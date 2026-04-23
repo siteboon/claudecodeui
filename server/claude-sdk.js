@@ -831,5 +831,10 @@ export {
   reconnectSessionWriter,
   handleImages,
   cleanupTempFiles,
-  loadMcpConfig
+  loadMcpConfig,
+  createRequestId,
+  waitForToolApproval,
+  matchesToolPermission,
+  TOOLS_REQUIRING_INTERACTION,
+  pendingToolApprovals
 };

@@ -7,10 +7,17 @@
  * alive per chat session and feeds sequential prompts over stdin. First message
  * pays cold start (~22s); subsequent messages pay only per-prompt overhead (~12s).
  *
+ * Permission flow: an in-process HTTP MCP server (claude-permission-mcp.js)
+ * exposes a `permission_prompt` tool that the CLI calls via
+ * --permission-prompt-tool; the tool bridges into the shared
+ * pendingToolApprovals flow from claude-sdk.js, so the UI receives the same
+ * permission_request messages and `claude-permission-response` acknowledgements
+ * work unchanged across SDK and stream modes.
+ *
  * MVP caveats:
- *   - Uses --dangerously-skip-permissions. No UI approval prompts.
  *   - Hooks are read from settings.json by the CLI itself (not from cloudcli code).
- *   - No support for canUseTool callbacks / pendingApprovals from claude-sdk.js.
+ *   - --dangerously-skip-permissions is still honored when
+ *     toolsSettings.skipPermissions is set (matches SDK path).
  *
  * Enable with env var CLAUDE_STREAM_MODE=1 (dispatched from server/index.js).
  */
@@ -22,6 +29,12 @@ import { CLAUDE_MODELS } from '../shared/modelConstants.js';
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { createNormalizedMessage } from './shared/utils.js';
 import { handleImages, cleanupTempFiles, loadMcpConfig } from './claude-sdk.js';
+import {
+  registerSession as registerPermissionMcpSession,
+  buildApprovalBridge,
+  PERMISSION_MCP_SERVER_NAME,
+  FULL_TOOL_NAME as PERMISSION_TOOL_NAME,
+} from './claude-permission-mcp.js';
 
 const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
 
@@ -60,7 +73,7 @@ function createPendingKey() {
 /**
  * Build CLI args for a new claude process.
  */
-function buildCliArgs({ sessionId, model, permissionMode, mcpServers, additionalDirs }) {
+function buildCliArgs({ sessionId, model, permissionMode, mcpServers, additionalDirs, skipPermissions, allowedTools, disallowedTools }) {
   const args = [
     '--print',
     '--verbose',
@@ -71,8 +84,14 @@ function buildCliArgs({ sessionId, model, permissionMode, mcpServers, additional
     // match the canonical JSONL id, so once the server catches up on refresh,
     // the streamed copy persists as a duplicate next to the server's canonical
     // assistant message. Emitting only the final `assistant` event avoids this.
-    '--dangerously-skip-permissions',
   ];
+
+  // Skip permissions is still supported — mirrors SDK path when the user has
+  // toggled "skip permissions" in the UI. When false, the permission-prompt-
+  // tool bridge handles approvals (wired in queryClaudeStream).
+  if (skipPermissions && permissionMode !== 'plan') {
+    args.push('--dangerously-skip-permissions');
+  }
 
   if (sessionId) {
     args.push('--resume', sessionId);
@@ -82,6 +101,16 @@ function buildCliArgs({ sessionId, model, permissionMode, mcpServers, additional
 
   if (permissionMode === 'plan') {
     args.push('--permission-mode', 'plan');
+  }
+
+  // Forward allow/disallow lists so the CLI can pre-approve internally even
+  // before reaching our permission-prompt-tool. Our onApproval bridge still
+  // checks the same lists client-side for UI consistency.
+  if (Array.isArray(allowedTools) && allowedTools.length > 0) {
+    args.push('--allowed-tools', ...allowedTools);
+  }
+  if (Array.isArray(disallowedTools) && disallowedTools.length > 0) {
+    args.push('--disallowed-tools', ...disallowedTools);
   }
 
   if (mcpServers && Object.keys(mcpServers).length > 0) {
@@ -98,8 +127,15 @@ function buildCliArgs({ sessionId, model, permissionMode, mcpServers, additional
 /**
  * Spawn a new claude process for a session.
  */
-function spawnClaudeProcess({ sessionId, cwd, model, permissionMode, mcpServers, additionalDirs }) {
-  const args = buildCliArgs({ sessionId, model, permissionMode, mcpServers, additionalDirs });
+function spawnClaudeProcess({ sessionId, cwd, model, permissionMode, mcpServers, additionalDirs, skipPermissions, allowedTools, disallowedTools, permissionPromptToolName }) {
+  const args = buildCliArgs({ sessionId, model, permissionMode, mcpServers, additionalDirs, skipPermissions, allowedTools, disallowedTools });
+
+  // The permission-prompt-tool flag must reference a tool that's in the
+  // --mcp-config passed above. Callers are responsible for ensuring the
+  // mcpServers map includes the approval server entry.
+  if (permissionPromptToolName && !skipPermissions && permissionMode !== 'plan') {
+    args.push('--permission-prompt-tool', permissionPromptToolName);
+  }
 
   const child = spawnFunction(process.env.CLAUDE_CLI_PATH || 'claude', args, {
     cwd: cwd || process.cwd(),
@@ -141,6 +177,7 @@ function handleEvent(session, event) {
   if (event.session_id && !session.sessionId) {
     const realId = event.session_id;
     session.sessionId = realId;
+    session.permissionMcp?.rekey(realId);
 
     // Rekey the map: find current key (pendingKey) and replace with realId
     for (const [key, value] of activeStreamSessions.entries()) {
@@ -375,6 +412,21 @@ function killSession(session) {
 function cleanupSession(session, { sendComplete = false } = {}) {
   disarmIdleTimer(session);
 
+  // Tear down the per-session permission MCP registration. Also force-deny
+  // any in-flight approvals so the downstream pendingToolApprovals entries
+  // don't leak waiters forever when the process died mid-request.
+  if (session.permissionMcp) {
+    try {
+      session.permissionMcp.cancelPendingApprovals('Session ended');
+    } catch (err) {
+      console.error('[claude-stream] cancelPendingApprovals failed:', err);
+    }
+    Promise.resolve(session.permissionMcp.dispose()).catch((err) => {
+      console.error('[claude-stream] permissionMcp.dispose failed:', err);
+    });
+    session.permissionMcp = null;
+  }
+
   // Clean up the in-flight prompt's temps (if any) and every queued prompt's
   // temps. Temp files belong to individual prompts so process-wide state
   // never deletes files that a queued prompt is still about to reference.
@@ -503,13 +555,22 @@ function drainQueue(session) {
  * Main entry point. Same signature as queryClaudeSDK.
  */
 async function queryClaudeStream(command, options = {}, ws) {
-  const { sessionId, cwd, model, permissionMode, images, additionalDirs } = options;
+  const { sessionId, cwd, model, permissionMode, images, additionalDirs, toolsSettings } = options;
+
+  const toolsSettingsResolved = toolsSettings || { allowedTools: [], disallowedTools: [], skipPermissions: false };
+  const skipPermissions = Boolean(toolsSettingsResolved.skipPermissions);
 
   // Track temp files outside the try so an early-return or thrown error that
   // never reaches submitPrompt (which transfers ownership to the prompt entry)
   // can still clean up the image files we already wrote to disk.
   let imageResult = null;
   let ownershipTaken = false;
+  // Hoisted out of the try so the catch block can tear down a partially-
+  // constructed session. Without this, a throw between `registerPermissionMcp`
+  // and `activeStreamSessions.set` would leak the McpServer/transport pair —
+  // the session never reaches the map, so no `close` handler ever runs.
+  let session = null;
+  let sessionAdopted = false;
 
   const cleanupUntakenTemps = () => {
     if (ownershipTaken) return;
@@ -527,15 +588,62 @@ async function queryClaudeStream(command, options = {}, ws) {
     // Delete stale entries immediately so a second concurrent resume can't
     // also see the dead record and spawn a duplicate process, and so
     // isClaudeStreamSessionActive doesn't report a dead session as live.
-    let session = sessionId ? activeStreamSessions.get(sessionId) : null;
+    session = sessionId ? activeStreamSessions.get(sessionId) : null;
     if (session && !isSessionProcessAlive(session)) {
       activeStreamSessions.delete(sessionId);
       session = null;
     }
 
     if (!session) {
-      // Spawn new process
-      const mcpServers = await loadMcpConfig(cwd);
+      // Build session shell first so the permission MCP bridge can close over
+      // its .writer / .sessionId and pick up the latest tools settings.
+      session = {
+        process: null, // set after spawn
+        sessionId: sessionId || null,  // may be null until system/init arrives
+        writer: ws,
+        cwd: cwd || process.cwd(),
+        currentPromptTemps: null,
+        stdoutBuffer: '',
+        sessionCreatedSent: false,
+        inFlight: false,
+        idleTimer: null,
+        queue: [],
+        toolsSettings: toolsSettingsResolved,
+        permissionMcp: null, // set below when !skipPermissions
+      };
+
+      // Register per-session permission MCP unless the user opted into skip.
+      // Plan mode also skips our bridge: the CLI restricts tools internally
+      // and issuing a permission-prompt-tool on top produces double prompts.
+      let permissionMcpEntry = null;
+      if (!skipPermissions && permissionMode !== 'plan') {
+        const bridge = buildApprovalBridge({
+          // getWriter, not a captured `ws` — session.writer is reassigned on
+          // reuse (line ~685) so a closure over the construction-time writer
+          // would silently route approval prompts to a dead client.
+          getWriter: () => session.writer,
+          getSessionId: () => session.sessionId,
+          getToolsSettings: () => session.toolsSettings,
+          getRegistration: () => session.permissionMcp,
+        });
+        session.permissionMcp = await registerPermissionMcpSession({
+          sessionId: sessionId || null,
+          onApproval: bridge,
+        });
+        permissionMcpEntry = {
+          [PERMISSION_MCP_SERVER_NAME]: {
+            type: 'http',
+            url: session.permissionMcp.url,
+          },
+        };
+      }
+
+      const userMcpServers = await loadMcpConfig(cwd);
+      const mcpServers = {
+        ...(userMcpServers || {}),
+        ...(permissionMcpEntry || {}),
+      };
+
       const child = spawnClaudeProcess({
         sessionId,  // pass --resume if sessionId provided (after reconnect)
         cwd,
@@ -543,28 +651,23 @@ async function queryClaudeStream(command, options = {}, ws) {
         permissionMode,
         mcpServers,
         additionalDirs,
+        skipPermissions,
+        allowedTools: toolsSettingsResolved.allowedTools,
+        disallowedTools: toolsSettingsResolved.disallowedTools,
+        permissionPromptToolName: session.permissionMcp ? PERMISSION_TOOL_NAME : null,
       });
-
-      session = {
-        process: child,
-        sessionId: sessionId || null,  // may be null until system/init arrives
-        writer: ws,
-        cwd: cwd || process.cwd(),
-        // Temp files are owned per-prompt (on queue entries + currentPromptTemps),
-        // never on the session itself, so queued prompts don't have their
-        // images deleted by a previous prompt's result cleanup.
-        currentPromptTemps: null,
-        stdoutBuffer: '',
-        sessionCreatedSent: false,
-        inFlight: false,  // set by writePromptNow
-        idleTimer: null,
-        queue: [],
-      };
+      session.process = child;
 
       const key = sessionId || createPendingKey();
       activeStreamSessions.set(key, session);
+      // Now owned by the map — the `close` handler cleans up the permission
+      // MCP; the catch block below should not double-dispose.
+      sessionAdopted = true;
       attachStdoutHandler(session);
     } else {
+      // Already in activeStreamSessions — catch block must not dispose its
+      // permission MCP if a later step throws.
+      sessionAdopted = true;
       // Reuse existing session — writer is refreshed; temps stay per-prompt.
       // Ownership guard: without this an authenticated client who knows
       // another user's sessionId could hijack the long-lived process by
@@ -584,6 +687,11 @@ async function queryClaudeStream(command, options = {}, ws) {
         return;
       }
       session.writer = ws;
+      // Refresh tools settings so UI toggles ("Allow Bash", etc.) between
+      // prompts take effect on the long-lived process too. The CLI can't
+      // receive a new --allowed-tools mid-process, but our permission bridge
+      // checks this on every invocation.
+      session.toolsSettings = toolsSettingsResolved;
       disarmIdleTimer(session);
     }
 
@@ -600,6 +708,17 @@ async function queryClaudeStream(command, options = {}, ws) {
   } catch (err) {
     console.error('[claude-stream] queryClaudeStream error:', err);
     cleanupUntakenTemps();
+    // If the session was created but never adopted by activeStreamSessions
+    // (throw between permission-MCP registration and map.set), tear down its
+    // permission MCP here — otherwise the token + McpServer stay alive for the
+    // rest of the process.
+    if (session && !sessionAdopted && session.permissionMcp) {
+      try {
+        session.permissionMcp.cancelPendingApprovals('Spawn failed');
+      } catch (_) {}
+      Promise.resolve(session.permissionMcp.dispose()).catch(() => {});
+      session.permissionMcp = null;
+    }
     ws?.send?.(createNormalizedMessage({
       kind: 'error',
       content: `Claude stream error: ${err.message}`,
@@ -669,6 +788,14 @@ async function abortClaudeStreamSession(sessionId, userId) {
   // Flag so the exit handler doesn't emit a second `complete` event — the
   // dispatcher in index.js already sent one for this abort.
   session.abortRequested = true;
+  // Resolve any in-flight approval prompts with deny so the CLI's blocking
+  // MCP tool call returns immediately — SIGINT doesn't cancel HTTP requests
+  // already dispatched to our permission server.
+  try {
+    session.permissionMcp?.cancelPendingApprovals('Session aborted by user');
+  } catch (err) {
+    console.error('[claude-stream] cancelPendingApprovals on abort failed:', err);
+  }
   try {
     // Send SIGINT first (graceful) — claude should flush and exit.
     session.process.kill('SIGINT');
