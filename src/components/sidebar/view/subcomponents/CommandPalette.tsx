@@ -138,19 +138,6 @@ export default function CommandPalette({
             placeholder="Type a command or search sessions and transcripts…"
             autoFocus
             onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
-            onKeyDown={(e) => {
-              if (
-                e.key === 'Enter' &&
-                !showActionsGroup &&
-                !showProjectsGroup &&
-                !showSessionsGroup &&
-                transcriptResults.length > 0
-              ) {
-                e.preventDefault();
-                e.stopPropagation();
-                handleTranscriptSelect(transcriptResults[0]);
-              }
-            }}
           />
           <CommandList className="max-h-[440px]">
             {!showTranscriptGroup && <CommandEmpty>No results found.</CommandEmpty>}
