@@ -1,4 +1,6 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { ListTodo } from 'lucide-react';
+
 import ChatInterface from '../../chat/view/ChatInterface';
 import FileTree from '../../file-tree/view/FileTree';
 import StandaloneShell from '../../standalone-shell/view/StandaloneShell';
@@ -12,9 +14,14 @@ import { useEditorSidebar } from '../../code-editor/hooks/useEditorSidebar';
 import EditorSidebar from '../../code-editor/view/EditorSidebar';
 import type { Project } from '../../../types/app';
 import { TaskMasterPanel } from '../../task-master';
-import MainContentHeader from './subcomponents/MainContentHeader';
-import MainContentStateView from './subcomponents/MainContentStateView';
+import PreviewPane from '../../preview/PreviewPane';
+import BrowserPane from '../../browser/BrowserPane';
+import TasksPane from '../../tasks/TasksPane';
+import TasksModal from '../../tasks/TasksModal';
+
 import ErrorBoundary from './ErrorBoundary';
+import MainContentStateView from './subcomponents/MainContentStateView';
+import MainContentHeader from './subcomponents/MainContentHeader';
 
 type TaskMasterContextValue = {
   currentProject?: Project | null;
@@ -71,6 +78,8 @@ function MainContent({
     selectedProject,
     isMobile,
   });
+
+  const [tasksDrawerOpen, setTasksDrawerOpen] = useState(false);
 
   useEffect(() => {
     const selectedProjectName = selectedProject?.name;
@@ -163,7 +172,13 @@ function MainContent({
 
           {shouldShowTasksTab && <TaskMasterPanel isVisible={activeTab === 'tasks'} />}
 
-          <div className={`h-full overflow-hidden ${activeTab === 'preview' ? 'block' : 'hidden'}`} />
+          <div className={`h-full overflow-hidden ${activeTab === 'preview' ? 'block' : 'hidden'}`}>
+            {activeTab === 'preview' && <PreviewPane />}
+          </div>
+
+          <div className={`h-full overflow-hidden ${activeTab === 'browser' ? 'block' : 'hidden'}`}>
+            {activeTab === 'browser' && <BrowserPane />}
+          </div>
 
           {activeTab.startsWith('plugin:') && (
             <div className="h-full overflow-hidden">
@@ -175,6 +190,22 @@ function MainContent({
             </div>
           )}
         </div>
+
+        {!isMobile && tasksDrawerOpen && (
+          <aside
+            data-accent="butter"
+            aria-label="Tasks"
+            className="hidden min-h-0 w-[380px] shrink-0 overflow-hidden border-l border-midnight-border lg:block"
+            style={{ background: 'var(--midnight-surface-1)' }}
+          >
+            <TasksPane
+              projectName={selectedProject?.name ?? null}
+              sessionId={selectedSession?.id ?? null}
+              ws={ws}
+              accent="butter"
+            />
+          </aside>
+        )}
 
         <EditorSidebar
           editingFile={editingFile}
@@ -190,6 +221,28 @@ function MainContent({
           fillSpace={activeTab === 'files'}
         />
       </div>
+
+      {selectedSession?.id && (
+        <button
+          type="button"
+          aria-label={tasksDrawerOpen ? 'Hide tasks' : 'Show tasks'}
+          aria-pressed={tasksDrawerOpen}
+          data-accent="butter"
+          onClick={() => setTasksDrawerOpen((v) => !v)}
+          className={`btn ${tasksDrawerOpen ? 'btn-pill-light' : 'btn-pill'} mobile-touch-target fixed bottom-20 right-4 z-30 lg:bottom-4`}
+        >
+          <ListTodo className="mr-1 h-4 w-4" aria-hidden="true" />
+          Tasks
+        </button>
+      )}
+
+      <TasksModal
+        open={isMobile && tasksDrawerOpen}
+        onClose={() => setTasksDrawerOpen(false)}
+        projectName={selectedProject?.name ?? null}
+        sessionId={selectedSession?.id ?? null}
+        ws={ws}
+      />
     </div>
   );
 }

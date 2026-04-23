@@ -50,6 +50,10 @@ import geminiRoutes from './routes/gemini.js';
 import pluginsRoutes from './routes/plugins.js';
 import messagesRoutes from './routes/messages.js';
 import providerRoutes from './modules/providers/provider.routes.js';
+import previewProxyRoutes, { attachPreviewUpgrade } from './routes/preview-proxy.js';
+import chromeScreencastRoutes, { attachChromeScreencast } from './routes/chrome-screencast.js';
+import worktreesRoutes from './routes/worktrees.js';
+import tasksRoutes from './routes/tasks.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
 import { initializeDatabase, sessionNamesDb, applyCustomSessionNames } from './database/db.js';
 import { configureWebPush } from './services/vapid-keys.js';
@@ -323,6 +327,14 @@ app.use('/api/providers', authenticateToken, providerRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
+
+// Phase 5 routes — preview proxy, chrome viewport, worktrees, tasks
+app.use('/preview', authenticateToken, previewProxyRoutes);
+app.use('/api/chrome-view', authenticateToken, chromeScreencastRoutes);
+app.use('/api/worktrees', authenticateToken, worktreesRoutes);
+app.use('/api/tasks', authenticateToken, tasksRoutes);
+attachPreviewUpgrade(server, wss);
+attachChromeScreencast(server, wss);
 
 // Serve public files (like api-docs.html)
 app.use(express.static(path.join(APP_ROOT, 'public')));

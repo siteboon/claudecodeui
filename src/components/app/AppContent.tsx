@@ -152,10 +152,8 @@ export default function AppContent() {
         setActiveTab('preview');
         break;
       case 'browser':
-        // Browser viewport arrives in Phase 5; for now, keep on chat so the
-        // rail doesn't lead to a broken state. Flagged in the PR.
         setSidebarOpen(false);
-        setActiveTab('chat');
+        setActiveTab('browser');
         break;
       case 'more':
         setSidebarOpen(false);
@@ -196,7 +194,15 @@ export default function AppContent() {
       )}
 
       <div
-        data-accent={activeTab === 'preview' ? 'mint' : 'sky'}
+        data-accent={
+          activeTab === 'preview'
+            ? 'mint'
+            : activeTab === 'browser'
+              ? 'peach'
+              : activeTab === 'tasks'
+                ? 'butter'
+                : 'sky'
+        }
         className="flex min-w-0 flex-1 flex-col"
         style={{ paddingBottom: 'var(--mobile-nav-total, 0px)' }}
       >
