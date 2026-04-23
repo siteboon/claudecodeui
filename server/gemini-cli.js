@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import crossSpawn from 'cross-spawn';
+import crypto from 'crypto';
 
 // Use cross-spawn on Windows for correct .cmd resolution (same pattern as cursor-cli.js)
 const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
@@ -210,7 +211,7 @@ async function spawnGemini(command, options = {}, ws) {
         geminiProcess.tempDir = tempDir;
 
         // Store process reference for potential abort
-        const processKey = capturedSessionId || sessionId || Date.now().toString();
+        const processKey = capturedSessionId || sessionId || `${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
         activeGeminiProcesses.set(processKey, geminiProcess);
 
         // Store sessionId on the process object for debugging
@@ -294,7 +295,7 @@ async function spawnGemini(command, options = {}, ws) {
 
             // For new sessions, create a session ID FIRST
             if (!sessionId && !sessionCreatedSent && !capturedSessionId) {
-                capturedSessionId = `gemini_${Date.now()}`;
+                capturedSessionId = `gemini_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
                 sessionCreatedSent = true;
 
                 // Create session in session manager

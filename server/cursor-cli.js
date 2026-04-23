@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import crossSpawn from 'cross-spawn';
+import crypto from 'crypto';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
@@ -71,7 +72,7 @@ async function spawnCursor(command, options = {}, ws) {
     const workingDir = cwd || projectPath || process.cwd();
 
     // Store process reference for potential abort
-    const processKey = capturedSessionId || Date.now().toString();
+    const processKey = capturedSessionId || `${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
 
     const settleOnce = (callback) => {
       if (settled) {
