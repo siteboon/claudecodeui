@@ -101,6 +101,15 @@ export default function SidebarProjectTree(props: SidebarProjectListProps) {
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
   );
 
+  useEffect(() => {
+    let baseTitle = 'CloudCLI UI';
+    const displayName = itemProps.selectedProject?.displayName?.trim();
+    if (displayName) {
+      baseTitle = `${displayName} - ${baseTitle}`;
+    }
+    document.title = baseTitle;
+  }, [itemProps.selectedProject]);
+
   const repoGroups = useMemo(() => groupProjects(filteredProjects), [filteredProjects]);
 
   const toggleCollapsed = (key: string) => {
