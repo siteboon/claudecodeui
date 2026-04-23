@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { version } from '../../package.json';
 import { ReleaseInfo } from '../types/sharedTypes';
+import { BASE_PATH } from '../utils/basePath';
 
 /**
  * Compare two semantic version strings
@@ -32,7 +33,7 @@ export const useVersionCheck = (owner: string, repo: string) => {
   useEffect(() => {
     const fetchInstallMode = async () => {
       try {
-        const response = await fetch('/health');
+        const response = await fetch(`${BASE_PATH}/health`);
         const data = await response.json();
         if (data.installMode === 'npm' || data.installMode === 'git') {
           setInstallMode(data.installMode);

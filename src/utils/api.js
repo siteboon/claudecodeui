@@ -1,7 +1,10 @@
 import { IS_PLATFORM } from "../constants/config";
+import { BASE_PATH } from "./basePath";
 
 // Utility function for authenticated API calls
-export const authenticatedFetch = (url, options = {}) => {
+export const authenticatedFetch = (rawUrl, options = {}) => {
+  // Auto-prepend BASE_PATH for root-relative URLs (e.g. '/api/...')
+  const url = (typeof rawUrl === 'string' && rawUrl.startsWith('/')) ? `${BASE_PATH}${rawUrl}` : rawUrl;
   const token = localStorage.getItem('auth-token');
 
   const defaultHeaders = {};
@@ -34,24 +37,24 @@ export const authenticatedFetch = (url, options = {}) => {
 export const api = {
   // Auth endpoints (no token required)
   auth: {
-    status: () => fetch('/api/auth/status'),
-    login: (username, password) => fetch('/api/auth/login', {
+    status: () => fetch(`${BASE_PATH}/api/auth/status`),
+    login: (username, password) => fetch(`${BASE_PATH}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     }),
-    register: (username, password) => fetch('/api/auth/register', {
+    register: (username, password) => fetch(`${BASE_PATH}/api/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     }),
-    user: () => authenticatedFetch('/api/auth/user'),
-    logout: () => authenticatedFetch('/api/auth/logout', { method: 'POST' }),
+    user: () => authenticatedFetch(`/api/auth/user`),
+    logout: () => authenticatedFetch(`/api/auth/logout`, { method: 'POST' }),
   },
 
   // Protected endpoints
   // config endpoint removed - no longer needed (frontend uses window.location)
-  projects: () => authenticatedFetch('/api/projects'),
+  projects: () => authenticatedFetch(`/api/projects`),
   sessions: (projectName, limit = 5, offset = 0) =>
     authenticatedFetch(`/api/projects/${projectName}/sessions?limit=${limit}&offset=${offset}`),
   // Unified endpoint — all providers through one URL
@@ -102,10 +105,10 @@ export const api = {
     const token = localStorage.getItem('auth-token');
     const params = new URLSearchParams({ q: query, limit: String(limit) });
     if (token) params.set('token', token);
-    return `/api/search/conversations?${params.toString()}`;
+    return `${BASE_PATH}/api/search/conversations?${params.toString()}`;
   },
   createWorkspace: (workspaceData) =>
-    authenticatedFetch('/api/projects/create-workspace', {
+    authenticatedFetch(`/api/projects/create-workspace`, {
       method: 'POST',
       body: JSON.stringify(workspaceData),
     }),
@@ -171,7 +174,7 @@ export const api = {
 
     // Get available PRD templates
     getTemplates: () =>
-      authenticatedFetch('/api/taskmaster/prd-templates'),
+      authenticatedFetch(`/api/taskmaster/prd-templates`),
 
     // Apply a PRD template
     applyTemplate: (projectName, { templateId, fileName, customizations }) =>
@@ -197,22 +200,22 @@ export const api = {
   },
 
   createFolder: (folderPath) =>
-    authenticatedFetch('/api/create-folder', {
+    authenticatedFetch(`/api/create-folder`, {
       method: 'POST',
       body: JSON.stringify({ path: folderPath }),
     }),
 
   // User endpoints
   user: {
-    gitConfig: () => authenticatedFetch('/api/user/git-config'),
+    gitConfig: () => authenticatedFetch(`/api/user/git-config`),
     updateGitConfig: (gitName, gitEmail) =>
-      authenticatedFetch('/api/user/git-config', {
+      authenticatedFetch(`/api/user/git-config`, {
         method: 'POST',
         body: JSON.stringify({ gitName, gitEmail }),
       }),
-    onboardingStatus: () => authenticatedFetch('/api/user/onboarding-status'),
+    onboardingStatus: () => authenticatedFetch(`/api/user/onboarding-status`),
     completeOnboarding: () =>
-      authenticatedFetch('/api/user/complete-onboarding', {
+      authenticatedFetch(`/api/user/complete-onboarding`, {
         method: 'POST',
       }),
   },

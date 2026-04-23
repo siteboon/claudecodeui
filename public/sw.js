@@ -2,8 +2,15 @@
 // Cache only manifest (needed for PWA install). HTML and JS are never pre-cached
 // so a rebuild + refresh always picks up the latest assets.
 const CACHE_NAME = 'claude-ui-v2';
+
+// Derive base path from service worker's own location.
+// If SW is at /s/mealstead/sw.js, BASE_PATH = '/s/mealstead'.
+// If SW is at /sw.js, BASE_PATH = ''.
+const SW_PATH = self.location.pathname;
+const BASE_PATH = SW_PATH.substring(0, SW_PATH.lastIndexOf('/')) || '';
+
 const urlsToCache = [
-  '/manifest.json'
+  `${BASE_PATH}/manifest.json`
 ];
 
 // Install event
@@ -15,29 +22,15 @@ self.addEventListener('install', event => {
   self.skipWaiting();
 });
 
-// Fetch event — network-first for everything except hashed assets
+// Fetch event — only intercept assets and navigation, let everything else pass through
 self.addEventListener('fetch', event => {
   const url = event.request.url;
 
-  // Never intercept API requests or WebSocket upgrades
-  if (url.includes('/api/') || url.includes('/ws')) {
-    return;
-  }
-
-  // Navigation requests (HTML) — always go to network, no caching
-  if (event.request.mode === 'navigate') {
-    event.respondWith(
-      fetch(event.request).catch(() => caches.match('/manifest.json').then(() =>
-        new Response('<h1>Offline</h1><p>Please check your connection.</p>', {
-          headers: { 'Content-Type': 'text/html' }
-        })
-      ))
-    );
-    return;
-  }
+  // Only intercept same-origin requests
+  if (!url.startsWith(self.location.origin)) return;
 
   // Hashed assets (JS/CSS in /assets/) — cache-first since filenames change per build
-  if (url.includes('/assets/')) {
+  if (url.includes(`${BASE_PATH}/assets/`)) {
     event.respondWith(
       caches.match(event.request).then(cached => {
         if (cached) return cached;
@@ -51,10 +44,19 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Everything else — network-first
-  event.respondWith(
-    fetch(event.request).catch(() => caches.match(event.request))
-  );
+  // Navigation requests (HTML) — always go to network, offline fallback
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).catch(() =>
+        new Response('<h1>Offline</h1><p>Please check your connection.</p>', {
+          headers: { 'Content-Type': 'text/html' }
+        })
+      )
+    );
+    return;
+  }
+
+  // Everything else (API, WS, session routes, etc.) — don't intercept
 });
 
 // Activate event — purge old caches
@@ -84,8 +86,8 @@ self.addEventListener('push', event => {
 
   const options = {
     body: payload.body || '',
-    icon: '/logo-256.png',
-    badge: '/logo-128.png',
+    icon: `${BASE_PATH}/logo-256.png`,
+    badge: `${BASE_PATH}/logo-128.png`,
     data: payload.data || {},
     tag: payload.data?.tag || `${payload.data?.sessionId || 'global'}:${payload.data?.code || 'default'}`,
     renotify: true
@@ -102,7 +104,7 @@ self.addEventListener('notificationclick', event => {
 
   const sessionId = event.notification.data?.sessionId;
   const provider = event.notification.data?.provider || null;
-  const urlPath = sessionId ? `/session/${sessionId}` : '/';
+  const urlPath = sessionId ? `${BASE_PATH}/session/${sessionId}` : `${BASE_PATH}/`;
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async clientList => {

@@ -105,6 +105,31 @@ npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
 
 Supports Claude Code, Codex, and Gemini CLI. See the [sandbox docs](docker/) for setup and advanced options.
 
+#### Subpath Deployment (BASE_PATH)
+
+Serve CloudCLI from a subpath (e.g. `/s/myproject/`) instead of the root `/`. This is useful when running multiple CloudCLI instances behind a single reverse proxy.
+
+**Build with relative asset paths:**
+```bash
+VITE_BASE_PATH=./ npm run build
+```
+
+**Start the server with a base path:**
+```bash
+BASE_PATH=/s/myproject npm run server
+```
+
+**Reverse proxy example (Caddy):**
+```caddyfile
+:443 {
+    handle /s/myproject/* {
+        uri strip_prefix /s/myproject
+        reverse_proxy 127.0.0.1:3001
+    }
+}
+```
+
+When `BASE_PATH` is not set, CloudCLI serves from `/` as usual — no changes needed for standard deployments.
 
 ---
 
