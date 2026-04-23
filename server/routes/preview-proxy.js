@@ -101,10 +101,20 @@ router.use('/:port', (req, res) => {
 });
 
 // WebSocket upgrade handler for HMR / dev-server sockets. Registered by
-// server/index.js via `attachPreviewUpgrade(server)`. Uses
-// `prependListener` so it wins the race against the root wss for
-// /preview/* paths, leaving /ws, /shell, /plugin-ws/* for the root wss.
-export function attachPreviewUpgrade(server) {
+// server/index.js via `attachPreviewUpgrade(server, rootWss)`. Patches the
+// root WebSocketServer so `shouldHandle` returns false for `/preview/*`,
+// which prevents the ws library's internal upgrade listener from also
+// calling handleUpgrade on a socket we already consumed (that path threw
+// `server.handleUpgrade() was called more than once with the same socket`).
+// Uses `prependListener` so our handler runs before the ws internal one.
+export function attachPreviewUpgrade(server, rootWss) {
+  if (rootWss && typeof rootWss.shouldHandle === 'function') {
+    const original = rootWss.shouldHandle.bind(rootWss);
+    rootWss.shouldHandle = (req) => {
+      if ((req.url || '').startsWith('/preview/')) return false;
+      return original(req);
+    };
+  }
   server.prependListener('upgrade', (req, socket, head) => {
     const rawUrl = req.url || '';
     if (!rawUrl.startsWith('/preview/')) return;

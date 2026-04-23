@@ -245,7 +245,7 @@ export default function BrowserPane({ variant = 'panel', className = '' }: Brows
           type="button"
           aria-pressed={takeControl}
           onClick={() => setTakeControl((v) => !v)}
-          className={`btn mobile-touch-target ${takeControl ? 'btn-pill-light' : 'btn-pill'}`}
+          className={`btn mobile-touch-target shrink-0 whitespace-nowrap ${takeControl ? 'btn-pill-light' : 'btn-pill'}`}
         >
           {takeControl ? <Unlock className="mr-1 h-4 w-4" /> : <Lock className="mr-1 h-4 w-4" />}
           {takeControl ? 'Controlling' : 'View only'}

@@ -331,8 +331,8 @@ app.use('/preview', authenticateToken, previewProxyRoutes);
 app.use('/api/chrome-view', authenticateToken, chromeScreencastRoutes);
 app.use('/api/worktrees', authenticateToken, worktreesRoutes);
 app.use('/api/tasks', authenticateToken, tasksRoutes);
-attachPreviewUpgrade(server);
-attachChromeScreencast(server);
+attachPreviewUpgrade(server, wss);
+attachChromeScreencast(server, wss);
 
 // Serve public files (like api-docs.html)
 app.use(express.static(path.join(APP_ROOT, 'public')));

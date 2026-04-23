@@ -206,7 +206,7 @@ export default function WorktreeList({
                 />
                 <span className="truncate text-xs text-midnight-text">{wt.slug}</span>
                 {wt.branch && (
-                  <span className="ml-1 truncate text-[10px] uppercase tracking-wider text-midnight-text3">
+                  <span className="ds-chip ds-chip-lavender ml-1 max-w-[9rem] shrink truncate !px-2 !py-0.5 text-[10px] uppercase tracking-wider">
                     {wt.branch}
                   </span>
                 )}

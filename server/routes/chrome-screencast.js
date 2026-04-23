@@ -266,7 +266,7 @@ async function handleChromeScreencastConnection(clientWs) {
   });
 }
 
-export function attachChromeScreencast(httpServer) {
+export function attachChromeScreencast(httpServer, rootWss) {
   const wss = new WebSocketServer({ noServer: true });
 
   wss.on('connection', (ws) => {
@@ -275,6 +275,19 @@ export function attachChromeScreencast(httpServer) {
       try { ws.close(); } catch { /* no-op */ }
     });
   });
+
+  // Patch the root WebSocketServer's `shouldHandle` so it returns false
+  // for our path. Without this the ws library's internal upgrade listener
+  // also invokes handleUpgrade on the same socket after ours has, and
+  // throws `server.handleUpgrade() was called more than once with the
+  // same socket`.
+  if (rootWss && typeof rootWss.shouldHandle === 'function') {
+    const original = rootWss.shouldHandle.bind(rootWss);
+    rootWss.shouldHandle = (req) => {
+      if ((req.url || '').startsWith('/ws/chrome-view')) return false;
+      return original(req);
+    };
+  }
 
   // `prependListener` ensures this handler runs before the root wss
   // listener in server/index.js and wins the upgrade race for
