@@ -122,7 +122,9 @@ export class GeminiSessionsProvider implements IProviderSessions {
       rawMessages = sessionManager.getSessionMessages(sessionId) as AnyRecord[];
 
       if (rawMessages.length === 0) {
-        rawMessages = await getGeminiCliSessionMessages(sessionId) as AnyRecord[];
+        const session = sessionManager.getSession(sessionId);
+        const cliSessionId = (session as any)?.cliSessionId || sessionId;
+        rawMessages = await getGeminiCliSessionMessages(cliSessionId) as AnyRecord[];
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
