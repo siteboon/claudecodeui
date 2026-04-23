@@ -122,6 +122,21 @@
       "label": "Modalità scura",
       "description": "Alterna tra tema chiaro e scuro"
     },
+    "font": {
+      "label": "Carattere",
+      "description": "Scegli il carattere dell'interfaccia",
+      "default": "Predefinito",
+      "custom": "Personalizzato"
+    },
+    "customFont": {
+      "label": "Nome carattere",
+      "description": "Inserisci il nome del carattere personalizzato",
+      "placeholder": "es: 'Inter', 'Roboto', sans-serif"
+    },
+    "fontSize": {
+      "label": "Dimensione carattere",
+      "description": "Dimensione del carattere dell'interfaccia in pixel"
+    },
     "projectSorting": {
       "label": "Ordinamento progetti",
       "description": "Come vengono ordinati i progetti nella barra laterale",
@@ -145,6 +160,17 @@
       "lineNumbers": {
         "label": "Mostra numeri di riga",
         "description": "Visualizza i numeri di riga nell'editor"
+      },
+      "font": {
+        "label": "Carattere",
+        "description": "Scegli il carattere per i blocchi di codice",
+        "default": "Predefinito",
+        "custom": "Personalizzato"
+      },
+      "customFont": {
+        "label": "Nome carattere",
+        "description": "Inserisci il nome del carattere monospace personalizzato",
+        "placeholder": "es: 'Fira Code', 'JetBrains Mono', monospace"
       },
       "fontSize": {
         "label": "Dimensione carattere",
