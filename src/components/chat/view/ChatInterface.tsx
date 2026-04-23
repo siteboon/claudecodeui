@@ -129,7 +129,6 @@ function ChatInterface({
     sendMessage,
     autoScrollToBottom,
     externalMessageUpdate,
-    processingSessions,
     resetStreamingState,
     pendingViewSessionRef,
     sessionStore,
