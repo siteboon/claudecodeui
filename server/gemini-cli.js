@@ -48,10 +48,13 @@ async function spawnGemini(command, options = {}, ws) {
     // If we have a sessionId, we want to resume
     if (sessionId) {
         const session = sessionManager.getSession(sessionId);
-        if (session && session.cliSessionId) {
-            args.push('--resume', session.cliSessionId);
-        } else if (session) {
-            console.warn(`[Gemini] Session ${sessionId} found but missing cliSessionId. Resuming without --resume.`);
+        if (session) {
+            // Use native ID for resumption: 
+            // 1. If it's a legacy session, it has a cliSessionId field.
+            // 2. In the new unified architecture, the session ID itself is the native ID.
+            const resumeId = session.cliSessionId || session.id || sessionId;
+            args.push('--resume', resumeId);
+            console.log(`[Gemini] Resuming native session: ${resumeId}`);
         } else {
             console.warn(`[Gemini] Session ${sessionId} not found in sessionManager. Resuming without --resume.`);
         }
@@ -290,12 +293,40 @@ async function spawnGemini(command, options = {}, ws) {
                     }
                 },
                 onInit: (event) => {
-                    if (capturedSessionId) {
-                        const sess = sessionManager.getSession(capturedSessionId);
-                        if (sess && !sess.cliSessionId) {
-                            sess.cliSessionId = event.session_id;
-                            sessionManager.saveSession(capturedSessionId);
+                    // Match Claude's implementation: wait for the native session_id before creating the UI session
+                    if (event.session_id && !capturedSessionId) {
+                        capturedSessionId = event.session_id;
+                        sessionCreatedSent = true;
+
+                        // Create session in session manager using the native native ID
+                        sessionManager.createSession(capturedSessionId, cwd || process.cwd());
+
+                        // Save the user message now that we have the native session ID
+                        if (command) {
+                            sessionManager.addMessage(capturedSessionId, 'user', command);
                         }
+
+                        // Re-key the active process map to use the native native ID
+                        if (processKey !== capturedSessionId) {
+                            activeGeminiProcesses.delete(processKey);
+                            activeGeminiProcesses.set(capturedSessionId, geminiProcess);
+                            geminiProcess.sessionId = capturedSessionId;
+                        }
+
+                        // Inform the writer and client about the newly established native ID
+                        if (ws) {
+                            if (typeof ws.setSessionId === 'function') {
+                                ws.setSessionId(capturedSessionId);
+                            }
+                            ws.send(createNormalizedMessage({ 
+                                kind: 'session_created', 
+                                newSessionId: capturedSessionId, 
+                                sessionId: capturedSessionId, 
+                                provider: 'gemini' 
+                            }));
+                        }
+                        
+                        console.log(`[Gemini] Native session established: ${capturedSessionId}`);
                     }
                 }
             });
@@ -306,34 +337,43 @@ async function spawnGemini(command, options = {}, ws) {
             const rawOutput = data.toString();
             startTimeout(); // Re-arm the timeout
 
-            // For new sessions, create a session ID FIRST
-            if (!sessionId && !sessionCreatedSent && !capturedSessionId) {
-                capturedSessionId = `gemini_${Date.now()}`;
-                sessionCreatedSent = true;
-
-                // Create session in session manager
-                sessionManager.createSession(capturedSessionId, cwd || process.cwd());
-
-                // Save the user message now that we have a session ID
-                if (command) {
-                    sessionManager.addMessage(capturedSessionId, 'user', command);
-                }
-
-                // Update process key with captured session ID
-                if (processKey !== capturedSessionId) {
-                    activeGeminiProcesses.delete(processKey);
-                    activeGeminiProcesses.set(capturedSessionId, geminiProcess);
-                }
-
-                ws.setSessionId && typeof ws.setSessionId === 'function' && ws.setSessionId(capturedSessionId);
-
-                ws.send(createNormalizedMessage({ kind: 'session_created', newSessionId: capturedSessionId, sessionId: capturedSessionId, provider: 'gemini' }));
-            }
-
             if (responseHandler) {
                 responseHandler.processData(rawOutput);
             } else if (rawOutput) {
-                // Fallback to direct sending for raw CLI mode without WS
+                // Fallback for raw CLI mode without structured JSON streaming
+                if (!sessionId && !sessionCreatedSent && !capturedSessionId) {
+                    capturedSessionId = `gemini_${Date.now()}`;
+                    sessionCreatedSent = true;
+
+                    // Create session in session manager
+                    sessionManager.createSession(capturedSessionId, cwd || process.cwd());
+
+                    // Save the user message now that we have a fallback session ID
+                    if (command) {
+                        sessionManager.addMessage(capturedSessionId, 'user', command);
+                    }
+
+                    // Update process key
+                    if (processKey !== capturedSessionId) {
+                        activeGeminiProcesses.delete(processKey);
+                        activeGeminiProcesses.set(capturedSessionId, geminiProcess);
+                        geminiProcess.sessionId = capturedSessionId;
+                    }
+
+                    if (ws) {
+                        if (typeof ws.setSessionId === 'function') {
+                            ws.setSessionId(capturedSessionId);
+                        }
+                        ws.send(createNormalizedMessage({ 
+                            kind: 'session_created', 
+                            newSessionId: capturedSessionId, 
+                            sessionId: capturedSessionId, 
+                            provider: 'gemini' 
+                        }));
+                    }
+                }
+
+                // Fallback direct streaming
                 if (assistantBlocks.length > 0 && assistantBlocks[assistantBlocks.length - 1].type === 'text') {
                     assistantBlocks[assistantBlocks.length - 1].text += rawOutput;
                 } else {
