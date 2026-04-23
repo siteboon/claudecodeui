@@ -209,6 +209,9 @@ async function processTitle(filePath) {
   if (!input) return;
 
   const raw = await callHaiku(input);
+  // `null` means both the direct and agent paths failed (no auth, offline, etc.).
+  // Leave the session pendingTitle=true so we retry when credentials recover.
+  if (raw === null) return;
   const title = normalizeTitle(raw) || DEFAULT_TITLE;
 
   try {
