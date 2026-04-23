@@ -9,7 +9,7 @@ import type { MCPServerStatus, SessionWithProvider } from '../types/types';
 import SidebarProjectItem from '../view/subcomponents/SidebarProjectItem';
 
 import TopicChip from './TopicChip';
-import type { Topic, TopicStorageAPI } from './useTopicStorage';
+import type { Topic, TopicStorageAPI } from './useServerTopics';
 
 export interface SidebarTopicGroupProps {
   project: Project;
@@ -55,21 +55,25 @@ export interface SidebarTopicGroupProps {
 
 function TopicChipDroppable({
   topic,
+  projectKey,
   isActive,
+  count,
   onClick,
   onContextMenu,
   allLabel,
 }: {
   topic: Topic | null;
+  projectKey: string;
   isActive: boolean;
+  count: number;
   onClick: () => void;
   onContextMenu?: (e: React.MouseEvent) => void;
   allLabel: string;
 }) {
-  const droppableId = topic ? `topic:${topic.id}` : 'topic:__all__';
+  const droppableId = topic ? `topic:${topic.id}` : `topic:__all__:${projectKey}`;
   const { setNodeRef, isOver } = useDroppable({
     id: droppableId,
-    data: { type: 'topic', topicId: topic?.id ?? null },
+    data: { type: 'topic', topicId: topic?.id ?? null, projectKey },
   });
   return (
     <TopicChip
@@ -77,6 +81,7 @@ function TopicChipDroppable({
       color={topic ? topic.color : null}
       isActive={isActive}
       isDropTarget={isOver}
+      count={count}
       onClick={onClick}
       onContextMenu={onContextMenu}
       dropRef={setNodeRef}
@@ -87,28 +92,37 @@ function TopicChipDroppable({
 
 /**
  * Additive wrapper around SidebarProjectItem.
- * Adds a horizontal Topic chip row as a sibling element and filters the
- * sessions passed to SidebarProjectItem by the active topic for this repo.
  *
- * Drag a session to a topic chip to assign. Drag to "All" to unassign.
- * The drag sources (sessions) wire themselves via dnd-kit useDraggable
- * inside SidebarSessionItem and participate in the DndContext that
- * SidebarProjectTree provides at the top level.
+ * Mobile + desktop: shows a horizontal Topic chip row above the conversation
+ * list. Tap a chip to filter the project's sessions by that topic. The chip
+ * row only appears when the project is expanded and has at least one session.
+ *
+ * The chips ARE droppable: drag a session onto a chip to manually assign that
+ * topic (method='manual', survives nightly re-clustering). Drag onto "All"
+ * to clear the manual assignment.
+ *
+ * Topic counts on chips show how many sessions each topic owns server-side.
  */
 export default function SidebarTopicGroup(props: SidebarTopicGroupProps) {
   const { project, sessions, topicsApi, isExpanded, t, ...rest } = props;
-  const repoKey = project.repoGroup || project.name;
-  const activeTopicId = topicsApi.activeTopicByRepo[repoKey] ?? null;
+  const projectKey = project.name;
+  const activeTopicId = topicsApi.activeTopicByProject[projectKey] ?? null;
 
   const [isCreating, setIsCreating] = useState(false);
   const [newTopicName, setNewTopicName] = useState('');
 
+  const projectTopics = useMemo<Topic[]>(
+    () => topicsApi.topics.filter((t) => t.projectKey === projectKey),
+    [topicsApi.topics, projectKey],
+  );
+
   const filteredSessions = useMemo(() => {
     if (!activeTopicId) return sessions;
-    return sessions.filter((s) => topicsApi.assignments[s.id] === activeTopicId);
+    return sessions.filter((s) => topicsApi.assignments[s.id]?.topicId === activeTopicId);
   }, [sessions, activeTopicId, topicsApi.assignments]);
 
-  // Only show chip row when expanded AND project has sessions (chips are pointless otherwise)
+  const allTopicCount = sessions.length;
+
   const showChips = isExpanded && sessions.length > 0;
 
   const handleCreateTopic = () => {
@@ -117,17 +131,18 @@ export default function SidebarTopicGroup(props: SidebarTopicGroupProps) {
       setIsCreating(false);
       return;
     }
-    const topic = topicsApi.createTopic(name);
-    topicsApi.setActiveTopic(repoKey, topic.id);
+    const topic = topicsApi.createTopic(projectKey, name);
+    topicsApi.setActiveTopic(projectKey, topic.id);
     setNewTopicName('');
     setIsCreating(false);
   };
 
   const allLabel = (t('sidebar:topics.all', { defaultValue: 'All' }) as string) || 'All';
-  const createLabel = (t('sidebar:topics.createTopic', { defaultValue: 'Topic' }) as string) || 'Topic';
+  const createLabel =
+    (t('sidebar:topics.createTopic', { defaultValue: 'Topic' }) as string) || 'Topic';
 
   return (
-    <div className="space-y-1" data-topic-group-repo={repoKey}>
+    <div className="space-y-1" data-topic-group-project={projectKey}>
       <SidebarProjectItem
         project={project}
         sessions={filteredSessions}
@@ -139,41 +154,43 @@ export default function SidebarTopicGroup(props: SidebarTopicGroupProps) {
         <div
           className="flex items-center gap-1.5 overflow-x-auto px-3 py-1.5 md:px-2"
           role="tablist"
-          aria-label={(t('sidebar:topics.chipRowLabel', { defaultValue: 'Topics' }) as string) || 'Topics'}
+          aria-label={
+            (t('sidebar:topics.chipRowLabel', { defaultValue: 'Topics' }) as string) || 'Topics'
+          }
         >
           <TopicChipDroppable
             topic={null}
+            projectKey={projectKey}
             isActive={activeTopicId === null}
-            onClick={() => topicsApi.setActiveTopic(repoKey, null)}
+            count={allTopicCount}
+            onClick={() => topicsApi.setActiveTopic(projectKey, null)}
             allLabel={allLabel}
           />
-          {topicsApi.topics.map((topic) => (
+          {projectTopics.map((topic) => (
             <TopicChipDroppable
               key={topic.id}
               topic={topic}
+              projectKey={projectKey}
               isActive={activeTopicId === topic.id}
-              onClick={() => topicsApi.setActiveTopic(repoKey, topic.id)}
+              count={topic.sessionCount}
+              onClick={() => topicsApi.setActiveTopic(projectKey, topic.id)}
               allLabel={allLabel}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                const nextName = window.prompt(
-                  (t('sidebar:topics.renamePrompt', { defaultValue: 'Rename topic' }) as string) ||
-                    'Rename topic',
-                  topic.name,
-                );
-                if (nextName === null) return;
-                const trimmed = nextName.trim();
-                if (trimmed) {
-                  topicsApi.renameTopic(topic.id, trimmed);
-                } else if (
-                  window.confirm(
-                    (t('sidebar:topics.deleteConfirm', { defaultValue: 'Delete this topic?' }) as string) ||
-                      'Delete this topic?',
-                  )
-                ) {
-                  topicsApi.deleteTopic(topic.id);
-                }
-              }}
+              onContextMenu={
+                topic.isLocal
+                  ? (e) => {
+                      e.preventDefault();
+                      if (
+                        window.confirm(
+                          (t('sidebar:topics.deleteConfirm', {
+                            defaultValue: 'Delete this topic?',
+                          }) as string) || 'Delete this topic?',
+                        )
+                      ) {
+                        topicsApi.deleteTopic(topic.id);
+                      }
+                    }
+                  : undefined
+              }
             />
           ))}
           {isCreating ? (
@@ -191,7 +208,8 @@ export default function SidebarTopicGroup(props: SidebarTopicGroupProps) {
                 }
               }}
               placeholder={
-                (t('sidebar:topics.namePlaceholder', { defaultValue: 'Topic name' }) as string) || 'Topic name'
+                (t('sidebar:topics.namePlaceholder', { defaultValue: 'Topic name' }) as string) ||
+                'Topic name'
               }
               className="ds-chip min-h-[44px] min-w-[120px] bg-transparent px-3 text-xs text-foreground outline-none placeholder:text-muted-foreground"
             />

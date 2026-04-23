@@ -10,6 +10,7 @@
  * Exports `start` / `stop` for tests and orderly shutdown.
  */
 
+import { EventEmitter } from 'node:events';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
@@ -17,6 +18,24 @@ import os from 'node:os';
 import { sessionNamesDb } from '../database/db.js';
 
 import { TITLE_PROMPT, extractFirstUserTexts, normalizeTitle } from './title-prompt.js';
+
+/**
+ * Phase 4 hookpoint: subscribers (e.g. topic-clusterer) get a 'titled' event
+ * whenever a session receives a fresh custom_name. Payload:
+ *   { sessionId, provider, title, filePath, slug }
+ *
+ * Failures in subscribers must not affect titling; emit() is wrapped.
+ */
+export const titlerEvents = new EventEmitter();
+titlerEvents.setMaxListeners(20);
+
+function emitTitled(payload) {
+  try {
+    titlerEvents.emit('titled', payload);
+  } catch (err) {
+    console.warn('[session-titler] titlerEvents subscriber threw:', err?.message || err);
+  }
+}
 
 const SETTINGS_PATH = path.join(os.homedir(), '.claude', 'settings.json');
 
@@ -220,6 +239,14 @@ async function processTitle(filePath) {
     console.warn(`[session-titler] Failed to save title for ${sessionId}: ${err.message}`);
     return;
   }
+
+  emitTitled({
+    sessionId,
+    provider: PROVIDER,
+    title,
+    filePath,
+    slug: path.basename(path.dirname(filePath)),
+  });
 
   await signalUpdate(filePath);
 }

@@ -15,7 +15,7 @@ import type { SidebarProjectListProps } from '../view/subcomponents/SidebarProje
 import SidebarProjectsState from '../view/subcomponents/SidebarProjectsState';
 
 import SidebarTopicGroup from './SidebarTopicGroup';
-import { useTopicStorage } from './useTopicStorage';
+import { useServerTopics } from './useServerTopics';
 
 const FALLBACK_GROUP = '__uncategorized__';
 const REPO_COLLAPSED_KEY = 'dispatch.sidebar.repoCollapsed.v1';
@@ -89,7 +89,7 @@ export default function SidebarProjectTree(props: SidebarProjectListProps) {
     t,
     ...itemProps
   } = props;
-  const topicsApi = useTopicStorage();
+  const topicsApi = useServerTopics();
   const [collapsed, setCollapsed] = useState<Set<string>>(() => readCollapsedSet());
 
   useEffect(() => {
@@ -124,11 +124,21 @@ export default function SidebarProjectTree(props: SidebarProjectListProps) {
   const onDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over) return;
-    const activeData = active.data.current as { type?: string; sessionId?: string } | undefined;
-    const overData = over.data.current as { type?: string; topicId?: string | null } | undefined;
+    const activeData = active.data.current as
+      | { type?: string; sessionId?: string; projectName?: string }
+      | undefined;
+    const overData = over.data.current as
+      | { type?: string; topicId?: string | null; projectKey?: string }
+      | undefined;
     if (activeData?.type !== 'session' || !activeData.sessionId) return;
     if (overData?.type !== 'topic') return;
-    topicsApi.assignSessionToTopic(activeData.sessionId, overData.topicId ?? null);
+    const projectKey = overData.projectKey || activeData.projectName;
+    if (!projectKey) return;
+    void topicsApi.assignSessionToTopic(
+      activeData.sessionId,
+      projectKey,
+      overData.topicId ?? null,
+    );
   };
 
   const state = (

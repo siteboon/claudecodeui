@@ -54,10 +54,12 @@ import previewProxyRoutes, { attachPreviewUpgrade } from './routes/preview-proxy
 import chromeScreencastRoutes, { attachChromeScreencast } from './routes/chrome-screencast.js';
 import worktreesRoutes from './routes/worktrees.js';
 import tasksRoutes from './routes/tasks.js';
+import topicsRoutes from './routes/topics.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
 import { initializeDatabase, sessionNamesDb, applyCustomSessionNames } from './database/db.js';
 import { configureWebPush } from './services/vapid-keys.js';
 import './services/session-titler.js';
+import './services/topic-clusterer-cron.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
 import { getConnectableHost } from '../shared/networkHosts.js';
@@ -334,6 +336,7 @@ app.use('/preview', authenticateToken, previewProxyRoutes);
 app.use('/api/chrome-view', authenticateToken, chromeScreencastRoutes);
 app.use('/api/worktrees', authenticateToken, worktreesRoutes);
 app.use('/api/tasks', authenticateToken, tasksRoutes);
+app.use('/api/topics', authenticateToken, topicsRoutes);
 attachPreviewUpgrade(server, wss);
 attachChromeScreencast(server, wss);
 
