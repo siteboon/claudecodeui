@@ -3,6 +3,8 @@ import net from 'net';
 
 import express from 'express';
 
+import { authenticateWebSocket } from '../middleware/auth.js';
+
 const router = express.Router();
 
 const PORT_PATTERN = /^\d{2,5}$/;
@@ -99,33 +101,52 @@ router.use('/:port', (req, res) => {
 });
 
 // WebSocket upgrade handler for HMR / dev-server sockets. Registered by
-// server/index.js via `attachPreviewUpgrade(server)`.
+// server/index.js via `attachPreviewUpgrade(server)`. Uses
+// `prependListener` so it wins the race against the root wss for
+// /preview/* paths, leaving /ws, /shell, /plugin-ws/* for the root wss.
 export function attachPreviewUpgrade(server) {
-  server.on('upgrade', (req, socket, head) => {
-    const url = req.url || '';
-    if (!url.startsWith('/preview/')) return;
+  server.prependListener('upgrade', (req, socket, head) => {
+    const rawUrl = req.url || '';
+    if (!rawUrl.startsWith('/preview/')) return;
 
-    const match = url.match(/^\/preview\/(\d{2,5})(\/.*)?$/);
+    const match = rawUrl.match(/^\/preview\/(\d{2,5})(\/.*)?(\?.*)?$/);
     if (!match) {
       socket.destroy();
       return;
     }
 
     const port = match[1];
-    const upstreamPath = match[2] || '/';
+    const upstreamPath = (match[2] || '/') + (match[3] || '');
     if (!isValidPort(port)) {
       socket.destroy();
       return;
     }
 
+    // Enforce JWT auth on the WS upgrade — mirrors the root wss
+    // `verifyClient` behavior from server/index.js.
+    const parsed = new URL(rawUrl, 'http://localhost');
+    const token =
+      parsed.searchParams.get('token') ||
+      (req.headers.authorization || '').split(' ')[1];
+    const user = authenticateWebSocket(token);
+    if (!user) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
     const upstream = net.connect(Number(port), '127.0.0.1', () => {
-      const handshake =
-        `${req.method} ${upstreamPath} HTTP/1.1\r\n` +
-        Object.entries(req.headers)
-          .filter(([key]) => !HOP_BY_HOP_HEADERS.has(key.toLowerCase()) || key.toLowerCase() === 'upgrade' || key.toLowerCase() === 'connection')
-          .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : value}`)
-          .join('\r\n') +
-        '\r\n\r\n';
+      const upstreamHeaders = Object.entries(req.headers)
+        .filter(([key]) => {
+          const k = key.toLowerCase();
+          // Keep upgrade/connection headers (required for WS handshake),
+          // strip the rest of the hop-by-hops.
+          if (k === 'upgrade' || k === 'connection') return true;
+          return !HOP_BY_HOP_HEADERS.has(k);
+        })
+        .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : value}`)
+        .join('\r\n');
+      const handshake = `${req.method} ${upstreamPath} HTTP/1.1\r\n${upstreamHeaders}\r\n\r\n`;
       upstream.write(handshake);
       if (head && head.length) upstream.write(head);
       upstream.pipe(socket);

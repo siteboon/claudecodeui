@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ExternalLink, RefreshCw, Globe } from 'lucide-react';
 
 type DevicePreset = {
@@ -38,7 +38,6 @@ export default function PreviewPane({ variant = 'panel', className = '' }: Previ
   const [activePath, setActivePath] = useState<string>(DEFAULT_PATH);
   const [preset, setPreset] = useState<DevicePreset['id']>('fill');
   const [reloadKey, setReloadKey] = useState<number>(0);
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const src = useMemo(() => `/preview/${activePort}${normalizePath(activePath)}`, [activePort, activePath]);
 
@@ -64,7 +63,6 @@ export default function PreviewPane({ variant = 'panel', className = '' }: Previ
   }, [activePort, activePath]);
 
   const frameStyle = useMemo(() => {
-    const p = DEVICE_PRESETS.find((preset) => preset.id === preset.id) || DEVICE_PRESETS[0];
     const selected = DEVICE_PRESETS.find((d) => d.id === preset) || DEVICE_PRESETS[0];
     if (selected.id === 'fill') return { width: '100%', height: '100%' } as const;
     return {
@@ -73,7 +71,6 @@ export default function PreviewPane({ variant = 'panel', className = '' }: Previ
       maxWidth: '100%',
       maxHeight: '100%',
     } as const;
-    void p;
   }, [preset]);
 
   const rootHeight = variant === 'modal' ? 'h-[100dvh]' : 'h-full';
@@ -158,7 +155,6 @@ export default function PreviewPane({ variant = 'panel', className = '' }: Previ
           }}
         >
           <iframe
-            ref={iframeRef}
             key={reloadKey}
             title="Preview"
             src={src}

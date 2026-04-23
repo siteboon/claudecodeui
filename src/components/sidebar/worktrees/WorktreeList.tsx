@@ -191,12 +191,12 @@ export default function WorktreeList({
           return (
             <div
               key={wt.path}
-              className="hover:bg-midnight-surface-hover group flex items-center gap-2 rounded-md px-2 py-1.5"
+              className="group flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent/40"
             >
               <button
                 type="button"
                 onClick={() => onSelect?.(wt)}
-                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                className="mobile-touch-target flex min-w-0 flex-1 items-center gap-2 text-left"
                 title={wt.path}
               >
                 <span
@@ -216,7 +216,7 @@ export default function WorktreeList({
                 onClick={() => onDelete(wt.path)}
                 aria-label={`Remove worktree ${wt.slug}`}
                 disabled={isDeleting}
-                className="touch:opacity-100 flex h-6 w-6 items-center justify-center rounded opacity-0 transition-opacity group-hover:opacity-100"
+                className="mobile-touch-target flex h-10 w-10 items-center justify-center rounded opacity-70 transition-opacity hover:opacity-100 focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100"
               >
                 {isDeleting ? (
                   <Loader2 className="h-3 w-3 animate-spin text-midnight-text3" aria-hidden="true" />

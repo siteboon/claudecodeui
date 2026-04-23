@@ -3,6 +3,8 @@ import http from 'http';
 import express from 'express';
 import WebSocket, { WebSocketServer } from 'ws';
 
+import { authenticateWebSocket } from '../middleware/auth.js';
+
 const CDP_HOST = process.env.CHROME_CDP_HOST || '127.0.0.1';
 const CDP_PORT = Number(process.env.CHROME_CDP_PORT || 9222);
 
@@ -274,9 +276,24 @@ export function attachChromeScreencast(httpServer) {
     });
   });
 
-  httpServer.on('upgrade', (req, socket, head) => {
-    const url = req.url || '';
-    if (!url.startsWith('/ws/chrome-view')) return;
+  // `prependListener` ensures this handler runs before the root wss
+  // listener in server/index.js and wins the upgrade race for
+  // /ws/chrome-view paths.
+  httpServer.prependListener('upgrade', (req, socket, head) => {
+    const rawUrl = req.url || '';
+    if (!rawUrl.startsWith('/ws/chrome-view')) return;
+
+    const parsed = new URL(rawUrl, 'http://localhost');
+    const token =
+      parsed.searchParams.get('token') ||
+      (req.headers.authorization || '').split(' ')[1];
+    const user = authenticateWebSocket(token);
+    if (!user) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
     wss.handleUpgrade(req, socket, head, (ws) => {
       wss.emit('connection', ws, req);
     });
