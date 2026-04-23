@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import {
   Plus,
   Archive,
@@ -23,9 +24,13 @@ import {
 } from '../../../../shared/view/ui';
 import type { FlatSession } from '../../../../hooks/useFlatSessionList';
 import type { ProjectRailItemData } from '../../../project-rail/types/types';
+import { useTranscriptSearch, type TranscriptSessionResult } from '../../hooks/useTranscriptSearch';
 
 import { KbdCombo } from './Kbd';
 import { MOD_KEY, ALT_KEY } from './shortcuts';
+import TranscriptMatchRow from './TranscriptMatchRow';
+
+const TRANSCRIPT_MIN_CHARS = 3;
 
 type CommandPaletteProps = {
   open: boolean;
@@ -62,20 +67,101 @@ export default function CommandPalette({
   onShowSettings,
   onShowShortcuts,
 }: CommandPaletteProps) {
+  // Mirror the Command root's search string by observing the input directly.
+  // Command.tsx owns the canonical search state in its context and doesn't
+  // expose it to the outside world; we peek via onInput so this hook can
+  // drive without modifying Command.tsx.
+  const [query, setQuery] = useState('');
+
+  // Command.tsx unmounts the input on Dialog close so its canonical search
+  // resets to ''. Our mirrored query needs to follow — otherwise a re-open
+  // would race an old query against a fresh (empty) input.
+  useEffect(() => {
+    if (!open) setQuery('');
+  }, [open]);
+
+  const { results: transcriptResults, isSearching: isTranscriptSearching } = useTranscriptSearch({
+    query,
+    enabled: open,
+    minChars: TRANSCRIPT_MIN_CHARS,
+  });
+
   const run = (fn: () => void) => () => {
     fn();
     onOpenChange(false);
   };
+
+  const handleTranscriptSelect = (r: TranscriptSessionResult) => {
+    const match = sessions.find((s) => s.id === r.sessionId);
+    if (match) {
+      onSelectSession(match);
+    }
+    // If the sessionId doesn't resolve (archived, not yet loaded, stale
+    // index) close silently rather than crash or toast — see plan §6(b).
+    onOpenChange(false);
+  };
+
+  const showTranscriptGroup =
+    query.trim().length >= TRANSCRIPT_MIN_CHARS &&
+    (transcriptResults.length > 0 || isTranscriptSearching);
+
+  // Mirror Command.tsx's visibility filter (substring match on lowercased
+  // `value` prop) so we can suppress group headings whose items all collapse
+  // for the current query. Keeping this in the render site avoids touching
+  // Command.tsx and keeps the data-flow one-way.
+  const normalizedQuery = query.toLowerCase();
+  const matchesQuery = (value: string) =>
+    !normalizedQuery || value.toLowerCase().includes(normalizedQuery);
+
+  const actionValues = [
+    `new session ${activeProjectName}`,
+    ...(hasSelectedSession ? ['archive current session'] : []),
+    ...(hasActiveFilter ? ['clear project filter'] : []),
+    'refresh projects',
+    'open settings',
+    'keyboard shortcuts help',
+  ];
+  const showActionsGroup = actionValues.some(matchesQuery);
+  const showProjectsGroup =
+    railItems.length > 0 &&
+    railItems.some((p) => matchesQuery(`project ${p.displayName || p.name}`));
+  const showSessionsGroup =
+    sessions.length > 0 &&
+    sessions.some((s) => matchesQuery(`session ${s.summary || s.id} ${s.__projectDisplayName}`));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl overflow-hidden p-0">
         <DialogTitle>Command Palette</DialogTitle>
         <Command>
-          <CommandInput placeholder="Type a command or search sessions…" autoFocus />
+          <CommandInput
+            placeholder="Type a command or search sessions and transcripts…"
+            autoFocus
+            onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
+            onKeyDown={(e) => {
+              // F1: when only transcript rows match (no visible CommandItems),
+              // Command's own Enter handler becomes a no-op because transcript
+              // rows live outside its selection model. Activate the first
+              // transcript here so Enter keeps working on the keyboard path.
+              // Stop propagation before Command's onKeyDown runs (which would
+              // preventDefault Enter and then return due to entries.length===0).
+              if (
+                e.key === 'Enter' &&
+                !showActionsGroup &&
+                !showProjectsGroup &&
+                !showSessionsGroup &&
+                transcriptResults.length > 0
+              ) {
+                e.preventDefault();
+                e.stopPropagation();
+                handleTranscriptSelect(transcriptResults[0]);
+              }
+            }}
+          />
           <CommandList className="max-h-[440px]">
-            <CommandEmpty>No results found.</CommandEmpty>
+            {!showTranscriptGroup && <CommandEmpty>No results found.</CommandEmpty>}
 
+            {showActionsGroup && (
             <CommandGroup heading="Actions">
               <CommandItem
                 value={`new session ${activeProjectName}`}
@@ -135,8 +221,9 @@ export default function CommandPalette({
                 <span>Keyboard shortcuts</span>
               </CommandItem>
             </CommandGroup>
+            )}
 
-            {railItems.length > 0 && (
+            {showProjectsGroup && (
               <>
                 <CommandSeparator />
                 <CommandGroup heading="Projects">
@@ -159,7 +246,7 @@ export default function CommandPalette({
               </>
             )}
 
-            {sessions.length > 0 && (
+            {showSessionsGroup && (
               <>
                 <CommandSeparator />
                 <CommandGroup heading="Sessions">
@@ -184,6 +271,27 @@ export default function CommandPalette({
                       </CommandItem>
                     );
                   })}
+                </CommandGroup>
+              </>
+            )}
+
+            {showTranscriptGroup && (
+              <>
+                <CommandSeparator />
+                <CommandGroup heading="Transcript matches">
+                  {transcriptResults.length === 0 && isTranscriptSearching ? (
+                    <div className="px-2 py-1.5 text-xs text-muted-foreground" role="status">
+                      Searching transcripts…
+                    </div>
+                  ) : (
+                    transcriptResults.map((r) => (
+                      <TranscriptMatchRow
+                        key={`${r.projectName}:${r.sessionId}`}
+                        result={r}
+                        onSelect={() => handleTranscriptSelect(r)}
+                      />
+                    ))
+                  )}
                 </CommandGroup>
               </>
             )}
