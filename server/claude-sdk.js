@@ -240,7 +240,7 @@ function addSession(sessionId, queryInstance, tempImagePaths = [], tempDir = nul
     status: 'active',
     tempImagePaths,
     tempDir,
-    writer
+    ws: writer && writer.isWebSocketWriter ? writer.ws : (writer && typeof writer.send === 'function' ? writer : null)
   });
 }
 
@@ -476,7 +476,7 @@ async function loadMcpConfig(cwd) {
  * @param {Object} ws - WebSocket connection
  * @returns {Promise<void>}
  */
-async function queryClaudeSDK(command, options = {}, ws) {
+async function queryClaudeSDK(command, options = {}, writer) {
   const { sessionId, sessionSummary } = options;
   let capturedSessionId = sessionId;
   let sessionCreatedSent = false;
@@ -485,8 +485,8 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
   const emitNotification = (event) => {
     notifyUserIfEnabled({
-      userId: ws?.userId || null,
-      writer: ws,
+      userId: writer?.userId || null,
+      writer: writer,
       event
     });
   };
@@ -551,7 +551,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
       }
 
       const requestId = createRequestId();
-      ws.send(createNormalizedMessage({ kind: 'permission_request', requestId, toolName, input, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+      writer.send(createNormalizedMessage({ kind: 'permission_request', requestId, toolName, input, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
       emitNotification(createNotificationEvent({
         provider: 'claude',
         sessionId: capturedSessionId || sessionId || null,
@@ -573,7 +573,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
           _receivedAt: new Date(),
         },
         onCancel: (reason) => {
-          ws.send(createNormalizedMessage({ kind: 'permission_cancelled', requestId, reason, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+          writer.send(createNormalizedMessage({ kind: 'permission_cancelled', requestId, reason, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
         }
       });
       if (!decision) {
@@ -629,7 +629,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
     // Track the query instance for abort capability
     if (capturedSessionId) {
-      addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir, ws);
+      addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir, writer);
     }
 
     // Process streaming messages
@@ -639,17 +639,17 @@ async function queryClaudeSDK(command, options = {}, ws) {
       if (message.session_id && !capturedSessionId) {
 
         capturedSessionId = message.session_id;
-        addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir, ws);
+        addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir, writer);
 
         // Set session ID on writer
-        if (ws.setSessionId && typeof ws.setSessionId === 'function') {
-          ws.setSessionId(capturedSessionId);
+        if (writer && typeof writer.setSessionId === 'function') {
+          writer.setSessionId(capturedSessionId);
         }
 
         // Send session-created event only once for new sessions
         if (!sessionId && !sessionCreatedSent) {
           sessionCreatedSent = true;
-          ws.send(createNormalizedMessage({ kind: 'session_created', newSessionId: capturedSessionId, sessionId: capturedSessionId, provider: 'claude' }));
+          writer.send(createNormalizedMessage({ kind: 'session_created', newSessionId: capturedSessionId, sessionId: capturedSessionId, provider: 'claude' }));
         }
       } else {
         // session_id already captured
@@ -666,7 +666,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
         if (transformedMessage.parentToolUseId && !msg.parentToolUseId) {
           msg.parentToolUseId = transformedMessage.parentToolUseId;
         }
-        ws.send(msg);
+        writer.send(msg);
       }
 
       // Extract and send token budget updates from result messages
@@ -677,7 +677,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
         }
         const tokenBudgetData = extractTokenBudget(message);
         if (tokenBudgetData) {
-          ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+          writer.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
         }
       }
     }
@@ -691,9 +691,9 @@ async function queryClaudeSDK(command, options = {}, ws) {
     await cleanupTempFiles(tempImagePaths, tempDir);
 
     // Send completion event
-    ws.send(createNormalizedMessage({ kind: 'complete', exitCode: 0, isNewSession: !sessionId && !!command, sessionId: capturedSessionId, provider: 'claude' }));
+    writer.send(createNormalizedMessage({ kind: 'complete', exitCode: 0, isNewSession: !sessionId && !!command, sessionId: capturedSessionId, provider: 'claude' }));
     notifyRunStopped({
-      userId: ws?.userId || null,
+      userId: writer?.userId || null,
       provider: 'claude',
       sessionId: capturedSessionId || sessionId || null,
       sessionName: sessionSummary,
@@ -719,9 +719,9 @@ async function queryClaudeSDK(command, options = {}, ws) {
       : error.message;
 
     // Send error to WebSocket
-    ws.send(createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+    writer.send(createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
     notifyRunFailed({
-      userId: ws?.userId || null,
+      userId: writer?.userId || null,
       provider: 'claude',
       sessionId: capturedSessionId || sessionId || null,
       sessionName: sessionSummary,
@@ -766,6 +766,23 @@ async function abortClaudeSDKSession(sessionId) {
 }
 
 /**
+ * Aborts all sessions associated with a specific WebSocket
+ * @param {WebSocket} ws - The WebSocket to match
+ * @returns {number} - Number of sessions aborted
+ */
+function abortClaudeSDKSessionsForWebSocket(ws) {
+  let count = 0;
+  for (const [id, session] of activeSessions.entries()) {
+    if (session.ws === ws && session.status === 'active') {
+      console.log(`[Claude] Aborting orphaned session ${id} due to WebSocket disconnect`);
+      abortClaudeSDKSession(id);
+      count++;
+    }
+  }
+  return count;
+}
+
+/**
  * Checks if an SDK session is currently active
  * @param {string} sessionId - Session identifier
  * @returns {boolean} True if session is active
@@ -780,7 +797,13 @@ function isClaudeSDKSessionActive(sessionId) {
  * @returns {Array<string>} Array of active session IDs
  */
 function getActiveClaudeSDKSessions() {
-  return getAllSessions();
+  const activeIds = [];
+  for (const [id, session] of activeSessions.entries()) {
+    if (session.status === 'active') {
+      activeIds.push(id);
+    }
+  }
+  return activeIds;
 }
 
 /**
@@ -820,10 +843,11 @@ function reconnectSessionWriter(sessionId, newRawWs) {
   return true;
 }
 
-// Export public API
+// Export public API - Fixed duplicate export issue
 export {
   queryClaudeSDK,
   abortClaudeSDKSession,
+  abortClaudeSDKSessionsForWebSocket,
   isClaudeSDKSessionActive,
   getActiveClaudeSDKSessions,
   resolveToolApproval,

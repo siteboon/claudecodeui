@@ -1,9 +1,10 @@
-import { Folder, FolderPlus, MessageSquare, Plus, RefreshCw, Search, X, PanelLeftClose } from 'lucide-react';
+import { Folder, FolderPlus, MessageSquare, Plus, RefreshCw, Search, X, PanelLeftClose, Globe } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import { Button, Input } from '../../../../shared/view/ui';
 import { IS_PLATFORM } from '../../../../constants/config';
 import { cn } from '../../../../lib/utils';
 import GitHubStarBadge from './GitHubStarBadge';
+import { useWebSocket } from '../../../../contexts/WebSocketContext';
 
 type SearchMode = 'projects' | 'conversations';
 
@@ -40,12 +41,21 @@ export default function SidebarHeader({
   onCollapseSidebar,
   t,
 }: SidebarHeaderProps) {
+  const { isConnected } = useWebSocket();
+
   const LogoBlock = () => (
     <div className="flex min-w-0 items-center gap-2.5">
-      <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-primary/90 shadow-sm">
+      <div className="relative flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-primary/90 shadow-sm">
         <svg className="h-3.5 w-3.5 text-primary-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
+        <div 
+          className={cn(
+            "absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full border border-background shadow-sm",
+            isConnected ? "bg-emerald-500" : "bg-red-500 animate-pulse"
+          )}
+          title={isConnected ? t('websocket.connected', { defaultValue: 'Connected' }) : t('websocket.disconnected', { defaultValue: 'Disconnected' })}
+        />
       </div>
       <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">{t('app.title')}</h1>
     </div>

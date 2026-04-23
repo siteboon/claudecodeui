@@ -248,6 +248,22 @@ const wss = new WebSocketServer({
     }
 });
 
+// Setup heartbeat interval to detect dead connections
+const heartbeatInterval = setInterval(() => {
+    wss.clients.forEach((ws) => {
+        if (ws.isAlive === false) {
+            console.log('🔌 Terminating dead WebSocket connection');
+            return ws.terminate();
+        }
+        ws.isAlive = false;
+        ws.ping();
+    });
+}, 30000); // 30 seconds
+
+wss.on('close', () => {
+    clearInterval(heartbeatInterval);
+});
+
 // Make WebSocket server available to routes
 app.locals.wss = wss;
 
@@ -1339,6 +1355,10 @@ wss.on('connection', (ws, request) => {
     const url = request.url;
     console.log('[INFO] Client connected to:', url);
 
+    // Initial liveness state for heartbeat
+    ws.isAlive = true;
+    ws.on('pong', () => { ws.isAlive = true; });
+
     // Parse URL to get pathname without query parameters
     const urlObj = new URL(url, 'http://localhost');
     const pathname = urlObj.pathname;
@@ -1371,9 +1391,15 @@ class WebSocketWriter {
     }
 
     send(data) {
-        if (this.ws.readyState === 1) { // WebSocket.OPEN
-            this.ws.send(JSON.stringify(data));
+        try {
+            if (this.ws && this.ws.readyState === 1) { // WebSocket.OPEN
+                this.ws.send(JSON.stringify(data));
+                return true;
+            }
+        } catch (error) {
+            console.error('[WebSocketWriter] Error sending message:', error.message);
         }
+        return false;
     }
 
     updateWebSocket(newRawWs) {
@@ -1534,6 +1560,22 @@ function handleChatConnection(ws, request) {
         console.log('🔌 Chat client disconnected');
         // Remove from connected clients
         connectedClients.delete(ws);
+
+        // Abort any active sessions associated with this specific WebSocket
+        try {
+            const counts = {
+                claude: abortClaudeSDKSessionsForWebSocket(ws),
+                cursor: abortCursorSessionsForWebSocket(ws),
+                codex: abortCodexSessionsForWebSocket(ws),
+                gemini: abortGeminiSessionsForWebSocket(ws)
+            };
+            const total = counts.claude + counts.cursor + counts.codex + counts.gemini;
+            if (total > 0) {
+                console.log(`🧹 Cleaned up ${total} orphaned sessions (Claude:${counts.claude}, Cursor:${counts.cursor}, Codex:${counts.codex}, Gemini:${counts.gemini})`);
+            }
+        } catch (err) {
+            console.error('[Cleanup] Error during session cleanup:', err.message);
+        }
     });
 }
 
@@ -2311,6 +2353,9 @@ async function startServer() {
     try {
         // Initialize authentication database
         await initializeDatabase();
+
+        // Ensure Gemini session store is loaded from disk before accepting requests
+        await sessionManager.ready;
 
         // Configure Web Push (VAPID keys)
         configureWebPush();

@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import crossSpawn from 'cross-spawn';
+import { StringDecoder } from 'string_decoder';
 
 // Use cross-spawn on Windows for correct .cmd resolution (same pattern as cursor-cli.js)
 const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
@@ -14,7 +15,7 @@ import { createNormalizedMessage } from './shared/utils.js';
 
 let activeGeminiProcesses = new Map(); // Track active processes by session ID
 
-async function spawnGemini(command, options = {}, ws) {
+async function spawnGemini(command, options = {}, writer) {
     const { sessionId, projectPath, cwd, toolsSettings, permissionMode, images, sessionSummary } = options;
     let capturedSessionId = sessionId; // Track session ID throughout the process
     let sessionCreatedSent = false; // Track if we've already sent session-created event
@@ -187,7 +188,7 @@ async function spawnGemini(command, options = {}, ws) {
             const finalSessionId = capturedSessionId || sessionId || processKey;
             if (code === 0 && !error) {
                 notifyRunStopped({
-                    userId: ws?.userId || null,
+                    userId: writer?.userId || null,
                     provider: 'gemini',
                     sessionId: finalSessionId,
                     sessionName: sessionSummary,
@@ -197,7 +198,7 @@ async function spawnGemini(command, options = {}, ws) {
             }
 
             notifyRunFailed({
-                userId: ws?.userId || null,
+                userId: writer?.userId || null,
                 provider: 'gemini',
                 sessionId: finalSessionId,
                 sessionName: sessionSummary,
@@ -208,6 +209,11 @@ async function spawnGemini(command, options = {}, ws) {
         // Attach temp file info to process for cleanup later
         geminiProcess.tempImagePaths = tempImagePaths;
         geminiProcess.tempDir = tempDir;
+
+        // Store WebSocket reference for cleanup on disconnect
+        if (writer && writer.ws) {
+            geminiProcess.ws = writer.ws;
+        }
 
         // Store process reference for potential abort
         const processKey = capturedSessionId || sessionId || Date.now().toString();
@@ -226,9 +232,9 @@ async function spawnGemini(command, options = {}, ws) {
         const startTimeout = () => {
             if (timeout) clearTimeout(timeout);
             timeout = setTimeout(() => {
-                const socketSessionId = typeof ws.getSessionId === 'function' ? ws.getSessionId() : (capturedSessionId || sessionId || processKey);
+                const socketSessionId = writer && typeof writer.getSessionId === 'function' ? writer.getSessionId() : (capturedSessionId || sessionId || processKey);
                 terminalFailureReason = `Gemini CLI timeout - no response received for ${timeoutMs / 1000} seconds`;
-                ws.send(createNormalizedMessage({ kind: 'error', content: terminalFailureReason, sessionId: socketSessionId, provider: 'gemini' }));
+                writer.send(createNormalizedMessage({ kind: 'error', content: terminalFailureReason, sessionId: socketSessionId, provider: 'gemini' }));
                 try {
                     geminiProcess.kill('SIGTERM');
                 } catch (e) { }
@@ -244,8 +250,8 @@ async function spawnGemini(command, options = {}, ws) {
 
         // Create response handler for NDJSON buffering
         let responseHandler;
-        if (ws) {
-            responseHandler = new GeminiResponseHandler(ws, {
+        if (writer) {
+            responseHandler = new GeminiResponseHandler(writer, {
                 onContentFragment: (content) => {
                     if (assistantBlocks.length > 0 && assistantBlocks[assistantBlocks.length - 1].type === 'text') {
                         assistantBlocks[assistantBlocks.length - 1].text += content;
@@ -287,9 +293,12 @@ async function spawnGemini(command, options = {}, ws) {
             });
         }
 
+        const stdoutDecoder = new StringDecoder('utf8');
+        const stderrDecoder = new StringDecoder('utf8');
+
         // Handle stdout
         geminiProcess.stdout.on('data', (data) => {
-            const rawOutput = data.toString();
+            const rawOutput = stdoutDecoder.write(data);
             startTimeout(); // Re-arm the timeout
 
             // For new sessions, create a session ID FIRST
@@ -311,10 +320,10 @@ async function spawnGemini(command, options = {}, ws) {
                     activeGeminiProcesses.set(capturedSessionId, geminiProcess);
                 }
 
-                ws.setSessionId && typeof ws.setSessionId === 'function' && ws.setSessionId(capturedSessionId);
+                writer && typeof writer.setSessionId === 'function' && writer.setSessionId(capturedSessionId);
 
-                ws.send(createNormalizedMessage({ kind: 'session_created', newSessionId: capturedSessionId, sessionId: capturedSessionId, provider: 'gemini' }));
-            }
+                writer.send(createNormalizedMessage({ kind: 'session_created', newSessionId: capturedSessionId, sessionId: capturedSessionId, provider: 'gemini' }));
+                }
 
             if (responseHandler) {
                 responseHandler.processData(rawOutput);
@@ -325,14 +334,14 @@ async function spawnGemini(command, options = {}, ws) {
                 } else {
                     assistantBlocks.push({ type: 'text', text: rawOutput });
                 }
-                const socketSessionId = typeof ws.getSessionId === 'function' ? ws.getSessionId() : (capturedSessionId || sessionId);
-                ws.send(createNormalizedMessage({ kind: 'stream_delta', content: rawOutput, sessionId: socketSessionId, provider: 'gemini' }));
+                const socketSessionId = writer && typeof writer.getSessionId === 'function' ? writer.getSessionId() : (capturedSessionId || sessionId);
+                writer.send(createNormalizedMessage({ kind: 'stream_delta', content: rawOutput, sessionId: socketSessionId, provider: 'gemini' }));
             }
         });
 
         // Handle stderr
         geminiProcess.stderr.on('data', (data) => {
-            const errorMsg = data.toString();
+            const errorMsg = stderrDecoder.write(data);
 
             // Filter out deprecation warnings and "Loaded cached credentials" message
             if (errorMsg.includes('[DEP0040]') ||
@@ -342,8 +351,8 @@ async function spawnGemini(command, options = {}, ws) {
                 return;
             }
 
-            const socketSessionId = typeof ws.getSessionId === 'function' ? ws.getSessionId() : (capturedSessionId || sessionId);
-            ws.send(createNormalizedMessage({ kind: 'error', content: errorMsg, sessionId: socketSessionId, provider: 'gemini' }));
+            const socketSessionId = writer && typeof writer.getSessionId === 'function' ? writer.getSessionId() : (capturedSessionId || sessionId);
+            writer.send(createNormalizedMessage({ kind: 'error', content: errorMsg, sessionId: socketSessionId, provider: 'gemini' }));
         });
 
         // Handle process completion
@@ -365,7 +374,7 @@ async function spawnGemini(command, options = {}, ws) {
                 sessionManager.addMessage(finalSessionId, 'assistant', assistantBlocks);
             }
 
-            ws.send(createNormalizedMessage({ kind: 'complete', exitCode: code, isNewSession: !sessionId && !!command, sessionId: finalSessionId, provider: 'gemini' }));
+            writer.send(createNormalizedMessage({ kind: 'complete', exitCode: code, isNewSession: !sessionId && !!command, sessionId: finalSessionId, provider: 'gemini' }));
 
             // Clean up temporary image files if any
             if (geminiProcess.tempImagePaths && geminiProcess.tempImagePaths.length > 0) {
@@ -385,8 +394,8 @@ async function spawnGemini(command, options = {}, ws) {
                 if (code === 127) {
                     const installed = await providerAuthService.isProviderInstalled('gemini');
                     if (!installed) {
-                        const socketSessionId = typeof ws.getSessionId === 'function' ? ws.getSessionId() : finalSessionId;
-                        ws.send(createNormalizedMessage({ kind: 'error', content: 'Gemini CLI is not installed. Please install it first: https://github.com/google-gemini/gemini-cli', sessionId: socketSessionId, provider: 'gemini' }));
+                        const socketSessionId = writer && typeof writer.getSessionId === 'function' ? writer.getSessionId() : finalSessionId;
+                        writer.send(createNormalizedMessage({ kind: 'error', content: 'Gemini CLI is not installed. Please install it first: https://github.com/google-gemini/gemini-cli', sessionId: socketSessionId, provider: 'gemini' }));
                     }
                 }
 
@@ -410,8 +419,8 @@ async function spawnGemini(command, options = {}, ws) {
                 ? 'Gemini CLI is not installed. Please install it first: https://github.com/google-gemini/gemini-cli'
                 : error.message;
 
-            const errorSessionId = typeof ws.getSessionId === 'function' ? ws.getSessionId() : finalSessionId;
-            ws.send(createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: errorSessionId, provider: 'gemini' }));
+            const errorSessionId = writer && typeof writer.getSessionId === 'function' ? writer.getSessionId() : finalSessionId;
+            writer.send(createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: errorSessionId, provider: 'gemini' }));
             notifyTerminalState({ error });
 
             reject(error);
@@ -453,6 +462,18 @@ function abortGeminiSession(sessionId) {
     return false;
 }
 
+function abortGeminiSessionsForWebSocket(ws) {
+    let count = 0;
+    for (const [sessionId, proc] of activeGeminiProcesses.entries()) {
+        if (proc.ws === ws) {
+            console.log(`[Gemini] Aborting orphaned session ${sessionId} due to WebSocket disconnect`);
+            abortGeminiSession(sessionId);
+            count++;
+        }
+    }
+    return count;
+}
+
 function isGeminiSessionActive(sessionId) {
     return activeGeminiProcesses.has(sessionId);
 }
@@ -464,6 +485,7 @@ function getActiveGeminiSessions() {
 export {
     spawnGemini,
     abortGeminiSession,
+    abortGeminiSessionsForWebSocket,
     isGeminiSessionActive,
     getActiveGeminiSessions
 };

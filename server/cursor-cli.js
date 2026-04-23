@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import crossSpawn from 'cross-spawn';
+import { StringDecoder } from 'string_decoder';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
@@ -25,7 +26,7 @@ function isWorkspaceTrustPrompt(text = '') {
   return WORKSPACE_TRUST_PATTERNS.some((pattern) => pattern.test(text));
 }
 
-async function spawnCursor(command, options = {}, ws) {
+async function spawnCursor(command, options = {}, writer) {
   return new Promise(async (resolve, reject) => {
     const { sessionId, projectPath, cwd, resume, toolsSettings, skipPermissions, model, sessionSummary } = options;
     let capturedSessionId = sessionId; // Track session ID throughout the process
@@ -97,7 +98,7 @@ async function spawnCursor(command, options = {}, ws) {
         const finalSessionId = capturedSessionId || sessionId || processKey;
         if (code === 0 && !error) {
           notifyRunStopped({
-            userId: ws?.userId || null,
+            userId: writer?.userId || null,
             provider: 'cursor',
             sessionId: finalSessionId,
             sessionName: sessionSummary,
@@ -107,7 +108,7 @@ async function spawnCursor(command, options = {}, ws) {
         }
 
         notifyRunFailed({
-          userId: ws?.userId || null,
+          userId: writer?.userId || null,
           provider: 'cursor',
           sessionId: finalSessionId,
           sessionName: sessionSummary,
@@ -128,6 +129,11 @@ async function spawnCursor(command, options = {}, ws) {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: { ...process.env } // Inherit all environment variables
       });
+
+      // Store WebSocket reference for cleanup on disconnect
+      if (writer && writer.ws) {
+        cursorProcess.ws = writer.ws;
+      }
 
       activeCursorProcesses.set(processKey, cursorProcess);
 
@@ -168,14 +174,12 @@ async function spawnCursor(command, options = {}, ws) {
                   }
 
                   // Set session ID on writer (for API endpoint compatibility)
-                  if (ws.setSessionId && typeof ws.setSessionId === 'function') {
-                    ws.setSessionId(capturedSessionId);
-                  }
+                  writer && typeof writer.setSessionId === 'function' && writer.setSessionId(capturedSessionId);
 
                   // Send session-created event only once for new sessions
                   if (!sessionId && !sessionCreatedSent) {
                     sessionCreatedSent = true;
-                    ws.send(createNormalizedMessage({ kind: 'session_created', newSessionId: capturedSessionId, model: response.model, cwd: response.cwd, sessionId: capturedSessionId, provider: 'cursor' }));
+                    writer.send(createNormalizedMessage({ kind: 'session_created', newSessionId: capturedSessionId, model: response.model, cwd: response.cwd, sessionId: capturedSessionId, provider: 'cursor' }));
                   }
                 }
 
@@ -191,7 +195,7 @@ async function spawnCursor(command, options = {}, ws) {
               // Accumulate assistant message chunks
               if (response.message && response.message.content && response.message.content.length > 0) {
                 const normalized = sessionsService.normalizeMessage('cursor', response, capturedSessionId || sessionId || null);
-                for (const msg of normalized) ws.send(msg);
+                for (const msg of normalized) writer.send(msg);
               }
               break;
 
@@ -199,7 +203,7 @@ async function spawnCursor(command, options = {}, ws) {
               // Session complete — send stream end + lifecycle complete with result payload
               console.log('Cursor session result:', response);
               const resultText = typeof response.result === 'string' ? response.result : '';
-              ws.send(createNormalizedMessage({
+              writer.send(createNormalizedMessage({
                 kind: 'complete',
                 exitCode: response.subtype === 'success' ? 0 : 1,
                 resultText,
@@ -221,13 +225,16 @@ async function spawnCursor(command, options = {}, ws) {
 
           // If not JSON, send as stream delta via adapter
           const normalized = sessionsService.normalizeMessage('cursor', line, capturedSessionId || sessionId || null);
-          for (const msg of normalized) ws.send(msg);
+          for (const msg of normalized) writer.send(msg);
         }
       };
 
+      const stdoutDecoder = new StringDecoder('utf8');
+      const stderrDecoder = new StringDecoder('utf8');
+
       // Handle stdout (streaming JSON responses)
       cursorProcess.stdout.on('data', (data) => {
-        const rawOutput = data.toString();
+        const rawOutput = stdoutDecoder.write(data);
         console.log('Cursor CLI stdout:', rawOutput);
 
         // Stream chunks can split JSON objects across packets; keep trailing partial line.
@@ -242,14 +249,14 @@ async function spawnCursor(command, options = {}, ws) {
 
       // Handle stderr
       cursorProcess.stderr.on('data', (data) => {
-        const stderrText = data.toString();
+        const stderrText = stderrDecoder.write(data);
         console.error('Cursor CLI stderr:', stderrText);
 
         if (shouldSuppressForTrustRetry(stderrText)) {
           return;
         }
 
-        ws.send(createNormalizedMessage({ kind: 'error', content: stderrText, sessionId: capturedSessionId || sessionId || null, provider: 'cursor' }));
+        writer.send(createNormalizedMessage({ kind: 'error', content: stderrText, sessionId: capturedSessionId || sessionId || null, provider: 'cursor' }));
       });
 
       // Handle process completion
@@ -276,7 +283,7 @@ async function spawnCursor(command, options = {}, ws) {
           return;
         }
 
-        ws.send(createNormalizedMessage({ kind: 'complete', exitCode: code, isNewSession: !sessionId && !!command, sessionId: finalSessionId, provider: 'cursor' }));
+        writer.send(createNormalizedMessage({ kind: 'complete', exitCode: code, isNewSession: !sessionId && !!command, sessionId: finalSessionId, provider: 'cursor' }));
 
         if (code === 0) {
           notifyTerminalState({ code });
@@ -301,7 +308,7 @@ async function spawnCursor(command, options = {}, ws) {
           ? 'Cursor CLI is not installed. Please install it from https://cursor.com'
           : error.message;
 
-        ws.send(createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider: 'cursor' }));
+        writer.send(createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider: 'cursor' }));
         notifyTerminalState({ error });
 
         settleOnce(() => reject(error));
@@ -326,6 +333,18 @@ function abortCursorSession(sessionId) {
   return false;
 }
 
+function abortCursorSessionsForWebSocket(ws) {
+  let count = 0;
+  for (const [sessionId, proc] of activeCursorProcesses.entries()) {
+    if (proc.ws === ws) {
+      console.log(`[Cursor] Aborting orphaned session ${sessionId} due to WebSocket disconnect`);
+      abortCursorSession(sessionId);
+      count++;
+    }
+  }
+  return count;
+}
+
 function isCursorSessionActive(sessionId) {
   return activeCursorProcesses.has(sessionId);
 }
@@ -337,6 +356,7 @@ function getActiveCursorSessions() {
 export {
   spawnCursor,
   abortCursorSession,
+  abortCursorSessionsForWebSocket,
   isCursorSessionActive,
   getActiveCursorSessions
 };
