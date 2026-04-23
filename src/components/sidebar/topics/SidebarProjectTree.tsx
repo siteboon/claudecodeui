@@ -162,7 +162,7 @@ export default function SidebarProjectTree(props: SidebarProjectListProps) {
                     onClick={() => toggleCollapsed(group.key)}
                     aria-expanded={!isCollapsed}
                     className={cn(
-                      'flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground md:px-2 md:min-h-[44px]',
+                      'flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground min-h-[44px] md:px-2',
                     )}
                   >
                     {isCollapsed ? (
@@ -171,12 +171,12 @@ export default function SidebarProjectTree(props: SidebarProjectListProps) {
                       <ChevronDown className="h-3.5 w-3.5 flex-shrink-0" />
                     )}
                     {group.gitOrigin ? (
-                      <FolderGit2 className="h-3.5 w-3.5 flex-shrink-0" />
+                      <FolderGit2 className="h-3.5 w-3.5 flex-shrink-0 text-[color:var(--midnight-lavender)]" />
                     ) : (
                       <GitBranch className="h-3.5 w-3.5 flex-shrink-0" />
                     )}
                     <span className="truncate">{group.displayName}</span>
-                    <span className="ml-auto rounded-full bg-muted px-1.5 py-0.5 text-[10px] normal-case tracking-normal text-muted-foreground">
+                    <span className="badge ml-auto text-[10px] normal-case tracking-normal">
                       {group.projects.length}
                     </span>
                   </button>

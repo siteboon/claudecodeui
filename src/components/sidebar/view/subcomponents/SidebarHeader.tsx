@@ -139,10 +139,11 @@ export default function SidebarHeader({
                 </button>
               )}
             </div>
-            {/* Search scope toggle: disabled until user types. Active state scopes
-                the full-text match between project names and conversation bodies. */}
+            {/* Search scope toggle: disabled until user types. Uses the
+                Midnight .ds-segment catalog so the active pill reads
+                white-on-black (high contrast vs. the dark canvas). */}
             <div
-              className="flex rounded-lg bg-muted/50 p-0.5"
+              className={cn('ds-segment flex w-full', !searchFilter && 'opacity-40')}
               role="tablist"
               aria-label={t('search.scopeLabel') as string}
               aria-disabled={!searchFilter}
@@ -153,11 +154,9 @@ export default function SidebarHeader({
                 disabled={!searchFilter}
                 aria-pressed={searchMode === 'projects'}
                 className={cn(
-                  'flex-1 flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all',
-                  searchMode === 'projects' && searchFilter
-                    ? 'bg-background shadow-sm text-foreground'
-                    : 'text-muted-foreground hover:text-foreground',
-                  !searchFilter && 'cursor-not-allowed opacity-40 hover:text-muted-foreground',
+                  'ds-segment-item flex-1 flex items-center justify-center gap-1.5 min-h-[44px]',
+                  searchMode === 'projects' && searchFilter && 'ds-segment-item-active',
+                  !searchFilter && 'cursor-not-allowed',
                 )}
               >
                 <Folder className="h-3 w-3" />
@@ -169,11 +168,9 @@ export default function SidebarHeader({
                 disabled={!searchFilter}
                 aria-pressed={searchMode === 'conversations'}
                 className={cn(
-                  'flex-1 flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all',
-                  searchMode === 'conversations' && searchFilter
-                    ? 'bg-background shadow-sm text-foreground'
-                    : 'text-muted-foreground hover:text-foreground',
-                  !searchFilter && 'cursor-not-allowed opacity-40 hover:text-muted-foreground',
+                  'ds-segment-item flex-1 flex items-center justify-center gap-1.5 min-h-[44px]',
+                  searchMode === 'conversations' && searchFilter && 'ds-segment-item-active',
+                  !searchFilter && 'cursor-not-allowed',
                 )}
               >
                 <MessageSquare className="h-3 w-3" />
