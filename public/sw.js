@@ -22,26 +22,12 @@ self.addEventListener('install', event => {
   self.skipWaiting();
 });
 
-// Fetch event — network-first for everything except hashed assets
+// Fetch event — only intercept assets and navigation, let everything else pass through
 self.addEventListener('fetch', event => {
   const url = event.request.url;
 
-  // Never intercept API requests or WebSocket upgrades
-  if (url.includes(`${BASE_PATH}/api/`) || url.includes(`${BASE_PATH}/ws`)) {
-    return;
-  }
-
-  // Navigation requests (HTML) — always go to network, no caching
-  if (event.request.mode === 'navigate') {
-    event.respondWith(
-      fetch(event.request).catch(() => caches.match(`${BASE_PATH}/manifest.json`).then(() =>
-        new Response('<h1>Offline</h1><p>Please check your connection.</p>', {
-          headers: { 'Content-Type': 'text/html' }
-        })
-      ))
-    );
-    return;
-  }
+  // Only intercept same-origin requests
+  if (!url.startsWith(self.location.origin)) return;
 
   // Hashed assets (JS/CSS in /assets/) — cache-first since filenames change per build
   if (url.includes(`${BASE_PATH}/assets/`)) {
@@ -58,10 +44,19 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Everything else — network-first
-  event.respondWith(
-    fetch(event.request).catch(() => caches.match(event.request))
-  );
+  // Navigation requests (HTML) — always go to network, offline fallback
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).catch(() =>
+        new Response('<h1>Offline</h1><p>Please check your connection.</p>', {
+          headers: { 'Content-Type': 'text/html' }
+        })
+      )
+    );
+    return;
+  }
+
+  // Everything else (API, WS, session routes, etc.) — don't intercept
 });
 
 // Activate event — purge old caches
