@@ -566,6 +566,10 @@
     .overflow-y-auto, [data-scroll-container] {
       touch-action: pan-y;
       -webkit-overflow-scrolling: touch;
+      /* Disable browser scroll anchoring — we manage scroll position in JS.
+         Browser anchoring can conflict with our auto-scroll-to-bottom logic
+         and cause the viewport to jump to the top during streaming. */
+      overflow-anchor: none;
     }
     
     /* Preserve checkbox visibility */
