@@ -21,6 +21,7 @@ export interface IProvider {
   readonly mcp: IProviderMcp;
   readonly auth: IProviderAuth;
   readonly sessions: IProviderSessions;
+  readonly sessionSynchronizer: IProviderSessionSynchronizer;
 }
 
 // ---------------------------
@@ -66,4 +67,26 @@ export interface IProviderMcp {
 export interface IProviderSessions {
   normalizeMessage(raw: unknown, sessionId: string | null): NormalizedMessage[];
   fetchHistory(sessionId: string, options?: FetchHistoryOptions): Promise<FetchHistoryResult>;
+}
+
+// ---------------------------
+//----------------- PROVIDER SESSION SYNCHRONIZER INTERFACE ------------
+/**
+ * Session indexing contract for one provider.
+ *
+ * Implementations scan provider-specific session artifacts on disk and upsert
+ * normalized session metadata into the database. The service layer uses this
+ * interface for both full rescans and single-file incremental sync triggered
+ * by filesystem watcher events.
+ */
+export interface IProviderSessionSynchronizer {
+  /**
+   * Scans provider session artifacts and upserts discovered sessions into DB.
+   */
+  synchronize(since?: Date): Promise<number>;
+
+  /**
+   * Parses and upserts one provider artifact file without running a full scan.
+   */
+  synchronizeFile(filePath: string): Promise<boolean>;
 }
