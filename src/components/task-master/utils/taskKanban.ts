@@ -1,4 +1,5 @@
 import type { TFunction } from 'i18next';
+
 import type { TaskKanbanColumn, TaskMasterTask } from '../types';
 
 const KANBAN_COLUMN_CONFIG = [
@@ -6,43 +7,43 @@ const KANBAN_COLUMN_CONFIG = [
     id: 'pending',
     titleKey: 'kanban.pending',
     status: 'pending',
-    color: 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700',
-    headerColor: 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200',
+    color: 'ds-tile-inset',
+    headerColor: 'bg-muted text-foreground',
   },
   {
     id: 'in-progress',
     titleKey: 'kanban.inProgress',
     status: 'in-progress',
-    color: 'bg-blue-50 dark:bg-blue-900/50 border-blue-200 dark:border-blue-700',
-    headerColor: 'bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200',
+    color: 'ds-tile-inset border-sky/30',
+    headerColor: 'bg-sky/15 text-sky',
   },
   {
     id: 'done',
     titleKey: 'kanban.done',
     status: 'done',
-    color: 'bg-emerald-50 dark:bg-emerald-900/50 border-emerald-200 dark:border-emerald-700',
-    headerColor: 'bg-emerald-100 dark:bg-emerald-800 text-emerald-800 dark:text-emerald-200',
+    color: 'ds-tile-inset border-mint/30',
+    headerColor: 'bg-mint/15 text-mint',
   },
   {
     id: 'blocked',
     titleKey: 'kanban.blocked',
     status: 'blocked',
-    color: 'bg-red-50 dark:bg-red-900/50 border-red-200 dark:border-red-700',
-    headerColor: 'bg-red-100 dark:bg-red-800 text-red-800 dark:text-red-200',
+    color: 'ds-tile-inset border-blush/30',
+    headerColor: 'bg-blush/15 text-blush',
   },
   {
     id: 'deferred',
     titleKey: 'kanban.deferred',
     status: 'deferred',
-    color: 'bg-amber-50 dark:bg-amber-900/50 border-amber-200 dark:border-amber-700',
-    headerColor: 'bg-amber-100 dark:bg-amber-800 text-amber-800 dark:text-amber-200',
+    color: 'ds-tile-inset border-butter/30',
+    headerColor: 'bg-butter/15 text-butter',
   },
   {
     id: 'cancelled',
     titleKey: 'kanban.cancelled',
     status: 'cancelled',
-    color: 'bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-700',
-    headerColor: 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200',
+    color: 'ds-tile-inset',
+    headerColor: 'bg-muted text-muted-foreground',
   },
 ] as const;
 

@@ -26,10 +26,10 @@ export const MCP_GLOBAL_SUPPORTED_SCOPES: McpScope[] = ['user', 'project'];
 export const MCP_GLOBAL_SUPPORTED_TRANSPORTS: McpTransport[] = ['stdio', 'http'];
 
 export const MCP_PROVIDER_BUTTON_CLASSES: Record<McpProvider, string> = {
-  claude: 'bg-purple-600 text-white hover:bg-purple-700',
-  cursor: 'bg-purple-600 text-white hover:bg-purple-700',
-  codex: 'bg-gray-800 text-white hover:bg-gray-900 dark:bg-gray-700 dark:hover:bg-gray-600',
-  gemini: 'bg-blue-600 text-white hover:bg-blue-700',
+  claude: 'bg-primary text-primary-foreground hover:opacity-90',
+  cursor: 'bg-primary text-primary-foreground hover:opacity-90',
+  codex: 'bg-card text-foreground hover:bg-card/80',
+  gemini: 'bg-primary text-primary-foreground hover:opacity-90',
 };
 
 export const MCP_SUPPORTS_WORKING_DIRECTORY: Record<McpProvider, boolean> = {
