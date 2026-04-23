@@ -41,6 +41,12 @@ export interface Project {
   geminiSessions?: ProjectSession[];
   sessionMeta?: ProjectSessionMeta;
   taskmaster?: ProjectTaskmasterInfo;
+  repoGroup?: string;
+  repoDisplayName?: string | null;
+  isWorktree?: boolean;
+  gitBranch?: string | null;
+  gitRoot?: string | null;
+  gitOrigin?: string | null;
   [key: string]: unknown;
 }
 

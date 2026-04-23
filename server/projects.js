@@ -66,6 +66,7 @@ import Database from 'better-sqlite3';
 import os from 'os';
 import sessionManager from './sessionManager.js';
 import { applyCustomSessionNames } from './database/db.js';
+import { group as groupByRepo } from './services/repo-grouper.js';
 
 // Import TaskMaster detection functions
 async function detectTaskMasterFolder(projectPath) {
@@ -637,7 +638,7 @@ async function getProjects(progressCallback = null) {
     });
   }
 
-  return projects;
+  return await groupByRepo(projects);
 }
 
 async function getSessions(projectName, limit = 5, offset = 0) {

@@ -1,8 +1,10 @@
 import { Folder, FolderPlus, MessageSquare, Plus, RefreshCw, Search, X, PanelLeftClose } from 'lucide-react';
 import type { TFunction } from 'i18next';
+
 import { Button, Input } from '../../../../shared/view/ui';
 import { IS_PLATFORM } from '../../../../constants/config';
 import { cn } from '../../../../lib/utils';
+
 import GitHubStarBadge from './GitHubStarBadge';
 
 type SearchMode = 'projects' | 'conversations';
@@ -112,40 +114,17 @@ export default function SidebarHeader({
         {/* Search bar */}
         {projectsCount > 0 && !isLoading && (
           <div className="mt-2.5 space-y-2">
-            {/* Search mode toggle */}
-            <div className="flex rounded-lg bg-muted/50 p-0.5">
-              <button
-                onClick={() => onSearchModeChange('projects')}
-                aria-pressed={searchMode === 'projects'}
-                className={cn(
-                  "flex-1 flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all",
-                  searchMode === 'projects'
-                    ? "bg-background shadow-sm text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <Folder className="h-3 w-3" />
-                {t('search.modeProjects')}
-              </button>
-              <button
-                onClick={() => onSearchModeChange('conversations')}
-                aria-pressed={searchMode === 'conversations'}
-                className={cn(
-                  "flex-1 flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all",
-                  searchMode === 'conversations'
-                    ? "bg-background shadow-sm text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <MessageSquare className="h-3 w-3" />
-                {t('search.modeConversations')}
-              </button>
-            </div>
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50" />
               <Input
                 type="text"
-                placeholder={searchMode === 'conversations' ? t('search.conversationsPlaceholder') : t('projects.searchPlaceholder')}
+                placeholder={
+                  !searchFilter
+                    ? (t('search.typeToSearch') as string)
+                    : searchMode === 'conversations'
+                      ? (t('search.modeConversations') as string)
+                      : (t('search.modeProjects') as string)
+                }
                 value={searchFilter}
                 onChange={(event) => onSearchFilterChange(event.target.value)}
                 className="nav-search-input h-9 rounded-xl border-0 pl-9 pr-8 text-sm transition-all duration-200 placeholder:text-muted-foreground/40 focus-visible:ring-0 focus-visible:ring-offset-0"
@@ -159,6 +138,44 @@ export default function SidebarHeader({
                   <X className="h-3 w-3 text-muted-foreground" />
                 </button>
               )}
+            </div>
+            {/* Search scope toggle: disabled until user types. Uses the
+                Midnight .ds-segment catalog so the active pill reads
+                white-on-black (high contrast vs. the dark canvas). */}
+            <div
+              className={cn('ds-segment flex w-full', !searchFilter && 'opacity-40')}
+              role="tablist"
+              aria-label={t('search.scopeLabel') as string}
+              aria-disabled={!searchFilter}
+            >
+              <button
+                type="button"
+                onClick={() => onSearchModeChange('projects')}
+                disabled={!searchFilter}
+                aria-pressed={searchMode === 'projects'}
+                className={cn(
+                  'ds-segment-item flex-1 flex items-center justify-center gap-1.5 min-h-[44px]',
+                  searchMode === 'projects' && searchFilter && 'ds-segment-item-active',
+                  !searchFilter && 'cursor-not-allowed',
+                )}
+              >
+                <Folder className="h-3 w-3" />
+                {t('search.modeProjects')}
+              </button>
+              <button
+                type="button"
+                onClick={() => onSearchModeChange('conversations')}
+                disabled={!searchFilter}
+                aria-pressed={searchMode === 'conversations'}
+                className={cn(
+                  'ds-segment-item flex-1 flex items-center justify-center gap-1.5 min-h-[44px]',
+                  searchMode === 'conversations' && searchFilter && 'ds-segment-item-active',
+                  !searchFilter && 'cursor-not-allowed',
+                )}
+              >
+                <MessageSquare className="h-3 w-3" />
+                {t('search.modeConversations')}
+              </button>
             </div>
           </div>
         )}
@@ -205,39 +222,17 @@ export default function SidebarHeader({
         {/* Mobile search */}
         {projectsCount > 0 && !isLoading && (
           <div className="mt-2.5 space-y-2">
-            <div className="flex rounded-lg bg-muted/50 p-0.5">
-              <button
-                onClick={() => onSearchModeChange('projects')}
-                aria-pressed={searchMode === 'projects'}
-                className={cn(
-                  "flex-1 flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all",
-                  searchMode === 'projects'
-                    ? "bg-background shadow-sm text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <Folder className="h-3 w-3" />
-                {t('search.modeProjects')}
-              </button>
-              <button
-                onClick={() => onSearchModeChange('conversations')}
-                aria-pressed={searchMode === 'conversations'}
-                className={cn(
-                  "flex-1 flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all",
-                  searchMode === 'conversations'
-                    ? "bg-background shadow-sm text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <MessageSquare className="h-3 w-3" />
-                {t('search.modeConversations')}
-              </button>
-            </div>
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/50" />
               <Input
                 type="text"
-                placeholder={searchMode === 'conversations' ? t('search.conversationsPlaceholder') : t('projects.searchPlaceholder')}
+                placeholder={
+                  !searchFilter
+                    ? (t('search.typeToSearch') as string)
+                    : searchMode === 'conversations'
+                      ? (t('search.modeConversations') as string)
+                      : (t('search.modeProjects') as string)
+                }
                 value={searchFilter}
                 onChange={(event) => onSearchFilterChange(event.target.value)}
                 className="nav-search-input h-10 rounded-xl border-0 pl-10 pr-9 text-sm transition-all duration-200 placeholder:text-muted-foreground/40 focus-visible:ring-0 focus-visible:ring-offset-0"
@@ -251,6 +246,45 @@ export default function SidebarHeader({
                   <X className="h-3.5 w-3.5 text-muted-foreground" />
                 </button>
               )}
+            </div>
+            <div
+              className="flex rounded-lg bg-muted/50 p-0.5"
+              role="tablist"
+              aria-label={t('search.scopeLabel') as string}
+              aria-disabled={!searchFilter}
+            >
+              <button
+                type="button"
+                onClick={() => onSearchModeChange('projects')}
+                disabled={!searchFilter}
+                aria-pressed={searchMode === 'projects'}
+                className={cn(
+                  'flex-1 flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all min-h-[44px]',
+                  searchMode === 'projects' && searchFilter
+                    ? 'bg-background shadow-sm text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                  !searchFilter && 'cursor-not-allowed opacity-40 hover:text-muted-foreground',
+                )}
+              >
+                <Folder className="h-3 w-3" />
+                {t('search.modeProjects')}
+              </button>
+              <button
+                type="button"
+                onClick={() => onSearchModeChange('conversations')}
+                disabled={!searchFilter}
+                aria-pressed={searchMode === 'conversations'}
+                className={cn(
+                  'flex-1 flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all min-h-[44px]',
+                  searchMode === 'conversations' && searchFilter
+                    ? 'bg-background shadow-sm text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                  !searchFilter && 'cursor-not-allowed opacity-40 hover:text-muted-foreground',
+                )}
+              >
+                <MessageSquare className="h-3 w-3" />
+                {t('search.modeConversations')}
+              </button>
             </div>
           </div>
         )}

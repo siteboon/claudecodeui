@@ -110,8 +110,10 @@
     "updateAvailable": "Доступно обновление"
   },
   "search": {
-    "modeProjects": "Проекты",
-    "modeConversations": "Разговоры",
+    "modeProjects": "Поиск по проектам",
+    "modeConversations": "Поиск по разговорам",
+    "typeToSearch": "Введите для поиска",
+    "scopeLabel": "Область поиска",
     "conversationsPlaceholder": "Поиск в разговорах...",
     "searching": "Поиск...",
     "noResults": "Результаты не найдены",
@@ -124,6 +126,14 @@
     "projectsScanned_few": "{{count}} проекта просканировано",
     "projectsScanned_many": "{{count}} проектов просканировано",
     "projectsScanned_other": "{{count}} проектов просканировано"
+  },
+  "topics": {
+    "all": "Все",
+    "createTopic": "Тема",
+    "renamePrompt": "Переименовать тему",
+    "deleteConfirm": "Удалить эту тему?",
+    "namePlaceholder": "Название темы",
+    "chipRowLabel": "Темы"
   },
   "deleteConfirmation": {
     "deleteProject": "Убрать проект",

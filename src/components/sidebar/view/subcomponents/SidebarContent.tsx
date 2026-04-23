@@ -1,13 +1,16 @@
 import { type ReactNode } from 'react';
 import { Folder, MessageSquare, Search } from 'lucide-react';
 import type { TFunction } from 'i18next';
+
 import { ScrollArea } from '../../../../shared/view/ui';
 import type { Project } from '../../../../types/app';
 import type { ReleaseInfo } from '../../../../types/sharedTypes';
 import type { ConversationSearchResults, SearchProgress } from '../../hooks/useSidebarController';
+import SidebarProjectTree from '../../topics/SidebarProjectTree';
+
 import SidebarFooter from './SidebarFooter';
 import SidebarHeader from './SidebarHeader';
-import SidebarProjectList, { type SidebarProjectListProps } from './SidebarProjectList';
+import { type SidebarProjectListProps } from './SidebarProjectList';
 
 type SearchMode = 'projects' | 'conversations';
 
@@ -211,7 +214,7 @@ export default function SidebarContent({
             </div>
           ) : null
         ) : (
-          <SidebarProjectList {...projectListProps} />
+          <SidebarProjectTree {...projectListProps} />
         )}
       </ScrollArea>
 

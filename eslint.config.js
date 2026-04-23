@@ -171,6 +171,11 @@ export default tseslint.config(
           mode: "file",
         },
         {
+          type: "backend-service", // Dispatch-local service modules wrapping legacy runtime (CLAUDE.md rule #6)
+          pattern: "server/services/*.{js,ts}", // additive wrappers composed into legacy files via a single require line
+          mode: "file",
+        },
+        {
           type: "backend-module", // logical element name used by boundaries rules below
           pattern: "server/modules/*", // each direct folder in server/modules is treated as one module boundary
           mode: "folder", // classify dependencies at folder-module level (not per individual file)

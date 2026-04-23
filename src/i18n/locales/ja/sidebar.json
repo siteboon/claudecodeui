@@ -108,6 +108,28 @@
   "version": {
     "updateAvailable": "アップデートあり"
   },
+  "search": {
+    "modeProjects": "プロジェクトを検索",
+    "modeConversations": "会話を検索",
+    "typeToSearch": "入力して検索",
+    "scopeLabel": "検索範囲",
+    "conversationsPlaceholder": "会話内を検索...",
+    "searching": "検索中...",
+    "noResults": "結果が見つかりません",
+    "tryDifferentQuery": "別の検索を試してください",
+    "matches_one": "{{count}}件の一致",
+    "matches_other": "{{count}}件の一致",
+    "projectsScanned_one": "{{count}}個のプロジェクトをスキャン",
+    "projectsScanned_other": "{{count}}個のプロジェクトをスキャン"
+  },
+  "topics": {
+    "all": "すべて",
+    "createTopic": "トピック",
+    "renamePrompt": "トピックの名前変更",
+    "deleteConfirm": "このトピックを削除しますか？",
+    "namePlaceholder": "トピック名",
+    "chipRowLabel": "トピック"
+  },
   "deleteConfirmation": {
     "deleteProject": "プロジェクトを除去",
     "deleteSession": "セッションを削除",
