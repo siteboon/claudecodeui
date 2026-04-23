@@ -110,8 +110,10 @@
     "updateAvailable": "有可用更新"
   },
   "search": {
-    "modeProjects": "项目",
-    "modeConversations": "对话",
+    "modeProjects": "搜索项目",
+    "modeConversations": "搜索对话",
+    "typeToSearch": "输入以搜索",
+    "scopeLabel": "搜索范围",
     "conversationsPlaceholder": "搜索对话内容...",
     "searching": "搜索中...",
     "noResults": "未找到结果",
@@ -120,6 +122,14 @@
     "matches_other": "{{count}} 个匹配",
     "projectsScanned_one": "{{count}} 个项目已扫描",
     "projectsScanned_other": "{{count}} 个项目已扫描"
+  },
+  "topics": {
+    "all": "全部",
+    "createTopic": "主题",
+    "renamePrompt": "重命名主题",
+    "deleteConfirm": "删除此主题？",
+    "namePlaceholder": "主题名称",
+    "chipRowLabel": "主题"
   },
   "deleteConfirmation": {
     "deleteProject": "移除项目",

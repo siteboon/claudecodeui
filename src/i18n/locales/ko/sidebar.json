@@ -108,6 +108,28 @@
   "version": {
     "updateAvailable": "업데이트 가능"
   },
+  "search": {
+    "modeProjects": "프로젝트 검색",
+    "modeConversations": "대화 검색",
+    "typeToSearch": "검색어 입력",
+    "scopeLabel": "검색 범위",
+    "conversationsPlaceholder": "대화 검색...",
+    "searching": "검색 중...",
+    "noResults": "결과 없음",
+    "tryDifferentQuery": "다른 검색어를 시도해보세요",
+    "matches_one": "{{count}}개 일치",
+    "matches_other": "{{count}}개 일치",
+    "projectsScanned_one": "{{count}}개 프로젝트 스캔됨",
+    "projectsScanned_other": "{{count}}개 프로젝트 스캔됨"
+  },
+  "topics": {
+    "all": "전체",
+    "createTopic": "주제",
+    "renamePrompt": "주제 이름 변경",
+    "deleteConfirm": "이 주제를 삭제할까요?",
+    "namePlaceholder": "주제 이름",
+    "chipRowLabel": "주제"
+  },
   "deleteConfirmation": {
     "deleteProject": "프로젝트 제거",
     "deleteSession": "세션 삭제",

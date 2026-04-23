@@ -110,8 +110,10 @@
     "updateAvailable": "Update verfügbar"
   },
   "search": {
-    "modeProjects": "Projekte",
-    "modeConversations": "Unterhaltungen",
+    "modeProjects": "Projekte durchsuchen",
+    "modeConversations": "Unterhaltungen durchsuchen",
+    "typeToSearch": "Zum Suchen tippen",
+    "scopeLabel": "Suchbereich",
     "conversationsPlaceholder": "In Unterhaltungen suchen...",
     "searching": "Sucht...",
     "noResults": "Keine Ergebnisse gefunden",
@@ -120,6 +122,14 @@
     "matches_other": "{{count}} Treffer",
     "projectsScanned_one": "{{count}} Projekt durchsucht",
     "projectsScanned_other": "{{count}} Projekte durchsucht"
+  },
+  "topics": {
+    "all": "Alle",
+    "createTopic": "Thema",
+    "renamePrompt": "Thema umbenennen",
+    "deleteConfirm": "Thema löschen?",
+    "namePlaceholder": "Themenname",
+    "chipRowLabel": "Themen"
   },
   "deleteConfirmation": {
     "deleteProject": "Projekt entfernen",

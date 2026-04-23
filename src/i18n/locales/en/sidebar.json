@@ -110,8 +110,10 @@
     "updateAvailable": "Update available"
   },
   "search": {
-    "modeProjects": "Projects",
-    "modeConversations": "Conversations",
+    "modeProjects": "Search projects",
+    "modeConversations": "Search conversations",
+    "typeToSearch": "Type to search",
+    "scopeLabel": "Search scope",
     "conversationsPlaceholder": "Search in conversations...",
     "searching": "Searching...",
     "noResults": "No results found",
@@ -120,6 +122,14 @@
     "matches_other": "{{count}} matches",
     "projectsScanned_one": "{{count}} project scanned",
     "projectsScanned_other": "{{count}} projects scanned"
+  },
+  "topics": {
+    "all": "All",
+    "createTopic": "Topic",
+    "renamePrompt": "Rename topic",
+    "deleteConfirm": "Delete this topic?",
+    "namePlaceholder": "Topic name",
+    "chipRowLabel": "Topics"
   },
   "deleteConfirmation": {
     "deleteProject": "Remove Project",

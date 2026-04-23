@@ -110,8 +110,10 @@
     "updateAvailable": "Güncelleme mevcut"
   },
   "search": {
-    "modeProjects": "Projeler",
-    "modeConversations": "Konuşmalar",
+    "modeProjects": "Projelerde ara",
+    "modeConversations": "Konuşmalarda ara",
+    "typeToSearch": "Aramak için yazın",
+    "scopeLabel": "Arama kapsamı",
     "conversationsPlaceholder": "Konuşmalarda ara...",
     "searching": "Aranıyor...",
     "noResults": "Sonuç bulunamadı",
@@ -120,6 +122,14 @@
     "matches_other": "{{count}} eşleşme",
     "projectsScanned_one": "{{count}} proje tarandı",
     "projectsScanned_other": "{{count}} proje tarandı"
+  },
+  "topics": {
+    "all": "Tümü",
+    "createTopic": "Konu",
+    "renamePrompt": "Konuyu yeniden adlandır",
+    "deleteConfirm": "Bu konu silinsin mi?",
+    "namePlaceholder": "Konu adı",
+    "chipRowLabel": "Konular"
   },
   "deleteConfirmation": {
     "deleteProject": "Projeyi Kaldır",
