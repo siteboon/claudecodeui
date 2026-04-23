@@ -517,7 +517,9 @@ const sessionNamesDb = {
   },
 };
 
-// Apply custom session names from the database (overrides CLI-generated summaries)
+// Apply custom session names from the database (overrides CLI-generated summaries).
+// Claude sessions additionally get a `pendingTitle` flag so the sidebar can
+// render a shimmer while the Phase-3 auto-titler is still generating their name.
 function applyCustomSessionNames(sessions, provider) {
   if (!sessions?.length) return;
   try {
@@ -525,7 +527,12 @@ function applyCustomSessionNames(sessions, provider) {
     const customNames = sessionNamesDb.getNames(ids, provider);
     for (const session of sessions) {
       const custom = customNames.get(session.id);
-      if (custom) session.summary = custom;
+      if (custom) {
+        session.summary = custom;
+        if (provider === 'claude') session.pendingTitle = false;
+      } else if (provider === 'claude') {
+        session.pendingTitle = true;
+      }
     }
   } catch (error) {
     console.warn(`[DB] Failed to apply custom session names for ${provider}:`, error.message);

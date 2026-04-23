@@ -12,6 +12,7 @@ export interface ProjectSession {
   updated_at?: string;
   lastActivity?: string;
   messageCount?: number;
+  pendingTitle?: boolean;
   __provider?: LLMProvider;
   __projectName?: string;
   [key: string]: unknown;
