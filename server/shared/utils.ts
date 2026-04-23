@@ -1,4 +1,3 @@
-
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -12,6 +11,14 @@ import type {
   NormalizedMessage,
 } from '@/shared/types.js';
 
+//----------------- NORMALIZED MESSAGE HELPER INPUT TYPES ------------
+/**
+ * Input payload accepted by `createNormalizedMessage`.
+ *
+ * Callers provide provider-specific fields plus the required `kind/provider`
+ * pair; this helper fills missing envelope fields (`id`, `sessionId`,
+ * `timestamp`) in a consistent way.
+ */
 type NormalizedMessageInput =
   {
     kind: NormalizedMessage['kind'];
@@ -21,6 +28,14 @@ type NormalizedMessageInput =
     timestamp?: string | null;
   } & Record<string, unknown>;
 
+// ---------------------------
+//----------------- HTTP HANDLER UTILITIES ------------
+/**
+ * Wraps arbitrary data in the standard API success envelope.
+ *
+ * Use this helper in route handlers to keep successful JSON responses consistent
+ * across endpoints.
+ */
 export function createApiSuccessResponse<TData>(
   data: TData,
 ): ApiSuccessShape<TData> {
@@ -30,6 +45,12 @@ export function createApiSuccessResponse<TData>(
   };
 }
 
+/**
+ * Converts an async Express handler into a standard `RequestHandler` and routes
+ * rejected promises to Express error middleware.
+ *
+ * Use this to avoid repeating `try/catch(next)` in every async route.
+ */
 export function asyncHandler(
   handler: (req: Request, res: Response, next: NextFunction) => Promise<unknown>
 ): RequestHandler {
@@ -38,7 +59,14 @@ export function asyncHandler(
   };
 }
 
-// --------- Global app error class for consistent error handling across the server ---------
+// ---------------------------
+//----------------- SHARED ERROR UTILITIES ------------
+/**
+ * Shared application error with HTTP status and machine-readable code metadata.
+ *
+ * Throw this from service/route layers when the caller should receive a
+ * controlled error response rather than a generic 500.
+ */
 export class AppError extends Error {
   readonly code: string;
   readonly statusCode: number;
@@ -53,9 +81,8 @@ export class AppError extends Error {
   }
 }
 
-// -------------------------------------------------------------------------------------------
-
-// ------------------------ Normalized provider message helpers ------------------------
+// ---------------------------
+//----------------- NORMALIZED PROVIDER MESSAGE UTILITIES ------------
 /**
  * Generates a stable unique id for normalized provider messages.
  */
@@ -80,9 +107,8 @@ export function createNormalizedMessage(fields: NormalizedMessageInput): Normali
   };
 }
 
-// -------------------------------------------------------------------------------------------
-
-// ------------------------ The following are mainly for provider MCP runtimes ------------------------
+// ---------------------------
+//----------------- MCP CONFIG PARSING UTILITIES ------------
 /**
  * Safely narrows an unknown value to a plain object record.
  *
@@ -188,6 +214,4 @@ export const writeJsonConfig = async (filePath: string, data: Record<string, unk
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
 };
-
-// -------------------------------------------------------------------------------------------
 

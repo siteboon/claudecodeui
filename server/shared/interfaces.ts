@@ -9,6 +9,7 @@ import type {
   UpsertProviderMcpServerInput,
 } from '@/shared/types.js';
 
+//----------------- PROVIDER CONTRACT INTERFACES ------------
 /**
  * Main provider contract for CLI and SDK integrations.
  *
@@ -22,9 +23,13 @@ export interface IProvider {
   readonly sessions: IProviderSessions;
 }
 
-
+// ---------------------------
+//----------------- PROVIDER AUTH INTERFACE ------------
 /**
  * Auth contract for one provider.
+ *
+ * Implementations should return a complete installation/authentication status
+ * without throwing for normal "not installed" or "not authenticated" states.
  */
 export interface IProviderAuth {
   /**
@@ -33,8 +38,13 @@ export interface IProviderAuth {
   getStatus(): Promise<ProviderAuthStatus>;
 }
 
+// ---------------------------
+//----------------- PROVIDER MCP INTERFACE ------------
 /**
  * MCP contract for one provider.
+ *
+ * Implementations must map provider-native MCP config formats to shared
+ * `ProviderMcpServer` records used by routes and frontend state.
  */
 export interface IProviderMcp {
   listServers(options?: { workspacePath?: string }): Promise<Record<McpScope, ProviderMcpServer[]>>;
@@ -45,8 +55,13 @@ export interface IProviderMcp {
   ): Promise<{ removed: boolean; provider: LLMProvider; name: string; scope: McpScope }>;
 }
 
+// ---------------------------
+//----------------- PROVIDER SESSION INTERFACE ------------
 /**
  * Session/history contract for one provider.
+ *
+ * Implementations normalize provider-specific events and message history into
+ * shared transport shapes consumed by API routes and realtime streams.
  */
 export interface IProviderSessions {
   normalizeMessage(raw: unknown, sessionId: string | null): NormalizedMessage[];
