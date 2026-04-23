@@ -273,7 +273,9 @@ export function useChatRealtimeHandlers({
 
         // Clear pending session
         const pendingSessionId = sessionStorage.getItem('pendingSessionId');
-        if (pendingSessionId && !currentSessionId && msg.exitCode === 0) {
+        const completedSuccessfully = typeof msg.exitCode !== 'number' || msg.exitCode === 0;
+
+        if (pendingSessionId && !currentSessionId && completedSuccessfully) {
           const actualId = msg.actualSessionId || pendingSessionId;
           setCurrentSessionId(actualId);
           if (msg.actualSessionId) {
