@@ -55,6 +55,11 @@ export interface ChatMessage {
     currentToolIndex: number;
     isComplete: boolean;
   };
+  isTaskNotification?: boolean;
+  taskStatus?: string;
+  taskId?: string;
+  taskEvent?: string;
+  displayText?: string;
   [key: string]: unknown;
 }
 

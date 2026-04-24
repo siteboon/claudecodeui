@@ -32,16 +32,23 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
         if (!content.trim()) continue;
 
         if (msg.role === 'user') {
-          // Parse task notifications
-          const taskNotifRegex = /<task-notification>\s*<task-id>[^<]*<\/task-id>\s*<output-file>[^<]*<\/output-file>\s*<status>([^<]*)<\/status>\s*<summary>([^<]*)<\/summary>\s*<\/task-notification>/g;
+          // Parse task notifications (handles both old and new XML formats)
+          const taskNotifRegex = /<task-notification>([\s\S]*?)<\/task-notification>/;
           const taskNotifMatch = taskNotifRegex.exec(content);
           if (taskNotifMatch) {
+            const inner = taskNotifMatch[1];
+            const taskId = (/<task-id>([^<]*)<\/task-id>/.exec(inner) || [])[1]?.trim() || '';
+            const summary = (/<summary>([^<]*)<\/summary>/.exec(inner) || [])[1]?.trim() || 'Background task update';
+            const taskEvent = (/<event>([\s\S]*?)<\/event>/.exec(inner) || [])[1]?.trim() || '';
+            const status = (/<status>([^<]*)<\/status>/.exec(inner) || [])[1]?.trim() || 'update';
             converted.push({
               type: 'assistant',
-              content: taskNotifMatch[2]?.trim() || 'Background task finished',
+              content: summary,
               timestamp: msg.timestamp,
               isTaskNotification: true,
-              taskStatus: taskNotifMatch[1]?.trim() || 'completed',
+              taskStatus: status,
+              taskId,
+              taskEvent,
             });
           } else {
             converted.push({
@@ -144,7 +151,9 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           content: msg.summary || 'Background task update',
           timestamp: msg.timestamp,
           isTaskNotification: true,
-          taskStatus: msg.status || 'completed',
+          taskStatus: msg.status || 'update',
+          taskId: msg.taskId,
+          taskEvent: msg.event,
         });
         break;
 

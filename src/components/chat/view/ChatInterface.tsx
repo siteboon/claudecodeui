@@ -136,6 +136,8 @@ function ChatInterface({
   });
 
   const {
+    queuedMessage,
+    cancelQueuedMessage,
     input,
     setInput,
     textareaRef,
@@ -441,6 +443,8 @@ function ChatInterface({
           })}
           isTextareaExpanded={isTextareaExpanded}
           sendByCtrlEnter={sendByCtrlEnter}
+          queuedMessage={queuedMessage}
+          onCancelQueue={cancelQueuedMessage}
         />
       </div>
 

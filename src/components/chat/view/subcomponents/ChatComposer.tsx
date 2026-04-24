@@ -112,6 +112,8 @@ interface ChatComposerProps {
   placeholder: string;
   isTextareaExpanded: boolean;
   sendByCtrlEnter?: boolean;
+  queuedMessage?: string | null;
+  onCancelQueue?: () => void;
 }
 
 export default function ChatComposer({
@@ -175,6 +177,8 @@ export default function ChatComposer({
   placeholder,
   isTextareaExpanded,
   sendByCtrlEnter,
+  queuedMessage,
+  onCancelQueue,
 }: ChatComposerProps) {
   const { t } = useTranslation('chat');
   const textareaRect = textareaRef.current?.getBoundingClientRect();
@@ -212,6 +216,18 @@ export default function ChatComposer({
             handlePermissionDecision={handlePermissionDecision}
             handleGrantToolPermission={handleGrantToolPermission}
           />
+        </div>
+      )}
+
+      {queuedMessage && (
+        <div className="mx-auto mb-2 flex max-w-4xl items-center gap-2 rounded-lg border border-border/50 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+          <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-amber-400" />
+          <span className="flex-1 truncate">Queued: {queuedMessage}</span>
+          {onCancelQueue && (
+            <button type="button" onClick={onCancelQueue} className="flex-shrink-0 hover:text-foreground" aria-label="Cancel queued message">
+              <XIcon className="h-3 w-3" />
+            </button>
+          )}
         </div>
       )}
 

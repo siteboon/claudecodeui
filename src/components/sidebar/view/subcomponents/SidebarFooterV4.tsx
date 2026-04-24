@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Keyboard, RefreshCw, Settings } from 'lucide-react';
+import { Keyboard, LayoutTemplate, RefreshCw, Settings } from 'lucide-react';
 
 import { Tooltip } from '../../../../shared/view/ui';
 import {
@@ -15,6 +15,8 @@ type SidebarFooterV4Props = {
   onShowShortcuts: () => void;
   onRefresh: () => void;
   isRefreshing: boolean;
+  hasSavedLayout?: boolean;
+  onRestoreLayout?: () => void;
 };
 
 type ProviderId = 'claude' | 'codex';
@@ -34,6 +36,8 @@ export default function SidebarFooterV4({
   onShowShortcuts,
   onRefresh,
   isRefreshing,
+  hasSavedLayout,
+  onRestoreLayout,
 }: SidebarFooterV4Props) {
   const claude = useProviderUsage('claude');
   const codex = useProviderUsage('codex');
@@ -101,6 +105,17 @@ export default function SidebarFooterV4({
             <Keyboard className="h-3.5 w-3.5" />
           </button>
         </Tooltip>
+        {hasSavedLayout && onRestoreLayout && (
+          <Tooltip content="Restore last split-screen layout" position="top">
+            <button
+              onClick={onRestoreLayout}
+              className="flex rounded p-1 text-amber-500 transition-colors hover:text-amber-400"
+              aria-label="Restore saved layout"
+            >
+              <LayoutTemplate className="h-3.5 w-3.5" />
+            </button>
+          </Tooltip>
+        )}
         <Tooltip content="Settings" position="top">
           <button
             onClick={onShowSettings}

@@ -48,6 +48,8 @@ function Sidebar({
   isMobile,
   activeSessions,
   processingSessions,
+  hasSavedLayout,
+  onRestoreLayout,
 }: SidebarProps) {
   const { t } = useTranslation(['sidebar', 'common']);
   const { isPWA } = useDeviceSettings({ trackMobile: false });
@@ -341,6 +343,8 @@ function Sidebar({
             void refreshProjects();
           }}
           isRefreshing={isRefreshing}
+          hasSavedLayout={hasSavedLayout}
+          onRestoreLayout={onRestoreLayout}
         />
       </div>
     </div>

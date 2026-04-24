@@ -43,6 +43,7 @@ type InteractiveOption = {
 
 type PermissionGrantState = 'idle' | 'granted' | 'error';
 const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'Edit', 'Write', 'ApplyPatch']);
+const CONTENT_TRUNCATE_CHARS = 4000;
 
 const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, onShowSettings, onGrantToolPermission, autoExpandTools, showRawParameters, showThinking, selectedProject, provider }: MessageComponentProps) => {
   const { t } = useTranslation('chat');
@@ -53,6 +54,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
       (prevMessage.type === 'error'));
   const messageRef = useRef<HTMLDivElement | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showFullContent, setShowFullContent] = useState(false);
   const permissionSuggestion = getClaudePermissionSuggestion(message, provider);
   const [permissionGrantState, setPermissionGrantState] = useState<PermissionGrantState>('idle');
   const userCopyContent = String(message.content || '');
@@ -168,10 +170,19 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
       ) : message.isTaskNotification ? (
         /* Compact task notification on the left */
         <div className="w-full">
-          <div className="flex items-center gap-2 py-0.5">
-            <span className={`inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${message.taskStatus === 'completed' ? 'bg-green-400 dark:bg-green-500' : 'bg-amber-400 dark:bg-amber-500'}`} />
-            <span className="text-xs text-gray-500 dark:text-gray-400">{message.content}</span>
-            <span className="text-[11px] text-gray-400 dark:text-gray-500">{formattedTime}</span>
+          <div className="flex items-start gap-2 py-0.5">
+            <span className={`mt-1 inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${message.taskStatus === 'completed' ? 'bg-green-400 dark:bg-green-500' : 'bg-amber-400 dark:bg-amber-500'}`} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-baseline gap-2">
+                <span className="text-xs text-gray-500 dark:text-gray-400">{message.content}</span>
+                <span className="text-[11px] text-gray-400 dark:text-gray-500 flex-shrink-0">{formattedTime}</span>
+              </div>
+              {message.taskEvent && (
+                <span className="mt-0.5 block truncate font-mono text-[10px] text-muted-foreground/50" title={String(message.taskEvent)}>
+                  {String(message.taskEvent)}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       ) : (
@@ -424,7 +435,12 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                 )}
 
                 {(() => {
-                  const content = formattedMessageContent;
+                  const isTruncatable = !message.isToolUse && !message.isThinking && !message.isInteractivePrompt && message.type === 'assistant';
+                  const rawContent = formattedMessageContent;
+                  const needsTruncation = isTruncatable && rawContent.length > CONTENT_TRUNCATE_CHARS;
+                  const content = needsTruncation && !showFullContent
+                    ? rawContent.slice(0, CONTENT_TRUNCATE_CHARS)
+                    : rawContent;
 
                   // Detect if content is pure JSON (starts with { or [)
                   const trimmedContent = content.trim();
@@ -457,7 +473,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                   }
 
                   // Normal rendering for non-JSON content
-                  return message.type === 'assistant' ? (
+                  const rendered = message.type === 'assistant' ? (
                     <Markdown className="prose prose-sm prose-gray max-w-none dark:prose-invert">
                       {content}
                     </Markdown>
@@ -465,6 +481,29 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                     <div className="whitespace-pre-wrap">
                       {content}
                     </div>
+                  );
+                  return (
+                    <>
+                      {rendered}
+                      {needsTruncation && !showFullContent && (
+                        <button
+                          type="button"
+                          onClick={() => setShowFullContent(true)}
+                          className="mt-2 text-xs text-muted-foreground/70 hover:text-muted-foreground underline"
+                        >
+                          Show full message ({Math.round(rawContent.length / 1000)}k chars)…
+                        </button>
+                      )}
+                      {needsTruncation && showFullContent && (
+                        <button
+                          type="button"
+                          onClick={() => setShowFullContent(false)}
+                          className="mt-2 text-xs text-muted-foreground/70 hover:text-muted-foreground underline"
+                        >
+                          Collapse
+                        </button>
+                      )}
+                    </>
                   );
                 })()}
               </div>

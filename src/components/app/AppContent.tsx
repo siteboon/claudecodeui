@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Sidebar from '../sidebar/view/Sidebar';
@@ -14,6 +14,8 @@ import { lookupSessionWithProviderStamp } from '../../hooks/useSessionLookup';
 import type { ProjectSession, SessionStatus } from '../../types/app';
 import type { PaneEntry } from '../main-content/types/types';
 import { navigationTarget, parsePaneRoute } from '../../utils/paneRoute';
+import { useProjectColors } from '../../hooks/useProjectColors';
+import { getProjectColor } from '../project-rail/utils/projectColors';
 
 export default function AppContent() {
   const navigate = useNavigate();
@@ -315,6 +317,37 @@ export default function AppContent() {
     return () => vv.removeEventListener('resize', update);
   }, []);
 
+  // Persist multi-pane layout to localStorage and expose restore
+  const SAVED_LAYOUT_KEY = 'saved_pane_layout';
+
+  useEffect(() => {
+    if (parsedRoute.paneIds.length > 1) {
+      localStorage.setItem(
+        SAVED_LAYOUT_KEY,
+        JSON.stringify({ paneIds: parsedRoute.paneIds, focusIndex: parsedRoute.focusIndex }),
+      );
+    }
+  }, [parsedRoute.paneIds, parsedRoute.focusIndex]);
+
+  const savedLayoutRaw = typeof window !== 'undefined' ? localStorage.getItem(SAVED_LAYOUT_KEY) : null;
+  const savedLayout = useMemo<{ paneIds: string[]; focusIndex: number } | null>(() => {
+    if (!savedLayoutRaw) return null;
+    try {
+      return JSON.parse(savedLayoutRaw);
+    } catch {
+      return null;
+    }
+  }, [savedLayoutRaw]);
+
+  const hasSavedLayout = parsedRoute.paneIds.length <= 1 && savedLayout !== null && savedLayout.paneIds.length > 1;
+
+  const handleRestoreLayout = useCallback(() => {
+    if (!savedLayout) return;
+    const target = navigationTarget(null, savedLayout.paneIds, savedLayout.focusIndex);
+    navigate(`${target.path}${target.search}`);
+  }, [navigate, savedLayout]);
+
+  const { getColor } = useProjectColors();
   const [sidebarHover, setSidebarHover] = useState(false);
   const multiPane = !isMobile && panes.length > 1;
 
@@ -343,6 +376,8 @@ export default function AppContent() {
               onSessionSelect={handleSidebarSessionSelect}
               activeSessions={activeSessions}
               processingSessions={processingSessions}
+              hasSavedLayout={hasSavedLayout}
+              onRestoreLayout={handleRestoreLayout}
             />
             </div>
           </div>
@@ -376,6 +411,8 @@ export default function AppContent() {
               onSessionSelect={handleSidebarSessionSelect}
               activeSessions={activeSessions}
               processingSessions={processingSessions}
+              hasSavedLayout={hasSavedLayout}
+              onRestoreLayout={handleRestoreLayout}
             />
           </div>
         </div>
@@ -385,8 +422,15 @@ export default function AppContent() {
         {panes.length > 0 ? panes.map((pane, idx) => {
           const paneStatus = pane.session ? statusMap.get(pane.session.id) : undefined;
           const isFocused = idx === parsedRoute.focusIndex;
+          const paneColor = getProjectColor(getColor(pane.project?.name));
+          const paneStyle = {
+            ...(idx > 0 ? { borderLeft: '1px solid var(--border)' } : {}),
+            '--project-accent': paneColor.hex,
+            '--project-accent-foreground': paneColor.fg,
+            background: `color-mix(in srgb, ${paneColor.hex} 5%, var(--background))`,
+          } as React.CSSProperties;
           return (
-            <div key={pane.paneId} className="flex min-w-0 flex-1 flex-col" style={idx > 0 ? { borderLeft: '1px solid var(--border)' } : undefined}>
+            <div key={pane.paneId} className="flex min-w-0 flex-1 flex-col" style={paneStyle}>
               <MainContent
                 selectedProject={pane.project ?? focusedProject}
                 selectedSession={pane.session ?? focusedSession}

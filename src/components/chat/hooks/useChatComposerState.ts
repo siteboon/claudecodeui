@@ -190,6 +190,9 @@ export function useChatComposerState({
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
   const [thinkingMode, setThinkingMode] = useState(DEFAULT_THINKING_MODE_ID);
 
+  const [queuedMessage, setQueuedMessage] = useState<string | null>(null);
+  const queuedMessageRef = useRef<string | null>(null);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputHighlightRef = useRef<HTMLDivElement>(null);
   const handleSubmitRef = useRef<
@@ -547,7 +550,20 @@ export function useChatComposerState({
       event.preventDefault();
       const currentInput = inputValueRef.current;
       const hasAttachments = attachedImages.length > 0 || attachedFiles.length > 0;
-      if ((!currentInput.trim() && !hasAttachments) || isLoading || !selectedProject) {
+      if (!currentInput.trim() && !hasAttachments) return;
+      if (!selectedProject) return;
+
+      // Queue text-only messages while Claude is responding
+      if (isLoading && currentInput.trim() && !hasAttachments) {
+        queuedMessageRef.current = currentInput;
+        setQueuedMessage(currentInput);
+        setInput('');
+        inputValueRef.current = '';
+        resetCommandMenuState();
+        setIsTextareaExpanded(false);
+        if (textareaRef.current) textareaRef.current.style.height = 'auto';
+        safeLocalStorage.removeItem(draftKey);
+        safeLocalStorage.removeItem(legacyKey);
         return;
       }
 
@@ -909,6 +925,22 @@ export function useChatComposerState({
     wasLoadingRef.current = isLoading;
   }, [isLoading, selectedProject?.name]);
 
+  // Auto-send queued message when loading completes
+  useEffect(() => {
+    if (!isLoading && queuedMessageRef.current && handleSubmitRef.current && selectedProject) {
+      const queued = queuedMessageRef.current;
+      queuedMessageRef.current = null;
+      setQueuedMessage(null);
+      inputValueRef.current = queued;
+      setTimeout(() => {
+        if (handleSubmitRef.current) {
+          handleSubmitRef.current(createFakeSubmitEvent());
+        }
+      }, 0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading]);
+
   useEffect(() => {
     if (!textareaRef.current) {
       return;
@@ -1023,6 +1055,11 @@ export function useChatComposerState({
     setIsTextareaExpanded(false);
   }, [resetCommandMenuState]);
 
+  const cancelQueuedMessage = useCallback(() => {
+    queuedMessageRef.current = null;
+    setQueuedMessage(null);
+  }, []);
+
   const handleAbortSession = useCallback(() => {
     if (!canAbortSession) {
       return;
@@ -1110,6 +1147,8 @@ export function useChatComposerState({
   );
 
   return {
+    queuedMessage,
+    cancelQueuedMessage,
     input,
     setInput,
     textareaRef,

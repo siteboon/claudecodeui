@@ -40,6 +40,8 @@ export type SidebarProps = {
   isMobile: boolean;
   activeSessions: Set<string>;
   processingSessions: Set<string>;
+  hasSavedLayout?: boolean;
+  onRestoreLayout?: () => void;
 };
 
 export type SessionViewModel = {

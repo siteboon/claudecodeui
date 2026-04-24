@@ -55,6 +55,8 @@ export interface NormalizedMessage {
   newSessionId?: string;
   status?: string;
   summary?: string;
+  taskId?: string;
+  event?: string;
   exitCode?: number;
   actualSessionId?: string;
   parentToolUseId?: string;
