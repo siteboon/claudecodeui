@@ -337,11 +337,13 @@ export default function AppContent() {
           onMouseEnter={() => { if (multiPane) setSidebarHover(true); }}
           onMouseLeave={() => setSidebarHover(false)}
         >
+          {/* max-width clips from the right, keeping the ProjectRail (left edge) always visible */}
           <div
-            className={`h-full transition-[transform,box-shadow] duration-250 ease-out ${multiPane ? 'absolute left-0 top-0 z-50' : 'border-r border-border/50'}`}
+            className={multiPane ? 'absolute inset-y-0 left-0 z-50 h-full overflow-hidden' : 'h-full border-r border-border/50'}
             style={multiPane ? {
-              transform: sidebarHover ? 'translateX(0)' : 'translateX(calc(-100% + 48px))',
-              boxShadow: sidebarHover ? '4px 0 24px rgba(0,0,0,0.18)' : 'none',
+              maxWidth: sidebarHover ? '400px' : '48px',
+              transition: 'max-width 220ms ease-out, box-shadow 220ms ease-out',
+              boxShadow: sidebarHover ? '4px 0 32px rgba(0,0,0,0.22)' : 'none',
             } : undefined}
           >
             <Sidebar
