@@ -27,9 +27,9 @@ import { promises as fsPromises } from 'fs';
 import { spawn } from 'child_process';
 import pty from 'node-pty';
 import mime from 'mime-types';
+import { getProjects } from '@/modules/projects';
 
 import {
-    getProjects,
     getSessionsById,
     renameProjectById,
     deleteSessionById,

@@ -30,68 +30,10 @@ import readline from 'readline';
 import crypto from 'crypto';
 import os from 'os';
 
-import { sessionSynchronizerService } from '@/modules/providers';
+import { generateDisplayName } from '@/modules/projects';
 
 import sessionManager from './sessionManager.js';
 import { projectsDb, sessionsDb } from './modules/database/index.js';
-import { getModuleDir, findAppRoot } from './utils/runtime-paths.js';
-
-// Snapshot files are kept as incrementing artifacts under .tmp/project-dumps for later review.
-const __dirname = getModuleDir(import.meta.url);
-const APP_ROOT = findAppRoot(__dirname);
-const PROJECTS_DUMP_DIR = path.join(APP_ROOT, '.tmp', 'project-dumps');
-let projectsSnapshotCounter = null;
-
-async function getNextProjectsSnapshotPath() {
-  await fs.mkdir(PROJECTS_DUMP_DIR, { recursive: true });
-
-  if (projectsSnapshotCounter === null) {
-    const entries = await fs.readdir(PROJECTS_DUMP_DIR).catch(() => []);
-    projectsSnapshotCounter = entries.reduce((max, entry) => {
-      const match = entry.match(/^projects-(\d+)\.json$/);
-      if (!match) {
-        return max;
-      }
-
-      return Math.max(max, Number(match[1]));
-    }, 0);
-  }
-
-  projectsSnapshotCounter += 1;
-  const suffix = String(projectsSnapshotCounter).padStart(4, '0');
-  return path.join(PROJECTS_DUMP_DIR, `projects-${suffix}.json`);
-}
-
-async function writeProjectsSnapshot(projects) {
-  try {
-    const snapshot = {
-      generatedAt: new Date().toISOString(),
-      projectCount: projects.length,
-      projects
-    };
-
-    const snapshotJson = JSON.stringify(
-      snapshot,
-      (_, value) => (typeof value === 'bigint' ? value.toString() : value),
-      2
-    );
-
-    while (true) {
-      const snapshotPath = await getNextProjectsSnapshotPath();
-      try {
-        await fs.writeFile(snapshotPath, snapshotJson, { encoding: 'utf8', flag: 'wx' });
-        break;
-      } catch (error) {
-        if (error.code === 'EEXIST') {
-          continue;
-        }
-        throw error;
-      }
-    }
-  } catch (error) {
-    console.warn('Could not write projects snapshot:', error.message);
-  }
-}
 
 // Import TaskMaster detection functions
 async function detectTaskMasterFolder(projectPath) {
@@ -325,35 +267,6 @@ async function saveProjectConfig(config) {
   await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8');
 }
 
-// Generate better display name from path
-async function generateDisplayName(projectName, actualProjectDir = null) {
-  // Use actual project directory if provided, otherwise decode from project name
-  let projectPath = actualProjectDir || projectName.replace(/-/g, '/');
-
-  // Try to read package.json from the project path
-  try {
-    const packageJsonPath = path.join(projectPath, 'package.json');
-    const packageData = await fs.readFile(packageJsonPath, 'utf8');
-    const packageJson = JSON.parse(packageData);
-
-    // Return the name from package.json if it exists
-    if (packageJson.name) {
-      return packageJson.name;
-    }
-  } catch (error) {
-    // Fall back to path-based naming if package.json doesn't exist or can't be read
-  }
-
-  // If it starts with /, it's an absolute path
-  if (projectPath.startsWith('/')) {
-    const parts = projectPath.split('/').filter(Boolean);
-    // Return only the last folder name
-    return parts[parts.length - 1] || projectPath;
-  }
-
-  return projectPath;
-}
-
 // Resolve a Claude-encoded folder name back to an absolute project directory
 // by inspecting cached metadata and JSONL `cwd` fields. Used only by the
 // legacy name-based helpers below (`getSessions`, `deleteProject`, etc.) and
@@ -476,129 +389,6 @@ async function extractProjectDirectory(projectName) {
     return extractedPath;
   }
 }
-
-/**
- * Group the `sessions` table rows for a project by provider.
- *
- * After the projectId migration, GET /api/projects no longer scans JSONL files
- * or any other session directory — every provider's session list comes from
- * the database. One `SELECT ... WHERE project_path = ?` gets us every row we
- * need, and we then bucket them by `provider` so each list (`sessions`,
- * `cursorSessions`, `codexSessions`, `geminiSessions`) can be built without
- * touching disk. Per the migration spec, each emitted session carries
- * `summary = custom_name`, `messageCount = 0` and `lastActivity` taken from
- * `updated_at` so the sidebar still sorts by recency.
- */
-function buildSessionsByProviderFromDb(projectPath) {
-  const rows = sessionsDb.getSessionsByProjectPath(projectPath);
-  const byProvider = {
-    claude: [],
-    cursor: [],
-    codex: [],
-    gemini: [],
-  };
-
-  for (const row of rows) {
-    const bucket = byProvider[row.provider];
-    if (!bucket) {
-      continue;
-    }
-
-    bucket.push({
-      id: row.session_id,
-      // The session summary intentionally mirrors the custom_name column only;
-      // the historical JSONL-derived summary is no longer computed on this path.
-      summary: row.custom_name || '',
-      // messageCount is always 0 for now — counting is not implemented yet.
-      messageCount: 0,
-      lastActivity: row.updated_at ?? row.created_at ?? new Date().toISOString(),
-    });
-  }
-
-  // Sort each bucket by recency so the sidebar's default ordering is preserved.
-  for (const provider of Object.keys(byProvider)) {
-    byProvider[provider].sort(
-      (a, b) => new Date(b.lastActivity) - new Date(a.lastActivity),
-    );
-  }
-
-  return byProvider;
-}
-
-async function getProjects(progressCallback = null) {
-  await sessionSynchronizerService.synchronizeSessions();
-  // Source of truth for project listing is now the `projects` and `sessions`
-  // tables — no directory scanning happens here. This keeps the API fast and
-  // lets the frontend identify projects by their stable DB `projectId`.
-  const projectRows = projectsDb.getProjectPaths();
-  const totalProjects = projectRows.length;
-  const projects = [];
-  let processedProjects = 0;
-
-  for (const row of projectRows) {
-    processedProjects++;
-
-    const projectId = row.project_id;
-    const projectPath = row.project_path;
-
-    if (progressCallback) {
-      progressCallback({
-        phase: 'loading',
-        current: processedProjects,
-        total: totalProjects,
-        currentProject: projectPath
-      });
-    }
-
-    // Use the stored custom name when present, otherwise fall back to a
-    // generated display name derived from the project path.
-    const displayName = row.custom_project_name && row.custom_project_name.trim().length > 0
-      ? row.custom_project_name
-      : await generateDisplayName(path.basename(projectPath) || projectPath, projectPath);
-
-    // All provider session lists are built from a single DB query — no JSONL
-    // parsing, no filesystem walks, no in-memory session manager lookups.
-    const sessionsByProvider = buildSessionsByProviderFromDb(projectPath);
-    const claudeSessionsAll = sessionsByProvider.claude;
-    const claudeSessions = claudeSessionsAll.slice(0, 5);
-
-    const project = {
-      // Primary identifier used across the UI and API routes post-migration.
-      projectId,
-      path: projectPath,
-      displayName,
-      fullPath: projectPath,
-      sessions: claudeSessions,
-      cursorSessions: sessionsByProvider.cursor,
-      codexSessions: sessionsByProvider.codex,
-      geminiSessions: sessionsByProvider.gemini,
-      // hasMore is pinned to false per the migration spec — pagination on the
-      // project list is not driven by this endpoint anymore.
-      sessionMeta: {
-        hasMore: false,
-        total: claudeSessionsAll.length
-      }
-    };
-
-    // Custom-name overrides are already baked into each row's `summary` field
-    // by buildSessionsByProviderFromDb, so we don't need to re-apply them.
-
-    projects.push(project);
-  }
-
-  if (progressCallback) {
-    progressCallback({
-      phase: 'complete',
-      current: totalProjects,
-      total: totalProjects
-    });
-  }
-
-  await writeProjectsSnapshot(projects);
-
-  return projects;
-}
-
 async function getSessions(projectName, limit = 5, offset = 0) {
   const projectDir = path.join(os.homedir(), '.claude', 'projects', projectName);
 
@@ -2424,7 +2214,6 @@ async function getGeminiCliSessionMessages(sessionId) {
 // based helpers (`getSessions`, `renameProject`, `deleteSession`, etc.) are
 // kept as internal implementation details of the id-based wrappers below.
 export {
-  getProjects,
   getSessionsById,
   getSessionMessages,
   renameProjectById,
