@@ -52,6 +52,7 @@ function MainContent({
   sessionStatus,
   waitingCount,
   onJumpToNextWaiting,
+  onPaneClose,
 }: MainContentProps) {
   const { preferences } = useUiPreferences();
   const { autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter } = preferences;
@@ -112,6 +113,7 @@ function MainContent({
         sessionStatus={sessionStatus}
         waitingCount={waitingCount}
         onJumpToNextWaiting={onJumpToNextWaiting}
+        onPaneClose={onPaneClose}
       />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">

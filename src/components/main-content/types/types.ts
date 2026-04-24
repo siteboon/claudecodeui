@@ -63,6 +63,7 @@ export type MainContentProps = {
   sessionStatus?: SessionStatus;
   waitingCount?: number;
   onJumpToNextWaiting?: () => void;
+  onPaneClose?: () => void;
 };
 
 export type MainContentHeaderProps = {
@@ -76,6 +77,7 @@ export type MainContentHeaderProps = {
   sessionStatus?: SessionStatus;
   waitingCount?: number;
   onJumpToNextWaiting?: () => void;
+  onPaneClose?: () => void;
 };
 
 export type MainContentStateViewProps = {

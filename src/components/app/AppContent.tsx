@@ -3,7 +3,6 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Sidebar from '../sidebar/view/Sidebar';
 import MainContent from '../main-content/view/MainContent';
-import PaneHeader from '../main-content/view/subcomponents/PaneTabBar';
 import type { AppTab } from '../../types/app';
 import { useWebSocket } from '../../contexts/WebSocketContext';
 import { useDeviceSettings } from '../../hooks/useDeviceSettings';
@@ -181,20 +180,11 @@ export default function AppContent() {
         return;
       }
 
-      // Ctrl+Shift+1..9 — focus Nth pane
-      const mod = e.metaKey || e.ctrlKey;
-      if (mod && e.shiftKey && !e.altKey && /^Digit[1-9]$/.test(e.code)) {
-        const idx = parseInt(e.code.slice(5), 10) - 1;
-        if (idx < parsedRoute.paneIds.length) {
-          e.preventDefault();
-          handlePaneFocus(parsedRoute.paneIds[idx]);
-        }
-      }
     };
 
     window.addEventListener('keydown', handleKeydown);
     return () => window.removeEventListener('keydown', handleKeydown);
-  }, [handlePaneClose, handlePaneFocus, parsedRoute]);
+  }, [handlePaneClose, parsedRoute]);
 
   useEffect(() => {
     // Expose a non-blocking refresh for chat/session flows.
@@ -337,7 +327,8 @@ export default function AppContent() {
           onMouseEnter={() => { if (multiPane) setSidebarHover(true); }}
           onMouseLeave={() => setSidebarHover(false)}
         >
-          {/* max-width clips from the right, keeping the ProjectRail (left edge) always visible */}
+          {/* max-width clips from the right, keeping the ProjectRail (left edge) visible.
+              shrink-0 on the inner wrapper prevents sidebar layout from reflowing at 48px. */}
           <div
             className={multiPane ? 'absolute inset-y-0 left-0 z-50 h-full overflow-hidden' : 'h-full border-r border-border/50'}
             style={multiPane ? {
@@ -346,12 +337,14 @@ export default function AppContent() {
               boxShadow: sidebarHover ? '4px 0 32px rgba(0,0,0,0.22)' : 'none',
             } : undefined}
           >
+            <div className={multiPane ? 'h-full shrink-0' : 'h-full'}>
             <Sidebar
               {...sidebarSharedProps}
               onSessionSelect={handleSidebarSessionSelect}
               activeSessions={activeSessions}
               processingSessions={processingSessions}
             />
+            </div>
           </div>
         </div>
       ) : (
@@ -394,15 +387,6 @@ export default function AppContent() {
           const isFocused = idx === parsedRoute.focusIndex;
           return (
             <div key={pane.paneId} className="flex min-w-0 flex-1 flex-col" style={idx > 0 ? { borderLeft: '1px solid var(--border)' } : undefined}>
-              {panes.length > 1 && (
-                <PaneHeader
-                  label={pane.session?.summary || pane.session?.title || pane.session?.id || 'Session not found'}
-                  index={idx}
-                  isFocused={isFocused}
-                  onFocus={() => handlePaneFocus(pane.paneId)}
-                  onClose={() => handlePaneClose(pane.paneId)}
-                />
-              )}
               <MainContent
                 selectedProject={pane.project ?? focusedProject}
                 selectedSession={pane.session ?? focusedSession}
@@ -428,6 +412,7 @@ export default function AppContent() {
                 sessionStatus={paneStatus}
                 waitingCount={isFocused ? waitingCount : 0}
                 onJumpToNextWaiting={isFocused ? onJumpToNextWaiting : undefined}
+                onPaneClose={panes.length > 1 ? () => handlePaneClose(pane.paneId) : undefined}
               />
             </div>
           );

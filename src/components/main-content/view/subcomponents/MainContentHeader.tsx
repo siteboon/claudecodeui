@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState, useEffect } from 'react';
+import { X } from 'lucide-react';
 import type { MainContentHeaderProps } from '../../types/types';
 import MobileMenuButton from './MobileMenuButton';
 import MainContentTabSwitcher from './MainContentTabSwitcher';
@@ -16,6 +17,7 @@ export default function MainContentHeader({
   sessionStatus,
   waitingCount = 0,
   onJumpToNextWaiting,
+  onPaneClose,
 }: MainContentHeaderProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -62,6 +64,17 @@ export default function MainContentHeader({
               waitingCount={waitingCount}
               onJumpToNextWaiting={onJumpToNextWaiting}
             />
+          )}
+          {onPaneClose && (
+            <button
+              type="button"
+              onClick={onPaneClose}
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              title="Close pane (Alt+W)"
+              aria-label="Close pane"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           )}
         </div>
 

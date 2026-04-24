@@ -18,7 +18,6 @@ export const SHORTCUTS: ShortcutEntry[] = [
   { id: 'jumpSession', label: 'Jump to session 1–9', keys: [ALT_KEY, '1–9'] },
   { id: 'newPane', label: 'Open session in new pane', keys: [ALT_KEY, SHIFT_KEY, '1–9'] },
   { id: 'closePane', label: 'Close active pane', keys: [ALT_KEY, 'W'] },
-  { id: 'focusPane', label: 'Focus pane 1–9', keys: [MOD_KEY, SHIFT_KEY, '1–9'] },
   { id: 'cycleProject', label: 'Cycle target project in ⌘K', keys: ['Tab / Shift+Tab'] },
   { id: 'clearFilter', label: 'Clear project filter', keys: ['Ctrl', '`'] },
 ];
