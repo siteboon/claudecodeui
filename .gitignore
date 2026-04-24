@@ -53,6 +53,9 @@ coverage/
 # nyc test coverage
 .nyc_output
 
+# c8 / V8 coverage
+.c8_output/
+
 # Dependency directories
 jspm_packages/
 

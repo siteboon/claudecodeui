@@ -54,6 +54,10 @@ interface ChatComposerProps {
   handleGrantToolPermission: (suggestion: { entry: string; toolName: string }) => { success: boolean };
   claudeStatus: { text: string; tokens: number; can_interrupt: boolean } | null;
   isLoading: boolean;
+  // True when the server advertised `server-capabilities.queue[provider] = true`
+  // for the current provider. The send button stays enabled while a prompt is
+  // in flight; the backend queues the new message behind the current turn.
+  canQueueWhileLoading?: boolean;
   onAbortSession: () => void;
   provider: Provider | string;
   permissionMode: PermissionMode | string;
@@ -109,6 +113,7 @@ export default function ChatComposer({
   handleGrantToolPermission,
   claudeStatus,
   isLoading,
+  canQueueWhileLoading = false,
   onAbortSession,
   provider,
   permissionMode,
@@ -394,7 +399,7 @@ export default function ChatComposer({
               {sendByCtrlEnter ? t('input.hintText.ctrlEnter') : t('input.hintText.enter')}
             </div>
             <PromptInputSubmit
-              disabled={!input.trim() || isLoading}
+              disabled={!input.trim() || (isLoading && !canQueueWhileLoading)}
               className="h-10 w-10 sm:h-10 sm:w-10"
               onMouseDown={(event) => {
                 event.preventDefault();

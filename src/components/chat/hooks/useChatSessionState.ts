@@ -140,6 +140,17 @@ export function useChatSessionState({
 
   const activeSessionId = selectedSession?.id || currentSessionId || null;
   const [pendingUserMessage, setPendingUserMessage] = useState<ChatMessage | null>(null);
+  // Server-advertised queueing capability per provider. Populated by the
+  // `server-capabilities` WS message on connect. Providers with queue=true
+  // accept prompts while a turn is still in flight (Claude stream mode
+  // backs this with session.queue in server/claude-stream.js).
+  const [serverQueueCapability, setServerQueueCapability] = useState<Record<string, boolean>>({});
+  // Set of sessionIds that currently have at least one open Shell WS
+  // attached (see `shell-session-active` broadcast in server/index.js).
+  // Drives the "Shell open" banner; chat state is NOT synchronised with
+  // the PTY, so the banner tells the user to treat that session as
+  // read-only here until the Shell tab closes.
+  const [shellActiveSessionIds, setShellActiveSessionIds] = useState<Set<string>>(() => new Set());
 
   // Tell the store which session we're viewing so it only re-renders for this one
   const prevActiveForStoreRef = useRef<string | null>(null);
@@ -715,6 +726,10 @@ export function useChatSessionState({
     setIsUserScrolledUp,
     tokenBudget,
     setTokenBudget,
+    serverQueueCapability,
+    setServerQueueCapability,
+    shellActiveSessionIds,
+    setShellActiveSessionIds,
     visibleMessageCount,
     visibleMessages,
     loadEarlierMessages,

@@ -30,6 +30,13 @@ import mime from 'mime-types';
 
 import { getProjects, getSessions, renameProject, deleteSession, deleteProject, extractProjectDirectory, clearProjectDirectoryCache, searchConversations } from './projects.js';
 import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, resolveToolApproval, getPendingApprovalsForSession, reconnectSessionWriter } from './claude-sdk.js';
+import { queryClaudeStream, abortClaudeStreamSession, isClaudeStreamSessionActive, isClaudeStreamSessionProcessing, getActiveClaudeStreamSessions, reconnectStreamSessionWriter } from './claude-stream.js';
+import { WebSocketWriter } from './ws-writer.js';
+
+// Feature flag: use long-lived CLI process per chat session instead of SDK per-message spawn.
+// First message pays cold start (~22s); subsequent messages in the same session are ~12s.
+// MVP: uses --dangerously-skip-permissions; no UI approval prompts.
+const CLAUDE_STREAM_MODE = process.env.CLAUDE_STREAM_MODE === '1';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import { queryCodex, abortCodexSession, isCodexSessionActive, getActiveCodexSessions } from './openai-codex.js';
 import { spawnGemini, abortGeminiSession, isGeminiSessionActive, getActiveGeminiSessions } from './gemini-cli.js';
@@ -79,6 +86,30 @@ const WATCHER_DEBOUNCE_MS = 300;
 let projectsWatchers = [];
 let projectsWatcherDebounceTimer = null;
 const connectedClients = new Set();
+
+// Per-sessionId tally of live shell PTY WebSockets so we can tell chat clients
+// "Shell open for this session → editing history out-of-band, don't cross-post
+// while it's up". Key = `${userId}:${sessionId}`; value = count (one user can
+// open multiple shell tabs for the same session). Scoping by user avoids
+// leaking a sibling user's shell activity into their chat banner.
+const shellSessionsByUser = new Map();
+
+function shellSessionKey(userId, sessionId) {
+    return `${userId ?? 'anon'}:${sessionId}`;
+}
+
+function broadcastShellActivity(userId, sessionId, active) {
+    const payload = JSON.stringify({ type: 'shell-session-active', sessionId, active });
+    for (const client of connectedClients) {
+        if (client.readyState !== 1) continue;
+        // connectedClients stores raw chat sockets; userId is stamped on the
+        // WebSocketWriter but not on the socket itself. Look up via the writer
+        // reference the chat handler attached below (ws._chatWriter).
+        const writerUserId = client._chatWriter?.userId ?? null;
+        if (writerUserId !== userId) continue;
+        client.send(payload);
+    }
+}
 let isGetProjectsRunning = false; // Flag to prevent reentrant calls
 
 // Broadcast progress to all connected WebSocket clients
@@ -1344,7 +1375,7 @@ wss.on('connection', (ws, request) => {
     const pathname = urlObj.pathname;
 
     if (pathname === '/shell') {
-        handleShellConnection(ws);
+        handleShellConnection(ws, request);
     } else if (pathname === '/ws') {
         handleChatConnection(ws, request);
     } else if (pathname.startsWith('/plugin-ws/')) {
@@ -1362,32 +1393,8 @@ wss.on('connection', (ws, request) => {
  * adapter `normalizeMessage()` to produce unified NormalizedMessage events.
  * The writer simply serialises and sends.
  */
-class WebSocketWriter {
-    constructor(ws, userId = null) {
-        this.ws = ws;
-        this.sessionId = null;
-        this.userId = userId;
-        this.isWebSocketWriter = true;  // Marker for transport detection
-    }
-
-    send(data) {
-        if (this.ws.readyState === 1) { // WebSocket.OPEN
-            this.ws.send(JSON.stringify(data));
-        }
-    }
-
-    updateWebSocket(newRawWs) {
-        this.ws = newRawWs;
-    }
-
-    setSessionId(sessionId) {
-        this.sessionId = sessionId;
-    }
-
-    getSessionId() {
-        return this.sessionId;
-    }
-}
+// WebSocketWriter moved to ./ws-writer.js so it is unit-testable without
+// loading the whole Express/WS bootstrap.
 
 // Handle chat WebSocket connections
 function handleChatConnection(ws, request) {
@@ -1398,6 +1405,37 @@ function handleChatConnection(ws, request) {
 
     // Wrap WebSocket with writer for consistent interface with SSEStreamWriter
     const writer = new WebSocketWriter(ws, request?.user?.id ?? request?.user?.userId ?? null);
+    // Stash the writer on the raw socket so cross-cutting broadcasters
+    // (see broadcastShellActivity) can find its userId without a second map.
+    ws._chatWriter = writer;
+
+    // Advertise server-side capabilities so the UI knows which providers
+    // accept prompts while a turn is in flight. Only the Claude stream
+    // backend has an explicit prompt queue (claude-stream.js session.queue);
+    // SDK / cursor / gemini / codex would either double-spawn or clobber
+    // the in-flight request, so keeping the button disabled for them is
+    // the correct behaviour.
+    writer.send({
+        type: 'server-capabilities',
+        queue: {
+            claude: CLAUDE_STREAM_MODE === true,
+            cursor: false,
+            codex: false,
+            gemini: false,
+        },
+    });
+
+    // Replay any active shell banners for this user so a chat tab opened
+    // after a Shell was already running still shows the "Shell open" info.
+    const ownUserId = writer.userId;
+    if (ownUserId !== null) {
+        const prefix = `${ownUserId}:`;
+        for (const key of shellSessionsByUser.keys()) {
+            if (!key.startsWith(prefix)) continue;
+            const sessionId = key.slice(prefix.length);
+            writer.send({ type: 'shell-session-active', sessionId, active: true });
+        }
+    }
 
     ws.on('message', async (message) => {
         try {
@@ -1408,8 +1446,21 @@ function handleChatConnection(ws, request) {
                 console.log('📁 Project:', data.options?.projectPath || 'Unknown');
                 console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
 
-                // Use Claude Agents SDK
-                await queryClaudeSDK(data.command, data.options, writer);
+                // Both handlers read `cwd` from options; fall back to
+                // `projectPath` so the Claude subprocess starts in the user's
+                // project dir and not in the server process cwd — the latter
+                // would be especially risky paired with skip-permissions.
+                // Use truthy check (`||` not `??`) so an empty-string `cwd`
+                // from a buggy client still falls through to `projectPath`.
+                const claudeOptions = {
+                    ...(data.options || {}),
+                    cwd: data.options?.cwd || data.options?.projectPath,
+                };
+                if (CLAUDE_STREAM_MODE) {
+                    await queryClaudeStream(data.command, claudeOptions, writer);
+                } else {
+                    await queryClaudeSDK(data.command, claudeOptions, writer);
+                }
             } else if (data.type === 'cursor-command') {
                 console.log('[DEBUG] Cursor message:', data.command || '[Continue/Resume]');
                 console.log('📁 Project:', data.options?.cwd || 'Unknown');
@@ -1447,8 +1498,9 @@ function handleChatConnection(ws, request) {
                     success = abortCodexSession(data.sessionId);
                 } else if (provider === 'gemini') {
                     success = abortGeminiSession(data.sessionId);
+                } else if (CLAUDE_STREAM_MODE && isClaudeStreamSessionActive(data.sessionId, writer.userId)) {
+                    success = await abortClaudeStreamSession(data.sessionId, writer.userId);
                 } else {
-                    // Use Claude Agents SDK
                     success = await abortClaudeSDKSession(data.sessionId);
                 }
 
@@ -1481,12 +1533,16 @@ function handleChatConnection(ws, request) {
                     isActive = isCodexSessionActive(sessionId);
                 } else if (provider === 'gemini') {
                     isActive = isGeminiSessionActive(sessionId);
+                } else if (CLAUDE_STREAM_MODE && isClaudeStreamSessionActive(sessionId, writer.userId)) {
+                    // Liveness alone isn't "processing" in stream mode — the CLI
+                    // stays warm between prompts. Only report true when a prompt
+                    // is actually in flight; still swap the writer so future
+                    // output from an in-flight prompt reaches this reconnected client.
+                    isActive = isClaudeStreamSessionProcessing(sessionId, writer.userId);
+                    reconnectStreamSessionWriter(sessionId, ws, writer.userId);
                 } else {
-                    // Use Claude Agents SDK
                     isActive = isClaudeSDKSessionActive(sessionId);
                     if (isActive) {
-                        // Reconnect the session's writer to the new WebSocket so
-                        // subsequent SDK output flows to the refreshed client.
                         reconnectSessionWriter(sessionId, ws);
                     }
                 }
@@ -1509,9 +1565,16 @@ function handleChatConnection(ws, request) {
                     });
                 }
             } else if (data.type === 'get-active-sessions') {
-                // Get all currently active sessions
+                // Get all currently active sessions.
+                // Union assumes SDK and stream layers both key sessions by the CLI-assigned
+                // `session_id` (stream layer strips its pre-init `pending:*` keys in
+                // getActiveClaudeStreamSessions). If either ever emits provider-internal
+                // IDs the dedupe breaks — normalize the two shapes before merging.
+                const claudeSessions = CLAUDE_STREAM_MODE
+                    ? [...new Set([...getActiveClaudeSDKSessions(), ...getActiveClaudeStreamSessions(writer.userId)])]
+                    : getActiveClaudeSDKSessions();
                 const activeSessions = {
-                    claude: getActiveClaudeSDKSessions(),
+                    claude: claudeSessions,
                     cursor: getActiveCursorSessions(),
                     codex: getActiveCodexSessions(),
                     gemini: getActiveGeminiSessions()
@@ -1538,12 +1601,37 @@ function handleChatConnection(ws, request) {
 }
 
 // Handle shell WebSocket connections
-function handleShellConnection(ws) {
+function handleShellConnection(ws, request) {
     console.log('🐚 Shell client connected');
+    const shellUserId = request?.user?.id ?? request?.user?.userId ?? null;
     let shellProcess = null;
     let ptySessionKey = null;
     let urlDetectionBuffer = '';
+    let shellSessionIdForBanner = null; // tracks which sessionId we announced
     const announcedAuthUrls = new Set();
+
+    const announceShell = (sessionId) => {
+        if (!sessionId) return;
+        const key = shellSessionKey(shellUserId, sessionId);
+        const prev = shellSessionsByUser.get(key) || 0;
+        shellSessionsByUser.set(key, prev + 1);
+        shellSessionIdForBanner = sessionId;
+        if (prev === 0) broadcastShellActivity(shellUserId, sessionId, true);
+    };
+
+    const unannounceShell = () => {
+        if (!shellSessionIdForBanner) return;
+        const key = shellSessionKey(shellUserId, shellSessionIdForBanner);
+        const prev = shellSessionsByUser.get(key) || 0;
+        const next = Math.max(0, prev - 1);
+        if (next === 0) {
+            shellSessionsByUser.delete(key);
+            broadcastShellActivity(shellUserId, shellSessionIdForBanner, false);
+        } else {
+            shellSessionsByUser.set(key, next);
+        }
+        shellSessionIdForBanner = null;
+    };
 
     ws.on('message', async (message) => {
         try {
@@ -1557,6 +1645,22 @@ function handleShellConnection(ws) {
                 const provider = data.provider || 'claude';
                 const initialCommand = data.initialCommand;
                 const isPlainShell = data.isPlainShell || (!!initialCommand && !hasSession) || provider === 'plain-shell';
+                // Let chat clients show a "Shell open" banner so users don't
+                // stack chat prompts against a session a Shell is actively
+                // editing. Scoped to real claude sessions — plain shells and
+                // non-claude providers aren't session-bound.
+                //
+                // A client may re-init the same WS (reconnect path, provider
+                // switch). Evict any prior claim before announcing so the
+                // 0↔1 edge is kept honest even when sessionId changes or the
+                // same sessionId is re-announced — otherwise the refcount
+                // drifts and the banner sticks ON forever.
+                if (sessionId && hasSession && !isPlainShell && provider === 'claude') {
+                    if (shellSessionIdForBanner) unannounceShell();
+                    announceShell(sessionId);
+                } else if (shellSessionIdForBanner) {
+                    unannounceShell();
+                }
                 urlDetectionBuffer = '';
                 announcedAuthUrls.clear();
 
@@ -1873,6 +1977,10 @@ function handleShellConnection(ws) {
 
     ws.on('close', () => {
         console.log('🔌 Shell client disconnected');
+        // Mirror the banner-on announcement: drop the per-user refcount and,
+        // if this was the last shell tab for the session, tell chat clients
+        // they can clear the warning.
+        unannounceShell();
 
         if (ptySessionKey) {
             const session = ptySessionsMap.get(ptySessionKey);

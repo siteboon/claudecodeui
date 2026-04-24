@@ -42,6 +42,7 @@ interface UseChatComposerStateArgs {
   geminiModel: string;
   isLoading: boolean;
   canAbortSession: boolean;
+  canQueueWhileLoading?: boolean;
   tokenBudget: Record<string, unknown> | null;
   sendMessage: (message: unknown) => void;
   sendByCtrlEnter?: boolean;
@@ -114,6 +115,7 @@ export function useChatComposerState({
   geminiModel,
   isLoading,
   canAbortSession,
+  canQueueWhileLoading = false,
   tokenBudget,
   sendMessage,
   sendByCtrlEnter,
@@ -267,6 +269,25 @@ export function useChatComposerState({
   const executeCommand = useCallback(
     async (command: SlashCommand, rawInput?: string) => {
       if (!command || !selectedProject) {
+        return;
+      }
+
+      // Passthrough built-ins (e.g. /btw) reach this function via the
+      // autocomplete menu click, which always routes through
+      // `onExecuteCommand`. The menu click already wrote the command into
+      // the composer, so we just trigger handleSubmit — which re-enters
+      // `handleSubmit` with the slash input, sees the passthrough gate,
+      // falls through the slash-command interception, and sends the raw
+      // input (including the slash prefix) as a normal prompt. The gate
+      // prevents infinite recursion because handleSubmit never calls back
+      // into executeCommand for a passthrough match. Trust only built-ins;
+      // custom commands that set passthrough in frontmatter fall through
+      // to the normal /api/commands/execute path.
+      const meta = (command as { metadata?: { passthrough?: boolean } }).metadata;
+      if (meta?.passthrough && (command as { namespace?: string }).namespace === 'builtin') {
+        if (handleSubmitRef.current) {
+          handleSubmitRef.current(createFakeSubmitEvent());
+        }
         return;
       }
 
@@ -463,29 +484,47 @@ export function useChatComposerState({
     ) => {
       event.preventDefault();
       const currentInput = inputValueRef.current;
-      if (!currentInput.trim() || isLoading || !selectedProject) {
+      // Normally block while a prompt is in flight. Providers that advertised
+      // server-side queueing (see server-capabilities WS message) skip that
+      // gate so the user can stack prompts Claude-CLI style; the backend's
+      // session.queue handles ordering.
+      if (!currentInput.trim() || (isLoading && !canQueueWhileLoading) || !selectedProject) {
         return;
       }
 
-      // Intercept slash commands: if input starts with /commandName, execute as command with args
+      // Intercept slash commands: if input starts with /commandName, execute as command with args.
+      // Exception — "passthrough" built-ins (e.g. /btw) are CLI-native slash prefixes that
+      // Claude Code itself parses from the raw user turn, so we must NOT route them through
+      // /api/commands/execute. Fall through to the normal send path so the prefix reaches
+      // the CLI verbatim. Trust the passthrough flag only on built-in entries; a custom
+      // command could set the same metadata in its own frontmatter, and we should not let
+      // that silently bypass the custom-command path.
       const trimmedInput = currentInput.trim();
       if (trimmedInput.startsWith('/')) {
         const firstSpace = trimmedInput.indexOf(' ');
         const commandName = firstSpace > 0 ? trimmedInput.slice(0, firstSpace) : trimmedInput;
         const matchedCommand = slashCommands.find((cmd: SlashCommand) => cmd.name === commandName);
         if (matchedCommand) {
-          executeCommand(matchedCommand, trimmedInput);
-          setInput('');
-          inputValueRef.current = '';
-          setAttachedImages([]);
-          setUploadingImages(new Map());
-          setImageErrors(new Map());
-          resetCommandMenuState();
-          setIsTextareaExpanded(false);
-          if (textareaRef.current) {
-            textareaRef.current.style.height = 'auto';
+          const matchedMeta = (matchedCommand as { metadata?: { passthrough?: boolean } }).metadata;
+          const isPassthroughBuiltin =
+            matchedMeta?.passthrough === true
+            && (matchedCommand as { namespace?: string }).namespace === 'builtin';
+          if (!isPassthroughBuiltin) {
+            executeCommand(matchedCommand, trimmedInput);
+            setInput('');
+            inputValueRef.current = '';
+            setAttachedImages([]);
+            setUploadingImages(new Map());
+            setImageErrors(new Map());
+            resetCommandMenuState();
+            setIsTextareaExpanded(false);
+            if (textareaRef.current) {
+              textareaRef.current.style.height = 'auto';
+            }
+            return;
           }
-          return;
+          // Passthrough — let the handler continue below, the raw input (including
+          // the slash prefix) will be sent as a normal prompt.
         }
       }
 
@@ -539,13 +578,21 @@ export function useChatComposerState({
       };
 
       addMessage(userMessage);
-      setIsLoading(true); // Processing banner starts
-      setCanAbortSession(true);
-      setClaudeStatus({
-        text: 'Processing',
-        tokens: 0,
-        can_interrupt: true,
-      });
+      // When this submit landed because of provider-side queueing (prompt B
+      // stacked behind still-running prompt A), the in-flight turn already
+      // owns isLoading + claudeStatus; blindly rewriting them would blank
+      // the tool-specific banner (e.g. "Running Bash: …") and the token
+      // counter. Only refresh that state when we're starting a fresh turn.
+      const isQueuedSubmit = isLoading && canQueueWhileLoading;
+      if (!isQueuedSubmit) {
+        setIsLoading(true); // Processing banner starts
+        setCanAbortSession(true);
+        setClaudeStatus({
+          text: 'Processing',
+          tokens: 0,
+          can_interrupt: true,
+        });
+      }
 
       setIsUserScrolledUp(false);
       setTimeout(() => scrollToBottom(), 100);

@@ -128,6 +128,18 @@ const builtInCommands = [
     description: 'Rewind the conversation to a previous state',
     namespace: 'builtin',
     metadata: { type: 'builtin' }
+  },
+  {
+    // Claude CLI itself owns the /btw semantics (forked turn, tools disabled,
+    // no transcript write — see gist docs). We only need the entry in this
+    // list so the slash-command autocomplete offers it. The client must
+    // NOT call /api/commands/execute for these — it has to forward the raw
+    // prompt (including the /btw prefix) over the claude-command WS so CLI
+    // can intercept. `passthrough: true` is the flag executeCommand watches.
+    name: '/btw',
+    description: 'Ask a side question (forked turn, tools disabled, no transcript write)',
+    namespace: 'builtin',
+    metadata: { type: 'builtin', passthrough: true }
   }
 ];
 
