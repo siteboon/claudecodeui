@@ -102,9 +102,11 @@ export const getAllSessions = (
   project: Project,
   additionalSessions: AdditionalSessionsByProject,
 ): SessionWithProvider[] => {
+  // `additionalSessions` is indexed by DB `projectId` now (the sidebar keys
+  // every per-project map by the same identifier).
   const claudeSessions = [
     ...(project.sessions || []),
-    ...(additionalSessions[project.name] || []),
+    ...(additionalSessions[project.projectId] || []),
   ].map((session) => ({ ...session, __provider: 'claude' as const }));
 
   const cursorSessions = (project.cursorSessions || []).map((session) => ({
@@ -151,8 +153,9 @@ export const sortProjects = (
   const byName = [...projects];
 
   byName.sort((projectA, projectB) => {
-    const aStarred = starredProjects.has(projectA.name);
-    const bStarred = starredProjects.has(projectB.name);
+    // Starred projects are tracked by `projectId` in localStorage.
+    const aStarred = starredProjects.has(projectA.projectId);
+    const bStarred = starredProjects.has(projectB.projectId);
 
     if (aStarred && !bStarred) {
       return -1;
@@ -169,7 +172,7 @@ export const sortProjects = (
       );
     }
 
-    return (projectA.displayName || projectA.name).localeCompare(projectB.displayName || projectB.name);
+    return (projectA.displayName || projectA.projectId).localeCompare(projectB.displayName || projectB.projectId);
   });
 
   return byName;
@@ -182,9 +185,11 @@ export const filterProjects = (projects: Project[], searchFilter: string): Proje
   }
 
   return projects.filter((project) => {
-    const displayName = (project.displayName || project.name).toLowerCase();
-    const projectName = project.name.toLowerCase();
-    return displayName.includes(normalizedSearch) || projectName.includes(normalizedSearch);
+    const displayName = (project.displayName || project.projectId).toLowerCase();
+    // `project.path`/`fullPath` is the most useful search target now that the
+    // folder-derived name is gone; fall back to displayName above.
+    const searchPath = (project.path || project.fullPath || '').toLowerCase();
+    return displayName.includes(normalizedSearch) || searchPath.includes(normalizedSearch);
   });
 };
 
@@ -218,12 +223,14 @@ export const normalizeProjectForSettings = (project: Project): SettingsProject =
         ? project.path
         : '';
 
+  // Legacy SettingsProject still expects a `name` field; use the projectId so
+  // downstream consumers that rely on a stable identifier continue to work.
   return {
-    name: project.name,
+    name: project.projectId,
     displayName:
       typeof project.displayName === 'string' && project.displayName.trim().length > 0
         ? project.displayName
-        : project.name,
+        : project.projectId,
     fullPath: fallbackPath,
     path:
       typeof project.path === 'string' && project.path.length > 0

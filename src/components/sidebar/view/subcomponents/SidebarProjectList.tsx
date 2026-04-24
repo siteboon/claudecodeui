@@ -117,19 +117,21 @@ export default function SidebarProjectList({
       {!showProjects
         ? state
         : filteredProjects.map((project) => (
+            // React key + per-project state lookups all use the DB `projectId`
+            // so they remain stable across renames and session changes.
             <SidebarProjectItem
-              key={project.name}
+              key={project.projectId}
               project={project}
               selectedProject={selectedProject}
               selectedSession={selectedSession}
-              isExpanded={expandedProjects.has(project.name)}
-              isDeleting={deletingProjects.has(project.name)}
-              isStarred={isProjectStarred(project.name)}
+              isExpanded={expandedProjects.has(project.projectId)}
+              isDeleting={deletingProjects.has(project.projectId)}
+              isStarred={isProjectStarred(project.projectId)}
               editingProject={editingProject}
               editingName={editingName}
               sessions={getProjectSessions(project)}
-              initialSessionsLoaded={initialSessionsLoaded.has(project.name)}
-              isLoadingSessions={Boolean(loadingSessions[project.name])}
+              initialSessionsLoaded={initialSessionsLoaded.has(project.projectId)}
+              isLoadingSessions={Boolean(loadingSessions[project.projectId])}
               currentTime={currentTime}
               editingSession={editingSession}
               editingSessionName={editingSessionName}

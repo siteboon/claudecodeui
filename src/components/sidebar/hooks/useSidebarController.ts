@@ -42,6 +42,9 @@ type ConversationSession = {
 };
 
 type ConversationProjectResult = {
+  // Emitted by server/projects.js#searchConversations so the sidebar can map a
+  // match back to the Project in its current state by projectId.
+  projectId: string | null;
   projectName: string;
   projectDisplayName: string;
   sessions: ConversationSession[];
@@ -69,7 +72,8 @@ type UseSidebarControllerArgs = {
   onProjectSelect: (project: Project) => void;
   onSessionSelect: (session: ProjectSession) => void;
   onSessionDelete?: (sessionId: string) => void;
-  onProjectDelete?: (projectName: string) => void;
+  // `projectId` is the DB-assigned identifier; callbacks use that post-migration.
+  onProjectDelete?: (projectId: string) => void;
   setCurrentProject: (project: Project) => void;
   setSidebarVisible: (visible: boolean) => void;
   sidebarVisible: boolean;
@@ -135,13 +139,15 @@ export function useSidebarController({
   }, [projects]);
 
   useEffect(() => {
+    // Expanded-project tracking is now keyed by the DB `projectId` so state
+    // survives display-name edits and other mutations.
     if (selectedProject) {
       setExpandedProjects((prev) => {
-        if (prev.has(selectedProject.name)) {
+        if (prev.has(selectedProject.projectId)) {
           return prev;
         }
         const next = new Set(prev);
-        next.add(selectedProject.name);
+        next.add(selectedProject.projectId);
         return next;
       });
     }
@@ -152,7 +158,7 @@ export function useSidebarController({
       const loadedProjects = new Set<string>();
       projects.forEach((project) => {
         if (project.sessions && project.sessions.length >= 0) {
-          loadedProjects.add(project.name);
+          loadedProjects.add(project.projectId);
         }
       });
       setInitialSessionsLoaded(loadedProjects);
@@ -296,30 +302,34 @@ export function useSidebarController({
     [],
   );
 
-  const toggleProject = useCallback((projectName: string) => {
+  // All sidebar state keys (expanded, starred, loading, etc.) use the DB
+  // `projectId` as their identifier after the migration.
+  const toggleProject = useCallback((projectId: string) => {
     setExpandedProjects((prev) => {
       const next = new Set<string>();
-      if (!prev.has(projectName)) {
-        next.add(projectName);
+      if (!prev.has(projectId)) {
+        next.add(projectId);
       }
       return next;
     });
   }, []);
 
   const handleSessionClick = useCallback(
-    (session: SessionWithProvider, projectName: string) => {
-      onSessionSelect({ ...session, __projectName: projectName });
+    (session: SessionWithProvider, projectId: string) => {
+      // Tag the session with its owning projectId so downstream handlers
+      // can correlate it with the selectedProject in the app state.
+      onSessionSelect({ ...session, __projectId: projectId });
     },
     [onSessionSelect],
   );
 
-  const toggleStarProject = useCallback((projectName: string) => {
+  const toggleStarProject = useCallback((projectId: string) => {
     setStarredProjects((prev) => {
       const next = new Set(prev);
-      if (next.has(projectName)) {
-        next.delete(projectName);
+      if (next.has(projectId)) {
+        next.delete(projectId);
       } else {
-        next.add(projectName);
+        next.add(projectId);
       }
 
       persistStarredProjects(next);
@@ -328,7 +338,7 @@ export function useSidebarController({
   }, []);
 
   const isProjectStarred = useCallback(
-    (projectName: string) => starredProjects.has(projectName),
+    (projectId: string) => starredProjects.has(projectId),
     [starredProjects],
   );
 
@@ -340,7 +350,8 @@ export function useSidebarController({
   const projectsWithSessionMeta = useMemo(
     () =>
       projects.map((project) => {
-        const hasMoreOverride = projectHasMoreOverrides[project.name];
+        // The `hasMore` override map is keyed by projectId (see loadMoreSessions).
+        const hasMoreOverride = projectHasMoreOverrides[project.projectId];
         if (hasMoreOverride === undefined) {
           return project;
         }
@@ -364,7 +375,9 @@ export function useSidebarController({
   );
 
   const startEditing = useCallback((project: Project) => {
-    setEditingProject(project.name);
+    // `editingProject` is keyed by projectId so it stays stable across
+    // display-name mutations that happen while the input is open.
+    setEditingProject(project.projectId);
     setEditingName(project.displayName);
   }, []);
 
@@ -374,9 +387,11 @@ export function useSidebarController({
   }, []);
 
   const saveProjectName = useCallback(
-    async (projectName: string) => {
+    // `projectId` is the DB primary key; the rename API resolves the path
+    // through the `projects` table before writing the new display name.
+    async (projectId: string) => {
       try {
-        const response = await api.renameProject(projectName, editingName);
+        const response = await api.renameProject(projectId, editingName);
         if (response.ok) {
           if (window.refreshProjects) {
             await window.refreshProjects();
@@ -397,13 +412,15 @@ export function useSidebarController({
   );
 
   const showDeleteSessionConfirmation = useCallback(
+    // `projectId` (not the legacy folder-encoded name) is what the DELETE
+    // /api/projects/:projectId/sessions/:sessionId endpoint expects.
     (
-      projectName: string,
+      projectId: string,
       sessionId: string,
       sessionTitle: string,
       provider: SessionDeleteConfirmation['provider'] = 'claude',
     ) => {
-      setSessionDeleteConfirmation({ projectName, sessionId, sessionTitle, provider });
+      setSessionDeleteConfirmation({ projectId, sessionId, sessionTitle, provider });
     },
     [],
   );
@@ -413,7 +430,7 @@ export function useSidebarController({
       return;
     }
 
-    const { projectName, sessionId, provider } = sessionDeleteConfirmation;
+    const { projectId, sessionId, provider } = sessionDeleteConfirmation;
     setSessionDeleteConfirmation(null);
 
     try {
@@ -423,7 +440,8 @@ export function useSidebarController({
       } else if (provider === 'gemini') {
         response = await api.deleteGeminiSession(sessionId);
       } else {
-        response = await api.deleteSession(projectName, sessionId);
+        // Claude sessions are owned by the DB project row; pass projectId.
+        response = await api.deleteSession(projectId, sessionId);
       }
 
       if (response.ok) {
@@ -461,13 +479,15 @@ export function useSidebarController({
     const isEmpty = sessionCount === 0;
 
     setDeleteConfirmation(null);
-    setDeletingProjects((prev) => new Set([...prev, project.name]));
+    // Track in-flight deletes by projectId so the UI can disable actions
+    // even if the project object is rebuilt while the request is flying.
+    setDeletingProjects((prev) => new Set([...prev, project.projectId]));
 
     try {
-      const response = await api.deleteProject(project.name, !isEmpty, deleteData);
+      const response = await api.deleteProject(project.projectId, !isEmpty, deleteData);
 
       if (response.ok) {
-        onProjectDelete?.(project.name);
+        onProjectDelete?.(project.projectId);
       } else {
         const error = (await response.json()) as { error?: string };
         alert(error.error || t('messages.deleteProjectFailed'));
@@ -478,7 +498,7 @@ export function useSidebarController({
     } finally {
       setDeletingProjects((prev) => {
         const next = new Set(prev);
-        next.delete(project.name);
+        next.delete(project.projectId);
         return next;
       });
     }
@@ -486,19 +506,21 @@ export function useSidebarController({
 
   const loadMoreSessions = useCallback(
     async (project: Project) => {
-      const hasMoreOverride = projectHasMoreOverrides[project.name];
+      // Per-project bookkeeping (additionalSessions, loadingSessions,
+      // projectHasMoreOverrides) is indexed by the DB `projectId`.
+      const hasMoreOverride = projectHasMoreOverrides[project.projectId];
       const canLoadMore =
         hasMoreOverride !== undefined ? hasMoreOverride : project.sessionMeta?.hasMore === true;
-      if (!canLoadMore || loadingSessions[project.name]) {
+      if (!canLoadMore || loadingSessions[project.projectId]) {
         return;
       }
 
-      setLoadingSessions((prev) => ({ ...prev, [project.name]: true }));
+      setLoadingSessions((prev) => ({ ...prev, [project.projectId]: true }));
 
       try {
         const currentSessionCount =
-          (project.sessions?.length || 0) + (additionalSessions[project.name]?.length || 0);
-        const response = await api.sessions(project.name, 5, currentSessionCount);
+          (project.sessions?.length || 0) + (additionalSessions[project.projectId]?.length || 0);
+        const response = await api.sessions(project.projectId, 5, currentSessionCount);
 
         if (!response.ok) {
           return;
@@ -511,17 +533,17 @@ export function useSidebarController({
 
         setAdditionalSessions((prev) => ({
           ...prev,
-          [project.name]: [...(prev[project.name] || []), ...(result.sessions || [])],
+          [project.projectId]: [...(prev[project.projectId] || []), ...(result.sessions || [])],
         }));
 
         if (result.hasMore === false) {
           // Keep hasMore state in local hook state instead of mutating the project prop object.
-          setProjectHasMoreOverrides((prev) => ({ ...prev, [project.name]: false }));
+          setProjectHasMoreOverrides((prev) => ({ ...prev, [project.projectId]: false }));
         }
       } catch (error) {
         console.error('Error loading more sessions:', error);
       } finally {
-        setLoadingSessions((prev) => ({ ...prev, [project.name]: false }));
+        setLoadingSessions((prev) => ({ ...prev, [project.projectId]: false }));
       }
     },
     [additionalSessions, loadingSessions, projectHasMoreOverrides],
@@ -545,7 +567,9 @@ export function useSidebarController({
   }, [onRefresh]);
 
   const updateSessionSummary = useCallback(
-    async (_projectName: string, sessionId: string, summary: string, provider: LLMProvider) => {
+    // `_projectId` is unused by the rename endpoint but preserved in the
+    // callback signature so existing wiring from sidebar components works.
+    async (_projectId: string, sessionId: string, summary: string, provider: LLMProvider) => {
       const trimmed = summary.trim();
       if (!trimmed) {
         setEditingSession(null);

@@ -49,17 +49,19 @@ export default function SidebarSessionItem({
   const sessionView = createSessionViewModel(session, currentTime, t);
   const isSelected = selectedSession?.id === session.id;
 
+  // Sessions are owned by a project identified by `projectId` (DB primary key)
+  // after the projectName → projectId migration.
   const selectMobileSession = () => {
     onProjectSelect(project);
-    onSessionSelect(session, project.name);
+    onSessionSelect(session, project.projectId);
   };
 
   const saveEditedSession = () => {
-    onSaveEditingSession(project.name, session.id, editingSessionName, session.__provider);
+    onSaveEditingSession(project.projectId, session.id, editingSessionName, session.__provider);
   };
 
   const requestDeleteSession = () => {
-    onDeleteSession(project.name, session.id, sessionView.sessionName, session.__provider);
+    onDeleteSession(project.projectId, session.id, sessionView.sessionName, session.__provider);
   };
 
   return (
@@ -131,7 +133,7 @@ export default function SidebarSessionItem({
             'w-full justify-start p-2 h-auto font-normal text-left hover:bg-accent/50 transition-colors duration-200',
             isSelected && 'bg-accent text-accent-foreground',
           )}
-          onClick={() => onSessionSelect(session, project.name)}
+          onClick={() => onSessionSelect(session, project.projectId)}
         >
           <div className="flex w-full min-w-0 items-start gap-2">
             <SessionProviderLogo provider={session.__provider} className="mt-0.5 h-3 w-3 flex-shrink-0" />

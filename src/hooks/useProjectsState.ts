@@ -41,7 +41,7 @@ const projectsHaveChanges = (
     }
 
     const baseChanged =
-      nextProject.name !== prevProject.name ||
+      nextProject.projectId !== prevProject.projectId ||
       nextProject.displayName !== prevProject.displayName ||
       nextProject.fullPath !== prevProject.fullPath ||
       serialize(nextProject.sessionMeta) !== serialize(prevProject.sessionMeta) ||
@@ -69,14 +69,16 @@ const mergeTaskMasterCache = (nextProjects: Project[], previousProjects: Project
     return nextProjects;
   }
 
+  // Keyed by `projectId` (the DB primary key) so caches stay correct across
+  // renames and other mutations that might have changed the display name.
   const previousTaskMasterByProject = new Map(
     previousProjects
       .filter((project) => Boolean(project.taskmaster))
-      .map((project) => [project.name, project.taskmaster]),
+      .map((project) => [project.projectId, project.taskmaster]),
   );
 
   return nextProjects.map((project) => {
-    const cachedTaskMasterInfo = previousTaskMasterByProject.get(project.name);
+    const cachedTaskMasterInfo = previousTaskMasterByProject.get(project.projectId);
     if (!cachedTaskMasterInfo) {
       return project;
     }
@@ -107,8 +109,8 @@ const isUpdateAdditive = (
     return true;
   }
 
-  const currentSelectedProject = currentProjects.find((project) => project.name === selectedProject.name);
-  const updatedSelectedProject = updatedProjects.find((project) => project.name === selectedProject.name);
+  const currentSelectedProject = currentProjects.find((project) => project.projectId === selectedProject.projectId);
+  const updatedSelectedProject = updatedProjects.find((project) => project.projectId === selectedProject.projectId);
 
   if (!currentSelectedProject || !updatedSelectedProject) {
     return false;
@@ -214,13 +216,15 @@ export function useProjectsState({
     await fetchProjects({ showLoadingState: false });
   }, [fetchProjects]);
 
-  const hydrateProjectTaskMaster = useCallback(async (projectName: string) => {
-    if (!projectName) {
+  // Hydrates TaskMaster details for the given `projectId`. The project
+  // identifier comes directly from the DB-driven /api/projects response.
+  const hydrateProjectTaskMaster = useCallback(async (projectId: string) => {
+    if (!projectId) {
       return;
     }
 
     try {
-      const response = await api.projectTaskmaster(projectName);
+      const response = await api.projectTaskmaster(projectId);
       if (!response.ok) {
         return;
       }
@@ -233,14 +237,14 @@ export function useProjectsState({
 
       setProjects((previousProjects) =>
         previousProjects.map((project) =>
-          project.name === projectName
+          project.projectId === projectId
             ? { ...project, taskmaster: taskMasterInfo }
             : project,
         ),
       );
 
       setSelectedProject((previousProject) => {
-        if (!previousProject || previousProject.name !== projectName) {
+        if (!previousProject || previousProject.projectId !== projectId) {
           return previousProject;
         }
 
@@ -250,7 +254,7 @@ export function useProjectsState({
         };
       });
     } catch (error) {
-      console.error(`Error fetching TaskMaster info for project ${projectName}:`, error);
+      console.error(`Error fetching TaskMaster info for project ${projectId}:`, error);
     }
   }, []);
 
@@ -264,12 +268,12 @@ export function useProjectsState({
   }, [fetchProjects]);
 
   useEffect(() => {
-    if (!selectedProject?.name) {
+    if (!selectedProject?.projectId) {
       return;
     }
 
-    void hydrateProjectTaskMaster(selectedProject.name);
-  }, [hydrateProjectTaskMaster, selectedProject?.name]);
+    void hydrateProjectTaskMaster(selectedProject.projectId);
+  }, [hydrateProjectTaskMaster, selectedProject?.projectId]);
 
   // Auto-select the project when there is only one, so the user lands on the new session page
   useEffect(() => {
@@ -345,7 +349,7 @@ export function useProjectsState({
     }
 
     const updatedSelectedProject = updatedProjects.find(
-      (project) => project.name === selectedProject.name,
+      (project) => project.projectId === selectedProject.projectId,
     );
 
     if (!updatedSelectedProject) {
@@ -383,10 +387,11 @@ export function useProjectsState({
       return;
     }
 
+    // Project membership is resolved through `projectId` after the migration.
     for (const project of projects) {
       const claudeSession = project.sessions?.find((session) => session.id === sessionId);
       if (claudeSession) {
-        const shouldUpdateProject = selectedProject?.name !== project.name;
+        const shouldUpdateProject = selectedProject?.projectId !== project.projectId;
         const shouldUpdateSession =
           selectedSession?.id !== sessionId || selectedSession.__provider !== 'claude';
 
@@ -401,7 +406,7 @@ export function useProjectsState({
 
       const cursorSession = project.cursorSessions?.find((session) => session.id === sessionId);
       if (cursorSession) {
-        const shouldUpdateProject = selectedProject?.name !== project.name;
+        const shouldUpdateProject = selectedProject?.projectId !== project.projectId;
         const shouldUpdateSession =
           selectedSession?.id !== sessionId || selectedSession.__provider !== 'cursor';
 
@@ -416,7 +421,7 @@ export function useProjectsState({
 
       const codexSession = project.codexSessions?.find((session) => session.id === sessionId);
       if (codexSession) {
-        const shouldUpdateProject = selectedProject?.name !== project.name;
+        const shouldUpdateProject = selectedProject?.projectId !== project.projectId;
         const shouldUpdateSession =
           selectedSession?.id !== sessionId || selectedSession.__provider !== 'codex';
 
@@ -431,7 +436,7 @@ export function useProjectsState({
 
       const geminiSession = project.geminiSessions?.find((session) => session.id === sessionId);
       if (geminiSession) {
-        const shouldUpdateProject = selectedProject?.name !== project.name;
+        const shouldUpdateProject = selectedProject?.projectId !== project.projectId;
         const shouldUpdateSession =
           selectedSession?.id !== sessionId || selectedSession.__provider !== 'gemini';
 
@@ -444,7 +449,7 @@ export function useProjectsState({
         return;
       }
     }
-  }, [sessionId, projects, selectedProject?.name, selectedSession?.id, selectedSession?.__provider]);
+  }, [sessionId, projects, selectedProject?.projectId, selectedSession?.id, selectedSession?.__provider]);
 
   const handleProjectSelect = useCallback(
     (project: Project) => {
@@ -473,17 +478,21 @@ export function useProjectsState({
       }
 
       if (isMobile) {
-        const sessionProjectName = session.__projectName;
-        const currentProjectName = selectedProject?.name;
+        // Sessions are tagged with the owning project's DB `projectId` when
+        // picked from the sidebar (see useSidebarController); compare against
+        // the current selection's `projectId` so we know whether to collapse
+        // the sidebar after navigation.
+        const sessionProjectId = session.__projectId;
+        const currentProjectId = selectedProject?.projectId;
 
-        if (sessionProjectName !== currentProjectName) {
+        if (sessionProjectId !== currentProjectId) {
           setSidebarOpen(false);
         }
       }
 
       navigate(`/session/${session.id}`);
     },
-    [activeTab, isMobile, navigate, selectedProject?.name],
+    [activeTab, isMobile, navigate, selectedProject?.projectId],
   );
 
   const handleNewSession = useCallback(
@@ -535,7 +544,7 @@ export function useProjectsState({
         return;
       }
 
-      const refreshedProject = mergedProjects.find((project) => project.name === selectedProject.name);
+      const refreshedProject = mergedProjects.find((project) => project.projectId === selectedProject.projectId);
       if (!refreshedProject) {
         return;
       }
@@ -568,17 +577,19 @@ export function useProjectsState({
     }
   }, [projects, selectedProject, selectedSession]);
 
+  // `projectId` is the DB identifier passed from the sidebar's delete flow
+  // after the migration away from folder-derived project names.
   const handleProjectDelete = useCallback(
-    (projectName: string) => {
-      if (selectedProject?.name === projectName) {
+    (projectId: string) => {
+      if (selectedProject?.projectId === projectId) {
         setSelectedProject(null);
         setSelectedSession(null);
         navigate('/');
       }
 
-      setProjects((prevProjects) => prevProjects.filter((project) => project.name !== projectName));
+      setProjects((prevProjects) => prevProjects.filter((project) => project.projectId !== projectId));
     },
-    [navigate, selectedProject?.name],
+    [navigate, selectedProject?.projectId],
   );
 
   const sidebarSharedProps = useMemo(

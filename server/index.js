@@ -28,7 +28,17 @@ import { spawn } from 'child_process';
 import pty from 'node-pty';
 import mime from 'mime-types';
 
-import { getProjects, getSessions, renameProject, deleteSession, deleteProject, getProjectTaskMaster, extractProjectDirectory, clearProjectDirectoryCache, searchConversations } from './projects.js';
+import {
+    getProjects,
+    getSessionsById,
+    renameProjectById,
+    deleteSessionById,
+    deleteProjectById,
+    getProjectTaskMasterById,
+    getProjectPathById,
+    clearProjectDirectoryCache,
+    searchConversations,
+} from './projects.js';
 import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, resolveToolApproval, getPendingApprovalsForSession, reconnectSessionWriter } from './claude-sdk.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import { queryCodex, abortCodexSession, isCodexSessionActive, getActiveCodexSessions } from './openai-codex.js';
@@ -428,20 +438,25 @@ app.get('/api/projects', authenticateToken, async (req, res) => {
     }
 });
 
-app.get('/api/projects/:projectName/taskmaster', authenticateToken, async (req, res) => {
+// Project-scoped TaskMaster details; identified by DB-assigned `projectId`.
+app.get('/api/projects/:projectId/taskmaster', authenticateToken, async (req, res) => {
     try {
-        const { projectName } = req.params;
-        const taskMasterDetails = await getProjectTaskMaster(projectName);
+        const { projectId } = req.params;
+        const taskMasterDetails = await getProjectTaskMasterById(projectId);
+        if (!taskMasterDetails) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
         res.json(taskMasterDetails);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-app.get('/api/projects/:projectName/sessions', authenticateToken, async (req, res) => {
+// Sessions for a project; `projectId` is resolved to a path via the DB.
+app.get('/api/projects/:projectId/sessions', authenticateToken, async (req, res) => {
     try {
         const { limit = 5, offset = 0 } = req.query;
-        const result = await getSessions(req.params.projectName, parseInt(limit), parseInt(offset));
+        const result = await getSessionsById(req.params.projectId, parseInt(limit), parseInt(offset));
         applyCustomSessionNames(result.sessions, 'claude');
         res.json(result);
     } catch (error) {
@@ -449,23 +464,23 @@ app.get('/api/projects/:projectName/sessions', authenticateToken, async (req, re
     }
 });
 
-// Rename project endpoint
-app.put('/api/projects/:projectName/rename', authenticateToken, async (req, res) => {
+// Rename project endpoint; stores the custom name on the DB row for `projectId`.
+app.put('/api/projects/:projectId/rename', authenticateToken, async (req, res) => {
     try {
         const { displayName } = req.body;
-        await renameProject(req.params.projectName, displayName);
+        await renameProjectById(req.params.projectId, displayName);
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-// Delete session endpoint
-app.delete('/api/projects/:projectName/sessions/:sessionId', authenticateToken, async (req, res) => {
+// Delete session endpoint; resolves `projectId` to path before touching disk.
+app.delete('/api/projects/:projectId/sessions/:sessionId', authenticateToken, async (req, res) => {
     try {
-        const { projectName, sessionId } = req.params;
-        console.log(`[API] Deleting session: ${sessionId} from project: ${projectName}`);
-        await deleteSession(projectName, sessionId);
+        const { projectId, sessionId } = req.params;
+        console.log(`[API] Deleting session: ${sessionId} from project: ${projectId}`);
+        await deleteSessionById(projectId, sessionId);
         sessionsDb.deleteName(sessionId, 'claude');
         console.log(`[API] Session ${sessionId} deleted successfully`);
         res.json({ success: true });
@@ -504,12 +519,13 @@ app.put('/api/sessions/:sessionId/rename', authenticateToken, async (req, res) =
 // Delete project endpoint
 // force=true to allow removal even when sessions exist
 // deleteData=true to also delete session/memory files on disk (destructive)
-app.delete('/api/projects/:projectName', authenticateToken, async (req, res) => {
+// `projectId` is resolved to an absolute path through the DB before cleanup.
+app.delete('/api/projects/:projectId', authenticateToken, async (req, res) => {
     try {
-        const { projectName } = req.params;
+        const { projectId } = req.params;
         const force = req.query.force === 'true';
         const deleteData = req.query.deleteData === 'true';
-        await deleteProject(projectName, force, deleteData);
+        await deleteProjectById(projectId, force, deleteData);
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -694,9 +710,9 @@ app.post('/api/create-folder', authenticateToken, async (req, res) => {
 });
 
 // Read file content endpoint
-app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) => {
+app.get('/api/projects/:projectId/file', authenticateToken, async (req, res) => {
     try {
-        const { projectName } = req.params;
+        const { projectId } = req.params;
         const { filePath } = req.query;
 
 
@@ -705,7 +721,9 @@ app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) =
             return res.status(400).json({ error: 'Invalid file path' });
         }
 
-        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+        // Resolve the absolute project root via the DB-backed helper; the
+        // caller passes the DB-assigned `projectId`, not a folder name.
+        const projectRoot = await getProjectPathById(projectId);
         if (!projectRoot) {
             return res.status(404).json({ error: 'Project not found' });
         }
@@ -734,9 +752,9 @@ app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) =
 });
 
 // Serve raw file bytes for previews and downloads.
-app.get('/api/projects/:projectName/files/content', authenticateToken, async (req, res) => {
+app.get('/api/projects/:projectId/files/content', authenticateToken, async (req, res) => {
     try {
-        const { projectName } = req.params;
+        const { projectId } = req.params;
         const { path: filePath } = req.query;
 
 
@@ -745,7 +763,8 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
             return res.status(400).json({ error: 'Invalid file path' });
         }
 
-        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+        // Projects are now addressed by DB `projectId`, resolved to their path here.
+        const projectRoot = await getProjectPathById(projectId);
         if (!projectRoot) {
             return res.status(404).json({ error: 'Project not found' });
         }
@@ -791,9 +810,9 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
 });
 
 // Save file content endpoint
-app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) => {
+app.put('/api/projects/:projectId/file', authenticateToken, async (req, res) => {
     try {
-        const { projectName } = req.params;
+        const { projectId } = req.params;
         const { filePath, content } = req.body;
 
 
@@ -806,7 +825,8 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
             return res.status(400).json({ error: 'Content is required' });
         }
 
-        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+        // Projects are now addressed by DB `projectId`, resolved to their path here.
+        const projectRoot = await getProjectPathById(projectId);
         if (!projectRoot) {
             return res.status(404).json({ error: 'Project not found' });
         }
@@ -840,19 +860,16 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
     }
 });
 
-app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) => {
+app.get('/api/projects/:projectId/files', authenticateToken, async (req, res) => {
     try {
 
         // Using fsPromises from import
 
-        // Use extractProjectDirectory to get the actual project path
-        let actualPath;
-        try {
-            actualPath = await extractProjectDirectory(req.params.projectName);
-        } catch (error) {
-            console.error('Error extracting project directory:', error);
-            // Fallback to simple dash replacement
-            actualPath = req.params.projectName.replace(/-/g, '/');
+        // Resolve the project's absolute path through the DB (projectId is the
+        // primary key of the `projects` table after the identifier migration).
+        const actualPath = await getProjectPathById(req.params.projectId);
+        if (!actualPath) {
+            return res.status(404).json({ error: 'Project not found' });
         }
 
         // Check if path exists
@@ -917,10 +934,10 @@ function validateFilename(name) {
     return { valid: true };
 }
 
-// POST /api/projects/:projectName/files/create - Create new file or directory
-app.post('/api/projects/:projectName/files/create', authenticateToken, async (req, res) => {
+// POST /api/projects/:projectId/files/create - Create new file or directory
+app.post('/api/projects/:projectId/files/create', authenticateToken, async (req, res) => {
     try {
-        const { projectName } = req.params;
+        const { projectId } = req.params;
         const { path: parentPath, type, name } = req.body;
 
         // Validate input
@@ -937,8 +954,8 @@ app.post('/api/projects/:projectName/files/create', authenticateToken, async (re
             return res.status(400).json({ error: nameValidation.error });
         }
 
-        // Get project root
-        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+        // Resolve the project directory through the DB using the new projectId.
+        const projectRoot = await getProjectPathById(projectId);
         if (!projectRoot) {
             return res.status(404).json({ error: 'Project not found' });
         }
@@ -994,10 +1011,10 @@ app.post('/api/projects/:projectName/files/create', authenticateToken, async (re
     }
 });
 
-// PUT /api/projects/:projectName/files/rename - Rename file or directory
-app.put('/api/projects/:projectName/files/rename', authenticateToken, async (req, res) => {
+// PUT /api/projects/:projectId/files/rename - Rename file or directory
+app.put('/api/projects/:projectId/files/rename', authenticateToken, async (req, res) => {
     try {
-        const { projectName } = req.params;
+        const { projectId } = req.params;
         const { oldPath, newName } = req.body;
 
         // Validate input
@@ -1010,8 +1027,8 @@ app.put('/api/projects/:projectName/files/rename', authenticateToken, async (req
             return res.status(400).json({ error: nameValidation.error });
         }
 
-        // Get project root
-        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+        // Resolve the project directory through the DB using the new projectId.
+        const projectRoot = await getProjectPathById(projectId);
         if (!projectRoot) {
             return res.status(404).json({ error: 'Project not found' });
         }
@@ -1071,10 +1088,10 @@ app.put('/api/projects/:projectName/files/rename', authenticateToken, async (req
     }
 });
 
-// DELETE /api/projects/:projectName/files - Delete file or directory
-app.delete('/api/projects/:projectName/files', authenticateToken, async (req, res) => {
+// DELETE /api/projects/:projectId/files - Delete file or directory
+app.delete('/api/projects/:projectId/files', authenticateToken, async (req, res) => {
     try {
-        const { projectName } = req.params;
+        const { projectId } = req.params;
         const { path: targetPath, type } = req.body;
 
         // Validate input
@@ -1082,8 +1099,8 @@ app.delete('/api/projects/:projectName/files', authenticateToken, async (req, re
             return res.status(400).json({ error: 'Path is required' });
         }
 
-        // Get project root
-        const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+        // Resolve the project directory through the DB using the new projectId.
+        const projectRoot = await getProjectPathById(projectId);
         if (!projectRoot) {
             return res.status(404).json({ error: 'Project not found' });
         }
@@ -1136,7 +1153,7 @@ app.delete('/api/projects/:projectName/files', authenticateToken, async (req, re
     }
 });
 
-// POST /api/projects/:projectName/files/upload - Upload files
+// POST /api/projects/:projectId/files/upload - Upload files
 // Dynamic import of multer for file uploads
 const uploadFilesHandler = async (req, res) => {
     // Dynamic import of multer
@@ -1175,7 +1192,7 @@ const uploadFilesHandler = async (req, res) => {
         }
 
         try {
-            const { projectName } = req.params;
+            const { projectId } = req.params;
             const { targetPath, relativePaths } = req.body;
 
             // Parse relative paths if provided (for folder uploads)
@@ -1189,7 +1206,7 @@ const uploadFilesHandler = async (req, res) => {
             }
 
             console.log('[DEBUG] File upload request:', {
-                projectName,
+                projectId,
                 targetPath: JSON.stringify(targetPath),
                 targetPathType: typeof targetPath,
                 filesCount: req.files?.length,
@@ -1200,8 +1217,8 @@ const uploadFilesHandler = async (req, res) => {
                 return res.status(400).json({ error: 'No files provided' });
             }
 
-            // Get project root
-            const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+            // Resolve the project directory through the DB using the new projectId.
+            const projectRoot = await getProjectPathById(projectId);
             if (!projectRoot) {
                 return res.status(404).json({ error: 'Project not found' });
             }
@@ -1298,7 +1315,7 @@ const uploadFilesHandler = async (req, res) => {
     });
 };
 
-app.post('/api/projects/:projectName/files/upload', authenticateToken, uploadFilesHandler);
+app.post('/api/projects/:projectId/files/upload', authenticateToken, uploadFilesHandler);
 
 /**
  * Proxy an authenticated client WebSocket to a plugin's internal WS server.
@@ -1905,8 +1922,10 @@ function handleShellConnection(ws) {
         console.error('[ERROR] Shell WebSocket error:', error);
     });
 }
-// Image upload endpoint
-app.post('/api/projects/:projectName/upload-images', authenticateToken, async (req, res) => {
+// Image upload endpoint. Accepts the DB-assigned `projectId` (not a folder name)
+// but the current implementation doesn't need to touch the project directory,
+// so we just leave the param rename for consistency with the rest of the API.
+app.post('/api/projects/:projectId/upload-images', authenticateToken, async (req, res) => {
     try {
         const multer = (await import('multer')).default;
         const path = (await import('path')).default;
@@ -1990,10 +2009,11 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
     }
 });
 
-// Get token usage for a specific session
-app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authenticateToken, async (req, res) => {
+// Get token usage for a specific session. `projectId` is the DB primary key;
+// the Claude branch below resolves it to an absolute path via the DB.
+app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticateToken, async (req, res) => {
     try {
-        const { projectName, sessionId } = req.params;
+        const { projectId, sessionId } = req.params;
         const { provider = 'claude' } = req.query;
         const homeDir = os.homedir();
 
@@ -2097,13 +2117,13 @@ app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authentica
         }
 
         // Handle Claude sessions (default)
-        // Extract actual project path
-        let projectPath;
-        try {
-            projectPath = await extractProjectDirectory(projectName);
-        } catch (error) {
-            console.error('Error extracting project directory:', error);
-            return res.status(500).json({ error: 'Failed to determine project path' });
+        // Resolve the project path through the DB using the caller-supplied
+        // `projectId`. Legacy code here called extractProjectDirectory with a
+        // folder-encoded project name; the migration centralizes that lookup
+        // in the projects table.
+        const projectPath = await getProjectPathById(projectId);
+        if (!projectPath) {
+            return res.status(404).json({ error: 'Project not found' });
         }
 
         // Construct the JSONL file path

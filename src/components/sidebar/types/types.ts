@@ -14,8 +14,10 @@ export type DeleteProjectConfirmation = {
   sessionCount: number;
 };
 
+// Delete confirmation payload; `projectId` is the DB primary key used by the
+// DELETE /api/projects/:projectId/sessions/:sessionId endpoint.
 export type SessionDeleteConfirmation = {
-  projectName: string;
+  projectId: string;
   sessionId: string;
   sessionTitle: string;
   provider: LLMProvider;
@@ -29,7 +31,9 @@ export type SidebarProps = {
   onSessionSelect: (session: ProjectSession) => void;
   onNewSession: (project: Project) => void;
   onSessionDelete?: (sessionId: string) => void;
-  onProjectDelete?: (projectName: string) => void;
+  // `projectId` is the DB identifier; the sidebar hands it back to the parent
+  // when the delete flow completes.
+  onProjectDelete?: (projectId: string) => void;
   isLoading: boolean;
   loadingProgress: LoadingProgress | null;
   onRefresh: () => Promise<void> | void;
@@ -55,4 +59,11 @@ export type MCPServerStatus = {
   isConfigured?: boolean;
 } | null;
 
-export type SettingsProject = Pick<Project, 'name' | 'displayName' | 'fullPath' | 'path'>;
+// Retained as `name` for backwards compatibility with existing settings
+// consumers; the value is populated from `projectId` by normalizeProjectForSettings.
+export type SettingsProject = {
+  name: string;
+  displayName: string;
+  fullPath: string;
+  path?: string;
+};

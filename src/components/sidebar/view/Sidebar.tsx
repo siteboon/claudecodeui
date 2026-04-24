@@ -234,14 +234,18 @@ function Sidebar({
             conversationResults={conversationResults}
             isSearching={isSearching}
             searchProgress={searchProgress}
-            onConversationResultClick={(projectName: string, sessionId: string, provider: string, messageTimestamp?: string | null, messageSnippet?: string | null) => {
+            onConversationResultClick={(projectId: string | null, sessionId: string, provider: string, messageTimestamp?: string | null, messageSnippet?: string | null) => {
+              // `projectId` (DB key) is the canonical identifier post-migration.
+              // The server emits null when it can't resolve a project row for
+              // the search hit; treat that as "no project" and still navigate
+              // to the session so the user can open it from the URL.
               const resolvedProvider = (provider || 'claude') as LLMProvider;
-              const project = projects.find(p => p.name === projectName);
+              const project = projectId ? projects.find(p => p.projectId === projectId) : null;
               const searchTarget = { __searchTargetTimestamp: messageTimestamp || null, __searchTargetSnippet: messageSnippet || null };
               const sessionObj = {
                 id: sessionId,
                 __provider: resolvedProvider,
-                __projectName: projectName,
+                __projectId: projectId ?? undefined,
                 ...searchTarget,
               };
               if (project) {
@@ -249,12 +253,12 @@ function Sidebar({
                 const sessions = getProjectSessions(project);
                 const existing = sessions.find(s => s.id === sessionId);
                 if (existing) {
-                  handleSessionClick({ ...existing, ...searchTarget }, projectName);
+                  handleSessionClick({ ...existing, ...searchTarget }, project.projectId);
                 } else {
-                  handleSessionClick(sessionObj, projectName);
+                  handleSessionClick(sessionObj, project.projectId);
                 }
               } else {
-                handleSessionClick(sessionObj, projectName);
+                handleSessionClick(sessionObj, projectId ?? '');
               }
             }}
             onRefresh={() => {

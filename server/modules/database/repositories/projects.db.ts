@@ -47,6 +47,25 @@ export const projectsDb = {
         return row ?? null;
     },
 
+    /**
+     * Resolve the absolute project directory from a database project_id.
+     *
+     * This is the canonical lookup used after the projectName → projectId migration:
+     * API routes receive the DB-assigned `projectId` and must resolve the real folder
+     * path through this helper before touching the filesystem. Returns `null` when the
+     * project row does not exist so callers can respond with a 404.
+     */
+    getProjectPathById(projectId: string): string | null {
+        const db = getConnection();
+        const row = db.prepare(`
+            SELECT project_path
+            FROM projects
+            WHERE project_id = ?
+        `).get(projectId) as Pick<ProjectRow, 'project_path'> | undefined;
+
+        return row?.project_path ?? null;
+    },
+
     getProjectPaths(): ProjectRow[] {
         const db = getConnection();
         return db.prepare(`

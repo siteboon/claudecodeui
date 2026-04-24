@@ -114,7 +114,7 @@ export function useSlashCommands({
           })),
         ];
 
-        const parsedHistory = readCommandHistory(selectedProject.name);
+        const parsedHistory = readCommandHistory(selectedProject.projectId);
         const sortedCommands = [...allCommands].sort((commandA, commandB) => {
           const commandAUsage = parsedHistory[commandA.name] || 0;
           const commandBUsage = parsedHistory[commandB.name] || 0;
@@ -173,7 +173,7 @@ export function useSlashCommands({
       return [];
     }
 
-    const parsedHistory = readCommandHistory(selectedProject.name);
+    const parsedHistory = readCommandHistory(selectedProject.projectId);
 
     return slashCommands
       .map((command) => ({
@@ -191,9 +191,9 @@ export function useSlashCommands({
         return;
       }
 
-      const parsedHistory = readCommandHistory(selectedProject.name);
+      const parsedHistory = readCommandHistory(selectedProject.projectId);
       parsedHistory[command.name] = (parsedHistory[command.name] || 0) + 1;
-      saveCommandHistory(selectedProject.name, parsedHistory);
+      saveCommandHistory(selectedProject.projectId, parsedHistory);
     },
     [selectedProject],
   );

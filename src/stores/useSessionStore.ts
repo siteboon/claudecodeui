@@ -165,12 +165,16 @@ export function useSessionStore() {
 
   /**
    * Fetch messages from the unified endpoint and populate serverMessages.
+   *
+   * `projectId` is the DB-assigned identifier used by the backend to resolve
+   * the project's on-disk directory; it replaces the legacy `projectName`
+   * Claude folder encoding that callers used to pass.
    */
   const fetchFromServer = useCallback(async (
     sessionId: string,
     opts: {
       provider?: LLMProvider;
-      projectName?: string;
+      projectId?: string;
       projectPath?: string;
       limit?: number | null;
       offset?: number;
@@ -183,7 +187,7 @@ export function useSessionStore() {
     try {
       const params = new URLSearchParams();
       if (opts.provider) params.append('provider', opts.provider);
-      if (opts.projectName) params.append('projectName', opts.projectName);
+      if (opts.projectId) params.append('projectId', opts.projectId);
       if (opts.projectPath) params.append('projectPath', opts.projectPath);
       if (opts.limit !== null && opts.limit !== undefined) {
         params.append('limit', String(opts.limit));
@@ -224,12 +228,15 @@ export function useSessionStore() {
 
   /**
    * Load older (paginated) messages and prepend to serverMessages.
+   *
+   * Accepts `projectId` (the DB primary key) so the unified messages endpoint
+   * can resolve the project path through the database.
    */
   const fetchMore = useCallback(async (
     sessionId: string,
     opts: {
       provider?: LLMProvider;
-      projectName?: string;
+      projectId?: string;
       projectPath?: string;
       limit?: number;
     } = {},
@@ -239,7 +246,7 @@ export function useSessionStore() {
 
     const params = new URLSearchParams();
     if (opts.provider) params.append('provider', opts.provider);
-    if (opts.projectName) params.append('projectName', opts.projectName);
+    if (opts.projectId) params.append('projectId', opts.projectId);
     if (opts.projectPath) params.append('projectPath', opts.projectPath);
     const limit = opts.limit ?? 20;
     params.append('limit', String(limit));
@@ -299,12 +306,15 @@ export function useSessionStore() {
 
   /**
    * Re-fetch serverMessages from the unified endpoint (e.g., on projects_updated).
+   *
+   * Uses the DB-assigned `projectId`; the legacy folder-derived projectName
+   * is no longer accepted here.
    */
   const refreshFromServer = useCallback(async (
     sessionId: string,
     opts: {
       provider?: LLMProvider;
-      projectName?: string;
+      projectId?: string;
       projectPath?: string;
     } = {},
   ) => {
@@ -312,7 +322,7 @@ export function useSessionStore() {
     try {
       const params = new URLSearchParams();
       if (opts.provider) params.append('provider', opts.provider);
-      if (opts.projectName) params.append('projectName', opts.projectName);
+      if (opts.projectId) params.append('projectId', opts.projectId);
       if (opts.projectPath) params.append('projectPath', opts.projectPath);
 
       const qs = params.toString();

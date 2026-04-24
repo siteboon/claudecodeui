@@ -93,22 +93,24 @@ export default function SidebarProjectItem({
   onSaveEditingSession,
   t,
 }: SidebarProjectItemProps) {
-  const isSelected = selectedProject?.name === project.name;
-  const isEditing = editingProject === project.name;
+  // Project identity is tracked by the DB-assigned `projectId` everywhere
+  // after the projectName → projectId migration.
+  const isSelected = selectedProject?.projectId === project.projectId;
+  const isEditing = editingProject === project.projectId;
   const hasMoreSessions = project.sessionMeta?.hasMore === true;
   const sessionCountDisplay = getSessionCountDisplay(sessions, hasMoreSessions);
   const sessionCountLabel = `${sessionCountDisplay} session${sessions.length === 1 ? '' : 's'}`;
   const taskStatus = getTaskIndicatorStatus(project, mcpServerStatus);
 
-  const toggleProject = () => onToggleProject(project.name);
-  const toggleStarProject = () => onToggleStarProject(project.name);
+  const toggleProject = () => onToggleProject(project.projectId);
+  const toggleStarProject = () => onToggleStarProject(project.projectId);
 
   const saveProjectName = () => {
-    onSaveProjectName(project.name);
+    onSaveProjectName(project.projectId);
   };
 
   const selectAndToggleProject = () => {
-    if (selectedProject?.name !== project.name) {
+    if (selectedProject?.projectId !== project.projectId) {
       onProjectSelect(project);
     }
 

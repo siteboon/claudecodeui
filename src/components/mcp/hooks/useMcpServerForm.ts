@@ -128,7 +128,8 @@ export function useMcpServerForm({
     currentProjects
       .map((project) => ({
         value: getProjectPath(project),
-        label: project.displayName || project.name,
+        // Fall back to projectId (DB primary key) when no display name is set.
+        label: project.displayName || project.projectId,
       }))
       .filter((project) => project.value)
   ), [currentProjects]);

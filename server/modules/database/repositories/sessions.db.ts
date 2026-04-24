@@ -192,17 +192,29 @@ export const sessionsDb = {
 
   /**
    * Legacy-compatibility method kept for parity with `server/database/db.js`.
+   *
+   * Renaming a session is a metadata-only change — it's not actual activity,
+   * so existing rows intentionally keep their `updated_at` untouched. This
+   * prevents the sidebar's "last activity" timestamp from jumping around when
+   * a user simply edits a session's label.
+   *
+   * When the row doesn't exist yet we still have to seed `created_at`/
+   * `updated_at`; we write ISO-8601 UTC (with the `Z` suffix) rather than
+   * rely on SQLite's `CURRENT_TIMESTAMP`, which stores a naive
+   * `"YYYY-MM-DD HH:MM:SS"` value that JavaScript's `new Date(...)` parses as
+   * local time and displays with the wrong offset.
+   *
    * TODO: Remove after all legacy imports are migrated to the new repository API.
    */
   setName(sessionId: string, provider: string, customName: string): void {
     const db = getConnection();
+    const nowIso = new Date().toISOString();
     db.prepare(
-      `INSERT INTO sessions (session_id, provider, custom_name)
-       VALUES (?, ?, ?)
+      `INSERT INTO sessions (session_id, provider, custom_name, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?)
        ON CONFLICT(session_id, provider) DO UPDATE SET
-         custom_name = excluded.custom_name,
-         updated_at = CURRENT_TIMESTAMP`
-    ).run(sessionId, provider, customName);
+         custom_name = excluded.custom_name`
+    ).run(sessionId, provider, customName, nowIso, nowIso);
   },
 
   /**

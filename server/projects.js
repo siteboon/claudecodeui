@@ -1,71 +1,39 @@
 /**
- * PROJECT DISCOVERY AND MANAGEMENT SYSTEM
- * ========================================
- * 
- * This module manages project discovery for both Claude CLI and Cursor CLI sessions.
- * 
- * ## Architecture Overview
- * 
- * 1. **Claude Projects** (stored in ~/.claude/projects/)
- *    - Each project is a directory named with the project path encoded (/ replaced with -)
- *    - Contains .jsonl files with conversation history including 'cwd' field
- *    - Project metadata stored in ~/.claude/project-config.json
- * 
- * 2. **Cursor Projects** (stored in ~/.cursor/chats/)
- *    - Each project directory is named with MD5 hash of the absolute project path
- *    - Example: /Users/john/myproject -> MD5 -> a1b2c3d4e5f6...
- *    - Contains session directories with SQLite databases (store.db)
- *    - Project path is NOT stored in the database - only in the MD5 hash
- * 
- * ## Project Discovery Strategy
- * 
- * 1. **Claude Projects Discovery**:
- *    - Scan ~/.claude/projects/ directory for Claude project folders
- *    - Extract actual project path from .jsonl files (cwd field)
- *    - Fall back to decoded directory name if no sessions exist
- * 
- * 2. **Cursor Sessions Discovery**:
- *    - For each KNOWN project (from Claude or manually added)
- *    - Compute MD5 hash of the project's absolute path
- *    - Check if ~/.cursor/chats/{md5_hash}/ directory exists
- *    - Read session metadata from SQLite store.db files
- * 
- * 3. **Manual Project Addition**:
- *    - Users can manually add project paths via UI
- *    - Stored in ~/.claude/project-config.json with 'manuallyAdded' flag
- *    - Allows discovering Cursor sessions for projects without Claude sessions
- * 
- * ## Critical Limitations
- * 
- * - **CANNOT discover Cursor-only projects**: From a quick check, there was no mention of
- *   the cwd of each project. if someone has the time, you can try to reverse engineer it.
- * 
- * - **Project relocation breaks history**: If a project directory is moved or renamed,
- *   the MD5 hash changes, making old Cursor sessions inaccessible unless the old
- *   path is known and manually added.
- * 
- * ## Error Handling
- * 
- * - Missing ~/.claude directory is handled gracefully with automatic creation
- * - ENOENT errors are caught and handled without crashing
- * - Empty arrays returned when no projects/sessions exist
- * 
- * ## Caching Strategy
- * 
- * - Project directory extraction is cached to minimize file I/O
- * - Cache is cleared when project configuration changes
- * - Session data is fetched on-demand, not cached
+ * PROJECT DISCOVERY AND MANAGEMENT
+ * ================================
+ *
+ * After the projectName → projectId migration, project and session listings
+ * for `GET /api/projects` are sourced entirely from the database:
+ *
+ *   - `projects` table (via `projectsDb`) — the canonical list of projects and
+ *     their absolute `project_path`.
+ *   - `sessions` table (via `sessionsDb`) — every provider's sessions for a
+ *     given project, keyed by `project_path`.
+ *
+ * Routes always address a project by its DB `projectId` and resolve the real
+ * directory through `getProjectPathById` before touching disk.
+ *
+ * The filesystem-aware helpers kept in this module serve the remaining
+ * features that still need on-disk data:
+ *   - Session message reads for each provider (Claude/Codex/Gemini) for
+ *     `GET /api/sessions/:sessionId/messages`.
+ *   - Conversation search (`searchConversations`) which scans JSONL history.
+ *   - Destructive project cleanup (`deleteProjectById` -> `deleteProject`)
+ *     which removes Claude/Cursor/Codex artifacts on disk.
+ *   - Manual project registration (`addProjectManually`) which syncs to
+ *     ~/.claude/project-config.json for backwards compatibility.
  */
 
-import { promises as fs } from 'fs';
-import fsSync from 'fs';
+import fsSync, { promises as fs } from 'fs';
 import path from 'path';
 import readline from 'readline';
 import crypto from 'crypto';
-import Database from 'better-sqlite3';
 import os from 'os';
+
+import { sessionSynchronizerService } from '@/modules/providers';
+
 import sessionManager from './sessionManager.js';
-import { applyCustomSessionNames } from './modules/database/index.js';
+import { projectsDb, sessionsDb } from './modules/database/index.js';
 import { getModuleDir, findAppRoot } from './utils/runtime-paths.js';
 
 // Snapshot files are kept as incrementing artifacts under .tmp/project-dumps for later review.
@@ -265,12 +233,56 @@ function normalizeTaskMasterInfo(taskMasterResult = null) {
   };
 }
 
-async function getProjectTaskMaster(projectName) {
-  const projectPath = await extractProjectDirectory(projectName);
+/**
+ * Resolve the absolute project path for a database `projectId`.
+ *
+ * After the projectName → projectId migration, every API route receives a
+ * `projectId` (the primary key from the `projects` table) and must translate
+ * it into the real directory on disk through this helper. Returns `null` when
+ * the id doesn't match any row so callers can respond with a 404.
+ */
+async function getProjectPathById(projectId) {
+  if (!projectId) {
+    return null;
+  }
+
+  return projectsDb.getProjectPathById(projectId);
+}
+
+/**
+ * Compute the Claude CLI project folder name for an absolute path.
+ *
+ * Claude stores its JSONL history per project under
+ * `~/.claude/projects/<encoded-path>/`. The folder name is derived from the
+ * absolute path by replacing every non-alphanumeric character (except `-`) with
+ * `-`. Filesystem helpers like `getSessions`/`deleteSession` still work on that
+ * folder name, so routes that receive a `projectId` compute it from the path
+ * resolved through the DB instead of keeping the encoded name as an identifier.
+ */
+function claudeFolderNameFromPath(projectPath) {
+  if (!projectPath) {
+    return '';
+  }
+
+  return projectPath.replace(/[^a-zA-Z0-9-]/g, '-');
+}
+
+/**
+ * TaskMaster details for a project, addressed by DB `projectId`.
+ *
+ * Resolves the project path through the DB and inspects the `.taskmaster`
+ * folder on disk for metadata the TaskMaster panel displays.
+ */
+async function getProjectTaskMasterById(projectId) {
+  const projectPath = await getProjectPathById(projectId);
+  if (!projectPath) {
+    return null;
+  }
+
   const taskMasterResult = await detectTaskMasterFolder(projectPath);
 
   return {
-    projectName,
+    projectId,
     projectPath,
     taskmaster: normalizeTaskMasterInfo(taskMasterResult)
   };
@@ -342,8 +354,10 @@ async function generateDisplayName(projectName, actualProjectDir = null) {
   return projectPath;
 }
 
-// Extract the actual project directory from JSONL sessions (with caching)
-// TODO: Get the project id as parameter and return the actual project directory from the database
+// Resolve a Claude-encoded folder name back to an absolute project directory
+// by inspecting cached metadata and JSONL `cwd` fields. Used only by the
+// legacy name-based helpers below (`getSessions`, `deleteProject`, etc.) and
+// by the conversation search; id-based routes use `getProjectPathById`.
 async function extractProjectDirectory(projectName) {
   // Check cache first
   if (projectDirectoryCache.has(projectName)) {
@@ -463,209 +477,115 @@ async function extractProjectDirectory(projectName) {
   }
 }
 
+/**
+ * Group the `sessions` table rows for a project by provider.
+ *
+ * After the projectId migration, GET /api/projects no longer scans JSONL files
+ * or any other session directory — every provider's session list comes from
+ * the database. One `SELECT ... WHERE project_path = ?` gets us every row we
+ * need, and we then bucket them by `provider` so each list (`sessions`,
+ * `cursorSessions`, `codexSessions`, `geminiSessions`) can be built without
+ * touching disk. Per the migration spec, each emitted session carries
+ * `summary = custom_name`, `messageCount = 0` and `lastActivity` taken from
+ * `updated_at` so the sidebar still sorts by recency.
+ */
+function buildSessionsByProviderFromDb(projectPath) {
+  const rows = sessionsDb.getSessionsByProjectPath(projectPath);
+  const byProvider = {
+    claude: [],
+    cursor: [],
+    codex: [],
+    gemini: [],
+  };
+
+  for (const row of rows) {
+    const bucket = byProvider[row.provider];
+    if (!bucket) {
+      continue;
+    }
+
+    bucket.push({
+      id: row.session_id,
+      // The session summary intentionally mirrors the custom_name column only;
+      // the historical JSONL-derived summary is no longer computed on this path.
+      summary: row.custom_name || '',
+      // messageCount is always 0 for now — counting is not implemented yet.
+      messageCount: 0,
+      lastActivity: row.updated_at ?? row.created_at ?? new Date().toISOString(),
+    });
+  }
+
+  // Sort each bucket by recency so the sidebar's default ordering is preserved.
+  for (const provider of Object.keys(byProvider)) {
+    byProvider[provider].sort(
+      (a, b) => new Date(b.lastActivity) - new Date(a.lastActivity),
+    );
+  }
+
+  return byProvider;
+}
+
 async function getProjects(progressCallback = null) {
-  const claudeDir = path.join(os.homedir(), '.claude', 'projects');
-  const config = await loadProjectConfig();
+  await sessionSynchronizerService.synchronizeSessions();
+  // Source of truth for project listing is now the `projects` and `sessions`
+  // tables — no directory scanning happens here. This keeps the API fast and
+  // lets the frontend identify projects by their stable DB `projectId`.
+  const projectRows = projectsDb.getProjectPaths();
+  const totalProjects = projectRows.length;
   const projects = [];
-  const existingProjects = new Set();
-  const codexSessionsIndexRef = { sessionsByProject: null };
-  let totalProjects = 0;
   let processedProjects = 0;
-  let directories = [];
 
-  try {
-    // Check if the .claude/projects directory exists
-    await fs.access(claudeDir);
+  for (const row of projectRows) {
+    processedProjects++;
 
-    // First, get existing Claude projects from the file system
-    const entries = await fs.readdir(claudeDir, { withFileTypes: true });
-    directories = entries.filter(e => e.isDirectory());
+    const projectId = row.project_id;
+    const projectPath = row.project_path;
 
-    // Build set of existing project names for later
-    directories.forEach(e => existingProjects.add(e.name));
-
-    // Count manual projects not already in directories
-    const manualProjectsCount = Object.entries(config)
-      .filter(([name, cfg]) => cfg.manuallyAdded && !existingProjects.has(name))
-      .length;
-
-    totalProjects = directories.length + manualProjectsCount;
-
-    for (const entry of directories) {
-      processedProjects++;
-
-      // Emit progress
-      if (progressCallback) {
-        progressCallback({
-          phase: 'loading',
-          current: processedProjects,
-          total: totalProjects,
-          currentProject: entry.name
-        });
-      }
-
-      // Extract actual project directory from JSONL sessions
-      const actualProjectDir = await extractProjectDirectory(entry.name);
-
-      // Get display name from config or generate one
-      const customName = config[entry.name]?.displayName;
-      const autoDisplayName = await generateDisplayName(entry.name, actualProjectDir);
-      const fullPath = actualProjectDir;
-
-      const project = {
-        name: entry.name,
-        path: actualProjectDir,
-        displayName: customName || autoDisplayName,
-        fullPath: fullPath,
-        sessions: [],
-        geminiSessions: [],
-        sessionMeta: {
-          hasMore: false,
-          total: 0
-        }
-      };
-
-      // Try to get sessions for this project (just first 5 for performance)
-      try {
-        const sessionResult = await getSessions(entry.name, 5, 0);
-        project.sessions = sessionResult.sessions || [];
-        project.sessionMeta = {
-          hasMore: sessionResult.hasMore,
-          total: sessionResult.total
-        };
-      } catch (e) {
-        console.warn(`Could not load sessions for project ${entry.name}:`, e.message);
-        project.sessionMeta = {
-          hasMore: false,
-          total: 0
-        };
-      }
-      applyCustomSessionNames(project.sessions, 'claude');
-
-      // Also fetch Cursor sessions for this project
-      try {
-        project.cursorSessions = await getCursorSessions(actualProjectDir);
-      } catch (e) {
-        console.warn(`Could not load Cursor sessions for project ${entry.name}:`, e.message);
-        project.cursorSessions = [];
-      }
-      applyCustomSessionNames(project.cursorSessions, 'cursor');
-
-      // Also fetch Codex sessions for this project
-      try {
-        project.codexSessions = await getCodexSessions(actualProjectDir, {
-          indexRef: codexSessionsIndexRef,
-        });
-      } catch (e) {
-        console.warn(`Could not load Codex sessions for project ${entry.name}:`, e.message);
-        project.codexSessions = [];
-      }
-      applyCustomSessionNames(project.codexSessions, 'codex');
-
-      // Also fetch Gemini sessions for this project (UI + CLI)
-      try {
-        const uiSessions = sessionManager.getProjectSessions(actualProjectDir) || [];
-        const cliSessions = await getGeminiCliSessions(actualProjectDir);
-        const uiIds = new Set(uiSessions.map(s => s.id));
-        const mergedGemini = [...uiSessions, ...cliSessions.filter(s => !uiIds.has(s.id))];
-        project.geminiSessions = mergedGemini;
-      } catch (e) {
-        console.warn(`Could not load Gemini sessions for project ${entry.name}:`, e.message);
-        project.geminiSessions = [];
-      }
-      applyCustomSessionNames(project.geminiSessions, 'gemini');
-
-      projects.push(project);
-      // console.log(`Loaded project: ${project.displayName} (${project.name}) with ${project.sessions.length} sessions, ${project.cursorSessions.length} Cursor sessions, ${project.codexSessions.length} Codex sessions, and ${project.geminiSessions.length} Gemini sessions.`);
-      // console.log("Full project data:", project);
+    if (progressCallback) {
+      progressCallback({
+        phase: 'loading',
+        current: processedProjects,
+        total: totalProjects,
+        currentProject: projectPath
+      });
     }
-  } catch (error) {
-    // If the directory doesn't exist (ENOENT), that's okay - just continue with empty projects
-    if (error.code !== 'ENOENT') {
-      console.error('Error reading projects directory:', error);
-    }
-    // Calculate total for manual projects only (no directories exist)
-    totalProjects = Object.entries(config)
-      .filter(([name, cfg]) => cfg.manuallyAdded)
-      .length;
+
+    // Use the stored custom name when present, otherwise fall back to a
+    // generated display name derived from the project path.
+    const displayName = row.custom_project_name && row.custom_project_name.trim().length > 0
+      ? row.custom_project_name
+      : await generateDisplayName(path.basename(projectPath) || projectPath, projectPath);
+
+    // All provider session lists are built from a single DB query — no JSONL
+    // parsing, no filesystem walks, no in-memory session manager lookups.
+    const sessionsByProvider = buildSessionsByProviderFromDb(projectPath);
+    const claudeSessionsAll = sessionsByProvider.claude;
+    const claudeSessions = claudeSessionsAll.slice(0, 5);
+
+    const project = {
+      // Primary identifier used across the UI and API routes post-migration.
+      projectId,
+      path: projectPath,
+      displayName,
+      fullPath: projectPath,
+      sessions: claudeSessions,
+      cursorSessions: sessionsByProvider.cursor,
+      codexSessions: sessionsByProvider.codex,
+      geminiSessions: sessionsByProvider.gemini,
+      // hasMore is pinned to false per the migration spec — pagination on the
+      // project list is not driven by this endpoint anymore.
+      sessionMeta: {
+        hasMore: false,
+        total: claudeSessionsAll.length
+      }
+    };
+
+    // Custom-name overrides are already baked into each row's `summary` field
+    // by buildSessionsByProviderFromDb, so we don't need to re-apply them.
+
+    projects.push(project);
   }
 
-  // Add manually configured projects that don't exist as folders yet
-  for (const [projectName, projectConfig] of Object.entries(config)) {
-    if (!existingProjects.has(projectName) && projectConfig.manuallyAdded) {
-      processedProjects++;
-
-      // Emit progress for manual projects
-      if (progressCallback) {
-        progressCallback({
-          phase: 'loading',
-          current: processedProjects,
-          total: totalProjects,
-          currentProject: projectName
-        });
-      }
-
-      // Use the original path if available, otherwise extract from potential sessions
-      let actualProjectDir = projectConfig.originalPath;
-
-      if (!actualProjectDir) {
-        try {
-          actualProjectDir = await extractProjectDirectory(projectName);
-        } catch (error) {
-          // Fall back to decoded project name
-          actualProjectDir = projectName.replace(/-/g, '/');
-        }
-      }
-
-      const project = {
-        name: projectName,
-        path: actualProjectDir,
-        displayName: projectConfig.displayName || await generateDisplayName(projectName, actualProjectDir),
-        fullPath: actualProjectDir,
-        sessions: [],
-        geminiSessions: [],
-        sessionMeta: {
-          hasMore: false,
-          total: 0
-        },
-        cursorSessions: [],
-        codexSessions: []
-      };
-
-      // Try to fetch Cursor sessions for manual projects too
-      try {
-        project.cursorSessions = await getCursorSessions(actualProjectDir);
-      } catch (e) {
-        console.warn(`Could not load Cursor sessions for manual project ${projectName}:`, e.message);
-      }
-      applyCustomSessionNames(project.cursorSessions, 'cursor');
-
-      // Try to fetch Codex sessions for manual projects too
-      try {
-        project.codexSessions = await getCodexSessions(actualProjectDir, {
-          indexRef: codexSessionsIndexRef,
-        });
-      } catch (e) {
-        console.warn(`Could not load Codex sessions for manual project ${projectName}:`, e.message);
-      }
-      applyCustomSessionNames(project.codexSessions, 'codex');
-
-      // Try to fetch Gemini sessions for manual projects too (UI + CLI)
-      try {
-        const uiSessions = sessionManager.getProjectSessions(actualProjectDir) || [];
-        const cliSessions = await getGeminiCliSessions(actualProjectDir);
-        const uiIds = new Set(uiSessions.map(s => s.id));
-        project.geminiSessions = [...uiSessions, ...cliSessions.filter(s => !uiIds.has(s.id))];
-      } catch (e) {
-        console.warn(`Could not load Gemini sessions for manual project ${projectName}:`, e.message);
-      }
-      applyCustomSessionNames(project.geminiSessions, 'gemini');
-
-      projects.push(project);
-    }
-  }
-
-  // Emit completion after all projects (including manual) are processed
   if (progressCallback) {
     progressCallback({
       phase: 'complete',
@@ -1117,6 +1037,26 @@ async function getSessionMessages(projectName, sessionId, limit = null, offset =
   }
 }
 
+/**
+ * ID-based wrapper around `getSessions`.
+ *
+ * Resolves a `projectId` to the underlying Claude JSONL folder name (via the
+ * DB-backed project path) and defers to the legacy filesystem reader. Keeps
+ * the previous pagination shape so the sidebar's "Load more sessions" UI keeps
+ * working after the migration.
+ */
+async function getSessionsById(projectId, limit = 5, offset = 0) {
+  const projectPath = await getProjectPathById(projectId);
+  if (!projectPath) {
+    return { sessions: [], hasMore: false, total: 0 };
+  }
+
+  // Claude stores history under ~/.claude/projects/<encoded-path>/; derive the
+  // folder name from the absolute path the DB gave us.
+  const claudeFolderName = claudeFolderNameFromPath(projectPath);
+  return getSessions(claudeFolderName, limit, offset);
+}
+
 // Rename a project's display name
 async function renameProject(projectName, newDisplayName) {
   const config = await loadProjectConfig();
@@ -1136,6 +1076,53 @@ async function renameProject(projectName, newDisplayName) {
 
   await saveProjectConfig(config);
   return true;
+}
+
+/**
+ * ID-based wrapper around `renameProject`.
+ *
+ * Writes the new display name to the `projects.custom_project_name` column
+ * (the source of truth for the DB-driven getProjects() response) and also
+ * keeps the legacy project-config.json in sync for backwards compatibility
+ * with any code that still reads it.
+ */
+async function renameProjectById(projectId, newDisplayName) {
+  const projectPath = await getProjectPathById(projectId);
+  if (!projectPath) {
+    throw new Error(`Unknown projectId: ${projectId}`);
+  }
+
+  const trimmed = typeof newDisplayName === 'string' ? newDisplayName.trim() : '';
+  // Persist on the DB row so getProjects() immediately reflects the change.
+  projectsDb.updateCustomProjectNameById(projectId, trimmed.length > 0 ? trimmed : null);
+
+  // Keep the legacy file-based project config in lockstep so historic readers
+  // that still consult project-config.json don't diverge.
+  const claudeFolderName = claudeFolderNameFromPath(projectPath);
+  try {
+    await renameProject(claudeFolderName, trimmed);
+  } catch (error) {
+    console.warn(`[projects] Legacy renameProject sync failed for ${projectId}:`, error.message);
+  }
+
+  return true;
+}
+
+/**
+ * ID-based wrapper around `deleteSession`.
+ *
+ * Resolves the real Claude history folder via the DB-backed path, then defers
+ * to the filesystem deletion routine. Callers should still clean up any DB
+ * bookkeeping (e.g. the sessions table) at the route layer.
+ */
+async function deleteSessionById(projectId, sessionId) {
+  const projectPath = await getProjectPathById(projectId);
+  if (!projectPath) {
+    throw new Error(`Unknown projectId: ${projectId}`);
+  }
+
+  const claudeFolderName = claudeFolderNameFromPath(projectPath);
+  return deleteSession(claudeFolderName, sessionId);
 }
 
 // Delete a session from a project
@@ -1261,6 +1248,35 @@ async function deleteProject(projectName, force = false, deleteData = false) {
   }
 }
 
+/**
+ * ID-based wrapper around `deleteProject`.
+ *
+ * Resolves the project path via the DB, defers destructive filesystem cleanup
+ * to `deleteProject`, then removes the row from the `projects` table so the
+ * DB-driven GET /api/projects response no longer lists it.
+ */
+async function deleteProjectById(projectId, force = false, deleteData = false) {
+  const projectPath = await getProjectPathById(projectId);
+  if (!projectPath) {
+    throw new Error(`Unknown projectId: ${projectId}`);
+  }
+
+  const claudeFolderName = claudeFolderNameFromPath(projectPath);
+  try {
+    await deleteProject(claudeFolderName, force, deleteData);
+  } catch (error) {
+    // If the legacy Claude folder doesn't exist anymore we still want to drop
+    // the DB row; rethrow otherwise so callers can surface the failure.
+    if (error.code !== 'ENOENT') {
+      throw error;
+    }
+  }
+
+  // Drop the DB row so the DB-driven GET /api/projects stops listing it.
+  projectsDb.deleteProjectById(projectId);
+  return true;
+}
+
 // Add a project manually to the config (without creating folders)
 async function addProjectManually(projectPath, displayName = null) {
   const absolutePath = path.resolve(projectPath);
@@ -1308,110 +1324,6 @@ async function addProjectManually(projectPath, displayName = null) {
     cursorSessions: []
   };
 }
-
-// Fetch Cursor sessions for a given project path
-async function getCursorSessions(projectPath) {
-  try {
-    // Calculate cwdID hash for the project path (Cursor uses MD5 hash)
-    const cwdId = crypto.createHash('md5').update(projectPath).digest('hex');
-    const cursorChatsPath = path.join(os.homedir(), '.cursor', 'chats', cwdId);
-
-    // Check if the directory exists
-    try {
-      await fs.access(cursorChatsPath);
-    } catch (error) {
-      // No sessions for this project
-      return [];
-    }
-
-    // List all session directories
-    const sessionDirs = await fs.readdir(cursorChatsPath);
-    const sessions = [];
-
-    for (const sessionId of sessionDirs) {
-      const sessionPath = path.join(cursorChatsPath, sessionId);
-      const storeDbPath = path.join(sessionPath, 'store.db');
-
-      try {
-        // Check if store.db exists
-        await fs.access(storeDbPath);
-
-        // Capture store.db mtime as a reliable fallback timestamp
-        let dbStatMtimeMs = null;
-        try {
-          const stat = await fs.stat(storeDbPath);
-          dbStatMtimeMs = stat.mtimeMs;
-        } catch (_) { }
-
-        // Open SQLite database
-        const db = new Database(storeDbPath, { readonly: true, fileMustExist: true });
-
-        // Get metadata from meta table
-        const metaRows = db.prepare('SELECT key, value FROM meta').all();
-
-        // Parse metadata
-        let metadata = {};
-        for (const row of metaRows) {
-          if (row.value) {
-            try {
-              // Try to decode as hex-encoded JSON
-              const hexMatch = row.value.toString().match(/^[0-9a-fA-F]+$/);
-              if (hexMatch) {
-                const jsonStr = Buffer.from(row.value, 'hex').toString('utf8');
-                metadata[row.key] = JSON.parse(jsonStr);
-              } else {
-                metadata[row.key] = row.value.toString();
-              }
-            } catch (e) {
-              metadata[row.key] = row.value.toString();
-            }
-          }
-        }
-
-        // Get message count
-        const messageCountResult = db.prepare('SELECT COUNT(*) as count FROM blobs').get();
-
-        db.close();
-
-        // Extract session info
-        const sessionName = metadata.title || metadata.sessionTitle || 'Untitled Session';
-
-        // Determine timestamp - prefer createdAt from metadata, fall back to db file mtime
-        let createdAt = null;
-        if (metadata.createdAt) {
-          createdAt = new Date(metadata.createdAt).toISOString();
-        } else if (dbStatMtimeMs) {
-          createdAt = new Date(dbStatMtimeMs).toISOString();
-        } else {
-          createdAt = new Date().toISOString();
-        }
-
-        sessions.push({
-          id: sessionId,
-          name: sessionName,
-          createdAt: createdAt,
-          lastActivity: createdAt, // For compatibility with Claude sessions
-          messageCount: messageCountResult.count || 0,
-          projectPath: projectPath
-        });
-
-      } catch (error) {
-        console.warn(`Could not read Cursor session ${sessionId}:`, error.message);
-      }
-    }
-
-    // Sort sessions by creation time (newest first)
-    sessions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-    // Return only the first 5 sessions for performance
-    return sessions.slice(0, 5);
-
-  } catch (error) {
-    console.error('Error fetching Cursor sessions:', error);
-    return [];
-  }
-}
-
 
 function normalizeComparablePath(inputPath) {
   if (!inputPath || typeof inputPath !== 'string') {
@@ -2011,7 +1923,23 @@ async function searchConversations(query, limit = 50, onProjectResult = null, si
         file => file.endsWith('.jsonl') && !file.startsWith('agent-')
       );
 
+      // Also include the DB `projectId` so the frontend (which now identifies
+      // projects by `projectId`) can match search results to the
+      // currently-loaded project list without a second round-trip.
+      let searchProjectId = null;
+      try {
+        const resolvedPath = await extractProjectDirectory(projectName);
+        const dbRow = projectsDb.getProjectPath(resolvedPath);
+        if (dbRow?.project_id) {
+          searchProjectId = dbRow.project_id;
+        }
+      } catch {
+        // Best-effort: if we cannot resolve the projectId, the result is still
+        // usable on the backend but the frontend will skip the auto-select.
+      }
+
       const projectResult = {
+        projectId: searchProjectId,
         projectName,
         projectDisplayName: displayName,
         sessions: []
@@ -2438,82 +2366,6 @@ async function searchGeminiSessionsForProject(
   }
 }
 
-async function getGeminiCliSessions(projectPath) {
-  const normalizedProjectPath = normalizeComparablePath(projectPath);
-  if (!normalizedProjectPath) return [];
-
-  const geminiTmpDir = path.join(os.homedir(), '.gemini', 'tmp');
-  try {
-    await fs.access(geminiTmpDir);
-  } catch {
-    return [];
-  }
-
-  const sessions = [];
-  let projectDirs;
-  try {
-    projectDirs = await fs.readdir(geminiTmpDir);
-  } catch {
-    return [];
-  }
-
-  for (const projectDir of projectDirs) {
-    const projectRootFile = path.join(geminiTmpDir, projectDir, '.project_root');
-    let projectRoot;
-    try {
-      projectRoot = (await fs.readFile(projectRootFile, 'utf8')).trim();
-    } catch {
-      continue;
-    }
-
-    if (normalizeComparablePath(projectRoot) !== normalizedProjectPath) continue;
-
-    const chatsDir = path.join(geminiTmpDir, projectDir, 'chats');
-    let chatFiles;
-    try {
-      chatFiles = await fs.readdir(chatsDir);
-    } catch {
-      continue;
-    }
-
-    for (const chatFile of chatFiles) {
-      if (!chatFile.endsWith('.json')) continue;
-      try {
-        const filePath = path.join(chatsDir, chatFile);
-        const data = await fs.readFile(filePath, 'utf8');
-        const session = JSON.parse(data);
-        if (!session.messages || !Array.isArray(session.messages)) continue;
-
-        const sessionId = session.sessionId || chatFile.replace('.json', '');
-        const firstUserMsg = session.messages.find(m => m.type === 'user');
-        let summary = 'Gemini CLI Session';
-        if (firstUserMsg) {
-          const text = Array.isArray(firstUserMsg.content)
-            ? firstUserMsg.content.filter(p => p.text).map(p => p.text).join(' ')
-            : (typeof firstUserMsg.content === 'string' ? firstUserMsg.content : '');
-          if (text) {
-            summary = text.length > 50 ? text.substring(0, 50) + '...' : text;
-          }
-        }
-
-        sessions.push({
-          id: sessionId,
-          summary,
-          messageCount: session.messages.length,
-          lastActivity: session.lastUpdated || session.startTime || null,
-          provider: 'gemini'
-        });
-      } catch {
-        continue;
-      }
-    }
-  }
-
-  return sessions.sort((a, b) =>
-    new Date(b.lastActivity || 0) - new Date(a.lastActivity || 0)
-  );
-}
-
 async function getGeminiCliSessionMessages(sessionId) {
   const geminiTmpDir = path.join(os.homedir(), '.gemini', 'tmp');
   let projectDirs;
@@ -2568,20 +2420,23 @@ async function getGeminiCliSessionMessages(sessionId) {
   return [];
 }
 
+// Only functions with consumers outside this module are exported. Folder-name
+// based helpers (`getSessions`, `renameProject`, `deleteSession`, etc.) are
+// kept as internal implementation details of the id-based wrappers below.
 export {
   getProjects,
-  getSessions,
+  getSessionsById,
   getSessionMessages,
-  renameProject,
-  deleteSession,
-  deleteProject,
+  renameProjectById,
+  deleteSessionById,
+  deleteProjectById,
   addProjectManually,
-  getProjectTaskMaster,
-  extractProjectDirectory,
+  getProjectTaskMasterById,
+  getProjectPathById,
+  claudeFolderNameFromPath,
   clearProjectDirectoryCache,
   getCodexSessionMessages,
   deleteCodexSession,
-  getGeminiCliSessions,
   getGeminiCliSessionMessages,
   searchConversations
 };

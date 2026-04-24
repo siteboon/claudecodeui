@@ -13,7 +13,9 @@ export interface ProjectSession {
   lastActivity?: string;
   messageCount?: number;
   __provider?: LLMProvider;
-  __projectName?: string;
+  // Tags the session with the owning project's DB `projectId` so UI handlers
+  // (session switching, sidebar focus, etc.) can match against selectedProject.
+  __projectId?: string;
   [key: string]: unknown;
 }
 
@@ -30,8 +32,12 @@ export interface ProjectTaskmasterInfo {
   [key: string]: unknown;
 }
 
+// After the projectName → projectId migration the backend no longer returns a
+// folder-derived `name` string. Projects are now addressed everywhere by the
+// DB-assigned `projectId` (primary key in the `projects` table), and the UI
+// uses the same identifier for routing, state keys and API calls.
 export interface Project {
-  name: string;
+  projectId: string;
   displayName: string;
   fullPath: string;
   path?: string;

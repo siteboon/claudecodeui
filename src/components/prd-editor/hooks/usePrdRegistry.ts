@@ -3,7 +3,8 @@ import { api } from '../../../utils/api';
 import type { ExistingPrdFile, PrdListResponse } from '../types';
 
 type UsePrdRegistryArgs = {
-  projectName?: string;
+  // DB primary key of the project (post migration).
+  projectId?: string;
 };
 
 type UsePrdRegistryResult = {
@@ -15,17 +16,17 @@ function getPrdFiles(data: PrdListResponse): ExistingPrdFile[] {
   return data.prdFiles || data.prds || [];
 }
 
-export function usePrdRegistry({ projectName }: UsePrdRegistryArgs): UsePrdRegistryResult {
+export function usePrdRegistry({ projectId }: UsePrdRegistryArgs): UsePrdRegistryResult {
   const [existingPrds, setExistingPrds] = useState<ExistingPrdFile[]>([]);
 
   const refreshExistingPrds = useCallback(async () => {
-    if (!projectName) {
+    if (!projectId) {
       setExistingPrds([]);
       return;
     }
 
     try {
-      const response = await api.get(`/taskmaster/prd/${encodeURIComponent(projectName)}`);
+      const response = await api.get(`/taskmaster/prd/${encodeURIComponent(projectId)}`);
       if (!response.ok) {
         setExistingPrds([]);
         return;
@@ -37,7 +38,7 @@ export function usePrdRegistry({ projectName }: UsePrdRegistryArgs): UsePrdRegis
       console.error('Failed to fetch existing PRDs:', error);
       setExistingPrds([]);
     }
-  }, [projectName]);
+  }, [projectId]);
 
   useEffect(() => {
     void refreshExistingPrds();
