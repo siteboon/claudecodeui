@@ -1,6 +1,6 @@
 import express from 'express';
 import sessionManager from '../sessionManager.js';
-import { sessionsDb } from '../database/db.js';
+import { sessionsDb } from '../modules/database/index.js';
 
 const router = express.Router();
 

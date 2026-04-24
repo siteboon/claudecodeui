@@ -23,6 +23,11 @@ type SessionMetadataLookupRow = Pick<
   'session_id' | 'provider' | 'project_path' | 'jsonl_path' | 'custom_name' | 'created_at' | 'updated_at'
 >;
 
+type LegacySessionSummary = {
+  id: string;
+  summary?: string;
+};
+
 function normalizeTimestamp(value?: string): string | null {
   if (!value) return null;
 
@@ -185,8 +190,81 @@ export const sessionsDb = {
     return new Map(rows.map((row) => [row.session_id, row.custom_name]));
   },
 
+  /**
+   * Legacy-compatibility method kept for parity with `server/database/db.js`.
+   * TODO: Remove after all legacy imports are migrated to the new repository API.
+   */
+  setName(sessionId: string, provider: string, customName: string): void {
+    const db = getConnection();
+    db.prepare(
+      `INSERT INTO sessions (session_id, provider, custom_name)
+       VALUES (?, ?, ?)
+       ON CONFLICT(session_id, provider) DO UPDATE SET
+         custom_name = excluded.custom_name,
+         updated_at = CURRENT_TIMESTAMP`
+    ).run(sessionId, provider, customName);
+  },
+
+  /**
+   * Legacy-compatibility method kept for parity with `server/database/db.js`.
+   * TODO: Remove after all legacy imports are migrated to the new repository API.
+   */
+  getName(sessionId: string, provider: string): string | null {
+    return sessionsDb.getSessionName(sessionId, provider);
+  },
+
+  /**
+   * Legacy-compatibility method kept for parity with `server/database/db.js`.
+   * TODO: Remove after all legacy imports are migrated to the new repository API.
+   */
+  getNames(sessionIds: string[], provider: string): Map<string, string> {
+    return sessionsDb.getSessionNames(sessionIds, provider);
+  },
+
+  /**
+   * Legacy-compatibility method kept for parity with `server/database/db.js`.
+   * TODO: Remove after all legacy imports are migrated to the new repository API.
+   */
+  deleteName(sessionId: string, provider: string): boolean {
+    const db = getConnection();
+    return (
+      db
+        .prepare(
+          `DELETE FROM sessions
+           WHERE session_id = ? AND provider = ?`
+        )
+        .run(sessionId, provider).changes > 0
+    );
+  },
+
   deleteSession(sessionId: string): void {
     const db = getConnection();
     db.prepare('DELETE FROM sessions WHERE session_id = ?').run(sessionId);
   },
 };
+
+/**
+ * Legacy-compatibility helper kept for parity with `server/database/db.js`.
+ * TODO: Remove after all legacy imports are migrated to the new repository API.
+ */
+export function applyCustomSessionNames(
+  sessions: LegacySessionSummary[] | null | undefined,
+  provider: string
+): void {
+  if (!sessions?.length) return;
+
+  try {
+    const sessionIds = sessions.map((session) => session.id);
+    const customNames = sessionsDb.getNames(sessionIds, provider);
+
+    for (const session of sessions) {
+      const customName = customNames.get(session.id);
+      if (customName) {
+        session.summary = customName;
+      }
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[DB] Failed to apply custom session names for ${provider}:`, message);
+  }
+}

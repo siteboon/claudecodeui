@@ -4,6 +4,7 @@ import path from 'path';
 import { spawn } from 'child_process';
 import os from 'os';
 import { addProjectManually } from '../projects.js';
+import { githubTokensDb } from '../modules/database/index.js';
 
 const router = express.Router();
 
@@ -311,21 +312,7 @@ router.post('/create-workspace', async (req, res) => {
  * Helper function to get GitHub token from database
  */
 async function getGithubTokenById(tokenId, userId) {
-  const { db } = await import('../database/db.js');
-
-  const credential = db.prepare(
-    'SELECT * FROM user_credentials WHERE id = ? AND user_id = ? AND credential_type = ? AND is_active = 1'
-  ).get(tokenId, userId, 'github_token');
-
-  // Return in the expected format (github_token field for compatibility)
-  if (credential) {
-    return {
-      ...credential,
-      github_token: credential.credential_value
-    };
-  }
-
-  return null;
+  return githubTokensDb.getGithubTokenById(userId, tokenId);
 }
 
 /**

@@ -138,12 +138,13 @@ ${PUSH_SUBSCRIPTIONS_TABLE_SCHEMA_SQL}
 CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user_id ON push_subscriptions(user_id);
 
 ${PROJECTS_TABLE_SCHEMA_SQL}
-CREATE INDEX IF NOT EXISTS idx_projects_is_starred ON projects(isStarred);
-CREATE INDEX IF NOT EXISTS idx_projects_is_archived ON projects(isArchived);
+-- NOTE: These indexes are created in migrations after legacy table-shape repairs.
+-- Creating them here can fail on upgraded installs where projects lacks those columns.
 
 ${SESSIONS_TABLE_SCHEMA_SQL}
 CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id);
-CREATE INDEX IF NOT EXISTS idx_sessions_project_path ON sessions(project_path);
+-- NOTE: This index is created in migrations after sessions is rebuilt to include project_path.
+-- Creating it here can fail on upgraded installs where the legacy sessions table has no project_path.
 
 ${LAST_SCANNED_AT_SQL}
 

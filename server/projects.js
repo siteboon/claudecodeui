@@ -65,7 +65,7 @@ import crypto from 'crypto';
 import Database from 'better-sqlite3';
 import os from 'os';
 import sessionManager from './sessionManager.js';
-import { applyCustomSessionNames } from './database/db.js';
+import { applyCustomSessionNames } from './modules/database/index.js';
 import { getModuleDir, findAppRoot } from './utils/runtime-paths.js';
 
 // Snapshot files are kept as incrementing artifacts under .tmp/project-dumps for later review.

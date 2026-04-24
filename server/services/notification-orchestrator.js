@@ -1,5 +1,5 @@
 import webPush from 'web-push';
-import { notificationPreferencesDb, pushSubscriptionsDb, sessionsDb } from '../database/db.js';
+import { notificationPreferencesDb, pushSubscriptionsDb, sessionsDb } from '../modules/database/index.js';
 
 const KIND_TO_PREF_KEY = {
   action_required: 'actionRequired',

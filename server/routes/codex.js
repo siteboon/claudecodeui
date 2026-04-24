@@ -1,6 +1,6 @@
 import express from 'express';
 import { deleteCodexSession } from '../projects.js';
-import { sessionsDb } from '../database/db.js';
+import { sessionsDb } from '../modules/database/index.js';
 
 const router = express.Router();
 
