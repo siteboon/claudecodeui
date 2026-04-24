@@ -22,6 +22,8 @@ import PermissionRequestsBanner from './PermissionRequestsBanner';
 import ModePills, { type ModePill } from './ModePills';
 import { thinkingModes } from '../../constants/thinkingModes';
 import TokenUsagePie from './TokenUsagePie';
+import ModelSelector from './ModelSelector';
+import { getClaudeContextWindow } from '../../../../../shared/modelConstants';
 import {
   PromptInput,
   PromptInputHeader,
@@ -63,6 +65,8 @@ interface ChatComposerProps {
   onPermissionModeSelect: (mode: PermissionMode) => void;
   thinkingMode: string;
   setThinkingMode: Dispatch<SetStateAction<string>>;
+  claudeModel: string;
+  setClaudeModel: (model: string) => void;
   tokenBudget: { used?: number; total?: number } | null;
   slashCommandsCount: number;
   onToggleCommandMenu: () => void;
@@ -128,6 +132,8 @@ export default function ChatComposer({
   onPermissionModeSelect,
   thinkingMode,
   setThinkingMode,
+  claudeModel,
+  setClaudeModel,
   tokenBudget,
   slashCommandsCount,
   onToggleCommandMenu,
@@ -463,7 +469,13 @@ export default function ChatComposer({
               />
             )}
 
-            <TokenUsagePie used={tokenBudget?.used || 0} total={tokenBudget?.total || parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 1000000} />
+            {provider === 'claude' && (
+              <ModelSelector
+                claudeModel={claudeModel}
+                setClaudeModel={setClaudeModel}
+                tokensUsed={tokenBudget?.used || 0}
+              />
+            )}
 
             <PromptInputButton
               tooltip={{ content: t('input.showAllCommands') }}
@@ -493,6 +505,15 @@ export default function ChatComposer({
           </PromptInputTools>
 
           <div className="flex items-center gap-2">
+            <TokenUsagePie
+              used={tokenBudget?.used || 0}
+              total={
+                tokenBudget?.total ||
+                (provider === 'claude'
+                  ? getClaudeContextWindow(claudeModel)
+                  : parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 1_000_000)
+              }
+            />
             <div
               className={`hidden text-[10px] text-muted-foreground/40 transition-opacity duration-200 lg:block ${
                 input.trim() ? 'opacity-0' : 'opacity-100'

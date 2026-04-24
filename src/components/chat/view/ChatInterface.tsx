@@ -378,6 +378,8 @@ function ChatInterface({
           onPermissionModeSelect={selectPermissionMode}
           thinkingMode={thinkingMode}
           setThinkingMode={setThinkingMode}
+          claudeModel={claudeModel}
+          setClaudeModel={setClaudeModel}
           tokenBudget={tokenBudget}
           slashCommandsCount={slashCommandsCount}
           onToggleCommandMenu={handleToggleCommandMenu}

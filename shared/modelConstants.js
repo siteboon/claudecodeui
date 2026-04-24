@@ -27,6 +27,25 @@ export const CLAUDE_MODELS = {
 };
 
 /**
+ * Context window (max input tokens) per Claude model.
+ * Used to warn when switching to a smaller-window model mid-session.
+ */
+export const CLAUDE_MODEL_CONTEXT_WINDOWS = {
+  "claude-opus-4-7": 1_000_000,
+  "claude-opus-4-6": 1_000_000,
+  "opus": 1_000_000,
+  "opusplan": 1_000_000,
+  "opus[1m]": 1_000_000,
+  "sonnet[1m]": 1_000_000,
+  "sonnet": 200_000,
+  "haiku": 200_000,
+};
+
+export function getClaudeContextWindow(model) {
+  return CLAUDE_MODEL_CONTEXT_WINDOWS[model] || 200_000;
+}
+
+/**
  * Cursor Models
  */
 export const CURSOR_MODELS = {

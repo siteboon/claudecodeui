@@ -306,7 +306,7 @@ export default function SidebarProjectItem({
                     }}
                   />
                   <div className="truncate text-xs text-muted-foreground" title={project.fullPath}>
-                    {project.fullPath}
+                    {project.fullPath.replace(/^\/home\/[^/]+/, '~')}
                   </div>
                 </div>
               ) : (
@@ -319,7 +319,10 @@ export default function SidebarProjectItem({
                     {project.fullPath !== project.displayName && (
                       <span className="ml-1 opacity-60" title={project.fullPath}>
                         {' - '}
-                        {project.fullPath.length > 25 ? `...${project.fullPath.slice(-22)}` : project.fullPath}
+                        {(() => {
+                          const p = project.fullPath.replace(/^\/home\/[^/]+/, '~');
+                          return p.length > 25 ? `...${p.slice(-22)}` : p;
+                        })()}
                       </span>
                     )}
                   </div>
