@@ -42,7 +42,8 @@
     "prepublishOnly": "npm run build",
     "postinstall": "node scripts/fix-node-pty.js",
     "prepare": "husky",
-    "update:platform": "./update-platform.sh"
+    "update:platform": "./update-platform.sh",
+    "test:claude-sdk-permissions": "npm run build:server && node --test server/modules/providers/tests/claude-sdk-permission-mode.test.mjs"
   },
   "keywords": [
     "claude code",

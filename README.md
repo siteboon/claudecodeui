@@ -250,3 +250,9 @@ CloudCLI UI  - (https://cloudcli.ai).
 <div align="center">
   <strong>Made with care for the Claude Code, Cursor and Codex community.</strong>
 </div>
+
+## Root-Run Claude Chat
+
+When CloudCLI runs as `root`, Claude chat now maps both the chat mode button's `bypassPermissions` setting and the Claude-specific skip-permissions setting to `dontAsk`. Claude rejects bypass mode under `root`/`sudo`, which previously caused chat requests to exit immediately with code 1.
+
+Run `npm run test:claude-sdk-permissions` to rebuild the server bundle and verify the root permission-mode mapping.
