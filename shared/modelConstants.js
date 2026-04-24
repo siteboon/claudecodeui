@@ -13,17 +13,12 @@
 export const CLAUDE_MODELS = {
   // Models in SDK format (what the actual SDK accepts)
   OPTIONS: [
-    { value: "claude-opus-4-7", label: "Opus 4.7" },
     { value: "sonnet", label: "Sonnet" },
-    { value: "opus", label: "Opus" },
-    { value: "haiku", label: "Haiku" },
     { value: "claude-opus-4-6", label: "Opus 4.6" },
-    { value: "opusplan", label: "Opus Plan" },
-    { value: "sonnet[1m]", label: "Sonnet [1M]" },
-    { value: "opus[1m]", label: "Opus [1M]" },
+    { value: "claude-opus-4-7", label: "Opus 4.7" },
   ],
 
-  DEFAULT: "claude-opus-4-7",
+  DEFAULT: "sonnet",
 };
 
 /**
@@ -31,14 +26,9 @@ export const CLAUDE_MODELS = {
  * Used to warn when switching to a smaller-window model mid-session.
  */
 export const CLAUDE_MODEL_CONTEXT_WINDOWS = {
-  "claude-opus-4-7": 1_000_000,
-  "claude-opus-4-6": 1_000_000,
-  "opus": 1_000_000,
-  "opusplan": 1_000_000,
-  "opus[1m]": 1_000_000,
-  "sonnet[1m]": 1_000_000,
   "sonnet": 200_000,
-  "haiku": 200_000,
+  "claude-opus-4-6": 1_000_000,
+  "claude-opus-4-7": 1_000_000,
 };
 
 export function getClaudeContextWindow(model) {
