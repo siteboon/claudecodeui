@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Plus,
   Archive,
@@ -41,6 +41,7 @@ type CommandPaletteProps = {
   hasSelectedSession: boolean;
   hasActiveFilter: boolean;
   onSelectSession: (session: FlatSession) => void;
+  onSelectSessionInNewPane: (session: FlatSession) => void;
   onSelectProject: (projectName: string) => void;
   onNewSession: () => void;
   onArchiveActiveSession: () => void;
@@ -59,6 +60,7 @@ export default function CommandPalette({
   hasSelectedSession,
   hasActiveFilter,
   onSelectSession,
+  onSelectSessionInNewPane,
   onSelectProject,
   onNewSession,
   onArchiveActiveSession,
@@ -67,6 +69,32 @@ export default function CommandPalette({
   onShowSettings,
   onShowShortcuts,
 }: CommandPaletteProps) {
+  // Track which session is currently highlighted via aria-selected so
+  // Shift+Enter can open it in a new pane.
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // Handles Shift+Enter whether focus is on the input or a list item.
+  // Runs before Command's internal Enter handler (which fires on bubbling to
+  // the Command root div). Command.tsx skips onSelect when shiftKey is set,
+  // so this handler has sole ownership of Shift+Enter.
+  const handleShiftEnter = (e: React.KeyboardEvent) => {
+    if (!(e.shiftKey && e.key === 'Enter' && listRef.current)) return;
+    const selected = listRef.current.querySelector<HTMLElement>('[aria-selected="true"]');
+    if (selected) {
+      const sessionId = selected.dataset.sessionId;
+      if (sessionId) {
+        const session = sessions.find((s) => s.id === sessionId);
+        if (session) {
+          e.preventDefault();
+          e.stopPropagation();
+          console.log('[palette] shift+enter → new pane', session.id);
+          onSelectSessionInNewPane(session);
+          onOpenChange(false);
+        }
+      }
+    }
+  };
+
   // Mirror the Command root's search string by observing the input directly.
   // Command.tsx owns the canonical search state in its context and doesn't
   // expose it to the outside world; we peek via onInput so this hook can
@@ -138,8 +166,9 @@ export default function CommandPalette({
             placeholder="Type a command or search sessions and transcripts…"
             autoFocus
             onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
+            onKeyDown={handleShiftEnter}
           />
-          <CommandList className="max-h-[440px]">
+          <CommandList ref={listRef} className="max-h-[440px]" onKeyDown={handleShiftEnter}>
             {!showTranscriptGroup && <CommandEmpty>No results found.</CommandEmpty>}
 
             {showActionsGroup && (
@@ -238,6 +267,7 @@ export default function CommandPalette({
                       <CommandItem
                         key={session.id}
                         value={`session ${title} ${session.__projectDisplayName}`}
+                        data-session-id={session.id}
                         onSelect={run(() => onSelectSession(session))}
                       >
                         <MessageSquare className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
@@ -253,6 +283,9 @@ export default function CommandPalette({
                       </CommandItem>
                     );
                   })}
+                  <div className="px-2 py-1.5 text-[11px] text-muted-foreground/60">
+                    {SHIFT_KEY}↵ opens in new pane
+                  </div>
                 </CommandGroup>
               </>
             )}

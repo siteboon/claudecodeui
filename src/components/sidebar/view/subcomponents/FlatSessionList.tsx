@@ -28,7 +28,7 @@ type FlatSessionListProps = {
   currentTime: Date;
   searchActive: boolean;
   isArchived: (sessionId: string) => boolean;
-  onSessionSelect: (session: FlatSession) => void;
+  onSessionSelect: (session: FlatSession, opts?: { openInNewPane?: boolean }) => void;
   onToggleArchived: (sessionId: string) => void;
   activeProjectName: string;
   onCreateSession: () => void;
@@ -109,7 +109,7 @@ export default function FlatSessionList({
             index={index}
             timeAgo={formatTimeAgo(getSessionDate(session), currentTime)}
             displayName={getDisplayName(session)}
-            onSelect={() => onSessionSelect(session)}
+            onSelect={(e) => onSessionSelect(session, e.shiftKey ? { openInNewPane: true } : undefined)}
             onToggleArchived={() => onToggleArchived(session.id)}
             showHotkey={showHotkeys}
           />

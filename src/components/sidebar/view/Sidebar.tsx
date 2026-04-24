@@ -175,12 +175,12 @@ function Sidebar({
     onNewSession(targetProject);
   };
 
-  const handleFlatSessionSelect = (session: FlatSession) => {
+  const handleFlatSessionSelect = (session: FlatSession, opts?: { openInNewPane?: boolean }) => {
     const project = projects.find((p) => p.name === session.__projectName);
     if (project) {
       handleProjectSelect(project);
     }
-    handleSessionClick(session, session.__projectName);
+    handleSessionClick(session, session.__projectName, opts);
   };
 
   const handleProjectCreated = () => {
@@ -213,6 +213,15 @@ function Sidebar({
         return;
       }
 
+      // Alt+Shift+1..9 — open Nth session in a new pane.
+      if (e.altKey && e.shiftKey && !e.metaKey && !e.ctrlKey && /^Digit[1-9]$/.test(e.code)) {
+        e.preventDefault();
+        const idx = parseInt(e.code.slice(5), 10) - 1;
+        const target = flatSessions[idx];
+        if (target) handleFlatSessionSelect(target, { openInNewPane: true });
+        return;
+      }
+
       // Alt+1..9 — pick Nth session. Works inside inputs so you can jump
       // from the search bar without losing typed text. Uses e.code to
       // sidestep macOS Option-digit dead-keys (Alt+1 → ¡, Alt+2 → ™, ...).
@@ -230,17 +239,8 @@ function Sidebar({
         return;
       }
 
-      // Alt+Shift+1..6 — switch project filter. Also works inside inputs so
-      // it fires from the command palette search bar. Plain Ctrl+digit was
-      // avoided because browsers consume it for tab switching; plain Alt+digit
-      // is taken by the session-jump handler above.
-      if (
-        e.altKey &&
-        e.shiftKey &&
-        !e.metaKey &&
-        !e.ctrlKey &&
-        /^Digit[1-6]$/.test(e.code)
-      ) {
+      // Ctrl+1..6 — switch project filter.
+      if (e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && /^Digit[1-6]$/.test(e.code)) {
         e.preventDefault();
         const idx = parseInt(e.code.slice(5), 10) - 1;
         const item = railItems[idx];
@@ -353,6 +353,7 @@ function Sidebar({
         hasSelectedSession={!!selectedSession}
         hasActiveFilter={activeProjectFilter !== null}
         onSelectSession={handleFlatSessionSelect}
+        onSelectSessionInNewPane={(s) => handleFlatSessionSelect(s, { openInNewPane: true })}
         onSelectProject={setActiveProjectFilter}
         onNewSession={handleCreateSession}
         onArchiveActiveSession={() => {

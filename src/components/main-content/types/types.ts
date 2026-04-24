@@ -32,6 +32,12 @@ export type PrdFile = {
   [key: string]: unknown;
 };
 
+export type PaneEntry = {
+  paneId: string;
+  session: ProjectSession | null;
+  project: Project | null;
+};
+
 export type MainContentProps = {
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
@@ -57,6 +63,10 @@ export type MainContentProps = {
   sessionStatus?: SessionStatus;
   waitingCount?: number;
   onJumpToNextWaiting?: () => void;
+  panes?: PaneEntry[];
+  focusedPaneIndex?: number;
+  onPaneFocus?: (paneId: string) => void;
+  onPaneClose?: (paneId: string) => void;
 };
 
 export type MainContentHeaderProps = {

@@ -67,7 +67,7 @@ type UseSidebarControllerArgs = {
   t: TFunction;
   onRefresh: () => Promise<void> | void;
   onProjectSelect: (project: Project) => void;
-  onSessionSelect: (session: ProjectSession) => void;
+  onSessionSelect: (session: ProjectSession, opts?: { openInNewPane?: boolean }) => void;
   onSessionDelete?: (sessionId: string) => void;
   onProjectDelete?: (projectName: string) => void;
   setCurrentProject: (project: Project) => void;
@@ -307,8 +307,8 @@ export function useSidebarController({
   }, []);
 
   const handleSessionClick = useCallback(
-    (session: SessionWithProvider, projectName: string) => {
-      onSessionSelect({ ...session, __projectName: projectName });
+    (session: SessionWithProvider, projectName: string, opts?: { openInNewPane?: boolean }) => {
+      onSessionSelect({ ...session, __projectName: projectName }, opts);
     },
     [onSessionSelect],
   );

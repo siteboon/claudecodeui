@@ -163,9 +163,19 @@ export function useChatComposerState({
   setIsUserScrolledUp,
   setPendingPermissionRequests,
 }: UseChatComposerStateArgs) {
+  const draftKey = `draft_input_${selectedProject?.name ?? ''}_${currentSessionId ?? 'new'}`;
+  const legacyKey = `draft_input_${selectedProject?.name ?? ''}`;
+
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
-      const draft = safeLocalStorage.getItem(`draft_input_${selectedProject.name}`) || '';
+      let draft = safeLocalStorage.getItem(draftKey) || '';
+      if (!draft) {
+        const legacy = safeLocalStorage.getItem(legacyKey);
+        if (legacy) {
+          draft = legacy;
+          safeLocalStorage.setItem(draftKey, legacy); // copy, do NOT removeItem here
+        }
+      }
       if (draft) return draft;
       const recovered = readAndConsumeInFlightSend(selectedProject.name);
       if (recovered) return recovered;
@@ -811,7 +821,8 @@ export function useChatComposerState({
         textareaRef.current.style.height = 'auto';
       }
 
-      safeLocalStorage.removeItem(`draft_input_${selectedProject.name}`);
+      safeLocalStorage.removeItem(draftKey);
+      safeLocalStorage.removeItem(legacyKey);
     },
     [
       selectedSession,
@@ -841,6 +852,8 @@ export function useChatComposerState({
       setIsUserScrolledUp,
       slashCommands,
       thinkingMode,
+      draftKey,
+      legacyKey,
     ],
   );
 
@@ -856,27 +869,32 @@ export function useChatComposerState({
     if (!selectedProject) {
       return;
     }
-    const savedInput =
-      safeLocalStorage.getItem(`draft_input_${selectedProject.name}`) ||
-      readAndConsumeInFlightSend(selectedProject.name) ||
-      '';
+    let saved = safeLocalStorage.getItem(draftKey) || '';
+    if (!saved) {
+      const legacy = safeLocalStorage.getItem(legacyKey);
+      if (legacy) {
+        saved = legacy;
+        safeLocalStorage.setItem(draftKey, legacy);
+      }
+    }
+    const savedInput = saved || readAndConsumeInFlightSend(selectedProject.name) || '';
     setInput((previous) => {
       const next = previous === savedInput ? previous : savedInput;
       inputValueRef.current = next;
       return next;
     });
-  }, [selectedProject?.name]);
+  }, [selectedProject?.name, currentSessionId]);
 
   useEffect(() => {
     if (!selectedProject) {
       return;
     }
     if (input !== '') {
-      safeLocalStorage.setItem(`draft_input_${selectedProject.name}`, input);
+      safeLocalStorage.setItem(draftKey, input);
     } else {
-      safeLocalStorage.removeItem(`draft_input_${selectedProject.name}`);
+      safeLocalStorage.removeItem(draftKey);
     }
-  }, [input, selectedProject]);
+  }, [input, selectedProject, currentSessionId]);
 
   // Clear the in-flight send snapshot once the backend has processed the turn
   // (isLoading flips back to false after having been true). Otherwise the

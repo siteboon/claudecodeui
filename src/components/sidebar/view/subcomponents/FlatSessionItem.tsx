@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Archive, ArchiveRestore } from 'lucide-react';
 import type { FlatSession } from '../../../../hooks/useFlatSessionList';
 
@@ -9,7 +9,7 @@ type FlatSessionItemProps = {
   index: number;
   timeAgo: string;
   displayName: string;
-  onSelect: () => void;
+  onSelect: (e: React.MouseEvent) => void;
   onToggleArchived: () => void;
   showHotkey?: boolean;
 };
@@ -53,7 +53,7 @@ export default function FlatSessionItem({
 
   return (
     <button
-      onClick={onSelect}
+      onClick={(e) => onSelect(e)}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors ${

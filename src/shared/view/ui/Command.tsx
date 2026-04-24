@@ -121,6 +121,9 @@ const Command = React.forwardRef<HTMLDivElement, CommandProps>(
       if (entries.length === 0) return;
 
       if (e.key === 'Enter') {
+        // Let Shift+Enter through — callers attach their own onKeyDown to
+        // handle it (e.g. CommandPalette's "open in new pane" handler).
+        if (e.shiftKey) return;
         const active = entries.find(entry => entry.id === activeId);
         active?.onSelect();
         return;

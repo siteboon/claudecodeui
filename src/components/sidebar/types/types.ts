@@ -26,7 +26,7 @@ export type SidebarProps = {
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
   onProjectSelect: (project: Project) => void;
-  onSessionSelect: (session: ProjectSession) => void;
+  onSessionSelect: (session: ProjectSession, opts?: { openInNewPane?: boolean }) => void;
   onNewSession: (project: Project) => void;
   onSessionDelete?: (sessionId: string) => void;
   onProjectDelete?: (projectName: string) => void;
