@@ -91,18 +91,18 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
   /**
    * Parses and upserts one Cursor session JSONL file.
    */
-  async synchronizeFile(filePath: string): Promise<boolean> {
+  async synchronizeFile(filePath: string): Promise<string | null> {
     if (!filePath.endsWith('.jsonl')) {
-      return false;
+      return null;
     }
 
     const parsed = await this.processSessionFile(filePath);
     if (!parsed) {
-      return false;
+      return null;
     }
 
     const timestamps = await readFileTimestamps(filePath);
-    sessionsDb.createSession(
+    return sessionsDb.createSession(
       parsed.sessionId,
       this.provider,
       parsed.projectPath,
@@ -111,8 +111,6 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
       timestamps.updatedAt,
       filePath
     );
-
-    return true;
   }
 
   /**

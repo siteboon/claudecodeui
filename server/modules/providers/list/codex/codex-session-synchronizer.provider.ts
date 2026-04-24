@@ -61,19 +61,19 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
   /**
    * Parses and upserts one Codex session JSONL file.
    */
-  async synchronizeFile(filePath: string): Promise<boolean> {
+  async synchronizeFile(filePath: string): Promise<string | null> {
     if (!filePath.endsWith('.jsonl')) {
-      return false;
+      return null;
     }
 
     const nameMap = await buildLookupMap(path.join(this.codexHome, 'session_index.jsonl'), 'id', 'thread_name');
     const parsed = await this.processSessionFile(filePath, nameMap);
     if (!parsed) {
-      return false;
+      return null;
     }
 
     const timestamps = await readFileTimestamps(filePath);
-    sessionsDb.createSession(
+    return sessionsDb.createSession(
       parsed.sessionId,
       this.provider,
       parsed.projectPath,
@@ -82,8 +82,6 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
       timestamps.updatedAt,
       filePath
     );
-
-    return true;
   }
 
   /**

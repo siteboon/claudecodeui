@@ -311,20 +311,12 @@ export function useProjectsState({
 
     const projectsMessage = latestMessage as ProjectsUpdatedMessage;
 
-    if (projectsMessage.changedFile && selectedSession && selectedProject) {
-      const normalized = projectsMessage.changedFile.replace(/\\/g, '/');
-      const changedFileParts = normalized.split('/');
+    if (projectsMessage.updatedSessionId && selectedSession && selectedProject) {
+      if (projectsMessage.updatedSessionId === selectedSession.id) {
+        const isSessionActive = activeSessions.has(selectedSession.id);
 
-      if (changedFileParts.length >= 2) {
-        const filename = changedFileParts[changedFileParts.length - 1];
-        const changedSessionId = filename.replace('.jsonl', '');
-
-        if (changedSessionId === selectedSession.id) {
-          const isSessionActive = activeSessions.has(selectedSession.id);
-
-          if (!isSessionActive) {
-            setExternalMessageUpdate((prev) => prev + 1);
-          }
+        if (!isSessionActive) {
+          setExternalMessageUpdate((prev) => prev + 1);
         }
       }
     }

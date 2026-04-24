@@ -88,5 +88,5 @@ export interface IProviderSessionSynchronizer {
   /**
    * Parses and upserts one provider artifact file without running a full scan.
    */
-  synchronizeFile(filePath: string): Promise<boolean>;
+  synchronizeFile(filePath: string): Promise<string | null>;
 }

@@ -72,25 +72,25 @@ export class GeminiSessionSynchronizer implements IProviderSessionSynchronizer {
   /**
    * Parses and upserts one Gemini session JSON artifact.
    */
-  async synchronizeFile(filePath: string): Promise<boolean> {
+  async synchronizeFile(filePath: string): Promise<string | null> {
     if (!filePath.endsWith('.json')) {
-      return false;
+      return null;
     }
 
     if (
       filePath.startsWith(path.join(this.geminiHome, 'tmp'))
       && !filePath.includes(`${path.sep}chats${path.sep}`)
     ) {
-      return false;
+      return null;
     }
 
     const parsed = await this.processSessionFile(filePath);
     if (!parsed) {
-      return false;
+      return null;
     }
 
     const timestamps = await readFileTimestamps(filePath);
-    sessionsDb.createSession(
+    return sessionsDb.createSession(
       parsed.sessionId,
       this.provider,
       parsed.projectPath,
@@ -99,8 +99,6 @@ export class GeminiSessionSynchronizer implements IProviderSessionSynchronizer {
       timestamps.updatedAt,
       filePath
     );
-
-    return true;
   }
 
   /**

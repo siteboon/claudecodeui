@@ -6,6 +6,8 @@ import chokidar, { type FSWatcher } from 'chokidar';
 
 import { sessionSynchronizerService } from '@/modules/providers/services/session-synchronizer.service.js';
 import type { LLMProvider } from '@/shared/types.js';
+import { getProjectsWithSessions } from '@/modules/projects/index.js';
+import { connectedClients } from '@/index.js';
 
 type WatcherEventType = 'add' | 'change';
 
@@ -43,6 +45,7 @@ const WATCHER_IGNORED_PATTERNS = [
 ];
 
 const watchers: FSWatcher[] = [];
+const WS_OPEN_STATE = 1;
 
 /**
  * Filters watcher events to provider-specific session artifact file types.
@@ -69,9 +72,31 @@ async function onUpdate(
 
   try {
     const result = await sessionSynchronizerService.synchronizeProviderFile(provider, filePath);
+
+    // Get updated projects list
+    const updatedProjects = await getProjectsWithSessions();
+
+    // Notify all connected clients about the project changes
+    const updateMessage = JSON.stringify({
+      type: 'projects_updated',
+      projects: updatedProjects,
+      timestamp: new Date().toISOString(),
+      changeType: eventType,
+      updatedSessionId: result.sessionId ?? undefined,
+      watchProvider: provider
+    });
+
+    connectedClients.forEach(client => {
+      if (client.readyState === WS_OPEN_STATE) {
+        client.send(updateMessage);
+      }
+    });
+
+
     console.log(`Session watcher sync complete for provider "${provider}" after ${eventType}`, {
       filePath,
       indexed: result.indexed,
+      sessionId: result.sessionId,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

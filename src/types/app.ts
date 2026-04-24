@@ -62,7 +62,7 @@ export interface LoadingProgress {
 export interface ProjectsUpdatedMessage {
   type: 'projects_updated';
   projects: Project[];
-  changedFile?: string;
+  updatedSessionId?: string;
   [key: string]: unknown;
 }
 

@@ -168,10 +168,14 @@ export const sessionSynchronizerService = {
   async synchronizeProviderFile(
     provider: LLMProvider,
     filePath: string
-  ): Promise<{ provider: LLMProvider; indexed: boolean }> {
+  ): Promise<{ provider: LLMProvider; indexed: boolean; sessionId: string | null }> {
     const resolvedProvider = providerRegistry.resolveProvider(provider);
-    const indexed = await resolvedProvider.sessionSynchronizer.synchronizeFile(filePath);
-    return { provider, indexed };
+    const sessionId = await resolvedProvider.sessionSynchronizer.synchronizeFile(filePath);
+    return {
+      provider,
+      indexed: Boolean(sessionId),
+      sessionId,
+    };
   },
 
   /**

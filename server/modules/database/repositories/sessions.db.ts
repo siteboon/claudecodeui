@@ -76,7 +76,7 @@ export const sessionsDb = {
     createdAt?: string,
     updatedAt?: string,
     jsonlPath?: string | null
-  ): void {
+  ): string {
     const db = getConnection();
     const createdAtValue = normalizeTimestamp(createdAt);
     const updatedAtValue = normalizeTimestamp(updatedAt);
@@ -103,6 +103,8 @@ export const sessionsDb = {
       createdAtValue,
       updatedAtValue
     );
+
+    return sessionId;
   },
 
   updateSessionCustomName(sessionId: string, customName: string): void {

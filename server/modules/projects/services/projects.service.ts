@@ -4,6 +4,7 @@ import path from 'node:path';
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { sessionSynchronizerService } from '@/modules/providers/index.js';
 import { findAppRoot, getModuleDir } from '@/utils/runtime-paths.js';
+import { connectedClients } from '@/index.js';
 
 type SessionSummary = {
   id: string;
@@ -35,9 +36,12 @@ export type ProjectsSnapshot = {
   projects: ProjectListItem[];
 };
 
-type ProgressCallback =
-  | ((progress: { phase: 'loading' | 'complete'; current: number; total: number; currentProject?: string }) => void)
-  | null;
+type ProgressUpdate = {
+  phase: 'loading' | 'complete';
+  current: number;
+  total: number;
+  currentProject?: string;
+};
 
 const __dirname = getModuleDir(import.meta.url);
 const APP_ROOT = findAppRoot(__dirname);
@@ -172,10 +176,24 @@ export async function writeSnapshot(projects: ProjectListItem[]): Promise<void> 
   }
 }
 
+// Broadcast progress to all connected WebSocket clients
+function broadcastProgress(progress: ProgressUpdate) {
+  const message = JSON.stringify({
+    type: 'loading_progress',
+    ...progress,
+  });
+
+  connectedClients.forEach((client: any) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  });
+}
+
 /**
  * Reads all projects from DB and returns provider-bucketed session summaries.
  */
-export async function getProjectsWithSessions(progressCallback: ProgressCallback = null): Promise<ProjectListItem[]> {
+export async function getProjectsWithSessions(): Promise<ProjectListItem[]> {
   await sessionSynchronizerService.synchronizeSessions();
 
   const projectRows = projectsDb.getProjectPaths() as Array<{
@@ -193,14 +211,12 @@ export async function getProjectsWithSessions(progressCallback: ProgressCallback
     const projectId = row.project_id;
     const projectPath = row.project_path;
 
-    if (progressCallback) {
-      progressCallback({
-        phase: 'loading',
-        current: processedProjects,
-        total: totalProjects,
-        currentProject: projectPath,
-      });
-    }
+    broadcastProgress({
+      phase: 'loading',
+      current: processedProjects,
+      total: totalProjects,
+      currentProject: projectPath,
+    });
 
     const displayName =
       row.custom_project_name && row.custom_project_name.trim().length > 0
@@ -227,13 +243,11 @@ export async function getProjectsWithSessions(progressCallback: ProgressCallback
     });
   }
 
-  if (progressCallback) {
-    progressCallback({
-      phase: 'complete',
-      current: totalProjects,
-      total: totalProjects,
-    });
-  }
+  broadcastProgress({
+    phase: 'complete',
+    current: totalProjects,
+    total: totalProjects,
+  });
 
   await writeSnapshot(projects);
   return projects;
