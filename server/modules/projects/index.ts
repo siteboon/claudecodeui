@@ -1,6 +1,6 @@
 export {
   createProjectsSnapshot,
   generateDisplayName,
-  getProjects,
+  getProjectsWithSessions,
   writeSnapshot,
 } from './services/projects.service.js';

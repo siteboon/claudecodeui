@@ -175,7 +175,7 @@ export async function writeSnapshot(projects: ProjectListItem[]): Promise<void> 
 /**
  * Reads all projects from DB and returns provider-bucketed session summaries.
  */
-export async function getProjects(progressCallback: ProgressCallback = null): Promise<ProjectListItem[]> {
+export async function getProjectsWithSessions(progressCallback: ProgressCallback = null): Promise<ProjectListItem[]> {
   await sessionSynchronizerService.synchronizeSessions();
 
   const projectRows = projectsDb.getProjectPaths() as Array<{

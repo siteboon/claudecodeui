@@ -872,7 +872,7 @@ async function renameProject(projectName, newDisplayName) {
  * ID-based wrapper around `renameProject`.
  *
  * Writes the new display name to the `projects.custom_project_name` column
- * (the source of truth for the DB-driven getProjects() response) and also
+ * (the source of truth for the DB-driven getProjectsWithSessions() response) and also
  * keeps the legacy project-config.json in sync for backwards compatibility
  * with any code that still reads it.
  */
@@ -883,7 +883,7 @@ async function renameProjectById(projectId, newDisplayName) {
   }
 
   const trimmed = typeof newDisplayName === 'string' ? newDisplayName.trim() : '';
-  // Persist on the DB row so getProjects() immediately reflects the change.
+  // Persist on the DB row so getProjectsWithSessions() immediately reflects the change.
   projectsDb.updateCustomProjectNameById(projectId, trimmed.length > 0 ? trimmed : null);
 
   // Keep the legacy file-based project config in lockstep so historic readers

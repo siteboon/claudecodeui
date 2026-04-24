@@ -27,7 +27,7 @@ import { promises as fsPromises } from 'fs';
 import { spawn } from 'child_process';
 import pty from 'node-pty';
 import mime from 'mime-types';
-import { getProjects } from '@/modules/projects';
+import { getProjectsWithSessions } from '@/modules/projects';
 
 import {
     getSessionsById,
@@ -142,7 +142,7 @@ async function setupProjectsWatcher() {
                 clearProjectDirectoryCache();
 
                 // Get updated projects list
-                const updatedProjects = await getProjects(broadcastProgress);
+                const updatedProjects = await getProjectsWithSessions(broadcastProgress);
 
                 // Notify all connected clients about the project changes
                 const updateMessage = JSON.stringify({
@@ -431,7 +431,7 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
 
 app.get('/api/projects', authenticateToken, async (req, res) => {
     try {
-        const projects = await getProjects(broadcastProgress);
+        const projects = await getProjectsWithSessions(broadcastProgress);
         res.json(projects);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -2375,7 +2375,7 @@ async function startServer() {
             // Start watching the projects folder for changes
             await setupProjectsWatcher();
 
-            // await getProjects(); // TODO: REMOVE THIS
+            // await getProjectsWithSessions(); // TODO: REMOVE THIS
             // Start server-side plugin processes for enabled plugins
             startEnabledPluginServers().catch(err => {
                 console.error('[Plugins] Error during startup:', err.message);
