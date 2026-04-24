@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react';
-import type { AppTab, Project, ProjectSession } from '../../../types/app';
+import type { AppTab, Project, ProjectSession, SessionStatus } from '../../../types/app';
 
 export type SessionLifecycleHandler = (sessionId?: string | null) => void;
 
@@ -32,6 +32,12 @@ export type PrdFile = {
   [key: string]: unknown;
 };
 
+export type PaneEntry = {
+  paneId: string;
+  session: ProjectSession | null;
+  project: Project | null;
+};
+
 export type MainContentProps = {
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
@@ -50,9 +56,17 @@ export type MainContentProps = {
   onSessionNotProcessing: SessionLifecycleHandler;
   processingSessions: Set<string>;
   onReplaceTemporarySession: SessionLifecycleHandler;
+  onAddPendingNewSession?: (projectName: string, firstMessage: string) => void;
   onNavigateToSession: (targetSessionId: string) => void;
   onShowSettings: () => void;
   externalMessageUpdate: number;
+  sessionStatus?: SessionStatus;
+  waitingCount?: number;
+  onJumpToNextWaiting?: () => void;
+  panes?: PaneEntry[];
+  focusedPaneIndex?: number;
+  onPaneFocus?: (paneId: string) => void;
+  onPaneClose?: (paneId: string) => void;
 };
 
 export type MainContentHeaderProps = {
@@ -63,6 +77,9 @@ export type MainContentHeaderProps = {
   shouldShowTasksTab: boolean;
   isMobile: boolean;
   onMenuClick: () => void;
+  sessionStatus?: SessionStatus;
+  waitingCount?: number;
+  onJumpToNextWaiting?: () => void;
 };
 
 export type MainContentStateViewProps = {

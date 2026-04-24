@@ -18,7 +18,7 @@ export default function AuthLoadingScreen() {
           {loadingDotAnimationDelays.map((delay) => (
             <div
               key={delay}
-              className="h-2 w-2 animate-bounce rounded-full bg-blue-500"
+              className="h-2 w-2 animate-bounce rounded-full bg-foreground"
               style={{ animationDelay: delay }}
             />
           ))}

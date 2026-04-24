@@ -52,6 +52,13 @@ export const getSessionDate = (session: SessionWithProvider): Date => {
 };
 
 export const getSessionName = (session: SessionWithProvider, t: TFunction): string => {
+  // Explicit rename wins over any CLI-derived fallback for every provider.
+  // `customName` is set server-side by `applyCustomSessionNames` when the
+  // user has set a name via `/rename` or inline rename.
+  if (session.customName) {
+    return session.customName;
+  }
+
   if (session.__provider === 'cursor') {
     return session.summary || session.name || t('projects.untitledSession');
   }
@@ -64,7 +71,8 @@ export const getSessionName = (session: SessionWithProvider, t: TFunction): stri
     return session.summary || session.name || t('projects.newSession');
   }
 
-  return session.summary || t('projects.newSession');
+  const claudeSummary = session.summary && session.summary !== 'New Session' ? session.summary : null;
+  return claudeSummary || session.firstUserMessage || t('projects.newSession');
 };
 
 export const getSessionTime = (session: SessionWithProvider): string => {

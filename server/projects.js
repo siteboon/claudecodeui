@@ -232,6 +232,27 @@ async function saveProjectConfig(config) {
   await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8');
 }
 
+// Read a project's icon file (if any) and return a data URL + updatedAt,
+// or null if the project has no icon configured or the file is missing.
+async function loadProjectIcon(projectConfigEntry) {
+  const iconMeta = projectConfigEntry?.icon;
+  if (!iconMeta || !iconMeta.filename || !iconMeta.mimeType) return null;
+  const iconPath = path.join(os.homedir(), '.claude', 'project-icons', iconMeta.filename);
+  try {
+    const buf = await fs.readFile(iconPath);
+    const base64 = buf.toString('base64');
+    return {
+      dataUrl: `data:${iconMeta.mimeType};base64,${base64}`,
+      updatedAt: iconMeta.updatedAt || 0,
+    };
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
+      console.warn(`Failed to read project icon for ${iconMeta.filename}:`, err.message);
+    }
+    return null;
+  }
+}
+
 // Generate better display name from path
 async function generateDisplayName(projectName, actualProjectDir = null) {
   // Use actual project directory if provided, otherwise decode from project name
@@ -429,12 +450,15 @@ async function getProjects(progressCallback = null) {
       const autoDisplayName = await generateDisplayName(entry.name, actualProjectDir);
       const fullPath = actualProjectDir;
 
+      const icon = await loadProjectIcon(config[entry.name]);
       const project = {
         name: entry.name,
         path: actualProjectDir,
         displayName: customName || autoDisplayName,
         fullPath: fullPath,
         isCustomName: !!customName,
+        iconDataUrl: icon?.dataUrl || null,
+        iconUpdatedAt: icon?.updatedAt || null,
         sessions: [],
         geminiSessions: [],
         sessionMeta: {
@@ -552,6 +576,7 @@ async function getProjects(progressCallback = null) {
         }
       }
 
+      const icon = await loadProjectIcon(projectConfig);
       const project = {
         name: projectName,
         path: actualProjectDir,
@@ -559,6 +584,8 @@ async function getProjects(progressCallback = null) {
         fullPath: actualProjectDir,
         isCustomName: !!projectConfig.displayName,
         isManuallyAdded: true,
+        iconDataUrl: icon?.dataUrl || null,
+        iconUpdatedAt: icon?.updatedAt || null,
         sessions: [],
         geminiSessions: [],
         sessionMeta: {
@@ -799,8 +826,8 @@ async function parseJsonlSessions(filePath) {
                 messageCount: 0,
                 lastActivity: new Date(),
                 cwd: entry.cwd || '',
-                lastUserMessage: null,
-                lastAssistantMessage: null
+                firstUserMessage: null,
+                lastMessageRole: null
               });
             }
 
@@ -816,11 +843,10 @@ async function parseJsonlSessions(filePath) {
               session.summary = entry.summary;
             }
 
-            // Track last user and assistant messages (skip system messages)
-            if (entry.message?.role === 'user' && entry.message?.content) {
+            // Capture the first real user message as a stable display fallback
+            if (session.firstUserMessage === null && entry.message?.role === 'user' && entry.message?.content) {
               const content = entry.message.content;
 
-              // Extract text from array format if needed
               let textContent = content;
               if (Array.isArray(content) && content.length > 0 && content[0].type === 'text') {
                 textContent = content[0].text;
@@ -835,42 +861,13 @@ async function parseJsonlSessions(filePath) {
                 textContent.startsWith('Caveat:') ||
                 textContent.startsWith('This session is being continued from a previous') ||
                 textContent.startsWith('Invalid API key') ||
-                textContent.includes('{"subtasks":') || // Filter Task Master prompts
-                textContent.includes('CRITICAL: You MUST respond with ONLY a JSON') || // Filter Task Master system prompts
-                textContent === 'Warmup' // Explicitly filter out "Warmup"
+                textContent.includes('{"subtasks":') ||
+                textContent.includes('CRITICAL: You MUST respond with ONLY a JSON') ||
+                textContent === 'Warmup'
               );
 
               if (typeof textContent === 'string' && textContent.length > 0 && !isSystemMessage) {
-                session.lastUserMessage = textContent;
-              }
-            } else if (entry.message?.role === 'assistant' && entry.message?.content) {
-              // Skip API error messages using the isApiErrorMessage flag
-              if (entry.isApiErrorMessage === true) {
-                // Skip this message entirely
-              } else {
-                // Track last assistant text message
-                let assistantText = null;
-
-                if (Array.isArray(entry.message.content)) {
-                  for (const part of entry.message.content) {
-                    if (part.type === 'text' && part.text) {
-                      assistantText = part.text;
-                    }
-                  }
-                } else if (typeof entry.message.content === 'string') {
-                  assistantText = entry.message.content;
-                }
-
-                // Additional filter for assistant messages with system content
-                const isSystemAssistantMessage = typeof assistantText === 'string' && (
-                  assistantText.startsWith('Invalid API key') ||
-                  assistantText.includes('{"subtasks":') ||
-                  assistantText.includes('CRITICAL: You MUST respond with ONLY a JSON')
-                );
-
-                if (assistantText && !isSystemAssistantMessage) {
-                  session.lastAssistantMessage = assistantText;
-                }
+                session.firstUserMessage = textContent;
               }
             }
 
@@ -879,20 +876,25 @@ async function parseJsonlSessions(filePath) {
             if (entry.timestamp) {
               session.lastActivity = new Date(entry.timestamp);
             }
+
+            // Track the last "real" message role so the UI can derive a
+            // stable "awaiting user reply" indicator without relying on
+            // transient browser-local state. Tool results are stored with
+            // role='user' in Claude's JSONL but aren't real user turns, so
+            // skip them — otherwise a session that ends mid-turn would
+            // incorrectly show as "user last spoke".
+            if (entry.message?.role === 'user' || entry.message?.role === 'assistant') {
+              const content = entry.message.content;
+              const isToolResult = Array.isArray(content) && content.some(
+                (c) => c && typeof c === 'object' && c.type === 'tool_result'
+              );
+              if (!isToolResult) {
+                session.lastMessageRole = entry.message.role;
+              }
+            }
           }
         } catch (parseError) {
           // Skip malformed lines silently
-        }
-      }
-    }
-
-    // After processing all entries, set final summary based on last message if no summary exists
-    for (const session of sessions.values()) {
-      if (session.summary === 'New Session') {
-        // Prefer last user message, fall back to last assistant message
-        const lastMessage = session.lastUserMessage || session.lastAssistantMessage;
-        if (lastMessage) {
-          session.summary = lastMessage.length > 50 ? lastMessage.substring(0, 50) + '...' : lastMessage;
         }
       }
     }
@@ -1242,7 +1244,11 @@ async function addProjectManually(projectPath, displayName = null) {
   const projectDir = path.join(os.homedir(), '.claude', 'projects', projectName);
 
   if (config[projectName]) {
-    throw new Error(`Project already configured for path: ${absolutePath}`);
+    const err = new Error(`Project already configured for path: ${absolutePath}`);
+    err.code = 'PROJECT_ALREADY_EXISTS';
+    err.projectName = projectName;
+    err.path = absolutePath;
+    throw err;
   }
 
   // Allow adding projects even if the directory exists - this enables tracking

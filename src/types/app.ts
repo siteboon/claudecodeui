@@ -1,11 +1,22 @@
 export type LLMProvider = 'claude' | 'cursor' | 'codex' | 'gemini';
 
+export type SessionStatus = 'running' | 'waiting' | 'error' | 'idle' | 'done';
+
 export type AppTab = 'chat' | 'files' | 'shell' | 'git' | 'tasks' | 'preview' | `plugin:${string}`;
 
 export interface ProjectSession {
   id: string;
   title?: string;
   summary?: string;
+  /**
+   * User-assigned display name. When present, wins over CLI-derived
+   * `summary` / `firstUserMessage` everywhere the session title is shown.
+   * Persisted server-side in `session_names`; `null`/absent means the
+   * session has never been explicitly renamed.
+   */
+  customName?: string | null;
+  firstUserMessage?: string;
+  lastMessageRole?: 'user' | 'assistant' | null;
   name?: string;
   createdAt?: string;
   created_at?: string;
@@ -14,6 +25,11 @@ export interface ProjectSession {
   messageCount?: number;
   __provider?: LLMProvider;
   __projectName?: string;
+  /**
+   * Client-only flag on synthetic sidebar rows that stand in for a new
+   * session while its real id is still being minted by the server.
+   */
+  __pending?: boolean;
   [key: string]: unknown;
 }
 
@@ -35,6 +51,8 @@ export interface Project {
   displayName: string;
   fullPath: string;
   path?: string;
+  iconDataUrl?: string | null;
+  iconUpdatedAt?: number | null;
   sessions?: ProjectSession[];
   cursorSessions?: ProjectSession[];
   codexSessions?: ProjectSession[];

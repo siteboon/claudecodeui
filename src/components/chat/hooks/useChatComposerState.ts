@@ -11,10 +11,11 @@ import type {
 } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { authenticatedFetch } from '../../../utils/api';
-import { thinkingModes } from '../constants/thinkingModes';
+import { DEFAULT_THINKING_MODE_ID, getEffortForModeId } from '../constants/thinkingModes';
 import { grantClaudeToolPermission } from '../utils/chatPermissions';
 import { safeLocalStorage } from '../utils/chatStorage';
 import type {
+  ChatFile,
   ChatMessage,
   PendingPermissionRequest,
   PermissionMode,
@@ -27,6 +28,7 @@ import { type SlashCommand, useSlashCommands } from './useSlashCommands';
 type PendingViewSession = {
   sessionId: string | null;
   startedAt: number;
+  pendingMessage?: ChatMessage;
 };
 
 interface UseChatComposerStateArgs {
@@ -46,7 +48,8 @@ interface UseChatComposerStateArgs {
   sendMessage: (message: unknown) => void;
   sendByCtrlEnter?: boolean;
   onSessionActive?: (sessionId?: string | null) => void;
-  onSessionProcessing?: (sessionId?: string | null) => void;
+  onAddPendingNewSession?: (projectName: string, firstMessage: string) => void;
+  onSessionNotProcessing?: (sessionId?: string | null) => void;
   onInputFocusChange?: (focused: boolean) => void;
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
@@ -83,6 +86,32 @@ const createFakeSubmitEvent = () => {
 const isTemporarySessionId = (sessionId: string | null | undefined) =>
   Boolean(sessionId && sessionId.startsWith('new-session-'));
 
+// Messages live here between submit and the next mount. Consumed once, so a
+// page reload during a WS reconnect doesn't silently lose the user's message
+// even though the WS queue in WebSocketContext is in-memory only.
+const IN_FLIGHT_SEND_TTL_MS = 60_000;
+
+const readAndConsumeInFlightSend = (projectName: string): string | null => {
+  const key = `in_flight_send_${projectName}`;
+  const raw = safeLocalStorage.getItem(key);
+  if (!raw) return null;
+  safeLocalStorage.removeItem(key);
+  try {
+    const parsed = JSON.parse(raw);
+    if (
+      parsed &&
+      typeof parsed.content === 'string' &&
+      typeof parsed.timestamp === 'number' &&
+      Date.now() - parsed.timestamp < IN_FLIGHT_SEND_TTL_MS
+    ) {
+      return parsed.content;
+    }
+  } catch {
+    // corrupt entry, already removed
+  }
+  return null;
+};
+
 const getNotificationSessionSummary = (
   selectedSession: ProjectSession | null,
   fallbackInput: string,
@@ -118,7 +147,8 @@ export function useChatComposerState({
   sendMessage,
   sendByCtrlEnter,
   onSessionActive,
-  onSessionProcessing,
+  onAddPendingNewSession,
+  onSessionNotProcessing,
   onInputFocusChange,
   onFileOpen,
   onShowSettings,
@@ -133,17 +163,32 @@ export function useChatComposerState({
   setIsUserScrolledUp,
   setPendingPermissionRequests,
 }: UseChatComposerStateArgs) {
+  const draftKey = `draft_input_${selectedProject?.name ?? ''}_${currentSessionId ?? 'new'}`;
+  const legacyKey = `draft_input_${selectedProject?.name ?? ''}`;
+
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
-      return safeLocalStorage.getItem(`draft_input_${selectedProject.name}`) || '';
+      let draft = safeLocalStorage.getItem(draftKey) || '';
+      if (!draft) {
+        const legacy = safeLocalStorage.getItem(legacyKey);
+        if (legacy) {
+          draft = legacy;
+          safeLocalStorage.setItem(draftKey, legacy); // copy, do NOT removeItem here
+        }
+      }
+      if (draft) return draft;
+      const recovered = readAndConsumeInFlightSend(selectedProject.name);
+      if (recovered) return recovered;
     }
     return '';
   });
   const [attachedImages, setAttachedImages] = useState<File[]>([]);
   const [uploadingImages, setUploadingImages] = useState<Map<string, number>>(new Map());
   const [imageErrors, setImageErrors] = useState<Map<string, string>>(new Map());
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [fileErrors, setFileErrors] = useState<Map<string, string>>(new Map());
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
-  const [thinkingMode, setThinkingMode] = useState('none');
+  const [thinkingMode, setThinkingMode] = useState(DEFAULT_THINKING_MODE_ID);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputHighlightRef = useRef<HTMLDivElement>(null);
@@ -421,6 +466,29 @@ export function useChatComposerState({
     }
   }, []);
 
+  const handleFileSelection = useCallback((files: File[]) => {
+    const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+    const MAX_FILES = 50;
+
+    const validFiles = files.filter((file) => {
+      if (!file || typeof file !== 'object') return false;
+      if (!file.size || file.size > MAX_FILE_SIZE) {
+        const fileName = file.name || 'Unknown file';
+        setFileErrors((prev) => {
+          const next = new Map(prev);
+          next.set(fileName, 'File too large (max 25MB)');
+          return next;
+        });
+        return false;
+      }
+      return true;
+    });
+
+    if (validFiles.length > 0) {
+      setAttachedFiles((prev) => [...prev, ...validFiles].slice(0, MAX_FILES));
+    }
+  }, []);
+
   const handlePaste = useCallback(
     (event: ClipboardEvent<HTMLTextAreaElement>) => {
       const items = Array.from(event.clipboardData.items);
@@ -446,16 +514,31 @@ export function useChatComposerState({
     [handleImageFiles],
   );
 
+  const handleDroppedFiles = useCallback((files: File[]) => {
+    const imageFiles = files.filter((f) => f.type && f.type.startsWith('image/'));
+    const nonImageFiles = files.filter((f) => !f.type || !f.type.startsWith('image/'));
+    if (imageFiles.length > 0) handleImageFiles(imageFiles);
+    if (nonImageFiles.length > 0) handleFileSelection(nonImageFiles);
+  }, [handleImageFiles, handleFileSelection]);
+
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
-    accept: {
-      'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'],
-    },
-    maxSize: 5 * 1024 * 1024,
-    maxFiles: 5,
-    onDrop: handleImageFiles,
+    maxSize: 25 * 1024 * 1024,
+    maxFiles: 50,
+    onDrop: handleDroppedFiles,
     noClick: true,
     noKeyboard: true,
   });
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
+
+  const openFilePicker = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const openFolderPicker = useCallback(() => {
+    folderInputRef.current?.click();
+  }, []);
 
   const handleSubmit = useCallback(
     async (
@@ -463,7 +546,8 @@ export function useChatComposerState({
     ) => {
       event.preventDefault();
       const currentInput = inputValueRef.current;
-      if (!currentInput.trim() || isLoading || !selectedProject) {
+      const hasAttachments = attachedImages.length > 0 || attachedFiles.length > 0;
+      if ((!currentInput.trim() && !hasAttachments) || isLoading || !selectedProject) {
         return;
       }
 
@@ -480,6 +564,8 @@ export function useChatComposerState({
           setAttachedImages([]);
           setUploadingImages(new Map());
           setImageErrors(new Map());
+          setAttachedFiles([]);
+          setFileErrors(new Map());
           resetCommandMenuState();
           setIsTextareaExpanded(false);
           if (textareaRef.current) {
@@ -489,11 +575,8 @@ export function useChatComposerState({
         }
       }
 
-      let messageContent = currentInput;
-      const selectedThinkingMode = thinkingModes.find((mode: { id: string; prefix?: string }) => mode.id === thinkingMode);
-      if (selectedThinkingMode && selectedThinkingMode.prefix) {
-        messageContent = `${selectedThinkingMode.prefix}: ${currentInput}`;
-      }
+      const messageContent = currentInput;
+      const selectedEffort = getEffortForModeId(thinkingMode);
 
       let uploadedImages: unknown[] = [];
       if (attachedImages.length > 0) {
@@ -527,6 +610,40 @@ export function useChatComposerState({
         }
       }
 
+      let uploadedFileData: { uploadBatchId: string; files: ChatFile[] } | null = null;
+      if (attachedFiles.length > 0) {
+        const formData = new FormData();
+        const relativePaths: string[] = [];
+        attachedFiles.forEach((file) => {
+          formData.append('files', file);
+          relativePaths.push((file as any).webkitRelativePath || file.name);
+        });
+        formData.append('relativePaths', JSON.stringify(relativePaths));
+
+        try {
+          const response = await authenticatedFetch(`/api/projects/${selectedProject.name}/upload-files`, {
+            method: 'POST',
+            headers: {},
+            body: formData,
+          });
+
+          if (!response.ok) {
+            throw new Error('Failed to upload files');
+          }
+
+          uploadedFileData = await response.json();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unknown error';
+          console.error('File upload failed:', error);
+          addMessage({
+            type: 'error',
+            content: `Failed to upload files: ${message}`,
+            timestamp: new Date(),
+          });
+          return;
+        }
+      }
+
       const effectiveSessionId =
         currentSessionId || selectedSession?.id || sessionStorage.getItem('cursorSessionId');
       const sessionToActivate = effectiveSessionId || `new-session-${Date.now()}`;
@@ -535,6 +652,8 @@ export function useChatComposerState({
         type: 'user',
         content: currentInput,
         images: uploadedImages as any,
+        files: uploadedFileData?.files,
+        uploadBatchId: uploadedFileData?.uploadBatchId,
         timestamp: new Date(),
       };
 
@@ -555,11 +674,27 @@ export function useChatComposerState({
           // Reset stale pending IDs from previous interrupted runs before creating a new one.
           sessionStorage.removeItem('pendingSessionId');
         }
-        pendingViewSessionRef.current = { sessionId: null, startedAt: Date.now() };
+        // Attach the optimistic user message to the pending ref. The
+        // `session_created` handler flushes it into the new session's store
+        // as soon as the backend assigns a real id, so the message isn't
+        // lost if the user navigates away before the reply arrives.
+        pendingViewSessionRef.current = {
+          sessionId: null,
+          startedAt: Date.now(),
+          pendingMessage: userMessage,
+        };
+        // Tell the sidebar to show an optimistic "in-flight" row for this
+        // project. It's removed when the real session shows up in the next
+        // `projects_updated` broadcast (see useProjectsState), or evicted
+        // on TTL if the send never lands.
+        if (selectedProject) {
+          onAddPendingNewSession?.(selectedProject.name, currentInput);
+        }
       }
       onSessionActive?.(sessionToActivate);
+      // User is replying — clear any "awaiting user reply" flag set by a prior turn's `complete`.
       if (effectiveSessionId && !isTemporarySessionId(effectiveSessionId)) {
-        onSessionProcessing?.(effectiveSessionId);
+        onSessionNotProcessing?.(effectiveSessionId);
       }
 
       const getToolsSettings = () => {
@@ -590,6 +725,19 @@ export function useChatComposerState({
       const toolsSettings = getToolsSettings();
       const resolvedProjectPath = selectedProject.fullPath || selectedProject.path || '';
       const sessionSummary = getNotificationSessionSummary(selectedSession, currentInput);
+
+      // Snapshot the outgoing text so it can be recovered on mount if the tab
+      // reloads before the WS flush completes. The WS queue in WebSocketContext
+      // handles the usual transient-disconnect case; this covers the page-reload
+      // race that the in-memory queue can't survive.
+      try {
+        safeLocalStorage.setItem(
+          `in_flight_send_${selectedProject.name}`,
+          JSON.stringify({ content: currentInput, timestamp: Date.now() }),
+        );
+      } catch {
+        // Quota or disabled storage — failure to snapshot is non-fatal.
+      }
 
       if (provider === 'cursor') {
         sendMessage({
@@ -636,6 +784,7 @@ export function useChatComposerState({
             sessionSummary,
             permissionMode,
             toolsSettings,
+            fileData: uploadedFileData,
           },
         });
       } else {
@@ -652,6 +801,8 @@ export function useChatComposerState({
             model: claudeModel,
             sessionSummary,
             images: uploadedImages,
+            fileData: uploadedFileData,
+            ...(selectedEffort ? { effort: selectedEffort } : {}),
           },
         });
       }
@@ -662,18 +813,21 @@ export function useChatComposerState({
       setAttachedImages([]);
       setUploadingImages(new Map());
       setImageErrors(new Map());
+      setAttachedFiles([]);
+      setFileErrors(new Map());
       setIsTextareaExpanded(false);
-      setThinkingMode('none');
 
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
 
-      safeLocalStorage.removeItem(`draft_input_${selectedProject.name}`);
+      safeLocalStorage.removeItem(draftKey);
+      safeLocalStorage.removeItem(legacyKey);
     },
     [
       selectedSession,
       attachedImages,
+      attachedFiles,
       claudeModel,
       codexModel,
       currentSessionId,
@@ -681,8 +835,9 @@ export function useChatComposerState({
       executeCommand,
       geminiModel,
       isLoading,
+      onAddPendingNewSession,
       onSessionActive,
-      onSessionProcessing,
+      onSessionNotProcessing,
       pendingViewSessionRef,
       permissionMode,
       provider,
@@ -697,6 +852,8 @@ export function useChatComposerState({
       setIsUserScrolledUp,
       slashCommands,
       thinkingMode,
+      draftKey,
+      legacyKey,
     ],
   );
 
@@ -712,24 +869,45 @@ export function useChatComposerState({
     if (!selectedProject) {
       return;
     }
-    const savedInput = safeLocalStorage.getItem(`draft_input_${selectedProject.name}`) || '';
+    let saved = safeLocalStorage.getItem(draftKey) || '';
+    if (!saved) {
+      const legacy = safeLocalStorage.getItem(legacyKey);
+      if (legacy) {
+        saved = legacy;
+        safeLocalStorage.setItem(draftKey, legacy);
+      }
+    }
+    const savedInput = saved || readAndConsumeInFlightSend(selectedProject.name) || '';
     setInput((previous) => {
       const next = previous === savedInput ? previous : savedInput;
       inputValueRef.current = next;
       return next;
     });
-  }, [selectedProject?.name]);
+  }, [selectedProject?.name, currentSessionId]);
 
   useEffect(() => {
     if (!selectedProject) {
       return;
     }
     if (input !== '') {
-      safeLocalStorage.setItem(`draft_input_${selectedProject.name}`, input);
+      safeLocalStorage.setItem(draftKey, input);
     } else {
-      safeLocalStorage.removeItem(`draft_input_${selectedProject.name}`);
+      safeLocalStorage.removeItem(draftKey);
     }
-  }, [input, selectedProject]);
+  }, [input, selectedProject, currentSessionId]);
+
+  // Clear the in-flight send snapshot once the backend has processed the turn
+  // (isLoading flips back to false after having been true). Otherwise the
+  // snapshot would keep restoring a successfully-delivered message on later
+  // mounts/project switches.
+  const wasLoadingRef = useRef(false);
+  useEffect(() => {
+    if (!selectedProject) return;
+    if (wasLoadingRef.current && !isLoading) {
+      safeLocalStorage.removeItem(`in_flight_send_${selectedProject.name}`);
+    }
+    wasLoadingRef.current = isLoading;
+  }, [isLoading, selectedProject?.name]);
 
   useEffect(() => {
     if (!textareaRef.current) {
@@ -957,6 +1135,14 @@ export function useChatComposerState({
     setAttachedImages,
     uploadingImages,
     imageErrors,
+    attachedFiles,
+    setAttachedFiles,
+    fileErrors,
+    fileInputRef,
+    folderInputRef,
+    openFilePicker,
+    openFolderPicker,
+    handleFileSelection,
     getRootProps,
     getInputProps,
     isDragActive,

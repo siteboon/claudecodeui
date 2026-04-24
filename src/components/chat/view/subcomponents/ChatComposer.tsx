@@ -11,13 +11,16 @@ import type {
   SetStateAction,
   TouchEvent,
 } from 'react';
-import { ImageIcon, MessageSquareIcon, XIcon, ArrowDownIcon } from 'lucide-react';
+import { useState, type RefObject as InputRefObject } from 'react';
+import { ImageIcon, PaperclipIcon, FolderIcon, FileIcon, MessageSquareIcon, XIcon, ArrowDownIcon } from 'lucide-react';
 import type { PendingPermissionRequest, PermissionMode, Provider } from '../../types/types';
 import CommandMenu from './CommandMenu';
 import ClaudeStatus from './ClaudeStatus';
 import ImageAttachment from './ImageAttachment';
+import FileAttachment from './FileAttachment';
 import PermissionRequestsBanner from './PermissionRequestsBanner';
-import ThinkingModeSelector from './ThinkingModeSelector';
+import ModePills, { type ModePill } from './ModePills';
+import { thinkingModes } from '../../constants/thinkingModes';
 import TokenUsagePie from './TokenUsagePie';
 import {
   PromptInput,
@@ -57,7 +60,7 @@ interface ChatComposerProps {
   onAbortSession: () => void;
   provider: Provider | string;
   permissionMode: PermissionMode | string;
-  onModeSwitch: () => void;
+  onPermissionModeSelect: (mode: PermissionMode) => void;
   thinkingMode: string;
   setThinkingMode: Dispatch<SetStateAction<string>>;
   tokenBudget: { used?: number; total?: number } | null;
@@ -74,6 +77,14 @@ interface ChatComposerProps {
   onRemoveImage: (index: number) => void;
   uploadingImages: Map<string, number>;
   imageErrors: Map<string, string>;
+  attachedFiles: File[];
+  onRemoveFile: (index: number) => void;
+  fileErrors: Map<string, string>;
+  fileInputRef: InputRefObject<HTMLInputElement>;
+  folderInputRef: InputRefObject<HTMLInputElement>;
+  openFilePicker: () => void;
+  openFolderPicker: () => void;
+  onFileSelection: (files: File[]) => void;
   showFileDropdown: boolean;
   filteredFiles: MentionableFile[];
   selectedFileIndex: number;
@@ -112,7 +123,7 @@ export default function ChatComposer({
   onAbortSession,
   provider,
   permissionMode,
-  onModeSwitch,
+  onPermissionModeSelect,
   thinkingMode,
   setThinkingMode,
   tokenBudget,
@@ -129,6 +140,14 @@ export default function ChatComposer({
   onRemoveImage,
   uploadingImages,
   imageErrors,
+  attachedFiles,
+  onRemoveFile,
+  fileErrors,
+  fileInputRef,
+  folderInputRef,
+  openFilePicker,
+  openFolderPicker,
+  onFileSelection,
   showFileDropdown,
   filteredFiles,
   selectedFileIndex,
@@ -164,6 +183,8 @@ export default function ChatComposer({
     left: textareaRect ? textareaRect.left : 16,
     bottom: textareaRect ? window.innerHeight - textareaRect.top + 8 : 90,
   };
+
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
 
   // Detect if the AskUserQuestion interactive panel is active
   const hasQuestionPanel = pendingPermissionRequests.some(
@@ -261,22 +282,30 @@ export default function ChatComposer({
                     d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
                   />
                 </svg>
-                <p className="text-sm font-medium">Drop images here</p>
+                <p className="text-sm font-medium">Drop files here</p>
               </div>
             </div>
           )}
 
-          {attachedImages.length > 0 && (
+          {(attachedImages.length > 0 || attachedFiles.length > 0) && (
             <PromptInputHeader>
               <div className="rounded-xl bg-muted/40 p-2">
                 <div className="flex flex-wrap gap-2">
                   {attachedImages.map((file, index) => (
                     <ImageAttachment
-                      key={index}
+                      key={`img-${index}`}
                       file={file}
                       onRemove={() => onRemoveImage(index)}
                       uploadProgress={uploadingImages.get(file.name)}
                       error={imageErrors.get(file.name)}
+                    />
+                  ))}
+                  {attachedFiles.map((file, index) => (
+                    <FileAttachment
+                      key={`file-${index}`}
+                      file={file}
+                      onRemove={() => onRemoveFile(index)}
+                      error={fileErrors.get(file.name)}
                     />
                   ))}
                 </div>
@@ -285,6 +314,36 @@ export default function ChatComposer({
           )}
 
           <input {...getInputProps()} />
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files) {
+                onFileSelection(Array.from(e.target.files));
+                e.target.value = '';
+              }
+            }}
+          />
+          <input
+            ref={(el) => {
+              if (el) {
+                el.setAttribute('webkitdirectory', '');
+                // eslint-disable-next-line no-param-reassign
+                (folderInputRef as { current: HTMLInputElement | null }).current = el;
+              }
+            }}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files) {
+                onFileSelection(Array.from(e.target.files));
+                e.target.value = '';
+              }
+            }}
+          />
 
           <PromptInputBody>
             <div ref={inputHighlightRef} aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
@@ -310,53 +369,85 @@ export default function ChatComposer({
 
         <PromptInputFooter>
           <PromptInputTools>
-            <PromptInputButton
-              tooltip={{ content: t('input.attachImages') }}
-              onClick={openImagePicker}
-            >
-              <ImageIcon />
-            </PromptInputButton>
+            <div className="relative">
+              <PromptInputButton
+                tooltip={{ content: t('input.attachImages', { defaultValue: 'Attach' }) }}
+                onClick={() => setShowAttachMenu((v) => !v)}
+              >
+                <PaperclipIcon />
+              </PromptInputButton>
+              {showAttachMenu && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowAttachMenu(false)} />
+                  <div className="absolute bottom-full left-0 z-50 mb-2 w-40 overflow-hidden rounded-lg border border-border/50 bg-card shadow-lg">
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground hover:bg-accent/50"
+                      onClick={() => { openImagePicker(); setShowAttachMenu(false); }}
+                    >
+                      <ImageIcon className="h-4 w-4" />
+                      Image
+                    </button>
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground hover:bg-accent/50"
+                      onClick={() => { openFilePicker(); setShowAttachMenu(false); }}
+                    >
+                      <FileIcon className="h-4 w-4" />
+                      File
+                    </button>
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground hover:bg-accent/50"
+                      onClick={() => { openFolderPicker(); setShowAttachMenu(false); }}
+                    >
+                      <FolderIcon className="h-4 w-4" />
+                      Folder
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
 
-            <button
-              type="button"
-              onClick={onModeSwitch}
-              className={`rounded-lg border p-2 text-xs font-medium transition-all duration-200 sm:px-2.5 sm:py-1 ${
-                permissionMode === 'default'
-                  ? 'border-border/60 bg-muted/50 text-muted-foreground hover:bg-muted'
-                  : permissionMode === 'acceptEdits'
-                    ? 'border-green-300/60 bg-green-50 text-green-700 hover:bg-green-100 dark:border-green-600/40 dark:bg-green-900/15 dark:text-green-300 dark:hover:bg-green-900/25'
-                    : permissionMode === 'bypassPermissions'
-                      ? 'border-orange-300/60 bg-orange-50 text-orange-700 hover:bg-orange-100 dark:border-orange-600/40 dark:bg-orange-900/15 dark:text-orange-300 dark:hover:bg-orange-900/25'
-                      : 'border-primary/20 bg-primary/5 text-primary hover:bg-primary/10'
-              }`}
-              title={t('input.clickToChangeMode')}
-            >
-              <div className="flex items-center gap-1.5">
-                <div
-                  className={`h-2.5 w-2.5 rounded-full sm:h-1.5 sm:w-1.5 ${
-                    permissionMode === 'default'
-                      ? 'bg-muted-foreground'
-                      : permissionMode === 'acceptEdits'
-                        ? 'bg-green-500'
-                        : permissionMode === 'bypassPermissions'
-                          ? 'bg-orange-500'
-                          : 'bg-primary'
-                  }`}
-                />
-                <span className="hidden whitespace-nowrap sm:inline">
-                  {permissionMode === 'default' && t('codex.modes.default')}
-                  {permissionMode === 'acceptEdits' && t('codex.modes.acceptEdits')}
-                  {permissionMode === 'bypassPermissions' && t('codex.modes.bypassPermissions')}
-                  {permissionMode === 'plan' && t('codex.modes.plan')}
-                </span>
-              </div>
-            </button>
-
-            {provider === 'claude' && (
-              <ThinkingModeSelector selectedMode={thinkingMode} onModeChange={setThinkingMode} onClose={() => {}} className="" />
+            {provider !== 'codex' && (
+              <ModePills<PermissionMode>
+                ariaLabel="Permission mode"
+                selected={permissionMode === 'plan' ? 'plan' : 'bypassPermissions'}
+                onSelect={onPermissionModeSelect}
+                items={[
+                  {
+                    id: 'bypassPermissions',
+                    label: 'Bypass',
+                    title: 'Bypass — skip all permission prompts',
+                    dotColor: '#f97316',
+                  },
+                  {
+                    id: 'plan',
+                    label: 'Plan',
+                    title: 'Plan — read-only planning, no edits',
+                    dotColor: '#3b82f6',
+                  },
+                ]}
+              />
             )}
 
-            <TokenUsagePie used={tokenBudget?.used || 0} total={tokenBudget?.total || parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000} />
+            {provider === 'claude' && (
+              <ModePills<string>
+                ariaLabel="Reasoning effort"
+                selected={thinkingMode}
+                onSelect={setThinkingMode}
+                items={thinkingModes.map((mode) => ({
+                  id: mode.id,
+                  label:
+                    mode.id === 'medium' ? 'Med'
+                    : mode.id === 'xhigh' ? 'xhigh'
+                    : mode.name,
+                  title: mode.description,
+                }))}
+              />
+            )}
+
+            <TokenUsagePie used={tokenBudget?.used || 0} total={tokenBudget?.total || parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 1000000} />
 
             <PromptInputButton
               tooltip={{ content: t('input.showAllCommands') }}
@@ -387,14 +478,14 @@ export default function ChatComposer({
 
           <div className="flex items-center gap-2">
             <div
-              className={`hidden text-xs text-muted-foreground/50 transition-opacity duration-200 lg:block ${
+              className={`hidden text-[10px] text-muted-foreground/40 transition-opacity duration-200 lg:block ${
                 input.trim() ? 'opacity-0' : 'opacity-100'
               }`}
             >
               {sendByCtrlEnter ? t('input.hintText.ctrlEnter') : t('input.hintText.enter')}
             </div>
             <PromptInputSubmit
-              disabled={!input.trim() || isLoading}
+              disabled={(!input.trim() && attachedImages.length === 0 && attachedFiles.length === 0) || isLoading}
               className="h-10 w-10 sm:h-10 sm:w-10"
               onMouseDown={(event) => {
                 event.preventDefault();

@@ -13,6 +13,7 @@ const __dirname = getModuleDir(import.meta.url);
 // Resolving the app root once keeps every repo-level lookup below aligned across both layouts.
 const APP_ROOT = findAppRoot(__dirname);
 const installMode = fs.existsSync(path.join(APP_ROOT, '.git')) ? 'git' : 'npm';
+const DIST_DIR = process.env.DIST_DIR ? path.resolve(process.env.DIST_DIR) : path.join(APP_ROOT, 'dist');
 
 import { c } from './utils/colors.js';
 
@@ -28,7 +29,7 @@ import { spawn } from 'child_process';
 import pty from 'node-pty';
 import mime from 'mime-types';
 
-import { getProjects, getSessions, renameProject, deleteSession, deleteProject, extractProjectDirectory, clearProjectDirectoryCache, searchConversations } from './projects.js';
+import { getProjects, getSessions, renameProject, deleteSession, deleteProject, extractProjectDirectory, clearProjectDirectoryCache, searchConversations, loadProjectConfig, saveProjectConfig } from './projects.js';
 import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, resolveToolApproval, getPendingApprovalsForSession, reconnectSessionWriter } from './claude-sdk.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import { queryCodex, abortCodexSession, isCodexSessionActive, getActiveCodexSessions } from './openai-codex.js';
@@ -327,7 +328,7 @@ app.use(express.static(path.join(APP_ROOT, 'public')));
 
 // Static files served after API routes
 // Add cache control: HTML files should not be cached, but assets can be cached
-app.use(express.static(path.join(APP_ROOT, 'dist'), {
+app.use(express.static(DIST_DIR, {
     setHeaders: (res, filePath) => {
         if (filePath.endsWith('.html')) {
             // Prevent HTML caching to avoid service worker issues after builds
@@ -1980,6 +1981,252 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
     }
 });
 
+// File/folder upload endpoint — saves files to a temp batch directory, returns metadata + batchId
+app.post('/api/projects/:projectName/upload-files', authenticateToken, async (req, res) => {
+    try {
+        const multer = (await import('multer')).default;
+        const path = (await import('path')).default;
+        const fs = (await import('fs')).promises;
+        const os = (await import('os')).default;
+        const crypto = (await import('crypto')).default;
+
+        const batchId = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+        const batchDir = path.join(os.tmpdir(), 'claude-ui-uploads', String(req.user.id), batchId);
+
+        const storage = multer.diskStorage({
+            destination: async (req, file, cb) => {
+                await fs.mkdir(batchDir, { recursive: true });
+                cb(null, batchDir);
+            },
+            filename: (req, file, cb) => {
+                // Preserve original name (sanitised) to make it easier to identify
+                const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+                const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+                cb(null, uniqueSuffix + '-' + sanitizedName);
+            }
+        });
+
+        const upload = multer({
+            storage,
+            limits: {
+                fileSize: 25 * 1024 * 1024, // 25MB per file
+                files: 50
+            }
+        });
+
+        upload.array('files', 50)(req, res, async (err) => {
+            if (err) {
+                return res.status(400).json({ error: err.message });
+            }
+
+            if (!req.files || req.files.length === 0) {
+                return res.status(400).json({ error: 'No files provided' });
+            }
+
+            try {
+                // Parse optional relative-path metadata sent alongside the files
+                let relativePaths = [];
+                try {
+                    if (req.body && req.body.relativePaths) {
+                        relativePaths = JSON.parse(req.body.relativePaths);
+                    }
+                } catch { /* ignore parse errors */ }
+
+                const processedFiles = req.files.map((file, idx) => ({
+                    name: file.originalname,
+                    size: file.size,
+                    mimeType: file.mimetype,
+                    relativePath: relativePaths[idx] || undefined,
+                    storedName: file.filename, // needed by SDK to find the file in batchDir
+                }));
+
+                res.json({ uploadBatchId: batchId, files: processedFiles });
+            } catch (error) {
+                console.error('Error processing file uploads:', error);
+                await Promise.all(req.files.map(f => fs.unlink(f.path).catch(() => { })));
+                res.status(500).json({ error: 'Failed to process files' });
+            }
+        });
+    } catch (error) {
+        console.error('Error in file upload endpoint:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// ---- Project icon endpoints ----
+// Storage: ~/.claude/project-icons/<projectName>.<ext> (one active file per project).
+// Metadata lives in ~/.claude/project-config.json under config[name].icon.
+
+const PROJECT_ICON_MIME_TO_EXT = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/webp': 'webp',
+    'image/gif': 'gif',
+    'image/svg+xml': 'svg',
+};
+
+function validateProjectNameParam(name) {
+    return typeof name === 'string' && /^[A-Za-z0-9._-]+$/.test(name);
+}
+
+function projectIconsDir() {
+    return path.join(os.homedir(), '.claude', 'project-icons');
+}
+
+async function removeProjectIconFile(filename) {
+    if (!filename) return;
+    const dir = projectIconsDir();
+    const target = path.join(dir, filename);
+    // Guard: ensure the resolved path stays inside the icons dir.
+    if (!path.resolve(target).startsWith(path.resolve(dir) + path.sep)) return;
+    try {
+        await fsPromises.unlink(target);
+    } catch (err) {
+        if (err.code !== 'ENOENT') {
+            console.warn(`Failed to remove project icon ${filename}:`, err.message);
+        }
+    }
+}
+
+// Serve the raw icon bytes. Token is accepted via query param (?token=...) so
+// <img src> tags work without a custom fetch.
+app.get('/api/projects/:projectName/icon', authenticateToken, async (req, res) => {
+    try {
+        const { projectName } = req.params;
+        if (!validateProjectNameParam(projectName)) {
+            return res.status(400).json({ error: 'Invalid projectName' });
+        }
+        const config = await loadProjectConfig();
+        const iconMeta = config[projectName]?.icon;
+        if (!iconMeta || !iconMeta.filename) {
+            return res.status(404).json({ error: 'No icon set for project' });
+        }
+        const dir = projectIconsDir();
+        const filePath = path.join(dir, iconMeta.filename);
+        if (!path.resolve(filePath).startsWith(path.resolve(dir) + path.sep)) {
+            return res.status(400).json({ error: 'Invalid icon path' });
+        }
+        try {
+            await fsPromises.access(filePath);
+        } catch {
+            return res.status(404).json({ error: 'Icon file missing' });
+        }
+        res.setHeader('Content-Type', iconMeta.mimeType || 'application/octet-stream');
+        res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
+        if (iconMeta.updatedAt) {
+            res.setHeader('ETag', `W/"icon-${iconMeta.updatedAt}"`);
+        }
+        fs.createReadStream(filePath).pipe(res);
+    } catch (error) {
+        console.error('Error serving project icon:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Upload (or replace) a project icon.
+app.post('/api/projects/:projectName/icon', authenticateToken, async (req, res) => {
+    try {
+        const { projectName } = req.params;
+        if (!validateProjectNameParam(projectName)) {
+            return res.status(400).json({ error: 'Invalid projectName' });
+        }
+
+        const multer = (await import('multer')).default;
+
+        const iconsDir = projectIconsDir();
+        await fsPromises.mkdir(iconsDir, { recursive: true });
+
+        const storage = multer.memoryStorage();
+        const fileFilter = (req, file, cb) => {
+            if (PROJECT_ICON_MIME_TO_EXT[file.mimetype]) {
+                cb(null, true);
+            } else {
+                cb(new Error('Invalid file type. Allowed: png, jpg, webp, gif, svg.'));
+            }
+        };
+        const upload = multer({
+            storage,
+            fileFilter,
+            limits: { fileSize: 512 * 1024, files: 1 },
+        }).single('icon');
+
+        upload(req, res, async (err) => {
+            if (err) {
+                return res.status(400).json({ error: err.message });
+            }
+            if (!req.file) {
+                return res.status(400).json({ error: 'No icon file provided' });
+            }
+
+            try {
+                const ext = PROJECT_ICON_MIME_TO_EXT[req.file.mimetype];
+                const filename = `${projectName}.${ext}`;
+                const target = path.join(iconsDir, filename);
+                if (!path.resolve(target).startsWith(path.resolve(iconsDir) + path.sep)) {
+                    return res.status(400).json({ error: 'Invalid icon path' });
+                }
+
+                const config = await loadProjectConfig();
+                const prevFilename = config[projectName]?.icon?.filename;
+                // If the prior icon used a different extension, remove the old file so we
+                // don't leave an orphan.
+                if (prevFilename && prevFilename !== filename) {
+                    await removeProjectIconFile(prevFilename);
+                }
+
+                await fsPromises.writeFile(target, req.file.buffer);
+
+                const updatedAt = Date.now();
+                config[projectName] = {
+                    ...config[projectName],
+                    icon: {
+                        filename,
+                        mimeType: req.file.mimetype,
+                        updatedAt,
+                    },
+                };
+                await saveProjectConfig(config);
+
+                res.json({ success: true, iconUpdatedAt: updatedAt });
+            } catch (error) {
+                console.error('Error saving project icon:', error);
+                res.status(500).json({ error: 'Failed to save project icon' });
+            }
+        });
+    } catch (error) {
+        console.error('Error in project icon upload endpoint:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Remove a project icon.
+app.delete('/api/projects/:projectName/icon', authenticateToken, async (req, res) => {
+    try {
+        const { projectName } = req.params;
+        if (!validateProjectNameParam(projectName)) {
+            return res.status(400).json({ error: 'Invalid projectName' });
+        }
+        const config = await loadProjectConfig();
+        const prevFilename = config[projectName]?.icon?.filename;
+        if (prevFilename) {
+            await removeProjectIconFile(prevFilename);
+        }
+        if (config[projectName]) {
+            const { icon: _icon, ...rest } = config[projectName];
+            if (Object.keys(rest).length === 0) {
+                delete config[projectName];
+            } else {
+                config[projectName] = rest;
+            }
+            await saveProjectConfig(config);
+        }
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error deleting project icon:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // Get token usage for a specific session
 app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authenticateToken, async (req, res) => {
     try {
@@ -2177,7 +2424,7 @@ app.get('*', (req, res) => {
 
     // Only serve index.html for HTML routes, not for static assets
     // Static assets should already be handled by express.static middleware above
-    const indexPath = path.join(APP_ROOT, 'dist', 'index.html');
+    const indexPath = path.join(DIST_DIR, 'index.html');
 
     // Check if dist/index.html exists (production build available)
     if (fs.existsSync(indexPath)) {
@@ -2316,7 +2563,7 @@ async function startServer() {
         configureWebPush();
 
         // Check if running in production mode (dist folder exists)
-        const distIndexPath = path.join(APP_ROOT, 'dist', 'index.html');
+        const distIndexPath = path.join(DIST_DIR, 'index.html');
         const isProduction = fs.existsSync(distIndexPath);
 
         // Log Claude implementation mode

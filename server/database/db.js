@@ -517,7 +517,12 @@ const sessionNamesDb = {
   },
 };
 
-// Apply custom session names from the database (overrides CLI-generated summaries)
+// Apply custom session names from the database.
+//
+// The client uses `customName` to branch cleanly between "user explicitly
+// renamed this" and "CLI wrote a summary". `summary` stays overwritten as a
+// compat fallback so every legacy consumer (search, notifications, anywhere
+// that reads `summary` directly) keeps seeing the user-chosen name.
 function applyCustomSessionNames(sessions, provider) {
   if (!sessions?.length) return;
   try {
@@ -525,7 +530,10 @@ function applyCustomSessionNames(sessions, provider) {
     const customNames = sessionNamesDb.getNames(ids, provider);
     for (const session of sessions) {
       const custom = customNames.get(session.id);
-      if (custom) session.summary = custom;
+      if (custom) {
+        session.customName = custom;
+        session.summary = custom;
+      }
     }
   } catch (error) {
     console.warn(`[DB] Failed to apply custom session names for ${provider}:`, error.message);

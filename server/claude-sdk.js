@@ -144,10 +144,16 @@ function matchesToolPermission(entry, toolName, input) {
  * @param {Object} options - CLI options
  * @returns {Object} SDK-compatible options
  */
+const VALID_EFFORT_LEVELS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
+
 function mapCliOptionsToSDK(options = {}) {
-  const { sessionId, cwd, toolsSettings, permissionMode } = options;
+  const { sessionId, cwd, toolsSettings, permissionMode, effort } = options;
 
   const sdkOptions = {};
+
+  if (effort && VALID_EFFORT_LEVELS.has(effort)) {
+    sdkOptions.effort = effort;
+  }
 
   // Forward all host env vars (e.g. ANTHROPIC_BASE_URL) to the subprocess.
   // Since SDK 0.2.113, options.env replaces process.env instead of overlaying it.
@@ -382,6 +388,66 @@ async function handleImages(command, images, cwd) {
 }
 
 /**
+ * Handles uploaded files for SDK queries.
+ * Moves files from the upload temp batch directory into the project's .tmp/uploads/
+ * and appends file paths to the command prompt.
+ * @param {string} command - Original user prompt
+ * @param {Object} fileData - {uploadBatchId, files: [{name, size, mimeType, relativePath?, storedName}]}
+ * @param {string} cwd - Working directory for the project
+ * @param {string} userId - User ID (to locate the upload batch dir)
+ * @returns {Promise<Object>} {modifiedCommand, tempFilePaths, tempDir}
+ */
+async function handleFiles(command, fileData, cwd, userId) {
+  const tempFilePaths = [];
+  let tempDir = null;
+
+  if (!fileData || !fileData.uploadBatchId || !fileData.files || fileData.files.length === 0) {
+    return { modifiedCommand: command, tempFilePaths, tempDir };
+  }
+
+  try {
+    const workingDir = cwd || process.cwd();
+    tempDir = path.join(workingDir, '.tmp', 'uploads', Date.now().toString());
+    await fs.mkdir(tempDir, { recursive: true });
+
+    const batchDir = path.join(os.tmpdir(), 'claude-ui-uploads', String(userId), fileData.uploadBatchId);
+
+    for (const file of fileData.files) {
+      const sourcePath = path.join(batchDir, file.storedName);
+      // Preserve relative path structure for folder uploads
+      const destName = file.relativePath
+        ? file.relativePath.replace(/[^a-zA-Z0-9._/\\-]/g, '_')
+        : file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const destPath = path.join(tempDir, destName);
+
+      // Ensure parent directory exists (for nested folder uploads)
+      await fs.mkdir(path.dirname(destPath), { recursive: true });
+
+      try {
+        await fs.copyFile(sourcePath, destPath);
+        tempFilePaths.push(destPath);
+      } catch (err) {
+        console.error(`Failed to copy uploaded file ${file.name}:`, err);
+      }
+    }
+
+    // Clean up the upload batch directory
+    await fs.rm(batchDir, { recursive: true, force: true }).catch(() => {});
+
+    let modifiedCommand = command;
+    if (tempFilePaths.length > 0 && command && command.trim()) {
+      const fileNote = `\n\n[Files provided at the following paths:]\n${tempFilePaths.map((p, i) => `${i + 1}. ${p}`).join('\n')}`;
+      modifiedCommand = command + fileNote;
+    }
+
+    return { modifiedCommand, tempFilePaths, tempDir };
+  } catch (error) {
+    console.error('Error processing files for SDK:', error);
+    return { modifiedCommand: command, tempFilePaths, tempDir };
+  }
+}
+
+/**
  * Cleans up temporary image files
  * @param {Array<string>} tempImagePaths - Array of temp file paths to delete
  * @param {string} tempDir - Temp directory to remove
@@ -476,12 +542,21 @@ async function loadMcpConfig(cwd) {
  * @param {Object} ws - WebSocket connection
  * @returns {Promise<void>}
  */
+// Sessions aborted via abortClaudeSDKSession() land here briefly so that the
+// async generator loop in queryClaudeSDK can tell "user cancelled" apart from
+// "stream ended unexpectedly" and skip auto-resume for the former.
+const recentlyAbortedSessions = new Set();
+
+const MAX_AUTO_RESUME_ATTEMPTS = 2;
+
 async function queryClaudeSDK(command, options = {}, ws) {
   const { sessionId, sessionSummary } = options;
   let capturedSessionId = sessionId;
   let sessionCreatedSent = false;
   let tempImagePaths = [];
   let tempDir = null;
+  let autoResumeAttempts = 0;
+  let lastStopInfo = null;
 
   const emitNotification = (event) => {
     notifyUserIfEnabled({
@@ -503,9 +578,16 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
     // Handle images - save to temp files and modify prompt
     const imageResult = await handleImages(command, options.images, options.cwd);
-    const finalCommand = imageResult.modifiedCommand;
+    let finalCommand = imageResult.modifiedCommand;
     tempImagePaths = imageResult.tempImagePaths;
     tempDir = imageResult.tempDir;
+
+    // Handle uploaded files - move from upload batch dir to project .tmp/uploads/
+    const fileResult = await handleFiles(finalCommand, options.fileData, options.cwd, ws?.userId);
+    finalCommand = fileResult.modifiedCommand;
+    // Track file temp paths for cleanup alongside images
+    tempImagePaths = [...tempImagePaths, ...fileResult.tempFilePaths];
+    if (!tempDir && fileResult.tempDir) tempDir = fileResult.tempDir;
 
     sdkOptions.hooks = {
       Notification: [{
@@ -599,107 +681,189 @@ async function queryClaudeSDK(command, options = {}, ws) {
       return { behavior: 'deny', message: decision.message ?? 'User denied tool use' };
     };
 
-    // Set stream-close timeout for interactive tools (Query constructor reads it synchronously). Claude Agent SDK has a default of 5s and this overrides it
-    const prevStreamTimeout = process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT;
-    process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT = '300000';
+    let attemptCommand = finalCommand;
+    let aborted = false;
 
-    let queryInstance;
-    try {
-      queryInstance = query({
-        prompt: finalCommand,
-        options: sdkOptions
-      });
-    } catch (hookError) {
-      // Older/newer SDK versions may not accept hook shapes yet.
-      // Keep notification behavior operational via runtime events even if hook registration fails.
-      console.warn('Failed to initialize Claude query with hooks, retrying without hooks:', hookError?.message || hookError);
-      delete sdkOptions.hooks;
-      queryInstance = query({
-        prompt: finalCommand,
-        options: sdkOptions
-      });
-    }
+    while (true) {
+      // On auto-resume, wire the current session id into sdkOptions so the SDK
+      // reattaches rather than starting fresh.
+      if (autoResumeAttempts > 0 && capturedSessionId) {
+        sdkOptions.resume = capturedSessionId;
+      }
 
-    // Restore immediately — Query constructor already captured the value
-    if (prevStreamTimeout !== undefined) {
-      process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT = prevStreamTimeout;
-    } else {
-      delete process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT;
-    }
+      // Set stream-close timeout (Query constructor reads it synchronously). SDK default is 5s.
+      const prevStreamTimeout = process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT;
+      process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT = '600000';
 
-    // Track the query instance for abort capability
-    if (capturedSessionId) {
-      addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir, ws);
-    }
+      let queryInstance;
+      try {
+        queryInstance = query({
+          prompt: attemptCommand,
+          options: sdkOptions
+        });
+      } catch (hookError) {
+        console.warn('Failed to initialize Claude query with hooks, retrying without hooks:', hookError?.message || hookError);
+        delete sdkOptions.hooks;
+        queryInstance = query({
+          prompt: attemptCommand,
+          options: sdkOptions
+        });
+      }
 
-    // Process streaming messages
-    console.log('Starting async generator loop for session:', capturedSessionId || 'NEW');
-    for await (const message of queryInstance) {
-      // Capture session ID from first message
-      if (message.session_id && !capturedSessionId) {
-
-        capturedSessionId = message.session_id;
-        addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir, ws);
-
-        // Set session ID on writer
-        if (ws.setSessionId && typeof ws.setSessionId === 'function') {
-          ws.setSessionId(capturedSessionId);
-        }
-
-        // Send session-created event only once for new sessions
-        if (!sessionId && !sessionCreatedSent) {
-          sessionCreatedSent = true;
-          ws.send(createNormalizedMessage({ kind: 'session_created', newSessionId: capturedSessionId, sessionId: capturedSessionId, provider: 'claude' }));
-        }
+      if (prevStreamTimeout !== undefined) {
+        process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT = prevStreamTimeout;
       } else {
-        // session_id already captured
+        delete process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT;
       }
 
-      // Transform and normalize message via adapter
-      const transformedMessage = transformMessage(message);
-      const sid = capturedSessionId || sessionId || null;
-
-      // Use adapter to normalize SDK events into NormalizedMessage[]
-      const normalized = sessionsService.normalizeMessage('claude', transformedMessage, sid);
-      for (const msg of normalized) {
-        // Preserve parentToolUseId from SDK wrapper for subagent tool grouping
-        if (transformedMessage.parentToolUseId && !msg.parentToolUseId) {
-          msg.parentToolUseId = transformedMessage.parentToolUseId;
-        }
-        ws.send(msg);
+      if (capturedSessionId) {
+        addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir, ws);
       }
 
-      // Extract and send token budget updates from result messages
-      if (message.type === 'result') {
-        const models = Object.keys(message.modelUsage || {});
-        if (models.length > 0) {
-          // Model info available in result message
+      let lastResultMessage = null;
+      let lastAssistantStopReason = null;
+      let messagesReceived = 0;
+      const attemptStartedAt = Date.now();
+
+      console.log(
+        `[claude-sdk] loop start session=${capturedSessionId || 'NEW'}` +
+        (autoResumeAttempts > 0 ? ` (auto-resume ${autoResumeAttempts}/${MAX_AUTO_RESUME_ATTEMPTS})` : '')
+      );
+
+      for await (const message of queryInstance) {
+        messagesReceived++;
+
+        if (message.session_id && !capturedSessionId) {
+          capturedSessionId = message.session_id;
+          addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir, ws);
+
+          if (ws.setSessionId && typeof ws.setSessionId === 'function') {
+            ws.setSessionId(capturedSessionId);
+          }
+
+          if (!sessionId && !sessionCreatedSent) {
+            sessionCreatedSent = true;
+            ws.send(createNormalizedMessage({ kind: 'session_created', newSessionId: capturedSessionId, sessionId: capturedSessionId, provider: 'claude' }));
+          }
         }
-        const tokenBudgetData = extractTokenBudget(message);
-        if (tokenBudgetData) {
-          ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+
+        if (message.type === 'assistant' && message?.message?.stop_reason) {
+          lastAssistantStopReason = message.message.stop_reason;
+        }
+
+        const transformedMessage = transformMessage(message);
+        const sid = capturedSessionId || sessionId || null;
+
+        const normalized = sessionsService.normalizeMessage('claude', transformedMessage, sid);
+        for (const msg of normalized) {
+          if (transformedMessage.parentToolUseId && !msg.parentToolUseId) {
+            msg.parentToolUseId = transformedMessage.parentToolUseId;
+          }
+          ws.send(msg);
+        }
+
+        if (message.type === 'result') {
+          lastResultMessage = message;
+          console.log('[claude-sdk] result', {
+            sessionId: capturedSessionId,
+            subtype: message.subtype,
+            is_error: message.is_error,
+            num_turns: message.num_turns,
+            duration_ms: message.duration_ms,
+            duration_api_ms: message.duration_api_ms,
+            lastAssistantStopReason,
+          });
+          const tokenBudgetData = extractTokenBudget(message);
+          if (tokenBudgetData) {
+            ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+          }
         }
       }
+
+      if (capturedSessionId) {
+        removeSession(capturedSessionId);
+      }
+
+      aborted = !!(capturedSessionId && recentlyAbortedSessions.has(capturedSessionId));
+      if (aborted) {
+        recentlyAbortedSessions.delete(capturedSessionId);
+      }
+
+      const premature = !aborted && (!lastResultMessage || lastResultMessage.subtype !== 'success' || lastResultMessage.is_error === true);
+
+      lastStopInfo = {
+        aborted,
+        premature,
+        subtype: lastResultMessage?.subtype ?? null,
+        stopReason: lastAssistantStopReason,
+        numTurns: lastResultMessage?.num_turns ?? null,
+        durationMs: lastResultMessage?.duration_ms ?? null,
+        isError: lastResultMessage?.is_error ?? false,
+        messagesReceived,
+        attemptDurationMs: Date.now() - attemptStartedAt,
+        receivedResult: !!lastResultMessage,
+      };
+
+      console.log('[claude-sdk] loop exit', {
+        sessionId: capturedSessionId,
+        attempt: autoResumeAttempts,
+        ...lastStopInfo,
+      });
+
+      const canRetry =
+        premature &&
+        !aborted &&
+        capturedSessionId &&
+        autoResumeAttempts < MAX_AUTO_RESUME_ATTEMPTS;
+
+      if (!canRetry) break;
+
+      autoResumeAttempts++;
+      const reasonLabel = lastStopInfo.subtype || lastStopInfo.stopReason || 'stream_ended';
+      console.log(`[claude-sdk] auto-resuming session ${capturedSessionId} (${autoResumeAttempts}/${MAX_AUTO_RESUME_ATTEMPTS}, reason: ${reasonLabel})`);
+
+      ws.send(createNormalizedMessage({
+        kind: 'status',
+        text: `Auto-resuming after interruption (${autoResumeAttempts}/${MAX_AUTO_RESUME_ATTEMPTS})`,
+        tokens: 0,
+        canInterrupt: true,
+        autoResume: true,
+        autoResumeAttempt: autoResumeAttempts,
+        reason: reasonLabel,
+        sessionId: capturedSessionId,
+        provider: 'claude',
+      }));
+
+      // Brief pause lets transient API errors clear before we reopen the stream.
+      await new Promise(r => setTimeout(r, 1000));
+
+      attemptCommand = 'Please continue from where you left off.';
     }
 
-    // Clean up session on completion
-    if (capturedSessionId) {
-      removeSession(capturedSessionId);
-    }
-
-    // Clean up temporary image files
     await cleanupTempFiles(tempImagePaths, tempDir);
 
-    // Send completion event
-    ws.send(createNormalizedMessage({ kind: 'complete', exitCode: 0, isNewSession: !sessionId && !!command, sessionId: capturedSessionId, provider: 'claude' }));
-    notifyRunStopped({
-      userId: ws?.userId || null,
-      provider: 'claude',
-      sessionId: capturedSessionId || sessionId || null,
-      sessionName: sessionSummary,
-      stopReason: 'completed'
-    });
-    // Complete
+    if (!aborted) {
+      ws.send(createNormalizedMessage({
+        kind: 'complete',
+        exitCode: 0,
+        isNewSession: !sessionId && !!command,
+        sessionId: capturedSessionId,
+        provider: 'claude',
+        premature: lastStopInfo?.premature ?? false,
+        stopReason: lastStopInfo?.stopReason ?? null,
+        subtype: lastStopInfo?.subtype ?? null,
+        numTurns: lastStopInfo?.numTurns ?? null,
+        durationMs: lastStopInfo?.durationMs ?? null,
+        autoResumeAttempts,
+      }));
+      notifyRunStopped({
+        userId: ws?.userId || null,
+        provider: 'claude',
+        sessionId: capturedSessionId || sessionId || null,
+        sessionName: sessionSummary,
+        stopReason: lastStopInfo?.premature ? 'premature' : 'completed'
+      });
+    }
 
   } catch (error) {
     console.error('SDK query error:', error);
@@ -745,6 +909,11 @@ async function abortClaudeSDKSession(sessionId) {
 
   try {
     console.log(`Aborting SDK session: ${sessionId}`);
+
+    // Mark as aborted BEFORE interrupt so the query loop sees it on exit and
+    // skips both auto-resume and its own `complete` event.
+    recentlyAbortedSessions.add(sessionId);
+    setTimeout(() => recentlyAbortedSessions.delete(sessionId), 10000);
 
     // Call interrupt() on the query instance
     await session.instance.interrupt();

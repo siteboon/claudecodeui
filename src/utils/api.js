@@ -1,4 +1,17 @@
 import { IS_PLATFORM } from "../constants/config";
+import { BASE_PATH, withBasePath } from "./basePath.js";
+
+const normalizeAppUrl = (url) => {
+  if (typeof url !== 'string' || !url.startsWith('/')) {
+    return url;
+  }
+
+  if (BASE_PATH && (url === BASE_PATH || url.startsWith(`${BASE_PATH}/`))) {
+    return url;
+  }
+
+  return withBasePath(url);
+};
 
 // Utility function for authenticated API calls
 export const authenticatedFetch = (url, options = {}) => {
@@ -15,7 +28,7 @@ export const authenticatedFetch = (url, options = {}) => {
     defaultHeaders['Authorization'] = `Bearer ${token}`;
   }
 
-  return fetch(url, {
+  return fetch(normalizeAppUrl(url), {
     ...options,
     headers: {
       ...defaultHeaders,
@@ -34,13 +47,13 @@ export const authenticatedFetch = (url, options = {}) => {
 export const api = {
   // Auth endpoints (no token required)
   auth: {
-    status: () => fetch('/api/auth/status'),
-    login: (username, password) => fetch('/api/auth/login', {
+    status: () => fetch(withBasePath('/api/auth/status')),
+    login: (username, password) => fetch(withBasePath('/api/auth/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     }),
-    register: (username, password) => fetch('/api/auth/register', {
+    register: (username, password) => fetch(withBasePath('/api/auth/register'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
@@ -51,9 +64,9 @@ export const api = {
 
   // Protected endpoints
   // config endpoint removed - no longer needed (frontend uses window.location)
-  projects: () => authenticatedFetch('/api/projects'),
+  projects: () => authenticatedFetch(withBasePath('/api/projects')),
   sessions: (projectName, limit = 5, offset = 0) =>
-    authenticatedFetch(`/api/projects/${projectName}/sessions?limit=${limit}&offset=${offset}`),
+    authenticatedFetch(withBasePath(`/api/projects/${projectName}/sessions?limit=${limit}&offset=${offset}`)),
   // Unified endpoint — all providers through one URL
   unifiedSessionMessages: (sessionId, provider = 'claude', { projectName = '', projectPath = '', limit = null, offset = 0 } = {}) => {
     const params = new URLSearchParams();
@@ -65,28 +78,28 @@ export const api = {
       params.append('offset', String(offset));
     }
     const queryString = params.toString();
-    return authenticatedFetch(`/api/sessions/${encodeURIComponent(sessionId)}/messages${queryString ? `?${queryString}` : ''}`);
+    return authenticatedFetch(withBasePath(`/api/sessions/${encodeURIComponent(sessionId)}/messages${queryString ? `?${queryString}` : ''}`));
   },
   renameProject: (projectName, displayName) =>
-    authenticatedFetch(`/api/projects/${projectName}/rename`, {
+    authenticatedFetch(withBasePath(`/api/projects/${projectName}/rename`), {
       method: 'PUT',
       body: JSON.stringify({ displayName }),
     }),
   deleteSession: (projectName, sessionId) =>
-    authenticatedFetch(`/api/projects/${projectName}/sessions/${sessionId}`, {
+    authenticatedFetch(withBasePath(`/api/projects/${projectName}/sessions/${sessionId}`), {
       method: 'DELETE',
     }),
   renameSession: (sessionId, summary, provider) =>
-    authenticatedFetch(`/api/sessions/${sessionId}/rename`, {
+    authenticatedFetch(withBasePath(`/api/sessions/${sessionId}/rename`), {
       method: 'PUT',
       body: JSON.stringify({ summary, provider }),
     }),
   deleteCodexSession: (sessionId) =>
-    authenticatedFetch(`/api/codex/sessions/${sessionId}`, {
+    authenticatedFetch(withBasePath(`/api/codex/sessions/${sessionId}`), {
       method: 'DELETE',
     }),
   deleteGeminiSession: (sessionId) =>
-    authenticatedFetch(`/api/gemini/sessions/${sessionId}`, {
+    authenticatedFetch(withBasePath(`/api/gemini/sessions/${sessionId}`), {
       method: 'DELETE',
     }),
   deleteProject: (projectName, force = false, deleteData = false) => {
@@ -94,7 +107,7 @@ export const api = {
     if (force) params.set('force', 'true');
     if (deleteData) params.set('deleteData', 'true');
     const qs = params.toString();
-    return authenticatedFetch(`/api/projects/${projectName}${qs ? `?${qs}` : ''}`, {
+    return authenticatedFetch(withBasePath(`/api/projects/${projectName}${qs ? `?${qs}` : ''}`), {
       method: 'DELETE',
     });
   },
@@ -102,87 +115,102 @@ export const api = {
     const token = localStorage.getItem('auth-token');
     const params = new URLSearchParams({ q: query, limit: String(limit) });
     if (token) params.set('token', token);
-    return `/api/search/conversations?${params.toString()}`;
+    return withBasePath(`/api/search/conversations?${params.toString()}`);
   },
   createWorkspace: (workspaceData) =>
-    authenticatedFetch('/api/projects/create-workspace', {
+    authenticatedFetch(withBasePath('/api/projects/create-workspace'), {
       method: 'POST',
       body: JSON.stringify(workspaceData),
     }),
   readFile: (projectName, filePath) =>
-    authenticatedFetch(`/api/projects/${projectName}/file?filePath=${encodeURIComponent(filePath)}`),
+    authenticatedFetch(withBasePath(`/api/projects/${projectName}/file?filePath=${encodeURIComponent(filePath)}`)),
   readFileBlob: (projectName, filePath) =>
-    authenticatedFetch(`/api/projects/${projectName}/files/content?path=${encodeURIComponent(filePath)}`),
+    authenticatedFetch(withBasePath(`/api/projects/${projectName}/files/content?path=${encodeURIComponent(filePath)}`)),
   saveFile: (projectName, filePath, content) =>
-    authenticatedFetch(`/api/projects/${projectName}/file`, {
+    authenticatedFetch(withBasePath(`/api/projects/${projectName}/file`), {
       method: 'PUT',
       body: JSON.stringify({ filePath, content }),
     }),
   getFiles: (projectName, options = {}) =>
-    authenticatedFetch(`/api/projects/${projectName}/files`, options),
+    authenticatedFetch(withBasePath(`/api/projects/${projectName}/files`), options),
 
   // File operations
   createFile: (projectName, { path, type, name }) =>
-    authenticatedFetch(`/api/projects/${projectName}/files/create`, {
+    authenticatedFetch(withBasePath(`/api/projects/${projectName}/files/create`), {
       method: 'POST',
       body: JSON.stringify({ path, type, name }),
     }),
 
   renameFile: (projectName, { oldPath, newName }) =>
-    authenticatedFetch(`/api/projects/${projectName}/files/rename`, {
+    authenticatedFetch(withBasePath(`/api/projects/${projectName}/files/rename`), {
       method: 'PUT',
       body: JSON.stringify({ oldPath, newName }),
     }),
 
   deleteFile: (projectName, { path, type }) =>
-    authenticatedFetch(`/api/projects/${projectName}/files`, {
+    authenticatedFetch(withBasePath(`/api/projects/${projectName}/files`), {
       method: 'DELETE',
       body: JSON.stringify({ path, type }),
     }),
 
   uploadFiles: (projectName, formData) =>
-    authenticatedFetch(`/api/projects/${projectName}/files/upload`, {
+    authenticatedFetch(withBasePath(`/api/projects/${projectName}/files/upload`), {
       method: 'POST',
       body: formData,
       headers: {}, // Let browser set Content-Type for FormData
+    }),
+
+  uploadProjectIcon: (projectName, file) => {
+    const formData = new FormData();
+    formData.append('icon', file);
+    return authenticatedFetch(withBasePath(`/api/projects/${projectName}/icon`), {
+      method: 'POST',
+      body: formData,
+      headers: {},
+    });
+  },
+
+  deleteProjectIcon: (projectName) =>
+    authenticatedFetch(withBasePath(`/api/projects/${projectName}/icon`), {
+      method: 'DELETE',
     }),
 
   // TaskMaster endpoints
   taskmaster: {
     // Initialize TaskMaster in a project
     init: (projectName) =>
-      authenticatedFetch(`/api/taskmaster/init/${projectName}`, {
+      authenticatedFetch(withBasePath(`/api/taskmaster/init/${projectName}`), {
         method: 'POST',
       }),
 
     // Add a new task
     addTask: (projectName, { prompt, title, description, priority, dependencies }) =>
-      authenticatedFetch(`/api/taskmaster/add-task/${projectName}`, {
+      authenticatedFetch(withBasePath(`/api/taskmaster/add-task/${projectName}`), {
         method: 'POST',
         body: JSON.stringify({ prompt, title, description, priority, dependencies }),
       }),
 
     // Parse PRD to generate tasks
     parsePRD: (projectName, { fileName, numTasks, append }) =>
-      authenticatedFetch(`/api/taskmaster/parse-prd/${projectName}`, {
+      authenticatedFetch(withBasePath(`/api/taskmaster/parse-prd/${projectName}`), {
         method: 'POST',
         body: JSON.stringify({ fileName, numTasks, append }),
       }),
 
     // Get available PRD templates
     getTemplates: () =>
-      authenticatedFetch('/api/taskmaster/prd-templates'),
+      authenticatedFetch(withBasePath('/api/taskmaster/prd-templates')),
 
     // Apply a PRD template
     applyTemplate: (projectName, { templateId, fileName, customizations }) =>
-      authenticatedFetch(`/api/taskmaster/apply-template/${projectName}`, {
+      authenticatedFetch(withBasePath(`/api/taskmaster/apply-template/${projectName}`), {
         method: 'POST',
         body: JSON.stringify({ templateId, fileName, customizations }),
       }),
 
     // Update a task
     updateTask: (projectName, taskId, updates) =>
-      authenticatedFetch(`/api/taskmaster/update-task/${projectName}/${taskId}`, {
+      authenticatedFetch(withBasePath(`/api/taskmaster/update-task/${projectName}/${taskId}`), {
         method: 'PUT',
         body: JSON.stringify(updates),
       }),
@@ -193,26 +221,26 @@ export const api = {
     const params = new URLSearchParams();
     if (dirPath) params.append('path', dirPath);
 
-    return authenticatedFetch(`/api/browse-filesystem?${params}`);
+    return authenticatedFetch(withBasePath(`/api/browse-filesystem?${params}`));
   },
 
   createFolder: (folderPath) =>
-    authenticatedFetch('/api/create-folder', {
+    authenticatedFetch(withBasePath('/api/create-folder'), {
       method: 'POST',
       body: JSON.stringify({ path: folderPath }),
     }),
 
   // User endpoints
   user: {
-    gitConfig: () => authenticatedFetch('/api/user/git-config'),
+    gitConfig: () => authenticatedFetch(withBasePath('/api/user/git-config')),
     updateGitConfig: (gitName, gitEmail) =>
-      authenticatedFetch('/api/user/git-config', {
+      authenticatedFetch(withBasePath('/api/user/git-config'), {
         method: 'POST',
         body: JSON.stringify({ gitName, gitEmail }),
       }),
-    onboardingStatus: () => authenticatedFetch('/api/user/onboarding-status'),
+    onboardingStatus: () => authenticatedFetch(withBasePath('/api/user/onboarding-status')),
     completeOnboarding: () =>
-      authenticatedFetch('/api/user/complete-onboarding', {
+      authenticatedFetch(withBasePath('/api/user/complete-onboarding'), {
         method: 'POST',
       }),
   },

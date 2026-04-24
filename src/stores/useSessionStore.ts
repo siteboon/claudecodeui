@@ -453,3 +453,27 @@ export function useSessionStore() {
 }
 
 export type SessionStore = ReturnType<typeof useSessionStore>;
+
+// ─── Multi-pane stubs ─────────────────────────────────────────────────────────
+// These are no-ops in single-pane builds. ChatPane.tsx imports them
+// so the module must export them even when the full multi-pane store
+// (singleton pattern used in the worktree) isn't wired up.
+
+/** Track that a pane for this session is mounted. No-op in single-pane builds. */
+export function registerPane(_sessionId: string): void {
+  // no-op
+}
+
+/** Track that a pane for this session has unmounted. No-op in single-pane builds. */
+export function unregisterPane(_sessionId: string): void {
+  // no-op
+}
+
+/**
+ * Return a tick counter that bumps when the session's store slot receives
+ * a realtime delta. In single-pane builds this returns a constant 0 so
+ * ChatPane degrades gracefully without the full singleton infrastructure.
+ */
+export function usePaneTick(_sessionId: string | null): number {
+  return 0;
+}

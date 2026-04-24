@@ -23,38 +23,90 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 0 0% 98.7%;
+    --foreground: 0 0% 0%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    --card-foreground: 0 0% 0%;
+    --popover: 0 0% 98.7%;
+    --popover-foreground: 0 0% 0%;
+    --primary: 0 0% 0%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 92.2%;
+    --secondary-foreground: 0 0% 0%;
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 32.3%;
+    --accent: 0 0% 92.2%;
+    --accent-foreground: 0 0% 0%;
+    --destructive: 358 75% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 89.6%;
+    --input: 0 0% 92.2%;
+    --ring: 0 0% 0%;
     --radius: 0.5rem;
 
-    /* Nav design tokens */
-    --nav-glass-bg: 0 0% 100% / 0.7;
-    --nav-glass-blur: 20px;
-    --nav-glass-saturate: 1.8;
-    --nav-tab-glow: 221.2 83.2% 53.3% / 0.18;
-    --nav-tab-ring: 221.2 83.2% 53.3% / 0.10;
-    --nav-float-shadow: 0 0% 0% / 0.06;
-    --nav-float-ring: 214.3 31.8% 91.4% / 0.5;
-    --nav-divider-color: 214.3 31.8% 91.4% / 0.5;
-    --nav-input-bg: 210 40% 96.1% / 0.5;
-    --nav-input-focus-ring: 221.2 83.2% 53.3% / 0.22;
+    /* Brand accent — eucalyptus green */
+    --eucalyptus: 157 65% 57%;
+    --eucalyptus-foreground: 157 100% 10%;
+    /* Brand accent — attention pink */
+    --attention: 330 100% 84%;
+    --attention-foreground: 330 100% 10%;
+    /* Session status colors */
+    --status-running: 157 65% 57%;
+    --status-waiting: 330 100% 84%;
+    --status-error: 358 75% 60%;
+    --status-idle: 0 0% 64.5%;
+    --status-done: 0 0% 45.6%;
+    /* Project rail tokens */
+    --rail-bg: 0 0% 96.1%;
+    --rail-active-marker: 157 65% 57%;
+    /* Dynamic project accent — overridden from JS based on open project */
+    --project-accent: #2bb28d;
+    --project-accent-foreground: #062818;
+
+    /* Sidebar tokens */
+    --sidebar: 0 0% 98.7%;
+    --sidebar-foreground: 0 0% 0%;
+    --sidebar-primary: 0 0% 0%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 92.2%;
+    --sidebar-accent-foreground: 0 0% 0%;
+    --sidebar-border: 0 0% 92.2%;
+    --sidebar-ring: 0 0% 0%;
+
+    /* Chart tokens */
+    --chart-1: 41 100% 51%;
+    --chart-2: 224 86% 56%;
+    --chart-3: 0 0% 64.5%;
+    --chart-4: 0 0% 89.6%;
+    --chart-5: 0 0% 45.6%;
+
+    /* Shadow tokens */
+    --shadow-color: 0 0% 0%;
+    --shadow-2xs: 0px 1px 2px 0px hsl(0 0% 0% / 0.09);
+    --shadow-xs: 0px 1px 2px 0px hsl(0 0% 0% / 0.09);
+    --shadow-sm: 0px 1px 2px 0px hsl(0 0% 0% / 0.18), 0px 1px 2px -1px hsl(0 0% 0% / 0.18);
+    --shadow: 0px 1px 2px 0px hsl(0 0% 0% / 0.18), 0px 1px 2px -1px hsl(0 0% 0% / 0.18);
+    --shadow-md: 0px 1px 2px 0px hsl(0 0% 0% / 0.18), 0px 2px 4px -1px hsl(0 0% 0% / 0.18);
+    --shadow-lg: 0px 1px 2px 0px hsl(0 0% 0% / 0.18), 0px 4px 6px -1px hsl(0 0% 0% / 0.18);
+    --shadow-xl: 0px 1px 2px 0px hsl(0 0% 0% / 0.18), 0px 8px 10px -1px hsl(0 0% 0% / 0.18);
+    --shadow-2xl: 0px 1px 2px 0px hsl(0 0% 0% / 0.45);
+
+    /* Typography */
+    --font-sans: Geist, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-serif: Georgia, serif;
+    --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    /* Nav design tokens — flat Vercel chrome */
+    --nav-glass-bg: 0 0% 98.7% / 0.85;
+    --nav-glass-blur: 10px;
+    --nav-glass-saturate: 1;
+    --nav-tab-glow: 0 0% 0% / 0;
+    --nav-tab-ring: 0 0% 0% / 0.08;
+    --nav-float-shadow: 0 0% 0% / 0.08;
+    --nav-float-ring: 0 0% 89.6% / 1;
+    --nav-divider-color: 0 0% 89.6% / 1;
+    --nav-input-bg: 0 0% 96.1%;
+    --nav-input-focus-ring: 0 0% 0% / 0.12;
 
     /* Safe area CSS variables */
     --safe-area-inset-top: env(safe-area-inset-top);
@@ -85,37 +137,67 @@
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 217.2 91.2% 8%;
-    --card-foreground: 210 40% 98%;
-    --popover: 217.2 91.2% 8%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 220 13% 46%;
-    --ring: 217.2 91.2% 59.8%;
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+    --card: 0 0% 3.5%;
+    --card-foreground: 0 0% 100%;
+    --popover: 0 0% 6.9%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 0 0% 100%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 0 0% 13.1%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 0 0% 11.3%;
+    --muted-foreground: 0 0% 64.5%;
+    --accent: 0 0% 19.9%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 100% 68%;
+    --destructive-foreground: 0 0% 0%;
+    --border: 0 0% 14.1%;
+    --input: 0 0% 19.9%;
+    --ring: 0 0% 64.5%;
 
-    /* Nav design tokens — dark overrides */
-    --nav-glass-bg: 217.2 91.2% 8% / 0.55;
-    --nav-glass-blur: 24px;
-    --nav-glass-saturate: 1.6;
-    --nav-tab-glow: 217.2 91.2% 59.8% / 0.25;
-    --nav-tab-ring: 217.2 91.2% 59.8% / 0.15;
-    --nav-float-shadow: 0 0% 0% / 0.35;
-    --nav-float-ring: 217.2 32.6% 17.5% / 0.3;
-    --nav-divider-color: 217.2 32.6% 17.5% / 0.5;
-    --nav-input-bg: 217.2 32.6% 17.5% / 0.5;
-    --nav-input-focus-ring: 217.2 91.2% 59.8% / 0.25;
+    /* Brand accent — dark */
+    --eucalyptus: 157 55% 50%;
+    --eucalyptus-foreground: 0 0% 100%;
+    --attention: 330 80% 75%;
+    --attention-foreground: 0 0% 0%;
+    --status-running: 157 55% 50%;
+    --status-waiting: 330 80% 75%;
+    --status-error: 0 100% 68%;
+    --status-idle: 0 0% 45.6%;
+    --status-done: 0 0% 32.3%;
+    --rail-bg: 0 0% 6.9%;
+    --rail-active-marker: 157 55% 50%;
+
+    /* Sidebar tokens — dark */
+    --sidebar: 0 0% 6.9%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 0 0% 100%;
+    --sidebar-primary-foreground: 0 0% 0%;
+    --sidebar-accent: 0 0% 19.9%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 0 0% 19.9%;
+    --sidebar-ring: 0 0% 64.5%;
+
+    /* Chart tokens — dark */
+    --chart-1: 41 100% 51%;
+    --chart-2: 218 90% 55%;
+    --chart-3: 0 0% 45.6%;
+    --chart-4: 0 0% 32.3%;
+    --chart-5: 0 0% 89.6%;
+
+    /* Nav design tokens — dark, flat Vercel chrome */
+    --nav-glass-bg: 0 0% 0% / 0.85;
+    --nav-glass-blur: 12px;
+    --nav-glass-saturate: 1;
+    --nav-tab-glow: 0 0% 100% / 0;
+    --nav-tab-ring: 0 0% 100% / 0.08;
+    --nav-float-shadow: 0 0% 0% / 0.6;
+    --nav-float-ring: 0 0% 14.1% / 1;
+    --nav-divider-color: 0 0% 14.1% / 1;
+    --nav-input-bg: 0 0% 11.3%;
+    --nav-input-focus-ring: 0 0% 100% / 0.18;
   }
 }
 
@@ -128,7 +210,8 @@
   
   body {
     @apply bg-background text-foreground;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: var(--font-sans);
+    font-feature-settings: "rlig" 1, "calt" 1;
     margin: 0;
     padding: 0;
   }
@@ -266,32 +349,32 @@
     -webkit-backdrop-filter: blur(var(--nav-glass-blur)) saturate(var(--nav-glass-saturate));
   }
 
-  /* Nav tab active pill glow — uses theme tokens */
+  /* Nav tab active pill — flat ring, no glow */
   .nav-tab-active {
-    box-shadow: 0 1px 8px hsl(var(--nav-tab-glow)),
-                0 0 0 1px hsl(var(--nav-tab-ring));
+    box-shadow: 0 0 0 1px hsl(var(--nav-tab-ring));
   }
 
-  /* Floating mobile nav bar — uses theme tokens */
+  /* Floating mobile nav bar — flat shadow + hairline ring */
   .mobile-nav-float {
-    box-shadow: 0 -1px 20px hsl(var(--nav-float-shadow)),
+    box-shadow: 0 4px 16px -2px hsl(var(--nav-float-shadow)),
                 0 0 0 1px hsl(var(--nav-float-ring));
   }
 
-  /* Subtle sidebar divider — uses theme tokens */
+  /* Hairline sidebar divider */
   .nav-divider {
     height: 1px;
-    background: linear-gradient(90deg, transparent, hsl(var(--nav-divider-color)) 20%, hsl(var(--nav-divider-color)) 80%, transparent);
+    background: hsl(var(--nav-divider-color));
   }
 
-  /* Nav search input surface — uses theme tokens */
+  /* Nav search input surface — flat Vercel chip */
   .nav-search-input {
     background: hsl(var(--nav-input-bg));
-    border: none;
+    border: 1px solid hsl(var(--border));
   }
 
   .nav-search-input:focus-within {
     background: hsl(var(--background));
+    border-color: hsl(var(--ring));
     box-shadow: 0 0 0 2px hsl(var(--nav-input-focus-ring));
   }
   

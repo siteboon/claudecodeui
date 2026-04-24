@@ -142,3 +142,16 @@ tasks/
 
 # Git worktrees
 .worktrees/
+
+# Pluto redesign artifacts (from pluto-gui.zip, design reference only)
+/Pluto Redesign.html
+/design-canvas.jsx
+/pluto/
+/uploads/
+
+# agent runtime artifacts
+.prose/
+
+# auth files
+AUTH.md
+AUTH.*.md

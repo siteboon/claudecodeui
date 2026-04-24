@@ -44,6 +44,16 @@ export type CreateWorkspaceResponse = {
   project?: Record<string, unknown>;
   error?: string;
   details?: string;
+  code?: string;
+  projectName?: string;
+  path?: string;
+};
+
+export type CreateWorkspaceErrorInfo = {
+  code?: string;
+  projectName?: string;
+  path?: string;
+  status?: number;
 };
 
 export type CloneProgressEvent = {

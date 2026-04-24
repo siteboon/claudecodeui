@@ -128,8 +128,8 @@
     "send": "Send",
     "stop": "Stop",
     "hintText": {
-      "ctrlEnter": "Ctrl+Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands",
-      "enter": "Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands"
+      "ctrlEnter": "Ctrl+Enter send · Shift+Enter newline · / for commands",
+      "enter": "Enter send · Shift+Enter newline · / for commands"
     },
     "clickToChangeMode": "Click to change permission mode (or press Tab in input)",
     "showAllCommands": "Show all commands",
@@ -138,39 +138,38 @@
   },
   "thinkingMode": {
     "selector": {
-      "title": "Thinking Mode",
-      "description": "Extended thinking gives Claude more time to evaluate alternatives",
+      "title": "Reasoning Effort",
+      "description": "Controls how much effort Claude puts into thinking before answering",
       "active": "Active",
-      "tip": "Higher thinking modes take more time but provide more thorough analysis"
+      "tip": "Higher effort levels take more time but produce more thorough reasoning"
     },
     "modes": {
-      "none": {
-        "name": "Standard",
-        "description": "Regular Claude response",
-        "prefix": ""
+      "auto": {
+        "name": "Auto",
+        "description": "Adaptive thinking — Claude decides"
       },
-      "think": {
-        "name": "Think",
-        "description": "Basic extended thinking",
-        "prefix": "think"
+      "low": {
+        "name": "Low",
+        "description": "Minimal thinking, fastest responses"
       },
-      "thinkHard": {
-        "name": "Think Hard",
-        "description": "More thorough evaluation",
-        "prefix": "think hard"
+      "medium": {
+        "name": "Medium",
+        "description": "Moderate thinking"
       },
-      "thinkHarder": {
-        "name": "Think Harder",
-        "description": "Deep analysis with alternatives",
-        "prefix": "think harder"
+      "high": {
+        "name": "High",
+        "description": "Deep reasoning (SDK default)"
       },
-      "ultrathink": {
-        "name": "Ultrathink",
-        "description": "Maximum thinking budget",
-        "prefix": "ultrathink"
+      "xhigh": {
+        "name": "Extra High",
+        "description": "Higher reasoning budget"
+      },
+      "max": {
+        "name": "Max",
+        "description": "Maximum effort (Opus 4.6/4.7 only)"
       }
     },
-    "buttonTitle": "Thinking mode: {{mode}}"
+    "buttonTitle": "Reasoning effort: {{mode}}"
   },
   "providerSelection": {
     "title": "Choose Your AI Assistant",

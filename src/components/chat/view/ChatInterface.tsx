@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import PermissionContext from '../../../contexts/PermissionContext';
 import { QuickSettingsPanel } from '../../quick-settings-panel';
-import type { ChatInterfaceProps, Provider  } from '../types/types';
+import type { ChatInterfaceProps, ChatMessage, Provider  } from '../types/types';
 import type { LLMProvider } from '../../../types/app';
 import { useChatProviderState } from '../hooks/useChatProviderState';
 import { useChatSessionState } from '../hooks/useChatSessionState';
@@ -19,6 +19,11 @@ import ChatComposer from './subcomponents/ChatComposer';
 type PendingViewSession = {
   sessionId: string | null;
   startedAt: number;
+  // The user message that was optimistically rendered for this in-flight send.
+  // Attached here on submit so the session_created handler can flush it into
+  // the new session's store even if the user navigated to a different session
+  // before the backend replied.
+  pendingMessage?: ChatMessage;
 };
 
 function ChatInterface({
@@ -35,6 +40,7 @@ function ChatInterface({
   onSessionNotProcessing,
   processingSessions,
   onReplaceTemporarySession,
+  onAddPendingNewSession,
   onNavigateToSession,
   onShowSettings,
   autoExpandTools,
@@ -78,6 +84,7 @@ function ChatInterface({
     pendingPermissionRequests,
     setPendingPermissionRequests,
     cyclePermissionMode,
+    selectPermissionMode,
   } = useChatProviderState({
     selectedSession,
   });
@@ -123,7 +130,6 @@ function ChatInterface({
     sendMessage,
     autoScrollToBottom,
     externalMessageUpdate,
-    processingSessions,
     resetStreamingState,
     pendingViewSessionRef,
     sessionStore,
@@ -155,6 +161,14 @@ function ChatInterface({
     setAttachedImages,
     uploadingImages,
     imageErrors,
+    attachedFiles,
+    setAttachedFiles,
+    fileErrors,
+    fileInputRef,
+    folderInputRef,
+    openFilePicker,
+    openFolderPicker,
+    handleFileSelection,
     getRootProps,
     getInputProps,
     isDragActive,
@@ -189,7 +203,8 @@ function ChatInterface({
     sendMessage,
     sendByCtrlEnter,
     onSessionActive,
-    onSessionProcessing,
+    onAddPendingNewSession,
+    onSessionNotProcessing,
     onInputFocusChange,
     onFileOpen,
     onShowSettings,
@@ -235,6 +250,7 @@ function ChatInterface({
     streamBufferRef,
     streamTimerRef,
     accumulatedStreamRef,
+    onSessionActive,
     onSessionInactive,
     onSessionProcessing,
     onSessionNotProcessing,
@@ -356,7 +372,7 @@ function ChatInterface({
           onAbortSession={handleAbortSession}
           provider={provider}
           permissionMode={permissionMode}
-          onModeSwitch={cyclePermissionMode}
+          onPermissionModeSelect={selectPermissionMode}
           thinkingMode={thinkingMode}
           setThinkingMode={setThinkingMode}
           tokenBudget={tokenBudget}
@@ -377,6 +393,18 @@ function ChatInterface({
           }
           uploadingImages={uploadingImages}
           imageErrors={imageErrors}
+          attachedFiles={attachedFiles}
+          onRemoveFile={(index) =>
+            setAttachedFiles((previous) =>
+              previous.filter((_, currentIndex) => currentIndex !== index),
+            )
+          }
+          fileErrors={fileErrors}
+          fileInputRef={fileInputRef}
+          folderInputRef={folderInputRef}
+          openFilePicker={openFilePicker}
+          openFolderPicker={openFolderPicker}
+          onFileSelection={handleFileSelection}
           showFileDropdown={showFileDropdown}
           filteredFiles={filteredFiles}
           selectedFileIndex={selectedFileIndex}

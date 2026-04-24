@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Sidebar from '../sidebar/view/Sidebar';
 import MainContent from '../main-content/view/MainContent';
@@ -7,9 +7,16 @@ import { useWebSocket } from '../../contexts/WebSocketContext';
 import { useDeviceSettings } from '../../hooks/useDeviceSettings';
 import { useSessionProtection } from '../../hooks/useSessionProtection';
 import { useProjectsState } from '../../hooks/useProjectsState';
+import { useSessionStatusMap } from '../../hooks/useSessionStatusMap';
+import { useArchivedSessions } from '../../hooks/useArchivedSessions';
+import { lookupSessionWithProviderStamp } from '../../hooks/useSessionLookup';
+import type { ProjectSession, SessionStatus } from '../../types/app';
+import type { PaneEntry } from '../main-content/types/types';
+import { navigationTarget, parsePaneRoute } from '../../utils/paneRoute';
 
 export default function AppContent() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { sessionId } = useParams<{ sessionId?: string }>();
   const { t } = useTranslation('common');
   const { isMobile } = useDeviceSettings({ trackPWA: false });
@@ -27,6 +34,7 @@ export default function AppContent() {
   } = useSessionProtection();
 
   const {
+    projects,
     selectedProject,
     selectedSession,
     activeTab,
@@ -39,6 +47,7 @@ export default function AppContent() {
     setShowSettings,
     openSettings,
     refreshProjectsSilently,
+    addPendingNewSession,
     sidebarSharedProps,
   } = useProjectsState({
     sessionId,
@@ -47,6 +56,119 @@ export default function AppContent() {
     isMobile,
     activeSessions,
   });
+
+  // ─── Multi-pane derivation ────────────────────────────────────────────────
+  // Parse the URL once per location change. URL shape:
+  //   /session/<paneIds[0]>?panes=<id1>,<id2>&focus=<N>
+  const parsedRoute = useMemo(
+    () => parsePaneRoute(sessionId ?? null, location.search),
+    [sessionId, location.search],
+  );
+
+  const panes = useMemo<PaneEntry[]>(() => {
+    return parsedRoute.paneIds.map((paneId) => {
+      const match = lookupSessionWithProviderStamp(projects, paneId);
+      return {
+        paneId,
+        session: match?.session ?? null,
+        project: match?.project ?? null,
+      };
+    });
+  }, [parsedRoute.paneIds, projects]);
+
+  const focusedPane = panes[parsedRoute.focusIndex] ?? panes[0] ?? null;
+  const focusedSession = focusedPane?.session ?? selectedSession;
+  const focusedProject = focusedPane?.project ?? selectedProject;
+
+  const handlePaneFocus = useCallback(
+    (paneId: string) => {
+      const nextIndex = parsedRoute.paneIds.indexOf(paneId);
+      if (nextIndex < 0 || nextIndex === parsedRoute.focusIndex) return;
+      const target = navigationTarget(parsedRoute, parsedRoute.paneIds, nextIndex);
+      navigate(`${target.path}${target.search}`, { replace: target.replace });
+    },
+    [navigate, parsedRoute],
+  );
+
+  const handlePaneClose = useCallback(
+    (paneId: string) => {
+      const idx = parsedRoute.paneIds.indexOf(paneId);
+      if (idx < 0) return;
+      const nextPaneIds = parsedRoute.paneIds.filter((_, i) => i !== idx);
+      if (nextPaneIds.length === 0) {
+        navigate('/');
+        return;
+      }
+      let nextFocus = parsedRoute.focusIndex;
+      if (idx === parsedRoute.focusIndex) {
+        nextFocus = Math.max(0, idx - 1);
+      } else if (idx < parsedRoute.focusIndex) {
+        nextFocus = parsedRoute.focusIndex - 1;
+      }
+      const target = navigationTarget(parsedRoute, nextPaneIds, nextFocus);
+      navigate(`${target.path}${target.search}`, { replace: target.replace });
+    },
+    [navigate, parsedRoute],
+  );
+
+  const openPaneFromSidebar = useCallback(
+    (targetSessionId: string, openInNewPane = false) => {
+      console.log('[pane] openPaneFromSidebar', targetSessionId, 'openInNewPane=', openInNewPane);
+      if (!openInNewPane) {
+        const nextPaneIds = parsedRoute.paneIds.length === 0
+          ? [targetSessionId]
+          : parsedRoute.paneIds.map((id, i) => (i === parsedRoute.focusIndex ? targetSessionId : id));
+        const target = navigationTarget(parsedRoute, nextPaneIds, parsedRoute.focusIndex);
+        navigate(`${target.path}${target.search}`, { replace: target.replace });
+        return;
+      }
+      const alreadyOpenAt = parsedRoute.paneIds.indexOf(targetSessionId);
+      if (alreadyOpenAt >= 0) {
+        const target = navigationTarget(parsedRoute, parsedRoute.paneIds, alreadyOpenAt);
+        navigate(`${target.path}${target.search}`, { replace: target.replace });
+        return;
+      }
+      const nextPaneIds = [...parsedRoute.paneIds, targetSessionId];
+      const target = navigationTarget(parsedRoute, nextPaneIds, nextPaneIds.length - 1);
+      navigate(`${target.path}${target.search}`, { replace: target.replace });
+    },
+    [navigate, parsedRoute],
+  );
+
+  const handleSidebarSessionSelect = useCallback(
+    (session: ProjectSession, opts?: { openInNewPane?: boolean }) => {
+      console.log('[sidebar] handleSidebarSessionSelect', session.id, 'openInNewPane=', opts?.openInNewPane ?? false);
+      sidebarSharedProps.onSessionSelect(session);
+      openPaneFromSidebar(session.id, opts?.openInNewPane ?? false);
+    },
+    [sidebarSharedProps, openPaneFromSidebar],
+  );
+
+  // Ctrl+Shift+W closes focused pane (only when >1 pane open)
+  useEffect(() => {
+    const handleKeydown = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      if (e.shiftKey && !e.altKey && (e.key === 'w' || e.key === 'W')) {
+        if (parsedRoute.paneIds.length > 1) {
+          const isTypingTarget = (target: EventTarget | null): boolean => {
+            if (!(target instanceof HTMLElement)) return false;
+            const tag = target.tagName;
+            return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
+          };
+          if (!isTypingTarget(e.target)) {
+            const focused = parsedRoute.paneIds[parsedRoute.focusIndex];
+            if (focused) {
+              e.preventDefault();
+              handlePaneClose(focused);
+            }
+          }
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeydown);
+    return () => window.removeEventListener('keydown', handleKeydown);
+  }, [handlePaneClose, parsedRoute]);
 
   useEffect(() => {
     // Expose a non-blocking refresh for chat/session flows.
@@ -104,7 +226,8 @@ export default function AppContent() {
     };
   }, [navigate, refreshProjectsSilently, setActiveTab, setSidebarOpen]);
 
-  // Permission recovery: query pending permissions on WebSocket reconnect or session change
+  // Permission recovery: query pending permissions on WebSocket reconnect or session change.
+  // Covers all open panes, not just the focused one.
   useEffect(() => {
     const isReconnect = isConnected && !wasConnectedRef.current;
 
@@ -114,13 +237,47 @@ export default function AppContent() {
       wasConnectedRef.current = false;
     }
 
-    if (isConnected && selectedSession?.id) {
-      sendMessage({
-        type: 'get-pending-permissions',
-        sessionId: selectedSession.id
-      });
+    if (!isConnected) return;
+
+    const sessionIds = panes.length > 0
+      ? panes.map((p) => p.paneId)
+      : selectedSession?.id ? [selectedSession.id] : [];
+
+    for (const id of sessionIds) {
+      sendMessage({ type: 'get-pending-permissions', sessionId: id });
     }
-  }, [isConnected, selectedSession?.id, sendMessage]);
+  }, [isConnected, panes, selectedSession?.id, sendMessage]);
+
+  const statusMap = useSessionStatusMap({ activeSessions, processingSessions });
+  const sessionStatus: SessionStatus | undefined = focusedSession
+    ? statusMap.get(focusedSession.id)
+    : undefined;
+  const { isArchived } = useArchivedSessions();
+
+  // "Waiting" count excludes sessions the user can already see in a pane.
+  const paneSessionIds = useMemo(
+    () => new Set(panes.map((pane) => pane.paneId)),
+    [panes],
+  );
+  const waitingCount = useMemo(() => {
+    let count = 0;
+    for (const id of processingSessions) {
+      if (paneSessionIds.has(id)) continue;
+      if (isArchived(id)) continue;
+      count++;
+    }
+    return count;
+  }, [processingSessions, paneSessionIds, isArchived]);
+  const onJumpToNextWaiting = useCallback(() => {
+    for (const id of processingSessions) {
+      if (!paneSessionIds.has(id)) {
+        openPaneFromSidebar(id, false);
+        return;
+      }
+    }
+    const first = processingSessions.values().next().value;
+    if (first) openPaneFromSidebar(first, false);
+  }, [processingSessions, paneSessionIds, openPaneFromSidebar]);
 
   // Adjust the app container to stay above the virtual keyboard on iOS Safari.
   // On Chrome for Android the layout viewport already shrinks when the keyboard opens,
@@ -146,7 +303,12 @@ export default function AppContent() {
     <div className="fixed inset-0 flex bg-background" style={{ bottom: 'var(--keyboard-height, 0px)' }}>
       {!isMobile ? (
         <div className="h-full flex-shrink-0 border-r border-border/50">
-          <Sidebar {...sidebarSharedProps} />
+          <Sidebar
+            {...sidebarSharedProps}
+            onSessionSelect={handleSidebarSessionSelect}
+            activeSessions={activeSessions}
+            processingSessions={processingSessions}
+          />
         </div>
       ) : (
         <div
@@ -172,15 +334,20 @@ export default function AppContent() {
             onClick={(event) => event.stopPropagation()}
             onTouchStart={(event) => event.stopPropagation()}
           >
-            <Sidebar {...sidebarSharedProps} />
+            <Sidebar
+              {...sidebarSharedProps}
+              onSessionSelect={handleSidebarSessionSelect}
+              activeSessions={activeSessions}
+              processingSessions={processingSessions}
+            />
           </div>
         </div>
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
         <MainContent
-          selectedProject={selectedProject}
-          selectedSession={selectedSession}
+          selectedProject={focusedProject}
+          selectedSession={focusedSession}
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           ws={ws}
@@ -196,9 +363,17 @@ export default function AppContent() {
           onSessionNotProcessing={markSessionAsNotProcessing}
           processingSessions={processingSessions}
           onReplaceTemporarySession={replaceTemporarySession}
-          onNavigateToSession={(targetSessionId: string) => navigate(`/session/${targetSessionId}`)}
+          onAddPendingNewSession={addPendingNewSession}
+          onNavigateToSession={(targetSessionId: string) => openPaneFromSidebar(targetSessionId, false)}
           onShowSettings={() => setShowSettings(true)}
           externalMessageUpdate={externalMessageUpdate}
+          sessionStatus={sessionStatus}
+          waitingCount={waitingCount}
+          onJumpToNextWaiting={onJumpToNextWaiting}
+          panes={panes}
+          focusedPaneIndex={parsedRoute.focusIndex}
+          onPaneFocus={handlePaneFocus}
+          onPaneClose={handlePaneClose}
         />
       </div>
 

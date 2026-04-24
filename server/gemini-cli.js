@@ -15,7 +15,7 @@ import { createNormalizedMessage } from './shared/utils.js';
 let activeGeminiProcesses = new Map(); // Track active processes by session ID
 
 async function spawnGemini(command, options = {}, ws) {
-    const { sessionId, projectPath, cwd, toolsSettings, permissionMode, images, sessionSummary } = options;
+    const { sessionId, projectPath, cwd, toolsSettings, permissionMode, images, fileData, sessionSummary } = options;
     let capturedSessionId = sessionId; // Track session ID throughout the process
     let sessionCreatedSent = false; // Track if we've already sent session-created event
     let assistantBlocks = []; // Accumulate the full response blocks including tools
@@ -92,6 +92,49 @@ async function spawnGemini(command, options = {}, ws) {
             }
         } catch (error) {
             console.error('Error processing images for Gemini:', error);
+        }
+    }
+
+    // Handle uploaded files — move from upload batch dir to project .tmp/uploads/
+    const tempUploadedFilePaths = [];
+    let tempUploadDir = null;
+    if (fileData && fileData.uploadBatchId && fileData.files && fileData.files.length > 0) {
+        try {
+            const userId = ws?.userId || 'unknown';
+            tempUploadDir = path.join(workingDir, '.tmp', 'uploads', Date.now().toString());
+            await fs.mkdir(tempUploadDir, { recursive: true });
+
+            const batchDir = path.join(os.tmpdir(), 'claude-ui-uploads', String(userId), fileData.uploadBatchId);
+
+            for (const file of fileData.files) {
+                const sourcePath = path.join(batchDir, file.storedName);
+                const destName = file.relativePath
+                    ? file.relativePath.replace(/[^a-zA-Z0-9._/\\-]/g, '_')
+                    : file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+                const destPath = path.join(tempUploadDir, destName);
+                await fs.mkdir(path.dirname(destPath), { recursive: true });
+
+                try {
+                    await fs.copyFile(sourcePath, destPath);
+                    tempUploadedFilePaths.push(destPath);
+                } catch (err) {
+                    console.error(`Failed to copy uploaded file ${file.name}:`, err);
+                }
+            }
+
+            // Clean up the upload batch directory
+            await fs.rm(batchDir, { recursive: true, force: true }).catch(() => {});
+
+            if (tempUploadedFilePaths.length > 0) {
+                const fileNote = `\n\n[Files provided at the following paths:]\n${tempUploadedFilePaths.map((p, i) => `${i + 1}. ${p}`).join('\n')}`;
+                // Update the command in args
+                const promptIndex = args.indexOf('--prompt');
+                if (promptIndex !== -1) {
+                    args[promptIndex + 1] = args[promptIndex + 1] + fileNote;
+                }
+            }
+        } catch (error) {
+            console.error('Error processing files for Gemini:', error);
         }
     }
 
@@ -206,8 +249,9 @@ async function spawnGemini(command, options = {}, ws) {
         };
 
         // Attach temp file info to process for cleanup later
-        geminiProcess.tempImagePaths = tempImagePaths;
+        geminiProcess.tempImagePaths = [...tempImagePaths, ...tempUploadedFilePaths];
         geminiProcess.tempDir = tempDir;
+        geminiProcess.tempUploadDir = tempUploadDir;
 
         // Store process reference for potential abort
         const processKey = capturedSessionId || sessionId || Date.now().toString();
@@ -375,6 +419,9 @@ async function spawnGemini(command, options = {}, ws) {
                 if (geminiProcess.tempDir) {
                     await fs.rm(geminiProcess.tempDir, { recursive: true, force: true }).catch(err => { });
                 }
+            }
+            if (geminiProcess.tempUploadDir) {
+                await fs.rm(geminiProcess.tempUploadDir, { recursive: true, force: true }).catch(() => { });
             }
 
             if (code === 0) {

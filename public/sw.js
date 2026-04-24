@@ -2,9 +2,10 @@
 // Cache only manifest (needed for PWA install). HTML and JS are never pre-cached
 // so a rebuild + refresh always picks up the latest assets.
 const CACHE_NAME = 'claude-ui-v2';
-const urlsToCache = [
-  '/manifest.json'
-];
+const manifestUrl = new URL('manifest.json', self.registration.scope).toString();
+const logo256Url = new URL('logo-256.png', self.registration.scope).toString();
+const logo128Url = new URL('logo-128.png', self.registration.scope).toString();
+const urlsToCache = [manifestUrl];
 
 // Install event
 self.addEventListener('install', event => {
@@ -27,7 +28,7 @@ self.addEventListener('fetch', event => {
   // Navigation requests (HTML) — always go to network, no caching
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match('/manifest.json').then(() =>
+      fetch(event.request).catch(() => caches.match(manifestUrl).then(() =>
         new Response('<h1>Offline</h1><p>Please check your connection.</p>', {
           headers: { 'Content-Type': 'text/html' }
         })
@@ -84,8 +85,8 @@ self.addEventListener('push', event => {
 
   const options = {
     body: payload.body || '',
-    icon: '/logo-256.png',
-    badge: '/logo-128.png',
+    icon: logo256Url,
+    badge: logo128Url,
     data: payload.data || {},
     tag: payload.data?.tag || `${payload.data?.sessionId || 'global'}:${payload.data?.code || 'default'}`,
     renotify: true
@@ -102,7 +103,7 @@ self.addEventListener('notificationclick', event => {
 
   const sessionId = event.notification.data?.sessionId;
   const provider = event.notification.data?.provider || null;
-  const urlPath = sessionId ? `/session/${sessionId}` : '/';
+  const urlPath = sessionId ? `session/${sessionId}` : './';
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async clientList => {
@@ -118,7 +119,7 @@ self.addEventListener('notificationclick', event => {
           return;
         }
       }
-      return self.clients.openWindow(urlPath);
+      return self.clients.openWindow(new URL(urlPath, self.registration.scope).toString());
     })
   );
 });

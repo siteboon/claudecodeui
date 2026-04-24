@@ -126,6 +126,26 @@ const readPersistedTab = (): AppTab => {
   return 'chat';
 };
 
+type PendingNewSession = {
+  projectName: string;
+  firstMessage: string;
+  createdAt: number;
+  // Snapshot of the project's Claude session ids at the moment the pending
+  // row was added. Reconciliation fires when a session id appears that is
+  // NOT in this set — i.e. a genuinely new-since-add session. Using a plain
+  // `sessions.length > 0` check would evict the pending row on the very
+  // next `projects_updated` for any project that already has sessions,
+  // which is the common case.
+  existingSessionIds: Set<string>;
+};
+
+// Synthetic rows stop mattering once the server has seen our send. Evict them
+// after 2 minutes even if no `projects_updated` ever references the real id,
+// so a bad send doesn't leave a ghost row in the sidebar forever.
+const PENDING_NEW_SESSION_TTL_MS = 2 * 60 * 1000;
+
+const pendingSessionId = (projectName: string) => `new-session-${projectName}`;
+
 export function useProjectsState({
   sessionId,
   navigate,
@@ -137,6 +157,10 @@ export function useProjectsState({
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [selectedSession, setSelectedSession] = useState<ProjectSession | null>(null);
   const [activeTab, setActiveTab] = useState<AppTab>(readPersistedTab);
+  // Keyed by project name — one in-flight new-session row per project,
+  // per Linus. If the user fires two rapid sends in the same project, the
+  // second overwrites the first's placeholder; rare enough to ignore.
+  const [pendingNewSessions, setPendingNewSessions] = useState<Record<string, PendingNewSession>>({});
 
   useEffect(() => {
     try {
@@ -264,6 +288,35 @@ export function useProjectsState({
     }
 
     setProjects(updatedProjects);
+
+    // Reconcile pending placeholders: once a `projects_updated` payload
+    // contains a real Claude session for a project that has an optimistic
+    // row, the placeholder has served its purpose. Drop it so the real row
+    // takes over (synthetic keyed by `new-session-<projectName>` unmounts
+    // and the real session row with its real id mounts in its place).
+    setPendingNewSessions((prev) => {
+      const prevKeys = Object.keys(prev);
+      if (prevKeys.length === 0) return prev;
+      let changed = false;
+      const next: Record<string, PendingNewSession> = {};
+      const now = Date.now();
+      for (const [projectName, entry] of Object.entries(prev)) {
+        const project = updatedProjects.find((p) => p.name === projectName);
+        // Reconcile only when a session id lands that wasn't present at
+        // add time. `sessions.length > 0` would fire immediately for any
+        // project that already had sessions before the user hit "New".
+        const realSessionArrived = Boolean(
+          project && project.sessions?.some((s) => !entry.existingSessionIds.has(s.id)),
+        );
+        const expired = now - entry.createdAt > PENDING_NEW_SESSION_TTL_MS;
+        if (realSessionArrived || expired) {
+          changed = true;
+          continue;
+        }
+        next[projectName] = entry;
+      }
+      return changed ? next : prev;
+    });
 
     if (!selectedProject) {
       return;
@@ -505,9 +558,72 @@ export function useProjectsState({
     [navigate, selectedProject?.name],
   );
 
+  const addPendingNewSession = useCallback((projectName: string, firstMessage: string) => {
+    if (!projectName) return;
+    setPendingNewSessions((prev) => {
+      // Snapshot the project's current Claude session ids so the reconcile
+      // step can tell "new session landed" from "project already had
+      // sessions when we started".
+      const project = projects.find((p) => p.name === projectName);
+      const existingSessionIds = new Set<string>(
+        (project?.sessions ?? []).map((s) => s.id),
+      );
+      return {
+        ...prev,
+        [projectName]: {
+          projectName,
+          firstMessage,
+          createdAt: Date.now(),
+          existingSessionIds,
+        },
+      };
+    });
+  }, [projects]);
+
+  // Merge synthetic pending rows into the sidebar-facing projects list.
+  // Keyed by `new-session-<projectName>`; React's natural unmount when this
+  // id disappears from `sessions` (on reconciliation) is the whole story —
+  // no flicker because `projects_updated` is already carrying the real row.
+  const sidebarProjects = useMemo<Project[]>(() => {
+    if (Object.keys(pendingNewSessions).length === 0) {
+      return projects;
+    }
+    return projects.map((project) => {
+      const pending = pendingNewSessions[project.name];
+      if (!pending) return project;
+
+      const tempId = pendingSessionId(project.name);
+      // Skip injection once a genuinely new-since-add session has landed —
+      // the next `projects_updated` effect will evict the pending entry on
+      // the same signal. Checking against the add-time snapshot instead of
+      // `sessions.length > 0` keeps the placeholder visible for projects
+      // that already had sessions before the user hit "New".
+      const newSessionArrived = project.sessions?.some(
+        (s) => !pending.existingSessionIds.has(s.id),
+      );
+      if (newSessionArrived) return project;
+
+      const syntheticSession: ProjectSession = {
+        id: tempId,
+        summary: pending.firstMessage,
+        firstUserMessage: pending.firstMessage,
+        lastActivity: new Date(pending.createdAt).toISOString(),
+        createdAt: new Date(pending.createdAt).toISOString(),
+        __provider: 'claude',
+        __projectName: project.name,
+        __pending: true,
+      };
+
+      return {
+        ...project,
+        sessions: [syntheticSession, ...(project.sessions ?? [])],
+      };
+    });
+  }, [pendingNewSessions, projects]);
+
   const sidebarSharedProps = useMemo(
     () => ({
-      projects,
+      projects: sidebarProjects,
       selectedProject,
       selectedSession,
       onProjectSelect: handleProjectSelect,
@@ -534,7 +650,7 @@ export function useProjectsState({
       isLoadingProjects,
       isMobile,
       loadingProgress,
-      projects,
+      sidebarProjects,
       settingsInitialTab,
       selectedProject,
       selectedSession,
@@ -561,6 +677,7 @@ export function useProjectsState({
     openSettings,
     fetchProjects,
     refreshProjectsSilently,
+    addPendingNewSession,
     sidebarSharedProps,
     handleProjectSelect,
     handleSessionSelect,

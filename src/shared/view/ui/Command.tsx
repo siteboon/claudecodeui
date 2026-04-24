@@ -18,6 +18,8 @@ interface ItemEntry {
   value: string;       // searchable text (lowercase)
   onSelect: () => void;
   element: HTMLElement | null;
+  category?: string;
+  alwaysVisible?: boolean;
 }
 
 interface CommandContextValue {
@@ -29,7 +31,7 @@ interface CommandContextValue {
   setActiveId: (id: string | null) => void;
   register: (entry: ItemEntry) => void;
   unregister: (id: string) => void;
-  updateEntry: (id: string, patch: Partial<Pick<ItemEntry, 'value' | 'onSelect' | 'element'>>) => void;
+  updateEntry: (id: string, patch: Partial<Pick<ItemEntry, 'value' | 'onSelect' | 'element' | 'category' | 'alwaysVisible'>>) => void;
 }
 
 const CommandContext = React.createContext<CommandContextValue | null>(null);
@@ -42,10 +44,17 @@ function useCommand() {
 
 /* ─── Command (root) ─────────────────────────────────────────────── */
 
-type CommandProps = React.HTMLAttributes<HTMLDivElement>;
+interface CommandProps extends React.HTMLAttributes<HTMLDivElement> {
+  /**
+   * When set, Shift+Tab cycles the active item through only the registered
+   * items whose `category` matches. Plain Tab is left alone so focus nav
+   * inside the surrounding dialog still works.
+   */
+  tabCategory?: string;
+}
 
 const Command = React.forwardRef<HTMLDivElement, CommandProps>(
-  ({ className, children, ...props }, ref) => {
+  ({ className, children, tabCategory, ...props }, ref) => {
     const [search, setSearch] = React.useState('');
     const entriesRef = React.useRef<Map<string, ItemEntry>>(new Map());
     // Bump this counter whenever the entry set changes so derived state recalculates
@@ -61,7 +70,7 @@ const Command = React.forwardRef<HTMLDivElement, CommandProps>(
       setRevision(r => r + 1);
     }, []);
 
-    const updateEntry = React.useCallback((id: string, patch: Partial<Pick<ItemEntry, 'value' | 'onSelect' | 'element'>>) => {
+    const updateEntry = React.useCallback((id: string, patch: Partial<Pick<ItemEntry, 'value' | 'onSelect' | 'element' | 'category' | 'alwaysVisible'>>) => {
       const existing = entriesRef.current.get(id);
       if (existing) {
         Object.assign(existing, patch);
@@ -73,7 +82,7 @@ const Command = React.forwardRef<HTMLDivElement, CommandProps>(
       const lowerSearch = search.toLowerCase();
       const ids = new Set<string>();
       for (const [id, entry] of entriesRef.current) {
-        if (!lowerSearch || entry.value.includes(lowerSearch)) {
+        if (entry.alwaysVisible || !lowerSearch || entry.value.includes(lowerSearch)) {
           ids.add(id);
         }
       }
@@ -99,7 +108,10 @@ const Command = React.forwardRef<HTMLDivElement, CommandProps>(
     }, [visibleEntries]);
 
     const handleKeyDown = React.useCallback((e: React.KeyboardEvent) => {
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter') {
+      const isShiftTab = e.key === 'Tab' && e.shiftKey && Boolean(tabCategory);
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || isShiftTab) {
+        // Shift+Tab only preempts focus nav when matching items exist
+        if (isShiftTab && !visibleEntries.some(entry => entry.category === tabCategory)) return;
         e.preventDefault();
       } else {
         return;
@@ -109,25 +121,34 @@ const Command = React.forwardRef<HTMLDivElement, CommandProps>(
       if (entries.length === 0) return;
 
       if (e.key === 'Enter') {
+        // Let Shift+Enter through — callers attach their own onKeyDown to
+        // handle it (e.g. CommandPalette's "open in new pane" handler).
+        if (e.shiftKey) return;
         const active = entries.find(entry => entry.id === activeId);
         active?.onSelect();
         return;
       }
 
-      const currentIndex = entries.findIndex(entry => entry.id === activeId);
-      let nextIndex: number;
-      if (e.key === 'ArrowDown') {
-        nextIndex = currentIndex < entries.length - 1 ? currentIndex + 1 : 0;
-      } else {
-        nextIndex = currentIndex > 0 ? currentIndex - 1 : entries.length - 1;
-      }
-      const nextId = entries[nextIndex].id;
-      setActiveId(nextId);
+      const scope = isShiftTab
+        ? entries.filter(entry => entry.category === tabCategory)
+        : entries;
+      if (scope.length === 0) return;
 
-      // Scroll the active item into view
-      const nextEntry = entries[nextIndex];
+      const currentIndex = scope.findIndex(entry => entry.id === activeId);
+      const forward = e.key === 'ArrowDown' || isShiftTab;
+      let nextIndex: number;
+      if (currentIndex === -1) {
+        // Active item isn't in the tab scope — jump to first of scope
+        nextIndex = forward ? 0 : scope.length - 1;
+      } else if (forward) {
+        nextIndex = currentIndex < scope.length - 1 ? currentIndex + 1 : 0;
+      } else {
+        nextIndex = currentIndex > 0 ? currentIndex - 1 : scope.length - 1;
+      }
+      const nextEntry = scope[nextIndex];
+      setActiveId(nextEntry.id);
       nextEntry.element?.scrollIntoView({ block: 'nearest' });
-    }, [visibleEntries, activeId]);
+    }, [visibleEntries, activeId, tabCategory]);
 
     const value = React.useMemo<CommandContextValue>(
       () => ({ search, setSearch, visibleIds, activeId, setActiveId, register, unregister, updateEntry }),
@@ -244,10 +265,12 @@ interface CommandItemProps extends React.HTMLAttributes<HTMLDivElement> {
   value?: string;
   onSelect?: () => void;
   disabled?: boolean;
+  category?: string;
+  alwaysVisible?: boolean;
 }
 
 const CommandItem = React.forwardRef<HTMLDivElement, CommandItemProps>(
-  ({ className, value, onSelect, disabled, children, ...props }, ref) => {
+  ({ className, value, onSelect, disabled, category, alwaysVisible, children, ...props }, ref) => {
     const { visibleIds, activeId, setActiveId, register, unregister, updateEntry } = useCommand();
     const stableId = React.useId();
     const elementRef = React.useRef<HTMLElement | null>(null);
@@ -260,16 +283,18 @@ const CommandItem = React.forwardRef<HTMLDivElement, CommandItemProps>(
         value: searchableText.toLowerCase(),
         onSelect: onSelect || (() => {}),
         element: elementRef.current,
+        category,
+        alwaysVisible,
       });
       return () => unregister(stableId);
       // Only re-register when the identity changes, not onSelect
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [stableId, searchableText, register, unregister]);
 
-    // Keep onSelect up-to-date without re-registering
+    // Keep onSelect / category / alwaysVisible up-to-date without re-registering
     React.useEffect(() => {
-      updateEntry(stableId, { onSelect: onSelect || (() => {}) });
-    }, [stableId, onSelect, updateEntry]);
+      updateEntry(stableId, { onSelect: onSelect || (() => {}), category, alwaysVisible });
+    }, [stableId, onSelect, category, alwaysVisible, updateEntry]);
 
     // Keep element ref up-to-date
     const setRef = React.useCallback((node: HTMLDivElement | null) => {

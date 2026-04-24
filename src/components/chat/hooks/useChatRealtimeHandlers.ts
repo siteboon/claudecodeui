@@ -1,12 +1,13 @@
 import { useEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
-import type { PendingPermissionRequest } from '../types/types';
+import type { ChatMessage, PendingPermissionRequest } from '../types/types';
 import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
 import type { SessionStore, NormalizedMessage } from '../../../stores/useSessionStore';
 
 type PendingViewSession = {
   sessionId: string | null;
   startedAt: number;
+  pendingMessage?: ChatMessage;
 };
 
 type LatestChatMessage = {
@@ -62,6 +63,7 @@ interface UseChatRealtimeHandlersArgs {
   streamBufferRef: MutableRefObject<string>;
   streamTimerRef: MutableRefObject<number | null>;
   accumulatedStreamRef: MutableRefObject<string>;
+  onSessionActive?: (sessionId?: string | null) => void;
   onSessionInactive?: (sessionId?: string | null) => void;
   onSessionProcessing?: (sessionId?: string | null) => void;
   onSessionNotProcessing?: (sessionId?: string | null) => void;
@@ -91,6 +93,7 @@ export function useChatRealtimeHandlers({
   streamBufferRef,
   streamTimerRef,
   accumulatedStreamRef,
+  onSessionActive,
   onSessionInactive,
   onSessionProcessing,
   onSessionNotProcessing,
@@ -149,17 +152,21 @@ export function useChatRealtimeHandlers({
             return;
           }
 
-          // Legacy isProcessing format from check-session-status
+          // Legacy isProcessing format from check-session-status.
+          // Server-side `isProcessing` actually means "SDK session is currently running"
+          // (see server/index.js check-session-status handler), so it maps to our
+          // `active` (running) state — NOT to `processing` (which now means
+          // "Claude finished, awaiting user reply").
           const isCurrentSession =
             statusSessionId === currentSessionId || (selectedSession && statusSessionId === selectedSession.id);
 
           if (msg.isProcessing) {
-            onSessionProcessing?.(statusSessionId);
+            onSessionActive?.(statusSessionId);
+            onSessionNotProcessing?.(statusSessionId);
             if (isCurrentSession) { setIsLoading(true); setCanAbortSession(true); }
             return;
           }
           onSessionInactive?.(statusSessionId);
-          onSessionNotProcessing?.(statusSessionId);
           if (isCurrentSession) {
             setIsLoading(false);
             setCanAbortSession(false);
@@ -228,11 +235,41 @@ export function useChatRealtimeHandlers({
         const newSessionId = msg.newSessionId;
         if (!newSessionId) break;
 
+        // Resolve the in-flight new-session ref and — critically — flush the
+        // optimistically-rendered user message into the new session's store,
+        // regardless of which session the user is currently viewing. Without
+        // this, navigating away from a new chat before `session_created`
+        // arrived left the composer-submitted message stranded (see Bug B
+        // in useChatSessionState).
+        const pending = pendingViewSessionRef.current;
+        if (pending && !pending.sessionId) {
+          pending.sessionId = newSessionId;
+          const pendingMsg = pending.pendingMessage;
+          if (pendingMsg) {
+            pending.pendingMessage = undefined;
+            const tsSource = pendingMsg.timestamp;
+            const timestamp = tsSource instanceof Date
+              ? tsSource.toISOString()
+              : typeof tsSource === 'number'
+                ? new Date(tsSource).toISOString()
+                : typeof tsSource === 'string' && tsSource
+                  ? tsSource
+                  : new Date().toISOString();
+            const normalized = {
+              id: `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+              sessionId: newSessionId,
+              timestamp,
+              provider,
+              kind: 'text',
+              role: 'user',
+              content: pendingMsg.content || '',
+            } as NormalizedMessage;
+            sessionStore.appendRealtime(newSessionId, normalized);
+          }
+        }
+
         if (!currentSessionId || currentSessionId.startsWith('new-session-')) {
           sessionStorage.setItem('pendingSessionId', newSessionId);
-          if (pendingViewSessionRef.current && !pendingViewSessionRef.current.sessionId) {
-            pendingViewSessionRef.current.sessionId = newSessionId;
-          }
           setCurrentSessionId(newSessionId);
           onReplaceTemporarySession?.(newSessionId);
           setPendingPermissionRequests((prev) =>
@@ -256,20 +293,29 @@ export function useChatRealtimeHandlers({
         accumulatedStreamRef.current = '';
         streamBufferRef.current = '';
 
+        if (msg.premature && !msg.aborted) {
+          console.warn('[chat] Claude session ended prematurely', {
+            sessionId: sid,
+            subtype: msg.subtype,
+            stopReason: msg.stopReason,
+            autoResumeAttempts: msg.autoResumeAttempts,
+          });
+        }
+
         setIsLoading(false);
         setCanAbortSession(false);
         setClaudeStatus(null);
         setPendingPermissionRequests([]);
         onSessionInactive?.(sid);
-        onSessionNotProcessing?.(sid);
 
-        // Handle aborted case
+        // Claude's turn ended — flag the session as awaiting user reply so the
+        // sidebar shows the pink "needs you" alert. Aborted turns don't count:
+        // the user intentionally cancelled, so there's no stalled reply to flag.
         if (msg.aborted) {
-          // Abort was requested — the complete event confirms it
-          // No special UI action needed beyond clearing loading state above
-          // The backend already sent any abort-related messages
+          onSessionNotProcessing?.(sid);
           break;
         }
+        onSessionProcessing?.(sid);
 
         // Clear pending session
         const pendingSessionId = sessionStorage.getItem('pendingSessionId');
@@ -358,6 +404,7 @@ export function useChatRealtimeHandlers({
     streamBufferRef,
     streamTimerRef,
     accumulatedStreamRef,
+    onSessionActive,
     onSessionInactive,
     onSessionProcessing,
     onSessionNotProcessing,

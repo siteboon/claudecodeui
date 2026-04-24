@@ -170,3 +170,31 @@ export type ProviderAuthStatus = {
   method: string | null;
   error?: string;
 };
+
+// -------------------- Provider usage types --------------------
+/**
+ * A single rate-limit window (e.g. 5-hour or weekly). `utilization` is
+ * normalized to [0, 1]; `resetsAt` is a unix timestamp in seconds.
+ */
+export type UsageWindow = {
+  utilization: number;
+  resetsAt: number;
+} | null;
+
+/**
+ * Snapshot of a provider's identity + rate-limit usage for the sidebar footer.
+ * `method` is null when the provider isn't authenticated at all. `stale` is
+ * set when a network error forced us to serve a cached/empty result.
+ */
+export type ProviderUsageSnapshot = {
+  provider: 'claude' | 'codex';
+  email: string | null;
+  displayName: string | null;
+  planType: string | null;
+  method: 'oauth' | 'api_key' | null;
+  fiveHour: UsageWindow;
+  sevenDay: UsageWindow;
+  fetchedAt: number;
+  stale?: boolean;
+  error?: string;
+};

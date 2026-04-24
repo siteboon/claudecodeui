@@ -3,6 +3,7 @@ import type { MainContentHeaderProps } from '../../types/types';
 import MobileMenuButton from './MobileMenuButton';
 import MainContentTabSwitcher from './MainContentTabSwitcher';
 import MainContentTitle from './MainContentTitle';
+import AttentionTicker from './AttentionTicker';
 
 export default function MainContentHeader({
   activeTab,
@@ -12,6 +13,9 @@ export default function MainContentHeader({
   shouldShowTasksTab,
   isMobile,
   onMenuClick,
+  sessionStatus,
+  waitingCount = 0,
+  onJumpToNextWaiting,
 }: MainContentHeaderProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -34,7 +38,12 @@ export default function MainContentHeader({
   }, [updateScrollState]);
 
   return (
-    <div className="pwa-header-safe flex-shrink-0 border-b border-border/60 bg-background px-3 py-1.5 sm:px-4 sm:py-2">
+    <div className="pwa-header-safe relative flex-shrink-0 border-b border-border/60 bg-background px-3 py-1.5 sm:px-4 sm:py-2">
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 h-[2px]"
+        style={{ background: 'var(--project-accent)' }}
+        aria-hidden
+      />
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           {isMobile && <MobileMenuButton onMenuClick={onMenuClick} />}
@@ -43,7 +52,17 @@ export default function MainContentHeader({
             selectedProject={selectedProject}
             selectedSession={selectedSession}
             shouldShowTasksTab={shouldShowTasksTab}
+            sessionStatus={sessionStatus}
           />
+        </div>
+
+        <div className="flex flex-shrink-0 items-center gap-2">
+          {waitingCount > 0 && onJumpToNextWaiting && (
+            <AttentionTicker
+              waitingCount={waitingCount}
+              onJumpToNextWaiting={onJumpToNextWaiting}
+            />
+          )}
         </div>
 
         <div className="relative min-w-0 flex-shrink overflow-hidden sm:flex-shrink-0">

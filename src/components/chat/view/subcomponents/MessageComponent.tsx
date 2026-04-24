@@ -119,7 +119,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
       {message.type === 'user' ? (
         /* User message bubble on the right */
         <div className="flex w-full items-end space-x-0 sm:w-auto sm:max-w-[85%] sm:space-x-3 md:max-w-md lg:max-w-lg xl:max-w-xl">
-          <div className="group flex-1 rounded-2xl rounded-br-md bg-blue-600 px-3 py-2 text-white shadow-sm sm:flex-initial sm:px-4">
+          <div className="group flex-1 rounded-2xl rounded-br-md bg-primary px-3 py-2 text-primary-foreground shadow-sm sm:flex-initial sm:px-4">
             <div className="whitespace-pre-wrap break-words text-sm">
               {message.content}
             </div>
@@ -136,7 +136,23 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                 ))}
               </div>
             )}
-            <div className="mt-1 flex items-center justify-end gap-1 text-xs text-blue-100">
+            {message.files && message.files.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {message.files.map((file, idx) => (
+                  <span
+                    key={`${file.name}-${idx}`}
+                    className="inline-flex items-center gap-1 rounded-md bg-primary-foreground/20 px-2 py-0.5 text-xs"
+                    title={file.relativePath || file.name}
+                  >
+                    <svg className="h-3 w-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                    {file.relativePath || file.name}
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="mt-1 flex items-center justify-end gap-1 text-xs text-primary-foreground/70">
               {shouldShowUserCopyControl && (
                 <MessageCopyControl content={userCopyContent} messageType="user" />
               )}
@@ -144,7 +160,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
             </div>
           </div>
           {!isGrouped && (
-            <div className="hidden h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm text-white sm:flex">
+            <div className="hidden h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-primary text-sm text-primary-foreground sm:flex">
               U
             </div>
           )}
@@ -155,6 +171,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
           <div className="flex items-center gap-2 py-0.5">
             <span className={`inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${message.taskStatus === 'completed' ? 'bg-green-400 dark:bg-green-500' : 'bg-amber-400 dark:bg-amber-500'}`} />
             <span className="text-xs text-gray-500 dark:text-gray-400">{message.content}</span>
+            <span className="text-[11px] text-gray-400 dark:text-gray-500">{formattedTime}</span>
           </div>
         </div>
       ) : (
@@ -453,14 +470,12 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
               </div>
             )}
 
-            {(shouldShowAssistantCopyControl || !isGrouped) && (
-              <div className="mt-1 flex w-full items-center gap-2 text-[11px] text-gray-400 dark:text-gray-500">
-                {shouldShowAssistantCopyControl && (
-                  <MessageCopyControl content={assistantCopyContent} messageType="assistant" />
-                )}
-                {!isGrouped && <span>{formattedTime}</span>}
-              </div>
-            )}
+            <div className="mt-1 flex w-full items-center gap-2 text-[11px] text-gray-400 dark:text-gray-500">
+              {shouldShowAssistantCopyControl && (
+                <MessageCopyControl content={assistantCopyContent} messageType="assistant" />
+              )}
+              <span>{formattedTime}</span>
+            </div>
           </div>
         </div>
       )}

@@ -14,6 +14,7 @@ import type { Project } from '../../../types/app';
 import { TaskMasterPanel } from '../../task-master';
 import MainContentHeader from './subcomponents/MainContentHeader';
 import MainContentStateView from './subcomponents/MainContentStateView';
+import PaneTabBar, { type PaneTabBarTab } from './subcomponents/PaneTabBar';
 import ErrorBoundary from './ErrorBoundary';
 
 type TaskMasterContextValue = {
@@ -45,9 +46,17 @@ function MainContent({
   onSessionNotProcessing,
   processingSessions,
   onReplaceTemporarySession,
+  onAddPendingNewSession,
   onNavigateToSession,
   onShowSettings,
   externalMessageUpdate,
+  sessionStatus,
+  waitingCount,
+  onJumpToNextWaiting,
+  panes,
+  focusedPaneIndex,
+  onPaneFocus,
+  onPaneClose,
 }: MainContentProps) {
   const { preferences } = useUiPreferences();
   const { autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter } = preferences;
@@ -95,6 +104,21 @@ function MainContent({
     return <MainContentStateView mode="empty" isMobile={isMobile} onMenuClick={onMenuClick} />;
   }
 
+  // Build tab bar entries from pane list (only shown when >1 pane open).
+  const activePanes = panes ?? [];
+  const focusedPaneId = activePanes.length > 0
+    ? (activePanes[focusedPaneIndex ?? 0]?.paneId ?? activePanes[0]?.paneId ?? null)
+    : null;
+  const paneTabs: PaneTabBarTab[] = activePanes.map((pane) => {
+    if (!pane.session) {
+      return { paneId: pane.paneId, label: 'Session not found', subLabel: pane.paneId };
+    }
+    return {
+      paneId: pane.paneId,
+      label: pane.session.summary || pane.session.title || pane.session.id,
+    };
+  });
+
   return (
     <div className="flex h-full flex-col">
       <MainContentHeader
@@ -105,11 +129,23 @@ function MainContent({
         shouldShowTasksTab={shouldShowTasksTab}
         isMobile={isMobile}
         onMenuClick={onMenuClick}
+        sessionStatus={sessionStatus}
+        waitingCount={waitingCount}
+        onJumpToNextWaiting={onJumpToNextWaiting}
       />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className={`flex min-h-0 min-w-[200px] flex-col overflow-hidden ${editorExpanded ? 'hidden' : ''} flex-1`}>
-          <div className={`h-full ${activeTab === 'chat' ? 'block' : 'hidden'}`}>
+          <div className={`${activeTab === 'chat' ? 'flex h-full flex-col' : 'hidden'}`}>
+            {activePanes.length > 1 && (
+              <PaneTabBar
+                tabs={paneTabs}
+                focusedPaneId={focusedPaneId}
+                onFocus={onPaneFocus ?? (() => {})}
+                onClose={onPaneClose}
+              />
+            )}
+            <div className="min-h-0 flex-1">
             <ErrorBoundary showDetails>
               <ChatInterface
                 selectedProject={selectedProject}
@@ -125,6 +161,7 @@ function MainContent({
                 onSessionNotProcessing={onSessionNotProcessing}
                 processingSessions={processingSessions}
                 onReplaceTemporarySession={onReplaceTemporarySession}
+                onAddPendingNewSession={onAddPendingNewSession}
                 onNavigateToSession={onNavigateToSession}
                 onShowSettings={onShowSettings}
                 autoExpandTools={autoExpandTools}
@@ -136,6 +173,7 @@ function MainContent({
                 onShowAllTasks={tasksEnabled ? () => setActiveTab('tasks') : null}
               />
             </ErrorBoundary>
+            </div>
           </div>
 
           {activeTab === 'files' && (

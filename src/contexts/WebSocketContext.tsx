@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../components/auth/context/AuthContext';
 import { IS_PLATFORM } from '../constants/config';
+import { withBasePath } from '../utils/basePath.js';
 
 type WebSocketContextType = {
   ws: WebSocket | null;
@@ -21,15 +22,19 @@ export const useWebSocket = () => {
 
 const buildWebSocketUrl = (token: string | null) => {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  if (IS_PLATFORM) return `${protocol}//${window.location.host}/ws`; // Platform mode: Use same domain as the page (goes through proxy)
+  const webSocketPath = withBasePath('/ws');
+  if (IS_PLATFORM) return `${protocol}//${window.location.host}${webSocketPath}`; // Platform mode: Use same domain as the page (goes through proxy)
   if (!token) return null;
-  return `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}`; // OSS mode: Use same host:port that served the page
+  return `${protocol}//${window.location.host}${webSocketPath}?token=${encodeURIComponent(token)}`; // OSS mode: Use same host:port that served the page
 };
 
 const useWebSocketProviderState = (): WebSocketContextType => {
   const wsRef = useRef<WebSocket | null>(null);
   const unmountedRef = useRef(false); // Track if component is unmounted
   const hasConnectedRef = useRef(false); // Track if we've ever connected (to detect reconnects)
+  // Messages whose callers tried to send while the socket was closed (reconnecting,
+  // not yet opened, etc.). Flushed in onopen so callers never silently lose a send.
+  const pendingSendQueueRef = useRef<string[]>([]);
   const [latestMessage, setLatestMessage] = useState<any>(null);
   const [isConnected, setIsConnected] = useState(false);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -60,8 +65,22 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       const websocket = new WebSocket(wsUrl);
 
       websocket.onopen = () => {
-        setIsConnected(true);
         wsRef.current = websocket;
+        setIsConnected(true);
+        // Flush messages that callers tried to send while the socket was closed.
+        // Previously these were dropped with a console.warn, which silently lost
+        // user messages sent during the 3s reconnect window.
+        if (pendingSendQueueRef.current.length > 0) {
+          const queued = pendingSendQueueRef.current;
+          pendingSendQueueRef.current = [];
+          for (const payload of queued) {
+            try {
+              websocket.send(payload);
+            } catch (err) {
+              console.error('Failed to flush queued WebSocket message:', err);
+            }
+          }
+        }
         if (hasConnectedRef.current) {
           // This is a reconnect — signal so components can catch up on missed messages
           setLatestMessage({ type: 'websocket-reconnected', timestamp: Date.now() });
@@ -100,11 +119,22 @@ const useWebSocketProviderState = (): WebSocketContextType => {
 
   const sendMessage = useCallback((message: any) => {
     const socket = wsRef.current;
+    const payload = JSON.stringify(message);
     if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify(message));
-    } else {
-      console.warn('WebSocket not connected');
+      socket.send(payload);
+      return;
     }
+    // Socket is closed or still connecting — queue the payload so it flushes on
+    // the next onopen rather than being silently dropped. The context reconnects
+    // every 3s after an onclose, so the queue drains quickly in practice.
+    const queue = pendingSendQueueRef.current;
+    // Bound the queue so a prolonged outage can't grow memory without limit.
+    // Drop the oldest payload on overflow (newer sends reflect the user's
+    // latest intent, so keeping those is more useful than the stale oldest).
+    if (queue.length >= 50) {
+      queue.shift();
+    }
+    queue.push(payload);
   }, []);
 
   const value: WebSocketContextType = useMemo(() =>

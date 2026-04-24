@@ -1,44 +1,62 @@
-import { Brain, Zap, Sparkles, Atom } from 'lucide-react';
+import { Brain, Gauge, Sparkles, Atom, Flame } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
-export const thinkingModes = [
+export type EffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
+export type ThinkingMode = {
+  id: string;
+  name: string;
+  description: string;
+  icon: LucideIcon | null;
+  effort: EffortLevel;
+  color: string;
+};
+
+export const thinkingModes: ThinkingMode[] = [
   {
-    id: 'none',
-    name: 'Standard',
-    description: 'Regular Claude response',
-    icon: null,
-    prefix: '',
-    color: 'text-gray-600'
-  },
-  {
-    id: 'think',
-    name: 'Think',
-    description: 'Basic extended thinking',
-    icon: Brain,
-    prefix: 'think',
+    id: 'low',
+    name: 'Low',
+    description: 'Minimal thinking, fastest responses',
+    icon: Gauge,
+    effort: 'low',
     color: 'text-blue-600'
   },
   {
-    id: 'think-hard',
-    name: 'Think Hard',
-    description: 'More thorough evaluation',
-    icon: Zap,
-    prefix: 'think hard',
+    id: 'medium',
+    name: 'Medium',
+    description: 'Moderate thinking',
+    icon: Brain,
+    effort: 'medium',
     color: 'text-purple-600'
   },
   {
-    id: 'think-harder',
-    name: 'Think Harder',
-    description: 'Deep analysis with alternatives',
+    id: 'high',
+    name: 'High',
+    description: 'Deep reasoning (SDK default)',
     icon: Sparkles,
-    prefix: 'think harder',
+    effort: 'high',
     color: 'text-indigo-600'
   },
   {
-    id: 'ultrathink',
-    name: 'Ultrathink',
-    description: 'Maximum thinking budget',
+    id: 'xhigh',
+    name: 'Extra High',
+    description: 'Higher reasoning budget',
+    icon: Flame,
+    effort: 'xhigh',
+    color: 'text-orange-600'
+  },
+  {
+    id: 'max',
+    name: 'Max',
+    description: 'Maximum effort (Opus 4.6/4.7 only)',
     icon: Atom,
-    prefix: 'ultrathink',
+    effort: 'max',
     color: 'text-red-600'
   }
 ];
+
+export const DEFAULT_THINKING_MODE_ID = 'high';
+
+export function getEffortForModeId(id: string): EffortLevel | null {
+  return thinkingModes.find((m) => m.id === id)?.effort ?? null;
+}

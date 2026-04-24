@@ -1,5 +1,9 @@
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
-import type { LLMProvider, ProviderAuthStatus } from '@/shared/types.js';
+import type { LLMProvider, ProviderAuthStatus, ProviderUsageSnapshot } from '@/shared/types.js';
+
+type UsageCapableAuth = {
+  getUsage: (opts?: { force?: boolean }) => Promise<ProviderUsageSnapshot>;
+};
 
 export const providerAuthService = {
   /**
@@ -22,5 +26,18 @@ export const providerAuthService = {
     } catch {
       return true;
     }
+  },
+
+  /**
+   * Returns a rate-limit + identity snapshot for a provider. Only providers
+   * whose auth implementations expose `getUsage` support this (currently
+   * claude and codex). The caller guards which providers can be passed in.
+   */
+  async getProviderUsage(
+    providerName: 'claude' | 'codex',
+    opts?: { force?: boolean },
+  ): Promise<ProviderUsageSnapshot> {
+    const provider = providerRegistry.resolveProvider(providerName);
+    return (provider.auth as unknown as UsageCapableAuth).getUsage(opts);
   },
 };

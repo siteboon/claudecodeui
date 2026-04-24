@@ -2,11 +2,18 @@ import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
 
 export type Provider = LLMProvider;
 
-export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
+export type PermissionMode = 'bypassPermissions' | 'plan';
 
 export interface ChatImage {
   data: string;
   name: string;
+}
+
+export interface ChatFile {
+  name: string;
+  size: number;
+  mimeType: string;
+  relativePath?: string;
 }
 
 export interface ToolResult {
@@ -30,6 +37,8 @@ export interface ChatMessage {
   content?: string;
   timestamp: string | number | Date;
   images?: ChatImage[];
+  files?: ChatFile[];
+  uploadBatchId?: string;
   reasoning?: string;
   isThinking?: boolean;
   isStreaming?: boolean;
@@ -105,6 +114,7 @@ export interface ChatInterfaceProps {
   onSessionNotProcessing?: (sessionId?: string | null) => void;
   processingSessions?: Set<string>;
   onReplaceTemporarySession?: (sessionId?: string | null) => void;
+  onAddPendingNewSession?: (projectName: string, firstMessage: string) => void;
   onNavigateToSession?: (targetSessionId: string) => void;
   onShowSettings?: () => void;
   autoExpandTools?: boolean;

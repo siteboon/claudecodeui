@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { FolderPlus, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useArchivedProjects } from '../../hooks/useArchivedProjects';
 import ErrorBanner from './components/ErrorBanner';
 import StepConfiguration from './components/StepConfiguration';
 import StepReview from './components/StepReview';
@@ -8,7 +9,11 @@ import StepTypeSelection from './components/StepTypeSelection';
 import WizardFooter from './components/WizardFooter';
 import WizardProgress from './components/WizardProgress';
 import { useGithubTokens } from './hooks/useGithubTokens';
-import { cloneWorkspaceWithProgress, createWorkspaceRequest } from './data/workspaceApi';
+import {
+  CreateWorkspaceError,
+  cloneWorkspaceWithProgress,
+  createWorkspaceRequest,
+} from './data/workspaceApi';
 import { isCloneWorkflow, shouldShowGithubAuthentication } from './utils/pathUtils';
 import type { TokenMode, WizardFormState, WizardStep, WorkspaceType } from './types';
 
@@ -36,6 +41,7 @@ export default function ProjectCreationWizard({
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cloneProgress, setCloneProgress] = useState('');
+  const { isProjectArchived, toggleArchivedProject } = useArchivedProjects();
 
   const shouldLoadTokens =
     step === 2 && shouldShowGithubAuthentication(formState.workspaceType, formState.githubUrl);
@@ -131,6 +137,21 @@ export default function ProjectCreationWizard({
       onProjectCreated?.(project);
       onClose();
     } catch (createError) {
+      if (
+        createError instanceof CreateWorkspaceError &&
+        createError.code === 'PROJECT_ALREADY_EXISTS' &&
+        createError.projectName
+      ) {
+        if (isProjectArchived(createError.projectName)) {
+          toggleArchivedProject(createError.projectName);
+          onProjectCreated?.({ name: createError.projectName, path: createError.path });
+          onClose();
+          return;
+        }
+        setError('This workspace is already added to your projects.');
+        return;
+      }
+
       const errorMessage =
         createError instanceof Error
           ? createError.message
@@ -139,7 +160,7 @@ export default function ProjectCreationWizard({
     } finally {
       setIsCreating(false);
     }
-  }, [formState, onClose, onProjectCreated, t]);
+  }, [formState, isProjectArchived, onClose, onProjectCreated, t, toggleArchivedProject]);
 
   const shouldCloneRepository = useMemo(
     () => isCloneWorkflow(formState.workspaceType, formState.githubUrl),

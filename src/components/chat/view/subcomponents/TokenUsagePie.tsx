@@ -3,52 +3,57 @@ type TokenUsagePieProps = {
   total: number;
 };
 
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}k`;
+  return `${n}`;
+}
+
 export default function TokenUsagePie({ used, total }: TokenUsagePieProps) {
-  // Token usage visualization component
-  // Only bail out on missing values or non‐positive totals; allow used===0 to render 0%
   if (used == null || total == null || total <= 0) return null;
 
   const percentage = Math.min(100, (used / total) * 100);
+  const size = 26;
   const radius = 10;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (percentage / 100) * circumference;
 
-  // Color based on usage level
-  const getColor = () => {
-    if (percentage < 50) return '#3b82f6'; // blue
-    if (percentage < 75) return '#f59e0b'; // orange
-    return '#ef4444'; // red
-  };
+  const strokeColor =
+    percentage < 50 ? '#3b82f6' : percentage < 75 ? '#f59e0b' : '#ef4444';
 
   return (
-    <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
-      <svg width="24" height="24" viewBox="0 0 24 24" className="-rotate-90 transform">
-        {/* Background circle */}
-        <circle
-          cx="12"
-          cy="12"
-          r={radius}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          className="text-gray-300 dark:text-gray-600"
-        />
-        {/* Progress circle */}
-        <circle
-          cx="12"
-          cy="12"
-          r={radius}
-          fill="none"
-          stroke={getColor()}
-          strokeWidth="2"
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          strokeLinecap="round"
-        />
-      </svg>
-      <span title={`${used.toLocaleString()} / ${total.toLocaleString()} tokens`}>
-        {percentage.toFixed(1)}%
-      </span>
+    <div
+      className="flex items-center gap-1.5 text-[10px] text-muted-foreground"
+      title={`${used.toLocaleString()} / ${total.toLocaleString()} tokens`}
+    >
+      <div className="relative" style={{ width: size, height: size }}>
+        <svg width={size} height={size} viewBox="0 0 26 26" className="-rotate-90">
+          <circle
+            cx="13"
+            cy="13"
+            r={radius}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            className="opacity-20"
+          />
+          <circle
+            cx="13"
+            cy="13"
+            r={radius}
+            fill="none"
+            stroke={strokeColor}
+            strokeWidth="2"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            strokeLinecap="round"
+          />
+        </svg>
+        <span className="absolute inset-0 flex items-center justify-center text-[8px] font-medium tabular-nums text-foreground/80">
+          {Math.round(percentage)}%
+        </span>
+      </div>
+      <span className="tabular-nums">{formatTokens(used)}</span>
     </div>
   );
 }
