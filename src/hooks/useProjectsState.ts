@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
+
 import { api } from '../utils/api';
 import type {
   AppSocketMessage,
@@ -60,6 +61,30 @@ const projectsHaveChanges = (
       serialize(nextProject.codexSessions) !== serialize(prevProject.codexSessions) ||
       serialize(nextProject.geminiSessions) !== serialize(prevProject.geminiSessions)
     );
+  });
+};
+
+const mergeTaskMasterCache = (nextProjects: Project[], previousProjects: Project[]): Project[] => {
+  if (previousProjects.length === 0) {
+    return nextProjects;
+  }
+
+  const previousTaskMasterByProject = new Map(
+    previousProjects
+      .filter((project) => Boolean(project.taskmaster))
+      .map((project) => [project.name, project.taskmaster]),
+  );
+
+  return nextProjects.map((project) => {
+    const cachedTaskMasterInfo = previousTaskMasterByProject.get(project.name);
+    if (!cachedTaskMasterInfo) {
+      return project;
+    }
+
+    return {
+      ...project,
+      taskmaster: cachedTaskMasterInfo,
+    };
   });
 };
 
@@ -165,12 +190,14 @@ export function useProjectsState({
       const projectData = (await response.json()) as Project[];
 
       setProjects((prevProjects) => {
+        const mergedProjects = mergeTaskMasterCache(projectData, prevProjects);
+
         if (prevProjects.length === 0) {
-          return projectData;
+          return mergedProjects;
         }
 
-        return projectsHaveChanges(prevProjects, projectData, true)
-          ? projectData
+        return projectsHaveChanges(prevProjects, mergedProjects, true)
+          ? mergedProjects
           : prevProjects;
       });
     } catch (error) {
@@ -187,6 +214,46 @@ export function useProjectsState({
     await fetchProjects({ showLoadingState: false });
   }, [fetchProjects]);
 
+  const hydrateProjectTaskMaster = useCallback(async (projectName: string) => {
+    if (!projectName) {
+      return;
+    }
+
+    try {
+      const response = await api.projectTaskmaster(projectName);
+      if (!response.ok) {
+        return;
+      }
+
+      const data = (await response.json()) as { taskmaster?: Project['taskmaster'] };
+      const taskMasterInfo = data.taskmaster;
+      if (!taskMasterInfo) {
+        return;
+      }
+
+      setProjects((previousProjects) =>
+        previousProjects.map((project) =>
+          project.name === projectName
+            ? { ...project, taskmaster: taskMasterInfo }
+            : project,
+        ),
+      );
+
+      setSelectedProject((previousProject) => {
+        if (!previousProject || previousProject.name !== projectName) {
+          return previousProject;
+        }
+
+        return {
+          ...previousProject,
+          taskmaster: taskMasterInfo,
+        };
+      });
+    } catch (error) {
+      console.error(`Error fetching TaskMaster info for project ${projectName}:`, error);
+    }
+  }, []);
+
   const openSettings = useCallback((tab = 'tools') => {
     setSettingsInitialTab(tab);
     setShowSettings(true);
@@ -195,6 +262,14 @@ export function useProjectsState({
   useEffect(() => {
     void fetchProjects();
   }, [fetchProjects]);
+
+  useEffect(() => {
+    if (!selectedProject?.name) {
+      return;
+    }
+
+    void hydrateProjectTaskMaster(selectedProject.name);
+  }, [hydrateProjectTaskMaster, selectedProject?.name]);
 
   // Auto-select the project when there is only one, so the user lands on the new session page
   useEffect(() => {
@@ -254,7 +329,7 @@ export function useProjectsState({
       (selectedSession && activeSessions.has(selectedSession.id)) ||
       (activeSessions.size > 0 && Array.from(activeSessions).some((id) => id.startsWith('new-session-')));
 
-    const updatedProjects = projectsMessage.projects;
+    const updatedProjects = mergeTaskMasterCache(projectsMessage.projects, projects);
 
     if (
       hasActiveSession &&
@@ -450,16 +525,17 @@ export function useProjectsState({
     try {
       const response = await api.projects();
       const freshProjects = (await response.json()) as Project[];
+      const mergedProjects = mergeTaskMasterCache(freshProjects, projects);
 
       setProjects((prevProjects) =>
-        projectsHaveChanges(prevProjects, freshProjects, true) ? freshProjects : prevProjects,
+        projectsHaveChanges(prevProjects, mergedProjects, true) ? mergedProjects : prevProjects,
       );
 
       if (!selectedProject) {
         return;
       }
 
-      const refreshedProject = freshProjects.find((project) => project.name === selectedProject.name);
+      const refreshedProject = mergedProjects.find((project) => project.name === selectedProject.name);
       if (!refreshedProject) {
         return;
       }
@@ -490,7 +566,7 @@ export function useProjectsState({
     } catch (error) {
       console.error('Error refreshing sidebar:', error);
     }
-  }, [selectedProject, selectedSession]);
+  }, [projects, selectedProject, selectedSession]);
 
   const handleProjectDelete = useCallback(
     (projectName: string) => {

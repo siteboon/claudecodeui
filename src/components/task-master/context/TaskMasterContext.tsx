@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+
 import { api } from '../../../utils/api';
 import { useAuth } from '../../auth/context/AuthContext';
 import { useWebSocket } from '../../../contexts/WebSocketContext';
@@ -74,10 +75,16 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
   const [error, setError] = useState<TaskMasterContextError | null>(null);
 
   const currentProjectNameRef = useRef<string | null>(null);
+  const projectTaskMasterRef = useRef<TaskMasterProjectInfo | null>(null);
+  const taskMasterRequestSeqRef = useRef(0);
 
   useEffect(() => {
     currentProjectNameRef.current = currentProject?.name ?? null;
   }, [currentProject?.name]);
+
+  useEffect(() => {
+    projectTaskMasterRef.current = projectTaskMaster;
+  }, [projectTaskMaster]);
 
   const clearError = useCallback(() => {
     setError(null);
@@ -88,15 +95,92 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
     setError(createTaskMasterError(context, caughtError));
   }, []);
 
-  const setCurrentProject = useCallback((project: TaskMasterProjectInput) => {
-    const normalizedProject = project ? enrichProject(project as TaskMasterProject) : null;
-    setCurrentProjectState(normalizedProject);
-    setProjectTaskMaster(normalizedProject?.taskmaster ?? null);
+  const applyTaskMasterInfo = useCallback((projectName: string, taskMasterInfo: TaskMasterProjectInfo | null) => {
+    setProjectTaskMaster(taskMasterInfo);
 
-    // Project-scoped task data is reset immediately to avoid stale task rendering.
-    setTasks([]);
-    setNextTask(null);
+    setProjects((previousProjects) =>
+      previousProjects.map((project) => {
+        if (project.name !== projectName) {
+          return project;
+        }
+
+        return enrichProject({
+          ...project,
+          taskmaster: taskMasterInfo ?? undefined,
+        });
+      }),
+    );
+
+    setCurrentProjectState((previousProject) => {
+      if (!previousProject || previousProject.name !== projectName) {
+        return previousProject;
+      }
+
+      return enrichProject({
+        ...previousProject,
+        taskmaster: taskMasterInfo ?? undefined,
+      });
+    });
   }, []);
+
+  const refreshCurrentProjectTaskMaster = useCallback(
+    async (projectName: string) => {
+      if (!projectName || !user || !token) {
+        return;
+      }
+
+      const requestSequence = ++taskMasterRequestSeqRef.current;
+
+      try {
+        const response = await api.projectTaskmaster(projectName);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch TaskMaster details: ${response.status}`);
+        }
+
+        const data = (await response.json()) as { taskmaster?: TaskMasterProjectInfo };
+        const resolvedTaskMasterInfo = data.taskmaster ?? null;
+
+        if (
+          requestSequence !== taskMasterRequestSeqRef.current
+          || currentProjectNameRef.current !== projectName
+        ) {
+          return;
+        }
+
+        applyTaskMasterInfo(projectName, resolvedTaskMasterInfo);
+      } catch (caughtError) {
+        if (
+          requestSequence !== taskMasterRequestSeqRef.current
+          || currentProjectNameRef.current !== projectName
+        ) {
+          return;
+        }
+
+        handleError('load selected project TaskMaster info', caughtError);
+      }
+    },
+    [applyTaskMasterInfo, handleError, token, user],
+  );
+
+  const setCurrentProject = useCallback(
+    (project: TaskMasterProjectInput) => {
+      const normalizedProject = project ? enrichProject(project as TaskMasterProject) : null;
+      setCurrentProjectState(normalizedProject);
+      setProjectTaskMaster(normalizedProject?.taskmaster ?? null);
+
+      // Project-scoped task data is reset immediately to avoid stale task rendering.
+      setTasks([]);
+      setNextTask(null);
+
+      if (!normalizedProject?.name) {
+        taskMasterRequestSeqRef.current += 1;
+        return;
+      }
+
+      void refreshCurrentProjectTaskMaster(normalizedProject.name);
+    },
+    [refreshCurrentProjectTaskMaster],
+  );
 
   const refreshProjects = useCallback(async () => {
     if (!user || !token) {
@@ -121,7 +205,25 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       const loadedProjects = Array.isArray(data) ? (data as TaskMasterProject[]) : [];
       const enrichedProjects = loadedProjects.map((project) => enrichProject(project));
 
-      setProjects(enrichedProjects);
+      setProjects((previousProjects) => {
+        const taskMasterByProjectName = new Map(
+          previousProjects
+            .filter((project) => Boolean(project.taskmaster))
+            .map((project) => [project.name, project.taskmaster]),
+        );
+
+        return enrichedProjects.map((project) => {
+          const cachedTaskMasterInfo = taskMasterByProjectName.get(project.name);
+          if (!cachedTaskMasterInfo) {
+            return project;
+          }
+
+          return enrichProject({
+            ...project,
+            taskmaster: cachedTaskMasterInfo,
+          });
+        });
+      });
 
       const currentProjectName = currentProjectNameRef.current;
       if (!currentProjectName) {
@@ -129,14 +231,34 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       }
 
       const matchingProject = enrichedProjects.find((project) => project.name === currentProjectName) ?? null;
-      setCurrentProjectState(matchingProject);
-      setProjectTaskMaster(matchingProject?.taskmaster ?? null);
+
+      if (!matchingProject) {
+        taskMasterRequestSeqRef.current += 1;
+        setCurrentProjectState(null);
+        setProjectTaskMaster(null);
+        setTasks([]);
+        setNextTask(null);
+        return;
+      }
+
+      const cachedTaskMasterInfo = matchingProject.taskmaster ?? projectTaskMasterRef.current ?? null;
+      setCurrentProjectState(
+        cachedTaskMasterInfo
+          ? enrichProject({
+              ...matchingProject,
+              taskmaster: cachedTaskMasterInfo,
+            })
+          : matchingProject,
+      );
+      setProjectTaskMaster(cachedTaskMasterInfo);
+
+      void refreshCurrentProjectTaskMaster(currentProjectName);
     } catch (caughtError) {
       handleError('load projects', caughtError);
     } finally {
       setIsLoading(false);
     }
-  }, [clearError, handleError, token, user]);
+  }, [clearError, handleError, refreshCurrentProjectTaskMaster, token, user]);
 
   const refreshTasks = useCallback(async () => {
     const projectName = currentProject?.name;
@@ -216,6 +338,9 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
     }
 
     if (message.type === 'taskmaster-project-updated' && message.projectName) {
+      if (message.projectName === currentProjectNameRef.current) {
+        void refreshCurrentProjectTaskMaster(message.projectName);
+      }
       void refreshProjects();
       return;
     }
@@ -228,7 +353,7 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
     if (message.type === 'taskmaster-mcp-status-changed') {
       void refreshMCPStatus();
     }
-  }, [currentProject?.name, latestMessage, refreshMCPStatus, refreshProjects, refreshTasks]);
+  }, [currentProject?.name, latestMessage, refreshCurrentProjectTaskMaster, refreshMCPStatus, refreshProjects, refreshTasks]);
 
   const contextValue = useMemo<TaskMasterContextValue>(
     () => ({

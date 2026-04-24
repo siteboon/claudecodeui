@@ -52,6 +52,8 @@ export const api = {
   // Protected endpoints
   // config endpoint removed - no longer needed (frontend uses window.location)
   projects: () => authenticatedFetch('/api/projects'),
+  projectTaskmaster: (projectName) =>
+    authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/taskmaster`),
   sessions: (projectName, limit = 5, offset = 0) =>
     authenticatedFetch(`/api/projects/${projectName}/sessions?limit=${limit}&offset=${offset}`),
   // Unified endpoint — all providers through one URL

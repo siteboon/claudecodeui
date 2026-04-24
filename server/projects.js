@@ -68,10 +68,31 @@ import sessionManager from './sessionManager.js';
 import { applyCustomSessionNames } from './database/db.js';
 import { getModuleDir, findAppRoot } from './utils/runtime-paths.js';
 
-// TODO: Remove the file writer after we have confidence in the stability of the project discovery system. This is just to help us debug and understand the projects being loaded in the wild, and will be removed in a future update.
+// Snapshot files are kept as incrementing artifacts under .tmp/project-dumps for later review.
 const __dirname = getModuleDir(import.meta.url);
 const APP_ROOT = findAppRoot(__dirname);
-const PROJECTS_DUMP_FILE = path.join(APP_ROOT, '.tmp', 'project-dumps', 'projects-latest.json');
+const PROJECTS_DUMP_DIR = path.join(APP_ROOT, '.tmp', 'project-dumps');
+let projectsSnapshotCounter = null;
+
+async function getNextProjectsSnapshotPath() {
+  await fs.mkdir(PROJECTS_DUMP_DIR, { recursive: true });
+
+  if (projectsSnapshotCounter === null) {
+    const entries = await fs.readdir(PROJECTS_DUMP_DIR).catch(() => []);
+    projectsSnapshotCounter = entries.reduce((max, entry) => {
+      const match = entry.match(/^projects-(\d+)\.json$/);
+      if (!match) {
+        return max;
+      }
+
+      return Math.max(max, Number(match[1]));
+    }, 0);
+  }
+
+  projectsSnapshotCounter += 1;
+  const suffix = String(projectsSnapshotCounter).padStart(4, '0');
+  return path.join(PROJECTS_DUMP_DIR, `projects-${suffix}.json`);
+}
 
 async function writeProjectsSnapshot(projects) {
   try {
@@ -81,12 +102,24 @@ async function writeProjectsSnapshot(projects) {
       projects
     };
 
-    await fs.mkdir(path.dirname(PROJECTS_DUMP_FILE), { recursive: true });
-    await fs.writeFile(
-      PROJECTS_DUMP_FILE,
-      JSON.stringify(snapshot, (_, value) => (typeof value === 'bigint' ? value.toString() : value), 2),
-      'utf8'
+    const snapshotJson = JSON.stringify(
+      snapshot,
+      (_, value) => (typeof value === 'bigint' ? value.toString() : value),
+      2
     );
+
+    while (true) {
+      const snapshotPath = await getNextProjectsSnapshotPath();
+      try {
+        await fs.writeFile(snapshotPath, snapshotJson, { encoding: 'utf8', flag: 'wx' });
+        break;
+      } catch (error) {
+        if (error.code === 'EEXIST') {
+          continue;
+        }
+        throw error;
+      }
+    }
   } catch (error) {
     console.warn('Could not write projects snapshot:', error.message);
   }
@@ -220,6 +253,29 @@ async function detectTaskMasterFolder(projectPath) {
   }
 }
 
+function normalizeTaskMasterInfo(taskMasterResult = null) {
+  const hasTaskmaster = Boolean(taskMasterResult?.hasTaskmaster);
+  const hasEssentialFiles = Boolean(taskMasterResult?.hasEssentialFiles);
+
+  return {
+    hasTaskmaster,
+    hasEssentialFiles,
+    metadata: taskMasterResult?.metadata ?? null,
+    status: hasTaskmaster && hasEssentialFiles ? 'configured' : 'not-configured'
+  };
+}
+
+async function getProjectTaskMaster(projectName) {
+  const projectPath = await extractProjectDirectory(projectName);
+  const taskMasterResult = await detectTaskMasterFolder(projectPath);
+
+  return {
+    projectName,
+    projectPath,
+    taskmaster: normalizeTaskMasterInfo(taskMasterResult)
+  };
+}
+
 // Cache for extracted project directories
 const projectDirectoryCache = new Map();
 
@@ -287,6 +343,7 @@ async function generateDisplayName(projectName, actualProjectDir = null) {
 }
 
 // Extract the actual project directory from JSONL sessions (with caching)
+// TODO: Get the project id as parameter and return the actual project directory from the database
 async function extractProjectDirectory(projectName) {
   // Check cache first
   if (projectDirectoryCache.has(projectName)) {
@@ -295,6 +352,7 @@ async function extractProjectDirectory(projectName) {
 
   // Check project config for originalPath (manually added projects via UI or platform)
   // This handles projects with dashes in their directory names correctly
+
   const config = await loadProjectConfig();
   if (config[projectName]?.originalPath) {
     const originalPath = config[projectName].originalPath;
@@ -517,27 +575,8 @@ async function getProjects(progressCallback = null) {
       }
       applyCustomSessionNames(project.geminiSessions, 'gemini');
 
-      // Add TaskMaster detection
-      try {
-        const taskMasterResult = await detectTaskMasterFolder(actualProjectDir);
-        project.taskmaster = {
-          hasTaskmaster: taskMasterResult.hasTaskmaster,
-          hasEssentialFiles: taskMasterResult.hasEssentialFiles,
-          metadata: taskMasterResult.metadata,
-          status: taskMasterResult.hasTaskmaster && taskMasterResult.hasEssentialFiles ? 'configured' : 'not-configured'
-        };
-      } catch (e) {
-        console.warn(`Could not detect TaskMaster for project ${entry.name}:`, e.message);
-        project.taskmaster = {
-          hasTaskmaster: false,
-          hasEssentialFiles: false,
-          metadata: null,
-          status: 'error'
-        };
-      }
-
       projects.push(project);
-      console.log(`Loaded project: ${project.displayName} (${project.name}) with ${project.sessions.length} sessions, ${project.cursorSessions.length} Cursor sessions, ${project.codexSessions.length} Codex sessions, and ${project.geminiSessions.length} Gemini sessions.`);
+      // console.log(`Loaded project: ${project.displayName} (${project.name}) with ${project.sessions.length} sessions, ${project.cursorSessions.length} Cursor sessions, ${project.codexSessions.length} Codex sessions, and ${project.geminiSessions.length} Gemini sessions.`);
       // console.log("Full project data:", project);
     }
   } catch (error) {
@@ -583,7 +622,6 @@ async function getProjects(progressCallback = null) {
         path: actualProjectDir,
         displayName: projectConfig.displayName || await generateDisplayName(projectName, actualProjectDir),
         fullPath: actualProjectDir,
-        isManuallyAdded: true,
         sessions: [],
         geminiSessions: [],
         sessionMeta: {
@@ -622,32 +660,6 @@ async function getProjects(progressCallback = null) {
         console.warn(`Could not load Gemini sessions for manual project ${projectName}:`, e.message);
       }
       applyCustomSessionNames(project.geminiSessions, 'gemini');
-
-      // Add TaskMaster detection for manual projects
-      try {
-        const taskMasterResult = await detectTaskMasterFolder(actualProjectDir);
-
-        // Determine TaskMaster status
-        let taskMasterStatus = 'not-configured';
-        if (taskMasterResult.hasTaskmaster && taskMasterResult.hasEssentialFiles) {
-          taskMasterStatus = 'taskmaster-only'; // We don't check MCP for manual projects in bulk
-        }
-
-        project.taskmaster = {
-          status: taskMasterStatus,
-          hasTaskmaster: taskMasterResult.hasTaskmaster,
-          hasEssentialFiles: taskMasterResult.hasEssentialFiles,
-          metadata: taskMasterResult.metadata
-        };
-      } catch (error) {
-        console.warn(`TaskMaster detection failed for manual project ${projectName}:`, error.message);
-        project.taskmaster = {
-          status: 'error',
-          hasTaskmaster: false,
-          hasEssentialFiles: false,
-          error: error.message
-        };
-      }
 
       projects.push(project);
     }
@@ -1292,7 +1304,6 @@ async function addProjectManually(projectPath, displayName = null) {
     path: absolutePath,
     fullPath: absolutePath,
     displayName: displayName || await generateDisplayName(projectName, absolutePath),
-    isManuallyAdded: true,
     sessions: [],
     cursorSessions: []
   };
@@ -2565,6 +2576,7 @@ export {
   deleteSession,
   deleteProject,
   addProjectManually,
+  getProjectTaskMaster,
   extractProjectDirectory,
   clearProjectDirectoryCache,
   getCodexSessionMessages,
