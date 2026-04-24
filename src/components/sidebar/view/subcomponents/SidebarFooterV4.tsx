@@ -11,8 +11,6 @@ import {
 import { MOD_KEY } from './shortcuts';
 
 type SidebarFooterV4Props = {
-  sessionCount: number;
-  maxSessions?: number;
   onShowSettings: () => void;
   onShowShortcuts: () => void;
   onRefresh: () => void;
@@ -32,8 +30,6 @@ const PROVIDER_LABEL: Record<ProviderId, string> = {
 };
 
 export default function SidebarFooterV4({
-  sessionCount,
-  maxSessions,
   onShowSettings,
   onShowShortcuts,
   onRefresh,
@@ -86,10 +82,6 @@ export default function SidebarFooterV4({
           style={{ background: PROVIDER_DOT_COLOR[activeProvider] }}
         />
         <IdentityLabel snapshot={activeSnapshot} />
-        <span className="font-mono text-[10px] text-muted-foreground/60">
-          {sessionCount}
-          {maxSessions ? `/${maxSessions}` : ''}
-        </span>
         <Tooltip content="Refresh projects & usage" position="top">
           <button
             onClick={handleRefreshAll}

@@ -36,6 +36,14 @@ export default defineConfig(({ mode }) => {
   return {
     base: normalizedBasePath,
     plugins: [react()],
+    optimizeDeps: {
+      include: [
+        '@xterm/xterm',
+        '@xterm/addon-fit',
+        '@xterm/addon-web-links',
+        '@xterm/addon-webgl',
+      ],
+    },
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url))
@@ -74,7 +82,7 @@ export default defineConfig(({ mode }) => {
               '@codemirror/lang-python',
               '@codemirror/theme-one-dark'
             ],
-            'vendor-xterm': ['@xterm/xterm', '@xterm/addon-fit', '@xterm/addon-clipboard', '@xterm/addon-webgl']
+            'vendor-xterm': ['@xterm/xterm', '@xterm/addon-fit', '@xterm/addon-web-links', '@xterm/addon-webgl']
           }
         }
       }

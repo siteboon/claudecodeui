@@ -71,8 +71,8 @@ export default function FlatSessionItem({
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 truncate font-mono text-[10px] leading-tight text-muted-foreground/70">
-          <span className="truncate">
-            @{session.__projectDisplayName} · {timeAgo}
+          <span className="truncate" title={session.__projectFullPath}>
+            {session.__projectFullPath} · {timeAgo}
           </span>
           {isArchived && (
             <span

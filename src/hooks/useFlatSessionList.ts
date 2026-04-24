@@ -6,6 +6,7 @@ import { getAllSessions, getSessionDate } from '../components/sidebar/utils/util
 export type FlatSession = SessionWithProvider & {
   __projectName: string;
   __projectDisplayName: string;
+  __projectFullPath: string;
   __status: SessionStatus;
   __sortRank: number;
 };
@@ -122,6 +123,7 @@ export function useFlatSessionList({
           ...session,
           __projectName: project.name,
           __projectDisplayName: project.displayName || project.name,
+          __projectFullPath: project.fullPath,
           __status: status,
           __sortRank: rank,
         });

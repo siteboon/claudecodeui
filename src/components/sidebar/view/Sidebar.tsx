@@ -19,7 +19,8 @@ import SidebarCollapsed from './subcomponents/SidebarCollapsed';
 import SidebarModals from './subcomponents/SidebarModals';
 import CommandBar, { type CommandBarHandle } from './subcomponents/CommandBar';
 import CommandPalette from './subcomponents/CommandPalette';
-import ShortcutsDialog from './subcomponents/ShortcutsDialog';
+import NewSessionPalette from './subcomponents/NewSessionPalette';
+import ShortcutsPanel from './subcomponents/ShortcutsPanel';
 import FlatSessionList from './subcomponents/FlatSessionList';
 import SidebarFooterV4 from './subcomponents/SidebarFooterV4';
 import MobileProjectFilter from './subcomponents/MobileProjectFilter';
@@ -60,6 +61,7 @@ function Sidebar({
 
   const [activeProjectFilter, setActiveProjectFilter] = useState<string | null>(null);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [showNewSessionPalette, setShowNewSessionPalette] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const { getColor, setColor } = useProjectColors();
   const { toggleArchived, isArchived } = useArchivedSessions();
@@ -214,10 +216,10 @@ function Sidebar({
         return;
       }
 
-      // Alt+N — new session (Ctrl+N is captured by browser on Linux/Win).
+      // Alt+N — open new-session palette (Ctrl+N is captured by browser on Linux/Win).
       if (e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'n') {
         e.preventDefault();
-        handleCreateSession();
+        setShowNewSessionPalette((prev) => !prev);
         return;
       }
 
@@ -329,10 +331,12 @@ function Sidebar({
             onCreateSession={handleCreateSession}
           />
         )}
+        {showShortcuts && (
+          <ShortcutsPanel onClose={() => setShowShortcuts(false)} />
+        )}
         <SidebarFooterV4
-          sessionCount={flatSessions.length}
           onShowSettings={onShowSettings}
-          onShowShortcuts={() => setShowShortcuts(true)}
+          onShowShortcuts={() => setShowShortcuts((prev) => !prev)}
           onRefresh={() => {
             void refreshProjects();
           }}
@@ -367,10 +371,16 @@ function Sidebar({
         onShowSettings={onShowSettings}
         onShowShortcuts={() => {
           setShowCommandPalette(false);
-          setShowShortcuts(true);
+          setShowShortcuts((prev) => !prev);
         }}
       />
-      <ShortcutsDialog open={showShortcuts} onOpenChange={setShowShortcuts} />
+      <NewSessionPalette
+        open={showNewSessionPalette}
+        onOpenChange={setShowNewSessionPalette}
+        railItems={railItems}
+        activeProjectName={activeProjectName}
+        onNewSessionInProject={handleCreateSessionInProject}
+      />
 
       <SidebarModals
         projects={projects}
