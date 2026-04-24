@@ -186,6 +186,11 @@ function mapPermissionModeToCodexOptions(permissionMode) {
   }
 }
 
+function isMissingCodexRolloutStateError(error) {
+  const message = String(error?.message || error || '');
+  return message.includes('state db missing rollout path');
+}
+
 /**
  * Execute a Codex query with streaming
  * @param {string} command - The prompt to send
@@ -209,6 +214,7 @@ export async function queryCodex(command, options = {}, ws) {
   let thread;
   let currentSessionId = sessionId;
   let terminalFailure = null;
+  let sessionCreatedSent = false;
   const abortController = new AbortController();
 
   try {
@@ -231,8 +237,10 @@ export async function queryCodex(command, options = {}, ws) {
       thread = codex.startThread(threadOptions);
     }
 
-    // Get the thread ID
-    currentSessionId = thread.id || sessionId || `codex-${Date.now()}`;
+    // For new Codex threads, thread.id is populated only after the first
+    // thread.started event. Use a temporary internal key until then, but do not
+    // navigate the UI to it.
+    currentSessionId = thread.id || sessionId || `codex-pending-${Date.now()}`;
 
     // Track the session
     activeCodexSessions.set(currentSessionId, {
@@ -240,11 +248,9 @@ export async function queryCodex(command, options = {}, ws) {
       codex,
       status: 'running',
       abortController,
-      startedAt: new Date().toISOString()
+      startedAt: new Date().toISOString(),
+      writer: ws
     });
-
-    // Send session created event
-    sendMessage(ws, createNormalizedMessage({ kind: 'session_created', newSessionId: currentSessionId, sessionId: currentSessionId, provider: 'codex' }));
 
     // Execute with streaming
     const streamedTurn = await thread.runStreamed(command, {
@@ -260,6 +266,25 @@ export async function queryCodex(command, options = {}, ws) {
 
       if (event.type === 'item.started' || event.type === 'item.updated') {
         continue;
+      }
+
+      if (event.type === 'thread.started' && event.thread_id && !sessionCreatedSent) {
+        const previousSessionId = currentSessionId;
+        currentSessionId = event.thread_id;
+        sessionCreatedSent = true;
+
+        const activeSession = activeCodexSessions.get(previousSessionId);
+        if (activeSession) {
+          activeCodexSessions.delete(previousSessionId);
+          activeCodexSessions.set(currentSessionId, activeSession);
+        }
+
+        sendMessage(ws, createNormalizedMessage({
+          kind: 'session_created',
+          newSessionId: currentSessionId,
+          sessionId: currentSessionId,
+          provider: 'codex'
+        }));
       }
 
       const transformed = transformCodexEvent(event);
@@ -290,7 +315,8 @@ export async function queryCodex(command, options = {}, ws) {
 
     // Send completion event
     if (!terminalFailure) {
-      sendMessage(ws, createNormalizedMessage({ kind: 'complete', actualSessionId: thread.id, sessionId: currentSessionId, provider: 'codex' }));
+      const finalSessionId = thread.id || currentSessionId;
+      sendMessage(ws, createNormalizedMessage({ kind: 'complete', actualSessionId: finalSessionId, sessionId: finalSessionId, provider: 'codex' }));
       notifyRunStopped({
         userId: ws?.userId || null,
         provider: 'codex',
@@ -312,7 +338,9 @@ export async function queryCodex(command, options = {}, ws) {
 
       // Check if Codex SDK is available for a clearer error message
       const installed = await providerAuthService.isProviderInstalled('codex');
-      const errorContent = !installed
+      const errorContent = isMissingCodexRolloutStateError(error)
+        ? 'Codex could not resume this chat because its local rollout state is missing. Start a new Codex chat for this project.'
+        : !installed
         ? 'Codex CLI is not configured. Please set up authentication first.'
         : error.message;
 
@@ -389,6 +417,24 @@ export function getActiveCodexSessions() {
   }
 
   return sessions;
+}
+
+/**
+ * Reconnect a Codex session's WebSocketWriter to a new raw WebSocket.
+ * Called when the browser reconnects while Codex is still streaming.
+ * @param {string} sessionId - Session ID to reconnect
+ * @param {object} newRawWs - New raw WebSocket connection
+ * @returns {boolean} Whether the writer was reconnected
+ */
+export function reconnectCodexSessionWriter(sessionId, newRawWs) {
+  const session = activeCodexSessions.get(sessionId);
+  if (!session?.writer?.updateWebSocket) {
+    return false;
+  }
+
+  session.writer.updateWebSocket(newRawWs);
+  console.log(`[RECONNECT] Codex writer swapped for session ${sessionId}`);
+  return true;
 }
 
 /**
