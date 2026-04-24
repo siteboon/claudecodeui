@@ -225,13 +225,14 @@ function ChatInterface({
   // On WebSocket reconnect, re-fetch the current session's messages from the server
   // so missed streaming events are shown. Also reset isLoading.
   const handleWebSocketReconnect = useCallback(async () => {
-    if (!selectedProject || !selectedSession) return;
-    const providerVal = (localStorage.getItem('selected-provider') as LLMProvider) || 'claude';
-    await sessionStore.refreshFromServer(selectedSession.id, {
-      provider: (selectedSession.__provider || providerVal) as LLMProvider,
-      projectName: selectedProject.name,
-      projectPath: selectedProject.fullPath || selectedProject.path || '',
-    });
+    if (selectedProject && selectedSession) {
+      const providerVal = (localStorage.getItem('selected-provider') as LLMProvider) || 'claude';
+      await sessionStore.refreshFromServer(selectedSession.id, {
+        provider: (selectedSession.__provider || providerVal) as LLMProvider,
+        projectName: selectedProject.name,
+        projectPath: selectedProject.fullPath || selectedProject.path || '',
+      });
+    }
     setIsLoading(false);
     setCanAbortSession(false);
   }, [selectedProject, selectedSession, sessionStore, setIsLoading, setCanAbortSession]);
