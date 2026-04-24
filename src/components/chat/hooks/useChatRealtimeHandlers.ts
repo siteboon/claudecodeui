@@ -57,6 +57,8 @@ interface UseChatRealtimeHandlersArgs {
   setCanAbortSession: (canAbort: boolean) => void;
   setClaudeStatus: (status: { text: string; tokens: number; can_interrupt: boolean } | null) => void;
   setTokenBudget: (budget: Record<string, unknown> | null) => void;
+  setServerQueueCapability: Dispatch<SetStateAction<Record<string, boolean>>>;
+  setShellActiveSessionIds: Dispatch<SetStateAction<Set<string>>>;
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
   pendingViewSessionRef: MutableRefObject<PendingViewSession | null>;
   streamBufferRef: MutableRefObject<string>;
@@ -86,6 +88,8 @@ export function useChatRealtimeHandlers({
   setCanAbortSession,
   setClaudeStatus,
   setTokenBudget,
+  setServerQueueCapability,
+  setShellActiveSessionIds,
   setPendingPermissionRequests,
   pendingViewSessionRef,
   streamBufferRef,
@@ -122,6 +126,31 @@ export function useChatRealtimeHandlers({
         case 'websocket-reconnected':
           onWebSocketReconnect?.();
           return;
+
+        case 'server-capabilities':
+          // Receive after chat WS (re)connect so the composer knows which
+          // providers accept prompts while a turn is in flight. Shape:
+          // { type: 'server-capabilities', queue: { claude, cursor, ... } }
+          if (msg.queue && typeof msg.queue === 'object') {
+            setServerQueueCapability(msg.queue as Record<string, boolean>);
+          }
+          return;
+
+        case 'shell-session-active': {
+          // Drives the "Shell open" banner. Add/remove the sessionId from
+          // the active set; the chat UI doesn't try to sync the PTY
+          // transcript — we only tell the user to stop typing against a
+          // session that's being edited from two places at once.
+          const shellSessionId = msg.sessionId;
+          if (!shellSessionId) return;
+          setShellActiveSessionIds((prev) => {
+            const next = new Set(prev);
+            if (msg.active) next.add(shellSessionId);
+            else next.delete(shellSessionId);
+            return next;
+          });
+          return;
+        }
 
         case 'pending-permissions-response': {
           const permSessionId = msg.sessionId;
@@ -256,6 +285,14 @@ export function useChatRealtimeHandlers({
         accumulatedStreamRef.current = '';
         streamBufferRef.current = '';
 
+        // `queueNext` signals the backend is about to drain a queued prompt
+        // into the same long-lived session. Keep the processing banner up so
+        // the send button doesn't flicker enabled between the current turn's
+        // `complete` and the next turn's first streamed token.
+        if (msg.queueNext) {
+          break;
+        }
+
         setIsLoading(false);
         setCanAbortSession(false);
         setClaudeStatus(null);
@@ -283,6 +320,25 @@ export function useChatRealtimeHandlers({
           if (window.refreshProjects) {
             setTimeout(() => window.refreshProjects?.(), 500);
           }
+        }
+
+        // Reconcile the store against the canonical JSONL now that the turn
+        // is done. Without this step a real-time message that got routed to
+        // the wrong slot (placeholder → real sessionId rekey race) or arrived
+        // while the chat WS was non-OPEN (replay buffer delivers on reconnect
+        // but never forces a UI re-render against the authoritative source)
+        // remains invisible until the user hard-refreshes. The 500 ms delay
+        // gives the provider's JSONL a moment to land on disk.
+        if (sid && selectedProject) {
+          setTimeout(() => {
+            sessionStore.refreshFromServer(sid, {
+              provider,
+              projectName: selectedProject.name,
+              projectPath: selectedProject.fullPath || selectedProject.path || '',
+            }).catch((err) => {
+              console.error('[realtime] post-complete refresh failed:', err);
+            });
+          }, 500);
         }
         break;
       }

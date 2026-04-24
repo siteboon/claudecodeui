@@ -29,6 +29,8 @@ import { CLAUDE_MODELS } from '../shared/modelConstants.js';
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { createNormalizedMessage } from './shared/utils.js';
 import { handleImages, cleanupTempFiles, loadMcpConfig } from './claude-sdk.js';
+import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
+import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
 import {
   registerSession as registerPermissionMcpSession,
   buildApprovalBridge,
@@ -46,6 +48,36 @@ const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
 const activeStreamSessions = new Map();
 
 const IDLE_TIMEOUT_MS = parseInt(process.env.CLAUDE_STREAM_IDLE_MS, 10) || 30 * 60 * 1000;
+
+// Matches the default used in claude-sdk.js extractTokenBudget — kept in sync
+// so the UI's context-window bar reads the same budget across SDK and stream
+// modes. Override via CONTEXT_WINDOW env var at server start.
+const CONTEXT_WINDOW_DEFAULT = 160000;
+
+/**
+ * Fold a CLI `result.usage` payload into the session's running token totals
+ * and return a `{ used, total }` shape that matches what claude-sdk.js emits
+ * via extractTokenBudget. Returns null when the usage payload is missing or
+ * has no numeric fields, so callers can skip the status emit.
+ */
+function accumulateTokenBudget(session, usage) {
+  if (!usage || typeof usage !== 'object') return null;
+  const input = Number(usage.input_tokens) || 0;
+  const output = Number(usage.output_tokens) || 0;
+  const cacheRead = Number(usage.cache_read_input_tokens) || 0;
+  const cacheCreation = Number(usage.cache_creation_input_tokens) || 0;
+  if (input + output + cacheRead + cacheCreation === 0) return null;
+  session.cumulativeTokens.input += input;
+  session.cumulativeTokens.output += output;
+  session.cumulativeTokens.cacheRead += cacheRead;
+  session.cumulativeTokens.cacheCreation += cacheCreation;
+  const used = session.cumulativeTokens.input
+    + session.cumulativeTokens.output
+    + session.cumulativeTokens.cacheRead
+    + session.cumulativeTokens.cacheCreation;
+  const total = parseInt(process.env.CONTEXT_WINDOW, 10) || CONTEXT_WINDOW_DEFAULT;
+  return { used, total };
+}
 
 /**
  * Temporary map key for a session that hasn't seen its `system/init` yet.
@@ -85,6 +117,16 @@ function buildCliArgs({ sessionId, model, permissionMode, mcpServers, additional
     // the streamed copy persists as a duplicate next to the server's canonical
     // assistant message. Emitting only the final `assistant` event avoids this.
   ];
+
+  // Hook lifecycle events (hook_started / hook_progress / hook_response for
+  // PreToolUse, PostToolUse, Stop, etc.) are OFF by default in the CLI;
+  // without the flag the UI never sees why a tool call is stalling on a
+  // hook. Opt in via CLAUDE_STREAM_INCLUDE_HOOK_EVENTS=1 so deployments
+  // that don't want the extra chatter can keep the old behaviour. Note
+  // SessionStart and Setup hooks always emit regardless of this flag.
+  if (process.env.CLAUDE_STREAM_INCLUDE_HOOK_EVENTS === '1') {
+    args.push('--include-hook-events');
+  }
 
   // Skip permissions is still supported — mirrors SDK path when the user has
   // toggled "skip permissions" in the UI. When false, the permission-prompt-
@@ -232,28 +274,86 @@ function handleEvent(session, event) {
     return;
   }
 
-  // Surface user-facing systemMessages from hook responses (e.g. SessionStart hooks
-  // that echo "Session saved to task X"). Drop other hook lifecycle events silently.
-  if (event.type === 'system' && event.subtype === 'hook_response') {
-    try {
-      const parsed = typeof event.output === 'string' ? JSON.parse(event.output) : event.output;
-      const sysMsg = parsed?.systemMessage;
-      if (sysMsg) {
-        session.writer?.send(createNormalizedMessage({
-          kind: 'status',
-          text: 'system_message',
-          content: sysMsg,
-          source: event.hook_name,
-          sessionId: sid,
-          provider: 'claude',
-        }));
-      }
-    } catch (_) { /* non-JSON output, ignore */ }
+  // Surface hook lifecycle events (hook_started / hook_progress /
+  // hook_response) as ephemeral `status` messages. The CLI only emits these
+  // when --include-hook-events is set (see buildCliArgs). SessionStart and
+  // Setup hooks always emit regardless of that flag, and their `systemMessage`
+  // payload gets promoted to a dedicated `system_message` status so the UI
+  // can render the message body prominently rather than as generic hook
+  // output. Event shapes (from @anthropic-ai/claude-agent-sdk sdk.d.ts):
+  //   hook_started:  { hook_id, hook_name, hook_event, uuid }
+  //   hook_progress: { hook_id, hook_name, hook_event, stdout, stderr, output, uuid }
+  //   hook_response: { hook_id, hook_name, hook_event, outcome, exit_code?,
+  //                    stdout, stderr, output, uuid }
+  if (event.type === 'system'
+      && (event.subtype === 'hook_started'
+          || event.subtype === 'hook_progress'
+          || event.subtype === 'hook_response')) {
+    // Promote SessionStart-style systemMessage into its own status event so
+    // pre-existing UI handling (rendered as an info banner, not a hook
+    // progress log entry) keeps working. Only `hook_response` carries the
+    // final output worth parsing.
+    if (event.subtype === 'hook_response') {
+      try {
+        const parsed = typeof event.output === 'string' ? JSON.parse(event.output) : event.output;
+        const sysMsg = parsed?.systemMessage;
+        if (sysMsg) {
+          session.writer?.send(createNormalizedMessage({
+            kind: 'status',
+            text: 'system_message',
+            content: sysMsg,
+            source: event.hook_name,
+            sessionId: sid,
+            provider: 'claude',
+          }));
+        }
+      } catch (_) { /* non-JSON output, ignore — hook output isn't required to be JSON */ }
+    }
+
+    session.writer?.send(createNormalizedMessage({
+      kind: 'status',
+      text: event.subtype, // 'hook_started' | 'hook_progress' | 'hook_response'
+      source: event.hook_name || null,
+      hookId: event.hook_id || null,
+      hookEvent: event.hook_event || null,
+      // Only hook_response has `outcome` + `exit_code`; hook_progress has
+      // incremental stdout/stderr/output; hook_started is the bare start
+      // marker. Forward whatever subset is present so the UI can decide
+      // what to display without the server guessing.
+      outcome: event.outcome || null,
+      exitCode: Number.isInteger(event.exit_code) ? event.exit_code : null,
+      stdout: typeof event.stdout === 'string' ? event.stdout : null,
+      stderr: typeof event.stderr === 'string' ? event.stderr : null,
+      output: typeof event.output === 'string' ? event.output : null,
+      sessionId: sid,
+      provider: 'claude',
+    }));
+    return;
+  }
+
+  // Surface auto-compaction boundary so the UI can tell the user the
+  // session history was trimmed. The CLI emits a `compact_boundary` event
+  // once the accumulated context crosses the trigger threshold; the field
+  // shape follows Anthropic's stream-json docs (compact_metadata carries
+  // trigger + pre/post token counts). There is no `compact_complete`
+  // companion event — the boundary itself is the terminal signal.
+  if (event.type === 'compact_boundary') {
+    const meta = event.compact_metadata || {};
+    session.writer?.send(createNormalizedMessage({
+      kind: 'status',
+      text: 'compact_boundary',
+      content: meta.trigger
+        ? `Context compacted (trigger: ${meta.trigger})`
+        : 'Context compacted',
+      compactMetadata: meta,
+      sessionId: sid,
+      provider: 'claude',
+    }));
     return;
   }
 
   // Drop non-informative system events silently: init (we already captured
-  // session_id), status, hook_started — they'd be UI noise.
+  // session_id), status — they'd be UI noise.
   if (event.type === 'system') return;
 
   // CLI error events (auth failure, internal errors). The shared adapter has
@@ -268,6 +368,17 @@ function handleEvent(session, event) {
       sessionId: sid,
       provider: 'claude',
     }));
+    // Parity with SDK / codex / cursor paths: fire a web-push notification
+    // so users who navigated away from the chat are told their prompt
+    // blew up. Swallow the sync error cause here because the user-visible
+    // `msg` is already surfaced via the `error` WS event above.
+    notifyRunFailed({
+      userId: session.writer?.userId || null,
+      provider: 'claude',
+      sessionId: sid,
+      sessionName: session.sessionSummary,
+      error: event.error || new Error(msg),
+    });
     // Clean the failed prompt's temps now — no `result` will follow to do it
     // for us, and letting the next drainQueue call overwrite
     // `currentPromptTemps` would leak the files on disk.
@@ -277,6 +388,10 @@ function handleEvent(session, event) {
     }
     session.currentPromptTemps = null;
     session.inFlight = false;
+    // Error clears the in-flight prompt but leaves the process alive for
+    // follow-up prompts; don't overwrite an 'aborted' status that may have
+    // landed from a concurrent abort request.
+    if (session.status !== 'aborted') session.status = 'idle';
     drainQueue(session);
     if (!session.inFlight) armIdleTimer(session);
     return;
@@ -289,6 +404,7 @@ function handleEvent(session, event) {
   // On result event, mark prompt done and run idle timer.
   if (event.type === 'result') {
     session.inFlight = false;
+    if (session.status !== 'aborted') session.status = 'idle';
 
     // Clean up only the in-flight prompt's temp files; queued prompts keep
     // their own temps attached to their queue entry until they run.
@@ -298,6 +414,27 @@ function handleEvent(session, event) {
     }
     session.currentPromptTemps = null;
 
+    // Emit token_budget before complete so the UI's context-window bar
+    // updates in the same tick the run finishes. Skipped when the CLI did
+    // not attach a usage payload (some error results arrive empty).
+    const tokenBudget = accumulateTokenBudget(session, event.usage);
+    if (tokenBudget) {
+      session.writer?.send(createNormalizedMessage({
+        kind: 'status',
+        text: 'token_budget',
+        tokenBudget,
+        sessionId: sid,
+        provider: 'claude',
+      }));
+    }
+
+    // When there's a queued prompt lined up, tell the client so it keeps the
+    // processing banner on instead of flickering off between the `complete`
+    // and the next `session_created` / first stream event. Without this the
+    // send button briefly enables mid-queue and any prompt typed into that
+    // gap would render as a fresh non-queued submit even though the backend
+    // transparently stacks it.
+    const queueNext = Array.isArray(session.queue) && session.queue.length > 0;
     session.writer?.send(createNormalizedMessage({
       kind: 'complete',
       exitCode: event.is_error ? 1 : 0,
@@ -306,9 +443,21 @@ function handleEvent(session, event) {
       apiDurationMs: event.duration_api_ms,
       totalCostUsd: event.total_cost_usd,
       usage: event.usage,
+      queueNext,
       sessionId: sid,
       provider: 'claude',
     }));
+    // Web-push parity with SDK/codex/cursor. `is_error: true` in a CLI
+    // result still counts as "run finished" for notification purposes;
+    // there is a separate `error` event type above that triggers failure
+    // notifications when the CLI itself broke.
+    notifyRunStopped({
+      userId: session.writer?.userId || null,
+      provider: 'claude',
+      sessionId: sid,
+      sessionName: session.sessionSummary,
+      stopReason: 'completed',
+    });
 
     drainQueue(session);
     if (!session.inFlight) armIdleTimer(session);
@@ -358,6 +507,13 @@ function attachStdoutHandler(session) {
       sessionId: session.sessionId,
       provider: 'claude',
     }));
+    notifyRunFailed({
+      userId: session.writer?.userId || null,
+      provider: 'claude',
+      sessionId: session.sessionId,
+      sessionName: session.sessionSummary,
+      error: err,
+    });
   });
 }
 
@@ -368,10 +524,17 @@ function attachStdoutHandler(session) {
  */
 function armIdleTimer(session) {
   if (session.idleTimer) clearTimeout(session.idleTimer);
-  session.idleTimer = setTimeout(() => {
+  const timer = setTimeout(() => {
     console.log(`[claude-stream] idle timeout → killing session ${session.sessionId}`);
     killSession(session);
   }, IDLE_TIMEOUT_MS);
+  // Don't let the idle timer keep the Node event loop alive. Matters for
+  // test harnesses that trigger handleEvent paths which arm the timer but
+  // never disarm it — without unref the process hangs 30 min after tests
+  // pass. In production the child process keeps Node alive anyway, so the
+  // unref is a no-op relative to normal shutdown semantics.
+  timer.unref?.();
+  session.idleTimer = timer;
 }
 
 /**
@@ -411,6 +574,9 @@ function killSession(session) {
  */
 function cleanupSession(session, { sendComplete = false } = {}) {
   disarmIdleTimer(session);
+  // Terminal state. Preserve 'aborted' so status queries after cleanup still
+  // reflect the user-initiated shutdown rather than a generic 'completed'.
+  if (session.status !== 'aborted') session.status = 'completed';
 
   // Tear down the per-session permission MCP registration. Also force-deny
   // any in-flight approvals so the downstream pendingToolApprovals entries
@@ -495,6 +661,11 @@ function writePromptNow(session, entry) {
   try {
     session.process.stdin.write(payload);
     session.inFlight = true;
+    // Only transition running→running / idle→running here. An aborted
+    // session should stay 'aborted' until cleanupSession flips it to
+    // 'completed'; flipping back to 'running' on a racing write would
+    // mask the abort from observers.
+    if (session.status !== 'aborted') session.status = 'running';
     session.currentPromptTemps = {
       tempImagePaths: entry.tempImagePaths || [],
       tempDir: entry.tempDir || null,
@@ -555,7 +726,7 @@ function drainQueue(session) {
  * Main entry point. Same signature as queryClaudeSDK.
  */
 async function queryClaudeStream(command, options = {}, ws) {
-  const { sessionId, cwd, model, permissionMode, images, additionalDirs, toolsSettings } = options;
+  const { sessionId, cwd, model, permissionMode, images, additionalDirs, toolsSettings, sessionSummary } = options;
 
   const toolsSettingsResolved = toolsSettings || { allowedTools: [], disallowedTools: [], skipPermissions: false };
   const skipPermissions = Boolean(toolsSettingsResolved.skipPermissions);
@@ -609,6 +780,23 @@ async function queryClaudeStream(command, options = {}, ws) {
         idleTimer: null,
         queue: [],
         toolsSettings: toolsSettingsResolved,
+        // High-level state machine, separate from inFlight:
+        //   'running'   — prompt currently streaming
+        //   'idle'      — process alive, awaiting next prompt
+        //   'aborted'   — user requested abort; process may still be winding down
+        //   'completed' — process exited cleanly
+        // Used by getClaudeStreamSessionStatus for observability and by the
+        // abort path to avoid re-notifying an already-aborted session.
+        status: 'idle',
+        // Stored for web-push notifications fired from handleEvent; kept on
+        // the session so every prompt in the long-lived process can refresh
+        // it without plumbing sessionSummary through the stdout handler.
+        sessionSummary: sessionSummary || null,
+        // CLI `result.usage` reports per-prompt token counts; the UI expects
+        // cumulative totals for the whole session (to match SDK mode's
+        // modelUsage.cumulative* fields). We accumulate here on every result
+        // and emit a `token_budget` status event before the `complete`.
+        cumulativeTokens: { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
         permissionMcp: null, // set below when !skipPermissions
       };
 
@@ -686,12 +874,29 @@ async function queryClaudeStream(command, options = {}, ws) {
         }));
         return;
       }
-      session.writer = ws;
+      // Swap the underlying raw socket on the EXISTING WebSocketWriter so any
+      // messages buffered in its replay queue during the disconnect window
+      // (e.g. a `complete` that fired while the old WS was closed) are
+      // flushed to the new connection. Replacing `session.writer` wholesale
+      // would drop that buffer and re-introduce the stuck-send-button bug.
+      // The incoming `ws` is a freshly-built WebSocketWriter from
+      // handleChatConnection; we only need its raw socket.
+      const incomingRawWs = ws?.ws || ws;
+      if (session.writer?.updateWebSocket) {
+        session.writer.updateWebSocket(incomingRawWs);
+      } else {
+        // Legacy / test path: session.writer is a bare ws. Fall back to the
+        // old replace-in-place behaviour so we don't regress those callers.
+        session.writer = ws;
+      }
       // Refresh tools settings so UI toggles ("Allow Bash", etc.) between
       // prompts take effect on the long-lived process too. The CLI can't
       // receive a new --allowed-tools mid-process, but our permission bridge
       // checks this on every invocation.
       session.toolsSettings = toolsSettingsResolved;
+      // Keep the session summary fresh so a later notification (on complete
+      // or failure) uses the most recent name the client has for this chat.
+      if (sessionSummary) session.sessionSummary = sessionSummary;
       disarmIdleTimer(session);
     }
 
@@ -719,12 +924,27 @@ async function queryClaudeStream(command, options = {}, ws) {
       Promise.resolve(session.permissionMcp.dispose()).catch(() => {});
       session.permissionMcp = null;
     }
+    // Parity with claude-sdk.js: when spawn fails because the CLI isn't
+    // installed (ENOENT on the `claude` binary), surface a setup pointer
+    // instead of a cryptic exec error. The install check runs only on the
+    // failure path so it doesn't add latency to the happy path.
+    const installed = await providerAuthService.isProviderInstalled('claude').catch(() => true);
+    const errorContent = !installed
+      ? 'Claude Code is not installed. Please install it first: https://docs.anthropic.com/en/docs/claude-code'
+      : `Claude stream error: ${err.message}`;
     ws?.send?.(createNormalizedMessage({
       kind: 'error',
-      content: `Claude stream error: ${err.message}`,
+      content: errorContent,
       sessionId: options.sessionId || null,
       provider: 'claude',
     }));
+    notifyRunFailed({
+      userId: ws?.userId || null,
+      provider: 'claude',
+      sessionId: options.sessionId || null,
+      sessionName: sessionSummary,
+      error: err,
+    });
   }
 }
 
@@ -788,6 +1008,7 @@ async function abortClaudeStreamSession(sessionId, userId) {
   // Flag so the exit handler doesn't emit a second `complete` event — the
   // dispatcher in index.js already sent one for this abort.
   session.abortRequested = true;
+  session.status = 'aborted';
   // Resolve any in-flight approval prompts with deny so the CLI's blocking
   // MCP tool call returns immediately — SIGINT doesn't cancel HTTP requests
   // already dispatched to our permission server.
@@ -827,6 +1048,39 @@ function isClaudeStreamSessionActive(sessionId, userId) {
   if (!session) return false;
   if (!sessionBelongsTo(session, userId)) return false;
   return true;
+}
+
+/**
+ * True only when the live session currently has an in-flight prompt. Stream
+ * sessions keep the CLI process warm between prompts, so liveness alone
+ * (`isClaudeStreamSessionActive`) would report idle sessions as processing
+ * and lock the UI's send button after a reconnect.
+ * @param {string} sessionId
+ * @param {string|number|null} [userId]
+ * @returns {boolean}
+ */
+function isClaudeStreamSessionProcessing(sessionId, userId) {
+  const session = getLiveSession(sessionId);
+  if (!session) return false;
+  if (!sessionBelongsTo(session, userId)) return false;
+  return session.inFlight === true;
+}
+
+/**
+ * Return the live session's status machine value — 'running' | 'idle' |
+ * 'aborted' — or null when the session isn't live or isn't owned by the
+ * caller. 'completed' is not reachable here because `getLiveSession` prunes
+ * dead entries; callers that want the terminal state should observe the
+ * `complete` WS event instead.
+ * @param {string} sessionId
+ * @param {string|number|null} [userId]
+ * @returns {'running' | 'idle' | 'aborted' | null}
+ */
+function getClaudeStreamSessionStatus(sessionId, userId) {
+  const session = getLiveSession(sessionId);
+  if (!session) return null;
+  if (!sessionBelongsTo(session, userId)) return null;
+  return session.status || 'idle';
 }
 
 /**
@@ -876,6 +1130,24 @@ export {
   queryClaudeStream,
   abortClaudeStreamSession,
   isClaudeStreamSessionActive,
+  isClaudeStreamSessionProcessing,
+  getClaudeStreamSessionStatus,
   getActiveClaudeStreamSessions,
   reconnectStreamSessionWriter,
+};
+
+// Test-only surface. Exposes internals so unit tests can seed the private
+// `activeStreamSessions` map and verify ownership / liveness / inFlight
+// semantics without spawning the real `claude` CLI. Do not import from
+// production code — prefer the public helpers above.
+export const __test__ = {
+  activeStreamSessions,
+  getLiveSession,
+  sessionBelongsTo,
+  isSessionProcessAlive,
+  accumulateTokenBudget,
+  handleEvent,
+  submitPrompt,
+  drainQueue,
+  writePromptNow,
 };

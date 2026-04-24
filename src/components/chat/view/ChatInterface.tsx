@@ -101,6 +101,10 @@ function ChatInterface({
     setIsUserScrolledUp,
     tokenBudget,
     setTokenBudget,
+    serverQueueCapability,
+    setServerQueueCapability,
+    shellActiveSessionIds,
+    setShellActiveSessionIds,
     visibleMessageCount,
     visibleMessages,
     loadEarlierMessages,
@@ -185,6 +189,7 @@ function ChatInterface({
     geminiModel,
     isLoading,
     canAbortSession,
+    canQueueWhileLoading: Boolean(serverQueueCapability[provider]),
     tokenBudget,
     sendMessage,
     sendByCtrlEnter,
@@ -230,6 +235,8 @@ function ChatInterface({
     setCanAbortSession,
     setClaudeStatus,
     setTokenBudget,
+    setServerQueueCapability,
+    setShellActiveSessionIds,
     setPendingPermissionRequests,
     pendingViewSessionRef,
     streamBufferRef,
@@ -347,12 +354,23 @@ function ChatInterface({
           selectedProject={selectedProject}
         />
 
+        {(() => {
+          const activeSid = selectedSession?.id || currentSessionId;
+          if (!activeSid || !shellActiveSessionIds.has(activeSid)) return null;
+          return (
+            <div className="mx-3 mb-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
+              Shell open for this session — chat state isn&apos;t synced with the terminal. Close the Shell tab to clear this banner.
+            </div>
+          );
+        })()}
+
         <ChatComposer
           pendingPermissionRequests={pendingPermissionRequests}
           handlePermissionDecision={handlePermissionDecision}
           handleGrantToolPermission={handleGrantToolPermission}
           claudeStatus={claudeStatus}
           isLoading={isLoading}
+          canQueueWhileLoading={Boolean(serverQueueCapability[provider])}
           onAbortSession={handleAbortSession}
           provider={provider}
           permissionMode={permissionMode}
