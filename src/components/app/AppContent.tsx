@@ -325,16 +325,32 @@ export default function AppContent() {
     return () => vv.removeEventListener('resize', update);
   }, []);
 
+  const [sidebarHover, setSidebarHover] = useState(false);
+  const multiPane = !isMobile && panes.length > 1;
+
   return (
     <div className="fixed inset-0 flex bg-background" style={{ bottom: 'var(--keyboard-height, 0px)' }}>
       {!isMobile ? (
-        <div className="h-full flex-shrink-0 border-r border-border/50">
-          <Sidebar
-            {...sidebarSharedProps}
-            onSessionSelect={handleSidebarSessionSelect}
-            activeSessions={activeSessions}
-            processingSessions={processingSessions}
-          />
+        <div
+          className="relative h-full flex-shrink-0"
+          style={{ width: multiPane ? '48px' : undefined }}
+          onMouseEnter={() => { if (multiPane) setSidebarHover(true); }}
+          onMouseLeave={() => setSidebarHover(false)}
+        >
+          <div
+            className={`h-full transition-[transform,box-shadow] duration-250 ease-out ${multiPane ? 'absolute left-0 top-0 z-50' : 'border-r border-border/50'}`}
+            style={multiPane ? {
+              transform: sidebarHover ? 'translateX(0)' : 'translateX(calc(-100% + 48px))',
+              boxShadow: sidebarHover ? '4px 0 24px rgba(0,0,0,0.18)' : 'none',
+            } : undefined}
+          >
+            <Sidebar
+              {...sidebarSharedProps}
+              onSessionSelect={handleSidebarSessionSelect}
+              activeSessions={activeSessions}
+              processingSessions={processingSessions}
+            />
+          </div>
         </div>
       ) : (
         <div
