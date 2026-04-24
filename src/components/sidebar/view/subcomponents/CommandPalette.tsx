@@ -44,6 +44,7 @@ type CommandPaletteProps = {
   onSelectSessionInNewPane: (session: FlatSession) => void;
   onSelectProject: (projectName: string) => void;
   onNewSession: () => void;
+  onNewSessionInProject: (projectName: string) => void;
   onArchiveActiveSession: () => void;
   onClearProjectFilter: () => void;
   onRefresh: () => void;
@@ -63,6 +64,7 @@ export default function CommandPalette({
   onSelectSessionInNewPane,
   onSelectProject,
   onNewSession,
+  onNewSessionInProject,
   onArchiveActiveSession,
   onClearProjectFilter,
   onRefresh,
@@ -96,17 +98,36 @@ export default function CommandPalette({
   };
 
   // Mirror the Command root's search string by observing the input directly.
-  // Command.tsx owns the canonical search state in its context and doesn't
-  // expose it to the outside world; we peek via onInput so this hook can
-  // drive without modifying Command.tsx.
   const [query, setQuery] = useState('');
 
-  // Command.tsx unmounts the input on Dialog close so its canonical search
-  // resets to ''. Our mirrored query needs to follow — otherwise a re-open
-  // would race an old query against a fresh (empty) input.
+  // Project cycle: Tab / Shift+Tab in the input cycles which project the
+  // "New session" action targets. Initialises to the active project on open.
+  const [cycleIdx, setCycleIdx] = useState(0);
   useEffect(() => {
-    if (!open) setQuery('');
-  }, [open]);
+    if (!open) {
+      setQuery('');
+      return;
+    }
+    const idx = railItems.findIndex(
+      (p) => p.name === activeProjectName || p.displayName === activeProjectName,
+    );
+    setCycleIdx(Math.max(0, idx));
+  }, [open, activeProjectName, railItems]);
+
+  const cycledProject = railItems.length > 0 ? railItems[cycleIdx] : null;
+  const cycledProjectName = cycledProject
+    ? (cycledProject.displayName || cycledProject.name)
+    : activeProjectName;
+
+  const handleTabCycle = (e: React.KeyboardEvent) => {
+    if (e.key !== 'Tab' || railItems.length < 2) return;
+    e.preventDefault();
+    setCycleIdx((prev) =>
+      e.shiftKey
+        ? (prev - 1 + railItems.length) % railItems.length
+        : (prev + 1) % railItems.length,
+    );
+  };
 
   const { results: transcriptResults, isSearching: isTranscriptSearching } = useTranscriptSearch({
     query,
@@ -142,7 +163,7 @@ export default function CommandPalette({
     !normalizedQuery || value.toLowerCase().includes(normalizedQuery);
 
   const actionValues = [
-    `new session ${activeProjectName}`,
+    `new session ${cycledProjectName}`,
     ...(hasSelectedSession ? ['archive current session'] : []),
     ...(hasActiveFilter ? ['clear project filter'] : []),
     'refresh projects',
@@ -166,7 +187,7 @@ export default function CommandPalette({
             placeholder="Type a command or search sessions and transcripts…"
             autoFocus
             onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
-            onKeyDown={handleShiftEnter}
+            onKeyDown={(e) => { handleTabCycle(e); handleShiftEnter(e); }}
           />
           <CommandList ref={listRef} className="max-h-[440px]" onKeyDown={handleShiftEnter}>
             {!showTranscriptGroup && <CommandEmpty>No results found.</CommandEmpty>}
@@ -174,16 +195,23 @@ export default function CommandPalette({
             {showActionsGroup && (
             <CommandGroup heading="Actions">
               <CommandItem
-                value={`new session ${activeProjectName}`}
-                onSelect={run(onNewSession)}
+                value={`new session ${cycledProjectName}`}
+                onSelect={run(() =>
+                  cycledProject
+                    ? onNewSessionInProject(cycledProject.name)
+                    : onNewSession()
+                )}
               >
                 <Plus className="h-4 w-4 text-muted-foreground" />
                 <span>
                   New session in{' '}
-                  <span style={{ color: 'var(--project-accent)' }}>@{activeProjectName}</span>
+                  <span style={{ color: 'var(--project-accent)' }}>@{cycledProjectName}</span>
                 </span>
-                <div className="ml-auto">
-                  <KbdCombo keys={[MOD_KEY, 'N']} />
+                <div className="ml-auto flex items-center gap-1.5">
+                  {railItems.length > 1 && (
+                    <span className="text-[10px] text-muted-foreground/50">Tab to switch</span>
+                  )}
+                  <KbdCombo keys={[ALT_KEY, 'N']} />
                 </div>
               </CommandItem>
 
@@ -195,7 +223,7 @@ export default function CommandPalette({
                   <Archive className="h-4 w-4 text-muted-foreground" />
                   <span>Archive current session</span>
                   <div className="ml-auto">
-                    <KbdCombo keys={[MOD_KEY, 'W']} />
+                    <KbdCombo keys={[ALT_KEY, 'A']} />
                   </div>
                 </CommandItem>
               )}

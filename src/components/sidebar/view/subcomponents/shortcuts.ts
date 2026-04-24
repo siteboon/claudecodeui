@@ -13,10 +13,11 @@ export type ShortcutEntry = {
 
 export const SHORTCUTS: ShortcutEntry[] = [
   { id: 'palette', label: 'Open command palette', keys: [MOD_KEY, 'K'] },
-  { id: 'newSession', label: 'New session in active project', keys: [MOD_KEY, 'N'] },
-  { id: 'archiveSession', label: 'Archive current session', keys: [MOD_KEY, 'W'] },
+  { id: 'newSession', label: 'New session in active project', keys: [ALT_KEY, 'N'] },
+  { id: 'archiveSession', label: 'Archive current session', keys: [ALT_KEY, 'A'] },
   { id: 'jumpSession', label: 'Jump to session 1–9', keys: [ALT_KEY, '1–9'] },
-  { id: 'jumpProject', label: 'Switch project 1–6', keys: [ALT_KEY, SHIFT_KEY, '1–6'] },
-  { id: 'cycleProject', label: 'Cycle projects in command palette', keys: [SHIFT_KEY, 'Tab'] },
+  { id: 'newPane', label: 'Open session in new pane', keys: [ALT_KEY, SHIFT_KEY, '1–9'] },
+  { id: 'closePane', label: 'Close active pane', keys: [ALT_KEY, 'W'] },
+  { id: 'cycleProject', label: 'Cycle target project in ⌘K', keys: ['Tab / Shift+Tab'] },
   { id: 'clearFilter', label: 'Clear project filter', keys: ['Ctrl', '`'] },
 ];

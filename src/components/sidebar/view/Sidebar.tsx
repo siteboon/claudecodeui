@@ -175,6 +175,13 @@ function Sidebar({
     onNewSession(targetProject);
   };
 
+  const handleCreateSessionInProject = (projectName: string) => {
+    const project = projects.find((p) => p.name === projectName);
+    if (!project) return;
+    handleProjectSelect(project);
+    onNewSession(project);
+  };
+
   const handleFlatSessionSelect = (session: FlatSession, opts?: { openInNewPane?: boolean }) => {
     const project = projects.find((p) => p.name === session.__projectName);
     if (project) {
@@ -207,7 +214,8 @@ function Sidebar({
         return;
       }
 
-      if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'n') {
+      // Alt+N — new session (Ctrl+N is captured by browser on Linux/Win).
+      if (e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'n') {
         e.preventDefault();
         handleCreateSession();
         return;
@@ -239,18 +247,10 @@ function Sidebar({
         return;
       }
 
-      // Ctrl+1..6 — switch project filter.
-      if (e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && /^Digit[1-6]$/.test(e.code)) {
-        e.preventDefault();
-        const idx = parseInt(e.code.slice(5), 10) - 1;
-        const item = railItems[idx];
-        if (item) setActiveProjectFilter(item.name);
-        return;
-      }
-
       if (inInput) return;
 
-      if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'w') {
+      // Alt+A — archive/unarchive current session (Ctrl+W is captured by browser).
+      if (e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'a') {
         if (!selectedSession) return;
         e.preventDefault();
         toggleArchived(selectedSession.id);
@@ -356,6 +356,7 @@ function Sidebar({
         onSelectSessionInNewPane={(s) => handleFlatSessionSelect(s, { openInNewPane: true })}
         onSelectProject={setActiveProjectFilter}
         onNewSession={handleCreateSession}
+        onNewSessionInProject={handleCreateSessionInProject}
         onArchiveActiveSession={() => {
           if (selectedSession) toggleArchived(selectedSession.id);
         }}

@@ -144,12 +144,11 @@ export default function AppContent() {
     [sidebarSharedProps, openPaneFromSidebar],
   );
 
-  // Ctrl+Shift+W closes focused pane (only when >1 pane open)
+  // Alt+W closes focused pane (only when >1 pane open)
   useEffect(() => {
     const handleKeydown = (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey;
-      if (!mod) return;
-      if (e.shiftKey && !e.altKey && (e.key === 'w' || e.key === 'W')) {
+      if (!e.altKey || e.metaKey || e.ctrlKey || e.shiftKey) return;
+      if (e.key === 'w' || e.key === 'W') {
         if (parsedRoute.paneIds.length > 1) {
           const isTypingTarget = (target: EventTarget | null): boolean => {
             if (!(target instanceof HTMLElement)) return false;
