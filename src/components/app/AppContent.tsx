@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Sidebar from '../sidebar/view/Sidebar';
 import MainContent from '../main-content/view/MainContent';
+import PaneHeader from '../main-content/view/subcomponents/PaneTabBar';
+import type { AppTab } from '../../types/app';
 import { useWebSocket } from '../../contexts/WebSocketContext';
 import { useDeviceSettings } from '../../hooks/useDeviceSettings';
 import { useSessionProtection } from '../../hooks/useSessionProtection';
@@ -56,6 +58,20 @@ export default function AppContent() {
     isMobile,
     activeSessions,
   });
+
+  // Per-pane active tab: each pane can be on a different session tab (chat/shell/…).
+  const [paneTabMap, setPaneTabMap] = useState<Record<string, AppTab>>({});
+  const makeSetTab = useCallback(
+    (paneId: string) =>
+      (action: AppTab | ((prev: AppTab) => AppTab)) => {
+        setPaneTabMap((prev) => {
+          const current = prev[paneId] ?? activeTab;
+          const next = typeof action === 'function' ? action(current) : action;
+          return { ...prev, [paneId]: next };
+        });
+      },
+    [activeTab],
+  );
 
   // ─── Multi-pane derivation ────────────────────────────────────────────────
   // Parse the URL once per location change. URL shape:
@@ -144,30 +160,41 @@ export default function AppContent() {
     [sidebarSharedProps, openPaneFromSidebar],
   );
 
-  // Alt+W closes focused pane (only when >1 pane open)
+  // Pane keyboard shortcuts
   useEffect(() => {
+    const isTypingTarget = (target: EventTarget | null): boolean => {
+      if (!(target instanceof HTMLElement)) return false;
+      const tag = target.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
+    };
+
     const handleKeydown = (e: KeyboardEvent) => {
-      if (!e.altKey || e.metaKey || e.ctrlKey || e.shiftKey) return;
-      if (e.key === 'w' || e.key === 'W') {
-        if (parsedRoute.paneIds.length > 1) {
-          const isTypingTarget = (target: EventTarget | null): boolean => {
-            if (!(target instanceof HTMLElement)) return false;
-            const tag = target.tagName;
-            return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
-          };
-          if (!isTypingTarget(e.target)) {
-            const focused = parsedRoute.paneIds[parsedRoute.focusIndex];
-            if (focused) {
-              e.preventDefault();
-              handlePaneClose(focused);
-            }
+      // Alt+W — close focused pane
+      if (e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && (e.key === 'w' || e.key === 'W')) {
+        if (parsedRoute.paneIds.length > 1 && !isTypingTarget(e.target)) {
+          const focused = parsedRoute.paneIds[parsedRoute.focusIndex];
+          if (focused) {
+            e.preventDefault();
+            handlePaneClose(focused);
           }
+        }
+        return;
+      }
+
+      // Ctrl+Shift+1..9 — focus Nth pane
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.shiftKey && !e.altKey && /^Digit[1-9]$/.test(e.code)) {
+        const idx = parseInt(e.code.slice(5), 10) - 1;
+        if (idx < parsedRoute.paneIds.length) {
+          e.preventDefault();
+          handlePaneFocus(parsedRoute.paneIds[idx]);
         }
       }
     };
+
     window.addEventListener('keydown', handleKeydown);
     return () => window.removeEventListener('keydown', handleKeydown);
-  }, [handlePaneClose, parsedRoute]);
+  }, [handlePaneClose, handlePaneFocus, parsedRoute]);
 
   useEffect(() => {
     // Expose a non-blocking refresh for chat/session flows.
@@ -343,37 +370,79 @@ export default function AppContent() {
         </div>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <MainContent
-          selectedProject={focusedProject}
-          selectedSession={focusedSession}
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          ws={ws}
-          sendMessage={sendMessage}
-          latestMessage={latestMessage}
-          isMobile={isMobile}
-          onMenuClick={() => setSidebarOpen(true)}
-          isLoading={isLoadingProjects}
-          onInputFocusChange={setIsInputFocused}
-          onSessionActive={markSessionAsActive}
-          onSessionInactive={markSessionAsInactive}
-          onSessionProcessing={markSessionAsProcessing}
-          onSessionNotProcessing={markSessionAsNotProcessing}
-          processingSessions={processingSessions}
-          onReplaceTemporarySession={replaceTemporarySession}
-          onAddPendingNewSession={addPendingNewSession}
-          onNavigateToSession={(targetSessionId: string) => openPaneFromSidebar(targetSessionId, false)}
-          onShowSettings={() => setShowSettings(true)}
-          externalMessageUpdate={externalMessageUpdate}
-          sessionStatus={sessionStatus}
-          waitingCount={waitingCount}
-          onJumpToNextWaiting={onJumpToNextWaiting}
-          panes={panes}
-          focusedPaneIndex={parsedRoute.focusIndex}
-          onPaneFocus={handlePaneFocus}
-          onPaneClose={handlePaneClose}
-        />
+      <div className="flex min-w-0 flex-1 flex-row">
+        {panes.length > 0 ? panes.map((pane, idx) => {
+          const paneStatus = pane.session ? statusMap.get(pane.session.id) : undefined;
+          const isFocused = idx === parsedRoute.focusIndex;
+          return (
+            <div key={pane.paneId} className="flex min-w-0 flex-1 flex-col" style={idx > 0 ? { borderLeft: '1px solid var(--border)' } : undefined}>
+              {panes.length > 1 && (
+                <PaneHeader
+                  label={pane.session?.summary || pane.session?.title || pane.session?.id || 'Session not found'}
+                  index={idx}
+                  isFocused={isFocused}
+                  onFocus={() => handlePaneFocus(pane.paneId)}
+                  onClose={() => handlePaneClose(pane.paneId)}
+                />
+              )}
+              <MainContent
+                selectedProject={pane.project ?? focusedProject}
+                selectedSession={pane.session ?? focusedSession}
+                activeTab={paneTabMap[pane.paneId] ?? activeTab}
+                setActiveTab={makeSetTab(pane.paneId) as typeof setActiveTab}
+                ws={ws}
+                sendMessage={sendMessage}
+                latestMessage={latestMessage}
+                isMobile={isMobile}
+                onMenuClick={() => setSidebarOpen(true)}
+                isLoading={isLoadingProjects}
+                onInputFocusChange={setIsInputFocused}
+                onSessionActive={markSessionAsActive}
+                onSessionInactive={markSessionAsInactive}
+                onSessionProcessing={markSessionAsProcessing}
+                onSessionNotProcessing={markSessionAsNotProcessing}
+                processingSessions={processingSessions}
+                onReplaceTemporarySession={replaceTemporarySession}
+                onAddPendingNewSession={addPendingNewSession}
+                onNavigateToSession={(targetSessionId: string) => openPaneFromSidebar(targetSessionId, false)}
+                onShowSettings={() => setShowSettings(true)}
+                externalMessageUpdate={externalMessageUpdate}
+                sessionStatus={paneStatus}
+                waitingCount={isFocused ? waitingCount : 0}
+                onJumpToNextWaiting={isFocused ? onJumpToNextWaiting : undefined}
+              />
+            </div>
+          );
+        }) : (
+          <div className="flex min-w-0 flex-1 flex-col">
+            <MainContent
+              selectedProject={focusedProject}
+              selectedSession={focusedSession}
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
+              ws={ws}
+              sendMessage={sendMessage}
+              latestMessage={latestMessage}
+              isMobile={isMobile}
+              onMenuClick={() => setSidebarOpen(true)}
+              isLoading={isLoadingProjects}
+              onInputFocusChange={setIsInputFocused}
+              onSessionActive={markSessionAsActive}
+              onSessionInactive={markSessionAsInactive}
+              onSessionProcessing={markSessionAsProcessing}
+              onSessionNotProcessing={markSessionAsNotProcessing}
+              processingSessions={processingSessions}
+              onReplaceTemporarySession={replaceTemporarySession}
+              onAddPendingNewSession={addPendingNewSession}
+              onNavigateToSession={(targetSessionId: string) => openPaneFromSidebar(targetSessionId, false)}
+              onShowSettings={() => setShowSettings(true)}
+              externalMessageUpdate={externalMessageUpdate}
+              sessionStatus={sessionStatus}
+              waitingCount={waitingCount}
+              onJumpToNextWaiting={onJumpToNextWaiting}
+            />
+          </div>
+        )}
       </div>
 
     </div>

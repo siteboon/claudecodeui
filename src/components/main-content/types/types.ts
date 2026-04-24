@@ -63,10 +63,6 @@ export type MainContentProps = {
   sessionStatus?: SessionStatus;
   waitingCount?: number;
   onJumpToNextWaiting?: () => void;
-  panes?: PaneEntry[];
-  focusedPaneIndex?: number;
-  onPaneFocus?: (paneId: string) => void;
-  onPaneClose?: (paneId: string) => void;
 };
 
 export type MainContentHeaderProps = {
