@@ -102,16 +102,45 @@ function createEmptySlot(): SessionSlot {
   };
 }
 
+function normalizeMessageContent(content: string | undefined): string {
+  return (content || '').replace(/\s+/g, ' ').trim();
+}
+
+function isDuplicateOptimisticUserMessage(
+  server: NormalizedMessage[],
+  realtimeMessage: NormalizedMessage,
+): boolean {
+  if (
+    !realtimeMessage.id.startsWith('local_') ||
+    realtimeMessage.kind !== 'text' ||
+    realtimeMessage.role !== 'user'
+  ) {
+    return false;
+  }
+
+  const realtimeContent = normalizeMessageContent(realtimeMessage.content);
+  if (!realtimeContent) {
+    return false;
+  }
+
+  return server.some((serverMessage) =>
+    serverMessage.kind === 'text' &&
+    serverMessage.role === 'user' &&
+    normalizeMessageContent(serverMessage.content) === realtimeContent,
+  );
+}
+
 /**
  * Compute merged messages: server + realtime, deduped by id.
  * Server messages take priority (they're the persisted source of truth).
  * Realtime messages that aren't yet in server stay (in-flight streaming).
+ * Optimistic local user messages are also hidden once the persisted copy exists.
  */
 function computeMerged(server: NormalizedMessage[], realtime: NormalizedMessage[]): NormalizedMessage[] {
   if (realtime.length === 0) return server;
   if (server.length === 0) return realtime;
   const serverIds = new Set(server.map(m => m.id));
-  const extra = realtime.filter(m => !serverIds.has(m.id));
+  const extra = realtime.filter(m => !serverIds.has(m.id) && !isDuplicateOptimisticUserMessage(server, m));
   if (extra.length === 0) return server;
   return [...server, ...extra];
 }

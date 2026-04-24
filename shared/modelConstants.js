@@ -59,6 +59,7 @@ export const CURSOR_MODELS = {
  */
 export const CODEX_MODELS = {
   OPTIONS: [
+    { value: "gpt-5.5", label: "GPT-5.5" },
     { value: "gpt-5.4", label: "GPT-5.4" },
     { value: "gpt-5.4-mini", label: "GPT-5.4 mini" },
     { value: "gpt-5.3-codex", label: "GPT-5.3 Codex" },
@@ -69,7 +70,7 @@ export const CODEX_MODELS = {
     { value: "o4-mini", label: "O4-mini" },
   ],
 
-  DEFAULT: "gpt-5.4",
+  DEFAULT: "gpt-5.5",
 };
 
 /**

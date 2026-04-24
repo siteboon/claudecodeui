@@ -30,24 +30,11 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   const wsRef = useRef<WebSocket | null>(null);
   const unmountedRef = useRef(false); // Track if component is unmounted
   const hasConnectedRef = useRef(false); // Track if we've ever connected (to detect reconnects)
+  const connectionIdRef = useRef(0); // Ignore events from sockets that have been superseded
   const [latestMessage, setLatestMessage] = useState<any>(null);
   const [isConnected, setIsConnected] = useState(false);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { token } = useAuth();
-
-  useEffect(() => {
-    connect();
-    
-    return () => {
-      unmountedRef.current = true;
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-    };
-  }, [token]); // everytime token changes, we reconnect
 
   const connect = useCallback(() => {
     if (unmountedRef.current) return; // Prevent connection if unmounted
@@ -56,12 +43,16 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       const wsUrl = buildWebSocketUrl(token);
 
       if (!wsUrl) return console.warn('No authentication token found for WebSocket connection');
-      
+      const connectionId = ++connectionIdRef.current;
       const websocket = new WebSocket(wsUrl);
+      wsRef.current = websocket;
 
       websocket.onopen = () => {
+        if (unmountedRef.current || connectionId !== connectionIdRef.current) {
+          websocket.close();
+          return;
+        }
         setIsConnected(true);
-        wsRef.current = websocket;
         if (hasConnectedRef.current) {
           // This is a reconnect — signal so components can catch up on missed messages
           setLatestMessage({ type: 'websocket-reconnected', timestamp: Date.now() });
@@ -70,6 +61,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       };
 
       websocket.onmessage = (event) => {
+        if (connectionId !== connectionIdRef.current) return;
         try {
           const data = JSON.parse(event.data);
           setLatestMessage(data);
@@ -79,8 +71,12 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       };
 
       websocket.onclose = () => {
+        if (connectionId !== connectionIdRef.current) return;
+
         setIsConnected(false);
-        wsRef.current = null;
+        if (wsRef.current === websocket) {
+          wsRef.current = null;
+        }
         
         // Attempt to reconnect after 3 seconds
         reconnectTimeoutRef.current = setTimeout(() => {
@@ -90,6 +86,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       };
 
       websocket.onerror = (error) => {
+        if (connectionId !== connectionIdRef.current) return;
         console.error('WebSocket error:', error);
       };
 
@@ -97,6 +94,39 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       console.error('Error creating WebSocket connection:', error);
     }
   }, [token]); // everytime token changes, we reconnect
+
+  useEffect(() => {
+    unmountedRef.current = false;
+    connect();
+    
+    return () => {
+      connectionIdRef.current += 1;
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      setIsConnected(false);
+    };
+  }, [connect]); // everytime token changes, we reconnect
+
+  useEffect(() => {
+    return () => {
+      unmountedRef.current = true;
+      connectionIdRef.current += 1;
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+  }, []);
 
   const sendMessage = useCallback((message: any) => {
     const socket = wsRef.current;
