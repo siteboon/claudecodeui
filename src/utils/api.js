@@ -56,8 +56,6 @@ export const api = {
   projects: () => authenticatedFetch('/api/projects'),
   projectTaskmaster: (projectId) =>
     authenticatedFetch(`/api/projects/${encodeURIComponent(projectId)}/taskmaster`),
-  sessions: (projectId, limit = 5, offset = 0) =>
-    authenticatedFetch(`/api/projects/${projectId}/sessions?limit=${limit}&offset=${offset}`),
   // Unified endpoint — all providers through one URL. The legacy `projectName`
   // query parameter is preserved on the wire (routes/messages.js still reads
   // it) but it now carries a projectId value supplied by the caller.

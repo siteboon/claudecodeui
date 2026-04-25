@@ -1,11 +1,7 @@
 import { useEffect } from 'react';
 import type { TFunction } from 'i18next';
 import type { LoadingProgress, Project, ProjectSession, LLMProvider } from '../../../../types/app';
-import type {
-  LoadingSessionsByProject,
-  MCPServerStatus,
-  SessionWithProvider,
-} from '../../types/types';
+import type { MCPServerStatus, SessionWithProvider } from '../../types/types';
 import SidebarProjectItem from './SidebarProjectItem';
 import SidebarProjectsState from './SidebarProjectsState';
 
@@ -19,7 +15,6 @@ export type SidebarProjectListProps = {
   expandedProjects: Set<string>;
   editingProject: string | null;
   editingName: string;
-  loadingSessions: LoadingSessionsByProject;
   initialSessionsLoaded: Set<string>;
   currentTime: Date;
   editingSession: string | null;
@@ -44,7 +39,6 @@ export type SidebarProjectListProps = {
     sessionTitle: string,
     provider: LLMProvider,
   ) => void;
-  onLoadMoreSessions: (project: Project) => void;
   onNewSession: (project: Project) => void;
   onEditingSessionNameChange: (value: string) => void;
   onStartEditingSession: (sessionId: string, initialName: string) => void;
@@ -63,7 +57,6 @@ export default function SidebarProjectList({
   expandedProjects,
   editingProject,
   editingName,
-  loadingSessions,
   initialSessionsLoaded,
   currentTime,
   editingSession,
@@ -83,7 +76,6 @@ export default function SidebarProjectList({
   onDeleteProject,
   onSessionSelect,
   onDeleteSession,
-  onLoadMoreSessions,
   onNewSession,
   onEditingSessionNameChange,
   onStartEditingSession,
@@ -131,7 +123,6 @@ export default function SidebarProjectList({
               editingName={editingName}
               sessions={getProjectSessions(project)}
               initialSessionsLoaded={initialSessionsLoaded.has(project.projectId)}
-              isLoadingSessions={Boolean(loadingSessions[project.projectId])}
               currentTime={currentTime}
               editingSession={editingSession}
               editingSessionName={editingSessionName}
@@ -147,7 +138,6 @@ export default function SidebarProjectList({
               onDeleteProject={onDeleteProject}
               onSessionSelect={onSessionSelect}
               onDeleteSession={onDeleteSession}
-              onLoadMoreSessions={onLoadMoreSessions}
               onNewSession={onNewSession}
               onEditingSessionNameChange={onEditingSessionNameChange}
               onStartEditingSession={onStartEditingSession}

@@ -1,12 +1,6 @@
 import type { TFunction } from 'i18next';
 import type { Project } from '../../../types/app';
-import type {
-  AdditionalSessionsByProject,
-  ProjectSortOrder,
-  SettingsProject,
-  SessionViewModel,
-  SessionWithProvider,
-} from '../types/types';
+import type { ProjectSortOrder, SettingsProject, SessionViewModel, SessionWithProvider } from '../types/types';
 
 export const readProjectSortOrder = (): ProjectSortOrder => {
   try {
@@ -98,16 +92,11 @@ export const createSessionViewModel = (
   };
 };
 
-export const getAllSessions = (
-  project: Project,
-  additionalSessions: AdditionalSessionsByProject,
-): SessionWithProvider[] => {
-  // `additionalSessions` is indexed by DB `projectId` now (the sidebar keys
-  // every per-project map by the same identifier).
-  const claudeSessions = [
-    ...(project.sessions || []),
-    ...(additionalSessions[project.projectId] || []),
-  ].map((session) => ({ ...session, __provider: 'claude' as const }));
+export const getAllSessions = (project: Project): SessionWithProvider[] => {
+  const claudeSessions = [...(project.sessions || [])].map((session) => ({
+    ...session,
+    __provider: 'claude' as const,
+  }));
 
   const cursorSessions = (project.cursorSessions || []).map((session) => ({
     ...session,
@@ -129,11 +118,8 @@ export const getAllSessions = (
   );
 };
 
-export const getProjectLastActivity = (
-  project: Project,
-  additionalSessions: AdditionalSessionsByProject,
-): Date => {
-  const sessions = getAllSessions(project, additionalSessions);
+export const getProjectLastActivity = (project: Project): Date => {
+  const sessions = getAllSessions(project);
   if (sessions.length === 0) {
     return new Date(0);
   }
@@ -148,7 +134,6 @@ export const sortProjects = (
   projects: Project[],
   projectSortOrder: ProjectSortOrder,
   starredProjects: Set<string>,
-  additionalSessions: AdditionalSessionsByProject,
 ): Project[] => {
   const byName = [...projects];
 
@@ -166,10 +151,7 @@ export const sortProjects = (
     }
 
     if (projectSortOrder === 'date') {
-      return (
-        getProjectLastActivity(projectB, additionalSessions).getTime() -
-        getProjectLastActivity(projectA, additionalSessions).getTime()
-      );
+      return getProjectLastActivity(projectB).getTime() - getProjectLastActivity(projectA).getTime();
     }
 
     return (projectA.displayName || projectA.projectId).localeCompare(projectB.displayName || projectB.projectId);

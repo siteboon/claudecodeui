@@ -53,7 +53,6 @@ function Sidebar({
     editingProject,
     showNewProject,
     editingName,
-    loadingSessions,
     initialSessionsLoaded,
     currentTime,
     isRefreshing,
@@ -83,7 +82,6 @@ function Sidebar({
     confirmDeleteSession,
     requestProjectDelete,
     confirmDeleteProject,
-    loadMoreSessions,
     handleProjectSelect,
     refreshProjects,
     updateSessionSummary,
@@ -142,7 +140,6 @@ function Sidebar({
     expandedProjects,
     editingProject,
     editingName,
-    loadingSessions,
     initialSessionsLoaded,
     currentTime,
     editingSession,
@@ -164,9 +161,6 @@ function Sidebar({
     onDeleteProject: requestProjectDelete,
     onSessionSelect: handleSessionClick,
     onDeleteSession: showDeleteSessionConfirmation,
-    onLoadMoreSessions: (project) => {
-      void loadMoreSessions(project);
-    },
     onNewSession,
     onEditingSessionNameChange: setEditingSessionName,
     onStartEditingSession: (sessionId, initialName) => {

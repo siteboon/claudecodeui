@@ -19,7 +19,6 @@ import { getConnectableHost } from '../shared/networkHosts.js';
 
 import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
 import {
-    getSessionsById,
     renameProjectById,
     deleteSessionById,
     deleteProjectById,
@@ -76,7 +75,7 @@ import pluginsRoutes from './routes/plugins.js';
 import messagesRoutes from './routes/messages.js';
 import providerRoutes from './modules/providers/provider.routes.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
-import { initializeDatabase, sessionsDb, applyCustomSessionNames } from './modules/database/index.js';
+import { initializeDatabase, sessionsDb } from './modules/database/index.js';
 import { configureWebPush } from './services/vapid-keys.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
@@ -300,18 +299,6 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
             success: false,
             error: error.message
         });
-    }
-});
-
-// Sessions for a project; `projectId` is resolved to a path via the DB.
-app.get('/api/projects/:projectId/sessions', authenticateToken, async (req, res) => {
-    try {
-        const { limit = 5, offset = 0 } = req.query;
-        const result = await getSessionsById(req.params.projectId, parseInt(limit), parseInt(offset));
-        applyCustomSessionNames(result.sessions, 'claude');
-        res.json(result);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
     }
 });
 

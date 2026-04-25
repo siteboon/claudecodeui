@@ -19,7 +19,6 @@ type SidebarProjectItemProps = {
   editingName: string;
   sessions: SessionWithProvider[];
   initialSessionsLoaded: boolean;
-  isLoadingSessions: boolean;
   currentTime: Date;
   editingSession: string | null;
   editingSessionName: string;
@@ -40,7 +39,6 @@ type SidebarProjectItemProps = {
     sessionTitle: string,
     provider: LLMProvider,
   ) => void;
-  onLoadMoreSessions: (project: Project) => void;
   onNewSession: (project: Project) => void;
   onEditingSessionNameChange: (value: string) => void;
   onStartEditingSession: (sessionId: string, initialName: string) => void;
@@ -49,14 +47,7 @@ type SidebarProjectItemProps = {
   t: TFunction;
 };
 
-const getSessionCountDisplay = (sessions: SessionWithProvider[], hasMoreSessions: boolean): string => {
-  const sessionCount = sessions.length;
-  if (hasMoreSessions && sessionCount >= 5) {
-    return `${sessionCount}+`;
-  }
-
-  return `${sessionCount}`;
-};
+const getSessionCountDisplay = (sessions: SessionWithProvider[]): string => String(sessions.length);
 
 export default function SidebarProjectItem({
   project,
@@ -69,7 +60,6 @@ export default function SidebarProjectItem({
   editingName,
   sessions,
   initialSessionsLoaded,
-  isLoadingSessions,
   currentTime,
   editingSession,
   editingSessionName,
@@ -85,7 +75,6 @@ export default function SidebarProjectItem({
   onDeleteProject,
   onSessionSelect,
   onDeleteSession,
-  onLoadMoreSessions,
   onNewSession,
   onEditingSessionNameChange,
   onStartEditingSession,
@@ -97,8 +86,7 @@ export default function SidebarProjectItem({
   // after the projectName → projectId migration.
   const isSelected = selectedProject?.projectId === project.projectId;
   const isEditing = editingProject === project.projectId;
-  const hasMoreSessions = project.sessionMeta?.hasMore === true;
-  const sessionCountDisplay = getSessionCountDisplay(sessions, hasMoreSessions);
+  const sessionCountDisplay = getSessionCountDisplay(sessions);
   const sessionCountLabel = `${sessionCountDisplay} session${sessions.length === 1 ? '' : 's'}`;
   const taskStatus = getTaskIndicatorStatus(project, mcpServerStatus);
 
@@ -411,7 +399,6 @@ export default function SidebarProjectItem({
         sessions={sessions}
         selectedSession={selectedSession}
         initialSessionsLoaded={initialSessionsLoaded}
-        isLoadingSessions={isLoadingSessions}
         currentTime={currentTime}
         editingSession={editingSession}
         editingSessionName={editingSessionName}
@@ -422,7 +409,6 @@ export default function SidebarProjectItem({
         onProjectSelect={onProjectSelect}
         onSessionSelect={onSessionSelect}
         onDeleteSession={onDeleteSession}
-        onLoadMoreSessions={onLoadMoreSessions}
         onNewSession={onNewSession}
         t={t}
       />

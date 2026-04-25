@@ -666,26 +666,6 @@ async function getSessionMessages(projectName, sessionId, limit = null, offset =
   }
 }
 
-/**
- * ID-based wrapper around `getSessions`.
- *
- * Resolves a `projectId` to the underlying Claude JSONL folder name (via the
- * DB-backed project path) and defers to the legacy filesystem reader. Keeps
- * the previous pagination shape so the sidebar's "Load more sessions" UI keeps
- * working after the migration.
- */
-async function getSessionsById(projectId, limit = 5, offset = 0) {
-  const projectPath = await getProjectPathById(projectId);
-  if (!projectPath) {
-    return { sessions: [], hasMore: false, total: 0 };
-  }
-
-  // Claude stores history under ~/.claude/projects/<encoded-path>/; derive the
-  // folder name from the absolute path the DB gave us.
-  const claudeFolderName = claudeFolderNameFromPath(projectPath);
-  return getSessions(claudeFolderName, limit, offset);
-}
-
 // Rename a project's display name
 async function renameProject(projectName, newDisplayName) {
   const config = await loadProjectConfig();
@@ -2053,7 +2033,6 @@ async function getGeminiCliSessionMessages(sessionId) {
 // based helpers (`getSessions`, `renameProject`, `deleteSession`, etc.) are
 // kept as internal implementation details of the id-based wrappers below.
 export {
-  getSessionsById,
   getSessionMessages,
   renameProjectById,
   deleteSessionById,

@@ -6,9 +6,6 @@ export type SessionWithProvider = ProjectSession & {
   __provider: LLMProvider;
 };
 
-export type AdditionalSessionsByProject = Record<string, ProjectSession[]>;
-export type LoadingSessionsByProject = Record<string, boolean>;
-
 export type DeleteProjectConfirmation = {
   project: Project;
   sessionCount: number;
