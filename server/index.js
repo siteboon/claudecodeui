@@ -1,34 +1,24 @@
 #!/usr/bin/env node
 // Load environment variables before other imports execute
 import './load-env.js';
-import fs from 'fs';
+import fs, { promises as fsPromises } from 'fs';
 import path from 'path';
-import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
-
-import { AppError } from '@/shared/utils.js';
-
-
-const __dirname = getModuleDir(import.meta.url);
-// The server source runs from /server, while the compiled output runs from /dist-server/server.
-// Resolving the app root once keeps every repo-level lookup below aligned across both layouts.
-const APP_ROOT = findAppRoot(__dirname);
-const installMode = fs.existsSync(path.join(APP_ROOT, '.git')) ? 'git' : 'npm';
-
-import { c } from './utils/colors.js';
-
-console.log('SERVER_PORT from env:', process.env.SERVER_PORT);
-
-import express from 'express';
 import os from 'os';
 import http from 'http';
-import cors from 'cors';
-import { promises as fsPromises } from 'fs';
 import { spawn } from 'child_process';
+
+import express from 'express';
+import cors from 'cors';
 import mime from 'mime-types';
+
+import { AppError } from '@/shared/utils.js';
 import { closeSessionsWatcher, initializeSessionsWatcher } from '@/modules/providers/index.js';
 import { getProjectsWithSessions } from '@/modules/projects/index.js';
 import { createWebSocketServer } from '@/modules/websocket/index.js';
 
+import { getConnectableHost } from '../shared/networkHosts.js';
+
+import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
 import {
     getSessionsById,
     renameProjectById,
@@ -92,7 +82,16 @@ import { initializeDatabase, sessionsDb, applyCustomSessionNames } from './modul
 import { configureWebPush } from './services/vapid-keys.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
-import { getConnectableHost } from '../shared/networkHosts.js';
+
+const __dirname = getModuleDir(import.meta.url);
+// The server source runs from /server, while the compiled output runs from /dist-server/server.
+// Resolving the app root once keeps every repo-level lookup below aligned across both layouts.
+const APP_ROOT = findAppRoot(__dirname);
+const installMode = fs.existsSync(path.join(APP_ROOT, '.git')) ? 'git' : 'npm';
+
+import { c } from './utils/colors.js';
+
+console.log('SERVER_PORT from env:', process.env.SERVER_PORT);
 
 const VALID_PROVIDERS = ['claude', 'codex', 'cursor', 'gemini'];
 
