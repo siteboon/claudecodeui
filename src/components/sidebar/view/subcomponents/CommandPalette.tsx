@@ -42,6 +42,7 @@ type CommandPaletteProps = {
   hasActiveFilter: boolean;
   onSelectSession: (session: FlatSession) => void;
   onSelectSessionInNewPane: (session: FlatSession) => void;
+  onSelectTranscriptResult: (result: TranscriptSessionResult) => void;
   onSelectProject: (projectName: string) => void;
   onNewSession: () => void;
   onNewSessionInProject: (projectName: string) => void;
@@ -62,6 +63,7 @@ export default function CommandPalette({
   hasActiveFilter,
   onSelectSession,
   onSelectSessionInNewPane,
+  onSelectTranscriptResult,
   onSelectProject,
   onNewSession,
   onNewSessionInProject,
@@ -141,12 +143,7 @@ export default function CommandPalette({
   };
 
   const handleTranscriptSelect = (r: TranscriptSessionResult) => {
-    const match = sessions.find((s) => s.id === r.sessionId);
-    if (match) {
-      onSelectSession(match);
-    }
-    // If the sessionId doesn't resolve (archived, not yet loaded, stale
-    // index) close silently rather than crash or toast — see plan §6(b).
+    onSelectTranscriptResult(r);
     onOpenChange(false);
   };
 

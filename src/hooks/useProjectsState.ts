@@ -342,7 +342,12 @@ export function useProjectsState({
       (session) => session.id === selectedSession.id,
     );
 
-    if (!updatedSelectedSession) {
+    // Don't clobber a session the URL still points at — it may just be
+    // paginated out of project.sessions (e.g. opened from transcript search
+    // or "load more" pagination, which lives in additionalSessions). Genuine
+    // deletes flow through handleSessionDelete, which clears state and URL
+    // together.
+    if (!updatedSelectedSession && sessionId !== selectedSession.id) {
       setSelectedSession(null);
     }
   }, [latestMessage, selectedProject, selectedSession, activeSessions, projects]);

@@ -129,10 +129,33 @@ export function useSidebarController({
   }, []);
 
   useEffect(() => {
-    setAdditionalSessions({});
+    // Dedupe rather than wipe: every projects_updated WS message replaces
+    // the projects array reference, but paginated and transcript-injected
+    // sessions in additionalSessions should survive — drop only entries
+    // that have been promoted into project.sessions.
+    setAdditionalSessions((prev) => {
+      const next: AdditionalSessionsByProject = {};
+      for (const project of projects) {
+        const ids = new Set((project.sessions ?? []).map((s) => s.id));
+        const survivors = (prev[project.name] ?? []).filter((s) => !ids.has(s.id));
+        if (survivors.length > 0) next[project.name] = survivors;
+      }
+      return next;
+    });
     setInitialSessionsLoaded(new Set());
     setProjectHasMoreOverrides({});
   }, [projects]);
+
+  const ensureSessionLoaded = useCallback(
+    (projectName: string, session: ProjectSession) => {
+      setAdditionalSessions((prev) => {
+        const existing = prev[projectName] ?? [];
+        if (existing.some((s) => s.id === session.id)) return prev;
+        return { ...prev, [projectName]: [session, ...existing] };
+      });
+    },
+    [],
+  );
 
   useEffect(() => {
     if (selectedProject) {
@@ -613,6 +636,7 @@ export function useSidebarController({
     requestProjectDelete,
     confirmDeleteProject,
     loadMoreSessions,
+    ensureSessionLoaded,
     handleProjectSelect,
     refreshProjects,
     updateSessionSummary,

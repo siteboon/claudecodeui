@@ -82,6 +82,7 @@ function Sidebar({
     isRefreshing,
     refreshProjects,
     handleSessionClick,
+    ensureSessionLoaded,
     handleProjectSelect,
     confirmDeleteSession,
     confirmDeleteProject,
@@ -192,6 +193,34 @@ function Sidebar({
       handleProjectSelect(project);
     }
     handleSessionClick(session, session.__projectName, opts);
+  };
+
+  // Transcript hits can land on sessions outside the currently filtered flat
+  // list (different project, archived, or not yet paginated in). Resolve from
+  // the full `projects` tree and fall back to a synthesised stub keyed on the
+  // session id — chat view loads conversations by id, so id + __projectName
+  // are the only fields needed to navigate.
+  const handleTranscriptResultSelect = (
+    r: { projectName: string; sessionId: string; sessionSummary: string; match: { timestamp: string | null } },
+  ) => {
+    const project = projects.find((p) => p.name === r.projectName);
+    if (project) handleProjectSelect(project);
+    const existing =
+      project?.sessions?.find((s) => s.id === r.sessionId) ??
+      additionalSessions[r.projectName]?.find((s) => s.id === r.sessionId);
+    if (!existing) {
+      // Inject a stub into the sidebar so the session is visible/restorable
+      // even though it's paginated out of project.sessions.
+      ensureSessionLoaded(r.projectName, {
+        id: r.sessionId,
+        summary: r.sessionSummary,
+        lastActivity: r.match.timestamp ?? new Date().toISOString(),
+      });
+    }
+    const session = existing
+      ? { ...existing, __projectName: r.projectName, __provider: 'claude' as const }
+      : { id: r.sessionId, summary: r.sessionSummary, __projectName: r.projectName, __provider: 'claude' as const };
+    handleSessionClick(session, r.projectName);
   };
 
   const handleProjectCreated = () => {
@@ -362,6 +391,7 @@ function Sidebar({
         hasActiveFilter={activeProjectFilter !== null}
         onSelectSession={handleFlatSessionSelect}
         onSelectSessionInNewPane={(s) => handleFlatSessionSelect(s, { openInNewPane: true })}
+        onSelectTranscriptResult={handleTranscriptResultSelect}
         onSelectProject={setActiveProjectFilter}
         onNewSession={handleCreateSession}
         onNewSessionInProject={handleCreateSessionInProject}
