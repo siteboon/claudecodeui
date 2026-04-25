@@ -448,8 +448,7 @@ export function useSidebarController({
       return;
     }
 
-    const { project, sessionCount } = deleteConfirmation;
-    const isEmpty = sessionCount === 0;
+    const { project } = deleteConfirmation;
 
     setDeleteConfirmation(null);
     // Track in-flight deletes by projectId so the UI can disable actions
@@ -457,13 +456,16 @@ export function useSidebarController({
     setDeletingProjects((prev) => new Set([...prev, project.projectId]));
 
     try {
-      const response = await api.deleteProject(project.projectId, !isEmpty, deleteData);
+      const response = await api.deleteProject(project.projectId, deleteData);
 
       if (response.ok) {
         onProjectDelete?.(project.projectId);
       } else {
-        const error = (await response.json()) as { error?: string };
-        alert(error.error || t('messages.deleteProjectFailed'));
+        const data = (await response.json()) as { error?: string | { message?: string } };
+        const err = data.error;
+        const message =
+          typeof err === 'string' ? err : err && typeof err === 'object' && err.message ? err.message : t('messages.deleteProjectFailed');
+        alert(message);
       }
     } catch (error) {
       console.error('Error deleting project:', error);

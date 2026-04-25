@@ -18,8 +18,8 @@
  *   - Session message reads for each provider (Claude/Codex/Gemini) for
  *     `GET /api/sessions/:sessionId/messages`.
  *   - Conversation search (`searchConversations`) which scans JSONL history.
- *   - Destructive project cleanup (`deleteProjectById` -> `deleteProject`)
- *     which removes Claude/Cursor/Codex artifacts on disk.
+ *   - (Project row removal / JSONL cleanup is handled in
+ *     `modules/projects/services/project-delete.service.ts`.)
  *   - Manual project registration (`addProjectManually`) which syncs to
  *     ~/.claude/project-config.json for backwards compatibility.
  */
@@ -27,7 +27,6 @@
 import fsSync, { promises as fs } from 'fs';
 import path from 'path';
 import readline from 'readline';
-import crypto from 'crypto';
 import os from 'os';
 
 import { generateDisplayName } from '@/modules/projects';
@@ -733,106 +732,6 @@ async function deleteSession(projectName, sessionId) {
     console.error(`Error deleting session ${sessionId} from project ${projectName}:`, error);
     throw error;
   }
-}
-
-// Check if a project is empty (has no sessions)
-async function isProjectEmpty(projectName) {
-  try {
-    const sessionsResult = await getSessions(projectName, 1, 0);
-    return sessionsResult.total === 0;
-  } catch (error) {
-    console.error(`Error checking if project ${projectName} is empty:`, error);
-    return false;
-  }
-}
-
-// Remove a project from the UI.
-// When deleteData=true, also delete session/memory files on disk (destructive).
-async function deleteProject(projectName, force = false, deleteData = false) {
-  const projectDir = path.join(os.homedir(), '.claude', 'projects', projectName);
-
-  try {
-    const isEmpty = await isProjectEmpty(projectName);
-    if (!isEmpty && !force) {
-      throw new Error('Cannot delete project with existing sessions');
-    }
-
-    const config = await loadProjectConfig();
-
-    // Destructive path: delete underlying data when explicitly requested
-    if (deleteData) {
-      let projectPath = config[projectName]?.path || config[projectName]?.originalPath;
-      if (!projectPath) {
-        projectPath = await extractProjectDirectory(projectName);
-      }
-
-      // Remove the Claude project directory (session logs, memory, subagent data)
-      await fs.rm(projectDir, { recursive: true, force: true });
-
-      // Delete Codex sessions associated with this project
-      if (projectPath) {
-        try {
-          const codexSessions = await getCodexSessions(projectPath, { limit: 0 });
-          for (const session of codexSessions) {
-            try {
-              await deleteCodexSession(session.id);
-            } catch (err) {
-              console.warn(`Failed to delete Codex session ${session.id}:`, err.message);
-            }
-          }
-        } catch (err) {
-          console.warn('Failed to delete Codex sessions:', err.message);
-        }
-
-        // Delete Cursor sessions directory if it exists
-        try {
-          const hash = crypto.createHash('md5').update(projectPath).digest('hex');
-          const cursorProjectDir = path.join(os.homedir(), '.cursor', 'chats', hash);
-          await fs.rm(cursorProjectDir, { recursive: true, force: true });
-        } catch (err) {
-          // Cursor dir may not exist, ignore
-        }
-      }
-    }
-
-    // Always remove from project config
-    delete config[projectName];
-    await saveProjectConfig(config);
-
-    return true;
-  } catch (error) {
-    console.error(`Error removing project ${projectName}:`, error);
-    throw error;
-  }
-}
-
-/**
- * ID-based wrapper around `deleteProject`.
- *
- * Resolves the project path via the DB, defers destructive filesystem cleanup
- * to `deleteProject`, then removes the row from the `projects` table so the
- * DB-driven GET /api/projects response no longer lists it.
- */
-async function deleteProjectById(projectId, force = false, deleteData = false) {
-  const projectPath = await getProjectPathById(projectId);
-  if (!projectPath) {
-    throw new Error(`Unknown projectId: ${projectId}`);
-  }
-
-  const claudeFolderName = claudeFolderNameFromPath(projectPath);
-  try {
-    await deleteProject(claudeFolderName, force, deleteData);
-  } catch (error) {
-    // If the legacy Claude folder doesn't exist anymore we still want to drop
-    // the DB row; rethrow otherwise so callers can surface the failure.
-    if (error.code !== 'ENOENT') {
-      throw error;
-    }
-  }
-
-  // Drop the DB row so the DB-driven GET /api/projects stops listing it.
-  projectsDb.deleteProjectById(projectId);
-  return true;
 }
 
 // Add a project manually to the config (without creating folders)
@@ -1984,7 +1883,6 @@ async function getGeminiCliSessionMessages(sessionId) {
 export {
   getSessionMessages,
   deleteSessionById,
-  deleteProjectById,
   addProjectManually,
   getProjectPathById,
   claudeFolderNameFromPath,

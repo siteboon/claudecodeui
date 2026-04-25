@@ -93,10 +93,10 @@ export const api = {
     authenticatedFetch(`/api/gemini/sessions/${sessionId}`, {
       method: 'DELETE',
     }),
-  deleteProject: (projectId, force = false, deleteData = false) => {
+  // `hardDelete` => server `?force=true` (remove DB row + Claude *.jsonl + sessions rows for path).
+  deleteProject: (projectId, hardDelete = false) => {
     const params = new URLSearchParams();
-    if (force) params.set('force', 'true');
-    if (deleteData) params.set('deleteData', 'true');
+    if (hardDelete) params.set('force', 'true');
     const qs = params.toString();
     return authenticatedFetch(`/api/projects/${projectId}${qs ? `?${qs}` : ''}`, {
       method: 'DELETE',

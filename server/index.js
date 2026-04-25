@@ -20,7 +20,6 @@ import { getConnectableHost } from '../shared/networkHosts.js';
 import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
 import {
     deleteSessionById,
-    deleteProjectById,
     getProjectPathById,
     searchConversations,
 } from './projects.js';
@@ -343,21 +342,6 @@ app.put('/api/sessions/:sessionId/rename', authenticateToken, async (req, res) =
 });
 
 // Delete project endpoint
-// force=true to allow removal even when sessions exist
-// deleteData=true to also delete session/memory files on disk (destructive)
-// `projectId` is resolved to an absolute path through the DB before cleanup.
-app.delete('/api/projects/:projectId', authenticateToken, async (req, res) => {
-    try {
-        const { projectId } = req.params;
-        const force = req.query.force === 'true';
-        const deleteData = req.query.deleteData === 'true';
-        await deleteProjectById(projectId, force, deleteData);
-        res.json({ success: true });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
 // Search conversations content (SSE streaming)
 app.get('/api/search/conversations', authenticateToken, async (req, res) => {
     const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';

@@ -5,6 +5,8 @@ import { startCloneProject } from '@/modules/projects/services/project-clone.ser
 import { getProjectTaskMaster } from '@/modules/projects/services/projects-has-taskmaster.service.js';
 import { AppError, asyncHandler } from '@/shared/utils.js';
 import { getProjectsWithSessions } from '@/modules/projects/services/projects-with-sessions-fetch.service.js';
+import { deleteOrArchiveProject } from '@/modules/projects/services/project-delete.service.js';
+import { applyLegacyStarredProjectIds, toggleProjectStar } from '@/modules/projects/services/project-star.service.js';
 
 const router = express.Router();
 
@@ -92,6 +94,20 @@ router.post(
   }),
 );
 
+/**
+ * One-time (or idempotent) migration: apply legacy `localStorage` starred projectIds to the DB, then clear client storage.
+ */
+router.post(
+  '/migrate-legacy-stars',
+  asyncHandler(async (req, res) => {
+    const projectIds = Array.isArray((req.body as { projectIds?: unknown })?.projectIds)
+      ? ((req.body as { projectIds: unknown[] }).projectIds as unknown[]).map((x) => String(x))
+      : [];
+    const { updated } = applyLegacyStarredProjectIds(projectIds);
+    res.json({ success: true, updated });
+  }),
+);
+
 router.get('/clone-progress', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -176,5 +192,28 @@ router.put('/:projectId/rename', (req, res) => {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to rename project' });
   }
 });
+
+router.post(
+  '/:projectId/toggle-star',
+  asyncHandler(async (req, res) => {
+    const projectId = typeof req.params.projectId === 'string' ? req.params.projectId : '';
+    const { isStarred } = toggleProjectStar(projectId);
+    res.json({ success: true, isStarred });
+  }),
+);
+
+/**
+ * - `force` not set / false: archive project in DB only (`isArchived` = 1; hidden from active list).
+ * - `force=true`: remove DB row, delete session rows for that path, remove all `*.jsonl` under the Claude project dir.
+ */
+router.delete(
+  '/:projectId',
+  asyncHandler(async (req, res) => {
+    const projectId = typeof req.params.projectId === 'string' ? req.params.projectId : '';
+    const force = req.query.force === 'true';
+    await deleteOrArchiveProject(projectId, force);
+    res.json({ success: true });
+  }),
+);
 
 export default router;

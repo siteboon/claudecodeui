@@ -161,6 +161,11 @@ export const sessionsDb = {
       .all(projectPath) as SessionRow[];
   },
 
+  deleteSessionsByProjectPath(projectPath: string): void {
+    const db = getConnection();
+    db.prepare(`DELETE FROM sessions WHERE project_path = ?`).run(projectPath);
+  },
+
   getSessionName(sessionId: string, provider: string): string | null {
     const db = getConnection();
     const row = db
