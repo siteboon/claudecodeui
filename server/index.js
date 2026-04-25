@@ -19,7 +19,6 @@ import { getConnectableHost } from '../shared/networkHosts.js';
 
 import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
 import {
-    renameProjectById,
     deleteSessionById,
     deleteProjectById,
     getProjectPathById,
@@ -299,17 +298,6 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
             success: false,
             error: error.message
         });
-    }
-});
-
-// Rename project endpoint; stores the custom name on the DB row for `projectId`.
-app.put('/api/projects/:projectId/rename', authenticateToken, async (req, res) => {
-    try {
-        const { displayName } = req.body;
-        await renameProjectById(req.params.projectId, displayName);
-        res.json({ success: true });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
     }
 });
 

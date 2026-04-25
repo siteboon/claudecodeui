@@ -666,57 +666,6 @@ async function getSessionMessages(projectName, sessionId, limit = null, offset =
   }
 }
 
-// Rename a project's display name
-async function renameProject(projectName, newDisplayName) {
-  const config = await loadProjectConfig();
-
-  if (!newDisplayName || newDisplayName.trim() === '') {
-    // Remove custom name if empty, will fall back to auto-generated
-    if (config[projectName]) {
-      delete config[projectName].displayName;
-    }
-  } else {
-    // Set custom display name, preserving other properties (manuallyAdded, originalPath)
-    config[projectName] = {
-      ...config[projectName],
-      displayName: newDisplayName.trim()
-    };
-  }
-
-  await saveProjectConfig(config);
-  return true;
-}
-
-/**
- * ID-based wrapper around `renameProject`.
- *
- * Writes the new display name to the `projects.custom_project_name` column
- * (the source of truth for the DB-driven getProjectsWithSessions() response) and also
- * keeps the legacy project-config.json in sync for backwards compatibility
- * with any code that still reads it.
- */
-async function renameProjectById(projectId, newDisplayName) {
-  const projectPath = await getProjectPathById(projectId);
-  if (!projectPath) {
-    throw new Error(`Unknown projectId: ${projectId}`);
-  }
-
-  const trimmed = typeof newDisplayName === 'string' ? newDisplayName.trim() : '';
-  // Persist on the DB row so getProjectsWithSessions() immediately reflects the change.
-  projectsDb.updateCustomProjectNameById(projectId, trimmed.length > 0 ? trimmed : null);
-
-  // Keep the legacy file-based project config in lockstep so historic readers
-  // that still consult project-config.json don't diverge.
-  const claudeFolderName = claudeFolderNameFromPath(projectPath);
-  try {
-    await renameProject(claudeFolderName, trimmed);
-  } catch (error) {
-    console.warn(`[projects] Legacy renameProject sync failed for ${projectId}:`, error.message);
-  }
-
-  return true;
-}
-
 /**
  * ID-based wrapper around `deleteSession`.
  *
@@ -2030,11 +1979,10 @@ async function getGeminiCliSessionMessages(sessionId) {
 }
 
 // Only functions with consumers outside this module are exported. Folder-name
-// based helpers (`getSessions`, `renameProject`, `deleteSession`, etc.) are
-// kept as internal implementation details of the id-based wrappers below.
+// based helpers (`getSessions`, `deleteSession`, etc.) are kept as internal
+// implementation details of the id-based wrappers below.
 export {
   getSessionMessages,
-  renameProjectById,
   deleteSessionById,
   deleteProjectById,
   addProjectManually,
