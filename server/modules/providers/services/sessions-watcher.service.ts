@@ -90,13 +90,6 @@ async function onUpdate(
         client.send(updateMessage);
       }
     });
-
-
-    console.log(`Session watcher sync complete for provider "${provider}" after ${eventType}`, {
-      filePath,
-      indexed: result.indexed,
-      sessionId: result.sessionId,
-    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`Session watcher sync failed for provider "${provider}"`, {
