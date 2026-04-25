@@ -4,7 +4,7 @@ import test from 'node:test';
 import {
   createProjectsSnapshot,
 } from '@/modules/projects/index.js';
-import { ProjectListItem, ProjectsSnapshot } from '@/modules/projects/services/projects.service.js';
+import { ProjectListItem, ProjectsSnapshot } from '@/modules/projects/services/projects-with-sessions-fetch.service.js';
 
 test('createProjectsSnapshot returns an object matching the predefined snapshot type', () => {
   const projects: ProjectListItem[] = [

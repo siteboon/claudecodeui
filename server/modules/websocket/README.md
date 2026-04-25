@@ -222,7 +222,7 @@ Only chat sockets (`/ws`) are tracked in `connectedClients`.
 
 That shared set is consumed by:
 
-1. `modules/projects/services/projects.service.ts`
+1. `modules/projects/services/projects-with-sessions-fetch.service.ts`
 Broadcasts `loading_progress` while project snapshots are being built.
 2. `modules/providers/services/sessions-watcher.service.ts`
 Broadcasts `projects_updated` when provider session artifacts change.

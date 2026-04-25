@@ -1,48 +1,64 @@
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 
 import { getConnection } from '@/modules/database/connection.js';
+import type { CreateProjectPathResult, ProjectRepositoryRow } from '@/shared/types.js';
 
-type ProjectRow = {
-  project_id: string;
-  project_path: string;
-  custom_project_name: string | null;
-  isStarred: number;
-  isArchived: number;
-};
+function normalizeProjectDisplayName(projectPath: string, customProjectName: string | null): string {
+    const trimmedCustomName = typeof customProjectName === 'string' ? customProjectName.trim() : '';
+    if (trimmedCustomName.length > 0) {
+        return trimmedCustomName;
+    }
+
+    const directoryName = path.basename(projectPath);
+    return directoryName || projectPath;
+}
 
 export const projectsDb = {
-    createProjectPath(projectPath: string, customProjectName: string | null = null): void {
+    createProjectPath(projectPath: string, customProjectName: string | null = null): CreateProjectPathResult {
         const db = getConnection();
-        db.prepare(`
-            INSERT INTO projects (project_id, project_path, custom_project_name)
-            VALUES (?, ?, ?)
+        const normalizedProjectName = normalizeProjectDisplayName(projectPath, customProjectName);
+        const row = db.prepare(`
+        INSERT INTO projects (project_id, project_path, custom_project_name, isArchived)
+            VALUES (?, ?, ?, 0)
             ON CONFLICT(project_path) DO UPDATE SET
-              custom_project_name = CASE
-                WHEN projects.custom_project_name IS NULL OR projects.custom_project_name = ''
-                THEN excluded.custom_project_name
-                ELSE projects.custom_project_name
-              END
-        `).run(randomUUID(), projectPath, customProjectName);
+            isArchived = 0
+            WHERE projects.isArchived = 1
+            RETURNING project_id, project_path, custom_project_name, isStarred, isArchived
+        `).get(randomUUID(), projectPath, normalizedProjectName) as ProjectRepositoryRow | undefined;
+
+        if (row) {
+            return {
+                outcome: row.isArchived === 1 ? 'reactivated_archived' : 'created',
+                project: row,
+            };
+        }
+
+        const existingProject = projectsDb.getProjectPath(projectPath);
+        return {
+            outcome: 'active_conflict',
+            project: existingProject,
+        };
     },
 
-    getProjectPath(projectPath: string): ProjectRow | null {
+    getProjectPath(projectPath: string): ProjectRepositoryRow | null {
         const db = getConnection();
         const row = db.prepare(`
             SELECT project_id, project_path, custom_project_name, isStarred, isArchived
             FROM projects
             WHERE project_path = ?
-        `).get(projectPath) as ProjectRow | undefined;
+        `).get(projectPath) as ProjectRepositoryRow | undefined;
 
         return row ?? null;
     },
 
-    getProjectById(projectId: string): ProjectRow | null {
+    getProjectById(projectId: string): ProjectRepositoryRow | null {
         const db = getConnection();
         const row = db.prepare(`
             SELECT project_id, project_path, custom_project_name, isStarred, isArchived
             FROM projects
             WHERE project_id = ?
-        `).get(projectId) as ProjectRow | undefined;
+        `).get(projectId) as ProjectRepositoryRow | undefined;
 
         return row ?? null;
     },
@@ -61,17 +77,18 @@ export const projectsDb = {
             SELECT project_path
             FROM projects
             WHERE project_id = ?
-        `).get(projectId) as Pick<ProjectRow, 'project_path'> | undefined;
+        `).get(projectId) as Pick<ProjectRepositoryRow, 'project_path'> | undefined;
 
         return row?.project_path ?? null;
     },
 
-    getProjectPaths(): ProjectRow[] {
+    getProjectPaths(): ProjectRepositoryRow[] {
         const db = getConnection();
         return db.prepare(`
             SELECT project_id, project_path, custom_project_name, isStarred, isArchived
             FROM projects
-        `).all() as ProjectRow[];
+            WHERE isArchived = 0
+        `).all() as ProjectRepositoryRow[];
     },
 
     getCustomProjectName(projectPath: string): string | null {
@@ -80,7 +97,7 @@ export const projectsDb = {
             SELECT custom_project_name
             FROM projects
             WHERE project_path = ?
-        `).get(projectPath) as Pick<ProjectRow, 'custom_project_name'> | undefined;
+        `).get(projectPath) as Pick<ProjectRepositoryRow, 'custom_project_name'> | undefined;
 
         return row?.custom_project_name ?? null;
     },

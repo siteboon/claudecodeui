@@ -275,3 +275,54 @@ export type CreateCredentialResult = {
   credentialName: string;
   credentialType: string;
 };
+
+// ---------------------------
+//----------------- PROJECT PERSISTENCE TYPES ------------
+/**
+ * Canonical project row shape returned by the projects repository.
+ *
+ * Use this type whenever backend services need to pass around one database
+ * project record without leaking raw SQL row typing across modules.
+ */
+export type ProjectRepositoryRow = {
+  project_id: string;
+  project_path: string;
+  custom_project_name: string | null;
+  isStarred: number;
+  isArchived: number;
+};
+
+/**
+ * Result category returned by `projectsDb.createProjectPath`.
+ *
+ * `created` means a fresh row was inserted, `reactivated_archived` means an
+ * existing archived path was accepted and updated, and `active_conflict` means
+ * an already-active path blocked project creation.
+ */
+export type CreateProjectPathOutcome =
+  | 'created'
+  | 'reactivated_archived'
+  | 'active_conflict';
+
+/**
+ * Structured result returned by project-path upsert operations.
+ *
+ * Services should use this result to decide whether a request succeeded,
+ * should return a conflict, or needs follow-up retrieval of row metadata.
+ */
+export type CreateProjectPathResult = {
+  outcome: CreateProjectPathOutcome;
+  project: ProjectRepositoryRow | null;
+};
+
+/**
+ * Validation result for user-supplied workspace/project paths.
+ *
+ * `resolvedPath` is present only when validation succeeds. `error` is present
+ * only when validation fails and is suitable for user-facing diagnostics.
+ */
+export type WorkspacePathValidationResult = {
+  valid: boolean;
+  resolvedPath?: string;
+  error?: string;
+};

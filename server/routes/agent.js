@@ -4,8 +4,7 @@ import path from 'path';
 import os from 'os';
 import { promises as fs } from 'fs';
 import crypto from 'crypto';
-import { userDb, apiKeysDb, githubTokensDb } from '../modules/database/index.js';
-import { addProjectManually } from '../projects.js';
+import { userDb, apiKeysDb, githubTokensDb, projectsDb } from '../modules/database/index.js';
 import { queryClaudeSDK } from '../claude-sdk.js';
 import { spawnCursor } from '../cursor-cli.js';
 import { queryCodex } from '../openai-codex.js';
@@ -900,19 +899,12 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       }
     }
 
-    // Register the project (or use existing registration)
-    let project;
-    try {
-      project = await addProjectManually(finalProjectPath);
-      console.log('📦 Project registered:', project);
-    } catch (error) {
-      // If project already exists, that's fine - continue with the existing registration
-      if (error.message && error.message.includes('Project already configured')) {
-        console.log('📦 Using existing project registration for:', finalProjectPath);
-        project = { path: finalProjectPath };
-      } else {
-        throw error;
-      }
+    // Register project path in DB (or reuse existing active registration)
+    const registrationResult = projectsDb.createProjectPath(finalProjectPath, null);
+    if (registrationResult.outcome === 'active_conflict') {
+      console.log('Project registration already exists for:', finalProjectPath);
+    } else {
+      console.log('Project registered:', registrationResult.project);
     }
 
     // Set up writer based on streaming mode

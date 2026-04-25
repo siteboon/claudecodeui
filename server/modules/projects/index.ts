@@ -3,4 +3,4 @@ export {
   generateDisplayName,
   getProjectsWithSessions,
   writeSnapshot,
-} from './services/projects.service.js';
+} from './services/projects-with-sessions-fetch.service.js';

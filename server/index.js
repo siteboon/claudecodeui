@@ -11,9 +11,8 @@ import express from 'express';
 import cors from 'cors';
 import mime from 'mime-types';
 
-import { AppError } from '@/shared/utils.js';
+import { AppError, WORKSPACES_ROOT, validateWorkspacePath } from '@/shared/utils.js';
 import { closeSessionsWatcher, initializeSessionsWatcher } from '@/modules/providers/index.js';
-import { getProjectsWithSessions } from '@/modules/projects/index.js';
 import { createWebSocketServer } from '@/modules/websocket/index.js';
 
 import { getConnectableHost } from '../shared/networkHosts.js';
@@ -24,7 +23,6 @@ import {
     renameProjectById,
     deleteSessionById,
     deleteProjectById,
-    getProjectTaskMasterById,
     getProjectPathById,
     searchConversations,
 } from './projects.js';
@@ -70,7 +68,7 @@ import mcpUtilsRoutes from './routes/mcp-utils.js';
 import commandsRoutes from './routes/commands.js';
 import settingsRoutes from './routes/settings.js';
 import agentRoutes from './routes/agent.js';
-import projectsRoutes, { WORKSPACES_ROOT, validateWorkspacePath } from './routes/projects.js';
+import projectModuleRoutes from './modules/projects/projects.routes.js';
 import userRoutes from './routes/user.js';
 import codexRoutes from './routes/codex.js';
 import geminiRoutes from './routes/gemini.js';
@@ -167,7 +165,7 @@ app.use('/api', validateApiKey);
 app.use('/api/auth', authRoutes);
 
 // Projects API Routes (protected)
-app.use('/api/projects', authenticateToken, projectsRoutes);
+app.use('/api/projects', authenticateToken, projectModuleRoutes);
 
 // Git API Routes (protected)
 app.use('/api/git', authenticateToken, gitRoutes);
@@ -302,29 +300,6 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
             success: false,
             error: error.message
         });
-    }
-});
-
-app.get('/api/projects', authenticateToken, async (req, res) => {
-    try {
-        const projects = await getProjectsWithSessions();
-        res.json(projects);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Project-scoped TaskMaster details; identified by DB-assigned `projectId`.
-app.get('/api/projects/:projectId/taskmaster', authenticateToken, async (req, res) => {
-    try {
-        const { projectId } = req.params;
-        const taskMasterDetails = await getProjectTaskMasterById(projectId);
-        if (!taskMasterDetails) {
-            return res.status(404).json({ error: 'Project not found' });
-        }
-        res.json(taskMasterDetails);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
     }
 });
 
@@ -1646,7 +1621,6 @@ async function startServer() {
             // Start watching the projects folder for changes
             await initializeSessionsWatcher();
 
-            // await getProjectsWithSessions(); // TODO: REMOVE THIS
             // Start server-side plugin processes for enabled plugins
             startEnabledPluginServers().catch(err => {
                 console.error('[Plugins] Error during startup:', err.message);

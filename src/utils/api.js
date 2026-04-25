@@ -110,10 +110,10 @@ export const api = {
     if (token) params.set('token', token);
     return `/api/search/conversations?${params.toString()}`;
   },
-  createWorkspace: (workspaceData) =>
-    authenticatedFetch('/api/projects/create-workspace', {
+  createProject: (projectData) =>
+    authenticatedFetch('/api/projects/create-project', {
       method: 'POST',
-      body: JSON.stringify(workspaceData),
+      body: JSON.stringify(projectData),
     }),
   readFile: (projectId, filePath) =>
     authenticatedFetch(`/api/projects/${projectId}/file?filePath=${encodeURIComponent(filePath)}`),
