@@ -112,9 +112,11 @@ export function useSidebarController({
   const [conversationResults, setConversationResults] = useState<ConversationSearchResults | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [searchProgress, setSearchProgress] = useState<SearchProgress | null>(null);
+  const [optimisticStarByProjectId, setOptimisticStarByProjectId] = useState<Map<string, boolean>>(new Map());
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchSeqRef = useRef(0);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const starToggleSequenceByProjectRef = useRef<Map<string, number>>(new Map());
 
   const isSidebarCollapsed = !isMobile && !sidebarVisible;
 
@@ -211,6 +213,33 @@ export function useSidebarController({
       active = false;
     };
   }, [onRefresh]);
+
+  useEffect(() => {
+    setOptimisticStarByProjectId((previous) => {
+      if (previous.size === 0) {
+        return previous;
+      }
+
+      const next = new Map(previous);
+      let changed = false;
+
+      for (const [projectId, optimisticValue] of previous.entries()) {
+        const project = projects.find((candidate) => candidate.projectId === projectId);
+        if (!project) {
+          next.delete(projectId);
+          changed = true;
+          continue;
+        }
+
+        if (Boolean(project.isStarred) === optimisticValue) {
+          next.delete(projectId);
+          changed = true;
+        }
+      }
+
+      return changed ? next : previous;
+    });
+  }, [projects]);
 
   // Debounced conversation search with SSE streaming
   useEffect(() => {
@@ -343,7 +372,29 @@ export function useSidebarController({
     [onSessionSelect],
   );
 
+  const resolveProjectStarState = useCallback(
+    (projectId: string): boolean => {
+      if (optimisticStarByProjectId.has(projectId)) {
+        return Boolean(optimisticStarByProjectId.get(projectId));
+      }
+
+      return projects.some((project) => project.projectId === projectId && Boolean(project.isStarred));
+    },
+    [optimisticStarByProjectId, projects],
+  );
+
   const toggleStarProject = useCallback((projectId: string) => {
+    const previousStarState = resolveProjectStarState(projectId);
+    const optimisticStarState = !previousStarState;
+    const latestSequence = (starToggleSequenceByProjectRef.current.get(projectId) ?? 0) + 1;
+    starToggleSequenceByProjectRef.current.set(projectId, latestSequence);
+
+    setOptimisticStarByProjectId((previous) => {
+      const next = new Map(previous);
+      next.set(projectId, optimisticStarState);
+      return next;
+    });
+
     const updateStar = async () => {
       try {
         const response = await api.toggleProjectStar(projectId);
@@ -359,24 +410,70 @@ export function useSidebarController({
           throw new Error(message);
         }
 
-        await onRefresh();
+        const payload = (await response.json()) as { isStarred?: boolean };
+        const isLatestSequence = starToggleSequenceByProjectRef.current.get(projectId) === latestSequence;
+        if (!isLatestSequence) {
+          return;
+        }
+
+        setOptimisticStarByProjectId((previous) => {
+          const next = new Map(previous);
+          next.set(projectId, Boolean(payload.isStarred));
+          return next;
+        });
       } catch (error) {
+        const isLatestSequence = starToggleSequenceByProjectRef.current.get(projectId) === latestSequence;
+        if (!isLatestSequence) {
+          return;
+        }
+
+        setOptimisticStarByProjectId((previous) => {
+          const next = new Map(previous);
+          next.set(projectId, previousStarState);
+          return next;
+        });
         console.error('[Sidebar] Failed to toggle project star:', error);
         alert(t('messages.updateProjectError'));
       }
     };
 
     void updateStar();
-  }, [onRefresh, t]);
+  }, [resolveProjectStarState, t]);
 
   const isProjectStarred = useCallback(
-    (projectId: string) => projects.some((project) => project.projectId === projectId && Boolean(project.isStarred)),
-    [projects],
+    (projectId: string) => resolveProjectStarState(projectId),
+    [resolveProjectStarState],
   );
 
   const getProjectSessions = useCallback((project: Project) => getAllSessions(project), []);
 
-  const sortedProjects = useMemo(() => sortProjects(projects, projectSortOrder), [projectSortOrder, projects]);
+  const projectsWithResolvedStarState = useMemo(() => {
+    if (optimisticStarByProjectId.size === 0) {
+      return projects;
+    }
+
+    return projects.map((project) => {
+      const optimisticStarState = optimisticStarByProjectId.get(project.projectId);
+      if (optimisticStarState === undefined) {
+        return project;
+      }
+
+      const currentStarState = Boolean(project.isStarred);
+      if (currentStarState === optimisticStarState) {
+        return project;
+      }
+
+      return {
+        ...project,
+        isStarred: optimisticStarState,
+      };
+    });
+  }, [optimisticStarByProjectId, projects]);
+
+  const sortedProjects = useMemo(
+    () => sortProjects(projectsWithResolvedStarState, projectSortOrder),
+    [projectSortOrder, projectsWithResolvedStarState],
+  );
 
   const filteredProjects = useMemo(
     () => filterProjects(sortedProjects, searchFilter),
