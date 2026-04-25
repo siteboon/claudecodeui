@@ -64,6 +64,12 @@ export interface ProjectsUpdatedMessage {
   type: 'projects_updated';
   projects: Project[];
   updatedSessionId?: string;
+  updatedSessionIds?: string[];
+  watchProvider?: LLMProvider;
+  watchProviders?: LLMProvider[];
+  changeType?: 'add' | 'change';
+  changeTypes?: Array<'add' | 'change'>;
+  batched?: boolean;
   [key: string]: unknown;
 }
 

@@ -45,6 +45,10 @@ type ProgressUpdate = {
   currentProject?: string;
 };
 
+type GetProjectsWithSessionsOptions = {
+  skipSynchronization?: boolean;
+};
+
 const __dirname = getModuleDir(import.meta.url);
 const APP_ROOT = findAppRoot(__dirname);
 const PROJECTS_DUMP_DIR = path.join(APP_ROOT, '.tmp', 'project-dumps');
@@ -195,8 +199,12 @@ function broadcastProgress(progress: ProgressUpdate) {
 /**
  * Reads all projects from DB and returns provider-bucketed session summaries.
  */
-export async function getProjectsWithSessions(): Promise<ProjectListItem[]> {
-  await sessionSynchronizerService.synchronizeSessions();
+export async function getProjectsWithSessions(
+  options: GetProjectsWithSessionsOptions = {}
+): Promise<ProjectListItem[]> {
+  if (!options.skipSynchronization) {
+    await sessionSynchronizerService.synchronizeSessions();
+  }
 
   const projectRows = projectsDb.getProjectPaths() as Array<{
     project_id: string;
