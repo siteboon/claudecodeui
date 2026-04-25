@@ -80,7 +80,7 @@ type UseSidebarControllerArgs = {
 export function useSidebarController({
   projects,
   selectedProject,
-  selectedSession,
+  selectedSession: _selectedSession,
   isLoading,
   isMobile,
   t,
@@ -133,19 +133,23 @@ export function useSidebarController({
   }, [projects]);
 
   useEffect(() => {
-    // Expanded-project tracking is now keyed by the DB `projectId` so state
-    // survives display-name edits and other mutations.
-    if (selectedProject) {
-      setExpandedProjects((prev) => {
-        if (prev.has(selectedProject.projectId)) {
-          return prev;
-        }
-        const next = new Set(prev);
-        next.add(selectedProject.projectId);
-        return next;
-      });
+    // Auto-expand only when the selected project identity changes.
+    // Depending on the full `selectedProject` object (or `selectedSession`) causes
+    // websocket-driven list refreshes to re-open projects users manually collapsed.
+    const selectedProjectId = selectedProject?.projectId;
+    if (!selectedProjectId) {
+      return;
     }
-  }, [selectedSession, selectedProject]);
+
+    setExpandedProjects((prev) => {
+      if (prev.has(selectedProjectId)) {
+        return prev;
+      }
+      const next = new Set(prev);
+      next.add(selectedProjectId);
+      return next;
+    });
+  }, [selectedProject?.projectId]);
 
   useEffect(() => {
     if (projects.length > 0 && !isLoading) {
