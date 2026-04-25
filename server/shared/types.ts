@@ -1,3 +1,5 @@
+import type { IncomingMessage } from 'node:http';
+
 //----------------- HTTP RESPONSE SHAPES ------------
 /**
  * Canonical success envelope used by backend APIs that return a structured payload.
@@ -17,6 +19,43 @@ export type ApiSuccessShape<TData = unknown> = {
  * domain models.
  */
 export type AnyRecord = Record<string, any>;
+
+// ---------------------------
+//----------------- WEBSOCKET TRANSPORT TYPES ------------
+/**
+ * Minimal websocket client contract used by backend broadcaster services.
+ *
+ * Any transport object added to `connectedClients` must implement these two
+ * members so shared services can safely send JSON strings and check whether the
+ * socket is still open before broadcasting.
+ */
+export type RealtimeClientConnection = {
+  readyState: number;
+  send(data: string): void;
+};
+
+/**
+ * Authenticated user payload attached to websocket upgrade requests.
+ *
+ * Platform and OSS auth flows currently use either `id` or `userId`; both are
+ * represented here so websocket handlers can resolve a stable writer user id.
+ */
+export type AuthenticatedWebSocketUser = {
+  id?: string | number;
+  userId?: string | number;
+  username?: string;
+  [key: string]: unknown;
+};
+
+/**
+ * HTTP upgrade request shape after websocket authentication succeeds.
+ *
+ * `verifyClient` populates `request.user` with the authenticated payload, and
+ * downstream websocket handlers rely on this extended request type.
+ */
+export type AuthenticatedWebSocketRequest = IncomingMessage & {
+  user?: AuthenticatedWebSocketUser;
+};
 
 // ---------------------------
 //----------------- PROVIDER MESSAGE MODEL ------------

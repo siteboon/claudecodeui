@@ -3,8 +3,9 @@ import path from 'node:path';
 
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { sessionSynchronizerService } from '@/modules/providers/index.js';
+import { WS_OPEN_STATE, connectedClients } from '@/modules/websocket/index.js';
+import type { RealtimeClientConnection } from '@/shared/types.js';
 import { findAppRoot, getModuleDir } from '@/utils/runtime-paths.js';
-import { connectedClients } from '@/index.js';
 
 type SessionSummary = {
   id: string;
@@ -183,8 +184,8 @@ function broadcastProgress(progress: ProgressUpdate) {
     ...progress,
   });
 
-  connectedClients.forEach((client: any) => {
-    if (client.readyState === WebSocket.OPEN) {
+  connectedClients.forEach((client: RealtimeClientConnection) => {
+    if (client.readyState === WS_OPEN_STATE) {
       client.send(message);
     }
   });

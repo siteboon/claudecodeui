@@ -182,6 +182,62 @@ export const readStringRecord = (value: unknown): Record<string, string> | undef
   return Object.keys(normalized).length > 0 ? normalized : undefined;
 };
 
+// ---------------------------
+//----------------- WEBSOCKET PAYLOAD PARSING UTILITIES ------------
+/**
+ * Parses one websocket message payload into a plain JSON object record.
+ *
+ * Use this in realtime handlers that receive raw websocket payloads as `string`,
+ * `Buffer`, `ArrayBuffer`, or chunk arrays. The helper converts supported
+ * payload formats to UTF-8 text, parses JSON, and returns only object payloads.
+ * Primitive/array/invalid payloads return `null` so callers can handle bad input
+ * without throwing from deeply nested message handlers.
+ */
+export const parseIncomingJsonObject = (payload: unknown): AnyRecord | null => {
+  let text: string | null = null;
+
+  if (typeof payload === 'string') {
+    text = payload;
+  } else if (Buffer.isBuffer(payload)) {
+    text = payload.toString('utf8');
+  } else if (payload instanceof ArrayBuffer) {
+    text = Buffer.from(payload).toString('utf8');
+  } else if (Array.isArray(payload)) {
+    const buffers = payload
+      .map((entry) => {
+        if (Buffer.isBuffer(entry)) {
+          return entry;
+        }
+
+        if (entry instanceof ArrayBuffer) {
+          return Buffer.from(entry);
+        }
+
+        if (ArrayBuffer.isView(entry)) {
+          return Buffer.from(entry.buffer, entry.byteOffset, entry.byteLength);
+        }
+
+        return null;
+      })
+      .filter((entry): entry is Buffer => entry !== null);
+
+    if (buffers.length > 0) {
+      text = Buffer.concat(buffers).toString('utf8');
+    }
+  }
+
+  if (typeof text !== 'string' || text.trim().length === 0) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    return readObjectRecord(parsed);
+  } catch {
+    return null;
+  }
+};
+
 /**
  * Reads a JSON config file and guarantees a plain object result.
  *

@@ -5,9 +5,9 @@ import { promises as fsPromises } from 'node:fs';
 import chokidar, { type FSWatcher } from 'chokidar';
 
 import { sessionSynchronizerService } from '@/modules/providers/services/session-synchronizer.service.js';
+import { WS_OPEN_STATE, connectedClients } from '@/modules/websocket/index.js';
 import type { LLMProvider } from '@/shared/types.js';
 import { getProjectsWithSessions } from '@/modules/projects/index.js';
-import { connectedClients } from '@/index.js';
 
 type WatcherEventType = 'add' | 'change';
 
@@ -45,7 +45,6 @@ const WATCHER_IGNORED_PATTERNS = [
 ];
 
 const watchers: FSWatcher[] = [];
-const WS_OPEN_STATE = 1;
 
 /**
  * Filters watcher events to provider-specific session artifact file types.
