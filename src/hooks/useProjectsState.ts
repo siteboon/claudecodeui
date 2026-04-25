@@ -183,6 +183,7 @@ export function useProjectsState({
   const [externalMessageUpdate, setExternalMessageUpdate] = useState(0);
 
   const loadingProgressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastHandledMessageRef = useRef<AppSocketMessage | null>(null);
 
   const fetchProjects = useCallback(async ({ showLoadingState = true }: FetchProjectsOptions = {}) => {
     try {
@@ -288,6 +289,15 @@ export function useProjectsState({
       return;
     }
 
+    // `latestMessage` is event-like data. This effect also depends on local state
+    // (`projects`, `selectedProject`, `selectedSession`) to compute derived updates.
+    // Without this guard, handling one websocket message can update that local
+    // state, retrigger the effect, and re-handle the same websocket message.
+    if (lastHandledMessageRef.current === latestMessage) {
+      return;
+    }
+    lastHandledMessageRef.current = latestMessage;
+
     if (latestMessage.type === 'loading_progress') {
       if (loadingProgressTimeoutRef.current) {
         clearTimeout(loadingProgressTimeoutRef.current);
@@ -335,7 +345,9 @@ export function useProjectsState({
       return;
     }
 
-    setProjects(updatedProjects);
+    setProjects((previousProjects) =>
+      projectsHaveChanges(previousProjects, updatedProjects, true) ? updatedProjects : previousProjects,
+    );
 
     if (!selectedProject) {
       return;
