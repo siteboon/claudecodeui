@@ -441,13 +441,11 @@ export default function ChatComposer({
                     id: 'bypassPermissions',
                     label: 'Bypass',
                     title: 'Bypass — skip all permission prompts',
-                    dotColor: '#f97316',
                   },
                   {
                     id: 'plan',
                     label: 'Plan',
                     title: 'Plan — read-only planning, no edits',
-                    dotColor: '#3b82f6',
                   },
                 ]}
               />

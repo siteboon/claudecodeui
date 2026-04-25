@@ -198,12 +198,12 @@ export default function ProviderSelectionEmptyState({
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1">
-                      <span className="text-xs font-semibold text-foreground">
-                        {getProviderDisplayName(provider)}
+                      <span className="truncate text-xs font-semibold text-foreground">
+                        {currentModelLabel}
                       </span>
                       <span className="text-xs text-muted-foreground">·</span>
-                      <span className="truncate text-xs text-foreground">
-                        {currentModelLabel}
+                      <span className="text-xs text-foreground">
+                        {getProviderDisplayName(provider)}
                       </span>
                     </div>
                     <p className="mt-0.5 text-[11px] text-muted-foreground">
