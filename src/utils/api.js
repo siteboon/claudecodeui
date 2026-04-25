@@ -113,6 +113,15 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(projectData),
     }),
+  migrateLegacyProjectStars: (projectIds) =>
+    authenticatedFetch('/api/projects/migrate-legacy-stars', {
+      method: 'POST',
+      body: JSON.stringify({ projectIds }),
+    }),
+  toggleProjectStar: (projectId) =>
+    authenticatedFetch(`/api/projects/${encodeURIComponent(projectId)}/toggle-star`, {
+      method: 'POST',
+    }),
   readFile: (projectId, filePath) =>
     authenticatedFetch(`/api/projects/${projectId}/file?filePath=${encodeURIComponent(filePath)}`),
   readFileBlob: (projectId, filePath) =>

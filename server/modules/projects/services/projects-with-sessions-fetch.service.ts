@@ -21,6 +21,7 @@ export type ProjectListItem = {
   path: string;
   displayName: string;
   fullPath: string;
+  isStarred: boolean;
   sessions: SessionSummary[];
   cursorSessions: SessionSummary[];
   codexSessions: SessionSummary[];
@@ -201,6 +202,7 @@ export async function getProjectsWithSessions(): Promise<ProjectListItem[]> {
     project_id: string;
     project_path: string;
     custom_project_name?: string | null;
+    isStarred?: number;
   }>;
   const totalProjects = projectRows.length;
   const projects: ProjectListItem[] = [];
@@ -233,6 +235,7 @@ export async function getProjectsWithSessions(): Promise<ProjectListItem[]> {
       path: projectPath,
       displayName,
       fullPath: projectPath,
+      isStarred: Boolean(row.isStarred),
       sessions: claudeSessions,
       cursorSessions: sessionsByProvider.cursor,
       codexSessions: sessionsByProvider.codex,

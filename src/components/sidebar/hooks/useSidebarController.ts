@@ -10,10 +10,10 @@ import type {
   SessionWithProvider,
 } from '../types/types';
 import {
+  clearLegacyStarredProjectIds,
   filterProjects,
   getAllSessions,
-  loadStarredProjects,
-  persistStarredProjects,
+  readLegacyStarredProjectIds,
   readProjectSortOrder,
   sortProjects,
 } from '../utils/utils';
@@ -108,7 +108,6 @@ export function useSidebarController({
   const [deleteConfirmation, setDeleteConfirmation] = useState<DeleteProjectConfirmation | null>(null);
   const [sessionDeleteConfirmation, setSessionDeleteConfirmation] = useState<SessionDeleteConfirmation | null>(null);
   const [showVersionModal, setShowVersionModal] = useState(false);
-  const [starredProjects, setStarredProjects] = useState<Set<string>>(() => loadStarredProjects());
   const [searchMode, setSearchMode] = useState<'projects' | 'conversations'>('projects');
   const [conversationResults, setConversationResults] = useState<ConversationSearchResults | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -184,6 +183,34 @@ export function useSidebarController({
       clearInterval(interval);
     };
   }, []);
+
+  useEffect(() => {
+    const legacyStarredProjectIds = readLegacyStarredProjectIds();
+    if (legacyStarredProjectIds.length === 0) {
+      return;
+    }
+
+    let active = true;
+
+    const migrateLegacyStars = async () => {
+      try {
+        await api.migrateLegacyProjectStars(legacyStarredProjectIds);
+        if (active) {
+          await onRefresh();
+        }
+      } catch (error) {
+        console.error('[Sidebar] Failed to migrate legacy starred projects:', error);
+      } finally {
+        clearLegacyStarredProjectIds();
+      }
+    };
+
+    void migrateLegacyStars();
+
+    return () => {
+      active = false;
+    };
+  }, [onRefresh]);
 
   // Debounced conversation search with SSE streaming
   useEffect(() => {
@@ -317,30 +344,39 @@ export function useSidebarController({
   );
 
   const toggleStarProject = useCallback((projectId: string) => {
-    setStarredProjects((prev) => {
-      const next = new Set(prev);
-      if (next.has(projectId)) {
-        next.delete(projectId);
-      } else {
-        next.add(projectId);
-      }
+    const updateStar = async () => {
+      try {
+        const response = await api.toggleProjectStar(projectId);
+        if (!response.ok) {
+          const payload = (await response.json()) as { error?: string | { message?: string } };
+          const errorPayload = payload.error;
+          const message =
+            typeof errorPayload === 'string'
+              ? errorPayload
+              : errorPayload && typeof errorPayload === 'object' && errorPayload.message
+                ? errorPayload.message
+                : t('messages.updateProjectError');
+          throw new Error(message);
+        }
 
-      persistStarredProjects(next);
-      return next;
-    });
-  }, []);
+        await onRefresh();
+      } catch (error) {
+        console.error('[Sidebar] Failed to toggle project star:', error);
+        alert(t('messages.updateProjectError'));
+      }
+    };
+
+    void updateStar();
+  }, [onRefresh, t]);
 
   const isProjectStarred = useCallback(
-    (projectId: string) => starredProjects.has(projectId),
-    [starredProjects],
+    (projectId: string) => projects.some((project) => project.projectId === projectId && Boolean(project.isStarred)),
+    [projects],
   );
 
   const getProjectSessions = useCallback((project: Project) => getAllSessions(project), []);
 
-  const sortedProjects = useMemo(
-    () => sortProjects(projects, projectSortOrder, starredProjects),
-    [projectSortOrder, projects, starredProjects],
-  );
+  const sortedProjects = useMemo(() => sortProjects(projects, projectSortOrder), [projectSortOrder, projects]);
 
   const filteredProjects = useMemo(
     () => filterProjects(sortedProjects, searchFilter),
@@ -550,7 +586,6 @@ export function useSidebarController({
     deleteConfirmation,
     sessionDeleteConfirmation,
     showVersionModal,
-    starredProjects,
     filteredProjects,
     toggleProject,
     handleSessionClick,

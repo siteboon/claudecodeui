@@ -13,6 +13,7 @@ test('createProjectsSnapshot returns an object matching the predefined snapshot 
       path: '/tmp/project-1',
       displayName: 'project-1',
       fullPath: '/tmp/project-1',
+      isStarred: false,
       sessions: [],
       cursorSessions: [],
       codexSessions: [],

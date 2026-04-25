@@ -16,20 +16,39 @@ export const readProjectSortOrder = (): ProjectSortOrder => {
   }
 };
 
-export const loadStarredProjects = (): Set<string> => {
+const LEGACY_STARRED_PROJECTS_STORAGE_KEY = 'starredProjects';
+
+/**
+ * Reads legacy project stars from localStorage (used only for one-time migration to backend).
+ */
+export const readLegacyStarredProjectIds = (): string[] => {
   try {
-    const saved = localStorage.getItem('starredProjects');
-    return saved ? new Set<string>(JSON.parse(saved)) : new Set<string>();
+    const saved = localStorage.getItem(LEGACY_STARRED_PROJECTS_STORAGE_KEY);
+    if (!saved) {
+      return [];
+    }
+
+    const parsed = JSON.parse(saved) as unknown;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .map((value) => String(value).trim())
+      .filter((value) => value.length > 0);
   } catch {
-    return new Set<string>();
+    return [];
   }
 };
 
-export const persistStarredProjects = (starredProjects: Set<string>) => {
+/**
+ * Clears the legacy localStorage stars key after migration to backend completes.
+ */
+export const clearLegacyStarredProjectIds = () => {
   try {
-    localStorage.setItem('starredProjects', JSON.stringify([...starredProjects]));
+    localStorage.removeItem(LEGACY_STARRED_PROJECTS_STORAGE_KEY);
   } catch {
-    // Keep UI responsive even if storage fails.
+    // Keep UI responsive even if storage is unavailable.
   }
 };
 
@@ -133,14 +152,13 @@ export const getProjectLastActivity = (project: Project): Date => {
 export const sortProjects = (
   projects: Project[],
   projectSortOrder: ProjectSortOrder,
-  starredProjects: Set<string>,
 ): Project[] => {
   const byName = [...projects];
 
   byName.sort((projectA, projectB) => {
-    // Starred projects are tracked by `projectId` in localStorage.
-    const aStarred = starredProjects.has(projectA.projectId);
-    const bStarred = starredProjects.has(projectB.projectId);
+    // Star order now comes from backend `projects.isStarred`.
+    const aStarred = Boolean(projectA.isStarred);
+    const bStarred = Boolean(projectB.isStarred);
 
     if (aStarred && !bStarred) {
       return -1;
