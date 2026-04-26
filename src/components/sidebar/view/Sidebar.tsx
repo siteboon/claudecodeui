@@ -148,31 +148,17 @@ function Sidebar({
     isLoading,
     loadingProgress,
     expandedProjects,
-    editingProject,
-    editingName,
-    initialSessionsLoaded,
     currentTime,
     editingSession,
     editingSessionName,
-    deletingProjects,
     tasksEnabled,
     mcpServerStatus,
-    getProjectSessions,
-    loadingMoreProjects,
     isProjectStarred,
-    onEditingNameChange: setEditingName,
     onToggleProject: toggleProject,
-    onProjectSelect: handleProjectSelect,
     onToggleStarProject: toggleStarProject,
-    onStartEditingProject: startEditing,
-    onCancelEditingProject: cancelEditing,
-    onSaveProjectName: (projectName) => {
-      void saveProjectName(projectName);
-    },
     onDeleteProject: requestProjectDelete,
-    onSessionSelect: handleSessionClick,
     onDeleteSession: showDeleteSessionConfirmation,
-    onLoadMoreSessions: loadMoreSessionsForProject,
+    onSessionSelect: handleSessionClick,
     onNewSession,
     onEditingSessionNameChange: setEditingSessionName,
     onStartEditingSession: (sessionId, initialName) => {
@@ -183,9 +169,10 @@ function Sidebar({
       setEditingSession(null);
       setEditingSessionName('');
     },
-    onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => {
-      void updateSessionSummary(projectName, sessionId, summary, provider);
+    onSaveEditingSession: (projectId, sessionId, summary, provider) => {
+      void updateSessionSummary(projectId, sessionId, summary, provider);
     },
+    onLoadMoreSessions: loadMoreSessionsForProject,
     t,
   };
 

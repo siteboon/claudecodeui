@@ -174,6 +174,62 @@ export const filterProjects = (projects: Project[], searchFilter: string): Proje
   });
 };
 
+/**
+ * A repo bucket — main project plus zero or more linked worktrees, all sharing
+ * a `repoGroup` key. Standalone projects (no detected worktrees) get a bucket
+ * with a single member and `mainProject === projects[0]`.
+ */
+export type RepoBucket = {
+  /** Stable key for React. Either the repo root path or the standalone project's id. */
+  key: string;
+  /** Primary project for this bucket — used for the card header. */
+  mainProject: Project;
+  /** Linked worktrees only (excludes mainProject). Empty for standalones. */
+  linkedWorktrees: Project[];
+  /** All projects (main + linked). Convenient for aggregating sessions. */
+  projects: Project[];
+};
+
+/**
+ * Group projects by repo root. Preserves the order of the *first* member in
+ * each group so existing sort ordering stays intact. A project with no
+ * `repoGroup` becomes its own one-element bucket.
+ */
+export const groupProjectsByRepo = (projects: Project[]): RepoBucket[] => {
+  const buckets = new Map<string, Project[]>();
+  const insertionOrder: string[] = [];
+
+  for (const project of projects) {
+    const groupKey = project.repoGroup ?? `__standalone__${project.projectId}`;
+    if (!buckets.has(groupKey)) {
+      buckets.set(groupKey, []);
+      insertionOrder.push(groupKey);
+    }
+    buckets.get(groupKey)!.push(project);
+  }
+
+  return insertionOrder.map((key) => {
+    const members = buckets.get(key)!;
+    if (members.length === 1) {
+      return { key, mainProject: members[0], linkedWorktrees: [], projects: members };
+    }
+
+    // Sort: main worktree first, then by branch name; falls back to displayName
+    // when branchName is unavailable.
+    const sorted = [...members].sort((a, b) => {
+      if (a.isMainWorktree && !b.isMainWorktree) return -1;
+      if (!a.isMainWorktree && b.isMainWorktree) return 1;
+      const aBranch = a.worktreeInfo?.branchName || a.displayName;
+      const bBranch = b.worktreeInfo?.branchName || b.displayName;
+      return aBranch.localeCompare(bBranch);
+    });
+
+    const mainProject = sorted.find((p) => p.isMainWorktree) ?? sorted[0];
+    const linkedWorktrees = sorted.filter((p) => p !== mainProject);
+    return { key, mainProject, linkedWorktrees, projects: sorted };
+  });
+};
+
 export const getTaskIndicatorStatus = (
   project: Project,
   mcpServerStatus: { hasMCPServer?: boolean; isConfigured?: boolean } | null,
