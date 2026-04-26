@@ -61,6 +61,11 @@ interface ChatMessagesPaneProps {
   showRawParameters?: boolean;
   showThinking?: boolean;
   selectedProject: Project;
+  isLoading: boolean;
+  useWorktreeForSession: boolean;
+  setUseWorktreeForSession: (value: boolean) => void;
+  worktreeName: string;
+  setWorktreeName: (value: string) => void;
 }
 
 export default function ChatMessagesPane({
@@ -110,6 +115,11 @@ export default function ChatMessagesPane({
   showRawParameters,
   showThinking,
   selectedProject,
+  isLoading,
+  useWorktreeForSession,
+  setUseWorktreeForSession,
+  worktreeName,
+  setWorktreeName,
 }: ChatMessagesPaneProps) {
   const { t } = useTranslation('chat');
   const messageKeyMapRef = useRef<WeakMap<ChatMessage, string>>(new WeakMap());
@@ -177,6 +187,10 @@ export default function ChatMessagesPane({
           isTaskMasterInstalled={isTaskMasterInstalled}
           onShowAllTasks={onShowAllTasks}
           setInput={setInput}
+          useWorktreeForSession={useWorktreeForSession}
+          setUseWorktreeForSession={setUseWorktreeForSession}
+          worktreeName={worktreeName}
+          setWorktreeName={setWorktreeName}
         />
       ) : (
         <>

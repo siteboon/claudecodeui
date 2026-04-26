@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, Plus, Shield, X } from 'lucide-react';
+import { AlertTriangle, GitBranch, Plus, Shield, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button, Input } from '../../../../../../../shared/view/ui';
 import type { CodexPermissionMode, GeminiPermissionMode } from '../../../../../types/types';
@@ -53,6 +53,8 @@ type ClaudePermissionsProps = {
   agent: 'claude';
   skipPermissions: boolean;
   onSkipPermissionsChange: (value: boolean) => void;
+  useWorktree: boolean;
+  onUseWorktreeChange: (value: boolean) => void;
   allowedTools: string[];
   onAllowedToolsChange: (value: string[]) => void;
   disallowedTools: string[];
@@ -62,6 +64,8 @@ type ClaudePermissionsProps = {
 function ClaudePermissions({
   skipPermissions,
   onSkipPermissionsChange,
+  useWorktree,
+  onUseWorktreeChange,
   allowedTools,
   onAllowedToolsChange,
   disallowedTools,
@@ -112,6 +116,25 @@ function ClaudePermissions({
               </div>
               <div className="text-sm text-orange-700 dark:text-orange-300">
                 {t('permissions.skipPermissions.claudeDescription')}
+              </div>
+            </div>
+          </label>
+        </div>
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={useWorktree}
+              onChange={(event) => onUseWorktreeChange(event.target.checked)}
+              className="h-4 w-4 rounded border-input bg-card text-primary focus:ring-2 focus:ring-primary"
+            />
+            <div>
+              <div className="flex items-center gap-2 font-medium text-blue-900 dark:text-blue-100">
+                <GitBranch className="h-4 w-4" />
+                {t('permissions.useWorktree.label')}
+              </div>
+              <div className="text-sm text-blue-700 dark:text-blue-300">
+                {t('permissions.useWorktree.description')}
               </div>
             </div>
           </label>

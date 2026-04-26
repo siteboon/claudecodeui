@@ -322,6 +322,10 @@
       "claudeDescription": "Entspricht dem Flag --dangerously-skip-permissions",
       "cursorDescription": "Entspricht dem Flag -f in der Cursor CLI"
     },
+    "useWorktree": {
+      "label": "Git-Worktree-Isolation verwenden",
+      "description": "Führt Claude Code in einem isolierten Git-Worktree aus. Entspricht dem Flag --worktree."
+    },
     "allowedTools": {
       "title": "Erlaubte Werkzeuge",
       "description": "Werkzeuge, die automatisch ohne Berechtigungsaufforderung erlaubt werden",

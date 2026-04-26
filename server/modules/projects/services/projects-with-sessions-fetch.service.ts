@@ -24,6 +24,13 @@ type SessionRepositoryRow = {
   created_at?: string | null;
 };
 
+export type WorktreeInfo = {
+  isWorktree: boolean;
+  worktreeRoot: string;
+  mainRepoRoot: string;
+  branchName: string;
+};
+
 export type ProjectListItem = {
   projectId: string;
   path: string;
@@ -39,6 +46,16 @@ export type ProjectListItem = {
     hasMore: boolean;
     total: number;
   };
+  // Worktree feature: present for both main checkouts and linked worktrees so
+  // the sidebar can group them under a single repo card.
+  worktreeInfo?: WorktreeInfo | null;
+  // Stable key shared by main + linked worktrees (the repo root path). Absent
+  // for projects with no detectable worktree relationship.
+  repoGroup?: string;
+  isMainWorktree?: boolean;
+  // True when the worktree directory no longer exists on disk — sidebar uses
+  // this to render an "archived" sub-section.
+  isStale?: boolean;
 };
 
 export type ArchivedProjectListItem = ProjectListItem & {
@@ -84,6 +101,68 @@ export type ProjectSessionsPageApiView = {
 
 const DEFAULT_PROJECT_SESSIONS_PAGE_SIZE = 20;
 const MAX_PROJECT_SESSIONS_PAGE_SIZE = 200;
+
+const WORKTREE_MARKER = '/.claude/worktrees/';
+
+/**
+ * Detect a Claude Code worktree from its on-disk path. Returns the repo root
+ * (the directory that owns the `.claude/worktrees/` folder) and the worktree
+ * name (used as the branch label in the sidebar). Returns null when the path
+ * doesn't match the convention.
+ */
+function detectWorktreeFromPath(projectPath: string): { mainRepoRoot: string; worktreeName: string } | null {
+  const markerIdx = projectPath.indexOf(WORKTREE_MARKER);
+  if (markerIdx < 0) {
+    return null;
+  }
+
+  const afterMarker = projectPath.slice(markerIdx + WORKTREE_MARKER.length);
+  const worktreeName = afterMarker.split('/')[0] ?? '';
+  if (!worktreeName) {
+    return null;
+  }
+
+  return {
+    mainRepoRoot: projectPath.slice(0, markerIdx),
+    worktreeName,
+  };
+}
+
+/**
+ * One pass over all projects to build a path → projectId map of *main repos*
+ * (those that own a `.claude/worktrees/` folder containing other projects).
+ * This lets a worktree project look up its main repo's projectId for grouping.
+ */
+function buildRepoGroupIndex(projectPaths: string[]): Map<string, string> {
+  const mainRepoRoots = new Set<string>();
+  for (const projectPath of projectPaths) {
+    const detected = detectWorktreeFromPath(projectPath);
+    if (detected) {
+      mainRepoRoots.add(detected.mainRepoRoot);
+    }
+  }
+
+  // Map each main repo root to itself; worktree projects reuse the same key.
+  const index = new Map<string, string>();
+  for (const root of mainRepoRoots) {
+    index.set(root, root);
+  }
+  for (const projectPath of projectPaths) {
+    if (mainRepoRoots.has(projectPath)) {
+      index.set(projectPath, projectPath);
+    }
+  }
+  return index;
+}
+
+async function checkPathExists(targetPath: string): Promise<boolean> {
+  try {
+    await fs.access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Generate better display name from path.
@@ -223,6 +302,8 @@ export async function getProjectsWithSessions(
   const projects: ProjectListItem[] = [];
   let processedProjects = 0;
 
+  const repoIndex = buildRepoGroupIndex(projectRows.map((row) => row.project_path));
+
   for (const row of projectRows) {
     processedProjects += 1;
 
@@ -246,6 +327,8 @@ export async function getProjectsWithSessions(
       offset: options.sessionsOffset,
     });
 
+    const worktreeFields = await resolveWorktreeFields(projectPath, repoIndex);
+
     projects.push({
       projectId,
       path: projectPath,
@@ -261,6 +344,7 @@ export async function getProjectsWithSessions(
         hasMore: sessionsPage.hasMore,
         total: sessionsPage.total,
       },
+      ...worktreeFields,
     });
   }
 
@@ -271,6 +355,54 @@ export async function getProjectsWithSessions(
   });
 
   return projects;
+}
+
+/**
+ * Compute worktree-related fields for a single project: whether it lives under
+ * `<repo>/.claude/worktrees/<name>`, the shared `repoGroup` key, the main vs
+ * linked-worktree flag, and whether the directory still exists.
+ *
+ * The repoIndex lets us only treat repos that actually own a `.claude/worktrees/`
+ * folder as "main" — standalone projects with no linked worktrees stay
+ * `repoGroup: undefined` so the sidebar can short-circuit grouping for them.
+ */
+async function resolveWorktreeFields(
+  projectPath: string,
+  repoIndex: Map<string, string>,
+): Promise<Pick<ProjectListItem, 'worktreeInfo' | 'repoGroup' | 'isMainWorktree' | 'isStale'>> {
+  const detected = detectWorktreeFromPath(projectPath);
+  if (detected) {
+    const exists = await checkPathExists(projectPath);
+    return {
+      worktreeInfo: {
+        isWorktree: true,
+        worktreeRoot: projectPath,
+        mainRepoRoot: detected.mainRepoRoot,
+        branchName: detected.worktreeName,
+      },
+      repoGroup: detected.mainRepoRoot,
+      isMainWorktree: false,
+      isStale: !exists,
+    };
+  }
+
+  // Main project: only mark `repoGroup` (and `isMainWorktree: true`) when at
+  // least one linked worktree exists for this repo. Otherwise let it render
+  // as a plain standalone project.
+  if (repoIndex.has(projectPath)) {
+    return {
+      worktreeInfo: null,
+      repoGroup: projectPath,
+      isMainWorktree: true,
+      isStale: false,
+    };
+  }
+
+  return {
+    worktreeInfo: null,
+    isMainWorktree: false,
+    isStale: false,
+  };
 }
 
 /**

@@ -17,7 +17,22 @@
     "projects": "проекты",
     "noMatchingProjects": "Нет подходящих проектов",
     "tryDifferentSearch": "Попробуйте изменить поисковый запрос",
-    "runClaudeCli": "Запустите Claude CLI в каталоге проекта для начала работы"
+    "runClaudeCli": "Запустите Claude CLI в каталоге проекта для начала работы",
+    "branch": "Ветка",
+    "repoGroup": "Репозиторий",
+    "worktrees": "рабочие деревья",
+    "archived": "в архиве",
+    "showMoreWorktrees": "Показать ещё {{count}}...",
+    "newGroupSession": "Новый сеанс в {{name}}",
+    "recent": "Recent",
+    "worktreesUpper": "Worktrees",
+    "showAll": "Show all",
+    "emptyWorktree": "empty · click to start",
+    "staleWorktree": "archived",
+    "messages": "messages",
+    "sessionsShort_one": "session",
+    "sessionsShort_other": "sessions",
+    "older": "Older"
   },
   "app": {
     "title": "CloudCLI",
@@ -49,7 +64,9 @@
     "save": "Сохранить",
     "cancel": "Отмена",
     "clearSearch": "Очистить поиск",
-    "openCommandPalette": "Открыть палитру команд"
+    "openCommandPalette": "Открыть палитру команд",
+    "newSessionInWorktree": "Новая сессия в этом worktree",
+    "deleteWorktree": "Удалить worktree"
   },
   "navigation": {
     "chat": "Чат",
