@@ -315,7 +315,11 @@ async function extractProjectDirectory(projectName) {
       // Fall back to decoded project name if no sessions
       extractedPath = projectName.replace(/-/g, '/');
     } else {
-      // Process all JSONL files to collect cwd values
+      // cwd is set in the first JSONL entry of every Claude session and
+      // effectively never changes within a session. Scanning every line of
+      // every file (some projects have hundreds of MB of JSONL) made
+      // /api/projects take 30+ seconds on a cold cache. Read until the first
+      // cwd in each file, then move on.
       for (const file of jsonlFiles) {
         const jsonlFile = path.join(projectDir, file);
         const fileStream = fsSync.createReadStream(jsonlFile);
@@ -324,26 +328,27 @@ async function extractProjectDirectory(projectName) {
           crlfDelay: Infinity
         });
 
-        for await (const line of rl) {
-          if (line.trim()) {
+        try {
+          for await (const line of rl) {
+            if (!line.trim()) continue;
             try {
               const entry = JSON.parse(line);
-
               if (entry.cwd) {
-                // Count occurrences of each cwd
                 cwdCounts.set(entry.cwd, (cwdCounts.get(entry.cwd) || 0) + 1);
-
-                // Track the most recent cwd
                 const timestamp = new Date(entry.timestamp || 0).getTime();
                 if (timestamp > latestTimestamp) {
                   latestTimestamp = timestamp;
                   latestCwd = entry.cwd;
                 }
+                break;
               }
             } catch (parseError) {
               // Skip malformed lines
             }
           }
+        } finally {
+          rl.close();
+          fileStream.destroy();
         }
       }
 
