@@ -1344,6 +1344,13 @@ wss.on('connection', (ws, request) => {
     const urlObj = new URL(url, 'http://localhost');
     const pathname = urlObj.pathname;
 
+    // Heartbeat: reverse proxies (tailnet, nginx) idle out silent WS at ~60s.
+    // Without traffic the connection dies and the browser may not notice
+    // immediately, causing send() calls to silently drop bytes. Pinging every
+    // 30s keeps proxies happy and lets us detect dead peers via missed pongs.
+    ws.isAlive = true;
+    ws.on('pong', () => { ws.isAlive = true; });
+
     if (pathname === '/shell') {
         handleShellConnection(ws);
     } else if (pathname === '/ws') {
@@ -1355,6 +1362,18 @@ wss.on('connection', (ws, request) => {
         ws.close();
     }
 });
+
+const wsHeartbeatInterval = setInterval(() => {
+    wss.clients.forEach((ws) => {
+        if (ws.isAlive === false) {
+            return ws.terminate();
+        }
+        ws.isAlive = false;
+        try { ws.ping(); } catch { /* socket already closing */ }
+    });
+}, 30000);
+
+wss.on('close', () => clearInterval(wsHeartbeatInterval));
 
 /**
  * WebSocket Writer - Wrapper for WebSocket to match SSEStreamWriter interface
