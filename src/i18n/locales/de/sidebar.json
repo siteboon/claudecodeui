@@ -17,7 +17,22 @@
     "projects": "Projekte",
     "noMatchingProjects": "Keine passenden Projekte",
     "tryDifferentSearch": "Versuch, den Suchbegriff anzupassen",
-    "runClaudeCli": "Führ Claude CLI in einem Projektverzeichnis aus, um zu beginnen"
+    "runClaudeCli": "Führ Claude CLI in einem Projektverzeichnis aus, um zu beginnen",
+    "branch": "Branch",
+    "repoGroup": "Repository",
+    "worktrees": "Worktrees",
+    "archived": "archiviert",
+    "showMoreWorktrees": "{{count}} weitere anzeigen...",
+    "newGroupSession": "Neue Sitzung in {{name}}",
+    "recent": "Recent",
+    "worktreesUpper": "Worktrees",
+    "showAll": "Show all",
+    "emptyWorktree": "empty · click to start",
+    "staleWorktree": "archived",
+    "messages": "messages",
+    "sessionsShort_one": "session",
+    "sessionsShort_other": "sessions",
+    "older": "Older"
   },
   "app": {
     "title": "CloudCLI",
@@ -47,7 +62,9 @@
     "deleteSession": "Diese Sitzung dauerhaft löschen",
     "save": "Speichern",
     "cancel": "Abbrechen",
-    "clearSearch": "Suche leeren"
+    "clearSearch": "Suche leeren",
+    "newSessionInWorktree": "New session in this worktree",
+    "deleteWorktree": "Delete worktree"
   },
   "navigation": {
     "chat": "Chat",

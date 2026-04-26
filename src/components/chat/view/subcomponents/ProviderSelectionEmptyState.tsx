@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, GitBranch } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { useServerPlatform } from "../../../../hooks/useServerPlatform";
@@ -44,6 +44,10 @@ type ProviderSelectionEmptyStateProps = {
   isTaskMasterInstalled: boolean | null;
   onShowAllTasks?: (() => void) | null;
   setInput: React.Dispatch<React.SetStateAction<string>>;
+  useWorktreeForSession: boolean;
+  setUseWorktreeForSession: (value: boolean) => void;
+  worktreeName: string;
+  setWorktreeName: (value: string) => void;
 };
 
 type ProviderGroup = {
@@ -104,6 +108,10 @@ export default function ProviderSelectionEmptyState({
   isTaskMasterInstalled,
   onShowAllTasks,
   setInput,
+  useWorktreeForSession,
+  setUseWorktreeForSession,
+  worktreeName,
+  setWorktreeName,
 }: ProviderSelectionEmptyStateProps) {
   const { t } = useTranslation("chat");
   const { isWindowsServer } = useServerPlatform();
@@ -282,6 +290,49 @@ export default function ProviderSelectionEmptyState({
             }
           </p>
 
+          {/* Worktree options — Claude only */}
+          {provider === "claude" && (
+            <div className="mt-5 rounded-lg border border-border/60 bg-muted/30 p-3">
+              <label className="flex cursor-pointer items-start gap-2.5">
+                <input
+                  type="checkbox"
+                  checked={useWorktreeForSession}
+                  onChange={(e) => setUseWorktreeForSession(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 cursor-pointer rounded border-border accent-primary"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-1.5 text-[13px] font-medium text-foreground">
+                    <GitBranch className="h-3.5 w-3.5" />
+                    {t("providerSelection.worktree.checkboxLabel", {
+                      defaultValue: "Spawn as worktree",
+                    })}
+                  </div>
+                  <p className="mt-0.5 text-[11px] leading-tight text-muted-foreground">
+                    {t("providerSelection.worktree.description", {
+                      defaultValue:
+                        "Run this session in an isolated git worktree.",
+                    })}
+                  </p>
+                </div>
+              </label>
+              {useWorktreeForSession && (
+                <div className="mt-2.5 pl-6">
+                  <input
+                    type="text"
+                    value={worktreeName}
+                    onChange={(e) => setWorktreeName(e.target.value)}
+                    placeholder={t(
+                      "providerSelection.worktree.namePlaceholder",
+                      { defaultValue: "Auto-generate name if blank" },
+                    )}
+                    className="w-full rounded-md border border-border/60 bg-background px-2.5 py-1.5 text-[13px] text-foreground placeholder:text-muted-foreground/70 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Task banner */}
           {provider && tasksEnabled && isTaskMasterInstalled && (
             <div className="mt-5">
               <NextTaskBanner

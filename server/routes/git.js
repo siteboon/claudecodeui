@@ -684,20 +684,31 @@ router.post('/checkout', async (req, res) => {
   const { project, branch } = req.body;
   
   if (!project || !branch) {
-    return res.status(400).json({ error: 'Project name and branch are required' });
+    return res.status(400).json({ success: false, error: 'Project name and branch are required' });
   }
 
   try {
     const projectPath = await getActualProjectPath(project);
-    
+
     // Checkout the branch
     validateBranchName(branch);
+
+    // Block checkout in linked worktrees — each worktree is tied to its branch
+    const worktreeInfo = await getWorktreeInfo(projectPath);
+    if (worktreeInfo?.isWorktree) {
+      return res.status(400).json({
+        success: false,
+        error: 'This project is a git worktree — switching branches is not supported. Each worktree is tied to its own branch.',
+      });
+    }
+
     const { stdout } = await spawnAsync('git', ['checkout', branch], { cwd: projectPath });
-    
+
     res.json({ success: true, output: stdout });
   } catch (error) {
     console.error('Git checkout error:', error);
-    res.status(500).json({ error: error.message });
+    const detail = error.stderr?.trim() || error.message;
+    res.status(500).json({ success: false, error: detail });
   }
 });
 
@@ -1484,5 +1495,45 @@ router.post('/delete-untracked', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+/**
+ * Detect whether a directory is a git worktree and resolve the main repository root.
+ *
+ * Uses `git rev-parse --git-common-dir` (Git 2.5+) to distinguish linked worktrees
+ * from the primary worktree.  Returns `null` when the directory is not inside a git
+ * repository or when an older git version is used.
+ *
+ * @param {string} projectPath – absolute path to the directory to inspect
+ * @returns {Promise<{isWorktree: boolean, worktreeRoot: string, mainRepoRoot: string, branchName: string} | null>}
+ */
+export async function getWorktreeInfo(projectPath) {
+  try {
+    const [toplevel, commonDir, gitDir, branch] = await Promise.all([
+      spawnAsync('git', ['rev-parse', '--show-toplevel'], { cwd: projectPath }).then(r => r.stdout.trim()),
+      spawnAsync('git', ['rev-parse', '--git-common-dir'], { cwd: projectPath }).then(r => r.stdout.trim()),
+      spawnAsync('git', ['rev-parse', '--git-dir'], { cwd: projectPath }).then(r => r.stdout.trim()),
+      getCurrentBranchName(projectPath).catch(() => ''),
+    ]);
+
+    const resolvedCommon = path.resolve(projectPath, commonDir);
+    const resolvedGit = path.resolve(projectPath, gitDir);
+    const isLinkedWorktree = resolvedCommon !== resolvedGit;
+
+    // The main repo root is the parent of the .git directory that --git-common-dir points to.
+    const mainRepoRoot = isLinkedWorktree
+      ? path.dirname(resolvedCommon)
+      : toplevel;
+
+    return {
+      isWorktree: isLinkedWorktree,
+      worktreeRoot: toplevel,
+      mainRepoRoot,
+      branchName: branch,
+    };
+  } catch {
+    // Not a git repo, git too old, or other failure – graceful degradation.
+    return null;
+  }
+}
 
 export default router;

@@ -342,6 +342,10 @@
       "claudeDescription": "Equivalent to --dangerously-skip-permissions flag",
       "cursorDescription": "Equivalent to -f flag in Cursor CLI"
     },
+    "useWorktree": {
+      "label": "Default new sessions to git worktree isolation",
+      "description": "When enabled, the \"Spawn as worktree\" option is checked by default for new Claude sessions. You can still toggle it (and set a custom name) per session."
+    },
     "allowedTools": {
       "title": "Allowed Tools",
       "description": "Tools that are automatically allowed without prompting for permission",

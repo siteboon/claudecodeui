@@ -42,7 +42,9 @@
     "prepublishOnly": "npm run build",
     "postinstall": "node scripts/fix-node-pty.js",
     "prepare": "husky",
-    "update:platform": "./update-platform.sh"
+    "update:platform": "./update-platform.sh",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": [
     "claude code",
@@ -157,7 +159,8 @@
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.1",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vitest": "^4.1.1"
   },
   "lint-staged": {
     "src/**/*.{ts,tsx,js,jsx}": "eslint",

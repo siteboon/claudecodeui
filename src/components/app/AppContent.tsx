@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Sidebar from '../sidebar/view/Sidebar';
@@ -7,6 +7,10 @@ import { useWebSocket } from '../../contexts/WebSocketContext';
 import { useDeviceSettings } from '../../hooks/useDeviceSettings';
 import { useSessionProtection } from '../../hooks/useSessionProtection';
 import { useProjectsState } from '../../hooks/useProjectsState';
+
+const MIN_SIDEBAR_WIDTH = 240;
+const MAX_SIDEBAR_WIDTH = 600;
+const DEFAULT_SIDEBAR_WIDTH = 288; // matches md:w-72
 
 export default function AppContent() {
   const navigate = useNavigate();
@@ -39,6 +43,7 @@ export default function AppContent() {
     setShowSettings,
     openSettings,
     refreshProjectsSilently,
+    updateProjectBranch,
     sidebarSharedProps,
   } = useProjectsState({
     sessionId,
@@ -48,17 +53,55 @@ export default function AppContent() {
     activeSessions,
   });
 
+  // Resizable sidebar
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = localStorage.getItem('sidebar-width');
+    return saved ? Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, Number(saved))) : DEFAULT_SIDEBAR_WIDTH;
+  });
+  const isResizingRef = useRef(false);
+  const sidebarWidthRef = useRef(sidebarWidth);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingRef.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!isResizingRef.current) return;
+      const newWidth = Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, moveEvent.clientX));
+      sidebarWidthRef.current = newWidth;
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      isResizingRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      localStorage.setItem('sidebar-width', String(sidebarWidthRef.current));
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, []);
+
   useEffect(() => {
     // Expose a non-blocking refresh for chat/session flows.
     // Full loading refreshes are still available through direct fetchProjects calls.
     window.refreshProjects = refreshProjectsSilently;
+    window.updateProjectBranch = updateProjectBranch;
 
     return () => {
       if (window.refreshProjects === refreshProjectsSilently) {
         delete window.refreshProjects;
       }
+      if (window.updateProjectBranch === updateProjectBranch) {
+        delete window.updateProjectBranch;
+      }
     };
-  }, [refreshProjectsSilently]);
+  }, [refreshProjectsSilently, updateProjectBranch]);
 
   useEffect(() => {
     window.openSettings = openSettings;
@@ -145,8 +188,17 @@ export default function AppContent() {
   return (
     <div className="fixed inset-0 flex bg-background" style={{ bottom: 'var(--keyboard-height, 0px)' }}>
       {!isMobile ? (
-        <div className="h-full flex-shrink-0 border-r border-border/50">
+        <div className="relative h-full flex-shrink-0 border-r border-border/50" style={{ width: sidebarWidth }}>
           <Sidebar {...sidebarSharedProps} />
+          {/* Resize handle — double-click to reset to default width */}
+          <div
+            className="absolute right-0 top-0 z-10 h-full w-2 cursor-col-resize hover:bg-primary/20 active:bg-primary/30"
+            onMouseDown={handleResizeStart}
+            onDoubleClick={() => {
+              setSidebarWidth(DEFAULT_SIDEBAR_WIDTH);
+              localStorage.setItem('sidebar-width', String(DEFAULT_SIDEBAR_WIDTH));
+            }}
+          />
         </div>
       ) : (
         <div

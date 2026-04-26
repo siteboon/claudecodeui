@@ -187,6 +187,21 @@ export function useProjectsState({
     await fetchProjects({ showLoadingState: false });
   }, [fetchProjects]);
 
+  const updateProjectBranch = useCallback((projectName: string, branchName: string) => {
+    setProjects((prev) =>
+      prev.map((p) =>
+        p.name === projectName && p.worktreeInfo
+          ? { ...p, worktreeInfo: { ...p.worktreeInfo, branchName } }
+          : p,
+      ),
+    );
+    setSelectedProject((prev) =>
+      prev?.name === projectName && prev.worktreeInfo
+        ? { ...prev, worktreeInfo: { ...prev.worktreeInfo, branchName } }
+        : prev,
+    );
+  }, []);
+
   const openSettings = useCallback((tab = 'tools') => {
     setSettingsInitialTab(tab);
     setShowSettings(true);
@@ -413,6 +428,10 @@ export function useProjectsState({
 
   const handleNewSession = useCallback(
     (project: Project) => {
+      // Honor whichever project the caller passed. The new sidebar uses the
+      // main project for "+ New session" (top-level CTA) and a linked worktree
+      // for the per-worktree "+" hover. Both should land on the project they
+      // were given.
       setSelectedProject(project);
       setSelectedSession(null);
       setActiveTab('chat');
@@ -561,6 +580,7 @@ export function useProjectsState({
     openSettings,
     fetchProjects,
     refreshProjectsSilently,
+    updateProjectBranch,
     sidebarSharedProps,
     handleProjectSelect,
     handleSessionSelect,

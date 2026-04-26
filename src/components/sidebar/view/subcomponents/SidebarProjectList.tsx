@@ -1,12 +1,14 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import type { TFunction } from 'i18next';
 import type { LoadingProgress, Project, ProjectSession, LLMProvider } from '../../../../types/app';
 import type {
+  AdditionalSessionsByProject,
   LoadingSessionsByProject,
   MCPServerStatus,
   SessionWithProvider,
 } from '../../types/types';
-import SidebarProjectItem from './SidebarProjectItem';
+import { groupProjectsByRepo, isRepoGroup } from '../../utils/utils';
+import RepoCard from './RepoCard';
 import SidebarProjectsState from './SidebarProjectsState';
 
 export type SidebarProjectListProps = {
@@ -20,6 +22,7 @@ export type SidebarProjectListProps = {
   editingProject: string | null;
   editingName: string;
   loadingSessions: LoadingSessionsByProject;
+  additionalSessions: AdditionalSessionsByProject;
   initialSessionsLoaded: Set<string>;
   currentTime: Date;
   editingSession: string | null;
@@ -61,34 +64,12 @@ export default function SidebarProjectList({
   isLoading,
   loadingProgress,
   expandedProjects,
-  editingProject,
-  editingName,
-  loadingSessions,
-  initialSessionsLoaded,
+  additionalSessions,
   currentTime,
-  editingSession,
-  editingSessionName,
-  deletingProjects,
-  tasksEnabled,
-  mcpServerStatus,
-  getProjectSessions,
-  isProjectStarred,
-  onEditingNameChange,
   onToggleProject,
-  onProjectSelect,
-  onToggleStarProject,
-  onStartEditingProject,
-  onCancelEditingProject,
-  onSaveProjectName,
-  onDeleteProject,
   onSessionSelect,
-  onDeleteSession,
-  onLoadMoreSessions,
   onNewSession,
-  onEditingSessionNameChange,
-  onStartEditingSession,
-  onCancelEditingSession,
-  onSaveEditingSession,
+  onDeleteProject,
   t,
 }: SidebarProjectListProps) {
   const state = (
@@ -112,48 +93,43 @@ export default function SidebarProjectList({
 
   const showProjects = !isLoading && projects.length > 0 && filteredProjects.length > 0;
 
+  const groupedItems = useMemo(
+    () => groupProjectsByRepo(filteredProjects),
+    [filteredProjects],
+  );
+
   return (
-    <div className="pb-safe-area-inset-bottom md:space-y-1">
+    <div className="pb-safe-area-inset-bottom md:space-y-1.5">
       {!showProjects
         ? state
-        : filteredProjects.map((project) => (
-            <SidebarProjectItem
-              key={project.name}
-              project={project}
-              selectedProject={selectedProject}
-              selectedSession={selectedSession}
-              isExpanded={expandedProjects.has(project.name)}
-              isDeleting={deletingProjects.has(project.name)}
-              isStarred={isProjectStarred(project.name)}
-              editingProject={editingProject}
-              editingName={editingName}
-              sessions={getProjectSessions(project)}
-              initialSessionsLoaded={initialSessionsLoaded.has(project.name)}
-              isLoadingSessions={Boolean(loadingSessions[project.name])}
-              currentTime={currentTime}
-              editingSession={editingSession}
-              editingSessionName={editingSessionName}
-              tasksEnabled={tasksEnabled}
-              mcpServerStatus={mcpServerStatus}
-              onEditingNameChange={onEditingNameChange}
-              onToggleProject={onToggleProject}
-              onProjectSelect={onProjectSelect}
-              onToggleStarProject={onToggleStarProject}
-              onStartEditingProject={onStartEditingProject}
-              onCancelEditingProject={onCancelEditingProject}
-              onSaveProjectName={onSaveProjectName}
-              onDeleteProject={onDeleteProject}
-              onSessionSelect={onSessionSelect}
-              onDeleteSession={onDeleteSession}
-              onLoadMoreSessions={onLoadMoreSessions}
-              onNewSession={onNewSession}
-              onEditingSessionNameChange={onEditingSessionNameChange}
-              onStartEditingSession={onStartEditingSession}
-              onCancelEditingSession={onCancelEditingSession}
-              onSaveEditingSession={onSaveEditingSession}
-              t={t}
-            />
-          ))}
+        : groupedItems.map((item) => {
+            const projectsInGroup = isRepoGroup(item) ? item.projects : [item];
+            const main = isRepoGroup(item)
+              ? (item.projects.find((p) => p.isMainWorktree) ?? item.projects[0])
+              : item;
+            const linkedWorktrees = isRepoGroup(item)
+              ? item.projects.filter((p) => p.name !== main.name)
+              : [];
+
+            return (
+              <RepoCard
+                key={isRepoGroup(item) ? `repo-group:${item.repoRoot}` : item.name}
+                projects={projectsInGroup}
+                mainProject={main}
+                linkedWorktrees={linkedWorktrees}
+                isExpanded={expandedProjects.has(main.name)}
+                selectedProject={selectedProject}
+                selectedSession={selectedSession}
+                additionalSessions={additionalSessions}
+                currentTime={currentTime}
+                onToggle={() => onToggleProject(main.name)}
+                onNewSession={onNewSession}
+                onSessionSelect={onSessionSelect}
+                onDeleteProject={onDeleteProject}
+                t={t}
+              />
+            );
+          })}
     </div>
   );
 }
