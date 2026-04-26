@@ -102,8 +102,37 @@ function createEmptySlot(): SessionSlot {
   };
 }
 
+const REALTIME_DUPLICATE_WINDOW_MS = 10_000;
+
+function getTextDuplicateKey(message: NormalizedMessage): string | null {
+  if (message.kind !== 'text') return null;
+  if (!message.content) return null;
+  return `${message.provider}:${message.role ?? ''}:${message.content}`;
+}
+
+function getTimestampMs(message: NormalizedMessage): number | null {
+  const value = new Date(message.timestamp).getTime();
+  return Number.isFinite(value) ? value : null;
+}
+
+function isDuplicatePersistedText(realtimeMessage: NormalizedMessage, persistedMessage: NormalizedMessage): boolean {
+  const realtimeKey = getTextDuplicateKey(realtimeMessage);
+  if (!realtimeKey || realtimeKey !== getTextDuplicateKey(persistedMessage)) {
+    return false;
+  }
+
+  const realtimeTime = getTimestampMs(realtimeMessage);
+  const persistedTime = getTimestampMs(persistedMessage);
+  if (realtimeTime === null || persistedTime === null) {
+    return false;
+  }
+
+  return Math.abs(realtimeTime - persistedTime) <= REALTIME_DUPLICATE_WINDOW_MS;
+}
+
 /**
- * Compute merged messages: server + realtime, deduped by id.
+ * Compute merged messages: server + realtime, deduped by id and short-lived
+ * text echoes.
  * Server messages take priority (they're the persisted source of truth).
  * Realtime messages that aren't yet in server stay (in-flight streaming).
  */
@@ -111,7 +140,10 @@ function computeMerged(server: NormalizedMessage[], realtime: NormalizedMessage[
   if (realtime.length === 0) return server;
   if (server.length === 0) return realtime;
   const serverIds = new Set(server.map(m => m.id));
-  const extra = realtime.filter(m => !serverIds.has(m.id));
+  const extra = realtime.filter(m => (
+    !serverIds.has(m.id) &&
+    !server.some(serverMessage => isDuplicatePersistedText(m, serverMessage))
+  ));
   if (extra.length === 0) return server;
   return [...server, ...extra];
 }
