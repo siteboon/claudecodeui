@@ -17,7 +17,22 @@
     "projects": "プロジェクト",
     "noMatchingProjects": "一致するプロジェクトがありません",
     "tryDifferentSearch": "検索語を変えてお試しください",
-    "runClaudeCli": "プロジェクトディレクトリでClaude CLIを実行して始めましょう"
+    "runClaudeCli": "プロジェクトディレクトリでClaude CLIを実行して始めましょう",
+    "branch": "ブランチ",
+    "repoGroup": "リポジトリ",
+    "worktrees": "ワークツリー",
+    "archived": "アーカイブ済み",
+    "showMoreWorktrees": "さらに{{count}}件表示...",
+    "newGroupSession": "{{name}}で新しいセッション",
+    "recent": "Recent",
+    "worktreesUpper": "Worktrees",
+    "showAll": "Show all",
+    "emptyWorktree": "empty · click to start",
+    "staleWorktree": "archived",
+    "messages": "messages",
+    "sessionsShort_one": "session",
+    "sessionsShort_other": "sessions",
+    "older": "Older"
   },
   "app": {
     "title": "CloudCLI",
@@ -46,7 +61,9 @@
     "editSessionName": "セッション名を手動で編集",
     "deleteSession": "このセッションを完全に削除",
     "save": "保存",
-    "cancel": "キャンセル"
+    "cancel": "キャンセル",
+    "newSessionInWorktree": "New session in this worktree",
+    "deleteWorktree": "Delete worktree"
   },
   "navigation": {
     "chat": "チャット",

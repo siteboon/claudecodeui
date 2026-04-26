@@ -17,7 +17,22 @@
     "projects": "项目",
     "noMatchingProjects": "未找到匹配的项目",
     "tryDifferentSearch": "尝试调整您的搜索词",
-    "runClaudeCli": "在项目目录中运行 Claude CLI 以开始使用"
+    "runClaudeCli": "在项目目录中运行 Claude CLI 以开始使用",
+    "branch": "分支",
+    "repoGroup": "仓库",
+    "worktrees": "工作树",
+    "archived": "已归档",
+    "showMoreWorktrees": "显示更多 {{count}} 个...",
+    "newGroupSession": "在 {{name}} 中新建会话",
+    "recent": "Recent",
+    "worktreesUpper": "Worktrees",
+    "showAll": "Show all",
+    "emptyWorktree": "empty · click to start",
+    "staleWorktree": "archived",
+    "messages": "messages",
+    "sessionsShort_one": "session",
+    "sessionsShort_other": "sessions",
+    "older": "Older"
   },
   "app": {
     "title": "CloudCLI",
@@ -47,7 +62,9 @@
     "deleteSession": "永久删除此会话",
     "save": "保存",
     "cancel": "取消",
-    "clearSearch": "清除搜索"
+    "clearSearch": "清除搜索",
+    "newSessionInWorktree": "New session in this worktree",
+    "deleteWorktree": "Delete worktree"
   },
   "navigation": {
     "chat": "聊天",

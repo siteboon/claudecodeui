@@ -66,6 +66,11 @@ import Database from 'better-sqlite3';
 import os from 'os';
 import sessionManager from './sessionManager.js';
 import { applyCustomSessionNames } from './database/db.js';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+import { getWorktreeInfo } from './routes/git.js';
+
+const execFileAsync = promisify(execFile);
 
 // Import TaskMaster detection functions
 async function detectTaskMasterFolder(projectPath) {
@@ -277,6 +282,32 @@ async function extractProjectDirectory(projectName) {
     return originalPath;
   }
 
+  // Fast path: when the project name encodes a Claude Code worktree path
+  // (<repo>/.claude/worktrees/<name>), trust the decoded path. The cwd-vote
+  // below can be misled by subagent cwds logged into the parent session's
+  // JSONL file (e.g. a session that launched many agent-<hex> sub-agents),
+  // and the naive `replace(/-/g, '/')` fallback further down mangles paths
+  // entirely (turning "binary-wondering-spindle" into nested directories).
+  //
+  // We resolve the parent project's directory recursively rather than naively
+  // decoding the prefix. That preserves dashes inside repo names like
+  // "developer-tracker" (which the naive decode would split into
+  // "developer/tracker"). The encoded name is the canonical source of truth
+  // for which path this project represents — whether the directory currently
+  // exists on disk is a separate concern handled later via the `isStale` flag.
+  const worktreeMarker = '--claude-worktrees-';
+  const markerIdx = projectName.indexOf(worktreeMarker);
+  if (markerIdx > 0) {
+    const parentProjectName = projectName.substring(0, markerIdx);
+    const worktreeName = projectName.substring(markerIdx + worktreeMarker.length);
+    if (worktreeName) {
+      const repoRoot = await extractProjectDirectory(parentProjectName);
+      const candidatePath = `${repoRoot}/.claude/worktrees/${worktreeName}`;
+      projectDirectoryCache.set(projectName, candidatePath);
+      return candidatePath;
+    }
+  }
+
   const projectDir = path.join(os.homedir(), '.claude', 'projects', projectName);
   const cwdCounts = new Map();
   let latestTimestamp = 0;
@@ -380,6 +411,54 @@ async function extractProjectDirectory(projectName) {
   }
 }
 
+/**
+ * Synthesize worktreeInfo from a path containing the Claude Code worktree
+ * directory convention: <repo>/.claude/worktrees/<name>
+ * Returns null if the path doesn't match.
+ */
+function synthesizeWorktreeInfoFromPath(decodedPath) {
+  // Normalize backslashes so Windows paths are matched too
+  const normalized = decodedPath.replace(/\\/g, '/');
+  const marker = '/.claude/worktrees/';
+  const markerIdx = normalized.indexOf(marker);
+  if (markerIdx === -1) return null;
+
+  const mainRepoRoot = decodedPath.substring(0, markerIdx);
+  const afterMarker = normalized.substring(markerIdx + marker.length);
+  const worktreeName = afterMarker.split('/')[0] || '';
+  return {
+    isWorktree: true,
+    worktreeRoot: decodedPath.substring(0, markerIdx + marker.length + worktreeName.length),
+    mainRepoRoot,
+    branchName: worktreeName,
+  };
+}
+
+/**
+ * Fix display names for worktree children within a repo group.
+ * - Subdirectory worktrees keep their relative path (e.g. "backend")
+ * - Worktrees whose displayName equals branchName get the main project's name
+ *   to avoid duplication with the branch badge
+ * - Custom names are never overwritten
+ */
+function fixWorktreeDisplayNames(grouped, mainProject) {
+  for (const p of grouped) {
+    if (p !== mainProject && p.fullPath && !p.isCustomName) {
+      const worktreeRoot = p.worktreeInfo?.worktreeRoot;
+      const branchName = p.worktreeInfo?.branchName;
+
+      if (worktreeRoot && p.fullPath.startsWith(worktreeRoot) && p.fullPath !== worktreeRoot) {
+        const relativePath = p.fullPath.substring(worktreeRoot.length + 1);
+        if (relativePath) {
+          p.displayName = relativePath;
+        }
+      } else if (mainProject && branchName && p.displayName === branchName) {
+        p.displayName = mainProject.displayName;
+      }
+    }
+  }
+}
+
 async function getProjects(progressCallback = null) {
   const claudeDir = path.join(os.homedir(), '.claude', 'projects');
   const config = await loadProjectConfig();
@@ -435,6 +514,7 @@ async function getProjects(progressCallback = null) {
         displayName: customName || autoDisplayName,
         fullPath: fullPath,
         isCustomName: !!customName,
+        isStale: false,
         sessions: [],
         geminiSessions: [],
         sessionMeta: {
@@ -510,6 +590,24 @@ async function getProjects(progressCallback = null) {
           metadata: null,
           status: 'error'
         };
+      }
+
+      // Detect git worktree info and directory existence concurrently
+      {
+        const [worktreeResult, accessResult] = await Promise.allSettled([
+          getWorktreeInfo(actualProjectDir),
+          actualProjectDir ? fs.access(actualProjectDir) : Promise.reject(),
+        ]);
+        project.worktreeInfo = worktreeResult.status === 'fulfilled' ? worktreeResult.value : null;
+        project.isStale = accessResult.status === 'rejected';
+      }
+
+      // Fallback: if worktreeInfo is null but the path contains the Claude Code
+      // worktree directory convention (<repo>/.claude/worktrees/<name>), synthesize
+      // worktreeInfo so this deleted worktree can still be grouped with its parent.
+      if (!project.worktreeInfo) {
+        const decodedPath = actualProjectDir || entry.name.replace(/-/g, '/');
+        project.worktreeInfo = synthesizeWorktreeInfoFromPath(decodedPath);
       }
 
       projects.push(project);
@@ -624,6 +722,22 @@ async function getProjects(progressCallback = null) {
         };
       }
 
+      // Detect git worktree information and directory accessibility for manual projects
+      {
+        const [worktreeResult, accessResult] = await Promise.allSettled([
+          getWorktreeInfo(actualProjectDir),
+          actualProjectDir ? fs.access(actualProjectDir) : Promise.reject(),
+        ]);
+        project.worktreeInfo = worktreeResult.status === 'fulfilled' ? worktreeResult.value : null;
+        project.isStale = accessResult.status === 'rejected';
+      }
+
+      // Fallback: synthesize worktree info from path convention if unavailable
+      if (!project.worktreeInfo) {
+        const decodedPath = actualProjectDir || projectName.replace(/-/g, '/');
+        project.worktreeInfo = synthesizeWorktreeInfoFromPath(decodedPath);
+      }
+
       projects.push(project);
     }
   }
@@ -635,6 +749,77 @@ async function getProjects(progressCallback = null) {
       current: totalProjects,
       total: totalProjects
     });
+  }
+
+  // Post-process: group projects that share the same underlying git repository
+  // (i.e. multiple worktrees of the same repo).
+  const repoGroups = new Map();
+  for (const project of projects) {
+    const repoRoot = project.worktreeInfo?.mainRepoRoot;
+    if (repoRoot) {
+      // Normalize separators so C:\repo and C:/repo bucket together
+      const key = repoRoot.replace(/\\/g, '/');
+      if (!repoGroups.has(key)) {
+        repoGroups.set(key, { repoRoot, projects: [] });
+      }
+      repoGroups.get(key).projects.push(project);
+    }
+  }
+
+  // Synthesize a parent project for any repo group that has no real main
+  // checkout, so the top-level repo is always reachable from the sidebar even
+  // when only worktrees have been discovered.
+  const syntheticParents = [];
+  for (const [, groupEntry] of repoGroups) {
+    const { repoRoot, projects: grouped } = groupEntry;
+    let mainProject = grouped.find(p => !p.worktreeInfo?.isWorktree) || null;
+
+    if (!mainProject && grouped.length >= 1) {
+      const syntheticName = repoRoot.replace(/[\\/:\s~_]/g, '-');
+      let isStale = false;
+      try {
+        await fs.access(repoRoot);
+      } catch {
+        isStale = true;
+      }
+      mainProject = {
+        name: syntheticName,
+        path: repoRoot,
+        fullPath: repoRoot,
+        displayName: path.basename(repoRoot) || repoRoot,
+        isCustomName: false,
+        isManuallyAdded: false,
+        isSynthetic: true,
+        isStale,
+        sessions: [],
+        geminiSessions: [],
+        cursorSessions: [],
+        codexSessions: [],
+        sessionMeta: { hasMore: false, total: 0 },
+        worktreeInfo: {
+          isWorktree: false,
+          worktreeRoot: repoRoot,
+          mainRepoRoot: repoRoot,
+          branchName: null,
+        },
+      };
+      grouped.unshift(mainProject);
+      syntheticParents.push(mainProject);
+    }
+
+    if (grouped.length > 1) {
+      for (const p of grouped) {
+        p.repoGroup = repoRoot;
+        p.repoGroupSize = grouped.length;
+        p.isMainWorktree = mainProject ? p === mainProject : false;
+      }
+
+      fixWorktreeDisplayNames(grouped, mainProject);
+    }
+  }
+
+  if (syntheticParents.length > 0) {
+    projects.push(...syntheticParents);
   }
 
   return projects;
@@ -1163,6 +1348,44 @@ async function isProjectEmpty(projectName) {
   }
 }
 
+/**
+ * Clean up a git worktree directory if the project path is inside a Claude worktree.
+ * Runs `git worktree remove` from the main repo, falling back to directory deletion.
+ */
+async function cleanupWorktreeDirectory(projectPath) {
+  if (!projectPath) return;
+  // Normalize backslashes so Windows paths are matched too
+  const normalized = projectPath.replace(/\\/g, '/');
+  const marker = '/.claude/worktrees/';
+  const markerIdx = normalized.indexOf(marker);
+  if (markerIdx === -1) return;
+
+  const mainRepoRoot = projectPath.substring(0, markerIdx);
+  const afterMarker = normalized.substring(markerIdx + marker.length);
+  const worktreeName = afterMarker.split('/')[0];
+  if (!worktreeName) return;
+
+  const worktreePath = projectPath.substring(0, markerIdx + marker.length + worktreeName.length);
+
+  try {
+    await execFileAsync('git', ['worktree', 'remove', worktreePath, '--force'], { cwd: mainRepoRoot });
+    console.log(`[INFO] Removed git worktree: ${worktreePath}`);
+  } catch (err) {
+    console.warn(`[WARN] git worktree remove failed for ${worktreePath}: ${err.message}`);
+    // Worktree may already be gone or git command unavailable — try direct deletion
+    try {
+      await fs.rm(worktreePath, { recursive: true, force: true });
+      // Also prune stale worktree entries from git
+      await execFileAsync('git', ['worktree', 'prune'], { cwd: mainRepoRoot }).catch((e) => {
+        console.warn(`[WARN] git worktree prune failed: ${e.message}`);
+      });
+      console.log(`[INFO] Deleted worktree directory: ${worktreePath}`);
+    } catch (rmErr) {
+      console.warn(`[WARN] Could not delete worktree directory ${worktreePath}: ${rmErr.message}`);
+    }
+  }
+}
+
 // Remove a project from the UI.
 // When deleteData=true, also delete session/memory files on disk (destructive).
 async function deleteProject(projectName, force = false, deleteData = false) {
@@ -1181,6 +1404,11 @@ async function deleteProject(projectName, force = false, deleteData = false) {
       let projectPath = config[projectName]?.path || config[projectName]?.originalPath;
       if (!projectPath) {
         projectPath = await extractProjectDirectory(projectName);
+      }
+
+      // Clean up git worktree if this project is inside one
+      if (projectPath) {
+        await cleanupWorktreeDirectory(projectPath);
       }
 
       // Remove the Claude project directory (session logs, memory, subagent data)
@@ -2551,5 +2779,8 @@ export {
   deleteCodexSession,
   getGeminiCliSessions,
   getGeminiCliSessionMessages,
-  searchConversations
+  searchConversations,
+  synthesizeWorktreeInfoFromPath,
+  fixWorktreeDisplayNames,
+  cleanupWorktreeDirectory
 };

@@ -145,6 +145,30 @@ export function useChatComposerState({
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
   const [thinkingMode, setThinkingMode] = useState('none');
 
+  // Per-session worktree decision: defaults to the global "use worktrees"
+  // setting but can be overridden in the provider selection UI for each new
+  // session. The optional name maps to `claude --worktree "<name>"`.
+  const readUseWorktreeDefault = (): boolean => {
+    try {
+      const raw = safeLocalStorage.getItem('claude-settings');
+      if (!raw) return false;
+      return Boolean(JSON.parse(raw)?.useWorktree);
+    } catch {
+      return false;
+    }
+  };
+  const [useWorktreeForSession, setUseWorktreeForSession] = useState<boolean>(
+    () => readUseWorktreeDefault(),
+  );
+  const [worktreeName, setWorktreeName] = useState<string>('');
+
+  // Reset the per-session worktree controls whenever the active project changes
+  // so the UI re-reads the global default and clears any previous name.
+  useEffect(() => {
+    setUseWorktreeForSession(readUseWorktreeDefault());
+    setWorktreeName('');
+  }, [selectedProject?.name]);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputHighlightRef = useRef<HTMLDivElement>(null);
   const handleSubmitRef = useRef<
@@ -639,6 +663,21 @@ export function useChatComposerState({
           },
         });
       } else {
+        // Worktree decisions are per-session and only apply to brand-new sessions.
+        // Resumed sessions already live in their own worktree (or main repo) and
+        // re-applying --worktree would create a duplicate.
+        const isNewSession = !effectiveSessionId;
+        const trimmedWorktreeName = worktreeName.trim();
+        const claudeToolsSettings = isNewSession
+          ? {
+              ...toolsSettings,
+              useWorktree: useWorktreeForSession,
+              worktreeName:
+                useWorktreeForSession && trimmedWorktreeName
+                  ? trimmedWorktreeName
+                  : undefined,
+            }
+          : toolsSettings;
         sendMessage({
           type: 'claude-command',
           command: messageContent,
@@ -647,13 +686,18 @@ export function useChatComposerState({
             cwd: resolvedProjectPath,
             sessionId: effectiveSessionId,
             resume: Boolean(effectiveSessionId),
-            toolsSettings,
+            toolsSettings: claudeToolsSettings,
             permissionMode,
             model: claudeModel,
             sessionSummary,
             images: uploadedImages,
           },
         });
+        // Clear the worktree name after sending so a follow-up new session
+        // doesn't inherit the previous custom name.
+        if (isNewSession && trimmedWorktreeName) {
+          setWorktreeName('');
+        }
       }
 
       setInput('');
@@ -697,6 +741,8 @@ export function useChatComposerState({
       setIsUserScrolledUp,
       slashCommands,
       thinkingMode,
+      useWorktreeForSession,
+      worktreeName,
     ],
   );
 
@@ -974,5 +1020,9 @@ export function useChatComposerState({
     handleGrantToolPermission,
     handleInputFocusChange,
     isInputFocused,
+    useWorktreeForSession,
+    setUseWorktreeForSession,
+    worktreeName,
+    setWorktreeName,
   };
 }

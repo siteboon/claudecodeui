@@ -182,6 +182,17 @@ function mapCliOptionsToSDK(options = {}) {
     sdkOptions.permissionMode = 'bypassPermissions';
   }
 
+  // Handle worktree mode — worktree is a Settings field, not a query Option,
+  // so it must be passed via the settings option (highest-priority settings layer).
+  // When the user provides a name on the per-session UI, pass it through so the
+  // worktree is created with that name (mirrors `claude --worktree "<name>"`).
+  if (settings.useWorktree) {
+    const worktreeOpt = settings.worktreeName
+      ? { name: String(settings.worktreeName) }
+      : {};
+    sdkOptions.settings = { worktree: worktreeOpt };
+  }
+
   let allowedTools = [...(settings.allowedTools || [])];
 
   // Add plan mode default tools
@@ -828,5 +839,6 @@ export {
   getActiveClaudeSDKSessions,
   resolveToolApproval,
   getPendingApprovalsForSession,
+  mapCliOptionsToSDK,
   reconnectSessionWriter
 };

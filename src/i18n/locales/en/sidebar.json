@@ -17,7 +17,22 @@
     "projects": "projects",
     "noMatchingProjects": "No matching projects",
     "tryDifferentSearch": "Try adjusting your search term",
-    "runClaudeCli": "Run Claude CLI in a project directory to get started"
+    "runClaudeCli": "Run Claude CLI in a project directory to get started",
+    "branch": "Branch",
+    "repoGroup": "Repository",
+    "worktrees": "worktrees",
+    "archived": "archived",
+    "showMoreWorktrees": "Show {{count}} more...",
+    "newGroupSession": "New session in {{name}}",
+    "recent": "Recent",
+    "worktreesUpper": "Worktrees",
+    "showAll": "Show all",
+    "emptyWorktree": "empty · click to start",
+    "staleWorktree": "archived",
+    "messages": "messages",
+    "sessionsShort_one": "session",
+    "sessionsShort_other": "sessions",
+    "older": "Older"
   },
   "app": {
     "title": "CloudCLI",
@@ -47,7 +62,9 @@
     "deleteSession": "Delete this session permanently",
     "save": "Save",
     "cancel": "Cancel",
-    "clearSearch": "Clear search"
+    "clearSearch": "Clear search",
+    "newSessionInWorktree": "New session in this worktree",
+    "deleteWorktree": "Delete worktree"
   },
   "navigation": {
     "chat": "Chat",
@@ -130,6 +147,7 @@
     "removeFromSidebar": "Remove from sidebar only",
     "deleteAllData": "Delete all data permanently",
     "allConversationsDeleted": "The project will be removed from the sidebar. Your files, memories, and session data will be preserved.",
-    "cannotUndo": "You can re-add the project later."
+    "cannotUndo": "You can re-add the project later.",
+    "worktreeWarning": "This project uses a git worktree. Deleting it will also remove the worktree branch and its files from disk."
   }
 }

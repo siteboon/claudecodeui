@@ -15,6 +15,10 @@ export type ShellInitMessage = {
   rows: number;
   initialCommand: string | null | undefined;
   isPlainShell: boolean;
+  claudeSettings?: {
+    skipPermissions?: boolean;
+    useWorktree?: boolean;
+  };
 };
 
 export type ShellResizeMessage = {

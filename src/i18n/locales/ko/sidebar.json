@@ -17,7 +17,22 @@
     "projects": "프로젝트",
     "noMatchingProjects": "일치하는 프로젝트 없음",
     "tryDifferentSearch": "검색어를 변경해보세요",
-    "runClaudeCli": "프로젝트 디렉토리에서 Claude CLI를 실행하여 시작하세요"
+    "runClaudeCli": "프로젝트 디렉토리에서 Claude CLI를 실행하여 시작하세요",
+    "branch": "브랜치",
+    "repoGroup": "저장소",
+    "worktrees": "워크트리",
+    "archived": "보관됨",
+    "showMoreWorktrees": "{{count}}개 더 보기...",
+    "newGroupSession": "{{name}}에서 새 세션",
+    "recent": "Recent",
+    "worktreesUpper": "Worktrees",
+    "showAll": "Show all",
+    "emptyWorktree": "empty · click to start",
+    "staleWorktree": "archived",
+    "messages": "messages",
+    "sessionsShort_one": "session",
+    "sessionsShort_other": "sessions",
+    "older": "Older"
   },
   "app": {
     "title": "CloudCLI",
@@ -46,7 +61,9 @@
     "editSessionName": "세션 이름 직접 편집",
     "deleteSession": "이 세션 영구 삭제",
     "save": "저장",
-    "cancel": "취소"
+    "cancel": "취소",
+    "newSessionInWorktree": "New session in this worktree",
+    "deleteWorktree": "Delete worktree"
   },
   "navigation": {
     "chat": "채팅",

@@ -188,6 +188,11 @@
       "codex": "Ready to use Codex with {{model}}. Start typing your message below.",
       "gemini": "Ready to use Gemini with {{model}}. Start typing your message below.",
       "default": "Select a provider above to begin"
+    },
+    "worktree": {
+      "checkboxLabel": "Spawn as worktree",
+      "description": "Run this session in an isolated git worktree.",
+      "namePlaceholder": "Auto-generate name if blank"
     }
   },
   "session": {

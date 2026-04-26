@@ -1557,6 +1557,7 @@ function handleShellConnection(ws) {
                 const provider = data.provider || 'claude';
                 const initialCommand = data.initialCommand;
                 const isPlainShell = data.isPlainShell || (!!initialCommand && !hasSession) || provider === 'plain-shell';
+                const claudeSettings = data.claudeSettings || {};
                 urlDetectionBuffer = '';
                 announcedAuthUrls.clear();
 
@@ -1705,15 +1706,39 @@ function handleShellConnection(ws) {
                         }
                     } else {
                         // Claude (default provider)
-                        const command = initialCommand || 'claude';
-                        if (hasSession && sessionId) {
-                            if (os.platform() === 'win32') {
-                                shellCommand = `claude --resume "${sessionId}"; if ($LASTEXITCODE -ne 0) { claude }`;
+                        const claudeFlags = [];
+                        if (claudeSettings.skipPermissions) claudeFlags.push('--dangerously-skip-permissions');
+
+                        // Only pass --worktree for NEW sessions and only when not already
+                        // inside a worktree directory. Resumed sessions already know their
+                        // worktree, and --worktree would create yet another one.
+                        const isAlreadyInWorktree = projectPath.includes('/.claude/worktrees/');
+                        const shouldCreateWorktree = claudeSettings.useWorktree && !hasSession && !isAlreadyInWorktree;
+                        if (shouldCreateWorktree) {
+                            const rawName = typeof claudeSettings.worktreeName === 'string'
+                                ? claudeSettings.worktreeName.trim()
+                                : '';
+                            if (rawName) {
+                                // Shell-escape the name so it's safe inside the bash/powershell command string.
+                                const escaped = `'${rawName.replace(/'/g, `'\\''`)}'`;
+                                claudeFlags.push(`--worktree ${escaped}`);
                             } else {
-                                shellCommand = `claude --resume "${sessionId}" || claude`;
+                                claudeFlags.push('--worktree');
+                            }
+                        }
+
+                        const flagStr = claudeFlags.length ? ' ' + claudeFlags.join(' ') : '';
+
+                        if (initialCommand) {
+                            shellCommand = initialCommand;
+                        } else if (hasSession && sessionId) {
+                            if (os.platform() === 'win32') {
+                                shellCommand = `claude${flagStr} --resume "${sessionId}"; if ($LASTEXITCODE -ne 0) { claude${flagStr} }`;
+                            } else {
+                                shellCommand = `claude${flagStr} --resume "${sessionId}" || claude${flagStr}`;
                             }
                         } else {
-                            shellCommand = command;
+                            shellCommand = `claude${flagStr}`;
                         }
                     }
 

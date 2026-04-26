@@ -9,6 +9,12 @@ const __dirname = getModuleDir(import.meta.url);
 // same top-level .env file from both /server/load-env.js and /dist-server/server/load-env.js.
 const APP_ROOT = findAppRoot(__dirname);
 
+// Remove CLAUDECODE env var so the Claude Agent SDK can spawn CLI subprocesses.
+// When the server is started from within a Claude Code session (or PM2 inherits that
+// environment), this variable tricks the CLI into thinking it's a nested session and
+// it refuses to start.
+delete process.env.CLAUDECODE;
+
 try {
   const envPath = path.join(APP_ROOT, '.env');
   const envFile = fs.readFileSync(envPath, 'utf8');
@@ -16,6 +22,9 @@ try {
     const trimmedLine = line.trim();
     if (trimmedLine && !trimmedLine.startsWith('#')) {
       const [key, ...valueParts] = trimmedLine.split('=');
+      if (key === 'CLAUDECODE') {
+        return;
+      }
       if (key && valueParts.length > 0 && !process.env[key]) {
         process.env[key] = valueParts.join('=').trim();
       }
