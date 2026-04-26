@@ -12,6 +12,7 @@ interface ChatMessagesPaneProps {
   onWheel: () => void;
   onTouchMove: () => void;
   isLoadingSessionMessages: boolean;
+  isRevalidating: boolean;
   chatMessages: ChatMessage[];
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
@@ -57,6 +58,7 @@ export default function ChatMessagesPane({
   onWheel,
   onTouchMove,
   isLoadingSessionMessages,
+  isRevalidating,
   chatMessages,
   selectedSession,
   currentSessionId,
@@ -132,6 +134,13 @@ export default function ChatMessagesPane({
       onTouchMove={onTouchMove}
       className="relative flex-1 space-y-3 overflow-y-auto overflow-x-hidden px-0 py-3 sm:space-y-4 sm:p-4"
     >
+      {isRevalidating && chatMessages.length > 0 && (
+        <div className="pointer-events-none sticky top-2 z-20 flex justify-end pr-2">
+          <div className="flex h-5 w-5 items-center justify-center rounded-full bg-background/80 shadow-sm ring-1 ring-border backdrop-blur-sm">
+            <div className="h-3 w-3 animate-spin rounded-full border-[1.5px] border-muted-foreground/40 border-t-muted-foreground" />
+          </div>
+        </div>
+      )}
       {isLoadingSessionMessages && chatMessages.length === 0 ? (
         <div className="mt-8 text-center text-gray-500 dark:text-gray-400">
           <div className="flex items-center justify-center space-x-2">

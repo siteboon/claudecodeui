@@ -99,6 +99,7 @@ function ChatInterface({
     currentSessionId,
     setCurrentSessionId,
     isLoadingSessionMessages,
+    isRevalidating,
     isLoadingMoreMessages,
     hasMoreMessages,
     totalMessages,
@@ -326,6 +327,7 @@ function ChatInterface({
           onWheel={handleScroll}
           onTouchMove={handleScroll}
           isLoadingSessionMessages={isLoadingSessionMessages}
+          isRevalidating={isRevalidating}
           chatMessages={chatMessages}
           selectedSession={selectedSession}
           currentSessionId={currentSessionId}

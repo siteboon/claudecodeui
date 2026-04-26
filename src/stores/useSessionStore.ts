@@ -132,9 +132,30 @@ function recomputeMergedIfNeeded(slot: SessionSlot): boolean {
   return true;
 }
 
-// ─── Stale threshold ─────────────────────────────────────────────────────────
-
-const STALE_THRESHOLD_MS = 30_000;
+/**
+ * Merge an incoming page of server messages into the existing cached array,
+ * deduped by id. Preserves any older history the user paginated into so an
+ * SWR-style revalidate (which fetches only the latest N) doesn't clobber
+ * earlier pages already loaded via fetchMore.
+ */
+function mergeServerMessages(
+  existing: NormalizedMessage[],
+  incoming: NormalizedMessage[],
+): NormalizedMessage[] {
+  if (existing.length === 0) return incoming;
+  if (incoming.length === 0) return existing;
+  const incomingIds = new Set(incoming.map(m => m.id));
+  const kept = existing.filter(m => !incomingIds.has(m.id));
+  const combined = [...kept, ...incoming];
+  combined.sort((a, b) => {
+    const ta = a.timestamp || '';
+    const tb = b.timestamp || '';
+    if (ta < tb) return -1;
+    if (ta > tb) return 1;
+    return 0;
+  });
+  return combined;
+}
 
 const MAX_REALTIME_MESSAGES = 500;
 
@@ -203,10 +224,14 @@ export function useSessionStore() {
       const data = await response.json();
       const messages: NormalizedMessage[] = data.messages || [];
 
-      slot.serverMessages = messages;
-      slot.total = data.total ?? messages.length;
-      slot.hasMore = Boolean(data.hasMore);
-      slot.offset = (opts.offset ?? 0) + messages.length;
+      const hadCache = slot.serverMessages.length > 0;
+      const merged = mergeServerMessages(slot.serverMessages, messages);
+      slot.serverMessages = merged;
+      slot.total = Math.max(data.total ?? merged.length, merged.length);
+      // Preserve hasMore from the cached state when we already have older pages
+      // loaded — a latest-N revalidate can't tell us whether older history exists.
+      slot.hasMore = hadCache ? slot.hasMore : Boolean(data.hasMore);
+      slot.offset = merged.length;
       slot.fetchedAt = Date.now();
       slot.status = 'idle';
       recomputeMergedIfNeeded(slot);
@@ -347,15 +372,6 @@ export function useSessionStore() {
   }, [getSlot, notify]);
 
   /**
-   * Check if a session's data is stale (>30s old).
-   */
-  const isStale = useCallback((sessionId: string) => {
-    const slot = storeRef.current.get(sessionId);
-    if (!slot) return true;
-    return Date.now() - slot.fetchedAt > STALE_THRESHOLD_MS;
-  }, []);
-
-  /**
    * Update or create a streaming message (accumulated text so far).
    * Uses a well-known ID so subsequent calls replace the same message.
    */
@@ -440,7 +456,6 @@ export function useSessionStore() {
     refreshFromServer,
     setActiveSession,
     setStatus,
-    isStale,
     updateStreaming,
     finalizeStreaming,
     clearRealtime,
@@ -449,7 +464,7 @@ export function useSessionStore() {
   }), [
     getSlot, has, fetchFromServer, fetchMore,
     appendRealtime, appendRealtimeBatch, refreshFromServer,
-    setActiveSession, setStatus, isStale, updateStreaming, finalizeStreaming,
+    setActiveSession, setStatus, updateStreaming, finalizeStreaming,
     clearRealtime, getMessages, getSessionSlot,
   ]);
 }

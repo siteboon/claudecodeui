@@ -102,6 +102,7 @@ export function useChatSessionState({
   const [isLoading, setIsLoading] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(selectedSession?.id || null);
   const [isLoadingSessionMessages, setIsLoadingSessionMessages] = useState(false);
+  const [isRevalidating, setIsRevalidating] = useState(false);
   const [isLoadingMoreMessages, setIsLoadingMoreMessages] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [totalMessages, setTotalMessages] = useState(0);
@@ -129,8 +130,6 @@ export function useChatSessionState({
   const scrollPositionRef = useRef({ height: 0, top: 0 });
   const loadAllFinishedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadAllOverlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastLoadedSessionKeyRef = useRef<string | null>(null);
-
   const createDiff = useMemo<DiffCalculator>(() => createCachedDiffCalculator(), []);
 
   /* ---------------------------------------------------------------- */
@@ -350,17 +349,14 @@ export function useChatSessionState({
       setHasMoreMessages(false);
       setTotalMessages(0);
       setTokenBudget(null);
-      lastLoadedSessionKeyRef.current = null;
       return;
     }
 
     const provider = (selectedSession.__provider || localStorage.getItem('selected-provider') as Provider) || 'claude';
-    const sessionKey = `${selectedSession.id}:${selectedProject.name}:${provider}`;
 
-    // Skip if already loaded and fresh
-    if (lastLoadedSessionKeyRef.current === sessionKey && sessionStore.has(selectedSession.id) && !sessionStore.isStale(selectedSession.id)) {
-      return;
-    }
+    const cachedSlot = sessionStore.getSessionSlot(selectedSession.id);
+    const isWarm = (cachedSlot?.fetchedAt ?? 0) > 0 && (cachedSlot?.serverMessages.length ?? 0) > 0;
+    const isStreaming = cachedSlot?.status === 'streaming';
 
     const sessionChanged = currentSessionId !== null && currentSessionId !== selectedSession.id;
     if (sessionChanged) {
@@ -372,8 +368,6 @@ export function useChatSessionState({
 
     // Reset pagination/scroll state
     messagesOffsetRef.current = 0;
-    setHasMoreMessages(false);
-    setTotalMessages(0);
     setVisibleMessageCount(INITIAL_VISIBLE_MESSAGES);
     setAllMessagesLoaded(false);
     allMessagesLoadedRef.current = false;
@@ -384,8 +378,18 @@ export function useChatSessionState({
     if (loadAllOverlayTimerRef.current) clearTimeout(loadAllOverlayTimerRef.current);
     if (loadAllFinishedTimerRef.current) clearTimeout(loadAllFinishedTimerRef.current);
 
+    // Seed pagination/token state from cache if warm; otherwise reset.
+    if (isWarm && cachedSlot) {
+      setHasMoreMessages(cachedSlot.hasMore);
+      setTotalMessages(cachedSlot.total);
+      if (cachedSlot.tokenUsage) setTokenBudget(cachedSlot.tokenUsage as Record<string, unknown>);
+    } else {
+      setHasMoreMessages(false);
+      setTotalMessages(0);
+    }
+
     if (sessionChanged) {
-      setTokenBudget(null);
+      if (!isWarm) setTokenBudget(null);
       setIsLoading(false);
     }
 
@@ -399,10 +403,17 @@ export function useChatSessionState({
       sendMessage({ type: 'check-session-status', sessionId: selectedSession.id, provider });
     }
 
-    lastLoadedSessionKeyRef.current = sessionKey;
+    // Cold = full skeleton; warm = subtle revalidate spinner.
+    if (isWarm) {
+      setIsLoadingSessionMessages(false);
+      // WebSocket is already keeping streaming sessions fresh — skip the refetch.
+      if (isStreaming) return;
+      setIsRevalidating(true);
+    } else {
+      setIsLoadingSessionMessages(true);
+    }
 
-    // Fetch from server → store updates → chatMessages re-derives automatically
-    setIsLoadingSessionMessages(true);
+    // Fetch from server → store merges → chatMessages re-derives automatically
     sessionStore.fetchFromServer(selectedSession.id, {
       provider: (selectedSession.__provider || provider) as LLMProvider,
       projectName: selectedProject.name,
@@ -416,8 +427,10 @@ export function useChatSessionState({
         if (slot.tokenUsage) setTokenBudget(slot.tokenUsage as Record<string, unknown>);
       }
       setIsLoadingSessionMessages(false);
+      setIsRevalidating(false);
     }).catch(() => {
       setIsLoadingSessionMessages(false);
+      setIsRevalidating(false);
     });
   }, [
     pendingViewSessionRef,
@@ -729,6 +742,7 @@ export function useChatSessionState({
     currentSessionId,
     setCurrentSessionId,
     isLoadingSessionMessages,
+    isRevalidating,
     isLoadingMoreMessages,
     hasMoreMessages,
     totalMessages,
