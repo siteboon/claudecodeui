@@ -263,6 +263,16 @@ export function useChatRealtimeHandlers({
         onSessionInactive?.(sid);
         onSessionNotProcessing?.(sid);
 
+        if (sid && selectedProject) {
+          setTimeout(() => {
+            sessionStore.refreshFromServer(sid, {
+              provider,
+              projectName: selectedProject.name,
+              projectPath: selectedProject.fullPath || selectedProject.path || '',
+            });
+          }, 250);
+        }
+
         // Handle aborted case
         if (msg.aborted) {
           // Abort was requested — the complete event confirms it
