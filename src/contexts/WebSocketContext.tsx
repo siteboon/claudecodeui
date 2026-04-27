@@ -8,6 +8,15 @@ type WebSocketContextType = {
   sendMessage: (message: any) => void;
   latestMessage: any | null;
   isConnected: boolean;
+  // Number of sends that were issued while the socket was closed and are
+  // waiting to be flushed on the next onopen. Surfaced so the UI can show a
+  // "still sending..." indicator instead of letting the user think their
+  // message went through.
+  pendingSendCount: number;
+  // The most recent payload's user-facing text (the `command` field of
+  // claude/cursor/codex/gemini-command frames), or null if unknown. Lets the
+  // UI display *what* is queued, not just that something is.
+  lastPendingSendText: string | null;
 };
 
 const WebSocketContext = createContext<WebSocketContextType | null>(null);
@@ -37,6 +46,16 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   const pendingSendQueueRef = useRef<string[]>([]);
   const [latestMessage, setLatestMessage] = useState<any>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [pendingSendCount, setPendingSendCount] = useState(0);
+  const [lastPendingSendText, setLastPendingSendText] = useState<string | null>(null);
+
+  const extractCommandText = (payload: string): string | null => {
+    try {
+      const parsed = JSON.parse(payload);
+      if (parsed && typeof parsed.command === 'string') return parsed.command;
+    } catch { /* ignore */ }
+    return null;
+  };
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { token } = useAuth();
 
@@ -73,6 +92,8 @@ const useWebSocketProviderState = (): WebSocketContextType => {
         if (pendingSendQueueRef.current.length > 0) {
           const queued = pendingSendQueueRef.current;
           pendingSendQueueRef.current = [];
+          setPendingSendCount(0);
+          setLastPendingSendText(null);
           for (const payload of queued) {
             try {
               websocket.send(payload);
@@ -135,6 +156,9 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       queue.shift();
     }
     queue.push(payload);
+    setPendingSendCount(queue.length);
+    const text = extractCommandText(payload);
+    if (text !== null) setLastPendingSendText(text);
   }, []);
 
   const value: WebSocketContextType = useMemo(() =>
@@ -142,8 +166,10 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     ws: wsRef.current,
     sendMessage,
     latestMessage,
-    isConnected
-  }), [sendMessage, latestMessage, isConnected]);
+    isConnected,
+    pendingSendCount,
+    lastPendingSendText,
+  }), [sendMessage, latestMessage, isConnected, pendingSendCount, lastPendingSendText]);
 
   return value;
 };
