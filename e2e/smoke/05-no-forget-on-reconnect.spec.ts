@@ -117,9 +117,14 @@ test('input is preserved after WS disconnect', async ({ page }) => {
     return;
   }
 
-  // Check (b)
+  // Check (b) — give React up to 1s to flush the pendingSendCount state update
+  // and re-render the indicator. An immediate .isVisible() races with the render.
   const pendingSendIndicator = page.locator('[data-pending-send="true"]');
-  if (await pendingSendIndicator.isVisible().catch(() => false)) {
+  const indicatorAppeared = await pendingSendIndicator
+    .waitFor({ state: 'visible', timeout: 1000 })
+    .then(() => true)
+    .catch(() => false);
+  if (indicatorAppeared) {
     return;
   }
 
