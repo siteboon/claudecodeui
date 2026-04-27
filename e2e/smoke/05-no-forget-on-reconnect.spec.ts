@@ -20,7 +20,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { ensureLoggedIn, TEST_USERNAME, TEST_PASSWORD } from '../fixtures.js';
+import { ensureLoggedIn } from '../fixtures.js';
 
 test.setTimeout(60_000);
 
@@ -42,13 +42,16 @@ test('input is preserved after WS disconnect', async ({ page }) => {
 
   await ensureLoggedIn(page);
 
-  // Navigate to the first project → first session
-  const railButtons = page.locator('.w-rail button');
-  await railButtons.nth(1).click();
+  // Close any open modal
+  if (await page.locator('.bg-black\\/50').isVisible().catch(() => false)) {
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+  }
 
-  const sessionButton = page.locator('button.flex.w-full').first();
-  await sessionButton.waitFor({ state: 'visible', timeout: 5_000 });
-  await sessionButton.click();
+  // Click the first session in the flat list
+  const sessionButtons = page.locator('button.flex.w-full');
+  await sessionButtons.first().waitFor({ state: 'visible', timeout: 5_000 });
+  await sessionButtons.first().click();
 
   const textarea = page.locator('textarea').first();
   await textarea.waitFor({ state: 'visible', timeout: 10_000 });

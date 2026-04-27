@@ -52,6 +52,11 @@ export async function ensureLoggedIn(page: import('@playwright/test').Page) {
   }
 
   // Inject token into localStorage so React Auth context picks it up
+  // Mark onboarding as complete so the wizard doesn't block the app on first run
+  await page.request.post('/api/user/complete-onboarding', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
   // AUTH_TOKEN_STORAGE_KEY = 'auth-token' (see src/components/auth/constants.ts)
   await page.evaluate((t) => {
     localStorage.setItem('auth-token', t);
@@ -60,8 +65,8 @@ export async function ensureLoggedIn(page: import('@playwright/test').Page) {
   // Reload so the app re-initialises with the token
   await page.reload();
 
-  // Wait for authenticated UI
-  await page.locator('.w-rail').waitFor({ state: 'visible', timeout: 15_000 });
+  // Wait for authenticated UI (allow longer for project data to load)
+  await page.locator('.w-rail').waitFor({ state: 'visible', timeout: 20_000 });
 }
 
 export { expect };

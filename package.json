@@ -43,7 +43,7 @@
     "postinstall": "node scripts/fix-node-pty.js",
     "prepare": "husky",
     "update:platform": "./update-platform.sh",
-    "dev:test": "SERVER_PORT=3099 VITE_PORT=5199 DATABASE_PATH=./.e2e/test.db concurrently --kill-others \"npm run server:dev\" \"npm run client\"",
+    "dev:test": "SERVER_PORT=3099 VITE_PORT=5199 DATABASE_PATH=./.e2e/test.db BASE_PATH= concurrently --kill-others \"npm run server:dev\" \"npm run client\"",
     "e2e:smoke": "playwright test e2e/smoke"
   },
   "keywords": [

@@ -18,7 +18,18 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        // On NixOS the bundled Playwright Chromium can't find system libs.
+        // Set PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH to a system chromium binary
+        // (e.g. the Nix store path) to override.  No-op on standard Linux/macOS.
+        ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+          ? {
+              channel: undefined,
+              launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH },
+            }
+          : {}),
+      },
     },
   ],
   // Only spin up dev:test automatically when not targeting a remote URL
@@ -36,6 +47,9 @@ export default defineConfig({
             SERVER_PORT: '3099',
             VITE_PORT: '5199',
             DATABASE_PATH: './.e2e/test.db',
+            // Clear BASE_PATH so the app serves at / — prevents the Pluto
+            // per-user prefix (e.g. /jorge/) from bleeding into dev:test runs.
+            BASE_PATH: '',
           },
         },
       }),

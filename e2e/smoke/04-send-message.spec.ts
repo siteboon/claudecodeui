@@ -21,13 +21,17 @@ test.setTimeout(60_000);
 test('send "ping" and receive an assistant reply within 30 s', async ({ page }) => {
   await ensureLoggedIn(page);
 
-  // Navigate to the first project → first session
-  const railButtons = page.locator('.w-rail button');
-  await railButtons.nth(1).click();
+  // Close any open modal
+  const backdrop = page.locator('.fixed.inset-0').filter({ has: page.locator('.bg-black\\/50') }).first();
+  if (await backdrop.isVisible().catch(() => false)) {
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+  }
 
-  const sessionButton = page.locator('button.flex.w-full').first();
-  await sessionButton.waitFor({ state: 'visible', timeout: 5_000 });
-  await sessionButton.click();
+  // Click the first session in the flat list
+  const sessionButtons = page.locator('button.flex.w-full');
+  await sessionButtons.first().waitFor({ state: 'visible', timeout: 5_000 });
+  await sessionButtons.first().click();
 
   // Wait for the chat textarea to be interactive
   const textarea = page.locator('textarea').first();

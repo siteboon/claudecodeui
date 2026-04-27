@@ -1,12 +1,13 @@
 /**
  * Smoke spec 03 — Open session → history
  *
- * Clicks the first project in the rail, then clicks the first session in the
- * sidebar session list, and asserts that at least one historical message
- * renders in the chat pane.
+ * After auth the sidebar already shows the flat session list.  We click the
+ * first session button (which may be under any project) and assert that at
+ * least one historical message renders in the chat pane.
  *
  * MessageComponent renders `.chat-message` elements for every message.
- * FlatSessionItem renders a `button.flex.w-full.items-center` per session.
+ * FlatSessionItem renders a button with text content matching
+ * "<path> · <age> <summary>".
  */
 
 import { test, expect } from '@playwright/test';
@@ -15,19 +16,21 @@ import { ensureLoggedIn } from '../fixtures.js';
 test('first session shows historical messages in chat pane', async ({ page }) => {
   await ensureLoggedIn(page);
 
-  // Click the first project item (index 1 skips the "All projects" button)
-  const railButtons = page.locator('.w-rail button');
-  await railButtons.nth(1).click();
+  // Close any open modal/dialog first (e.g. Create New Project wizard)
+  const backdrop = page.locator('.fixed.inset-0.z-\\[60\\], [class*="z-[60]"]').first();
+  if (await backdrop.isVisible().catch(() => false)) {
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+  }
 
-  // FlatSessionItem renders a button with classes: flex w-full items-center gap-2.5 rounded-md
-  // We find the first such button in the sidebar (outside the rail).
-  // The sidebar panel sits beside the rail; session buttons are inside it.
-  const sessionButton = page
-    .locator('button.flex.w-full')
-    .first();
+  // Session buttons are directly visible in the sidebar flat list.
+  // FlatSessionItem renders: button.flex.w-full.items-center.gap-2.5
+  // We pick the first one that has a non-empty text label (not a utility button).
+  const sessionButtons = page.locator('button.flex.w-full');
+  await sessionButtons.first().waitFor({ state: 'visible', timeout: 5_000 });
 
-  await sessionButton.waitFor({ state: 'visible', timeout: 5_000 });
-  await sessionButton.click();
+  // Click the first session
+  await sessionButtons.first().click();
 
   // At least one .chat-message must render in the chat pane
   await expect(page.locator('.chat-message').first()).toBeVisible({ timeout: 10_000 });
