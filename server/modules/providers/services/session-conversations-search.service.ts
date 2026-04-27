@@ -100,6 +100,15 @@ const INTERNAL_CONTENT_PREFIXES = [
   '[Request interrupted',
 ] as const;
 
+/**
+ * Codex includes extra internal metadata tags that should not surface as
+ * user-facing searchable conversation content.
+ */
+const CODEX_INTERNAL_CONTENT_PREFIXES = [
+  '<environment_context>',
+  '<cwd>',
+] as const;
+
 function normalizeComparablePath(inputPath: string): string {
   if (!inputPath || typeof inputPath !== 'string') {
     return '';
@@ -154,6 +163,11 @@ function toSummaryText(customName: string | null, fallback: string | null | unde
 
 function isInternalContent(content: string): boolean {
   return INTERNAL_CONTENT_PREFIXES.some((prefix) => content.startsWith(prefix));
+}
+
+function isInternalCodexContent(content: string): boolean {
+  const normalized = content.trimStart();
+  return CODEX_INTERNAL_CONTENT_PREFIXES.some((prefix) => normalized.startsWith(prefix));
 }
 
 function escapeRegex(value: string): string {
@@ -807,7 +821,6 @@ async function parseCodexSessionMatches(
       if (entry.type === 'event_msg' && isVisibleCodexUserMessage(entry.payload as AnyRecord)) {
         text = String(entry.payload.message);
         role = 'user';
-        latestUserMessageText = text;
       } else if (
         entry.type === 'event_msg'
         && entry.payload?.type === 'agent_reasoning'
@@ -820,9 +833,6 @@ async function parseCodexSessionMatches(
         if (payload.role === 'user') {
           text = extractCodexText(payload.content);
           role = 'user';
-          if (text) {
-            latestUserMessageText = text;
-          }
         } else if (payload.role === 'assistant') {
           text = extractCodexText(payload.content);
           role = 'assistant';
@@ -843,6 +853,12 @@ async function parseCodexSessionMatches(
 
       if (!text || !role) {
         continue;
+      }
+      if (isInternalCodexContent(text)) {
+        continue;
+      }
+      if (role === 'user') {
+        latestUserMessageText = text;
       }
 
       const fingerprint = `${role}:${text.trim().toLowerCase()}`;
