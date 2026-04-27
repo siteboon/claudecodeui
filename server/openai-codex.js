@@ -224,15 +224,27 @@ export async function queryCodex(command, options = {}, ws) {
       model
     };
 
-    // Start or resume thread
+    // Start or resume thread — with fallback to new thread if stale
+    let resumeFailed = false;
     if (sessionId) {
-      thread = codex.resumeThread(sessionId, threadOptions);
+      try {
+        thread = codex.resumeThread(sessionId, threadOptions);
+      } catch (resumeError) {
+        const errorMsg = resumeError?.message || String(resumeError);
+        if (/thread/i.test(errorMsg) && /not found|no conversation/i.test(errorMsg)) {
+          console.log(`[WARN] Resume thread ${sessionId} not found, starting new thread`);
+          thread = codex.startThread(threadOptions);
+          resumeFailed = true;
+        } else {
+          throw resumeError;
+        }
+      }
     } else {
       thread = codex.startThread(threadOptions);
     }
 
-    // Get the thread ID
-    currentSessionId = thread.id || sessionId || `codex-${Date.now()}`;
+    // Get the thread ID — avoid falling back to stale sessionId after failed resume
+    currentSessionId = thread.id || (resumeFailed ? null : sessionId) || `codex-${Date.now()}`;
 
     // Track the session
     activeCodexSessions.set(currentSessionId, {
