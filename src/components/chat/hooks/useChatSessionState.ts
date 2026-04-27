@@ -188,6 +188,10 @@ export function useChatSessionState({
     // session once `session_created` has stamped its id onto pendingViewSessionRef.
     // Prevents the bubble from leaking into an unrelated session the user
     // clicked into before the backend responded.
+    // Cross-session leak is not possible: the null branch fires only while
+    // activeSessionId is also null (pre-session_created new-chat view); once
+    // session_created stamps a real id, the message is already in the store
+    // so all.length > 0 and this block is skipped entirely.
     if (pendingUserMessage && all.length === 0) {
       const pendingTarget = pendingViewSessionRef.current?.sessionId ?? null;
       const matchesView = pendingTarget === null

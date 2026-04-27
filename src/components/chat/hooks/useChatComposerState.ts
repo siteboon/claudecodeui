@@ -192,6 +192,9 @@ export function useChatComposerState({
 
   const [queuedMessage, setQueuedMessage] = useState<string | null>(null);
   const queuedMessageRef = useRef<string | null>(null);
+  // Tracks which session the queued message was typed into so we can guard
+  // against firing it into a different session the user navigated to.
+  const queuedSessionIdRef = useRef<string | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputHighlightRef = useRef<HTMLDivElement>(null);
@@ -556,6 +559,7 @@ export function useChatComposerState({
       // Queue text-only messages while Claude is responding
       if (isLoading && currentInput.trim() && !hasAttachments) {
         queuedMessageRef.current = currentInput;
+        queuedSessionIdRef.current = currentSessionId;
         setQueuedMessage(currentInput);
         setInput('');
         inputValueRef.current = '';
@@ -839,6 +843,12 @@ export function useChatComposerState({
 
       safeLocalStorage.removeItem(draftKey);
       safeLocalStorage.removeItem(legacyKey);
+      // Clear the in-flight snapshot immediately on successful send so a
+      // hard reload before the WS 'complete' event does not restore the
+      // just-sent message into the textarea.  The isLoading-based clear in
+      // the effect below is a belt-and-suspenders fallback for the case where
+      // the send path throws before reaching here.
+      safeLocalStorage.removeItem(`in_flight_send_${selectedProject.name}`);
     },
     [
       selectedSession,
@@ -925,11 +935,28 @@ export function useChatComposerState({
     wasLoadingRef.current = isLoading;
   }, [isLoading, selectedProject?.name]);
 
-  // Auto-send queued message when loading completes
+  // Auto-send queued message when loading completes, but only if the user
+  // is still in the same session the message was typed into.
   useEffect(() => {
     if (!isLoading && queuedMessageRef.current && handleSubmitRef.current && selectedProject) {
+      const targetSession = queuedSessionIdRef.current;
+      if (targetSession !== currentSessionId) {
+        // User navigated to a different session — drop the queued text rather
+        // than silently submitting it to the wrong session.
+        console.warn(
+          '[useChatComposerState] dropping queued message: session changed from',
+          targetSession,
+          'to',
+          currentSessionId,
+        );
+        queuedMessageRef.current = null;
+        queuedSessionIdRef.current = null;
+        setQueuedMessage(null);
+        return;
+      }
       const queued = queuedMessageRef.current;
       queuedMessageRef.current = null;
+      queuedSessionIdRef.current = null;
       setQueuedMessage(null);
       inputValueRef.current = queued;
       setTimeout(() => {
@@ -1057,6 +1084,7 @@ export function useChatComposerState({
 
   const cancelQueuedMessage = useCallback(() => {
     queuedMessageRef.current = null;
+    queuedSessionIdRef.current = null;
     setQueuedMessage(null);
   }, []);
 

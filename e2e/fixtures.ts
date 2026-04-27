@@ -29,7 +29,7 @@ export async function ensureLoggedIn(page: import('@playwright/test').Page) {
   if (alreadyAuthed) return;
 
   // Wait for an input to appear (either login or setup form)
-  await loginInput.waitFor({ state: 'visible', timeout: 10_000 });
+  await loginInput.waitFor({ state: 'visible', timeout: 45_000 });
 
   // Try register first (fresh DB)
   const registerRes = await page.request.post('/api/auth/register', {

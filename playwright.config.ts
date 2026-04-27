@@ -38,7 +38,7 @@ export default defineConfig({
     : {
         webServer: {
           command: 'npm run dev:test',
-          url: 'http://localhost:5199',
+          url: 'http://localhost:3099/api/auth/status',
           reuseExistingServer: !process.env.CI,
           timeout: 60_000,
           stdout: 'pipe',

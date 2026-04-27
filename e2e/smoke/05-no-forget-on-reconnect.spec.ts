@@ -25,7 +25,9 @@ import { ensureLoggedIn } from '../fixtures.js';
 test.setTimeout(60_000);
 
 test('input is preserved after WS disconnect', async ({ page }) => {
-  // Patch WebSocket at init so we can capture and close the app socket later
+  // Patch WebSocket at init so we can capture and close the app socket later.
+  // The patch is scoped to this page's JavaScript context and is automatically
+  // torn down when the page is closed — no cross-spec leakage.
   await page.addInitScript(() => {
     (window as any).__wsList = [];
     const OriginalWebSocket = window.WebSocket;
@@ -38,6 +40,10 @@ test('input is preserved after WS disconnect', async ({ page }) => {
     // @ts-ignore
     window.WebSocket.prototype = OriginalWebSocket.prototype;
     Object.assign(window.WebSocket, OriginalWebSocket);
+    // Expose a restore handle so the test can undo the patch before navigation
+    (window as any).__restoreWebSocket = () => {
+      window.WebSocket = OriginalWebSocket;
+    };
   });
 
   await ensureLoggedIn(page);
@@ -82,26 +88,42 @@ test('input is preserved after WS disconnect', async ({ page }) => {
   // Submit the message while disconnected — the context should queue it
   await textarea.press('Enter');
 
-  // Assert: either the textarea still holds the value (send was queued but
-  // value not cleared by the app before reconnect), OR the textarea is now
-  // empty meaning the message was accepted into the outbound queue.
-  // Either outcome is acceptable — what we DON'T want is the input
-  // vanishing silently with no visible indicator and no queue entry.
+  // Restore the WebSocket prototype so subsequent specs or navigation within
+  // this page are not affected by the wrapper.
+  await page.evaluate(() => {
+    if (typeof (window as any).__restoreWebSocket === 'function') {
+      (window as any).__restoreWebSocket();
+    }
+  });
+
+  // Assert: the queued-message feature must demonstrably work for THIS
+  // specific prompt text.  We accept three distinct evidence forms:
   //
-  // Check the outbound-queue: the context's pendingSendQueueRef stores the
-  // payload.  We can't inspect React refs from outside, so we verify the
-  // user-visible state instead: if textarea was cleared, a user message
-  // bubble should appear in the chat pane (even if assistant reply hasn't
-  // come yet).
-  // Use delta (bubblesAfter - bubblesBefore) to avoid false-pass from prior
-  // spec leakage.
+  //   (a) textarea still holds the exact prompt — WS send was queued and the
+  //       app is waiting to flush; OR
+  //   (b) a data-pending-send indicator is present — the app acknowledged the
+  //       queue visually; OR
+  //   (c) after reconnect, a user bubble containing the exact prompt text
+  //       appears within 10s — the message was flushed and rendered.
+  //
+  // Accepting "any bubble" (bubblesAfter >= 1) would pass even if the feature
+  // is completely broken as long as earlier specs left a bubble behind.
+
   const textareaValueAfter = await textarea.inputValue();
-  const bubblesAfter = await page.locator('.chat-message.user').count();
 
-  const inputPreservedOrQueued = textareaValueAfter === prompt || (bubblesAfter - bubblesBefore) >= 1;
+  // Check (a)
+  if (textareaValueAfter === prompt) {
+    // Input preserved — queue mechanism held the text.
+    return;
+  }
 
-  expect(
-    inputPreservedOrQueued,
-    'Input was silently dropped: textarea empty AND no new user bubble appeared in chat pane',
-  ).toBe(true);
+  // Check (b)
+  const pendingSendIndicator = page.locator('[data-pending-send="true"]');
+  if (await pendingSendIndicator.isVisible().catch(() => false)) {
+    return;
+  }
+
+  // Check (c) — wait up to 10s for the specific prompt to appear as a user bubble
+  const specificBubble = page.locator('.chat-message.user', { hasText: prompt });
+  await expect(specificBubble, `queued message "${prompt}" never appeared after reconnect`).toBeVisible({ timeout: 10_000 });
 });
