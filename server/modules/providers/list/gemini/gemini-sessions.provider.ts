@@ -1,10 +1,50 @@
-import sessionManager from '@/sessionManager.js';
-import { getGeminiCliSessionMessages } from '@/projects.js';
+import fs from 'node:fs/promises';
+
+import { sessionsDb } from '@/modules/database/index.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
 import { createNormalizedMessage, generateMessageId, readObjectRecord } from '@/shared/utils.js';
 
 const PROVIDER = 'gemini';
+
+async function getGeminiCliSessionMessages(sessionId: string): Promise<AnyRecord[]> {
+  const sessionFilePath = sessionsDb.getSessionById(sessionId)?.jsonl_path;
+  if (!sessionFilePath) {
+    return [];
+  }
+
+  try {
+    const data = await fs.readFile(sessionFilePath, 'utf8');
+    const session = JSON.parse(data) as AnyRecord;
+    const sourceMessages = Array.isArray(session.messages) ? session.messages : [];
+
+    return sourceMessages.map((msg: AnyRecord) => {
+      const role = msg.type === 'user'
+        ? 'user'
+        : (msg.type === 'gemini' || msg.type === 'assistant')
+          ? 'assistant'
+          : msg.type;
+
+      let content = '';
+      if (typeof msg.content === 'string') {
+        content = msg.content;
+      } else if (Array.isArray(msg.content)) {
+        content = msg.content
+          .filter((part: AnyRecord) => part?.text)
+          .map((part: AnyRecord) => part.text)
+          .join('\n');
+      }
+
+      return {
+        type: 'message',
+        message: { role, content },
+        timestamp: msg.timestamp || null,
+      };
+    });
+  } catch {
+    return [];
+  }
+}
 
 export class GeminiSessionsProvider implements IProviderSessions {
   /**
@@ -108,8 +148,7 @@ export class GeminiSessionsProvider implements IProviderSessions {
   }
 
   /**
-   * Loads Gemini history from the in-memory session manager first, then falls
-   * back to Gemini CLI session files on disk.
+   * Loads Gemini history from Gemini CLI session files on disk.
    */
   async fetchHistory(
     sessionId: string,
@@ -119,11 +158,7 @@ export class GeminiSessionsProvider implements IProviderSessions {
 
     let rawMessages: AnyRecord[];
     try {
-      rawMessages = sessionManager.getSessionMessages(sessionId) as AnyRecord[];
-
-      if (rawMessages.length === 0) {
-        rawMessages = await getGeminiCliSessionMessages(sessionId) as AnyRecord[];
-      }
+      rawMessages = await getGeminiCliSessionMessages(sessionId);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`[GeminiProvider] Failed to load session ${sessionId}:`, message);
