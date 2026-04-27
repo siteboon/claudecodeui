@@ -86,8 +86,6 @@ const installMode = fs.existsSync(path.join(APP_ROOT, '.git')) ? 'git' : 'npm';
 
 console.log('SERVER_PORT from env:', process.env.SERVER_PORT);
 
-const VALID_PROVIDERS = ['claude', 'codex', 'cursor', 'gemini'];
-
 const app = express();
 const server = http.createServer(app);
 
