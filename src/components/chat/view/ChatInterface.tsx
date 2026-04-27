@@ -223,8 +223,17 @@ function ChatInterface({
     setPendingPermissionRequests,
   });
 
-  // On WebSocket reconnect, re-fetch the current session's messages from the server
-  // so missed streaming events are shown. Also reset isLoading.
+  // On WebSocket reconnect, re-fetch the current session's messages from the
+  // server so missed streaming events are shown, then ask the server whether
+  // the session is still processing. The server's `session-status` reply is
+  // handled by useChatRealtimeHandlers, which authoritatively sets isLoading
+  // and canAbortSession based on whether the SDK session is alive.
+  //
+  // Previously we unconditionally cleared isLoading/canAbortSession here,
+  // which created a brief race window after every WS reconnect: if the
+  // Claude subprocess was still streaming when the WS dropped (e.g. the
+  // proxy 30s timeout that motivated the heartbeat in commit 85d371d), the
+  // composer would briefly show "ready" and the user could submit a duplicate.
   const handleWebSocketReconnect = useCallback(async () => {
     if (selectedProject && selectedSession) {
       const providerVal = (localStorage.getItem('selected-provider') as LLMProvider) || 'claude';
@@ -233,10 +242,19 @@ function ChatInterface({
         projectName: selectedProject.name,
         projectPath: selectedProject.fullPath || selectedProject.path || '',
       });
+      // Authoritative: ask server if the session is still streaming. If yes,
+      // the session-status handler keeps isLoading=true. If no, it clears.
+      sendMessage({
+        type: 'check-session-status',
+        sessionId: selectedSession.id,
+        provider: (selectedSession.__provider || providerVal) as LLMProvider,
+      });
+    } else {
+      // No active session — there's nothing to be "loading" for, safe to clear.
+      setIsLoading(false);
+      setCanAbortSession(false);
     }
-    setIsLoading(false);
-    setCanAbortSession(false);
-  }, [selectedProject, selectedSession, sessionStore, setIsLoading, setCanAbortSession]);
+  }, [selectedProject, selectedSession, sessionStore, sendMessage, setIsLoading, setCanAbortSession]);
 
   useChatRealtimeHandlers({
     latestMessage,
