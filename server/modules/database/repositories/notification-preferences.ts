@@ -64,7 +64,7 @@ export const notificationPreferencesDb = {
       return defaults;
     }
 
-    let parsed: unknown = DEFAULT_NOTIFICATION_PREFERENCES;
+    let parsed: unknown;
     try {
       parsed = JSON.parse(row.preferences_json);
     } catch {
