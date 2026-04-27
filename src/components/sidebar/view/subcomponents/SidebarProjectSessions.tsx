@@ -1,8 +1,10 @@
 import { Plus } from 'lucide-react';
 import type { TFunction } from 'i18next';
+
 import { Button } from '../../../../shared/view/ui';
 import type { Project, ProjectSession, LLMProvider } from '../../../../types/app';
 import type { SessionWithProvider } from '../../types/types';
+
 import SidebarSessionItem from './SidebarSessionItem';
 
 type SidebarProjectSessionsProps = {
@@ -11,6 +13,8 @@ type SidebarProjectSessionsProps = {
   sessions: SessionWithProvider[];
   selectedSession: ProjectSession | null;
   initialSessionsLoaded: boolean;
+  hasMoreSessions: boolean;
+  isLoadingMoreSessions: boolean;
   currentTime: Date;
   editingSession: string | null;
   editingSessionName: string;
@@ -26,6 +30,7 @@ type SidebarProjectSessionsProps = {
     sessionTitle: string,
     provider: LLMProvider,
   ) => void;
+  onLoadMoreSessions: (projectId: string) => void;
   onNewSession: (project: Project) => void;
   t: TFunction;
 };
@@ -54,6 +59,8 @@ export default function SidebarProjectSessions({
   sessions,
   selectedSession,
   initialSessionsLoaded,
+  hasMoreSessions,
+  isLoadingMoreSessions,
   currentTime,
   editingSession,
   editingSessionName,
@@ -64,6 +71,7 @@ export default function SidebarProjectSessions({
   onProjectSelect,
   onSessionSelect,
   onDeleteSession,
+  onLoadMoreSessions,
   onNewSession,
   t,
 }: SidebarProjectSessionsProps) {
@@ -105,25 +113,39 @@ export default function SidebarProjectSessions({
           <p className="text-xs text-muted-foreground">{t('sessions.noSessions')}</p>
         </div>
       ) : (
-        sessions.map((session) => (
-          <SidebarSessionItem
-            key={session.id}
-            project={project}
-            session={session}
-            selectedSession={selectedSession}
-            currentTime={currentTime}
-            editingSession={editingSession}
-            editingSessionName={editingSessionName}
-            onEditingSessionNameChange={onEditingSessionNameChange}
-            onStartEditingSession={onStartEditingSession}
-            onCancelEditingSession={onCancelEditingSession}
-            onSaveEditingSession={onSaveEditingSession}
-            onProjectSelect={onProjectSelect}
-            onSessionSelect={onSessionSelect}
-            onDeleteSession={onDeleteSession}
-            t={t}
-          />
-        ))
+        <>
+          {sessions.map((session) => (
+            <SidebarSessionItem
+              key={session.id}
+              project={project}
+              session={session}
+              selectedSession={selectedSession}
+              currentTime={currentTime}
+              editingSession={editingSession}
+              editingSessionName={editingSessionName}
+              onEditingSessionNameChange={onEditingSessionNameChange}
+              onStartEditingSession={onStartEditingSession}
+              onCancelEditingSession={onCancelEditingSession}
+              onSaveEditingSession={onSaveEditingSession}
+              onProjectSelect={onProjectSelect}
+              onSessionSelect={onSessionSelect}
+              onDeleteSession={onDeleteSession}
+              t={t}
+            />
+          ))}
+
+          {hasMoreSessions && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-full justify-center text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => onLoadMoreSessions(project.projectId)}
+              disabled={isLoadingMoreSessions}
+            >
+              {isLoadingMoreSessions ? t('sessions.loadingSessions') : 'Load more sessions'}
+            </Button>
+          )}
+        </>
       )}
     </div>
   );

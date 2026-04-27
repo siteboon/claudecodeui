@@ -151,6 +151,32 @@ export const sessionsDb = {
       .all(projectPath) as SessionRow[];
   },
 
+  getSessionsByProjectPathPage(projectPath: string, limit: number, offset: number): SessionRow[] {
+    const db = getConnection();
+    return db
+      .prepare(
+        `SELECT session_id, provider, project_path, jsonl_path, custom_name, created_at, updated_at
+         FROM sessions
+         WHERE project_path = ?
+         ORDER BY datetime(COALESCE(updated_at, created_at)) DESC, session_id DESC
+         LIMIT ? OFFSET ?`
+      )
+      .all(projectPath, limit, offset) as SessionRow[];
+  },
+
+  countSessionsByProjectPath(projectPath: string): number {
+    const db = getConnection();
+    const row = db
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM sessions
+         WHERE project_path = ?`
+      )
+      .get(projectPath) as { count: number } | undefined;
+
+    return Number(row?.count ?? 0);
+  },
+
   deleteSessionsByProjectPath(projectPath: string): void {
     const db = getConnection();
     db.prepare(`DELETE FROM sessions WHERE project_path = ?`).run(projectPath);

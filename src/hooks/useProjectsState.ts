@@ -100,6 +100,86 @@ const getProjectSessions = (project: Project): ProjectSession[] => {
   ];
 };
 
+const countLoadedProjectSessions = (project: Project): number => getProjectSessions(project).length;
+
+const mergeSessionProviderLists = (baseSessions: ProjectSession[], additionalSessions: ProjectSession[]): ProjectSession[] => {
+  const merged = [...baseSessions];
+  const seenSessionIds = new Set(baseSessions.map((session) => String(session.id)));
+
+  for (const session of additionalSessions) {
+    const sessionId = String(session.id);
+    if (seenSessionIds.has(sessionId)) {
+      continue;
+    }
+
+    merged.push(session);
+    seenSessionIds.add(sessionId);
+  }
+
+  return merged;
+};
+
+const mergeExpandedSessionPages = (previousProjects: Project[], incomingProjects: Project[]): Project[] => {
+  if (previousProjects.length === 0) {
+    return incomingProjects;
+  }
+
+  const previousByProjectId = new Map(previousProjects.map((project) => [project.projectId, project]));
+
+  return incomingProjects.map((incomingProject) => {
+    const previousProject = previousByProjectId.get(incomingProject.projectId);
+    if (!previousProject) {
+      return incomingProject;
+    }
+
+    const previousLoadedCount = countLoadedProjectSessions(previousProject);
+    const incomingLoadedCount = countLoadedProjectSessions(incomingProject);
+    if (previousLoadedCount <= incomingLoadedCount) {
+      return incomingProject;
+    }
+
+    const mergedProject: Project = {
+      ...incomingProject,
+      sessions: mergeSessionProviderLists(incomingProject.sessions ?? [], previousProject.sessions ?? []),
+      cursorSessions: mergeSessionProviderLists(incomingProject.cursorSessions ?? [], previousProject.cursorSessions ?? []),
+      codexSessions: mergeSessionProviderLists(incomingProject.codexSessions ?? [], previousProject.codexSessions ?? []),
+      geminiSessions: mergeSessionProviderLists(incomingProject.geminiSessions ?? [], previousProject.geminiSessions ?? []),
+    };
+
+    const totalSessions = Number(incomingProject.sessionMeta?.total ?? previousLoadedCount);
+    mergedProject.sessionMeta = {
+      ...incomingProject.sessionMeta,
+      total: totalSessions,
+      hasMore: countLoadedProjectSessions(mergedProject) < totalSessions,
+    };
+
+    return mergedProject;
+  });
+};
+
+const mergeProjectSessionPage = (
+  existingProject: Project,
+  sessionsPage: Pick<Project, 'sessions' | 'cursorSessions' | 'codexSessions' | 'geminiSessions' | 'sessionMeta'>,
+): Project => {
+  const mergedProject: Project = {
+    ...existingProject,
+    sessions: mergeSessionProviderLists(existingProject.sessions ?? [], sessionsPage.sessions ?? []),
+    cursorSessions: mergeSessionProviderLists(existingProject.cursorSessions ?? [], sessionsPage.cursorSessions ?? []),
+    codexSessions: mergeSessionProviderLists(existingProject.codexSessions ?? [], sessionsPage.codexSessions ?? []),
+    geminiSessions: mergeSessionProviderLists(existingProject.geminiSessions ?? [], sessionsPage.geminiSessions ?? []),
+  };
+
+  const totalSessions = Number(sessionsPage.sessionMeta?.total ?? existingProject.sessionMeta?.total ?? 0);
+  mergedProject.sessionMeta = {
+    ...existingProject.sessionMeta,
+    ...sessionsPage.sessionMeta,
+    total: totalSessions,
+    hasMore: countLoadedProjectSessions(mergedProject) < totalSessions,
+  };
+
+  return mergedProject;
+};
+
 const isUpdateAdditive = (
   currentProjects: Project[],
   updatedProjects: Project[],
@@ -194,7 +274,8 @@ export function useProjectsState({
       const projectData = (await response.json()) as Project[];
 
       setProjects((prevProjects) => {
-        const mergedProjects = mergeTaskMasterCache(projectData, prevProjects);
+        const projectsWithTaskMaster = mergeTaskMasterCache(projectData, prevProjects);
+        const mergedProjects = mergeExpandedSessionPages(prevProjects, projectsWithTaskMaster);
 
         if (prevProjects.length === 0) {
           return mergedProjects;
@@ -336,7 +417,8 @@ export function useProjectsState({
       (selectedSession && activeSessions.has(selectedSession.id)) ||
       (activeSessions.size > 0 && Array.from(activeSessions).some((id) => id.startsWith('new-session-')));
 
-    const updatedProjects = mergeTaskMasterCache(projectsMessage.projects, projects);
+    const updatedProjectsWithTaskMaster = mergeTaskMasterCache(projectsMessage.projects, projects);
+    const updatedProjects = mergeExpandedSessionPages(projects, updatedProjectsWithTaskMaster);
 
     if (
       hasActiveSession &&
@@ -522,14 +604,24 @@ export function useProjectsState({
       }
 
       setProjects((prevProjects) =>
-        prevProjects.map((project) => ({
-          ...project,
-          sessions: project.sessions?.filter((session) => session.id !== sessionIdToDelete) ?? [],
-          sessionMeta: {
+        prevProjects.map((project) => {
+          const updatedProject: Project = {
+            ...project,
+            sessions: project.sessions?.filter((session) => session.id !== sessionIdToDelete) ?? [],
+            cursorSessions: project.cursorSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [],
+            codexSessions: project.codexSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [],
+            geminiSessions: project.geminiSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [],
+          };
+
+          const totalSessions = Math.max(0, Number(project.sessionMeta?.total ?? 0) - 1);
+          updatedProject.sessionMeta = {
             ...project.sessionMeta,
-            total: Math.max(0, (project.sessionMeta?.total as number | undefined ?? 0) - 1),
-          },
-        })),
+            total: totalSessions,
+            hasMore: countLoadedProjectSessions(updatedProject) < totalSessions,
+          };
+
+          return updatedProject;
+        }),
       );
     },
     [navigate, selectedSession?.id],
@@ -539,7 +631,8 @@ export function useProjectsState({
     try {
       const response = await api.projects();
       const freshProjects = (await response.json()) as Project[];
-      const mergedProjects = mergeTaskMasterCache(freshProjects, projects);
+      const projectsWithTaskMaster = mergeTaskMasterCache(freshProjects, projects);
+      const mergedProjects = mergeExpandedSessionPages(projects, projectsWithTaskMaster);
 
       setProjects((prevProjects) =>
         projectsHaveChanges(prevProjects, mergedProjects, true) ? mergedProjects : prevProjects,
@@ -582,6 +675,55 @@ export function useProjectsState({
     }
   }, [projects, selectedProject, selectedSession]);
 
+  const loadMoreProjectSessions = useCallback(async (projectId: string) => {
+    const project = projects.find((candidate) => candidate.projectId === projectId);
+    if (!project) {
+      return;
+    }
+
+    const loadedCount = countLoadedProjectSessions(project);
+    const totalCount = Number(project.sessionMeta?.total ?? 0);
+    if (totalCount > 0 && loadedCount >= totalCount) {
+      return;
+    }
+
+    const response = await api.projectSessions(projectId, {
+      limit: 20,
+      offset: loadedCount,
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as { error?: string | { message?: string } };
+      const errorPayload = payload.error;
+      const message =
+        typeof errorPayload === 'string'
+          ? errorPayload
+          : errorPayload && typeof errorPayload === 'object' && errorPayload.message
+            ? errorPayload.message
+            : `Failed to load more sessions for project ${projectId}`;
+      throw new Error(message);
+    }
+
+    const sessionsPage = (await response.json()) as Pick<Project, 'sessions' | 'cursorSessions' | 'codexSessions' | 'geminiSessions' | 'sessionMeta'>;
+
+    let mergedProjectForSelection: Project | null = null;
+    setProjects((previousProjects) =>
+      previousProjects.map((candidate) => {
+        if (candidate.projectId !== projectId) {
+          return candidate;
+        }
+
+        const mergedProject = mergeProjectSessionPage(candidate, sessionsPage);
+        mergedProjectForSelection = mergedProject;
+        return mergedProject;
+      }),
+    );
+
+    if (selectedProject?.projectId === projectId && mergedProjectForSelection) {
+      setSelectedProject(mergedProjectForSelection);
+    }
+  }, [projects, selectedProject?.projectId]);
+
   // `projectId` is the DB identifier passed from the sidebar's delete flow
   // after the migration away from folder-derived project names.
   const handleProjectDelete = useCallback(
@@ -606,6 +748,7 @@ export function useProjectsState({
       onSessionSelect: handleSessionSelect,
       onNewSession: handleNewSession,
       onSessionDelete: handleSessionDelete,
+      onLoadMoreSessions: loadMoreProjectSessions,
       onProjectDelete: handleProjectDelete,
       isLoading: isLoadingProjects,
       loadingProgress,
@@ -621,6 +764,7 @@ export function useProjectsState({
       handleProjectDelete,
       handleProjectSelect,
       handleSessionDelete,
+      loadMoreProjectSessions,
       handleSessionSelect,
       handleSidebarRefresh,
       isLoadingProjects,
@@ -658,6 +802,7 @@ export function useProjectsState({
     handleSessionSelect,
     handleNewSession,
     handleSessionDelete,
+    loadMoreProjectSessions,
     handleProjectDelete,
     handleSidebarRefresh,
   };

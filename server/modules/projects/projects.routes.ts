@@ -4,7 +4,7 @@ import { createProject, updateProjectDisplayName } from '@/modules/projects/serv
 import { startCloneProject } from '@/modules/projects/services/project-clone.service.js';
 import { getProjectTaskMaster } from '@/modules/projects/services/projects-has-taskmaster.service.js';
 import { AppError, asyncHandler } from '@/shared/utils.js';
-import { getProjectsWithSessions } from '@/modules/projects/services/projects-with-sessions-fetch.service.js';
+import { getProjectSessionsPage, getProjectsWithSessions } from '@/modules/projects/services/projects-with-sessions-fetch.service.js';
 import { deleteOrArchiveProject } from '@/modules/projects/services/project-delete.service.js';
 import { applyLegacyStarredProjectIds, toggleProjectStar } from '@/modules/projects/services/project-star.service.js';
 
@@ -36,6 +36,23 @@ function readOptionalNumericQueryValue(value: unknown): number | null {
   return Number.isNaN(parsedValue) ? null : parsedValue;
 }
 
+function parseNonNegativeIntQuery(value: unknown, name: string, fallback: number): number {
+  const rawValue = readQueryStringValue(value).trim();
+  if (!rawValue) {
+    return fallback;
+  }
+
+  const parsedValue = Number.parseInt(rawValue, 10);
+  if (Number.isNaN(parsedValue) || parsedValue < 0) {
+    throw new AppError(`${name} must be a non-negative integer`, {
+      code: 'INVALID_QUERY_PARAMETER',
+      statusCode: 400,
+    });
+  }
+
+  return parsedValue;
+}
+
 function resolveRouteErrorMessage(error: unknown): string {
   if (error instanceof AppError) {
     return error.message;
@@ -53,6 +70,17 @@ router.get(
   asyncHandler(async (_req, res) => {
     const projects = await getProjectsWithSessions();
     res.json(projects);
+  }),
+);
+
+router.get(
+  '/:projectId/sessions',
+  asyncHandler(async (req, res) => {
+    const projectId = typeof req.params.projectId === 'string' ? req.params.projectId : '';
+    const limit = parseNonNegativeIntQuery(req.query.limit, 'limit', 20);
+    const offset = parseNonNegativeIntQuery(req.query.offset, 'offset', 0);
+    const sessionsPage = await getProjectSessionsPage(projectId, { limit, offset });
+    res.json(sessionsPage);
   }),
 );
 

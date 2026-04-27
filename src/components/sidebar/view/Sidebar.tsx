@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+
 import { useDeviceSettings } from '../../../hooks/useDeviceSettings';
 import { useVersionCheck } from '../../../hooks/useVersionCheck';
 import { useUiPreferences } from '../../../hooks/useUiPreferences';
@@ -8,6 +9,7 @@ import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import type { Project, LLMProvider } from '../../../types/app';
 import type { MCPServerStatus, SidebarProps } from '../types/types';
+
 import SidebarCollapsed from './subcomponents/SidebarCollapsed';
 import SidebarContent from './subcomponents/SidebarContent';
 import SidebarModals from './subcomponents/SidebarModals';
@@ -26,6 +28,7 @@ function Sidebar({
   onSessionSelect,
   onNewSession,
   onSessionDelete,
+  onLoadMoreSessions,
   onProjectDelete,
   isLoading,
   loadingProgress,
@@ -75,6 +78,8 @@ function Sidebar({
     toggleStarProject,
     isProjectStarred,
     getProjectSessions,
+    loadingMoreProjects,
+    loadMoreSessionsForProject,
     startEditing,
     cancelEditing,
     saveProjectName,
@@ -106,6 +111,7 @@ function Sidebar({
     onProjectSelect,
     onSessionSelect,
     onSessionDelete,
+    onLoadMoreSessions,
     onProjectDelete,
     setCurrentProject,
     setSidebarVisible: (visible) => setPreference('sidebarVisible', visible),
@@ -148,6 +154,7 @@ function Sidebar({
     tasksEnabled,
     mcpServerStatus,
     getProjectSessions,
+    loadingMoreProjects,
     isProjectStarred,
     onEditingNameChange: setEditingName,
     onToggleProject: toggleProject,
@@ -161,6 +168,7 @@ function Sidebar({
     onDeleteProject: requestProjectDelete,
     onSessionSelect: handleSessionClick,
     onDeleteSession: showDeleteSessionConfirmation,
+    onLoadMoreSessions: loadMoreSessionsForProject,
     onNewSession,
     onEditingSessionNameChange: setEditingSessionName,
     onStartEditingSession: (sessionId, initialName) => {

@@ -5,6 +5,7 @@ import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { sessionSynchronizerService } from '@/modules/providers/index.js';
 import { WS_OPEN_STATE, connectedClients } from '@/modules/websocket/index.js';
 import type { RealtimeClientConnection } from '@/shared/types.js';
+import { AppError } from '@/shared/utils.js';
 
 type SessionSummary = {
   id: string;
@@ -14,6 +15,14 @@ type SessionSummary = {
 };
 
 type SessionsByProvider = Record<'claude' | 'cursor' | 'codex' | 'gemini', SessionSummary[]>;
+
+type SessionRepositoryRow = {
+  provider: string;
+  session_id: string;
+  custom_name?: string | null;
+  updated_at?: string | null;
+  created_at?: string | null;
+};
 
 export type ProjectListItem = {
   projectId: string;
@@ -40,7 +49,35 @@ type ProgressUpdate = {
 
 type GetProjectsWithSessionsOptions = {
   skipSynchronization?: boolean;
+  sessionsLimit?: number;
+  sessionsOffset?: number;
 };
+
+type SessionPaginationOptions = {
+  limit?: number;
+  offset?: number;
+};
+
+type ProjectSessionsPageResult = {
+  sessionsByProvider: SessionsByProvider;
+  total: number;
+  hasMore: boolean;
+};
+
+export type ProjectSessionsPageApiView = {
+  projectId: string;
+  sessions: SessionSummary[];
+  cursorSessions: SessionSummary[];
+  codexSessions: SessionSummary[];
+  geminiSessions: SessionSummary[];
+  sessionMeta: {
+    hasMore: boolean;
+    total: number;
+  };
+};
+
+const DEFAULT_PROJECT_SESSIONS_PAGE_SIZE = 20;
+const MAX_PROJECT_SESSIONS_PAGE_SIZE = 200;
 
 /**
  * Generate better display name from path.
@@ -73,17 +110,26 @@ export async function generateDisplayName(projectName: string, actualProjectDir:
   return projectPath;
 }
 
-/**
- * Group the `sessions` table rows for a project by provider.
- */
-function buildSessionsByProviderFromDb(projectPath: string): SessionsByProvider {
-  const rows = sessionsDb.getSessionsByProjectPath(projectPath) as Array<{
-    provider: string;
-    session_id: string;
-    custom_name?: string | null;
-    updated_at?: string | null;
-    created_at?: string | null;
-  }>;
+function normalizeSessionPagination(options: SessionPaginationOptions = {}): { limit: number; offset: number } {
+  const rawLimit = Number.isFinite(options.limit) ? Math.floor(Number(options.limit)) : DEFAULT_PROJECT_SESSIONS_PAGE_SIZE;
+  const rawOffset = Number.isFinite(options.offset) ? Math.floor(Number(options.offset)) : 0;
+
+  return {
+    limit: Math.min(Math.max(1, rawLimit), MAX_PROJECT_SESSIONS_PAGE_SIZE),
+    offset: Math.max(0, rawOffset),
+  };
+}
+
+function mapSessionRowToSummary(row: SessionRepositoryRow): SessionSummary {
+  return {
+    id: row.session_id,
+    summary: row.custom_name || '',
+    messageCount: 0,
+    lastActivity: row.updated_at ?? row.created_at ?? new Date().toISOString(),
+  };
+}
+
+function bucketSessionRowsByProvider(rows: SessionRepositoryRow[]): SessionsByProvider {
   const byProvider: SessionsByProvider = {
     claude: [],
     cursor: [],
@@ -98,19 +144,32 @@ function buildSessionsByProviderFromDb(projectPath: string): SessionsByProvider 
       continue;
     }
 
-    bucket.push({
-      id: row.session_id,
-      summary: row.custom_name || '',
-      messageCount: 0,
-      lastActivity: row.updated_at ?? row.created_at ?? new Date().toISOString(),
-    });
-  }
-
-  for (const provider of Object.keys(byProvider) as Array<keyof SessionsByProvider>) {
-    byProvider[provider].sort((a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime());
+    bucket.push(mapSessionRowToSummary(row));
   }
 
   return byProvider;
+}
+
+/**
+ * Reads one paginated project session slice from the DB and groups rows by provider.
+ */
+function readProjectSessionsPageByPath(
+  projectPath: string,
+  options: SessionPaginationOptions = {},
+): ProjectSessionsPageResult {
+  const pagination = normalizeSessionPagination(options);
+  const rows = sessionsDb.getSessionsByProjectPathPage(
+    projectPath,
+    pagination.limit,
+    pagination.offset,
+  ) as SessionRepositoryRow[];
+  const total = sessionsDb.countSessionsByProjectPath(projectPath);
+
+  return {
+    sessionsByProvider: bucketSessionRowsByProvider(rows),
+    total,
+    hasMore: pagination.offset + rows.length < total,
+  };
 }
 
 // Broadcast progress to all connected WebSocket clients
@@ -165,9 +224,10 @@ export async function getProjectsWithSessions(
         ? row.custom_project_name
         : await generateDisplayName(path.basename(projectPath) || projectPath, projectPath);
 
-    const sessionsByProvider = buildSessionsByProviderFromDb(projectPath);
-    const claudeSessionsAll = sessionsByProvider.claude;
-    const claudeSessions = claudeSessionsAll.slice(0, 5);
+    const sessionsPage = readProjectSessionsPageByPath(projectPath, {
+      limit: options.sessionsLimit,
+      offset: options.sessionsOffset,
+    });
 
     projects.push({
       projectId,
@@ -175,13 +235,13 @@ export async function getProjectsWithSessions(
       displayName,
       fullPath: projectPath,
       isStarred: Boolean(row.isStarred),
-      sessions: claudeSessions,
-      cursorSessions: sessionsByProvider.cursor,
-      codexSessions: sessionsByProvider.codex,
-      geminiSessions: sessionsByProvider.gemini,
+      sessions: sessionsPage.sessionsByProvider.claude,
+      cursorSessions: sessionsPage.sessionsByProvider.cursor,
+      codexSessions: sessionsPage.sessionsByProvider.codex,
+      geminiSessions: sessionsPage.sessionsByProvider.gemini,
       sessionMeta: {
-        hasMore: false,
-        total: claudeSessionsAll.length,
+        hasMore: sessionsPage.hasMore,
+        total: sessionsPage.total,
       },
     });
   }
@@ -193,4 +253,33 @@ export async function getProjectsWithSessions(
   });
 
   return projects;
+}
+
+/**
+ * Loads one paginated session slice for a specific project id.
+ */
+export async function getProjectSessionsPage(
+  projectId: string,
+  options: SessionPaginationOptions = {},
+): Promise<ProjectSessionsPageApiView> {
+  const projectRow = projectsDb.getProjectById(projectId);
+  if (!projectRow) {
+    throw new AppError(`Project "${projectId}" was not found.`, {
+      code: 'PROJECT_NOT_FOUND',
+      statusCode: 404,
+    });
+  }
+
+  const sessionsPage = readProjectSessionsPageByPath(projectRow.project_path, options);
+  return {
+    projectId: projectRow.project_id,
+    sessions: sessionsPage.sessionsByProvider.claude,
+    cursorSessions: sessionsPage.sessionsByProvider.cursor,
+    codexSessions: sessionsPage.sessionsByProvider.codex,
+    geminiSessions: sessionsPage.sessionsByProvider.gemini,
+    sessionMeta: {
+      hasMore: sessionsPage.hasMore,
+      total: sessionsPage.total,
+    },
+  };
 }

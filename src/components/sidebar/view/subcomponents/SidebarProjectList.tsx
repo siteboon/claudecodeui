@@ -1,7 +1,9 @@
 import { useEffect } from 'react';
 import type { TFunction } from 'i18next';
+
 import type { LoadingProgress, Project, ProjectSession, LLMProvider } from '../../../../types/app';
 import type { MCPServerStatus, SessionWithProvider } from '../../types/types';
+
 import SidebarProjectItem from './SidebarProjectItem';
 import SidebarProjectsState from './SidebarProjectsState';
 
@@ -23,6 +25,8 @@ export type SidebarProjectListProps = {
   tasksEnabled: boolean;
   mcpServerStatus: MCPServerStatus;
   getProjectSessions: (project: Project) => SessionWithProvider[];
+  onLoadMoreSessions: (projectId: string) => void;
+  loadingMoreProjects: Set<string>;
   isProjectStarred: (projectName: string) => boolean;
   onEditingNameChange: (value: string) => void;
   onToggleProject: (projectName: string) => void;
@@ -65,6 +69,8 @@ export default function SidebarProjectList({
   tasksEnabled,
   mcpServerStatus,
   getProjectSessions,
+  onLoadMoreSessions,
+  loadingMoreProjects,
   isProjectStarred,
   onEditingNameChange,
   onToggleProject,
@@ -123,6 +129,7 @@ export default function SidebarProjectList({
               editingName={editingName}
               sessions={getProjectSessions(project)}
               initialSessionsLoaded={initialSessionsLoaded.has(project.projectId)}
+              isLoadingMoreSessions={loadingMoreProjects.has(project.projectId)}
               currentTime={currentTime}
               editingSession={editingSession}
               editingSessionName={editingSessionName}
@@ -138,6 +145,7 @@ export default function SidebarProjectList({
               onDeleteProject={onDeleteProject}
               onSessionSelect={onSessionSelect}
               onDeleteSession={onDeleteSession}
+              onLoadMoreSessions={onLoadMoreSessions}
               onNewSession={onNewSession}
               onEditingSessionNameChange={onEditingSessionNameChange}
               onStartEditingSession={onStartEditingSession}

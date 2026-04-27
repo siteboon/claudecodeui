@@ -70,6 +70,7 @@ type UseSidebarControllerArgs = {
   onProjectSelect: (project: Project) => void;
   onSessionSelect: (session: ProjectSession) => void;
   onSessionDelete?: (sessionId: string) => void;
+  onLoadMoreSessions?: (projectId: string) => Promise<void> | void;
   // `projectId` is the DB-assigned identifier; callbacks use that post-migration.
   onProjectDelete?: (projectId: string) => void;
   setCurrentProject: (project: Project) => void;
@@ -88,6 +89,7 @@ export function useSidebarController({
   onProjectSelect,
   onSessionSelect,
   onSessionDelete,
+  onLoadMoreSessions,
   onProjectDelete,
   setCurrentProject,
   setSidebarVisible,
@@ -113,6 +115,7 @@ export function useSidebarController({
   const [isSearching, setIsSearching] = useState(false);
   const [searchProgress, setSearchProgress] = useState<SearchProgress | null>(null);
   const [optimisticStarByProjectId, setOptimisticStarByProjectId] = useState<Map<string, boolean>>(new Map());
+  const [loadingMoreProjects, setLoadingMoreProjects] = useState<Set<string>>(new Set());
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchSeqRef = useRef(0);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -436,6 +439,31 @@ export function useSidebarController({
 
   const getProjectSessions = useCallback((project: Project) => getAllSessions(project), []);
 
+  const loadMoreSessionsForProject = useCallback(async (projectId: string) => {
+    if (!onLoadMoreSessions || loadingMoreProjects.has(projectId)) {
+      return;
+    }
+
+    setLoadingMoreProjects((previous) => {
+      const next = new Set(previous);
+      next.add(projectId);
+      return next;
+    });
+
+    try {
+      await onLoadMoreSessions(projectId);
+    } catch (error) {
+      console.error('[Sidebar] Failed to load more sessions:', error);
+      alert(t('messages.refreshError'));
+    } finally {
+      setLoadingMoreProjects((previous) => {
+        const next = new Set(previous);
+        next.delete(projectId);
+        return next;
+      });
+    }
+  }, [loadingMoreProjects, onLoadMoreSessions, t]);
+
   const projectsWithResolvedStarState = useMemo(() => {
     if (optimisticStarByProjectId.size === 0) {
       return projects;
@@ -661,6 +689,7 @@ export function useSidebarController({
     editingSessionName,
     searchFilter,
     deletingProjects,
+    loadingMoreProjects,
     deleteConfirmation,
     sessionDeleteConfirmation,
     showVersionModal,
@@ -670,6 +699,7 @@ export function useSidebarController({
     toggleStarProject,
     isProjectStarred,
     getProjectSessions,
+    loadMoreSessionsForProject,
     startEditing,
     cancelEditing,
     saveProjectName,
