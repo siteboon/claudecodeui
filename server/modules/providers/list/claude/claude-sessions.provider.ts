@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
 
@@ -103,13 +102,10 @@ async function parseAgentTools(filePath: string): Promise<AnyRecord[]> {
 }
 
 async function getSessionMessages(
-  projectName: string,
   sessionId: string,
   limit: number | null,
   offset: number,
 ): Promise<ClaudeHistoryMessagesResult> {
-  const projectDir = path.join(os.homedir(), '.claude', 'projects', projectName);
-
   try {
     const jsonLPath = sessionsDb.getSessionById(sessionId)?.jsonl_path;
 
@@ -117,6 +113,7 @@ async function getSessionMessages(
       return { messages: [], total: 0, hasMore: false };
     }
 
+    const projectDir = path.dirname(jsonLPath);
     const files = await fsp.readdir(projectDir);
     const agentFiles = files.filter((file) => file.endsWith('.jsonl') && file.startsWith('agent-'));
 
@@ -413,14 +410,11 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     sessionId: string,
     options: FetchHistoryOptions = {},
   ): Promise<FetchHistoryResult> {
-    const { projectName, limit = null, offset = 0 } = options;
-    if (!projectName) {
-      return { messages: [], total: 0, hasMore: false, offset: 0, limit: null };
-    }
+    const { limit = null, offset = 0 } = options;
 
     let result: ClaudeHistoryResult;
     try {
-      result = await getSessionMessages(projectName, sessionId, limit, offset);
+      result = await getSessionMessages(sessionId, limit, offset);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`[ClaudeProvider] Failed to load session ${sessionId}:`, message);

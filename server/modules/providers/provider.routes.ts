@@ -49,6 +49,29 @@ const readOptionalQueryString = (value: unknown): string | undefined => {
   return normalized.length > 0 ? normalized : undefined;
 };
 
+const parseOptionalBooleanQuery = (value: unknown, name: string): boolean | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const normalized = readOptionalQueryString(value);
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (normalized === 'true') {
+    return true;
+  }
+  if (normalized === 'false') {
+    return false;
+  }
+
+  throw new AppError(`${name} must be "true" or "false".`, {
+    code: 'INVALID_QUERY_PARAMETER',
+    statusCode: 400,
+  });
+};
+
 const parseMcpScope = (value: unknown): McpScope | undefined => {
   if (value === undefined) {
     return undefined;
@@ -260,7 +283,8 @@ router.delete(
   '/sessions/:sessionId',
   asyncHandler(async (req: Request, res: Response) => {
     const sessionId = parseSessionId(req.params.sessionId);
-    const result = await sessionsService.deleteSessionById(sessionId);
+    const deletedFromDisk = parseOptionalBooleanQuery(req.query.deletedFromDisk, 'deletedFromDisk') ?? false;
+    const result = await sessionsService.deleteSessionById(sessionId, deletedFromDisk);
     res.json(createApiSuccessResponse(result));
   }),
 );
@@ -272,6 +296,38 @@ router.put(
     const summary = parseSessionRenameSummary(req.body);
     const result = sessionsService.renameSessionById(sessionId, summary);
     res.json(createApiSuccessResponse(result));
+  }),
+);
+
+router.get(
+  '/sessions/:sessionId/messages',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const limitRaw = readOptionalQueryString(req.query.limit);
+    const offsetRaw = readOptionalQueryString(req.query.offset);
+
+    const limit = limitRaw === undefined ? null : Number.parseInt(limitRaw, 10);
+    const offset = offsetRaw === undefined ? 0 : Number.parseInt(offsetRaw, 10);
+
+    if (limitRaw !== undefined && Number.isNaN(limit)) {
+      throw new AppError('limit must be a valid integer.', {
+        code: 'INVALID_QUERY_PARAMETER',
+        statusCode: 400,
+      });
+    }
+
+    if (offsetRaw !== undefined && Number.isNaN(offset)) {
+      throw new AppError('offset must be a valid integer.', {
+        code: 'INVALID_QUERY_PARAMETER',
+        statusCode: 400,
+      });
+    }
+
+    const result = await sessionsService.fetchHistory(sessionId, {
+      limit,
+      offset,
+    });
+    res.json(result);
   }),
 );
 

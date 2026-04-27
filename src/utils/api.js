@@ -56,20 +56,16 @@ export const api = {
   projects: () => authenticatedFetch('/api/projects'),
   projectTaskmaster: (projectId) =>
     authenticatedFetch(`/api/projects/${encodeURIComponent(projectId)}/taskmaster`),
-  // Unified endpoint — all providers through one URL. The legacy `projectName`
-  // query parameter is preserved on the wire (routes/messages.js still reads
-  // it) but it now carries a projectId value supplied by the caller.
-  unifiedSessionMessages: (sessionId, provider = 'claude', { projectId = '', projectPath = '', limit = null, offset = 0 } = {}) => {
+  // Unified endpoint for persisted session messages.
+  // Provider/project metadata are resolved by the backend from sessionId.
+  unifiedSessionMessages: (sessionId, _provider = 'claude', { limit = null, offset = 0 } = {}) => {
     const params = new URLSearchParams();
-    params.append('provider', provider);
-    if (projectId) params.append('projectId', projectId);
-    if (projectPath) params.append('projectPath', projectPath);
     if (limit !== null) {
       params.append('limit', String(limit));
       params.append('offset', String(offset));
     }
     const queryString = params.toString();
-    return authenticatedFetch(`/api/sessions/${encodeURIComponent(sessionId)}/messages${queryString ? `?${queryString}` : ''}`);
+    return authenticatedFetch(`/api/providers/sessions/${encodeURIComponent(sessionId)}/messages${queryString ? `?${queryString}` : ''}`);
   },
   renameProject: (projectId, displayName) =>
     authenticatedFetch(`/api/projects/${projectId}/rename`, {

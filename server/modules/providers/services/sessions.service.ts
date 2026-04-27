@@ -10,7 +10,6 @@ import type {
 } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
 
-
 /**
  * Removes one file if it exists.
  */
@@ -54,20 +53,54 @@ export const sessionsService = {
   },
 
   /**
-   * Fetches normalized persisted session history for one provider/session pair.
+   * Fetches persisted history by session id.
+   *
+   * Provider and provider-specific lookup hints are resolved from the indexed
+   * session metadata in the database.
    */
   fetchHistory(
-    providerName: string,
     sessionId: string,
-    options?: FetchHistoryOptions,
+    options: Pick<FetchHistoryOptions, 'limit' | 'offset'> = {},
   ): Promise<FetchHistoryResult> {
-    return providerRegistry.resolveProvider(providerName).sessions.fetchHistory(sessionId, options);
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session) {
+      throw new AppError(`Session "${sessionId}" was not found.`, {
+        code: 'SESSION_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    const provider = session.provider as LLMProvider;
+    return providerRegistry.resolveProvider(provider).sessions.fetchHistory(sessionId, {
+      limit: options.limit ?? null,
+      offset: options.offset ?? 0,
+      projectPath: session.project_path ?? '',
+    });
   },
 
   /**
    * Deletes one persisted session row by id.
+   *
+   * When `deletedFromDisk` is true and a session `jsonl_path` exists, the path
+   * is deleted from disk before the DB row is removed.
    */
-  deleteSessionById(sessionId: string): { sessionId: string } {
+  async deleteSessionById(
+    sessionId: string,
+    deletedFromDisk = false,
+  ): Promise<{ sessionId: string; deletedFromDisk: boolean }> {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session) {
+      throw new AppError(`Session "${sessionId}" was not found.`, {
+        code: 'SESSION_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    let removedFromDisk = false;
+    if (deletedFromDisk && session.jsonl_path) {
+      removedFromDisk = await removeFileIfExists(session.jsonl_path);
+    }
+
     const deleted = sessionsDb.deleteSessionById(sessionId);
     if (!deleted) {
       throw new AppError(`Session "${sessionId}" was not found.`, {
@@ -76,7 +109,7 @@ export const sessionsService = {
       });
     }
 
-    return { sessionId };
+    return { sessionId, deletedFromDisk: removedFromDisk };
   },
 
   /**

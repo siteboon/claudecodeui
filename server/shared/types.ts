@@ -133,11 +133,10 @@ export type NormalizedMessage = {
 /**
  * Shared options used to fetch historical provider messages.
  *
- * Consumers should pass provider-specific lookup hints (`projectName`, `projectPath`)
- * only when the selected provider requires them.
+ * Consumers should pass provider-specific lookup hints (`projectPath`) only
+ * when the selected provider requires them.
  */
 export type FetchHistoryOptions = {
-  projectName?: string;
   projectPath?: string;
   limit?: number | null;
   offset?: number;

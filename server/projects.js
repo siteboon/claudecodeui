@@ -16,7 +16,7 @@
  * The filesystem-aware helpers kept in this module serve the remaining
  * features that still need on-disk data:
  *   - Session message reads for each provider (Claude/Codex/Gemini) for
- *     `GET /api/sessions/:sessionId/messages`.
+ *     `GET /api/providers/sessions/:sessionId/messages`.
  *   - Conversation search (`searchConversations`) which scans JSONL history.
  *   - (Project row removal / JSONL cleanup is handled in
  *     `modules/projects/services/project-delete.service.ts`.)
