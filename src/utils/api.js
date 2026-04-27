@@ -1,4 +1,5 @@
 import { IS_PLATFORM } from "../constants/config";
+import { AUTH_TOKEN_REFRESHED_EVENT, AUTH_TOKEN_STORAGE_KEY } from "../components/auth/constants";
 import { BASE_PATH, withBasePath } from "./basePath.js";
 
 const normalizeAppUrl = (url) => {
@@ -15,7 +16,7 @@ const normalizeAppUrl = (url) => {
 
 // Utility function for authenticated API calls
 export const authenticatedFetch = (url, options = {}) => {
-  const token = localStorage.getItem('auth-token');
+  const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
 
   const defaultHeaders = {};
 
@@ -36,8 +37,16 @@ export const authenticatedFetch = (url, options = {}) => {
     },
   }).then((response) => {
     const refreshedToken = response.headers.get('X-Refreshed-Token');
-    if (refreshedToken) {
-      localStorage.setItem('auth-token', refreshedToken);
+    if (refreshedToken && refreshedToken !== token) {
+      localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, refreshedToken);
+      // Notify AuthContext so React state syncs with localStorage. Without
+      // this, the WS context's [token] effect never re-fires, so on the next
+      // disconnect it reconnects with the previous (soon-to-expire) token.
+      try {
+        window.dispatchEvent(
+          new CustomEvent(AUTH_TOKEN_REFRESHED_EVENT, { detail: { token: refreshedToken } }),
+        );
+      } catch { /* ignore — event dispatch is best-effort */ }
     }
     return response;
   });

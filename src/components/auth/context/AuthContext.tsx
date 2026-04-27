@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { IS_PLATFORM } from '../../../constants/config';
 import { api } from '../../../utils/api';
-import { AUTH_ERROR_MESSAGES, AUTH_TOKEN_STORAGE_KEY } from '../constants';
+import { AUTH_ERROR_MESSAGES, AUTH_TOKEN_REFRESHED_EVENT, AUTH_TOKEN_STORAGE_KEY } from '../constants';
 import type {
   AuthContextValue,
   AuthProviderProps,
@@ -127,6 +127,27 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     void checkAuthStatus();
   }, [checkAuthStatus, checkOnboardingStatus]);
+
+  // Sync token state with X-Refreshed-Token writes from authenticatedFetch.
+  // The fetch helper persists the new token to localStorage, but React state
+  // here doesn't know about that. WebSocketContext listens to `token` to
+  // reconnect — without this listener, a refreshed token never reaches the
+  // WS layer until a full page reload, which means the next reconnect uses
+  // the about-to-expire token.
+  useEffect(() => {
+    if (IS_PLATFORM) return;
+    const onRefreshed = (event: Event) => {
+      const detail = (event as CustomEvent<{ token?: string }>).detail;
+      const next = detail?.token;
+      if (typeof next === 'string' && next.length > 0) {
+        setToken(next);
+      }
+    };
+    window.addEventListener(AUTH_TOKEN_REFRESHED_EVENT, onRefreshed);
+    return () => {
+      window.removeEventListener(AUTH_TOKEN_REFRESHED_EVENT, onRefreshed);
+    };
+  }, []);
 
   const login = useCallback<AuthContextValue['login']>(
     async (username, password) => {
