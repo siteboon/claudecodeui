@@ -39,7 +39,6 @@ const buildWebSocketUrl = (token: string | null) => {
 
 const useWebSocketProviderState = (): WebSocketContextType => {
   const wsRef = useRef<WebSocket | null>(null);
-  const unmountedRef = useRef(false); // Track if component is unmounted
   const hasConnectedRef = useRef(false); // Track if we've ever connected (to detect reconnects)
   // Messages whose callers tried to send while the socket was closed (reconnecting,
   // not yet opened, etc.). Flushed in onopen so callers never silently lose a send.
@@ -60,82 +59,91 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   const { token } = useAuth();
 
   useEffect(() => {
+    // Per-effect-run flag. When this effect's cleanup runs (token change or
+    // unmount), we set cancelled=true on the OLD closure so any in-flight
+    // close/reconnect path bails instead of opening a parallel socket with a
+    // stale token. The next effect run gets its own fresh `cancelled=false`.
+    let cancelled = false;
+
+    const connect = () => {
+      if (cancelled) return;
+      try {
+        const wsUrl = buildWebSocketUrl(token);
+        if (!wsUrl) return console.warn('No authentication token found for WebSocket connection');
+
+        const websocket = new WebSocket(wsUrl);
+
+        websocket.onopen = () => {
+          if (cancelled) {
+            try { websocket.close(); } catch { /* ignore */ }
+            return;
+          }
+          wsRef.current = websocket;
+          setIsConnected(true);
+          // Flush messages that callers tried to send while the socket was closed.
+          // Previously these were dropped with a console.warn, which silently lost
+          // user messages sent during the 3s reconnect window.
+          if (pendingSendQueueRef.current.length > 0) {
+            const queued = pendingSendQueueRef.current;
+            pendingSendQueueRef.current = [];
+            setPendingSendCount(0);
+            setLastPendingSendText(null);
+            for (const payload of queued) {
+              try {
+                websocket.send(payload);
+              } catch (err) {
+                console.error('Failed to flush queued WebSocket message:', err);
+              }
+            }
+          }
+          if (hasConnectedRef.current) {
+            setLatestMessage({ type: 'websocket-reconnected', timestamp: Date.now() });
+          }
+          hasConnectedRef.current = true;
+        };
+
+        websocket.onmessage = (event) => {
+          if (cancelled) return;
+          try {
+            const data = JSON.parse(event.data);
+            setLatestMessage(data);
+          } catch (error) {
+            console.error('Error parsing WebSocket message:', error);
+          }
+        };
+
+        websocket.onclose = () => {
+          if (wsRef.current === websocket) {
+            wsRef.current = null;
+            setIsConnected(false);
+          }
+          if (cancelled) return;
+          reconnectTimeoutRef.current = setTimeout(() => {
+            if (cancelled) return;
+            connect();
+          }, 3000);
+        };
+
+        websocket.onerror = (error) => {
+          console.error('WebSocket error:', error);
+        };
+      } catch (error) {
+        console.error('Error creating WebSocket connection:', error);
+      }
+    };
+
     connect();
-    
+
     return () => {
-      unmountedRef.current = true;
+      cancelled = true;
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
       }
       if (wsRef.current) {
         wsRef.current.close();
       }
     };
-  }, [token]); // everytime token changes, we reconnect
-
-  const connect = useCallback(() => {
-    if (unmountedRef.current) return; // Prevent connection if unmounted
-    try {
-      // Construct WebSocket URL
-      const wsUrl = buildWebSocketUrl(token);
-
-      if (!wsUrl) return console.warn('No authentication token found for WebSocket connection');
-      
-      const websocket = new WebSocket(wsUrl);
-
-      websocket.onopen = () => {
-        wsRef.current = websocket;
-        setIsConnected(true);
-        // Flush messages that callers tried to send while the socket was closed.
-        // Previously these were dropped with a console.warn, which silently lost
-        // user messages sent during the 3s reconnect window.
-        if (pendingSendQueueRef.current.length > 0) {
-          const queued = pendingSendQueueRef.current;
-          pendingSendQueueRef.current = [];
-          setPendingSendCount(0);
-          setLastPendingSendText(null);
-          for (const payload of queued) {
-            try {
-              websocket.send(payload);
-            } catch (err) {
-              console.error('Failed to flush queued WebSocket message:', err);
-            }
-          }
-        }
-        if (hasConnectedRef.current) {
-          // This is a reconnect — signal so components can catch up on missed messages
-          setLatestMessage({ type: 'websocket-reconnected', timestamp: Date.now() });
-        }
-        hasConnectedRef.current = true;
-      };
-
-      websocket.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          setLatestMessage(data);
-        } catch (error) {
-          console.error('Error parsing WebSocket message:', error);
-        }
-      };
-
-      websocket.onclose = () => {
-        setIsConnected(false);
-        wsRef.current = null;
-        
-        // Attempt to reconnect after 3 seconds
-        reconnectTimeoutRef.current = setTimeout(() => {
-          if (unmountedRef.current) return; // Prevent reconnection if unmounted
-          connect();
-        }, 3000);
-      };
-
-      websocket.onerror = (error) => {
-        console.error('WebSocket error:', error);
-      };
-
-    } catch (error) {
-      console.error('Error creating WebSocket connection:', error);
-    }
   }, [token]); // everytime token changes, we reconnect
 
   const sendMessage = useCallback((message: any) => {
