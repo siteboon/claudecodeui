@@ -100,7 +100,7 @@ export const api = {
     const token = localStorage.getItem('auth-token');
     const params = new URLSearchParams({ q: query, limit: String(limit) });
     if (token) params.set('token', token);
-    return `/api/search/conversations?${params.toString()}`;
+    return `/api/providers/search/sessions?${params.toString()}`;
   },
   createProject: (projectData) =>
     authenticatedFetch('/api/projects/create-project', {

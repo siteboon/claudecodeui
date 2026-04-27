@@ -40,7 +40,7 @@ type ConversationSession = {
 };
 
 type ConversationProjectResult = {
-  // Emitted by server/projects.js#searchConversations so the sidebar can map a
+  // Emitted by the provider search service so the sidebar can map a
   // match back to the Project in its current state by projectId.
   projectId: string | null;
   projectName: string;
