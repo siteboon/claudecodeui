@@ -42,7 +42,9 @@
     "prepublishOnly": "npm run build",
     "postinstall": "node scripts/fix-node-pty.js",
     "prepare": "husky",
-    "update:platform": "./update-platform.sh"
+    "update:platform": "./update-platform.sh",
+    "dev:test": "SERVER_PORT=3099 VITE_PORT=5199 DATABASE_PATH=./.e2e/test.db BASE_PATH= concurrently --kill-others \"npm run server:dev\" \"npm run client\"",
+    "e2e:smoke": "playwright test e2e/smoke"
   },
   "keywords": [
     "claude code",
@@ -125,6 +127,7 @@
     "@commitlint/cli": "^20.5.0",
     "@commitlint/config-conventional": "^20.5.0",
     "@eslint/js": "^9.39.3",
+    "@playwright/test": "^1.59.1",
     "@release-it/conventional-changelog": "^10.0.5",
     "@types/better-sqlite3": "^7.6.13",
     "@types/cross-spawn": "^6.0.6",
