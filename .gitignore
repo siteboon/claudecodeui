@@ -155,3 +155,8 @@ tasks/
 # auth files
 AUTH.md
 AUTH.*.md
+
+# e2e test artifacts (throwaway DB, Playwright reports/traces)
+.e2e/
+playwright-report/
+test-results/
