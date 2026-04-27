@@ -58,6 +58,10 @@ test('input is preserved after WS disconnect', async ({ page }) => {
 
   const prompt = 'hello from disconnected state';
 
+  // Snapshot bubble count before we do anything so the delta is spec-local
+  // (prevents false-pass from bubbles left by earlier specs in the same run).
+  const bubblesBefore = await page.locator('.chat-message.user').count();
+
   // Type the prompt into the composer
   await textarea.fill(prompt);
 
@@ -89,13 +93,15 @@ test('input is preserved after WS disconnect', async ({ page }) => {
   // user-visible state instead: if textarea was cleared, a user message
   // bubble should appear in the chat pane (even if assistant reply hasn't
   // come yet).
+  // Use delta (bubblesAfter - bubblesBefore) to avoid false-pass from prior
+  // spec leakage.
   const textareaValueAfter = await textarea.inputValue();
-  const userBubbleCount = await page.locator('.chat-message.user').count();
+  const bubblesAfter = await page.locator('.chat-message.user').count();
 
-  const inputPreservedOrQueued = textareaValueAfter === prompt || userBubbleCount > 0;
+  const inputPreservedOrQueued = textareaValueAfter === prompt || (bubblesAfter - bubblesBefore) >= 1;
 
   expect(
     inputPreservedOrQueued,
-    'Input was silently dropped: textarea empty AND no user bubble in chat pane',
+    'Input was silently dropped: textarea empty AND no new user bubble appeared in chat pane',
   ).toBe(true);
 });
