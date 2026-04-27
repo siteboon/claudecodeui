@@ -2,26 +2,29 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { authenticatedFetch } from '../../utils/api';
 import type { Project } from '../../types/app';
 
+type Dep = {
+  number: number;
+  closed: boolean;
+};
+
 type Ticket = {
-  id: string;
+  number: number;
   title: string;
-  kind: string | null;
-  status: string;
-  deps: string[];
-  env: string | null;
-  created: string | null;
-  updated: string | null;
-  prUrl: string | null;
-  worktreeBranch: string | null;
+  kind: 'fix' | 'feature' | 'test';
+  status: 'backlog' | 'ready' | 'in-progress' | 'blocked' | 'done';
+  deps: Dep[];
   request: string;
-  log: string[];
+  url: string;
+  state: 'open' | 'closed';
+  createdAt: string | null;
+  updatedAt: string | null;
 };
 
 type BoardPanelProps = {
   selectedProject: Project | null | undefined;
 };
 
-const COLUMNS: { key: string; label: string }[] = [
+const COLUMNS: { key: Ticket['status']; label: string }[] = [
   { key: 'backlog', label: 'Backlog' },
   { key: 'ready', label: 'Ready' },
   { key: 'in-progress', label: 'In Progress' },
@@ -47,8 +50,14 @@ export default function BoardPanel({ selectedProject }: BoardPanelProps) {
         { signal },
       );
       if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || `HTTP ${response.status}`);
+        let detail = `HTTP ${response.status}`;
+        try {
+          const json = await response.json();
+          detail = json.detail || json.error || detail;
+        } catch {
+          // body wasn't JSON; keep the status-line fallback
+        }
+        throw new Error(detail);
       }
       const data = await response.json();
       setTickets(Array.isArray(data.tickets) ? data.tickets : []);
@@ -73,12 +82,16 @@ export default function BoardPanel({ selectedProject }: BoardPanelProps) {
   }, [projectName, refresh]);
 
   const grouped = useMemo(() => {
-    const map: Record<string, Ticket[]> = {};
-    for (const col of COLUMNS) map[col.key] = [];
+    const map: Record<Ticket['status'], Ticket[]> = {
+      backlog: [],
+      ready: [],
+      'in-progress': [],
+      blocked: [],
+      done: [],
+    };
     if (!tickets) return map;
     for (const t of tickets) {
-      const bucket = map[t.status] ?? (map[t.status] = []);
-      bucket.push(t);
+      (map[t.status] ?? map.backlog).push(t);
     }
     return map;
   }, [tickets]);
@@ -96,7 +109,7 @@ export default function BoardPanel({ selectedProject }: BoardPanelProps) {
       <div className="flex items-center justify-between border-b border-border px-4 py-2">
         <h2 className="text-sm font-medium text-foreground">Kanban</h2>
         <div className="text-xs text-muted-foreground">
-          {tickets ? `${tickets.length} tickets` : 'Loading…'}
+          {tickets ? `${tickets.length} issues` : 'Loading…'}
         </div>
       </div>
 
@@ -124,7 +137,7 @@ export default function BoardPanel({ selectedProject }: BoardPanelProps) {
                 {items.length === 0 ? (
                   <div className="px-1 py-2 text-xs text-muted-foreground/70">—</div>
                 ) : (
-                  items.map((t) => <TicketCard key={t.id} ticket={t} />)
+                  items.map((t) => <TicketCard key={t.number} ticket={t} />)
                 )}
               </div>
             </div>
@@ -136,32 +149,35 @@ export default function BoardPanel({ selectedProject }: BoardPanelProps) {
 }
 
 function TicketCard({ ticket }: { ticket: Ticket }) {
+  const openDeps = ticket.deps.filter((d) => !d.closed);
   return (
-    <div className="rounded border border-border bg-card p-2 text-xs shadow-sm">
+    <a
+      href={ticket.url}
+      target="_blank"
+      rel="noreferrer"
+      className="block rounded border border-border bg-card p-2 text-xs shadow-sm transition-colors hover:border-primary/60"
+    >
       <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-[10px] text-muted-foreground">{ticket.id}</span>
-        {ticket.kind && (
-          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase text-muted-foreground">
-            {ticket.kind}
-          </span>
-        )}
+        <span className="font-mono text-[10px] text-muted-foreground">#{ticket.number}</span>
+        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase text-muted-foreground">
+          {ticket.kind}
+        </span>
       </div>
       <div className="mt-1 text-sm text-foreground">{ticket.title || ticket.request.slice(0, 80)}</div>
       {ticket.deps.length > 0 && (
         <div className="mt-1 text-[10px] text-muted-foreground">
-          deps: {ticket.deps.join(', ')}
+          deps:{' '}
+          {ticket.deps.map((d, i) => (
+            <span key={d.number} className={d.closed ? 'line-through text-muted-foreground/60' : ''}>
+              #{d.number}
+              {i < ticket.deps.length - 1 ? ', ' : ''}
+            </span>
+          ))}
+          {openDeps.length > 0 && (
+            <span className="ml-1 text-muted-foreground/60">({openDeps.length} open)</span>
+          )}
         </div>
       )}
-      {ticket.prUrl && (
-        <a
-          href={ticket.prUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-1 block truncate text-[10px] text-primary hover:underline"
-        >
-          {ticket.prUrl}
-        </a>
-      )}
-    </div>
+    </a>
   );
 }
