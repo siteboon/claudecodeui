@@ -119,6 +119,7 @@ interface ChatComposerProps {
   sendByCtrlEnter?: boolean;
   queuedMessage?: string | null;
   onCancelQueue?: () => void;
+  onCompact?: () => void;
 }
 
 export default function ChatComposer({
@@ -186,6 +187,7 @@ export default function ChatComposer({
   sendByCtrlEnter,
   queuedMessage,
   onCancelQueue,
+  onCompact,
 }: ChatComposerProps) {
   const { t } = useTranslation('chat');
   const textareaRect = textareaRef.current?.getBoundingClientRect();
@@ -543,6 +545,8 @@ export default function ChatComposer({
                   ? getClaudeContextWindow(claudeModel)
                   : parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 1_000_000)
               }
+              onClick={provider === 'claude' && onCompact ? onCompact : undefined}
+              clickTitle={provider === 'claude' ? 'Click to /compact' : undefined}
             />
             <div
               className={`hidden text-[10px] text-muted-foreground/40 transition-opacity duration-200 lg:block ${

@@ -1,6 +1,8 @@
 type TokenUsagePieProps = {
   used: number;
   total: number;
+  onClick?: () => void;
+  clickTitle?: string;
 };
 
 function formatTokens(n: number): string {
@@ -9,7 +11,7 @@ function formatTokens(n: number): string {
   return `${n}`;
 }
 
-export default function TokenUsagePie({ used, total }: TokenUsagePieProps) {
+export default function TokenUsagePie({ used, total, onClick, clickTitle }: TokenUsagePieProps) {
   if (used == null || total == null || total <= 0) return null;
 
   const percentage = Math.min(100, (used / total) * 100);
@@ -21,11 +23,15 @@ export default function TokenUsagePie({ used, total }: TokenUsagePieProps) {
   const strokeColor =
     percentage < 50 ? '#3b82f6' : percentage < 75 ? '#f59e0b' : '#ef4444';
 
-  return (
-    <div
-      className="flex items-center gap-1.5 text-[10px] text-muted-foreground"
-      title={`${used.toLocaleString()} / ${total.toLocaleString()} tokens`}
-    >
+  const baseTitle = `${used.toLocaleString()} / ${total.toLocaleString()} tokens`;
+  const title = onClick && clickTitle ? `${baseTitle}\n${clickTitle}` : baseTitle;
+
+  const interactiveClass = onClick
+    ? 'cursor-pointer rounded-md px-1 -mx-1 transition-colors hover:bg-foreground/5 hover:text-foreground'
+    : '';
+
+  const inner = (
+    <>
       <div className="relative" style={{ width: size, height: size }}>
         <svg width={size} height={size} viewBox="0 0 26 26" className="-rotate-90">
           <circle
@@ -54,6 +60,28 @@ export default function TokenUsagePie({ used, total }: TokenUsagePieProps) {
         </span>
       </div>
       <span className="tabular-nums">{formatTokens(used)}</span>
+    </>
+  );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={`flex items-center gap-1.5 text-[10px] text-muted-foreground ${interactiveClass}`}
+        title={title}
+      >
+        {inner}
+      </button>
+    );
+  }
+
+  return (
+    <div
+      className="flex items-center gap-1.5 text-[10px] text-muted-foreground"
+      title={title}
+    >
+      {inner}
     </div>
   );
 }

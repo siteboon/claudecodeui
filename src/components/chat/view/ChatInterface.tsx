@@ -189,6 +189,7 @@ function ChatInterface({
     handleGrantToolPermission,
     handleInputFocusChange,
     isInputFocused,
+    triggerCompact,
   } = useChatComposerState({
     selectedProject,
     selectedSession,
@@ -468,6 +469,7 @@ function ChatInterface({
           sendByCtrlEnter={sendByCtrlEnter}
           queuedMessage={queuedMessage}
           onCancelQueue={cancelQueuedMessage}
+          onCompact={triggerCompact}
         />
       </div>
 

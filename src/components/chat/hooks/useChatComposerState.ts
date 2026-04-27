@@ -218,6 +218,10 @@ export function useChatComposerState({
     ((event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>) => Promise<void>) | null
   >(null);
   const inputValueRef = useRef(input);
+  // Set when /compact is triggered programmatically (action handler or pie click)
+  // so handleSubmit forwards the literal "/compact" prompt to the Claude CLI
+  // subprocess instead of looping back through the slash-command intercept.
+  const bypassSlashInterceptRef = useRef(false);
 
   const handleBuiltInCommand = useCallback(
     (result: CommandExecutionResult) => {
@@ -277,6 +281,20 @@ export function useChatComposerState({
         case 'config':
           onShowSettings?.();
           break;
+
+        case 'compact': {
+          const instructions = data?.instructions || '';
+          const promptText = instructions ? `/compact ${instructions}` : '/compact';
+          setInput(promptText);
+          inputValueRef.current = promptText;
+          bypassSlashInterceptRef.current = true;
+          setTimeout(() => {
+            if (handleSubmitRef.current) {
+              handleSubmitRef.current(createFakeSubmitEvent());
+            }
+          }, 0);
+          break;
+        }
 
         case 'rewind':
           if (data.error) {
@@ -587,9 +605,13 @@ export function useChatComposerState({
         return;
       }
 
-      // Intercept slash commands: if input starts with /commandName, execute as command with args
+      // Intercept slash commands: if input starts with /commandName, execute as command with args.
+      // Skip the intercept once when bypass flag is set (e.g. /compact passthrough), so the literal
+      // "/compact" prompt is forwarded to the Claude CLI subprocess which handles it natively.
       const trimmedInput = currentInput.trim();
-      if (trimmedInput.startsWith('/')) {
+      const bypassIntercept = bypassSlashInterceptRef.current;
+      bypassSlashInterceptRef.current = false;
+      if (!bypassIntercept && trimmedInput.startsWith('/')) {
         const firstSpace = trimmedInput.indexOf(' ');
         const commandName = firstSpace > 0 ? trimmedInput.slice(0, firstSpace) : trimmedInput;
         const matchedCommand = slashCommands.find((cmd: SlashCommand) => cmd.name === commandName);
@@ -1211,6 +1233,19 @@ export function useChatComposerState({
     [sendMessage, setClaudeStatus, setPendingPermissionRequests],
   );
 
+  const triggerCompact = useCallback(() => {
+    if (provider !== 'claude') return;
+    if (!selectedProject) return;
+    setInput('/compact');
+    inputValueRef.current = '/compact';
+    bypassSlashInterceptRef.current = true;
+    setTimeout(() => {
+      if (handleSubmitRef.current) {
+        handleSubmitRef.current(createFakeSubmitEvent());
+      }
+    }, 0);
+  }, [provider, selectedProject]);
+
   const [isInputFocused, setIsInputFocused] = useState(false);
 
   const handleInputFocusChange = useCallback(
@@ -1274,5 +1309,6 @@ export function useChatComposerState({
     handleGrantToolPermission,
     handleInputFocusChange,
     isInputFocused,
+    triggerCompact,
   };
 }

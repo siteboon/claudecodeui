@@ -106,6 +106,12 @@ const builtInCommands = [
     metadata: { type: 'builtin' }
   },
   {
+    name: '/compact',
+    description: 'Summarize the conversation to free up context window',
+    namespace: 'builtin',
+    metadata: { type: 'builtin' }
+  },
+  {
     name: '/memory',
     description: 'Open CLAUDE.md memory file for editing',
     namespace: 'builtin',
@@ -372,6 +378,20 @@ Custom commands can be created in:
       action: 'config',
       data: {
         message: 'Opening settings...'
+      }
+    };
+  },
+
+  '/compact': async (args, context) => {
+    const instructions = args.length > 0 ? args.join(' ') : '';
+    return {
+      type: 'builtin',
+      action: 'compact',
+      data: {
+        instructions,
+        message: instructions
+          ? `Compacting conversation with focus: ${instructions}`
+          : 'Compacting conversation...'
       }
     };
   },
