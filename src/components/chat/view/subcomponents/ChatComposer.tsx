@@ -12,6 +12,7 @@ import type {
   TouchEvent,
 } from 'react';
 import { useState, type RefObject as InputRefObject } from 'react';
+import { useWebSocket } from '../../../../contexts/WebSocketContext';
 import { ImageIcon, PaperclipIcon, FolderIcon, FileIcon, MessageSquareIcon, XIcon, ArrowDownIcon } from 'lucide-react';
 import type { PendingPermissionRequest, PermissionMode, Provider } from '../../types/types';
 import CommandMenu from './CommandMenu';
@@ -196,6 +197,20 @@ export default function ChatComposer({
 
   const [showAttachMenu, setShowAttachMenu] = useState(false);
 
+  // Surface WS sends that were issued while disconnected. Without this, a user
+  // who hits send during a brief WS outage sees their textarea cleared and the
+  // chat scrolling to a (transient) optimistic bubble that may be wiped when
+  // the session refetches on reconnect — i.e. the message looks "forgotten".
+  // The indicator stays visible until the queue flushes on the next onopen.
+  const { pendingSendCount, lastPendingSendText } = useWebSocket();
+  // Show whenever the queue is non-empty — by construction, payloads only land
+  // there when the socket was closed at send time, and the queue clears the
+  // moment onopen flushes them. Gating on isConnected as well introduces a
+  // race: onclose is async, so a send issued ~immediately after a programmatic
+  // close (or a same-tick close) can land in the queue before isConnected
+  // flips to false, and the indicator would briefly miss its window.
+  const showPendingSendIndicator = pendingSendCount > 0;
+
   // Detect if the AskUserQuestion interactive panel is active
   const hasQuestionPanel = pendingPermissionRequests.some(
     (r) => r.toolName === 'AskUserQuestion'
@@ -222,6 +237,20 @@ export default function ChatComposer({
             handlePermissionDecision={handlePermissionDecision}
             handleGrantToolPermission={handleGrantToolPermission}
           />
+        </div>
+      )}
+
+      {showPendingSendIndicator && (
+        <div
+          data-pending-send="true"
+          className="mx-auto mb-2 flex max-w-4xl items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-300"
+        >
+          <span className="h-1.5 w-1.5 flex-shrink-0 animate-pulse rounded-full bg-amber-500" />
+          <span className="flex-1 truncate">
+            {lastPendingSendText
+              ? `Reconnecting... will send: ${lastPendingSendText}`
+              : `Reconnecting... ${pendingSendCount} message(s) waiting to send`}
+          </span>
         </div>
       )}
 
