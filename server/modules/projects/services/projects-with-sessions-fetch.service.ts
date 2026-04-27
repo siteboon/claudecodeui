@@ -5,7 +5,6 @@ import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { sessionSynchronizerService } from '@/modules/providers/index.js';
 import { WS_OPEN_STATE, connectedClients } from '@/modules/websocket/index.js';
 import type { RealtimeClientConnection } from '@/shared/types.js';
-import { findAppRoot, getModuleDir } from '@/utils/runtime-paths.js';
 
 type SessionSummary = {
   id: string;
@@ -32,12 +31,6 @@ export type ProjectListItem = {
   };
 };
 
-export type ProjectsSnapshot = {
-  generatedAt: string;
-  projectCount: number;
-  projects: ProjectListItem[];
-};
-
 type ProgressUpdate = {
   phase: 'loading' | 'complete';
   current: number;
@@ -48,12 +41,6 @@ type ProgressUpdate = {
 type GetProjectsWithSessionsOptions = {
   skipSynchronization?: boolean;
 };
-
-const __dirname = getModuleDir(import.meta.url);
-const APP_ROOT = findAppRoot(__dirname);
-const PROJECTS_DUMP_DIR = path.join(APP_ROOT, '.tmp', 'project-dumps');
-
-let projectsSnapshotCounter: number | null = null;
 
 /**
  * Generate better display name from path.
@@ -124,62 +111,6 @@ function buildSessionsByProviderFromDb(projectPath: string): SessionsByProvider 
   }
 
   return byProvider;
-}
-
-async function getNextProjectsSnapshotPath(): Promise<string> {
-  await fs.mkdir(PROJECTS_DUMP_DIR, { recursive: true });
-
-  if (projectsSnapshotCounter === null) {
-    const entries = await fs.readdir(PROJECTS_DUMP_DIR).catch(() => []);
-    projectsSnapshotCounter = entries.reduce((max, entry) => {
-      const match = entry.match(/^projects-(\d+)\.json$/);
-      if (!match) {
-        return max;
-      }
-
-      return Math.max(max, Number(match[1]));
-    }, 0);
-  }
-
-  projectsSnapshotCounter += 1;
-  const suffix = String(projectsSnapshotCounter).padStart(4, '0');
-  return path.join(PROJECTS_DUMP_DIR, `projects-${suffix}.json`);
-}
-
-/**
- * Builds a typed snapshot payload for project dumps.
- */
-export function createProjectsSnapshot(projects: ProjectListItem[]): ProjectsSnapshot {
-  return {
-    generatedAt: new Date().toISOString(),
-    projectCount: projects.length,
-    projects,
-  };
-}
-
-/**
- * Writes a projects snapshot file as an incrementing artifact.
- */
-export async function writeSnapshot(projects: ProjectListItem[]): Promise<void> {
-  try {
-    const snapshot = createProjectsSnapshot(projects);
-    const snapshotJson = JSON.stringify(snapshot, (_, value) => (typeof value === 'bigint' ? value.toString() : value), 2);
-
-    while (true) {
-      const snapshotPath = await getNextProjectsSnapshotPath();
-      try {
-        await fs.writeFile(snapshotPath, snapshotJson, { encoding: 'utf8', flag: 'wx' });
-        break;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
-          continue;
-        }
-        throw error;
-      }
-    }
-  } catch (error) {
-    console.warn('Could not write projects snapshot:', (error as Error).message);
-  }
 }
 
 // Broadcast progress to all connected WebSocket clients
@@ -261,6 +192,5 @@ export async function getProjectsWithSessions(
     total: totalProjects,
   });
 
-  await writeSnapshot(projects);
   return projects;
 }

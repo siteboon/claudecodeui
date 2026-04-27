@@ -42,6 +42,14 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
         continue;
       }
 
+      const existingSession = sessionsDb.getSessionById(parsed.sessionId);
+      if (existingSession) {
+        // If session name is untitled and we now have a name, update it
+        if (existingSession.custom_name === 'Untitled Codex Session' && parsed.sessionName && parsed.sessionName !== 'Untitled Codex Session') {
+          sessionsDb.updateSessionCustomName(parsed.sessionId, parsed.sessionName);
+        }
+      }
+
       const timestamps = await readFileTimestamps(filePath);
       sessionsDb.createSession(
         parsed.sessionId,
