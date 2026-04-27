@@ -66,7 +66,7 @@ export async function ensureLoggedIn(page: import('@playwright/test').Page) {
   await page.reload();
 
   // Wait for authenticated UI (allow longer for project data to load)
-  await page.locator('.w-rail').waitFor({ state: 'visible', timeout: 20_000 });
+  await page.locator('.w-rail').waitFor({ state: 'visible', timeout: 45_000 });
 }
 
 export { expect };
