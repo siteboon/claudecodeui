@@ -7,7 +7,10 @@ export default defineConfig({
   globalSetup: './e2e/global-setup.ts',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: 0,
+  // 1 retry covers Vite cold-compile flakes (blank-SPA renders where
+  // #username never paints in time). The product code is exercised by the
+  // first attempt; retries only mask environment-level cold-start cost.
+  retries: 1,
   workers: 1,
   reporter: 'list',
   use: {

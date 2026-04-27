@@ -15,12 +15,20 @@ export const TEST_PASSWORD = 'e2epassword1';
 
 /** Ensure the app is authenticated and the project rail is visible. */
 export async function ensureLoggedIn(page: import('@playwright/test').Page) {
-  // Navigate to root — this lands on login or setup depending on DB state
-  await page.goto('/');
+  // Per-spec timeout floor. The fixture's internal waitFors add up to ~90s
+  // worst-case (45s for login form + 45s for rail after reload), but the
+  // Playwright per-test default is 30s — so even if the locators are willing
+  // to wait, the test times out mid-fixture. Specs 04/05 set this explicitly;
+  // apply the same floor here so 01/02/03 don't flake on Vite cold-compile.
+  base.info().setTimeout(Math.max(base.info().timeout, 60_000));
+
+  // Navigate to root — this lands on login or setup depending on DB state.
+  // Use 'commit' so we don't wait for every dev-mode HMR ping; Vite keeps
+  // chatter on the network indefinitely in dev.
+  await page.goto('/', { waitUntil: 'commit' });
 
   // Wait for either the login form or the setup form or the authenticated app
   const loginInput = page.locator('#username');
-  const setupInput = page.locator('#username');
   const projectRail = page.locator('.w-rail');
 
   // If already authed (token in localStorage from a previous spec in the same
@@ -28,8 +36,15 @@ export async function ensureLoggedIn(page: import('@playwright/test').Page) {
   const alreadyAuthed = await projectRail.isVisible().catch(() => false);
   if (alreadyAuthed) return;
 
-  // Wait for an input to appear (either login or setup form)
-  await loginInput.waitFor({ state: 'visible', timeout: 45_000 });
+  // Wait for the login input to appear. Race against the project rail in
+  // case the app is already authenticated and skipped the login form.
+  await Promise.race([
+    loginInput.waitFor({ state: 'visible', timeout: 45_000 }),
+    projectRail.waitFor({ state: 'visible', timeout: 45_000 }),
+  ]);
+
+  // If the rail came up first, we're done.
+  if (await projectRail.isVisible().catch(() => false)) return;
 
   // Try register first (fresh DB)
   const registerRes = await page.request.post('/api/auth/register', {
