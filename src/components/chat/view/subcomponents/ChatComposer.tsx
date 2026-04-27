@@ -255,7 +255,10 @@ export default function ChatComposer({
       )}
 
       {queuedMessage && (
-        <div className="mx-auto mb-2 flex max-w-4xl items-center gap-2 rounded-lg border border-border/50 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+        <div
+          data-pending-send="true"
+          className="mx-auto mb-2 flex max-w-4xl items-center gap-2 rounded-lg border border-border/50 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground"
+        >
           <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-amber-400" />
           <span className="flex-1 truncate">Queued: {queuedMessage}</span>
           {onCancelQueue && (
