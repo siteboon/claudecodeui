@@ -24,6 +24,7 @@ import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
 import { escapeRegExp } from '../utils/chatFormatting';
 import { useFileMentions } from './useFileMentions';
 import { type SlashCommand, useSlashCommands } from './useSlashCommands';
+import { useWebSocket } from '../../../contexts/WebSocketContext';
 
 type PendingViewSession = {
   sessionId: string | null;
@@ -165,6 +166,21 @@ export function useChatComposerState({
 }: UseChatComposerStateArgs) {
   const draftKey = `draft_input_${selectedProject?.name ?? ''}_${currentSessionId ?? 'new'}`;
   const legacyKey = `draft_input_${selectedProject?.name ?? ''}`;
+
+  // Read live WS connection state so handleSubmit can avoid clearing the
+  // textarea while the socket is closed. The user's North Star is "no
+  // forgotten input" — if the send is going into the WS queue rather than
+  // out the wire, the typed text must remain visible until the actual flush.
+  const { isConnected: wsIsConnected, pendingSendCount: wsPendingSendCount } = useWebSocket();
+  const wsConnectedRef = useRef(wsIsConnected);
+  useEffect(() => {
+    wsConnectedRef.current = wsIsConnected;
+  }, [wsIsConnected]);
+  // Track whether the most recent submit was held back because the socket
+  // was closed. Once the queue flushes (pendingSendCount goes 0 while
+  // connected), clear the textarea since the message is now actually on the
+  // wire.
+  const wsHeldSubmitRef = useRef(false);
 
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
@@ -827,8 +843,19 @@ export function useChatComposerState({
         });
       }
 
-      setInput('');
-      inputValueRef.current = '';
+      // If the WS was closed at send time, the payload landed in the
+      // WebSocketContext pendingSendQueueRef rather than being transmitted.
+      // Keep the textarea contents intact so the user has visible evidence
+      // ("no forgotten input") that nothing was lost. The queue flushes on
+      // the next onopen; the effect below clears the textarea once
+      // pendingSendCount drops back to 0.
+      const wsWasConnected = wsConnectedRef.current;
+      if (wsWasConnected) {
+        setInput('');
+        inputValueRef.current = '';
+      } else {
+        wsHeldSubmitRef.current = true;
+      }
       resetCommandMenuState();
       setAttachedImages([]);
       setUploadingImages(new Map());
@@ -837,12 +864,14 @@ export function useChatComposerState({
       setFileErrors(new Map());
       setIsTextareaExpanded(false);
 
-      if (textareaRef.current) {
+      if (textareaRef.current && wsWasConnected) {
         textareaRef.current.style.height = 'auto';
       }
 
-      safeLocalStorage.removeItem(draftKey);
-      safeLocalStorage.removeItem(legacyKey);
+      if (wsWasConnected) {
+        safeLocalStorage.removeItem(draftKey);
+        safeLocalStorage.removeItem(legacyKey);
+      }
       // Clear the in-flight snapshot immediately on successful send so a
       // hard reload before the WS 'complete' event does not restore the
       // just-sent message into the textarea.  The isLoading-based clear in
@@ -886,6 +915,24 @@ export function useChatComposerState({
   useEffect(() => {
     handleSubmitRef.current = handleSubmit;
   }, [handleSubmit]);
+
+  // Once the WS queue has flushed (count back to 0 while connected) clear
+  // the textarea contents that we deliberately kept around as evidence the
+  // queued send was not lost. This is the "actually transmitted" moment.
+  useEffect(() => {
+    if (wsHeldSubmitRef.current && wsIsConnected && wsPendingSendCount === 0) {
+      wsHeldSubmitRef.current = false;
+      setInput('');
+      inputValueRef.current = '';
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
+      if (selectedProject) {
+        safeLocalStorage.removeItem(draftKey);
+        safeLocalStorage.removeItem(legacyKey);
+      }
+    }
+  }, [wsIsConnected, wsPendingSendCount, draftKey, legacyKey, selectedProject]);
 
   useEffect(() => {
     inputValueRef.current = input;
