@@ -76,22 +76,14 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ displayName }),
     }),
-  deleteSession: (projectId, sessionId) =>
-    authenticatedFetch(`/api/projects/${projectId}/sessions/${sessionId}`, {
+  deleteSession: (sessionId) =>
+    authenticatedFetch(`/api/providers/sessions/${sessionId}`, {
       method: 'DELETE',
     }),
-  renameSession: (sessionId, summary, provider) =>
-    authenticatedFetch(`/api/sessions/${sessionId}/rename`, {
+  renameSession: (sessionId, summary) =>
+    authenticatedFetch(`/api/providers/sessions/${sessionId}`, {
       method: 'PUT',
-      body: JSON.stringify({ summary, provider }),
-    }),
-  deleteCodexSession: (sessionId) =>
-    authenticatedFetch(`/api/codex/sessions/${sessionId}`, {
-      method: 'DELETE',
-    }),
-  deleteGeminiSession: (sessionId) =>
-    authenticatedFetch(`/api/gemini/sessions/${sessionId}`, {
-      method: 'DELETE',
+      body: JSON.stringify({ summary }),
     }),
   // `hardDelete` => server `?force=true` (remove DB row + Claude *.jsonl + sessions rows for path).
   deleteProject: (projectId, hardDelete = false) => {

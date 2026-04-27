@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type React from 'react';
 import type { TFunction } from 'i18next';
+
 import { api } from '../../../utils/api';
 import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
 import type {
@@ -340,21 +340,6 @@ export function useSidebarController({
     };
   }, [searchFilter, searchMode]);
 
-  const handleTouchClick = useCallback(
-    (callback: () => void) =>
-      (event: React.TouchEvent<HTMLElement>) => {
-        const target = event.target as HTMLElement;
-        if (target.closest('.overflow-y-auto') || target.closest('[data-scroll-container]')) {
-          return;
-        }
-
-        event.preventDefault();
-        event.stopPropagation();
-        callback();
-      },
-    [],
-  );
-
   // All sidebar state keys (expanded, starred, loading, etc.) use the DB
   // `projectId` as their identifier after the migration.
   const toggleProject = useCallback((projectId: string) => {
@@ -522,8 +507,8 @@ export function useSidebarController({
   );
 
   const showDeleteSessionConfirmation = useCallback(
-    // `projectId` (not the legacy folder-encoded name) is what the DELETE
-    // /api/projects/:projectId/sessions/:sessionId endpoint expects.
+    // Kept with project/provider arguments for component wiring compatibility;
+    // deletion now uses only `sessionId` via /api/providers/sessions/:sessionId.
     (
       projectId: string,
       sessionId: string,
@@ -540,19 +525,11 @@ export function useSidebarController({
       return;
     }
 
-    const { projectId, sessionId, provider } = sessionDeleteConfirmation;
+    const { sessionId } = sessionDeleteConfirmation;
     setSessionDeleteConfirmation(null);
 
     try {
-      let response;
-      if (provider === 'codex') {
-        response = await api.deleteCodexSession(sessionId);
-      } else if (provider === 'gemini') {
-        response = await api.deleteGeminiSession(sessionId);
-      } else {
-        // Claude sessions are owned by the DB project row; pass projectId.
-        response = await api.deleteSession(projectId, sessionId);
-      }
+      const response = await api.deleteSession(sessionId);
 
       if (response.ok) {
         onSessionDelete?.(sessionId);
@@ -634,9 +611,9 @@ export function useSidebarController({
   }, [onRefresh]);
 
   const updateSessionSummary = useCallback(
-    // `_projectId` is unused by the rename endpoint but preserved in the
-    // callback signature so existing wiring from sidebar components works.
-    async (_projectId: string, sessionId: string, summary: string, provider: LLMProvider) => {
+    // `_projectId` and `_provider` are preserved for compatibility with
+    // existing sidebar callback signatures; backend rename only needs sessionId.
+    async (_projectId: string, sessionId: string, summary: string, _provider: LLMProvider) => {
       const trimmed = summary.trim();
       if (!trimmed) {
         setEditingSession(null);
@@ -644,7 +621,7 @@ export function useSidebarController({
         return;
       }
       try {
-        const response = await api.renameSession(sessionId, trimmed, provider);
+        const response = await api.renameSession(sessionId, trimmed);
         if (response.ok) {
           await onRefresh();
         } else {

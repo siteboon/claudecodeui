@@ -1,4 +1,5 @@
 import express from 'express';
+
 import { deleteCodexSession } from '../projects.js';
 import { sessionsDb } from '../modules/database/index.js';
 
@@ -8,7 +9,7 @@ router.delete('/sessions/:sessionId', async (req, res) => {
   try {
     const { sessionId } = req.params;
     await deleteCodexSession(sessionId);
-    sessionsDb.deleteName(sessionId, 'codex');
+    sessionsDb.deleteSessionById(sessionId);
     res.json({ success: true });
   } catch (error) {
     console.error(`Error deleting Codex session ${req.params.sessionId}:`, error);

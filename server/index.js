@@ -306,7 +306,7 @@ app.delete('/api/projects/:projectId/sessions/:sessionId', authenticateToken, as
         const { projectId, sessionId } = req.params;
         console.log(`[API] Deleting session: ${sessionId} from project: ${projectId}`);
         await deleteSessionById(projectId, sessionId);
-        sessionsDb.deleteName(sessionId, 'claude');
+        sessionsDb.deleteSessionById(sessionId);
         console.log(`[API] Session ${sessionId} deleted successfully`);
         res.json({ success: true });
     } catch (error) {
@@ -323,17 +323,14 @@ app.put('/api/sessions/:sessionId/rename', authenticateToken, async (req, res) =
         if (!safeSessionId || safeSessionId !== String(sessionId)) {
             return res.status(400).json({ error: 'Invalid sessionId' });
         }
-        const { summary, provider } = req.body;
+        const { summary } = req.body;
         if (!summary || typeof summary !== 'string' || summary.trim() === '') {
             return res.status(400).json({ error: 'Summary is required' });
         }
         if (summary.trim().length > 500) {
             return res.status(400).json({ error: 'Summary must not exceed 500 characters' });
         }
-        if (!provider || !VALID_PROVIDERS.includes(provider)) {
-            return res.status(400).json({ error: `Provider must be one of: ${VALID_PROVIDERS.join(', ')}` });
-        }
-        sessionsDb.setName(safeSessionId, provider, summary.trim());
+        sessionsDb.updateSessionCustomName(safeSessionId, summary.trim());
         res.json({ success: true });
     } catch (error) {
         console.error(`[API] Error renaming session ${req.params.sessionId}:`, error);

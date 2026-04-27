@@ -11,8 +11,8 @@ export type DeleteProjectConfirmation = {
   sessionCount: number;
 };
 
-// Delete confirmation payload; `projectId` is the DB primary key used by the
-// DELETE /api/projects/:projectId/sessions/:sessionId endpoint.
+// Delete confirmation payload used by sidebar UX. `projectId`/`provider` are
+// kept for wiring compatibility, while API deletion now keys only by sessionId.
 export type SessionDeleteConfirmation = {
   projectId: string;
   sessionId: string;

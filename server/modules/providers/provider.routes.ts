@@ -2,6 +2,7 @@ import express, { type Request, type Response } from 'express';
 
 import { providerAuthService } from '@/modules/providers/services/provider-auth.service.js';
 import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
+import { sessionsService } from '@/modules/providers/services/sessions.service.js';
 import type { LLMProvider, McpScope, McpTransport, UpsertProviderMcpServerInput } from '@/shared/types.js';
 import { AppError, asyncHandler, createApiSuccessResponse } from '@/shared/utils.js';
 
@@ -24,6 +25,20 @@ const readPathParam = (value: unknown, name: string): string => {
 
 const normalizeProviderParam = (value: unknown): string =>
   readPathParam(value, 'provider').trim().toLowerCase();
+
+const SESSION_ID_PATTERN = /^[a-zA-Z0-9._-]{1,120}$/;
+
+const parseSessionId = (value: unknown): string => {
+  const sessionId = readPathParam(value, 'sessionId').trim();
+  if (!SESSION_ID_PATTERN.test(sessionId)) {
+    throw new AppError('Invalid sessionId.', {
+      code: 'INVALID_SESSION_ID',
+      statusCode: 400,
+    });
+  }
+
+  return sessionId;
+};
 
 const readOptionalQueryString = (value: unknown): string | undefined => {
   if (typeof value !== 'string') {
@@ -143,6 +158,33 @@ const parseProvider = (value: unknown): LLMProvider => {
   });
 };
 
+const parseSessionRenameSummary = (payload: unknown): string => {
+  if (!payload || typeof payload !== 'object') {
+    throw new AppError('Request body must be an object.', {
+      code: 'INVALID_REQUEST_BODY',
+      statusCode: 400,
+    });
+  }
+
+  const body = payload as Record<string, unknown>;
+  const summary = typeof body.summary === 'string' ? body.summary.trim() : '';
+  if (!summary) {
+    throw new AppError('Summary is required.', {
+      code: 'INVALID_SESSION_SUMMARY',
+      statusCode: 400,
+    });
+  }
+
+  if (summary.length > 500) {
+    throw new AppError('Summary must not exceed 500 characters.', {
+      code: 'INVALID_SESSION_SUMMARY',
+      statusCode: 400,
+    });
+  }
+
+  return summary;
+};
+
 router.get(
   '/:provider/auth/status',
   asyncHandler(async (req: Request, res: Response) => {
@@ -211,6 +253,25 @@ router.post(
       scope: payload.scope === 'user' ? 'user' : 'project',
     });
     res.status(201).json(createApiSuccessResponse({ results }));
+  }),
+);
+
+router.delete(
+  '/sessions/:sessionId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const result = await sessionsService.deleteSessionById(sessionId);
+    res.json(createApiSuccessResponse(result));
+  }),
+);
+
+router.put(
+  '/sessions/:sessionId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const summary = parseSessionRenameSummary(req.body);
+    const result = sessionsService.renameSessionById(sessionId, summary);
+    res.json(createApiSuccessResponse(result));
   }),
 );
 

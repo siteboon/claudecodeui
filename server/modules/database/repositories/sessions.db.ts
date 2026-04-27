@@ -3,11 +3,6 @@ import path from 'node:path';
 import { getConnection } from '@/modules/database/connection.js';
 import { projectsDb } from '@/modules/database/repositories/projects.db.js';
 
-type SessionNameLookupRow = {
-  session_id: string;
-  custom_name: string;
-};
-
 type SessionRow = {
   session_id: string;
   provider: string;
@@ -22,11 +17,6 @@ type SessionMetadataLookupRow = Pick<
   SessionRow,
   'session_id' | 'provider' | 'project_path' | 'jsonl_path' | 'custom_name' | 'created_at' | 'updated_at'
 >;
-
-type LegacySessionSummary = {
-  id: string;
-  summary?: string;
-};
 
 function normalizeTimestamp(value?: string): string | null {
   if (!value) return null;
@@ -179,111 +169,8 @@ export const sessionsDb = {
     return row?.custom_name ?? null;
   },
 
-  getSessionNames(sessionIds: string[], provider: string): Map<string, string> {
-    if (sessionIds.length === 0) return new Map();
-
+  deleteSessionById(sessionId: string): boolean {
     const db = getConnection();
-    const placeholders = sessionIds.map(() => '?').join(',');
-    const rows = db
-      .prepare(
-        `SELECT session_id, custom_name
-         FROM sessions
-         WHERE session_id IN (${placeholders})
-           AND provider = ?
-           AND custom_name IS NOT NULL`
-      )
-      .all(...sessionIds, provider) as SessionNameLookupRow[];
-
-    return new Map(rows.map((row) => [row.session_id, row.custom_name]));
-  },
-
-  /**
-   * Legacy-compatibility method kept for parity with `server/database/db.js`.
-   *
-   * Renaming a session is a metadata-only change — it's not actual activity,
-   * so existing rows intentionally keep their `updated_at` untouched. This
-   * prevents the sidebar's "last activity" timestamp from jumping around when
-   * a user simply edits a session's label.
-   *
-   * When the row doesn't exist yet we still have to seed `created_at`/
-   * `updated_at`; we write ISO-8601 UTC (with the `Z` suffix) rather than
-   * rely on SQLite's `CURRENT_TIMESTAMP`, which stores a naive
-   * `"YYYY-MM-DD HH:MM:SS"` value that JavaScript's `new Date(...)` parses as
-   * local time and displays with the wrong offset.
-   *
-   * TODO: Remove after all legacy imports are migrated to the new repository API.
-   */
-  setName(sessionId: string, provider: string, customName: string): void {
-    const db = getConnection();
-    const nowIso = new Date().toISOString();
-    db.prepare(
-      `INSERT INTO sessions (session_id, provider, custom_name, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(session_id, provider) DO UPDATE SET
-         custom_name = excluded.custom_name`
-    ).run(sessionId, provider, customName, nowIso, nowIso);
-  },
-
-  /**
-   * Legacy-compatibility method kept for parity with `server/database/db.js`.
-   * TODO: Remove after all legacy imports are migrated to the new repository API.
-   */
-  getName(sessionId: string, provider: string): string | null {
-    return sessionsDb.getSessionName(sessionId, provider);
-  },
-
-  /**
-   * Legacy-compatibility method kept for parity with `server/database/db.js`.
-   * TODO: Remove after all legacy imports are migrated to the new repository API.
-   */
-  getNames(sessionIds: string[], provider: string): Map<string, string> {
-    return sessionsDb.getSessionNames(sessionIds, provider);
-  },
-
-  /**
-   * Legacy-compatibility method kept for parity with `server/database/db.js`.
-   * TODO: Remove after all legacy imports are migrated to the new repository API.
-   */
-  deleteName(sessionId: string, provider: string): boolean {
-    const db = getConnection();
-    return (
-      db
-        .prepare(
-          `DELETE FROM sessions
-           WHERE session_id = ? AND provider = ?`
-        )
-        .run(sessionId, provider).changes > 0
-    );
-  },
-
-  deleteSession(sessionId: string): void {
-    const db = getConnection();
-    db.prepare('DELETE FROM sessions WHERE session_id = ?').run(sessionId);
+    return db.prepare('DELETE FROM sessions WHERE session_id = ?').run(sessionId).changes > 0;
   },
 };
-
-/**
- * Legacy-compatibility helper kept for parity with `server/database/db.js`.
- * TODO: Remove after all legacy imports are migrated to the new repository API.
- */
-export function applyCustomSessionNames(
-  sessions: LegacySessionSummary[] | null | undefined,
-  provider: string
-): void {
-  if (!sessions?.length) return;
-
-  try {
-    const sessionIds = sessions.map((session) => session.id);
-    const customNames = sessionsDb.getNames(sessionIds, provider);
-
-    for (const session of sessions) {
-      const customName = customNames.get(session.id);
-      if (customName) {
-        session.summary = customName;
-      }
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(`[DB] Failed to apply custom session names for ${provider}:`, message);
-  }
-}
