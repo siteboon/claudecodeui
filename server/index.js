@@ -211,9 +211,33 @@ const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
 const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
 import { stripAnsiSequences, normalizeDetectedUrl, extractUrlsFromText, shouldAutoOpenUrlFromOutput } from './utils/url-detection.js';
 
+// Extract a bearer JWT from Sec-WebSocket-Protocol values.
+// Browsers can't set arbitrary headers on `new WebSocket(url)`, so the
+// client frames the token as a subprotocol like `bearer.<encoded>`.
+// Compared to passing the token in the URL query string, this keeps the
+// JWT out of HTTP access logs, browser history, and Referer headers.
+const extractBearerFromProtocols = (protocols) => {
+    if (!protocols) return null;
+    const parts = protocols.split(',').map((s) => s.trim()).filter(Boolean);
+    const bearer = parts.find((p) => p.startsWith('bearer.'));
+    if (!bearer) return null;
+    try {
+        return decodeURIComponent(bearer.slice('bearer.'.length));
+    } catch {
+        return null;
+    }
+};
+
 // Single WebSocket server that handles both paths
 const wss = new WebSocketServer({
     server,
+    handleProtocols: (protocols /* Set<string> */) => {
+        // Echo the bearer.* subprotocol so the browser accepts the handshake.
+        for (const p of protocols) {
+            if (typeof p === 'string' && p.startsWith('bearer.')) return p;
+        }
+        return false; // No subprotocol negotiated (platform mode, etc.)
+    },
     verifyClient: (info) => {
         console.log('WebSocket connection attempt to:', info.req.url);
 
@@ -229,11 +253,17 @@ const wss = new WebSocketServer({
             return true;
         }
 
-        // Normal mode: verify token
-        // Extract token from query parameters or headers
+        // Normal mode: verify token. Prefer Sec-WebSocket-Protocol (browsers
+        // can't set arbitrary headers on `new WebSocket`, but they can
+        // negotiate subprotocols). Authorization header is for non-browser
+        // clients. Query string is the legacy path, kept for one rolling
+        // release window so a stale tab doesn't get instantly logged out
+        // — remove once that window has passed.
+        const subProtoToken = extractBearerFromProtocols(info.req.headers['sec-websocket-protocol']);
+        const headerToken = info.req.headers.authorization?.split(' ')[1];
         const url = new URL(info.req.url, 'http://localhost');
-        const token = url.searchParams.get('token') ||
-            info.req.headers.authorization?.split(' ')[1];
+        const queryToken = url.searchParams.get('token');
+        const token = subProtoToken || headerToken || queryToken;
 
         // Verify token
         const user = authenticateWebSocket(token);

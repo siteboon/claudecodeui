@@ -29,13 +29,20 @@ export const useWebSocket = () => {
   return context;
 };
 
-const buildWebSocketUrl = (token: string | null) => {
+const buildWebSocketUrl = () => {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const webSocketPath = withBasePath('/ws');
-  if (IS_PLATFORM) return `${protocol}//${window.location.host}${webSocketPath}`; // Platform mode: Use same domain as the page (goes through proxy)
-  if (!token) return null;
-  return `${protocol}//${window.location.host}${webSocketPath}?token=${encodeURIComponent(token)}`; // OSS mode: Use same host:port that served the page
+  return `${protocol}//${window.location.host}${webSocketPath}`;
 };
+
+// Encode a JWT for transport via Sec-WebSocket-Protocol. The browser
+// WebSocket constructor only allows headers via the `protocols` arg, so
+// we frame the bearer token as a subprotocol value (`bearer.<encoded>`).
+// The server reads it in verifyClient and echoes it back via handleProtocols.
+// JWTs contain dots; URL-encode so the protocol token has exactly one
+// `bearer.` prefix and is otherwise opaque.
+const buildBearerSubprotocol = (token: string): string =>
+  `bearer.${encodeURIComponent(token)}`;
 
 const useWebSocketProviderState = (): WebSocketContextType => {
   const wsRef = useRef<WebSocket | null>(null);
@@ -68,10 +75,17 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     const connect = () => {
       if (cancelled) return;
       try {
-        const wsUrl = buildWebSocketUrl(token);
-        if (!wsUrl) return console.warn('No authentication token found for WebSocket connection');
+        const wsUrl = buildWebSocketUrl();
+        // Platform mode: server identifies user from request, no JWT needed.
+        // OSS mode: bail out until we have a token rather than opening an
+        // unauthenticated connection that the server will reject.
+        if (!IS_PLATFORM && !token) {
+          return console.warn('No authentication token found for WebSocket connection');
+        }
 
-        const websocket = new WebSocket(wsUrl);
+        const websocket = !IS_PLATFORM && token
+          ? new WebSocket(wsUrl, [buildBearerSubprotocol(token)])
+          : new WebSocket(wsUrl);
 
         websocket.onopen = () => {
           if (cancelled) {
