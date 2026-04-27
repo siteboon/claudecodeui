@@ -50,6 +50,7 @@ import geminiRoutes from './routes/gemini.js';
 import pluginsRoutes from './routes/plugins.js';
 import messagesRoutes from './routes/messages.js';
 import providerRoutes from './modules/providers/provider.routes.js';
+import boardRoutes from './routes/board.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
 import { initializeDatabase, sessionNamesDb, applyCustomSessionNames } from './database/db.js';
 import { configureWebPush } from './services/vapid-keys.js';
@@ -349,6 +350,9 @@ app.use('/api/sessions', authenticateToken, messagesRoutes);
 
 // Unified provider MCP routes (protected)
 app.use('/api/providers', authenticateToken, providerRoutes);
+
+// Prose kanban board routes (protected)
+app.use('/api/board', authenticateToken, boardRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
