@@ -218,6 +218,10 @@ function mapCliOptionsToSDK(options = {}) {
   // This loads CLAUDE.md from project, user (~/.config/claude/CLAUDE.md), and local directories
   sdkOptions.settingSources = ['project', 'user', 'local'];
 
+  // Emit token-by-token deltas so the UI can render streaming output instead of
+  // receiving each assistant message as a single completed block.
+  sdkOptions.includePartialMessages = true;
+
   // Map resume session
   if (sessionId) {
     sdkOptions.resume = sessionId;
@@ -634,6 +638,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
     // Process streaming messages
     console.log('Starting async generator loop for session:', capturedSessionId || 'NEW');
+    let textWasStreamed = false;
     for await (const message of queryInstance) {
       // Capture session ID from first message
       if (message.session_id && !capturedSessionId) {
@@ -655,9 +660,35 @@ async function queryClaudeSDK(command, options = {}, ws) {
         // session_id already captured
       }
 
+      // Track text deltas streamed via includePartialMessages so we can avoid
+      // re-emitting the same text from the consolidated assistant message below.
+      if (
+        message.type === 'stream_event' &&
+        message.event?.type === 'content_block_delta' &&
+        message.event?.delta?.type === 'text_delta'
+      ) {
+        textWasStreamed = true;
+      }
+
       // Transform and normalize message via adapter
-      const transformedMessage = transformMessage(message);
+      let transformedMessage = transformMessage(message);
       const sid = capturedSessionId || sessionId || null;
+
+      // Strip text parts from the consolidated assistant message when text was
+      // already streamed for this turn — otherwise the client renders both the
+      // streamed buffer (finalized by stream_end) and a duplicate text message.
+      if (
+        textWasStreamed &&
+        message.type === 'assistant' &&
+        Array.isArray(message.message?.content)
+      ) {
+        const filtered = message.message.content.filter((part) => part.type !== 'text');
+        transformedMessage = {
+          ...transformedMessage,
+          message: { ...message.message, content: filtered },
+        };
+        textWasStreamed = false;
+      }
 
       // Use adapter to normalize SDK events into NormalizedMessage[]
       const normalized = sessionsService.normalizeMessage('claude', transformedMessage, sid);
