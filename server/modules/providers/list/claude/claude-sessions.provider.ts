@@ -66,10 +66,14 @@ export class ClaudeSessionsProvider implements IProviderSessions {
 
     // Live SDK stream events (emitted when includePartialMessages is enabled) wrap
     // the Anthropic streaming event under a `stream_event` envelope.
-    if (raw.type === 'stream_event' && raw.event && typeof raw.event === 'object') {
-      const ev = raw.event as { type?: string; delta?: { type?: string; text?: string } };
-      if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta' && ev.delta.text) {
-        return [createNormalizedMessage({ kind: 'stream_delta', content: ev.delta.text, sessionId, provider: PROVIDER })];
+    if (raw.type === 'stream_event') {
+      const ev = readObjectRecord(raw.event);
+      if (!ev) {
+        return [];
+      }
+      const delta = readObjectRecord(ev.delta);
+      if (ev.type === 'content_block_delta' && delta?.type === 'text_delta' && typeof delta.text === 'string' && delta.text) {
+        return [createNormalizedMessage({ kind: 'stream_delta', content: delta.text, sessionId, provider: PROVIDER })];
       }
       if (ev.type === 'content_block_stop') {
         return [createNormalizedMessage({ kind: 'stream_end', sessionId, provider: PROVIDER })];

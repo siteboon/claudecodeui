@@ -218,10 +218,6 @@ function mapCliOptionsToSDK(options = {}) {
   // This loads CLAUDE.md from project, user (~/.config/claude/CLAUDE.md), and local directories
   sdkOptions.settingSources = ['project', 'user', 'local'];
 
-  // Emit token-by-token deltas so the UI can render streaming output instead of
-  // receiving each assistant message as a single completed block.
-  sdkOptions.includePartialMessages = true;
-
   // Map resume session
   if (sessionId) {
     sdkOptions.resume = sessionId;
@@ -495,9 +491,18 @@ async function queryClaudeSDK(command, options = {}, ws) {
     });
   };
 
+  // Only writers that finalize streaming on the client side (WebSocket UI, SSE
+  // endpoints) can consume the partial-message events; other callers
+  // (commit-message generator, ResponseCollector) just collect the consolidated
+  // assistant message, so we leave streaming off for them.
+  const writerStreams = Boolean(ws?.isWebSocketWriter || ws?.isSSEStreamWriter);
+
   try {
     // Map CLI options to SDK format
     const sdkOptions = mapCliOptionsToSDK(options);
+    if (writerStreams) {
+      sdkOptions.includePartialMessages = true;
+    }
 
     // Load MCP configuration
     const mcpServers = await loadMcpConfig(options.cwd);
@@ -677,7 +682,10 @@ async function queryClaudeSDK(command, options = {}, ws) {
       // Strip text parts from the consolidated assistant message when text was
       // already streamed for this turn — otherwise the client renders both the
       // streamed buffer (finalized by stream_end) and a duplicate text message.
+      // Only applies to streaming writers; non-streaming consumers need the
+      // consolidated text payload to remain intact.
       if (
+        writerStreams &&
         textWasStreamed &&
         message.type === 'assistant' &&
         Array.isArray(message.message?.content)
