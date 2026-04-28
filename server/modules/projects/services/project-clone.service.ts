@@ -125,7 +125,7 @@ const defaultDependencies: CloneProjectDependencies = {
     return tokenRow;
   },
   spawnGitClone: (cloneUrl: string, clonePath: string): GitCloneProcess =>
-    spawn('git', ['clone', '--progress', cloneUrl, clonePath], {
+    spawn('git', ['clone', '--progress', '--', cloneUrl, clonePath], {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,
@@ -163,6 +163,13 @@ export async function startCloneProject(
   if (!normalizedGithubUrl) {
     throw new AppError('workspacePath and githubUrl are required', {
       code: 'GITHUB_URL_REQUIRED',
+      statusCode: 400,
+    });
+  }
+
+  if (normalizedGithubUrl.startsWith('-')) {
+    throw new AppError('Invalid githubUrl', {
+      code: 'INVALID_GITHUB_URL',
       statusCode: 400,
     });
   }

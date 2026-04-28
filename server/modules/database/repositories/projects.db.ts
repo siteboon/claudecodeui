@@ -18,6 +18,7 @@ export const projectsDb = {
     createProjectPath(projectPath: string, customProjectName: string | null = null): CreateProjectPathResult {
         const db = getConnection();
         const normalizedProjectName = normalizeProjectDisplayName(projectPath, customProjectName);
+        const attemptedId = randomUUID();
         const row = db.prepare(`
         INSERT INTO projects (project_id, project_path, custom_project_name, isArchived)
             VALUES (?, ?, ?, 0)
@@ -25,11 +26,11 @@ export const projectsDb = {
             isArchived = 0
             WHERE projects.isArchived = 1
             RETURNING project_id, project_path, custom_project_name, isStarred, isArchived
-        `).get(randomUUID(), projectPath, normalizedProjectName) as ProjectRepositoryRow | undefined;
+        `).get(attemptedId, projectPath, normalizedProjectName) as ProjectRepositoryRow | undefined;
 
         if (row) {
             return {
-                outcome: row.isArchived === 1 ? 'reactivated_archived' : 'created',
+                outcome: row.project_id === attemptedId ? 'created' : 'reactivated_archived',
                 project: row,
             };
         }

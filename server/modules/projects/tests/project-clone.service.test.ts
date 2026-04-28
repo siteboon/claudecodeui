@@ -87,6 +87,29 @@ test('startCloneProject rejects when github URL is missing', async () => {
   );
 });
 
+test('startCloneProject rejects github URL values that begin with option prefixes', async () => {
+  await assert.rejects(
+    async () =>
+      startCloneProject(
+        {
+          workspacePath: '/workspace/root',
+          githubUrl: '--upload-pack=malicious',
+          userId: 1,
+        },
+        {
+          onProgress: () => undefined,
+          onComplete: () => undefined,
+        },
+        buildDependencies(),
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'INVALID_GITHUB_URL');
+      return true;
+    },
+  );
+});
+
 test('startCloneProject rejects when selected github token does not exist', async () => {
   await assert.rejects(
     async () =>
