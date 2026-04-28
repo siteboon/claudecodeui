@@ -320,7 +320,7 @@ Custom commands can be created in:
         packageName,
         uptime: uptimeFormatted,
         uptimeSeconds: Math.floor(uptime),
-        model: context?.model || 'claude-sonnet-4.5',
+        model: context?.model || CLAUDE_MODELS.DEFAULT,
         provider: context?.provider || 'claude',
         nodeVersion: process.version,
         platform: process.platform
