@@ -327,7 +327,9 @@ export default function ChatComposer({
                     ? 'border-green-300/60 bg-green-50 text-green-700 hover:bg-green-100 dark:border-green-600/40 dark:bg-green-900/15 dark:text-green-300 dark:hover:bg-green-900/25'
                     : permissionMode === 'bypassPermissions'
                       ? 'border-orange-300/60 bg-orange-50 text-orange-700 hover:bg-orange-100 dark:border-orange-600/40 dark:bg-orange-900/15 dark:text-orange-300 dark:hover:bg-orange-900/25'
-                      : 'border-primary/20 bg-primary/5 text-primary hover:bg-primary/10'
+                      : permissionMode === 'auto'
+                        ? 'border-sky-300/60 bg-sky-50 text-sky-700 hover:bg-sky-100 dark:border-sky-600/40 dark:bg-sky-900/15 dark:text-sky-300 dark:hover:bg-sky-900/25'
+                        : 'border-primary/20 bg-primary/5 text-primary hover:bg-primary/10'
               }`}
               title={t('input.clickToChangeMode')}
             >
@@ -340,7 +342,9 @@ export default function ChatComposer({
                         ? 'bg-green-500'
                         : permissionMode === 'bypassPermissions'
                           ? 'bg-orange-500'
-                          : 'bg-primary'
+                          : permissionMode === 'auto'
+                            ? 'bg-sky-500'
+                            : 'bg-primary'
                   }`}
                 />
                 <span className="hidden whitespace-nowrap sm:inline">
@@ -348,6 +352,7 @@ export default function ChatComposer({
                   {permissionMode === 'acceptEdits' && t('codex.modes.acceptEdits')}
                   {permissionMode === 'bypassPermissions' && t('codex.modes.bypassPermissions')}
                   {permissionMode === 'plan' && t('codex.modes.plan')}
+                  {permissionMode === 'auto' && t('codex.modes.auto')}
                 </span>
               </div>
             </button>

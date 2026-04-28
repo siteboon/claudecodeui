@@ -91,13 +91,15 @@
       "default": "Standardmodus",
       "acceptEdits": "Bearbeitungen akzeptieren",
       "bypassPermissions": "Berechtigungen umgehen",
-      "plan": "Planungsmodus"
+      "plan": "Planungsmodus",
+      "auto": "Auto-Modus"
     },
     "descriptions": {
       "default": "Nur vertrauenswürdige Befehle (ls, cat, grep, git status usw.) werden automatisch ausgeführt. Andere Befehle werden übersprungen. Kann in den Arbeitsbereich schreiben.",
       "acceptEdits": "Alle Befehle werden automatisch innerhalb des Arbeitsbereichs ausgeführt. Vollautomatischer Modus mit isolierter Ausführung.",
       "bypassPermissions": "Vollständiger Systemzugriff ohne Einschränkungen. Alle Befehle werden automatisch mit vollem Festplatten- und Netzwerkzugriff ausgeführt. Mit Vorsicht verwenden.",
-      "plan": "Planungsmodus – keine Befehle werden ausgeführt"
+      "plan": "Planungsmodus – keine Befehle werden ausgeführt",
+      "auto": "Claude bewertet jede Tool-Anfrage selbst und entscheidet ohne Rückfrage über Genehmigung oder Ablehnung. Nutzt einen Modell-Klassifizierer – sicherer als Bypass, weniger unterbrechend als der Standardmodus."
     },
     "technicalDetails": "Technische Details"
   },
