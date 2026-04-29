@@ -55,7 +55,8 @@ export const sessionsDb = {
     db.prepare(
       `INSERT INTO sessions (session_id, provider, custom_name, project_path, jsonl_path, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))
-       ON CONFLICT(session_id, provider) DO UPDATE SET
+       ON CONFLICT(session_id) DO UPDATE SET
+         provider = excluded.provider,
          updated_at = excluded.updated_at,
          project_path = excluded.project_path,
          jsonl_path = excluded.jsonl_path,
@@ -80,15 +81,6 @@ export const sessionsDb = {
        SET custom_name = ?
        WHERE session_id = ?`
     ).run(customName, sessionId);
-  },
-
-  createSessionName(sessionId: string, provider: string, customName: string): void {
-    const db = getConnection();
-    db.prepare(
-      `UPDATE sessions
-       SET custom_name = ?
-       WHERE session_id = ? AND provider = ?`
-    ).run(customName, sessionId, provider);
   },
 
   getSessionById(sessionId: string): SessionMetadataLookupRow | null {

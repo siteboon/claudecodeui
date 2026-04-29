@@ -57,7 +57,7 @@ const migrateLegacySessionNames = (db: Database): void => {
   if (hasSessionsTable) {
     console.log('Running migration: Merging session_names into sessions');
     db.exec(`
-      INSERT OR REPLACE INTO sessions (session_id, provider, custom_name, created_at, updated_at)
+      INSERT INTO sessions (session_id, provider, custom_name, created_at, updated_at)
       SELECT
         session_id,
         COALESCE(provider, 'claude'),
@@ -65,6 +65,11 @@ const migrateLegacySessionNames = (db: Database): void => {
         COALESCE(created_at, CURRENT_TIMESTAMP),
         COALESCE(updated_at, CURRENT_TIMESTAMP)
       FROM session_names
+      ON CONFLICT(session_id) DO UPDATE SET
+        provider = excluded.provider,
+        custom_name = COALESCE(excluded.custom_name, sessions.custom_name),
+        created_at = COALESCE(sessions.created_at, excluded.created_at),
+        updated_at = COALESCE(excluded.updated_at, sessions.updated_at)
     `);
     db.exec('DROP TABLE session_names');
     return;
@@ -245,9 +250,9 @@ const rebuildSessionsTableWithProjectSchema = (db: Database): void => {
 
   const shouldRebuild =
     !columnNames.includes('project_path') ||
-    primaryKeyColumns.length !== 2 ||
+    primaryKeyColumns.length !== 1 ||
     primaryKeyColumns[0] !== 'session_id' ||
-    primaryKeyColumns[1] !== 'provider';
+    !columnNames.includes('provider');
 
   if (!shouldRebuild) {
     addColumnToTableIfNotExists(db, 'sessions', columnNames, 'jsonl_path', 'TEXT');
@@ -299,14 +304,42 @@ const rebuildSessionsTableWithProjectSchema = (db: Database): void => {
         jsonl_path TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (session_id, provider),
+        PRIMARY KEY (session_id),
         FOREIGN KEY (project_path) REFERENCES projects(project_path)
         ON DELETE SET NULL
         ON UPDATE CASCADE
       )
     `);
     db.exec(`
-      INSERT OR REPLACE INTO sessions__new (
+      WITH source_rows AS (
+        SELECT
+          session_id,
+          ${providerExpression} AS provider,
+          ${customNameExpression} AS custom_name,
+          ${projectPathExpression} AS project_path,
+          ${jsonlPathExpression} AS jsonl_path,
+          ${createdAtExpression} AS created_at,
+          ${updatedAtExpression} AS updated_at,
+          rowid AS source_rowid
+        FROM sessions
+        WHERE session_id IS NOT NULL AND trim(session_id) <> ''
+      ),
+      ranked_rows AS (
+        SELECT
+          session_id,
+          provider,
+          custom_name,
+          project_path,
+          jsonl_path,
+          created_at,
+          updated_at,
+          ROW_NUMBER() OVER (
+            PARTITION BY session_id
+            ORDER BY datetime(COALESCE(updated_at, created_at)) DESC, source_rowid DESC
+          ) AS session_rank
+        FROM source_rows
+      )
+      INSERT INTO sessions__new (
         session_id,
         provider,
         custom_name,
@@ -317,14 +350,14 @@ const rebuildSessionsTableWithProjectSchema = (db: Database): void => {
       )
       SELECT
         session_id,
-        ${providerExpression},
-        ${customNameExpression},
-        ${projectPathExpression},
-        ${jsonlPathExpression},
-        ${createdAtExpression},
-        ${updatedAtExpression}
-      FROM sessions
-      WHERE session_id IS NOT NULL AND trim(session_id) <> ''
+        provider,
+        custom_name,
+        project_path,
+        jsonl_path,
+        created_at,
+        updated_at
+      FROM ranked_rows
+      WHERE session_rank = 1
     `);
     db.exec('DROP TABLE sessions');
     db.exec('ALTER TABLE sessions__new RENAME TO sessions');
