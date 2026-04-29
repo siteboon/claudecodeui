@@ -462,10 +462,6 @@ export function useChatSessionState({
             projectName: selectedProject.name,
             projectPath: selectedProject.fullPath || selectedProject.path || '',
           });
-
-          if (Boolean(autoScrollToBottom) && isNearBottom()) {
-            setTimeout(() => scrollToBottom(), 200);
-          }
         }
       } catch (error) {
         console.error('Error reloading messages from external update:', error);
@@ -474,10 +470,7 @@ export function useChatSessionState({
 
     reloadExternalMessages();
   }, [
-    autoScrollToBottom,
     externalMessageUpdate,
-    isNearBottom,
-    scrollToBottom,
     selectedProject,
     selectedSession,
     sessionStore,
