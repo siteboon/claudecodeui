@@ -19,7 +19,6 @@ import { getConnectableHost } from '../shared/networkHosts.js';
 
 import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
 import {
-    deleteSessionById,
     getProjectPathById,
 } from './projects.js';
 import {
@@ -66,12 +65,11 @@ import settingsRoutes from './routes/settings.js';
 import agentRoutes from './routes/agent.js';
 import projectModuleRoutes from './modules/projects/projects.routes.js';
 import userRoutes from './routes/user.js';
-import codexRoutes from './routes/codex.js';
 import geminiRoutes from './routes/gemini.js';
 import pluginsRoutes from './routes/plugins.js';
 import providerRoutes from './modules/providers/provider.routes.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
-import { initializeDatabase, sessionsDb } from './modules/database/index.js';
+import { initializeDatabase } from './modules/database/index.js';
 import { configureWebPush } from './services/vapid-keys.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
@@ -181,9 +179,6 @@ app.use('/api/settings', authenticateToken, settingsRoutes);
 // User API Routes (protected)
 app.use('/api/user', authenticateToken, userRoutes);
 
-// Codex API Routes (protected)
-app.use('/api/codex', authenticateToken, codexRoutes);
-
 // Gemini API Routes (protected)
 app.use('/api/gemini', authenticateToken, geminiRoutes);
 
@@ -290,44 +285,6 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
             success: false,
             error: error.message
         });
-    }
-});
-
-// Delete session endpoint; resolves `projectId` to path before touching disk.
-app.delete('/api/projects/:projectId/sessions/:sessionId', authenticateToken, async (req, res) => {
-    try {
-        const { projectId, sessionId } = req.params;
-        console.log(`[API] Deleting session: ${sessionId} from project: ${projectId}`);
-        await deleteSessionById(projectId, sessionId);
-        sessionsDb.deleteSessionById(sessionId);
-        console.log(`[API] Session ${sessionId} deleted successfully`);
-        res.json({ success: true });
-    } catch (error) {
-        console.error(`[API] Error deleting session ${req.params.sessionId}:`, error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Rename session endpoint
-app.put('/api/sessions/:sessionId/rename', authenticateToken, async (req, res) => {
-    try {
-        const { sessionId } = req.params;
-        const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9._-]/g, '');
-        if (!safeSessionId || safeSessionId !== String(sessionId)) {
-            return res.status(400).json({ error: 'Invalid sessionId' });
-        }
-        const { summary } = req.body;
-        if (!summary || typeof summary !== 'string' || summary.trim() === '') {
-            return res.status(400).json({ error: 'Summary is required' });
-        }
-        if (summary.trim().length > 500) {
-            return res.status(400).json({ error: 'Summary must not exceed 500 characters' });
-        }
-        sessionsDb.updateSessionCustomName(safeSessionId, summary.trim());
-        res.json({ success: true });
-    } catch (error) {
-        console.error(`[API] Error renaming session ${req.params.sessionId}:`, error);
-        res.status(500).json({ error: error.message });
     }
 });
 
