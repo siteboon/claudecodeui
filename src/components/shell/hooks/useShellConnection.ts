@@ -5,10 +5,12 @@ import type { Terminal } from '@xterm/xterm';
 import type { Project, ProjectSession } from '../../../types/app';
 import { TERMINAL_INIT_DELAY_MS } from '../constants/constants';
 import { getShellWebSocketUrl, parseShellMessage, sendSocketMessage } from '../utils/socket';
+import { useAppLifecycle } from '../../../hooks/useAppLifecycle';
 
 const ANSI_ESCAPE_REGEX =
   /(?:\u001B\[[0-?]*[ -/]*[@-~]|\u009B[0-?]*[ -/]*[@-~]|\u001B\][^\u0007\u001B]*(?:\u0007|\u001B\\)|\u009D[^\u0007\u009C]*(?:\u0007|\u009C)|\u001B[PX^_][^\u001B]*\u001B\\|[\u0090\u0098\u009E\u009F][^\u009C]*\u009C|\u001B[@-Z\\-_])/g;
 const PROCESS_EXIT_REGEX = /Process exited with code (\d+)/;
+const SHELL_RECONNECT_DELAY_MS = 5000;
 
 type UseShellConnectionOptions = {
   wsRef: MutableRefObject<WebSocket | null>;
@@ -54,6 +56,9 @@ export function useShellConnection({
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const connectingRef = useRef(false);
+  const wasConnectedRef = useRef(false);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const { onForeground } = useAppLifecycle();
 
   const handleProcessCompletion = useCallback(
     (output: string) => {
@@ -165,7 +170,16 @@ export function useShellConnection({
           setIsConnected(false);
           setIsConnecting(false);
           connectingRef.current = false;
-          clearTerminalScreen();
+          // Don't clear terminal — server will replay buffered output on reconnect.
+          // Track that we were connected so foreground resume can auto-reconnect.
+          wasConnectedRef.current = true;
+
+          // Auto-reconnect after delay (with jitter)
+          const jitter = Math.random() * 1000;
+          reconnectTimeoutRef.current = setTimeout(() => {
+            if (wsRef.current?.readyState === WebSocket.OPEN) return;
+            connectWebSocket();
+          }, SHELL_RECONNECT_DELAY_MS + jitter);
         };
 
         socket.onerror = () => {
@@ -206,6 +220,11 @@ export function useShellConnection({
   }, [connectWebSocket, isConnected, isConnecting, isInitialized]);
 
   const disconnectFromShell = useCallback(() => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    wasConnectedRef.current = false;
     closeSocket();
     clearTerminalScreen();
     setIsConnected(false);
@@ -221,6 +240,34 @@ export function useShellConnection({
 
     connectToShell();
   }, [autoConnect, connectToShell, isConnected, isConnecting, isInitialized]);
+
+  // Foreground resume: auto-reconnect if we were previously connected
+  useEffect(() => {
+    const cleanup = onForeground(() => {
+      if (!wasConnectedRef.current) return;
+      const ws = wsRef.current;
+      if (ws && ws.readyState === WebSocket.OPEN) return;
+
+      // Cancel any pending reconnect timer and connect immediately
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      console.log('[Shell] Foreground resume: reconnecting to shell');
+      connectWebSocket();
+    });
+
+    return cleanup;
+  }, [onForeground, connectWebSocket, wsRef]);
+
+  // Clean up reconnect timer on unmount
+  useEffect(() => {
+    return () => {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return {
     isConnected,

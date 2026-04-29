@@ -7,6 +7,7 @@ import { useWebSocket } from '../../contexts/WebSocketContext';
 import { useDeviceSettings } from '../../hooks/useDeviceSettings';
 import { useSessionProtection } from '../../hooks/useSessionProtection';
 import { useProjectsState } from '../../hooks/useProjectsState';
+import { useWakeLock } from '../../hooks/useWakeLock';
 
 export default function AppContent() {
   const navigate = useNavigate();
@@ -25,6 +26,9 @@ export default function AppContent() {
     markSessionAsNotProcessing,
     replaceTemporarySession,
   } = useSessionProtection();
+
+  // Keep screen awake on mobile while an agent session is processing
+  useWakeLock(isMobile && processingSessions.size > 0);
 
   const {
     selectedProject,

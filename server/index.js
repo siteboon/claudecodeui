@@ -1396,12 +1396,34 @@ function handleChatConnection(ws, request) {
     // Add to connected clients for project updates
     connectedClients.add(ws);
 
+    // Heartbeat: detect dead connections (mobile backgrounding kills sockets silently)
+    let isAlive = true;
+    ws.on('pong', () => { isAlive = true; });
+    const heartbeatInterval = setInterval(() => {
+        if (!isAlive) {
+            console.log('[INFO] Chat WebSocket heartbeat failed, terminating');
+            clearInterval(heartbeatInterval);
+            ws.terminate();
+            return;
+        }
+        isAlive = false;
+        try { ws.ping(); } catch (_) { /* socket already closing */ }
+    }, 30000);
+
     // Wrap WebSocket with writer for consistent interface with SSEStreamWriter
     const writer = new WebSocketWriter(ws, request?.user?.id ?? request?.user?.userId ?? null);
 
     ws.on('message', async (message) => {
         try {
             const data = JSON.parse(message);
+
+            // Application-level ping for foreground-resume checks
+            if (data.type === 'ping') {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }));
+                }
+                return;
+            }
 
             if (data.type === 'claude-command') {
                 console.log('[DEBUG] User message:', data.command || '[Continue/Resume]');
@@ -1532,6 +1554,7 @@ function handleChatConnection(ws, request) {
 
     ws.on('close', () => {
         console.log('🔌 Chat client disconnected');
+        clearInterval(heartbeatInterval);
         // Remove from connected clients
         connectedClients.delete(ws);
     });
@@ -1545,10 +1568,32 @@ function handleShellConnection(ws) {
     let urlDetectionBuffer = '';
     const announcedAuthUrls = new Set();
 
+    // Heartbeat: detect dead connections from mobile backgrounding
+    let isAlive = true;
+    ws.on('pong', () => { isAlive = true; });
+    const heartbeatInterval = setInterval(() => {
+        if (!isAlive) {
+            console.log('[INFO] Shell WebSocket heartbeat failed, terminating');
+            clearInterval(heartbeatInterval);
+            ws.terminate();
+            return;
+        }
+        isAlive = false;
+        try { ws.ping(); } catch (_) { /* socket already closing */ }
+    }, 30000);
+
     ws.on('message', async (message) => {
         try {
             const data = JSON.parse(message);
             console.log('📨 Shell message received:', data.type);
+
+            // Application-level ping for foreground-resume checks
+            if (data.type === 'ping') {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }));
+                }
+                return;
+            }
 
             if (data.type === 'init') {
                 const projectPath = data.projectPath || process.cwd();
@@ -1873,6 +1918,7 @@ function handleShellConnection(ws) {
 
     ws.on('close', () => {
         console.log('🔌 Shell client disconnected');
+        clearInterval(heartbeatInterval);
 
         if (ptySessionKey) {
             const session = ptySessionsMap.get(ptySessionKey);
