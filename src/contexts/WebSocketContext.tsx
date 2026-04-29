@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../components/auth/context/AuthContext';
 import { IS_PLATFORM } from '../constants/config';
+import { useAppLifecycle } from '../hooks/useAppLifecycle';
 
 type WebSocketContextType = {
   ws: WebSocket | null;
@@ -26,52 +27,87 @@ const buildWebSocketUrl = (token: string | null) => {
   return `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}`; // OSS mode: Use same host:port that served the page
 };
 
+const HEARTBEAT_INTERVAL_MS = 25000;
+const HEARTBEAT_TIMEOUT_MS = 10000;
+const RECONNECT_DELAY_MS = 3000;
+const STALE_THRESHOLD_MS = 5000;
+const PING_PROBE_TIMEOUT_MS = 2000;
+
 const useWebSocketProviderState = (): WebSocketContextType => {
   const wsRef = useRef<WebSocket | null>(null);
-  const unmountedRef = useRef(false); // Track if component is unmounted
-  const hasConnectedRef = useRef(false); // Track if we've ever connected (to detect reconnects)
+  const unmountedRef = useRef(false);
+  const hasConnectedRef = useRef(false);
   const [latestMessage, setLatestMessage] = useState<any>(null);
   const [isConnected, setIsConnected] = useState(false);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastPongRef = useRef<number>(Date.now());
+  const pingProbeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { token } = useAuth();
+  const { onForeground, onBackground } = useAppLifecycle();
 
-  useEffect(() => {
-    connect();
-    
-    return () => {
-      unmountedRef.current = true;
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
+  const clearHeartbeat = useCallback(() => {
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
+    }
+    if (pingProbeTimeoutRef.current) {
+      clearTimeout(pingProbeTimeoutRef.current);
+      pingProbeTimeoutRef.current = null;
+    }
+  }, []);
+
+  const startHeartbeat = useCallback(() => {
+    clearHeartbeat();
+    heartbeatIntervalRef.current = setInterval(() => {
+      const ws = wsRef.current;
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+      // If we haven't received a pong in too long, the connection is dead
+      if (Date.now() - lastPongRef.current > HEARTBEAT_INTERVAL_MS + HEARTBEAT_TIMEOUT_MS) {
+        console.warn('[WebSocket] Heartbeat timeout, forcing reconnect');
+        clearHeartbeat();
+        ws.close();
+        return;
       }
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-    };
-  }, [token]); // everytime token changes, we reconnect
+
+      try {
+        ws.send(JSON.stringify({ type: 'ping' }));
+      } catch (_) { /* socket closing */ }
+    }, HEARTBEAT_INTERVAL_MS);
+  }, [clearHeartbeat]);
 
   const connect = useCallback(() => {
-    if (unmountedRef.current) return; // Prevent connection if unmounted
+    if (unmountedRef.current) return;
     try {
-      // Construct WebSocket URL
       const wsUrl = buildWebSocketUrl(token);
-
       if (!wsUrl) return console.warn('No authentication token found for WebSocket connection');
-      
+
       const websocket = new WebSocket(wsUrl);
 
       websocket.onopen = () => {
         setIsConnected(true);
         wsRef.current = websocket;
+        lastPongRef.current = Date.now();
         if (hasConnectedRef.current) {
-          // This is a reconnect — signal so components can catch up on missed messages
           setLatestMessage({ type: 'websocket-reconnected', timestamp: Date.now() });
         }
         hasConnectedRef.current = true;
+        startHeartbeat();
       };
 
       websocket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          // Track application-level pongs for heartbeat
+          if (data.type === 'pong') {
+            lastPongRef.current = Date.now();
+            if (pingProbeTimeoutRef.current) {
+              clearTimeout(pingProbeTimeoutRef.current);
+              pingProbeTimeoutRef.current = null;
+            }
+            return;
+          }
           setLatestMessage(data);
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
@@ -81,12 +117,14 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       websocket.onclose = () => {
         setIsConnected(false);
         wsRef.current = null;
-        
-        // Attempt to reconnect after 3 seconds
+        clearHeartbeat();
+
+        // Attempt to reconnect after delay (with jitter to avoid reconnect storms)
+        const jitter = Math.random() * 1000;
         reconnectTimeoutRef.current = setTimeout(() => {
-          if (unmountedRef.current) return; // Prevent reconnection if unmounted
+          if (unmountedRef.current) return;
           connect();
-        }, 3000);
+        }, RECONNECT_DELAY_MS + jitter);
       };
 
       websocket.onerror = (error) => {
@@ -96,7 +134,78 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     } catch (error) {
       console.error('Error creating WebSocket connection:', error);
     }
-  }, [token]); // everytime token changes, we reconnect
+  }, [token, startHeartbeat, clearHeartbeat]);
+
+  // Initial connection + cleanup on token change
+  useEffect(() => {
+    unmountedRef.current = false;
+    connect();
+
+    return () => {
+      clearHeartbeat();
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, [token]);
+
+  // Mark as unmounted only on true component unmount
+  useEffect(() => {
+    return () => {
+      unmountedRef.current = true;
+    };
+  }, []);
+
+  // Foreground: immediately check connection health and reconnect if needed
+  useEffect(() => {
+    const cleanup = onForeground((backgroundDurationMs) => {
+      if (unmountedRef.current) return;
+
+      const ws = wsRef.current;
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        // Socket is dead — cancel any pending reconnect and connect now
+        if (reconnectTimeoutRef.current) {
+          clearTimeout(reconnectTimeoutRef.current);
+          reconnectTimeoutRef.current = null;
+        }
+        console.log('[WebSocket] Foreground resume: socket dead, reconnecting immediately');
+        connect();
+        return;
+      }
+
+      // Socket reports OPEN but may be stale after long backgrounding
+      if (backgroundDurationMs > STALE_THRESHOLD_MS) {
+        try {
+          ws.send(JSON.stringify({ type: 'ping' }));
+        } catch (_) {
+          connect();
+          return;
+        }
+        // If no pong within timeout, force reconnect
+        pingProbeTimeoutRef.current = setTimeout(() => {
+          console.log('[WebSocket] Foreground resume: stale connection detected, reconnecting');
+          ws.close();
+        }, PING_PROBE_TIMEOUT_MS);
+        return; // Don't restart heartbeat while probe is pending
+      }
+
+      // Restart heartbeat (was paused during background)
+      startHeartbeat();
+    });
+
+    return cleanup;
+  }, [onForeground, connect, startHeartbeat]);
+
+  // Background: pause heartbeat (no point sending pings while frozen)
+  useEffect(() => {
+    const cleanup = onBackground(() => {
+      clearHeartbeat();
+    });
+    return cleanup;
+  }, [onBackground, clearHeartbeat]);
 
   const sendMessage = useCallback((message: any) => {
     const socket = wsRef.current;
