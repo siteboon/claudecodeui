@@ -16,6 +16,7 @@ export const sessionSynchronizerService = {
    */
   async synchronizeSessions(): Promise<SessionSynchronizeResult> {
     const lastScanAt = scanStateDb.getLastScannedAt();
+    const scanBoundary = new Date();
     const processedByProvider: Record<LLMProvider, number> = {
       claude: 0,
       codex: 0,
@@ -41,7 +42,13 @@ export const sessionSynchronizerService = {
       failures.push(reason);
     }
 
-    scanStateDb.updateLastScannedAt();
+    if (failures.length === 0) {
+      scanStateDb.updateLastScannedAt(scanBoundary);
+    } else {
+      console.warn(
+        `[Sessions] Skipping scan_state cursor advance because ${failures.length} provider sync(s) failed.`,
+      );
+    }
 
     return {
       processedByProvider,

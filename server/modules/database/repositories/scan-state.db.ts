@@ -28,14 +28,15 @@ export const scanStateDb = {
         return lastScannedDate;
     },
 
-    updateLastScannedAt() {
+    updateLastScannedAt(scannedAt: Date = new Date()) {
         const db = getConnection();
+        const sqliteTimestamp = scannedAt.toISOString().slice(0, 19).replace('T', ' ');
 
         db.prepare(`
             INSERT INTO scan_state (id, last_scanned_at)
-            VALUES (1, CURRENT_TIMESTAMP)
+            VALUES (1, ?)
             ON CONFLICT (id)
-            DO UPDATE SET last_scanned_at = CURRENT_TIMESTAMP
-        `).run();
+            DO UPDATE SET last_scanned_at = excluded.last_scanned_at
+        `).run(sqliteTimestamp);
     }
 };
