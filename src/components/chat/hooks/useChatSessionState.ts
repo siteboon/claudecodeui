@@ -289,6 +289,7 @@ export function useChatSessionState({
 
     const nearBottom = isNearBottom();
     setIsUserScrolledUp(!nearBottom);
+    scrollPositionRef.current = { height: container.scrollHeight, top: container.scrollTop };
 
     if (!allMessagesLoadedRef.current) {
       const scrolledNearTop = container.scrollTop < 100;
@@ -619,15 +620,17 @@ export function useChatSessionState({
     return chatMessages.slice(-visibleMessageCount);
   }, [chatMessages, visibleMessageCount]);
 
+  // Only auto-scroll when chat content actually grew. A re-render that doesn't
+  // append messages (SWR revalidate finishing, spinner unmount, sibling state
+  // flip) must not yank the viewport — scrolling on those was the bug behind
+  // "circle indicator finishes → chat scrolls down even though nothing changed."
+  const prevChatLenRef = useRef(0);
   useEffect(() => {
-    if (!autoScrollToBottom && scrollContainerRef.current) {
-      const container = scrollContainerRef.current;
-      scrollPositionRef.current = { height: container.scrollHeight, top: container.scrollTop };
-    }
-  });
+    const prevLen = prevChatLenRef.current;
+    prevChatLenRef.current = chatMessages.length;
 
-  useEffect(() => {
     if (!scrollContainerRef.current || chatMessages.length === 0) return;
+    if (chatMessages.length <= prevLen) return;
     if (isLoadingMoreRef.current || isLoadingMoreMessages || pendingScrollRestoreRef.current) return;
     if (searchScrollActiveRef.current) return;
 
