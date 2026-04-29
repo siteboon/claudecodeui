@@ -189,6 +189,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
           console.log('[WebSocket] Foreground resume: stale connection detected, reconnecting');
           ws.close();
         }, PING_PROBE_TIMEOUT_MS);
+        return; // Don't restart heartbeat while probe is pending
       }
 
       // Restart heartbeat (was paused during background)
