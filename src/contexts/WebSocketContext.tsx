@@ -136,12 +136,12 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     }
   }, [token, startHeartbeat, clearHeartbeat]);
 
-  // Initial connection + cleanup
+  // Initial connection + cleanup on token change
   useEffect(() => {
+    unmountedRef.current = false;
     connect();
 
     return () => {
-      unmountedRef.current = true;
       clearHeartbeat();
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
@@ -151,6 +151,13 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       }
     };
   }, [token]);
+
+  // Mark as unmounted only on true component unmount
+  useEffect(() => {
+    return () => {
+      unmountedRef.current = true;
+    };
+  }, []);
 
   // Foreground: immediately check connection health and reconnect if needed
   useEffect(() => {

@@ -57,6 +57,7 @@ export function useShellConnection({
   const [isConnecting, setIsConnecting] = useState(false);
   const connectingRef = useRef(false);
   const wasConnectedRef = useRef(false);
+  const shouldReconnectRef = useRef(true);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { onForeground } = useAppLifecycle();
 
@@ -170,6 +171,9 @@ export function useShellConnection({
           setIsConnected(false);
           setIsConnecting(false);
           connectingRef.current = false;
+
+          if (!shouldReconnectRef.current) return;
+
           // Don't clear terminal — server will replay buffered output on reconnect.
           // Track that we were connected so foreground resume can auto-reconnect.
           wasConnectedRef.current = true;
@@ -214,12 +218,14 @@ export function useShellConnection({
       return;
     }
 
+    shouldReconnectRef.current = true;
     connectingRef.current = true;
     setIsConnecting(true);
     connectWebSocket(true);
   }, [connectWebSocket, isConnected, isConnecting, isInitialized]);
 
   const disconnectFromShell = useCallback(() => {
+    shouldReconnectRef.current = false;
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;

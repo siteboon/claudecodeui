@@ -19,9 +19,18 @@ export function useWakeLock(shouldLock: boolean) {
     const requestLock = async () => {
       try {
         if (released) return;
-        wakeLockRef.current = await navigator.wakeLock.request('screen');
-        wakeLockRef.current.addEventListener('release', () => {
-          wakeLockRef.current = null;
+        const sentinel = await navigator.wakeLock.request('screen');
+        // If cleanup ran while awaiting, release immediately
+        if (released) {
+          await sentinel.release().catch(() => {});
+          return;
+        }
+        wakeLockRef.current = sentinel;
+        sentinel.addEventListener('release', () => {
+          // Only clear ref if it still holds this sentinel (not a newer one)
+          if (wakeLockRef.current === sentinel) {
+            wakeLockRef.current = null;
+          }
         });
       } catch (_) {
         // Wake Lock request can fail (low battery, permission denied, etc.)
