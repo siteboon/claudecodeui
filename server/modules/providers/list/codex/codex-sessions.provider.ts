@@ -270,6 +270,23 @@ export class CodexSessionsProvider implements IProviderSessions {
     const ts = raw.timestamp || new Date().toISOString();
     const baseId = raw.uuid || generateMessageId('codex');
 
+    if (raw.type === 'thinking' || raw.isReasoning) {
+      const thinkingContent = typeof raw.message?.content === 'string'
+        ? raw.message.content
+        : '';
+      if (!thinkingContent.trim()) {
+        return [];
+      }
+      return [createNormalizedMessage({
+        id: baseId,
+        sessionId,
+        timestamp: ts,
+        provider: PROVIDER,
+        kind: 'thinking',
+        content: thinkingContent,
+      })];
+    }
+
     if (raw.message?.role === 'user') {
       const content = typeof raw.message.content === 'string'
         ? raw.message.content
@@ -313,17 +330,6 @@ export class CodexSessionsProvider implements IProviderSessions {
         kind: 'text',
         role: 'assistant',
         content,
-      })];
-    }
-
-    if (raw.type === 'thinking' || raw.isReasoning) {
-      return [createNormalizedMessage({
-        id: baseId,
-        sessionId,
-        timestamp: ts,
-        provider: PROVIDER,
-        kind: 'thinking',
-        content: raw.message?.content || '',
       })];
     }
 
