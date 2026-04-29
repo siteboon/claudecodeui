@@ -2,7 +2,7 @@ import express from 'express';
 import { spawn } from 'child_process';
 import path from 'path';
 import { promises as fs } from 'fs';
-import { getProjectPathById } from '../projects.js';
+import { projectsDb } from '../modules/database/index.js';
 import { queryClaudeSDK } from '../claude-sdk.js';
 import { spawnCursor } from '../cursor-cli.js';
 
@@ -111,7 +111,7 @@ function validateProjectPath(projectPath) {
  * by `validateProjectPath` before any `git` command runs against it.
  */
 async function getActualProjectPath(projectId) {
-  const projectPath = await getProjectPathById(projectId);
+  const projectPath = await projectsDb.getProjectPathById(projectId);
   if (!projectPath) {
     throw new Error(`Unable to resolve project path for "${projectId}"`);
   }

@@ -13,7 +13,7 @@ import fs from 'fs';
 import path from 'path';
 import { promises as fsPromises } from 'fs';
 import { spawn } from 'child_process';
-import { getProjectPathById } from '../projects.js';
+import { projectsDb } from '../modules/database/index.js';
 import { detectTaskMasterMCPServer } from '../utils/mcp-detector.js';
 import { broadcastTaskMasterProjectUpdate, broadcastTaskMasterTasksUpdate } from '../utils/taskmaster-websocket.js';
 
@@ -26,10 +26,10 @@ import { broadcastTaskMasterProjectUpdate, broadcastTaskMasterTasksUpdate } from
  * every handler calls this helper and 404s when the id is unknown.
  */
 async function resolveProjectPathFromId(projectId) {
-    if (!projectId) {
-        return null;
-    }
-    return getProjectPathById(projectId);
+  if (!projectId) {
+    return null;
+  }
+  return projectsDb.getProjectPathById(projectId);
 }
 
 const router = express.Router();

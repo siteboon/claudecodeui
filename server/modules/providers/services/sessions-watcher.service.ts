@@ -194,10 +194,6 @@ async function onUpdate(
       return;
     }
 
-    console.log(`Session synchronization triggered by ${eventType} event for provider "${provider}"`, {
-      filePath,
-      sessionId: result.sessionId,
-    });
     queuePendingWatcherUpdate(eventType, provider, result.sessionId);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
