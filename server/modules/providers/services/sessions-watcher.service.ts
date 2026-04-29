@@ -66,7 +66,7 @@ let watcherRescheduleAfterRefresh = false;
  */
 function isWatcherTargetFile(provider: LLMProvider, filePath: string): boolean {
   if (provider === 'gemini') {
-    return filePath.endsWith('.json');
+    return filePath.endsWith('.json') || filePath.endsWith('.jsonl');
   }
 
   return filePath.endsWith('.jsonl');
@@ -194,6 +194,10 @@ async function onUpdate(
       return;
     }
 
+    console.log(`Session synchronization triggered by ${eventType} event for provider "${provider}"`, {
+      filePath,
+      sessionId: result.sessionId,
+    });
     queuePendingWatcherUpdate(eventType, provider, result.sessionId);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
