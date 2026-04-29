@@ -196,8 +196,12 @@ function createWordMatcher(
       return phraseRegex.test(text);
     }
 
-    if (phraseRegex.test(text) || words.length === 1) {
+    if (phraseRegex.test(text)) {
       return true;
+    }
+
+    if (words.length === 1) {
+      return allWordsMatch(text.toLowerCase());
     }
 
     return allWordsMatch(text.toLowerCase());
@@ -534,31 +538,47 @@ async function findMatchedFileKeys(
   const requireExactPhrase = words.length > 1 && normalizedQuery.length > 0;
 
   if (requireExactPhrase) {
-    const matchedForPhrase = new Set<string>();
-    const fileChunks = chunkArray(
-      searchablePathEntries.map((entry) => entry.absolutePath),
-      RIPGREP_FILE_CHUNK_SIZE,
-    );
+    let matchedForPhrase = searchablePathEntries.slice();
 
-    let nextChunkIndex = 0;
-    const workerCount = Math.min(RIPGREP_CHUNK_CONCURRENCY, fileChunks.length);
-    const workers = Array.from({ length: workerCount }, async () => {
-      while (nextChunkIndex < fileChunks.length && !signal?.aborted) {
-        const currentIndex = nextChunkIndex;
-        nextChunkIndex += 1;
-        const chunkMatches = await runRipgrepFilesWithMatches(normalizedQuery, fileChunks[currentIndex], signal);
-        for (const matchedPath of chunkMatches) {
-          matchedForPhrase.add(matchedPath);
-        }
+    // Keep ripgrep as an over-approximation for exact phrase mode by requiring
+    // each word to appear somewhere in the file, then defer strict phrase
+    // validation to the in-memory matcher.
+    for (const word of words) {
+      if (signal?.aborted) {
+        return new Set();
       }
-    });
 
-    await Promise.all(workers);
-    if (signal?.aborted) {
-      return new Set();
+      const matchedForWord = new Set<string>();
+      const fileChunks = chunkArray(
+        matchedForPhrase.map((entry) => entry.absolutePath),
+        RIPGREP_FILE_CHUNK_SIZE,
+      );
+
+      let nextChunkIndex = 0;
+      const workerCount = Math.min(RIPGREP_CHUNK_CONCURRENCY, fileChunks.length);
+      const workers = Array.from({ length: workerCount }, async () => {
+        while (nextChunkIndex < fileChunks.length && !signal?.aborted) {
+          const currentIndex = nextChunkIndex;
+          nextChunkIndex += 1;
+          const chunkMatches = await runRipgrepFilesWithMatches(word, fileChunks[currentIndex], signal);
+          for (const matchedPath of chunkMatches) {
+            matchedForWord.add(matchedPath);
+          }
+        }
+      });
+
+      await Promise.all(workers);
+      if (signal?.aborted) {
+        return new Set();
+      }
+
+      matchedForPhrase = matchedForPhrase.filter((entry) => matchedForWord.has(entry.normalizedPath));
+      if (matchedForPhrase.length === 0) {
+        break;
+      }
     }
 
-    return matchedForPhrase;
+    return new Set(matchedForPhrase.map((entry) => entry.normalizedPath));
   }
 
   let remainingEntries = searchablePathEntries.slice();

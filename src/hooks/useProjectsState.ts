@@ -605,12 +605,28 @@ export function useProjectsState({
 
       setProjects((prevProjects) =>
         prevProjects.map((project) => {
+          const sessions = project.sessions?.filter((session) => session.id !== sessionIdToDelete) ?? [];
+          const cursorSessions = project.cursorSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [];
+          const codexSessions = project.codexSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [];
+          const geminiSessions = project.geminiSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [];
+
+          const removedFromProject = (
+            sessions.length !== (project.sessions?.length ?? 0)
+            || cursorSessions.length !== (project.cursorSessions?.length ?? 0)
+            || codexSessions.length !== (project.codexSessions?.length ?? 0)
+            || geminiSessions.length !== (project.geminiSessions?.length ?? 0)
+          );
+
+          if (!removedFromProject) {
+            return project;
+          }
+
           const updatedProject: Project = {
             ...project,
-            sessions: project.sessions?.filter((session) => session.id !== sessionIdToDelete) ?? [],
-            cursorSessions: project.cursorSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [],
-            codexSessions: project.codexSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [],
-            geminiSessions: project.geminiSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [],
+            sessions,
+            cursorSessions,
+            codexSessions,
+            geminiSessions,
           };
 
           const totalSessions = Math.max(0, Number(project.sessionMeta?.total ?? 0) - 1);

@@ -120,6 +120,8 @@ export function useSidebarController({
   const searchSeqRef = useRef(0);
   const eventSourceRef = useRef<EventSource | null>(null);
   const starToggleSequenceByProjectRef = useRef<Map<string, number>>(new Map());
+  const migrationStartedRef = useRef(false);
+  const onRefreshRef = useRef(onRefresh);
 
   const isSidebarCollapsed = !isMobile && !sidebarVisible;
 
@@ -194,19 +196,25 @@ export function useSidebarController({
   }, []);
 
   useEffect(() => {
+    onRefreshRef.current = onRefresh;
+  }, [onRefresh]);
+
+  useEffect(() => {
+    if (migrationStartedRef.current) {
+      return;
+    }
+
     const legacyStarredProjectIds = readLegacyStarredProjectIds();
     if (legacyStarredProjectIds.length === 0) {
       return;
     }
 
-    let active = true;
+    migrationStartedRef.current = true;
 
     const migrateLegacyStars = async () => {
       try {
         await api.migrateLegacyProjectStars(legacyStarredProjectIds);
-        if (active) {
-          await onRefresh();
-        }
+        await onRefreshRef.current();
       } catch (error) {
         console.error('[Sidebar] Failed to migrate legacy starred projects:', error);
       } finally {
@@ -215,10 +223,6 @@ export function useSidebarController({
     };
 
     void migrateLegacyStars();
-
-    return () => {
-      active = false;
-    };
   }, [onRefresh]);
 
   useEffect(() => {
@@ -446,15 +450,25 @@ export function useSidebarController({
   const getProjectSessions = useCallback((project: Project) => getAllSessions(project), []);
 
   const loadMoreSessionsForProject = useCallback(async (projectId: string) => {
-    if (!onLoadMoreSessions || loadingMoreProjects.has(projectId)) {
+    if (!onLoadMoreSessions) {
       return;
     }
 
+    let shouldLoad = false;
     setLoadingMoreProjects((previous) => {
+      if (previous.has(projectId)) {
+        return previous;
+      }
+
+      shouldLoad = true;
       const next = new Set(previous);
       next.add(projectId);
       return next;
     });
+
+    if (!shouldLoad) {
+      return;
+    }
 
     try {
       await onLoadMoreSessions(projectId);
@@ -468,7 +482,7 @@ export function useSidebarController({
         return next;
       });
     }
-  }, [loadingMoreProjects, onLoadMoreSessions, t]);
+  }, [onLoadMoreSessions, t]);
 
   const projectsWithResolvedStarState = useMemo(() => {
     if (optimisticStarByProjectId.size === 0) {

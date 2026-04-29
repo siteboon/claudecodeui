@@ -338,21 +338,28 @@ router.get(
     const limitRaw = readOptionalQueryString(req.query.limit);
     const offsetRaw = readOptionalQueryString(req.query.offset);
 
-    const limit = limitRaw === undefined ? null : Number.parseInt(limitRaw, 10);
-    const offset = offsetRaw === undefined ? 0 : Number.parseInt(offsetRaw, 10);
-
-    if (limitRaw !== undefined && Number.isNaN(limit)) {
-      throw new AppError('limit must be a valid integer.', {
-        code: 'INVALID_QUERY_PARAMETER',
-        statusCode: 400,
-      });
+    let limit: number | null = null;
+    if (limitRaw !== undefined) {
+      const parsedLimit = Number.parseInt(limitRaw, 10);
+      if (Number.isNaN(parsedLimit) || parsedLimit < 0) {
+        throw new AppError('limit must be a non-negative integer.', {
+          code: 'INVALID_QUERY_PARAMETER',
+          statusCode: 400,
+        });
+      }
+      limit = parsedLimit;
     }
 
-    if (offsetRaw !== undefined && Number.isNaN(offset)) {
-      throw new AppError('offset must be a valid integer.', {
-        code: 'INVALID_QUERY_PARAMETER',
-        statusCode: 400,
-      });
+    let offset = 0;
+    if (offsetRaw !== undefined) {
+      const parsedOffset = Number.parseInt(offsetRaw, 10);
+      if (Number.isNaN(parsedOffset) || parsedOffset < 0) {
+        throw new AppError('offset must be a non-negative integer.', {
+          code: 'INVALID_QUERY_PARAMETER',
+          statusCode: 400,
+        });
+      }
+      offset = parsedOffset;
     }
 
     const result = await sessionsService.fetchHistory(sessionId, {
