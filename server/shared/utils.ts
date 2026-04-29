@@ -138,6 +138,64 @@ export const FORBIDDEN_WORKSPACE_PATHS = [
   'C:\\$Recycle.Bin',
 ];
 
+function stripWindowsLongPathPrefix(inputPath: string): string {
+  if (inputPath.startsWith('\\\\?\\UNC\\')) {
+    return `\\\\${inputPath.slice('\\\\?\\UNC\\'.length)}`;
+  }
+
+  if (inputPath.startsWith('\\\\?\\')) {
+    return inputPath.slice('\\\\?\\'.length);
+  }
+
+  return inputPath;
+}
+
+function shouldUseWindowsPathNormalization(inputPath: string): boolean {
+  if (process.platform === 'win32') {
+    return true;
+  }
+
+  return inputPath.startsWith('\\\\') || /^[a-zA-Z]:([\\/]|$)/.test(inputPath);
+}
+
+/**
+ * Canonicalizes project/workspace paths for stable DB keys and comparisons.
+ *
+ * Normalization rules:
+ * - trim whitespace
+ * - strip Windows long-path prefixes (`\\?\` and `\\?\UNC\`)
+ * - normalize path separators and dot segments
+ * - trim trailing separators except for filesystem roots
+ */
+export function normalizeProjectPath(inputPath: string): string {
+  if (typeof inputPath !== 'string') {
+    return '';
+  }
+
+  const trimmed = inputPath.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  const withoutLongPrefix = stripWindowsLongPathPrefix(trimmed);
+  const useWindowsPathRules = shouldUseWindowsPathNormalization(withoutLongPrefix);
+  const normalized = useWindowsPathRules
+    ? path.win32.normalize(withoutLongPrefix)
+    : path.posix.normalize(withoutLongPrefix);
+
+  if (!normalized) {
+    return '';
+  }
+
+  const parser = useWindowsPathRules ? path.win32 : path.posix;
+  const root = parser.parse(normalized).root;
+  if (normalized === root) {
+    return normalized;
+  }
+
+  return normalized.replace(/[\\/]+$/, '');
+}
+
 /**
  * Validates that a user-supplied workspace path is safe to use.
  *
@@ -147,8 +205,16 @@ export const FORBIDDEN_WORKSPACE_PATHS = [
  */
 export async function validateWorkspacePath(requestedPath: string): Promise<WorkspacePathValidationResult> {
   try {
-    const absolutePath = path.resolve(requestedPath);
-    const normalizedPath = path.normalize(absolutePath);
+    const normalizedRequestedPath = normalizeProjectPath(requestedPath);
+    if (!normalizedRequestedPath) {
+      return {
+        valid: false,
+        error: 'Workspace path is required',
+      };
+    }
+
+    const absolutePath = path.resolve(normalizedRequestedPath);
+    const normalizedPath = normalizeProjectPath(absolutePath);
 
     if (FORBIDDEN_WORKSPACE_PATHS.includes(normalizedPath) || normalizedPath === '/') {
       return {
@@ -158,10 +224,14 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
     }
 
     for (const forbiddenPath of FORBIDDEN_WORKSPACE_PATHS) {
-      if (normalizedPath === forbiddenPath || normalizedPath.startsWith(`${forbiddenPath}${path.sep}`)) {
+      const normalizedForbiddenPath = normalizeProjectPath(forbiddenPath);
+      if (
+        normalizedPath === normalizedForbiddenPath
+        || normalizedPath.startsWith(`${normalizedForbiddenPath}${path.sep}`)
+      ) {
         // Allow specific user-writable folders under /var.
         if (
-          forbiddenPath === '/var'
+          normalizedForbiddenPath === '/var'
           && (normalizedPath.startsWith('/var/tmp') || normalizedPath.startsWith('/var/folders'))
         ) {
           continue;
@@ -174,10 +244,10 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
       }
     }
 
-    let resolvedPath = absolutePath;
+    let resolvedPath = normalizeProjectPath(absolutePath);
     try {
       await access(absolutePath);
-      resolvedPath = await realpath(absolutePath);
+      resolvedPath = normalizeProjectPath(await realpath(absolutePath));
     } catch (error) {
       const fileError = error as NodeJS.ErrnoException;
       if (fileError.code !== 'ENOENT') {
@@ -187,7 +257,7 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
       const parentPath = path.dirname(absolutePath);
       try {
         const parentRealPath = await realpath(parentPath);
-        resolvedPath = path.join(parentRealPath, path.basename(absolutePath));
+        resolvedPath = normalizeProjectPath(path.join(parentRealPath, path.basename(absolutePath)));
       } catch (parentError) {
         const parentFileError = parentError as NodeJS.ErrnoException;
         if (parentFileError.code !== 'ENOENT') {
@@ -196,7 +266,7 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
       }
     }
 
-    const resolvedWorkspaceRoot = await realpath(WORKSPACES_ROOT);
+    const resolvedWorkspaceRoot = normalizeProjectPath(await realpath(WORKSPACES_ROOT));
     if (
       !resolvedPath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)
       && resolvedPath !== resolvedWorkspaceRoot

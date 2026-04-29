@@ -7,7 +7,7 @@ import type {
   ProjectRepositoryRow,
   WorkspacePathValidationResult,
 } from '@/shared/types.js';
-import { AppError, validateWorkspacePath } from '@/shared/utils.js';
+import { AppError, normalizeProjectPath, validateWorkspacePath } from '@/shared/utils.js';
 
 type CreateProjectInput = {
   projectPath: string;
@@ -95,7 +95,7 @@ export async function createProject(
   input: CreateProjectInput,
   dependencies: CreateProjectDependencies = defaultDependencies,
 ): Promise<CreateProjectServiceResult> {
-  const normalizedPath = (input.projectPath || '').trim();
+  const normalizedPath = normalizeProjectPath(input.projectPath || '');
   if (!normalizedPath) {
     throw new AppError('path is required', {
       code: 'PROJECT_PATH_REQUIRED',
@@ -112,7 +112,7 @@ export async function createProject(
     });
   }
 
-  const resolvedProjectPath = pathValidation.resolvedPath;
+  const resolvedProjectPath = normalizeProjectPath(pathValidation.resolvedPath);
   await dependencies.ensureWorkspaceDirectory(resolvedProjectPath);
 
   const normalizedCustomName = resolveDisplayName(input.customName ?? null, resolvedProjectPath);

@@ -12,6 +12,7 @@ import { spawnGemini } from '../gemini-cli.js';
 import { Octokit } from '@octokit/rest';
 import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants.js';
 import { IS_PLATFORM } from '../constants/config.js';
+import { normalizeProjectPath } from '../shared/utils.js';
 
 const router = express.Router();
 
@@ -889,7 +890,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       finalProjectPath = await cloneGitHubRepo(githubUrl.trim(), tokenToUse, targetPath);
     } else {
       // Use existing project path
-      finalProjectPath = path.resolve(projectPath);
+      finalProjectPath = normalizeProjectPath(path.resolve(projectPath));
 
       // Verify the path exists
       try {
@@ -898,6 +899,8 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         throw new Error(`Project path does not exist: ${finalProjectPath}`);
       }
     }
+
+    finalProjectPath = normalizeProjectPath(finalProjectPath);
 
     // Register project path in DB (or reuse existing active registration)
     const registrationResult = projectsDb.createProjectPath(finalProjectPath, null);

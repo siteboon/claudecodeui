@@ -1,7 +1,6 @@
-import path from 'node:path';
-
 import { getConnection } from '@/modules/database/connection.js';
 import { projectsDb } from '@/modules/database/repositories/projects.db.js';
+import { normalizeProjectPath } from '@/shared/utils.js';
 
 type SessionRow = {
   session_id: string;
@@ -29,32 +28,9 @@ function normalizeTimestamp(value?: string): string | null {
   return parsed.toISOString();
 }
 
-function normalizeCodexProjectPath(projectPath: string): string {
-  const trimmedPath = projectPath.trim();
-  if (!trimmedPath) {
-    return projectPath;
-  }
-
-  if (process.platform !== 'win32') {
-    return path.normalize(trimmedPath);
-  }
-
-  let strippedPath = trimmedPath;
-  if (strippedPath.startsWith('\\\\?\\UNC\\')) {
-    strippedPath = `\\\\${strippedPath.slice('\\\\?\\UNC\\'.length)}`;
-  } else if (strippedPath.startsWith('\\\\?\\')) {
-    strippedPath = strippedPath.slice('\\\\?\\'.length);
-  }
-
-  return path.win32.normalize(strippedPath);
-}
-
 function normalizeProjectPathForProvider(provider: string, projectPath: string): string {
-  if (provider !== 'codex') {
-    return projectPath;
-  }
-
-  return normalizeCodexProjectPath(projectPath);
+  void provider;
+  return normalizeProjectPath(projectPath);
 }
 
 export const sessionsDb = {
@@ -142,17 +118,19 @@ export const sessionsDb = {
 
   getSessionsByProjectPath(projectPath: string): SessionRow[] {
     const db = getConnection();
+    const normalizedProjectPath = normalizeProjectPath(projectPath);
     return db
       .prepare(
         `SELECT session_id, provider, project_path, jsonl_path, custom_name, created_at, updated_at
          FROM sessions
          WHERE project_path = ?`
       )
-      .all(projectPath) as SessionRow[];
+      .all(normalizedProjectPath) as SessionRow[];
   },
 
   getSessionsByProjectPathPage(projectPath: string, limit: number, offset: number): SessionRow[] {
     const db = getConnection();
+    const normalizedProjectPath = normalizeProjectPath(projectPath);
     return db
       .prepare(
         `SELECT session_id, provider, project_path, jsonl_path, custom_name, created_at, updated_at
@@ -161,25 +139,27 @@ export const sessionsDb = {
          ORDER BY datetime(COALESCE(updated_at, created_at)) DESC, session_id DESC
          LIMIT ? OFFSET ?`
       )
-      .all(projectPath, limit, offset) as SessionRow[];
+      .all(normalizedProjectPath, limit, offset) as SessionRow[];
   },
 
   countSessionsByProjectPath(projectPath: string): number {
     const db = getConnection();
+    const normalizedProjectPath = normalizeProjectPath(projectPath);
     const row = db
       .prepare(
         `SELECT COUNT(*) AS count
          FROM sessions
          WHERE project_path = ?`
       )
-      .get(projectPath) as { count: number } | undefined;
+      .get(normalizedProjectPath) as { count: number } | undefined;
 
     return Number(row?.count ?? 0);
   },
 
   deleteSessionsByProjectPath(projectPath: string): void {
     const db = getConnection();
-    db.prepare(`DELETE FROM sessions WHERE project_path = ?`).run(projectPath);
+    const normalizedProjectPath = normalizeProjectPath(projectPath);
+    db.prepare(`DELETE FROM sessions WHERE project_path = ?`).run(normalizedProjectPath);
   },
 
   getSessionName(sessionId: string, provider: string): string | null {

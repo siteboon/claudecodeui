@@ -176,7 +176,6 @@
     },
     "step3": {
       "reviewConfig": "Rivedi la tua configurazione",
-      "workspaceType": "Tipo area di lavoro:",
       "existingWorkspace": "Area di lavoro esistente",
       "newWorkspace": "Nuova area di lavoro",
       "path": "Percorso:",

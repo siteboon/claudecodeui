@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { getConnection } from '@/modules/database/connection.js';
 import type { CreateProjectPathResult, ProjectRepositoryRow } from '@/shared/types.js';
+import { normalizeProjectPath } from '@/shared/utils.js';
 
 function normalizeProjectDisplayName(projectPath: string, customProjectName: string | null): string {
     const trimmedCustomName = typeof customProjectName === 'string' ? customProjectName.trim() : '';
@@ -17,7 +18,8 @@ function normalizeProjectDisplayName(projectPath: string, customProjectName: str
 export const projectsDb = {
     createProjectPath(projectPath: string, customProjectName: string | null = null): CreateProjectPathResult {
         const db = getConnection();
-        const normalizedProjectName = normalizeProjectDisplayName(projectPath, customProjectName);
+        const normalizedProjectPath = normalizeProjectPath(projectPath);
+        const normalizedProjectName = normalizeProjectDisplayName(normalizedProjectPath, customProjectName);
         const attemptedId = randomUUID();
         const row = db.prepare(`
         INSERT INTO projects (project_id, project_path, custom_project_name, isArchived)
@@ -26,7 +28,7 @@ export const projectsDb = {
             isArchived = 0
             WHERE projects.isArchived = 1
             RETURNING project_id, project_path, custom_project_name, isStarred, isArchived
-        `).get(attemptedId, projectPath, normalizedProjectName) as ProjectRepositoryRow | undefined;
+        `).get(attemptedId, normalizedProjectPath, normalizedProjectName) as ProjectRepositoryRow | undefined;
 
         if (row) {
             return {
@@ -35,7 +37,7 @@ export const projectsDb = {
             };
         }
 
-        const existingProject = projectsDb.getProjectPath(projectPath);
+        const existingProject = projectsDb.getProjectPath(normalizedProjectPath);
         return {
             outcome: 'active_conflict',
             project: existingProject,
@@ -44,11 +46,12 @@ export const projectsDb = {
 
     getProjectPath(projectPath: string): ProjectRepositoryRow | null {
         const db = getConnection();
+        const normalizedProjectPath = normalizeProjectPath(projectPath);
         const row = db.prepare(`
             SELECT project_id, project_path, custom_project_name, isStarred, isArchived
             FROM projects
             WHERE project_path = ?
-        `).get(projectPath) as ProjectRepositoryRow | undefined;
+        `).get(normalizedProjectPath) as ProjectRepositoryRow | undefined;
 
         return row ?? null;
     },
@@ -94,22 +97,24 @@ export const projectsDb = {
 
     getCustomProjectName(projectPath: string): string | null {
         const db = getConnection();
+        const normalizedProjectPath = normalizeProjectPath(projectPath);
         const row = db.prepare(`
             SELECT custom_project_name
             FROM projects
             WHERE project_path = ?
-        `).get(projectPath) as Pick<ProjectRepositoryRow, 'custom_project_name'> | undefined;
+        `).get(normalizedProjectPath) as Pick<ProjectRepositoryRow, 'custom_project_name'> | undefined;
 
         return row?.custom_project_name ?? null;
     },
 
     updateCustomProjectName(projectPath: string, customProjectName: string | null): void {
         const db = getConnection();
+        const normalizedProjectPath = normalizeProjectPath(projectPath);
         db.prepare(`
             INSERT INTO projects (project_id, project_path, custom_project_name)
             VALUES (?, ?, ?)
             ON CONFLICT(project_path) DO UPDATE SET custom_project_name = excluded.custom_project_name
-        `).run(randomUUID(), projectPath, customProjectName);
+        `).run(randomUUID(), normalizedProjectPath, customProjectName);
     },
 
     updateCustomProjectNameById(projectId: string, customProjectName: string | null): void {
@@ -123,11 +128,12 @@ export const projectsDb = {
 
     updateProjectIsStarred(projectPath: string, isStarred: boolean): void {
         const db = getConnection();
+        const normalizedProjectPath = normalizeProjectPath(projectPath);
         db.prepare(`
             UPDATE projects
             SET isStarred = ?
             WHERE project_path = ?
-        `).run(isStarred ? 1 : 0, projectPath);
+        `).run(isStarred ? 1 : 0, normalizedProjectPath);
     },
 
     updateProjectIsStarredById(projectId: string, isStarred: boolean): void {
@@ -141,11 +147,12 @@ export const projectsDb = {
 
     updateProjectIsArchived(projectPath: string, isArchived: boolean): void {
         const db = getConnection();
+        const normalizedProjectPath = normalizeProjectPath(projectPath);
         db.prepare(`
             UPDATE projects
             SET isArchived = ?
             WHERE project_path = ?
-        `).run(isArchived ? 1 : 0, projectPath);
+        `).run(isArchived ? 1 : 0, normalizedProjectPath);
     },
 
     updateProjectIsArchivedById(projectId: string, isArchived: boolean): void {
@@ -159,10 +166,11 @@ export const projectsDb = {
 
     deleteProjectPath(projectPath: string): void {
         const db = getConnection();
+        const normalizedProjectPath = normalizeProjectPath(projectPath);
         db.prepare(`
             DELETE FROM projects
             WHERE project_path = ?
-        `).run(projectPath);
+        `).run(normalizedProjectPath);
     },
 
     deleteProjectById(projectId: string): void {
