@@ -640,28 +640,78 @@ async function getProjects(progressCallback = null) {
   return projects;
 }
 
+/**
+ * Returns true iff the given Claude JSONL file represents an interactive
+ * top-level session (i.e. a `claude --resume`-able conversation).
+ *
+ * Files written by sub-agents — both Task-tool transcripts and MCP-spawned
+ * Agent SDK sub-conversations (e.g. Taskmaster `expand`, `update_subtask`) —
+ * carry `isSidechain: true` on every record. The `agent-*.jsonl` filename
+ * filter catches the Task-tool case cheaply; this content-based check is
+ * the authoritative one and covers MCP sub-agents that get UUID filenames
+ * indistinguishable from real sessions.
+ *
+ * Streams the file and returns as soon as a `user` or `assistant` entry is
+ * found. Files without any user/assistant entry are treated as
+ * non-interactive.
+ */
+async function isInteractiveClaudeSessionFile(filePath) {
+  try {
+    const fileStream = fsSync.createReadStream(filePath);
+    const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
+    try {
+      for await (const line of rl) {
+        if (!line.trim()) continue;
+        let entry;
+        try { entry = JSON.parse(line); } catch { continue; }
+        if (entry.type === 'user' || entry.type === 'assistant') {
+          return entry.isSidechain !== true;
+        }
+      }
+      return false;
+    } finally {
+      rl.close();
+      fileStream.destroy();
+    }
+  } catch {
+    return false;
+  }
+}
+
 async function getSessions(projectName, limit = 5, offset = 0) {
   const projectDir = path.join(os.homedir(), '.claude', 'projects', projectName);
 
   try {
     const files = await fs.readdir(projectDir);
-    // agent-*.jsonl files contain session start data at this point. This needs to be revisited
-    // periodically to make sure only accurate data is there and no new functionality is added there
+    // agent-*.jsonl files are Task-tool sub-agent transcripts (cheap fast-path).
+    // The authoritative sub-agent filter is the isSidechain content check below,
+    // which also catches MCP-spawned (Agent SDK) sub-conversations that get
+    // UUID-named files.
     const jsonlFiles = files.filter(file => file.endsWith('.jsonl') && !file.startsWith('agent-'));
 
     if (jsonlFiles.length === 0) {
       return { sessions: [], hasMore: false, total: 0 };
     }
 
-    // Sort files by modification time (newest first)
-    const filesWithStats = await Promise.all(
+    // Stat each file and drop sidechain files (sub-agent transcripts with
+    // UUID filenames — see isInteractiveClaudeSessionFile).
+    const enriched = await Promise.all(
       jsonlFiles.map(async (file) => {
         const filePath = path.join(projectDir, file);
-        const stats = await fs.stat(filePath);
-        return { file, mtime: stats.mtime };
+        const [stats, interactive] = await Promise.all([
+          fs.stat(filePath),
+          isInteractiveClaudeSessionFile(filePath),
+        ]);
+        return { file, mtime: stats.mtime, interactive };
       })
     );
-    filesWithStats.sort((a, b) => b.mtime - a.mtime);
+    const filesWithStats = enriched
+      .filter(f => f.interactive)
+      .sort((a, b) => b.mtime - a.mtime);
+
+    if (filesWithStats.length === 0) {
+      return { sessions: [], hasMore: false, total: 0 };
+    }
 
     const allSessions = new Map();
     const allEntries = [];
@@ -784,6 +834,12 @@ async function parseJsonlSessions(filePath) {
       if (line.trim()) {
         try {
           const entry = JSON.parse(line);
+          // Defensive: skip sub-agent records that may appear in mixed-content
+          // files. The file-level filter in getSessions() is the primary gate;
+          // this prevents a stray sidechain entry from materialising a session.
+          if (entry.isSidechain === true) {
+            continue;
+          }
           entries.push(entry);
 
           // Handle summary entries that don't have sessionId yet
