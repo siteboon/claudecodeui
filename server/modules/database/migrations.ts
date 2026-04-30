@@ -65,6 +65,7 @@ const migrateLegacySessionNames = (db: Database): void => {
         COALESCE(created_at, CURRENT_TIMESTAMP),
         COALESCE(updated_at, CURRENT_TIMESTAMP)
       FROM session_names
+      WHERE true
       ON CONFLICT(session_id) DO UPDATE SET
         provider = excluded.provider,
         custom_name = COALESCE(excluded.custom_name, sessions.custom_name),
