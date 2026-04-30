@@ -5,6 +5,7 @@ import { api } from '../utils/api';
 import type {
   AppSocketMessage,
   AppTab,
+  LLMProvider,
   LoadingProgress,
   Project,
   ProjectSession,
@@ -557,7 +558,42 @@ export function useProjectsState({
         return;
       }
     }
-  }, [sessionId, projects, selectedProject?.projectId, selectedSession?.id, selectedSession?.__provider]);
+
+    // Session id is in the URL but not yet present on any project payload (common
+    // right after `session_created` + navigate, before the next projects refresh).
+    // Without a `selectedSession`, chat state clears `currentSessionId` and the
+    // UI stops reading the session store even though messages stream under this id.
+    if (selectedSession?.id === sessionId) {
+      return;
+    }
+
+    if (!selectedProject) {
+      return;
+    }
+
+    let providerFromStorage: string | null = null;
+    try {
+      providerFromStorage = localStorage.getItem('selected-provider');
+    } catch {
+      providerFromStorage = null;
+    }
+
+    const normalizedProvider: LLMProvider =
+      providerFromStorage === 'cursor'
+        ? 'cursor'
+        : providerFromStorage === 'codex'
+          ? 'codex'
+          : providerFromStorage === 'gemini'
+            ? 'gemini'
+            : 'claude';
+
+    setSelectedSession({
+      id: sessionId,
+      __provider: normalizedProvider,
+      __projectId: selectedProject.projectId,
+      summary: '',
+    });
+  }, [sessionId, projects, selectedProject, selectedSession?.id, selectedSession?.__provider]);
 
   const handleProjectSelect = useCallback(
     (project: Project) => {
