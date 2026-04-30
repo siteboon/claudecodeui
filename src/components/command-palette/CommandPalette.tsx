@@ -1,11 +1,14 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  ArrowDownToLine,
+  ArrowUpFromLine,
   Bell,
   Bot,
   FileText,
   GitBranch,
   GitCommit,
+  GitMerge,
   Info,
   KeyRound,
   ListChecks,
@@ -13,6 +16,7 @@ import {
   MessageSquarePlus,
   Palette,
   Plug,
+  RefreshCw,
   Settings,
   SunMoon,
 } from 'lucide-react';
@@ -35,6 +39,8 @@ import { useSessionsSource } from './sources/useSessionsSource';
 import { useFilesSource } from './sources/useFilesSource';
 import { useCommitsSource } from './sources/useCommitsSource';
 import { useSessionMessageSearch } from './sources/useSessionMessageSearch';
+import { useBranchesSource } from './sources/useBranchesSource';
+import { useGitActions } from './sources/useGitActions';
 
 type Mode = 'mixed' | 'actions' | 'files' | 'commits';
 
@@ -104,6 +110,8 @@ export default function CommandPalette({
   const { items: messageMatches } = useSessionMessageSearch(projectId, query, open && mode === 'mixed');
   const { items: files } = useFilesSource(projectId, open && (mode === 'mixed' || mode === 'files'));
   const { items: commits } = useCommitsSource(projectId, open && (mode === 'mixed' || mode === 'commits'));
+  const { items: branches } = useBranchesSource(projectId, open && (mode === 'mixed' || mode === 'actions'));
+  const git = useGitActions(projectId);
 
   const showActions = mode === 'mixed' || mode === 'actions';
   const showSessions = mode === 'mixed';
@@ -203,6 +211,45 @@ export default function CommandPalette({
                     <span className="flex-1">{tab.label}</span>
                   </CommandItem>
                 ))}
+              </CommandGroup>
+            )}
+
+            {showActions && projectId && (
+              <CommandGroup heading="Git">
+                <CommandItem
+                  value="git fetch remote"
+                  onSelect={() => run(() => { void git.fetch(); onShowTab?.('git'); })}
+                >
+                  <RefreshCw className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                  <span className="flex-1">Git: Fetch</span>
+                </CommandItem>
+                <CommandItem
+                  value="git pull merge upstream"
+                  onSelect={() => run(() => { void git.pull(); onShowTab?.('git'); })}
+                >
+                  <ArrowDownToLine className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                  <span className="flex-1">Git: Pull</span>
+                </CommandItem>
+                <CommandItem
+                  value="git push origin remote"
+                  onSelect={() => run(() => { void git.push(); onShowTab?.('git'); })}
+                >
+                  <ArrowUpFromLine className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                  <span className="flex-1">Git: Push</span>
+                </CommandItem>
+                {branches
+                  .filter((b) => !b.isCurrent && !b.isRemote)
+                  .slice(0, 30)
+                  .map((b) => (
+                    <CommandItem
+                      key={`branch-${b.name}`}
+                      value={`git switch checkout branch ${b.name}`}
+                      onSelect={() => run(() => { void git.checkout(b.name); onShowTab?.('git'); })}
+                    >
+                      <GitMerge className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                      <span className="flex-1 truncate">Switch to branch: {b.name}</span>
+                    </CommandItem>
+                  ))}
               </CommandGroup>
             )}
 
