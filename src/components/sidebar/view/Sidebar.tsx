@@ -6,6 +6,7 @@ import { useVersionCheck } from '../../../hooks/useVersionCheck';
 import { useUiPreferences } from '../../../hooks/useUiPreferences';
 import { useSidebarController } from '../hooks/useSidebarController';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
+import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import type { Project, LLMProvider } from '../../../types/app';
 import type { MCPServerStatus, SidebarProps } from '../types/types';
@@ -49,6 +50,7 @@ function Sidebar({
   const { sidebarVisible } = preferences;
   const { setCurrentProject, mcpServerStatus } = useTaskMaster() as TaskMasterSidebarContext;
   const { tasksEnabled } = useTasksSettings();
+  const paletteOps = usePaletteOps();
 
   const {
     isSidebarCollapsed,
@@ -128,12 +130,7 @@ function Sidebar({
   }, [isPWA]);
 
   const handleProjectCreated = () => {
-    if (window.refreshProjects) {
-      void window.refreshProjects();
-      return;
-    }
-
-    window.location.reload();
+    void paletteOps.refreshProjects();
   };
 
   const projectListProps: SidebarProjectListProps = {

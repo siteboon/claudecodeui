@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
+import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
 import type { PendingPermissionRequest } from '../types/types';
 import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
 import type { SessionStore, NormalizedMessage } from '../../../stores/useSessionStore';
@@ -99,6 +100,7 @@ export function useChatRealtimeHandlers({
   onWebSocketReconnect,
   sessionStore,
 }: UseChatRealtimeHandlersArgs) {
+  const paletteOps = usePaletteOps();
   const lastProcessedMessageRef = useRef<LatestChatMessage | null>(null);
 
   useEffect(() => {
@@ -280,9 +282,7 @@ export function useChatRealtimeHandlers({
             onNavigateToSession?.(actualId);
           }
           sessionStorage.removeItem('pendingSessionId');
-          if (window.refreshProjects) {
-            setTimeout(() => window.refreshProjects?.(), 500);
-          }
+          setTimeout(() => { void paletteOps.refreshProjects(); }, 500);
         }
         break;
       }
@@ -365,5 +365,6 @@ export function useChatRealtimeHandlers({
     onNavigateToSession,
     onWebSocketReconnect,
     sessionStore,
+    paletteOps,
   ]);
 }

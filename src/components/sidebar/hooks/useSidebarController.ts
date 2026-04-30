@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TFunction } from 'i18next';
 
 import { api } from '../../../utils/api';
+import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
 import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
 import type {
   DeleteProjectConfirmation,
@@ -95,6 +96,7 @@ export function useSidebarController({
   setSidebarVisible,
   sidebarVisible,
 }: UseSidebarControllerArgs) {
+  const paletteOps = usePaletteOps();
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [editingProject, setEditingProject] = useState<string | null>(null);
   const [showNewProject, setShowNewProject] = useState(false);
@@ -536,11 +538,7 @@ export function useSidebarController({
       try {
         const response = await api.renameProject(projectId, editingName);
         if (response.ok) {
-          if (window.refreshProjects) {
-            await window.refreshProjects();
-          } else {
-            window.location.reload();
-          }
+          await paletteOps.refreshProjects();
         } else {
           console.error('Failed to rename project');
         }
@@ -551,7 +549,7 @@ export function useSidebarController({
         setEditingName('');
       }
     },
-    [editingName],
+    [editingName, paletteOps],
   );
 
   const showDeleteSessionConfirmation = useCallback(

@@ -165,7 +165,8 @@
       "cursor": "{{model}}でCursorを使用する準備ができました。下にメッセージを入力してください。",
       "codex": "{{model}}でCodexを使用する準備ができました。下にメッセージを入力してください。",
       "default": "上からプロバイダーを選択して開始してください"
-    }
+    },
+    "pressToSearch": "<kbd>{{shortcut}}</kbd> を押してセッション、ファイル、コミットを検索"
   },
   "session": {
     "continue": {

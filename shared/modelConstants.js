@@ -51,7 +51,7 @@ export const CURSOR_MODELS = {
     { value: "grok", label: "Grok" },
   ],
 
-  DEFAULT: "gpt-5-3-codex",
+  DEFAULT: "gpt-5.3-codex",
 };
 
 /**
@@ -94,3 +94,13 @@ export const GEMINI_MODELS = {
 
   DEFAULT: "gemini-3.1-pro-preview",
 };
+
+/**
+ * Ordered provider registry. Display order in selection UIs.
+ */
+export const PROVIDERS = [
+  { id: "claude", name: "Anthropic", models: CLAUDE_MODELS },
+  { id: "codex", name: "OpenAI", models: CODEX_MODELS },
+  { id: "gemini", name: "Google", models: GEMINI_MODELS },
+  { id: "cursor", name: "Cursor", models: CURSOR_MODELS },
+];
