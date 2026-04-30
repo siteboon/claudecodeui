@@ -94,5 +94,5 @@ export function useSessionMessageSearch(
     };
   }, []);
 
-  return { items };
+  return items;
 }

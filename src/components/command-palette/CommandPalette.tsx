@@ -95,11 +95,11 @@ export default function CommandPalette({
   const showFiles = mode === 'mixed' || mode === 'files';
   const showCommits = mode === 'mixed' || mode === 'commits';
 
-  const { items: sessions } = useSessionsSource(projectId, open && showSessions);
-  const { items: messageMatches } = useSessionMessageSearch(projectId, query, open && showSessions);
-  const { items: files } = useFilesSource(projectId, open && showFiles);
-  const { items: commits } = useCommitsSource(projectId, open && showCommits);
-  const { items: branches } = useBranchesSource(projectId, open && showActions);
+  const sessions = useSessionsSource(projectId, open && showSessions);
+  const messageMatches = useSessionMessageSearch(projectId, query, open && showSessions);
+  const files = useFilesSource(projectId, open && showFiles);
+  const commits = useCommitsSource(projectId, open && showCommits);
+  const branches = useBranchesSource(projectId, open && showActions);
   const git = useGitActions(projectId);
 
   const sessionRows = React.useMemo(() => {
