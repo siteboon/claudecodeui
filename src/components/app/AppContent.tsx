@@ -209,6 +209,7 @@ export default function AppContent() {
         selectedProject={selectedProject}
         onStartNewChat={handleNewSession}
         onOpenSettings={() => openSettings()}
+        onShowTab={setActiveTab}
       />
     </div>
   );
