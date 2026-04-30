@@ -6,12 +6,20 @@ import Sidebar from '../sidebar/view/Sidebar';
 import MainContent from '../main-content/view/MainContent';
 import CommandPalette from '../command-palette/CommandPalette';
 import { useWebSocket } from '../../contexts/WebSocketContext';
-import { PaletteOpsProvider } from '../../contexts/PaletteOpsContext';
+import { PaletteOpsProvider, usePaletteOpsRegister } from '../../contexts/PaletteOpsContext';
 import { useDeviceSettings } from '../../hooks/useDeviceSettings';
 import { useSessionProtection } from '../../hooks/useSessionProtection';
 import { useProjectsState } from '../../hooks/useProjectsState';
 
 export default function AppContent() {
+  return (
+    <PaletteOpsProvider>
+      <AppContentInner />
+    </PaletteOpsProvider>
+  );
+}
+
+function AppContentInner() {
   const navigate = useNavigate();
   const { sessionId } = useParams<{ sessionId?: string }>();
   const { t } = useTranslation('common');
@@ -52,27 +60,10 @@ export default function AppContent() {
     activeSessions,
   });
 
-  useEffect(() => {
-    // Expose a non-blocking refresh for chat/session flows.
-    // Full loading refreshes are still available through direct fetchProjects calls.
-    window.refreshProjects = refreshProjectsSilently;
-
-    return () => {
-      if (window.refreshProjects === refreshProjectsSilently) {
-        delete window.refreshProjects;
-      }
-    };
-  }, [refreshProjectsSilently]);
-
-  useEffect(() => {
-    window.openSettings = openSettings;
-
-    return () => {
-      if (window.openSettings === openSettings) {
-        delete window.openSettings;
-      }
-    };
-  }, [openSettings]);
+  usePaletteOpsRegister({
+    openSettings,
+    refreshProjects: refreshProjectsSilently,
+  });
 
   useEffect(() => {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
@@ -147,7 +138,6 @@ export default function AppContent() {
   }, []);
 
   return (
-    <PaletteOpsProvider>
     <div className="fixed inset-0 flex bg-background" style={{ bottom: 'var(--keyboard-height, 0px)' }}>
       {!isMobile ? (
         <div className="h-full flex-shrink-0 border-r border-border/50">
@@ -214,6 +204,5 @@ export default function AppContent() {
         onShowTab={setActiveTab}
       />
     </div>
-    </PaletteOpsProvider>
   );
 }
