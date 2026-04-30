@@ -1,8 +1,8 @@
-import { Check, Clock, Edit2, Trash2, X } from 'lucide-react';
+import { Check, Edit2, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
+
 import { Badge, Button } from '../../../../shared/view/ui';
 import { cn } from '../../../../lib/utils';
-import { formatTimeAgo } from '../../../../utils/dateUtils';
 import type { Project, ProjectSession, LLMProvider } from '../../../../types/app';
 import type { SessionWithProvider } from '../../types/types';
 import { createSessionViewModel } from '../../utils/utils';
@@ -30,6 +30,34 @@ type SidebarSessionItemProps = {
   t: TFunction;
 };
 
+/**
+ * Compact relative time for sidebar rows:
+ * <1m, Xm, Xhr, Xd.
+ */
+const formatCompactSessionAge = (dateString: string, currentTime: Date): string => {
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  const diffInMinutes = Math.floor(Math.max(0, currentTime.getTime() - date.getTime()) / (1000 * 60));
+  if (diffInMinutes < 1) {
+    return '<1m';
+  }
+
+  if (diffInMinutes < 60) {
+    return `${diffInMinutes}m`;
+  }
+
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) {
+    return `${diffInHours}hr`;
+  }
+
+  const diffInDays = Math.floor(diffInHours / 24);
+  return `${diffInDays}d`;
+};
+
 export default function SidebarSessionItem({
   project,
   session,
@@ -48,18 +76,21 @@ export default function SidebarSessionItem({
 }: SidebarSessionItemProps) {
   const sessionView = createSessionViewModel(session, currentTime, t);
   const isSelected = selectedSession?.id === session.id;
+  const compactSessionAge = formatCompactSessionAge(sessionView.sessionTime, currentTime);
 
+  // Sessions are owned by a project identified by `projectId` (DB primary key)
+  // after the projectName → projectId migration.
   const selectMobileSession = () => {
     onProjectSelect(project);
-    onSessionSelect(session, project.name);
+    onSessionSelect(session, project.projectId);
   };
 
   const saveEditedSession = () => {
-    onSaveEditingSession(project.name, session.id, editingSessionName, session.__provider);
+    onSaveEditingSession(project.projectId, session.id, editingSessionName, session.__provider);
   };
 
   const requestDeleteSession = () => {
-    onDeleteSession(project.name, session.id, sessionView.sessionName, session.__provider);
+    onDeleteSession(project.projectId, session.id, sessionView.sessionName, session.__provider);
   };
 
   return (
@@ -92,20 +123,18 @@ export default function SidebarSessionItem({
             </div>
 
             <div className="min-w-0 flex-1">
-              <div className="truncate text-xs font-medium text-foreground">{sessionView.sessionName}</div>
-              <div className="mt-0.5 flex items-center gap-1">
-                <Clock className="h-2.5 w-2.5 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">
-                  {formatTimeAgo(sessionView.sessionTime, currentTime, t)}
-                </span>
+              <div className="flex items-center gap-2">
+                <div className="truncate text-xs font-medium text-foreground">{sessionView.sessionName}</div>
+                {compactSessionAge && (
+                  <span className="ml-auto flex-shrink-0 text-[11px] text-muted-foreground">{compactSessionAge}</span>
+                )}
+              </div>
+              <div className="mt-0.5 flex items-center">
                 {sessionView.messageCount > 0 && (
-                  <Badge variant="secondary" className="ml-auto px-1 py-0 text-xs">
+                  <Badge variant="secondary" className="px-1 py-0 text-xs">
                     {sessionView.messageCount}
                   </Badge>
                 )}
-                <span className="ml-1 opacity-70">
-                  <SessionProviderLogo provider={session.__provider} className="h-3 w-3" />
-                </span>
               </div>
             </div>
 
@@ -131,28 +160,21 @@ export default function SidebarSessionItem({
             'w-full justify-start p-2 h-auto font-normal text-left hover:bg-accent/50 transition-colors duration-200',
             isSelected && 'bg-accent text-accent-foreground',
           )}
-          onClick={() => onSessionSelect(session, project.name)}
+          onClick={() => onSessionSelect(session, project.projectId)}
         >
           <div className="flex w-full min-w-0 items-start gap-2">
             <SessionProviderLogo provider={session.__provider} className="mt-0.5 h-3 w-3 flex-shrink-0" />
             <div className="min-w-0 flex-1">
-              <div className="truncate text-xs font-medium text-foreground">{sessionView.sessionName}</div>
-              <div className="mt-0.5 flex items-center gap-1">
-                <Clock className="h-2.5 w-2.5 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">
-                  {formatTimeAgo(sessionView.sessionTime, currentTime, t)}
-                </span>
-                {sessionView.messageCount > 0 && (
-                  <Badge
-                    variant="secondary"
-                    className="ml-auto px-1 py-0 text-xs transition-opacity group-hover:opacity-0"
-                  >
-                    {sessionView.messageCount}
-                  </Badge>
+              <div className="flex items-center gap-2">
+                <div className="truncate text-xs font-medium text-foreground">{sessionView.sessionName}</div>
+                {compactSessionAge && (
+                  <span className="ml-auto flex-shrink-0 text-[11px] text-muted-foreground transition-opacity duration-200 group-hover:opacity-0">
+                    {compactSessionAge}
+                  </span>
                 )}
-                <span className="ml-1 opacity-70 transition-opacity group-hover:opacity-0">
-                  <SessionProviderLogo provider={session.__provider} className="h-3 w-3" />
-                </span>
+              </div>
+              <div className="mt-0.5 flex items-center">
+                {sessionView.messageCount > 0 && <Badge variant="secondary" className="px-1 py-0 text-xs">{sessionView.messageCount}</Badge>}
               </div>
             </div>
           </div>

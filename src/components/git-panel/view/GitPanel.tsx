@@ -58,7 +58,9 @@ export default function GitPanel({ selectedProject, isMobile = false, onFileOpen
   });
 
   const { isRevertingLocalCommit, revertLatestLocalCommit } = useRevertLocalCommit({
-    projectName: selectedProject?.name ?? null,
+    // `projectId` (DB primary key) is forwarded to the revert API which uses it
+    // as the `project` body param.
+    projectId: selectedProject?.projectId ?? null,
     onSuccess: refreshAll,
   });
 

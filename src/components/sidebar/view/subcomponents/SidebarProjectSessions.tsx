@@ -1,8 +1,10 @@
-import { ChevronDown, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import type { TFunction } from 'i18next';
+
 import { Button } from '../../../../shared/view/ui';
 import type { Project, ProjectSession, LLMProvider } from '../../../../types/app';
 import type { SessionWithProvider } from '../../types/types';
+
 import SidebarSessionItem from './SidebarSessionItem';
 
 type SidebarProjectSessionsProps = {
@@ -11,7 +13,8 @@ type SidebarProjectSessionsProps = {
   sessions: SessionWithProvider[];
   selectedSession: ProjectSession | null;
   initialSessionsLoaded: boolean;
-  isLoadingSessions: boolean;
+  hasMoreSessions: boolean;
+  isLoadingMoreSessions: boolean;
   currentTime: Date;
   editingSession: string | null;
   editingSessionName: string;
@@ -27,7 +30,7 @@ type SidebarProjectSessionsProps = {
     sessionTitle: string,
     provider: LLMProvider,
   ) => void;
-  onLoadMoreSessions: (project: Project) => void;
+  onLoadMoreSessions: (projectId: string) => void;
   onNewSession: (project: Project) => void;
   t: TFunction;
 };
@@ -56,7 +59,8 @@ export default function SidebarProjectSessions({
   sessions,
   selectedSession,
   initialSessionsLoaded,
-  isLoadingSessions,
+  hasMoreSessions,
+  isLoadingMoreSessions,
   currentTime,
   editingSession,
   editingSessionName,
@@ -76,7 +80,6 @@ export default function SidebarProjectSessions({
   }
 
   const hasSessions = sessions.length > 0;
-  const hasMoreSessions = project.sessionMeta?.hasMore === true;
 
   return (
     <div className="ml-3 space-y-1 border-l border-border pl-3">
@@ -105,52 +108,44 @@ export default function SidebarProjectSessions({
 
       {!initialSessionsLoaded ? (
         <SessionListSkeleton />
-      ) : !hasSessions && !isLoadingSessions ? (
+      ) : !hasSessions ? (
         <div className="px-3 py-2 text-left">
           <p className="text-xs text-muted-foreground">{t('sessions.noSessions')}</p>
         </div>
       ) : (
-        sessions.map((session) => (
-          <SidebarSessionItem
-            key={session.id}
-            project={project}
-            session={session}
-            selectedSession={selectedSession}
-            currentTime={currentTime}
-            editingSession={editingSession}
-            editingSessionName={editingSessionName}
-            onEditingSessionNameChange={onEditingSessionNameChange}
-            onStartEditingSession={onStartEditingSession}
-            onCancelEditingSession={onCancelEditingSession}
-            onSaveEditingSession={onSaveEditingSession}
-            onProjectSelect={onProjectSelect}
-            onSessionSelect={onSessionSelect}
-            onDeleteSession={onDeleteSession}
-            t={t}
-          />
-        ))
-      )}
+        <>
+          {sessions.map((session) => (
+            <SidebarSessionItem
+              key={session.id}
+              project={project}
+              session={session}
+              selectedSession={selectedSession}
+              currentTime={currentTime}
+              editingSession={editingSession}
+              editingSessionName={editingSessionName}
+              onEditingSessionNameChange={onEditingSessionNameChange}
+              onStartEditingSession={onStartEditingSession}
+              onCancelEditingSession={onCancelEditingSession}
+              onSaveEditingSession={onSaveEditingSession}
+              onProjectSelect={onProjectSelect}
+              onSessionSelect={onSessionSelect}
+              onDeleteSession={onDeleteSession}
+              t={t}
+            />
+          ))}
 
-      {hasSessions && hasMoreSessions && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="mt-2 w-full justify-center gap-2 text-muted-foreground"
-          onClick={() => onLoadMoreSessions(project)}
-          disabled={isLoadingSessions}
-        >
-          {isLoadingSessions ? (
-            <>
-              <div className="h-3 w-3 animate-spin rounded-full border border-muted-foreground border-t-transparent" />
-              {t('sessions.loading')}
-            </>
-          ) : (
-            <>
-              <ChevronDown className="h-3 w-3" />
-              {t('sessions.showMore')}
-            </>
+          {hasMoreSessions && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-full justify-center text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => onLoadMoreSessions(project.projectId)}
+              disabled={isLoadingMoreSessions}
+            >
+              {isLoadingMoreSessions ? t('sessions.loadingSessions') : 'Load more sessions'}
+            </Button>
           )}
-        </Button>
+        </>
       )}
     </div>
   );

@@ -9,7 +9,7 @@ type WizardProgressProps = {
 
 export default function WizardProgress({ step }: WizardProgressProps) {
   const { t } = useTranslation();
-  const steps: WizardStep[] = [1, 2, 3];
+  const steps: WizardStep[] = [1, 2];
 
   return (
     <div className="px-6 pb-2 pt-4">
@@ -30,14 +30,12 @@ export default function WizardProgress({ step }: WizardProgressProps) {
               </div>
               <span className="hidden text-sm font-medium text-gray-700 dark:text-gray-300 sm:inline">
                 {currentStep === 1
-                  ? t('projectWizard.steps.type')
-                  : currentStep === 2
-                    ? t('projectWizard.steps.configure')
-                    : t('projectWizard.steps.confirm')}
+                  ? t('projectWizard.steps.configure')
+                  : t('projectWizard.steps.confirm')}
               </span>
             </div>
 
-            {currentStep < 3 && (
+            {currentStep < 2 && (
               <div
                 className={`mx-2 h-1 flex-1 rounded ${
                   currentStep < step ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-700'

@@ -176,7 +176,6 @@
     },
     "step3": {
       "reviewConfig": "Konfiguration überprüfen",
-      "workspaceType": "Arbeitsbereichstyp:",
       "existingWorkspace": "Vorhandener Arbeitsbereich",
       "newWorkspace": "Neuer Arbeitsbereich",
       "path": "Pfad:",

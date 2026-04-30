@@ -1,4 +1,10 @@
-import type { IProvider, IProviderAuth, IProviderMcp, IProviderSessions } from '@/shared/interfaces.js';
+import type {
+  IProvider,
+  IProviderAuth,
+  IProviderMcp,
+  IProviderSessionSynchronizer,
+  IProviderSessions,
+} from '@/shared/interfaces.js';
 import type { LLMProvider } from '@/shared/types.js';
 
 /**
@@ -13,6 +19,7 @@ export abstract class AbstractProvider implements IProvider {
   abstract readonly mcp: IProviderMcp;
   abstract readonly auth: IProviderAuth;
   abstract readonly sessions: IProviderSessions;
+  abstract readonly sessionSynchronizer: IProviderSessionSynchronizer;
 
   protected constructor(id: LLMProvider) {
     this.id = id;

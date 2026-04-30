@@ -90,7 +90,8 @@ export type TaskMasterMcpStatus = {
 
 export type TaskMasterWebSocketMessage = {
   type?: string;
-  projectName?: string;
+  // Post-migration TaskMaster broadcasts identify projects by `projectId`.
+  projectId?: string;
   [key: string]: unknown;
 };
 
