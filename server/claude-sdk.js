@@ -527,6 +527,12 @@ async function queryClaudeSDK(command, options = {}, ws) {
       }]
     };
 
+    // Caveat: in 'auto' and 'bypassPermissions' modes the SDK resolves approval
+    // at the permission-mode step and skips this callback, so interactive tools
+    // (AskUserQuestion, ExitPlanMode) won't reach the UI — the classifier/bypass
+    // auto-approves them and the model acts on a generated answer. Move these
+    // tools to a PreToolUse hook (runs before the mode check) if we need them
+    // to work in those modes.
     sdkOptions.canUseTool = async (toolName, input, context) => {
       const requiresInteraction = TOOLS_REQUIRING_INTERACTION.has(toolName);
 
