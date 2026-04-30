@@ -2,7 +2,7 @@ import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
 
 export type Provider = LLMProvider;
 
-export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
+export type PermissionMode = 'default' | 'acceptEdits' | 'auto' | 'bypassPermissions' | 'plan';
 
 export interface ChatImage {
   data: string;

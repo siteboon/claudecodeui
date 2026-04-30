@@ -325,9 +325,11 @@ export default function ChatComposer({
                   ? 'border-border/60 bg-muted/50 text-muted-foreground hover:bg-muted'
                   : permissionMode === 'acceptEdits'
                     ? 'border-green-300/60 bg-green-50 text-green-700 hover:bg-green-100 dark:border-green-600/40 dark:bg-green-900/15 dark:text-green-300 dark:hover:bg-green-900/25'
-                    : permissionMode === 'bypassPermissions'
-                      ? 'border-orange-300/60 bg-orange-50 text-orange-700 hover:bg-orange-100 dark:border-orange-600/40 dark:bg-orange-900/15 dark:text-orange-300 dark:hover:bg-orange-900/25'
-                      : 'border-primary/20 bg-primary/5 text-primary hover:bg-primary/10'
+                    : permissionMode === 'auto'
+                      ? 'border-amber-300/60 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-600/40 dark:bg-amber-900/15 dark:text-amber-300 dark:hover:bg-amber-900/25'
+                      : permissionMode === 'bypassPermissions'
+                        ? 'border-orange-300/60 bg-orange-50 text-orange-700 hover:bg-orange-100 dark:border-orange-600/40 dark:bg-orange-900/15 dark:text-orange-300 dark:hover:bg-orange-900/25'
+                        : 'border-primary/20 bg-primary/5 text-primary hover:bg-primary/10'
               }`}
               title={t('input.clickToChangeMode')}
             >
@@ -338,14 +340,17 @@ export default function ChatComposer({
                       ? 'bg-muted-foreground'
                       : permissionMode === 'acceptEdits'
                         ? 'bg-green-500'
-                        : permissionMode === 'bypassPermissions'
-                          ? 'bg-orange-500'
-                          : 'bg-primary'
+                        : permissionMode === 'auto'
+                          ? 'bg-amber-500'
+                          : permissionMode === 'bypassPermissions'
+                            ? 'bg-orange-500'
+                            : 'bg-primary'
                   }`}
                 />
                 <span className="hidden whitespace-nowrap sm:inline">
                   {permissionMode === 'default' && t('codex.modes.default')}
                   {permissionMode === 'acceptEdits' && t('codex.modes.acceptEdits')}
+                  {permissionMode === 'auto' && t('codex.modes.auto')}
                   {permissionMode === 'bypassPermissions' && t('codex.modes.bypassPermissions')}
                   {permissionMode === 'plan' && t('codex.modes.plan')}
                 </span>
