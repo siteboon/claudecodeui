@@ -1,6 +1,21 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, GitCommit, MessageSquare, MessageSquarePlus, Settings, SunMoon } from 'lucide-react';
+import {
+  Bell,
+  Bot,
+  FileText,
+  GitBranch,
+  GitCommit,
+  Info,
+  KeyRound,
+  ListChecks,
+  MessageSquare,
+  MessageSquarePlus,
+  Palette,
+  Plug,
+  Settings,
+  SunMoon,
+} from 'lucide-react';
 
 import {
   Command,
@@ -19,13 +34,14 @@ import type { AppTab, Project } from '../../types/app';
 import { useSessionsSource } from './sources/useSessionsSource';
 import { useFilesSource } from './sources/useFilesSource';
 import { useCommitsSource } from './sources/useCommitsSource';
+import { useSessionMessageSearch } from './sources/useSessionMessageSearch';
 
 type Mode = 'mixed' | 'actions' | 'files' | 'commits';
 
 type CommandPaletteProps = {
   selectedProject: Project | null;
   onStartNewChat: (project: Project) => void;
-  onOpenSettings: () => void;
+  onOpenSettings: (tab?: string) => void;
   onShowTab?: (tab: AppTab) => void;
 };
 
@@ -35,6 +51,25 @@ function parseMode(input: string): { mode: Mode; query: string } {
   if (input.startsWith('#')) return { mode: 'commits', query: input.slice(1) };
   return { mode: 'mixed', query: input };
 }
+
+const SETTINGS_TABS: Array<{ id: string; label: string; keywords: string; icon: React.ComponentType<{ className?: string }> }> = [
+  { id: 'agents', label: 'Agents', keywords: 'agents subagents claude code', icon: Bot },
+  { id: 'appearance', label: 'Appearance', keywords: 'appearance theme dark light language', icon: Palette },
+  { id: 'git', label: 'Git', keywords: 'git github commits', icon: GitBranch },
+  { id: 'api', label: 'API Tokens', keywords: 'api tokens auth keys', icon: KeyRound },
+  { id: 'tasks', label: 'Tasks', keywords: 'tasks taskmaster', icon: ListChecks },
+  { id: 'notifications', label: 'Notifications', keywords: 'notifications alerts push', icon: Bell },
+  { id: 'plugins', label: 'Plugins', keywords: 'plugins extensions integrations', icon: Plug },
+  { id: 'about', label: 'About', keywords: 'about version info', icon: Info },
+];
+
+const NAV_TABS: Array<{ id: AppTab; label: string; keywords: string }> = [
+  { id: 'chat', label: 'Go to Chat', keywords: 'chat messages conversation' },
+  { id: 'files', label: 'Go to Files', keywords: 'files file tree explorer' },
+  { id: 'shell', label: 'Go to Shell', keywords: 'shell terminal console' },
+  { id: 'git', label: 'Go to Git', keywords: 'git diff branches' },
+  { id: 'tasks', label: 'Go to Tasks', keywords: 'tasks taskmaster' },
+];
 
 export default function CommandPalette({
   selectedProject,
@@ -62,10 +97,11 @@ export default function CommandPalette({
     if (!open) setSearch('');
   }, [open]);
 
-  const { mode } = parseMode(search);
+  const { mode, query } = parseMode(search);
 
   const projectId = selectedProject?.projectId;
   const { items: sessions } = useSessionsSource(projectId, open && (mode === 'mixed'));
+  const { items: messageMatches } = useSessionMessageSearch(projectId, query, open && mode === 'mixed');
   const { items: files } = useFilesSource(projectId, open && (mode === 'mixed' || mode === 'files'));
   const { items: commits } = useCommitsSource(projectId, open && (mode === 'mixed' || mode === 'commits'));
 
@@ -73,6 +109,29 @@ export default function CommandPalette({
   const showSessions = mode === 'mixed';
   const showFiles = mode === 'mixed' || mode === 'files';
   const showCommits = mode === 'mixed' || mode === 'commits';
+
+  const sessionRows = React.useMemo(() => {
+    if (!showSessions) return [];
+    type Row = { id: string; label: string; provider?: string; snippet?: string };
+    const byId = new Map<string, Row>();
+    for (const s of sessions) {
+      byId.set(s.id, { id: s.id, label: s.label, provider: s.provider });
+    }
+    for (const m of messageMatches) {
+      const existing = byId.get(m.sessionId);
+      if (existing) {
+        existing.snippet = m.snippet;
+      } else {
+        byId.set(m.sessionId, {
+          id: m.sessionId,
+          label: m.label,
+          provider: m.provider,
+          snippet: m.snippet,
+        });
+      }
+    }
+    return Array.from(byId.values());
+  }, [sessions, messageMatches, showSessions]);
 
   const filter = React.useCallback(
     (value: string, rawSearch: string) => {
@@ -119,7 +178,7 @@ export default function CommandPalette({
                     <span className="text-xs text-muted-foreground">Select a project first</span>
                   )}
                 </CommandItem>
-                <CommandItem value="open settings" onSelect={() => run(onOpenSettings)}>
+                <CommandItem value="open settings" onSelect={() => run(() => onOpenSettings())}>
                   <Settings className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
                   <span className="flex-1">Open settings</span>
                 </CommandItem>
@@ -133,16 +192,50 @@ export default function CommandPalette({
               </CommandGroup>
             )}
 
-            {showSessions && sessions.length > 0 && (
+            {showActions && (
+              <CommandGroup heading="Navigate">
+                {NAV_TABS.map((tab) => (
+                  <CommandItem
+                    key={tab.id as string}
+                    value={`navigate ${tab.label} ${tab.keywords}`}
+                    onSelect={() => run(() => onShowTab?.(tab.id))}
+                  >
+                    <span className="flex-1">{tab.label}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+
+            {showActions && (
+              <CommandGroup heading="Settings">
+                {SETTINGS_TABS.map(({ id, label, keywords, icon: Icon }) => (
+                  <CommandItem
+                    key={id}
+                    value={`settings ${label} ${keywords}`}
+                    onSelect={() => run(() => onOpenSettings(id))}
+                  >
+                    <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                    <span className="flex-1">Settings: {label}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+
+            {showSessions && sessionRows.length > 0 && (
               <CommandGroup heading="Sessions">
-                {sessions.map((s) => (
+                {sessionRows.map((s) => (
                   <CommandItem
                     key={s.id}
-                    value={`session ${s.label} ${s.id}`}
+                    value={`session ${s.label} ${s.id} ${s.snippet ?? ''}`}
                     onSelect={() => run(() => navigate(`/session/${s.id}`))}
                   >
                     <MessageSquare className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                    <span className="flex-1 truncate">{s.label}</span>
+                    <div className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate">{s.label}</span>
+                      {s.snippet && (
+                        <span className="truncate text-xs text-muted-foreground">{s.snippet}</span>
+                      )}
+                    </div>
                     {s.provider && (
                       <span className="text-xs text-muted-foreground">{s.provider}</span>
                     )}

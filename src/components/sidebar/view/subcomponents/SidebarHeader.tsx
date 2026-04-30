@@ -148,9 +148,9 @@ export default function SidebarHeader({
                 placeholder={searchMode === 'conversations' ? t('search.conversationsPlaceholder') : t('projects.searchPlaceholder')}
                 value={searchFilter}
                 onChange={(event) => onSearchFilterChange(event.target.value)}
-                className="nav-search-input h-9 rounded-xl border-0 pl-9 pr-8 text-sm transition-all duration-200 placeholder:text-muted-foreground/40 focus-visible:ring-0 focus-visible:ring-offset-0"
+                className="nav-search-input h-9 rounded-xl border-0 pl-9 pr-14 text-sm transition-all duration-200 placeholder:text-muted-foreground/40 focus-visible:ring-0 focus-visible:ring-offset-0"
               />
-              {searchFilter && (
+              {searchFilter ? (
                 <button
                   onClick={onClearSearchFilter}
                   aria-label={t('tooltips.clearSearch')}
@@ -158,6 +158,15 @@ export default function SidebarHeader({
                 >
                   <X className="h-3 w-3 text-muted-foreground" />
                 </button>
+              ) : (
+                <kbd
+                  aria-hidden
+                  title="Open command palette"
+                  className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 rounded border border-border/60 bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground md:inline-flex"
+                >
+                  {typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'}
+                  <span>K</span>
+                </kbd>
               )}
             </div>
           </div>
