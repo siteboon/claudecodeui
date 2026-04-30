@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
+  ChevronRight,
   FileText,
   GitCommit,
   GitMerge,
@@ -11,6 +12,7 @@ import {
   RefreshCw,
   Settings,
   SunMoon,
+  X,
 } from 'lucide-react';
 
 import {
@@ -36,7 +38,15 @@ import { useSessionMessageSearch } from './sources/useSessionMessageSearch';
 import { useBranchesSource } from './sources/useBranchesSource';
 import { useGitActions } from './sources/useGitActions';
 
-type Mode = 'mixed' | 'actions' | 'files' | 'commits';
+type Page = 'actions' | 'files' | 'sessions' | 'commits' | 'branches';
+
+const PAGE_LABELS: Record<Page, string> = {
+  actions: 'Actions',
+  files: 'Files',
+  sessions: 'Sessions',
+  commits: 'Commits',
+  branches: 'Branches',
+};
 
 type CommandPaletteProps = {
   selectedProject: Project | null;
@@ -44,13 +54,6 @@ type CommandPaletteProps = {
   onOpenSettings: (tab?: string) => void;
   onShowTab?: (tab: AppTab) => void;
 };
-
-function parseMode(input: string): { mode: Mode; query: string } {
-  if (input.startsWith('> ')) return { mode: 'actions', query: input.slice(2) };
-  if (input.startsWith('/')) return { mode: 'files', query: input.slice(1) };
-  if (input.startsWith('#')) return { mode: 'commits', query: input.slice(1) };
-  return { mode: 'mixed', query: input };
-}
 
 const NAV_TABS: Array<{ id: AppTab; label: string; keywords: string }> = [
   { id: 'chat', label: 'Go to Chat', keywords: 'chat messages conversation' },
@@ -68,9 +71,12 @@ export default function CommandPalette({
 }: CommandPaletteProps) {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
+  const [pages, setPages] = React.useState<Page[]>([]);
   const { toggleDarkMode } = useTheme();
   const navigate = useNavigate();
   const ops = usePaletteOps();
+
+  const page = pages.at(-1);
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -84,22 +90,25 @@ export default function CommandPalette({
   }, []);
 
   React.useEffect(() => {
-    if (!open) setSearch('');
+    if (!open) {
+      setSearch('');
+      setPages([]);
+    }
   }, [open]);
 
-  const { mode, query } = parseMode(search);
   const projectId = selectedProject?.projectId;
 
-  const showActions = mode === 'mixed' || mode === 'actions';
-  const showSessions = mode === 'mixed';
-  const showFiles = mode === 'mixed' || mode === 'files';
-  const showCommits = mode === 'mixed' || mode === 'commits';
+  const showActions = !page || page === 'actions';
+  const showSessions = !page || page === 'sessions';
+  const showFiles = !page || page === 'files';
+  const showCommits = !page || page === 'commits';
+  const showBranches = !page || page === 'branches' || page === 'actions';
 
   const sessions = useSessionsSource(projectId, open && showSessions);
-  const messageMatches = useSessionMessageSearch(projectId, query, open && showSessions);
+  const messageMatches = useSessionMessageSearch(projectId, search, open && showSessions);
   const files = useFilesSource(projectId, open && showFiles);
   const commits = useCommitsSource(projectId, open && showCommits);
-  const branches = useBranchesSource(projectId, open && showActions);
+  const branches = useBranchesSource(projectId, open && showBranches);
   const git = useGitActions(projectId);
 
   const sessionRows = React.useMemo(() => {
@@ -125,26 +134,58 @@ export default function CommandPalette({
     return Array.from(byId.values());
   }, [sessions, messageMatches, showSessions]);
 
-  const filter = React.useCallback((value: string, rawSearch: string) => {
-    const stripped = parseMode(rawSearch).query.trim().toLowerCase();
-    if (!stripped) return 1;
-    return value.toLowerCase().includes(stripped) ? 1 : 0;
-  }, []);
-
   const run = React.useCallback((fn: () => void) => {
     setOpen(false);
     fn();
   }, []);
 
+  const pushPage = React.useCallback((next: Page) => {
+    setSearch('');
+    setPages((prev) => [...prev, next]);
+  }, []);
+
+  const popPage = React.useCallback(() => {
+    setSearch('');
+    setPages((prev) => prev.slice(0, -1));
+  }, []);
+
+  const handleKeyDown = React.useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Backspace' && !search && pages.length > 0) {
+      e.preventDefault();
+      popPage();
+    }
+  }, [search, pages.length, popPage]);
+
   const startNewChatDisabled = !selectedProject;
+  const browseLimit = 5;
+  const filesShown = page === 'files' ? files : files.slice(0, browseLimit);
+  const commitsShown = page === 'commits' ? commits : commits.slice(0, browseLimit);
+  const sessionsShown = page === 'sessions' ? sessionRows : sessionRows.slice(0, browseLimit);
+  const branchesShown = page === 'branches' ? branches : branches.slice(0, browseLimit);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-xl overflow-hidden p-0">
         <DialogTitle>Command palette</DialogTitle>
-        <Command label="Command palette" filter={filter}>
+        <Command label="Command palette" onKeyDown={handleKeyDown}>
+          {page && (
+            <div className="flex items-center gap-2 border-b px-3 py-2">
+              <span className="inline-flex items-center gap-1 rounded-md bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground">
+                {PAGE_LABELS[page]}
+                <button
+                  type="button"
+                  onClick={popPage}
+                  aria-label="Back to all"
+                  className="ml-0.5 rounded-sm opacity-70 hover:opacity-100"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+              <span className="text-xs text-muted-foreground">Backspace to go back</span>
+            </div>
+          )}
           <CommandInput
-            placeholder="Type to search — prefix with > for actions, / for files, # for commits"
+            placeholder={page ? `Search ${PAGE_LABELS[page].toLowerCase()}…` : 'Type to search anything…'}
             value={search}
             onValueChange={setSearch}
           />
@@ -215,19 +256,6 @@ export default function CommandPalette({
                   <ArrowUpFromLine className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
                   <span className="flex-1">Git: Push</span>
                 </CommandItem>
-                {branches
-                  .filter((b) => !b.isCurrent && !b.isRemote)
-                  .slice(0, 30)
-                  .map((b) => (
-                    <CommandItem
-                      key={`branch-${b.name}`}
-                      value={`Switch to branch ${b.name}`}
-                      onSelect={() => run(() => { void git.checkout(b.name); onShowTab?.('git'); })}
-                    >
-                      <GitMerge className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                      <span className="flex-1 truncate">Switch to branch: {b.name}</span>
-                    </CommandItem>
-                  ))}
               </CommandGroup>
             )}
 
@@ -246,12 +274,12 @@ export default function CommandPalette({
               </CommandGroup>
             )}
 
-            {showSessions && projectId && sessionRows.length > 0 && (
+            {showSessions && projectId && sessionsShown.length > 0 && (
               <CommandGroup heading="Sessions">
-                {sessionRows.map((s) => (
+                {sessionsShown.map((s) => (
                   <CommandItem
                     key={s.id}
-                    value={`${s.label} ${s.snippet ?? ''}`.trim()}
+                    value={`session-${s.id} ${s.label} ${s.snippet ?? ''}`.trim()}
                     onSelect={() => run(() => navigate(`/session/${s.id}`))}
                   >
                     <MessageSquare className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -266,15 +294,18 @@ export default function CommandPalette({
                     )}
                   </CommandItem>
                 ))}
+                {!page && sessionRows.length > browseLimit && (
+                  <BrowseAllItem label={`Browse all sessions (${sessionRows.length})`} onSelect={() => pushPage('sessions')} />
+                )}
               </CommandGroup>
             )}
 
-            {showFiles && projectId && files.length > 0 && (
+            {showFiles && projectId && filesShown.length > 0 && (
               <CommandGroup heading="Files">
-                {files.map((f) => (
+                {filesShown.map((f) => (
                   <CommandItem
                     key={f.path}
-                    value={f.path}
+                    value={`file-${f.path}`}
                     onSelect={() => run(() => ops.openFile(f.path))}
                   >
                     <FileText className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -282,15 +313,18 @@ export default function CommandPalette({
                     <span className="truncate text-xs text-muted-foreground">{f.path}</span>
                   </CommandItem>
                 ))}
+                {!page && files.length > browseLimit && (
+                  <BrowseAllItem label={`Browse all files (${files.length})`} onSelect={() => pushPage('files')} />
+                )}
               </CommandGroup>
             )}
 
-            {showCommits && projectId && commits.length > 0 && (
+            {showCommits && projectId && commitsShown.length > 0 && (
               <CommandGroup heading="Commits">
-                {commits.map((c) => (
+                {commitsShown.map((c) => (
                   <CommandItem
                     key={c.hash}
-                    value={`${c.shortHash} ${c.message} ${c.author}`}
+                    value={`commit-${c.hash} ${c.message} ${c.author}`}
                     onSelect={() => run(() => onShowTab?.('git'))}
                   >
                     <GitCommit className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -299,11 +333,41 @@ export default function CommandPalette({
                     <span className="truncate text-xs text-muted-foreground">{c.author}</span>
                   </CommandItem>
                 ))}
+                {!page && commits.length > browseLimit && (
+                  <BrowseAllItem label={`Browse all commits (${commits.length})`} onSelect={() => pushPage('commits')} />
+                )}
+              </CommandGroup>
+            )}
+
+            {showBranches && projectId && branchesShown.length > 0 && (
+              <CommandGroup heading="Branches">
+                {branchesShown.map((b) => (
+                  <CommandItem
+                    key={`branch-${b.name}`}
+                    value={`branch-${b.name}`}
+                    onSelect={() => run(() => { void git.checkout(b.name); onShowTab?.('git'); })}
+                  >
+                    <GitMerge className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                    <span className="flex-1 truncate">Switch to: {b.name}</span>
+                  </CommandItem>
+                ))}
+                {!page && branches.length > browseLimit && (
+                  <BrowseAllItem label={`Browse all branches (${branches.length})`} onSelect={() => pushPage('branches')} />
+                )}
               </CommandGroup>
             )}
           </CommandList>
         </Command>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function BrowseAllItem({ label, onSelect }: { label: string; onSelect: () => void }) {
+  return (
+    <CommandItem value={`browse-${label}`} onSelect={onSelect}>
+      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+      <span className="flex-1 text-muted-foreground">{label}</span>
+    </CommandItem>
   );
 }

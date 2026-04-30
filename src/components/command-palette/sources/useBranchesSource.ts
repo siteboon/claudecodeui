@@ -2,14 +2,10 @@ import { authenticatedFetch } from '../../../utils/api';
 
 import { useApiSource } from './useApiSource';
 
-export type BranchResult = {
-  name: string;
-  isCurrent: boolean;
-  isRemote: boolean;
-};
+export type BranchResult = { name: string };
 
 interface BranchesResponse {
-  branches?: Array<{ name: string; current?: boolean; isRemote?: boolean }>;
+  localBranches?: string[];
 }
 
 export function useBranchesSource(projectId: string | undefined, enabled: boolean) {
@@ -20,13 +16,6 @@ export function useBranchesSource(projectId: string | undefined, enabled: boolea
       const params = new URLSearchParams({ project: projectId! });
       return authenticatedFetch(`/api/git/branches?${params.toString()}`, { signal });
     },
-    parse: (data) => {
-      const list = data.branches ?? [];
-      return list.map<BranchResult>((b) => ({
-        name: b.name,
-        isCurrent: Boolean(b.current),
-        isRemote: Boolean(b.isRemote),
-      }));
-    },
+    parse: (data) => (data.localBranches ?? []).map((name) => ({ name })),
   });
 }
