@@ -7,6 +7,7 @@ import GitPanel from '../../git-panel/view/GitPanel';
 import PluginTabContent from '../../plugins/view/PluginTabContent';
 import type { MainContentProps } from '../types/types';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
+import { usePaletteOpsRegister } from '../../../contexts/PaletteOpsContext';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useUiPreferences } from '../../../hooks/useUiPreferences';
 import { useEditorSidebar } from '../../code-editor/hooks/useEditorSidebar';
@@ -91,19 +92,12 @@ function MainContent({
     }
   }, [shouldShowTasksTab, activeTab, setActiveTab]);
 
-  // Expose file-open to non-descendant features (command palette).
-  useEffect(() => {
-    const open = (filePath: string) => {
+  usePaletteOpsRegister({
+    openFile: (filePath: string) => {
       setActiveTab('files');
       handleFileOpen(filePath);
-    };
-    window.openFile = open;
-    return () => {
-      if (window.openFile === open) {
-        delete window.openFile;
-      }
-    };
-  }, [handleFileOpen, setActiveTab]);
+    },
+  });
 
   if (isLoading) {
     return <MainContentStateView mode="loading" isMobile={isMobile} onMenuClick={onMenuClick} />;

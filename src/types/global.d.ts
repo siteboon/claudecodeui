@@ -5,7 +5,6 @@ declare global {
     __ROUTER_BASENAME__?: string;
     refreshProjects?: () => void | Promise<void>;
     openSettings?: (tab?: string) => void;
-    openFile?: (filePath: string) => void;
   }
 
   interface EventSourceEventMap {

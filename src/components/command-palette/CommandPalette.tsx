@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from '../../shared/view/ui';
 import { useTheme } from '../../contexts/ThemeContext';
+import { usePaletteOps } from '../../contexts/PaletteOpsContext';
 import type { AppTab, Project } from '../../types/app';
 
 import { GROUPS, parseMode } from './registry';
@@ -35,6 +36,7 @@ export default function CommandPalette({
   const [search, setSearch] = React.useState('');
   const { toggleDarkMode } = useTheme();
   const navigate = useNavigate();
+  const ops = usePaletteOps();
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -60,8 +62,8 @@ export default function CommandPalette({
   }, []);
 
   const openFile = React.useCallback((path: string) => {
-    window.openFile?.(path);
-  }, []);
+    ops.openFile(path);
+  }, [ops]);
 
   const filter = React.useCallback(
     (value: string, rawSearch: string) => {

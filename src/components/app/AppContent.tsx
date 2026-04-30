@@ -6,6 +6,7 @@ import Sidebar from '../sidebar/view/Sidebar';
 import MainContent from '../main-content/view/MainContent';
 import CommandPalette from '../command-palette/CommandPalette';
 import { useWebSocket } from '../../contexts/WebSocketContext';
+import { PaletteOpsProvider } from '../../contexts/PaletteOpsContext';
 import { useDeviceSettings } from '../../hooks/useDeviceSettings';
 import { useSessionProtection } from '../../hooks/useSessionProtection';
 import { useProjectsState } from '../../hooks/useProjectsState';
@@ -146,6 +147,7 @@ export default function AppContent() {
   }, []);
 
   return (
+    <PaletteOpsProvider>
     <div className="fixed inset-0 flex bg-background" style={{ bottom: 'var(--keyboard-height, 0px)' }}>
       {!isMobile ? (
         <div className="h-full flex-shrink-0 border-r border-border/50">
@@ -212,5 +214,6 @@ export default function AppContent() {
         onShowTab={setActiveTab}
       />
     </div>
+    </PaletteOpsProvider>
   );
 }
