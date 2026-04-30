@@ -3,7 +3,6 @@ import { Check, ChevronDown } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { useServerPlatform } from "../../../../hooks/useServerPlatform";
-import { useCommandKey } from "../../../../hooks/useCommandKey";
 import SessionProviderLogo from "../../../llm-logo-provider/SessionProviderLogo";
 import {
   CLAUDE_MODELS,
@@ -27,6 +26,9 @@ import {
   CommandItem,
   Card,
 } from "../../../../shared/view/ui";
+
+const MOD_KEY =
+  typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
 
 type ProviderSelectionEmptyStateProps = {
   selectedSession: ProjectSession | null;
@@ -108,7 +110,6 @@ export default function ProviderSelectionEmptyState({
 }: ProviderSelectionEmptyStateProps) {
   const { t } = useTranslation("chat");
   const { isWindowsServer } = useServerPlatform();
-  const { modKey } = useCommandKey();
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const visibleProviderGroups = useMemo(
@@ -293,7 +294,7 @@ export default function ProviderSelectionEmptyState({
           <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground/60">
             <span>Press</span>
             <kbd className="inline-flex items-center gap-0.5 rounded border border-border/60 bg-muted/40 px-1.5 py-0.5 font-mono text-[10px]">
-              {modKey}
+              {MOD_KEY}
               <span>K</span>
             </kbd>
             <span>to search sessions, files, and commits</span>

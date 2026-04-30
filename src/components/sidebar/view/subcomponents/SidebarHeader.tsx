@@ -3,8 +3,10 @@ import type { TFunction } from 'i18next';
 import { Button, Input } from '../../../../shared/view/ui';
 import { IS_PLATFORM } from '../../../../constants/config';
 import { cn } from '../../../../lib/utils';
-import { useCommandKey } from '../../../../hooks/useCommandKey';
 import GitHubStarBadge from './GitHubStarBadge';
+
+const MOD_KEY =
+  typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
 
 type SearchMode = 'projects' | 'conversations';
 
@@ -41,7 +43,6 @@ export default function SidebarHeader({
   onCollapseSidebar,
   t,
 }: SidebarHeaderProps) {
-  const { modKey } = useCommandKey();
   const LogoBlock = () => (
     <div className="flex min-w-0 items-center gap-2.5">
       <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-primary/90 shadow-sm">
@@ -166,7 +167,7 @@ export default function SidebarHeader({
                   title="Open command palette"
                   className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 rounded border border-border/60 bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground md:inline-flex"
                 >
-                  {modKey}
+                  {MOD_KEY}
                   <span>K</span>
                 </kbd>
               )}
