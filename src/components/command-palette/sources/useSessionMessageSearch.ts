@@ -42,8 +42,11 @@ export function useSessionMessageSearch(
       return;
     }
 
+    esRef.current?.close();
+    esRef.current = null;
+    seqRef.current++;
+
     const handle = setTimeout(() => {
-      esRef.current?.close();
       const seq = ++seqRef.current;
       const url = api.searchConversationsUrl(trimmed);
       const es = new EventSource(url);

@@ -51,7 +51,7 @@ export const CURSOR_MODELS = {
     { value: "grok", label: "Grok" },
   ],
 
-  DEFAULT: "gpt-5-3-codex",
+  DEFAULT: "gpt-5.3-codex",
 };
 
 /**

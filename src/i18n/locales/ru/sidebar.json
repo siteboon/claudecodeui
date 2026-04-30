@@ -47,7 +47,8 @@
     "deleteSession": "Удалить этот сеанс навсегда",
     "save": "Сохранить",
     "cancel": "Отмена",
-    "clearSearch": "Очистить поиск"
+    "clearSearch": "Очистить поиск",
+    "openCommandPalette": "Открыть палитру команд"
   },
   "navigation": {
     "chat": "Чат",

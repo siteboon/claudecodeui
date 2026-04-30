@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef } from 'react';
-import type { ReactNode } from 'react';
+import type { MutableRefObject, ReactNode } from 'react';
 
 export type PaletteOps = {
   openFile: (path: string) => void;
@@ -7,7 +7,7 @@ export type PaletteOps = {
   refreshProjects: () => Promise<void> | void;
 };
 
-type Registry = React.MutableRefObject<Partial<PaletteOps>>;
+type Registry = MutableRefObject<Partial<PaletteOps>>;
 
 const PaletteOpsContext = createContext<Registry | null>(null);
 

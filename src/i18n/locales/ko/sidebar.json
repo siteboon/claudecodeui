@@ -46,7 +46,8 @@
     "editSessionName": "세션 이름 직접 편집",
     "deleteSession": "이 세션 영구 삭제",
     "save": "저장",
-    "cancel": "취소"
+    "cancel": "취소",
+    "openCommandPalette": "명령 팔레트 열기"
   },
   "navigation": {
     "chat": "채팅",

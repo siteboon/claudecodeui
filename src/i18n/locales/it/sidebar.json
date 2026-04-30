@@ -47,7 +47,8 @@
     "deleteSession": "Elimina questa sessione permanentemente",
     "save": "Salva",
     "cancel": "Annulla",
-    "clearSearch": "Cancella ricerca"
+    "clearSearch": "Cancella ricerca",
+    "openCommandPalette": "Apri tavolozza comandi"
   },
   "navigation": {
     "chat": "Chat",
