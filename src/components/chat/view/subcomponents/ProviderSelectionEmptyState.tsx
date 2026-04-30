@@ -9,6 +9,7 @@ import {
   CURSOR_MODELS,
   CODEX_MODELS,
   GEMINI_MODELS,
+  PROVIDERS,
 } from "../../../../../shared/modelConstants";
 import type { ProjectSession, LLMProvider } from "../../../../types/app";
 import { NextTaskBanner } from "../../../task-master";
@@ -52,12 +53,11 @@ type ProviderGroup = {
   models: { value: string; label: string }[];
 };
 
-const PROVIDER_GROUPS: ProviderGroup[] = [
-  { id: "claude", name: "Anthropic", models: CLAUDE_MODELS.OPTIONS },
-  { id: "cursor", name: "Cursor", models: CURSOR_MODELS.OPTIONS },
-  { id: "codex", name: "OpenAI", models: CODEX_MODELS.OPTIONS },
-  { id: "gemini", name: "Google", models: GEMINI_MODELS.OPTIONS },
-];
+const PROVIDER_GROUPS: ProviderGroup[] = PROVIDERS.map((p) => ({
+  id: p.id as LLMProvider,
+  name: p.name,
+  models: p.models.OPTIONS,
+}));
 
 function getModelConfig(p: LLMProvider) {
   if (p === "claude") return CLAUDE_MODELS;
@@ -231,9 +231,14 @@ export default function ProviderSelectionEmptyState({
                       defaultValue: "No models found.",
                     })}
                   </CommandEmpty>
-                  {visibleProviderGroups.map((group) => (
+                  {visibleProviderGroups.map((group, idx) => (
                     <CommandGroup
                       key={group.id}
+                      className={
+                        idx > 0
+                          ? "border-t border-border/40 [&_[cmdk-group-heading]]:mt-1 [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider"
+                          : "[&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider"
+                      }
                       heading={
                         <span className="flex items-center gap-1.5">
                           <SessionProviderLogo provider={group.id} className="h-3.5 w-3.5 shrink-0" />
@@ -248,6 +253,7 @@ export default function ProviderSelectionEmptyState({
                             key={`${group.id}-${model.value}`}
                             value={`${group.name} ${model.label}`}
                             onSelect={() => handleModelSelect(group.id, model.value)}
+                            className="ml-4 border-l border-border/40 pl-4"
                           >
                             <span className="flex-1 truncate">{model.label}</span>
                             {isSelected && (
