@@ -279,7 +279,7 @@ export default function CommandPalette({
                 {sessionsShown.map((s) => (
                   <CommandItem
                     key={s.id}
-                    value={`session-${s.id} ${s.label} ${s.snippet ?? ''}`.trim()}
+                    value={`${s.label} ${s.snippet ?? ''} ${s.id}`.trim()}
                     onSelect={() => run(() => navigate(`/session/${s.id}`))}
                   >
                     <MessageSquare className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -305,7 +305,7 @@ export default function CommandPalette({
                 {filesShown.map((f) => (
                   <CommandItem
                     key={f.path}
-                    value={`file-${f.path}`}
+                    value={f.path}
                     onSelect={() => run(() => ops.openFile(f.path))}
                   >
                     <FileText className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -324,7 +324,7 @@ export default function CommandPalette({
                 {commitsShown.map((c) => (
                   <CommandItem
                     key={c.hash}
-                    value={`commit-${c.hash} ${c.message} ${c.author}`}
+                    value={`${c.message} ${c.author} ${c.shortHash}`}
                     onSelect={() => run(() => onShowTab?.('git'))}
                   >
                     <GitCommit className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -344,7 +344,7 @@ export default function CommandPalette({
                 {branchesShown.map((b) => (
                   <CommandItem
                     key={`branch-${b.name}`}
-                    value={`branch-${b.name}`}
+                    value={b.name}
                     onSelect={() => run(() => { void git.checkout(b.name); onShowTab?.('git'); })}
                   >
                     <GitMerge className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -365,7 +365,7 @@ export default function CommandPalette({
 
 function BrowseAllItem({ label, onSelect }: { label: string; onSelect: () => void }) {
   return (
-    <CommandItem value={`browse-${label}`} onSelect={onSelect}>
+    <CommandItem value={label} onSelect={onSelect}>
       <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
       <span className="flex-1 text-muted-foreground">{label}</span>
     </CommandItem>
