@@ -3,23 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
-  Bell,
-  Bot,
   FileText,
-  GitBranch,
   GitCommit,
   GitMerge,
-  Info,
-  KeyRound,
-  ListChecks,
   MessageSquare,
   MessageSquarePlus,
-  Palette,
-  Plug,
   RefreshCw,
   Settings,
   SunMoon,
 } from 'lucide-react';
+
+import { SETTINGS_MAIN_TABS } from '../settings/constants/constants';
 
 import {
   Command,
@@ -57,17 +51,6 @@ function parseMode(input: string): { mode: Mode; query: string } {
   if (input.startsWith('#')) return { mode: 'commits', query: input.slice(1) };
   return { mode: 'mixed', query: input };
 }
-
-const SETTINGS_TABS: Array<{ id: string; label: string; keywords: string; icon: React.ComponentType<{ className?: string }> }> = [
-  { id: 'agents', label: 'Agents', keywords: 'agents subagents claude code', icon: Bot },
-  { id: 'appearance', label: 'Appearance', keywords: 'appearance theme dark light language', icon: Palette },
-  { id: 'git', label: 'Git', keywords: 'git github commits', icon: GitBranch },
-  { id: 'api', label: 'API Tokens', keywords: 'api tokens auth keys', icon: KeyRound },
-  { id: 'tasks', label: 'Tasks', keywords: 'tasks taskmaster', icon: ListChecks },
-  { id: 'notifications', label: 'Notifications', keywords: 'notifications alerts push', icon: Bell },
-  { id: 'plugins', label: 'Plugins', keywords: 'plugins extensions integrations', icon: Plug },
-  { id: 'about', label: 'About', keywords: 'about version info', icon: Info },
-];
 
 const NAV_TABS: Array<{ id: AppTab; label: string; keywords: string }> = [
   { id: 'chat', label: 'Go to Chat', keywords: 'chat messages conversation' },
@@ -255,7 +238,7 @@ export default function CommandPalette({
 
             {showActions && (
               <CommandGroup heading="Settings">
-                {SETTINGS_TABS.map(({ id, label, keywords, icon: Icon }) => (
+                {SETTINGS_MAIN_TABS.map(({ id, label, keywords, icon: Icon }) => (
                   <CommandItem
                     key={id}
                     value={`settings ${label} ${keywords}`}
