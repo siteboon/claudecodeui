@@ -1,5 +1,5 @@
 import express from 'express';
-import { userDb } from '../database/db.js';
+import { userDb } from '../modules/database/index.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { getSystemGitConfig } from '../utils/gitConfig.js';
 import { spawn } from 'child_process';

@@ -11,12 +11,24 @@ import type {
   SetStateAction,
   TouchEvent,
 } from 'react';
+import { ImageIcon, MessageSquareIcon, XIcon, ArrowDownIcon } from 'lucide-react';
 import type { PendingPermissionRequest, PermissionMode, Provider } from '../../types/types';
 import CommandMenu from './CommandMenu';
 import ClaudeStatus from './ClaudeStatus';
 import ImageAttachment from './ImageAttachment';
 import PermissionRequestsBanner from './PermissionRequestsBanner';
-import ChatInputControls from './ChatInputControls';
+import ThinkingModeSelector from './ThinkingModeSelector';
+import TokenUsagePie from './TokenUsagePie';
+import {
+  PromptInput,
+  PromptInputHeader,
+  PromptInputBody,
+  PromptInputTextarea,
+  PromptInputFooter,
+  PromptInputTools,
+  PromptInputButton,
+  PromptInputSubmit,
+} from '../../../../shared/view/ui';
 
 interface MentionableFile {
   name: string;
@@ -86,7 +98,6 @@ interface ChatComposerProps {
   onTextareaScrollSync: (target: HTMLTextAreaElement) => void;
   onTextareaInput: (event: FormEvent<HTMLTextAreaElement>) => void;
   onInputFocusChange?: (focused: boolean) => void;
-  isInputFocused?: boolean;
   placeholder: string;
   isTextareaExpanded: boolean;
   sendByCtrlEnter?: boolean;
@@ -142,7 +153,6 @@ export default function ChatComposer({
   onTextareaScrollSync,
   onTextareaInput,
   onInputFocusChange,
-  isInputFocused,
   placeholder,
   isTextareaExpanded,
   sendByCtrlEnter,
@@ -163,81 +173,40 @@ export default function ChatComposer({
   // Hide the thinking/status bar while any permission request is pending
   const hasPendingPermissions = pendingPermissionRequests.length > 0;
 
-  // On mobile, when input is focused, float the input box at the bottom
-  const mobileFloatingClass = isInputFocused
-    ? 'max-sm:fixed max-sm:bottom-0 max-sm:left-0 max-sm:right-0 max-sm:z-50 max-sm:bg-background max-sm:shadow-[0_-4px_20px_rgba(0,0,0,0.15)]'
-    : '';
-
   return (
-    <div className={`flex-shrink-0 p-2 pb-2 sm:p-4 sm:pb-4 md:p-4 md:pb-6 ${mobileFloatingClass}`}>
+    <div className="flex-shrink-0 p-2 pb-2 sm:p-4 sm:pb-4 md:p-4 md:pb-6">
       {!hasPendingPermissions && (
-        <div className="flex-1">
-          <ClaudeStatus
-            status={claudeStatus}
-            isLoading={isLoading}
-            onAbort={onAbortSession}
-            provider={provider}
+        <ClaudeStatus
+          status={claudeStatus}
+          isLoading={isLoading}
+          onAbort={onAbortSession}
+          provider={provider}
+        />
+      )}
+
+      {pendingPermissionRequests.length > 0 && (
+        <div className="mx-auto mb-3 max-w-4xl">
+          <PermissionRequestsBanner
+            pendingPermissionRequests={pendingPermissionRequests}
+            handlePermissionDecision={handlePermissionDecision}
+            handleGrantToolPermission={handleGrantToolPermission}
           />
         </div>
       )}
 
-      <div className="mx-auto mb-3 max-w-4xl">
-        <PermissionRequestsBanner
-          pendingPermissionRequests={pendingPermissionRequests}
-          handlePermissionDecision={handlePermissionDecision}
-          handleGrantToolPermission={handleGrantToolPermission}
-        />
-
-        {!hasQuestionPanel && <ChatInputControls
-          permissionMode={permissionMode}
-          onModeSwitch={onModeSwitch}
-          provider={provider}
-          thinkingMode={thinkingMode}
-          setThinkingMode={setThinkingMode}
-          tokenBudget={tokenBudget}
-          slashCommandsCount={slashCommandsCount}
-          onToggleCommandMenu={onToggleCommandMenu}
-          hasInput={hasInput}
-          onClearInput={onClearInput}
-          isUserScrolledUp={isUserScrolledUp}
-          hasMessages={hasMessages}
-          onScrollToBottom={onScrollToBottom}
-        />}
-      </div>
-
-      {!hasQuestionPanel && <form onSubmit={onSubmit as (event: FormEvent<HTMLFormElement>) => void} className="relative mx-auto max-w-4xl">
-        {isDragActive && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center rounded-2xl border-2 border-dashed border-primary/50 bg-primary/15">
-            <div className="rounded-xl border border-border/30 bg-card p-4 shadow-lg">
-              <svg className="mx-auto mb-2 h-8 w-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                />
-              </svg>
-              <p className="text-sm font-medium">Drop images here</p>
-            </div>
+      {!hasQuestionPanel && <div className="relative mx-auto max-w-4xl">
+        {isUserScrolledUp && hasMessages && (
+          <div className="absolute -top-10 left-0 right-0 z-10 flex justify-center">
+            <button
+              type="button"
+              onClick={onScrollToBottom}
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-border/50 bg-card text-muted-foreground shadow-sm transition-all duration-200 hover:bg-accent hover:text-foreground"
+              title={t('input.scrollToBottom', { defaultValue: 'Scroll to bottom' })}
+            >
+              <ArrowDownIcon className="h-4 w-4" />
+            </button>
           </div>
         )}
-
-        {attachedImages.length > 0 && (
-          <div className="mb-2 rounded-xl bg-muted/40 p-2">
-            <div className="flex flex-wrap gap-2">
-              {attachedImages.map((file, index) => (
-                <ImageAttachment
-                  key={index}
-                  file={file}
-                  onRemove={() => onRemoveImage(index)}
-                  uploadProgress={uploadingImages.get(file.name)}
-                  error={imageErrors.get(file.name)}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
         {showFileDropdown && filteredFiles.length > 0 && (
           <div className="absolute bottom-full left-0 right-0 z-50 mb-2 max-h-48 overflow-y-auto rounded-xl border border-border/50 bg-card/95 shadow-lg backdrop-blur-md">
             {filteredFiles.map((file, index) => (
@@ -275,21 +244,56 @@ export default function ChatComposer({
           frequentCommands={frequentCommands}
         />
 
-        <div
+        <PromptInput
+          onSubmit={onSubmit as (event: FormEvent<HTMLFormElement>) => void}
+          status={isLoading ? 'streaming' : 'ready'}
+          className={isTextareaExpanded ? 'chat-input-expanded' : ''}
           {...getRootProps()}
-          className={`relative overflow-hidden rounded-2xl border border-border/50 bg-card/80 shadow-sm backdrop-blur-sm transition-all duration-200 focus-within:border-primary/30 focus-within:shadow-md focus-within:ring-1 focus-within:ring-primary/15 ${
-            isTextareaExpanded ? 'chat-input-expanded' : ''
-          }`}
         >
-          <input {...getInputProps()} />
-          <div ref={inputHighlightRef} aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
-            <div className="chat-input-placeholder block w-full whitespace-pre-wrap break-words py-1.5 pl-12 pr-20 text-base leading-6 text-transparent sm:py-4 sm:pr-40">
-              {renderInputWithMentions(input)}
+          {isDragActive && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center rounded-2xl border-2 border-dashed border-primary/50 bg-primary/15">
+              <div className="rounded-xl border border-border/30 bg-card p-4 shadow-lg">
+                <svg className="mx-auto mb-2 h-8 w-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                  />
+                </svg>
+                <p className="text-sm font-medium">Drop images here</p>
+              </div>
             </div>
-          </div>
+          )}
 
-          <div className="relative z-10">
-            <textarea
+          {attachedImages.length > 0 && (
+            <PromptInputHeader>
+              <div className="rounded-xl bg-muted/40 p-2">
+                <div className="flex flex-wrap gap-2">
+                  {attachedImages.map((file, index) => (
+                    <ImageAttachment
+                      key={index}
+                      file={file}
+                      onRemove={() => onRemoveImage(index)}
+                      uploadProgress={uploadingImages.get(file.name)}
+                      error={imageErrors.get(file.name)}
+                    />
+                  ))}
+                </div>
+              </div>
+            </PromptInputHeader>
+          )}
+
+          <input {...getInputProps()} />
+
+          <PromptInputBody>
+            <div ref={inputHighlightRef} aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
+              <div className="chat-input-placeholder block w-full whitespace-pre-wrap break-words px-4 py-2 text-sm leading-6 text-transparent">
+                {renderInputWithMentions(input)}
+              </div>
+            </div>
+
+            <PromptInputTextarea
               ref={textareaRef}
               value={input}
               onChange={onInputChange}
@@ -301,54 +305,110 @@ export default function ChatComposer({
               onBlur={() => onInputFocusChange?.(false)}
               onInput={onTextareaInput}
               placeholder={placeholder}
-              className="chat-input-placeholder block max-h-[40vh] min-h-[50px] w-full resize-none overflow-y-auto rounded-2xl bg-transparent py-1.5 pl-12 pr-20 text-base leading-6 text-foreground placeholder-muted-foreground/50 transition-all duration-200 focus:outline-none sm:max-h-[300px] sm:min-h-[80px] sm:py-4 sm:pr-40"
-              style={{ height: '50px' }}
             />
+        </PromptInputBody>
+
+        <PromptInputFooter>
+          <PromptInputTools>
+            <PromptInputButton
+              tooltip={{ content: t('input.attachImages') }}
+              onClick={openImagePicker}
+            >
+              <ImageIcon />
+            </PromptInputButton>
 
             <button
               type="button"
-              onClick={openImagePicker}
-              className="absolute left-2 top-1/2 -translate-y-1/2 transform rounded-xl p-2 transition-colors hover:bg-accent/60"
-              title={t('input.attachImages')}
+              onClick={onModeSwitch}
+              className={`rounded-lg border p-2 text-xs font-medium transition-all duration-200 sm:px-2.5 sm:py-1 ${
+                permissionMode === 'default'
+                  ? 'border-border/60 bg-muted/50 text-muted-foreground hover:bg-muted'
+                  : permissionMode === 'acceptEdits'
+                    ? 'border-green-300/60 bg-green-50 text-green-700 hover:bg-green-100 dark:border-green-600/40 dark:bg-green-900/15 dark:text-green-300 dark:hover:bg-green-900/25'
+                    : permissionMode === 'bypassPermissions'
+                      ? 'border-orange-300/60 bg-orange-50 text-orange-700 hover:bg-orange-100 dark:border-orange-600/40 dark:bg-orange-900/15 dark:text-orange-300 dark:hover:bg-orange-900/25'
+                      : 'border-primary/20 bg-primary/5 text-primary hover:bg-primary/10'
+              }`}
+              title={t('input.clickToChangeMode')}
             >
-              <svg className="h-5 w-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+              <div className="flex items-center gap-1.5">
+                <div
+                  className={`h-2.5 w-2.5 rounded-full sm:h-1.5 sm:w-1.5 ${
+                    permissionMode === 'default'
+                      ? 'bg-muted-foreground'
+                      : permissionMode === 'acceptEdits'
+                        ? 'bg-green-500'
+                        : permissionMode === 'bypassPermissions'
+                          ? 'bg-orange-500'
+                          : 'bg-primary'
+                  }`}
                 />
-              </svg>
+                <span className="hidden whitespace-nowrap sm:inline">
+                  {permissionMode === 'default' && t('codex.modes.default')}
+                  {permissionMode === 'acceptEdits' && t('codex.modes.acceptEdits')}
+                  {permissionMode === 'bypassPermissions' && t('codex.modes.bypassPermissions')}
+                  {permissionMode === 'plan' && t('codex.modes.plan')}
+                </span>
+              </div>
             </button>
 
-            <button
-              type="submit"
-              disabled={!input.trim() || isLoading}
-              onMouseDown={(event) => {
-                event.preventDefault();
-                onSubmit(event);
-              }}
-              onTouchStart={(event) => {
-                event.preventDefault();
-                onSubmit(event);
-              }}
-              className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 transform items-center justify-center rounded-xl bg-primary transition-all duration-200 hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-1 focus:ring-offset-background disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground sm:h-11 sm:w-11"
+            {provider === 'claude' && (
+              <ThinkingModeSelector selectedMode={thinkingMode} onModeChange={setThinkingMode} onClose={() => {}} className="" />
+            )}
+
+            <TokenUsagePie used={tokenBudget?.used || 0} total={tokenBudget?.total || parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000} />
+
+            <PromptInputButton
+              tooltip={{ content: t('input.showAllCommands') }}
+              onClick={onToggleCommandMenu}
+              className="relative"
             >
-              <svg className="h-4 w-4 rotate-90 transform text-primary-foreground sm:h-[18px] sm:w-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-              </svg>
-            </button>
+              <MessageSquareIcon />
+              {slashCommandsCount > 0 && (
+                <span
+                  className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground"
+                >
+                  {slashCommandsCount}
+                </span>
+              )}
+            </PromptInputButton>
 
+            {hasInput && (
+              <PromptInputButton
+                tooltip={{ content: t('input.clearInput', { defaultValue: 'Clear input' }) }}
+                onClick={onClearInput}
+                className="hidden sm:No-flex"
+              >
+                <XIcon />
+              </PromptInputButton>
+            )}
+
+          </PromptInputTools>
+
+          <div className="flex items-center gap-2">
             <div
-              className={`pointer-events-none absolute bottom-1 left-12 right-14 hidden text-xs text-muted-foreground/50 transition-opacity duration-200 sm:right-40 sm:block ${
+              className={`hidden text-xs text-muted-foreground/50 transition-opacity duration-200 lg:block ${
                 input.trim() ? 'opacity-0' : 'opacity-100'
               }`}
             >
               {sendByCtrlEnter ? t('input.hintText.ctrlEnter') : t('input.hintText.enter')}
             </div>
+            <PromptInputSubmit
+              disabled={!input.trim() || isLoading}
+              className="h-10 w-10 sm:h-10 sm:w-10"
+              onMouseDown={(event) => {
+                event.preventDefault();
+                onSubmit(event as unknown as MouseEvent<HTMLButtonElement>);
+              }}
+              onTouchStart={(event) => {
+                event.preventDefault();
+                onSubmit(event as unknown as TouchEvent<HTMLButtonElement>);
+              }}
+            />
           </div>
-        </div>
-      </form>}
+        </PromptInputFooter>
+      </PromptInput>
+      </div>}
     </div>
   );
 }

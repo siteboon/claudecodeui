@@ -1,0 +1,490 @@
+{
+  "title": "Ayarlar",
+  "tabs": {
+    "account": "Hesap",
+    "permissions": "İzinler",
+    "mcpServers": "MCP Sunucuları",
+    "appearance": "Görünüm"
+  },
+  "account": {
+    "title": "Hesap",
+    "language": "Dil",
+    "languageLabel": "Görüntüleme Dili",
+    "languageDescription": "Arayüz için tercih ettiğin dili seç",
+    "username": "Kullanıcı Adı",
+    "email": "E-posta",
+    "profile": "Profil",
+    "changePassword": "Şifreyi Değiştir"
+  },
+  "mcp": {
+    "title": "MCP Sunucuları",
+    "addServer": "Sunucu Ekle",
+    "editServer": "Sunucuyu Düzenle",
+    "deleteServer": "Sunucuyu Sil",
+    "serverName": "Sunucu Adı",
+    "serverType": "Sunucu Türü",
+    "config": "Yapılandırma",
+    "testConnection": "Bağlantıyı Test Et",
+    "status": "Durum",
+    "connected": "Bağlı",
+    "disconnected": "Bağlantı kesildi",
+    "scope": {
+      "label": "Kapsam",
+      "user": "Kullanıcı",
+      "project": "Proje"
+    }
+  },
+  "appearance": {
+    "title": "Görünüm",
+    "theme": "Tema",
+    "codeEditor": "Kod Editörü",
+    "editorTheme": "Editör Teması",
+    "wordWrap": "Kelime Kaydırma",
+    "showMinimap": "Minimap'i Göster",
+    "lineNumbers": "Satır Numaraları",
+    "fontSize": "Yazı Tipi Boyutu"
+  },
+  "actions": {
+    "saveChanges": "Değişiklikleri Kaydet",
+    "resetToDefaults": "Varsayılanlara Döndür",
+    "cancelChanges": "Değişiklikleri İptal Et"
+  },
+  "quickSettings": {
+    "title": "Hızlı Ayarlar",
+    "sections": {
+      "appearance": "Görünüm",
+      "toolDisplay": "Araç Gösterimi",
+      "viewOptions": "Görünüm Seçenekleri",
+      "inputSettings": "Girdi Ayarları"
+    },
+    "darkMode": "Koyu Mod",
+    "autoExpandTools": "Araçları otomatik genişlet",
+    "showRawParameters": "Ham parametreleri göster",
+    "showThinking": "Düşünmeyi göster",
+    "autoScrollToBottom": "Otomatik en alta kaydır",
+    "sendByCtrlEnter": "Ctrl+Enter ile gönder",
+    "sendByCtrlEnterDescription": "Etkinleştirildiğinde, Ctrl+Enter'a basmak yalnız Enter yerine mesajı gönderir. IME (girdi metot düzenleyici) kullananlar için yanlışlıkla göndermeyi önler.",
+    "dragHandle": {
+      "dragging": "Tutamaç sürükleniyor",
+      "closePanel": "Ayarlar panelini kapat",
+      "openPanel": "Ayarlar panelini aç",
+      "draggingStatus": "Sürükleniyor...",
+      "toggleAndMove": "Açıp kapamak için tıkla, taşımak için sürükle"
+    }
+  },
+  "terminalShortcuts": {
+    "title": "Terminal Kısayolları",
+    "sectionKeys": "Tuşlar",
+    "sectionNavigation": "Gezinme",
+    "escape": "Escape",
+    "tab": "Tab",
+    "shiftTab": "Shift+Tab",
+    "arrowUp": "Yukarı Ok",
+    "arrowDown": "Aşağı Ok",
+    "scrollDown": "Aşağı Kaydır",
+    "handle": {
+      "closePanel": "Kısayol panelini kapat",
+      "openPanel": "Kısayol panelini aç"
+    }
+  },
+  "mainTabs": {
+    "label": "Ayarlar",
+    "agents": "Ajanlar",
+    "appearance": "Görünüm",
+    "git": "Git",
+    "apiTokens": "API ve Token'lar",
+    "tasks": "Görevler",
+    "notifications": "Bildirimler",
+    "plugins": "Eklentiler",
+    "about": "Hakkında"
+  },
+  "notifications": {
+    "title": "Bildirimler",
+    "description": "Hangi bildirim etkinliklerini alacağını kontrol et.",
+    "webPush": {
+      "title": "Web Push Bildirimleri",
+      "enable": "Push Bildirimlerini Etkinleştir",
+      "disable": "Push Bildirimlerini Devre Dışı Bırak",
+      "enabled": "Push bildirimleri etkin",
+      "loading": "Güncelleniyor...",
+      "unsupported": "Bu tarayıcıda push bildirimleri desteklenmiyor.",
+      "denied": "Push bildirimleri engellendi. Lütfen tarayıcı ayarlarından izin ver."
+    },
+    "events": {
+      "title": "Etkinlik Türleri",
+      "actionRequired": "Aksiyon gerekli",
+      "stop": "Çalıştırma durduruldu",
+      "error": "Çalıştırma başarısız"
+    }
+  },
+  "appearanceSettings": {
+    "darkMode": {
+      "label": "Koyu Mod",
+      "description": "Açık ve koyu temalar arasında geçiş yap"
+    },
+    "projectSorting": {
+      "label": "Proje Sıralama",
+      "description": "Projelerin kenar çubuğunda nasıl sıralanacağı",
+      "alphabetical": "Alfabetik",
+      "recentActivity": "Son Etkinlik"
+    },
+    "codeEditor": {
+      "title": "Kod Editörü",
+      "theme": {
+        "label": "Editör Teması",
+        "description": "Kod editörü için varsayılan tema"
+      },
+      "wordWrap": {
+        "label": "Kelime Kaydırma",
+        "description": "Editörde kelime kaydırmayı varsayılan olarak etkinleştir"
+      },
+      "showMinimap": {
+        "label": "Minimap'i Göster",
+        "description": "Diff görünümünde kolay gezinme için minimap göster"
+      },
+      "lineNumbers": {
+        "label": "Satır Numaralarını Göster",
+        "description": "Editörde satır numaralarını göster"
+      },
+      "fontSize": {
+        "label": "Yazı Tipi Boyutu",
+        "description": "Editör yazı tipi boyutu (piksel)"
+      }
+    }
+  },
+  "mcpForm": {
+    "title": {
+      "add": "MCP Sunucusu Ekle",
+      "edit": "MCP Sunucusunu Düzenle"
+    },
+    "importMode": {
+      "form": "Form Girdisi",
+      "json": "JSON İçe Aktar"
+    },
+    "scope": {
+      "label": "Kapsam",
+      "userGlobal": "Kullanıcı (Genel)",
+      "projectLocal": "Proje (Yerel)",
+      "userDescription": "Kullanıcı kapsamı: Makinendeki tüm projelerde kullanılabilir",
+      "projectDescription": "Yerel kapsam: Yalnızca seçili projede kullanılabilir",
+      "cannotChange": "Mevcut bir sunucu düzenlenirken kapsam değiştirilemez"
+    },
+    "fields": {
+      "serverName": "Sunucu Adı",
+      "transportType": "Taşıma Türü",
+      "command": "Komut",
+      "arguments": "Argümanlar (satır başına bir tane)",
+      "jsonConfig": "JSON Yapılandırması",
+      "url": "URL",
+      "envVars": "Ortam Değişkenleri (KEY=değer, satır başına bir tane)",
+      "headers": "Başlıklar (KEY=değer, satır başına bir tane)",
+      "selectProject": "Bir proje seç..."
+    },
+    "placeholders": {
+      "serverName": "benim-sunucum"
+    },
+    "validation": {
+      "missingType": "Zorunlu alan eksik: type",
+      "stdioRequiresCommand": "stdio türü command alanı gerektirir",
+      "httpRequiresUrl": "{{type}} türü url alanı gerektirir",
+      "invalidJson": "Geçersiz JSON formatı",
+      "jsonHelp": "MCP sunucu yapılandırmanı JSON formatında yapıştır. Örnek formatlar:",
+      "jsonExampleStdio": "• stdio: {\"type\":\"stdio\",\"command\":\"npx\",\"args\":[\"@upstash/context7-mcp\"]}",
+      "jsonExampleHttp": "• http/sse: {\"type\":\"http\",\"url\":\"https://api.example.com/mcp\"}"
+    },
+    "configDetails": "Yapılandırma Detayları ({{configFile}} dosyasından)",
+    "projectPath": "Yol: {{path}}",
+    "actions": {
+      "cancel": "İptal",
+      "saving": "Kaydediliyor...",
+      "addServer": "Sunucu Ekle",
+      "updateServer": "Sunucuyu Güncelle"
+    }
+  },
+  "saveStatus": {
+    "success": "Ayarlar başarıyla kaydedildi!",
+    "error": "Ayarlar kaydedilemedi",
+    "saving": "Kaydediliyor..."
+  },
+  "footerActions": {
+    "save": "Ayarları Kaydet",
+    "cancel": "İptal"
+  },
+  "git": {
+    "title": "Git Yapılandırması",
+    "description": "Commit'ler için git kimliğini yapılandır. Bu ayarlar git config --global ile genel olarak uygulanacak",
+    "name": {
+      "label": "Git Adı",
+      "help": "Git commit'leri için adın"
+    },
+    "email": {
+      "label": "Git E-postası",
+      "help": "Git commit'leri için e-postan"
+    },
+    "actions": {
+      "save": "Yapılandırmayı Kaydet",
+      "saving": "Kaydediliyor..."
+    },
+    "status": {
+      "success": "Başarıyla kaydedildi"
+    }
+  },
+  "apiKeys": {
+    "title": "API Anahtarları",
+    "description": "Diğer uygulamalardan harici API'ye erişmek için API anahtarları üret.",
+    "newKey": {
+      "alertTitle": "⚠️ API Anahtarını Kaydet",
+      "alertMessage": "Bu anahtarı yalnızca bu sefer göreceksin. Güvenli bir yerde sakla.",
+      "iveSavedIt": "Kaydettim"
+    },
+    "form": {
+      "placeholder": "API Anahtar Adı (ör. Production Sunucu)",
+      "createButton": "Oluştur",
+      "cancelButton": "İptal"
+    },
+    "newButton": "Yeni API Anahtarı",
+    "empty": "Henüz API anahtarı oluşturulmamış.",
+    "list": {
+      "created": "Oluşturuldu:",
+      "lastUsed": "Son kullanım:"
+    },
+    "confirmDelete": "Bu API anahtarını silmek istediğinden emin misin?",
+    "status": {
+      "active": "Aktif",
+      "inactive": "Pasif"
+    },
+    "github": {
+      "title": "GitHub Token'ları",
+      "description": "Harici API üzerinden özel depoları klonlamak için GitHub Kişisel Erişim Token'ları ekle.",
+      "descriptionAlt": "Özel depoları klonlamak için GitHub Kişisel Erişim Token'ları ekle. Token'ları saklamadan API isteklerinde doğrudan da geçebilirsin.",
+      "addButton": "Token Ekle",
+      "form": {
+        "namePlaceholder": "Token Adı (ör. Kişisel Depolar)",
+        "tokenPlaceholder": "GitHub Kişisel Erişim Token'ı (ghp_...)",
+        "descriptionPlaceholder": "Açıklama (isteğe bağlı)",
+        "addButton": "Token Ekle",
+        "cancelButton": "İptal",
+        "howToCreate": "GitHub Kişisel Erişim Token'ı nasıl oluşturulur →"
+      },
+      "empty": "Henüz GitHub token'ı eklenmemiş.",
+      "added": "Eklendi:",
+      "confirmDelete": "Bu GitHub token'ını silmek istediğinden emin misin?"
+    },
+    "apiDocsLink": "API Dokümantasyonu",
+    "documentation": {
+      "title": "Harici API Dokümantasyonu",
+      "description": "Uygulamalarından Claude/Cursor oturumları tetiklemek için harici API'nin nasıl kullanılacağını öğren.",
+      "viewLink": "API Dokümantasyonunu Görüntüle →"
+    },
+    "loading": "Yükleniyor...",
+    "version": {
+      "updateAvailable": "Güncelleme mevcut: v{{version}}"
+    }
+  },
+  "tasks": {
+    "checking": "TaskMaster kurulumu kontrol ediliyor...",
+    "notInstalled": {
+      "title": "TaskMaster AI CLI Kurulu Değil",
+      "description": "Görev yönetim özelliklerini kullanmak için TaskMaster CLI gereklidir. Başlamak için kur:",
+      "installCommand": "npm install -g task-master-ai",
+      "viewOnGitHub": "GitHub'da Görüntüle",
+      "afterInstallation": "Kurulumdan sonra:",
+      "steps": {
+        "restart": "Bu uygulamayı yeniden başlat",
+        "autoAvailable": "TaskMaster özellikleri otomatik olarak kullanılabilir hale gelecek",
+        "initCommand": "Proje dizininde task-master init komutunu kullan"
+      }
+    },
+    "settings": {
+      "enableLabel": "TaskMaster Entegrasyonunu Etkinleştir",
+      "enableDescription": "TaskMaster görevlerini, banner'larını ve kenar çubuğu göstergelerini arayüz genelinde göster"
+    }
+  },
+  "agents": {
+    "authStatus": {
+      "checking": "Kontrol ediliyor...",
+      "connected": "Bağlı",
+      "notConnected": "Bağlı değil",
+      "disconnected": "Bağlantı kesildi",
+      "checkingAuth": "Kimlik doğrulama durumu kontrol ediliyor...",
+      "loggedInAs": "{{email}} olarak giriş yapıldı",
+      "authenticatedUser": "kimliği doğrulanmış kullanıcı"
+    },
+    "account": {
+      "claude": {
+        "description": "Anthropic Claude AI asistanı"
+      },
+      "cursor": {
+        "description": "Cursor AI destekli kod editörü"
+      },
+      "codex": {
+        "description": "OpenAI Codex AI asistanı"
+      },
+      "gemini": {
+        "description": "Google Gemini AI asistanı"
+      }
+    },
+    "connectionStatus": "Bağlantı Durumu",
+    "login": {
+      "title": "Giriş Yap",
+      "reAuthenticate": "Yeniden Kimlik Doğrula",
+      "description": "AI özelliklerini etkinleştirmek için {{agent}} hesabına giriş yap",
+      "reAuthDescription": "Farklı bir hesapla giriş yap veya kimlik bilgilerini yenile",
+      "button": "Giriş Yap",
+      "reLoginButton": "Tekrar Giriş Yap"
+    },
+    "error": "Hata: {{error}}"
+  },
+  "permissions": {
+    "title": "İzin Ayarları",
+    "skipPermissions": {
+      "label": "İzin istemlerini atla (dikkatli kullan)",
+      "claudeDescription": "--dangerously-skip-permissions bayrağının eşdeğeri",
+      "cursorDescription": "Cursor CLI'daki -f bayrağının eşdeğeri"
+    },
+    "allowedTools": {
+      "title": "İzin Verilen Araçlar",
+      "description": "İzin istemeden otomatik olarak izin verilen araçlar",
+      "placeholder": "ör. \"Bash(git log:*)\" veya \"Write\"",
+      "quickAdd": "Yaygın araçları hızlı ekle:",
+      "empty": "İzin verilen araç yapılandırılmamış"
+    },
+    "blockedTools": {
+      "title": "Engellenen Araçlar",
+      "description": "İzin istemeden otomatik olarak engellenen araçlar",
+      "placeholder": "ör. \"Bash(rm:*)\"",
+      "empty": "Engellenen araç yapılandırılmamış"
+    },
+    "allowedCommands": {
+      "title": "İzin Verilen Shell Komutları",
+      "description": "İzin istemeden otomatik olarak izin verilen shell komutları",
+      "placeholder": "ör. \"Shell(ls)\" veya \"Shell(git status)\"",
+      "quickAdd": "Yaygın komutları hızlı ekle:",
+      "empty": "İzin verilen komut yapılandırılmamış"
+    },
+    "blockedCommands": {
+      "title": "Engellenen Shell Komutları",
+      "description": "Otomatik olarak engellenen shell komutları",
+      "placeholder": "ör. \"Shell(rm -rf)\" veya \"Shell(sudo)\"",
+      "empty": "Engellenen komut yapılandırılmamış"
+    },
+    "toolExamples": {
+      "title": "Araç Desen Örnekleri:",
+      "bashGitLog": "- Tüm git log komutlarına izin ver",
+      "bashGitDiff": "- Tüm git diff komutlarına izin ver",
+      "write": "- Tüm Write aracı kullanımına izin ver",
+      "bashRm": "- Tüm rm komutlarını engelle (tehlikeli)"
+    },
+    "shellExamples": {
+      "title": "Shell Komut Örnekleri:",
+      "ls": "- ls komutuna izin ver",
+      "gitStatus": "- git status'a izin ver",
+      "npmInstall": "- npm install'a izin ver",
+      "rmRf": "- Özyinelemeli silmeyi engelle"
+    },
+    "codex": {
+      "permissionMode": "İzin Modu",
+      "description": "Codex'in dosya değişiklikleri ve komut çalıştırmayı nasıl ele aldığını kontrol eder",
+      "modes": {
+        "default": {
+          "title": "Varsayılan",
+          "description": "Sadece güvenilir komutlar (ls, cat, grep, git status, vb.) otomatik çalışır. Diğer komutlar atlanır. Çalışma alanına yazabilir."
+        },
+        "acceptEdits": {
+          "title": "Düzenlemeleri Kabul Et",
+          "description": "Tüm komutlar çalışma alanı içinde otomatik çalışır. Sandbox'lu çalıştırma ile tam otomatik mod."
+        },
+        "bypassPermissions": {
+          "title": "İzinleri Atla",
+          "description": "Kısıtlama olmadan tam sistem erişimi. Tüm komutlar tam disk ve ağ erişimiyle otomatik çalışır. Dikkatli kullan."
+        }
+      },
+      "technicalDetails": "Teknik ayrıntılar",
+      "technicalInfo": {
+        "default": "sandboxMode=workspace-write, approvalPolicy=untrusted. Güvenilir komutlar: cat, cd, grep, head, ls, pwd, tail, git status/log/diff/show, find (-exec olmadan), vb.",
+        "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never. Tüm komutlar proje dizini içinde otomatik çalışır.",
+        "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never. Tam sistem erişimi, yalnızca güvenilir ortamlarda kullan.",
+        "overrideNote": "Sohbet arayüzündeki mod düğmesini kullanarak bunu oturum başına geçersiz kılabilirsin."
+      }
+    },
+    "actions": {
+      "add": "Ekle"
+    }
+  },
+  "mcpServers": {
+    "title": "MCP Sunucuları",
+    "description": {
+      "claude": "Model Context Protocol sunucuları Claude'a ek araçlar ve veri kaynakları sağlar",
+      "cursor": "Model Context Protocol sunucuları Cursor'a ek araçlar ve veri kaynakları sağlar",
+      "codex": "Model Context Protocol sunucuları Codex'e ek araçlar ve veri kaynakları sağlar"
+    },
+    "addButton": "MCP Sunucusu Ekle",
+    "empty": "Yapılandırılmış MCP sunucusu yok",
+    "serverType": "Tür",
+    "scope": {
+      "local": "yerel",
+      "user": "kullanıcı"
+    },
+    "config": {
+      "command": "Komut",
+      "url": "URL",
+      "args": "Argümanlar",
+      "environment": "Ortam"
+    },
+    "tools": {
+      "title": "Araçlar",
+      "count": "({{count}}):",
+      "more": "+{{count}} tane daha"
+    },
+    "actions": {
+      "edit": "Sunucuyu düzenle",
+      "delete": "Sunucuyu sil"
+    },
+    "help": {
+      "title": "Codex MCP Hakkında",
+      "description": "Codex stdio tabanlı MCP sunucularını destekler. Codex'in yeteneklerini ek araçlar ve kaynaklarla genişleten sunucular ekleyebilirsin."
+    }
+  },
+  "pluginSettings": {
+    "title": "Eklentiler",
+    "description": "Arayüzü özel eklentilerle genişlet. Git'ten yükle veya ~/.claude-code-ui/plugins/ klasörüne bir dizin bırak.",
+    "installPlaceholder": "https://github.com/kullanici/benim-eklentim",
+    "installButton": "Yükle",
+    "installing": "Yükleniyor…",
+    "securityWarning": "Yalnızca kaynak kodunu incelediğin veya güvendiğin geliştiricilerin eklentilerini yükle.",
+    "scanningPlugins": "Eklentiler taranıyor…",
+    "noPluginsInstalled": "Yüklü eklenti yok",
+    "pullLatest": "Git'ten en güncelini çek",
+    "noGitRemote": "Git uzak sunucusu yok — güncelleme kullanılamıyor",
+    "uninstallPlugin": "Eklentiyi kaldır",
+    "confirmUninstall": "Onaylamak için tekrar tıkla",
+    "confirmUninstallMessage": "{{name}} kaldırılsın mı? Bu işlem geri alınamaz.",
+    "cancel": "İptal",
+    "remove": "Kaldır",
+    "updateFailed": "Güncelleme başarısız",
+    "installFailed": "Yükleme başarısız",
+    "uninstallFailed": "Kaldırma başarısız",
+    "toggleFailed": "Açıp kapama başarısız",
+    "starterPluginLabel": "Başlangıç Eklentisi",
+    "starter": "Başlangıç",
+    "docs": "Dokümanlar",
+    "starterPlugin": {
+      "name": "Proje İstatistikleri",
+      "badge": "başlangıç",
+      "description": "Projen için dosya sayıları, kod satırları, dosya türü dağılımı ve son etkinlik.",
+      "install": "Yükle"
+    },
+    "terminalPlugin": {
+      "name": "Terminal",
+      "badge": "resmi",
+      "description": "Arayüzün içinde tam shell erişimiyle entegre terminal.",
+      "install": "Yükle"
+    },
+    "morePlugins": "Daha Fazla",
+    "enable": "Etkinleştir",
+    "disable": "Devre Dışı Bırak",
+    "installAriaLabel": "Eklenti git deposu URL'si",
+    "tab": "sekme",
+    "runningStatus": "çalışıyor"
+  }
+}

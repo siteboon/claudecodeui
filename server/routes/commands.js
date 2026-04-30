@@ -452,55 +452,6 @@ router.post('/list', async (req, res) => {
 });
 
 /**
- * POST /api/commands/load
- * Load a specific command file and return its content and metadata
- */
-router.post('/load', async (req, res) => {
-  try {
-    const { commandPath } = req.body;
-
-    if (!commandPath) {
-      return res.status(400).json({
-        error: 'Command path is required'
-      });
-    }
-
-    // Security: Prevent path traversal
-    const resolvedPath = path.resolve(commandPath);
-    if (!resolvedPath.startsWith(path.resolve(os.homedir())) &&
-        !resolvedPath.includes('.claude/commands')) {
-      return res.status(403).json({
-        error: 'Access denied',
-        message: 'Command must be in .claude/commands directory'
-      });
-    }
-
-    // Read and parse the command file
-    const content = await fs.readFile(commandPath, 'utf8');
-    const { data: metadata, content: commandContent } = parseFrontmatter(content);
-
-    res.json({
-      path: commandPath,
-      metadata,
-      content: commandContent
-    });
-  } catch (error) {
-    if (error.code === 'ENOENT') {
-      return res.status(404).json({
-        error: 'Command not found',
-        message: `Command file not found: ${req.body.commandPath}`
-      });
-    }
-
-    console.error('Error loading command:', error);
-    res.status(500).json({
-      error: 'Failed to load command',
-      message: error.message
-    });
-  }
-});
-
-/**
  * POST /api/commands/execute
  * Execute a command with argument replacement
  * This endpoint prepares the command content but doesn't execute bash commands yet

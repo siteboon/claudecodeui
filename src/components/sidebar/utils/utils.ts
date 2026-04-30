@@ -1,12 +1,6 @@
 import type { TFunction } from 'i18next';
 import type { Project } from '../../../types/app';
-import type {
-  AdditionalSessionsByProject,
-  ProjectSortOrder,
-  SettingsProject,
-  SessionViewModel,
-  SessionWithProvider,
-} from '../types/types';
+import type { ProjectSortOrder, SettingsProject, SessionViewModel, SessionWithProvider } from '../types/types';
 
 export const readProjectSortOrder = (): ProjectSortOrder => {
   try {
@@ -22,20 +16,39 @@ export const readProjectSortOrder = (): ProjectSortOrder => {
   }
 };
 
-export const loadStarredProjects = (): Set<string> => {
+const LEGACY_STARRED_PROJECTS_STORAGE_KEY = 'starredProjects';
+
+/**
+ * Reads legacy project stars from localStorage (used only for one-time migration to backend).
+ */
+export const readLegacyStarredProjectIds = (): string[] => {
   try {
-    const saved = localStorage.getItem('starredProjects');
-    return saved ? new Set<string>(JSON.parse(saved)) : new Set<string>();
+    const saved = localStorage.getItem(LEGACY_STARRED_PROJECTS_STORAGE_KEY);
+    if (!saved) {
+      return [];
+    }
+
+    const parsed = JSON.parse(saved) as unknown;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .map((value) => String(value).trim())
+      .filter((value) => value.length > 0);
   } catch {
-    return new Set<string>();
+    return [];
   }
 };
 
-export const persistStarredProjects = (starredProjects: Set<string>) => {
+/**
+ * Clears the legacy localStorage stars key after migration to backend completes.
+ */
+export const clearLegacyStarredProjectIds = () => {
   try {
-    localStorage.setItem('starredProjects', JSON.stringify([...starredProjects]));
+    localStorage.removeItem(LEGACY_STARRED_PROJECTS_STORAGE_KEY);
   } catch {
-    // Keep UI responsive even if storage fails.
+    // Keep UI responsive even if storage is unavailable.
   }
 };
 
@@ -98,14 +111,11 @@ export const createSessionViewModel = (
   };
 };
 
-export const getAllSessions = (
-  project: Project,
-  additionalSessions: AdditionalSessionsByProject,
-): SessionWithProvider[] => {
-  const claudeSessions = [
-    ...(project.sessions || []),
-    ...(additionalSessions[project.name] || []),
-  ].map((session) => ({ ...session, __provider: 'claude' as const }));
+export const getAllSessions = (project: Project): SessionWithProvider[] => {
+  const claudeSessions = [...(project.sessions || [])].map((session) => ({
+    ...session,
+    __provider: 'claude' as const,
+  }));
 
   const cursorSessions = (project.cursorSessions || []).map((session) => ({
     ...session,
@@ -127,11 +137,8 @@ export const getAllSessions = (
   );
 };
 
-export const getProjectLastActivity = (
-  project: Project,
-  additionalSessions: AdditionalSessionsByProject,
-): Date => {
-  const sessions = getAllSessions(project, additionalSessions);
+export const getProjectLastActivity = (project: Project): Date => {
+  const sessions = getAllSessions(project);
   if (sessions.length === 0) {
     return new Date(0);
   }
@@ -145,14 +152,13 @@ export const getProjectLastActivity = (
 export const sortProjects = (
   projects: Project[],
   projectSortOrder: ProjectSortOrder,
-  starredProjects: Set<string>,
-  additionalSessions: AdditionalSessionsByProject,
 ): Project[] => {
   const byName = [...projects];
 
   byName.sort((projectA, projectB) => {
-    const aStarred = starredProjects.has(projectA.name);
-    const bStarred = starredProjects.has(projectB.name);
+    // Star order now comes from backend `projects.isStarred`.
+    const aStarred = Boolean(projectA.isStarred);
+    const bStarred = Boolean(projectB.isStarred);
 
     if (aStarred && !bStarred) {
       return -1;
@@ -163,13 +169,10 @@ export const sortProjects = (
     }
 
     if (projectSortOrder === 'date') {
-      return (
-        getProjectLastActivity(projectB, additionalSessions).getTime() -
-        getProjectLastActivity(projectA, additionalSessions).getTime()
-      );
+      return getProjectLastActivity(projectB).getTime() - getProjectLastActivity(projectA).getTime();
     }
 
-    return (projectA.displayName || projectA.name).localeCompare(projectB.displayName || projectB.name);
+    return (projectA.displayName || projectA.projectId).localeCompare(projectB.displayName || projectB.projectId);
   });
 
   return byName;
@@ -182,9 +185,11 @@ export const filterProjects = (projects: Project[], searchFilter: string): Proje
   }
 
   return projects.filter((project) => {
-    const displayName = (project.displayName || project.name).toLowerCase();
-    const projectName = project.name.toLowerCase();
-    return displayName.includes(normalizedSearch) || projectName.includes(normalizedSearch);
+    const displayName = (project.displayName || project.projectId).toLowerCase();
+    // `project.path`/`fullPath` is the most useful search target now that the
+    // folder-derived name is gone; fall back to displayName above.
+    const searchPath = (project.path || project.fullPath || '').toLowerCase();
+    return displayName.includes(normalizedSearch) || searchPath.includes(normalizedSearch);
   });
 };
 
@@ -218,12 +223,14 @@ export const normalizeProjectForSettings = (project: Project): SettingsProject =
         ? project.path
         : '';
 
+  // Legacy SettingsProject still expects a `name` field; use the projectId so
+  // downstream consumers that rely on a stable identifier continue to work.
   return {
-    name: project.name,
+    name: project.projectId,
     displayName:
       typeof project.displayName === 'string' && project.displayName.trim().length > 0
         ? project.displayName
-        : project.name,
+        : project.projectId,
     fullPath: fallbackPath,
     path:
       typeof project.path === 'string' && project.path.length > 0

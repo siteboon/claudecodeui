@@ -1,5 +1,5 @@
 import express from 'express';
-import { apiKeysDb, credentialsDb, notificationPreferencesDb, pushSubscriptionsDb } from '../database/db.js';
+import { apiKeysDb, credentialsDb, notificationPreferencesDb, pushSubscriptionsDb } from '../modules/database/index.js';
 import { getPublicKey } from '../services/vapid-keys.js';
 import { createNotificationEvent, notifyUserIfEnabled } from '../services/notification-orchestrator.js';
 
@@ -270,6 +270,16 @@ router.post('/push/unsubscribe', async (req, res) => {
   } catch (error) {
     console.error('Error removing push subscription:', error);
     res.status(500).json({ error: 'Failed to remove push subscription' });
+  }
+});
+
+// Host OS for UI (e.g. hide Cursor agent when the backend runs on Windows).
+router.get('/server-env', async (req, res) => {
+  try {
+    res.json({ platform: process.platform });
+  } catch (error) {
+    console.error('Error reading server environment:', error);
+    res.status(500).json({ error: 'Failed to read server environment' });
   }
 });
 

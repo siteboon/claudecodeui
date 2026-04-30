@@ -7,7 +7,9 @@ export type CodeEditorDiffInfo = {
 export type CodeEditorFile = {
   name: string;
   path: string;
-  projectName?: string;
+  // DB projectId; used by the editor to build `/api/projects/:projectId/file`
+  // URLs for reading and saving content.
+  projectId?: string;
   diffInfo?: CodeEditorDiffInfo | null;
   [key: string]: unknown;
 };

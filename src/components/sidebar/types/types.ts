@@ -6,16 +6,15 @@ export type SessionWithProvider = ProjectSession & {
   __provider: LLMProvider;
 };
 
-export type AdditionalSessionsByProject = Record<string, ProjectSession[]>;
-export type LoadingSessionsByProject = Record<string, boolean>;
-
 export type DeleteProjectConfirmation = {
   project: Project;
   sessionCount: number;
 };
 
+// Delete confirmation payload used by sidebar UX. `projectId`/`provider` are
+// kept for wiring compatibility, while API deletion now keys only by sessionId.
 export type SessionDeleteConfirmation = {
-  projectName: string;
+  projectId: string;
   sessionId: string;
   sessionTitle: string;
   provider: LLMProvider;
@@ -29,7 +28,10 @@ export type SidebarProps = {
   onSessionSelect: (session: ProjectSession) => void;
   onNewSession: (project: Project) => void;
   onSessionDelete?: (sessionId: string) => void;
-  onProjectDelete?: (projectName: string) => void;
+  onLoadMoreSessions?: (projectId: string) => Promise<void> | void;
+  // `projectId` is the DB identifier; the sidebar hands it back to the parent
+  // when the delete flow completes.
+  onProjectDelete?: (projectId: string) => void;
   isLoading: boolean;
   loadingProgress: LoadingProgress | null;
   onRefresh: () => Promise<void> | void;
@@ -55,4 +57,11 @@ export type MCPServerStatus = {
   isConfigured?: boolean;
 } | null;
 
-export type SettingsProject = Pick<Project, 'name' | 'displayName' | 'fullPath' | 'path'>;
+// Retained as `name` for backwards compatibility with existing settings
+// consumers; the value is populated from `projectId` by normalizeProjectForSettings.
+export type SettingsProject = {
+  name: string;
+  displayName: string;
+  fullPath: string;
+  path?: string;
+};
