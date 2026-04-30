@@ -1,19 +1,5 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  ArrowDownToLine,
-  ArrowUpFromLine,
-  FileText,
-  GitCommit,
-  GitMerge,
-  MessageSquare,
-  MessageSquarePlus,
-  RefreshCw,
-  Settings,
-  SunMoon,
-} from 'lucide-react';
-
-import { SETTINGS_MAIN_TABS } from '../settings/constants/constants';
 
 import {
   Command,
@@ -29,14 +15,8 @@ import {
 import { useTheme } from '../../contexts/ThemeContext';
 import type { AppTab, Project } from '../../types/app';
 
-import { useSessionsSource } from './sources/useSessionsSource';
-import { useFilesSource } from './sources/useFilesSource';
-import { useCommitsSource } from './sources/useCommitsSource';
-import { useSessionMessageSearch } from './sources/useSessionMessageSearch';
-import { useBranchesSource } from './sources/useBranchesSource';
-import { useGitActions } from './sources/useGitActions';
-
-type Mode = 'mixed' | 'actions' | 'files' | 'commits';
+import { GROUPS, parseMode } from './registry';
+import type { GroupConfig, PaletteCtx } from './registry';
 
 type CommandPaletteProps = {
   selectedProject: Project | null;
@@ -44,21 +24,6 @@ type CommandPaletteProps = {
   onOpenSettings: (tab?: string) => void;
   onShowTab?: (tab: AppTab) => void;
 };
-
-function parseMode(input: string): { mode: Mode; query: string } {
-  if (input.startsWith('> ')) return { mode: 'actions', query: input.slice(2) };
-  if (input.startsWith('/')) return { mode: 'files', query: input.slice(1) };
-  if (input.startsWith('#')) return { mode: 'commits', query: input.slice(1) };
-  return { mode: 'mixed', query: input };
-}
-
-const NAV_TABS: Array<{ id: AppTab; label: string; keywords: string }> = [
-  { id: 'chat', label: 'Go to Chat', keywords: 'chat messages conversation' },
-  { id: 'files', label: 'Go to Files', keywords: 'files file tree explorer' },
-  { id: 'shell', label: 'Go to Shell', keywords: 'shell terminal console' },
-  { id: 'git', label: 'Go to Git', keywords: 'git diff branches' },
-  { id: 'tasks', label: 'Go to Tasks', keywords: 'tasks taskmaster' },
-];
 
 export default function CommandPalette({
   selectedProject,
@@ -87,42 +52,16 @@ export default function CommandPalette({
   }, [open]);
 
   const { mode, query } = parseMode(search);
-
   const projectId = selectedProject?.projectId;
-  const { items: sessions } = useSessionsSource(projectId, open && (mode === 'mixed'));
-  const { items: messageMatches } = useSessionMessageSearch(projectId, query, open && mode === 'mixed');
-  const { items: files } = useFilesSource(projectId, open && (mode === 'mixed' || mode === 'files'));
-  const { items: commits } = useCommitsSource(projectId, open && (mode === 'mixed' || mode === 'commits'));
-  const { items: branches } = useBranchesSource(projectId, open && (mode === 'mixed' || mode === 'actions'));
-  const git = useGitActions(projectId);
 
-  const showActions = mode === 'mixed' || mode === 'actions';
-  const showSessions = mode === 'mixed';
-  const showFiles = mode === 'mixed' || mode === 'files';
-  const showCommits = mode === 'mixed' || mode === 'commits';
+  const run = React.useCallback((fn: () => void) => {
+    setOpen(false);
+    fn();
+  }, []);
 
-  const sessionRows = React.useMemo(() => {
-    if (!showSessions) return [];
-    type Row = { id: string; label: string; provider?: string; snippet?: string };
-    const byId = new Map<string, Row>();
-    for (const s of sessions) {
-      byId.set(s.id, { id: s.id, label: s.label, provider: s.provider });
-    }
-    for (const m of messageMatches) {
-      const existing = byId.get(m.sessionId);
-      if (existing) {
-        existing.snippet = m.snippet;
-      } else {
-        byId.set(m.sessionId, {
-          id: m.sessionId,
-          label: m.label,
-          provider: m.provider,
-          snippet: m.snippet,
-        });
-      }
-    }
-    return Array.from(byId.values());
-  }, [sessions, messageMatches, showSessions]);
+  const openFile = React.useCallback((path: string) => {
+    window.openFile?.(path);
+  }, []);
 
   const filter = React.useCallback(
     (value: string, rawSearch: string) => {
@@ -132,13 +71,6 @@ export default function CommandPalette({
     },
     [],
   );
-
-  const run = React.useCallback((fn: () => void) => {
-    setOpen(false);
-    fn();
-  }, []);
-
-  const startNewChatDisabled = !selectedProject;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -152,163 +84,50 @@ export default function CommandPalette({
           />
           <CommandList>
             <CommandEmpty>No results.</CommandEmpty>
-
-            {showActions && (
-              <CommandGroup heading="Actions">
-                <CommandItem
-                  value="start new chat"
-                  disabled={startNewChatDisabled}
-                  onSelect={() => {
-                    if (!selectedProject) return;
-                    run(() => onStartNewChat(selectedProject));
-                  }}
-                >
-                  <MessageSquarePlus className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                  <span className="flex-1">Start new chat</span>
-                  {startNewChatDisabled && (
-                    <span className="text-xs text-muted-foreground">Select a project first</span>
-                  )}
-                </CommandItem>
-                <CommandItem value="open settings" onSelect={() => run(() => onOpenSettings())}>
-                  <Settings className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                  <span className="flex-1">Open settings</span>
-                </CommandItem>
-                <CommandItem
-                  value="toggle theme dark light mode"
-                  onSelect={() => run(toggleDarkMode)}
-                >
-                  <SunMoon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                  <span className="flex-1">Toggle theme</span>
-                </CommandItem>
-              </CommandGroup>
-            )}
-
-            {showActions && (
-              <CommandGroup heading="Navigate">
-                {NAV_TABS.map((tab) => (
-                  <CommandItem
-                    key={tab.id as string}
-                    value={`navigate ${tab.label} ${tab.keywords}`}
-                    onSelect={() => run(() => onShowTab?.(tab.id))}
-                  >
-                    <span className="flex-1">{tab.label}</span>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            )}
-
-            {showActions && projectId && (
-              <CommandGroup heading="Git">
-                <CommandItem
-                  value="git fetch remote"
-                  onSelect={() => run(() => { void git.fetch(); onShowTab?.('git'); })}
-                >
-                  <RefreshCw className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                  <span className="flex-1">Git: Fetch</span>
-                </CommandItem>
-                <CommandItem
-                  value="git pull merge upstream"
-                  onSelect={() => run(() => { void git.pull(); onShowTab?.('git'); })}
-                >
-                  <ArrowDownToLine className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                  <span className="flex-1">Git: Pull</span>
-                </CommandItem>
-                <CommandItem
-                  value="git push origin remote"
-                  onSelect={() => run(() => { void git.push(); onShowTab?.('git'); })}
-                >
-                  <ArrowUpFromLine className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                  <span className="flex-1">Git: Push</span>
-                </CommandItem>
-                {branches
-                  .filter((b) => !b.isCurrent && !b.isRemote)
-                  .slice(0, 30)
-                  .map((b) => (
-                    <CommandItem
-                      key={`branch-${b.name}`}
-                      value={`git switch checkout branch ${b.name}`}
-                      onSelect={() => run(() => { void git.checkout(b.name); onShowTab?.('git'); })}
-                    >
-                      <GitMerge className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                      <span className="flex-1 truncate">Switch to branch: {b.name}</span>
-                    </CommandItem>
-                  ))}
-              </CommandGroup>
-            )}
-
-            {showActions && (
-              <CommandGroup heading="Settings">
-                {SETTINGS_MAIN_TABS.map(({ id, label, keywords, icon: Icon }) => (
-                  <CommandItem
-                    key={id}
-                    value={`settings ${label} ${keywords}`}
-                    onSelect={() => run(() => onOpenSettings(id))}
-                  >
-                    <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                    <span className="flex-1">Settings: {label}</span>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            )}
-
-            {showSessions && sessionRows.length > 0 && (
-              <CommandGroup heading="Sessions">
-                {sessionRows.map((s) => (
-                  <CommandItem
-                    key={s.id}
-                    value={`session ${s.label} ${s.id} ${s.snippet ?? ''}`}
-                    onSelect={() => run(() => navigate(`/session/${s.id}`))}
-                  >
-                    <MessageSquare className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                    <div className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate">{s.label}</span>
-                      {s.snippet && (
-                        <span className="truncate text-xs text-muted-foreground">{s.snippet}</span>
-                      )}
-                    </div>
-                    {s.provider && (
-                      <span className="text-xs text-muted-foreground">{s.provider}</span>
-                    )}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            )}
-
-            {showFiles && files.length > 0 && (
-              <CommandGroup heading="Files">
-                {files.map((f) => (
-                  <CommandItem
-                    key={f.path}
-                    value={`file ${f.path}`}
-                    onSelect={() => run(() => window.openFile?.(f.path))}
-                  >
-                    <FileText className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                    <span className="flex-1 truncate">{f.name}</span>
-                    <span className="truncate text-xs text-muted-foreground">{f.path}</span>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            )}
-
-            {showCommits && commits.length > 0 && (
-              <CommandGroup heading="Commits">
-                {commits.map((c) => (
-                  <CommandItem
-                    key={c.hash}
-                    value={`commit ${c.shortHash} ${c.message} ${c.author}`}
-                    onSelect={() => run(() => onShowTab?.('git'))}
-                  >
-                    <GitCommit className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                    <span className="font-mono text-xs text-muted-foreground">{c.shortHash}</span>
-                    <span className="flex-1 truncate">{c.message}</span>
-                    <span className="truncate text-xs text-muted-foreground">{c.author}</span>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            )}
+            {GROUPS.map((group) => (
+              <GroupSlot
+                key={group.id}
+                group={group}
+                mode={mode}
+                ctx={{
+                  projectId,
+                  selectedProject,
+                  query,
+                  enabled: open && group.modes.includes(mode) && (!group.requiresProject || !!projectId),
+                  open,
+                  run,
+                  navigate,
+                  toggleDarkMode,
+                  onStartNewChat,
+                  onOpenSettings,
+                  onShowTab,
+                  openFile,
+                }}
+              />
+            ))}
           </CommandList>
         </Command>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function GroupSlot({ group, mode, ctx }: { group: GroupConfig; mode: string; ctx: PaletteCtx }) {
+  const items = group.useItems(ctx);
+  const eligible = group.modes.includes(mode) && (!group.requiresProject || !!ctx.projectId);
+  if (!eligible || items.length === 0) return null;
+  return (
+    <CommandGroup heading={group.heading}>
+      {items.map((item) => (
+        <CommandItem
+          key={item.key}
+          value={item.value}
+          disabled={item.disabled}
+          onSelect={item.onSelect}
+        >
+          {item.node}
+        </CommandItem>
+      ))}
+    </CommandGroup>
   );
 }
