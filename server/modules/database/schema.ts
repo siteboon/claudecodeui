@@ -102,6 +102,21 @@ CREATE TABLE IF NOT EXISTS scan_state (
 );
 `;
 
+export const PROVIDER_ACCOUNTS_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS provider_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    provider TEXT NOT NULL,
+    account_name TEXT NOT NULL,
+    auth_method TEXT NOT NULL,
+    credential_value TEXT,
+    email TEXT,
+    is_active BOOLEAN DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+`;
+
 export const APP_CONFIG_TABLE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS app_config (
     key TEXT PRIMARY KEY,
@@ -149,4 +164,8 @@ CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id);
 ${LAST_SCANNED_AT_SQL}
 
 ${APP_CONFIG_TABLE_SCHEMA_SQL}
+
+${PROVIDER_ACCOUNTS_TABLE_SCHEMA_SQL}
+CREATE INDEX IF NOT EXISTS idx_provider_accounts_user_provider ON provider_accounts(user_id, provider);
+CREATE INDEX IF NOT EXISTS idx_provider_accounts_active ON provider_accounts(is_active);
 `;

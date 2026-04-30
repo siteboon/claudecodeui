@@ -1,8 +1,10 @@
 import type { LLMProvider } from '../../types/app';
+
 import ClaudeLogo from './ClaudeLogo';
 import CodexLogo from './CodexLogo';
 import CursorLogo from './CursorLogo';
 import GeminiLogo from './GeminiLogo';
+import GroqLogo from './GroqLogo';
 
 type SessionProviderLogoProps = {
   provider?: LLMProvider | string | null;
@@ -23,6 +25,10 @@ export default function SessionProviderLogo({
 
   if (provider === 'gemini') {
     return <GeminiLogo className={className} />;
+  }
+
+  if (provider === 'groq') {
+    return <GroqLogo className={className} />;
   }
 
   return <ClaudeLogo className={className} />;

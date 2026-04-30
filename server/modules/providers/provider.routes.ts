@@ -1,5 +1,6 @@
 import express, { type Request, type Response } from 'express';
 
+import { providerAccountsService } from '@/modules/providers/services/provider-accounts.service.js';
 import { providerAuthService } from '@/modules/providers/services/provider-auth.service.js';
 import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
 import { sessionConversationsSearchService } from '@/modules/providers/services/session-conversations-search.service.js';
@@ -172,7 +173,7 @@ const parseMcpUpsertPayload = (payload: unknown): UpsertProviderMcpServerInput =
 
 const parseProvider = (value: unknown): LLMProvider => {
   const normalized = normalizeProviderParam(value);
-  if (normalized === 'claude' || normalized === 'codex' || normalized === 'cursor' || normalized === 'gemini') {
+  if (normalized === 'claude' || normalized === 'codex' || normalized === 'cursor' || normalized === 'gemini' || normalized === 'groq') {
     return normalized;
   }
 
@@ -244,6 +245,87 @@ router.get(
     const provider = parseProvider(req.params.provider);
     const status = await providerAuthService.getProviderAuthStatus(provider);
     res.json(createApiSuccessResponse(status));
+  }),
+);
+
+// ----------------- Account routes -----------------
+router.get(
+  '/:provider/accounts',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      throw new AppError('Unauthorized.', { code: 'UNAUTHORIZED', statusCode: 401 });
+    }
+    const accounts = providerAccountsService.listAccounts(userId, provider);
+    res.json(createApiSuccessResponse({ accounts }));
+  }),
+);
+
+router.post(
+  '/:provider/accounts',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      throw new AppError('Unauthorized.', { code: 'UNAUTHORIZED', statusCode: 401 });
+    }
+
+    const body = req.body as Record<string, unknown>;
+    const accountName = typeof body.accountName === 'string' ? body.accountName.trim() : '';
+    if (!accountName) {
+      throw new AppError('accountName is required.', { code: 'INVALID_ACCOUNT_NAME', statusCode: 400 });
+    }
+    const authMethod = typeof body.authMethod === 'string' ? body.authMethod.trim() : 'api_key';
+    const credentialValue = typeof body.credentialValue === 'string' ? body.credentialValue.trim() : null;
+    const email = typeof body.email === 'string' ? body.email.trim() : null;
+
+    const account = providerAccountsService.addAccount(userId, provider, accountName, authMethod, credentialValue, email);
+    res.status(201).json(createApiSuccessResponse({ account }));
+  }),
+);
+
+router.patch(
+  '/:provider/accounts/:accountId/activate',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      throw new AppError('Unauthorized.', { code: 'UNAUTHORIZED', statusCode: 401 });
+    }
+
+    const accountId = Number.parseInt(readPathParam(req.params.accountId, 'accountId'), 10);
+    if (Number.isNaN(accountId)) {
+      throw new AppError('Invalid accountId.', { code: 'INVALID_ACCOUNT_ID', statusCode: 400 });
+    }
+
+    const success = providerAccountsService.setActiveAccount(userId, provider, accountId);
+    if (!success) {
+      throw new AppError('Account not found.', { code: 'ACCOUNT_NOT_FOUND', statusCode: 404 });
+    }
+    res.json(createApiSuccessResponse({ activated: true }));
+  }),
+);
+
+router.delete(
+  '/:provider/accounts/:accountId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      throw new AppError('Unauthorized.', { code: 'UNAUTHORIZED', statusCode: 401 });
+    }
+
+    const accountId = Number.parseInt(readPathParam(req.params.accountId, 'accountId'), 10);
+    if (Number.isNaN(accountId)) {
+      throw new AppError('Invalid accountId.', { code: 'INVALID_ACCOUNT_ID', statusCode: 400 });
+    }
+
+    const success = providerAccountsService.removeAccount(userId, accountId);
+    if (!success) {
+      throw new AppError('Account not found.', { code: 'ACCOUNT_NOT_FOUND', statusCode: 404 });
+    }
+    res.json(createApiSuccessResponse({ deleted: true }));
   }),
 );
 

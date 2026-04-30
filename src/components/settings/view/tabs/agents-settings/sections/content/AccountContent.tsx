@@ -1,5 +1,6 @@
 import { LogIn } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
 import { Badge, Button } from '../../../../../../../shared/view/ui';
 import SessionProviderLogo from '../../../../../../llm-logo-provider/SessionProviderLogo';
 import type { AgentProvider, AuthStatus } from '../../../../../types/types';
@@ -53,6 +54,14 @@ const agentConfig: Record<AgentProvider, AgentVisualConfig> = {
     textClass: 'text-indigo-900 dark:text-indigo-100',
     subtextClass: 'text-indigo-700 dark:text-indigo-300',
     buttonClass: 'bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800',
+  },
+  groq: {
+    name: 'Groq',
+    bgClass: 'bg-orange-50 dark:bg-orange-900/20',
+    borderClass: 'border-orange-200 dark:border-orange-800',
+    textClass: 'text-orange-900 dark:text-orange-100',
+    subtextClass: 'text-orange-700 dark:text-orange-300',
+    buttonClass: 'bg-orange-600 hover:bg-orange-700 active:bg-orange-800',
   },
 };
 

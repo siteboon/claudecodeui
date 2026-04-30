@@ -14,7 +14,7 @@ type SessionSummary = {
   lastActivity: string;
 };
 
-type SessionsByProvider = Record<'claude' | 'cursor' | 'codex' | 'gemini', SessionSummary[]>;
+type SessionsByProvider = Record<'claude' | 'cursor' | 'codex' | 'gemini' | 'groq', SessionSummary[]>;
 
 type SessionRepositoryRow = {
   provider: string;
@@ -34,6 +34,7 @@ export type ProjectListItem = {
   cursorSessions: SessionSummary[];
   codexSessions: SessionSummary[];
   geminiSessions: SessionSummary[];
+  groqSessions: SessionSummary[];
   sessionMeta: {
     hasMore: boolean;
     total: number;
@@ -70,6 +71,7 @@ export type ProjectSessionsPageApiView = {
   cursorSessions: SessionSummary[];
   codexSessions: SessionSummary[];
   geminiSessions: SessionSummary[];
+  groqSessions: SessionSummary[];
   sessionMeta: {
     hasMore: boolean;
     total: number;
@@ -135,6 +137,7 @@ function bucketSessionRowsByProvider(rows: SessionRepositoryRow[]): SessionsByPr
     cursor: [],
     codex: [],
     gemini: [],
+    groq: [],
   };
 
   for (const row of rows) {
@@ -239,6 +242,7 @@ export async function getProjectsWithSessions(
       cursorSessions: sessionsPage.sessionsByProvider.cursor,
       codexSessions: sessionsPage.sessionsByProvider.codex,
       geminiSessions: sessionsPage.sessionsByProvider.gemini,
+      groqSessions: sessionsPage.sessionsByProvider.groq,
       sessionMeta: {
         hasMore: sessionsPage.hasMore,
         total: sessionsPage.total,
@@ -277,6 +281,7 @@ export async function getProjectSessionsPage(
     cursorSessions: sessionsPage.sessionsByProvider.cursor,
     codexSessions: sessionsPage.sessionsByProvider.codex,
     geminiSessions: sessionsPage.sessionsByProvider.gemini,
+    groqSessions: sessionsPage.sessionsByProvider.groq,
     sessionMeta: {
       hasMore: sessionsPage.hasMore,
       total: sessionsPage.total,

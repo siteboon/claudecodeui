@@ -4,6 +4,7 @@ import {
   APP_CONFIG_TABLE_SCHEMA_SQL,
   LAST_SCANNED_AT_SQL,
   PROJECTS_TABLE_SCHEMA_SQL,
+  PROVIDER_ACCOUNTS_TABLE_SCHEMA_SQL,
   PUSH_SUBSCRIPTIONS_TABLE_SCHEMA_SQL,
   SESSIONS_TABLE_SCHEMA_SQL,
   USER_NOTIFICATION_PREFERENCES_TABLE_SCHEMA_SQL,
@@ -435,6 +436,14 @@ export const runMigrations = (db: Database) => {
     }
 
     db.exec(LAST_SCANNED_AT_SQL);
+
+    if (!tableExists(db, 'provider_accounts')) {
+      console.log('Running migration: Creating provider_accounts table');
+      db.exec(PROVIDER_ACCOUNTS_TABLE_SCHEMA_SQL);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_provider_accounts_user_provider ON provider_accounts(user_id, provider)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_provider_accounts_active ON provider_accounts(is_active)');
+    }
+
     console.log('Database migrations completed successfully');
   } catch (error: any) {
     console.error('Error running migrations:', error.message);
