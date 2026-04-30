@@ -1,5 +1,5 @@
 import express from 'express';
-import { apiKeysDb, credentialsDb, notificationPreferencesDb, pushSubscriptionsDb } from '../database/db.js';
+import { apiKeysDb, credentialsDb, notificationPreferencesDb, pushSubscriptionsDb } from '../modules/database/index.js';
 import { getPublicKey } from '../services/vapid-keys.js';
 import { createNotificationEvent, notifyUserIfEnabled } from '../services/notification-orchestrator.js';
 

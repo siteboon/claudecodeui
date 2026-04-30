@@ -43,24 +43,13 @@ export default function StepReview({
 
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
-            <span className="text-gray-600 dark:text-gray-400">
-              {t('projectWizard.step3.workspaceType')}
-            </span>
-            <span className="font-medium text-gray-900 dark:text-white">
-              {formState.workspaceType === 'existing'
-                ? t('projectWizard.step3.existingWorkspace')
-                : t('projectWizard.step3.newWorkspace')}
-            </span>
-          </div>
-
-          <div className="flex justify-between text-sm">
             <span className="text-gray-600 dark:text-gray-400">{t('projectWizard.step3.path')}</span>
             <span className="break-all font-mono text-xs text-gray-900 dark:text-white">
               {formState.workspacePath}
             </span>
           </div>
 
-          {formState.workspaceType === 'new' && formState.githubUrl && (
+          {formState.githubUrl && (
             <>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600 dark:text-gray-400">
@@ -94,11 +83,9 @@ export default function StepReview({
           </div>
         ) : (
           <p className="text-sm text-blue-800 dark:text-blue-200">
-            {formState.workspaceType === 'existing'
-              ? t('projectWizard.step3.existingInfo')
-              : formState.githubUrl
-                ? t('projectWizard.step3.newWithClone')
-                : t('projectWizard.step3.newEmpty')}
+            {formState.githubUrl
+              ? t('projectWizard.step3.newWithClone')
+              : t('projectWizard.step3.newEmpty')}
           </p>
         )}
       </div>

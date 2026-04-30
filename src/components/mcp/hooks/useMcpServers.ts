@@ -31,6 +31,8 @@ type GlobalMcpServerResponse = {
   results: GlobalMcpServerResult[];
 };
 
+// Internal MCP-side shape; `name` is now filled from the DB projectId since
+// the legacy Project.name field was removed during the projectId migration.
 type ProjectTarget = {
   name: string;
   displayName: string;
@@ -111,6 +113,9 @@ const normalizeServer = (
     bearerTokenEnvVar: server.bearerTokenEnvVar,
     envHttpHeaders: server.envHttpHeaders ?? {},
     workspacePath: project?.path || server.workspacePath,
+    // Keep the `projectName` key in the MCP wire payload for backwards
+    // compatibility. ProjectTarget.name is populated from the DB `projectId`
+    // (see createProjectTargets) so this still carries the new identifier.
     projectName: project?.name || server.projectName,
     projectDisplayName: project?.displayName || server.projectDisplayName,
   };
@@ -126,8 +131,9 @@ const createProjectTargets = (projects: McpProject[]): ProjectTarget[] => {
 
     seen.add(projectPath);
     acc.push({
-      name: project.name,
-      displayName: project.displayName || project.name,
+      // Use projectId as the stable internal identifier.
+      name: project.projectId,
+      displayName: project.displayName || project.projectId,
       path: projectPath,
     });
     return acc;

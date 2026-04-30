@@ -73,13 +73,15 @@ function MainContent({
   });
 
   useEffect(() => {
-    const selectedProjectName = selectedProject?.name;
-    const currentProjectName = currentProject?.name;
+    // Identify projects by DB `projectId`; the TaskMaster context uses the
+    // same identifier to key its internal maps.
+    const selectedProjectId = selectedProject?.projectId;
+    const currentProjectId = currentProject?.projectId;
 
-    if (selectedProject && selectedProjectName !== currentProjectName) {
+    if (selectedProject && selectedProjectId !== currentProjectId) {
       setCurrentProject?.(selectedProject);
     }
-  }, [selectedProject, currentProject?.name, setCurrentProject]);
+  }, [selectedProject, currentProject?.projectId, setCurrentProject]);
 
   useEffect(() => {
     if (!shouldShowTasksTab && activeTab === 'tasks') {

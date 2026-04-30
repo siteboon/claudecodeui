@@ -24,7 +24,7 @@ export default function TaskMasterPanel({ isVisible }: TaskMasterPanelProps) {
   const [prdNotification, setPrdNotification] = useState<string | null>(null);
   const notificationTimeoutRef = useRef<number | null>(null);
 
-  const { prdFiles, refreshPrdFiles } = useProjectPrdFiles({ projectName: currentProject?.name });
+  const { prdFiles, refreshPrdFiles } = useProjectPrdFiles({ projectId: currentProject?.projectId });
 
   const showPrdNotification = useCallback((message: string) => {
     if (notificationTimeoutRef.current) {

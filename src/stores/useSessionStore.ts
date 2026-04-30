@@ -8,8 +8,9 @@
  */
 
 import { useCallback, useMemo, useRef, useState } from 'react';
-import type { LLMProvider } from '../types/app';
+
 import { authenticatedFetch } from '../utils/api';
+import type { LLMProvider } from '../types/app';
 
 // ─── NormalizedMessage (mirrors server/adapters/types.js) ────────────────────
 
@@ -164,13 +165,15 @@ export function useSessionStore() {
   const has = useCallback((sessionId: string) => storeRef.current.has(sessionId), []);
 
   /**
-   * Fetch messages from the unified endpoint and populate serverMessages.
+   * Fetch messages from the provider sessions endpoint and populate serverMessages.
+   *
+   * Provider and project metadata are resolved server-side from `sessionId`.
    */
   const fetchFromServer = useCallback(async (
     sessionId: string,
     opts: {
       provider?: LLMProvider;
-      projectName?: string;
+      projectId?: string;
       projectPath?: string;
       limit?: number | null;
       offset?: number;
@@ -182,16 +185,13 @@ export function useSessionStore() {
 
     try {
       const params = new URLSearchParams();
-      if (opts.provider) params.append('provider', opts.provider);
-      if (opts.projectName) params.append('projectName', opts.projectName);
-      if (opts.projectPath) params.append('projectPath', opts.projectPath);
       if (opts.limit !== null && opts.limit !== undefined) {
         params.append('limit', String(opts.limit));
         params.append('offset', String(opts.offset ?? 0));
       }
 
       const qs = params.toString();
-      const url = `/api/sessions/${encodeURIComponent(sessionId)}/messages${qs ? `?${qs}` : ''}`;
+      const url = `/api/providers/sessions/${encodeURIComponent(sessionId)}/messages${qs ? `?${qs}` : ''}`;
       const response = await authenticatedFetch(url);
 
       if (!response.ok) {
@@ -229,7 +229,7 @@ export function useSessionStore() {
     sessionId: string,
     opts: {
       provider?: LLMProvider;
-      projectName?: string;
+      projectId?: string;
       projectPath?: string;
       limit?: number;
     } = {},
@@ -238,15 +238,12 @@ export function useSessionStore() {
     if (!slot.hasMore) return slot;
 
     const params = new URLSearchParams();
-    if (opts.provider) params.append('provider', opts.provider);
-    if (opts.projectName) params.append('projectName', opts.projectName);
-    if (opts.projectPath) params.append('projectPath', opts.projectPath);
     const limit = opts.limit ?? 20;
     params.append('limit', String(limit));
     params.append('offset', String(slot.offset));
 
     const qs = params.toString();
-    const url = `/api/sessions/${encodeURIComponent(sessionId)}/messages${qs ? `?${qs}` : ''}`;
+    const url = `/api/providers/sessions/${encodeURIComponent(sessionId)}/messages${qs ? `?${qs}` : ''}`;
 
     try {
       const response = await authenticatedFetch(url);
@@ -298,25 +295,22 @@ export function useSessionStore() {
   }, [getSlot, notify]);
 
   /**
-   * Re-fetch serverMessages from the unified endpoint (e.g., on projects_updated).
+   * Re-fetch serverMessages from the provider sessions endpoint.
    */
   const refreshFromServer = useCallback(async (
     sessionId: string,
-    opts: {
+    _opts: {
       provider?: LLMProvider;
-      projectName?: string;
+      projectId?: string;
       projectPath?: string;
     } = {},
   ) => {
     const slot = getSlot(sessionId);
     try {
       const params = new URLSearchParams();
-      if (opts.provider) params.append('provider', opts.provider);
-      if (opts.projectName) params.append('projectName', opts.projectName);
-      if (opts.projectPath) params.append('projectPath', opts.projectPath);
 
       const qs = params.toString();
-      const url = `/api/sessions/${encodeURIComponent(sessionId)}/messages${qs ? `?${qs}` : ''}`;
+      const url = `/api/providers/sessions/${encodeURIComponent(sessionId)}/messages${qs ? `?${qs}` : ''}`;
       const response = await authenticatedFetch(url);
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);

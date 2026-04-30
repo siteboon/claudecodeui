@@ -241,7 +241,8 @@ export function useChatSessionState({
       try {
         const slot = await sessionStore.fetchMore(selectedSession.id, {
           provider: sessionProvider as LLMProvider,
-          projectName: selectedProject.name,
+          // DB-assigned projectId replaces the legacy folder-derived name.
+          projectId: selectedProject.projectId,
           projectPath: selectedProject.fullPath || selectedProject.path || '',
           limit: MESSAGES_PER_PAGE,
         });
@@ -296,7 +297,7 @@ export function useChatSessionState({
     topLoadLockRef.current = false;
     pendingScrollRestoreRef.current = null;
     setIsUserScrolledUp(false);
-  }, [selectedProject?.name, selectedSession?.id]);
+  }, [selectedProject?.projectId, selectedSession?.id]);
 
   // Initial scroll to bottom
   useEffect(() => {
@@ -325,7 +326,7 @@ export function useChatSessionState({
     }
 
     const provider = (selectedSession.__provider || localStorage.getItem('selected-provider') as Provider) || 'claude';
-    const sessionKey = `${selectedSession.id}:${selectedProject.name}:${provider}`;
+    const sessionKey = `${selectedSession.id}:${selectedProject.projectId}:${provider}`;
 
     // Skip if already loaded and fresh
     if (lastLoadedSessionKeyRef.current === sessionKey && sessionStore.has(selectedSession.id) && !sessionStore.isStale(selectedSession.id)) {
@@ -375,7 +376,7 @@ export function useChatSessionState({
     setIsLoadingSessionMessages(true);
     sessionStore.fetchFromServer(selectedSession.id, {
       provider: (selectedSession.__provider || provider) as LLMProvider,
-      projectName: selectedProject.name,
+      projectId: selectedProject.projectId,
       projectPath: selectedProject.fullPath || selectedProject.path || '',
       limit: MESSAGES_PER_PAGE,
       offset: 0,
@@ -411,7 +412,7 @@ export function useChatSessionState({
         if (!isLoading) {
           await sessionStore.refreshFromServer(selectedSession.id, {
             provider: (selectedSession.__provider || provider) as LLMProvider,
-            projectName: selectedProject.name,
+            projectId: selectedProject.projectId,
             projectPath: selectedProject.fullPath || selectedProject.path || '',
           });
 
@@ -469,7 +470,7 @@ export function useChatSessionState({
             // Load all messages into the store for search navigation
             const slot = await sessionStore.fetchFromServer(selectedSession.id, {
               provider: sessionProvider as LLMProvider,
-              projectName: selectedProject.name,
+              projectId: selectedProject.projectId,
               projectPath: selectedProject.fullPath || selectedProject.path || '',
               limit: null,
               offset: 0,
@@ -550,7 +551,8 @@ export function useChatSessionState({
 
     const fetchInitialTokenUsage = async () => {
       try {
-        const url = `/api/projects/${selectedProject.name}/sessions/${selectedSession.id}/token-usage`;
+        // Token usage endpoint is now keyed by the DB projectId.
+        const url = `/api/projects/${selectedProject.projectId}/sessions/${selectedSession.id}/token-usage`;
         const response = await authenticatedFetch(url);
         if (response.ok) {
           setTokenBudget(await response.json());
@@ -656,7 +658,7 @@ export function useChatSessionState({
     try {
       const slot = await sessionStore.fetchFromServer(requestSessionId, {
         provider: sessionProvider as LLMProvider,
-        projectName: selectedProject.name,
+        projectId: selectedProject.projectId,
         projectPath: selectedProject.fullPath || selectedProject.path || '',
         limit: null,
         offset: 0,

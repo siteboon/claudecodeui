@@ -165,9 +165,8 @@ export default tseslint.config(
           pattern: [
             "server/projects.js",
             "server/sessionManager.js",
-            "server/database/*.{js,ts}",
             "server/utils/runtime-paths.js",
-          ], // provider history loading still resolves session data through these legacy runtime/database files
+          ], // provider history loading still resolves session data through these legacy runtime files
           mode: "file",
         },
         {

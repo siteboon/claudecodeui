@@ -114,7 +114,7 @@ export default function SidebarModals({
                     <p className="mb-1 text-sm text-muted-foreground">
                       {t('deleteConfirmation.confirmDelete')}{' '}
                       <span className="font-medium text-foreground">
-                        {deleteConfirmation.project.displayName || deleteConfirmation.project.name}
+                        {deleteConfirmation.project.displayName || deleteConfirmation.project.projectId}
                       </span>
                       ?
                     </p>

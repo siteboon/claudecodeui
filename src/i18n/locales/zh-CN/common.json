@@ -176,7 +176,6 @@
     },
     "step3": {
       "reviewConfig": "查看您的配置",
-      "workspaceType": "工作区类型：",
       "existingWorkspace": "现有工作区",
       "newWorkspace": "新建工作区",
       "path": "路径：",
