@@ -22,6 +22,7 @@ interface UseChatSessionStateArgs {
   sendMessage: (message: unknown) => void;
   autoScrollToBottom?: boolean;
   externalMessageUpdate?: number;
+  newSessionTrigger?: number;
   processingSessions?: Set<string>;
   resetStreamingState: () => void;
   pendingViewSessionRef: MutableRefObject<PendingViewSession | null>;
@@ -95,6 +96,7 @@ export function useChatSessionState({
   sendMessage,
   autoScrollToBottom,
   externalMessageUpdate,
+  newSessionTrigger,
   processingSessions,
   resetStreamingState,
   pendingViewSessionRef,
@@ -131,8 +133,77 @@ export function useChatSessionState({
   const loadAllFinishedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadAllOverlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastLoadedSessionKeyRef = useRef<string | null>(null);
+  /**
+   * Tracks the last processed value from `useProjectsState.newSessionTrigger`.
+   *
+   * The trigger itself is intentionally increment-only and routed via:
+   * useProjectsState -> AppContent -> MainContent -> ChatInterface -> this hook.
+   * We compare values to ensure each explicit New Session click runs exactly one
+   * reset pass in this local chat state domain.
+   */
+  const previousNewSessionTriggerRef = useRef(newSessionTrigger ?? 0);
 
   const createDiff = useMemo<DiffCalculator>(() => createCachedDiffCalculator(), []);
+
+  useEffect(() => {
+    const trigger = newSessionTrigger ?? 0;
+    if (trigger === previousNewSessionTriggerRef.current) {
+      return;
+    }
+    previousNewSessionTriggerRef.current = trigger;
+
+    /**
+     * Consumer-side reset for explicit New Session intent.
+     *
+     * Why this is essential:
+     * - Chat keeps local state that is not fully derived from `selectedSession`:
+     *   `currentSessionId`, `pendingUserMessage`, streaming/status flags, message
+     *   pagination/scroll bookkeeping, and pending session IDs in sessionStorage.
+     * - If the user clicks New Session while already on the same route with no
+     *   selected session, parent state updates can be idempotent and this local
+     *   state would otherwise persist, making the click appear to "do nothing".
+     *
+     * What this reset guarantees:
+     * - A deterministic clean draft state on every New Session click.
+     * - No dependence on route/tab/session-object identity changes.
+     * - No coupling to unrelated external update signals.
+     */
+    resetStreamingState();
+    pendingViewSessionRef.current = null;
+    setClaudeStatus(null);
+    setCanAbortSession(false);
+    setIsLoading(false);
+    setCurrentSessionId(null);
+    setPendingUserMessage(null);
+    sessionStorage.removeItem('pendingSessionId');
+    sessionStorage.removeItem('cursorSessionId');
+    messagesOffsetRef.current = 0;
+    setHasMoreMessages(false);
+    setTotalMessages(0);
+    setTokenBudget(null);
+    setVisibleMessageCount(INITIAL_VISIBLE_MESSAGES);
+    setAllMessagesLoaded(false);
+    allMessagesLoadedRef.current = false;
+    setIsLoadingAllMessages(false);
+    setLoadAllJustFinished(false);
+    setShowLoadAllOverlay(false);
+    setViewHiddenCount(0);
+    setSearchTarget(null);
+    searchScrollActiveRef.current = false;
+    topLoadLockRef.current = false;
+    pendingScrollRestoreRef.current = null;
+    pendingInitialScrollRef.current = true;
+    lastLoadedSessionKeyRef.current = null;
+
+    if (loadAllOverlayTimerRef.current) {
+      clearTimeout(loadAllOverlayTimerRef.current);
+      loadAllOverlayTimerRef.current = null;
+    }
+    if (loadAllFinishedTimerRef.current) {
+      clearTimeout(loadAllFinishedTimerRef.current);
+      loadAllFinishedTimerRef.current = null;
+    }
+  }, [newSessionTrigger, pendingViewSessionRef, resetStreamingState]);
 
   /* ---------------------------------------------------------------- */
   /*  Derive chatMessages from the store                              */

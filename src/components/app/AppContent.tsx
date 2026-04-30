@@ -44,6 +44,7 @@ function AppContentInner() {
     sidebarOpen,
     isLoadingProjects,
     externalMessageUpdate,
+    newSessionTrigger,
     setActiveTab,
     setSidebarOpen,
     setIsInputFocused,
@@ -194,6 +195,7 @@ function AppContentInner() {
           onNavigateToSession={(targetSessionId: string) => navigate(`/session/${targetSessionId}`)}
           onShowSettings={() => setShowSettings(true)}
           externalMessageUpdate={externalMessageUpdate}
+          newSessionTrigger={newSessionTrigger}
         />
       </div>
 

@@ -53,6 +53,7 @@ export type MainContentProps = {
   onNavigateToSession: (targetSessionId: string) => void;
   onShowSettings: () => void;
   externalMessageUpdate: number;
+  newSessionTrigger: number;
 };
 
 export type MainContentHeaderProps = {
