@@ -60,7 +60,10 @@ export const sessionsDb = {
          updated_at = excluded.updated_at,
          project_path = excluded.project_path,
          jsonl_path = excluded.jsonl_path,
-         custom_name = COALESCE(excluded.custom_name, sessions.custom_name)`
+         custom_name = CASE
+           WHEN sessions.is_name_pinned = 1 THEN sessions.custom_name
+           ELSE COALESCE(excluded.custom_name, sessions.custom_name)
+         END`
     ).run(
       sessionId,
       provider,
@@ -78,7 +81,7 @@ export const sessionsDb = {
     const db = getConnection();
     db.prepare(
       `UPDATE sessions
-       SET custom_name = ?
+       SET custom_name = ?, is_name_pinned = 1
        WHERE session_id = ?`
     ).run(customName, sessionId);
   },

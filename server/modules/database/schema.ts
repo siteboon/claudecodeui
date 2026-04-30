@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     jsonl_path TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    is_name_pinned INTEGER DEFAULT 0,
     PRIMARY KEY (session_id),
     FOREIGN KEY (project_path) REFERENCES projects(project_path)
     ON DELETE SET NULL

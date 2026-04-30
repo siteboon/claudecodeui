@@ -419,6 +419,11 @@ export const runMigrations = (db: Database) => {
     migrateLegacySessionNames(db);
     ensureProjectsForSessionPaths(db);
 
+    // Add is_name_pinned column to sessions table
+    const sessionsTableInfo = getTableInfo(db, 'sessions');
+    const sessionColumnNames = sessionsTableInfo.map((column) => column.name);
+    addColumnToTableIfNotExists(db, 'sessions', sessionColumnNames, 'is_name_pinned', 'INTEGER DEFAULT 0');
+
     db.exec('CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_project_path ON sessions(project_path)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_projects_is_starred ON projects(isStarred)');
