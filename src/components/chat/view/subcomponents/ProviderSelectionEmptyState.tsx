@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { useServerPlatform } from "../../../../hooks/useServerPlatform";
 import SessionProviderLogo from "../../../llm-logo-provider/SessionProviderLogo";
@@ -292,12 +292,15 @@ export default function ProviderSelectionEmptyState({
           </p>
 
           <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground/60">
-            <span>Press</span>
-            <kbd className="inline-flex items-center gap-0.5 rounded border border-border/60 bg-muted/40 px-1.5 py-0.5 font-mono text-[10px]">
-              {MOD_KEY}
-              <span>K</span>
-            </kbd>
-            <span>to search sessions, files, and commits</span>
+            <Trans
+              i18nKey="providerSelection.pressToSearch"
+              values={{ shortcut: `${MOD_KEY}K` }}
+              components={{
+                kbd: (
+                  <kbd className="inline-flex items-center gap-0.5 rounded border border-border/60 bg-muted/40 px-1.5 py-0.5 font-mono text-[10px]" />
+                ),
+              }}
+            />
           </p>
 
           {provider && tasksEnabled && isTaskMasterInstalled && (

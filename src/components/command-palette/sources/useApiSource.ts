@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type DependencyList } from 'react';
 
 export function useApiSource<T, R = unknown>(opts: {
   enabled: boolean;
-  deps: React.DependencyList;
+  deps: DependencyList;
   fetcher: (signal: AbortSignal) => Promise<Response>;
   parse: (raw: R) => T[];
 }): T[] {
