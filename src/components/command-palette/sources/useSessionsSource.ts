@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
-
-import { api } from '../../../utils/api';
+import { authenticatedFetch } from '../../../utils/api';
 import type { LLMProvider, ProjectSession } from '../../../types/app';
+
+import { useApiSource } from './useApiSource';
 
 export type SessionResult = {
   id: string;
@@ -17,45 +17,28 @@ interface SessionsResponse {
 }
 
 export function useSessionsSource(projectId: string | undefined, enabled: boolean) {
-  const [items, setItems] = useState<SessionResult[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => {
-    if (!enabled || !projectId) {
-      setItems([]);
-      return;
-    }
-    let cancelled = false;
-    setIsLoading(true);
-    api
-      .projectSessions(projectId, { limit: 50 })
-      .then((r) => r.json() as Promise<SessionsResponse>)
-      .then((data) => {
-        if (cancelled) return;
-        const all: ProjectSession[] = [
-          ...(data.sessions ?? []),
-          ...(data.cursorSessions ?? []),
-          ...(data.codexSessions ?? []),
-          ...(data.geminiSessions ?? []),
-        ];
-        setItems(
-          all.map<SessionResult>((s) => ({
-            id: s.id,
-            label: (s.title || s.summary || s.name || s.id) as string,
-            provider: s.__provider,
-          })),
-        );
-      })
-      .catch(() => {
-        if (!cancelled) setItems([]);
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, enabled]);
-
-  return { items, isLoading };
+  return useApiSource<SessionResult, SessionsResponse>({
+    enabled: enabled && !!projectId,
+    deps: [projectId],
+    fetcher: (signal) => {
+      const params = new URLSearchParams({ limit: '50', offset: '0' });
+      return authenticatedFetch(
+        `/api/projects/${encodeURIComponent(projectId!)}/sessions?${params.toString()}`,
+        { signal },
+      );
+    },
+    parse: (data) => {
+      const all: ProjectSession[] = [
+        ...(data.sessions ?? []),
+        ...(data.cursorSessions ?? []),
+        ...(data.codexSessions ?? []),
+        ...(data.geminiSessions ?? []),
+      ];
+      return all.map<SessionResult>((s) => ({
+        id: s.id,
+        label: (s.title || s.summary || s.name || s.id) as string,
+        provider: s.__provider,
+      }));
+    },
+  });
 }

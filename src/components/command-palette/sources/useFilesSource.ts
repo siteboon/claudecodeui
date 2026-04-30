@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
-
 import { api } from '../../../utils/api';
+
+import { useApiSource } from './useApiSource';
 
 export type FileResult = {
   path: string;
@@ -28,36 +28,15 @@ function flatten(nodes: FileNode[], out: FileResult[]): void {
 }
 
 export function useFilesSource(projectId: string | undefined, enabled: boolean) {
-  const [items, setItems] = useState<FileResult[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => {
-    if (!enabled || !projectId) {
-      setItems([]);
-      return;
-    }
-    let cancelled = false;
-    setIsLoading(true);
-    api
-      .getFiles(projectId)
-      .then((r) => r.json())
-      .then((data: unknown) => {
-        if (cancelled) return;
-        const tree: FileNode[] = Array.isArray(data) ? (data as FileNode[]) : [];
-        const flat: FileResult[] = [];
-        flatten(tree, flat);
-        setItems(flat);
-      })
-      .catch(() => {
-        if (!cancelled) setItems([]);
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, enabled]);
-
-  return { items, isLoading };
+  return useApiSource<FileResult, unknown>({
+    enabled: enabled && !!projectId,
+    deps: [projectId],
+    fetcher: (signal) => api.getFiles(projectId!, { signal }),
+    parse: (data) => {
+      const tree: FileNode[] = Array.isArray(data) ? (data as FileNode[]) : [];
+      const flat: FileResult[] = [];
+      flatten(tree, flat);
+      return flat;
+    },
+  });
 }
