@@ -177,8 +177,9 @@ function mapCliOptionsToSDK(options = {}) {
   };
 
   // Handle tool permissions
-  if (settings.skipPermissions && permissionMode !== 'plan') {
-    // When skipping permissions, use bypassPermissions mode
+  if (settings.skipPermissions && permissionMode !== 'plan' && permissionMode !== 'auto') {
+    // When skipping permissions, use bypassPermissions mode — but respect
+    // explicit 'plan' and 'auto' choices over the global skipPermissions hint.
     sdkOptions.permissionMode = 'bypassPermissions';
   }
 
@@ -527,77 +528,82 @@ async function queryClaudeSDK(command, options = {}, ws) {
       }]
     };
 
-    sdkOptions.canUseTool = async (toolName, input, context) => {
-      const requiresInteraction = TOOLS_REQUIRING_INTERACTION.has(toolName);
+    // 'auto' mode delegates the permission decision to the SDK's built-in
+    // model-classifier. Registering canUseTool here would override that and
+    // force every call back through our user-prompt flow, defeating the mode.
+    if (sdkOptions.permissionMode !== 'auto') {
+      sdkOptions.canUseTool = async (toolName, input, context) => {
+        const requiresInteraction = TOOLS_REQUIRING_INTERACTION.has(toolName);
 
-      if (!requiresInteraction) {
-        if (sdkOptions.permissionMode === 'bypassPermissions') {
-          return { behavior: 'allow', updatedInput: input };
-        }
-
-        const isDisallowed = (sdkOptions.disallowedTools || []).some(entry =>
-          matchesToolPermission(entry, toolName, input)
-        );
-        if (isDisallowed) {
-          return { behavior: 'deny', message: 'Tool disallowed by settings' };
-        }
-
-        const isAllowed = (sdkOptions.allowedTools || []).some(entry =>
-          matchesToolPermission(entry, toolName, input)
-        );
-        if (isAllowed) {
-          return { behavior: 'allow', updatedInput: input };
-        }
-      }
-
-      const requestId = createRequestId();
-      ws.send(createNormalizedMessage({ kind: 'permission_request', requestId, toolName, input, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
-      emitNotification(createNotificationEvent({
-        provider: 'claude',
-        sessionId: capturedSessionId || sessionId || null,
-        kind: 'action_required',
-        code: 'permission.required',
-        meta: { toolName, sessionName: sessionSummary },
-        severity: 'warning',
-        requiresUserAction: true,
-        dedupeKey: `claude:permission:${capturedSessionId || sessionId || 'none'}:${requestId}`
-      }));
-
-      const decision = await waitForToolApproval(requestId, {
-        timeoutMs: requiresInteraction ? 0 : undefined,
-        signal: context?.signal,
-        metadata: {
-          _sessionId: capturedSessionId || sessionId || null,
-          _toolName: toolName,
-          _input: input,
-          _receivedAt: new Date(),
-        },
-        onCancel: (reason) => {
-          ws.send(createNormalizedMessage({ kind: 'permission_cancelled', requestId, reason, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
-        }
-      });
-      if (!decision) {
-        return { behavior: 'deny', message: 'Permission request timed out' };
-      }
-
-      if (decision.cancelled) {
-        return { behavior: 'deny', message: 'Permission request cancelled' };
-      }
-
-      if (decision.allow) {
-        if (decision.rememberEntry && typeof decision.rememberEntry === 'string') {
-          if (!sdkOptions.allowedTools.includes(decision.rememberEntry)) {
-            sdkOptions.allowedTools.push(decision.rememberEntry);
+        if (!requiresInteraction) {
+          if (sdkOptions.permissionMode === 'bypassPermissions') {
+            return { behavior: 'allow', updatedInput: input };
           }
-          if (Array.isArray(sdkOptions.disallowedTools)) {
-            sdkOptions.disallowedTools = sdkOptions.disallowedTools.filter(entry => entry !== decision.rememberEntry);
+
+          const isDisallowed = (sdkOptions.disallowedTools || []).some(entry =>
+            matchesToolPermission(entry, toolName, input)
+          );
+          if (isDisallowed) {
+            return { behavior: 'deny', message: 'Tool disallowed by settings' };
+          }
+
+          const isAllowed = (sdkOptions.allowedTools || []).some(entry =>
+            matchesToolPermission(entry, toolName, input)
+          );
+          if (isAllowed) {
+            return { behavior: 'allow', updatedInput: input };
           }
         }
-        return { behavior: 'allow', updatedInput: decision.updatedInput ?? input };
-      }
 
-      return { behavior: 'deny', message: decision.message ?? 'User denied tool use' };
-    };
+        const requestId = createRequestId();
+        ws.send(createNormalizedMessage({ kind: 'permission_request', requestId, toolName, input, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+        emitNotification(createNotificationEvent({
+          provider: 'claude',
+          sessionId: capturedSessionId || sessionId || null,
+          kind: 'action_required',
+          code: 'permission.required',
+          meta: { toolName, sessionName: sessionSummary },
+          severity: 'warning',
+          requiresUserAction: true,
+          dedupeKey: `claude:permission:${capturedSessionId || sessionId || 'none'}:${requestId}`
+        }));
+
+        const decision = await waitForToolApproval(requestId, {
+          timeoutMs: requiresInteraction ? 0 : undefined,
+          signal: context?.signal,
+          metadata: {
+            _sessionId: capturedSessionId || sessionId || null,
+            _toolName: toolName,
+            _input: input,
+            _receivedAt: new Date(),
+          },
+          onCancel: (reason) => {
+            ws.send(createNormalizedMessage({ kind: 'permission_cancelled', requestId, reason, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+          }
+        });
+        if (!decision) {
+          return { behavior: 'deny', message: 'Permission request timed out' };
+        }
+
+        if (decision.cancelled) {
+          return { behavior: 'deny', message: 'Permission request cancelled' };
+        }
+
+        if (decision.allow) {
+          if (decision.rememberEntry && typeof decision.rememberEntry === 'string') {
+            if (!sdkOptions.allowedTools.includes(decision.rememberEntry)) {
+              sdkOptions.allowedTools.push(decision.rememberEntry);
+            }
+            if (Array.isArray(sdkOptions.disallowedTools)) {
+              sdkOptions.disallowedTools = sdkOptions.disallowedTools.filter(entry => entry !== decision.rememberEntry);
+            }
+          }
+          return { behavior: 'allow', updatedInput: decision.updatedInput ?? input };
+        }
+
+        return { behavior: 'deny', message: decision.message ?? 'User denied tool use' };
+      };
+    }
 
     // Set stream-close timeout for interactive tools (Query constructor reads it synchronously). Claude Agent SDK has a default of 5s and this overrides it
     const prevStreamTimeout = process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT;

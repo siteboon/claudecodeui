@@ -84,10 +84,14 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
   }, [provider]);
 
   const cyclePermissionMode = useCallback(() => {
+    // 'auto' is exposed only for Claude — the Claude Agent SDK
+    // (>= 0.2.116) maps it to its model-classifier permission decider.
     const modes: PermissionMode[] =
       provider === 'codex'
         ? ['default', 'acceptEdits', 'bypassPermissions']
-        : ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
+        : provider === 'claude'
+          ? ['default', 'acceptEdits', 'bypassPermissions', 'plan', 'auto']
+          : ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
 
     const currentIndex = modes.indexOf(permissionMode);
     const nextIndex = (currentIndex + 1) % modes.length;

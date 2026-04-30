@@ -91,13 +91,15 @@
       "default": "Default Mode",
       "acceptEdits": "Accept Edits",
       "bypassPermissions": "Bypass Permissions",
-      "plan": "Plan Mode"
+      "plan": "Plan Mode",
+      "auto": "Auto Mode"
     },
     "descriptions": {
       "default": "Only trusted commands (ls, cat, grep, git status, etc.) run automatically. Other commands are skipped. Can write to workspace.",
       "acceptEdits": "All commands run automatically within the workspace. Full auto mode with sandboxed execution.",
       "bypassPermissions": "Full system access with no restrictions. All commands run automatically with full disk and network access. Use with caution.",
-      "plan": "Planning mode - no commands are executed"
+      "plan": "Planning mode - no commands are executed",
+      "auto": "Claude evaluates each tool request itself and approves or denies it without prompting. Uses a model classifier — safer than bypass, less interruptive than default."
     },
     "technicalDetails": "Technical details"
   },

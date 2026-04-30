@@ -91,13 +91,15 @@
       "default": "Modalità predefinita",
       "acceptEdits": "Accetta modifiche",
       "bypassPermissions": "Ignora permessi",
-      "plan": "Modalità piano"
+      "plan": "Modalità piano",
+      "auto": "Modalità automatica"
     },
     "descriptions": {
       "default": "Solo i comandi attendibili (ls, cat, grep, git status, ecc.) vengono eseguiti automaticamente. Gli altri comandi vengono saltati. Può scrivere nell'area di lavoro.",
       "acceptEdits": "Tutti i comandi vengono eseguiti automaticamente nell'area di lavoro. Modalità completamente automatica con esecuzione sandboxed.",
       "bypassPermissions": "Accesso completo al sistema senza restrizioni. Tutti i comandi vengono eseguiti automaticamente con accesso completo a disco e rete. Usa con cautela.",
-      "plan": "Modalità pianificazione - nessun comando viene eseguito"
+      "plan": "Modalità pianificazione - nessun comando viene eseguito",
+      "auto": "Claude valuta autonomamente ogni richiesta di strumento e la approva o nega senza chiedere conferma. Usa un classificatore basato su modello — più sicuro del bypass, meno invasivo della modalità predefinita."
     },
     "technicalDetails": "Dettagli tecnici"
   },

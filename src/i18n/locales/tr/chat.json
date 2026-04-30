@@ -91,13 +91,15 @@
       "default": "Varsayılan Mod",
       "acceptEdits": "Düzenlemeleri Kabul Et",
       "bypassPermissions": "İzinleri Atla",
-      "plan": "Plan Modu"
+      "plan": "Plan Modu",
+      "auto": "Otomatik Mod"
     },
     "descriptions": {
       "default": "Sadece güvenilir komutlar (ls, cat, grep, git status, vb.) otomatik çalışır. Diğer komutlar atlanır. Çalışma alanına yazabilir.",
       "acceptEdits": "Tüm komutlar çalışma alanı içinde otomatik çalışır. Sandbox'lu çalıştırma ile tam otomatik mod.",
       "bypassPermissions": "Kısıtlama olmadan tam sistem erişimi. Tüm komutlar tam disk ve ağ erişimiyle otomatik çalışır. Dikkatli kullan.",
-      "plan": "Planlama modu — hiçbir komut çalıştırılmaz"
+      "plan": "Planlama modu — hiçbir komut çalıştırılmaz",
+      "auto": "Claude her araç isteğini kendisi değerlendirir ve onaylar veya reddeder; soru sormadan. Model sınıflandırıcı kullanır — bypass'tan daha güvenli, varsayılandan daha akıcı."
     },
     "technicalDetails": "Teknik ayrıntılar"
   },
