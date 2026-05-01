@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
@@ -14,6 +14,8 @@ import { useSessionStore } from '../../../stores/useSessionStore';
 
 import ChatMessagesPane from './subcomponents/ChatMessagesPane';
 import ChatComposer from './subcomponents/ChatComposer';
+import SessionReconciliationBanner from './subcomponents/SessionReconciliationBanner';
+import type { SessionMismatchReason } from './subcomponents/SessionReconciliationBanner';
 
 
 type PendingViewSession = {
@@ -54,6 +56,40 @@ function ChatInterface({
   const accumulatedStreamRef = useRef('');
   const pendingViewSessionRef = useRef<PendingViewSession | null>(null);
 
+  const [sessionMismatch, setSessionMismatch] = useState<{
+    reason: SessionMismatchReason;
+    suggestedSessionId?: string | null;
+  } | null>(null);
+
+  const handleSessionMismatch = useCallback((mismatch: { reason: string; suggestedSessionId?: string | null }) => {
+    setSessionMismatch({
+      reason: (mismatch.reason as SessionMismatchReason) || 'not_found',
+      suggestedSessionId: mismatch.suggestedSessionId,
+    });
+  }, []);
+
+  const handleMismatchReconnect = useCallback(() => {
+    if (sessionMismatch?.suggestedSessionId) {
+      onNavigateToSession?.(sessionMismatch.suggestedSessionId);
+    } else {
+      // Re-send check-session-status to attempt reconnection
+      setSessionMismatch((prev) => prev ? { ...prev, reason: 'reconnecting' } : null);
+      if (selectedSession?.id) {
+        sendMessage({
+          type: 'check-session-status',
+          sessionId: selectedSession.id,
+          provider: (localStorage.getItem('selected-provider') as LLMProvider) || 'claude',
+        });
+      }
+      // Auto-dismiss after 5s if still reconnecting
+      setTimeout(() => setSessionMismatch(null), 5000);
+    }
+  }, [sessionMismatch, onNavigateToSession, selectedSession, sendMessage]);
+
+  const handleMismatchDismiss = useCallback(() => {
+    setSessionMismatch(null);
+  }, []);
+
   const resetStreamingState = useCallback(() => {
     if (streamTimerRef.current) {
       clearTimeout(streamTimerRef.current);
@@ -74,6 +110,8 @@ function ChatInterface({
     setCodexModel,
     geminiModel,
     setGeminiModel,
+    groqModel,
+    setGroqModel,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
@@ -183,6 +221,7 @@ function ChatInterface({
     claudeModel,
     codexModel,
     geminiModel,
+    groqModel,
     isLoading,
     canAbortSession,
     tokenBudget,
@@ -242,6 +281,7 @@ function ChatInterface({
     onReplaceTemporarySession,
     onNavigateToSession,
     onWebSocketReconnect: handleWebSocketReconnect,
+    onSessionMismatch: handleSessionMismatch,
     sessionStore,
   });
 
@@ -284,7 +324,9 @@ function ChatInterface({
           ? t('messageTypes.codex')
           : provider === 'gemini'
             ? t('messageTypes.gemini')
-            : t('messageTypes.claude');
+            : provider === 'groq'
+              ? t('messageTypes.groq')
+              : t('messageTypes.claude');
 
     return (
       <div className="flex h-full items-center justify-center">
@@ -303,6 +345,14 @@ function ChatInterface({
   return (
     <PermissionContext.Provider value={permissionContextValue}>
       <div className="flex h-full flex-col">
+        {sessionMismatch && (
+          <SessionReconciliationBanner
+            reason={sessionMismatch.reason}
+            suggestedSessionId={sessionMismatch.suggestedSessionId}
+            onReconnect={handleMismatchReconnect}
+            onDismiss={handleMismatchDismiss}
+          />
+        )}
         <ChatMessagesPane
           scrollContainerRef={scrollContainerRef}
           onWheel={handleScroll}
@@ -322,6 +372,8 @@ function ChatInterface({
           setCodexModel={setCodexModel}
           geminiModel={geminiModel}
           setGeminiModel={setGeminiModel}
+          groqModel={groqModel}
+          setGroqModel={setGroqModel}
           tasksEnabled={tasksEnabled}
           isTaskMasterInstalled={isTaskMasterInstalled}
           onShowAllTasks={onShowAllTasks}
@@ -410,7 +462,9 @@ function ChatInterface({
                   ? t('messageTypes.codex')
                   : provider === 'gemini'
                     ? t('messageTypes.gemini')
-                    : t('messageTypes.claude'),
+                    : provider === 'groq'
+                      ? t('messageTypes.groq')
+                      : t('messageTypes.claude'),
           })}
           isTextareaExpanded={isTextareaExpanded}
           sendByCtrlEnter={sendByCtrlEnter}

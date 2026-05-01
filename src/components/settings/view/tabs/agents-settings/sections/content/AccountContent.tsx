@@ -4,6 +4,10 @@ import { useTranslation } from 'react-i18next';
 import { Badge, Button } from '../../../../../../../shared/view/ui';
 import SessionProviderLogo from '../../../../../../llm-logo-provider/SessionProviderLogo';
 import type { AgentProvider, AuthStatus } from '../../../../../types/types';
+import { useProviderAccounts } from '../../hooks/useProviderAccounts';
+
+import AccountsList from './AccountsList';
+import AddAccountDialog from './AddAccountDialog';
 
 type AccountContentProps = {
   agent: AgentProvider;
@@ -68,6 +72,7 @@ const agentConfig: Record<AgentProvider, AgentVisualConfig> = {
 export default function AccountContent({ agent, authStatus, onLogin }: AccountContentProps) {
   const { t } = useTranslation('settings');
   const config = agentConfig[agent];
+  const { accounts, loading: accountsLoading, addAccount, activateAccount, removeAccount } = useProviderAccounts(agent);
 
   return (
     <div className="space-y-6">
@@ -148,6 +153,26 @@ export default function AccountContent({ agent, authStatus, onLogin }: AccountCo
             </div>
           )}
         </div>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h4 className={`text-sm font-medium ${config.textClass}`}>
+            {t('agents.accounts.title')}
+          </h4>
+          <AddAccountDialog
+            providerName={config.name}
+            onAdd={addAccount}
+            buttonClass={config.buttonClass}
+          />
+        </div>
+        <AccountsList
+          accounts={accounts}
+          loading={accountsLoading}
+          onActivate={activateAccount}
+          onRemove={removeAccount}
+          accentClass={config.subtextClass}
+        />
       </div>
     </div>
   );

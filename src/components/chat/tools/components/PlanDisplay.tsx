@@ -1,5 +1,5 @@
-import React from 'react';
-import { ChevronsUpDown, FileText } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { ChevronsUpDown, FileText, List, Code2 } from 'lucide-react';
 
 import {
   Card,
@@ -16,6 +16,8 @@ import {
 import { usePermission } from '../../../../contexts/PermissionContext';
 
 import { MarkdownContent } from './ContentRenderers';
+import PlanStepList from './PlanStepList';
+import { parsePlanSteps } from '../utils/planStepParser';
 
 interface PlanDisplayProps {
   title: string;
@@ -37,7 +39,9 @@ export const PlanDisplay: React.FC<PlanDisplayProps> = ({
   rawContent,
   toolName: _toolName,
 }) => {
+  const [viewMode, setViewMode] = useState<'structured' | 'raw'>('structured');
   const permissionCtx = usePermission();
+  const steps = useMemo(() => (content ? parsePlanSteps(content) : []), [content]);
 
   const pendingRequest = permissionCtx?.pendingPermissionRequests.find(
     (r) => r.toolName === 'ExitPlanMode' || r.toolName === 'exit_plan_mode'
@@ -78,11 +82,45 @@ export const PlanDisplay: React.FC<PlanDisplayProps> = ({
         {/* Collapsible content */}
         <CollapsibleContent>
           <CardContent className="px-4 pb-4 pt-3">
+            {/* View mode toggle */}
+            {content && steps.length > 0 && !isStreaming && (
+              <div className="mb-3 flex items-center gap-1 border-b border-border/30 pb-2">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('structured')}
+                  className={`flex items-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors ${
+                    viewMode === 'structured'
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <List className="h-3 w-3" />
+                  Structured
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('raw')}
+                  className={`flex items-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors ${
+                    viewMode === 'raw'
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Code2 className="h-3 w-3" />
+                  Markdown
+                </button>
+              </div>
+            )}
+
             {content ? (
-              <MarkdownContent
-                content={content}
-                className="prose prose-sm max-w-none dark:prose-invert"
-              />
+              viewMode === 'structured' && steps.length > 0 && !isStreaming ? (
+                <PlanStepList steps={steps} />
+              ) : (
+                <MarkdownContent
+                  content={content}
+                  className="prose prose-sm max-w-none dark:prose-invert"
+                />
+              )
             ) : isStreaming ? (
               <div className="py-2">
                 <Shimmer>Generating plan...</Shimmer>

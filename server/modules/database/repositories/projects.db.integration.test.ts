@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
 
 import { closeConnection } from '@/modules/database/connection.js';
 import { initializeDatabase } from '@/modules/database/init-db.js';
@@ -36,7 +35,7 @@ test('projectsDb.createProjectPath returns created for fresh paths', async () =>
 
     assert.equal(created.outcome, 'created');
     assert.ok(created.project);
-    assert.equal(created.project?.project_path, '/workspace/new-project');
+    assert.equal(created.project?.project_path, path.normalize('/workspace/new-project'));
     assert.equal(created.project?.isArchived, 0);
   });
 });

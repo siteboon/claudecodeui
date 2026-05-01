@@ -18,7 +18,8 @@
     "claude": "Claude",
     "cursor": "Cursor",
     "codex": "Codex",
-    "gemini": "Gemini"
+    "gemini": "Gemini",
+    "groq": "Groq"
   },
   "tools": {
     "settings": "Tool Settings",
@@ -189,6 +190,7 @@
       "cursor": "Ready to use Cursor with {{model}}. Start typing your message below.",
       "codex": "Ready to use Codex with {{model}}. Start typing your message below.",
       "gemini": "Ready to use Gemini with {{model}}. Start typing your message below.",
+      "groq": "Ready to use Groq with {{model}}. Start typing your message below.",
       "default": "Select a provider above to begin"
     },
     "pressToSearch": "Press <kbd>{{shortcut}}</kbd> to search sessions, files, and commits"
@@ -271,5 +273,9 @@
   },
   "tasks": {
     "nextTaskPrompt": "Start the next task"
+  },
+  "errors": {
+    "retryable": "Retryable",
+    "details": "Details"
   }
 }

@@ -69,6 +69,7 @@ interface UseChatRealtimeHandlersArgs {
   onReplaceTemporarySession?: (sessionId?: string | null) => void;
   onNavigateToSession?: (sessionId: string) => void;
   onWebSocketReconnect?: () => void;
+  onSessionMismatch?: (mismatch: { reason: string; suggestedSessionId?: string | null }) => void;
   sessionStore: SessionStore;
 }
 
@@ -98,6 +99,7 @@ export function useChatRealtimeHandlers({
   onReplaceTemporarySession,
   onNavigateToSession,
   onWebSocketReconnect,
+  onSessionMismatch,
   sessionStore,
 }: UseChatRealtimeHandlersArgs) {
   const paletteOps = usePaletteOps();
@@ -131,6 +133,14 @@ export function useChatRealtimeHandlers({
             permSessionId === currentSessionId || (selectedSession && permSessionId === selectedSession.id);
           if (permSessionId && !isCurrentPermSession) return;
           setPendingPermissionRequests(msg.data || []);
+          return;
+        }
+
+        case 'session-mismatch': {
+          onSessionMismatch?.({
+            reason: typeof msg.reason === 'string' ? msg.reason : 'not_found',
+            suggestedSessionId: typeof msg.suggestedSessionId === 'string' ? msg.suggestedSessionId : null,
+          });
           return;
         }
 
@@ -364,6 +374,7 @@ export function useChatRealtimeHandlers({
     onReplaceTemporarySession,
     onNavigateToSession,
     onWebSocketReconnect,
+    onSessionMismatch,
     sessionStore,
     paletteOps,
   ]);

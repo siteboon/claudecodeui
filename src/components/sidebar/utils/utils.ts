@@ -77,6 +77,10 @@ export const getSessionName = (session: SessionWithProvider, t: TFunction): stri
     return session.summary || session.name || t('projects.newSession');
   }
 
+  if (session.__provider === 'groq') {
+    return session.summary || session.name || t('projects.newSession');
+  }
+
   return session.summary || t('projects.newSession');
 };
 
@@ -104,6 +108,7 @@ export const createSessionViewModel = (
     isCursorSession: session.__provider === 'cursor',
     isCodexSession: session.__provider === 'codex',
     isGeminiSession: session.__provider === 'gemini',
+    isGroqSession: session.__provider === 'groq',
     isActive: diffInMinutes < 10,
     sessionName: getSessionName(session, t),
     sessionTime: getSessionTime(session),
@@ -132,7 +137,12 @@ export const getAllSessions = (project: Project): SessionWithProvider[] => {
     __provider: 'gemini' as const,
   }));
 
-  return [...claudeSessions, ...cursorSessions, ...codexSessions, ...geminiSessions].sort(
+  const groqSessions = (project.groqSessions || []).map((session) => ({
+    ...session,
+    __provider: 'groq' as const,
+  }));
+
+  return [...claudeSessions, ...cursorSessions, ...codexSessions, ...geminiSessions, ...groqSessions].sort(
     (a, b) => getSessionDate(b).getTime() - getSessionDate(a).getTime(),
   );
 };

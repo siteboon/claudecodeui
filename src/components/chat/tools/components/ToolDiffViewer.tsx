@@ -1,4 +1,6 @@
 import React, { useMemo } from 'react';
+import type { ToolStatus } from './ToolStatusBadge';
+import { ToolStatusBadge } from './ToolStatusBadge';
 
 type DiffLine = {
   type: string;
@@ -14,6 +16,8 @@ interface ToolDiffViewerProps {
   onFileClick?: () => void;
   badge?: string;
   badgeColor?: 'gray' | 'green';
+  /** When provided, replaces the static badge with a lifecycle status badge. */
+  lifecycleStatus?: ToolStatus;
 }
 
 /**
@@ -26,7 +30,8 @@ export const ToolDiffViewer: React.FC<ToolDiffViewerProps> = ({
   createDiff,
   onFileClick,
   badge = 'Diff',
-  badgeColor = 'gray'
+  badgeColor = 'gray',
+  lifecycleStatus,
 }) => {
   const badgeClasses = badgeColor === 'green'
     ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
@@ -58,9 +63,13 @@ export const ToolDiffViewer: React.FC<ToolDiffViewerProps> = ({
             {filePath}
           </span>
         )}
-        <span className={`rounded px-1.5 py-px text-[10px] font-medium ${badgeClasses} ml-2 flex-shrink-0`}>
-          {badge}
-        </span>
+        {lifecycleStatus ? (
+          <ToolStatusBadge status={lifecycleStatus} className="ml-2 flex-shrink-0" />
+        ) : (
+          <span className={`rounded px-1.5 py-px text-[10px] font-medium ${badgeClasses} ml-2 flex-shrink-0`}>
+            {badge}
+          </span>
+        )}
       </div>
 
       {/* Diff lines */}

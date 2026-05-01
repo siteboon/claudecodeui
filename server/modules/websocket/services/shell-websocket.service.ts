@@ -113,6 +113,10 @@ function buildShellCommand(
     return 'codex';
   }
 
+  if (provider === 'groq') {
+    return initialCommand || '';
+  }
+
   if (provider === 'gemini') {
     const command = initialCommand || 'gemini';
     let resumeId = sessionId;
@@ -389,7 +393,9 @@ export function handleShellConnection(
                 ? 'Codex'
                 : provider === 'gemini'
                   ? 'Gemini'
-                  : 'Claude';
+                  : provider === 'groq'
+                    ? 'Groq'
+                    : 'Claude';
           welcomeMsg = hasSession
             ? `\x1b[36mResuming ${providerName} session ${sessionId} in: ${projectPath}\x1b[0m\r\n`
             : `\x1b[36mStarting new ${providerName} session in: ${projectPath}\x1b[0m\r\n`;

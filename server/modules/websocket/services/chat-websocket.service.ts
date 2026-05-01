@@ -221,6 +221,18 @@ export function handleChatConnection(
           }
         }
 
+        // If session was requested but not found in any active sessions,
+        // send a session-mismatch message so the client can show a reconciliation banner.
+        if (sessionId && !isActive) {
+          writer.send({
+            type: 'session-mismatch',
+            sessionId,
+            reason: 'not_found',
+            provider,
+            suggestedSessionId: null,
+          });
+        }
+
         writer.send({
           type: 'session-status',
           sessionId,

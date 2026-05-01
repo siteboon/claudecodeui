@@ -96,6 +96,22 @@ export const GEMINI_MODELS = {
 };
 
 /**
+ * Groq Models
+ */
+export const GROQ_MODELS = {
+  OPTIONS: [
+    { value: "llama-4-maverick-17b-128e-instruct", label: "Llama 4 Maverick" },
+    { value: "llama-4-scout-17b-16e-instruct", label: "Llama 4 Scout" },
+    { value: "qwen-qwq-32b", label: "QwQ 32B" },
+    { value: "deepseek-r1-distill-llama-70b", label: "DeepSeek R1 70B" },
+    { value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B" },
+    { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B" },
+  ],
+
+  DEFAULT: "llama-4-maverick-17b-128e-instruct",
+};
+
+/**
  * Ordered provider registry. Display order in selection UIs.
  */
 export const PROVIDERS = [
@@ -103,4 +119,5 @@ export const PROVIDERS = [
   { id: "codex", name: "OpenAI", models: CODEX_MODELS },
   { id: "gemini", name: "Google", models: GEMINI_MODELS },
   { id: "cursor", name: "Cursor", models: CURSOR_MODELS },
+  { id: "groq", name: "Groq", models: GROQ_MODELS },
 ];

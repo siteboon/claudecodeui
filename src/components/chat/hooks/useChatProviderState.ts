@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { authenticatedFetch } from '../../../utils/api';
-import { CLAUDE_MODELS, CODEX_MODELS, CURSOR_MODELS, GEMINI_MODELS } from '../../../../shared/modelConstants';
+import { CLAUDE_MODELS, CODEX_MODELS, CURSOR_MODELS, GEMINI_MODELS, GROQ_MODELS } from '../../../../shared/modelConstants';
 import type { PendingPermissionRequest, PermissionMode } from '../types/types';
 import type { ProjectSession, LLMProvider } from '../../../types/app';
 
 const getPermissionModesForProvider = (provider: LLMProvider): PermissionMode[] => {
   if (provider === 'codex') {
-    return ['default', 'acceptEdits', 'bypassPermissions'];
+    return ['default', 'acceptEdits'];
   }
   if (provider === 'claude') {
-    return ['default', 'auto', 'acceptEdits', 'bypassPermissions', 'plan'];
+    return ['default', 'acceptEdits', 'auto', 'bypassPermissions', 'plan'];
   }
-  return ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
+  return ['default', 'acceptEdits', 'auto', 'bypassPermissions', 'plan'];
 };
 
 interface UseChatProviderStateArgs {
@@ -35,6 +35,9 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
   });
   const [geminiModel, setGeminiModel] = useState<string>(() => {
     return localStorage.getItem('gemini-model') || GEMINI_MODELS.DEFAULT;
+  });
+  const [groqModel, setGroqModel] = useState<string>(() => {
+    return localStorage.getItem('groq-model') || GROQ_MODELS.DEFAULT;
   });
 
   const lastProviderRef = useRef(provider);
@@ -94,7 +97,7 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
       });
   }, [provider]);
 
-  const cyclePermissionMode = useCallback(() => {
+  const cyclePermissionMode = useCallback((): PermissionMode => {
     const modes = getPermissionModesForProvider(provider);
 
     const currentIndex = modes.indexOf(permissionMode);
@@ -105,6 +108,8 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
     if (selectedSession?.id) {
       localStorage.setItem(`permissionMode-${selectedSession.id}`, nextMode);
     }
+
+    return nextMode;
   }, [permissionMode, provider, selectedSession?.id]);
 
   return {
@@ -118,6 +123,8 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
     setCodexModel,
     geminiModel,
     setGeminiModel,
+    groqModel,
+    setGroqModel,
     permissionMode,
     setPermissionMode,
     pendingPermissionRequests,

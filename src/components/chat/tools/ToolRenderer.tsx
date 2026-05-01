@@ -4,10 +4,13 @@ import type { Project } from '../../../types/app';
 import type { SubagentChildTool } from '../types/types';
 
 import { getToolConfig } from './configs/toolConfigs';
+import { resolveToolDisplay } from './configs/resolveToolDisplay';
 import { OneLineDisplay, CollapsibleDisplay, ToolDiffViewer, MarkdownContent, FileListContent, TodoListContent, TaskListContent, TextContent, QuestionAnswerContent, SubagentContainer } from './components';
 import { PlanDisplay } from './components/PlanDisplay';
 import { ToolStatusBadge } from './components/ToolStatusBadge';
 import type { ToolStatus } from './components/ToolStatusBadge';
+import { deriveDiffLifecycleStatus } from './utils/diffLifecycle';
+import { useToolDisplay } from '../../../contexts/ToolDisplayContext';
 
 type DiffLine = {
   type: string;
@@ -86,7 +89,9 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
   isSubagentContainer,
   subagentState
 }) => {
-  const config = getToolConfig(toolName);
+  const { getEffectiveDensity } = useToolDisplay();
+  const density = getEffectiveDensity(toolName);
+  const config = resolveToolDisplay(toolName, density);
   const displayConfig: any = mode === 'input' ? config.input : config.result;
 
   const parsedData = useMemo(() => {
@@ -196,11 +201,13 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
     switch (displayConfig.contentType) {
       case 'diff':
         if (createDiff) {
+          const lifecycle = deriveDiffLifecycleStatus(toolName, toolResult);
           contentComponent = (
             <ToolDiffViewer
               {...contentProps}
               createDiff={createDiff}
               onFileClick={() => onFileOpen?.(contentProps.filePath)}
+              lifecycleStatus={lifecycle ?? undefined}
             />
           );
         }

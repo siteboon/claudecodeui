@@ -103,6 +103,7 @@
     "jszip": "^3.10.1",
     "katex": "^0.16.25",
     "lucide-react": "^0.515.0",
+    "mermaid": "^11.14.0",
     "mime-types": "^3.0.1",
     "multer": "^2.0.1",
     "node-fetch": "^2.7.0",

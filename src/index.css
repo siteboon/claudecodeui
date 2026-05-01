@@ -2,6 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Streaming text cursor caret */
+.streaming-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  background-color: currentColor;
+  vertical-align: text-bottom;
+  margin-left: 1px;
+  animation: blink-caret 0.75s step-end infinite;
+}
+
+@keyframes blink-caret {
+  from, to { opacity: 1; }
+  50% { opacity: 0; }
+}
+
 /* Global spinner animation - defined early to ensure it loads */
 @keyframes spin {
   0% {

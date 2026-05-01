@@ -10,7 +10,9 @@ import type {
   TouchEvent,
 } from 'react';
 import { useDropzone } from 'react-dropzone';
+import { useTranslation } from 'react-i18next';
 import { authenticatedFetch } from '../../../utils/api';
+import { useToast } from '../../../contexts/ToastContext';
 import { thinkingModes } from '../constants/thinkingModes';
 import { grantClaudeToolPermission } from '../utils/chatPermissions';
 import { safeLocalStorage } from '../utils/chatStorage';
@@ -40,6 +42,7 @@ interface UseChatComposerStateArgs {
   claudeModel: string;
   codexModel: string;
   geminiModel: string;
+  groqModel: string;
   isLoading: boolean;
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
@@ -112,6 +115,7 @@ export function useChatComposerState({
   claudeModel,
   codexModel,
   geminiModel,
+  groqModel,
   isLoading,
   canAbortSession,
   tokenBudget,
@@ -133,6 +137,9 @@ export function useChatComposerState({
   setIsUserScrolledUp,
   setPendingPermissionRequests,
 }: UseChatComposerStateArgs) {
+  const { t } = useTranslation('chat');
+  const { toast } = useToast();
+
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
       // Draft inputs are keyed by the DB projectId so per-project drafts
@@ -285,7 +292,7 @@ export function useChatComposerState({
           projectId: selectedProject.projectId,
           sessionId: currentSessionId,
           provider,
-          model: provider === 'cursor' ? cursorModel : provider === 'codex' ? codexModel : provider === 'gemini' ? geminiModel : claudeModel,
+          model: provider === 'cursor' ? cursorModel : provider === 'codex' ? codexModel : provider === 'gemini' ? geminiModel : provider === 'groq' ? groqModel : claudeModel,
           tokenUsage: tokenBudget,
         };
 
@@ -337,6 +344,7 @@ export function useChatComposerState({
       currentSessionId,
       cursorModel,
       geminiModel,
+      groqModel,
       handleBuiltInCommand,
       handleCustomCommand,
       input,
@@ -575,7 +583,9 @@ export function useChatComposerState({
                 ? 'codex-settings'
                 : provider === 'gemini'
                   ? 'gemini-settings'
-                  : 'claude-settings';
+                  : provider === 'groq'
+                    ? 'groq-settings'
+                    : 'claude-settings';
           const savedSettings = safeLocalStorage.getItem(settingsKey);
           if (savedSettings) {
             return JSON.parse(savedSettings);
@@ -642,6 +652,22 @@ export function useChatComposerState({
             toolsSettings,
           },
         });
+      } else if (provider === 'groq') {
+        sendMessage({
+          type: 'claude-command',
+          command: messageContent,
+          options: {
+            projectPath: resolvedProjectPath,
+            cwd: resolvedProjectPath,
+            sessionId: effectiveSessionId,
+            resume: Boolean(effectiveSessionId),
+            toolsSettings,
+            permissionMode,
+            model: groqModel,
+            sessionSummary,
+            images: uploadedImages,
+          },
+        });
       } else {
         sendMessage({
           type: 'claude-command',
@@ -684,6 +710,7 @@ export function useChatComposerState({
       cursorModel,
       executeCommand,
       geminiModel,
+      groqModel,
       isLoading,
       onSessionActive,
       onSessionProcessing,
@@ -789,6 +816,20 @@ export function useChatComposerState({
       if (event.key === 'Tab' && !showFileDropdown && !showCommandMenu) {
         event.preventDefault();
         cyclePermissionMode();
+        // Derive the next mode to show in toast (same logic as ChatComposer)
+        const modeOrder = ['default', 'acceptEdits', 'auto', 'bypassPermissions', 'plan'] as const;
+        const currentIdx = modeOrder.indexOf(permissionMode as typeof modeOrder[number]);
+        const nextMode = modeOrder[(currentIdx + 1) % modeOrder.length];
+        const toastVariant = nextMode === 'default' ? 'default' as const
+          : nextMode === 'acceptEdits' ? 'success' as const
+          : nextMode === 'auto' ? 'warning' as const
+          : nextMode === 'bypassPermissions' ? 'error' as const
+          : 'default' as const;
+        toast({
+          title: t(`codex.modes.${nextMode}`),
+          description: t(`codex.descriptions.${nextMode}`),
+          variant: toastVariant,
+        });
         return;
       }
 
@@ -811,9 +852,12 @@ export function useChatComposerState({
       handleCommandMenuKeyDown,
       handleFileMentionsKeyDown,
       handleSubmit,
+      permissionMode,
       sendByCtrlEnter,
       showCommandMenu,
       showFileDropdown,
+      t,
+      toast,
     ],
   );
 

@@ -6,6 +6,8 @@ import { TaskMasterProvider } from './contexts/TaskMasterContext';
 import { TasksSettingsProvider } from './contexts/TasksSettingsContext';
 import { WebSocketProvider } from './contexts/WebSocketContext';
 import { PluginsProvider } from './contexts/PluginsContext';
+import { ToastProvider } from './contexts/ToastContext';
+import { ToolDisplayProvider } from './contexts/ToolDisplayContext';
 import AppContent from './components/app/AppContent';
 import i18n from './i18n/config.js';
 
@@ -13,6 +15,8 @@ export default function App() {
   return (
     <I18nextProvider i18n={i18n}>
       <ThemeProvider>
+        <ToastProvider>
+        <ToolDisplayProvider>
         <AuthProvider>
           <WebSocketProvider>
             <PluginsProvider>
@@ -31,6 +35,8 @@ export default function App() {
             </PluginsProvider>
           </WebSocketProvider>
         </AuthProvider>
+        </ToolDisplayProvider>
+        </ToastProvider>
       </ThemeProvider>
     </I18nextProvider>
   );

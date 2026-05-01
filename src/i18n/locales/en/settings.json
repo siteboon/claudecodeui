@@ -64,6 +64,12 @@
     "autoScrollToBottom": "Auto-scroll to bottom",
     "sendByCtrlEnter": "Send by Ctrl+Enter",
     "sendByCtrlEnterDescription": "When enabled, pressing Ctrl+Enter will send the message instead of just Enter. This is useful for IME users to avoid accidental sends.",
+    "density": {
+      "label": "Display Density",
+      "compact": "Compact",
+      "standard": "Standard",
+      "expanded": "Expanded"
+    },
     "dragHandle": {
       "dragging": "Dragging handle",
       "closePanel": "Close settings panel",
@@ -326,6 +332,25 @@
       "groq": {
         "description": "Groq high-speed AI inference"
       }
+    },
+    "accounts": {
+      "title": "Additional Accounts",
+      "loading": "Loading accounts...",
+      "empty": "No additional accounts configured.",
+      "active": "Active",
+      "apiKey": "API Key",
+      "activate": "Activate",
+      "confirmDelete": "Confirm?",
+      "addButton": "Add Account",
+      "addTitle": "Add {{provider}} Account",
+      "nameLabel": "Account Name",
+      "namePlaceholder": "e.g., Work Account",
+      "apiKeyLabel": "API Key",
+      "apiKeyPlaceholder": "Paste your API key here",
+      "emailLabel": "Email (optional)",
+      "emailPlaceholder": "user@example.com",
+      "cancelButton": "Cancel",
+      "adding": "Adding..."
     },
     "connectionStatus": "Connection Status",
     "login": {

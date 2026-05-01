@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { Suspense, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -8,6 +8,8 @@ import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useTranslation } from 'react-i18next';
 import { normalizeInlineCodeFences } from '../../utils/chatFormatting';
 import { copyTextToClipboard } from '../../../../utils/clipboard';
+
+const MermaidDiagram = React.lazy(() => import('./MermaidDiagram'));
 
 type MarkdownProps = {
   children: React.ReactNode;
@@ -43,6 +45,21 @@ const CodeBlock = ({ node, inline, className, children, ...props }: CodeBlockPro
 
   const match = /language-(\w+)/.exec(className || '');
   const language = match ? match[1] : 'text';
+
+  // Mermaid code blocks get rendered as interactive diagrams
+  if (language === 'mermaid') {
+    return (
+      <Suspense
+        fallback={
+          <pre className="my-2 overflow-auto rounded-lg border border-border bg-muted p-4 text-sm text-muted-foreground">
+            {raw}
+          </pre>
+        }
+      >
+        <MermaidDiagram source={raw} />
+      </Suspense>
+    );
+  }
 
   return (
     <div className="group relative my-2">

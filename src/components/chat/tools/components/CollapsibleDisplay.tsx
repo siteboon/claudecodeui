@@ -1,6 +1,9 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Settings2 } from 'lucide-react';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../../../../shared/view/ui';
 import { CollapsibleSection } from './CollapsibleSection';
+import { useToolDisplay } from '../../../../contexts/ToolDisplayContext';
+import type { ToolDisplayDensity } from '../../../../hooks/useToolDisplayPreferences';
 
 interface CollapsibleDisplayProps {
   toolName: string;
@@ -29,6 +32,72 @@ const borderColorMap: Record<string, string> = {
   default: 'border-l-border',
 };
 
+const DENSITY_OPTIONS: { value: ToolDisplayDensity; label: string }[] = [
+  { value: 'compact', label: 'Always compact' },
+  { value: 'standard', label: 'Default' },
+  { value: 'expanded', label: 'Always expanded' },
+];
+
+function DensityOverrideMenu({ toolName }: { toolName: string }) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const { preferences, setToolOverride, clearToolOverride } = useToolDisplay();
+  const currentOverride = preferences.perToolOverrides[toolName]?.density;
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  return (
+    <div ref={menuRef} className="relative">
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+        className="rounded p-0.5 text-muted-foreground/40 opacity-0 transition-all hover:text-muted-foreground group-hover/tool:opacity-100"
+        title="Tool display density"
+      >
+        <Settings2 className="h-3 w-3" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-50 mt-1 min-w-[140px] rounded-md border border-border bg-popover p-1 shadow-md">
+          {DENSITY_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (opt.value === 'standard') clearToolOverride(toolName);
+                else setToolOverride(toolName, { density: opt.value });
+                setOpen(false);
+              }}
+              className={`flex w-full items-center gap-2 rounded-sm px-2 py-1 text-xs transition-colors hover:bg-accent ${
+                (currentOverride === opt.value || (!currentOverride && opt.value === 'standard'))
+                  ? 'font-medium text-primary'
+                  : 'text-foreground'
+              }`}
+            >
+              {(currentOverride === opt.value || (!currentOverride && opt.value === 'standard')) && (
+                <svg className="h-3 w-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+              {!(currentOverride === opt.value || (!currentOverride && opt.value === 'standard')) && (
+                <span className="h-3 w-3 flex-shrink-0" />
+              )}
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export const CollapsibleDisplay: React.FC<CollapsibleDisplayProps> = ({
   toolName,
   title,
@@ -45,12 +114,12 @@ export const CollapsibleDisplay: React.FC<CollapsibleDisplayProps> = ({
   const borderColor = borderColorMap[toolCategory || 'default'] || borderColorMap.default;
 
   return (
-    <div className={`border-l-2 ${borderColor} my-1 py-0.5 pl-3 ${className}`}>
+    <div className={`group/tool border-l-2 ${borderColor} my-1 py-0.5 pl-3 ${className}`}>
       <CollapsibleSection
         title={title}
         toolName={toolName}
         open={defaultOpen}
-        action={action}
+        action={<>{action}<DensityOverrideMenu toolName={toolName} /></>}
         badge={badge}
         onTitleClick={onTitleClick}
       >

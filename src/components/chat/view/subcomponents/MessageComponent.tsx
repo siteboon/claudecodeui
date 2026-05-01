@@ -11,9 +11,12 @@ import { formatUsageLimitText } from '../../utils/chatFormatting';
 import { getClaudePermissionSuggestion } from '../../utils/chatPermissions';
 import type { Project } from '../../../../types/app';
 import { ToolRenderer, shouldHideToolResult } from '../../tools';
+import StructuredErrorDisplay from '../../tools/components/StructuredErrorDisplay';
+import { classifyToolError } from '../../tools/utils/errorClassifier';
 import { Reasoning, ReasoningTrigger, ReasoningContent } from '../../../../shared/view/ui';
 import { Markdown } from './Markdown';
 import MessageCopyControl from './MessageCopyControl';
+import StreamingMarkdown from './StreamingMarkdown';
 
 type DiffLine = {
   type: string;
@@ -214,23 +217,17 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                 {/* Tool Result Section */}
                 {message.toolResult && !shouldHideToolResult(message.toolName || 'UnknownTool', message.toolResult) && (
                   message.toolResult.isError ? (
-                    // Error results - red error box with content
-                    <div
-                      id={`tool-result-${message.toolId}`}
-                      className="relative mt-2 scroll-mt-4 rounded border border-red-200/60 bg-red-50/50 p-3 dark:border-red-800/40 dark:bg-red-950/10"
-                    >
-                      <div className="relative mb-2 flex items-center gap-1.5">
-                        <svg className="h-4 w-4 text-red-500 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                        <span className="text-xs font-medium text-red-700 dark:text-red-300">{t('messageTypes.error')}</span>
-                      </div>
-                      <div className="relative text-sm text-red-900 dark:text-red-100">
-                        <Markdown className="prose prose-sm prose-red max-w-none dark:prose-invert">
-                          {String(message.toolResult.content || '')}
-                        </Markdown>
+                    // Error results - structured error display with categorization
+                    <div id={`tool-result-${message.toolId}`} className="scroll-mt-4">
+                      <StructuredErrorDisplay
+                        error={classifyToolError(
+                          message.toolName || 'UnknownTool',
+                          String(message.toolResult.content || ''),
+                        )}
+                        toolName={message.toolName || 'UnknownTool'}
+                      >
                         {permissionSuggestion && (
-                          <div className="mt-4 border-t border-red-200/60 pt-3 dark:border-red-800/60">
+                          <div className="mt-3 border-t border-border/30 pt-3">
                             <div className="flex flex-wrap items-center gap-2">
                               <button
                                 type="button"
@@ -257,13 +254,13 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                                 <button
                                   type="button"
                                   onClick={(e) => { e.stopPropagation(); onShowSettings(); }}
-                                  className="text-xs text-red-700 underline hover:text-red-800 dark:text-red-200 dark:hover:text-red-100"
+                                  className="text-xs text-muted-foreground underline hover:text-foreground"
                                 >
                                   {t('permissions.openSettings')}
                                 </button>
                               )}
                             </div>
-                            <div className="mt-2 text-xs text-red-700/90 dark:text-red-200/80">
+                            <div className="mt-2 text-xs text-muted-foreground">
                               {t('permissions.addTo', { entry: permissionSuggestion.entry })}
                             </div>
                             {permissionGrantState === 'error' && (
@@ -278,7 +275,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                             )}
                           </div>
                         )}
-                      </div>
+                      </StructuredErrorDisplay>
                     </div>
                   ) : (
                     // Non-error results - route through ToolRenderer (single source of truth)
@@ -441,9 +438,11 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
 
                   // Normal rendering for non-JSON content
                   return message.type === 'assistant' ? (
-                    <Markdown className="prose prose-sm prose-gray max-w-none dark:prose-invert">
-                      {content}
-                    </Markdown>
+                    <StreamingMarkdown
+                      content={content}
+                      isStreaming={Boolean(message.isStreaming)}
+                      className="prose prose-sm prose-gray max-w-none dark:prose-invert"
+                    />
                   ) : (
                     <div className="whitespace-pre-wrap">
                       {content}
