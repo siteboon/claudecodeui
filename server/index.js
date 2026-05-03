@@ -9,8 +9,9 @@ import { spawn } from 'child_process';
 
 import express from 'express';
 import cors from 'cors';
-import mime from 'mime-types';
+import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import mime from 'mime-types';
 
 import { AppError, WORKSPACES_ROOT, validateWorkspacePath } from '@/shared/utils.js';
 import { closeSessionsWatcher, initializeSessionsWatcher } from '@/modules/providers/index.js';
@@ -127,7 +128,47 @@ const wss = createWebSocketServer(server, {
 // Make WebSocket server available to routes
 app.locals.wss = wss;
 
-app.use(cors({ exposedHeaders: ['X-Refreshed-Token'] }));
+// Security headers
+app.use(helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+}));
+
+// CORS — lock to known origins in production
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+    : undefined;
+
+app.use(cors({
+    origin: ALLOWED_ORIGINS || true,
+    exposedHeaders: ['X-Refreshed-Token'],
+}));
+
+// Rate limiting
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many auth attempts, try again later' },
+});
+
+const agentLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many agent requests, try again later' },
+});
+
+const apiLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many requests, try again later' },
+});
+
 app.use(express.json({
     limit: '50mb',
     type: (req) => {
@@ -151,10 +192,10 @@ app.get('/health', (req, res) => {
 });
 
 // Optional API key validation (if configured)
-app.use('/api', validateApiKey);
+app.use('/api', apiLimiter, validateApiKey);
 
-// Authentication routes (public)
-app.use('/api/auth', authRoutes);
+// Authentication routes (public, stricter rate limit)
+app.use('/api/auth', authLimiter, authRoutes);
 
 // Projects API Routes (protected)
 app.use('/api/projects', authenticateToken, projectModuleRoutes);
@@ -204,8 +245,8 @@ app.use('/api/crewai', crewaiLimiter, authenticateToken, crewaiRoutes);
 });
 app.use('/api/9router', nineRouterLimiter, authenticateToken, nineRouterRoutes);
 
-// CrewAI orchestration (protected)
-app.use('/api/crewai', authenticateToken, crewaiRoutes);
+// CrewAI orchestration (protected, stricter rate limit)
+app.use('/api/crewai', agentLimiter, authenticateToken, crewaiRoutes);
 
 // OpenClaude session visibility (protected)
 const openclaudeSessionsLimiter = rateLimit({
@@ -216,8 +257,8 @@ const openclaudeSessionsLimiter = rateLimit({
 });
 app.use('/api/openclaude/sessions', openclaudeSessionsLimiter, authenticateToken, openclaudeSessionsRoutes);
 
-// Agent API Routes (uses API key authentication)
-app.use('/api/agent', agentRoutes);
+// Agent API Routes (uses API key authentication, stricter rate limit)
+app.use('/api/agent', agentLimiter, agentRoutes);
 
 // Serve public files (like api-docs.html)
 app.use(express.static(path.join(APP_ROOT, 'public')));
