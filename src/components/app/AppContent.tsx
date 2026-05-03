@@ -66,12 +66,19 @@ function AppContentInner() {
     refreshProjects: refreshProjectsSilently,
   });
 
+  const TAB_ORDER = ['chat', 'shell', 'files', 'git', 'tasks'] as const;
+
   useGlobalShortcuts({
     onNewChat: () => {
       if (selectedProject) handleNewSession(selectedProject);
     },
     onToggleSidebar: () => setSidebarOpen((prev) => !prev),
     onOpenSettings: openSettings,
+    onSwitchTab: (index) => {
+      if (index < TAB_ORDER.length) {
+        setActiveTab(TAB_ORDER[index]);
+      }
+    },
   });
 
   useEffect(() => {
