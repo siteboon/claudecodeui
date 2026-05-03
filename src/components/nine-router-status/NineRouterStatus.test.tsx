@@ -1,7 +1,14 @@
 import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { NineRouterStatus } from './NineRouterStatus';
+
+const mockSendMessage = vi.fn();
+vi.mock('../../contexts/WebSocketContext', () => ({
+  useWebSocket: () => ({ sendMessage: mockSendMessage, isConnected: true, ws: null, latestMessage: null }),
+}));
+
+const PREFERENCE_KEY = 'cloudcli.9router.preferredAccountId';
 
 const fixture = {
   connected: {
@@ -35,6 +42,8 @@ const jsonResponse = (body: unknown, status = 200): Response =>
 describe('NineRouterStatus', () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockSendMessage.mockClear();
+    window.localStorage.clear();
   });
 
   afterEach(() => {
@@ -142,5 +151,113 @@ describe('NineRouterStatus', () => {
     unmount();
 
     expect(receivedSignal?.aborted).toBe(true);
+  });
+
+  // ─── Account picker behavior ────────────────────────────────
+
+  test('picker is hidden by default', async () => {
+    stubFetch(() => jsonResponse(fixture.connected));
+
+    render(<NineRouterStatus />);
+    await screen.findByRole('status');
+
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  });
+
+  test('clicking the chip opens the account picker', async () => {
+    stubFetch(() => jsonResponse(fixture.connected));
+
+    render(<NineRouterStatus />);
+    const trigger = await screen.findByRole('button', { name: /9router/i });
+
+    fireEvent.click(trigger);
+
+    expect(await screen.findByRole('listbox')).toBeInTheDocument();
+  });
+
+  test('picker lists Auto + every account from /api/9router/status', async () => {
+    stubFetch(() => jsonResponse(fixture.connected));
+
+    render(<NineRouterStatus />);
+    fireEvent.click(await screen.findByRole('button', { name: /9router/i }));
+
+    const listbox = await screen.findByRole('listbox');
+    const options = listbox.querySelectorAll('[role="option"]');
+    expect(options).toHaveLength(3);
+    expect(options[0]).toHaveTextContent(/auto/i);
+    expect(options[1]).toHaveTextContent('Avi Primary');
+    expect(options[2]).toHaveTextContent('Avi Secondary');
+  });
+
+  test('selecting an account dispatches set-account WS message and persists to localStorage', async () => {
+    stubFetch(() => jsonResponse(fixture.connected));
+
+    render(<NineRouterStatus />);
+    fireEvent.click(await screen.findByRole('button', { name: /9router/i }));
+    const option = await screen.findByRole('option', { name: 'Avi Primary' });
+    fireEvent.click(option);
+
+    expect(mockSendMessage).toHaveBeenCalledWith({ type: 'set-account', accountId: 'a1' });
+    expect(window.localStorage.getItem(PREFERENCE_KEY)).toBe('a1');
+  });
+
+  test('selecting Auto sends null accountId and clears localStorage', async () => {
+    window.localStorage.setItem(PREFERENCE_KEY, 'a1');
+    stubFetch(() => jsonResponse(fixture.connected));
+
+    render(<NineRouterStatus />);
+    fireEvent.click(await screen.findByRole('button', { name: /9router/i }));
+    fireEvent.click(await screen.findByRole('option', { name: /auto/i }));
+
+    expect(mockSendMessage).toHaveBeenCalledWith({ type: 'set-account', accountId: null });
+    expect(window.localStorage.getItem(PREFERENCE_KEY)).toBeNull();
+  });
+
+  test('selected account is marked aria-selected', async () => {
+    stubFetch(() => jsonResponse(fixture.connected));
+
+    render(<NineRouterStatus />);
+    fireEvent.click(await screen.findByRole('button', { name: /9router/i }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Avi Secondary' }));
+    // picker closes after selection
+    fireEvent.click(screen.getByRole('button', { name: /9router/i })); // reopen
+
+    const selected = await screen.findByRole('option', { name: 'Avi Secondary' });
+    expect(selected).toHaveAttribute('aria-selected', 'true');
+  });
+
+  test('on mount, restores preference from localStorage and sends set-account', async () => {
+    window.localStorage.setItem(PREFERENCE_KEY, 'a2');
+    stubFetch(() => jsonResponse(fixture.connected));
+
+    render(<NineRouterStatus />);
+
+    await waitFor(() => {
+      expect(mockSendMessage).toHaveBeenCalledWith({ type: 'set-account', accountId: 'a2' });
+    });
+  });
+
+  test('clicking the chip a second time closes the picker', async () => {
+    stubFetch(() => jsonResponse(fixture.connected));
+
+    render(<NineRouterStatus />);
+    const trigger = await screen.findByRole('button', { name: /9router/i });
+
+    fireEvent.click(trigger);
+    expect(await screen.findByRole('listbox')).toBeInTheDocument();
+
+    fireEvent.click(trigger);
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  });
+
+  test('picker is not opened when 9Router is disconnected', async () => {
+    stubFetch(() => jsonResponse(fixture.disconnected));
+
+    render(<NineRouterStatus />);
+    const trigger = await screen.findByRole('button', { name: /9router/i });
+
+    fireEvent.click(trigger);
+
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
   });
 });
