@@ -109,6 +109,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
   }, [autoExpandTools, isExpanded, message.isToolUse]);
 
   const formattedTime = useMemo(() => new Date(message.timestamp).toLocaleTimeString(), [message.timestamp]);
+  const fullTimestamp = useMemo(() => new Date(message.timestamp).toLocaleString(), [message.timestamp]);
   const shouldHideThinkingMessage = Boolean(message.isThinking && !showThinking);
 
   if (shouldHideThinkingMessage) {
@@ -147,7 +148,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                   <MessageActions content={userCopyContent} messageType="user" />
                 )}
               </div>
-              <span>{formattedTime}</span>
+              <span title={fullTimestamp}>{formattedTime}</span>
             </div>
           </div>
           {!isGrouped && (
@@ -460,7 +461,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
 
             {(shouldShowAssistantCopyControl || !isGrouped) && (
               <div className="mt-2 flex w-full items-center gap-2 text-[11px] text-muted-foreground/60">
-                {!isGrouped && <span>{formattedTime}</span>}
+                {!isGrouped && <span title={fullTimestamp}>{formattedTime}</span>}
                 <div className="ml-auto opacity-0 transition-opacity group-hover/msg:opacity-100">
                   {shouldShowAssistantCopyControl && (
                     <MessageActions content={assistantCopyContent} messageType="assistant" />
