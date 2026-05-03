@@ -95,6 +95,7 @@
   },
   "mainTabs": {
     "label": "Settings",
+    "dashboard": "Dashboard",
     "agents": "Agents",
     "appearance": "Appearance",
     "git": "Git",
