@@ -190,7 +190,13 @@ app.use('/api/plugins', authenticateToken, pluginsRoutes);
 app.use('/api/providers', authenticateToken, providerRoutes);
 
 // 9Router gateway status (protected)
-app.use('/api/9router', authenticateToken, nineRouterRoutes);
+const nineRouterLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per window
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+app.use('/api/9router', nineRouterLimiter, authenticateToken, nineRouterRoutes);
 
 // CrewAI orchestration (protected)
 app.use('/api/crewai', authenticateToken, crewaiRoutes);
