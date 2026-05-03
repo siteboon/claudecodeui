@@ -1,3 +1,4 @@
+import { spawn as nodeSpawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 
@@ -61,11 +62,15 @@ export function createCrewAIRunner(opts?: CrewAIRunnerOptions): CrewAIRunner {
   const activeRuns = new Map<string, ActiveRun>();
 
   const defaultSpawn: SpawnFn = (command, args, options) => {
-    const { spawn } = require('node:child_process');
-    return spawn(command, args, {
-      cwd: options.cwd,
+    const resolvedCwd = path.resolve(options.cwd);
+    const root = path.resolve(process.env.CREWAI_PROJECTS_ROOT ?? process.cwd());
+    if (resolvedCwd !== root && !resolvedCwd.startsWith(root + path.sep)) {
+      throw new Error('Invalid cwd: path must be within the allowed projects root');
+    }
+    return nodeSpawn(command, args, {
+      cwd: resolvedCwd,
       env: { ...process.env, ...options.env },
-    });
+    }) as unknown as MockChildProcess;
   };
 
   const spawnFn = opts?.spawn ?? defaultSpawn;
