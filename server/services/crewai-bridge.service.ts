@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 export type CrewAIBridgeConfig = {
   mode: 'local' | 'cloud' | 'hybrid';
   localProjectPath: string;
@@ -32,6 +34,7 @@ export type CrewAISpawnArgs = {
 };
 
 export const CREWAI_DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
+const CREWAI_PROJECTS_ROOT = path.resolve(process.env.CREWAI_PROJECTS_ROOT ?? process.cwd());
 
 export function validateCrewAIConfig(
   config: CrewAIBridgeConfig,
@@ -53,6 +56,15 @@ export function validateCrewAIConfig(
 
 export function buildCrewAISpawnArgs(options: CrewAIRunOptions): CrewAISpawnArgs {
   const env: Record<string, string> = {};
+  const resolvedProjectPath = path.resolve(CREWAI_PROJECTS_ROOT, options.projectPath);
+  const rootWithSep = `${CREWAI_PROJECTS_ROOT}${path.sep}`;
+
+  if (
+    resolvedProjectPath !== CREWAI_PROJECTS_ROOT &&
+    !resolvedProjectPath.startsWith(rootWithSep)
+  ) {
+    throw new Error('Invalid projectPath: path must be within the allowed projects root');
+  }
 
   if (Object.keys(options.inputs).length > 0) {
     env.CREWAI_INPUTS = JSON.stringify(options.inputs);
@@ -65,7 +77,7 @@ export function buildCrewAISpawnArgs(options: CrewAIRunOptions): CrewAISpawnArgs
   return {
     command: 'uv',
     args: ['run', 'run_crew'],
-    cwd: options.projectPath,
+    cwd: resolvedProjectPath,
     env,
   };
 }
