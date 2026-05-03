@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Copy, Check, RotateCcw, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { Copy, Check, Pencil, RotateCcw, ThumbsUp, ThumbsDown } from 'lucide-react';
 
 type MessageActionsProps = {
   content: string;
   messageType: 'user' | 'assistant';
   onRetry?: () => void;
+  onEdit?: () => void;
 };
 
-export default function MessageActions({ content, messageType, onRetry }: MessageActionsProps) {
+export default function MessageActions({ content, messageType, onRetry, onEdit }: MessageActionsProps) {
   const { t } = useTranslation('chat');
   const [copied, setCopied] = useState(false);
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null);
@@ -33,6 +34,17 @@ export default function MessageActions({ content, messageType, onRetry }: Messag
       >
         {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
       </button>
+
+      {messageType === 'user' && onEdit && (
+        <button
+          type="button"
+          onClick={onEdit}
+          className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          title={t('actions.edit', { defaultValue: 'Edit' })}
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+      )}
 
       {messageType === 'assistant' && onRetry && (
         <button
