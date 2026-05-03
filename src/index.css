@@ -18,6 +18,23 @@
   50% { opacity: 0; }
 }
 
+@keyframes message-appear {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes thinking-dots {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+@keyframes slide-in-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
 /* Global spinner animation - defined early to ensure it loads */
 @keyframes spin {
   0% {
@@ -39,38 +56,82 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    /* Core surfaces — warm beige Claude Desktop palette */
+    --background: 36 33% 97%;
+    --foreground: 25 8% 14%;
+    --card: 36 25% 95%;
+    --card-foreground: 25 8% 14%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
-    --radius: 0.5rem;
+    --popover-foreground: 25 8% 14%;
 
-    /* Nav design tokens */
-    --nav-glass-bg: 0 0% 100% / 0.7;
+    /* Brand accent — warm orange-brown */
+    --primary: 25 84% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary surfaces */
+    --secondary: 36 20% 93%;
+    --secondary-foreground: 25 8% 14%;
+    --muted: 36 14% 91%;
+    --muted-foreground: 25 5% 45%;
+    --accent: 36 20% 93%;
+    --accent-foreground: 25 8% 14%;
+
+    /* Status */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Borders & inputs */
+    --border: 36 14% 88%;
+    --input: 36 14% 88%;
+    --ring: 25 84% 45%;
+
+    /* Radius — larger corners */
+    --radius: 0.75rem;
+
+    /* Chat-specific tokens */
+    --user-bubble-bg: 36 25% 94%;
+    --user-bubble-border: 36 14% 88%;
+    --assistant-bg: transparent;
+    --code-bg: 220 20% 97%;
+    --code-header-bg: 220 15% 94%;
+    --code-border: 220 12% 91%;
+    --thinking-bg: 36 14% 95%;
+
+    /* Sidebar tokens */
+    --sidebar-width: 260px;
+    --sidebar-bg: var(--card);
+    --sidebar-hover: 36 20% 91%;
+    --sidebar-active: 25 84% 45% / 0.08;
+    --sidebar-active-border: var(--primary);
+
+    /* Chat column */
+    --chat-max-width: 48rem;
+    --composer-max-width: 48rem;
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.03);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.03);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.06), 0 4px 6px -4px rgb(0 0 0 / 0.03);
+    --shadow-float: 0 8px 30px rgb(0 0 0 / 0.08), 0 0 0 1px rgb(0 0 0 / 0.03);
+
+    /* Animation easing */
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+    --duration-fast: 100ms;
+    --duration-normal: 200ms;
+    --duration-slow: 300ms;
+
+    /* Nav design tokens — warm hues */
+    --nav-glass-bg: 36 33% 97% / 0.7;
     --nav-glass-blur: 20px;
     --nav-glass-saturate: 1.8;
-    --nav-tab-glow: 221.2 83.2% 53.3% / 0.18;
-    --nav-tab-ring: 221.2 83.2% 53.3% / 0.10;
+    --nav-tab-glow: 25 84% 45% / 0.18;
+    --nav-tab-ring: 25 84% 45% / 0.10;
     --nav-float-shadow: 0 0% 0% / 0.06;
-    --nav-float-ring: 214.3 31.8% 91.4% / 0.5;
-    --nav-divider-color: 214.3 31.8% 91.4% / 0.5;
-    --nav-input-bg: 210 40% 96.1% / 0.5;
-    --nav-input-focus-ring: 221.2 83.2% 53.3% / 0.22;
+    --nav-float-ring: 36 14% 88% / 0.5;
+    --nav-divider-color: 36 14% 88% / 0.5;
+    --nav-input-bg: 36 20% 93% / 0.5;
+    --nav-input-focus-ring: 25 84% 45% / 0.22;
 
     /* Safe area CSS variables */
     --safe-area-inset-top: env(safe-area-inset-top);
@@ -101,37 +162,54 @@
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 217.2 91.2% 8%;
-    --card-foreground: 210 40% 98%;
-    --popover: 217.2 91.2% 8%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 220 13% 46%;
-    --ring: 217.2 91.2% 59.8%;
+    /* Core surfaces — warm charcoal */
+    --background: 220 13% 10%;
+    --foreground: 36 20% 90%;
+    --card: 220 13% 13%;
+    --card-foreground: 36 20% 90%;
+    --popover: 220 13% 15%;
+    --popover-foreground: 36 20% 90%;
+
+    --primary: 25 80% 55%;
+    --primary-foreground: 220 13% 10%;
+
+    --secondary: 220 10% 18%;
+    --secondary-foreground: 36 20% 90%;
+    --muted: 220 10% 18%;
+    --muted-foreground: 220 8% 55%;
+    --accent: 220 10% 20%;
+    --accent-foreground: 36 20% 90%;
+
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 36 20% 90%;
+
+    --border: 220 10% 20%;
+    --input: 220 10% 25%;
+    --ring: 25 80% 55%;
+
+    /* Chat-specific dark overrides */
+    --user-bubble-bg: 220 10% 16%;
+    --user-bubble-border: 220 10% 22%;
+    --code-bg: 220 13% 14%;
+    --code-header-bg: 220 13% 17%;
+    --code-border: 220 10% 22%;
+    --thinking-bg: 220 10% 14%;
+
+    /* Sidebar dark overrides */
+    --sidebar-hover: 220 10% 17%;
+    --sidebar-active: 25 80% 55% / 0.12;
 
     /* Nav design tokens — dark overrides */
-    --nav-glass-bg: 217.2 91.2% 8% / 0.55;
+    --nav-glass-bg: 220 13% 10% / 0.55;
     --nav-glass-blur: 24px;
     --nav-glass-saturate: 1.6;
-    --nav-tab-glow: 217.2 91.2% 59.8% / 0.25;
-    --nav-tab-ring: 217.2 91.2% 59.8% / 0.15;
+    --nav-tab-glow: 25 80% 55% / 0.25;
+    --nav-tab-ring: 25 80% 55% / 0.15;
     --nav-float-shadow: 0 0% 0% / 0.35;
-    --nav-float-ring: 217.2 32.6% 17.5% / 0.3;
-    --nav-divider-color: 217.2 32.6% 17.5% / 0.5;
-    --nav-input-bg: 217.2 32.6% 17.5% / 0.5;
-    --nav-input-focus-ring: 217.2 91.2% 59.8% / 0.25;
+    --nav-float-ring: 220 10% 20% / 0.3;
+    --nav-divider-color: 220 10% 20% / 0.5;
+    --nav-input-bg: 220 10% 18% / 0.5;
+    --nav-input-focus-ring: 25 80% 55% / 0.25;
   }
 }
 
@@ -144,7 +222,7 @@
   
   body {
     @apply bg-background text-foreground;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: var(--font-sans, "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif);
     margin: 0;
     padding: 0;
   }

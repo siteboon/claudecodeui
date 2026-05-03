@@ -1,9 +1,11 @@
 import { useTranslation } from 'react-i18next';
 import { useCallback, useRef } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
-import type { ChatMessage } from '../../types/types';
+
 import type { Project, ProjectSession, LLMProvider } from '../../../../types/app';
+import type { ChatMessage } from '../../types/types';
 import { getIntrinsicMessageKey } from '../../utils/messageKeys';
+
 import MessageComponent from './MessageComponent';
 import ProviderSelectionEmptyState from './ProviderSelectionEmptyState';
 
@@ -138,8 +140,9 @@ export default function ChatMessagesPane({
       ref={scrollContainerRef}
       onWheel={onWheel}
       onTouchMove={onTouchMove}
-      className="relative flex-1 space-y-3 overflow-y-auto overflow-x-hidden px-0 py-3 sm:space-y-4 sm:p-4"
+      className="relative flex-1 overflow-y-auto overflow-x-hidden py-3"
     >
+      <div className="mx-auto w-full max-w-chat space-y-3 px-3 sm:space-y-4 sm:px-6">
       {isLoadingSessionMessages && chatMessages.length === 0 ? (
         <div className="mt-8 text-center text-gray-500 dark:text-gray-400">
           <div className="flex items-center justify-center space-x-2">
@@ -270,6 +273,7 @@ export default function ChatMessagesPane({
           })}
         </>
       )}
+      </div>
     </div>
   );
 }
