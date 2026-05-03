@@ -145,13 +145,25 @@ function matchesToolPermission(entry, toolName, input) {
  * @returns {Object} SDK-compatible options
  */
 function mapCliOptionsToSDK(options = {}) {
-  const { sessionId, cwd, toolsSettings, permissionMode } = options;
+  const { sessionId, cwd, toolsSettings, permissionMode, preferredAccountId } = options;
 
   const sdkOptions = {};
 
   // Forward all host env vars (e.g. ANTHROPIC_BASE_URL) to the subprocess.
   // Since SDK 0.2.113, options.env replaces process.env instead of overlaying it.
   sdkOptions.env = { ...process.env };
+
+  // When the user has chosen a specific 9Router account for this session, bridge the
+  // preference to 9Router by injecting an X-Preferred-Account HTTP header. The native
+  // claude binary forwards anything in ANTHROPIC_CUSTOM_HEADERS on every API request.
+  const accountId = typeof preferredAccountId === 'string' ? preferredAccountId.trim() : '';
+  if (accountId) {
+    const accountHeader = `X-Preferred-Account: ${accountId}`;
+    const existing = sdkOptions.env.ANTHROPIC_CUSTOM_HEADERS;
+    sdkOptions.env.ANTHROPIC_CUSTOM_HEADERS = existing
+      ? `${existing}\n${accountHeader}`
+      : accountHeader;
+  }
 
   // Use CLAUDE_CLI_PATH if explicitly set, otherwise fall back to 'claude' on PATH.
   // The SDK 0.2.113+ looks for a bundled native binary optional dep by default;
@@ -828,5 +840,6 @@ export {
   getActiveClaudeSDKSessions,
   resolveToolApproval,
   getPendingApprovalsForSession,
-  reconnectSessionWriter
+  reconnectSessionWriter,
+  mapCliOptionsToSDK,
 };

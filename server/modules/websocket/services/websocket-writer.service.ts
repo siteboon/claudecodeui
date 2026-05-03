@@ -10,12 +10,14 @@ export class WebSocketWriter {
   sessionId: string | null;
   userId: string | number | null;
   isWebSocketWriter: boolean;
+  preferredAccountId: string | null;
 
   constructor(ws: RealtimeClientConnection, userId: string | number | null = null) {
     this.ws = ws;
     this.sessionId = null;
     this.userId = userId;
     this.isWebSocketWriter = true;
+    this.preferredAccountId = null;
   }
 
   send(data: unknown): void {
@@ -34,5 +36,17 @@ export class WebSocketWriter {
 
   getSessionId(): string | null {
     return this.sessionId;
+  }
+
+  setPreferredAccountId(accountId: string | null): void {
+    if (typeof accountId === 'string' && accountId.trim().length > 0) {
+      this.preferredAccountId = accountId.trim();
+    } else {
+      this.preferredAccountId = null;
+    }
+  }
+
+  getPreferredAccountId(): string | null {
+    return this.preferredAccountId;
   }
 }

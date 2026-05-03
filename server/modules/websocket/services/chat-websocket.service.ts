@@ -20,6 +20,7 @@ type ChatIncomingMessage = AnyRecord & {
   updatedInput?: unknown;
   message?: unknown;
   rememberEntry?: unknown;
+  accountId?: string;
 };
 
 const DEFAULT_PROVIDER: LLMProvider = 'claude';
@@ -114,8 +115,26 @@ export function handleChatConnection(
         throw new Error('Message type is required');
       }
 
+      if (messageType === 'set-account') {
+        const accountId = typeof data.accountId === 'string' ? data.accountId : null;
+        writer.setPreferredAccountId(accountId);
+        writer.send(
+          createNormalizedMessage({
+            kind: 'status',
+            text: 'account_preference_set',
+            accountId: writer.getPreferredAccountId(),
+            provider: 'claude',
+          })
+        );
+        return;
+      }
+
       if (messageType === 'claude-command') {
-        await dependencies.queryClaudeSDK(data.command ?? '', data.options, writer);
+        const preferredAccountId = writer.getPreferredAccountId();
+        const optionsWithAccount = preferredAccountId
+          ? { ...(data.options ?? {}), preferredAccountId }
+          : data.options;
+        await dependencies.queryClaudeSDK(data.command ?? '', optionsWithAccount, writer);
         return;
       }
 
