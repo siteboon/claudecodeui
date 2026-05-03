@@ -8,6 +8,8 @@ const defaultProps = {
   onClose: vi.fn(),
   onRename: vi.fn(),
   onPin: vi.fn(),
+  onArchive: vi.fn(),
+  onExport: vi.fn(),
   onDelete: vi.fn(),
 };
 

@@ -43,6 +43,31 @@ export default function AppearanceSettingsTab({
         </SettingsCard>
       </SettingsSection>
 
+      <SettingsSection title={t('appearanceSettings.chatFontSize.label', 'Chat Font Size')}>
+        <SettingsCard>
+          <SettingsRow
+            label={t('appearanceSettings.chatFontSize.label', 'Chat Font Size')}
+            description={t('appearanceSettings.chatFontSize.description', 'Adjust the font size for chat messages')}
+          >
+            <select
+              value={localStorage.getItem('chat-font-size') || '14'}
+              onChange={(event) => {
+                localStorage.setItem('chat-font-size', event.target.value);
+                document.documentElement.style.setProperty('--chat-font-size', `${event.target.value}px`);
+              }}
+              className="w-full rounded-lg border border-input bg-card p-2.5 text-sm text-foreground touch-manipulation focus:border-primary focus:ring-1 focus:ring-primary sm:w-28"
+            >
+              <option value="12">12px</option>
+              <option value="13">13px</option>
+              <option value="14">14px</option>
+              <option value="15">15px</option>
+              <option value="16">16px</option>
+              <option value="18">18px</option>
+            </select>
+          </SettingsRow>
+        </SettingsCard>
+      </SettingsSection>
+
       <SettingsSection title={t('mainTabs.appearance')}>
         <SettingsCard>
           <LanguageSelector />

@@ -120,6 +120,14 @@ export default function SidebarConversationList({
             togglePin(contextMenu.session.id);
             setContextMenu(null);
           }}
+          onArchive={() => {
+            const s = contextMenu.session;
+            onDeleteSession(s.__parentProjectId, s.id, s.summary || s.title || s.id, s.__provider);
+            setContextMenu(null);
+          }}
+          onExport={() => {
+            setContextMenu(null);
+          }}
           onDelete={() => {
             const s = contextMenu.session;
             onDeleteSession(s.__parentProjectId, s.id, s.summary || s.title || s.id, s.__provider);

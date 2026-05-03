@@ -1,11 +1,13 @@
 import { useEffect, useRef } from 'react';
-import { Pencil, Pin, Trash2 } from 'lucide-react';
+import { Archive, Download, Pencil, Pin, Trash2 } from 'lucide-react';
 
 interface ConversationContextMenuProps {
   position: { x: number; y: number };
   onClose: () => void;
   onRename: () => void;
   onPin: () => void;
+  onArchive: () => void;
+  onExport: () => void;
   onDelete: () => void;
 }
 
@@ -14,6 +16,8 @@ export default function ConversationContextMenu({
   onClose,
   onRename,
   onPin,
+  onArchive,
+  onExport,
   onDelete,
 }: ConversationContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
@@ -57,6 +61,9 @@ export default function ConversationContextMenu({
     >
       {item('Rename', <Pencil size={14} />, onRename)}
       {item('Pin to top', <Pin size={14} />, onPin)}
+      {item('Archive', <Archive size={14} />, onArchive)}
+      {item('Export', <Download size={14} />, onExport)}
+      <div className="my-1 border-t border-border/50" />
       {item('Delete', <Trash2 size={14} />, onDelete, 'context-menu-delete', 'text-destructive')}
     </div>
   );
