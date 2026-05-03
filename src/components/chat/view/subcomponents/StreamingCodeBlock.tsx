@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Check, Copy } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
@@ -16,7 +17,16 @@ const MONO_FAMILY =
  */
 function StreamingCodeBlockInner({ source, language }: StreamingCodeBlockProps) {
   const [highlighted, setHighlighted] = useState(source);
+  const [copied, setCopied] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(source);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard unavailable */ }
+  }, [source]);
 
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -35,11 +45,21 @@ function StreamingCodeBlockInner({ source, language }: StreamingCodeBlockProps) 
 
   return (
     <div className="group relative my-2">
-      {language && language !== 'text' && (
-        <div className="absolute left-3 top-2 z-10 text-xs font-medium uppercase text-gray-400">
-          {language}
-        </div>
-      )}
+      <div className="absolute right-2 top-2 z-10 flex items-center gap-2">
+        {language && language !== 'text' && (
+          <span className="text-xs font-medium uppercase text-gray-400">
+            {language}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="rounded p-1 text-gray-400 opacity-0 transition-all hover:bg-white/10 hover:text-gray-200 group-hover:opacity-100"
+          title="Copy code"
+        >
+          {copied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
+        </button>
+      </div>
       <SyntaxHighlighter
         language={language}
         style={oneDark}
