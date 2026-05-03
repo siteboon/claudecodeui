@@ -10,6 +10,7 @@ import { spawn } from 'child_process';
 import express from 'express';
 import cors from 'cors';
 import mime from 'mime-types';
+import rateLimit from 'express-rate-limit';
 
 import { AppError, WORKSPACES_ROOT, validateWorkspacePath } from '@/shared/utils.js';
 import { closeSessionsWatcher, initializeSessionsWatcher } from '@/modules/providers/index.js';
@@ -195,7 +196,13 @@ app.use('/api/9router', authenticateToken, nineRouterRoutes);
 app.use('/api/crewai', authenticateToken, crewaiRoutes);
 
 // OpenClaude session visibility (protected)
-app.use('/api/openclaude/sessions', authenticateToken, openclaudeSessionsRoutes);
+const openclaudeSessionsLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per window
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+app.use('/api/openclaude/sessions', openclaudeSessionsLimiter, authenticateToken, openclaudeSessionsRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
