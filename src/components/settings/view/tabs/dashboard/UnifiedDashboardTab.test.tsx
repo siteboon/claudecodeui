@@ -74,6 +74,38 @@ describe('UnifiedDashboardTab', () => {
     expect(screen.getByText(/12 messages/i)).toBeDefined();
   });
 
+  it('renders CrewAISummary when crewai API returns active agents', async () => {
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes('crewai')) {
+        return {
+          ok: true,
+          json: async () => ({
+            activeRunIds: ['run-1'],
+            agents: [
+              { role: 'Researcher', status: 'working', task: 'Gathering data' },
+              { role: 'Writer', status: 'idle' },
+            ],
+            crewName: 'Research Crew',
+          }),
+        };
+      }
+      if (url.includes('9router')) {
+        return {
+          ok: true,
+          json: async () => ({ health: { reachable: false }, accounts: [], usage: { totalRequests: 0, totalTokens: 0, totalCostUsd: 0 } }),
+        };
+      }
+      return { ok: true, json: async () => ({ sessions: [] }) };
+    });
+
+    render(<UnifiedDashboardTab />);
+    await waitFor(() => {
+      expect(screen.getByText('Research Crew')).toBeDefined();
+    });
+    expect(screen.getByText('Researcher')).toBeDefined();
+    expect(screen.getByText('Writer')).toBeDefined();
+  });
+
   it('shows empty state messages when services have no data', async () => {
     mockFetch.mockImplementation(async (url: string) => {
       if (url.includes('9router')) {

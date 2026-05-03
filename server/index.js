@@ -66,6 +66,7 @@ import geminiRoutes from './routes/gemini.js';
 import pluginsRoutes from './routes/plugins.js';
 import providerRoutes from './modules/providers/provider.routes.js';
 import nineRouterRoutes from './routes/nine-router.js';
+import crewaiRoutes from './routes/crewai.js';
 import openclaudeSessionsRoutes from './routes/openclaude-sessions.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
 import { initializeDatabase, projectsDb } from './modules/database/index.js';
@@ -189,6 +190,9 @@ app.use('/api/providers', authenticateToken, providerRoutes);
 
 // 9Router gateway status (protected)
 app.use('/api/9router', authenticateToken, nineRouterRoutes);
+
+// CrewAI orchestration (protected)
+app.use('/api/crewai', authenticateToken, crewaiRoutes);
 
 // OpenClaude session visibility (protected)
 app.use('/api/openclaude/sessions', authenticateToken, openclaudeSessionsRoutes);

@@ -1,5 +1,14 @@
 import { useEffect, useState } from 'react';
 
+import CrewAISummary from '../../../../crewai/CrewAISummary';
+import type { CrewAIAgentStatus } from '../../../../crewai/types';
+
+interface CrewAIStatus {
+  activeRunIds: string[];
+  agents: CrewAIAgentStatus[];
+  crewName: string;
+}
+
 interface NineRouterHealth {
   reachable: boolean;
   port?: number;
@@ -34,6 +43,7 @@ interface OpenClaudeSession {
 export default function UnifiedDashboardTab() {
   const [routerData, setRouterData] = useState<NineRouterData | null>(null);
   const [ocSessions, setOcSessions] = useState<OpenClaudeSession[]>([]);
+  const [crewaiStatus, setCrewaiStatus] = useState<CrewAIStatus | null>(null);
 
   useEffect(() => {
     fetch('/api/9router/status')
@@ -44,6 +54,11 @@ export default function UnifiedDashboardTab() {
     fetch('/api/openclaude/sessions')
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => { if (data?.sessions) setOcSessions(data.sessions); })
+      .catch(() => {});
+
+    fetch('/api/crewai/status')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data) setCrewaiStatus(data); })
       .catch(() => {});
   }, []);
 
@@ -128,11 +143,15 @@ export default function UnifiedDashboardTab() {
       {/* CrewAI Section */}
       <section>
         <h3 className="mb-3 text-sm font-semibold">CrewAI Agents</h3>
-        <div className="rounded-lg border border-border bg-muted/30 p-4">
-          <p className="text-center text-sm text-muted-foreground">
-            No active crews. Start a crew from the chat interface.
-          </p>
-        </div>
+        {crewaiStatus?.agents && crewaiStatus.agents.length > 0 ? (
+          <CrewAISummary agents={crewaiStatus.agents} crewName={crewaiStatus.crewName} />
+        ) : (
+          <div className="rounded-lg border border-border bg-muted/30 p-4">
+            <p className="text-center text-sm text-muted-foreground">
+              No active crews. Start a crew from the chat interface.
+            </p>
+          </div>
+        )}
       </section>
     </div>
   );
