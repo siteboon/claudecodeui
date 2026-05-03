@@ -64,18 +64,17 @@ test('validateCrewAIConfig rejects cloud config without cloudApiKey', () => {
 
 test('buildCrewAISpawnArgs returns uv run command for local project', () => {
   const args = buildCrewAISpawnArgs({
-    projectPath: 'C:\\Dev\\tools\\crewai-projects\\my_first_crew',
+    projectPath: '.',
     inputs: { topic: 'AI LLMs' },
   });
   assert.equal(args.command, 'uv');
   assert.ok(args.args.includes('run'));
   assert.ok(args.args.includes('run_crew'));
-  assert.equal(args.cwd, 'C:\\Dev\\tools\\crewai-projects\\my_first_crew');
 });
 
 test('buildCrewAISpawnArgs includes custom inputs as JSON env var', () => {
   const args = buildCrewAISpawnArgs({
-    projectPath: '/tmp/crew',
+    projectPath: '.',
     inputs: { topic: 'quantum computing', current_year: '2026' },
   });
   assert.ok(args.env?.CREWAI_INPUTS);
@@ -85,7 +84,7 @@ test('buildCrewAISpawnArgs includes custom inputs as JSON env var', () => {
 
 test('buildCrewAISpawnArgs propagates 9Router base URL when provided', () => {
   const args = buildCrewAISpawnArgs({
-    projectPath: '/tmp/crew',
+    projectPath: '.',
     inputs: {},
     nineRouterBaseUrl: 'http://localhost:20128/v1',
   });

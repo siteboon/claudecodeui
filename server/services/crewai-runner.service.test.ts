@@ -24,7 +24,7 @@ test('startRun rejects invalid config', async () => {
   const runner = createCrewAIRunner();
   const result = await runner.startRun(
     { mode: 'local', localProjectPath: '' },
-    { projectPath: '/some/path', inputs: {} },
+    { projectPath: '.', inputs: {} },
     makeNoopCallbacks(),
   );
   assert.equal(result.success, false);
@@ -51,8 +51,8 @@ test('startRun tracks the run as active', async () => {
   });
 
   const result = await runner.startRun(
-    { mode: 'local', localProjectPath: '/project' },
-    { projectPath: '/project', inputs: {} },
+    { mode: 'local', localProjectPath: '.' },
+    { projectPath: '.', inputs: {} },
     makeNoopCallbacks(),
   );
 
@@ -78,8 +78,8 @@ test('run is removed from active list after process exits', async () => {
 
   const completedPromise = new Promise<void>((resolve) => {
     runner.startRun(
-      { mode: 'local', localProjectPath: '/project' },
-      { projectPath: '/project', inputs: {} },
+      { mode: 'local', localProjectPath: '.' },
+      { projectPath: '.', inputs: {} },
       { onAgentOutput: () => {}, onCrewComplete: () => resolve(), onCrewError: () => {} },
     );
   });
@@ -107,8 +107,8 @@ test('abortRun kills the process and removes from active list', async () => {
   });
 
   const result = await runner.startRun(
-    { mode: 'local', localProjectPath: '/project' },
-    { projectPath: '/project', inputs: {} },
+    { mode: 'local', localProjectPath: '.' },
+    { projectPath: '.', inputs: {} },
     makeNoopCallbacks(),
   );
 
@@ -134,8 +134,8 @@ test('isRunActive returns true for active runs', async () => {
   });
 
   const result = await runner.startRun(
-    { mode: 'local', localProjectPath: '/project' },
-    { projectPath: '/project', inputs: {} },
+    { mode: 'local', localProjectPath: '.' },
+    { projectPath: '.', inputs: {} },
     makeNoopCallbacks(),
   );
 
@@ -166,8 +166,8 @@ test('onAgentOutput callback receives parsed agent data from stdout', async () =
 
   const completedPromise = new Promise<void>((resolve) => {
     runner.startRun(
-      { mode: 'local', localProjectPath: '/project' },
-      { projectPath: '/project', inputs: {} },
+      { mode: 'local', localProjectPath: '.' },
+      { projectPath: '.', inputs: {} },
       {
         onAgentOutput: (o) => agentOutputs.push(o),
         onCrewComplete: () => resolve(),
@@ -203,8 +203,8 @@ test('onCrewError callback fires on non-zero exit code', async () => {
 
   const errorPromise = new Promise<void>((resolve) => {
     runner.startRun(
-      { mode: 'local', localProjectPath: '/project' },
-      { projectPath: '/project', inputs: {} },
+      { mode: 'local', localProjectPath: '.' },
+      { projectPath: '.', inputs: {} },
       {
         onAgentOutput: () => {},
         onCrewComplete: () => {},
