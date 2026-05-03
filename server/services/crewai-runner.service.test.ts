@@ -117,6 +117,17 @@ test('abortRun kills the process and removes from active list', async () => {
   assert.equal(killed, true);
 });
 
+test('startRun rejects path traversal in projectPath', async () => {
+  const runner = createCrewAIRunner();
+  const result = await runner.startRun(
+    { mode: 'local', localProjectPath: '.' },
+    { projectPath: '../../etc/passwd', inputs: {} },
+    makeNoopCallbacks(),
+  );
+  assert.equal(result.success, false);
+  assert.ok(result.error);
+});
+
 test('abortRun returns false for unknown runId', () => {
   const runner = createCrewAIRunner();
   assert.equal(runner.abortRun('nonexistent'), false);

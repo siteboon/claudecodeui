@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 
 import {
   type CrewAIBridgeConfig,
@@ -79,10 +80,22 @@ export function createCrewAIRunner(opts?: CrewAIRunnerOptions): CrewAIRunner {
       return Promise.resolve({ success: false, error: validation.error });
     }
 
+    let spawnArgs;
+    try {
+      spawnArgs = buildCrewAISpawnArgs(options);
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
+
+    const allowedRoot = path.resolve(process.env.CREWAI_PROJECTS_ROOT ?? process.cwd());
+    const safeCwd = path.resolve(spawnArgs.cwd);
+    if (safeCwd !== allowedRoot && !safeCwd.startsWith(allowedRoot + path.sep)) {
+      return { success: false, error: 'Project path is outside the allowed root' };
+    }
+
     const runId = randomUUID();
-    const spawnArgs = buildCrewAISpawnArgs(options);
     const child = spawnFn(spawnArgs.command, spawnArgs.args, {
-      cwd: spawnArgs.cwd,
+      cwd: safeCwd,
       env: spawnArgs.env,
     });
 
