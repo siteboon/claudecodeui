@@ -1,5 +1,6 @@
 import { spawn as nodeSpawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { realpathSync } from 'node:fs';
 import path from 'node:path';
 
 import {
@@ -64,11 +65,13 @@ export function createCrewAIRunner(opts?: CrewAIRunnerOptions): CrewAIRunner {
   const defaultSpawn: SpawnFn = (command, args, options) => {
     const resolvedCwd = path.resolve(options.cwd);
     const root = path.resolve(process.env.CREWAI_PROJECTS_ROOT ?? process.cwd());
-    if (resolvedCwd !== root && !resolvedCwd.startsWith(root + path.sep)) {
+    const canonicalRoot = realpathSync(root);
+    const canonicalCwd = realpathSync(resolvedCwd);
+    if (canonicalCwd !== canonicalRoot && !canonicalCwd.startsWith(canonicalRoot + path.sep)) {
       throw new Error('Invalid cwd: path must be within the allowed projects root');
     }
     return nodeSpawn(command, args, {
-      cwd: resolvedCwd,
+      cwd: canonicalCwd,
       env: { ...process.env, ...options.env },
     }) as unknown as MockChildProcess;
   };
@@ -93,8 +96,9 @@ export function createCrewAIRunner(opts?: CrewAIRunnerOptions): CrewAIRunner {
     }
 
     const allowedRoot = path.resolve(process.env.CREWAI_PROJECTS_ROOT ?? process.cwd());
-    const safeCwd = path.resolve(spawnArgs.cwd);
-    if (safeCwd !== allowedRoot && !safeCwd.startsWith(allowedRoot + path.sep)) {
+    const canonicalAllowedRoot = realpathSync(allowedRoot);
+    const safeCwd = realpathSync(path.resolve(spawnArgs.cwd));
+    if (safeCwd !== canonicalAllowedRoot && !safeCwd.startsWith(canonicalAllowedRoot + path.sep)) {
       return { success: false, error: 'Project path is outside the allowed root' };
     }
 
