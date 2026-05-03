@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
+import ClaudeSparkle from '../../../icons/ClaudeSparkle';
 import type {
   ChatMessage,
   ClaudePermissionSuggestion,
@@ -15,6 +16,7 @@ import StructuredErrorDisplay from '../../tools/components/StructuredErrorDispla
 import { classifyToolError } from '../../tools/utils/errorClassifier';
 import { Reasoning, ReasoningTrigger, ReasoningContent } from '../../../../shared/view/ui';
 import { Markdown } from './Markdown';
+import MessageActions from './MessageActions';
 import MessageCopyControl from './MessageCopyControl';
 import StreamingMarkdown from './StreamingMarkdown';
 
@@ -117,7 +119,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
     <div
       ref={messageRef}
       data-message-timestamp={message.timestamp || undefined}
-      className={`chat-message ${message.type} ${isGrouped ? 'grouped' : ''} animate-message-appear ${message.type === 'user' ? 'flex justify-end px-3 sm:px-0' : 'px-3 sm:px-0'}`}
+      className={`group/msg chat-message ${message.type} ${isGrouped ? 'grouped' : ''} animate-message-appear ${message.type === 'user' ? 'flex justify-end px-3 sm:px-0' : 'px-3 sm:px-0'}`}
     >
       {message.type === 'user' ? (
         /* User message bubble on the right */
@@ -139,10 +141,12 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                 ))}
               </div>
             )}
-            <div className="mt-1 flex items-center justify-end gap-1 text-xs text-muted-foreground">
-              {shouldShowUserCopyControl && (
-                <MessageCopyControl content={userCopyContent} messageType="user" />
-              )}
+            <div className="mt-1 flex items-center justify-end gap-1.5 text-xs text-muted-foreground/60">
+              <div className="opacity-0 transition-opacity group-hover/msg:opacity-100">
+                {shouldShowUserCopyControl && (
+                  <MessageActions content={userCopyContent} messageType="user" />
+                )}
+              </div>
               <span>{formattedTime}</span>
             </div>
           </div>
@@ -164,22 +168,24 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
         /* Claude/Error/Tool messages on the left */
         <div className="w-full">
           {!isGrouped && (
-            <div className="mb-2 flex items-center space-x-3">
+            <div className="mb-2 flex items-center space-x-2">
               {message.type === 'error' ? (
-                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-red-600 text-sm text-white">
+                <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-destructive text-xs text-destructive-foreground">
                   !
                 </div>
               ) : message.type === 'tool' ? (
-                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gray-600 text-sm text-white dark:bg-gray-700">
+                <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-muted text-xs text-muted-foreground">
                   🔧
                 </div>
+              ) : (provider === 'claude' || provider === 'openclaude') ? (
+                <ClaudeSparkle className="h-5 w-5 flex-shrink-0 text-primary" />
               ) : (
-                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full p-1 text-sm text-white">
+                <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full p-0.5">
                   <SessionProviderLogo provider={provider} className="h-full w-full" />
                 </div>
               )}
-              <div className="text-sm font-medium text-gray-900 dark:text-white">
-                {message.type === 'error' ? t('messageTypes.error') : message.type === 'tool' ? t('messageTypes.tool') : (provider === 'cursor' ? t('messageTypes.cursor') : provider === 'codex' ? t('messageTypes.codex') : provider === 'gemini' ? t('messageTypes.gemini') : t('messageTypes.claude'))}
+              <div className="text-sm font-medium text-foreground">
+                {message.type === 'error' ? t('messageTypes.error') : message.type === 'tool' ? t('messageTypes.tool') : (provider === 'cursor' ? t('messageTypes.cursor') : provider === 'codex' ? t('messageTypes.codex') : provider === 'gemini' ? t('messageTypes.gemini') : provider === 'openclaude' ? t('messageTypes.openclaude') : t('messageTypes.claude'))}
               </div>
             </div>
           )}
@@ -390,7 +396,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                 </ReasoningContent>
               </Reasoning>
             ) : (
-              <div className="text-sm text-gray-700 dark:text-gray-300">
+              <div className="text-sm text-foreground">
                 {/* Reasoning accordion */}
                 {showThinking && message.reasoning && (
                   <Reasoning className="mb-3" defaultOpen={false}>
@@ -453,11 +459,13 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
             )}
 
             {(shouldShowAssistantCopyControl || !isGrouped) && (
-              <div className="mt-1 flex w-full items-center gap-2 text-[11px] text-gray-400 dark:text-gray-500">
-                {shouldShowAssistantCopyControl && (
-                  <MessageCopyControl content={assistantCopyContent} messageType="assistant" />
-                )}
+              <div className="mt-2 flex w-full items-center gap-2 text-[11px] text-muted-foreground/60">
                 {!isGrouped && <span>{formattedTime}</span>}
+                <div className="ml-auto opacity-0 transition-opacity group-hover/msg:opacity-100">
+                  {shouldShowAssistantCopyControl && (
+                    <MessageActions content={assistantCopyContent} messageType="assistant" />
+                  )}
+                </div>
               </div>
             )}
           </div>

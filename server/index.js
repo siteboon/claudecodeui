@@ -47,6 +47,13 @@ import {
     isGeminiSessionActive,
     getActiveGeminiSessions,
 } from './gemini-cli.js';
+import {
+    spawnOpenClaude,
+    abortOpenClaudeSession,
+    isOpenClaudeSessionActive,
+    getActiveOpenClaudeSessions,
+} from './openclaude-cli.js';
+import { createCrewAIRunner } from './services/crewai-runner.service.js';
 import sessionManager from './sessionManager.js';
 import {
     stripAnsiSequences,
@@ -88,6 +95,8 @@ console.log('SERVER_PORT from env:', process.env.SERVER_PORT);
 const app = express();
 const server = http.createServer(app);
 
+const crewAIRunner = createCrewAIRunner();
+
 // Single WebSocket server that handles chat, shell, and plugin proxy paths.
 const wss = createWebSocketServer(server, {
     verifyClient: {
@@ -99,21 +108,27 @@ const wss = createWebSocketServer(server, {
         spawnCursor,
         queryCodex,
         spawnGemini,
+        spawnOpenClaude,
         abortClaudeSDKSession,
         abortCursorSession,
         abortCodexSession,
         abortGeminiSession,
+        abortOpenClaudeSession,
         resolveToolApproval,
         isClaudeSDKSessionActive,
         isCursorSessionActive,
         isCodexSessionActive,
         isGeminiSessionActive,
+        isOpenClaudeSessionActive,
         reconnectSessionWriter,
         getPendingApprovalsForSession,
         getActiveClaudeSDKSessions,
         getActiveCursorSessions,
         getActiveCodexSessions,
         getActiveGeminiSessions,
+        getActiveOpenClaudeSessions,
+        startCrewAIRun: crewAIRunner.startRun,
+        abortCrewAIRun: crewAIRunner.abortRun,
     },
     shell: {
         getSessionById: (sessionId) => sessionManager.getSession(sessionId),

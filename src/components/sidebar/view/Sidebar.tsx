@@ -273,6 +273,21 @@ function Sidebar({
             onShowVersionModal={() => setShowVersionModal(true)}
             onShowSettings={onShowSettings}
             projectListProps={projectListProps}
+            conversationListProps={{
+              projects,
+              getProjectSessions,
+              selectedSessionId: selectedSession?.id ?? null,
+              onSessionClick: (session, projectId) => {
+                const project = projects.find((p) => p.projectId === projectId);
+                if (project) handleProjectSelect(project);
+                handleSessionClick(session, projectId);
+              },
+              onDeleteSession: showDeleteSessionConfirmation,
+              onStartEditingSession: (sessionId, initialName) => {
+                setEditingSession(sessionId);
+                setEditingSessionName(initialName);
+              },
+            }}
             t={t}
           />
         </>

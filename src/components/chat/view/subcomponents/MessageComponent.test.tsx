@@ -25,6 +25,12 @@ vi.mock('./Markdown', () => ({
   Markdown: ({ children }: { children: string }) => <div data-testid="markdown">{children}</div>,
 }));
 
+vi.mock('./MessageActions', () => ({
+  default: ({ messageType }: { messageType: string }) => (
+    <div data-testid="message-actions" data-message-type={messageType} />
+  ),
+}));
+
 vi.mock('./MessageCopyControl', () => ({
   default: ({ messageType }: { messageType: string }) => (
     <button data-testid="copy-control" data-message-type={messageType} />
@@ -143,12 +149,12 @@ describe('MessageComponent — Phase 5 design system', () => {
       expect(avatar).toBeNull();
     });
 
-    it('shows copy control for non-empty user messages', () => {
+    it('shows message actions for non-empty user messages', () => {
       render(
         <MessageComponent message={makeMessage({ content: 'Copy me' })} {...defaultProps} />,
       );
-      const copyBtn = screen.getByTestId('copy-control');
-      expect(copyBtn.getAttribute('data-message-type')).toBe('user');
+      const actions = screen.getByTestId('message-actions');
+      expect(actions.getAttribute('data-message-type')).toBe('user');
     });
 
     it('renders image attachments', () => {
@@ -218,15 +224,15 @@ describe('MessageComponent — Phase 5 design system', () => {
       expect(logo.getAttribute('data-provider')).toBe('gemini');
     });
 
-    it('shows copy control for assistant messages with content', () => {
+    it('shows message actions for assistant messages with content', () => {
       render(
         <MessageComponent
           message={makeMessage({ type: 'assistant', content: 'Copy this' })}
           {...defaultProps}
         />,
       );
-      const copyBtn = screen.getByTestId('copy-control');
-      expect(copyBtn.getAttribute('data-message-type')).toBe('assistant');
+      const actions = screen.getByTestId('message-actions');
+      expect(actions.getAttribute('data-message-type')).toBe('assistant');
     });
 
     it('renders reasoning block when showThinking and reasoning present', () => {
@@ -369,7 +375,7 @@ describe('MessageComponent — Phase 5 design system', () => {
           {...defaultProps}
         />,
       );
-      const errorAvatar = container.querySelector('.bg-red-600');
+      const errorAvatar = container.querySelector('.bg-destructive');
       expect(errorAvatar).not.toBeNull();
       expect(errorAvatar!.textContent).toBe('!');
     });

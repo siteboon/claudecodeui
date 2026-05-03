@@ -10,6 +10,7 @@ import { PaletteOpsProvider, usePaletteOpsRegister } from '../../contexts/Palett
 import { useDeviceSettings } from '../../hooks/useDeviceSettings';
 import { useSessionProtection } from '../../hooks/useSessionProtection';
 import { useProjectsState } from '../../hooks/useProjectsState';
+import { useGlobalShortcuts } from '../../hooks/useGlobalShortcuts';
 
 export default function AppContent() {
   return (
@@ -63,6 +64,14 @@ function AppContentInner() {
   usePaletteOpsRegister({
     openSettings,
     refreshProjects: refreshProjectsSilently,
+  });
+
+  useGlobalShortcuts({
+    onNewChat: () => {
+      if (selectedProject) handleNewSession(selectedProject);
+    },
+    onToggleSidebar: () => setSidebarOpen((prev) => !prev),
+    onOpenSettings: openSettings,
   });
 
   useEffect(() => {
@@ -138,11 +147,11 @@ function AppContentInner() {
   }, []);
 
   return (
-    <div className="fixed inset-0 flex bg-background" style={{ bottom: 'var(--keyboard-height, 0px)' }}>
+    <div className="fixed inset-0 flex bg-background" role="application" aria-label="CloudCLI" style={{ bottom: 'var(--keyboard-height, 0px)' }}>
       {!isMobile ? (
-        <div className="h-full flex-shrink-0 border-r border-border/50">
+        <nav className="h-full flex-shrink-0 border-r border-border/50" aria-label="Sidebar">
           <Sidebar {...sidebarSharedProps} />
-        </div>
+        </nav>
       ) : (
         <div
           className={`fixed inset-0 z-50 flex transition-all duration-150 ease-out ${sidebarOpen ? 'visible opacity-100' : 'invisible opacity-0'
@@ -172,7 +181,7 @@ function AppContentInner() {
         </div>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <main className="flex min-w-0 flex-1 flex-col">
         <MainContent
           selectedProject={selectedProject}
           selectedSession={selectedSession}
@@ -195,7 +204,7 @@ function AppContentInner() {
           onShowSettings={() => setShowSettings(true)}
           externalMessageUpdate={externalMessageUpdate}
         />
-      </div>
+      </main>
 
       <CommandPalette
         selectedProject={selectedProject}

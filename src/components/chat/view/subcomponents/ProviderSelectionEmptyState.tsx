@@ -325,6 +325,7 @@ export default function ProviderSelectionEmptyState({
 
           <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground/60">
             <Trans
+              t={t}
               i18nKey="providerSelection.pressToSearch"
               values={{ shortcut: MOD_KEY === "⌘" ? "⌘K" : "Ctrl+K" }}
               components={{

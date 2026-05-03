@@ -675,18 +675,16 @@ export function useChatComposerState({
         });
       } else if (provider === 'openclaude') {
         sendMessage({
-          type: 'claude-command',
+          type: 'openclaude-command',
           command: messageContent,
           options: {
             projectPath: resolvedProjectPath,
             cwd: resolvedProjectPath,
             sessionId: effectiveSessionId,
             resume: Boolean(effectiveSessionId),
-            toolsSettings,
             permissionMode,
             model: openclaudeModel,
             sessionSummary,
-            images: uploadedImages,
           },
         });
       } else {

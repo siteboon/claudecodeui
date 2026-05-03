@@ -1,104 +1,54 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 
-import ModelSelectorPopover from './ModelSelectorPopover';
+import ModelSelectorButton from './ModelSelectorPopover';
 
-const providers = [
-  { id: 'claude', label: 'Claude', models: ['claude-opus-4', 'claude-sonnet-4', 'claude-haiku'] },
-  { id: 'gemini', label: 'Gemini', models: ['gemini-2.5-pro', 'gemini-2.5-flash'] },
-];
+describe('ModelSelectorButton', () => {
+  const defaultProps = {
+    currentProvider: 'claude' as const,
+    currentModel: 'opus',
+    currentModelLabel: 'Opus',
+    onSelect: vi.fn(),
+  };
 
-describe('ModelSelectorPopover', () => {
-  it('renders provider tabs', () => {
-    render(
-      <ModelSelectorPopover
-        isOpen={true}
-        onClose={vi.fn()}
-        providers={providers}
-        selectedProvider="claude"
-        selectedModel="claude-sonnet-4"
-        onSelect={vi.fn()}
-      />,
-    );
-    expect(screen.getByText('Claude')).toBeDefined();
-    expect(screen.getByText('Gemini')).toBeDefined();
+  it('renders the trigger button with model label', () => {
+    render(<ModelSelectorButton {...defaultProps} />);
+    expect(screen.getByText('Opus')).toBeDefined();
   });
 
-  it('renders model list for selected provider', () => {
-    render(
-      <ModelSelectorPopover
-        isOpen={true}
-        onClose={vi.fn()}
-        providers={providers}
-        selectedProvider="claude"
-        selectedModel="claude-sonnet-4"
-        onSelect={vi.fn()}
-      />,
-    );
-    expect(screen.getByText('claude-opus-4')).toBeDefined();
-    expect(screen.getByText('claude-sonnet-4')).toBeDefined();
-    expect(screen.getByText('claude-haiku')).toBeDefined();
+  it('opens popover on click and shows provider tabs', () => {
+    render(<ModelSelectorButton {...defaultProps} />);
+    fireEvent.click(screen.getByText('Opus'));
+    expect(screen.getByTestId('model-selector-popover')).toBeDefined();
+    expect(screen.getByText('Anthropic')).toBeDefined();
+    expect(screen.getByText('Google')).toBeDefined();
   });
 
   it('marks the selected model with a checkmark', () => {
-    const { container } = render(
-      <ModelSelectorPopover
-        isOpen={true}
-        onClose={vi.fn()}
-        providers={providers}
-        selectedProvider="claude"
-        selectedModel="claude-sonnet-4"
-        onSelect={vi.fn()}
-      />,
-    );
-    const selected = container.querySelector('[data-testid="model-item-claude-sonnet-4"]');
+    const { container } = render(<ModelSelectorButton {...defaultProps} />);
+    fireEvent.click(screen.getByText('Opus'));
+    const selected = container.querySelector('[data-testid="model-item-opus"]');
     expect(selected).toBeDefined();
     expect(selected!.querySelector('[data-testid="model-check"]')).toBeDefined();
   });
 
   it('calls onSelect with provider and model when a model is clicked', () => {
     const onSelect = vi.fn();
-    render(
-      <ModelSelectorPopover
-        isOpen={true}
-        onClose={vi.fn()}
-        providers={providers}
-        selectedProvider="claude"
-        selectedModel="claude-sonnet-4"
-        onSelect={onSelect}
-      />,
-    );
-    fireEvent.click(screen.getByText('claude-opus-4'));
-    expect(onSelect).toHaveBeenCalledWith('claude', 'claude-opus-4');
+    render(<ModelSelectorButton {...defaultProps} onSelect={onSelect} />);
+    fireEvent.click(screen.getByText('Opus'));
+    fireEvent.click(screen.getByText('Sonnet'));
+    expect(onSelect).toHaveBeenCalledWith('claude', 'sonnet');
   });
 
   it('switches model list when clicking a different provider tab', () => {
-    render(
-      <ModelSelectorPopover
-        isOpen={true}
-        onClose={vi.fn()}
-        providers={providers}
-        selectedProvider="claude"
-        selectedModel="claude-sonnet-4"
-        onSelect={vi.fn()}
-      />,
-    );
-    fireEvent.click(screen.getByText('Gemini'));
-    expect(screen.getByText('gemini-2.5-pro')).toBeDefined();
-    expect(screen.getByText('gemini-2.5-flash')).toBeDefined();
+    render(<ModelSelectorButton {...defaultProps} />);
+    fireEvent.click(screen.getByText('Opus'));
+    fireEvent.click(screen.getByText('Google'));
+    expect(screen.getByText('Gemini 2.5 Pro')).toBeDefined();
   });
 
-  it('renders nothing when isOpen is false', () => {
-    const { container } = render(
-      <ModelSelectorPopover
-        isOpen={false}
-        onClose={vi.fn()}
-        providers={providers}
-        selectedProvider="claude"
-        selectedModel="claude-sonnet-4"
-        onSelect={vi.fn()}
-      />,
-    );
+  it('does not show popover initially', () => {
+    const { container } = render(<ModelSelectorButton {...defaultProps} />);
     expect(container.querySelector('[data-testid="model-selector-popover"]')).toBeNull();
   });
 });

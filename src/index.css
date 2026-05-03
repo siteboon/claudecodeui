@@ -56,6 +56,12 @@
 
 @layer base {
   :root {
+    /* Typography */
+    --font-sans: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont,
+                 "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: "JetBrains Mono", "Fira Code", "SF Mono", "Cascadia Code",
+                 "Consolas", "Liberation Mono", monospace;
+
     /* Core surfaces — warm beige Claude Desktop palette */
     --background: 36 33% 97%;
     --foreground: 25 8% 14%;

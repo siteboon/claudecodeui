@@ -9,8 +9,9 @@ import { queryClaudeSDK } from '../claude-sdk.js';
 import { spawnCursor } from '../cursor-cli.js';
 import { queryCodex } from '../openai-codex.js';
 import { spawnGemini } from '../gemini-cli.js';
+import { spawnOpenClaude } from '../openclaude-cli.js';
 import { Octokit } from '@octokit/rest';
-import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants.js';
+import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS, OPENCLAUDE_MODELS } from '../../shared/modelConstants.js';
 import { IS_PLATFORM } from '../constants/config.js';
 import { normalizeProjectPath } from '../shared/utils.js';
 
@@ -859,8 +860,8 @@ router.post('/', validateExternalApiKey, async (req, res) => {
     return res.status(400).json({ error: 'message is required' });
   }
 
-  if (!['claude', 'cursor', 'codex', 'gemini', 'groq'].includes(provider)) {
-    return res.status(400).json({ error: 'provider must be "claude", "cursor", "codex", "gemini", or "groq"' });
+  if (!['claude', 'cursor', 'codex', 'gemini', 'groq', 'openclaude'].includes(provider)) {
+    return res.status(400).json({ error: 'provider must be "claude", "cursor", "codex", "gemini", "groq", or "openclaude"' });
   }
 
   // Validate GitHub branch/PR creation requirements
@@ -979,6 +980,16 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         sessionId: sessionId || null,
         model: model,
         skipPermissions: true // CLI mode bypasses permissions
+      }, writer);
+    } else if (provider === 'openclaude') {
+      console.log('🔓 Starting OpenClaude CLI session');
+
+      await spawnOpenClaude(message.trim(), {
+        projectPath: finalProjectPath,
+        cwd: finalProjectPath,
+        sessionId: sessionId || null,
+        model: model || OPENCLAUDE_MODELS.DEFAULT,
+        permissionMode: 'bypassPermissions'
       }, writer);
     }
 

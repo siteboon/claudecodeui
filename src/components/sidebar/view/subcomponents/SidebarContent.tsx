@@ -8,6 +8,7 @@ import type { ConversationSearchResults, SearchProgress } from '../../hooks/useS
 import SidebarFooter from './SidebarFooter';
 import SidebarHeader from './SidebarHeader';
 import SidebarProjectList, { type SidebarProjectListProps } from './SidebarProjectList';
+import SidebarConversationList, { type SidebarConversationListProps } from './SidebarConversationList';
 
 type SearchMode = 'projects' | 'conversations';
 
@@ -62,6 +63,7 @@ type SidebarContentProps = {
   onShowVersionModal: () => void;
   onShowSettings: () => void;
   projectListProps: SidebarProjectListProps;
+  conversationListProps: Omit<SidebarConversationListProps, 't'>;
   t: TFunction;
 };
 
@@ -90,6 +92,7 @@ export default function SidebarContent({
   onShowVersionModal,
   onShowSettings,
   projectListProps,
+  conversationListProps,
   t,
 }: SidebarContentProps) {
   const showConversationSearch = searchMode === 'conversations' && searchFilter.trim().length >= 2;
@@ -214,6 +217,8 @@ export default function SidebarContent({
               ))}
             </div>
           ) : null
+        ) : searchMode === 'conversations' ? (
+          <SidebarConversationList {...conversationListProps} t={t} />
         ) : (
           <SidebarProjectList {...projectListProps} />
         )}

@@ -14,9 +14,11 @@ import type {
 import { ImageIcon, MessageSquareIcon, XIcon, ArrowDownIcon } from 'lucide-react';
 import type { PendingPermissionRequest, PermissionMode, Provider } from '../../types/types';
 import { useToast } from '../../../../contexts/ToastContext';
+import type { LLMProvider } from '../../../../types/app';
 import CommandMenu from './CommandMenu';
 import ClaudeStatus from './ClaudeStatus';
 import ImageAttachment from './ImageAttachment';
+import ModelSelectorButton from './ModelSelectorPopover';
 import PermissionRequestsBanner from './PermissionRequestsBanner';
 import ThinkingModeSelector from './ThinkingModeSelector';
 import TokenUsagePie from './TokenUsagePie';
@@ -103,6 +105,9 @@ interface ChatComposerProps {
   placeholder: string;
   isTextareaExpanded: boolean;
   sendByCtrlEnter?: boolean;
+  currentModel: string;
+  currentModelLabel: string;
+  onProviderModelChange: (provider: LLMProvider, model: string) => void;
 }
 
 export default function ChatComposer({
@@ -158,6 +163,9 @@ export default function ChatComposer({
   placeholder,
   isTextareaExpanded,
   sendByCtrlEnter,
+  currentModel,
+  currentModelLabel,
+  onProviderModelChange,
 }: ChatComposerProps) {
   const { t } = useTranslation('chat');
   const { toast } = useToast();
@@ -217,7 +225,7 @@ export default function ChatComposer({
         </div>
       )}
 
-      {!hasQuestionPanel && <div className="relative mx-auto max-w-4xl">
+      {!hasQuestionPanel && <div className="relative mx-auto w-full max-w-chat px-0 sm:px-0">
         {isUserScrolledUp && hasMessages && (
           <div className="absolute -top-10 left-0 right-0 z-10 flex justify-center">
             <button
@@ -437,6 +445,52 @@ export default function ChatComposer({
           </div>
         </PromptInputFooter>
       </PromptInput>
+
+        <div className="mt-1.5 flex items-center justify-between px-1">
+          <ModelSelectorButton
+            currentProvider={provider as LLMProvider}
+            currentModel={currentModel}
+            currentModelLabel={currentModelLabel}
+            onSelect={onProviderModelChange}
+          />
+
+          <Tooltip content={t(`codex.descriptions.${permissionMode}`)} position="top">
+            <button
+              type="button"
+              onClick={handleModeSwitch}
+              className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <div
+                className={`h-1.5 w-1.5 rounded-full ${
+                  permissionMode === 'default'
+                    ? 'bg-muted-foreground'
+                    : permissionMode === 'acceptEdits'
+                      ? 'bg-green-500'
+                      : permissionMode === 'auto'
+                        ? 'bg-amber-500'
+                        : permissionMode === 'bypassPermissions'
+                          ? 'bg-red-500'
+                          : 'bg-primary'
+                }${permissionMode !== 'default' ? ' animate-pulse' : ''}`}
+              />
+              <span>
+                {permissionMode === 'default' && t('codex.modes.default')}
+                {permissionMode === 'acceptEdits' && t('codex.modes.acceptEdits')}
+                {permissionMode === 'auto' && t('codex.modes.auto')}
+                {permissionMode === 'bypassPermissions' && t('codex.modes.bypassPermissions')}
+                {permissionMode === 'plan' && t('codex.modes.plan')}
+              </span>
+            </button>
+          </Tooltip>
+
+          <span
+            className={`text-xs text-muted-foreground/50 transition-opacity duration-200 ${
+              input.trim() ? 'opacity-0' : 'opacity-100'
+            }`}
+          >
+            {sendByCtrlEnter ? t('input.hintText.ctrlEnter') : t('input.hintText.enter')}
+          </span>
+        </div>
       </div>}
     </div>
   );

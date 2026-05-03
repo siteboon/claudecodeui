@@ -1,20 +1,11 @@
+import ClaudeSparkle from '../../../icons/ClaudeSparkle';
+
 const SUGGESTIONS = [
   { title: 'Write code', description: 'for a REST API endpoint' },
   { title: 'Debug an issue', description: 'in my application' },
   { title: 'Explain a concept', description: 'in simple terms' },
   { title: 'Help me plan', description: 'a new project' },
 ];
-
-function ClaudeSparkle({ size = 48 }: { size?: number }) {
-  return (
-    <svg data-testid="claude-sparkle" width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <path
-        d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z"
-        fill="hsl(var(--primary))"
-      />
-    </svg>
-  );
-}
 
 interface EmptyStateProps {
   onSuggestionClick: (prompt: string) => void;
@@ -23,7 +14,7 @@ interface EmptyStateProps {
 export default function EmptyState({ onSuggestionClick }: EmptyStateProps) {
   return (
     <div className="mx-auto -mt-16 flex h-full max-w-lg flex-col items-center justify-center px-6">
-      <ClaudeSparkle size={48} />
+      <ClaudeSparkle data-testid="claude-sparkle" className="h-12 w-12 text-primary" />
       <h1 className="mb-8 mt-6 text-2xl font-semibold text-foreground">
         How can I help you today?
       </h1>

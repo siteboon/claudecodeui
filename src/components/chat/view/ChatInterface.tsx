@@ -11,6 +11,7 @@ import { useChatSessionState } from '../hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '../hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '../hooks/useChatComposerState';
 import { useSessionStore } from '../../../stores/useSessionStore';
+import { PROVIDERS } from '../../../../shared/modelConstants';
 
 import ChatMessagesPane from './subcomponents/ChatMessagesPane';
 import ChatComposer from './subcomponents/ChatComposer';
@@ -477,6 +478,41 @@ function ChatInterface({
           })}
           isTextareaExpanded={isTextareaExpanded}
           sendByCtrlEnter={sendByCtrlEnter}
+          currentModel={
+            provider === 'claude' ? claudeModel
+              : provider === 'cursor' ? cursorModel
+              : provider === 'codex' ? codexModel
+              : provider === 'gemini' ? geminiModel
+              : provider === 'groq' ? groqModel
+              : openclaudeModel
+          }
+          currentModelLabel={(() => {
+            const m = provider === 'claude' ? claudeModel
+              : provider === 'cursor' ? cursorModel
+              : provider === 'codex' ? codexModel
+              : provider === 'gemini' ? geminiModel
+              : provider === 'groq' ? groqModel
+              : openclaudeModel;
+            const providerConst = PROVIDERS.find((p) => p.id === provider);
+            const opt = providerConst?.models?.OPTIONS?.find((o: { value: string }) => o.value === m);
+            return opt?.label ?? m;
+          })()}
+          onProviderModelChange={(newProvider, newModel) => {
+            if (newProvider !== provider) {
+              setProvider(newProvider);
+              localStorage.setItem('selected-provider', newProvider);
+            }
+            const setters: Record<string, (v: string) => void> = {
+              claude: setClaudeModel,
+              cursor: setCursorModel,
+              codex: setCodexModel,
+              gemini: setGeminiModel,
+              groq: setGroqModel,
+              openclaude: setOpenclaudeModel,
+            };
+            setters[newProvider]?.(newModel);
+            localStorage.setItem(`${newProvider}-model`, newModel);
+          }}
         />
       </div>
 
