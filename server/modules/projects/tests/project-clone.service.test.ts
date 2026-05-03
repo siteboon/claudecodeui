@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
+import { test } from 'node:test';
 
 import { startCloneProject } from '@/modules/projects/services/project-clone.service.js';
 import { AppError } from '@/shared/utils.js';

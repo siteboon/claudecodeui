@@ -35,6 +35,7 @@
     "build:server": "tsc -p server/tsconfig.json && tsc-alias -p server/tsconfig.json",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p server/tsconfig.json",
+    "test": "tsx --tsconfig server/tsconfig.json --test --test-reporter=spec \"server/**/*.test.ts\"",
     "lint": "eslint src/ server/",
     "lint:fix": "eslint src/ server/ --fix",
     "start": "npm run build && npm run server",

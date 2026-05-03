@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import { test } from 'node:test';
 
 import { createProject } from '@/modules/projects/services/project-management.service.js';
 import { AppError } from '@/shared/utils.js';
