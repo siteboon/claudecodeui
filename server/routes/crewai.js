@@ -14,6 +14,16 @@ router.post('/start', async (req, res) => {
   try {
     const { config, options } = req.body;
 
+    if (!options || typeof options !== 'object' || typeof options.projectPath !== 'string') {
+      return res.status(400).json({ error: 'Invalid options: projectPath is required' });
+    }
+
+    // Allow only a simple project directory name to avoid path traversal/path injection.
+    // Disallows path separators and traversal forms by construction.
+    if (!/^[A-Za-z0-9._-]+$/.test(options.projectPath)) {
+      return res.status(400).json({ error: 'Invalid projectPath format' });
+    }
+
     const validation = validateCrewAIConfig(config);
     if (!validation.valid) {
       return res.status(400).json({ error: validation.error });
