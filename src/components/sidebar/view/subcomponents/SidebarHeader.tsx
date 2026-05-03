@@ -115,21 +115,8 @@ export default function SidebarHeader({
         {/* Search bar */}
         {projectsCount > 0 && !isLoading && (
           <div className="mt-2.5 space-y-2">
-            {/* Search mode toggle */}
+            {/* Search mode toggle — Conversations first (Claude Code default) */}
             <div className="flex rounded-lg bg-muted/50 p-0.5">
-              <button
-                onClick={() => onSearchModeChange('projects')}
-                aria-pressed={searchMode === 'projects'}
-                className={cn(
-                  "flex-1 flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all",
-                  searchMode === 'projects'
-                    ? "bg-background shadow-sm text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <Folder className="h-3 w-3" />
-                {t('search.modeProjects')}
-              </button>
               <button
                 onClick={() => onSearchModeChange('conversations')}
                 aria-pressed={searchMode === 'conversations'}
@@ -142,6 +129,19 @@ export default function SidebarHeader({
               >
                 <MessageSquare className="h-3 w-3" />
                 {t('search.modeConversations')}
+              </button>
+              <button
+                onClick={() => onSearchModeChange('projects')}
+                aria-pressed={searchMode === 'projects'}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all",
+                  searchMode === 'projects'
+                    ? "bg-background shadow-sm text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Folder className="h-3 w-3" />
+                {t('search.modeProjects')}
               </button>
             </div>
             <div className="relative">
@@ -219,19 +219,6 @@ export default function SidebarHeader({
           <div className="mt-2.5 space-y-2">
             <div className="flex rounded-lg bg-muted/50 p-0.5">
               <button
-                onClick={() => onSearchModeChange('projects')}
-                aria-pressed={searchMode === 'projects'}
-                className={cn(
-                  "flex-1 flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all",
-                  searchMode === 'projects'
-                    ? "bg-background shadow-sm text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <Folder className="h-3 w-3" />
-                {t('search.modeProjects')}
-              </button>
-              <button
                 onClick={() => onSearchModeChange('conversations')}
                 aria-pressed={searchMode === 'conversations'}
                 className={cn(
@@ -243,6 +230,19 @@ export default function SidebarHeader({
               >
                 <MessageSquare className="h-3 w-3" />
                 {t('search.modeConversations')}
+              </button>
+              <button
+                onClick={() => onSearchModeChange('projects')}
+                aria-pressed={searchMode === 'projects'}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all",
+                  searchMode === 'projects'
+                    ? "bg-background shadow-sm text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Folder className="h-3 w-3" />
+                {t('search.modeProjects')}
               </button>
             </div>
             <div className="relative">
