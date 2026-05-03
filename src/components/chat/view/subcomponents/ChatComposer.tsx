@@ -11,7 +11,7 @@ import type {
   SetStateAction,
   TouchEvent,
 } from 'react';
-import { ImageIcon, MessageSquareIcon, XIcon, ArrowDownIcon } from 'lucide-react';
+import { ImageIcon, MessageSquareIcon, PaperclipIcon, XIcon, ArrowDownIcon } from 'lucide-react';
 import type { PendingPermissionRequest, PermissionMode, Provider } from '../../types/types';
 import { useToast } from '../../../../contexts/ToastContext';
 import type { LLMProvider } from '../../../../types/app';
@@ -346,6 +346,13 @@ export default function ChatComposer({
               onClick={openImagePicker}
             >
               <ImageIcon />
+            </PromptInputButton>
+
+            <PromptInputButton
+              tooltip={{ content: t('input.attachFiles', 'Attach files') }}
+              onClick={openImagePicker}
+            >
+              <PaperclipIcon />
             </PromptInputButton>
 
             <Tooltip content={t(`codex.descriptions.${permissionMode}`)} position="top">

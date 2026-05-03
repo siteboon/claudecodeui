@@ -6,6 +6,7 @@ interface GlobalShortcutHandlers {
   onOpenSettings?: () => void;
   onFocusSearch?: () => void;
   onSwitchTab?: (index: number) => void;
+  onShowShortcuts?: () => void;
 }
 
 export function useGlobalShortcuts({
@@ -14,6 +15,7 @@ export function useGlobalShortcuts({
   onOpenSettings,
   onFocusSearch,
   onSwitchTab,
+  onShowShortcuts,
 }: GlobalShortcutHandlers) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -32,6 +34,9 @@ export function useGlobalShortcuts({
       } else if (e.key === 'k') {
         e.preventDefault();
         onFocusSearch?.();
+      } else if (e.key === '?' && e.shiftKey) {
+        e.preventDefault();
+        onShowShortcuts?.();
       } else if (e.key >= '1' && e.key <= '9' && onSwitchTab) {
         e.preventDefault();
         onSwitchTab(parseInt(e.key, 10) - 1);
@@ -40,5 +45,5 @@ export function useGlobalShortcuts({
 
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [onNewChat, onToggleSidebar, onOpenSettings, onFocusSearch, onSwitchTab]);
+  }, [onNewChat, onToggleSidebar, onOpenSettings, onFocusSearch, onSwitchTab, onShowShortcuts]);
 }

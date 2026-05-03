@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -11,6 +11,8 @@ import { useDeviceSettings } from '../../hooks/useDeviceSettings';
 import { useSessionProtection } from '../../hooks/useSessionProtection';
 import { useProjectsState } from '../../hooks/useProjectsState';
 import { useGlobalShortcuts } from '../../hooks/useGlobalShortcuts';
+import { useSidebarResize } from '../../hooks/useSidebarResize';
+import KeyboardShortcutsModal from '../settings/KeyboardShortcutsModal';
 
 export default function AppContent() {
   return (
@@ -66,7 +68,10 @@ function AppContentInner() {
     refreshProjects: refreshProjectsSilently,
   });
 
+  const { width: sidebarWidth, handleResizeStart } = useSidebarResize();
   const TAB_ORDER = ['chat', 'shell', 'files', 'git', 'tasks'] as const;
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const toggleShortcuts = useCallback(() => setShortcutsOpen((v) => !v), []);
 
   useGlobalShortcuts({
     onNewChat: () => {
@@ -74,6 +79,7 @@ function AppContentInner() {
     },
     onToggleSidebar: () => setSidebarOpen((prev) => !prev),
     onOpenSettings: openSettings,
+    onShowShortcuts: toggleShortcuts,
     onSwitchTab: (index) => {
       if (index < TAB_ORDER.length) {
         setActiveTab(TAB_ORDER[index]);
@@ -156,8 +162,14 @@ function AppContentInner() {
   return (
     <div className="fixed inset-0 flex bg-background" role="application" aria-label="CloudCLI" style={{ bottom: 'var(--keyboard-height, 0px)' }}>
       {!isMobile ? (
-        <nav className="h-full flex-shrink-0 border-r border-border/50" aria-label="Sidebar">
+        <nav className="relative h-full flex-shrink-0 border-r border-border/50" aria-label="Sidebar" style={{ width: sidebarOpen ? sidebarWidth : undefined }}>
           <Sidebar {...sidebarSharedProps} />
+          {sidebarOpen && (
+            <div
+              className="absolute right-0 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-primary/20 active:bg-primary/30"
+              onMouseDown={handleResizeStart}
+            />
+          )}
         </nav>
       ) : (
         <div
@@ -219,6 +231,8 @@ function AppContentInner() {
         onOpenSettings={() => openSettings()}
         onShowTab={setActiveTab}
       />
+
+      <KeyboardShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </div>
   );
 }
