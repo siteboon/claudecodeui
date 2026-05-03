@@ -65,6 +65,7 @@ import userRoutes from './routes/user.js';
 import geminiRoutes from './routes/gemini.js';
 import pluginsRoutes from './routes/plugins.js';
 import providerRoutes from './modules/providers/provider.routes.js';
+import nineRouterRoutes from './routes/nine-router.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
 import { initializeDatabase, projectsDb } from './modules/database/index.js';
 import { configureWebPush } from './services/vapid-keys.js';
@@ -184,6 +185,9 @@ app.use('/api/plugins', authenticateToken, pluginsRoutes);
 
 // Unified provider MCP routes (protected)
 app.use('/api/providers', authenticateToken, providerRoutes);
+
+// 9Router gateway status (protected)
+app.use('/api/9router', authenticateToken, nineRouterRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
