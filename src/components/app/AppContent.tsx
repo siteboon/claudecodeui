@@ -12,6 +12,7 @@ import { useSessionProtection } from '../../hooks/useSessionProtection';
 import { useProjectsState } from '../../hooks/useProjectsState';
 import { useGlobalShortcuts } from '../../hooks/useGlobalShortcuts';
 import { useSidebarResize } from '../../hooks/useSidebarResize';
+import ConnectionBanner from '../chat/view/subcomponents/ConnectionBanner';
 import KeyboardShortcutsModal from '../settings/KeyboardShortcutsModal';
 
 export default function AppContent() {
@@ -201,6 +202,7 @@ function AppContentInner() {
       )}
 
       <main className="flex min-w-0 flex-1 flex-col">
+        <ConnectionBanner isConnected={isConnected} />
         <MainContent
           selectedProject={selectedProject}
           selectedSession={selectedSession}
