@@ -193,7 +193,13 @@ app.use('/api/providers', authenticateToken, providerRoutes);
 const nineRouterLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 100, // limit each IP to 100 requests per window
+const crewaiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per window
     standardHeaders: true,
+    legacyHeaders: false,
+});
+app.use('/api/crewai', crewaiLimiter, authenticateToken, crewaiRoutes);
     legacyHeaders: false,
 });
 app.use('/api/9router', nineRouterLimiter, authenticateToken, nineRouterRoutes);
