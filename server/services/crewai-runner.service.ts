@@ -24,7 +24,7 @@ export type CrewAIStartResult = {
   error?: string;
 };
 
-type MockChildProcess = {
+type ChildProcess = {
   pid: number;
   stdout: { on: (event: string, cb: (data: Buffer) => void) => void };
   stderr: { on: (event: string, cb: (data: Buffer) => void) => void };
@@ -36,7 +36,7 @@ type SpawnFn = (
   command: string,
   args: string[],
   options: { cwd: string; env?: Record<string, string> },
-) => MockChildProcess;
+) => ChildProcess;
 
 export type CrewAIRunnerOptions = {
   spawn?: SpawnFn;
@@ -44,7 +44,7 @@ export type CrewAIRunnerOptions = {
 
 type ActiveRun = {
   runId: string;
-  process: MockChildProcess;
+  process: ChildProcess;
   stdoutBuffer: string;
 };
 
@@ -59,21 +59,24 @@ export type CrewAIRunner = {
   getActiveRunIds: () => string[];
 };
 
+const DOTDOT_PATTERN = /(?:^|[\\/])\.\.(?:[\\/]|$)/;
+
 export function createCrewAIRunner(opts?: CrewAIRunnerOptions): CrewAIRunner {
   const activeRuns = new Map<string, ActiveRun>();
 
   const defaultSpawn: SpawnFn = (command, args, options) => {
-    const resolvedCwd = path.resolve(options.cwd);
-    const root = path.resolve(process.env.CREWAI_PROJECTS_ROOT ?? process.cwd());
-    const canonicalRoot = realpathSync(root);
-    const canonicalCwd = realpathSync(resolvedCwd);
+    if (DOTDOT_PATTERN.test(options.cwd)) {
+      throw new Error('Invalid cwd: path traversal detected');
+    }
+    const canonicalRoot = realpathSync(path.resolve(process.env.CREWAI_PROJECTS_ROOT ?? process.cwd()));
+    const canonicalCwd = realpathSync(path.resolve(options.cwd));
     if (canonicalCwd !== canonicalRoot && !canonicalCwd.startsWith(canonicalRoot + path.sep)) {
       throw new Error('Invalid cwd: path must be within the allowed projects root');
     }
     return nodeSpawn(command, args, {
       cwd: canonicalCwd,
       env: { ...process.env, ...options.env },
-    }) as unknown as MockChildProcess;
+    }) as unknown as ChildProcess;
   };
 
   const spawnFn = opts?.spawn ?? defaultSpawn;
