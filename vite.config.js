@@ -42,7 +42,7 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       outDir: 'dist',
-      chunkSizeWarningLimit: 1000,
+      chunkSizeWarningLimit: 1500,
       rollupOptions: {
         output: {
           manualChunks: {
@@ -55,9 +55,14 @@ export default defineConfig(({ mode }) => {
               '@codemirror/lang-json',
               '@codemirror/lang-markdown',
               '@codemirror/lang-python',
-              '@codemirror/theme-one-dark'
+              '@codemirror/merge',
+              '@codemirror/theme-one-dark',
+              '@replit/codemirror-minimap'
             ],
-            'vendor-xterm': ['@xterm/xterm', '@xterm/addon-fit', '@xterm/addon-clipboard', '@xterm/addon-webgl']
+            'vendor-xterm': ['@xterm/xterm', '@xterm/addon-fit', '@xterm/addon-clipboard', '@xterm/addon-webgl', '@xterm/addon-web-links'],
+            'vendor-syntax-highlight': ['react-syntax-highlighter'],
+            'vendor-markdown': ['react-markdown', 'remark-gfm', 'remark-math', 'rehype-raw', 'rehype-katex', 'katex'],
+            'vendor-i18n': ['i18next', 'react-i18next', 'i18next-browser-languagedetector']
           }
         }
       }
