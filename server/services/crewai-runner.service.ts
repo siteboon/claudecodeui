@@ -95,14 +95,14 @@ export function createCrewAIRunner(opts?: CrewAIRunnerOptions): CrewAIRunner {
     try {
       spawnArgs = buildCrewAISpawnArgs(options);
     } catch (err) {
-      return { success: false, error: err instanceof Error ? err.message : String(err) };
+      return Promise.resolve({ success: false, error: err instanceof Error ? err.message : String(err) });
     }
 
     const allowedRoot = path.resolve(process.env.CREWAI_PROJECTS_ROOT ?? process.cwd());
     const canonicalAllowedRoot = realpathSync(allowedRoot);
     const safeCwd = realpathSync(path.resolve(spawnArgs.cwd));
     if (safeCwd !== canonicalAllowedRoot && !safeCwd.startsWith(canonicalAllowedRoot + path.sep)) {
-      return { success: false, error: 'Project path is outside the allowed root' };
+      return Promise.resolve({ success: false, error: 'Project path is outside the allowed root' });
     }
 
     const runId = randomUUID();
