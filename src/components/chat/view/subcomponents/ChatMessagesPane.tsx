@@ -7,7 +7,7 @@ import type { ChatMessage } from '../../types/types';
 import { getIntrinsicMessageKey } from '../../utils/messageKeys';
 
 import MessageComponent from './MessageComponent';
-import ProviderSelectionEmptyState from './ProviderSelectionEmptyState';
+import EmptyState from './EmptyState';
 
 interface ChatMessagesPaneProps {
   scrollContainerRef: RefObject<HTMLDivElement>;
@@ -151,28 +151,11 @@ export default function ChatMessagesPane({
           </div>
         </div>
       ) : chatMessages.length === 0 ? (
-        <ProviderSelectionEmptyState
-          selectedSession={selectedSession}
-          currentSessionId={currentSessionId}
-          provider={provider}
-          setProvider={setProvider}
-          textareaRef={textareaRef}
-          claudeModel={claudeModel}
-          setClaudeModel={setClaudeModel}
-          cursorModel={cursorModel}
-          setCursorModel={setCursorModel}
-          codexModel={codexModel}
-          setCodexModel={setCodexModel}
-          geminiModel={geminiModel}
-          setGeminiModel={setGeminiModel}
-          groqModel={groqModel}
-          setGroqModel={setGroqModel}
-          openclaudeModel={openclaudeModel}
-          setOpenclaudeModel={setOpenclaudeModel}
-          tasksEnabled={tasksEnabled}
-          isTaskMasterInstalled={isTaskMasterInstalled}
-          onShowAllTasks={onShowAllTasks}
-          setInput={setInput}
+        <EmptyState
+          onSuggestionClick={(prompt) => {
+            setInput(prompt);
+            textareaRef.current?.focus();
+          }}
         />
       ) : (
         <>

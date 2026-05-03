@@ -13,7 +13,7 @@ interface EmptyStateProps {
 
 export default function EmptyState({ onSuggestionClick }: EmptyStateProps) {
   return (
-    <div className="mx-auto -mt-16 flex h-full max-w-lg flex-col items-center justify-center px-6">
+    <div className="mx-auto flex h-full max-w-lg flex-col items-center justify-center px-6">
       <ClaudeSparkle data-testid="claude-sparkle" className="h-12 w-12 text-primary" />
       <h1 className="mb-8 mt-6 text-2xl font-semibold text-foreground">
         How can I help you today?
