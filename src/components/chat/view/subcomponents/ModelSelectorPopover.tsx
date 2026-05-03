@@ -17,6 +17,24 @@ interface ModelSelectorButtonProps {
   onSelect: (provider: LLMProvider, model: string) => void;
 }
 
+const MODEL_BADGES: Record<string, string[]> = {
+  'claude-opus-4-20250514': ['Vision', 'Thinking'],
+  'claude-sonnet-4-20250514': ['Vision', 'Thinking'],
+  'claude-3-5-sonnet-20241022': ['Vision'],
+  'claude-3-5-haiku-20241022': ['Fast'],
+  'o4-mini': ['Thinking'],
+  'gpt-4.1': ['Vision'],
+  'gemini-2.5-pro': ['Vision', 'Thinking'],
+  'gemini-2.5-flash': ['Fast', 'Vision'],
+};
+
+function getBadges(modelValue: string): string[] {
+  for (const [key, badges] of Object.entries(MODEL_BADGES)) {
+    if (modelValue.includes(key)) return badges;
+  }
+  return [];
+}
+
 function ProviderIcon({ provider, className }: { provider: string; className?: string }) {
   if (provider === 'claude' || provider === 'openclaude') {
     return <ClaudeSparkle className={className} />;
@@ -112,7 +130,14 @@ export default function ModelSelectorButton({
                     isSelected ? 'bg-primary/10 text-foreground' : 'hover:bg-accent'
                   }`}
                 >
-                  <span className="text-sm font-medium">{model.label}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">{model.label}</span>
+                    {getBadges(model.value).map((badge) => (
+                      <span key={badge} className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                        {badge}
+                      </span>
+                    ))}
+                  </div>
                   {isSelected && <Check data-testid="model-check" className="h-4 w-4 text-primary" />}
                 </button>
               );
