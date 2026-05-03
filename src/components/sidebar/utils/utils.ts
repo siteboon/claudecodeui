@@ -81,6 +81,10 @@ export const getSessionName = (session: SessionWithProvider, t: TFunction): stri
     return session.summary || session.name || t('projects.newSession');
   }
 
+  if (session.__provider === 'openclaude') {
+    return session.summary || session.name || t('projects.newSession');
+  }
+
   return session.summary || t('projects.newSession');
 };
 
@@ -109,6 +113,7 @@ export const createSessionViewModel = (
     isCodexSession: session.__provider === 'codex',
     isGeminiSession: session.__provider === 'gemini',
     isGroqSession: session.__provider === 'groq',
+    isOpenClaudeSession: session.__provider === 'openclaude',
     isActive: diffInMinutes < 10,
     sessionName: getSessionName(session, t),
     sessionTime: getSessionTime(session),
@@ -142,7 +147,12 @@ export const getAllSessions = (project: Project): SessionWithProvider[] => {
     __provider: 'groq' as const,
   }));
 
-  return [...claudeSessions, ...cursorSessions, ...codexSessions, ...geminiSessions, ...groqSessions].sort(
+  const openclaudeSessions = (project.openclaudeSessions || []).map((session) => ({
+    ...session,
+    __provider: 'openclaude' as const,
+  }));
+
+  return [...claudeSessions, ...cursorSessions, ...codexSessions, ...geminiSessions, ...groqSessions, ...openclaudeSessions].sort(
     (a, b) => getSessionDate(b).getTime() - getSessionDate(a).getTime(),
   );
 };

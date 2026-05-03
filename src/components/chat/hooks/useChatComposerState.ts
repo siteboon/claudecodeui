@@ -43,6 +43,7 @@ interface UseChatComposerStateArgs {
   codexModel: string;
   geminiModel: string;
   groqModel: string;
+  openclaudeModel: string;
   isLoading: boolean;
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
@@ -116,6 +117,7 @@ export function useChatComposerState({
   codexModel,
   geminiModel,
   groqModel,
+  openclaudeModel,
   isLoading,
   canAbortSession,
   tokenBudget,
@@ -292,7 +294,7 @@ export function useChatComposerState({
           projectId: selectedProject.projectId,
           sessionId: currentSessionId,
           provider,
-          model: provider === 'cursor' ? cursorModel : provider === 'codex' ? codexModel : provider === 'gemini' ? geminiModel : provider === 'groq' ? groqModel : claudeModel,
+          model: provider === 'cursor' ? cursorModel : provider === 'codex' ? codexModel : provider === 'gemini' ? geminiModel : provider === 'groq' ? groqModel : provider === 'openclaude' ? openclaudeModel : claudeModel,
           tokenUsage: tokenBudget,
         };
 
@@ -345,6 +347,7 @@ export function useChatComposerState({
       cursorModel,
       geminiModel,
       groqModel,
+      openclaudeModel,
       handleBuiltInCommand,
       handleCustomCommand,
       input,
@@ -585,7 +588,9 @@ export function useChatComposerState({
                   ? 'gemini-settings'
                   : provider === 'groq'
                     ? 'groq-settings'
-                    : 'claude-settings';
+                    : provider === 'openclaude'
+                      ? 'openclaude-settings'
+                      : 'claude-settings';
           const savedSettings = safeLocalStorage.getItem(settingsKey);
           if (savedSettings) {
             return JSON.parse(savedSettings);
@@ -668,6 +673,22 @@ export function useChatComposerState({
             images: uploadedImages,
           },
         });
+      } else if (provider === 'openclaude') {
+        sendMessage({
+          type: 'claude-command',
+          command: messageContent,
+          options: {
+            projectPath: resolvedProjectPath,
+            cwd: resolvedProjectPath,
+            sessionId: effectiveSessionId,
+            resume: Boolean(effectiveSessionId),
+            toolsSettings,
+            permissionMode,
+            model: openclaudeModel,
+            sessionSummary,
+            images: uploadedImages,
+          },
+        });
       } else {
         sendMessage({
           type: 'claude-command',
@@ -711,6 +732,7 @@ export function useChatComposerState({
       executeCommand,
       geminiModel,
       groqModel,
+      openclaudeModel,
       isLoading,
       onSessionActive,
       onSessionProcessing,

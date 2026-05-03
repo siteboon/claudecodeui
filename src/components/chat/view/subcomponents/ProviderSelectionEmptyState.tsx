@@ -10,6 +10,7 @@ import {
   CODEX_MODELS,
   GEMINI_MODELS,
   GROQ_MODELS,
+  OPENCLAUDE_MODELS,
   PROVIDERS,
 } from "../../../../../shared/modelConstants";
 import type { ProjectSession, LLMProvider } from "../../../../types/app";
@@ -47,6 +48,8 @@ type ProviderSelectionEmptyStateProps = {
   setGeminiModel: (model: string) => void;
   groqModel: string;
   setGroqModel: (model: string) => void;
+  openclaudeModel: string;
+  setOpenclaudeModel: (model: string) => void;
   tasksEnabled: boolean;
   isTaskMasterInstalled: boolean | null;
   onShowAllTasks?: (() => void) | null;
@@ -70,6 +73,7 @@ function getModelConfig(p: LLMProvider) {
   if (p === "codex") return CODEX_MODELS;
   if (p === "gemini") return GEMINI_MODELS;
   if (p === "groq") return GROQ_MODELS;
+  if (p === "openclaude") return OPENCLAUDE_MODELS;
   return CURSOR_MODELS;
 }
 
@@ -80,11 +84,13 @@ function getCurrentModel(
   co: string,
   g: string,
   gr: string,
+  oc: string,
 ) {
   if (p === "claude") return c;
   if (p === "codex") return co;
   if (p === "gemini") return g;
   if (p === "groq") return gr;
+  if (p === "openclaude") return oc;
   return cu;
 }
 
@@ -93,6 +99,7 @@ function getProviderDisplayName(p: LLMProvider) {
   if (p === "cursor") return "Cursor";
   if (p === "codex") return "Codex";
   if (p === "groq") return "Groq";
+  if (p === "openclaude") return "OpenClaude";
   return "Gemini";
 }
 
@@ -112,6 +119,8 @@ export default function ProviderSelectionEmptyState({
   setGeminiModel,
   groqModel,
   setGroqModel,
+  openclaudeModel,
+  setOpenclaudeModel,
   tasksEnabled,
   isTaskMasterInstalled,
   onShowAllTasks,
@@ -144,6 +153,7 @@ export default function ProviderSelectionEmptyState({
     codexModel,
     geminiModel,
     groqModel,
+    openclaudeModel,
   );
 
   const currentModelLabel = useMemo(() => {
@@ -168,12 +178,15 @@ export default function ProviderSelectionEmptyState({
       } else if (providerId === "groq") {
         setGroqModel(modelValue);
         localStorage.setItem("groq-model", modelValue);
+      } else if (providerId === "openclaude") {
+        setOpenclaudeModel(modelValue);
+        localStorage.setItem("openclaude-model", modelValue);
       } else {
         setCursorModel(modelValue);
         localStorage.setItem("cursor-model", modelValue);
       }
     },
-    [setClaudeModel, setCursorModel, setCodexModel, setGeminiModel, setGroqModel],
+    [setClaudeModel, setCursorModel, setCodexModel, setGeminiModel, setGroqModel, setOpenclaudeModel],
   );
 
   const handleModelSelect = useCallback(
@@ -302,6 +315,9 @@ export default function ProviderSelectionEmptyState({
                 }),
                 groq: t("providerSelection.readyPrompt.groq", {
                   model: groqModel,
+                }),
+                openclaude: t("providerSelection.readyPrompt.openclaude", {
+                  model: openclaudeModel,
                 }),
               }[provider]
             }

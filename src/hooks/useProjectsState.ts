@@ -61,7 +61,8 @@ const projectsHaveChanges = (
       serialize(nextProject.cursorSessions) !== serialize(prevProject.cursorSessions) ||
       serialize(nextProject.codexSessions) !== serialize(prevProject.codexSessions) ||
       serialize(nextProject.geminiSessions) !== serialize(prevProject.geminiSessions) ||
-      serialize(nextProject.groqSessions) !== serialize(prevProject.groqSessions)
+      serialize(nextProject.groqSessions) !== serialize(prevProject.groqSessions) ||
+      serialize(nextProject.openclaudeSessions) !== serialize(prevProject.openclaudeSessions)
     );
   });
 };
@@ -99,6 +100,7 @@ const getProjectSessions = (project: Project): ProjectSession[] => {
     ...(project.cursorSessions ?? []),
     ...(project.geminiSessions ?? []),
     ...(project.groqSessions ?? []),
+    ...(project.openclaudeSessions ?? []),
   ];
 };
 
@@ -147,6 +149,7 @@ const mergeExpandedSessionPages = (previousProjects: Project[], incomingProjects
       codexSessions: mergeSessionProviderLists(incomingProject.codexSessions ?? [], previousProject.codexSessions ?? []),
       geminiSessions: mergeSessionProviderLists(incomingProject.geminiSessions ?? [], previousProject.geminiSessions ?? []),
       groqSessions: mergeSessionProviderLists(incomingProject.groqSessions ?? [], previousProject.groqSessions ?? []),
+      openclaudeSessions: mergeSessionProviderLists(incomingProject.openclaudeSessions ?? [], previousProject.openclaudeSessions ?? []),
     };
 
     const totalSessions = Number(incomingProject.sessionMeta?.total ?? previousLoadedCount);
@@ -162,7 +165,7 @@ const mergeExpandedSessionPages = (previousProjects: Project[], incomingProjects
 
 const mergeProjectSessionPage = (
   existingProject: Project,
-  sessionsPage: Pick<Project, 'sessions' | 'cursorSessions' | 'codexSessions' | 'geminiSessions' | 'groqSessions' | 'sessionMeta'>,
+  sessionsPage: Pick<Project, 'sessions' | 'cursorSessions' | 'codexSessions' | 'geminiSessions' | 'groqSessions' | 'openclaudeSessions' | 'sessionMeta'>,
 ): Project => {
   const mergedProject: Project = {
     ...existingProject,
@@ -171,6 +174,7 @@ const mergeProjectSessionPage = (
     codexSessions: mergeSessionProviderLists(existingProject.codexSessions ?? [], sessionsPage.codexSessions ?? []),
     geminiSessions: mergeSessionProviderLists(existingProject.geminiSessions ?? [], sessionsPage.geminiSessions ?? []),
     groqSessions: mergeSessionProviderLists(existingProject.groqSessions ?? [], sessionsPage.groqSessions ?? []),
+    openclaudeSessions: mergeSessionProviderLists(existingProject.openclaudeSessions ?? [], sessionsPage.openclaudeSessions ?? []),
   };
 
   const totalSessions = Number(sessionsPage.sessionMeta?.total ?? existingProject.sessionMeta?.total ?? 0);
@@ -554,6 +558,21 @@ export function useProjectsState({
         }
         return;
       }
+
+      const openclaudeSession = project.openclaudeSessions?.find((session) => session.id === sessionId);
+      if (openclaudeSession) {
+        const shouldUpdateProject = selectedProject?.projectId !== project.projectId;
+        const shouldUpdateSession =
+          selectedSession?.id !== sessionId || selectedSession.__provider !== 'openclaude';
+
+        if (shouldUpdateProject) {
+          setSelectedProject(project);
+        }
+        if (shouldUpdateSession) {
+          setSelectedSession({ ...openclaudeSession, __provider: 'openclaude' });
+        }
+        return;
+      }
     }
   }, [sessionId, projects, selectedProject?.projectId, selectedSession?.id, selectedSession?.__provider]);
 
@@ -629,6 +648,7 @@ export function useProjectsState({
           const codexSessions = project.codexSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [];
           const geminiSessions = project.geminiSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [];
           const groqSessions = project.groqSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [];
+          const openclaudeSessions = project.openclaudeSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [];
 
           const removedFromProject = (
             sessions.length !== (project.sessions?.length ?? 0)
@@ -636,6 +656,7 @@ export function useProjectsState({
             || codexSessions.length !== (project.codexSessions?.length ?? 0)
             || geminiSessions.length !== (project.geminiSessions?.length ?? 0)
             || groqSessions.length !== (project.groqSessions?.length ?? 0)
+            || openclaudeSessions.length !== (project.openclaudeSessions?.length ?? 0)
           );
 
           if (!removedFromProject) {
@@ -649,6 +670,7 @@ export function useProjectsState({
             codexSessions,
             geminiSessions,
             groqSessions,
+            openclaudeSessions,
           };
 
           const totalSessions = Math.max(0, Number(project.sessionMeta?.total ?? 0) - 1);
@@ -742,7 +764,7 @@ export function useProjectsState({
       throw new Error(message);
     }
 
-    const sessionsPage = (await response.json()) as Pick<Project, 'sessions' | 'cursorSessions' | 'codexSessions' | 'geminiSessions' | 'groqSessions' | 'sessionMeta'>;
+    const sessionsPage = (await response.json()) as Pick<Project, 'sessions' | 'cursorSessions' | 'codexSessions' | 'geminiSessions' | 'groqSessions' | 'openclaudeSessions' | 'sessionMeta'>;
 
     let mergedProjectForSelection: Project | null = null;
     setProjects((previousProjects) =>

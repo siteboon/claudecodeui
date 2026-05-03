@@ -331,6 +331,9 @@
       },
       "groq": {
         "description": "Groq high-speed AI inference"
+      },
+      "openclaude": {
+        "description": "OpenClaude multi-provider AI assistant"
       }
     },
     "accounts": {

@@ -19,7 +19,8 @@
     "cursor": "Cursor",
     "codex": "Codex",
     "gemini": "Gemini",
-    "groq": "Groq"
+    "groq": "Groq",
+    "openclaude": "OpenClaude"
   },
   "tools": {
     "settings": "Tool Settings",
@@ -191,6 +192,7 @@
       "codex": "Ready to use Codex with {{model}}. Start typing your message below.",
       "gemini": "Ready to use Gemini with {{model}}. Start typing your message below.",
       "groq": "Ready to use Groq with {{model}}. Start typing your message below.",
+      "openclaude": "Ready to use OpenClaude with {{model}}. Start typing your message below.",
       "default": "Select a provider above to begin"
     },
     "pressToSearch": "Press <kbd>{{shortcut}}</kbd> to search sessions, files, and commits"

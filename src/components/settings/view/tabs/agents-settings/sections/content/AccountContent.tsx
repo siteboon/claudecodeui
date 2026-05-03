@@ -67,6 +67,14 @@ const agentConfig: Record<AgentProvider, AgentVisualConfig> = {
     subtextClass: 'text-orange-700 dark:text-orange-300',
     buttonClass: 'bg-orange-600 hover:bg-orange-700 active:bg-orange-800',
   },
+  openclaude: {
+    name: 'OpenClaude',
+    bgClass: 'bg-teal-50 dark:bg-teal-900/20',
+    borderClass: 'border-teal-200 dark:border-teal-800',
+    textClass: 'text-teal-900 dark:text-teal-100',
+    subtextClass: 'text-teal-700 dark:text-teal-300',
+    buttonClass: 'bg-teal-600 hover:bg-teal-700 active:bg-teal-800',
+  },
 };
 
 export default function AccountContent({ agent, authStatus, onLogin }: AccountContentProps) {

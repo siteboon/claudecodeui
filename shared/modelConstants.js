@@ -112,6 +112,23 @@ export const GROQ_MODELS = {
 };
 
 /**
+ * OpenClaude Models (via @gitlawb/openclaude CLI — supports 200+ models across providers)
+ */
+export const OPENCLAUDE_MODELS = {
+  OPTIONS: [
+    { value: "sonnet", label: "Sonnet" },
+    { value: "opus", label: "Opus" },
+    { value: "haiku", label: "Haiku" },
+    { value: "gpt-4.1", label: "GPT-4.1" },
+    { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+    { value: "deepseek-r1", label: "DeepSeek R1" },
+    { value: "llama-4-maverick", label: "Llama 4 Maverick" },
+  ],
+
+  DEFAULT: "sonnet",
+};
+
+/**
  * Ordered provider registry. Display order in selection UIs.
  */
 export const PROVIDERS = [
@@ -120,4 +137,5 @@ export const PROVIDERS = [
   { id: "gemini", name: "Google", models: GEMINI_MODELS },
   { id: "cursor", name: "Cursor", models: CURSOR_MODELS },
   { id: "groq", name: "Groq", models: GROQ_MODELS },
+  { id: "openclaude", name: "OpenClaude", models: OPENCLAUDE_MODELS },
 ];

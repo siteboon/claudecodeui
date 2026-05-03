@@ -112,6 +112,8 @@ function ChatInterface({
     setGeminiModel,
     groqModel,
     setGroqModel,
+    openclaudeModel,
+    setOpenclaudeModel,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
@@ -222,6 +224,7 @@ function ChatInterface({
     codexModel,
     geminiModel,
     groqModel,
+    openclaudeModel,
     isLoading,
     canAbortSession,
     tokenBudget,
@@ -326,7 +329,9 @@ function ChatInterface({
             ? t('messageTypes.gemini')
             : provider === 'groq'
               ? t('messageTypes.groq')
-              : t('messageTypes.claude');
+              : provider === 'openclaude'
+                ? t('messageTypes.openclaude')
+                : t('messageTypes.claude');
 
     return (
       <div className="flex h-full items-center justify-center">
@@ -374,6 +379,8 @@ function ChatInterface({
           setGeminiModel={setGeminiModel}
           groqModel={groqModel}
           setGroqModel={setGroqModel}
+          openclaudeModel={openclaudeModel}
+          setOpenclaudeModel={setOpenclaudeModel}
           tasksEnabled={tasksEnabled}
           isTaskMasterInstalled={isTaskMasterInstalled}
           onShowAllTasks={onShowAllTasks}
@@ -464,7 +471,9 @@ function ChatInterface({
                     ? t('messageTypes.gemini')
                     : provider === 'groq'
                       ? t('messageTypes.groq')
-                      : t('messageTypes.claude'),
+                      : provider === 'openclaude'
+                        ? t('messageTypes.openclaude')
+                        : t('messageTypes.claude'),
           })}
           isTextareaExpanded={isTextareaExpanded}
           sendByCtrlEnter={sendByCtrlEnter}

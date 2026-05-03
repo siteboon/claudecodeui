@@ -14,6 +14,10 @@ function includeProviderInGlobalMcp(providerId: LLMProvider): boolean {
     return false;
   }
 
+  if (providerId === 'openclaude') {
+    return false;
+  }
+
   return true;
 }
 

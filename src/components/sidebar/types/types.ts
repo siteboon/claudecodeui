@@ -47,6 +47,7 @@ export type SessionViewModel = {
   isCodexSession: boolean;
   isGeminiSession: boolean;
   isGroqSession: boolean;
+  isOpenClaudeSession: boolean;
   isActive: boolean;
   sessionName: string;
   sessionTime: string;

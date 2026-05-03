@@ -26,7 +26,7 @@ export default function AgentsSettingsTab({
   const { isWindowsServer } = useServerPlatform();
 
   const visibleAgents = useMemo<AgentProvider[]>(() => {
-    const all: AgentProvider[] = ['claude', 'cursor', 'codex', 'gemini', 'groq'];
+    const all: AgentProvider[] = ['claude', 'cursor', 'codex', 'gemini', 'groq', 'openclaude'];
     if (isWindowsServer) {
       return all.filter((id) => id !== 'cursor');
     }
@@ -61,6 +61,10 @@ export default function AgentsSettingsTab({
       authStatus: providerAuthStatus.groq,
       onLogin: () => onProviderLogin('groq'),
     },
+    openclaude: {
+      authStatus: providerAuthStatus.openclaude,
+      onLogin: () => onProviderLogin('openclaude'),
+    },
   }), [
     onProviderLogin,
     providerAuthStatus.claude,
@@ -68,6 +72,7 @@ export default function AgentsSettingsTab({
     providerAuthStatus.cursor,
     providerAuthStatus.gemini,
     providerAuthStatus.groq,
+    providerAuthStatus.openclaude,
   ]);
 
   return (

@@ -28,6 +28,8 @@ interface ChatMessagesPaneProps {
   setGeminiModel: (model: string) => void;
   groqModel: string;
   setGroqModel: (model: string) => void;
+  openclaudeModel: string;
+  setOpenclaudeModel: (model: string) => void;
   tasksEnabled: boolean;
   isTaskMasterInstalled: boolean | null;
   onShowAllTasks?: (() => void) | null;
@@ -75,6 +77,8 @@ export default function ChatMessagesPane({
   setGeminiModel,
   groqModel,
   setGroqModel,
+  openclaudeModel,
+  setOpenclaudeModel,
   tasksEnabled,
   isTaskMasterInstalled,
   onShowAllTasks,
@@ -160,6 +164,8 @@ export default function ChatMessagesPane({
           setGeminiModel={setGeminiModel}
           groqModel={groqModel}
           setGroqModel={setGroqModel}
+          openclaudeModel={openclaudeModel}
+          setOpenclaudeModel={setOpenclaudeModel}
           tasksEnabled={tasksEnabled}
           isTaskMasterInstalled={isTaskMasterInstalled}
           onShowAllTasks={onShowAllTasks}
