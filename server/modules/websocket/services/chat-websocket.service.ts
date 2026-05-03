@@ -25,6 +25,15 @@ type ChatIncomingMessage = AnyRecord & {
 
 const DEFAULT_PROVIDER: LLMProvider = 'claude';
 
+type CrewAICommandPayload = {
+  projectPath: string;
+  inputs?: Record<string, string>;
+  mode?: 'local' | 'cloud' | 'hybrid';
+  localProjectPath?: string;
+  cloudApiKey?: string;
+  nineRouterBaseUrl?: string;
+};
+
 type ChatWebSocketDependencies = {
   queryClaudeSDK: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
   spawnCursor: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
@@ -53,13 +62,23 @@ type ChatWebSocketDependencies = {
   getActiveCursorSessions: () => unknown;
   getActiveCodexSessions: () => unknown;
   getActiveGeminiSessions: () => unknown;
+  startCrewAIRun?: (
+    config: { mode: string; localProjectPath: string; cloudApiKey?: string },
+    options: { projectPath: string; inputs: Record<string, string>; nineRouterBaseUrl?: string },
+    callbacks: {
+      onAgentOutput: (output: { agentRole: string; task: string; output: string }) => void;
+      onCrewComplete: (outputs: Array<{ agentRole: string; task: string; output: string }>, exitCode: number) => void;
+      onCrewError: (error: string) => void;
+    },
+  ) => Promise<{ success: boolean; runId?: string; error?: string }>;
+  abortCrewAIRun?: (runId: string) => boolean;
 };
 
 /**
  * Normalizes potentially invalid provider names coming from websocket payloads.
  */
 function readProvider(value: unknown): LLMProvider {
-  if (value === 'claude' || value === 'cursor' || value === 'codex' || value === 'gemini' || value === 'groq') {
+  if (value === 'claude' || value === 'cursor' || value === 'codex' || value === 'gemini' || value === 'groq' || value === 'openclaude') {
     return value;
   }
 
@@ -284,6 +303,82 @@ export function handleChatConnection(
             gemini: dependencies.getActiveGeminiSessions(),
           },
         });
+        return;
+      }
+
+      if (messageType === 'crewai-command' && dependencies.startCrewAIRun) {
+        const payload = data.options as unknown as CrewAICommandPayload | undefined;
+        const projectPath = payload?.projectPath ?? '';
+        const config = {
+          mode: payload?.mode ?? 'local',
+          localProjectPath: payload?.localProjectPath ?? projectPath,
+          cloudApiKey: payload?.cloudApiKey,
+        };
+        const options = {
+          projectPath,
+          inputs: payload?.inputs ?? {},
+          nineRouterBaseUrl: payload?.nineRouterBaseUrl,
+        };
+
+        const result = await dependencies.startCrewAIRun(config, options, {
+          onAgentOutput: (output) => {
+            writer.send({
+              type: 'crewai-agent-output',
+              agentRole: output.agentRole,
+              task: output.task,
+              output: output.output,
+            });
+          },
+          onCrewComplete: (outputs, exitCode) => {
+            writer.send({
+              type: 'crewai-crew-complete',
+              outputs,
+              exitCode,
+              success: true,
+            });
+          },
+          onCrewError: (error) => {
+            writer.send({
+              type: 'crewai-crew-complete',
+              outputs: [],
+              exitCode: 1,
+              success: false,
+              error,
+            });
+          },
+        });
+
+        if (!result.success) {
+          writer.send({
+            type: 'crewai-crew-complete',
+            outputs: [],
+            exitCode: 1,
+            success: false,
+            error: result.error,
+          });
+        } else {
+          writer.send({
+            type: 'crewai-run-started',
+            runId: result.runId,
+          });
+        }
+        return;
+      }
+
+      if (messageType === 'crewai-abort' && dependencies.abortCrewAIRun) {
+        const runId = typeof data.sessionId === 'string' ? data.sessionId : '';
+        const success = dependencies.abortCrewAIRun(runId);
+        writer.send(
+          createNormalizedMessage({
+            kind: 'complete',
+            exitCode: success ? 0 : 1,
+            aborted: true,
+            success,
+            sessionId: runId,
+            provider: 'claude',
+          })
+        );
+        return;
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
