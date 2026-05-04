@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import spawn from 'cross-spawn';
 
+import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
 import type { IProviderAuth } from '@/shared/interfaces.js';
 import type { ProviderAuthStatus } from '@/shared/types.js';
 import { readObjectRecord, readOptionalString } from '@/shared/utils.js';
@@ -20,13 +21,13 @@ export class ClaudeProviderAuth implements IProviderAuth {
    * Checks whether the Claude Code CLI is available on this host.
    */
   private checkInstalled(): boolean {
-      const cliPath = process.env.CLAUDE_CLI_PATH || 'claude';
-      try {
-        spawn.sync(cliPath, ['--version'], { stdio: 'ignore', timeout: 5000 });
-        return true;
-      } catch {
-        return false;
-      }
+    const cliPath = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH);
+    try {
+      spawn.sync(cliPath, ['--version'], { stdio: 'ignore', timeout: 5000 });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /**
