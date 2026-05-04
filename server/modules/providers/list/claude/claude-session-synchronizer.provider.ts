@@ -37,6 +37,14 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
 
     let processed = 0;
     for (const filePath of files) {
+      // PATCH (kamioj): subagent .jsonl 文件共享父 session 的 sessionId，
+      // 会被当成主 session 写入 DB → 污染主会话记录。直接跳过。
+      if (
+        filePath.includes(`${path.sep}subagents${path.sep}`) ||
+        filePath.replace(/\\/g, '/').includes('/subagents/')
+      ) {
+        continue;
+      }
       const parsed = await this.processSessionFile(filePath, nameMap);
       if (!parsed) {
         continue;
@@ -63,6 +71,13 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
    */
   async synchronizeFile(filePath: string): Promise<string | null> {
     if (!filePath.endsWith('.jsonl')) {
+      return null;
+    }
+    // PATCH (kamioj): 同 synchronize()，单文件路径走 watcher 进来时也要排除 subagents/
+    if (
+      filePath.includes(`${path.sep}subagents${path.sep}`) ||
+      filePath.replace(/\\/g, '/').includes('/subagents/')
+    ) {
       return null;
     }
 
