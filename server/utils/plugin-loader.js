@@ -94,6 +94,65 @@ export function validateManifest(manifest) {
 }
 
 const BUILD_TIMEOUT_MS = 60_000;
+const REBUILD_TIMEOUT_MS = 120_000;
+
+/**
+ * Run `npm rebuild` for packages that have a binding.gyp (native addons).
+ * --ignore-scripts skips the install/build lifecycle scripts that native modules
+ * need to compile their .node binaries, so we rebuild them explicitly afterwards.
+ * This is scoped to packages with binding.gyp to limit script execution surface.
+ */
+function rebuildNativeAddons(dir, callback) {
+  const nodeModulesDir = path.join(dir, 'node_modules');
+  let nativePackages = [];
+  try {
+    for (const entry of fs.readdirSync(nodeModulesDir)) {
+      if (entry.startsWith('.')) continue;
+      if (fs.existsSync(path.join(nodeModulesDir, entry, 'binding.gyp'))) {
+        nativePackages.push(entry);
+      }
+    }
+  } catch {
+    return callback(null);
+  }
+
+  if (nativePackages.length === 0) return callback(null);
+
+  const rebuildProcess = spawn('npm', ['rebuild', ...nativePackages], {
+    cwd: dir,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  let stderr = '';
+  let settled = false;
+
+  const timer = setTimeout(() => {
+    if (settled) return;
+    settled = true;
+    rebuildProcess.removeAllListeners();
+    rebuildProcess.kill();
+    callback(new Error('npm rebuild timed out'));
+  }, REBUILD_TIMEOUT_MS);
+
+  rebuildProcess.stderr.on('data', (data) => { stderr += data.toString(); });
+
+  rebuildProcess.on('close', (code) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    if (code !== 0) {
+      return callback(new Error(`npm rebuild failed (exit code ${code}): ${stderr.trim()}`));
+    }
+    callback(null);
+  });
+
+  rebuildProcess.on('error', (err) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    callback(err);
+  });
+}
 
 /** Run `npm run build` if the plugin's package.json declares a build script. */
 function runBuildIfNeeded(dir, packageJsonPath, onSuccess, onError) {
@@ -348,7 +407,12 @@ export function installPluginFromGit(url) {
             cleanupTemp();
             return reject(new Error(`npm install for ${repoName} failed (exit code ${npmCode})`));
           }
-          runBuildIfNeeded(tempDir, packageJsonPath, () => finalize(manifest), (err) => { cleanupTemp(); reject(err); });
+          rebuildNativeAddons(tempDir, (rebuildErr) => {
+            if (rebuildErr) {
+              console.warn(`[Plugins] Warning: native addon rebuild failed for "${repoName}": ${rebuildErr.message}`);
+            }
+            runBuildIfNeeded(tempDir, packageJsonPath, () => finalize(manifest), (err) => { cleanupTemp(); reject(err); });
+          });
         });
 
         npmProcess.on('error', (err) => {
@@ -413,7 +477,12 @@ export function updatePluginFromGit(name) {
           if (npmCode !== 0) {
             return reject(new Error(`npm install for ${name} failed (exit code ${npmCode})`));
           }
-          runBuildIfNeeded(pluginDir, packageJsonPath, () => resolve(manifest), (err) => reject(err));
+          rebuildNativeAddons(pluginDir, (rebuildErr) => {
+            if (rebuildErr) {
+              console.warn(`[Plugins] Warning: native addon rebuild failed for "${name}": ${rebuildErr.message}`);
+            }
+            runBuildIfNeeded(pluginDir, packageJsonPath, () => resolve(manifest), (err) => reject(err));
+          });
         });
         npmProcess.on('error', (err) => reject(err));
       } else {
