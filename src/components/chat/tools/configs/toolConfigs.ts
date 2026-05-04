@@ -524,6 +524,107 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
   },
 
   // ============================================================================
+  // OCC-SPECIFIC TOOLS (OpenClaude / open-claude-code)
+  // ============================================================================
+
+  Spawn: {
+    input: {
+      type: 'one-line',
+      icon: 'workflow',
+      label: 'Spawn',
+      getValue: (input) => input.description || input.agent || 'subagent',
+      action: 'none',
+    },
+  },
+
+  Dispatch: {
+    input: {
+      type: 'one-line',
+      icon: 'send',
+      label: 'Dispatch',
+      getValue: (input) => input.target || input.message || 'dispatch',
+      action: 'none',
+    },
+  },
+
+  SendMessage: {
+    input: {
+      type: 'one-line',
+      icon: 'message-circle',
+      label: 'SendMessage',
+      getValue: (input) => input.to || input.target || 'message',
+      getSecondary: (input) => input.content?.slice(0, 80),
+      action: 'none',
+    },
+  },
+
+  MultiEdit: {
+    input: {
+      type: 'collapsible',
+      title: (input) => `MultiEdit ${input.file_path || ''}`,
+      defaultOpen: false,
+      contentType: 'diff',
+      getContentProps: (input) => ({
+        filePath: input.file_path,
+        edits: input.edits,
+      }),
+    },
+  },
+
+  LS: {
+    input: {
+      type: 'one-line',
+      icon: 'folder-open',
+      label: 'LS',
+      getValue: (input) => input.path || input.directory || '.',
+      action: 'none',
+    },
+  },
+
+  WebFetch: {
+    input: {
+      type: 'one-line',
+      icon: 'globe',
+      label: 'WebFetch',
+      getValue: (input) => input.url || '',
+      action: 'none',
+    },
+  },
+
+  WebSearch: {
+    input: {
+      type: 'one-line',
+      icon: 'search',
+      label: 'WebSearch',
+      getValue: (input) => input.query || '',
+      action: 'none',
+    },
+  },
+
+  MCPTool: {
+    input: {
+      type: 'one-line',
+      icon: 'plug',
+      label: 'MCP',
+      getValue: (input) => input.tool_name || input.server || 'mcp-tool',
+      action: 'none',
+    },
+  },
+
+  Agent: {
+    input: {
+      type: 'collapsible',
+      title: (input) => `Agent: ${input.description || input.name || 'subagent'}`,
+      defaultOpen: false,
+      contentType: 'text',
+      getContentProps: (input) => ({
+        content: input.prompt || input.description || '',
+        format: 'plain',
+      }),
+    },
+  },
+
+  // ============================================================================
   // DEFAULT FALLBACK
   // ============================================================================
 

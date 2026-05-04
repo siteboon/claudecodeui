@@ -155,6 +155,19 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
     </button>
   );
 
+  const isCliTheme = document.documentElement.classList.contains('cli-theme');
+
+  if (isCliTheme) {
+    const dot = status === 'error' ? 'text-red-400' : status === 'running' ? 'text-green-400' : 'text-gray-500';
+    return (
+      <div className="my-0.5 font-mono text-xs">
+        <span className={dot}>● </span>
+        <span className="text-[#4ec9b0]">{toolName}</span>
+        <span className="text-gray-500">({value})</span>
+      </div>
+    );
+  }
+
   // Terminal style: dark pill around the command
   if (isTerminal) {
     return (

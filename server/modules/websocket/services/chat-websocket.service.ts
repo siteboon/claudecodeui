@@ -29,10 +29,14 @@ type ChatWebSocketDependencies = {
   spawnCursor: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
   queryCodex: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
   spawnGemini: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
+  spawnOpenClaude: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
+  queryCrewAI: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
   abortClaudeSDKSession: (sessionId: string) => Promise<boolean>;
   abortCursorSession: (sessionId: string) => boolean;
   abortCodexSession: (sessionId: string) => boolean;
   abortGeminiSession: (sessionId: string) => boolean;
+  abortOpenClaudeSession: (sessionId: string) => boolean;
+  abortCrewAISession: (sessionId: string) => boolean;
   resolveToolApproval: (
     requestId: string,
     payload: {
@@ -46,6 +50,8 @@ type ChatWebSocketDependencies = {
   isCursorSessionActive: (sessionId: string) => boolean;
   isCodexSessionActive: (sessionId: string) => boolean;
   isGeminiSessionActive: (sessionId: string) => boolean;
+  isOpenClaudeSessionActive: (sessionId: string) => boolean;
+  isCrewAISessionActive: (sessionId: string) => boolean;
   reconnectSessionWriter: (sessionId: string, ws: WebSocket) => boolean;
   getPendingApprovalsForSession: (sessionId: string) => unknown[];
   getActiveClaudeSDKSessions: () => unknown;
@@ -58,7 +64,7 @@ type ChatWebSocketDependencies = {
  * Normalizes potentially invalid provider names coming from websocket payloads.
  */
 function readProvider(value: unknown): LLMProvider {
-  if (value === 'claude' || value === 'cursor' || value === 'codex' || value === 'gemini' || value === 'groq') {
+  if (value === 'claude' || value === 'cursor' || value === 'codex' || value === 'gemini' || value === 'groq' || value === 'openclaude' || value === 'crewai') {
     return value;
   }
 
@@ -134,6 +140,16 @@ export function handleChatConnection(
         return;
       }
 
+      if (messageType === 'openclaude-command') {
+        await dependencies.spawnOpenClaude(data.command ?? '', data.options, writer);
+        return;
+      }
+
+      if (messageType === 'crewai-command') {
+        await dependencies.queryCrewAI(data.command ?? '', data.options, writer);
+        return;
+      }
+
       if (messageType === 'cursor-resume') {
         await dependencies.spawnCursor(
           '',
@@ -158,6 +174,10 @@ export function handleChatConnection(
           success = dependencies.abortCodexSession(sessionId);
         } else if (provider === 'gemini') {
           success = dependencies.abortGeminiSession(sessionId);
+        } else if (provider === 'openclaude') {
+          success = dependencies.abortOpenClaudeSession(sessionId);
+        } else if (provider === 'crewai') {
+          success = dependencies.abortCrewAISession(sessionId);
         } else {
           success = await dependencies.abortClaudeSDKSession(sessionId);
         }

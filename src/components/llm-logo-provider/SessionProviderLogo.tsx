@@ -2,9 +2,11 @@ import type { LLMProvider } from '../../types/app';
 
 import ClaudeLogo from './ClaudeLogo';
 import CodexLogo from './CodexLogo';
+import CrewAILogo from './CrewAILogo';
 import CursorLogo from './CursorLogo';
 import GeminiLogo from './GeminiLogo';
 import GroqLogo from './GroqLogo';
+import OpenClaudeLogo from './OpenClaudeLogo';
 
 type SessionProviderLogoProps = {
   provider?: LLMProvider | string | null;
@@ -29,6 +31,14 @@ export default function SessionProviderLogo({
 
   if (provider === 'groq') {
     return <GroqLogo className={className} />;
+  }
+
+  if (provider === 'openclaude') {
+    return <OpenClaudeLogo className={className} />;
+  }
+
+  if (provider === 'crewai') {
+    return <CrewAILogo className={className} />;
   }
 
   return <ClaudeLogo className={className} />;

@@ -112,6 +112,31 @@ export const GROQ_MODELS = {
 };
 
 /**
+ * OpenClaude (OCC) Models
+ */
+export const OPENCLAUDE_MODELS = {
+  OPTIONS: [
+    { value: "claude-opus-4-6", label: "Claude Opus 4.6" },
+    { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
+    { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+    { value: "gpt-5.3-codex", label: "GPT-5.3 Codex" },
+  ],
+
+  DEFAULT: "claude-opus-4-6",
+};
+
+/**
+ * CrewAI Models (crews, not LLMs — the model is chosen per-agent inside CrewAI)
+ */
+export const CREWAI_MODELS = {
+  OPTIONS: [
+    { value: "crew-default", label: "Default Crew Config" },
+  ],
+
+  DEFAULT: "crew-default",
+};
+
+/**
  * Ordered provider registry. Display order in selection UIs.
  */
 export const PROVIDERS = [
@@ -120,4 +145,6 @@ export const PROVIDERS = [
   { id: "gemini", name: "Google", models: GEMINI_MODELS },
   { id: "cursor", name: "Cursor", models: CURSOR_MODELS },
   { id: "groq", name: "Groq", models: GROQ_MODELS },
+  { id: "openclaude", name: "OpenClaude", models: OPENCLAUDE_MODELS },
+  { id: "crewai", name: "CrewAI", models: CREWAI_MODELS },
 ];
