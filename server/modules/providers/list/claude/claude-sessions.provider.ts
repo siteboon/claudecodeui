@@ -53,7 +53,8 @@ async function parseAgentTools(filePath: string): Promise<AnyRecord[]> {
       try {
         const entry = JSON.parse(line) as AnyRecord;
 
-        if (entry.message?.role === 'assistant' && Array.isArray(entry.message?.content)) {
+        const isAssistantEntry = entry.message?.role === 'assistant' || entry.type === 'assistant';
+        if (isAssistantEntry && Array.isArray(entry.message?.content)) {
           for (const part of entry.message.content as AnyRecord[]) {
             if (part.type === 'tool_use') {
               tools.push({
@@ -348,7 +349,10 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       return messages;
     }
 
-    if (raw.message?.role === 'assistant' && raw.message?.content) {
+    // Claude Desktop uses top-level `type: 'assistant'` instead of `message.role`,
+    // so check both to support CLI and Desktop transcript formats.
+    const isAssistant = raw.message?.role === 'assistant' || raw.type === 'assistant';
+    if (isAssistant && raw.message?.content) {
       if (Array.isArray(raw.message.content)) {
         let partIndex = 0;
         for (const part of raw.message.content) {
