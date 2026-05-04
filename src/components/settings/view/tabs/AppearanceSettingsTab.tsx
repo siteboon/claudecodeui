@@ -16,6 +16,8 @@ type AppearanceSettingsTabProps = {
   onCodeEditorShowMinimapChange: (value: boolean) => void;
   onCodeEditorLineNumbersChange: (value: boolean) => void;
   onCodeEditorFontSizeChange: (value: string) => void;
+  cliTheme?: boolean;
+  onCliThemeChange?: (value: boolean) => void;
 };
 
 export default function AppearanceSettingsTab({
@@ -27,6 +29,8 @@ export default function AppearanceSettingsTab({
   onCodeEditorShowMinimapChange,
   onCodeEditorLineNumbersChange,
   onCodeEditorFontSizeChange,
+  cliTheme,
+  onCliThemeChange,
 }: AppearanceSettingsTabProps) {
   const { t } = useTranslation('settings');
 
@@ -42,6 +46,23 @@ export default function AppearanceSettingsTab({
           </SettingsRow>
         </SettingsCard>
       </SettingsSection>
+
+      {onCliThemeChange && (
+        <SettingsSection title="CLI Theme">
+          <SettingsCard>
+            <SettingsRow
+              label="CLI Theme"
+              description="Monospace terminal look matching Claude Code CLI. Dark palette, minimal chrome."
+            >
+              <SettingsToggle
+                checked={!!cliTheme}
+                onChange={onCliThemeChange}
+                ariaLabel="CLI Theme"
+              />
+            </SettingsRow>
+          </SettingsCard>
+        </SettingsSection>
+      )}
 
       <SettingsSection title={t('mainTabs.appearance')}>
         <SettingsCard>

@@ -950,3 +950,71 @@
     }
   }
 }
+
+/* =============================================================================
+   CLI THEME — monospace terminal look matching Claude Code CLI
+   Activated by .cli-theme class on <html> via Settings > Appearance
+   ============================================================================= */
+.cli-theme {
+  --cli-bg: #1a1b26;
+  --cli-fg: #c0caf5;
+  --cli-dim: #565f89;
+  --cli-accent: #7aa2f7;
+  --cli-green: #9ece6a;
+  --cli-red: #f7768e;
+  --cli-yellow: #e0af68;
+  --cli-border: #292e42;
+  --cli-surface: #1f2335;
+}
+
+.cli-theme body {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'SF Mono', 'Consolas', monospace;
+  background-color: var(--cli-bg);
+  color: var(--cli-fg);
+}
+
+.cli-theme .bg-background,
+.cli-theme .bg-card {
+  background-color: var(--cli-bg) !important;
+}
+
+.cli-theme .bg-muted,
+.cli-theme .bg-sidebar {
+  background-color: var(--cli-surface) !important;
+}
+
+.cli-theme .text-foreground {
+  color: var(--cli-fg) !important;
+}
+
+.cli-theme .text-muted-foreground {
+  color: var(--cli-dim) !important;
+}
+
+.cli-theme .text-primary {
+  color: var(--cli-accent) !important;
+}
+
+.cli-theme .border,
+.cli-theme .border-border,
+.cli-theme .border-input {
+  border-color: var(--cli-border) !important;
+}
+
+.cli-theme .rounded-lg,
+.cli-theme .rounded-xl,
+.cli-theme .rounded-2xl {
+  border-radius: 2px !important;
+}
+
+.cli-theme pre,
+.cli-theme code,
+.cli-theme .font-mono {
+  font-family: inherit;
+}
+
+.cli-theme .shadow-sm,
+.cli-theme .shadow-md,
+.cli-theme .shadow-lg {
+  box-shadow: none !important;
+}

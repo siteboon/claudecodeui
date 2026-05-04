@@ -53,7 +53,12 @@ function MainContent({
   externalMessageUpdate,
 }: MainContentProps) {
   const { preferences } = useUiPreferences();
-  const { autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter } = preferences;
+  const { autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter, cliTheme } = preferences;
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('cli-theme', cliTheme);
+    return () => { document.documentElement.classList.remove('cli-theme'); };
+  }, [cliTheme]);
 
   const { currentProject, setCurrentProject } = useTaskMaster() as TaskMasterContextValue;
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings() as TasksSettingsContextValue;
