@@ -121,6 +121,15 @@ export async function checkStatus(): Promise<CodexCredentialsStatus> {
     }
   }
 
+  if (readOptionalString(process.env.OPENAI_API_KEY)) {
+    return {
+      authenticated: true,
+      email: API_KEY_EMAIL,
+      method: 'api_key',
+      error: null,
+    };
+  }
+
   return {
     authenticated: false,
     email: null,
