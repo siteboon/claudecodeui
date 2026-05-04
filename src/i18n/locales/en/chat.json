@@ -125,7 +125,7 @@
   },
   "input": {
     "placeholder": "Type / for commands, @ for files, or ask {{provider}} anything...",
-    "placeholderDefault": "Type your message...",
+    "placeholderDefault": "Message Claude...",
     "disabled": "Input disabled",
     "attachFiles": "Attach files",
     "attachImages": "Attach images",

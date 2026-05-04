@@ -266,6 +266,10 @@ function Sidebar({
             isRefreshing={isRefreshing}
             onCreateProject={() => setShowNewProject(true)}
             onCollapseSidebar={handleCollapseSidebar}
+            onNewChat={() => {
+              const project = selectedProject ?? projects[0];
+              if (project) onNewSession(project);
+            }}
             updateAvailable={updateAvailable}
             releaseInfo={releaseInfo}
             latestVersion={latestVersion}

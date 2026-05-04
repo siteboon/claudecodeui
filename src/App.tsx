@@ -8,6 +8,7 @@ import { WebSocketProvider } from './contexts/WebSocketContext';
 import { PluginsProvider } from './contexts/PluginsContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { ToolDisplayProvider } from './contexts/ToolDisplayContext';
+import { ModelInfoProvider } from './contexts/ModelInfoContext';
 import AppContent from './components/app/AppContent';
 import i18n from './i18n/config.js';
 
@@ -22,6 +23,7 @@ export default function App() {
             <PluginsProvider>
               <TasksSettingsProvider>
                 <TaskMasterProvider>
+                <ModelInfoProvider>
                 <ProtectedRoute>
                   <Router basename={window.__ROUTER_BASENAME__ || ''}>
                     <Routes>
@@ -30,6 +32,7 @@ export default function App() {
                     </Routes>
                   </Router>
                 </ProtectedRoute>
+                </ModelInfoProvider>
                 </TaskMasterProvider>
               </TasksSettingsProvider>
             </PluginsProvider>

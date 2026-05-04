@@ -12,6 +12,7 @@ import TasksSettingsTab from '../view/tabs/tasks-settings/TasksSettingsTab';
 import PluginSettingsTab from '../../plugins/view/PluginSettingsTab';
 import AboutTab from '../view/tabs/AboutTab';
 import CustomInstructionsTab from '../view/tabs/CustomInstructionsTab';
+import MemoryTab from '../view/tabs/MemoryTab';
 import UnifiedDashboardTab from '../view/tabs/dashboard/UnifiedDashboardTab';
 import { useSettingsController } from '../hooks/useSettingsController';
 import { useWebPush } from '../../../hooks/useWebPush';
@@ -124,6 +125,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
               )}
 
               {activeTab === 'instructions' && <CustomInstructionsTab />}
+
+              {activeTab === 'memory' && <MemoryTab />}
 
               {activeTab === 'git' && <GitSettingsTab />}
 

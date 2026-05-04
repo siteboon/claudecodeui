@@ -141,6 +141,9 @@ export default function ChatMessagesPane({
       onWheel={onWheel}
       onTouchMove={onTouchMove}
       className="relative flex-1 overflow-y-auto overflow-x-hidden py-3"
+      role="log"
+      aria-label="Chat messages"
+      aria-live="polite"
     >
       <div className="mx-auto w-full max-w-chat space-y-3 px-3 sm:space-y-4 sm:px-6">
       {isLoadingSessionMessages && chatMessages.length === 0 ? (

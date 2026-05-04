@@ -99,6 +99,7 @@
     "agents": "Agents",
     "appearance": "Appearance",
     "instructions": "Instructions",
+    "memory": "Memory",
     "git": "Git",
     "apiTokens": "API & Tokens",
     "tasks": "Tasks",

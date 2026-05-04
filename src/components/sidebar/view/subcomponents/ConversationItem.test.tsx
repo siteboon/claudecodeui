@@ -83,6 +83,22 @@ describe('ConversationItem', () => {
     expect(menuBtn!.className).toContain('group-hover:opacity-100');
   });
 
+  it('uses MoreVertical icon (not MoreHorizontal) for the 3-dot menu', () => {
+    const { container } = render(
+      <ConversationItem
+        session={makeSession()}
+        isActive={false}
+        onClick={vi.fn()}
+        onMenuOpen={vi.fn()}
+      />,
+    );
+    const menuBtn = container.querySelector('[data-testid="conversation-menu-btn"]')!;
+    // lucide-react renders MoreVertical with a specific class name
+    const svg = menuBtn.querySelector('svg');
+    expect(svg).toBeDefined();
+    expect(svg!.classList.toString()).toContain('lucide-ellipsis-vertical');
+  });
+
   it('calls onMenuOpen with click event when 3-dot button is clicked', () => {
     const onMenuOpen = vi.fn();
     const { container } = render(

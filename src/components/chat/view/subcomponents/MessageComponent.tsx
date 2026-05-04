@@ -397,7 +397,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                 </ReasoningContent>
               </Reasoning>
             ) : (
-              <div className="text-sm text-foreground">
+              <div className={`text-sm text-foreground ${message.type === 'assistant' ? 'assistant-content border-l-2 border-primary/20 pl-3' : ''}`}>
                 {/* Reasoning accordion */}
                 {showThinking && message.reasoning && (
                   <Reasoning className="mb-3" defaultOpen={false}>

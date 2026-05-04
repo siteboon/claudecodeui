@@ -30,10 +30,10 @@ export default function HeaderBar({
       </button>
 
       <button
-        className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium hover:bg-secondary"
+        className="flex max-w-[200px] items-center gap-2 truncate rounded-lg px-3 py-1.5 text-sm font-medium hover:bg-secondary"
         onClick={onModelSelectorOpen}
       >
-        <span>{modelName}</span>
+        <span className="truncate">{modelName}</span>
         <ChevronDown size={14} className="text-muted-foreground" />
       </button>
 

@@ -189,6 +189,57 @@ describe('MessageComponent — Phase 5 design system', () => {
     });
   });
 
+  describe('M2: assistant message no-bubble styling with left border', () => {
+    it('has no bubble background on assistant message content area', () => {
+      const { container } = render(
+        <MessageComponent
+          message={makeMessage({ type: 'assistant', content: 'Hello' })}
+          {...defaultProps}
+        />,
+      );
+      // The assistant content wrapper should NOT have any bg- class (transparent)
+      const outerWrapper = container.querySelector('.chat-message.assistant');
+      expect(outerWrapper).not.toBeNull();
+      // No bubble-style background classes on the content area
+      const contentArea = outerWrapper!.querySelector('.assistant-content');
+      expect(contentArea).not.toBeNull();
+      expect(contentArea!.className).not.toContain('bg-');
+    });
+
+    it('applies a subtle left border on assistant messages', () => {
+      const { container } = render(
+        <MessageComponent
+          message={makeMessage({ type: 'assistant', content: 'Hello' })}
+          {...defaultProps}
+        />,
+      );
+      const contentArea = container.querySelector('.assistant-content');
+      expect(contentArea).not.toBeNull();
+      expect(contentArea!.className).toContain('border-l-2');
+      expect(contentArea!.className).toContain('border-primary/20');
+    });
+
+    it('does not apply left border on tool use messages', () => {
+      const { container } = render(
+        <MessageComponent
+          message={makeMessage({
+            type: 'assistant',
+            content: '',
+            isToolUse: true,
+            toolName: 'Bash',
+            toolInput: { command: 'ls' },
+            toolId: 'tool-1',
+            displayText: 'Running...',
+          })}
+          {...defaultProps}
+        />,
+      );
+      // Tool use messages should not get the assistant-content wrapper
+      const contentArea = container.querySelector('.assistant-content');
+      expect(contentArea).toBeNull();
+    });
+  });
+
   describe('assistant message rendering', () => {
     it('renders assistant text via StreamingMarkdown', () => {
       render(

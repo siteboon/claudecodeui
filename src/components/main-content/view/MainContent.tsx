@@ -15,6 +15,8 @@ import EditorSidebar from '../../code-editor/view/EditorSidebar';
 import type { Project } from '../../../types/app';
 import { TaskMasterPanel } from '../../task-master';
 
+import HeaderBar from '../../header/HeaderBar';
+import { useModelInfo } from '../../../contexts/ModelInfoContext';
 import MainContentHeader from './subcomponents/MainContentHeader';
 import MainContentStateView from './subcomponents/MainContentStateView';
 import ErrorBoundary from './ErrorBoundary';
@@ -92,6 +94,8 @@ function MainContent({
     }
   }, [shouldShowTasksTab, activeTab, setActiveTab]);
 
+  const { modelInfo, openModelSelector } = useModelInfo();
+
   usePaletteOpsRegister({
     openFile: (filePath: string) => {
       setActiveTab('files');
@@ -109,6 +113,14 @@ function MainContent({
 
   return (
     <div className="flex h-full flex-col">
+      <HeaderBar
+        isMobile={isMobile}
+        onMenuClick={onMenuClick}
+        onNewChat={() => {/* handled by sidebar/global shortcut */}}
+        onShowSettings={onShowSettings}
+        modelName={modelInfo.modelName || 'Select model'}
+        onModelSelectorOpen={openModelSelector}
+      />
       <MainContentHeader
         activeTab={activeTab}
         setActiveTab={setActiveTab}

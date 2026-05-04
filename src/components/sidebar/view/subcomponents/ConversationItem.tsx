@@ -1,4 +1,4 @@
-import { MoreHorizontal } from 'lucide-react';
+import { MoreVertical } from 'lucide-react';
 import type { MouseEvent } from 'react';
 
 import type { SessionWithProvider } from '../../types/types';
@@ -37,7 +37,7 @@ export default function ConversationItem({
           onMenuOpen(e);
         }}
       >
-        <MoreHorizontal size={14} />
+        <MoreVertical size={14} />
       </button>
     </div>
   );

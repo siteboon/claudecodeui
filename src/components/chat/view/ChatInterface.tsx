@@ -11,6 +11,7 @@ import { useChatSessionState } from '../hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '../hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '../hooks/useChatComposerState';
 import { useSessionStore } from '../../../stores/useSessionStore';
+import { useModelInfo } from '../../../contexts/ModelInfoContext';
 import { PROVIDERS } from '../../../../shared/modelConstants';
 
 import ChatMessagesPane from './subcomponents/ChatMessagesPane';
@@ -122,6 +123,20 @@ function ChatInterface({
   } = useChatProviderState({
     selectedSession,
   });
+
+  // Publish current model info to context so HeaderBar can consume it
+  const { setModelInfo } = useModelInfo();
+  useEffect(() => {
+    const m = provider === 'claude' ? claudeModel
+      : provider === 'cursor' ? cursorModel
+      : provider === 'codex' ? codexModel
+      : provider === 'gemini' ? geminiModel
+      : provider === 'groq' ? groqModel
+      : openclaudeModel;
+    const providerConst = PROVIDERS.find((p) => p.id === provider);
+    const opt = providerConst?.models?.OPTIONS?.find((o: { value: string }) => o.value === m);
+    setModelInfo({ provider, modelName: opt?.label ?? m });
+  }, [provider, claudeModel, cursorModel, codexModel, geminiModel, groqModel, openclaudeModel, setModelInfo]);
 
   const {
     chatMessages,

@@ -162,6 +162,12 @@ function AppContentInner() {
 
   return (
     <div className="fixed inset-0 flex bg-background" role="application" aria-label="CloudCLI" style={{ bottom: 'var(--keyboard-height, 0px)' }}>
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground focus:shadow-lg"
+      >
+        Skip to content
+      </a>
       {!isMobile ? (
         <nav className="relative h-full flex-shrink-0 border-r border-border/50" aria-label="Sidebar" style={{ width: sidebarOpen ? sidebarWidth : undefined }}>
           <Sidebar {...sidebarSharedProps} />
@@ -201,7 +207,7 @@ function AppContentInner() {
         </div>
       )}
 
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main id="main-content" className="flex min-w-0 flex-1 flex-col" aria-label="Chat content">
         <ConnectionBanner isConnected={isConnected} />
         <MainContent
           selectedProject={selectedProject}

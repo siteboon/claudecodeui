@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, Copy } from 'lucide-react';
+import { Check, Copy, Play } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+
+const SHELL_LANGUAGES = new Set(['bash', 'sh', 'zsh', 'powershell', 'cmd', 'shell', 'console']);
 
 interface StreamingCodeBlockProps {
   source: string;
   language: string;
+  onRunInShell?: (code: string) => void;
 }
 
 const MONO_FAMILY =
@@ -15,7 +18,7 @@ const MONO_FAMILY =
  * A code block that re-highlights on a debounce (100 ms) during streaming,
  * showing the un-highlighted delta as monospace text in between cycles.
  */
-function StreamingCodeBlockInner({ source, language }: StreamingCodeBlockProps) {
+function StreamingCodeBlockInner({ source, language, onRunInShell }: StreamingCodeBlockProps) {
   const [highlighted, setHighlighted] = useState(source);
   const [copied, setCopied] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -50,6 +53,16 @@ function StreamingCodeBlockInner({ source, language }: StreamingCodeBlockProps) 
           <span className="text-xs font-medium uppercase text-gray-400">
             {language}
           </span>
+        )}
+        {SHELL_LANGUAGES.has(language) && (
+          <button
+            type="button"
+            onClick={() => onRunInShell?.(source)}
+            className="rounded p-1 text-gray-400 opacity-0 transition-all hover:bg-white/10 hover:text-gray-200 group-hover:opacity-100"
+            title="Run in Shell"
+          >
+            <Play className="h-3.5 w-3.5" />
+          </button>
         )}
         <button
           type="button"
@@ -98,6 +111,5 @@ function StreamingCodeBlockInner({ source, language }: StreamingCodeBlockProps) 
 }
 
 export default React.memo(StreamingCodeBlockInner, (prev, next) => {
-  // Only re-render when content actually changes
-  return prev.source === next.source && prev.language === next.language;
+  return prev.source === next.source && prev.language === next.language && prev.onRunInShell === next.onRunInShell;
 });

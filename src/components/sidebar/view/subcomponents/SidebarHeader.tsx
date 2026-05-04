@@ -1,4 +1,4 @@
-import { Folder, FolderPlus, MessageSquare, Plus, RefreshCw, Search, X, PanelLeftClose } from 'lucide-react';
+import { Folder, FolderPlus, MessageSquarePlus, MessageSquare, Plus, RefreshCw, Search, X, PanelLeftClose } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import { Button, Input } from '../../../../shared/view/ui';
 import { IS_PLATFORM } from '../../../../constants/config';
@@ -24,6 +24,7 @@ type SidebarHeaderProps = {
   isRefreshing: boolean;
   onCreateProject: () => void;
   onCollapseSidebar: () => void;
+  onNewChat: () => void;
   t: TFunction;
 };
 
@@ -41,6 +42,7 @@ export default function SidebarHeader({
   isRefreshing,
   onCreateProject,
   onCollapseSidebar,
+  onNewChat,
   t,
 }: SidebarHeaderProps) {
   const LogoBlock = () => (
@@ -111,6 +113,16 @@ export default function SidebarHeader({
         </div>
 
         <GitHubStarBadge />
+
+        {/* New Chat button */}
+        <button
+          data-testid="new-chat-btn"
+          className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+          onClick={onNewChat}
+        >
+          <MessageSquarePlus className="h-4 w-4" />
+          {t('sidebar.newChat', { defaultValue: 'New Chat' })}
+        </button>
 
         {/* Search bar */}
         {projectsCount > 0 && !isLoading && (
@@ -213,6 +225,16 @@ export default function SidebarHeader({
             </button>
           </div>
         </div>
+
+        {/* Mobile New Chat button */}
+        <button
+          data-testid="new-chat-btn-mobile"
+          className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors active:scale-[0.98]"
+          onClick={onNewChat}
+        >
+          <MessageSquarePlus className="h-4 w-4" />
+          {t('sidebar.newChat', { defaultValue: 'New Chat' })}
+        </button>
 
         {/* Mobile search */}
         {projectsCount > 0 && !isLoading && (

@@ -60,4 +60,10 @@ describe('HeaderBar', () => {
     expect(header!.className).toContain('sticky');
     expect(header!.className).toContain('backdrop-blur');
   });
+
+  it('truncates long model names with ellipsis', () => {
+    render(<HeaderBar {...defaultProps} modelName="A Very Long Model Name That Should Be Truncated" />);
+    const modelBtn = screen.getByText('A Very Long Model Name That Should Be Truncated');
+    expect(modelBtn.closest('button')!.className).toContain('truncate');
+  });
 });
