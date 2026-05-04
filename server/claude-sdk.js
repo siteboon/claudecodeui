@@ -18,6 +18,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
 import { CLAUDE_MODELS } from '../shared/modelConstants.js';
+import { resolveClaudeCodeExecutablePath } from './shared/claude-cli-path.js';
 import {
   createNotificationEvent,
   notifyRunFailed,
@@ -153,11 +154,9 @@ function mapCliOptionsToSDK(options = {}) {
   // Since SDK 0.2.113, options.env replaces process.env instead of overlaying it.
   sdkOptions.env = { ...process.env };
 
-  // Use CLAUDE_CLI_PATH if explicitly set, otherwise fall back to 'claude' on PATH.
-  // The SDK 0.2.113+ looks for a bundled native binary optional dep by default;
-  // this fallback ensures users who installed via the official installer still work
-  // even when npm prune --production has removed those optional deps.
-  sdkOptions.pathToClaudeCodeExecutable = process.env.CLAUDE_CLI_PATH || 'claude';
+  // Resolve the executable eagerly on Windows because the SDK uses raw child_process.spawn,
+  // which does not reliably follow npm's shell wrappers like cross-spawn does.
+  sdkOptions.pathToClaudeCodeExecutable = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH);
 
   // Map working directory
   if (cwd) {

@@ -1,5 +1,6 @@
 import os from 'node:os';
 import path from 'node:path';
+import { readFile } from 'node:fs/promises';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import {
@@ -91,7 +92,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     filePath: string,
     nameMap: Map<string, string>
   ): Promise<ParsedSession | null> {
-    return extractFirstValidJsonlData(filePath, (rawData) => {
+    const parsed = await extractFirstValidJsonlData(filePath, (rawData) => {
       const data = rawData as Record<string, unknown>;
       const sessionId = typeof data.sessionId === 'string' ? data.sessionId : undefined;
       const projectPath = typeof data.cwd === 'string' ? data.cwd : undefined;
@@ -103,8 +104,68 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       return {
         sessionId,
         projectPath,
-        sessionName: normalizeSessionName(nameMap.get(sessionId), 'Untitled Claude Session'),
       };
     });
+
+    if (!parsed) {
+      return null;
+    }
+
+    const existingSession = sessionsDb.getSessionById(parsed.sessionId);
+    const existingSessionName = existingSession?.custom_name;
+    if (existingSessionName && existingSessionName !== 'Untitled Claude Session') {
+      return {
+        ...parsed,
+        sessionName: normalizeSessionName(existingSessionName, 'Untitled Claude Session'),
+      };
+    }
+
+    let sessionName = nameMap.get(parsed.sessionId);
+    if (!sessionName) {
+      sessionName = await this.extractSessionAiTitleFromEnd(filePath, parsed.sessionId);
+    }
+
+    return {
+      ...parsed,
+      sessionName: normalizeSessionName(sessionName, 'Untitled Claude Session'),
+    };
+  }
+
+  private async extractSessionAiTitleFromEnd(
+    filePath: string,
+    sessionId: string
+  ): Promise<string | undefined> {
+    try {
+      const content = await readFile(filePath, 'utf8');
+      const lines = content.split(/\r?\n/);
+
+      for (let index = lines.length - 1; index >= 0; index -= 1) {
+        const line = lines[index]?.trim();
+        if (!line) {
+          continue;
+        }
+
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(line);
+        } catch {
+          continue;
+        }
+
+        const data = parsed as Record<string, unknown>;
+        const eventType = typeof data.type === 'string' ? data.type : undefined;
+        const eventSessionId = typeof data.sessionId === 'string' ? data.sessionId : undefined;
+        const aiTitle = typeof data.aiTitle === 'string' ? data.aiTitle : undefined;
+        const lastPrompt = typeof data.lastPrompt === 'string' ? data.lastPrompt : undefined;
+
+        if ((eventType === 'ai-title' && eventSessionId === sessionId && aiTitle?.trim()) || (eventType === 'last-prompt' && eventSessionId === sessionId && lastPrompt?.trim())) {
+          return aiTitle || lastPrompt;
+        }
+      }
+    } catch {
+      // Ignore missing/unreadable files so sync can continue.
+    }
+
+    return undefined;
   }
 }

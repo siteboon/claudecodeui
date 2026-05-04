@@ -5,6 +5,7 @@ import { api } from '../utils/api';
 import type {
   AppSocketMessage,
   AppTab,
+  LLMProvider,
   LoadingProgress,
   Project,
   ProjectSession,
@@ -261,6 +262,27 @@ export function useProjectsState({
   const [showSettings, setShowSettings] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState('agents');
   const [externalMessageUpdate, setExternalMessageUpdate] = useState(0);
+  /**
+   * `newSessionTrigger` is an explicit, monotonic intent signal for user-driven
+   * New Session actions.
+   *
+   * It exists because `handleNewSession` can be invoked while the app is already in
+   * the same visible state (`selectedSession === null`, `activeTab === 'chat'`,
+   * route already `/`). In that case, React/router updates are idempotent and no
+   * downstream reset logic runs.
+   *
+   * Usage across the codebase:
+   * 1) Produced here in `handleNewSession` via increment (always changes).
+   * 2) Returned from this hook and threaded through:
+   *    useProjectsState -> AppContent -> MainContent -> ChatInterface.
+   * 3) Consumed in `useChatSessionState` as an effect dependency to forcibly clear
+   *    chat-local state (`currentSessionId`, pending draft message, streaming flags,
+   *    pending session storage keys, pagination/scroll artifacts).
+   *
+   * Keeping this signal dedicated avoids coupling resets to unrelated counters/events
+   * (for example websocket/project refresh updates) that could cause accidental resets.
+   */
+  const [newSessionTrigger, setNewSessionTrigger] = useState(0);
 
   const loadingProgressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastHandledMessageRef = useRef<AppSocketMessage | null>(null);
@@ -536,7 +558,42 @@ export function useProjectsState({
         return;
       }
     }
-  }, [sessionId, projects, selectedProject?.projectId, selectedSession?.id, selectedSession?.__provider]);
+
+    // Session id is in the URL but not yet present on any project payload (common
+    // right after `session_created` + navigate, before the next projects refresh).
+    // Without a `selectedSession`, chat state clears `currentSessionId` and the
+    // UI stops reading the session store even though messages stream under this id.
+    if (selectedSession?.id === sessionId) {
+      return;
+    }
+
+    if (!selectedProject) {
+      return;
+    }
+
+    let providerFromStorage: string | null = null;
+    try {
+      providerFromStorage = localStorage.getItem('selected-provider');
+    } catch {
+      providerFromStorage = null;
+    }
+
+    const normalizedProvider: LLMProvider =
+      providerFromStorage === 'cursor'
+        ? 'cursor'
+        : providerFromStorage === 'codex'
+          ? 'codex'
+          : providerFromStorage === 'gemini'
+            ? 'gemini'
+            : 'claude';
+
+    setSelectedSession({
+      id: sessionId,
+      __provider: normalizedProvider,
+      __projectId: selectedProject.projectId,
+      summary: '',
+    });
+  }, [sessionId, projects, selectedProject, selectedSession?.id, selectedSession?.__provider]);
 
   const handleProjectSelect = useCallback(
     (project: Project) => {
@@ -587,6 +644,7 @@ export function useProjectsState({
       setSelectedProject(project);
       setSelectedSession(null);
       setActiveTab('chat');
+      setNewSessionTrigger((previous) => previous + 1);
       navigate('/');
 
       if (isMobile) {
@@ -806,6 +864,7 @@ export function useProjectsState({
     showSettings,
     settingsInitialTab,
     externalMessageUpdate,
+    newSessionTrigger,
     setActiveTab,
     setSidebarOpen,
     setIsInputFocused,

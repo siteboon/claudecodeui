@@ -91,6 +91,10 @@ export interface Question {
   multiSelect?: boolean;
 }
 
+export type SessionNavigationOptions = {
+  replace?: boolean;
+};
+
 export interface ChatInterfaceProps {
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
@@ -105,7 +109,7 @@ export interface ChatInterfaceProps {
   onSessionNotProcessing?: (sessionId?: string | null) => void;
   processingSessions?: Set<string>;
   onReplaceTemporarySession?: (sessionId?: string | null) => void;
-  onNavigateToSession?: (targetSessionId: string) => void;
+  onNavigateToSession?: (targetSessionId: string, options?: SessionNavigationOptions) => void;
   onShowSettings?: () => void;
   autoExpandTools?: boolean;
   showRawParameters?: boolean;
@@ -113,6 +117,7 @@ export interface ChatInterfaceProps {
   autoScrollToBottom?: boolean;
   sendByCtrlEnter?: boolean;
   externalMessageUpdate?: number;
+  newSessionTrigger?: number;
   onTaskClick?: (...args: unknown[]) => void;
   onShowAllTasks?: (() => void) | null;
 }
