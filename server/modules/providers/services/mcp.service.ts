@@ -10,7 +10,7 @@ function includeProviderInGlobalMcp(providerId: LLMProvider): boolean {
     return false;
   }
 
-  if (providerId === 'groq') {
+  if (providerId === 'groq' || providerId === 'openclaude' || providerId === 'crewai') {
     return false;
   }
 

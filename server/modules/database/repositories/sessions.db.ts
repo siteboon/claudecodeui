@@ -167,6 +167,18 @@ export const sessionsDb = {
     return row?.custom_name ?? null;
   },
 
+  getSessionsByProvider(provider: string): SessionRow[] {
+    const db = getConnection();
+    return db
+      .prepare(
+        `SELECT session_id, provider, project_path, jsonl_path, custom_name, created_at, updated_at
+         FROM sessions
+         WHERE provider = ?
+         ORDER BY datetime(COALESCE(updated_at, created_at)) DESC`
+      )
+      .all(provider) as SessionRow[];
+  },
+
   deleteSessionById(sessionId: string): boolean {
     const db = getConnection();
     return db.prepare('DELETE FROM sessions WHERE session_id = ?').run(sessionId).changes > 0;
