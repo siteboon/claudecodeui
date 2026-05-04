@@ -144,6 +144,25 @@ app.get('/health', (req, res) => {
     });
 });
 
+app.get('/api/stack-health', async (req, res) => {
+    const checks = {};
+    checks.cloudcli = { status: 'ok', port: process.env.SERVER_PORT || 3001 };
+
+    try {
+        const routerResp = await fetch('http://localhost:20128', { signal: AbortSignal.timeout(2000) });
+        checks.router = { status: routerResp.ok ? 'ok' : 'error', port: 20128 };
+    } catch { checks.router = { status: 'offline', port: 20128 }; }
+
+    try {
+        const bridgeUrl = process.env.CREWAI_BRIDGE_URL || 'http://localhost:8000';
+        const bridgeResp = await fetch(`${bridgeUrl}/health`, { signal: AbortSignal.timeout(2000) });
+        checks.crewai_bridge = { status: bridgeResp.ok ? 'ok' : 'error', port: 8000 };
+    } catch { checks.crewai_bridge = { status: 'offline', port: 8000 }; }
+
+    const allOk = Object.values(checks).every(c => c.status === 'ok');
+    res.json({ status: allOk ? 'ok' : 'degraded', services: checks });
+});
+
 // Optional API key validation (if configured)
 app.use('/api', validateApiKey);
 
