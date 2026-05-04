@@ -50,7 +50,7 @@ function resolveClaudeWrapperBinary(
     return null;
   }
 
-  const matches = content.matchAll(/["']([^"'\\r\\n]*claude\.exe)["']/gi);
+  const matches = content.matchAll(/["']([^"'\\\r\n]*claude\.exe)["']/gi);
   for (const match of matches) {
     const rawTarget = match[1]
       .replace(/^\$basedir[\\/]/i, '')
