@@ -4,6 +4,7 @@ import { CursorProvider } from '@/modules/providers/list/cursor/cursor.provider.
 import { GeminiProvider } from '@/modules/providers/list/gemini/gemini.provider.js';
 import { GroqProvider } from '@/modules/providers/list/groq/groq.provider.js';
 import { OpenClaudeProvider } from '@/modules/providers/list/openclaude/openclaude.provider.js';
+import { CrewAIProvider } from '@/modules/providers/list/crewai/crewai.provider.js';
 import type { IProvider } from '@/shared/interfaces.js';
 import type { LLMProvider } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
@@ -15,6 +16,7 @@ const providers: Record<LLMProvider, IProvider> = {
   gemini: new GeminiProvider(),
   groq: new GroqProvider(),
   openclaude: new OpenClaudeProvider(),
+  crewai: new CrewAIProvider(),
 };
 
 /**
