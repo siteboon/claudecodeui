@@ -3,6 +3,7 @@ import { CodexProvider } from '@/modules/providers/list/codex/codex.provider.js'
 import { CursorProvider } from '@/modules/providers/list/cursor/cursor.provider.js';
 import { GeminiProvider } from '@/modules/providers/list/gemini/gemini.provider.js';
 import { GroqProvider } from '@/modules/providers/list/groq/groq.provider.js';
+import { OpenClaudeProvider } from '@/modules/providers/list/openclaude/openclaude.provider.js';
 import type { IProvider } from '@/shared/interfaces.js';
 import type { LLMProvider } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
@@ -13,6 +14,7 @@ const providers: Record<LLMProvider, IProvider> = {
   cursor: new CursorProvider(),
   gemini: new GeminiProvider(),
   groq: new GroqProvider(),
+  openclaude: new OpenClaudeProvider(),
 };
 
 /**

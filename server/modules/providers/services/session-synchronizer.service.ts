@@ -23,6 +23,7 @@ export const sessionSynchronizerService = {
       cursor: 0,
       gemini: 0,
       groq: 0,
+      openclaude: 0,
     };
     const failures: string[] = [];
 
