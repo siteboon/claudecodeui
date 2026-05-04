@@ -43,7 +43,7 @@ function createRequestId() {
 }
 
 function waitForToolApproval(requestId, options = {}) {
-  const { timeoutMs = TOOL_APPROVAL_TIMEOUT_MS, signal, onCancel, metadata } = options;
+  const { timeoutMs = TOOL_APPROVAL_TIMEOUT_MS, signal, onCancel, onWarning, metadata } = options;
 
   return new Promise(resolve => {
     let settled = false;
@@ -56,10 +56,12 @@ function waitForToolApproval(requestId, options = {}) {
     };
 
     let timeout;
+    let warningTimeout;
 
     const cleanup = () => {
       pendingToolApprovals.delete(requestId);
       if (timeout) clearTimeout(timeout);
+      if (warningTimeout) clearTimeout(warningTimeout);
       if (signal && abortHandler) {
         signal.removeEventListener('abort', abortHandler);
       }
@@ -67,6 +69,12 @@ function waitForToolApproval(requestId, options = {}) {
 
     // timeoutMs 0 = wait indefinitely (interactive tools)
     if (timeoutMs > 0) {
+      const warningLeadMs = 10000;
+      if (timeoutMs > warningLeadMs) {
+        warningTimeout = setTimeout(() => {
+          onWarning?.('timeout_imminent', { remainingMs: warningLeadMs });
+        }, timeoutMs - warningLeadMs);
+      }
       timeout = setTimeout(() => {
         onCancel?.('timeout');
         finalize(null);
@@ -574,6 +582,9 @@ async function queryClaudeSDK(command, options = {}, ws) {
         },
         onCancel: (reason) => {
           ws.send(createNormalizedMessage({ kind: 'permission_cancelled', requestId, reason, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+        },
+        onWarning: (reason, meta) => {
+          ws.send(createNormalizedMessage({ kind: 'permission_warning', requestId, reason, meta, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
         }
       });
       if (!decision) {

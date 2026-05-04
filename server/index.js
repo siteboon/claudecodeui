@@ -78,8 +78,6 @@ const __dirname = getModuleDir(import.meta.url);
 const APP_ROOT = findAppRoot(__dirname);
 const installMode = fs.existsSync(path.join(APP_ROOT, '.git')) ? 'git' : 'npm';
 
-console.log('SERVER_PORT from env:', process.env.SERVER_PORT);
-
 const app = express();
 const server = http.createServer(app);
 

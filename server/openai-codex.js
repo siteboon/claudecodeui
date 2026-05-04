@@ -212,8 +212,11 @@ export async function queryCodex(command, options = {}, ws) {
   const abortController = new AbortController();
 
   try {
-    // Initialize Codex SDK
-    codex = new Codex();
+    // Initialize Codex SDK — pass baseUrl when OPENAI_API_BASE is set (e.g. to route through 9Router)
+    const codexInitOptions = {};
+    if (process.env.OPENAI_API_BASE) codexInitOptions.baseUrl = process.env.OPENAI_API_BASE;
+    if (process.env.OPENAI_API_KEY) codexInitOptions.apiKey = process.env.OPENAI_API_KEY;
+    codex = new Codex(codexInitOptions);
 
     // Thread options with sandbox and approval settings
     const threadOptions = {
