@@ -1,14 +1,25 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+
 import Sidebar from '../sidebar/view/Sidebar';
 import MainContent from '../main-content/view/MainContent';
+import CommandPalette from '../command-palette/CommandPalette';
 import { useWebSocket } from '../../contexts/WebSocketContext';
+import { PaletteOpsProvider, usePaletteOpsRegister } from '../../contexts/PaletteOpsContext';
 import { useDeviceSettings } from '../../hooks/useDeviceSettings';
 import { useSessionProtection } from '../../hooks/useSessionProtection';
 import { useProjectsState } from '../../hooks/useProjectsState';
 
 export default function AppContent() {
+  return (
+    <PaletteOpsProvider>
+      <AppContentInner />
+    </PaletteOpsProvider>
+  );
+}
+
+function AppContentInner() {
   const navigate = useNavigate();
   const { sessionId } = useParams<{ sessionId?: string }>();
   const { t } = useTranslation('common');
@@ -40,6 +51,7 @@ export default function AppContent() {
     openSettings,
     refreshProjectsSilently,
     sidebarSharedProps,
+    handleNewSession,
   } = useProjectsState({
     sessionId,
     navigate,
@@ -48,27 +60,10 @@ export default function AppContent() {
     activeSessions,
   });
 
-  useEffect(() => {
-    // Expose a non-blocking refresh for chat/session flows.
-    // Full loading refreshes are still available through direct fetchProjects calls.
-    window.refreshProjects = refreshProjectsSilently;
-
-    return () => {
-      if (window.refreshProjects === refreshProjectsSilently) {
-        delete window.refreshProjects;
-      }
-    };
-  }, [refreshProjectsSilently]);
-
-  useEffect(() => {
-    window.openSettings = openSettings;
-
-    return () => {
-      if (window.openSettings === openSettings) {
-        delete window.openSettings;
-      }
-    };
-  }, [openSettings]);
+  usePaletteOpsRegister({
+    openSettings,
+    refreshProjects: refreshProjectsSilently,
+  });
 
   useEffect(() => {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
@@ -122,8 +117,28 @@ export default function AppContent() {
     }
   }, [isConnected, selectedSession?.id, sendMessage]);
 
+  // Adjust the app container to stay above the virtual keyboard on iOS Safari.
+  // On Chrome for Android the layout viewport already shrinks when the keyboard opens,
+  // so inset-0 adjusts automatically. On iOS the layout viewport stays full-height and
+  // the keyboard overlays it — we use the Visual Viewport API to track keyboard height
+  // and apply it as a CSS variable that shifts the container's bottom edge up.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      // Only resize matters — keyboard open/close changes vv.height.
+      // Do NOT listen to scroll: on iOS Safari, scrolling content changes
+      // vv.offsetTop which would make --keyboard-height fluctuate during
+      // normal scrolling, causing the container to bounce up and down.
+      const kb = Math.max(0, window.innerHeight - vv.height);
+      document.documentElement.style.setProperty('--keyboard-height', `${kb}px`);
+    };
+    vv.addEventListener('resize', update);
+    return () => vv.removeEventListener('resize', update);
+  }, []);
+
   return (
-    <div className="fixed inset-0 flex bg-background">
+    <div className="fixed inset-0 flex bg-background" style={{ bottom: 'var(--keyboard-height, 0px)' }}>
       {!isMobile ? (
         <div className="h-full flex-shrink-0 border-r border-border/50">
           <Sidebar {...sidebarSharedProps} />
@@ -182,6 +197,12 @@ export default function AppContent() {
         />
       </div>
 
+      <CommandPalette
+        selectedProject={selectedProject}
+        onStartNewChat={handleNewSession}
+        onOpenSettings={() => openSettings()}
+        onShowTab={setActiveTab}
+      />
     </div>
   );
 }

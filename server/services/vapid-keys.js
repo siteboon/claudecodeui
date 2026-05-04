@@ -1,7 +1,8 @@
 import webPush from 'web-push';
-import { db } from '../database/db.js';
+import { getConnection } from '../modules/database/connection.js';
 
 let cachedKeys = null;
+const db = getConnection();
 
 function ensureVapidKeys() {
   if (cachedKeys) return cachedKeys;

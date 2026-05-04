@@ -48,7 +48,9 @@ type SidebarContentProps = {
   conversationResults: ConversationSearchResults | null;
   isSearching: boolean;
   searchProgress: SearchProgress | null;
-  onConversationResultClick: (projectName: string, sessionId: string, provider: string, messageTimestamp?: string | null, messageSnippet?: string | null) => void;
+  // Conversation result clicks pass back the DB projectId (or null when the
+  // server couldn't resolve it). Consumers must handle the null case.
+  onConversationResultClick: (projectId: string | null, sessionId: string, provider: string, messageTimestamp?: string | null, messageSnippet?: string | null) => void;
   onRefresh: () => void;
   isRefreshing: boolean;
   onCreateProject: () => void;
@@ -170,10 +172,12 @@ export default function SidebarContent({
                   </div>
                   {projectResult.sessions.map((session) => (
                     <button
-                      key={`${projectResult.projectName}-${session.sessionId}`}
+                      key={`${projectResult.projectId ?? projectResult.projectName}-${session.sessionId}`}
                       className="w-full rounded-md px-2 py-2 text-left transition-colors hover:bg-accent/50"
                       onClick={() => onConversationResultClick(
-                        projectResult.projectName,
+                        // Pass the DB projectId (preferred) so the parent can
+                        // cross-reference with the loaded projects list.
+                        projectResult.projectId,
                         session.sessionId,
                         session.provider || session.matches[0]?.provider || 'claude',
                         session.matches[0]?.timestamp,

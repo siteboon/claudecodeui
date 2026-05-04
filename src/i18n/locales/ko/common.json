@@ -176,7 +176,6 @@
     },
     "step3": {
       "reviewConfig": "설정 검토",
-      "workspaceType": "워크스페이스 유형:",
       "existingWorkspace": "기존 워크스페이스",
       "newWorkspace": "새 워크스페이스",
       "path": "경로:",

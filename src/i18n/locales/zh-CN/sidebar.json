@@ -47,7 +47,8 @@
     "deleteSession": "永久删除此会话",
     "save": "保存",
     "cancel": "取消",
-    "clearSearch": "清除搜索"
+    "clearSearch": "清除搜索",
+    "openCommandPalette": "打开命令面板"
   },
   "navigation": {
     "chat": "聊天",

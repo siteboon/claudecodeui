@@ -19,7 +19,8 @@ export interface FileTreeImageSelection {
   name: string;
   path: string;
   projectPath?: string;
-  projectName: string;
+  // DB projectId; used by ImageViewer to build the raw content URL.
+  projectId: string;
 }
 
 export interface FileIconData {

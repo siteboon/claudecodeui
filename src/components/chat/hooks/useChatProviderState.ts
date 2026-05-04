@@ -4,6 +4,16 @@ import { CLAUDE_MODELS, CODEX_MODELS, CURSOR_MODELS, GEMINI_MODELS } from '../..
 import type { PendingPermissionRequest, PermissionMode } from '../types/types';
 import type { ProjectSession, LLMProvider } from '../../../types/app';
 
+const getPermissionModesForProvider = (provider: LLMProvider): PermissionMode[] => {
+  if (provider === 'codex') {
+    return ['default', 'acceptEdits', 'bypassPermissions'];
+  }
+  if (provider === 'claude') {
+    return ['default', 'auto', 'acceptEdits', 'bypassPermissions', 'plan'];
+  }
+  return ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
+};
+
 interface UseChatProviderStateArgs {
   selectedSession: ProjectSession | null;
 }
@@ -34,9 +44,10 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
       return;
     }
 
-    const savedMode = localStorage.getItem(`permissionMode-${selectedSession.id}`);
-    setPermissionMode((savedMode as PermissionMode) || 'default');
-  }, [selectedSession?.id]);
+    const savedMode = localStorage.getItem(`permissionMode-${selectedSession.id}`) as PermissionMode | null;
+    const validModes = getPermissionModesForProvider(provider);
+    setPermissionMode(savedMode && validModes.includes(savedMode) ? savedMode : 'default');
+  }, [selectedSession?.id, provider]);
 
   useEffect(() => {
     if (!selectedSession?.__provider || selectedSession.__provider === provider) {
@@ -84,10 +95,7 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
   }, [provider]);
 
   const cyclePermissionMode = useCallback(() => {
-    const modes: PermissionMode[] =
-      provider === 'codex'
-        ? ['default', 'acceptEdits', 'bypassPermissions']
-        : ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
+    const modes = getPermissionModesForProvider(provider);
 
     const currentIndex = modes.indexOf(permissionMode);
     const nextIndex = (currentIndex + 1) % modes.length;

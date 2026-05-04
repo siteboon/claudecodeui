@@ -47,7 +47,8 @@
     "deleteSession": "Diese Sitzung dauerhaft löschen",
     "save": "Speichern",
     "cancel": "Abbrechen",
-    "clearSearch": "Suche leeren"
+    "clearSearch": "Suche leeren",
+    "openCommandPalette": "Befehlspalette öffnen"
   },
   "navigation": {
     "chat": "Chat",

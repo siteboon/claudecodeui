@@ -5,7 +5,7 @@
 
 export interface ToolDisplayConfig {
   input: {
-    type: 'one-line' | 'collapsible' | 'hidden';
+    type: 'one-line' | 'collapsible' | 'plan' | 'hidden';
     // One-line config
     icon?: string;
     label?: string;
@@ -31,7 +31,7 @@ export interface ToolDisplayConfig {
   result?: {
     hidden?: boolean;
     hideOnSuccess?: boolean;
-    type?: 'one-line' | 'collapsible' | 'special';
+    type?: 'one-line' | 'collapsible' | 'plan' | 'special';
     title?: string | ((result: any) => string);
     defaultOpen?: boolean;
     // Special result handlers
@@ -494,7 +494,7 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
 
   exit_plan_mode: {
     input: {
-      type: 'collapsible',
+      type: 'plan',
       title: 'Implementation plan',
       defaultOpen: true,
       contentType: 'markdown',
@@ -503,29 +503,14 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       })
     },
     result: {
-      type: 'collapsible',
-      contentType: 'markdown',
-      getContentProps: (result) => {
-        try {
-          let parsed = result.content;
-          if (typeof parsed === 'string') {
-            parsed = JSON.parse(parsed);
-          }
-          return {
-            content: parsed.plan?.replace(/\\n/g, '\n') || parsed.plan
-          };
-        } catch (e) {
-          console.warn('Failed to parse plan content:', e);
-          return { content: '' };
-        }
-      }
+      hidden: true
     }
   },
 
   // Also register as ExitPlanMode (the actual tool name used by Claude)
   ExitPlanMode: {
     input: {
-      type: 'collapsible',
+      type: 'plan',
       title: 'Implementation plan',
       defaultOpen: true,
       contentType: 'markdown',
@@ -534,22 +519,7 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       })
     },
     result: {
-      type: 'collapsible',
-      contentType: 'markdown',
-      getContentProps: (result) => {
-        try {
-          let parsed = result.content;
-          if (typeof parsed === 'string') {
-            parsed = JSON.parse(parsed);
-          }
-          return {
-            content: parsed.plan?.replace(/\\n/g, '\n') || parsed.plan
-          };
-        } catch (e) {
-          console.warn('Failed to parse plan content:', e);
-          return { content: '' };
-        }
-      }
+      hidden: true
     }
   },
 

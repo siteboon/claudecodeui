@@ -89,12 +89,14 @@
     "permissionMode": "权限模式",
     "modes": {
       "default": "默认模式",
+      "auto": "Auto Mode",
       "acceptEdits": "编辑模式",
       "bypassPermissions": "无限制模式",
       "plan": "计划模式"
     },
     "descriptions": {
       "default": "只有受信任的命令（ls、cat、grep、git status 等）自动运行。其他命令将被跳过。可以写入工作区。",
+      "auto": "A model classifier decides per tool call whether to approve or deny. Hands-off, but safer than Bypass — denials still happen.",
       "acceptEdits": "工作区内的所有命令自动运行。完全自动模式，具有沙盒执行功能。",
       "bypassPermissions": "完全的系统访问，无限制。所有命令自动运行，具有完整的磁盘和网络访问权限。请谨慎使用。",
       "plan": "计划模式 - 不执行任何命令"
@@ -170,7 +172,8 @@
       "codex": "准备好使用带有 {{model}} 的 Codex。请在下方开始输入您的消息。",
       "gemini": "准备好使用带有 {{model}} 的 Gemini。请在下方开始输入您的消息。",
       "default": "请在上方选择一个提供者以开始"
-    }
+    },
+    "pressToSearch": "按 <kbd>{{shortcut}}</kbd> 搜索会话、文件和提交"
   },
   "session": {
     "continue": {

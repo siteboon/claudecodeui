@@ -46,7 +46,8 @@
     "editSessionName": "セッション名を手動で編集",
     "deleteSession": "このセッションを完全に削除",
     "save": "保存",
-    "cancel": "キャンセル"
+    "cancel": "キャンセル",
+    "openCommandPalette": "コマンドパレットを開く"
   },
   "navigation": {
     "chat": "チャット",

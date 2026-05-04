@@ -1,5 +1,3 @@
-import type { WorkspaceType } from '../types';
-
 const SSH_PREFIXES = ['git@', 'ssh://'];
 const WINDOWS_DRIVE_PATTERN = /^[A-Za-z]:\\?$/;
 
@@ -8,13 +6,11 @@ export const isSshGitUrl = (url: string): boolean => {
   return SSH_PREFIXES.some((prefix) => trimmedUrl.startsWith(prefix));
 };
 
-export const shouldShowGithubAuthentication = (
-  workspaceType: WorkspaceType,
-  githubUrl: string,
-): boolean => workspaceType === 'new' && githubUrl.trim().length > 0 && !isSshGitUrl(githubUrl);
+export const shouldShowGithubAuthentication = (githubUrl: string): boolean =>
+  githubUrl.trim().length > 0 && !isSshGitUrl(githubUrl);
 
-export const isCloneWorkflow = (workspaceType: WorkspaceType, githubUrl: string): boolean =>
-  workspaceType === 'new' && githubUrl.trim().length > 0;
+export const isCloneWorkflow = (githubUrl: string): boolean =>
+  githubUrl.trim().length > 0;
 
 export const getSuggestionRootPath = (inputPath: string): string => {
   const trimmedPath = inputPath.trim();

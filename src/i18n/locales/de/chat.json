@@ -89,12 +89,14 @@
     "permissionMode": "Berechtigungsmodus",
     "modes": {
       "default": "Standardmodus",
+      "auto": "Auto Mode",
       "acceptEdits": "Bearbeitungen akzeptieren",
       "bypassPermissions": "Berechtigungen umgehen",
       "plan": "Planungsmodus"
     },
     "descriptions": {
       "default": "Nur vertrauenswürdige Befehle (ls, cat, grep, git status usw.) werden automatisch ausgeführt. Andere Befehle werden übersprungen. Kann in den Arbeitsbereich schreiben.",
+      "auto": "A model classifier decides per tool call whether to approve or deny. Hands-off, but safer than Bypass — denials still happen.",
       "acceptEdits": "Alle Befehle werden automatisch innerhalb des Arbeitsbereichs ausgeführt. Vollautomatischer Modus mit isolierter Ausführung.",
       "bypassPermissions": "Vollständiger Systemzugriff ohne Einschränkungen. Alle Befehle werden automatisch mit vollem Festplatten- und Netzwerkzugriff ausgeführt. Mit Vorsicht verwenden.",
       "plan": "Planungsmodus – keine Befehle werden ausgeführt"
@@ -188,7 +190,8 @@
       "codex": "Bereit, Codex mit {{model}} zu verwenden. Gib unten deine Nachricht ein.",
       "gemini": "Bereit, Gemini mit {{model}} zu verwenden. Gib unten deine Nachricht ein.",
       "default": "Wähl oben einen Anbieter, um zu beginnen"
-    }
+    },
+    "pressToSearch": "Drücke <kbd>{{shortcut}}</kbd>, um Sitzungen, Dateien und Commits zu durchsuchen"
   },
   "session": {
     "continue": {

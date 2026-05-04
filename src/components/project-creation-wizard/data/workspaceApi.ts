@@ -3,8 +3,8 @@ import type {
   BrowseFilesystemResponse,
   CloneProgressEvent,
   CreateFolderResponse,
-  CreateWorkspacePayload,
-  CreateWorkspaceResponse,
+  CreateProjectPayload,
+  CreateProjectResponse,
   CredentialsResponse,
   FolderSuggestion,
   TokenMode,
@@ -25,6 +25,42 @@ type CloneProgressHandlers = {
 const parseJson = async <T>(response: Response): Promise<T> => {
   const data = (await response.json()) as T;
   return data;
+};
+
+const resolveCreateProjectErrorMessage = (responseData: CreateProjectResponse): string | null => {
+  if (typeof responseData.details === 'string' && responseData.details.trim().length > 0) {
+    return responseData.details;
+  }
+
+  if (typeof responseData.error === 'string' && responseData.error.trim().length > 0) {
+    return responseData.error;
+  }
+
+  if (responseData.error && typeof responseData.error === 'object') {
+    const errorObject = responseData.error as { message?: unknown; details?: unknown };
+
+    if (typeof errorObject.details === 'string' && errorObject.details.trim().length > 0) {
+      return errorObject.details;
+    }
+
+    if (typeof errorObject.message === 'string' && errorObject.message.trim().length > 0) {
+      return errorObject.message;
+    }
+
+    if (
+      errorObject.details
+      && typeof errorObject.details === 'object'
+      && typeof (errorObject.details as { projectPath?: unknown }).projectPath === 'string'
+    ) {
+      return `Project path already exists: ${(errorObject.details as { projectPath: string }).projectPath}`;
+    }
+  }
+
+  if (typeof responseData.message === 'string' && responseData.message.trim().length > 0) {
+    return responseData.message;
+  }
+
+  return null;
 };
 
 export const fetchGithubTokenCredentials = async () => {
@@ -64,12 +100,12 @@ export const createFolderInFilesystem = async (folderPath: string) => {
   return data.path || folderPath;
 };
 
-export const createWorkspaceRequest = async (payload: CreateWorkspacePayload) => {
-  const response = await api.createWorkspace(payload);
-  const data = await parseJson<CreateWorkspaceResponse>(response);
+export const createProjectRequest = async (payload: CreateProjectPayload) => {
+  const response = await api.createProject(payload);
+  const data = await parseJson<CreateProjectResponse>(response);
 
   if (!response.ok) {
-    throw new Error(data.details || data.error || 'Failed to create workspace');
+    throw new Error(resolveCreateProjectErrorMessage(data) || 'Failed to create project');
   }
 
   return data.project;

@@ -4,7 +4,8 @@ import type { ExistingPrdFile, SavePrdInput, SavePrdResult } from '../types';
 import { ensurePrdExtension } from '../utils/fileName';
 
 type UsePrdSaveArgs = {
-  projectName?: string;
+  // DB primary key of the project (post migration).
+  projectId?: string;
   existingPrds: ExistingPrdFile[];
   isExistingFile: boolean;
   onAfterSave?: () => Promise<void>;
@@ -17,7 +18,7 @@ type UsePrdSaveResult = {
 };
 
 export function usePrdSave({
-  projectName,
+  projectId,
   existingPrds,
   isExistingFile,
   onAfterSave,
@@ -44,7 +45,7 @@ export function usePrdSave({
         return { status: 'failed', message: 'Please provide a filename for the PRD.' };
       }
 
-      if (!projectName) {
+      if (!projectId) {
         return { status: 'failed', message: 'No project selected. Please reopen the editor.' };
       }
 
@@ -59,7 +60,7 @@ export function usePrdSave({
       setSaving(true);
 
       try {
-        const response = await authenticatedFetch(`/api/taskmaster/prd/${encodeURIComponent(projectName)}`, {
+        const response = await authenticatedFetch(`/api/taskmaster/prd/${encodeURIComponent(projectId)}`, {
           method: 'POST',
           body: JSON.stringify({
             fileName: finalFileName,
@@ -100,7 +101,7 @@ export function usePrdSave({
         setSaving(false);
       }
     },
-    [existingPrds, isExistingFile, onAfterSave, projectName],
+    [existingPrds, isExistingFile, onAfterSave, projectId],
   );
 
   return {

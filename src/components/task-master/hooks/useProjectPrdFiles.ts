@@ -3,7 +3,8 @@ import { api } from '../../../utils/api';
 import type { PrdFile } from '../types';
 
 type UseProjectPrdFilesOptions = {
-  projectName?: string;
+  // DB primary key of the project (post migration).
+  projectId?: string;
 };
 
 type PrdResponse = {
@@ -23,19 +24,19 @@ function normalizePrdResponse(responseData: PrdResponse): PrdFile[] {
   return [];
 }
 
-export function useProjectPrdFiles({ projectName }: UseProjectPrdFilesOptions) {
+export function useProjectPrdFiles({ projectId }: UseProjectPrdFilesOptions) {
   const [prdFiles, setPrdFiles] = useState<PrdFile[]>([]);
   const [isLoadingPrdFiles, setIsLoadingPrdFiles] = useState(false);
 
   const refreshPrdFiles = useCallback(async () => {
-    if (!projectName) {
+    if (!projectId) {
       setPrdFiles([]);
       return;
     }
 
     try {
       setIsLoadingPrdFiles(true);
-      const response = await api.get(`/taskmaster/prd/${encodeURIComponent(projectName)}`);
+      const response = await api.get(`/taskmaster/prd/${encodeURIComponent(projectId)}`);
 
       if (!response.ok) {
         setPrdFiles([]);
@@ -50,7 +51,7 @@ export function useProjectPrdFiles({ projectName }: UseProjectPrdFilesOptions) {
     } finally {
       setIsLoadingPrdFiles(false);
     }
-  }, [projectName]);
+  }, [projectId]);
 
   useEffect(() => {
     void refreshPrdFiles();

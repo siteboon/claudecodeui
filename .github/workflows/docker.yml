@@ -1,0 +1,51 @@
+name: Docker
+
+on:
+  workflow_dispatch:
+    inputs:
+      extra_tag:
+        description: 'Additional tag to push alongside the template tag (e.g. v1.2.3, leave empty for none)'
+        required: false
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        template: [claude-code, codex, gemini]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Compute tags
+        id: tags
+        run: |
+          TAGS="docker.io/cloudcliai/sandbox:${{ matrix.template }}"
+          if [ -n "${{ inputs.extra_tag }}" ]; then
+            TAGS="$TAGS,docker.io/cloudcliai/sandbox:${{ matrix.template }}-${{ inputs.extra_tag }}"
+          fi
+          echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./docker
+          file: ./docker/${{ matrix.template }}/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          cache-from: type=gha,scope=${{ matrix.template }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.template }}

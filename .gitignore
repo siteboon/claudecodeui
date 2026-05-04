@@ -137,6 +137,8 @@ tasks/
 !src/i18n/locales/ja/tasks.json
 !src/i18n/locales/ru/tasks.json
 !src/i18n/locales/de/tasks.json
+!src/i18n/locales/tr/tasks.json
+!src/i18n/locales/it/tasks.json
 
 # Git worktrees
 .worktrees/

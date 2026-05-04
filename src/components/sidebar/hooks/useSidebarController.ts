@@ -1,21 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type React from 'react';
 import type { TFunction } from 'i18next';
+
 import { api } from '../../../utils/api';
+import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
 import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
 import type {
-  AdditionalSessionsByProject,
   DeleteProjectConfirmation,
-  LoadingSessionsByProject,
   ProjectSortOrder,
   SessionDeleteConfirmation,
   SessionWithProvider,
 } from '../types/types';
 import {
+  clearLegacyStarredProjectIds,
   filterProjects,
   getAllSessions,
-  loadStarredProjects,
-  persistStarredProjects,
+  readLegacyStarredProjectIds,
   readProjectSortOrder,
   sortProjects,
 } from '../utils/utils';
@@ -42,6 +41,9 @@ type ConversationSession = {
 };
 
 type ConversationProjectResult = {
+  // Emitted by the provider search service so the sidebar can map a
+  // match back to the Project in its current state by projectId.
+  projectId: string | null;
   projectName: string;
   projectDisplayName: string;
   sessions: ConversationSession[];
@@ -69,7 +71,9 @@ type UseSidebarControllerArgs = {
   onProjectSelect: (project: Project) => void;
   onSessionSelect: (session: ProjectSession) => void;
   onSessionDelete?: (sessionId: string) => void;
-  onProjectDelete?: (projectName: string) => void;
+  onLoadMoreSessions?: (projectId: string) => Promise<void> | void;
+  // `projectId` is the DB-assigned identifier; callbacks use that post-migration.
+  onProjectDelete?: (projectId: string) => void;
   setCurrentProject: (project: Project) => void;
   setSidebarVisible: (visible: boolean) => void;
   sidebarVisible: boolean;
@@ -78,7 +82,7 @@ type UseSidebarControllerArgs = {
 export function useSidebarController({
   projects,
   selectedProject,
-  selectedSession,
+  selectedSession: _selectedSession,
   isLoading,
   isMobile,
   t,
@@ -86,22 +90,21 @@ export function useSidebarController({
   onProjectSelect,
   onSessionSelect,
   onSessionDelete,
+  onLoadMoreSessions,
   onProjectDelete,
   setCurrentProject,
   setSidebarVisible,
   sidebarVisible,
 }: UseSidebarControllerArgs) {
+  const paletteOps = usePaletteOps();
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [editingProject, setEditingProject] = useState<string | null>(null);
   const [showNewProject, setShowNewProject] = useState(false);
   const [editingName, setEditingName] = useState('');
-  const [loadingSessions, setLoadingSessions] = useState<LoadingSessionsByProject>({});
-  const [additionalSessions, setAdditionalSessions] = useState<AdditionalSessionsByProject>({});
   const [initialSessionsLoaded, setInitialSessionsLoaded] = useState<Set<string>>(new Set());
   const [currentTime, setCurrentTime] = useState(new Date());
   const [projectSortOrder, setProjectSortOrder] = useState<ProjectSortOrder>('name');
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [projectHasMoreOverrides, setProjectHasMoreOverrides] = useState<Record<string, boolean>>({});
   const [editingSession, setEditingSession] = useState<string | null>(null);
   const [editingSessionName, setEditingSessionName] = useState('');
   const [searchFilter, setSearchFilter] = useState('');
@@ -109,14 +112,18 @@ export function useSidebarController({
   const [deleteConfirmation, setDeleteConfirmation] = useState<DeleteProjectConfirmation | null>(null);
   const [sessionDeleteConfirmation, setSessionDeleteConfirmation] = useState<SessionDeleteConfirmation | null>(null);
   const [showVersionModal, setShowVersionModal] = useState(false);
-  const [starredProjects, setStarredProjects] = useState<Set<string>>(() => loadStarredProjects());
   const [searchMode, setSearchMode] = useState<'projects' | 'conversations'>('projects');
   const [conversationResults, setConversationResults] = useState<ConversationSearchResults | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [searchProgress, setSearchProgress] = useState<SearchProgress | null>(null);
-  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+  const [optimisticStarByProjectId, setOptimisticStarByProjectId] = useState<Map<string, boolean>>(new Map());
+  const [loadingMoreProjects, setLoadingMoreProjects] = useState<Set<string>>(new Set());
   const searchSeqRef = useRef(0);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const starToggleSequenceByProjectRef = useRef<Map<string, number>>(new Map());
+  const migrationStartedRef = useRef(false);
+  const onRefreshRef = useRef(onRefresh);
 
   const isSidebarCollapsed = !isMobile && !sidebarVisible;
 
@@ -129,30 +136,34 @@ export function useSidebarController({
   }, []);
 
   useEffect(() => {
-    setAdditionalSessions({});
     setInitialSessionsLoaded(new Set());
-    setProjectHasMoreOverrides({});
   }, [projects]);
 
   useEffect(() => {
-    if (selectedProject) {
-      setExpandedProjects((prev) => {
-        if (prev.has(selectedProject.name)) {
-          return prev;
-        }
-        const next = new Set(prev);
-        next.add(selectedProject.name);
-        return next;
-      });
+    // Auto-expand only when the selected project identity changes.
+    // Depending on the full `selectedProject` object (or `selectedSession`) causes
+    // websocket-driven list refreshes to re-open projects users manually collapsed.
+    const selectedProjectId = selectedProject?.projectId;
+    if (!selectedProjectId) {
+      return;
     }
-  }, [selectedSession, selectedProject]);
+
+    setExpandedProjects((prev) => {
+      if (prev.has(selectedProjectId)) {
+        return prev;
+      }
+      const next = new Set(prev);
+      next.add(selectedProjectId);
+      return next;
+    });
+  }, [selectedProject?.projectId]);
 
   useEffect(() => {
     if (projects.length > 0 && !isLoading) {
       const loadedProjects = new Set<string>();
       projects.forEach((project) => {
         if (project.sessions && project.sessions.length >= 0) {
-          loadedProjects.add(project.name);
+          loadedProjects.add(project.projectId);
         }
       });
       setInitialSessionsLoaded(loadedProjects);
@@ -186,17 +197,83 @@ export function useSidebarController({
     };
   }, []);
 
+  useEffect(() => {
+    onRefreshRef.current = onRefresh;
+  }, [onRefresh]);
+
+  useEffect(() => {
+    if (migrationStartedRef.current) {
+      return;
+    }
+
+    const legacyStarredProjectIds = readLegacyStarredProjectIds();
+    if (legacyStarredProjectIds.length === 0) {
+      return;
+    }
+
+    migrationStartedRef.current = true;
+
+    const migrateLegacyStars = async () => {
+      try {
+        await api.migrateLegacyProjectStars(legacyStarredProjectIds);
+        await onRefreshRef.current();
+      } catch (error) {
+        console.error('[Sidebar] Failed to migrate legacy starred projects:', error);
+      } finally {
+        clearLegacyStarredProjectIds();
+      }
+    };
+
+    void migrateLegacyStars();
+  }, [onRefresh]);
+
+  useEffect(() => {
+    setOptimisticStarByProjectId((previous) => {
+      if (previous.size === 0) {
+        return previous;
+      }
+
+      const next = new Map(previous);
+      let changed = false;
+
+      for (const [projectId, optimisticValue] of previous.entries()) {
+        const project = projects.find((candidate) => candidate.projectId === projectId);
+        if (!project) {
+          next.delete(projectId);
+          changed = true;
+          continue;
+        }
+
+        if (Boolean(project.isStarred) === optimisticValue) {
+          next.delete(projectId);
+          changed = true;
+        }
+      }
+
+      return changed ? next : previous;
+    });
+  }, [projects]);
+
+  // Debounce search text updates so both project filtering and conversation
+  // SSE requests avoid running on every keypress.
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setDebouncedSearchQuery(searchFilter.trim());
+    }, 300);
+
+    return () => {
+      clearTimeout(timeout);
+    };
+  }, [searchFilter]);
+
   // Debounced conversation search with SSE streaming
   useEffect(() => {
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
     }
 
-    const query = searchFilter.trim();
+    const query = debouncedSearchQuery;
     if (searchMode !== 'conversations' || query.length < 2) {
       searchSeqRef.current += 1;
       setConversationResults(null);
@@ -208,163 +285,244 @@ export function useSidebarController({
     setIsSearching(true);
     const seq = ++searchSeqRef.current;
 
-    searchTimeoutRef.current = setTimeout(() => {
-      if (seq !== searchSeqRef.current) return;
+    if (seq !== searchSeqRef.current) {
+      return;
+    }
 
-      const url = api.searchConversationsUrl(query);
-      const es = new EventSource(url);
-      eventSourceRef.current = es;
+    const url = api.searchConversationsUrl(query);
+    const es = new EventSource(url);
+    eventSourceRef.current = es;
 
-      const accumulated: ConversationProjectResult[] = [];
-      let totalMatches = 0;
+    const accumulated: ConversationProjectResult[] = [];
+    let totalMatches = 0;
 
-      es.addEventListener('result', (evt) => {
-        if (seq !== searchSeqRef.current) { es.close(); return; }
-        try {
-          const data = JSON.parse(evt.data) as {
-            projectResult: ConversationProjectResult;
-            totalMatches: number;
-            scannedProjects: number;
-            totalProjects: number;
-          };
-          accumulated.push(data.projectResult);
-          totalMatches = data.totalMatches;
-          setConversationResults({ results: [...accumulated], totalMatches, query });
-          setSearchProgress({ scannedProjects: data.scannedProjects, totalProjects: data.totalProjects });
-        } catch {
-          // Ignore malformed SSE data
-        }
-      });
+    es.addEventListener('result', (evt) => {
+      if (seq !== searchSeqRef.current) { es.close(); return; }
+      try {
+        const data = JSON.parse(evt.data) as {
+          projectResult: ConversationProjectResult;
+          totalMatches: number;
+          scannedProjects: number;
+          totalProjects: number;
+        };
+        accumulated.push(data.projectResult);
+        totalMatches = data.totalMatches;
+        setConversationResults({ results: [...accumulated], totalMatches, query });
+        setSearchProgress({ scannedProjects: data.scannedProjects, totalProjects: data.totalProjects });
+      } catch {
+        // Ignore malformed SSE data
+      }
+    });
 
-      es.addEventListener('progress', (evt) => {
-        if (seq !== searchSeqRef.current) { es.close(); return; }
-        try {
-          const data = JSON.parse(evt.data) as { totalMatches: number; scannedProjects: number; totalProjects: number };
-          totalMatches = data.totalMatches;
-          setSearchProgress({ scannedProjects: data.scannedProjects, totalProjects: data.totalProjects });
-        } catch {
-          // Ignore malformed SSE data
-        }
-      });
+    es.addEventListener('progress', (evt) => {
+      if (seq !== searchSeqRef.current) { es.close(); return; }
+      try {
+        const data = JSON.parse(evt.data) as { totalMatches: number; scannedProjects: number; totalProjects: number };
+        totalMatches = data.totalMatches;
+        setSearchProgress({ scannedProjects: data.scannedProjects, totalProjects: data.totalProjects });
+      } catch {
+        // Ignore malformed SSE data
+      }
+    });
 
-      es.addEventListener('done', () => {
-        if (seq !== searchSeqRef.current) { es.close(); return; }
-        es.close();
-        eventSourceRef.current = null;
-        setIsSearching(false);
-        setSearchProgress(null);
-        if (accumulated.length === 0) {
-          setConversationResults({ results: [], totalMatches: 0, query });
-        }
-      });
+    es.addEventListener('done', () => {
+      if (seq !== searchSeqRef.current) { es.close(); return; }
+      es.close();
+      eventSourceRef.current = null;
+      setIsSearching(false);
+      setSearchProgress(null);
+      if (accumulated.length === 0) {
+        setConversationResults({ results: [], totalMatches: 0, query });
+      }
+    });
 
-      es.addEventListener('error', () => {
-        if (seq !== searchSeqRef.current) { es.close(); return; }
-        es.close();
-        eventSourceRef.current = null;
-        setIsSearching(false);
-        setSearchProgress(null);
-        if (accumulated.length === 0) {
-          setConversationResults({ results: [], totalMatches: 0, query });
-        }
-      });
-    }, 400);
+    es.addEventListener('error', () => {
+      if (seq !== searchSeqRef.current) { es.close(); return; }
+      es.close();
+      eventSourceRef.current = null;
+      setIsSearching(false);
+      setSearchProgress(null);
+      if (accumulated.length === 0) {
+        setConversationResults({ results: [], totalMatches: 0, query });
+      }
+    });
 
     return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
     };
-  }, [searchFilter, searchMode]);
+  }, [debouncedSearchQuery, searchMode]);
 
-  const handleTouchClick = useCallback(
-    (callback: () => void) =>
-      (event: React.TouchEvent<HTMLElement>) => {
-        const target = event.target as HTMLElement;
-        if (target.closest('.overflow-y-auto') || target.closest('[data-scroll-container]')) {
-          return;
-        }
-
-        event.preventDefault();
-        event.stopPropagation();
-        callback();
-      },
-    [],
-  );
-
-  const toggleProject = useCallback((projectName: string) => {
+  // All sidebar state keys (expanded, starred, loading, etc.) use the DB
+  // `projectId` as their identifier after the migration.
+  const toggleProject = useCallback((projectId: string) => {
     setExpandedProjects((prev) => {
       const next = new Set<string>();
-      if (!prev.has(projectName)) {
-        next.add(projectName);
+      if (!prev.has(projectId)) {
+        next.add(projectId);
       }
       return next;
     });
   }, []);
 
   const handleSessionClick = useCallback(
-    (session: SessionWithProvider, projectName: string) => {
-      onSessionSelect({ ...session, __projectName: projectName });
+    (session: SessionWithProvider, projectId: string) => {
+      // Tag the session with its owning projectId so downstream handlers
+      // can correlate it with the selectedProject in the app state.
+      onSessionSelect({ ...session, __projectId: projectId });
     },
     [onSessionSelect],
   );
 
-  const toggleStarProject = useCallback((projectName: string) => {
-    setStarredProjects((prev) => {
-      const next = new Set(prev);
-      if (next.has(projectName)) {
-        next.delete(projectName);
-      } else {
-        next.add(projectName);
+  const resolveProjectStarState = useCallback(
+    (projectId: string): boolean => {
+      if (optimisticStarByProjectId.has(projectId)) {
+        return Boolean(optimisticStarByProjectId.get(projectId));
       }
 
-      persistStarredProjects(next);
+      return projects.some((project) => project.projectId === projectId && Boolean(project.isStarred));
+    },
+    [optimisticStarByProjectId, projects],
+  );
+
+  const toggleStarProject = useCallback((projectId: string) => {
+    const previousStarState = resolveProjectStarState(projectId);
+    const optimisticStarState = !previousStarState;
+    const latestSequence = (starToggleSequenceByProjectRef.current.get(projectId) ?? 0) + 1;
+    starToggleSequenceByProjectRef.current.set(projectId, latestSequence);
+
+    setOptimisticStarByProjectId((previous) => {
+      const next = new Map(previous);
+      next.set(projectId, optimisticStarState);
       return next;
     });
-  }, []);
 
-  const isProjectStarred = useCallback(
-    (projectName: string) => starredProjects.has(projectName),
-    [starredProjects],
-  );
-
-  const getProjectSessions = useCallback(
-    (project: Project) => getAllSessions(project, additionalSessions),
-    [additionalSessions],
-  );
-
-  const projectsWithSessionMeta = useMemo(
-    () =>
-      projects.map((project) => {
-        const hasMoreOverride = projectHasMoreOverrides[project.name];
-        if (hasMoreOverride === undefined) {
-          return project;
+    const updateStar = async () => {
+      try {
+        const response = await api.toggleProjectStar(projectId);
+        if (!response.ok) {
+          const payload = (await response.json()) as { error?: string | { message?: string } };
+          const errorPayload = payload.error;
+          const message =
+            typeof errorPayload === 'string'
+              ? errorPayload
+              : errorPayload && typeof errorPayload === 'object' && errorPayload.message
+                ? errorPayload.message
+                : t('messages.updateProjectError');
+          throw new Error(message);
         }
 
-        return {
-          ...project,
-          sessionMeta: { ...project.sessionMeta, hasMore: hasMoreOverride },
-        };
-      }),
-    [projectHasMoreOverrides, projects],
+        const payload = (await response.json()) as { isStarred?: boolean };
+        const isLatestSequence = starToggleSequenceByProjectRef.current.get(projectId) === latestSequence;
+        if (!isLatestSequence) {
+          return;
+        }
+
+        setOptimisticStarByProjectId((previous) => {
+          const next = new Map(previous);
+          next.set(projectId, Boolean(payload.isStarred));
+          return next;
+        });
+      } catch (error) {
+        const isLatestSequence = starToggleSequenceByProjectRef.current.get(projectId) === latestSequence;
+        if (!isLatestSequence) {
+          return;
+        }
+
+        setOptimisticStarByProjectId((previous) => {
+          const next = new Map(previous);
+          next.set(projectId, previousStarState);
+          return next;
+        });
+        console.error('[Sidebar] Failed to toggle project star:', error);
+        alert(t('messages.updateProjectError'));
+      }
+    };
+
+    void updateStar();
+  }, [resolveProjectStarState, t]);
+
+  const isProjectStarred = useCallback(
+    (projectId: string) => resolveProjectStarState(projectId),
+    [resolveProjectStarState],
   );
 
+  const getProjectSessions = useCallback((project: Project) => getAllSessions(project), []);
+
+  const loadMoreSessionsForProject = useCallback(async (projectId: string) => {
+    if (!onLoadMoreSessions) {
+      return;
+    }
+
+    let shouldLoad = false;
+    setLoadingMoreProjects((previous) => {
+      if (previous.has(projectId)) {
+        return previous;
+      }
+
+      shouldLoad = true;
+      const next = new Set(previous);
+      next.add(projectId);
+      return next;
+    });
+
+    if (!shouldLoad) {
+      return;
+    }
+
+    try {
+      await onLoadMoreSessions(projectId);
+    } catch (error) {
+      console.error('[Sidebar] Failed to load more sessions:', error);
+      alert(t('messages.refreshError'));
+    } finally {
+      setLoadingMoreProjects((previous) => {
+        const next = new Set(previous);
+        next.delete(projectId);
+        return next;
+      });
+    }
+  }, [onLoadMoreSessions, t]);
+
+  const projectsWithResolvedStarState = useMemo(() => {
+    if (optimisticStarByProjectId.size === 0) {
+      return projects;
+    }
+
+    return projects.map((project) => {
+      const optimisticStarState = optimisticStarByProjectId.get(project.projectId);
+      if (optimisticStarState === undefined) {
+        return project;
+      }
+
+      const currentStarState = Boolean(project.isStarred);
+      if (currentStarState === optimisticStarState) {
+        return project;
+      }
+
+      return {
+        ...project,
+        isStarred: optimisticStarState,
+      };
+    });
+  }, [optimisticStarByProjectId, projects]);
+
   const sortedProjects = useMemo(
-    () => sortProjects(projectsWithSessionMeta, projectSortOrder, starredProjects, additionalSessions),
-    [additionalSessions, projectSortOrder, projectsWithSessionMeta, starredProjects],
+    () => sortProjects(projectsWithResolvedStarState, projectSortOrder),
+    [projectSortOrder, projectsWithResolvedStarState],
   );
 
   const filteredProjects = useMemo(
-    () => filterProjects(sortedProjects, searchFilter),
-    [searchFilter, sortedProjects],
+    () => filterProjects(sortedProjects, debouncedSearchQuery),
+    [debouncedSearchQuery, sortedProjects],
   );
 
   const startEditing = useCallback((project: Project) => {
-    setEditingProject(project.name);
+    // `editingProject` is keyed by projectId so it stays stable across
+    // display-name mutations that happen while the input is open.
+    setEditingProject(project.projectId);
     setEditingName(project.displayName);
   }, []);
 
@@ -374,15 +532,13 @@ export function useSidebarController({
   }, []);
 
   const saveProjectName = useCallback(
-    async (projectName: string) => {
+    // `projectId` is the DB primary key; the rename API resolves the path
+    // through the `projects` table before writing the new display name.
+    async (projectId: string) => {
       try {
-        const response = await api.renameProject(projectName, editingName);
+        const response = await api.renameProject(projectId, editingName);
         if (response.ok) {
-          if (window.refreshProjects) {
-            await window.refreshProjects();
-          } else {
-            window.location.reload();
-          }
+          await paletteOps.refreshProjects();
         } else {
           console.error('Failed to rename project');
         }
@@ -393,17 +549,19 @@ export function useSidebarController({
         setEditingName('');
       }
     },
-    [editingName],
+    [editingName, paletteOps],
   );
 
   const showDeleteSessionConfirmation = useCallback(
+    // Kept with project/provider arguments for component wiring compatibility;
+    // deletion now uses only `sessionId` via /api/providers/sessions/:sessionId.
     (
-      projectName: string,
+      projectId: string,
       sessionId: string,
       sessionTitle: string,
       provider: SessionDeleteConfirmation['provider'] = 'claude',
     ) => {
-      setSessionDeleteConfirmation({ projectName, sessionId, sessionTitle, provider });
+      setSessionDeleteConfirmation({ projectId, sessionId, sessionTitle, provider });
     },
     [],
   );
@@ -413,18 +571,11 @@ export function useSidebarController({
       return;
     }
 
-    const { projectName, sessionId, provider } = sessionDeleteConfirmation;
+    const { sessionId } = sessionDeleteConfirmation;
     setSessionDeleteConfirmation(null);
 
     try {
-      let response;
-      if (provider === 'codex') {
-        response = await api.deleteCodexSession(sessionId);
-      } else if (provider === 'gemini') {
-        response = await api.deleteGeminiSession(sessionId);
-      } else {
-        response = await api.deleteSession(projectName, sessionId);
-      }
+      const response = await api.deleteSession(sessionId);
 
       if (response.ok) {
         onSessionDelete?.(sessionId);
@@ -457,20 +608,24 @@ export function useSidebarController({
       return;
     }
 
-    const { project, sessionCount } = deleteConfirmation;
-    const isEmpty = sessionCount === 0;
+    const { project } = deleteConfirmation;
 
     setDeleteConfirmation(null);
-    setDeletingProjects((prev) => new Set([...prev, project.name]));
+    // Track in-flight deletes by projectId so the UI can disable actions
+    // even if the project object is rebuilt while the request is flying.
+    setDeletingProjects((prev) => new Set([...prev, project.projectId]));
 
     try {
-      const response = await api.deleteProject(project.name, !isEmpty, deleteData);
+      const response = await api.deleteProject(project.projectId, deleteData);
 
       if (response.ok) {
-        onProjectDelete?.(project.name);
+        onProjectDelete?.(project.projectId);
       } else {
-        const error = (await response.json()) as { error?: string };
-        alert(error.error || t('messages.deleteProjectFailed'));
+        const data = (await response.json()) as { error?: string | { message?: string } };
+        const err = data.error;
+        const message =
+          typeof err === 'string' ? err : err && typeof err === 'object' && err.message ? err.message : t('messages.deleteProjectFailed');
+        alert(message);
       }
     } catch (error) {
       console.error('Error deleting project:', error);
@@ -478,54 +633,11 @@ export function useSidebarController({
     } finally {
       setDeletingProjects((prev) => {
         const next = new Set(prev);
-        next.delete(project.name);
+        next.delete(project.projectId);
         return next;
       });
     }
   }, [deleteConfirmation, onProjectDelete, t]);
-
-  const loadMoreSessions = useCallback(
-    async (project: Project) => {
-      const hasMoreOverride = projectHasMoreOverrides[project.name];
-      const canLoadMore =
-        hasMoreOverride !== undefined ? hasMoreOverride : project.sessionMeta?.hasMore === true;
-      if (!canLoadMore || loadingSessions[project.name]) {
-        return;
-      }
-
-      setLoadingSessions((prev) => ({ ...prev, [project.name]: true }));
-
-      try {
-        const currentSessionCount =
-          (project.sessions?.length || 0) + (additionalSessions[project.name]?.length || 0);
-        const response = await api.sessions(project.name, 5, currentSessionCount);
-
-        if (!response.ok) {
-          return;
-        }
-
-        const result = (await response.json()) as {
-          sessions?: ProjectSession[];
-          hasMore?: boolean;
-        };
-
-        setAdditionalSessions((prev) => ({
-          ...prev,
-          [project.name]: [...(prev[project.name] || []), ...(result.sessions || [])],
-        }));
-
-        if (result.hasMore === false) {
-          // Keep hasMore state in local hook state instead of mutating the project prop object.
-          setProjectHasMoreOverrides((prev) => ({ ...prev, [project.name]: false }));
-        }
-      } catch (error) {
-        console.error('Error loading more sessions:', error);
-      } finally {
-        setLoadingSessions((prev) => ({ ...prev, [project.name]: false }));
-      }
-    },
-    [additionalSessions, loadingSessions, projectHasMoreOverrides],
-  );
 
   const handleProjectSelect = useCallback(
     (project: Project) => {
@@ -545,7 +657,9 @@ export function useSidebarController({
   }, [onRefresh]);
 
   const updateSessionSummary = useCallback(
-    async (_projectName: string, sessionId: string, summary: string, provider: LLMProvider) => {
+    // `_projectId` and `_provider` are preserved for compatibility with
+    // existing sidebar callback signatures; backend rename only needs sessionId.
+    async (_projectId: string, sessionId: string, summary: string, _provider: LLMProvider) => {
       const trimmed = summary.trim();
       if (!trimmed) {
         setEditingSession(null);
@@ -553,7 +667,7 @@ export function useSidebarController({
         return;
       }
       try {
-        const response = await api.renameSession(sessionId, trimmed, provider);
+        const response = await api.renameSession(sessionId, trimmed);
         if (response.ok) {
           await onRefresh();
         } else {
@@ -585,8 +699,6 @@ export function useSidebarController({
     editingProject,
     showNewProject,
     editingName,
-    loadingSessions,
-    additionalSessions,
     initialSessionsLoaded,
     currentTime,
     projectSortOrder,
@@ -595,16 +707,17 @@ export function useSidebarController({
     editingSessionName,
     searchFilter,
     deletingProjects,
+    loadingMoreProjects,
     deleteConfirmation,
     sessionDeleteConfirmation,
     showVersionModal,
-    starredProjects,
     filteredProjects,
     toggleProject,
     handleSessionClick,
     toggleStarProject,
     isProjectStarred,
     getProjectSessions,
+    loadMoreSessionsForProject,
     startEditing,
     cancelEditing,
     saveProjectName,
@@ -612,7 +725,6 @@ export function useSidebarController({
     confirmDeleteSession,
     requestProjectDelete,
     confirmDeleteProject,
-    loadMoreSessions,
     handleProjectSelect,
     refreshProjects,
     updateSessionSummary,
