@@ -65,7 +65,6 @@ interface UseChatRealtimeHandlersArgs {
   onSessionInactive?: (sessionId?: string | null) => void;
   onSessionProcessing?: (sessionId?: string | null) => void;
   onSessionNotProcessing?: (sessionId?: string | null) => void;
-  onReplaceTemporarySession?: (sessionId?: string | null) => void;
   onNavigateToSession?: (sessionId: string, options?: SessionNavigationOptions) => void;
   onWebSocketReconnect?: () => void;
   sessionStore: SessionStore;
@@ -92,7 +91,6 @@ export function useChatRealtimeHandlers({
   onSessionInactive,
   onSessionProcessing,
   onSessionNotProcessing,
-  onReplaceTemporarySession,
   onNavigateToSession,
   onWebSocketReconnect,
   sessionStore,
@@ -232,7 +230,9 @@ export function useChatRealtimeHandlers({
         const newSessionId = msg.newSessionId;
         if (!newSessionId) break;
 
-        if (!currentSessionId || currentSessionId.startsWith('new-session-')) {
+        // We no longer synthesize client-side placeholder IDs. Until the provider
+        // announces `session_created`, the active id is expected to be null.
+        if (!currentSessionId) {
           console.log('Session created with ID:', newSessionId);
           console.log('Existing session ID:', currentSessionId);
           sessionStorage.setItem('pendingSessionId', newSessionId);
@@ -240,7 +240,6 @@ export function useChatRealtimeHandlers({
             pendingViewSessionRef.current.sessionId = newSessionId;
           }
           setCurrentSessionId(newSessionId);
-          onReplaceTemporarySession?.(newSessionId);
           setPendingPermissionRequests((prev) =>
             prev.map((r) => (r.sessionId ? r : { ...r, sessionId: newSessionId })),
           );
@@ -402,7 +401,6 @@ export function useChatRealtimeHandlers({
     onSessionInactive,
     onSessionProcessing,
     onSessionNotProcessing,
-    onReplaceTemporarySession,
     onNavigateToSession,
     onWebSocketReconnect,
     sessionStore,

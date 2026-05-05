@@ -628,7 +628,7 @@ export function useChatSessionState({
 
   // Token usage fetch for Claude
   useEffect(() => {
-    if (!selectedProject || !selectedSession?.id || selectedSession.id.startsWith('new-session-')) {
+    if (!selectedProject || !selectedSession?.id) {
       setTokenBudget(null);
       return;
     }

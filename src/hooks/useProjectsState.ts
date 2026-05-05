@@ -435,9 +435,7 @@ export function useProjectsState({
       }
     }
 
-    const hasActiveSession =
-      (selectedSession && activeSessions.has(selectedSession.id)) ||
-      (activeSessions.size > 0 && Array.from(activeSessions).some((id) => id.startsWith('new-session-')));
+    const hasActiveSession = Boolean(selectedSession && activeSessions.has(selectedSession.id));
 
     const updatedProjectsWithTaskMaster = mergeTaskMasterCache(projectsMessage.projects, projects);
     const updatedProjects = mergeExpandedSessionPages(projects, updatedProjectsWithTaskMaster);

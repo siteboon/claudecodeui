@@ -10,6 +10,7 @@ import type {
   TouchEvent,
 } from 'react';
 import { useDropzone } from 'react-dropzone';
+
 import { authenticatedFetch } from '../../../utils/api';
 import { thinkingModes } from '../constants/thinkingModes';
 import { grantClaudeToolPermission } from '../utils/chatPermissions';
@@ -21,6 +22,7 @@ import type {
 } from '../types/types';
 import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
 import { escapeRegExp } from '../utils/chatFormatting';
+
 import { useFileMentions } from './useFileMentions';
 import { type SlashCommand, useSlashCommands } from './useSlashCommands';
 
@@ -79,9 +81,6 @@ interface CommandExecutionResult {
 const createFakeSubmitEvent = () => {
   return { preventDefault: () => undefined } as unknown as FormEvent<HTMLFormElement>;
 };
-
-const isTemporarySessionId = (sessionId: string | null | undefined) =>
-  Boolean(sessionId && sessionId.startsWith('new-session-'));
 
 const getNotificationSessionSummary = (
   selectedSession: ProjectSession | null,
@@ -533,7 +532,12 @@ export function useChatComposerState({
 
       const effectiveSessionId =
         currentSessionId || selectedSession?.id || sessionStorage.getItem('cursorSessionId');
-      const sessionToActivate = effectiveSessionId || `new-session-${Date.now()}`;
+
+      console.log('Submitting message', {
+        content: messageContent,
+        sessionId: effectiveSessionId,
+        images: uploadedImages,
+      });
 
       const userMessage: ChatMessage = {
         type: 'user',
@@ -559,10 +563,12 @@ export function useChatComposerState({
           // Reset stale pending IDs from previous interrupted runs before creating a new one.
           sessionStorage.removeItem('pendingSessionId');
         }
+        // For new sessions we intentionally keep this as `null` until the backend
+        // emits `session_created` with the canonical provider session id.
         pendingViewSessionRef.current = { sessionId: null, startedAt: Date.now() };
       }
-      onSessionActive?.(sessionToActivate);
-      if (effectiveSessionId && !isTemporarySessionId(effectiveSessionId)) {
+      if (effectiveSessionId) {
+        onSessionActive?.(effectiveSessionId);
         onSessionProcessing?.(effectiveSessionId);
       }
 
@@ -868,7 +874,7 @@ export function useChatComposerState({
     ];
 
     const targetSessionId =
-      candidateSessionIds.find((sessionId) => Boolean(sessionId) && !isTemporarySessionId(sessionId)) || null;
+      candidateSessionIds.find((sessionId) => Boolean(sessionId)) || null;
 
     if (!targetSessionId) {
       console.warn('Abort requested but no concrete session ID is available yet.');
