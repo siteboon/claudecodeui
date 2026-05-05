@@ -33,6 +33,7 @@
     "build:client": "vite build",
     "prebuild:server": "node -e \"require('node:fs').rmSync('dist-server', { recursive: true, force: true })\"",
     "build:server": "tsc -p server/tsconfig.json && tsc-alias -p server/tsconfig.json",
+    "test:provider-auth": "npm run build:server && node --test server/modules/providers/tests/claude-auth-env.test.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p server/tsconfig.json",
     "lint": "eslint src/ server/",
