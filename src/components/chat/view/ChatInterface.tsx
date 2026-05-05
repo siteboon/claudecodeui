@@ -218,9 +218,18 @@ function ChatInterface({
       projectId: selectedProject.projectId,
       projectPath: selectedProject.fullPath || selectedProject.path || '',
     });
+    // Optimistically clear loading state; check-session-status will restore it if the session
+    // is still active and reconnect the writer so subsequent messages reach the new WebSocket.
     setIsLoading(false);
     setCanAbortSession(false);
-  }, [selectedProject, selectedSession, sessionStore, setIsLoading, setCanAbortSession]);
+    setClaudeStatus(null);
+    // Re-send check-session-status so the server reconnects the writer to the new WebSocket.
+    // Without this, the `complete` event goes to the dead connection and is silently dropped,
+    // leaving the thinking indicator stuck.
+    if (sendMessage) {
+      sendMessage({ type: 'check-session-status', sessionId: selectedSession.id, provider: providerVal });
+    }
+  }, [selectedProject, selectedSession, sessionStore, setIsLoading, setCanAbortSession, setClaudeStatus, sendMessage]);
 
   useChatRealtimeHandlers({
     latestMessage,
