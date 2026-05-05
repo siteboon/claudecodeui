@@ -206,31 +206,17 @@ export function handleShellConnection(
 
         const existingSession = isLoginCommand ? null : ptySessionsMap.get(ptySessionKey);
         if (existingSession) {
-          shellProcess = existingSession.pty;
+          // Kill the old PTY and start fresh so the shell shows current state.
+          // claude --resume <sessionId> restores conversation from the JSONL file.
           if (existingSession.timeoutId) {
             clearTimeout(existingSession.timeoutId);
           }
-
-          ws.send(
-            JSON.stringify({
-              type: 'output',
-              data: '\x1b[36m[Reconnected to existing session]\x1b[0m\r\n',
-            })
-          );
-
-          if (existingSession.buffer.length > 0) {
-            existingSession.buffer.forEach((bufferedData) => {
-              ws.send(
-                JSON.stringify({
-                  type: 'output',
-                  data: bufferedData,
-                })
-              );
-            });
+          try {
+            existingSession.pty.kill();
+          } catch {
+            // PTY may already be dead
           }
-
-          existingSession.ws = ws;
-          return;
+          ptySessionsMap.delete(ptySessionKey);
         }
 
         const resolvedProjectPath = path.resolve(projectPath);
@@ -285,7 +271,7 @@ export function handleShellConnection(
           }
 
           const session = ptySessionsMap.get(ptySessionKey);
-          if (!session) {
+          if (!session || session.pty !== shellProcess) {
             return;
           }
 
@@ -361,7 +347,13 @@ export function handleShellConnection(
           }
 
           const session = ptySessionsMap.get(ptySessionKey);
-          if (session && session.ws && session.ws.readyState === WebSocket.OPEN) {
+          // Only act if this PTY is still the active one — a replacement PTY
+          // may have been spawned while this one was being killed.
+          if (!session || session.pty !== shellProcess) {
+            return;
+          }
+
+          if (session.ws && session.ws.readyState === WebSocket.OPEN) {
             session.ws.send(
               JSON.stringify({
                 type: 'output',
@@ -372,7 +364,7 @@ export function handleShellConnection(
             );
           }
 
-          if (session?.timeoutId) {
+          if (session.timeoutId) {
             clearTimeout(session.timeoutId);
           }
 
