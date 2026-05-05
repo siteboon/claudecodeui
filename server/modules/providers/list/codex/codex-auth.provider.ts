@@ -88,6 +88,7 @@ const readConfigTomlStatus = async (
 
 export async function checkStatus(): Promise<CodexCredentialsStatus> {
   const codexHome = path.join(os.homedir(), '.codex');
+  let readError: string | null = null;
 
   try {
     const authStatus = await readAuthJsonStatus(codexHome);
@@ -96,12 +97,7 @@ export async function checkStatus(): Promise<CodexCredentialsStatus> {
     }
   } catch (error) {
     if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
-      return {
-        authenticated: false,
-        email: null,
-        method: null,
-        error: error instanceof Error ? error.message : 'Failed to read Codex auth',
-      };
+      readError = error instanceof Error ? error.message : 'Failed to read Codex auth';
     }
   }
 
@@ -112,12 +108,7 @@ export async function checkStatus(): Promise<CodexCredentialsStatus> {
     }
   } catch (error) {
     if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
-      return {
-        authenticated: false,
-        email: null,
-        method: null,
-        error: error instanceof Error ? error.message : 'Failed to read Codex config',
-      };
+      readError = readError ?? (error instanceof Error ? error.message : 'Failed to read Codex config');
     }
   }
 
@@ -127,6 +118,15 @@ export async function checkStatus(): Promise<CodexCredentialsStatus> {
       email: API_KEY_EMAIL,
       method: 'api_key',
       error: null,
+    };
+  }
+
+  if (readError) {
+    return {
+      authenticated: false,
+      email: null,
+      method: null,
+      error: readError,
     };
   }
 
