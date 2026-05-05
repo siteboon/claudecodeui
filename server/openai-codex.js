@@ -14,6 +14,7 @@
  */
 
 import { Codex } from '@openai/codex-sdk';
+import crypto from 'crypto';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
@@ -192,7 +193,7 @@ function mapPermissionModeToCodexOptions(permissionMode) {
  * @param {object} options - Options including cwd, sessionId, model, permissionMode
  * @param {WebSocket|object} ws - WebSocket connection or response writer
  */
-export async function queryCodex(command, options = {}, ws) {
+async function queryCodex(command, options = {}, ws) {
   const {
     sessionId,
     sessionSummary,
@@ -232,7 +233,7 @@ export async function queryCodex(command, options = {}, ws) {
     }
 
     // Get the thread ID
-    currentSessionId = thread.id || sessionId || `codex-${Date.now()}`;
+    currentSessionId = thread.id || sessionId || `codex-${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
 
     // Track the session
     activeCodexSessions.set(currentSessionId, {
@@ -344,7 +345,7 @@ export async function queryCodex(command, options = {}, ws) {
  * @param {string} sessionId - Session ID to abort
  * @returns {boolean} - Whether abort was successful
  */
-export function abortCodexSession(sessionId) {
+function abortCodexSession(sessionId) {
   const session = activeCodexSessions.get(sessionId);
 
   if (!session) {
@@ -366,7 +367,7 @@ export function abortCodexSession(sessionId) {
  * @param {string} sessionId - Session ID to check
  * @returns {boolean} - Whether session is active
  */
-export function isCodexSessionActive(sessionId) {
+function isCodexSessionActive(sessionId) {
   const session = activeCodexSessions.get(sessionId);
   return session?.status === 'running';
 }
@@ -375,7 +376,7 @@ export function isCodexSessionActive(sessionId) {
  * Get all active sessions
  * @returns {Array} - Array of active session info
  */
-export function getActiveCodexSessions() {
+function getActiveCodexSessions() {
   const sessions = [];
 
   for (const [id, session] of activeCodexSessions.entries()) {
@@ -391,6 +392,13 @@ export function getActiveCodexSessions() {
   return sessions;
 }
 
+export {
+  queryCodex,
+  abortCodexSession,
+  isCodexSessionActive,
+  getActiveCodexSessions
+};
+
 /**
  * Helper to send message via WebSocket or writer
  * @param {WebSocket|object} ws - WebSocket or response writer
@@ -398,12 +406,14 @@ export function getActiveCodexSessions() {
  */
 function sendMessage(ws, data) {
   try {
-    if (ws.isSSEStreamWriter || ws.isWebSocketWriter) {
+    if (ws && (ws.isSSEStreamWriter || ws.isWebSocketWriter)) {
       // Writer handles stringification (SSEStreamWriter or WebSocketWriter)
       ws.send(data);
-    } else if (typeof ws.send === 'function') {
+    } else if (ws && typeof ws.send === 'function') {
       // Raw WebSocket - stringify here
-      ws.send(JSON.stringify(data));
+      if (ws.readyState === 1) { // WebSocket.OPEN
+        ws.send(JSON.stringify(data));
+      }
     }
   } catch (error) {
     console.error('[Codex] Error sending message:', error);
