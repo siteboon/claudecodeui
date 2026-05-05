@@ -39,6 +39,8 @@ All notable changes to CloudCLI UI will be documented in this file.
 
 ### Bug Fixes
 
+* Claude chat now maps both skip-permissions and explicit `bypassPermissions` chat mode to `dontAsk` when CloudCLI runs as root, avoiding Claude SDK exit code 1 from forbidden bypass mode
+
 * iOS scrolling main chat area ([3969135](https://github.com/siteboon/claudecodeui/commit/3969135bd427fbf48f29bb3dbfedb47791ca78dc))
 * migrate PlanDisplay raw params from native details to Collapsible primitive ([fc3504e](https://github.com/siteboon/claudecodeui/commit/fc3504eaed8ca7ed9214838d148ea385b8352c31))
 * precise Claude SDK denial message detection in deriveToolStatus ([09dcea0](https://github.com/siteboon/claudecodeui/commit/09dcea05fbc8c208d931aa1f08618f0e8087392f))
