@@ -58,7 +58,7 @@ const getCreatedTimestamp = (session: SessionWithProvider): string => {
 };
 
 const getUpdatedTimestamp = (session: SessionWithProvider): string => {
-  return String(session.lastActivity || session.updated_at || '');
+  return String(session.lastActivity || '');
 };
 
 export const getSessionDate = (session: SessionWithProvider): Date => {
