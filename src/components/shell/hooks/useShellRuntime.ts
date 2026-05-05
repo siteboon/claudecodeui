@@ -149,9 +149,18 @@ export function useShellRuntime({
     lastSessionIdRef.current = currentSessionId;
   }, [disconnectFromShell, isInitialized, selectedSession?.id]);
 
+  // Clean up WebSocket and terminal on unmount so PTY is not left dangling on server
+  useEffect(() => {
+    return () => {
+      disconnectFromShell();
+      disposeTerminal();
+    };
+  }, [disconnectFromShell, disposeTerminal]);
+
   return {
     terminalContainerRef,
     terminalRef,
+    fitAddonRef: fitAddonRef,
     wsRef,
     isConnected,
     isInitialized,

@@ -16,6 +16,8 @@ import CodeEditorHeader from './subcomponents/CodeEditorHeader';
 import CodeEditorLoadingState from './subcomponents/CodeEditorLoadingState';
 import CodeEditorSurface from './subcomponents/CodeEditorSurface';
 import CodeEditorBinaryFile from './subcomponents/CodeEditorBinaryFile';
+import CodeEditorImagePreview from './subcomponents/CodeEditorImagePreview';
+import CodeEditorPdfPreview from './subcomponents/CodeEditorPdfPreview';
 
 type CodeEditorProps = {
   file: CodeEditorFile;
@@ -57,6 +59,7 @@ export default function CodeEditor({
     saving,
     saveSuccess,
     saveError,
+    fileCategory,
     isBinary,
     handleSave,
     handleDownload,
@@ -152,12 +155,44 @@ export default function CodeEditor({
     dependency: content,
   });
 
+  // Ensure projectId is populated for preview API requests.
+  const previewFile = useMemo<CodeEditorFile>(
+    () => ({ ...file, projectId: file.projectId ?? projectPath ?? '' }),
+    [file, projectPath],
+  );
+
   if (loading) {
     return (
       <CodeEditorLoadingState
         isDarkMode={isDarkMode}
         isSidebar={isSidebar}
         loadingText={t('loading', { fileName: file.name })}
+      />
+    );
+  }
+
+  // Image preview
+  if (fileCategory === 'image') {
+    return (
+      <CodeEditorImagePreview
+        file={previewFile}
+        isSidebar={isSidebar}
+        isFullscreen={isFullscreen}
+        onClose={onClose}
+        onToggleFullscreen={() => setIsFullscreen((prev) => !prev)}
+      />
+    );
+  }
+
+  // PDF preview
+  if (fileCategory === 'pdf') {
+    return (
+      <CodeEditorPdfPreview
+        file={previewFile}
+        isSidebar={isSidebar}
+        isFullscreen={isFullscreen}
+        onClose={onClose}
+        onToggleFullscreen={() => setIsFullscreen((prev) => !prev)}
       />
     );
   }

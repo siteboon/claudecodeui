@@ -191,46 +191,33 @@ export function handleShellConnection(
           isPlainShell && initialCommand
             ? `_cmd_${Buffer.from(initialCommand).toString('base64').slice(0, 16)}`
             : '';
-        ptySessionKey = `${projectPath}_${sessionId ?? 'default'}${commandSuffix}`;
+        const sessionKey = `${projectPath}_${sessionId ?? 'default'}${commandSuffix}`;
+        ptySessionKey = sessionKey;
 
         if (isLoginCommand) {
-          const oldSession = ptySessionsMap.get(ptySessionKey);
+          const oldSession = ptySessionsMap.get(sessionKey);
           if (oldSession) {
             if (oldSession.timeoutId) {
               clearTimeout(oldSession.timeoutId);
             }
             oldSession.pty.kill();
-            ptySessionsMap.delete(ptySessionKey);
+            ptySessionsMap.delete(sessionKey);
           }
         }
 
-        const existingSession = isLoginCommand ? null : ptySessionsMap.get(ptySessionKey);
+        const existingSession = isLoginCommand ? null : ptySessionsMap.get(sessionKey);
         if (existingSession) {
-          shellProcess = existingSession.pty;
+          // Kill the old PTY and start fresh so the shell shows current state.
+          // claude --resume <sessionId> restores conversation from the JSONL file.
           if (existingSession.timeoutId) {
             clearTimeout(existingSession.timeoutId);
           }
-
-          ws.send(
-            JSON.stringify({
-              type: 'output',
-              data: '\x1b[36m[Reconnected to existing session]\x1b[0m\r\n',
-            })
-          );
-
-          if (existingSession.buffer.length > 0) {
-            existingSession.buffer.forEach((bufferedData) => {
-              ws.send(
-                JSON.stringify({
-                  type: 'output',
-                  data: bufferedData,
-                })
-              );
-            });
+          try {
+            existingSession.pty.kill();
+          } catch {
+            // PTY may already be dead
           }
-
-          existingSession.ws = ws;
-          return;
+          ptySessionsMap.delete(sessionKey);
         }
 
         const resolvedProjectPath = path.resolve(projectPath);
@@ -257,7 +244,7 @@ export function handleShellConnection(
         const termCols = readNumber(data.cols, 80);
         const termRows = readNumber(data.rows, 24);
 
-        shellProcess = pty.spawn(shell, shellArgs, {
+        const spawnedPty = pty.spawn(shell, shellArgs, {
           name: 'xterm-256color',
           cols: termCols,
           rows: termRows,
@@ -270,8 +257,10 @@ export function handleShellConnection(
           },
         });
 
-        ptySessionsMap.set(ptySessionKey, {
-          pty: shellProcess,
+        shellProcess = spawnedPty;
+
+        ptySessionsMap.set(sessionKey, {
+          pty: spawnedPty,
           ws,
           buffer: [],
           timeoutId: null,
@@ -279,13 +268,11 @@ export function handleShellConnection(
           sessionId,
         });
 
-        shellProcess.onData((chunk) => {
-          if (!ptySessionKey) {
-            return;
-          }
-
-          const session = ptySessionsMap.get(ptySessionKey);
-          if (!session) {
+        // Capture immutable locals so callback closures never reference a
+        // replacement PTY or session key from a later init on the same socket.
+        spawnedPty.onData((chunk) => {
+          const session = ptySessionsMap.get(sessionKey);
+          if (!session || session.pty !== spawnedPty) {
             return;
           }
 
@@ -355,13 +342,15 @@ export function handleShellConnection(
           }
         });
 
-        shellProcess.onExit((exitCode) => {
-          if (!ptySessionKey) {
+        spawnedPty.onExit((exitCode) => {
+          const session = ptySessionsMap.get(sessionKey);
+          // Only act if this PTY is still the active one — a replacement PTY
+          // may have been spawned while this one was being killed.
+          if (!session || session.pty !== spawnedPty) {
             return;
           }
 
-          const session = ptySessionsMap.get(ptySessionKey);
-          if (session && session.ws && session.ws.readyState === WebSocket.OPEN) {
+          if (session.ws && session.ws.readyState === WebSocket.OPEN) {
             session.ws.send(
               JSON.stringify({
                 type: 'output',
@@ -372,12 +361,14 @@ export function handleShellConnection(
             );
           }
 
-          if (session?.timeoutId) {
+          if (session.timeoutId) {
             clearTimeout(session.timeoutId);
           }
 
-          ptySessionsMap.delete(ptySessionKey);
-          shellProcess = null;
+          ptySessionsMap.delete(sessionKey);
+          if (shellProcess === spawnedPty) {
+            shellProcess = null;
+          }
         });
 
         let welcomeMsg = `\x1b[36mStarting terminal in: ${projectPath}\x1b[0m\r\n`;

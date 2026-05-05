@@ -121,8 +121,8 @@ function MainContent({
       />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className={`flex min-h-0 min-w-[200px] flex-col overflow-hidden ${editorExpanded ? 'hidden' : ''} flex-1`}>
-          <div className={`h-full ${activeTab === 'chat' ? 'block' : 'hidden'}`}>
+        <div className={`relative flex min-h-0 min-w-[200px] flex-col overflow-hidden ${editorExpanded ? 'hidden' : ''} flex-1`}>
+          <div className={`absolute inset-0 ${activeTab === 'chat' ? 'z-10' : 'z-0 invisible'}`}>
             <ErrorBoundary showDetails>
               <ChatInterface
                 selectedProject={selectedProject}
@@ -158,16 +158,14 @@ function MainContent({
             </div>
           )}
 
-          {activeTab === 'shell' && (
-            <div className="h-full w-full overflow-hidden">
-              <StandaloneShell
-                project={selectedProject}
-                session={selectedSession}
-                showHeader={false}
-                isActive={activeTab === 'shell'}
-              />
-            </div>
-          )}
+          <div className={`absolute inset-0 overflow-hidden ${activeTab === 'shell' ? 'z-10' : 'z-0 invisible'}`}>
+            <StandaloneShell
+              project={selectedProject}
+              session={selectedSession}
+              showHeader={false}
+              isActive={activeTab === 'shell'}
+            />
+          </div>
 
           {activeTab === 'git' && (
             <div className="h-full overflow-hidden">
