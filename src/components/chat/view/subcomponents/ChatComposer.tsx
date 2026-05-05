@@ -401,14 +401,6 @@ export default function ChatComposer({
             <PromptInputSubmit
               disabled={!input.trim() || isLoading}
               className="h-10 w-10 sm:h-10 sm:w-10"
-              onMouseDown={(event) => {
-                event.preventDefault();
-                onSubmit(event as unknown as MouseEvent<HTMLButtonElement>);
-              }}
-              onTouchStart={(event) => {
-                event.preventDefault();
-                onSubmit(event as unknown as TouchEvent<HTMLButtonElement>);
-              }}
             />
           </div>
         </PromptInputFooter>
