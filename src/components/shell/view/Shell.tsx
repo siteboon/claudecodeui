@@ -160,7 +160,11 @@ export default function Shell({
     }
 
     const focusTerminal = () => {
-      terminalRef.current?.focus();
+      const term = terminalRef.current;
+      if (!term) return;
+      const savedViewport = term.buffer.active.viewportY;
+      term.focus();
+      term.scrollToLine(savedViewport);
     };
 
     const animationFrameId = window.requestAnimationFrame(focusTerminal);
