@@ -148,7 +148,8 @@ export function useShellTerminal({
         !event.ctrlKey &&
         !event.metaKey &&
         !event.altKey &&
-        event.key?.toLowerCase() === 'c'
+        event.shiftKey &&
+        event.key === 'C'
       ) {
         event.preventDefault();
         event.stopPropagation();
