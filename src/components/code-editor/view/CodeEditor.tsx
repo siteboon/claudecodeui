@@ -155,6 +155,12 @@ export default function CodeEditor({
     dependency: content,
   });
 
+  // Ensure projectId is populated for preview API requests.
+  const previewFile = useMemo<CodeEditorFile>(
+    () => ({ ...file, projectId: file.projectId ?? projectPath ?? '' }),
+    [file, projectPath],
+  );
+
   if (loading) {
     return (
       <CodeEditorLoadingState
@@ -169,7 +175,7 @@ export default function CodeEditor({
   if (fileCategory === 'image') {
     return (
       <CodeEditorImagePreview
-        file={file}
+        file={previewFile}
         isSidebar={isSidebar}
         isFullscreen={isFullscreen}
         onClose={onClose}
@@ -182,7 +188,7 @@ export default function CodeEditor({
   if (fileCategory === 'pdf') {
     return (
       <CodeEditorPdfPreview
-        file={file}
+        file={previewFile}
         isSidebar={isSidebar}
         isFullscreen={isFullscreen}
         onClose={onClose}
