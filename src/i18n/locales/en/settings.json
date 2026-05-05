@@ -122,6 +122,21 @@
       "label": "Dark Mode",
       "description": "Toggle between light and dark themes"
     },
+    "font": {
+      "label": "Font",
+      "description": "Choose font family for the interface",
+      "default": "Default",
+      "custom": "Custom"
+    },
+    "customFont": {
+      "label": "Font Name",
+      "description": "Enter custom font family name",
+      "placeholder": "e.g., 'Inter', 'Roboto', sans-serif"
+    },
+    "fontSize": {
+      "label": "Font Size",
+      "description": "Interface font size in pixels"
+    },
     "projectSorting": {
       "label": "Project Sorting",
       "description": "How projects are ordered in the sidebar",
@@ -145,6 +160,17 @@
       "lineNumbers": {
         "label": "Show Line Numbers",
         "description": "Display line numbers in the editor"
+      },
+      "font": {
+        "label": "Font",
+        "description": "Choose font family for code blocks",
+        "default": "Default",
+        "custom": "Custom"
+      },
+      "customFont": {
+        "label": "Font Name",
+        "description": "Enter custom monospace font family name",
+        "placeholder": "e.g., 'Fira Code', 'JetBrains Mono', monospace"
       },
       "fontSize": {
         "label": "Font Size",

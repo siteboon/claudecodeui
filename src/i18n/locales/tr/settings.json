@@ -122,6 +122,21 @@
       "label": "Koyu Mod",
       "description": "Açık ve koyu temalar arasında geçiş yap"
     },
+    "font": {
+      "label": "Yazı Tipi",
+      "description": "Arayüz yazı tipini seçin",
+      "default": "Varsayılan",
+      "custom": "Özel"
+    },
+    "customFont": {
+      "label": "Yazı Tipi Adı",
+      "description": "Özel yazı tipi adını girin",
+      "placeholder": "örn: 'Inter', 'Roboto', sans-serif"
+    },
+    "fontSize": {
+      "label": "Yazı Tipi Boyutu",
+      "description": "Arayüz yazı tipi boyutu (piksel)"
+    },
     "projectSorting": {
       "label": "Proje Sıralama",
       "description": "Projelerin kenar çubuğunda nasıl sıralanacağı",
@@ -145,6 +160,17 @@
       "lineNumbers": {
         "label": "Satır Numaralarını Göster",
         "description": "Editörde satır numaralarını göster"
+      },
+      "font": {
+        "label": "Yazı Tipi",
+        "description": "Kod blokları için yazı tipini seçin",
+        "default": "Varsayılan",
+        "custom": "Özel"
+      },
+      "customFont": {
+        "label": "Yazı Tipi Adı",
+        "description": "Özel monospace yazı tipi adını girin",
+        "placeholder": "örn: 'Fira Code', 'JetBrains Mono', monospace"
       },
       "fontSize": {
         "label": "Yazı Tipi Boyutu",

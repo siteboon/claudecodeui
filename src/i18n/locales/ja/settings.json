@@ -122,6 +122,21 @@
       "label": "ダークモード",
       "description": "ライトテーマとダークテーマを切り替えます"
     },
+    "font": {
+      "label": "フォント",
+      "description": "インターフェースのフォントを選択",
+      "default": "デフォルト",
+      "custom": "カスタム"
+    },
+    "customFont": {
+      "label": "フォント名",
+      "description": "カスタムフォント名を入力",
+      "placeholder": "例：'Inter', 'Roboto', sans-serif"
+    },
+    "fontSize": {
+      "label": "フォントサイズ",
+      "description": "インターフェースのフォントサイズ（ピクセル）"
+    },
     "projectSorting": {
       "label": "プロジェクトの並び順",
       "description": "サイドバーでのプロジェクトの並び順を設定します",
@@ -145,6 +160,17 @@
       "lineNumbers": {
         "label": "行番号を表示",
         "description": "エディタに行番号を表示します"
+      },
+      "font": {
+        "label": "フォント",
+        "description": "コードブロックのフォントを選択",
+        "default": "デフォルト",
+        "custom": "カスタム"
+      },
+      "customFont": {
+        "label": "フォント名",
+        "description": "カスタム等幅フォント名を入力",
+        "placeholder": "例：'Fira Code', 'JetBrains Mono', monospace"
       },
       "fontSize": {
         "label": "フォントサイズ",
