@@ -33,6 +33,20 @@ test('resolveClaudeCodeExecutablePath keeps an explicit JavaScript launcher path
   assert.equal(resolved, scriptPath);
 });
 
+test('resolveClaudeCodeExecutablePath can parse a wrapper file path containing letters r and n before claude.exe', () => {
+  const wrapperPath = 'C:\\tools\\claude';
+  const nativePath = 'C:\\tools\\custom\\bin\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe';
+  const readFileSync = (() => `exec "$basedir/custom/bin/node_modules/@anthropic-ai/claude-code/bin/claude.exe" "$@"`) as unknown as ResolveClaudeCodeExecutablePathDependencies['readFileSync'];
+
+  const resolved = resolveClaudeCodeExecutablePath(wrapperPath, {
+    platform: 'win32',
+    existsSync: (candidate) => candidate === nativePath,
+    readFileSync,
+  });
+
+  assert.equal(resolved, nativePath);
+});
+
 test('resolveClaudeCodeExecutablePath falls back to the configured command when PATH lookup fails', () => {
   const execFileSync = (() => {
     throw new Error('not found');
