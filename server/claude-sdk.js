@@ -302,19 +302,15 @@ function extractTokenBudget(resultMessage) {
     return null;
   }
 
-  // Use cumulative tokens if available (tracks total for the session)
-  // Otherwise fall back to per-request tokens
-  const inputTokens = modelData.cumulativeInputTokens || modelData.inputTokens || 0;
-  const outputTokens = modelData.cumulativeOutputTokens || modelData.outputTokens || 0;
-  const cacheReadTokens = modelData.cumulativeCacheReadInputTokens || modelData.cacheReadInputTokens || 0;
-  const cacheCreationTokens = modelData.cumulativeCacheCreationInputTokens || modelData.cacheCreationInputTokens || 0;
+  // Only input tokens consume the context window; output tokens do not.
+  // Use the current-turn input token count (not cumulative) to reflect
+  // the actual context window pressure for this message.
+  const totalUsed = modelData.inputTokens || 0;
 
-  // Total used = input + output + cache tokens
-  const totalUsed = inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
-
-  // Use configured context window budget from environment (default 160000)
-  // This is the user's budget limit, not the model's context window
-  const contextWindow = parseInt(process.env.CONTEXT_WINDOW) || 160000;
+  // Use the model's actual context window size (default 200000 for claude-3.x/4.x).
+  // Previously this used a hardcoded 160000 "budget" which caused the gauge to
+  // read incorrectly — 160K is not the context window for current models.
+  const contextWindow = modelData.contextWindow || 200000;
 
   // Token calc logged via token-budget WS event
 
