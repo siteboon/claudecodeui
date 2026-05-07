@@ -33,7 +33,27 @@ const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
  */
 const activeStreamSessions = new Map();
 
-const IDLE_TIMEOUT_MS = parseInt(process.env.CLAUDE_STREAM_IDLE_MS, 10) || 30 * 60 * 1000;
+// In-flight spawns keyed by sessionId. Prevents two concurrent `claude-command`
+// requests for the same sessionId (e.g. quick retry after a crash) from each
+// awaiting loadMcpConfig and spawning duplicate CLI processes — the second
+// `activeStreamSessions.set` would overwrite the first, orphaning that child.
+const pendingSpawns = new Map();
+
+// Hard cap on bytes accumulated in stdoutBuffer between newlines. A misbehaving
+// CLI that emits a multi-MB line without a `\n` would otherwise grow the buffer
+// without bound. 16 MiB is far above any legitimate JSONL event size.
+const MAX_STDOUT_BUFFER_BYTES = 16 * 1024 * 1024;
+
+// Per-session prompt queue cap. Beyond this, additional prompts are rejected
+// rather than letting an abusive client fill memory with queued entries.
+const MAX_QUEUE_LENGTH = 100;
+
+const IDLE_TIMEOUT_MS = (() => {
+  const raw = process.env.CLAUDE_STREAM_IDLE_MS;
+  if (raw === undefined || raw === '') return 30 * 60 * 1000;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : 30 * 60 * 1000;
+})();
 
 /**
  * Temporary map key for a session that hasn't seen its `system/init` yet.
@@ -297,6 +317,20 @@ function handleEvent(session, event) {
 function attachStdoutHandler(session) {
   session.process.stdout.on('data', (chunk) => {
     session.stdoutBuffer += chunk.toString('utf8');
+
+    if (session.stdoutBuffer.length > MAX_STDOUT_BUFFER_BYTES) {
+      console.error(`[claude-stream] stdoutBuffer exceeded ${MAX_STDOUT_BUFFER_BYTES} bytes without newline; killing session ${session.sessionId || 'NEW'}`);
+      session.writer?.send(createNormalizedMessage({
+        kind: 'error',
+        content: 'Claude process produced unbounded output without newlines; session terminated',
+        sessionId: session.sessionId,
+        provider: 'claude',
+      }));
+      session.stdoutBuffer = '';
+      killSession(session);
+      return;
+    }
+
     let nl;
     while ((nl = session.stdoutBuffer.indexOf('\n')) >= 0) {
       const line = session.stdoutBuffer.slice(0, nl);
@@ -316,6 +350,23 @@ function attachStdoutHandler(session) {
   session.process.stderr.on('data', (chunk) => {
     const text = chunk.toString('utf8');
     console.error('[claude-stream stderr]', text.slice(0, 500));
+  });
+
+  // Listen for stream-level errors on each stdio pipe. Without these listeners
+  // an EPIPE on stdin (CLI closes its stdin half early) or an EIO on stdout
+  // would propagate as an unhandled `'error'` event and crash the entire Node
+  // process. Logging is enough — the `close`/`exit` handlers below take care
+  // of teardown once the child actually terminates.
+  if (session.process.stdin) {
+    session.process.stdin.on('error', (err) => {
+      console.error('[claude-stream] stdin stream error:', err.code || err.message);
+    });
+  }
+  session.process.stdout.on('error', (err) => {
+    console.error('[claude-stream] stdout stream error:', err.code || err.message);
+  });
+  session.process.stderr.on('error', (err) => {
+    console.error('[claude-stream] stderr stream error:', err.code || err.message);
   });
 
   // 'close' fires after all stdio streams are fully drained; 'exit' fires as
@@ -477,6 +528,19 @@ function writePromptNow(session, entry) {
  */
 function submitPrompt(session, entry) {
   if (session.inFlight) {
+    if (session.queue.length >= MAX_QUEUE_LENGTH) {
+      console.warn(`[claude-stream] queue cap (${MAX_QUEUE_LENGTH}) reached for session ${session.sessionId}; dropping prompt`);
+      if (Array.isArray(entry.tempImagePaths) && entry.tempImagePaths.length > 0) {
+        cleanupTempFiles(entry.tempImagePaths, entry.tempDir).catch(() => {});
+      }
+      session.writer?.send(createNormalizedMessage({
+        kind: 'error',
+        content: `Prompt queue is full (${MAX_QUEUE_LENGTH} pending). Wait for current prompt to finish before sending more.`,
+        sessionId: session.sessionId,
+        provider: 'claude',
+      }));
+      return;
+    }
     session.queue.push(entry);
     return;
   }
@@ -546,37 +610,62 @@ async function queryClaudeStream(command, options = {}, ws) {
       session = null;
     }
 
+    // If another caller is already mid-spawn for this same sessionId, wait
+    // for their spawn to complete and reuse the resulting session. Without
+    // this, both requests await loadMcpConfig in parallel, both spawn a
+    // child, and the second `activeStreamSessions.set` overwrites the first
+    // — leaving the loser's process orphaned. Ownership of the awaited
+    // session is still verified below in the reuse branch.
+    if (!session && sessionId && pendingSpawns.has(sessionId)) {
+      try {
+        const awaited = await pendingSpawns.get(sessionId);
+        if (awaited && isSessionProcessAlive(awaited)) session = awaited;
+      } catch (_) { /* failed spawn — fall through and try our own */ }
+    }
+
     if (!session) {
-      // Spawn new process
-      const mcpServers = await loadMcpConfig(cwd);
-      const child = spawnClaudeProcess({
-        sessionId,  // pass --resume if sessionId provided (after reconnect)
-        cwd,
-        model,
-        permissionMode,
-        mcpServers,
-        additionalDirs,
-      });
+      // Spawn new process — register the in-flight Promise in pendingSpawns
+      // BEFORE the first await so a concurrent caller arriving during
+      // loadMcpConfig sees and waits on it instead of spawning their own.
+      const spawnPromise = (async () => {
+        const mcpServers = await loadMcpConfig(cwd);
+        const child = spawnClaudeProcess({
+          sessionId,  // pass --resume if sessionId provided (after reconnect)
+          cwd,
+          model,
+          permissionMode,
+          mcpServers,
+          additionalDirs,
+        });
 
-      session = {
-        process: child,
-        sessionId: sessionId || null,  // may be null until system/init arrives
-        writer: ws,
-        cwd: cwd || process.cwd(),
-        // Temp files are owned per-prompt (on queue entries + currentPromptTemps),
-        // never on the session itself, so queued prompts don't have their
-        // images deleted by a previous prompt's result cleanup.
-        currentPromptTemps: null,
-        stdoutBuffer: '',
-        sessionCreatedSent: false,
-        inFlight: false,  // set by writePromptNow
-        idleTimer: null,
-        queue: [],
-      };
+        const s = {
+          process: child,
+          sessionId: sessionId || null,  // may be null until system/init arrives
+          writer: ws,
+          cwd: cwd || process.cwd(),
+          // Temp files are owned per-prompt (on queue entries + currentPromptTemps),
+          // never on the session itself, so queued prompts don't have their
+          // images deleted by a previous prompt's result cleanup.
+          currentPromptTemps: null,
+          stdoutBuffer: '',
+          sessionCreatedSent: false,
+          inFlight: false,  // set by writePromptNow
+          idleTimer: null,
+          queue: [],
+        };
 
-      const key = sessionId || createPendingKey();
-      activeStreamSessions.set(key, session);
-      attachStdoutHandler(session);
+        const key = sessionId || createPendingKey();
+        activeStreamSessions.set(key, s);
+        attachStdoutHandler(s);
+        return s;
+      })();
+
+      if (sessionId) pendingSpawns.set(sessionId, spawnPromise);
+      try {
+        session = await spawnPromise;
+      } finally {
+        if (sessionId) pendingSpawns.delete(sessionId);
+      }
     } else {
       // Reuse existing session — writer is refreshed; temps stay per-prompt.
       // Ownership guard: without this an authenticated client who knows
@@ -697,6 +786,10 @@ async function abortClaudeStreamSession(sessionId, userId) {
         killSession(session);
       }
     }, 2000);
+    // Belt-and-suspenders: if the `exit` event fires before this listener
+    // attaches (microtask race) the clearTimeout below would never run; unref
+    // ensures the lingering timer can't block server shutdown for 2 seconds.
+    if (typeof fallbackTimer.unref === 'function') fallbackTimer.unref();
     session.process.once('exit', () => clearTimeout(fallbackTimer));
     return true;
   } catch (err) {
