@@ -24,19 +24,6 @@ type GeminiAuthType =
   | 'cloud-shell'
   | null;
 
-/**
- * Env keys Gemini CLI accepts for headless authentication.
- * We check these from both process.env and user-level env files.
- */
-const GEMINI_AUTH_ENV_KEYS = [
-  'GEMINI_API_KEY',
-  'GOOGLE_API_KEY',
-  'GOOGLE_CLOUD_PROJECT',
-  'GOOGLE_CLOUD_PROJECT_ID',
-  'GOOGLE_CLOUD_LOCATION',
-  'GOOGLE_APPLICATION_CREDENTIALS',
-] as const;
-
 export class GeminiProviderAuth implements IProviderAuth {
   /**
    * Gemini CLI can override its home root via GEMINI_CLI_HOME.
