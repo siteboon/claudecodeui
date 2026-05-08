@@ -414,7 +414,9 @@ export class ClaudeSessionsProvider implements IProviderSessions {
 
     let result: ClaudeHistoryResult;
     try {
-      result = await getSessionMessages(sessionId, limit, offset);
+      // Load full history first so `total` reflects frontend-normalized messages,
+      // not raw JSONL records.
+      result = await getSessionMessages(sessionId, null, 0);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`[ClaudeProvider] Failed to load session ${sessionId}:`, message);
@@ -422,8 +424,6 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     }
 
     const rawMessages = Array.isArray(result) ? result : (result.messages || []);
-    const total = Array.isArray(result) ? rawMessages.length : (result.total || 0);
-    const hasMore = Array.isArray(result) ? false : Boolean(result.hasMore);
 
     const toolResultMap = new Map<string, ClaudeToolResult>();
     for (const raw of rawMessages) {
@@ -464,12 +464,31 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       }
     }
 
+    const totalNormalized = normalized.length;
+    let total = 0;
+    for (const msg of normalized) {
+      if (msg.kind !== 'tool_result') {
+        total += 1;
+      }
+    }
+    const normalizedOffset = Math.max(0, offset);
+    const normalizedLimit = limit === null ? null : Math.max(0, limit);
+    const messages = normalizedLimit === null
+      ? normalized
+      : normalized.slice(
+          Math.max(0, totalNormalized - normalizedOffset - normalizedLimit),
+          Math.max(0, totalNormalized - normalizedOffset),
+        );
+    const hasMore = normalizedLimit === null
+      ? false
+      : Math.max(0, totalNormalized - normalizedOffset - normalizedLimit) > 0;
+
     return {
-      messages: normalized,
+      messages,
       total,
       hasMore,
-      offset,
-      limit,
+      offset: normalizedOffset,
+      limit: normalizedLimit,
     };
   }
 }
