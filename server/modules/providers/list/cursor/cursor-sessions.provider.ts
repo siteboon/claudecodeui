@@ -25,6 +25,47 @@ type CursorMessageBlob = {
   content: AnyRecord;
 };
 
+function isInternalCursorText(value: unknown): boolean {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  const normalized = value.trim();
+  return normalized.startsWith('<user_info>') || normalized.startsWith('<system_reminder>');
+}
+
+function isInternalCursorPart(part: unknown): boolean {
+  if (!part || typeof part !== 'object') {
+    return false;
+  }
+
+  const record = part as AnyRecord;
+  const type = typeof record.type === 'string' ? record.type : '';
+  if (type === 'user_info' || type === 'system_reminder') {
+    return true;
+  }
+
+  return isInternalCursorText(record.text);
+}
+
+function unwrapUserQueryText(value: string, role: 'user' | 'assistant'): string {
+  if (role !== 'user') {
+    return value;
+  }
+
+  const normalized = value.trimStart();
+  const openTag = '<user_query>';
+  const closeTag = '</user_query>';
+  if (!normalized.startsWith(openTag)) {
+    return value;
+  }
+
+  const afterOpen = normalized.slice(openTag.length);
+  const closeIndex = afterOpen.lastIndexOf(closeTag);
+  const inner = closeIndex >= 0 ? afterOpen.slice(0, closeIndex) : afterOpen;
+  return inner.trim();
+}
+
 function sanitizeCursorSessionId(sessionId: string): string {
   const normalized = sessionId.trim();
   if (!normalized) {
@@ -192,6 +233,7 @@ export class CursorSessionsProvider implements IProviderSessions {
    */
   normalizeMessage(rawMessage: unknown, sessionId: string | null): NormalizedMessage[] {
     const raw = readObjectRecord(rawMessage);
+    console.log('Normalizing Cursor message:', raw);
     if (raw?.type === 'assistant' && raw.message?.content?.[0]?.text) {
       return [createNormalizedMessage({
         kind: 'stream_delta',
@@ -274,6 +316,7 @@ export class CursorSessionsProvider implements IProviderSessions {
       const baseId = blob.id || generateMessageId('cursor');
 
       try {
+        console.log('Normalizing Cursor blob content:', content);
         if (!content?.role || !content?.content) {
           if (content?.message?.role && content?.message?.content) {
             if (content.message.role === 'system') {
@@ -283,11 +326,24 @@ export class CursorSessionsProvider implements IProviderSessions {
             let text = '';
             if (Array.isArray(content.message.content)) {
               text = content.message.content
-                .map((part: string | AnyRecord) => typeof part === 'string' ? part : part?.text || '')
+                .map((part: string | AnyRecord) => {
+                  if (typeof part === 'string') {
+                    if (isInternalCursorText(part)) {
+                      return '';
+                    }
+                    return unwrapUserQueryText(part, role);
+                  }
+                  if (isInternalCursorPart(part)) {
+                    return '';
+                  }
+                  return unwrapUserQueryText(part?.text || '', role);
+                })
                 .filter(Boolean)
                 .join('\n');
             } else if (typeof content.message.content === 'string') {
-              text = content.message.content;
+              if (!isInternalCursorText(content.message.content)) {
+                text = unwrapUserQueryText(content.message.content, role);
+              }
             }
             if (text?.trim()) {
               messages.push(createNormalizedMessage({
@@ -336,8 +392,15 @@ export class CursorSessionsProvider implements IProviderSessions {
         if (Array.isArray(content.content)) {
           for (let partIdx = 0; partIdx < content.content.length; partIdx++) {
             const part = content.content[partIdx];
+            if (isInternalCursorPart(part)) {
+              continue;
+            }
 
             if (part?.type === 'text' && part?.text) {
+              const normalizedPartText = unwrapUserQueryText(part.text, role);
+              if (!normalizedPartText) {
+                continue;
+              }
               messages.push(createNormalizedMessage({
                 id: `${baseId}_${partIdx}`,
                 sessionId,
@@ -345,7 +408,7 @@ export class CursorSessionsProvider implements IProviderSessions {
                 provider: PROVIDER,
                 kind: 'text',
                 role,
-                content: part.text,
+                content: normalizedPartText,
                 sequence: blob.sequence,
                 rowid: blob.rowid,
               }));
@@ -376,7 +439,15 @@ export class CursorSessionsProvider implements IProviderSessions {
               toolUseMap.set(toolId, message);
             }
           }
-        } else if (typeof content.content === 'string' && content.content.trim()) {
+        } else if (
+          typeof content.content === 'string'
+          && content.content.trim()
+          && !isInternalCursorText(content.content)
+        ) {
+          const normalizedText = unwrapUserQueryText(content.content, role);
+          if (!normalizedText) {
+            continue;
+          }
           messages.push(createNormalizedMessage({
             id: baseId,
             sessionId,
@@ -384,7 +455,7 @@ export class CursorSessionsProvider implements IProviderSessions {
             provider: PROVIDER,
             kind: 'text',
             role,
-            content: content.content,
+            content: normalizedText,
             sequence: blob.sequence,
             rowid: blob.rowid,
           }));
