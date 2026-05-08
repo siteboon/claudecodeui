@@ -257,8 +257,10 @@ const rebuildSessionsTableWithProjectSchema = (db: Database): void => {
 
   if (!shouldRebuild) {
     addColumnToTableIfNotExists(db, 'sessions', columnNames, 'jsonl_path', 'TEXT');
+    addColumnToTableIfNotExists(db, 'sessions', columnNames, 'isArchived', 'BOOLEAN DEFAULT 0');
     addColumnToTableIfNotExists(db, 'sessions', columnNames, 'created_at', 'DATETIME');
     addColumnToTableIfNotExists(db, 'sessions', columnNames, 'updated_at', 'DATETIME');
+    db.exec('UPDATE sessions SET isArchived = COALESCE(isArchived, 0)');
     db.exec('UPDATE sessions SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP)');
     db.exec('UPDATE sessions SET updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP)');
     return;
@@ -284,6 +286,10 @@ const rebuildSessionsTableWithProjectSchema = (db: Database): void => {
     ? 'jsonl_path'
     : 'NULL';
 
+  const isArchivedExpression = columnNames.includes('isArchived')
+    ? 'COALESCE(isArchived, 0)'
+    : '0';
+
   const createdAtExpression = columnNames.includes('created_at')
     ? 'COALESCE(created_at, CURRENT_TIMESTAMP)'
     : 'CURRENT_TIMESTAMP';
@@ -303,6 +309,7 @@ const rebuildSessionsTableWithProjectSchema = (db: Database): void => {
         custom_name TEXT,
         project_path TEXT,
         jsonl_path TEXT,
+        isArchived BOOLEAN DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (session_id),
@@ -319,6 +326,7 @@ const rebuildSessionsTableWithProjectSchema = (db: Database): void => {
           ${customNameExpression} AS custom_name,
           ${projectPathExpression} AS project_path,
           ${jsonlPathExpression} AS jsonl_path,
+          ${isArchivedExpression} AS isArchived,
           ${createdAtExpression} AS created_at,
           ${updatedAtExpression} AS updated_at,
           rowid AS source_rowid
@@ -332,6 +340,7 @@ const rebuildSessionsTableWithProjectSchema = (db: Database): void => {
           custom_name,
           project_path,
           jsonl_path,
+          isArchived,
           created_at,
           updated_at,
           ROW_NUMBER() OVER (
@@ -346,6 +355,7 @@ const rebuildSessionsTableWithProjectSchema = (db: Database): void => {
         custom_name,
         project_path,
         jsonl_path,
+        isArchived,
         created_at,
         updated_at
       )
@@ -355,6 +365,7 @@ const rebuildSessionsTableWithProjectSchema = (db: Database): void => {
         custom_name,
         project_path,
         jsonl_path,
+        isArchived,
         created_at,
         updated_at
       FROM ranked_rows
@@ -421,6 +432,7 @@ export const runMigrations = (db: Database) => {
 
     db.exec('CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_project_path ON sessions(project_path)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_is_archived ON sessions(isArchived)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_projects_is_starred ON projects(isStarred)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_projects_is_archived ON projects(isArchived)');
 

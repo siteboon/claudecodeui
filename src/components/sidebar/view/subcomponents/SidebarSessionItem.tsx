@@ -239,7 +239,7 @@ export default function SidebarSessionItem({
                       event.stopPropagation();
                       requestDeleteSession();
                     }}
-                    title={t('tooltips.deleteSession')}
+                    title={t('tooltips.deleteSessionOptions', 'Archive or permanently delete this session')}
                   >
                     <Trash2 className="h-3 w-3 text-red-600 dark:text-red-400" />
                   </button>
