@@ -148,8 +148,9 @@ function countUserMessagesInJsonl(jsonlPath: string): number {
           const content = message?.content;
           const isToolResult =
             Array.isArray(content) &&
-            content.length > 0 &&
-            (content[0] as Record<string, unknown>)?.type === 'tool_result';
+            content.some(
+              (item) => (item as Record<string, unknown>)?.type === 'tool_result',
+            );
           if (!isToolResult) {
             count += 1;
           }
