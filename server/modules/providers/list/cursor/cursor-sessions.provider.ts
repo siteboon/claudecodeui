@@ -66,6 +66,126 @@ function unwrapUserQueryText(value: string, role: 'user' | 'assistant'): string 
   return inner.trim();
 }
 
+function normalizeToolId(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim();
+  return normalized ? normalized : null;
+}
+
+function extractCursorToolResultContent(item: AnyRecord): string {
+  if (typeof item.result === 'string' && item.result.trim()) {
+    return item.result;
+  }
+
+  if (typeof item.output === 'string' && item.output.trim()) {
+    return item.output;
+  }
+
+  if (Array.isArray(item.experimental_content)) {
+    const experimentalText = item.experimental_content
+      .map((part: unknown) => {
+        if (typeof part === 'string') {
+          return part;
+        }
+        if (part && typeof part === 'object') {
+          const record = part as AnyRecord;
+          if (typeof record.text === 'string') {
+            return record.text;
+          }
+        }
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n');
+
+    if (experimentalText.trim()) {
+      return experimentalText;
+    }
+  }
+
+  return typeof item.result === 'string' ? item.result : '';
+}
+
+function parseCursorToolInput(rawInput: unknown): unknown {
+  if (typeof rawInput !== 'string') {
+    return rawInput;
+  }
+
+  const trimmed = rawInput.trim();
+  if (!trimmed) {
+    return rawInput;
+  }
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return rawInput;
+  }
+}
+
+function normalizeCursorToolInput(toolName: string, rawInput: unknown): unknown {
+  const parsed = parseCursorToolInput(rawInput);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return parsed;
+  }
+
+  const input = parsed as AnyRecord;
+  const normalized: AnyRecord = { ...input };
+
+  const filePath = input.file_path
+    ?? input.filePath
+    ?? input.path
+    ?? input.file
+    ?? input.filename;
+  if (typeof filePath === 'string' && filePath.trim()) {
+    normalized.file_path = filePath;
+  }
+
+  if (toolName === 'Write') {
+    const content = input.content
+      ?? input.text
+      ?? input.value
+      ?? input.contents
+      ?? input.fileContent
+      ?? input.new_string
+      ?? input.newString;
+    if (typeof content === 'string') {
+      normalized.content = content;
+    }
+  }
+
+  if (toolName === 'Edit') {
+    const oldString = input.old_string
+      ?? input.oldString
+      ?? input.old
+      ?? '';
+    const newString = input.new_string
+      ?? input.newString
+      ?? input.new
+      ?? input.content
+      ?? '';
+
+    if (typeof oldString === 'string') {
+      normalized.old_string = oldString;
+    }
+    if (typeof newString === 'string') {
+      normalized.new_string = newString;
+    }
+  }
+
+  if (toolName === 'ApplyPatch') {
+    const patch = input.patch ?? input.diff ?? input.content;
+    if (typeof patch === 'string' && !normalized.patch) {
+      normalized.patch = patch;
+    }
+  }
+
+  return normalized;
+}
+
 function sanitizeCursorSessionId(sessionId: string): string {
   const normalized = sessionId.trim();
   if (!normalized) {
@@ -372,7 +492,14 @@ export class CursorSessionsProvider implements IProviderSessions {
             if (item?.type !== 'tool-result') {
               continue;
             }
-            const toolCallId = item.toolCallId || content.id;
+            const cursorOptions = content.providerOptions?.cursor as AnyRecord | undefined;
+            const highLevelToolCallResult = cursorOptions?.highLevelToolCallResult;
+            const toolCallId = normalizeToolId(item.toolCallId)
+              || normalizeToolId(item.tool_call_id)
+              || normalizeToolId(highLevelToolCallResult?.toolCallId)
+              || normalizeToolId(highLevelToolCallResult?.tool_call_id)
+              || normalizeToolId(content.id)
+              || '';
             messages.push(createNormalizedMessage({
               id: `${baseId}_tr`,
               sessionId,
@@ -380,8 +507,9 @@ export class CursorSessionsProvider implements IProviderSessions {
               provider: PROVIDER,
               kind: 'tool_result',
               toolId: toolCallId,
-              content: item.result || '',
-              isError: false,
+              content: extractCursorToolResultContent(item),
+              isError: Boolean(item.isError || item.is_error),
+              toolUseResult: highLevelToolCallResult,
             }));
           }
           continue;
@@ -424,7 +552,10 @@ export class CursorSessionsProvider implements IProviderSessions {
             } else if (part?.type === 'tool-call' || part?.type === 'tool_use') {
               const rawToolName = part.toolName || part.name || 'Unknown Tool';
               const toolName = rawToolName === 'ApplyPatch' ? 'Edit' : rawToolName;
-              const toolId = part.toolCallId || part.id || `tool_${i}_${partIdx}`;
+              const toolId = normalizeToolId(part.toolCallId)
+                || normalizeToolId(part.tool_call_id)
+                || normalizeToolId(part.id)
+                || `tool_${i}_${partIdx}`;
               const message = createNormalizedMessage({
                 id: `${baseId}_${partIdx}`,
                 sessionId,
@@ -432,7 +563,7 @@ export class CursorSessionsProvider implements IProviderSessions {
                 provider: PROVIDER,
                 kind: 'tool_use',
                 toolName,
-                toolInput: part.args || part.input,
+                toolInput: normalizeCursorToolInput(toolName, part.args ?? part.input),
                 toolId,
               });
               messages.push(message);
@@ -472,6 +603,7 @@ export class CursorSessionsProvider implements IProviderSessions {
           toolUse.toolResult = {
             content: msg.content,
             isError: msg.isError,
+            toolUseResult: msg.toolUseResult,
           };
         }
       }
