@@ -232,21 +232,17 @@ export async function queryCodex(command, options = {}, ws) {
       thread = codex.startThread(threadOptions);
     }
 
-    console.log(`[Codex] Started thread, sandboxMode: ${sandboxMode}, approvalPolicy: ${approvalPolicy}`);
-
     const registerSession = (id) => {
       if (!id) {
         return;
       }
-      if (!activeCodexSessions.has(id)) {
-        activeCodexSessions.set(id, {
-          thread,
-          codex,
-          status: 'running',
-          abortController,
-          startedAt: new Date().toISOString()
-        });
-      }
+      activeCodexSessions.set(id, {
+        thread,
+        codex,
+        status: 'running',
+        abortController,
+        startedAt: new Date().toISOString()
+      });
     };
 
     // Existing sessions can be tracked immediately; new sessions are tracked after thread.started.

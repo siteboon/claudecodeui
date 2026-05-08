@@ -18,8 +18,6 @@ let activeGeminiProcesses = new Map(); // Track active processes by session ID
 
 function mapGeminiExitCodeToMessage(exitCode) {
     switch (exitCode) {
-        case 41:
-            return 'Gemini authentication failed (exit code 41). Run `gemini` in a terminal to choose an auth method, or configure a valid `GEMINI_API_KEY`.';
         case 42:
             return 'Gemini rejected the request input (exit code 42).';
         case 44:
@@ -103,7 +101,7 @@ async function loadGeminiUserLevelEnv() {
 
 async function buildGeminiProcessEnv() {
     const processEnv = { ...process.env };
-    if (GEMINI_AUTH_ENV_KEYS.every((key) => processEnv[key])) {
+    if (processEnv.GEMINI_API_KEY || processEnv.GOOGLE_API_KEY || processEnv.GOOGLE_APPLICATION_CREDENTIALS) {
         return processEnv;
     }
 
@@ -265,9 +263,6 @@ async function spawnGemini(command, options = {}, ws) {
 
     // Try to find gemini in PATH first, then fall back to environment variable
     const geminiPath = process.env.GEMINI_PATH || 'gemini';
-    console.log('Spawning Gemini CLI:', geminiPath, args.join(' '));
-    console.log('Working directory:', workingDir);
-
     let spawnCmd = geminiPath;
     let spawnArgs = args;
 
@@ -525,7 +520,7 @@ async function spawnGemini(command, options = {}, ws) {
 
                     terminalFailureReason =
                         'Gemini authentication failed (exit code 41). '
-                        + 'Run `gemini` in a terminal to choose an auth method, or configure `GEMINI_API_KEY`.'
+                        + 'Run `gemini` in a terminal to choose an auth method, or configure a valid `GEMINI_API_KEY`.'
                         + authErrorSuffix;
                     ws.send(createNormalizedMessage({ kind: 'error', content: terminalFailureReason, sessionId: socketSessionId, provider: 'gemini' }));
                 } else {

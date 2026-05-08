@@ -533,12 +533,6 @@ export function useChatComposerState({
       const effectiveSessionId =
         currentSessionId || selectedSession?.id || sessionStorage.getItem('cursorSessionId');
 
-      console.log('Submitting message', {
-        content: messageContent,
-        sessionId: effectiveSessionId,
-        images: uploadedImages,
-      });
-
       const userMessage: ChatMessage = {
         type: 'user',
         content: currentInput,
