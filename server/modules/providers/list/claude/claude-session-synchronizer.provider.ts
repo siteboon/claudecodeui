@@ -157,9 +157,14 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         const eventSessionId = typeof data.sessionId === 'string' ? data.sessionId : undefined;
         const aiTitle = typeof data.aiTitle === 'string' ? data.aiTitle : undefined;
         const lastPrompt = typeof data.lastPrompt === 'string' ? data.lastPrompt : undefined;
+        const claudeRenamedTitle = typeof data.customTitle === 'string' ? data.customTitle : undefined;
 
-        if ((eventType === 'ai-title' && eventSessionId === sessionId && aiTitle?.trim()) || (eventType === 'last-prompt' && eventSessionId === sessionId && lastPrompt?.trim())) {
-          return aiTitle || lastPrompt;
+        if (
+          (eventType === 'ai-title' && eventSessionId === sessionId && aiTitle?.trim()) ||
+          (eventType === 'last-prompt' && eventSessionId === sessionId && lastPrompt?.trim()) ||
+          (eventType === "custom-title" && eventSessionId === sessionId && claudeRenamedTitle?.trim())
+        ) {
+          return aiTitle || lastPrompt || claudeRenamedTitle;
         }
       }
     } catch {
