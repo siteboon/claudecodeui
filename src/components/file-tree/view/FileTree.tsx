@@ -148,10 +148,11 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
         onSearchQueryChange={setSearchQuery}
         onNewFile={() => operations.handleStartCreate('', 'file')}
         onNewFolder={() => operations.handleStartCreate('', 'directory')}
+        onUpload={(files) => upload.handleFileSelect(files)}
         onRefresh={refreshFiles}
         onCollapseAll={collapseAll}
         loading={loading}
-        operationLoading={operations.operationLoading}
+        operationLoading={operations.operationLoading || upload.operationLoading}
       />
 
       {viewMode === 'detailed' && filteredFiles.length > 0 && <FileTreeDetailedColumns />}
@@ -216,6 +217,21 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
           operationLoading={operations.operationLoading}
         />
       </ScrollArea>
+
+      {/* Upload progress bar */}
+      {upload.uploadProgress > 0 && upload.uploadProgress < 100 && (
+        <div className="px-3 pb-2">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-blue-500 transition-all duration-300 ease-out"
+              style={{ width: `${upload.uploadProgress}%` }}
+            />
+          </div>
+          <p className="mt-1 text-center text-xs text-muted-foreground">
+            {t('fileTree.uploading', 'Uploading... {{progress}}%', { progress: upload.uploadProgress })}
+          </p>
+        </div>
+      )}
 
       {selectedImage && (
         <ImageViewer

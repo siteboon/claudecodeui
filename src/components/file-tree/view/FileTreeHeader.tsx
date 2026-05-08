@@ -1,4 +1,5 @@
-import { ChevronDown, Eye, FileText, FolderPlus, List, RefreshCw, Search, TableProperties, X } from 'lucide-react';
+import { useCallback, useRef } from 'react';
+import { ChevronDown, Eye, FileText, FolderPlus, List, RefreshCw, Search, TableProperties, Upload, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button, Input } from '../../../shared/view/ui';
 import { cn } from '../../../lib/utils';
@@ -12,6 +13,7 @@ type FileTreeHeaderProps = {
   // Toolbar actions
   onNewFile?: () => void;
   onNewFolder?: () => void;
+  onUpload?: (files: File[]) => void;
   onRefresh?: () => void;
   onCollapseAll?: () => void;
   // Loading state
@@ -26,12 +28,29 @@ export default function FileTreeHeader({
   onSearchQueryChange,
   onNewFile,
   onNewFolder,
+  onUpload,
   onRefresh,
   onCollapseAll,
   loading,
   operationLoading,
 }: FileTreeHeaderProps) {
   const { t } = useTranslation();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleUploadClick = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const fileList = e.target.files;
+    if (fileList && fileList.length > 0 && onUpload) {
+      onUpload(Array.from(fileList));
+    }
+    // Reset input so the same file can be selected again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, [onUpload]);
 
   return (
     <div className="space-y-2 border-b border-border px-3 pb-2 pt-3">
@@ -65,6 +84,28 @@ export default function FileTreeHeader({
             >
               <FolderPlus className="h-3.5 w-3.5" />
             </Button>
+          )}
+          {onUpload && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={handleUploadClick}
+                title={t('fileTree.upload', 'Upload Files')}
+                aria-label={t('fileTree.upload', 'Upload Files')}
+                disabled={operationLoading}
+              >
+                <Upload className="h-3.5 w-3.5" />
+              </Button>
+            </>
           )}
           {onRefresh && (
             <Button

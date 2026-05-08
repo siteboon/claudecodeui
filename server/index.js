@@ -125,7 +125,7 @@ app.locals.wss = wss;
 
 app.use(cors({ exposedHeaders: ['X-Refreshed-Token'] }));
 app.use(express.json({
-    limit: '50mb',
+    limit: '200mb',
     type: (req) => {
         // Skip multipart/form-data requests (for file uploads like images)
         const contentType = req.headers['content-type'] || '';
@@ -135,7 +135,7 @@ app.use(express.json({
         return contentType.includes('json');
     }
 }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(express.urlencoded({ limit: '200mb', extended: true }));
 
 // Public health check endpoint (no authentication required)
 app.get('/health', (req, res) => {
@@ -881,7 +881,7 @@ const uploadFilesHandler = async (req, res) => {
             }
         }),
         limits: {
-            fileSize: 50 * 1024 * 1024, // 50MB limit
+            fileSize: 200 * 1024 * 1024, // 200MB limit
             files: 20 // Max 20 files at once
         }
     });
@@ -891,7 +891,7 @@ const uploadFilesHandler = async (req, res) => {
         if (err) {
             console.error('Multer error:', err);
             if (err.code === 'LIMIT_FILE_SIZE') {
-                return res.status(400).json({ error: 'File too large. Maximum size is 50MB.' });
+                return res.status(400).json({ error: 'File too large. Maximum size is 200MB.' });
             }
             if (err.code === 'LIMIT_FILE_COUNT') {
                 return res.status(400).json({ error: 'Too many files. Maximum is 20 files.' });

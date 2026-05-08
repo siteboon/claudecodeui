@@ -30,7 +30,7 @@ type PtySessionEntry = {
 };
 
 const ptySessionsMap = new Map<string, PtySessionEntry>();
-const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
+const PTY_SESSION_TIMEOUT = 240 * 60 * 1000;
 const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
 
 type ShellWebSocketDependencies = {
@@ -289,7 +289,7 @@ export function handleShellConnection(
             return;
           }
 
-          if (session.buffer.length < 5000) {
+          if (session.buffer.length < 100000) {
             session.buffer.push(chunk);
           } else {
             session.buffer.shift();
