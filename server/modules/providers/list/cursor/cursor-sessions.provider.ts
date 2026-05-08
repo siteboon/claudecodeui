@@ -353,7 +353,6 @@ export class CursorSessionsProvider implements IProviderSessions {
    */
   normalizeMessage(rawMessage: unknown, sessionId: string | null): NormalizedMessage[] {
     const raw = readObjectRecord(rawMessage);
-    console.log('Normalizing Cursor message:', raw);
     if (raw?.type === 'assistant' && raw.message?.content?.[0]?.text) {
       return [createNormalizedMessage({
         kind: 'stream_delta',
@@ -436,7 +435,6 @@ export class CursorSessionsProvider implements IProviderSessions {
       const baseId = blob.id || generateMessageId('cursor');
 
       try {
-        console.log('Normalizing Cursor blob content:', content);
         if (!content?.role || !content?.content) {
           if (content?.message?.role && content?.message?.content) {
             if (content.message.role === 'system') {
