@@ -40,6 +40,20 @@ export interface NormalizedMessage {
   // kind-specific fields (flat for simplicity)
   role?: 'user' | 'assistant';
   content?: string;
+  /**
+   * Mirrors optional transcript metadata from the server.
+   *
+   * These fields are currently used by Claude history normalization so local
+   * slash commands, local stdout, and compact summaries do not disappear when
+   * the session store hydrates from REST history.
+   */
+  displayText?: string;
+  commandName?: string;
+  commandMessage?: string;
+  commandArgs?: string;
+  isLocalCommand?: boolean;
+  isLocalCommandStdout?: boolean;
+  isCompactSummary?: boolean;
   images?: string[];
   toolName?: string;
   toolInput?: unknown;
