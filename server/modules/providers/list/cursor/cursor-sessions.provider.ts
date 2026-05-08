@@ -386,22 +386,17 @@ export class CursorSessionsProvider implements IProviderSessions {
     try {
       const blobs = await this.loadCursorBlobs(sessionId, projectPath);
       const allNormalized = this.normalizeCursorBlobs(blobs, sessionId);
-      const totalNormalized = allNormalized.length;
-      let total = 0;
-      for (const msg of allNormalized) {
-        if (msg.kind !== 'tool_result') {
-          total += 1;
-        }
-      }
+      const renderableMessages = allNormalized.filter((msg) => msg.kind !== 'tool_result');
+      const total = renderableMessages.length;
 
       if (limit !== null) {
         const start = offset;
         const page = limit === 0
           ? []
-          : allNormalized.slice(start, start + limit);
+          : renderableMessages.slice(start, start + limit);
         const hasMore = limit === 0
-          ? start < totalNormalized
-          : start + limit < totalNormalized;
+          ? start < total
+          : start + limit < total;
         return {
           messages: page,
           total,
@@ -412,7 +407,7 @@ export class CursorSessionsProvider implements IProviderSessions {
       }
 
       return {
-        messages: allNormalized,
+        messages: renderableMessages,
         total,
         hasMore: false,
         offset: 0,
@@ -560,6 +555,7 @@ export class CursorSessionsProvider implements IProviderSessions {
                 || normalizeToolId(part.tool_call_id)
                 || normalizeToolId(part.id)
                 || `tool_${i}_${partIdx}`;
+              const normalizedToolInput = normalizeCursorToolInput(rawToolName, part.args ?? part.input);
               const message = createNormalizedMessage({
                 id: `${baseId}_${partIdx}`,
                 sessionId,
@@ -567,7 +563,7 @@ export class CursorSessionsProvider implements IProviderSessions {
                 provider: PROVIDER,
                 kind: 'tool_use',
                 toolName,
-                toolInput: normalizeCursorToolInput(toolName, part.args ?? part.input),
+                toolInput: normalizedToolInput,
                 toolId,
               });
               messages.push(message);
