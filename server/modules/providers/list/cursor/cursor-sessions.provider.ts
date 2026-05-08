@@ -225,7 +225,13 @@ export class CursorSessionsProvider implements IProviderSessions {
     try {
       const blobs = await this.loadCursorBlobs(sessionId, projectPath);
       const allNormalized = this.normalizeCursorBlobs(blobs, sessionId);
-      const total = allNormalized.length;
+      const totalNormalized = allNormalized.length;
+      let total = 0;
+      for (const msg of allNormalized) {
+        if (msg.kind !== 'tool_result') {
+          total += 1;
+        }
+      }
 
       if (limit !== null) {
         const start = offset;
@@ -233,8 +239,8 @@ export class CursorSessionsProvider implements IProviderSessions {
           ? []
           : allNormalized.slice(start, start + limit);
         const hasMore = limit === 0
-          ? start < total
-          : start + limit < total;
+          ? start < totalNormalized
+          : start + limit < totalNormalized;
         return {
           messages: page,
           total,
