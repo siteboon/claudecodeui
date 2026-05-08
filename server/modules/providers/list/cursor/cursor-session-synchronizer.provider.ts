@@ -1,4 +1,3 @@
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
@@ -35,13 +34,20 @@ async function listDirectoryEntriesSafe(
 
 /**
  * Session indexer for Cursor transcript artifacts.
+ *
+ * Recent cursor-agent versions write JSONL transcripts under
+ *   ~/.cursor/projects/<project-dir>/agent-transcripts/<chatId>/<chatId>.jsonl
+ * (sometimes nested one level deeper). The legacy
+ *   ~/.cursor/chats/<projectHash>/
+ * directory still exists but now holds SQLite `store.db` files used by the
+ * loader (cursor-sessions.provider.ts), not JSONL the indexer can parse.
  */
 export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
   private readonly provider = 'cursor' as const;
   private readonly cursorHome = path.join(os.homedir(), '.cursor');
 
   /**
-   * Scans Cursor chats and upserts discovered sessions into DB.
+   * Scans Cursor transcripts and upserts discovered sessions into DB.
    */
   async synchronize(since?: Date): Promise<number> {
     const projectsDir = path.join(this.cursorHome, 'projects');
@@ -54,19 +60,19 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
         continue;
       }
 
-      const workerLogPath = path.join(projectsDir, entry.name, 'worker.log');
+      const projectDir = path.join(projectsDir, entry.name);
+      const workerLogPath = path.join(projectDir, 'worker.log');
       const projectPath = await this.extractProjectPathFromWorkerLog(workerLogPath);
       if (!projectPath || seenProjectPaths.has(projectPath)) {
         continue;
       }
-
       seenProjectPaths.add(projectPath);
-      const projectHash = this.md5(projectPath);
-      const chatsDir = path.join(this.cursorHome, 'chats', projectHash);
-      const files = await findFilesRecursivelyCreatedAfter(chatsDir, '.jsonl', since ?? null);
+
+      const transcriptsDir = path.join(projectDir, 'agent-transcripts');
+      const files = await findFilesRecursivelyCreatedAfter(transcriptsDir, '.jsonl', since ?? null);
 
       for (const filePath of files) {
-        const parsed = await this.processSessionFile(filePath);
+        const parsed = await this.processSessionFile(filePath, projectPath);
         if (!parsed) {
           continue;
         }
@@ -89,7 +95,7 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
   }
 
   /**
-   * Parses and upserts one Cursor session JSONL file.
+   * Parses and upserts one Cursor session JSONL file (called by the file watcher).
    */
   async synchronizeFile(filePath: string): Promise<string | null> {
     if (!filePath.endsWith('.jsonl')) {
@@ -114,10 +120,30 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
   }
 
   /**
-   * Produces the same project hash Cursor uses in chat directory names.
+   * Walks up from a transcript file looking for the project's worker.log.
+   *
+   * Cursor has nested transcripts at varying depths over time
+   * (`agent-transcripts/<chatId>/<file>.jsonl` and
+   *  `agent-transcripts/<chatId>/<sub>/<file>.jsonl` both occur in the wild),
+   * so a fixed `dirname()` count silently skipped the deeper variant.
    */
-  private md5(input: string): string {
-    return crypto.createHash('md5').update(input).digest('hex');
+  private async findProjectDirForTranscript(filePath: string): Promise<string | null> {
+    const projectsRoot = path.join(this.cursorHome, 'projects');
+    let current = path.dirname(filePath);
+    while (current.startsWith(projectsRoot + path.sep) && current !== projectsRoot) {
+      try {
+        await fsp.access(path.join(current, 'worker.log'));
+        return current;
+      } catch {
+        // keep walking up
+      }
+      const parent = path.dirname(current);
+      if (parent === current) {
+        break;
+      }
+      current = parent;
+    }
+    return null;
   }
 
   /**
@@ -147,16 +173,25 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
   /**
    * Extracts session metadata from one Cursor JSONL session file.
    */
-  private async processSessionFile(filePath: string): Promise<ParsedSession | null> {
+  private async processSessionFile(
+    filePath: string,
+    projectPathHint?: string
+  ): Promise<ParsedSession | null> {
     const sessionId = path.basename(filePath, '.jsonl');
-    const grandparentDir = path.dirname(path.dirname(filePath));
-    const workerLogPath = path.join(grandparentDir, 'worker.log');
-    const projectPath = await this.extractProjectPathFromWorkerLog(workerLogPath);
 
+    let projectPath = projectPathHint ?? null;
     if (!projectPath) {
-      return null;
+      const projectDir = await this.findProjectDirForTranscript(filePath);
+      if (!projectDir) {
+        return null;
+      }
+      projectPath = await this.extractProjectPathFromWorkerLog(path.join(projectDir, 'worker.log'));
+      if (!projectPath) {
+        return null;
+      }
     }
 
+    const resolvedProjectPath = projectPath;
     return extractFirstValidJsonlData(filePath, (rawData) => {
       const data = rawData as Record<string, any>;
       if (data.role !== 'user') {
@@ -168,7 +203,7 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
 
       return {
         sessionId,
-        projectPath,
+        projectPath: resolvedProjectPath,
         sessionName: normalizeSessionName(firstLine, 'Untitled Cursor Session'),
       };
     });
