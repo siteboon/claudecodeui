@@ -624,7 +624,6 @@ export function useChatSessionState({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatMessages.length, isLoadingSessionMessages, searchTarget]);
 
-  console.log("[UseChatSessionState] total and chatMessages: ", totalMessages, chatMessages)
   // Token usage fetch for Claude
   useEffect(() => {
     if (!selectedProject || !selectedSession?.id) {

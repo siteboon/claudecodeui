@@ -559,8 +559,6 @@ export class CodexSessionsProvider implements IProviderSessions {
         total += 1;
       }
     }
-    console.log(`[CodexProvider] Loaded ${total} frontend messages (${totalNormalized} normalized) for session "${sessionId}".`);
-
     const normalizedOffset = Math.max(0, offset);
     const normalizedLimit = limit === null ? null : Math.max(0, limit);
     const messages = normalizedLimit === null
