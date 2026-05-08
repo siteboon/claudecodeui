@@ -25,6 +25,167 @@ type CursorMessageBlob = {
   content: AnyRecord;
 };
 
+function isInternalCursorText(value: unknown): boolean {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  const normalized = value.trim();
+  return normalized.startsWith('<user_info>') || normalized.startsWith('<system_reminder>');
+}
+
+function isInternalCursorPart(part: unknown): boolean {
+  if (!part || typeof part !== 'object') {
+    return false;
+  }
+
+  const record = part as AnyRecord;
+  const type = typeof record.type === 'string' ? record.type : '';
+  if (type === 'user_info' || type === 'system_reminder') {
+    return true;
+  }
+
+  return isInternalCursorText(record.text);
+}
+
+function unwrapUserQueryText(value: string, role: 'user' | 'assistant'): string {
+  if (role !== 'user') {
+    return value;
+  }
+
+  const normalized = value.trimStart();
+  const openTag = '<user_query>';
+  const closeTag = '</user_query>';
+  if (!normalized.startsWith(openTag)) {
+    return value;
+  }
+
+  const afterOpen = normalized.slice(openTag.length);
+  const closeIndex = afterOpen.lastIndexOf(closeTag);
+  const inner = closeIndex >= 0 ? afterOpen.slice(0, closeIndex) : afterOpen;
+  return inner.trim();
+}
+
+function normalizeToolId(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim();
+  return normalized ? normalized : null;
+}
+
+function extractCursorToolResultContent(item: AnyRecord): string {
+  if (typeof item.result === 'string' && item.result.trim()) {
+    return item.result;
+  }
+
+  if (typeof item.output === 'string' && item.output.trim()) {
+    return item.output;
+  }
+
+  if (Array.isArray(item.experimental_content)) {
+    const experimentalText = item.experimental_content
+      .map((part: unknown) => {
+        if (typeof part === 'string') {
+          return part;
+        }
+        if (part && typeof part === 'object') {
+          const record = part as AnyRecord;
+          if (typeof record.text === 'string') {
+            return record.text;
+          }
+        }
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n');
+
+    if (experimentalText.trim()) {
+      return experimentalText;
+    }
+  }
+
+  return typeof item.result === 'string' ? item.result : '';
+}
+
+function parseCursorToolInput(rawInput: unknown): unknown {
+  if (typeof rawInput !== 'string') {
+    return rawInput;
+  }
+
+  const trimmed = rawInput.trim();
+  if (!trimmed) {
+    return rawInput;
+  }
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return rawInput;
+  }
+}
+
+function normalizeCursorToolInput(toolName: string, rawInput: unknown): unknown {
+  const parsed = parseCursorToolInput(rawInput);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return parsed;
+  }
+
+  const input = parsed as AnyRecord;
+  const normalized: AnyRecord = { ...input };
+
+  const filePath = input.file_path
+    ?? input.filePath
+    ?? input.path
+    ?? input.file
+    ?? input.filename;
+  if (typeof filePath === 'string' && filePath.trim()) {
+    normalized.file_path = filePath;
+  }
+
+  if (toolName === 'Write') {
+    const content = input.content
+      ?? input.text
+      ?? input.value
+      ?? input.contents
+      ?? input.fileContent
+      ?? input.new_string
+      ?? input.newString;
+    if (typeof content === 'string') {
+      normalized.content = content;
+    }
+  }
+
+  if (toolName === 'Edit') {
+    const oldString = input.old_string
+      ?? input.oldString
+      ?? input.old
+      ?? '';
+    const newString = input.new_string
+      ?? input.newString
+      ?? input.new
+      ?? input.content
+      ?? '';
+
+    if (typeof oldString === 'string') {
+      normalized.old_string = oldString;
+    }
+    if (typeof newString === 'string') {
+      normalized.new_string = newString;
+    }
+  }
+
+  if (toolName === 'ApplyPatch') {
+    const patch = input.patch ?? input.diff ?? input.content;
+    if (typeof patch === 'string' && !normalized.patch) {
+      normalized.patch = patch;
+    }
+  }
+
+  return normalized;
+}
+
 function sanitizeCursorSessionId(sessionId: string): string {
   const normalized = sessionId.trim();
   if (!normalized) {
@@ -192,6 +353,7 @@ export class CursorSessionsProvider implements IProviderSessions {
    */
   normalizeMessage(rawMessage: unknown, sessionId: string | null): NormalizedMessage[] {
     const raw = readObjectRecord(rawMessage);
+    console.log('Normalizing Cursor message:', raw);
     if (raw?.type === 'assistant' && raw.message?.content?.[0]?.text) {
       return [createNormalizedMessage({
         kind: 'stream_delta',
@@ -280,6 +442,7 @@ export class CursorSessionsProvider implements IProviderSessions {
       const baseId = blob.id || generateMessageId('cursor');
 
       try {
+        console.log('Normalizing Cursor blob content:', content);
         if (!content?.role || !content?.content) {
           if (content?.message?.role && content?.message?.content) {
             if (content.message.role === 'system') {
@@ -289,11 +452,24 @@ export class CursorSessionsProvider implements IProviderSessions {
             let text = '';
             if (Array.isArray(content.message.content)) {
               text = content.message.content
-                .map((part: string | AnyRecord) => typeof part === 'string' ? part : part?.text || '')
+                .map((part: string | AnyRecord) => {
+                  if (typeof part === 'string') {
+                    if (isInternalCursorText(part)) {
+                      return '';
+                    }
+                    return unwrapUserQueryText(part, role);
+                  }
+                  if (isInternalCursorPart(part)) {
+                    return '';
+                  }
+                  return unwrapUserQueryText(part?.text || '', role);
+                })
                 .filter(Boolean)
                 .join('\n');
             } else if (typeof content.message.content === 'string') {
-              text = content.message.content;
+              if (!isInternalCursorText(content.message.content)) {
+                text = unwrapUserQueryText(content.message.content, role);
+              }
             }
             if (text?.trim()) {
               messages.push(createNormalizedMessage({
@@ -322,7 +498,14 @@ export class CursorSessionsProvider implements IProviderSessions {
             if (item?.type !== 'tool-result') {
               continue;
             }
-            const toolCallId = item.toolCallId || content.id;
+            const cursorOptions = content.providerOptions?.cursor as AnyRecord | undefined;
+            const highLevelToolCallResult = cursorOptions?.highLevelToolCallResult;
+            const toolCallId = normalizeToolId(item.toolCallId)
+              || normalizeToolId(item.tool_call_id)
+              || normalizeToolId(highLevelToolCallResult?.toolCallId)
+              || normalizeToolId(highLevelToolCallResult?.tool_call_id)
+              || normalizeToolId(content.id)
+              || '';
             messages.push(createNormalizedMessage({
               id: `${baseId}_tr`,
               sessionId,
@@ -330,8 +513,9 @@ export class CursorSessionsProvider implements IProviderSessions {
               provider: PROVIDER,
               kind: 'tool_result',
               toolId: toolCallId,
-              content: item.result || '',
-              isError: false,
+              content: extractCursorToolResultContent(item),
+              isError: Boolean(item.isError || item.is_error),
+              toolUseResult: highLevelToolCallResult,
             }));
           }
           continue;
@@ -342,8 +526,15 @@ export class CursorSessionsProvider implements IProviderSessions {
         if (Array.isArray(content.content)) {
           for (let partIdx = 0; partIdx < content.content.length; partIdx++) {
             const part = content.content[partIdx];
+            if (isInternalCursorPart(part)) {
+              continue;
+            }
 
             if (part?.type === 'text' && part?.text) {
+              const normalizedPartText = unwrapUserQueryText(part.text, role);
+              if (!normalizedPartText) {
+                continue;
+              }
               messages.push(createNormalizedMessage({
                 id: `${baseId}_${partIdx}`,
                 sessionId,
@@ -351,7 +542,7 @@ export class CursorSessionsProvider implements IProviderSessions {
                 provider: PROVIDER,
                 kind: 'text',
                 role,
-                content: part.text,
+                content: normalizedPartText,
                 sequence: blob.sequence,
                 rowid: blob.rowid,
               }));
@@ -367,7 +558,10 @@ export class CursorSessionsProvider implements IProviderSessions {
             } else if (part?.type === 'tool-call' || part?.type === 'tool_use') {
               const rawToolName = part.toolName || part.name || 'Unknown Tool';
               const toolName = rawToolName === 'ApplyPatch' ? 'Edit' : rawToolName;
-              const toolId = part.toolCallId || part.id || `tool_${i}_${partIdx}`;
+              const toolId = normalizeToolId(part.toolCallId)
+                || normalizeToolId(part.tool_call_id)
+                || normalizeToolId(part.id)
+                || `tool_${i}_${partIdx}`;
               const message = createNormalizedMessage({
                 id: `${baseId}_${partIdx}`,
                 sessionId,
@@ -375,14 +569,22 @@ export class CursorSessionsProvider implements IProviderSessions {
                 provider: PROVIDER,
                 kind: 'tool_use',
                 toolName,
-                toolInput: part.args || part.input,
+                toolInput: normalizeCursorToolInput(toolName, part.args ?? part.input),
                 toolId,
               });
               messages.push(message);
               toolUseMap.set(toolId, message);
             }
           }
-        } else if (typeof content.content === 'string' && content.content.trim()) {
+        } else if (
+          typeof content.content === 'string'
+          && content.content.trim()
+          && !isInternalCursorText(content.content)
+        ) {
+          const normalizedText = unwrapUserQueryText(content.content, role);
+          if (!normalizedText) {
+            continue;
+          }
           messages.push(createNormalizedMessage({
             id: baseId,
             sessionId,
@@ -390,7 +592,7 @@ export class CursorSessionsProvider implements IProviderSessions {
             provider: PROVIDER,
             kind: 'text',
             role,
-            content: content.content,
+            content: normalizedText,
             sequence: blob.sequence,
             rowid: blob.rowid,
           }));
@@ -407,6 +609,7 @@ export class CursorSessionsProvider implements IProviderSessions {
           toolUse.toolResult = {
             content: msg.content,
             isError: msg.isError,
+            toolUseResult: msg.toolUseResult,
           };
         }
       }
