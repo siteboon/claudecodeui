@@ -20,6 +20,10 @@ export const CLAUDE_MODELS = {
     { value: "opusplan", label: "Opus Plan" },
     { value: "sonnet[1m]", label: "Sonnet [1M]" },
     { value: "opus[1m]", label: "Opus [1M]" },
+    { value: "glm-4.7", label: "GLM-4.7 (智谱AI)" },
+    { value: "glm-4-flash", label: "GLM-4 Flash" },
+    { value: "glm-4-plus", label: "GLM-4 Plus" },
+    { value: "glm-4-air", label: "GLM-4 Air" },
   ],
 
   DEFAULT: "opus",
