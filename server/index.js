@@ -587,10 +587,46 @@ app.get('/api/projects/:projectId/files', authenticateToken, async (req, res) =>
             return res.status(404).json({ error: `Project path not found: ${actualPath}` });
         }
 
-        const files = await getFileTree(actualPath, 10, 0, true);
+        const files = await getFileTree(actualPath, 1, 0, true);
         res.json(files);
     } catch (error) {
         console.error('[ERROR] File tree error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Lazy-load directory children for on-demand expansion
+app.get('/api/projects/:projectId/files/children', authenticateToken, async (req, res) => {
+    try {
+        const { dirPath } = req.query;
+        if (!dirPath || typeof dirPath !== 'string') {
+            return res.status(400).json({ error: 'dirPath query parameter is required' });
+        }
+
+        const projectPath = await projectsDb.getProjectPathById(req.params.projectId);
+        if (!projectPath) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        // Security: ensure resolved path is within project directory
+        const resolvedDir = path.resolve(dirPath);
+        if (!resolvedDir.startsWith(projectPath)) {
+            return res.status(403).json({ error: 'Path is outside project directory' });
+        }
+
+        try {
+            const stats = await fsPromises.stat(resolvedDir);
+            if (!stats.isDirectory()) {
+                return res.status(400).json({ error: 'Path is not a directory' });
+            }
+        } catch (e) {
+            return res.status(404).json({ error: 'Directory not found' });
+        }
+
+        const children = await getFileTree(resolvedDir, 1, 0, true);
+        res.json(children);
+    } catch (error) {
+        console.error('[ERROR] File tree children error:', error.message);
         res.status(500).json({ error: error.message });
     }
 });

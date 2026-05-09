@@ -1,5 +1,5 @@
 import type { ReactNode, RefObject } from 'react';
-import { ChevronRight, Folder, FolderOpen } from 'lucide-react';
+import { ChevronRight, Folder, FolderOpen, Loader2 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import type { FileTreeNode as FileTreeNodeType, FileTreeViewMode } from '../types/types';
 import { Input } from '../../../shared/view/ui';
@@ -10,6 +10,7 @@ type FileTreeNodeProps = {
   level: number;
   viewMode: FileTreeViewMode;
   expandedDirs: Set<string>;
+  loadingDirs?: Set<string>;
   onItemClick: (item: FileTreeNodeType) => void;
   renderFileIcon: (filename: string) => ReactNode;
   formatFileSize: (bytes?: number) => string;
@@ -64,6 +65,7 @@ export default function FileTreeNode({
   level,
   viewMode,
   expandedDirs,
+  loadingDirs,
   onItemClick,
   renderFileIcon,
   formatFileSize,
@@ -85,7 +87,8 @@ export default function FileTreeNode({
 }: FileTreeNodeProps) {
   const isDirectory = item.type === 'directory';
   const isOpen = isDirectory && expandedDirs.has(item.path);
-  const hasChildren = Boolean(isDirectory && item.children && item.children.length > 0);
+  const hasChildren = isDirectory;
+  const isLoading = isDirectory && loadingDirs?.has(item.path);
   const isRenaming = renamingItem?.path === item.path;
 
   const nameClassName = cn(
@@ -201,18 +204,25 @@ export default function FileTreeNode({
 
       {isDirectory && isOpen && hasChildren && (
         <div className="relative">
+          {isLoading ? (
+            <div className="py-1" style={{ paddingLeft: `${(level + 1) * 16 + 4}px` }}>
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            </div>
+          ) : item.children && item.children.length > 0 ? (
+          <>
           <span
             className="absolute bottom-0 top-0 border-l border-border/40"
             style={{ left: `${level * 16 + 14}px` }}
             aria-hidden="true"
           />
-          {item.children?.map((child) => (
+          {item.children.map((child) => (
             <FileTreeNode
               key={child.path}
               item={child}
               level={level + 1}
               viewMode={viewMode}
               expandedDirs={expandedDirs}
+              loadingDirs={loadingDirs}
               onItemClick={onItemClick}
               renderFileIcon={renderFileIcon}
               formatFileSize={formatFileSize}
@@ -233,6 +243,8 @@ export default function FileTreeNode({
               operationLoading={operationLoading}
             />
           ))}
+          </>
+          ) : null}
         </div>
       )}
     </div>
