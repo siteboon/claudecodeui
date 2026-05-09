@@ -45,44 +45,28 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
    */
   async synchronize(since?: Date): Promise<number> {
     const projectsDir = path.join(this.cursorHome, 'projects');
-    const projectEntries = await listDirectoryEntriesSafe(projectsDir);
-    const seenProjectPaths = new Set<string>();
 
     let processed = 0;
-    for (const entry of projectEntries) {
-      if (!entry.isDirectory()) {
+
+    const files = await findFilesRecursivelyCreatedAfter(projectsDir, '.jsonl', since ?? null);
+
+    for (const filePath of files) {
+      const parsed = await this.processSessionFile(filePath);
+      if (!parsed) {
         continue;
       }
 
-      const workerLogPath = path.join(projectsDir, entry.name, 'worker.log');
-      const projectPath = await this.extractProjectPathFromWorkerLog(workerLogPath);
-      if (!projectPath || seenProjectPaths.has(projectPath)) {
-        continue;
-      }
-
-      seenProjectPaths.add(projectPath);
-      const projectHash = this.md5(projectPath);
-      const chatsDir = path.join(this.cursorHome, 'chats', projectHash);
-      const files = await findFilesRecursivelyCreatedAfter(chatsDir, '.jsonl', since ?? null);
-
-      for (const filePath of files) {
-        const parsed = await this.processSessionFile(filePath);
-        if (!parsed) {
-          continue;
-        }
-
-        const timestamps = await readFileTimestamps(filePath);
-        sessionsDb.createSession(
-          parsed.sessionId,
-          this.provider,
-          parsed.projectPath,
-          parsed.sessionName,
-          timestamps.createdAt,
-          timestamps.updatedAt,
-          filePath
-        );
-        processed += 1;
-      }
+      const timestamps = await readFileTimestamps(filePath);
+      sessionsDb.createSession(
+        parsed.sessionId,
+        this.provider,
+        parsed.projectPath,
+        parsed.sessionName,
+        timestamps.createdAt,
+        timestamps.updatedAt,
+        filePath
+      );
+      processed += 1;
     }
 
     return processed;
@@ -114,13 +98,6 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
   }
 
   /**
-   * Produces the same project hash Cursor uses in chat directory names.
-   */
-  private md5(input: string): string {
-    return crypto.createHash('md5').update(input).digest('hex');
-  }
-
-  /**
    * Extracts project path from Cursor worker.log.
    */
   private async extractProjectPathFromWorkerLog(filePath: string): Promise<string | null> {
@@ -149,7 +126,7 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
    */
   private async processSessionFile(filePath: string): Promise<ParsedSession | null> {
     const sessionId = path.basename(filePath, '.jsonl');
-    const grandparentDir = path.dirname(path.dirname(filePath));
+    const grandparentDir = path.dirname(path.dirname(path.dirname(filePath)));
     const workerLogPath = path.join(grandparentDir, 'worker.log');
     const projectPath = await this.extractProjectPathFromWorkerLog(workerLogPath);
 

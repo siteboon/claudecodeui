@@ -3,7 +3,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 
 import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
 import type { PendingPermissionRequest, SessionNavigationOptions } from '../types/types';
-import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
+import type { ProjectSession, LLMProvider } from '../../../types/app';
 import type { SessionStore, NormalizedMessage } from '../../../stores/useSessionStore';
 
 type PendingViewSession = {
@@ -51,7 +51,6 @@ type LatestChatMessage = {
 interface UseChatRealtimeHandlersArgs {
   latestMessage: LatestChatMessage | null;
   provider: LLMProvider;
-  selectedProject: Project | null;
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
   setCurrentSessionId: (sessionId: string | null) => void;
@@ -61,13 +60,11 @@ interface UseChatRealtimeHandlersArgs {
   setTokenBudget: (budget: Record<string, unknown> | null) => void;
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
   pendingViewSessionRef: MutableRefObject<PendingViewSession | null>;
-  streamBufferRef: MutableRefObject<string>;
   streamTimerRef: MutableRefObject<number | null>;
   accumulatedStreamRef: MutableRefObject<string>;
   onSessionInactive?: (sessionId?: string | null) => void;
   onSessionProcessing?: (sessionId?: string | null) => void;
   onSessionNotProcessing?: (sessionId?: string | null) => void;
-  onReplaceTemporarySession?: (sessionId?: string | null) => void;
   onNavigateToSession?: (sessionId: string, options?: SessionNavigationOptions) => void;
   onWebSocketReconnect?: () => void;
   sessionStore: SessionStore;
@@ -80,7 +77,6 @@ interface UseChatRealtimeHandlersArgs {
 export function useChatRealtimeHandlers({
   latestMessage,
   provider,
-  selectedProject,
   selectedSession,
   currentSessionId,
   setCurrentSessionId,
@@ -90,13 +86,11 @@ export function useChatRealtimeHandlers({
   setTokenBudget,
   setPendingPermissionRequests,
   pendingViewSessionRef,
-  streamBufferRef,
   streamTimerRef,
   accumulatedStreamRef,
   onSessionInactive,
   onSessionProcessing,
   onSessionNotProcessing,
-  onReplaceTemporarySession,
   onNavigateToSession,
   onWebSocketReconnect,
   sessionStore,
@@ -187,7 +181,6 @@ export function useChatRealtimeHandlers({
     if (msg.kind === 'stream_delta') {
       const text = msg.content || '';
       if (!text) return;
-      streamBufferRef.current += text;
       accumulatedStreamRef.current += text;
       if (!streamTimerRef.current) {
         streamTimerRef.current = window.setTimeout(() => {
@@ -216,12 +209,18 @@ export function useChatRealtimeHandlers({
         sessionStore.finalizeStreaming(sid);
       }
       accumulatedStreamRef.current = '';
-      streamBufferRef.current = '';
       return;
     }
 
     // --- All other messages: route to store ---
-    if (sid) {
+    const shouldPersist =
+      msg.kind !== 'session_created'
+      && msg.kind !== 'complete'
+      && msg.kind !== 'status'
+      && msg.kind !== 'permission_request'
+      && msg.kind !== 'permission_cancelled';
+
+    if (sid && shouldPersist) {
       sessionStore.appendRealtime(sid, msg as NormalizedMessage);
     }
 
@@ -231,13 +230,16 @@ export function useChatRealtimeHandlers({
         const newSessionId = msg.newSessionId;
         if (!newSessionId) break;
 
-        if (!currentSessionId || currentSessionId.startsWith('new-session-')) {
+        // We no longer synthesize client-side placeholder IDs. Until the provider
+        // announces `session_created`, the active id is expected to be null.
+        if (!currentSessionId) {
+          console.log('Session created with ID:', newSessionId);
+          console.log('Existing session ID:', currentSessionId);
           sessionStorage.setItem('pendingSessionId', newSessionId);
           if (pendingViewSessionRef.current && !pendingViewSessionRef.current.sessionId) {
             pendingViewSessionRef.current.sessionId = newSessionId;
           }
           setCurrentSessionId(newSessionId);
-          onReplaceTemporarySession?.(newSessionId);
           setPendingPermissionRequests((prev) =>
             prev.map((r) => (r.sessionId ? r : { ...r, sessionId: newSessionId })),
           );
@@ -257,7 +259,6 @@ export function useChatRealtimeHandlers({
           sessionStore.finalizeStreaming(sid);
         }
         accumulatedStreamRef.current = '';
-        streamBufferRef.current = '';
 
         setIsLoading(false);
         setCanAbortSession(false);
@@ -386,7 +387,6 @@ export function useChatRealtimeHandlers({
   }, [
     latestMessage,
     provider,
-    selectedProject,
     selectedSession,
     currentSessionId,
     setCurrentSessionId,
@@ -396,13 +396,11 @@ export function useChatRealtimeHandlers({
     setTokenBudget,
     setPendingPermissionRequests,
     pendingViewSessionRef,
-    streamBufferRef,
     streamTimerRef,
     accumulatedStreamRef,
     onSessionInactive,
     onSessionProcessing,
     onSessionNotProcessing,
-    onReplaceTemporarySession,
     onNavigateToSession,
     onWebSocketReconnect,
     sessionStore,

@@ -40,6 +40,10 @@ export type ProjectListItem = {
   };
 };
 
+export type ArchivedProjectListItem = ProjectListItem & {
+  isArchived: true;
+};
+
 type ProgressUpdate = {
   phase: 'loading' | 'complete';
   current: number;
@@ -150,6 +154,16 @@ function bucketSessionRowsByProvider(rows: SessionRepositoryRow[]): SessionsByPr
   return byProvider;
 }
 
+function readProjectSessionsIncludingArchived(projectPath: string): ProjectSessionsPageResult {
+  const rows = sessionsDb.getSessionsByProjectPathIncludingArchived(projectPath) as SessionRepositoryRow[];
+
+  return {
+    sessionsByProvider: bucketSessionRowsByProvider(rows),
+    total: rows.length,
+    hasMore: false,
+  };
+}
+
 /**
  * Reads one paginated project session slice from the DB and groups rows by provider.
  */
@@ -253,6 +267,56 @@ export async function getProjectsWithSessions(
   });
 
   return projects;
+}
+
+/**
+ * Reads archived projects from DB and includes every session row for each
+ * project path, because an archived workspace should surface all preserved
+ * conversation history in the archive view regardless of each session's flag.
+ */
+export async function getArchivedProjectsWithSessions(
+  options: Pick<GetProjectsWithSessionsOptions, 'skipSynchronization'> = {},
+): Promise<ArchivedProjectListItem[]> {
+  if (!options.skipSynchronization) {
+    await sessionSynchronizerService.synchronizeSessions();
+  }
+
+  const projectRows = projectsDb.getArchivedProjectPaths() as Array<{
+    project_id: string;
+    project_path: string;
+    custom_project_name?: string | null;
+    isStarred?: number;
+  }>;
+
+  const archivedProjects: ArchivedProjectListItem[] = [];
+
+  for (const row of projectRows) {
+    const displayName =
+      row.custom_project_name && row.custom_project_name.trim().length > 0
+        ? row.custom_project_name
+        : await generateDisplayName(path.basename(row.project_path) || row.project_path, row.project_path);
+
+    const sessionsPage = readProjectSessionsIncludingArchived(row.project_path);
+
+    archivedProjects.push({
+      projectId: row.project_id,
+      path: row.project_path,
+      displayName,
+      fullPath: row.project_path,
+      isStarred: Boolean(row.isStarred),
+      isArchived: true,
+      sessions: sessionsPage.sessionsByProvider.claude,
+      cursorSessions: sessionsPage.sessionsByProvider.cursor,
+      codexSessions: sessionsPage.sessionsByProvider.codex,
+      geminiSessions: sessionsPage.sessionsByProvider.gemini,
+      sessionMeta: {
+        hasMore: sessionsPage.hasMore,
+        total: sessionsPage.total,
+      },
+    });
+  }
+
+  return archivedProjects;
 }
 
 /**

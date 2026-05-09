@@ -1,18 +1,122 @@
 import { spawn } from 'child_process';
+import { promises as fs } from 'fs';
+import os from 'os';
+import path from 'path';
+
 import crossSpawn from 'cross-spawn';
 
-// Use cross-spawn on Windows for correct .cmd resolution (same pattern as cursor-cli.js)
-const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
-import { promises as fs } from 'fs';
-import path from 'path';
-import os from 'os';
 import sessionManager from './sessionManager.js';
 import GeminiResponseHandler from './gemini-response-handler.js';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
 import { createNormalizedMessage } from './shared/utils.js';
 
+// Use cross-spawn on Windows for correct .cmd resolution (same pattern as cursor-cli.js)
+const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
+
 let activeGeminiProcesses = new Map(); // Track active processes by session ID
+
+function mapGeminiExitCodeToMessage(exitCode) {
+    switch (exitCode) {
+        case 42:
+            return 'Gemini rejected the request input (exit code 42).';
+        case 44:
+            return 'Gemini sandbox error (exit code 44). Check local sandbox/container settings.';
+        case 52:
+            return 'Gemini configuration error (exit code 52). Check your Gemini settings files for invalid JSON/config.';
+        case 53:
+            return 'Gemini conversation turn limit reached (exit code 53). Start a new Gemini session.';
+        default:
+            return null;
+    }
+}
+
+const GEMINI_AUTH_ENV_KEYS = [
+    'GEMINI_API_KEY',
+    'GOOGLE_API_KEY',
+    'GOOGLE_CLOUD_PROJECT',
+    'GOOGLE_CLOUD_PROJECT_ID',
+    'GOOGLE_CLOUD_LOCATION',
+    'GOOGLE_APPLICATION_CREDENTIALS'
+];
+
+function parseEnvFileContent(content) {
+    const parsed = {};
+
+    for (const rawLine of content.split(/\r?\n/)) {
+        const line = rawLine.trim();
+        if (!line || line.startsWith('#')) {
+            continue;
+        }
+
+        const exportPrefix = 'export ';
+        const normalizedLine = line.startsWith(exportPrefix) ? line.slice(exportPrefix.length).trim() : line;
+        const separatorIndex = normalizedLine.indexOf('=');
+
+        if (separatorIndex <= 0) {
+            continue;
+        }
+
+        const key = normalizedLine.slice(0, separatorIndex).trim();
+        if (!key) {
+            continue;
+        }
+
+        let value = normalizedLine.slice(separatorIndex + 1).trim();
+        const hasDoubleQuotes = value.startsWith('"') && value.endsWith('"');
+        const hasSingleQuotes = value.startsWith('\'') && value.endsWith('\'');
+
+        if (hasDoubleQuotes || hasSingleQuotes) {
+            value = value.slice(1, -1);
+        } else {
+            // Support inline comments in unquoted values: KEY=value # comment
+            value = value.replace(/\s+#.*$/, '').trim();
+        }
+
+        parsed[key] = value;
+    }
+
+    return parsed;
+}
+
+async function loadGeminiUserLevelEnv() {
+    const geminiCliHome = (process.env.GEMINI_CLI_HOME || '').trim() || os.homedir();
+    const envCandidates = [
+        path.join(geminiCliHome, '.gemini', '.env'),
+        path.join(geminiCliHome, '.env')
+    ];
+
+    for (const envPath of envCandidates) {
+        try {
+            await fs.access(envPath);
+            const content = await fs.readFile(envPath, 'utf8');
+            return parseEnvFileContent(content);
+        } catch {
+            // Keep scanning for the next candidate.
+        }
+    }
+
+    return {};
+}
+
+async function buildGeminiProcessEnv() {
+    const processEnv = { ...process.env };
+    if (processEnv.GEMINI_API_KEY || processEnv.GOOGLE_API_KEY || processEnv.GOOGLE_APPLICATION_CREDENTIALS) {
+        return processEnv;
+    }
+
+    // Gemini CLI docs recommend ~/.gemini/.env for persistent headless auth settings.
+    // When the server process was launched without shell profile variables, we still
+    // want the spawned CLI process to inherit those user-level credentials.
+    const userEnv = await loadGeminiUserLevelEnv();
+    for (const key of GEMINI_AUTH_ENV_KEYS) {
+        if (!processEnv[key] && userEnv[key]) {
+            processEnv[key] = userEnv[key];
+        }
+    }
+
+    return processEnv;
+}
 
 async function spawnGemini(command, options = {}, ws) {
     const { sessionId, projectPath, cwd, toolsSettings, permissionMode, images, sessionSummary } = options;
@@ -100,6 +204,11 @@ async function spawnGemini(command, options = {}, ws) {
         args.push('--debug');
     }
 
+    // This integration runs Gemini in headless mode and cannot answer trust prompts.
+    // Skip folder-trust interactivity so authenticated runs don't fail with
+    // FatalUntrustedWorkspaceError in previously unseen directories.
+    args.push('--skip-trust');
+
     // Add MCP config flag only if MCP servers are configured
     try {
         const geminiConfigPath = path.join(os.homedir(), '.gemini.json');
@@ -154,9 +263,6 @@ async function spawnGemini(command, options = {}, ws) {
 
     // Try to find gemini in PATH first, then fall back to environment variable
     const geminiPath = process.env.GEMINI_PATH || 'gemini';
-    console.log('Spawning Gemini CLI:', geminiPath, args.join(' '));
-    console.log('Working directory:', workingDir);
-
     let spawnCmd = geminiPath;
     let spawnArgs = args;
 
@@ -168,11 +274,13 @@ async function spawnGemini(command, options = {}, ws) {
         spawnArgs = ['-c', 'exec "$0" "$@"', geminiPath, ...args];
     }
 
+    const spawnEnv = await buildGeminiProcessEnv();
+
     return new Promise((resolve, reject) => {
         const geminiProcess = spawnFunction(spawnCmd, spawnArgs, {
             cwd: workingDir,
             stdio: ['pipe', 'pipe', 'pipe'],
-            env: { ...process.env } // Inherit all environment variables
+            env: spawnEnv
         });
         let terminalNotificationSent = false;
         let terminalFailureReason = null;
@@ -276,12 +384,43 @@ async function spawnGemini(command, options = {}, ws) {
                     }
                 },
                 onInit: (event) => {
-                    if (capturedSessionId) {
-                        const sess = sessionManager.getSession(capturedSessionId);
-                        if (sess && !sess.cliSessionId) {
-                            sess.cliSessionId = event.session_id;
-                            sessionManager.saveSession(capturedSessionId);
+                    const discoveredSessionId = event?.session_id;
+                    if (!discoveredSessionId) {
+                        return;
+                    }
+
+                    // New Gemini sessions announce their canonical ID asynchronously via the
+                    // initial `init` stream event. Avoid synthetic IDs and only register
+                    // the session once that real ID is known (same model used by Claude/Codex).
+                    if (!capturedSessionId) {
+                        capturedSessionId = discoveredSessionId;
+
+                        sessionManager.createSession(capturedSessionId, cwd || process.cwd());
+                        if (command) {
+                            sessionManager.addMessage(capturedSessionId, 'user', command);
                         }
+
+                        if (processKey !== capturedSessionId) {
+                            activeGeminiProcesses.delete(processKey);
+                            activeGeminiProcesses.set(capturedSessionId, geminiProcess);
+                        }
+
+                        geminiProcess.sessionId = capturedSessionId;
+
+                        if (ws.setSessionId && typeof ws.setSessionId === 'function') {
+                            ws.setSessionId(capturedSessionId);
+                        }
+
+                        if (!sessionId && !sessionCreatedSent) {
+                            sessionCreatedSent = true;
+                            ws.send(createNormalizedMessage({ kind: 'session_created', newSessionId: capturedSessionId, sessionId: capturedSessionId, provider: 'gemini' }));
+                        }
+                    }
+
+                    const sess = sessionManager.getSession(capturedSessionId);
+                    if (sess && !sess.cliSessionId) {
+                        sess.cliSessionId = discoveredSessionId;
+                        sessionManager.saveSession(capturedSessionId);
                     }
                 }
             });
@@ -291,30 +430,6 @@ async function spawnGemini(command, options = {}, ws) {
         geminiProcess.stdout.on('data', (data) => {
             const rawOutput = data.toString();
             startTimeout(); // Re-arm the timeout
-
-            // For new sessions, create a session ID FIRST
-            if (!sessionId && !sessionCreatedSent && !capturedSessionId) {
-                capturedSessionId = `gemini_${Date.now()}`;
-                sessionCreatedSent = true;
-
-                // Create session in session manager
-                sessionManager.createSession(capturedSessionId, cwd || process.cwd());
-
-                // Save the user message now that we have a session ID
-                if (command) {
-                    sessionManager.addMessage(capturedSessionId, 'user', command);
-                }
-
-                // Update process key with captured session ID
-                if (processKey !== capturedSessionId) {
-                    activeGeminiProcesses.delete(processKey);
-                    activeGeminiProcesses.set(capturedSessionId, geminiProcess);
-                }
-
-                ws.setSessionId && typeof ws.setSessionId === 'function' && ws.setSessionId(capturedSessionId);
-
-                ws.send(createNormalizedMessage({ kind: 'session_created', newSessionId: capturedSessionId, sessionId: capturedSessionId, provider: 'gemini' }));
-            }
 
             if (responseHandler) {
                 responseHandler.processData(rawOutput);
@@ -381,12 +496,38 @@ async function spawnGemini(command, options = {}, ws) {
                 notifyTerminalState({ code });
                 resolve();
             } else {
-                // code 127 = shell "command not found" — check installation
+                const socketSessionId = typeof ws.getSessionId === 'function' ? ws.getSessionId() : finalSessionId;
+
+                // code 127 = shell "command not found" - check installation
                 if (code === 127) {
                     const installed = await providerAuthService.isProviderInstalled('gemini');
                     if (!installed) {
-                        const socketSessionId = typeof ws.getSessionId === 'function' ? ws.getSessionId() : finalSessionId;
-                        ws.send(createNormalizedMessage({ kind: 'error', content: 'Gemini CLI is not installed. Please install it first: https://github.com/google-gemini/gemini-cli', sessionId: socketSessionId, provider: 'gemini' }));
+                        terminalFailureReason = 'Gemini CLI is not installed. Please install it first: https://github.com/google-gemini/gemini-cli';
+                        ws.send(createNormalizedMessage({ kind: 'error', content: terminalFailureReason, sessionId: socketSessionId, provider: 'gemini' }));
+                    }
+                } else if (code === 41) {
+                    // Gemini CLI documents exit code 41 as FatalAuthenticationError.
+                    // Surface an actionable auth error instead of a generic exit-code message.
+                    let authErrorSuffix = '';
+                    try {
+                        const authStatus = await providerAuthService.getProviderAuthStatus('gemini');
+                        if (!authStatus?.authenticated && authStatus?.error) {
+                            authErrorSuffix = ` Details: ${authStatus.error}`;
+                        }
+                    } catch {
+                        // Keep base remediation text when auth status lookup fails.
+                    }
+
+                    terminalFailureReason =
+                        'Gemini authentication failed (exit code 41). '
+                        + 'Run `gemini` in a terminal to choose an auth method, or configure a valid `GEMINI_API_KEY`.'
+                        + authErrorSuffix;
+                    ws.send(createNormalizedMessage({ kind: 'error', content: terminalFailureReason, sessionId: socketSessionId, provider: 'gemini' }));
+                } else {
+                    const mappedError = mapGeminiExitCodeToMessage(code);
+                    if (mappedError) {
+                        terminalFailureReason = mappedError;
+                        ws.send(createNormalizedMessage({ kind: 'error', content: terminalFailureReason, sessionId: socketSessionId, provider: 'gemini' }));
                     }
                 }
 
@@ -394,7 +535,14 @@ async function spawnGemini(command, options = {}, ws) {
                     code,
                     error: code === null ? 'Gemini CLI process was terminated or timed out' : null
                 });
-                reject(new Error(code === null ? 'Gemini CLI process was terminated or timed out' : `Gemini CLI exited with code ${code}`));
+                reject(
+                    new Error(
+                        terminalFailureReason
+                        || (code === null
+                            ? 'Gemini CLI process was terminated or timed out'
+                            : `Gemini CLI exited with code ${code}`)
+                    )
+                );
             }
         });
 

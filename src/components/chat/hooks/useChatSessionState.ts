@@ -182,6 +182,7 @@ export function useChatSessionState({
     messagesOffsetRef.current = 0;
     setHasMoreMessages(false);
     setTotalMessages(0);
+    
     setTokenBudget(null);
     setVisibleMessageCount(INITIAL_VISIBLE_MESSAGES);
     setAllMessagesLoaded(false);
@@ -318,7 +319,6 @@ export function useChatSessionState({
       if (!hasMoreMessages || !selectedSession || !selectedProject) return false;
 
       const sessionProvider = selectedSession.__provider || 'claude';
-      if (sessionProvider === 'cursor') return false;
 
       isLoadingMoreRef.current = true;
       const previousScrollHeight = container.scrollHeight;
@@ -551,7 +551,6 @@ export function useChatSessionState({
     const scrollToTarget = async () => {
       if (!allMessagesLoadedRef.current && selectedSession && selectedProject) {
         const sessionProvider = selectedSession.__provider || 'claude';
-        if (sessionProvider !== 'cursor') {
           try {
             // Load all messages into the store for search navigation
             const slot = await sessionStore.fetchFromServer(selectedSession.id, {
@@ -573,7 +572,6 @@ export function useChatSessionState({
           } catch {
             // Fall through and scroll in current messages
           }
-        }
       }
       setVisibleMessageCount(Infinity);
 
@@ -628,7 +626,7 @@ export function useChatSessionState({
 
   // Token usage fetch for Claude
   useEffect(() => {
-    if (!selectedProject || !selectedSession?.id || selectedSession.id.startsWith('new-session-')) {
+    if (!selectedProject || !selectedSession?.id) {
       setTokenBudget(null);
       return;
     }
@@ -721,15 +719,6 @@ export function useChatSessionState({
     if (!selectedSession || !selectedProject) return;
     if (isLoadingAllMessages) return;
     const sessionProvider = selectedSession.__provider || 'claude';
-    if (sessionProvider === 'cursor') {
-      setVisibleMessageCount(Infinity);
-      setAllMessagesLoaded(true);
-      allMessagesLoadedRef.current = true;
-      setLoadAllJustFinished(true);
-      if (loadAllFinishedTimerRef.current) clearTimeout(loadAllFinishedTimerRef.current);
-      loadAllFinishedTimerRef.current = setTimeout(() => { setLoadAllJustFinished(false); setShowLoadAllOverlay(false); }, 1000);
-      return;
-    }
 
     const requestSessionId = selectedSession.id;
     allMessagesLoadedRef.current = true;

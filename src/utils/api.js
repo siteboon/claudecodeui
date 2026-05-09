@@ -54,6 +54,7 @@ export const api = {
   // After the projectName → projectId migration the path/query identifier is
   // the DB-assigned `projectId`; parameter names reflect that for clarity.
   projects: () => authenticatedFetch('/api/projects'),
+  archivedProjects: () => authenticatedFetch('/api/projects/archived'),
   projectSessions: (projectId, { limit = 20, offset = 0 } = {}) => {
     const params = new URLSearchParams();
     params.set('limit', String(limit));
@@ -78,9 +79,28 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ displayName }),
     }),
-  deleteSession: (sessionId) =>
-    authenticatedFetch(`/api/providers/sessions/${sessionId}`, {
+  restoreProject: (projectId) =>
+    authenticatedFetch(`/api/projects/${encodeURIComponent(projectId)}/restore`, {
+      method: 'POST',
+    }),
+  // Session deletion now mirrors project deletion:
+  // - default: archive only (`isArchived = 1`)
+  // - hardDelete: remove the row and, by default, its persisted transcript file
+  deleteSession: (sessionId, hardDelete = false) => {
+    const params = new URLSearchParams();
+    if (hardDelete) {
+      params.set('force', 'true');
+    }
+    const qs = params.toString();
+    return authenticatedFetch(`/api/providers/sessions/${sessionId}${qs ? `?${qs}` : ''}`, {
       method: 'DELETE',
+    });
+  },
+  getArchivedSessions: () =>
+    authenticatedFetch('/api/providers/sessions/archived'),
+  restoreSession: (sessionId) =>
+    authenticatedFetch(`/api/providers/sessions/${sessionId}/restore`, {
+      method: 'POST',
     }),
   renameSession: (sessionId, summary) =>
     authenticatedFetch(`/api/providers/sessions/${sessionId}`, {

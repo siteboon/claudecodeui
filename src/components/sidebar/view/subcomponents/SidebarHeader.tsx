@@ -1,25 +1,26 @@
-import { Folder, FolderPlus, MessageSquare, Plus, RefreshCw, Search, X, PanelLeftClose } from 'lucide-react';
+import { Archive, Folder, FolderPlus, MessageSquare, Plus, RefreshCw, Search, X, PanelLeftClose } from 'lucide-react';
 import type { TFunction } from 'i18next';
-import { Button, Input } from '../../../../shared/view/ui';
+import { Button, Input, Tooltip } from '../../../../shared/view/ui';
 import { IS_PLATFORM } from '../../../../constants/config';
 import { cn } from '../../../../lib/utils';
+import type { SidebarSearchMode } from '../../types/types';
 import GitHubStarBadge from './GitHubStarBadge';
 
 const MOD_KEY =
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
-
-type SearchMode = 'projects' | 'conversations';
 
 type SidebarHeaderProps = {
   isPWA: boolean;
   isMobile: boolean;
   isLoading: boolean;
   projectsCount: number;
+  archivedSessionsCount: number;
+  isArchivedSessionsLoading: boolean;
   searchFilter: string;
   onSearchFilterChange: (value: string) => void;
   onClearSearchFilter: () => void;
-  searchMode: SearchMode;
-  onSearchModeChange: (mode: SearchMode) => void;
+  searchMode: SidebarSearchMode;
+  onSearchModeChange: (mode: SidebarSearchMode) => void;
   onRefresh: () => void;
   isRefreshing: boolean;
   onCreateProject: () => void;
@@ -32,6 +33,8 @@ export default function SidebarHeader({
   isMobile,
   isLoading,
   projectsCount,
+  archivedSessionsCount,
+  isArchivedSessionsLoading,
   searchFilter,
   onSearchFilterChange,
   onClearSearchFilter,
@@ -43,6 +46,13 @@ export default function SidebarHeader({
   onCollapseSidebar,
   t,
 }: SidebarHeaderProps) {
+  const showSearchTools = (projectsCount > 0 || archivedSessionsCount > 0 || isArchivedSessionsLoading) && !isLoading;
+  const searchPlaceholder = searchMode === 'conversations'
+    ? t('search.conversationsPlaceholder')
+    : searchMode === 'archived'
+      ? t('search.archivedPlaceholder', 'Search archived sessions...')
+      : t('projects.searchPlaceholder');
+
   const LogoBlock = () => (
     <div className="flex min-w-0 items-center gap-2.5">
       <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-primary/90 shadow-sm">
@@ -113,7 +123,7 @@ export default function SidebarHeader({
         <GitHubStarBadge />
 
         {/* Search bar */}
-        {projectsCount > 0 && !isLoading && (
+        {showSearchTools && (
           <div className="mt-2.5 space-y-2">
             {/* Search mode toggle */}
             <div className="flex rounded-lg bg-muted/50 p-0.5">
@@ -143,12 +153,28 @@ export default function SidebarHeader({
                 <MessageSquare className="h-3 w-3" />
                 {t('search.modeConversations')}
               </button>
+              <Tooltip content={t('search.archiveOnlyTooltip', 'Archive only')} position="top">
+                <button
+                  onClick={() => onSearchModeChange('archived')}
+                  aria-pressed={searchMode === 'archived'}
+                  aria-label={t('search.archiveOnlyTooltip', 'Archive only')}
+                  title={t('search.archiveOnlyTooltip', 'Archive only')}
+                  className={cn(
+                    "flex items-center justify-center rounded-md px-2.5 py-1.5 text-xs font-medium transition-all",
+                    searchMode === 'archived'
+                      ? "bg-background shadow-sm text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Archive className="h-3 w-3" />
+                </button>
+              </Tooltip>
             </div>
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50" />
               <Input
                 type="text"
-                placeholder={searchMode === 'conversations' ? t('search.conversationsPlaceholder') : t('projects.searchPlaceholder')}
+                placeholder={searchPlaceholder}
                 value={searchFilter}
                 onChange={(event) => onSearchFilterChange(event.target.value)}
                 className="nav-search-input h-9 rounded-xl border-0 pl-9 pr-14 text-sm transition-all duration-200 placeholder:text-muted-foreground/40 focus-visible:ring-0 focus-visible:ring-offset-0"
@@ -215,7 +241,7 @@ export default function SidebarHeader({
         </div>
 
         {/* Mobile search */}
-        {projectsCount > 0 && !isLoading && (
+        {showSearchTools && (
           <div className="mt-2.5 space-y-2">
             <div className="flex rounded-lg bg-muted/50 p-0.5">
               <button
@@ -244,12 +270,28 @@ export default function SidebarHeader({
                 <MessageSquare className="h-3 w-3" />
                 {t('search.modeConversations')}
               </button>
+              <Tooltip content={t('search.archiveOnlyTooltip', 'Archive only')} position="top">
+                <button
+                  onClick={() => onSearchModeChange('archived')}
+                  aria-pressed={searchMode === 'archived'}
+                  aria-label={t('search.archiveOnlyTooltip', 'Archive only')}
+                  title={t('search.archiveOnlyTooltip', 'Archive only')}
+                  className={cn(
+                    "flex items-center justify-center rounded-md px-2.5 py-1.5 text-xs font-medium transition-all",
+                    searchMode === 'archived'
+                      ? "bg-background shadow-sm text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Archive className="h-3 w-3" />
+                </button>
+              </Tooltip>
             </div>
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/50" />
               <Input
                 type="text"
-                placeholder={searchMode === 'conversations' ? t('search.conversationsPlaceholder') : t('projects.searchPlaceholder')}
+                placeholder={searchPlaceholder}
                 value={searchFilter}
                 onChange={(event) => onSearchFilterChange(event.target.value)}
                 className="nav-search-input h-10 rounded-xl border-0 pl-10 pr-9 text-sm transition-all duration-200 placeholder:text-muted-foreground/40 focus-visible:ring-0 focus-visible:ring-offset-0"

@@ -528,10 +528,16 @@ export class GeminiSessionsProvider implements IProviderSessions {
     const messages = pageLimit === null
       ? normalized.slice(start)
       : normalized.slice(start, start + pageLimit);
+    let total = 0;
+    for (const msg of normalized) {
+      if (msg.kind !== 'tool_result') {
+        total += 1;
+      }
+    }
 
     return {
       messages,
-      total: normalized.length,
+      total,
       hasMore: pageLimit === null ? false : start + pageLimit < normalized.length,
       offset: start,
       limit: pageLimit,

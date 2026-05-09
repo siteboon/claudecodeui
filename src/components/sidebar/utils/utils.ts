@@ -1,4 +1,5 @@
 import type { TFunction } from 'i18next';
+
 import type { Project } from '../../../types/app';
 import type { ProjectSortOrder, SettingsProject, SessionViewModel, SessionWithProvider } from '../types/types';
 
@@ -52,44 +53,24 @@ export const clearLegacyStarredProjectIds = () => {
   }
 };
 
+const getCreatedTimestamp = (session: SessionWithProvider): string => {
+  return String(session.createdAt || session.created_at || '');
+};
+
+const getUpdatedTimestamp = (session: SessionWithProvider): string => {
+  return String(session.lastActivity || '');
+};
+
 export const getSessionDate = (session: SessionWithProvider): Date => {
-  if (session.__provider === 'cursor') {
-    return new Date(session.createdAt || 0);
-  }
-
-  if (session.__provider === 'codex') {
-    return new Date(session.createdAt || session.lastActivity || 0);
-  }
-
-  return new Date(session.lastActivity || session.createdAt || 0);
+  return new Date(getUpdatedTimestamp(session) || getCreatedTimestamp(session) || 0);
 };
 
 export const getSessionName = (session: SessionWithProvider, t: TFunction): string => {
-  if (session.__provider === 'cursor') {
-    return session.summary || session.name || t('projects.untitledSession');
-  }
-
-  if (session.__provider === 'codex') {
-    return session.summary || session.name || t('projects.codexSession');
-  }
-
-  if (session.__provider === 'gemini') {
-    return session.summary || session.name || t('projects.newSession');
-  }
-
-  return session.summary || t('projects.newSession');
+  return session.summary || session.name || t('projects.newSession');
 };
 
 export const getSessionTime = (session: SessionWithProvider): string => {
-  if (session.__provider === 'cursor') {
-    return String(session.createdAt || '');
-  }
-
-  if (session.__provider === 'codex') {
-    return String(session.createdAt || session.lastActivity || '');
-  }
-
-  return String(session.lastActivity || session.createdAt || '');
+  return getUpdatedTimestamp(session) || getCreatedTimestamp(session);
 };
 
 export const createSessionViewModel = (

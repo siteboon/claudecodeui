@@ -213,13 +213,6 @@ export default function ChatMessagesPane({
             </div>
           )}
 
-          {/* Performance warning when all messages are loaded */}
-          {allMessagesLoaded && (
-            <div className="border-b border-amber-200 bg-amber-50 py-1.5 text-center text-xs text-amber-600 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-400">
-              {t('session.messages.perfWarning')}
-            </div>
-          )}
-
           {/* Legacy message count indicator (for non-paginated view) */}
           {!hasMoreMessages && chatMessages.length > visibleMessageCount && (
             <div className="border-b border-gray-200 py-2 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
