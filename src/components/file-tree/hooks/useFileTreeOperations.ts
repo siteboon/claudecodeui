@@ -21,7 +21,7 @@ export type DeleteConfirmation = {
 
 export type UseFileTreeOperationsOptions = {
   selectedProject: Project | null;
-  onRefresh: () => void;
+  onRefresh: (dirPath?: string) => void;
   showToast: (message: string, type: 'success' | 'error') => void;
 };
 
@@ -137,7 +137,7 @@ export function useFileTreeOperations({
       }
 
       showToast(t('fileTree.toast.renamed', 'Renamed successfully'), 'success');
-      onRefresh();
+      onRefresh(renamingItem.path.substring(0, renamingItem.path.lastIndexOf('/')));
       handleCancelRename();
     } catch (err) {
       showToast((err as Error).message, 'error');
@@ -177,7 +177,7 @@ export function useFileTreeOperations({
           : t('fileTree.toast.fileDeleted', 'File deleted'),
         'success'
       );
-      onRefresh();
+      onRefresh(item.path.substring(0, item.path.lastIndexOf('/')));
       handleCancelDelete();
     } catch (err) {
       showToast((err as Error).message, 'error');
@@ -229,7 +229,7 @@ export function useFileTreeOperations({
           : t('fileTree.toast.folderCreated', 'Folder created successfully'),
         'success'
       );
-      onRefresh();
+      onRefresh(newItemParent || selectedProject?.path);
       handleCancelCreate();
     } catch (err) {
       showToast((err as Error).message, 'error');

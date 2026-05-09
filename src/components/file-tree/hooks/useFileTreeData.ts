@@ -8,6 +8,7 @@ type UseFileTreeDataResult = {
   loading: boolean;
   loadingDirs: Set<string>;
   refreshFiles: () => void;
+  refreshDirectory: (dirPath: string) => Promise<void>;
   loadDirectoryChildren: (dirPath: string) => Promise<void>;
 };
 
@@ -124,11 +125,31 @@ export function useFileTreeData(selectedProject: Project | null): UseFileTreeDat
     }
   }, [selectedProject?.projectId]);
 
+  const refreshDirectory = useCallback(async (dirPath: string) => {
+    const projectId = selectedProject?.projectId;
+    if (!projectId) return;
+
+    try {
+      const response = await api.getFileChildren(projectId, dirPath);
+      if (!response.ok) return;
+
+      const children = (await response.json()) as FileTreeNode[];
+      setFiles((prevFiles) => {
+        const newTree = JSON.parse(JSON.stringify(prevFiles)) as FileTreeNode[];
+        insertChildren(newTree, dirPath, children);
+        return newTree;
+      });
+    } catch (error) {
+      console.error('Error refreshing directory:', error);
+    }
+  }, [selectedProject?.projectId]);
+
   return {
     files,
     loading,
     loadingDirs,
     refreshFiles,
+    refreshDirectory,
     loadDirectoryChildren,
   };
 }

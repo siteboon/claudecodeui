@@ -45,7 +45,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
     }
   }, [toast]);
 
-  const { files, loading, loadingDirs, refreshFiles, loadDirectoryChildren } = useFileTreeData(selectedProject);
+  const { files, loading, loadingDirs, refreshFiles, refreshDirectory, loadDirectoryChildren } = useFileTreeData(selectedProject);
   const { viewMode, changeViewMode } = useFileTreeViewMode();
   const { expandedDirs, toggleDirectory, expandDirectories, collapseAll } = useExpandedDirectories();
   const { searchQuery, setSearchQuery, filteredFiles } = useFileTreeSearch({
@@ -54,9 +54,17 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
   });
 
   // File operations
+  const handleRefresh = useCallback((dirPath?: string) => {
+    if (dirPath) {
+      refreshDirectory(dirPath);
+    } else {
+      refreshFiles();
+    }
+  }, [refreshDirectory, refreshFiles]);
+
   const operations = useFileTreeOperations({
     selectedProject,
-    onRefresh: refreshFiles,
+    onRefresh: handleRefresh,
     showToast,
   });
 

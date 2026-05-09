@@ -128,6 +128,9 @@ export const api = {
   getFiles: (projectId, options = {}) =>
     authenticatedFetch(`/api/projects/${projectId}/files`, options),
 
+  getFilesDeep: (projectId, depth = 5, options = {}) =>
+    authenticatedFetch(`/api/projects/${projectId}/files?depth=${depth}`, options),
+
   getFileChildren: (projectId, dirPath, options = {}) =>
     authenticatedFetch(`/api/projects/${projectId}/files/children?dirPath=${encodeURIComponent(dirPath)}`, options),
 

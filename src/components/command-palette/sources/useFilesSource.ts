@@ -31,7 +31,7 @@ export function useFilesSource(projectId: string | undefined, enabled: boolean) 
   return useApiSource<FileResult, unknown>({
     enabled: enabled && !!projectId,
     deps: [projectId],
-    fetcher: (signal) => api.getFiles(projectId!, { signal }),
+    fetcher: (signal) => api.getFilesDeep(projectId!, 5, { signal }),
     parse: (data) => {
       const tree: FileNode[] = Array.isArray(data) ? (data as FileNode[]) : [];
       const flat: FileResult[] = [];

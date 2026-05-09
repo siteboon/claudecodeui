@@ -587,7 +587,8 @@ app.get('/api/projects/:projectId/files', authenticateToken, async (req, res) =>
             return res.status(404).json({ error: `Project path not found: ${actualPath}` });
         }
 
-        const files = await getFileTree(actualPath, 1, 0, true);
+        const depth = Math.min(parseInt(req.query.depth) || 1, 10);
+        const files = await getFileTree(actualPath, depth, 0, true);
         res.json(files);
     } catch (error) {
         console.error('[ERROR] File tree error:', error.message);
