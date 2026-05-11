@@ -15,7 +15,7 @@
   <a href="https://trendshift.io/repositories/15586" target="_blank"><img src="https://trendshift.io/api/badge/repositories/15586" alt="siteboon%2Fclaudecodeui | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 </p>
 
-<div align="right"><i><a href="./README.md">English</a> · <a href="./README.ru.md">Русский</a> · <b>Deutsch</b> · <a href="./README.ko.md">한국어</a> · <a href="./README.zh-CN.md">中文</a> · <a href="./README.ja.md">日本語</a></i></div>
+<div align="right"><i><a href="./README.md">English</a> · <a href="./README.ru.md">Русский</a> · <b>Deutsch</b> · <a href="./README.ko.md">한국어</a> · <a href="./README.zh-CN.md">中文</a> · <a href="./README.ja.md">日本語</a> · <a href="./README.tr.md">Türkçe</a></i></div>
 
 ---
 
@@ -76,6 +76,8 @@ Der schnellste Einstieg – keine lokale Einrichtung erforderlich. Erhalte eine 
 
 ### Self-Hosted (Open Source)
 
+#### npm
+
 CloudCLI UI sofort mit **npx** ausprobieren (erfordert **Node.js** v22+):
 
 ```bash
@@ -93,6 +95,15 @@ cloudcli
 
 Die **[Dokumentation →](https://cloudcli.ai/docs)** enthält weitere Konfigurationsoptionen, PM2, Remote-Server-Einrichtung und mehr.
 
+#### Docker Sandboxes (Experimentell)
+
+Agents in isolierten Sandboxes mit Hypervisor-Isolation ausführen. Standardmäßig wird Claude Code gestartet. Erfordert die [`sbx` CLI](https://docs.docker.com/ai/sandboxes/get-started/).
+
+```
+npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
+```
+
+Unterstützt Claude Code, Codex und Gemini CLI. Weitere Details in der [Sandbox-Dokumentation](docker/).
 
 ---
 

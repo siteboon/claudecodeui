@@ -1,5 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react';
+
 import type { AppTab, Project, ProjectSession } from '../../../types/app';
+import type { SessionNavigationOptions } from '../../chat/types/types';
 
 export type SessionLifecycleHandler = (sessionId?: string | null) => void;
 
@@ -49,10 +51,10 @@ export type MainContentProps = {
   onSessionProcessing: SessionLifecycleHandler;
   onSessionNotProcessing: SessionLifecycleHandler;
   processingSessions: Set<string>;
-  onReplaceTemporarySession: SessionLifecycleHandler;
-  onNavigateToSession: (targetSessionId: string) => void;
+  onNavigateToSession: (targetSessionId: string, options?: SessionNavigationOptions) => void;
   onShowSettings: () => void;
   externalMessageUpdate: number;
+  newSessionTrigger: number;
 };
 
 export type MainContentHeaderProps = {

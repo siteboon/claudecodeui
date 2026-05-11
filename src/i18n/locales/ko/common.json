@@ -84,7 +84,7 @@
     "openInEditor": "에디터에서 열기"
   },
   "mainContent": {
-    "loading": "Claude Code UI 로딩 중",
+    "loading": "CloudCLI 로딩 중",
     "settingUpWorkspace": "워크스페이스 설정 중...",
     "chooseProject": "프로젝트 선택",
     "selectProjectDescription": "사이드바에서 프로젝트를 선택하여 Claude와 코딩을 시작하세요. 각 프로젝트에는 채팅 세션과 파일 히스토리가 포함됩니다.",
@@ -176,7 +176,6 @@
     },
     "step3": {
       "reviewConfig": "설정 검토",
-      "workspaceType": "워크스페이스 유형:",
       "existingWorkspace": "기존 워크스페이스",
       "newWorkspace": "새 워크스페이스",
       "path": "경로:",

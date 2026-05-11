@@ -3,11 +3,10 @@ import { FolderOpen } from 'lucide-react';
 import { Button, Input } from '../../../shared/view/ui';
 import { browseFilesystemFolders } from '../data/workspaceApi';
 import { getSuggestionRootPath } from '../utils/pathUtils';
-import type { FolderSuggestion, WorkspaceType } from '../types';
+import type { FolderSuggestion } from '../types';
 import FolderBrowserModal from './FolderBrowserModal';
 
 type WorkspacePathFieldProps = {
-  workspaceType: WorkspaceType;
   value: string;
   disabled?: boolean;
   onChange: (path: string) => void;
@@ -15,7 +14,6 @@ type WorkspacePathFieldProps = {
 };
 
 export default function WorkspacePathField({
-  workspaceType,
   value,
   disabled = false,
   onChange,
@@ -88,11 +86,7 @@ export default function WorkspacePathField({
             type="text"
             value={value}
             onChange={(event) => onChange(event.target.value)}
-            placeholder={
-              workspaceType === 'existing'
-                ? '/path/to/existing/workspace'
-                : '/path/to/new/workspace'
-            }
+            placeholder="/path/to/project/workspace"
             className="w-full"
             disabled={disabled}
           />
@@ -127,7 +121,7 @@ export default function WorkspacePathField({
 
       <FolderBrowserModal
         isOpen={showFolderBrowser}
-        autoAdvanceOnSelect={workspaceType === 'existing'}
+        autoAdvanceOnSelect={false}
         onClose={() => setShowFolderBrowser(false)}
         onFolderSelected={handleFolderSelected}
       />
