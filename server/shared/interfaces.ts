@@ -4,6 +4,8 @@ import type {
   LLMProvider,
   McpScope,
   NormalizedMessage,
+  ProviderSkill,
+  ProviderSkillListOptions,
   ProviderAuthStatus,
   ProviderMcpServer,
   UpsertProviderMcpServerInput,
@@ -20,6 +22,7 @@ export interface IProvider {
   readonly id: LLMProvider;
   readonly mcp: IProviderMcp;
   readonly auth: IProviderAuth;
+  readonly skills: IProviderSkills;
   readonly sessions: IProviderSessions;
   readonly sessionSynchronizer: IProviderSessionSynchronizer;
 }
@@ -37,6 +40,22 @@ export interface IProviderAuth {
    * Checks whether the provider is installed and has usable credentials.
    */
   getStatus(): Promise<ProviderAuthStatus>;
+}
+
+// ---------------------------
+//----------------- PROVIDER SKILLS INTERFACE ------------
+/**
+ * Skills contract for one provider.
+ *
+ * Implementations discover provider-native skill markdown locations and return
+ * normalized skill records with the exact command syntax expected by that
+ * provider. Each skill is read from a `SKILL.md` file under its skill directory.
+ */
+export interface IProviderSkills {
+  /**
+   * Lists all skills visible to this provider for the optional workspace.
+   */
+  listSkills(options?: ProviderSkillListOptions): Promise<ProviderSkill[]>;
 }
 
 // ---------------------------

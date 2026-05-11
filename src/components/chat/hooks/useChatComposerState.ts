@@ -152,6 +152,7 @@ export function useChatComposerState({
     ((event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>) => Promise<void>) | null
   >(null);
   const inputValueRef = useRef(input);
+  const selectedProjectId = selectedProject?.projectId;
 
   const handleBuiltInCommand = useCallback(
     (result: CommandExecutionResult) => {
@@ -361,6 +362,7 @@ export function useChatComposerState({
     handleCommandMenuKeyDown,
   } = useSlashCommands({
     selectedProject,
+    provider,
     input,
     setInput,
     textareaRef,
@@ -470,14 +472,14 @@ export function useChatComposerState({
         return;
       }
 
-      // Intercept slash commands: if input starts with /commandName, execute as command with args
-      const trimmedInput = currentInput.trim();
-      if (trimmedInput.startsWith('/')) {
-        const firstSpace = trimmedInput.indexOf(' ');
-        const commandName = firstSpace > 0 ? trimmedInput.slice(0, firstSpace) : trimmedInput;
+      // Intercept slash commands only when "/" is the first input character.
+      const commandInput = currentInput.trimEnd();
+      if (commandInput.startsWith('/')) {
+        const firstSpace = commandInput.indexOf(' ');
+        const commandName = firstSpace > 0 ? commandInput.slice(0, firstSpace) : commandInput;
         const matchedCommand = slashCommands.find((cmd: SlashCommand) => cmd.name === commandName);
-        if (matchedCommand) {
-          executeCommand(matchedCommand, trimmedInput);
+        if (matchedCommand && matchedCommand.type !== 'skill') {
+          executeCommand(matchedCommand, commandInput);
           setInput('');
           inputValueRef.current = '';
           setAttachedImages([]);
@@ -713,27 +715,27 @@ export function useChatComposerState({
   }, [input]);
 
   useEffect(() => {
-    if (!selectedProject) {
+    if (!selectedProjectId) {
       return;
     }
-    const savedInput = safeLocalStorage.getItem(`draft_input_${selectedProject.projectId}`) || '';
+    const savedInput = safeLocalStorage.getItem(`draft_input_${selectedProjectId}`) || '';
     setInput((previous) => {
       const next = previous === savedInput ? previous : savedInput;
       inputValueRef.current = next;
       return next;
     });
-  }, [selectedProject?.projectId]);
+  }, [selectedProjectId]);
 
   useEffect(() => {
-    if (!selectedProject) {
+    if (!selectedProjectId) {
       return;
     }
     if (input !== '') {
-      safeLocalStorage.setItem(`draft_input_${selectedProject.projectId}`, input);
+      safeLocalStorage.setItem(`draft_input_${selectedProjectId}`, input);
     } else {
-      safeLocalStorage.removeItem(`draft_input_${selectedProject.projectId}`);
+      safeLocalStorage.removeItem(`draft_input_${selectedProjectId}`);
     }
-  }, [input, selectedProject]);
+  }, [input, selectedProjectId]);
 
   useEffect(() => {
     if (!textareaRef.current) {

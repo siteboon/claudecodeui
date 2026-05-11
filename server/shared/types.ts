@@ -172,6 +172,69 @@ export type FetchHistoryResult = {
 };
 
 // ---------------------------
+//----------------- PROVIDER SKILL TYPES ------------
+/**
+ * Scope where a provider skill definition was discovered.
+ *
+ * Provider skill adapters should use this to describe the origin of each
+ * skill markdown file without leaking provider-specific folder names into route
+ * contracts. `repo` is used for Codex repository lookup locations, while
+ * `project` is used for providers that treat workspace-local skills as project
+ * scoped.
+ */
+export type ProviderSkillScope = 'user' | 'project' | 'plugin' | 'repo' | 'admin' | 'system';
+
+/**
+ * Shared input accepted by provider skill listing operations.
+ *
+ * Routes pass `workspacePath` when a caller wants project/repository skills for
+ * a specific folder. Providers should fall back to the backend process cwd when
+ * this option is omitted.
+ */
+export type ProviderSkillListOptions = {
+  workspacePath?: string;
+};
+
+/**
+ * Normalized skill record returned by provider skill adapters.
+ *
+ * The `command` value is the exact invocation text the selected provider expects
+ * for this skill. Claude plugin skills use a namespaced command such as
+ * `/plugin-name:skill-name`, while Codex skills use the `$skill-name` form.
+ * `sourcePath` points to the skill markdown file that produced the record so
+ * callers can distinguish duplicate skill names across scopes.
+ */
+export type ProviderSkill = {
+  provider: LLMProvider;
+  name: string;
+  description: string;
+  command: string;
+  scope: ProviderSkillScope;
+  sourcePath: string;
+  pluginName?: string;
+  pluginId?: string;
+};
+
+/**
+ * Internal source descriptor consumed by shared provider skill discovery logic.
+ *
+ * Concrete provider adapters build these records from their native lookup rules.
+ * The shared skills provider then scans `rootDir` for child skill markdown files
+ * and uses `commandForSkill` or `commandPrefix` to produce the provider-specific
+ * invocation command. Set `recursive` only when a provider stores skills under
+ * arbitrary nested folders below the source root.
+ */
+export type ProviderSkillSource = {
+  scope: ProviderSkillScope;
+  rootDir: string;
+  recursive?: boolean;
+  commandPrefix?: '/' | '$';
+  commandForSkill?: (skillName: string) => string;
+  pluginName?: string;
+  pluginId?: string;
+};
+
+// ---------------------------
 //----------------- SHARED ERROR TYPES ------------
 /**
  * Optional metadata used when constructing application-level errors.
