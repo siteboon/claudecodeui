@@ -15,7 +15,7 @@
   <a href="https://trendshift.io/repositories/15586" target="_blank"><img src="https://trendshift.io/api/badge/repositories/15586" alt="siteboon%2Fclaudecodeui | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 </p>
 
-<div align="right"><i><a href="./README.md">English</a> · <b>Русский</b> · <a href="./README.de.md">Deutsch</a> · <a href="./README.ko.md">한국어</a> · <a href="./README.zh-CN.md">中文</a> · <a href="./README.ja.md">日本語</a></i></div>
+<div align="right"><i><a href="./README.md">English</a> · <b>Русский</b> · <a href="./README.de.md">Deutsch</a> · <a href="./README.ko.md">한국어</a> · <a href="./README.zh-CN.md">中文</a> · <a href="./README.ja.md">日本語</a> · <a href="./README.tr.md">Türkçe</a></i></div>
 
 ---
 
@@ -76,23 +76,34 @@
 
 ### Self-Hosted (Open source)
 
+#### npm
+
 Попробовать CloudCLI UI можно сразу через **npx** (требуется **Node.js** v22+):
 
 ```bash
-npx @siteboon/claude-code-ui
+npx @cloudcli-ai/cloudcli
 ```
 
 Или установить **глобально** для регулярного использования:
 
 ```bash
-npm install -g @siteboon/claude-code-ui
+npm install -g @cloudcli-ai/cloudcli
 cloudcli
 ```
 
 Откройте `http://localhost:3001` — все ваши существующие сессии будут обнаружены автоматически.
 
-Посетите **[документацию →](https://cloudcli.ai/docs)**, чтобы узнать про дополнительные варианты конфигурации, PM2, настройку удалённого сервера и многое другое
+Посетите **[документацию →](https://cloudcli.ai/docs)**, чтобы узнать про дополнительные варианты конфигурации, PM2, настройку удалённого сервера и многое другое.
 
+#### Docker Sandboxes (Экспериментально)
+
+Запускайте агентов в изолированных песочницах с гипервизорной изоляцией. По умолчанию запускается Claude Code. Требуется [`sbx` CLI](https://docs.docker.com/ai/sandboxes/get-started/).
+
+```
+npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
+```
+
+Поддерживаются Claude Code, Codex и Gemini CLI. Подробнее в [документации sandbox](docker/).
 
 ---
 
@@ -104,7 +115,7 @@ CloudCLI UI — это open source UI-слой, на котором постро
 |---|---|---|
 | **Лучше всего подходит для** | Разработчиков, которым нужен полноценный UI для локальных агентских сессий на своей машине | Команд и разработчиков, которым нужны агенты в облаке с доступом откуда угодно |
 | **Как вы получаете доступ** | Браузер через `[yourip]:port` | Браузер, любая IDE, REST API, n8n |
-| **Настройка** | `npx @siteboon/claude-code-ui` | Настройка не требуется |
+| **Настройка** | `npx @cloudcli-ai/cloudcli` | Настройка не требуется |
 | **Машина должна оставаться включённой** | Да | Нет |
 | **Доступ с мобильных устройств** | Любой браузер в вашей сети | Любое устройство, нативное приложение в разработке |
 | **Доступные сессии** | Все сессии автоматически обнаруживаются из `~/.claude` | Все сессии внутри вашей облачной среды |

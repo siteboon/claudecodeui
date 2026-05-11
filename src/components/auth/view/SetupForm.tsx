@@ -82,7 +82,7 @@ export default function SetupForm() {
 
   return (
     <AuthScreenLayout
-      title="Welcome to Claude Code UI"
+      title="Welcome to CloudCLI"
       description="Set up your account to get started"
       footerText="This is a single-user system. Only one account can be created."
       logo={<img src="/logo.svg" alt="CloudCLI" className="h-16 w-16" />}

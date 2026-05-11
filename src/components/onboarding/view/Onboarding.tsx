@@ -1,17 +1,15 @@
 import { Check, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { LLMProvider } from '../../../types/app';
 import { authenticatedFetch } from '../../../utils/api';
+import { useProviderAuthStatus } from '../../provider-auth/hooks/useProviderAuthStatus';
 import ProviderLoginModal from '../../provider-auth/view/ProviderLoginModal';
 import AgentConnectionsStep from './subcomponents/AgentConnectionsStep';
 import GitConfigurationStep from './subcomponents/GitConfigurationStep';
 import OnboardingStepProgress from './subcomponents/OnboardingStepProgress';
-import type { CliProvider, ProviderStatusMap } from './types';
 import {
-  cliProviders,
-  createInitialProviderStatuses,
   gitEmailPattern,
   readErrorMessageFromResponse,
-  selectedProject,
 } from './utils';
 
 type OnboardingProps = {
@@ -24,59 +22,14 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   const [gitEmail, setGitEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [activeLoginProvider, setActiveLoginProvider] = useState<CliProvider | null>(null);
-  const [providerStatuses, setProviderStatuses] = useState<ProviderStatusMap>(createInitialProviderStatuses);
+  const [activeLoginProvider, setActiveLoginProvider] = useState<LLMProvider | null>(null);
+  const {
+    providerAuthStatus,
+    checkProviderAuthStatus,
+    refreshProviderAuthStatuses,
+  } = useProviderAuthStatus();
 
-  const previousActiveLoginProviderRef = useRef<CliProvider | null | undefined>(undefined);
-
-  const checkProviderAuthStatus = useCallback(async (provider: CliProvider) => {
-    try {
-      const response = await authenticatedFetch(`/api/cli/${provider}/status`);
-      if (!response.ok) {
-        setProviderStatuses((previous) => ({
-          ...previous,
-          [provider]: {
-            authenticated: false,
-            email: null,
-            loading: false,
-            error: 'Failed to check authentication status',
-          },
-        }));
-        return;
-      }
-
-      const payload = (await response.json()) as {
-        authenticated?: boolean;
-        email?: string | null;
-        error?: string | null;
-      };
-
-      setProviderStatuses((previous) => ({
-        ...previous,
-        [provider]: {
-          authenticated: Boolean(payload.authenticated),
-          email: payload.email ?? null,
-          loading: false,
-          error: payload.error ?? null,
-        },
-      }));
-    } catch (caughtError) {
-      console.error(`Error checking ${provider} auth status:`, caughtError);
-      setProviderStatuses((previous) => ({
-        ...previous,
-        [provider]: {
-          authenticated: false,
-          email: null,
-          loading: false,
-          error: caughtError instanceof Error ? caughtError.message : 'Unknown error',
-        },
-      }));
-    }
-  }, []);
-
-  const refreshAllProviderStatuses = useCallback(async () => {
-    await Promise.all(cliProviders.map((provider) => checkProviderAuthStatus(provider)));
-  }, [checkProviderAuthStatus]);
+  const previousActiveLoginProviderRef = useRef<LLMProvider | null | undefined>(undefined);
 
   const loadGitConfig = useCallback(async () => {
     try {
@@ -99,23 +52,24 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
 
   useEffect(() => {
     void loadGitConfig();
-    void refreshAllProviderStatuses();
-  }, [loadGitConfig, refreshAllProviderStatuses]);
+    void refreshProviderAuthStatuses();
+  }, [loadGitConfig, refreshProviderAuthStatuses]);
 
   useEffect(() => {
     const previousProvider = previousActiveLoginProviderRef.current;
     previousActiveLoginProviderRef.current = activeLoginProvider;
 
-    const isInitialMount = previousProvider === undefined;
-    const didCloseModal = previousProvider !== null && activeLoginProvider === null;
+    const didCloseModal = previousProvider !== undefined
+      && previousProvider !== null
+      && activeLoginProvider === null;
 
-    // Refresh statuses once on mount and again after the login modal is closed.
-    if (isInitialMount || didCloseModal) {
-      void refreshAllProviderStatuses();
+    // Refresh statuses after the login modal is closed.
+    if (didCloseModal) {
+      void refreshProviderAuthStatuses();
     }
-  }, [activeLoginProvider, refreshAllProviderStatuses]);
+  }, [activeLoginProvider, refreshProviderAuthStatuses]);
 
-  const handleProviderLoginOpen = (provider: CliProvider) => {
+  const handleProviderLoginOpen = (provider: LLMProvider) => {
     setActiveLoginProvider(provider);
   };
 
@@ -209,7 +163,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
               />
             ) : (
               <AgentConnectionsStep
-                providerStatuses={providerStatuses}
+                providerStatuses={providerAuthStatus}
                 onOpenProviderLogin={handleProviderLoginOpen}
               />
             )}
@@ -279,7 +233,6 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           isOpen={Boolean(activeLoginProvider)}
           onClose={() => setActiveLoginProvider(null)}
           provider={activeLoginProvider}
-          project={selectedProject}
           onComplete={handleLoginComplete}
         />
       )}

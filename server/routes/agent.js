@@ -4,8 +4,7 @@ import path from 'path';
 import os from 'os';
 import { promises as fs } from 'fs';
 import crypto from 'crypto';
-import { userDb, apiKeysDb, githubTokensDb } from '../database/db.js';
-import { addProjectManually } from '../projects.js';
+import { userDb, apiKeysDb, githubTokensDb, projectsDb } from '../modules/database/index.js';
 import { queryClaudeSDK } from '../claude-sdk.js';
 import { spawnCursor } from '../cursor-cli.js';
 import { queryCodex } from '../openai-codex.js';
@@ -13,6 +12,7 @@ import { spawnGemini } from '../gemini-cli.js';
 import { Octokit } from '@octokit/rest';
 import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants.js';
 import { IS_PLATFORM } from '../constants/config.js';
+import { normalizeProjectPath } from '../shared/utils.js';
 
 const router = express.Router();
 
@@ -475,6 +475,7 @@ class SSEStreamWriter {
 
   setSessionId(sessionId) {
     this.sessionId = sessionId;
+    this.send({ type: 'session-id', sessionId });
   }
 
   getSessionId() {
@@ -839,7 +840,7 @@ class ResponseCollector {
  *   }
  */
 router.post('/', validateExternalApiKey, async (req, res) => {
-  const { githubUrl, projectPath, message, provider = 'claude', model, githubToken, branchName } = req.body;
+  const { githubUrl, projectPath, message, provider = 'claude', model, githubToken, branchName, sessionId } = req.body;
 
   // Parse stream and cleanup as booleans (handle string "true"/"false" from curl)
   const stream = req.body.stream === undefined ? true : (req.body.stream === true || req.body.stream === 'true');
@@ -889,7 +890,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       finalProjectPath = await cloneGitHubRepo(githubUrl.trim(), tokenToUse, targetPath);
     } else {
       // Use existing project path
-      finalProjectPath = path.resolve(projectPath);
+      finalProjectPath = normalizeProjectPath(path.resolve(projectPath));
 
       // Verify the path exists
       try {
@@ -899,19 +900,14 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       }
     }
 
-    // Register the project (or use existing registration)
-    let project;
-    try {
-      project = await addProjectManually(finalProjectPath);
-      console.log('📦 Project registered:', project);
-    } catch (error) {
-      // If project already exists, that's fine - continue with the existing registration
-      if (error.message && error.message.includes('Project already configured')) {
-        console.log('📦 Using existing project registration for:', finalProjectPath);
-        project = { path: finalProjectPath };
-      } else {
-        throw error;
-      }
+    finalProjectPath = normalizeProjectPath(finalProjectPath);
+
+    // Register project path in DB (or reuse existing active registration)
+    const registrationResult = projectsDb.createProjectPath(finalProjectPath, null);
+    if (registrationResult.outcome === 'active_conflict') {
+      console.log('Project registration already exists for:', finalProjectPath);
+    } else {
+      console.log('Project registered:', registrationResult.project);
     }
 
     // Set up writer based on streaming mode
@@ -949,7 +945,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       await queryClaudeSDK(message.trim(), {
         projectPath: finalProjectPath,
         cwd: finalProjectPath,
-        sessionId: null, // New session
+        sessionId: sessionId || null,
         model: model,
         permissionMode: 'bypassPermissions' // Bypass all permissions for API calls
       }, writer);
@@ -960,7 +956,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       await spawnCursor(message.trim(), {
         projectPath: finalProjectPath,
         cwd: finalProjectPath,
-        sessionId: null, // New session
+        sessionId: sessionId || null,
         model: model || undefined,
         skipPermissions: true // Bypass permissions for Cursor
       }, writer);
@@ -970,7 +966,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       await queryCodex(message.trim(), {
         projectPath: finalProjectPath,
         cwd: finalProjectPath,
-        sessionId: null,
+        sessionId: sessionId || null,
         model: model || CODEX_MODELS.DEFAULT,
         permissionMode: 'bypassPermissions'
       }, writer);
@@ -980,7 +976,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       await spawnGemini(message.trim(), {
         projectPath: finalProjectPath,
         cwd: finalProjectPath,
-        sessionId: null,
+        sessionId: sessionId || null,
         model: model,
         skipPermissions: true // CLI mode bypasses permissions
       }, writer);
@@ -1124,7 +1120,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
           } else {
             prBody += `Agent task: ${message}`;
           }
-          prBody += '\n\n---\n*This pull request was automatically created by Claude Code UI Agent.*';
+          prBody += '\n\n---\n*This pull request was automatically created by CloudCLI.ai Agent.*';
 
           console.log(`📝 PR Title: ${prTitle}`);
 
