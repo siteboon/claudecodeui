@@ -20,9 +20,14 @@ import {
 
 const getClaudeHomePath = (): string => path.join(os.homedir(), '.claude');
 
-const getClaudePluginName = (pluginId: string): string => {
-  const [pluginName] = pluginId.split('@');
-  return pluginName || pluginId;
+const getClaudePluginName = (pluginId: string): string | null => {
+  const normalizedPluginId = pluginId.trim();
+  if (!normalizedPluginId || normalizedPluginId === '@') {
+    return null;
+  }
+
+  const [pluginName] = normalizedPluginId.split('@');
+  return readOptionalString(pluginName) ?? null;
 };
 
 const stripMarkdownExtension = (filename: string): string =>
@@ -52,7 +57,7 @@ const listChildDirectories = async (directoryPath: string): Promise<string[]> =>
 const readClaudePluginName = async (
   installPath: string,
   pluginId: string,
-): Promise<string> => {
+): Promise<string | null> => {
   try {
     const pluginConfig = await readJsonConfig(
       path.join(installPath, '.claude-plugin', 'plugin.json'),
@@ -142,6 +147,10 @@ export class ClaudeSkillsProvider extends SkillsProvider {
           visitedPluginFolders.add(pluginFolderKey);
 
           const pluginName = await readClaudePluginName(pluginFolder, pluginId);
+          if (!pluginName) {
+            continue;
+          }
+
           const commandsPath = path.join(pluginFolder, 'commands');
           if (await pathExistsAsDirectory(commandsPath)) {
             skills.push(

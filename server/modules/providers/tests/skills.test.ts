@@ -101,6 +101,24 @@ test('providerSkillsService lists claude user, project, and enabled plugin skill
     'disabled-skills',
     'ghi789',
   );
+  const emptyIdPluginInstallPath = path.join(
+    tempRoot,
+    '.claude',
+    'plugins',
+    'cache',
+    'invalid-empty-plugin',
+    'empty',
+    '000',
+  );
+  const atIdPluginInstallPath = path.join(
+    tempRoot,
+    '.claude',
+    'plugins',
+    'cache',
+    'invalid-at-plugin',
+    'at',
+    '000',
+  );
   const siblingSkillPluginPath = path.join(path.dirname(skillPluginInstallPath), 'legacy777');
   await fs.mkdir(workspacePath, { recursive: true });
 
@@ -161,6 +179,16 @@ test('providerSkillsService lists claude user, project, and enabled plugin skill
       'disabled-command',
       'Disabled plugin command',
     );
+    await writeClaudePluginCommand(
+      path.join(emptyIdPluginInstallPath, 'commands'),
+      'invalid-empty-command',
+      'Invalid empty id command',
+    );
+    await writeClaudePluginCommand(
+      path.join(atIdPluginInstallPath, 'commands'),
+      'invalid-at-command',
+      'Invalid at id command',
+    );
     await writeSkill(
       path.join(
         disabledPluginInstallPath,
@@ -176,6 +204,8 @@ test('providerSkillsService lists claude user, project, and enabled plugin skill
       JSON.stringify(
         {
           enabledPlugins: {
+            '': true,
+            '@': true,
             'notion@notion-marketplace': true,
             'example-skills@anthropic-agent-skills': true,
             'disabled-skills@disabled-marketplace': false,
@@ -192,6 +222,20 @@ test('providerSkillsService lists claude user, project, and enabled plugin skill
         {
           version: 2,
           plugins: {
+            '': [
+              {
+                scope: 'user',
+                installPath: emptyIdPluginInstallPath,
+                version: '000',
+              },
+            ],
+            '@': [
+              {
+                scope: 'user',
+                installPath: atIdPluginInstallPath,
+                version: '000',
+              },
+            ],
             'notion@notion-marketplace': [
               {
                 scope: 'user',
@@ -265,6 +309,9 @@ test('providerSkillsService lists claude user, project, and enabled plugin skill
     assert.equal(siblingPluginSkill?.description, 'Sibling Claude plugin skill');
     assert.equal(byName.has('disabled-command'), false);
     assert.equal(byName.has('disabled-plugin'), false);
+    assert.equal(byName.has('invalid-empty-command'), false);
+    assert.equal(byName.has('invalid-at-command'), false);
+    assert.equal(skills.some((skill) => skill.command.startsWith('/:')), false);
   } finally {
     restoreHomeDir();
     await fs.rm(tempRoot, { recursive: true, force: true });

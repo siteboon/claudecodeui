@@ -310,22 +310,36 @@ export function useSlashCommands({
     [input, resetCommandMenuState, setInput, slashPosition, textareaRef],
   );
 
+  const executeNonSkillCommand = useCallback(
+    (command: SlashCommand) => {
+      const executionResult = onExecuteCommand(command);
+      if (isPromiseLike(executionResult)) {
+        executionResult.then(
+          () => {
+            resetCommandMenuState();
+          },
+          () => {
+            resetCommandMenuState();
+            // Keep behavior silent; execution errors are handled by caller.
+          },
+        );
+      } else {
+        resetCommandMenuState();
+      }
+    },
+    [onExecuteCommand, resetCommandMenuState],
+  );
+
   const selectCommandFromKeyboard = useCallback(
     (command: SlashCommand) => {
-      insertCommandIntoInput(command);
-
       if (isSkillCommand(command)) {
+        insertCommandIntoInput(command);
         return;
       }
 
-      const executionResult = onExecuteCommand(command);
-      if (isPromiseLike(executionResult)) {
-        executionResult.catch(() => {
-          // Keep behavior silent; execution errors are handled by caller.
-        });
-      }
+      executeNonSkillCommand(command);
     },
-    [insertCommandIntoInput, onExecuteCommand],
+    [executeNonSkillCommand, insertCommandIntoInput],
   );
 
   const handleCommandSelect = useCallback(
@@ -345,20 +359,9 @@ export function useSlashCommands({
         return;
       }
 
-      const executionResult = onExecuteCommand(command);
-
-      if (isPromiseLike(executionResult)) {
-        executionResult.then(() => {
-          resetCommandMenuState();
-        });
-        executionResult.catch(() => {
-          // Keep behavior silent; execution errors are handled by caller.
-        });
-      } else {
-        resetCommandMenuState();
-      }
+      executeNonSkillCommand(command);
     },
-    [selectedProject, trackCommandUsage, insertCommandIntoInput, onExecuteCommand, resetCommandMenuState],
+    [selectedProject, trackCommandUsage, insertCommandIntoInput, executeNonSkillCommand],
   );
 
   const handleToggleCommandMenu = useCallback(() => {
