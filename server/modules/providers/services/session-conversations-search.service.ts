@@ -89,13 +89,8 @@ const RIPGREP_CHUNK_CONCURRENCY = 6;
 const UNKNOWN_PROJECT_KEY = '__unknown_project__';
 
 const INTERNAL_CONTENT_PREFIXES = [
-  '<command-name>',
-  '<command-message>',
-  '<command-args>',
-  '<local-command-stdout>',
   '<system-reminder>',
   'Caveat:',
-  'This session is being continued from a previous',
   'Invalid API key',
   '[Request interrupted',
 ] as const;
@@ -302,6 +297,135 @@ function extractClaudeText(content: unknown): string {
     .join(' ');
 }
 
+function extractTaggedContent(content: string, tagName: string): string | null {
+  const escapedTagName = tagName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = new RegExp(`<${escapedTagName}>([\\s\\S]*?)<\\/${escapedTagName}>`).exec(content);
+  return match ? match[1] : null;
+}
+
+type ClaudeLocalCommandPayload = {
+  commandName: string;
+  commandMessage: string;
+  commandArgs: string;
+};
+
+function parseClaudeLocalCommandPayload(content: string): ClaudeLocalCommandPayload | null {
+  const commandName = extractTaggedContent(content, 'command-name');
+  const commandMessage = extractTaggedContent(content, 'command-message');
+  const commandArgs = extractTaggedContent(content, 'command-args');
+
+  if (commandName === null && commandMessage === null && commandArgs === null) {
+    return null;
+  }
+
+  return {
+    commandName: commandName ?? '',
+    commandMessage: commandMessage ?? '',
+    commandArgs: commandArgs ?? '',
+  };
+}
+
+function buildClaudeLocalCommandDisplayText(payload: ClaudeLocalCommandPayload): string {
+  const commandName = payload.commandName.trim();
+  const commandMessage = payload.commandMessage.trim();
+  const commandArgs = payload.commandArgs.trim();
+  const baseCommand = commandName || commandMessage;
+
+  if (!baseCommand) {
+    return '';
+  }
+
+  return commandArgs ? `${baseCommand} ${commandArgs}` : baseCommand;
+}
+
+function stripAnsiFormatting(text: string): string {
+  return text.replace(/\u001B\[[0-9;?]*[ -/]*[@-~]/g, '');
+}
+
+type ClaudeSearchableMessage = {
+  text: string;
+  role: 'user' | 'assistant';
+};
+
+/**
+ * Claude mixes visible chat, compact summaries, and local command wrappers into
+ * the same transcript stream. Search should operate on the user-visible meaning
+ * of those rows rather than the raw wrapper syntax.
+ */
+function extractClaudeSearchableMessage(entry: AnyRecord): ClaudeSearchableMessage | null {
+  if (!entry.message?.content || entry.isApiErrorMessage) {
+    return null;
+  }
+
+  const rawRole = entry.message.role;
+  if (rawRole !== 'user' && rawRole !== 'assistant') {
+    return null;
+  }
+
+  if (typeof entry.message.content === 'string') {
+    const content = String(entry.message.content);
+
+    if (entry.isCompactSummary === true && content.trim()) {
+      return {
+        text: content,
+        role: 'assistant',
+      };
+    }
+
+    const localCommand = parseClaudeLocalCommandPayload(content);
+    if (localCommand) {
+      const displayText = buildClaudeLocalCommandDisplayText(localCommand);
+      return displayText
+        ? {
+            text: displayText,
+            role: 'user',
+          }
+        : null;
+    }
+
+    const localCommandStdout = extractTaggedContent(content, 'local-command-stdout');
+    if (localCommandStdout !== null) {
+      const stdoutText = stripAnsiFormatting(localCommandStdout).trim();
+      return stdoutText
+        ? {
+            text: stdoutText,
+            role: 'assistant',
+          }
+        : null;
+    }
+
+    if (!content || isInternalContent(content)) {
+      return null;
+    }
+
+    return {
+      text: content,
+      role: rawRole,
+    };
+  }
+
+  const text = extractClaudeText(entry.message.content);
+  if (!text) {
+    return null;
+  }
+
+  if (entry.isCompactSummary === true) {
+    return {
+      text,
+      role: 'assistant',
+    };
+  }
+
+  if (isInternalContent(text)) {
+    return null;
+  }
+
+  return {
+    text,
+    role: rawRole,
+  };
+}
+
 function extractCodexText(content: unknown): string {
   if (typeof content === 'string') {
     return content;
@@ -348,6 +472,7 @@ function extractGeminiText(content: unknown): string {
 
 function normalizeSearchableSessions(rows: SessionRepositoryRow[]): SearchableSessionRow[] {
   const normalizedRows: SearchableSessionRow[] = [];
+  const projectArchiveStateByPath = new Map<string, boolean>();
 
   for (const row of rows) {
     const provider = row.provider as SearchableProvider;
@@ -363,6 +488,27 @@ function normalizeSearchableSessions(rows: SessionRepositoryRow[]): SearchableSe
     const absoluteJsonlPath = path.resolve(rawJsonlPath);
     if (!fsSync.existsSync(absoluteJsonlPath)) {
       continue;
+    }
+
+    /**
+     * Active session rows can still belong to an archived project because
+     * project archiving intentionally preserves the underlying session data.
+     * Global conversation search should follow the visible workspace model,
+     * which means excluding any session whose owning project is archived.
+     *
+     * Cache the archive lookup per normalized project path so one search pass
+     * does not re-query the same project row for every session in that folder.
+     */
+    const normalizedProjectPath = typeof row.project_path === 'string' ? row.project_path.trim() : '';
+    if (normalizedProjectPath) {
+      if (!projectArchiveStateByPath.has(normalizedProjectPath)) {
+        const projectRow = projectsDb.getProjectPath(normalizedProjectPath);
+        projectArchiveStateByPath.set(normalizedProjectPath, Boolean(projectRow?.isArchived));
+      }
+
+      if (projectArchiveStateByPath.get(normalizedProjectPath) === true) {
+        continue;
+      }
     }
 
     normalizedRows.push({
@@ -733,18 +879,21 @@ async function parseClaudeSessionMatches(
           }
         }
 
-        if (!entry.message?.content || entry.isApiErrorMessage) {
+        const searchableMessage = extractClaudeSearchableMessage(entry);
+        if (!searchableMessage) {
           continue;
         }
 
-        const role = entry.message.role;
-        if (role !== 'user' && role !== 'assistant') {
-          continue;
-        }
+        const { text, role } = searchableMessage;
 
-        const text = extractClaudeText(entry.message.content);
-        if (!text || isInternalContent(text)) {
-          continue;
+        /**
+         * Claude compact summaries are the most faithful session-summary source
+         * after a `/compact` because they describe the post-compaction state that
+         * the resumed session actually continues from. Prefer them over generic
+         * fallback user text when present.
+         */
+        if (entry.isCompactSummary === true) {
+          state.resolvedSummary = text;
         }
 
         if (role === 'user') {

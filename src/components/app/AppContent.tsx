@@ -34,7 +34,6 @@ function AppContentInner() {
     markSessionAsInactive,
     markSessionAsProcessing,
     markSessionAsNotProcessing,
-    replaceTemporarySession,
   } = useSessionProtection();
 
   const {
@@ -191,7 +190,6 @@ function AppContentInner() {
           onSessionProcessing={markSessionAsProcessing}
           onSessionNotProcessing={markSessionAsNotProcessing}
           processingSessions={processingSessions}
-          onReplaceTemporarySession={replaceTemporarySession}
           onNavigateToSession={(targetSessionId: string, options) =>
             navigate(`/session/${targetSessionId}`, { replace: Boolean(options?.replace) })
           }

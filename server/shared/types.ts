@@ -102,6 +102,21 @@ export type NormalizedMessage = {
   kind: MessageKind;
   role?: 'user' | 'assistant';
   content?: string;
+  /**
+   * Optional display-oriented metadata used by providers that need to expose
+   * richer transcript artifacts without introducing a brand-new message kind.
+   *
+   * Current Claude usage:
+   * - local slash commands expose parsed command fields
+   * - compact summaries are flagged so the UI can treat them differently later
+   */
+  displayText?: string;
+  commandName?: string;
+  commandMessage?: string;
+  commandArgs?: string;
+  isLocalCommand?: boolean;
+  isLocalCommandStdout?: boolean;
+  isCompactSummary?: boolean;
   images?: unknown;
   toolName?: string;
   toolInput?: unknown;

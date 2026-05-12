@@ -150,7 +150,6 @@ async function spawnCursor(command, options = {}, ws) {
 
         try {
           const response = JSON.parse(line);
-          console.log('Parsed JSON response:', response);
 
           // Handle different message types
           switch (response.type) {
@@ -159,7 +158,6 @@ async function spawnCursor(command, options = {}, ws) {
                 // Capture session ID
                 if (response.session_id && !capturedSessionId) {
                   capturedSessionId = response.session_id;
-                  console.log('Captured session ID:', capturedSessionId);
 
                   // Update process key with captured session ID
                   if (processKey !== capturedSessionId) {
@@ -197,7 +195,6 @@ async function spawnCursor(command, options = {}, ws) {
 
             case 'result': {
               // Session complete — send stream end + lifecycle complete with result payload
-              console.log('Cursor session result:', response);
               const resultText = typeof response.result === 'string' ? response.result : '';
               ws.send(createNormalizedMessage({
                 kind: 'complete',
@@ -213,8 +210,6 @@ async function spawnCursor(command, options = {}, ws) {
               // Unknown message types — ignore.
           }
         } catch (parseError) {
-          console.log('Non-JSON response:', line);
-
           if (shouldSuppressForTrustRetry(line)) {
             return;
           }
@@ -228,7 +223,6 @@ async function spawnCursor(command, options = {}, ws) {
       // Handle stdout (streaming JSON responses)
       cursorProcess.stdout.on('data', (data) => {
         const rawOutput = data.toString();
-        console.log('Cursor CLI stdout:', rawOutput);
 
         // Stream chunks can split JSON objects across packets; keep trailing partial line.
         stdoutLineBuffer += rawOutput;
@@ -254,8 +248,6 @@ async function spawnCursor(command, options = {}, ws) {
 
       // Handle process completion
       cursorProcess.on('close', async (code) => {
-        console.log(`Cursor CLI process exited with code ${code}`);
-
         const finalSessionId = capturedSessionId || sessionId || processKey;
         activeCursorProcesses.delete(finalSessionId);
 

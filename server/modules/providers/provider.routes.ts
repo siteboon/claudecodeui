@@ -311,12 +311,33 @@ router.post(
 );
 
 // ----------------- Session routes -----------------
+router.get(
+  '/sessions/archived',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const sessions = sessionsService.listArchivedSessions();
+    res.json(createApiSuccessResponse({ sessions }));
+  }),
+);
+
 router.delete(
   '/sessions/:sessionId',
   asyncHandler(async (req: Request, res: Response) => {
     const sessionId = parseSessionId(req.params.sessionId);
-    const deletedFromDisk = parseOptionalBooleanQuery(req.query.deletedFromDisk, 'deletedFromDisk') ?? false;
-    const result = await sessionsService.deleteSessionById(sessionId, deletedFromDisk);
+    const force = parseOptionalBooleanQuery(req.query.force, 'force') ?? false;
+    const deletedFromDisk = parseOptionalBooleanQuery(req.query.deletedFromDisk, 'deletedFromDisk') ?? force;
+    const result = await sessionsService.deleteOrArchiveSessionById(sessionId, {
+      force,
+      deletedFromDisk,
+    });
+    res.json(createApiSuccessResponse(result));
+  }),
+);
+
+router.post(
+  '/sessions/:sessionId/restore',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const result = sessionsService.restoreSessionById(sessionId);
     res.json(createApiSuccessResponse(result));
   }),
 );

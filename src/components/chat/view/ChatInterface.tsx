@@ -34,7 +34,6 @@ function ChatInterface({
   onSessionProcessing,
   onSessionNotProcessing,
   processingSessions,
-  onReplaceTemporarySession,
   onNavigateToSession,
   onShowSettings,
   autoExpandTools,
@@ -50,7 +49,6 @@ function ChatInterface({
   const { t } = useTranslation('chat');
 
   const sessionStore = useSessionStore();
-  const streamBufferRef = useRef('');
   const streamTimerRef = useRef<number | null>(null);
   const accumulatedStreamRef = useRef('');
   const pendingViewSessionRef = useRef<PendingViewSession | null>(null);
@@ -60,7 +58,6 @@ function ChatInterface({
       clearTimeout(streamTimerRef.current);
       streamTimerRef.current = null;
     }
-    streamBufferRef.current = '';
     accumulatedStreamRef.current = '';
   }, []);
 
@@ -225,7 +222,6 @@ function ChatInterface({
   useChatRealtimeHandlers({
     latestMessage,
     provider,
-    selectedProject,
     selectedSession,
     currentSessionId,
     setCurrentSessionId,
@@ -235,13 +231,11 @@ function ChatInterface({
     setTokenBudget,
     setPendingPermissionRequests,
     pendingViewSessionRef,
-    streamBufferRef,
     streamTimerRef,
     accumulatedStreamRef,
     onSessionInactive,
     onSessionProcessing,
     onSessionNotProcessing,
-    onReplaceTemporarySession,
     onNavigateToSession,
     onWebSocketReconnect: handleWebSocketReconnect,
     sessionStore,

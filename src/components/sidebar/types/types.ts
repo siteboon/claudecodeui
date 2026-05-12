@@ -1,9 +1,24 @@
 import type { LoadingProgress, Project, ProjectSession, LLMProvider } from '../../../types/app';
 
 export type ProjectSortOrder = 'name' | 'date';
+export type SidebarSearchMode = 'projects' | 'conversations' | 'archived';
+export type ArchivedProjectListItem = Project & { isArchived: true };
 
 export type SessionWithProvider = ProjectSession & {
   __provider: LLMProvider;
+};
+
+export type ArchivedSessionListItem = {
+  sessionId: string;
+  provider: LLMProvider;
+  projectId: string | null;
+  projectPath: string | null;
+  projectDisplayName: string;
+  sessionTitle: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+  lastActivity: string | null;
+  isProjectArchived: boolean;
 };
 
 export type DeleteProjectConfirmation = {
@@ -14,10 +29,11 @@ export type DeleteProjectConfirmation = {
 // Delete confirmation payload used by sidebar UX. `projectId`/`provider` are
 // kept for wiring compatibility, while API deletion now keys only by sessionId.
 export type SessionDeleteConfirmation = {
-  projectId: string;
+  projectId: string | null;
   sessionId: string;
   sessionTitle: string;
   provider: LLMProvider;
+  isArchived: boolean;
 };
 
 export type SidebarProps = {
