@@ -255,7 +255,8 @@ test('providerMcpService global adder writes to all providers and rejects unsupp
     });
 
     const expectCursorGlobal = process.platform !== 'win32';
-    assert.equal(globalResult.length, expectCursorGlobal ? 4 : 3);
+    // Five providers (claude, codex, cursor, gemini, kiro); cursor is skipped on Windows.
+    assert.equal(globalResult.length, expectCursorGlobal ? 5 : 4);
     assert.ok(globalResult.every((entry) => entry.created === true));
 
     const claudeProject = await readJson(path.join(workspacePath, '.mcp.json'));
@@ -266,6 +267,9 @@ test('providerMcpService global adder writes to all providers and rejects unsupp
 
     const geminiProject = await readJson(path.join(workspacePath, '.gemini', 'settings.json'));
     assert.ok((geminiProject.mcpServers as Record<string, unknown>)['global-http']);
+
+    const kiroProject = await readJson(path.join(workspacePath, '.kiro', 'settings', 'mcp.json'));
+    assert.ok((kiroProject.mcpServers as Record<string, unknown>)['global-http']);
 
     if (expectCursorGlobal) {
       const cursorProject = await readJson(path.join(workspacePath, '.cursor', 'mcp.json'));

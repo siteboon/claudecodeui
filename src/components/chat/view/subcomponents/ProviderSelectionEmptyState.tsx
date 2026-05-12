@@ -9,6 +9,7 @@ import {
   CURSOR_MODELS,
   CODEX_MODELS,
   GEMINI_MODELS,
+  KIRO_MODELS,
   PROVIDERS,
 } from "../../../../../shared/modelConstants";
 import type { ProjectSession, LLMProvider } from "../../../../types/app";
@@ -44,6 +45,8 @@ type ProviderSelectionEmptyStateProps = {
   setCodexModel: (model: string) => void;
   geminiModel: string;
   setGeminiModel: (model: string) => void;
+  kiroModel: string;
+  setKiroModel: (model: string) => void;
   tasksEnabled: boolean;
   isTaskMasterInstalled: boolean | null;
   onShowAllTasks?: (() => void) | null;
@@ -66,6 +69,7 @@ function getModelConfig(p: LLMProvider) {
   if (p === "claude") return CLAUDE_MODELS;
   if (p === "codex") return CODEX_MODELS;
   if (p === "gemini") return GEMINI_MODELS;
+  if (p === "kiro") return KIRO_MODELS;
   return CURSOR_MODELS;
 }
 
@@ -75,10 +79,12 @@ function getCurrentModel(
   cu: string,
   co: string,
   g: string,
+  k: string,
 ) {
   if (p === "claude") return c;
   if (p === "codex") return co;
   if (p === "gemini") return g;
+  if (p === "kiro") return k;
   return cu;
 }
 
@@ -86,6 +92,7 @@ function getProviderDisplayName(p: LLMProvider) {
   if (p === "claude") return "Claude";
   if (p === "cursor") return "Cursor";
   if (p === "codex") return "Codex";
+  if (p === "kiro") return "Kiro";
   return "Gemini";
 }
 
@@ -103,6 +110,8 @@ export default function ProviderSelectionEmptyState({
   setCodexModel,
   geminiModel,
   setGeminiModel,
+  kiroModel,
+  setKiroModel,
   tasksEnabled,
   isTaskMasterInstalled,
   onShowAllTasks,
@@ -134,6 +143,7 @@ export default function ProviderSelectionEmptyState({
     cursorModel,
     codexModel,
     geminiModel,
+    kiroModel,
   );
 
   const currentModelLabel = useMemo(() => {
@@ -155,12 +165,15 @@ export default function ProviderSelectionEmptyState({
       } else if (providerId === "gemini") {
         setGeminiModel(modelValue);
         localStorage.setItem("gemini-model", modelValue);
+      } else if (providerId === "kiro") {
+        setKiroModel(modelValue);
+        localStorage.setItem("kiro-model", modelValue);
       } else {
         setCursorModel(modelValue);
         localStorage.setItem("cursor-model", modelValue);
       }
     },
-    [setClaudeModel, setCursorModel, setCodexModel, setGeminiModel],
+    [setClaudeModel, setCursorModel, setCodexModel, setGeminiModel, setKiroModel],
   );
 
   const handleModelSelect = useCallback(
@@ -286,6 +299,9 @@ export default function ProviderSelectionEmptyState({
                 }),
                 gemini: t("providerSelection.readyPrompt.gemini", {
                   model: geminiModel,
+                }),
+                kiro: t("providerSelection.readyPrompt.kiro", {
+                  model: kiroModel,
                 }),
               }[provider]
             }

@@ -45,6 +45,12 @@ import {
     isGeminiSessionActive,
     getActiveGeminiSessions,
 } from './gemini-cli.js';
+import {
+    spawnKiro,
+    abortKiroSession,
+    isKiroSessionActive,
+    getActiveKiroSessions,
+} from './kiro-cli.js';
 import sessionManager from './sessionManager.js';
 import {
     stripAnsiSequences,
@@ -94,21 +100,25 @@ const wss = createWebSocketServer(server, {
         spawnCursor,
         queryCodex,
         spawnGemini,
+        spawnKiro,
         abortClaudeSDKSession,
         abortCursorSession,
         abortCodexSession,
         abortGeminiSession,
+        abortKiroSession,
         resolveToolApproval,
         isClaudeSDKSessionActive,
         isCursorSessionActive,
         isCodexSessionActive,
         isGeminiSessionActive,
+        isKiroSessionActive,
         reconnectSessionWriter,
         getPendingApprovalsForSession,
         getActiveClaudeSDKSessions,
         getActiveCursorSessions,
         getActiveCodexSessions,
         getActiveGeminiSessions,
+        getActiveKiroSessions,
     },
     shell: {
         getSessionById: (sessionId) => sessionManager.getSession(sessionId),
@@ -1145,6 +1155,20 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
                 breakdown: { input: 0, cacheCreation: 0, cacheRead: 0 },
                 unsupported: true,
                 message: 'Token usage tracking not available for Gemini sessions'
+            });
+        }
+
+        // Kiro sessions report `context_usage_percentage` per turn but not a
+        // running total/used pair compatible with this endpoint. Defer accurate
+        // accounting to a follow-up; the UI will treat Kiro as "no budget" for
+        // now (parity with Cursor/Gemini).
+        if (provider === 'kiro') {
+            return res.json({
+                used: 0,
+                total: 0,
+                breakdown: { input: 0, cacheCreation: 0, cacheRead: 0 },
+                unsupported: true,
+                message: 'Token usage tracking not available for Kiro sessions'
             });
         }
 

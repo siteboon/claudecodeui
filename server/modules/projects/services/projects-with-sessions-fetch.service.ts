@@ -14,7 +14,7 @@ type SessionSummary = {
   lastActivity: string;
 };
 
-type SessionsByProvider = Record<'claude' | 'cursor' | 'codex' | 'gemini', SessionSummary[]>;
+type SessionsByProvider = Record<'claude' | 'cursor' | 'codex' | 'gemini' | 'kiro', SessionSummary[]>;
 
 type SessionRepositoryRow = {
   provider: string;
@@ -34,6 +34,7 @@ export type ProjectListItem = {
   cursorSessions: SessionSummary[];
   codexSessions: SessionSummary[];
   geminiSessions: SessionSummary[];
+  kiroSessions: SessionSummary[];
   sessionMeta: {
     hasMore: boolean;
     total: number;
@@ -74,6 +75,7 @@ export type ProjectSessionsPageApiView = {
   cursorSessions: SessionSummary[];
   codexSessions: SessionSummary[];
   geminiSessions: SessionSummary[];
+  kiroSessions: SessionSummary[];
   sessionMeta: {
     hasMore: boolean;
     total: number;
@@ -139,6 +141,7 @@ function bucketSessionRowsByProvider(rows: SessionRepositoryRow[]): SessionsByPr
     cursor: [],
     codex: [],
     gemini: [],
+    kiro: [],
   };
 
   for (const row of rows) {
@@ -253,6 +256,7 @@ export async function getProjectsWithSessions(
       cursorSessions: sessionsPage.sessionsByProvider.cursor,
       codexSessions: sessionsPage.sessionsByProvider.codex,
       geminiSessions: sessionsPage.sessionsByProvider.gemini,
+      kiroSessions: sessionsPage.sessionsByProvider.kiro,
       sessionMeta: {
         hasMore: sessionsPage.hasMore,
         total: sessionsPage.total,
@@ -309,6 +313,7 @@ export async function getArchivedProjectsWithSessions(
       cursorSessions: sessionsPage.sessionsByProvider.cursor,
       codexSessions: sessionsPage.sessionsByProvider.codex,
       geminiSessions: sessionsPage.sessionsByProvider.gemini,
+      kiroSessions: sessionsPage.sessionsByProvider.kiro,
       sessionMeta: {
         hasMore: sessionsPage.hasMore,
         total: sessionsPage.total,
@@ -341,6 +346,7 @@ export async function getProjectSessionsPage(
     cursorSessions: sessionsPage.sessionsByProvider.cursor,
     codexSessions: sessionsPage.sessionsByProvider.codex,
     geminiSessions: sessionsPage.sessionsByProvider.gemini,
+    kiroSessions: sessionsPage.sessionsByProvider.kiro,
     sessionMeta: {
       hasMore: sessionsPage.hasMore,
       total: sessionsPage.total,

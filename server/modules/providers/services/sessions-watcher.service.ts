@@ -34,6 +34,10 @@ const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> =
     provider: 'gemini',
     rootPath: path.join(os.homedir(), '.gemini', 'tmp'),
   },
+  {
+    provider: 'kiro',
+    rootPath: path.join(os.homedir(), '.kiro', 'sessions', 'cli'),
+  },
 ];
 
 const WATCHER_IGNORED_PATTERNS = [

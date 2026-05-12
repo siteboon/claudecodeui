@@ -113,7 +113,12 @@ export const getAllSessions = (project: Project): SessionWithProvider[] => {
     __provider: 'gemini' as const,
   }));
 
-  return [...claudeSessions, ...cursorSessions, ...codexSessions, ...geminiSessions].sort(
+  const kiroSessions = (project.kiroSessions || []).map((session) => ({
+    ...session,
+    __provider: 'kiro' as const,
+  }));
+
+  return [...claudeSessions, ...cursorSessions, ...codexSessions, ...geminiSessions, ...kiroSessions].sort(
     (a, b) => getSessionDate(b).getTime() - getSessionDate(a).getTime(),
   );
 };
