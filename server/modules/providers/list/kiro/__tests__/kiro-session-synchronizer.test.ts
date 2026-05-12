@@ -40,6 +40,7 @@ after(async () => {
     process.env.USERPROFILE = ORIGINAL_HOME;
   } else {
     delete process.env.HOME;
+    delete process.env.USERPROFILE;
   }
   if (ORIGINAL_DB !== undefined) {
     process.env.DATABASE_PATH = ORIGINAL_DB;

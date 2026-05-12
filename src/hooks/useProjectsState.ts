@@ -602,7 +602,9 @@ export function useProjectsState({
           ? 'codex'
           : providerFromStorage === 'gemini'
             ? 'gemini'
-            : 'claude';
+            : providerFromStorage === 'kiro'
+              ? 'kiro'
+              : 'claude';
 
     setSelectedSession({
       id: sessionId,

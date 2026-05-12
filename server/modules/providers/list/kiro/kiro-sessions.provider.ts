@@ -135,7 +135,11 @@ export class KiroSessionsProvider implements IProviderSessions {
     if (entry.kind === 'AssistantMessage') {
       const messages: NormalizedMessage[] = [];
 
-      for (const part of parts) {
+      // An entry can carry multiple parts of the same kind (e.g. two text
+      // chunks, or text + toolUse + text). The part index disambiguates so the
+      // generated id is unique even when toolUseId or baseId would otherwise
+      // collide across parts.
+      for (const [partIndex, part] of parts.entries()) {
         if (!isContentPart(part)) {
           continue;
         }
@@ -144,7 +148,7 @@ export class KiroSessionsProvider implements IProviderSessions {
           const text = typeof part.data === 'string' ? part.data : '';
           if (text.trim()) {
             messages.push(createNormalizedMessage({
-              id: `${baseId}_text`,
+              id: `${baseId}_text_${partIndex}`,
               sessionId,
               timestamp: ts,
               provider: PROVIDER,
@@ -158,7 +162,7 @@ export class KiroSessionsProvider implements IProviderSessions {
 
         if (part.kind === 'toolUse') {
           const data = readObjectRecord(part.data) ?? {};
-          const toolUseId = typeof data.toolUseId === 'string' ? data.toolUseId : baseId;
+          const toolUseId = typeof data.toolUseId === 'string' ? data.toolUseId : `${baseId}_tool_${partIndex}`;
           const toolName = typeof data.name === 'string' ? data.name : 'Unknown';
           messages.push(createNormalizedMessage({
             id: toolUseId,
@@ -184,15 +188,18 @@ export class KiroSessionsProvider implements IProviderSessions {
       const entryStatus = typeof entry.data?.status === 'string' ? entry.data!.status : null;
       const entryIsError = entryStatus !== null && entryStatus !== 'success';
 
-      for (const part of parts) {
+      for (const [partIndex, part] of parts.entries()) {
         if (!isContentPart(part) || part.kind !== 'toolResult') {
           continue;
         }
         const data = readObjectRecord(part.data) ?? {};
         const toolUseId = typeof data.toolUseId === 'string' ? data.toolUseId : '';
         const { text, isError: contentIsError } = flattenToolResultContent(data.content);
+        // Two tool_result parts for the same tool would otherwise share an id.
+        // Use the part index as the disambiguator to keep keyed React render
+        // and message-association lookups stable.
         messages.push(createNormalizedMessage({
-          id: `${toolUseId || baseId}_result`,
+          id: `${toolUseId || baseId}_result_${partIndex}`,
           sessionId,
           timestamp: ts,
           provider: PROVIDER,

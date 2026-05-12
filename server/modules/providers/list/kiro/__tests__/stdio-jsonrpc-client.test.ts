@@ -267,4 +267,44 @@ describe('StdioJsonRpcClient', () => {
     assert.equal(sent.method, 'session/cancel');
     assert.equal('id' in sent, false, 'notification frames must have no id');
   });
+
+  it('continues processing frames when a notification handler throws', async () => {
+    const fake = makeFakeChild();
+    const client = new StdioJsonRpcClient(fake.child);
+
+    let goodCalls = 0;
+    client.onNotification('throws', () => {
+      throw new Error('handler boom');
+    });
+    client.onNotification('survives', () => {
+      goodCalls += 1;
+    });
+
+    // Suppress the expected console.error so it doesn't pollute test output;
+    // we still want to assert the stream itself kept flowing.
+    const originalConsoleError = console.error;
+    const errorCalls: unknown[][] = [];
+    console.error = (...args) => {
+      errorCalls.push(args);
+    };
+
+    try {
+      // Three frames: throwing handler, recoverable handler, then a request
+      // response that proves the dispatch loop wasn't broken.
+      const promise = client.request('after-throw');
+      const sent = JSON.parse(fake.stdinWrites[0].trim());
+
+      fake.emitStdout(`${JSON.stringify({ jsonrpc: '2.0', method: 'throws', params: {} })}\n`);
+      fake.emitStdout(`${JSON.stringify({ jsonrpc: '2.0', method: 'survives', params: {} })}\n`);
+      fake.emitStdout(`${JSON.stringify({ jsonrpc: '2.0', id: sent.id, result: 'still works' })}\n`);
+
+      assert.equal(await promise, 'still works');
+      // Allow the synchronous notification handlers to finish
+      await new Promise((r) => setImmediate(r));
+      assert.equal(goodCalls, 1);
+      assert.ok(errorCalls.length >= 1, 'handler errors should be logged');
+    } finally {
+      console.error = originalConsoleError;
+    }
+  });
 });

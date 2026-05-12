@@ -177,4 +177,66 @@ describe('KiroSessionsProvider.normalizeMessage', () => {
     assert.equal(provider.normalizeMessage('string', 'session-1').length, 0);
     assert.equal(provider.normalizeMessage(42, 'session-1').length, 0);
   });
+
+  it('produces unique ids when an entry has multiple text or tool parts', () => {
+    // Regression: when CodeRabbit flagged this, an AssistantMessage with two
+    // text parts produced two messages with the same `id` (both `${baseId}_text`),
+    // breaking React keyed rendering and message-association lookups.
+    const entry = {
+      version: 'v1',
+      kind: 'AssistantMessage',
+      data: {
+        message_id: 'a-multi',
+        content: [
+          { kind: 'text', data: 'first chunk' },
+          { kind: 'text', data: 'second chunk' },
+          {
+            kind: 'toolUse',
+            data: { toolUseId: 'tu1', name: 'fs_read', input: { path: '/a' } },
+          },
+          {
+            kind: 'toolUse',
+            data: { toolUseId: 'tu2', name: 'fs_read', input: { path: '/b' } },
+          },
+        ],
+      },
+    };
+
+    const messages = provider.normalizeMessage(entry, 'session-1');
+    const ids = messages.map((m) => m.id);
+    assert.equal(messages.length, 4);
+    assert.equal(new Set(ids).size, 4, `all ids must be unique; got: ${ids.join(', ')}`);
+  });
+
+  it('produces unique ids when ToolResults has multiple toolResult parts', () => {
+    const entry = {
+      version: 'v1',
+      kind: 'ToolResults',
+      data: {
+        message_id: 'r-multi',
+        status: 'success',
+        content: [
+          {
+            kind: 'toolResult',
+            data: {
+              toolUseId: 'shared-tool-id',
+              content: [{ kind: 'text', data: 'first result' }],
+            },
+          },
+          {
+            kind: 'toolResult',
+            data: {
+              toolUseId: 'shared-tool-id',
+              content: [{ kind: 'text', data: 'second result' }],
+            },
+          },
+        ],
+      },
+    };
+
+    const messages = provider.normalizeMessage(entry, 'session-1');
+    const ids = messages.map((m) => m.id);
+    assert.equal(messages.length, 2);
+    assert.equal(new Set(ids).size, 2, `tool_result ids must differ even when toolUseId collides; got: ${ids.join(', ')}`);
+  });
 });

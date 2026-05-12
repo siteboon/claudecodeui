@@ -220,16 +220,18 @@ export class StdioJsonRpcClient {
       if (exact) {
         try {
           exact(params);
-        } catch {
-          // Handler errors must not break the JSON-RPC stream.
+        } catch (handlerError) {
+          // Handler errors must not break the JSON-RPC stream — but they ARE
+          // logged so silent regressions don't slip past the stderr console.
+          console.error(`[StdioJsonRpcClient] notification handler for "${method}" threw:`, handlerError);
         }
       }
       for (const [prefix, handler] of this.prefixHandlers) {
         if (method.startsWith(prefix)) {
           try {
             handler(params);
-          } catch {
-            // Same defensive policy as above.
+          } catch (handlerError) {
+            console.error(`[StdioJsonRpcClient] prefix-"${prefix}" handler threw on "${method}":`, handlerError);
           }
         }
       }
