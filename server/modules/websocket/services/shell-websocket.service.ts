@@ -30,7 +30,8 @@ type PtySessionEntry = {
 };
 
 const ptySessionsMap = new Map<string, PtySessionEntry>();
-const PTY_SESSION_TIMEOUT = 240 * 60 * 1000;
+const PTY_SESSION_TIMEOUT = 60 * 60 * 1000;
+const PTY_BUFFER_CAP = 20_000;
 const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
 
 type ShellWebSocketDependencies = {
@@ -219,14 +220,18 @@ export function handleShellConnection(
           );
 
           if (existingSession.buffer.length > 0) {
-            existingSession.buffer.forEach((bufferedData) => {
-              ws.send(
-                JSON.stringify({
-                  type: 'output',
-                  data: bufferedData,
-                })
-              );
-            });
+            const REPLAY_BATCH_SIZE = 500;
+            const bufferedChunks = existingSession.buffer;
+            for (let i = 0; i < bufferedChunks.length; i += REPLAY_BATCH_SIZE) {
+              if (ws.readyState !== WebSocket.OPEN) break;
+              const batch = bufferedChunks.slice(i, i + REPLAY_BATCH_SIZE);
+              for (const chunk of batch) {
+                ws.send(JSON.stringify({ type: 'output', data: chunk }));
+              }
+              if (i + REPLAY_BATCH_SIZE < bufferedChunks.length) {
+                await new Promise((resolve) => setImmediate(resolve));
+              }
+            }
           }
 
           existingSession.ws = ws;
@@ -289,11 +294,9 @@ export function handleShellConnection(
             return;
           }
 
-          if (session.buffer.length < 100000) {
-            session.buffer.push(chunk);
-          } else {
-            session.buffer.shift();
-            session.buffer.push(chunk);
+          session.buffer.push(chunk);
+          if (session.buffer.length > PTY_BUFFER_CAP) {
+            session.buffer = session.buffer.slice(session.buffer.length - PTY_BUFFER_CAP);
           }
 
           if (session.ws && session.ws.readyState === WebSocket.OPEN) {

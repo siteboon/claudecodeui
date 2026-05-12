@@ -105,8 +105,10 @@ export const useFileTreeUpload = ({
   const [operationLoading, setOperationLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const treeRef = useRef<HTMLDivElement>(null);
+  const isUploadingRef = useRef(false);
 
   const performUpload = useCallback(async (files: File[], targetPath: string) => {
+    if (isUploadingRef.current) return;
     if (files.length === 0) {
       return;
     }
@@ -116,6 +118,7 @@ export const useFileTreeUpload = ({
       return;
     }
 
+    isUploadingRef.current = true;
     setOperationLoading(true);
     setUploadProgress(0);
 
@@ -156,6 +159,7 @@ export const useFileTreeUpload = ({
       console.error('Upload error:', err);
       showToast(err instanceof Error ? err.message : 'Upload failed', 'error');
     } finally {
+      isUploadingRef.current = false;
       setOperationLoading(false);
       setUploadProgress(0);
       setDropTarget(null);
