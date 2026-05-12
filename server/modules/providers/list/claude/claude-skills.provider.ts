@@ -2,9 +2,8 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import matter from 'gray-matter';
-
 import { SkillsProvider } from '@/modules/providers/shared/skills/skills.provider.js';
+import { parseFrontMatter } from '@/shared/frontmatter.js';
 import type {
   ProviderSkill,
   ProviderSkillListOptions,
@@ -216,7 +215,7 @@ export class ClaudeSkillsProvider extends SkillsProvider {
     commandPath: string,
   ): Promise<{ name: string; description: string }> {
     const content = await readFile(commandPath, 'utf8');
-    const parsed = matter(content);
+    const parsed = parseFrontMatter(content);
     const data = readObjectRecord(parsed.data) ?? {};
 
     return {

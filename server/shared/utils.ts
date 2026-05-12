@@ -15,9 +15,9 @@ import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
 
-import matter from 'gray-matter';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 
+import { parseFrontMatter } from '@/shared/frontmatter.js';
 import type {
   AnyRecord,
   ApiSuccessShape,
@@ -587,7 +587,7 @@ export async function readProviderSkillMarkdownDefinition(
   skillPath: string,
 ): Promise<{ name: string; description: string }> {
   const content = await readFile(skillPath, 'utf8');
-  const parsed = matter(content);
+  const parsed = parseFrontMatter(content);
   const data = readObjectRecord(parsed.data) ?? {};
   const fallbackName = path.basename(path.dirname(skillPath));
 
