@@ -51,6 +51,7 @@ export default function Shell({
   const {
     terminalContainerRef,
     terminalRef,
+    fitAddonRef,
     wsRef,
     isConnected,
     isInitialized,
@@ -159,18 +160,17 @@ export default function Shell({
       return;
     }
 
-    const focusTerminal = () => {
+    // Re-fit terminal when tab becomes visible, since xterm.js loses
+    // dimension info while the container is hidden via display:none.
+    const id = window.setTimeout(() => {
+      fitAddonRef.current?.fit();
       terminalRef.current?.focus();
-    };
-
-    const animationFrameId = window.requestAnimationFrame(focusTerminal);
-    const timeoutId = window.setTimeout(focusTerminal, 0);
+    }, 50);
 
     return () => {
-      window.cancelAnimationFrame(animationFrameId);
-      window.clearTimeout(timeoutId);
+      window.clearTimeout(id);
     };
-  }, [isActive, isConnected, isInitialized, terminalRef]);
+  }, [isActive, isConnected, isInitialized, terminalRef, fitAddonRef]);
 
   const sendInput = useCallback(
     (data: string) => {

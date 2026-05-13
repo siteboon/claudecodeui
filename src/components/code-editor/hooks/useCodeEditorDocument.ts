@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../../utils/api';
 import type { CodeEditorFile } from '../types/types';
-import { isBinaryFile } from '../utils/binaryFile';
+import { getFileCategory, type FileCategory } from '../utils/binaryFile';
 
 type UseCodeEditorDocumentParams = {
   file: CodeEditorFile;
@@ -22,7 +22,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [isBinary, setIsBinary] = useState(false);
+  const [fileCategory, setFileCategory] = useState<FileCategory>('text');
   // `fileProjectId` is the DB primary key passed down from the editor sidebar;
   // the fallback to `projectPath` preserves older callers that didn't yet
   // propagate the identifier.
@@ -36,11 +36,13 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     const loadFileContent = async () => {
       try {
         setLoading(true);
-        setIsBinary(false);
+        setFileCategory('text');
 
-        // Check if file is binary by extension
-        if (isBinaryFile(file.name)) {
-          setIsBinary(true);
+        // Check file category by extension — previewable types (image/pdf)
+        // are handled by dedicated viewer components in CodeEditor.
+        const category = getFileCategory(file.name);
+        if (category !== 'text') {
+          setFileCategory(category);
           setLoading(false);
           return;
         }
@@ -133,7 +135,8 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     saving,
     saveSuccess,
     saveError,
-    isBinary,
+    fileCategory,
+    isBinary: fileCategory === 'binary',
     handleSave,
     handleDownload,
   };

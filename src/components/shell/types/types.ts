@@ -63,6 +63,7 @@ export type ShellSharedRefs = {
 export type UseShellRuntimeResult = {
   terminalContainerRef: RefObject<HTMLDivElement>;
   terminalRef: MutableRefObject<Terminal | null>;
+  fitAddonRef: MutableRefObject<FitAddon | null>;
   wsRef: MutableRefObject<WebSocket | null>;
   isConnected: boolean;
   isInitialized: boolean;
