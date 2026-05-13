@@ -853,6 +853,11 @@ async function queryClaudeStream(command, options = {}, ws) {
     // session still alive but no idle reaper armed — and it would sit until
     // the next prompt or an explicit abort. Re-arm if the session is still
     // live and not in-flight.
+    //
+    // Bare options.sessionId is sufficient: the only path that disarms the
+    // timer pre-throw is the reuse branch, which requires options.sessionId
+    // to be non-null. New-session spawns never disarm before this catch, so
+    // a null options.sessionId here means there's nothing to re-arm.
     if (options.sessionId) {
       const live = activeStreamSessions.get(options.sessionId);
       if (live && isSessionProcessAlive(live) && !live.inFlight) armIdleTimer(live);
@@ -992,12 +997,12 @@ async function getMcpServersSig(cwd) {
   const inFlight = mcpSigInFlight.get(key);
   if (inFlight) return inFlight;
   // Use a deferred so the in-flight registration happens BEFORE the worker
-  // body starts. Async functions run synchronously up to their first await
-  // and finally clauses are microtasks (so the IIFE-then-set ordering is
-  // safe today), but registering first removes the dependency on that
-  // ordering if loadMcpConfig is ever swapped for a sync-resolving variant.
-  let resolveSig;
-  let rejectSig;
+  // body starts. Removes the set-vs-finally ordering dependency — the IIFE
+  // body still relies on async-function try/catch microtask semantics to
+  // surface errors via rejectSig, but `mcpSigInFlight.set` no longer races
+  // a hypothetical sync-resolving loadMcpConfig.
+  let resolveSig = (_value) => {};
+  let rejectSig = (_err) => {};
   const promise = new Promise((resolve, reject) => {
     resolveSig = resolve;
     rejectSig = reject;
@@ -1006,6 +1011,11 @@ async function getMcpServersSig(cwd) {
   (async () => {
     try {
       const sig = canonicalizeForCompare(await loadMcpConfig(cwd));
+      // Refresh the cache entry's insertion position so the FIFO eviction
+      // loop below evicts cold keys first. Without delete-then-set a hot
+      // key inserted early would be evicted before colder keys inserted
+      // later when the cap kicks in.
+      mcpSigCache.delete(key);
       mcpSigCache.set(key, { sig, ts: Date.now() });
       while (mcpSigCache.size > MAX_MCP_SIG_CACHE_ENTRIES) {
         const oldest = mcpSigCache.keys().next().value;
