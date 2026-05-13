@@ -100,16 +100,24 @@ function buildCliArgs({ sessionId, model, permissionMode, mcpServers, additional
 
   args.push('--model', model || CLAUDE_MODELS.DEFAULT);
 
-  // Permission mode mapping. Stream path doesn't yet route UI approval
-  // prompts, so `default` would block waiting for an approval that never
-  // comes — keep --dangerously-skip-permissions as the MVP fallback for it.
+  // Permission mode mapping. Stream path doesn't route UI approval prompts,
+  // so `default` would block waiting for an approval that never comes.
+  // Fail closed: callers must pick an explicit non-default mode, or operators
+  // must opt in to the dangerous fallback via CLAUDE_STREAM_ALLOW_DANGEROUS=1.
   // Other modes (`auto`, `acceptEdits`, `bypassPermissions`, `plan`) are
   // handled natively by the CLI without callbacks into our process.
   if (permissionMode && permissionMode !== 'default') {
     args.push('--permission-mode', permissionMode);
   } else {
-    console.warn('[claude-stream] permissionMode=default downgraded to --dangerously-skip-permissions; UI approval prompts are not routed through this path.');
-    args.push('--dangerously-skip-permissions');
+    const allowDangerous = process.env.CLAUDE_STREAM_ALLOW_DANGEROUS;
+    if (allowDangerous === '1' || allowDangerous === 'true') {
+      console.warn('[claude-stream] permissionMode=default and CLAUDE_STREAM_ALLOW_DANGEROUS set — running with --dangerously-skip-permissions; UI approval prompts are not routed through this path.');
+      args.push('--dangerously-skip-permissions');
+    } else {
+      throw new Error(
+        'claude-stream does not support permissionMode=default. Pass an explicit mode (auto, acceptEdits, bypassPermissions, plan) or set CLAUDE_STREAM_ALLOW_DANGEROUS=1 to opt in to --dangerously-skip-permissions.'
+      );
+    }
   }
 
   if (mcpServers && Object.keys(mcpServers).length > 0) {
