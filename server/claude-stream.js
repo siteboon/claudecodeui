@@ -18,6 +18,7 @@
 import { spawn } from 'child_process';
 import crossSpawn from 'cross-spawn';
 import crypto from 'crypto';
+import path from 'path';
 import { CLAUDE_MODELS } from '../shared/modelConstants.js';
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { createNormalizedMessage } from './shared/utils.js';
@@ -237,14 +238,11 @@ function handleEvent(session, event) {
       }
     }
 
-    // Record session owner so a future cold `--resume` for this id can be
-    // refused when a different user tries to rehydrate the conversation.
-    // Must run on every system/init event, not just the first one: on the
-    // `--resume` path session.sessionId is pre-seeded, so gating this on
-    // !session.sessionId would leave the persisted owner unset and let a
-    // different user cold-resume the conversation once the live process
-    // exits.
-    rememberSessionOwner(realId, session.writer?.userId ?? null);
+    // Runs on every system/init incl. --resume (gating on !sessionId left
+    // resumed sessions unowned and rehydratable by another user).
+    if (isFirstSeen || event.type === 'system') {
+      rememberSessionOwner(realId, session.writer?.userId ?? null);
+    }
   }
 
   const sid = session.sessionId;
@@ -747,15 +745,16 @@ async function queryClaudeStream(command, options = {}, ws) {
           cwd: cwd || process.cwd(),
           // Snapshot of CLI-affecting options the process was spawned with.
           // Used by the reuse branch to refuse a subsequent claude-command
-          // request whose model/permissionMode/cwd/additionalDirs differ from
-          // the live process — the long-lived CLI cannot change these mid-run,
-          // so silently honoring the new values would answer with the wrong
-          // model or run tools in the wrong cwd.
+          // request whose options differ from the live process — the long-
+          // lived CLI cannot change them mid-run, so silently honoring the
+          // new values would answer with the wrong model, run tools in the
+          // wrong cwd, or expose tools from a stale MCP server set.
           config: {
             model: model || CLAUDE_MODELS.DEFAULT,
             permissionMode: permissionMode || 'default',
-            cwd: cwd || process.cwd(),
-            additionalDirs: Array.isArray(additionalDirs) ? [...additionalDirs] : [],
+            cwd: path.resolve(cwd || process.cwd()),
+            additionalDirs: Array.isArray(additionalDirs) ? additionalDirs.map(d => path.resolve(d)) : [],
+            mcpServersSig: canonicalizeForCompare(mcpServers),
           },
           // Temp files are owned per-prompt (on queue entries + currentPromptTemps),
           // never on the session itself, so queued prompts don't have their
@@ -805,7 +804,7 @@ async function queryClaudeStream(command, options = {}, ws) {
       // different model would route the prompt to the wrong model; a new
       // cwd would run tools in the wrong directory. Refuse the reuse so
       // the caller can either restart the session or downgrade the request.
-      const mismatch = findSessionConfigMismatch(session, { model, permissionMode, cwd, additionalDirs });
+      const mismatch = await findSessionConfigMismatch(session, { model, permissionMode, cwd, additionalDirs });
       if (mismatch) {
         console.warn(`[claude-stream] reuse rejected: ${mismatch} changed for session ${sessionId}`);
         cleanupUntakenTemps();
@@ -920,19 +919,34 @@ function pendingSpawnBelongsTo(pending, userId) {
 }
 
 /**
+ * Order-stable JSON serializer for structural comparison. Sorts object keys
+ * recursively so two equivalent mcpServers trees with different key insertion
+ * orders produce the same string and don't trigger a spurious reuse refusal.
+ */
+function canonicalizeForCompare(value) {
+  if (value === null || value === undefined) return 'null';
+  if (typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return '[' + value.map(canonicalizeForCompare).join(',') + ']';
+  const keys = Object.keys(value).sort();
+  return '{' + keys.map(k => JSON.stringify(k) + ':' + canonicalizeForCompare(value[k])).join(',') + '}';
+}
+
+/**
  * Compare a new request's execution settings against the live session's
  * spawn config. Returns the first mismatching field name, or null when the
  * request is compatible with the running process. additionalDirs is order-
  * sensitive (the CLI receives `--add-dir` once per entry, in order).
+ * cwd/additionalDirs are normalized via path.resolve to avoid spurious
+ * mismatches between `/foo` and `/foo/`.
  */
-function findSessionConfigMismatch(session, opts) {
+async function findSessionConfigMismatch(session, opts) {
   const cfg = session?.config;
   if (!cfg) return null;  // legacy session record without config snapshot
   const requested = {
     model: opts.model || CLAUDE_MODELS.DEFAULT,
     permissionMode: opts.permissionMode || 'default',
-    cwd: opts.cwd || process.cwd(),
-    additionalDirs: Array.isArray(opts.additionalDirs) ? opts.additionalDirs : [],
+    cwd: path.resolve(opts.cwd || process.cwd()),
+    additionalDirs: Array.isArray(opts.additionalDirs) ? opts.additionalDirs.map(d => path.resolve(d)) : [],
   };
   if (cfg.model !== requested.model) return 'model';
   if (cfg.permissionMode !== requested.permissionMode) return 'permissionMode';
@@ -943,6 +957,12 @@ function findSessionConfigMismatch(session, opts) {
   for (let i = 0; i < a.length; i++) {
     if (a[i] !== b[i]) return 'additionalDirs';
   }
+  // MCP server set is resolved from disk (~/.claude.json) at spawn time and
+  // baked into argv via --mcp-config. Re-reading on reuse closes a hole
+  // where editing the config between requests would silently keep the stale
+  // tool set live for the long-lived process.
+  const requestedMcpSig = canonicalizeForCompare(await loadMcpConfig(opts.cwd));
+  if (cfg.mcpServersSig !== requestedMcpSig) return 'mcpServers';
   return null;
 }
 

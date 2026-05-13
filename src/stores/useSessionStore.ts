@@ -316,16 +316,13 @@ function reconcileRealtimeAgainstServer(slot: SessionSlot): void {
   // Otherwise an assistant who legitimately produces an identical short
   // reply twice could see the second placeholder match the first canonical
   // copy from earlier in the history — making the newer reply disappear
-  // until a later refresh.
+  // until a later refresh. 30 min covers slow tool-use placeholders that
+  // sit in flight while the user idles between send and canonical landing.
   const MATCH_WINDOW = 50;
-  const MATCH_LOOKBACK_MS = 5 * 60 * 1000;
+  const MATCH_LOOKBACK_MS = 30 * 60 * 1000;
   const windowStart = Math.max(0, slot.serverMessages.length - MATCH_WINDOW);
 
-  const parseTs = (value: string | undefined): number => {
-    if (!value) return Number.NaN;
-    const t = Date.parse(value);
-    return Number.isNaN(t) ? Number.NaN : t;
-  };
+  const parseTs = (value: string | undefined): number => Date.parse(value || '');
 
   const consumedServerIds = new Set<string>();
   const takeCanonicalMatch = (m: NormalizedMessage): boolean => {
