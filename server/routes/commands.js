@@ -4,7 +4,7 @@ import path from 'path';
 
 import express from 'express';
 
-import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants.js';
+import { providerModelsService } from '../modules/providers/services/provider-models.service.js';
 import { parseFrontMatter } from '../shared/frontmatter.js';
 import { findAppRoot, getModuleDir } from '../utils/runtime-paths.js';
 
@@ -187,15 +187,31 @@ Custom commands can be created in:
   },
 
   '/model': async (args, context) => {
-    // Read available models from centralized constants
+    const [claude, cursor, codex, gemini, opencode] = await Promise.all([
+      providerModelsService.getProviderModels('claude'),
+      providerModelsService.getProviderModels('cursor'),
+      providerModelsService.getProviderModels('codex'),
+      providerModelsService.getProviderModels('gemini'),
+      providerModelsService.getProviderModels('opencode'),
+    ]);
+
     const availableModels = {
-      claude: CLAUDE_MODELS.OPTIONS.map(o => o.value),
-      cursor: CURSOR_MODELS.OPTIONS.map(o => o.value),
-      codex: CODEX_MODELS.OPTIONS.map(o => o.value)
+      claude: claude.OPTIONS.map(o => o.value),
+      cursor: cursor.OPTIONS.map(o => o.value),
+      codex: codex.OPTIONS.map(o => o.value),
+      gemini: gemini.OPTIONS.map(o => o.value),
+      opencode: opencode.OPTIONS.map(o => o.value),
     };
 
     const currentProvider = context?.provider || 'claude';
-    const currentModel = context?.model || CLAUDE_MODELS.DEFAULT;
+    const defaults = {
+      claude: claude.DEFAULT,
+      cursor: cursor.DEFAULT,
+      codex: codex.DEFAULT,
+      gemini: gemini.DEFAULT,
+      opencode: opencode.DEFAULT,
+    };
+    const currentModel = context?.model || defaults[currentProvider] || claude.DEFAULT;
 
     return {
       type: 'builtin',
@@ -216,13 +232,10 @@ Custom commands can be created in:
   '/cost': async (args, context) => {
     const tokenUsage = context?.tokenUsage || {};
     const provider = context?.provider || 'claude';
+    const catalog = await providerModelsService.getProviderModels(provider);
     const model =
       context?.model ||
-      (provider === 'cursor'
-        ? CURSOR_MODELS.DEFAULT
-        : provider === 'codex'
-          ? CODEX_MODELS.DEFAULT
-          : CLAUDE_MODELS.DEFAULT);
+      catalog.DEFAULT;
 
     const used = Number(tokenUsage.used ?? tokenUsage.totalUsed ?? tokenUsage.total_tokens ?? 0) || 0;
     const total =
@@ -314,6 +327,9 @@ Custom commands can be created in:
       ? `${uptimeHours}h ${uptimeMinutes % 60}m`
       : `${uptimeMinutes}m`;
 
+    const statusProvider = context?.provider || 'claude';
+    const statusCatalog = await providerModelsService.getProviderModels(statusProvider);
+
     return {
       type: 'builtin',
       action: 'status',
@@ -322,8 +338,8 @@ Custom commands can be created in:
         packageName,
         uptime: uptimeFormatted,
         uptimeSeconds: Math.floor(uptime),
-        model: context?.model || CLAUDE_MODELS.DEFAULT,
-        provider: context?.provider || 'claude',
+        model: context?.model || statusCatalog.DEFAULT,
+        provider: statusProvider,
         nodeVersion: process.version,
         platform: process.platform
       }

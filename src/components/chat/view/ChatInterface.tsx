@@ -72,12 +72,17 @@ function ChatInterface({
     setCodexModel,
     geminiModel,
     setGeminiModel,
+    opencodeModel,
+    setOpenCodeModel,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
     cyclePermissionMode,
+    providerModelCatalog,
+    providerModelsLoading,
   } = useChatProviderState({
     selectedSession,
+    selectedProject,
   });
 
   const {
@@ -182,6 +187,7 @@ function ChatInterface({
     claudeModel,
     codexModel,
     geminiModel,
+    opencodeModel,
     isLoading,
     canAbortSession,
     tokenBudget,
@@ -280,6 +286,8 @@ function ChatInterface({
           ? t('messageTypes.codex')
           : provider === 'gemini'
             ? t('messageTypes.gemini')
+            : provider === 'opencode'
+              ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
             : t('messageTypes.claude');
 
     return (
@@ -318,6 +326,10 @@ function ChatInterface({
           setCodexModel={setCodexModel}
           geminiModel={geminiModel}
           setGeminiModel={setGeminiModel}
+          opencodeModel={opencodeModel}
+          setOpenCodeModel={setOpenCodeModel}
+          providerModelCatalog={providerModelCatalog}
+          providerModelsLoading={providerModelsLoading}
           tasksEnabled={tasksEnabled}
           isTaskMasterInstalled={isTaskMasterInstalled}
           onShowAllTasks={onShowAllTasks}
@@ -406,6 +418,8 @@ function ChatInterface({
                   ? t('messageTypes.codex')
                   : provider === 'gemini'
                     ? t('messageTypes.gemini')
+                    : provider === 'opencode'
+                      ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
                     : t('messageTypes.claude'),
           })}
           isTextareaExpanded={isTextareaExpanded}

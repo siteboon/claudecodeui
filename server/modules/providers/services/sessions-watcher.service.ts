@@ -34,6 +34,10 @@ const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> =
     provider: 'gemini',
     rootPath: path.join(os.homedir(), '.gemini', 'tmp'),
   },
+  {
+    provider: 'opencode',
+    rootPath: path.join(os.homedir(), '.local', 'share', 'opencode'),
+  },
 ];
 
 const WATCHER_IGNORED_PATTERNS = [
@@ -67,6 +71,10 @@ let watcherRescheduleAfterRefresh = false;
  * Filters watcher events to provider-specific session artifact file types.
  */
 function isWatcherTargetFile(provider: LLMProvider, filePath: string): boolean {
+  if (provider === 'opencode') {
+    return path.basename(filePath) === 'opencode.db';
+  }
+
   if (provider === 'gemini') {
     return filePath.endsWith('.json') || filePath.endsWith('.jsonl');
   }

@@ -65,7 +65,23 @@ export type AuthenticatedWebSocketRequest = IncomingMessage & {
  * Use this as the source of truth whenever a function or payload needs to identify
  * a specific LLM integration.
  */
-export type LLMProvider = 'claude' | 'codex' | 'gemini' | 'cursor';
+export type LLMProvider = 'claude' | 'codex' | 'gemini' | 'cursor' | 'opencode';
+
+/**
+ * One selectable model row (matches legacy `shared/modelConstants.js` option shape).
+ */
+export type ProviderModelOption = {
+  value: string;
+  label: string;
+};
+
+/**
+ * Provider model catalog returned by `GET /api/providers/:provider/models`.
+ */
+export type ProviderModelsDefinition = {
+  OPTIONS: ProviderModelOption[];
+  DEFAULT: string;
+};
 
 /**
  * Message/event variants emitted by provider adapters and normalized transports.

@@ -2,6 +2,7 @@ import express, { type Request, type Response } from 'express';
 
 import { providerAuthService } from '@/modules/providers/services/provider-auth.service.js';
 import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
+import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
 import { providerSkillsService } from '@/modules/providers/services/skills.service.js';
 import { sessionConversationsSearchService } from '@/modules/providers/services/session-conversations-search.service.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
@@ -173,7 +174,13 @@ const parseMcpUpsertPayload = (payload: unknown): UpsertProviderMcpServerInput =
 
 const parseProvider = (value: unknown): LLMProvider => {
   const normalized = normalizeProviderParam(value);
-  if (normalized === 'claude' || normalized === 'codex' || normalized === 'cursor' || normalized === 'gemini') {
+  if (
+    normalized === 'claude'
+    || normalized === 'codex'
+    || normalized === 'cursor'
+    || normalized === 'gemini'
+    || normalized === 'opencode'
+  ) {
     return normalized;
   }
 
@@ -245,6 +252,17 @@ router.get(
     const provider = parseProvider(req.params.provider);
     const status = await providerAuthService.getProviderAuthStatus(provider);
     res.json(createApiSuccessResponse(status));
+  }),
+);
+
+router.get(
+  '/:provider/models',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const workspacePath = readOptionalQueryString(req.query.workspacePath);
+    const cwd = workspacePath;
+    const models = await providerModelsService.getProviderModels(provider, { cwd });
+    res.json(createApiSuccessResponse({ provider, models }));
   }),
 );
 

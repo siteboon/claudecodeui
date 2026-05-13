@@ -23,6 +23,7 @@ import type {
   ApiSuccessShape,
   AppErrorOptions,
   NormalizedMessage,
+  ProviderSkillSource,
   WorkspacePathValidationResult,
 } from '@/shared/types.js';
 
@@ -506,6 +507,67 @@ export const writeJsonConfig = async (filePath: string, data: Record<string, unk
 
 // ---------------------------
 //----------------- PROVIDER SKILL FILE UTILITIES ------------
+async function hasGitMarker(dirPath: string): Promise<boolean> {
+  try {
+    const gitMarkerStats = await stat(path.join(dirPath, '.git'));
+    return gitMarkerStats.isDirectory() || gitMarkerStats.isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Finds the highest git worktree root visible from a starting directory.
+ *
+ * Provider skill systems such as Codex and OpenCode walk upward through parent
+ * folders when resolving repository/project skills. Use this helper when a
+ * provider needs the topmost `.git` marker instead of only the nearest one, so
+ * monorepos and nested package folders discover shared root-level skills once.
+ */
+export async function findTopmostGitRoot(startPath: string): Promise<string | null> {
+  let currentPath = path.resolve(startPath);
+  let topmostGitRoot: string | null = null;
+
+  while (true) {
+    if (await hasGitMarker(currentPath)) {
+      topmostGitRoot = currentPath;
+    }
+
+    const parentPath = path.dirname(currentPath);
+    if (parentPath === currentPath) {
+      break;
+    }
+
+    currentPath = parentPath;
+  }
+
+  return topmostGitRoot;
+}
+
+/**
+ * Adds one provider skill source after normalizing and de-duplicating its root.
+ *
+ * Provider skill lookup rules often point at overlapping folders (for example a
+ * workspace folder can also be the git root). Use this helper while building a
+ * provider's `ProviderSkillSource[]` so the shared skills scanner reads each
+ * physical root once and still preserves provider-specific scope/command data.
+ */
+export function addUniqueProviderSkillSource(
+  sources: ProviderSkillSource[],
+  seenRootDirs: Set<string>,
+  source: ProviderSkillSource,
+): void {
+  const normalizedRootDir = path.resolve(source.rootDir);
+  if (seenRootDirs.has(normalizedRootDir)) {
+    return;
+  }
+
+  seenRootDirs.add(normalizedRootDir);
+  sources.push({ ...source, rootDir: normalizedRootDir });
+}
+
+// ---------------------------
+//----------------- PROVIDER SKILL MARKDOWN UTILITIES ------------
 /**
  * Finds direct child skill markdown files under a provider skill root.
  *
@@ -614,6 +676,70 @@ export function normalizeSessionName(rawValue: string | undefined, fallback: str
   }
 
   return normalized.slice(0, 120);
+}
+
+// ---------------------------
+//----------------- PROVIDER SESSION VALUE NORMALIZATION UTILITIES ------------
+/**
+ * Converts provider-native timestamps into ISO strings.
+ *
+ * Provider CLIs commonly persist epoch timestamps as milliseconds, seconds, or
+ * already-formatted date strings. Use this helper when normalizing session
+ * metadata or transcript events so every provider writes the same ISO timestamp
+ * shape to API responses and database rows.
+ */
+export function normalizeProviderTimestamp(value: unknown): string {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    const millis = value < 1_000_000_000_000 ? value * 1000 : value;
+    return new Date(millis).toISOString();
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return normalizeProviderTimestamp(parsed);
+    }
+
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) {
+      return date.toISOString();
+    }
+  }
+
+  return new Date().toISOString();
+}
+
+/**
+ * Parses a JSON string or narrows an existing object into a plain record.
+ *
+ * Use this when provider databases store structured JSON inside text columns.
+ * Invalid JSON, arrays, and primitive values return `null` so callers can skip
+ * malformed optional metadata without hiding the rest of a session transcript.
+ */
+export function readJsonRecord(value: unknown): AnyRecord | null {
+  if (typeof value !== 'string') {
+    return readObjectRecord(value);
+  }
+
+  try {
+    return readObjectRecord(JSON.parse(value));
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------
+//----------------- OPENCODE SESSION STORAGE UTILITIES ------------
+/**
+ * Resolves the OpenCode SQLite session database path.
+ *
+ * OpenCode stores session, message, part, and project metadata in one shared
+ * `opencode.db` file under its XDG data directory. Provider readers and
+ * synchronizers should use this path for read-only access and should never store
+ * it as a deletable transcript path for an individual app session row.
+ */
+export function getOpenCodeDatabasePath(): string {
+  return path.join(os.homedir(), '.local', 'share', 'opencode', 'opencode.db');
 }
 
 // ---------------------------

@@ -2,7 +2,7 @@ import express from 'express';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
-import { CURSOR_MODELS } from '../../shared/modelConstants.js';
+import { CURSOR_MODELS } from '../modules/providers/services/provider-models.service.js';
 
 const router = express.Router();
 

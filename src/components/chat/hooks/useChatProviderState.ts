@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { authenticatedFetch } from '../../../utils/api';
-import { CLAUDE_MODELS, CODEX_MODELS, CURSOR_MODELS, GEMINI_MODELS } from '../../../../shared/modelConstants';
 import type { PendingPermissionRequest, PermissionMode } from '../types/types';
-import type { ProjectSession, LLMProvider } from '../../../types/app';
+import type { ProjectSession, LLMProvider, Project, ProviderModelsDefinition } from '../../../types/app';
+
+const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
+  claude: 'opus',
+  cursor: 'gpt-5.3-codex',
+  codex: 'gpt-5.4',
+  gemini: 'gemini-3.1-pro-preview',
+  opencode: 'anthropic/claude-sonnet-4-5',
+};
 
 const getPermissionModesForProvider = (provider: LLMProvider): PermissionMode[] => {
   if (provider === 'codex') {
@@ -11,33 +18,179 @@ const getPermissionModesForProvider = (provider: LLMProvider): PermissionMode[] 
   if (provider === 'claude') {
     return ['default', 'auto', 'acceptEdits', 'bypassPermissions', 'plan'];
   }
+  if (provider === 'opencode') {
+    return ['default'];
+  }
   return ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
 };
 
 interface UseChatProviderStateArgs {
   selectedSession: ProjectSession | null;
+  selectedProject: Project | null;
 }
 
-export function useChatProviderState({ selectedSession }: UseChatProviderStateArgs) {
+export function useChatProviderState({ selectedSession, selectedProject }: UseChatProviderStateArgs) {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('default');
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<PendingPermissionRequest[]>([]);
   const [provider, setProvider] = useState<LLMProvider>(() => {
     return (localStorage.getItem('selected-provider') as LLMProvider) || 'claude';
   });
   const [cursorModel, setCursorModel] = useState<string>(() => {
-    return localStorage.getItem('cursor-model') || CURSOR_MODELS.DEFAULT;
+    return localStorage.getItem('cursor-model') || FALLBACK_DEFAULT_MODEL.cursor;
   });
   const [claudeModel, setClaudeModel] = useState<string>(() => {
-    return localStorage.getItem('claude-model') || CLAUDE_MODELS.DEFAULT;
+    return localStorage.getItem('claude-model') || FALLBACK_DEFAULT_MODEL.claude;
   });
   const [codexModel, setCodexModel] = useState<string>(() => {
-    return localStorage.getItem('codex-model') || CODEX_MODELS.DEFAULT;
+    return localStorage.getItem('codex-model') || FALLBACK_DEFAULT_MODEL.codex;
   });
   const [geminiModel, setGeminiModel] = useState<string>(() => {
-    return localStorage.getItem('gemini-model') || GEMINI_MODELS.DEFAULT;
+    return localStorage.getItem('gemini-model') || FALLBACK_DEFAULT_MODEL.gemini;
+  });
+  const [opencodeModel, setOpenCodeModel] = useState<string>(() => {
+    return localStorage.getItem('opencode-model') || FALLBACK_DEFAULT_MODEL.opencode;
   });
 
+  const [providerModelCatalog, setProviderModelCatalog] = useState<
+    Partial<Record<LLMProvider, ProviderModelsDefinition>>
+  >({});
+  const [providerModelsLoading, setProviderModelsLoading] = useState(true);
+
   const lastProviderRef = useRef(provider);
+
+  const workspacePath = selectedProject?.fullPath || selectedProject?.path || '';
+
+  useEffect(() => {
+    let cancelled = false;
+    const providers: LLMProvider[] = ['claude', 'cursor', 'codex', 'gemini', 'opencode'];
+
+    const load = async () => {
+      setProviderModelsLoading(true);
+      try {
+        const results = await Promise.all(
+          providers.map(async (p) => {
+            const qs =
+              p === 'opencode' && workspacePath
+                ? `?workspacePath=${encodeURIComponent(workspacePath)}`
+                : '';
+            const response = await authenticatedFetch(`/api/providers/${p}/models${qs}`);
+            const body = (await response.json()) as {
+              success?: boolean;
+              data?: { models?: ProviderModelsDefinition };
+            };
+            if (!body.success || !body.data?.models) {
+              return null;
+            }
+            return body.data.models;
+          }),
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        const next: Partial<Record<LLMProvider, ProviderModelsDefinition>> = {};
+        providers.forEach((p, i) => {
+          const entry = results[i];
+          if (entry) {
+            next[p] = entry;
+          }
+        });
+        setProviderModelCatalog(next);
+      } catch (error) {
+        console.error('Error loading provider models:', error);
+      } finally {
+        if (!cancelled) {
+          setProviderModelsLoading(false);
+        }
+      }
+    };
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [workspacePath]);
+
+  const pickStoredOrCurrent = (
+    storageKey: string,
+    current: string,
+    def: ProviderModelsDefinition,
+  ): string => {
+    const stored = localStorage.getItem(storageKey);
+    if (stored && def.OPTIONS.some((o) => o.value === stored)) {
+      return stored;
+    }
+    if (current && def.OPTIONS.some((o) => o.value === current)) {
+      return current;
+    }
+    return def.DEFAULT;
+  };
+
+  useEffect(() => {
+    const claude = providerModelCatalog.claude;
+    if (claude) {
+      const next = pickStoredOrCurrent('claude-model', claudeModel, claude);
+      if (next !== claudeModel) {
+        setClaudeModel(next);
+      }
+      if (localStorage.getItem('claude-model') !== next) {
+        localStorage.setItem('claude-model', next);
+      }
+    }
+  }, [providerModelCatalog.claude, claudeModel]);
+
+  useEffect(() => {
+    const cursor = providerModelCatalog.cursor;
+    if (cursor) {
+      const next = pickStoredOrCurrent('cursor-model', cursorModel, cursor);
+      if (next !== cursorModel) {
+        setCursorModel(next);
+      }
+      if (localStorage.getItem('cursor-model') !== next) {
+        localStorage.setItem('cursor-model', next);
+      }
+    }
+  }, [providerModelCatalog.cursor, cursorModel]);
+
+  useEffect(() => {
+    const codex = providerModelCatalog.codex;
+    if (codex) {
+      const next = pickStoredOrCurrent('codex-model', codexModel, codex);
+      if (next !== codexModel) {
+        setCodexModel(next);
+      }
+      if (localStorage.getItem('codex-model') !== next) {
+        localStorage.setItem('codex-model', next);
+      }
+    }
+  }, [providerModelCatalog.codex, codexModel]);
+
+  useEffect(() => {
+    const gemini = providerModelCatalog.gemini;
+    if (gemini) {
+      const next = pickStoredOrCurrent('gemini-model', geminiModel, gemini);
+      if (next !== geminiModel) {
+        setGeminiModel(next);
+      }
+      if (localStorage.getItem('gemini-model') !== next) {
+        localStorage.setItem('gemini-model', next);
+      }
+    }
+  }, [providerModelCatalog.gemini, geminiModel]);
+
+  useEffect(() => {
+    const opencode = providerModelCatalog.opencode;
+    if (opencode) {
+      const next = pickStoredOrCurrent('opencode-model', opencodeModel, opencode);
+      if (next !== opencodeModel) {
+        setOpenCodeModel(next);
+      }
+      if (localStorage.getItem('opencode-model') !== next) {
+        localStorage.setItem('opencode-model', next);
+      }
+    }
+  }, [providerModelCatalog.opencode, opencodeModel]);
 
   useEffect(() => {
     if (!selectedSession?.id) {
@@ -118,10 +271,14 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
     setCodexModel,
     geminiModel,
     setGeminiModel,
+    opencodeModel,
+    setOpenCodeModel,
     permissionMode,
     setPermissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
     cyclePermissionMode,
+    providerModelCatalog,
+    providerModelsLoading,
   };
 }

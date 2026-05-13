@@ -17,7 +17,7 @@ import crypto from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
-import { CLAUDE_MODELS } from '../shared/modelConstants.js';
+import { CLAUDE_MODELS } from './modules/providers/services/provider-models.service.js';
 import { resolveClaudeCodeExecutablePath } from './shared/claude-cli-path.js';
 import {
   createNotificationEvent,

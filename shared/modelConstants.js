@@ -97,6 +97,27 @@ export const GEMINI_MODELS = {
 };
 
 /**
+ * OpenCode Models
+ *
+ * OpenCode model ids include the upstream provider prefix. Users can still type
+ * any OpenCode-supported model in the selector when their config enables it.
+ */
+export const OPENCODE_MODELS = {
+  OPTIONS: [
+    { value: "anthropic/claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
+    { value: "anthropic/claude-opus-4-1", label: "Claude Opus 4.1" },
+    { value: "anthropic/claude-haiku-4-5", label: "Claude Haiku 4.5"},
+    { value: "openai/gpt-5.1", label: "GPT-5.1" },
+    { value: "openai/gpt-5.1-codex", label: "GPT-5.1 Codex" },
+    { value: "openai/gpt-5.4-mini", label: "GPT-5.4 Mini" },
+    { value: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+    { value: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+  ],
+
+  DEFAULT: "anthropic/claude-sonnet-4-5",
+};
+
+/**
  * Ordered provider registry. Display order in selection UIs.
  */
 export const PROVIDERS = [
@@ -104,4 +125,5 @@ export const PROVIDERS = [
   { id: "codex", name: "OpenAI", models: CODEX_MODELS },
   { id: "gemini", name: "Google", models: GEMINI_MODELS },
   { id: "cursor", name: "Cursor", models: CURSOR_MODELS },
+  { id: "opencode", name: "OpenCode", models: OPENCODE_MODELS },
 ];

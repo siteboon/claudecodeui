@@ -3,15 +3,8 @@ import { Check, ChevronDown } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 
 import { useServerPlatform } from "../../../../hooks/useServerPlatform";
+import type { ProjectSession, LLMProvider, ProviderModelsDefinition } from "../../../../types/app";
 import SessionProviderLogo from "../../../llm-logo-provider/SessionProviderLogo";
-import {
-  CLAUDE_MODELS,
-  CURSOR_MODELS,
-  CODEX_MODELS,
-  GEMINI_MODELS,
-  PROVIDERS,
-} from "../../../../../shared/modelConstants";
-import type { ProjectSession, LLMProvider } from "../../../../types/app";
 import { NextTaskBanner } from "../../../task-master";
 import {
   Dialog,
@@ -26,6 +19,14 @@ import {
   CommandItem,
   Card,
 } from "../../../../shared/view/ui";
+
+const PROVIDER_META: { id: LLMProvider; name: string }[] = [
+  { id: "claude", name: "Anthropic" },
+  { id: "codex", name: "OpenAI" },
+  { id: "gemini", name: "Google" },
+  { id: "cursor", name: "Cursor" },
+  { id: "opencode", name: "OpenCode" },
+];
 
 const MOD_KEY =
   typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
@@ -44,6 +45,10 @@ type ProviderSelectionEmptyStateProps = {
   setCodexModel: (model: string) => void;
   geminiModel: string;
   setGeminiModel: (model: string) => void;
+  opencodeModel: string;
+  setOpenCodeModel: (model: string) => void;
+  providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
+  providerModelsLoading: boolean;
   tasksEnabled: boolean;
   isTaskMasterInstalled: boolean | null;
   onShowAllTasks?: (() => void) | null;
@@ -56,17 +61,12 @@ type ProviderGroup = {
   models: { value: string; label: string }[];
 };
 
-const PROVIDER_GROUPS: ProviderGroup[] = PROVIDERS.map((p) => ({
-  id: p.id as LLMProvider,
-  name: p.name,
-  models: p.models.OPTIONS,
-}));
-
-function getModelConfig(p: LLMProvider) {
-  if (p === "claude") return CLAUDE_MODELS;
-  if (p === "codex") return CODEX_MODELS;
-  if (p === "gemini") return GEMINI_MODELS;
-  return CURSOR_MODELS;
+function getModelConfig(
+  p: LLMProvider,
+  catalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>,
+): ProviderModelsDefinition {
+  const entry = catalog[p];
+  return entry ?? { OPTIONS: [], DEFAULT: "" };
 }
 
 function getCurrentModel(
@@ -75,10 +75,12 @@ function getCurrentModel(
   cu: string,
   co: string,
   g: string,
+  o: string,
 ) {
   if (p === "claude") return c;
   if (p === "codex") return co;
   if (p === "gemini") return g;
+  if (p === "opencode") return o;
   return cu;
 }
 
@@ -86,6 +88,7 @@ function getProviderDisplayName(p: LLMProvider) {
   if (p === "claude") return "Claude";
   if (p === "cursor") return "Cursor";
   if (p === "codex") return "Codex";
+  if (p === "opencode") return "OpenCode";
   return "Gemini";
 }
 
@@ -103,6 +106,10 @@ export default function ProviderSelectionEmptyState({
   setCodexModel,
   geminiModel,
   setGeminiModel,
+  opencodeModel,
+  setOpenCodeModel,
+  providerModelCatalog,
+  providerModelsLoading,
   tasksEnabled,
   isTaskMasterInstalled,
   onShowAllTasks,
@@ -112,10 +119,14 @@ export default function ProviderSelectionEmptyState({
   const { isWindowsServer } = useServerPlatform();
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  const visibleProviderGroups = useMemo(
-    () => (isWindowsServer ? PROVIDER_GROUPS.filter((p) => p.id !== "cursor") : PROVIDER_GROUPS),
-    [isWindowsServer],
-  );
+  const visibleProviderGroups = useMemo(() => {
+    const groups: ProviderGroup[] = PROVIDER_META.map((p) => ({
+      id: p.id,
+      name: p.name,
+      models: providerModelCatalog[p.id]?.OPTIONS ?? [],
+    }));
+    return isWindowsServer ? groups.filter((p) => p.id !== "cursor") : groups;
+  }, [isWindowsServer, providerModelCatalog]);
 
   useEffect(() => {
     if (isWindowsServer && provider === "cursor") {
@@ -134,15 +145,16 @@ export default function ProviderSelectionEmptyState({
     cursorModel,
     codexModel,
     geminiModel,
+    opencodeModel,
   );
 
   const currentModelLabel = useMemo(() => {
-    const config = getModelConfig(provider);
+    const config = getModelConfig(provider, providerModelCatalog);
     const found = config.OPTIONS.find(
       (o: { value: string; label: string }) => o.value === currentModel,
     );
     return found?.label || currentModel;
-  }, [provider, currentModel]);
+  }, [provider, currentModel, providerModelCatalog]);
 
   const setModelForProvider = useCallback(
     (providerId: LLMProvider, modelValue: string) => {
@@ -155,12 +167,15 @@ export default function ProviderSelectionEmptyState({
       } else if (providerId === "gemini") {
         setGeminiModel(modelValue);
         localStorage.setItem("gemini-model", modelValue);
+      } else if (providerId === "opencode") {
+        setOpenCodeModel(modelValue);
+        localStorage.setItem("opencode-model", modelValue);
       } else {
         setCursorModel(modelValue);
         localStorage.setItem("cursor-model", modelValue);
       }
     },
-    [setClaudeModel, setCursorModel, setCodexModel, setGeminiModel],
+    [setClaudeModel, setCursorModel, setCodexModel, setGeminiModel, setOpenCodeModel],
   );
 
   const handleModelSelect = useCallback(
@@ -249,6 +264,11 @@ export default function ProviderSelectionEmptyState({
                         </span>
                       }
                     >
+                      {group.models.length === 0 && providerModelsLoading ? (
+                        <CommandItem disabled className="ml-4 border-l border-border/40 pl-4 text-muted-foreground">
+                          {t("providerSelection.loadingModels", { defaultValue: "Loading models…" })}
+                        </CommandItem>
+                      ) : null}
                       {group.models.map((model) => {
                         const isSelected = provider === group.id && currentModel === model.value;
                         return (
@@ -286,6 +306,10 @@ export default function ProviderSelectionEmptyState({
                 }),
                 gemini: t("providerSelection.readyPrompt.gemini", {
                   model: geminiModel,
+                }),
+                opencode: t("providerSelection.readyPrompt.opencode", {
+                  model: opencodeModel,
+                  defaultValue: "Ready with OpenCode {{model}}",
                 }),
               }[provider]
             }
