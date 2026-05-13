@@ -745,6 +745,18 @@ async function queryClaudeStream(command, options = {}, ws) {
           sessionId: sessionId || null,  // may be null until system/init arrives
           writer: ws,
           cwd: cwd || process.cwd(),
+          // Snapshot of CLI-affecting options the process was spawned with.
+          // Used by the reuse branch to refuse a subsequent claude-command
+          // request whose model/permissionMode/cwd/additionalDirs differ from
+          // the live process — the long-lived CLI cannot change these mid-run,
+          // so silently honoring the new values would answer with the wrong
+          // model or run tools in the wrong cwd.
+          config: {
+            model: model || CLAUDE_MODELS.DEFAULT,
+            permissionMode: permissionMode || 'default',
+            cwd: cwd || process.cwd(),
+            additionalDirs: Array.isArray(additionalDirs) ? [...additionalDirs] : [],
+          },
           // Temp files are owned per-prompt (on queue entries + currentPromptTemps),
           // never on the session itself, so queued prompts don't have their
           // images deleted by a previous prompt's result cleanup.
@@ -782,6 +794,24 @@ async function queryClaudeStream(command, options = {}, ws) {
         ws?.send?.(createNormalizedMessage({
           kind: 'error',
           content: 'Session belongs to another user',
+          sessionId: sessionId || null,
+          provider: 'claude',
+        }));
+        return;
+      }
+      // The long-lived CLI is locked to whatever model/permissionMode/cwd/
+      // additionalDirs it was spawned with — those translate to argv flags
+      // resolved at process start. Silently honoring a new request with a
+      // different model would route the prompt to the wrong model; a new
+      // cwd would run tools in the wrong directory. Refuse the reuse so
+      // the caller can either restart the session or downgrade the request.
+      const mismatch = findSessionConfigMismatch(session, { model, permissionMode, cwd, additionalDirs });
+      if (mismatch) {
+        console.warn(`[claude-stream] reuse rejected: ${mismatch} changed for session ${sessionId}`);
+        cleanupUntakenTemps();
+        ws?.send?.(createNormalizedMessage({
+          kind: 'error',
+          content: `Session ${mismatch} changed since it started; abort and start a new session to apply the new value`,
           sessionId: sessionId || null,
           provider: 'claude',
         }));
@@ -887,6 +917,33 @@ function pendingSpawnBelongsTo(pending, userId) {
   if (ownerId === null || ownerId === undefined) return true;
   if (userId === undefined || userId === null) return false;
   return String(ownerId) === String(userId);
+}
+
+/**
+ * Compare a new request's execution settings against the live session's
+ * spawn config. Returns the first mismatching field name, or null when the
+ * request is compatible with the running process. additionalDirs is order-
+ * sensitive (the CLI receives `--add-dir` once per entry, in order).
+ */
+function findSessionConfigMismatch(session, opts) {
+  const cfg = session?.config;
+  if (!cfg) return null;  // legacy session record without config snapshot
+  const requested = {
+    model: opts.model || CLAUDE_MODELS.DEFAULT,
+    permissionMode: opts.permissionMode || 'default',
+    cwd: opts.cwd || process.cwd(),
+    additionalDirs: Array.isArray(opts.additionalDirs) ? opts.additionalDirs : [],
+  };
+  if (cfg.model !== requested.model) return 'model';
+  if (cfg.permissionMode !== requested.permissionMode) return 'permissionMode';
+  if (cfg.cwd !== requested.cwd) return 'cwd';
+  const a = cfg.additionalDirs;
+  const b = requested.additionalDirs;
+  if (a.length !== b.length) return 'additionalDirs';
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return 'additionalDirs';
+  }
+  return null;
 }
 
 /**
