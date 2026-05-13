@@ -382,6 +382,20 @@ function attachStdoutHandler(session) {
   // in stdout that never reach handleEvent if we cleanup on 'exit'.
   session.process.on('close', (code, signal) => {
     console.log(`[claude-stream] process pid=${session.process.pid} closed code=${code} signal=${signal} session=${session.sessionId || 'NEW'}`);
+    // Flush any final JSONL line that arrived without a trailing newline.
+    // Otherwise a CLI that emits its terminal `result` event then closes
+    // stdout would have that event silently dropped, leaving the prompt in
+    // an aborted state instead of completed.
+    const trailing = session.stdoutBuffer.trim();
+    if (trailing) {
+      try {
+        handleEvent(session, JSON.parse(trailing));
+      } catch (err) {
+        console.warn('[claude-stream] trailing stdout line was not valid JSON:', err);
+      } finally {
+        session.stdoutBuffer = '';
+      }
+    }
     cleanupSession(session, { sendComplete: session.inFlight });
   });
 
@@ -572,6 +586,12 @@ function submitPrompt(session, entry) {
  */
 function drainQueue(session) {
   if (session.queue.length === 0) return;
+  // If the process has already closed (e.g. when handleEvent is replaying a
+  // trailing result event from inside the close handler), writing to stdin
+  // would EPIPE and produce a spurious per-prompt error to the client right
+  // before cleanupSession emits its own discard error for the same entry.
+  // Leave the queue alone — cleanupSession will drain and report it.
+  if (!isSessionProcessAlive(session)) return;
   const next = session.queue.shift();
   if (!writePromptNow(session, next)) {
     session.queue.unshift(next);
