@@ -206,37 +206,45 @@ function forwardToAdapter(session, event) {
  * rate_limit_event, system/* lifecycle events, result).
  */
 function handleEvent(session, event) {
-  // Capture session ID on first init message
-  if (event.session_id && !session.sessionId) {
+  if (event.session_id) {
     const realId = event.session_id;
-    session.sessionId = realId;
+    const isFirstSeen = !session.sessionId;
 
-    // Rekey the map: find current key (pendingKey) and replace with realId
-    for (const [key, value] of activeStreamSessions.entries()) {
-      if (value === session) {
-        activeStreamSessions.delete(key);
-        break;
+    if (isFirstSeen) {
+      session.sessionId = realId;
+
+      // Rekey the map: find current key (pendingKey) and replace with realId
+      for (const [key, value] of activeStreamSessions.entries()) {
+        if (value === session) {
+          activeStreamSessions.delete(key);
+          break;
+        }
+      }
+      activeStreamSessions.set(realId, session);
+
+      if (session.writer?.setSessionId) {
+        session.writer.setSessionId(realId);
+      }
+
+      if (!session.sessionCreatedSent) {
+        session.sessionCreatedSent = true;
+        session.writer?.send(createNormalizedMessage({
+          kind: 'session_created',
+          newSessionId: realId,
+          sessionId: realId,
+          provider: 'claude',
+        }));
       }
     }
-    activeStreamSessions.set(realId, session);
 
     // Record session owner so a future cold `--resume` for this id can be
     // refused when a different user tries to rehydrate the conversation.
+    // Must run on every system/init event, not just the first one: on the
+    // `--resume` path session.sessionId is pre-seeded, so gating this on
+    // !session.sessionId would leave the persisted owner unset and let a
+    // different user cold-resume the conversation once the live process
+    // exits.
     rememberSessionOwner(realId, session.writer?.userId ?? null);
-
-    if (session.writer?.setSessionId) {
-      session.writer.setSessionId(realId);
-    }
-
-    if (!session.sessionCreatedSent) {
-      session.sessionCreatedSent = true;
-      session.writer?.send(createNormalizedMessage({
-        kind: 'session_created',
-        newSessionId: realId,
-        sessionId: realId,
-        provider: 'claude',
-      }));
-    }
   }
 
   const sid = session.sessionId;
