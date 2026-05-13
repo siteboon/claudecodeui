@@ -171,6 +171,10 @@ function ChatInterface({
     handleGrantToolPermission,
     handleInputFocusChange,
     isInputFocused,
+    useWorktreeForSession,
+    setUseWorktreeForSession,
+    worktreeName,
+    setWorktreeName,
   } = useChatComposerState({
     selectedProject,
     selectedSession,
@@ -342,6 +346,11 @@ function ChatInterface({
           showRawParameters={showRawParameters}
           showThinking={showThinking}
           selectedProject={selectedProject}
+          isLoading={isLoading}
+          useWorktreeForSession={useWorktreeForSession}
+          setUseWorktreeForSession={setUseWorktreeForSession}
+          worktreeName={worktreeName}
+          setWorktreeName={setWorktreeName}
         />
 
         <ChatComposer
