@@ -58,15 +58,46 @@ const formatToolContent = (value: unknown): string => {
   }
 };
 
-const extractText = (value: unknown): string => {
-  if (typeof value === 'string') {
+/**
+ * OpenCode can persist the first prompt as a JSON string literal inside a text
+ * part, for example `"hello"` instead of `hello`. Decode only complete JSON
+ * string literals so normal assistant/user prose remains untouched.
+ */
+const unwrapJsonStringLiteral = (value: string): string => {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('"') || !trimmed.endsWith('"')) {
     return value;
   }
 
+  try {
+    const parsed = JSON.parse(trimmed);
+    return typeof parsed === 'string' ? parsed : value;
+  } catch {
+    return value;
+  }
+};
+
+const extractText = (value: unknown): string => {
+  if (typeof value === 'string') {
+    return unwrapJsonStringLiteral(value);
+  }
+
   const record = readObjectRecord(value);
-  return readOptionalString(record?.text)
+  const text = readOptionalString(record?.text)
     ?? readOptionalString(record?.content)
     ?? '';
+  return unwrapJsonStringLiteral(text);
+};
+
+const hasUserRole = (value: unknown): boolean => {
+  const record = readObjectRecord(value);
+  return readOptionalString(record?.role) === 'user';
+};
+
+const isUserTextEcho = (raw: AnyRecord): boolean => {
+  return readOptionalString(raw.role) === 'user'
+    || hasUserRole(raw.message)
+    || hasUserRole(raw.part);
 };
 
 const buildTokenUsage = (totals: OpenCodeTokenTotals | undefined): AnyRecord | undefined => {
@@ -158,6 +189,12 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
       ?? generateMessageId('opencode');
 
     if (type === 'text') {
+      // The client already renders an optimistic user bubble, so provider user
+      // echoes must not be streamed back as assistant text.
+      if (isUserTextEcho(raw)) {
+        return [];
+      }
+
       const content = extractText(raw.text ?? raw.delta ?? raw.message);
       if (!content.trim()) {
         return [];

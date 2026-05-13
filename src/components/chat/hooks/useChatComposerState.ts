@@ -27,7 +27,6 @@ import { useFileMentions } from './useFileMentions';
 import { type SlashCommand, useSlashCommands } from './useSlashCommands';
 
 type PendingViewSession = {
-  sessionId: string | null;
   startedAt: number;
 };
 
@@ -566,13 +565,9 @@ export function useChatComposerState({
       setTimeout(() => scrollToBottom(), 100);
 
       if (!effectiveSessionId && !selectedSession?.id) {
-        if (typeof window !== 'undefined') {
-          // Reset stale pending IDs from previous interrupted runs before creating a new one.
-          sessionStorage.removeItem('pendingSessionId');
-        }
-        // For new sessions we intentionally keep this as `null` until the backend
-        // emits `session_created` with the canonical provider session id.
-        pendingViewSessionRef.current = { sessionId: null, startedAt: Date.now() };
+        // This tracks only that a request is in flight before the provider has
+        // emitted its real session id; routing still waits for session_created.
+        pendingViewSessionRef.current = { startedAt: Date.now() };
       }
       if (effectiveSessionId) {
         onSessionActive?.(effectiveSessionId);
@@ -884,15 +879,11 @@ export function useChatComposerState({
       return;
     }
 
-    const pendingSessionId =
-      typeof window !== 'undefined' ? sessionStorage.getItem('pendingSessionId') : null;
     const cursorSessionId =
       typeof window !== 'undefined' ? sessionStorage.getItem('cursorSessionId') : null;
 
     const candidateSessionIds = [
       currentSessionId,
-      pendingViewSessionRef.current?.sessionId || null,
-      pendingSessionId,
       provider === 'cursor' ? cursorSessionId : null,
       selectedSession?.id || null,
     ];
@@ -910,7 +901,7 @@ export function useChatComposerState({
       sessionId: targetSessionId,
       provider,
     });
-  }, [canAbortSession, currentSessionId, pendingViewSessionRef, provider, selectedSession?.id, sendMessage]);
+  }, [canAbortSession, currentSessionId, provider, selectedSession?.id, sendMessage]);
 
   const handleGrantToolPermission = useCallback(
     (suggestion: { entry: string; toolName: string }) => {

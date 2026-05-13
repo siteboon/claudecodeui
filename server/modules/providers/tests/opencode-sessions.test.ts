@@ -6,8 +6,7 @@ import test from 'node:test';
 
 import Database from 'better-sqlite3';
 
-import { closeConnection } from '@/modules/database/connection.js';
-import { initializeDatabase, sessionsDb } from '@/modules/database/index.js';
+import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import { OpenCodeSessionSynchronizer } from '@/modules/providers/list/opencode/opencode-session-synchronizer.provider.js';
 import { OpenCodeSessionsProvider } from '@/modules/providers/list/opencode/opencode-sessions.provider.js';
 
@@ -183,7 +182,7 @@ const createOpenCodeDatabase = async (homeDir: string, workspacePath: string): P
       1_700_000_001_000,
       JSON.stringify({
         type: 'text',
-        text: 'Build the OpenCode integration.',
+        text: JSON.stringify('Build the OpenCode integration.'),
       }),
     );
     insertPart.run(
@@ -261,6 +260,28 @@ test('OpenCode session synchronizer indexes sqlite sessions without deletable tr
   }
 });
 
+test('OpenCode sessions provider normalizes quoted live text and skips user echoes', () => {
+  const provider = new OpenCodeSessionsProvider();
+  const normalized = provider.normalizeMessage({
+    type: 'text',
+    sessionID: 'open-session-live',
+    text: JSON.stringify('hello bro'),
+  }, null);
+
+  assert.equal(normalized.length, 1);
+  assert.equal(normalized[0]?.kind, 'stream_delta');
+  assert.equal(normalized[0]?.content, 'hello bro');
+
+  const userEcho = provider.normalizeMessage({
+    type: 'text',
+    sessionID: 'open-session-live',
+    role: 'user',
+    text: 'hello bro',
+  }, null);
+
+  assert.deepEqual(userEcho, []);
+});
+
 test('OpenCode sessions provider reads sqlite history and token usage', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'opencode-session-history-'));
   const workspacePath = path.join(tempRoot, 'workspace');
@@ -275,6 +296,7 @@ test('OpenCode sessions provider reads sqlite history and token usage', { concur
     assert.equal(history.total, 4);
     assert.equal(history.messages[0]?.kind, 'text');
     assert.equal(history.messages[0]?.role, 'user');
+    assert.equal(history.messages[0]?.content, 'Build the OpenCode integration.');
     assert.equal(history.messages[1]?.kind, 'thinking');
     assert.equal(history.messages[2]?.content, 'The provider is wired.');
     assert.equal(history.messages[3]?.kind, 'tool_use');
