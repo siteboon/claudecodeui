@@ -343,7 +343,10 @@ async function handleImages(command, images, cwd) {
   try {
     // Create temp directory in the project directory
     const workingDir = cwd || process.cwd();
-    tempDir = path.join(workingDir, '.tmp', 'images', Date.now().toString());
+    // Suffix with randomUUID so two image prompts arriving in the same
+    // millisecond (reachable under stream mode's queued prompt flow) don't
+    // share a directory and clobber each other's image_<i>.* files.
+    tempDir = path.join(workingDir, '.tmp', 'images', `${Date.now()}-${crypto.randomUUID()}`);
     await fs.mkdir(tempDir, { recursive: true });
 
     // Save each image to a temp file
