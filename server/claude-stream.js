@@ -239,8 +239,10 @@ function handleEvent(session, event) {
     }
 
     // Runs on every system/init incl. --resume (gating on !sessionId left
-    // resumed sessions unowned and rehydratable by another user).
-    if (isFirstSeen || event.type === 'system') {
+    // resumed sessions unowned and rehydratable by another user). Narrow
+    // to the init subtype so unrelated system events (hook_response etc.)
+    // don't trigger unnecessary work.
+    if (isFirstSeen || (event.type === 'system' && event.subtype === 'init')) {
       rememberSessionOwner(realId, session.writer?.userId ?? null);
     }
   }
@@ -753,7 +755,9 @@ async function queryClaudeStream(command, options = {}, ws) {
             model: model || CLAUDE_MODELS.DEFAULT,
             permissionMode: permissionMode || 'default',
             cwd: path.resolve(cwd || process.cwd()),
-            additionalDirs: Array.isArray(additionalDirs) ? additionalDirs.map(d => path.resolve(d)) : [],
+            additionalDirs: Array.isArray(additionalDirs)
+              ? additionalDirs.filter(d => typeof d === 'string').map(d => path.resolve(d))
+              : [],
             mcpServersSig: canonicalizeForCompare(mcpServers),
           },
           // Temp files are owned per-prompt (on queue entries + currentPromptTemps),
@@ -799,15 +803,23 @@ async function queryClaudeStream(command, options = {}, ws) {
         return;
       }
       // The long-lived CLI is locked to whatever model/permissionMode/cwd/
-      // additionalDirs it was spawned with — those translate to argv flags
-      // resolved at process start. Silently honoring a new request with a
-      // different model would route the prompt to the wrong model; a new
-      // cwd would run tools in the wrong directory. Refuse the reuse so
-      // the caller can either restart the session or downgrade the request.
+      // additionalDirs/mcpServers it was spawned with — those translate to
+      // argv flags resolved at process start. Silently honoring a new
+      // request with a different model would route the prompt to the wrong
+      // model; a new cwd would run tools in the wrong directory. Refuse
+      // the reuse so the caller can either restart the session or downgrade
+      // the request.
+      //
+      // Disarm the idle timer BEFORE awaiting the disk-read inside
+      // findSessionConfigMismatch — otherwise a slow ~/.claude.json read
+      // could allow the idle deadline to fire and killSession mid-check,
+      // and the rejection branch below has to re-arm if it bails.
+      disarmIdleTimer(session);
       const mismatch = await findSessionConfigMismatch(session, { model, permissionMode, cwd, additionalDirs });
       if (mismatch) {
         console.warn(`[claude-stream] reuse rejected: ${mismatch} changed for session ${sessionId}`);
         cleanupUntakenTemps();
+        if (!session.inFlight) armIdleTimer(session);
         ws?.send?.(createNormalizedMessage({
           kind: 'error',
           content: `Session ${mismatch} changed since it started; abort and start a new session to apply the new value`,
@@ -817,7 +829,6 @@ async function queryClaudeStream(command, options = {}, ws) {
         return;
       }
       session.writer = ws;
-      disarmIdleTimer(session);
     }
 
     // submitPrompt takes ownership of the temps — from here on they live on
@@ -922,13 +933,36 @@ function pendingSpawnBelongsTo(pending, userId) {
  * Order-stable JSON serializer for structural comparison. Sorts object keys
  * recursively so two equivalent mcpServers trees with different key insertion
  * orders produce the same string and don't trigger a spurious reuse refusal.
+ * A WeakSet of seen objects breaks cycles in malformed input — without it a
+ * circular `~/.claude.json` would stack-overflow the reuse check.
  */
-function canonicalizeForCompare(value) {
+function canonicalizeForCompare(value, seen = new WeakSet()) {
   if (value === null || value === undefined) return 'null';
   if (typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return '[' + value.map(canonicalizeForCompare).join(',') + ']';
+  if (seen.has(value)) return '"<cycle>"';
+  seen.add(value);
+  if (Array.isArray(value)) return '[' + value.map(v => canonicalizeForCompare(v, seen)).join(',') + ']';
   const keys = Object.keys(value).sort();
-  return '{' + keys.map(k => JSON.stringify(k) + ':' + canonicalizeForCompare(value[k])).join(',') + '}';
+  return '{' + keys.map(k => JSON.stringify(k) + ':' + canonicalizeForCompare(value[k], seen)).join(',') + '}';
+}
+
+// Short TTL cache for the canonicalized mcpServers signature so a stream of
+// reused prompts doesn't re-read ~/.claude.json on every claude-command.
+// Keyed by raw cwd (matches the value `loadMcpConfig` receives at spawn
+// time). 2s is long enough to skip per-message reads during a burst but
+// short enough that an operator editing the config sees the new tools on
+// the next prompt rather than waiting for the live session to die.
+const MCP_SIG_CACHE_TTL_MS = 2_000;
+const mcpSigCache = new Map();
+
+async function getMcpServersSig(cwd) {
+  const key = String(cwd ?? '');
+  const cached = mcpSigCache.get(key);
+  const now = Date.now();
+  if (cached && now - cached.ts < MCP_SIG_CACHE_TTL_MS) return cached.sig;
+  const sig = canonicalizeForCompare(await loadMcpConfig(cwd));
+  mcpSigCache.set(key, { sig, ts: now });
+  return sig;
 }
 
 /**
@@ -946,7 +980,11 @@ async function findSessionConfigMismatch(session, opts) {
     model: opts.model || CLAUDE_MODELS.DEFAULT,
     permissionMode: opts.permissionMode || 'default',
     cwd: path.resolve(opts.cwd || process.cwd()),
-    additionalDirs: Array.isArray(opts.additionalDirs) ? opts.additionalDirs.map(d => path.resolve(d)) : [],
+    // additionalDirs can arrive off the wire; non-string entries would
+    // throw inside path.resolve and tank the whole reuse check.
+    additionalDirs: Array.isArray(opts.additionalDirs)
+      ? opts.additionalDirs.filter(d => typeof d === 'string').map(d => path.resolve(d))
+      : [],
   };
   if (cfg.model !== requested.model) return 'model';
   if (cfg.permissionMode !== requested.permissionMode) return 'permissionMode';
@@ -961,8 +999,7 @@ async function findSessionConfigMismatch(session, opts) {
   // baked into argv via --mcp-config. Re-reading on reuse closes a hole
   // where editing the config between requests would silently keep the stale
   // tool set live for the long-lived process.
-  const requestedMcpSig = canonicalizeForCompare(await loadMcpConfig(opts.cwd));
-  if (cfg.mcpServersSig !== requestedMcpSig) return 'mcpServers';
+  if (cfg.mcpServersSig !== await getMcpServersSig(opts.cwd)) return 'mcpServers';
   return null;
 }
 
