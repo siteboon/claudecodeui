@@ -819,13 +819,16 @@ async function queryClaudeStream(command, options = {}, ws) {
       if (mismatch) {
         console.warn(`[claude-stream] reuse rejected: ${mismatch} changed for session ${sessionId}`);
         cleanupUntakenTemps();
-        if (!session.inFlight) armIdleTimer(session);
+        // Send the error first; re-arm the idle timer afterwards so a
+        // future throw inside armIdleTimer (defensive — none today) can't
+        // strand the user without feedback.
         ws?.send?.(createNormalizedMessage({
           kind: 'error',
           content: `Session ${mismatch} changed since it started; abort and start a new session to apply the new value`,
           sessionId: sessionId || null,
           provider: 'claude',
         }));
+        if (!session.inFlight) armIdleTimer(session);
         return;
       }
       session.writer = ws;
@@ -939,7 +942,9 @@ function pendingSpawnBelongsTo(pending, userId) {
 function canonicalizeForCompare(value, seen = new WeakSet()) {
   if (value === null || value === undefined) return 'null';
   if (typeof value !== 'object') return JSON.stringify(value);
-  if (seen.has(value)) return '"<cycle>"';
+  // Unambiguous sentinel — distinguishable from a JSON string literal
+  // `"<cycle>"` that could occur in real data.
+  if (seen.has(value)) return '__cycle__';
   seen.add(value);
   if (Array.isArray(value)) return '[' + value.map(v => canonicalizeForCompare(v, seen)).join(',') + ']';
   const keys = Object.keys(value).sort();
@@ -952,17 +957,39 @@ function canonicalizeForCompare(value, seen = new WeakSet()) {
 // time). 2s is long enough to skip per-message reads during a burst but
 // short enough that an operator editing the config sees the new tools on
 // the next prompt rather than waiting for the live session to die.
+//
+// FIFO-capped at MAX_MCP_SIG_CACHE_ENTRIES — practical cwd set is tiny but
+// the cap prevents drift over a long-running server.
+// mcpSigInFlight dedupes concurrent misses for the same cwd so a burst of
+// reused prompts triggers exactly one disk read instead of N.
 const MCP_SIG_CACHE_TTL_MS = 2_000;
+const MAX_MCP_SIG_CACHE_ENTRIES = 256;
 const mcpSigCache = new Map();
+const mcpSigInFlight = new Map();
 
 async function getMcpServersSig(cwd) {
-  const key = String(cwd ?? '');
+  const key = cwd ?? '';
   const cached = mcpSigCache.get(key);
   const now = Date.now();
   if (cached && now - cached.ts < MCP_SIG_CACHE_TTL_MS) return cached.sig;
-  const sig = canonicalizeForCompare(await loadMcpConfig(cwd));
-  mcpSigCache.set(key, { sig, ts: now });
-  return sig;
+  const inFlight = mcpSigInFlight.get(key);
+  if (inFlight) return inFlight;
+  const promise = (async () => {
+    try {
+      const sig = canonicalizeForCompare(await loadMcpConfig(cwd));
+      mcpSigCache.set(key, { sig, ts: Date.now() });
+      while (mcpSigCache.size > MAX_MCP_SIG_CACHE_ENTRIES) {
+        const oldest = mcpSigCache.keys().next().value;
+        if (oldest === undefined) break;
+        mcpSigCache.delete(oldest);
+      }
+      return sig;
+    } finally {
+      mcpSigInFlight.delete(key);
+    }
+  })();
+  mcpSigInFlight.set(key, promise);
+  return promise;
 }
 
 /**

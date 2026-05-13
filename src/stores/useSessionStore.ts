@@ -323,7 +323,7 @@ function reconcileRealtimeAgainstServer(slot: SessionSlot): void {
   const windowStart = Math.max(0, slot.serverMessages.length - MATCH_WINDOW);
 
   const parseTs = (value: string | undefined): number =>
-    value ? Date.parse(value) : Number.NaN;
+    value === undefined ? Number.NaN : Date.parse(value);
 
   const consumedServerIds = new Set<string>();
   const takeCanonicalMatch = (m: NormalizedMessage): boolean => {
