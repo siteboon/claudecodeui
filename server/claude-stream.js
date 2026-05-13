@@ -847,6 +847,16 @@ async function queryClaudeStream(command, options = {}, ws) {
   } catch (err) {
     console.error('[claude-stream] queryClaudeStream error:', err);
     cleanupUntakenTemps();
+    // The reuse branch disarms the idle timer before awaiting the disk-read
+    // inside findSessionConfigMismatch. If that read throws (e.g. a
+    // transient ~/.claude.json FS error), control jumps here with the
+    // session still alive but no idle reaper armed — and it would sit until
+    // the next prompt or an explicit abort. Re-arm if the session is still
+    // live and not in-flight.
+    if (options.sessionId) {
+      const live = activeStreamSessions.get(options.sessionId);
+      if (live && isSessionProcessAlive(live) && !live.inFlight) armIdleTimer(live);
+    }
     ws?.send?.(createNormalizedMessage({
       kind: 'error',
       content: `Claude stream error: ${err.message}`,
@@ -968,13 +978,32 @@ const mcpSigCache = new Map();
 const mcpSigInFlight = new Map();
 
 async function getMcpServersSig(cwd) {
+  // `cwd ?? ''` collapses null/undefined into the empty-string bucket; this
+  // matches the no-cwd default that loadMcpConfig itself sees and keeps the
+  // cache key consistent across callers that pass either form.
   const key = cwd ?? '';
   const cached = mcpSigCache.get(key);
   const now = Date.now();
+  // Fresh cache hit short-circuits without consulting mcpSigInFlight. If a
+  // refresh fires while a fresh entry still exists, this caller intentionally
+  // gets the prior sig; subsequent callers past the TTL window pick up the
+  // new one. The window is 2s so the worst-case staleness is bounded.
   if (cached && now - cached.ts < MCP_SIG_CACHE_TTL_MS) return cached.sig;
   const inFlight = mcpSigInFlight.get(key);
   if (inFlight) return inFlight;
-  const promise = (async () => {
+  // Use a deferred so the in-flight registration happens BEFORE the worker
+  // body starts. Async functions run synchronously up to their first await
+  // and finally clauses are microtasks (so the IIFE-then-set ordering is
+  // safe today), but registering first removes the dependency on that
+  // ordering if loadMcpConfig is ever swapped for a sync-resolving variant.
+  let resolveSig;
+  let rejectSig;
+  const promise = new Promise((resolve, reject) => {
+    resolveSig = resolve;
+    rejectSig = reject;
+  });
+  mcpSigInFlight.set(key, promise);
+  (async () => {
     try {
       const sig = canonicalizeForCompare(await loadMcpConfig(cwd));
       mcpSigCache.set(key, { sig, ts: Date.now() });
@@ -983,12 +1012,13 @@ async function getMcpServersSig(cwd) {
         if (oldest === undefined) break;
         mcpSigCache.delete(oldest);
       }
-      return sig;
+      resolveSig(sig);
+    } catch (err) {
+      rejectSig(err);
     } finally {
       mcpSigInFlight.delete(key);
     }
   })();
-  mcpSigInFlight.set(key, promise);
   return promise;
 }
 
