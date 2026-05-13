@@ -1001,8 +1001,8 @@ async function getMcpServersSig(cwd) {
   // body still relies on async-function try/catch microtask semantics to
   // surface errors via rejectSig, but `mcpSigInFlight.set` no longer races
   // a hypothetical sync-resolving loadMcpConfig.
-  let resolveSig = (_value) => {};
-  let rejectSig = (_err) => {};
+  let resolveSig = () => {};
+  let rejectSig = () => {};
   const promise = new Promise((resolve, reject) => {
     resolveSig = resolve;
     rejectSig = reject;
@@ -1011,10 +1011,12 @@ async function getMcpServersSig(cwd) {
   (async () => {
     try {
       const sig = canonicalizeForCompare(await loadMcpConfig(cwd));
-      // Refresh the cache entry's insertion position so the FIFO eviction
-      // loop below evicts cold keys first. Without delete-then-set a hot
-      // key inserted early would be evicted before colder keys inserted
-      // later when the cap kicks in.
+      // Eviction is by least-recently-written — reads don't refresh
+      // position, but every TTL window forces a write on active cwds so
+      // write-recency tracks usage closely enough at this cap. The delete
+      // is a no-op on first-time inserts (key not present yet); on update
+      // it moves the entry to the tail so colder keys stay at the head
+      // and get evicted first.
       mcpSigCache.delete(key);
       mcpSigCache.set(key, { sig, ts: Date.now() });
       while (mcpSigCache.size > MAX_MCP_SIG_CACHE_ENTRIES) {
