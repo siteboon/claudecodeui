@@ -37,7 +37,35 @@ const activeStreamSessions = new Map();
 // requests for the same sessionId (e.g. quick retry after a crash) from each
 // awaiting loadMcpConfig and spawning duplicate CLI processes — the second
 // `activeStreamSessions.set` would overwrite the first, orphaning that child.
+// Value shape: { promise, userId } — userId is needed so a second caller
+// arriving mid-spawn with a different userId can be rejected instead of
+// awaiting and silently piggybacking on another user's process.
 const pendingSpawns = new Map();
+
+// Persistent owner map for stream sessions. Populated on first system/init
+// event; entries are NOT removed when the live session dies, so a cold
+// `--resume` spawn for the same sessionId from a different user is rejected
+// even after the original process has exited. TODO: persist this to disk so
+// the guard survives a server restart — without persistence the protection
+// gap reopens after a process restart.
+//
+// Capped at MAX_OWNER_ENTRIES with FIFO eviction (Map iterates insertion
+// order). Without a cap a long-running server steadily accrues one entry per
+// session — unbounded across the process lifetime.
+const streamSessionOwners = new Map();
+const MAX_OWNER_ENTRIES = 10_000;
+
+function rememberSessionOwner(sessionId, userId) {
+  if (!sessionId) return;
+  if (userId === null || userId === undefined) return;
+  if (streamSessionOwners.has(sessionId)) return;
+  streamSessionOwners.set(sessionId, userId);
+  while (streamSessionOwners.size > MAX_OWNER_ENTRIES) {
+    const oldest = streamSessionOwners.keys().next().value;
+    if (oldest === undefined) break;
+    streamSessionOwners.delete(oldest);
+  }
+}
 
 // Hard cap on bytes accumulated in stdoutBuffer between newlines. A misbehaving
 // CLI that emits a multi-MB line without a `\n` would otherwise grow the buffer
@@ -191,6 +219,10 @@ function handleEvent(session, event) {
       }
     }
     activeStreamSessions.set(realId, session);
+
+    // Record session owner so a future cold `--resume` for this id can be
+    // refused when a different user tries to rehydrate the conversation.
+    rememberSessionOwner(realId, session.writer?.userId ?? null);
 
     if (session.writer?.setSessionId) {
       session.writer.setSessionId(realId);
@@ -642,16 +674,50 @@ async function queryClaudeStream(command, options = {}, ws) {
     // for their spawn to complete and reuse the resulting session. Without
     // this, both requests await loadMcpConfig in parallel, both spawn a
     // child, and the second `activeStreamSessions.set` overwrites the first
-    // — leaving the loser's process orphaned. Ownership of the awaited
-    // session is still verified below in the reuse branch.
+    // — leaving the loser's process orphaned. Reject mid-spawn piggybacking
+    // when the caller doesn't own the in-flight spawn; without this a second
+    // user knowing the sessionId could await the first user's spawn and end
+    // up bound to it via the reuse branch below.
     if (!session && sessionId && pendingSpawns.has(sessionId)) {
+      const pending = pendingSpawns.get(sessionId);
+      const callerUserId = ws?.userId ?? null;
+      if (!persistedOwnerMatches(sessionId, callerUserId)
+          || !pendingSpawnBelongsTo(pending, callerUserId)) {
+        console.warn(`[claude-stream] mid-spawn join rejected: user ${ws?.userId} does not own session ${sessionId}`);
+        cleanupUntakenTemps();
+        ws?.send?.(createNormalizedMessage({
+          kind: 'error',
+          content: 'Session belongs to another user',
+          sessionId: sessionId || null,
+          provider: 'claude',
+        }));
+        return;
+      }
       try {
-        const awaited = await pendingSpawns.get(sessionId);
+        const awaited = await pending.promise;
         if (awaited && isSessionProcessAlive(awaited)) session = awaited;
       } catch (_) { /* failed spawn — fall through and try our own */ }
     }
 
     if (!session) {
+      // Authorize cold `--resume` before spawning. The in-memory reuse
+      // branch below covers live sessions; here we cover the case where the
+      // live record has died (idle timeout, prior crash) but a CLI-level
+      // session jsonl still exists on disk that `--resume` would rehydrate.
+      // Without this, anyone with a known sessionId could rebind that
+      // conversation to themselves and start receiving its output.
+      if (sessionId && !persistedOwnerMatches(sessionId, ws?.userId ?? null)) {
+        console.warn(`[claude-stream] resume rejected: user ${ws?.userId} does not own session ${sessionId}`);
+        cleanupUntakenTemps();
+        ws?.send?.(createNormalizedMessage({
+          kind: 'error',
+          content: 'Session belongs to another user',
+          sessionId: sessionId || null,
+          provider: 'claude',
+        }));
+        return;
+      }
+
       // Spawn new process — register the in-flight Promise in pendingSpawns
       // BEFORE the first await so a concurrent caller arriving during
       // loadMcpConfig sees and waits on it instead of spawning their own.
@@ -688,7 +754,7 @@ async function queryClaudeStream(command, options = {}, ws) {
         return s;
       })();
 
-      if (sessionId) pendingSpawns.set(sessionId, spawnPromise);
+      if (sessionId) pendingSpawns.set(sessionId, { promise: spawnPromise, userId: ws?.userId ?? null });
       try {
         session = await spawnPromise;
       } finally {
@@ -781,6 +847,37 @@ function sessionBelongsTo(session, userId) {
   // hand back the user id as either string or number (JWT payloads are
   // typed loosely), and a string/number mismatch on the same user would
   // otherwise wrongly reject their own session.
+  return String(ownerId) === String(userId);
+}
+
+/**
+ * Persistent ownership guard for cold `--resume` spawns. Returns true when
+ * no owner has ever been recorded for `sessionId` (legacy sessions, or
+ * sessions created outside this module — same trust level as before this
+ * guard was added), or when the persisted owner matches `userId`. Returns
+ * false when an owner exists but `userId` is null/undefined, so an
+ * unauthenticated caller cannot rehydrate a known-owned conversation.
+ * Compared with string coercion for the same reason as sessionBelongsTo.
+ */
+function persistedOwnerMatches(sessionId, userId) {
+  if (!sessionId) return true;
+  const ownerId = streamSessionOwners.get(sessionId);
+  if (ownerId === undefined || ownerId === null) return true;
+  if (userId === undefined || userId === null) return false;
+  return String(ownerId) === String(userId);
+}
+
+/**
+ * Ownership guard for awaiting an in-flight spawn from `pendingSpawns`.
+ * Returns true when the pending spawn has no recorded owner (legacy entry)
+ * or when its userId matches `userId`. Returns false when the pending
+ * spawn was registered with a non-null userId and the joining caller's
+ * userId either is missing or differs.
+ */
+function pendingSpawnBelongsTo(pending, userId) {
+  const ownerId = pending?.userId ?? null;
+  if (ownerId === null || ownerId === undefined) return true;
+  if (userId === undefined || userId === null) return false;
   return String(ownerId) === String(userId);
 }
 
