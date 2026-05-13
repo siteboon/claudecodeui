@@ -307,16 +307,46 @@ function reconcileRealtimeAgainstServer(slot: SessionSlot): void {
   // placeholder, so two identical-content prompts (e.g. "ok" twice in a row)
   // don't both get hidden just because the first one already has a canonical
   // on the server.
+  //
+  // The match window is restricted to:
+  //   1. the last MATCH_WINDOW server messages (insertion order — most
+  //      recent), and
+  //   2. server messages whose timestamp is no older than
+  //      MATCH_LOOKBACK_MS before the placeholder's timestamp.
+  // Otherwise an assistant who legitimately produces an identical short
+  // reply twice could see the second placeholder match the first canonical
+  // copy from earlier in the history — making the newer reply disappear
+  // until a later refresh.
+  const MATCH_WINDOW = 50;
+  const MATCH_LOOKBACK_MS = 5 * 60 * 1000;
+  const windowStart = Math.max(0, slot.serverMessages.length - MATCH_WINDOW);
+
+  const parseTs = (value: string | undefined): number => {
+    if (!value) return Number.NaN;
+    const t = Date.parse(value);
+    return Number.isNaN(t) ? Number.NaN : t;
+  };
+
   const consumedServerIds = new Set<string>();
   const takeCanonicalMatch = (m: NormalizedMessage): boolean => {
     const mRole = (m as { role?: string }).role;
     const mSig = comparableSignature(m);
     if (mSig === null) return false;
-    for (const s of slot.serverMessages) {
+    const mTs = parseTs(m.timestamp);
+    for (let i = windowStart; i < slot.serverMessages.length; i++) {
+      const s = slot.serverMessages[i];
       if (consumedServerIds.has(s.id)) continue;
       if (s.kind !== m.kind) continue;
       if ((s as { role?: string }).role !== mRole) continue;
       if (comparableSignature(s) !== mSig) continue;
+      // Reject server messages that are older than the placeholder's
+      // timestamp by more than the lookback slack. If either timestamp is
+      // missing/unparseable, accept the match (legacy paths without
+      // timestamps still benefit from the window cap above).
+      if (!Number.isNaN(mTs)) {
+        const sTs = parseTs(s.timestamp);
+        if (!Number.isNaN(sTs) && sTs < mTs - MATCH_LOOKBACK_MS) continue;
+      }
       consumedServerIds.add(s.id);
       return true;
     }
