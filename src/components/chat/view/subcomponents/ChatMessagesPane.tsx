@@ -26,6 +26,8 @@ interface ChatMessagesPaneProps {
   setCodexModel: (model: string) => void;
   geminiModel: string;
   setGeminiModel: (model: string) => void;
+  kiroModel: string;
+  setKiroModel: (model: string) => void;
   tasksEnabled: boolean;
   isTaskMasterInstalled: boolean | null;
   onShowAllTasks?: (() => void) | null;
@@ -71,6 +73,8 @@ export default function ChatMessagesPane({
   setCodexModel,
   geminiModel,
   setGeminiModel,
+  kiroModel,
+  setKiroModel,
   tasksEnabled,
   isTaskMasterInstalled,
   onShowAllTasks,
@@ -154,6 +158,8 @@ export default function ChatMessagesPane({
           setCodexModel={setCodexModel}
           geminiModel={geminiModel}
           setGeminiModel={setGeminiModel}
+          kiroModel={kiroModel}
+          setKiroModel={setKiroModel}
           tasksEnabled={tasksEnabled}
           isTaskMasterInstalled={isTaskMasterInstalled}
           onShowAllTasks={onShowAllTasks}

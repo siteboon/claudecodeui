@@ -18,7 +18,8 @@
     "claude": "Claude",
     "cursor": "Cursor",
     "codex": "Codex",
-    "gemini": "Gemini"
+    "gemini": "Gemini",
+    "kiro": "Kiro"
   },
   "tools": {
     "settings": "Impostazioni strumento",
@@ -189,7 +190,8 @@
       "cursor": "Pronto a usare Cursor con {{model}}. Inizia a digitare il tuo messaggio qui sotto.",
       "codex": "Pronto a usare Codex con {{model}}. Inizia a digitare il tuo messaggio qui sotto.",
       "gemini": "Pronto a usare Gemini con {{model}}. Inizia a digitare il tuo messaggio qui sotto.",
-      "default": "Seleziona un provider sopra per iniziare"
+      "default": "Seleziona un provider sopra per iniziare",
+      "kiro": "Pronto per usare Kiro con {{model}}. Inizia a digitare il tuo messaggio qui sotto."
     },
     "pressToSearch": "Premi <kbd>{{shortcut}}</kbd> per cercare sessioni, file e commit"
   },

@@ -29,10 +29,12 @@ type ChatWebSocketDependencies = {
   spawnCursor: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
   queryCodex: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
   spawnGemini: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
+  spawnKiro: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
   abortClaudeSDKSession: (sessionId: string) => Promise<boolean>;
   abortCursorSession: (sessionId: string) => boolean;
   abortCodexSession: (sessionId: string) => boolean;
   abortGeminiSession: (sessionId: string) => boolean;
+  abortKiroSession: (sessionId: string) => boolean;
   resolveToolApproval: (
     requestId: string,
     payload: {
@@ -46,19 +48,27 @@ type ChatWebSocketDependencies = {
   isCursorSessionActive: (sessionId: string) => boolean;
   isCodexSessionActive: (sessionId: string) => boolean;
   isGeminiSessionActive: (sessionId: string) => boolean;
+  isKiroSessionActive: (sessionId: string) => boolean;
   reconnectSessionWriter: (sessionId: string, ws: WebSocket) => boolean;
   getPendingApprovalsForSession: (sessionId: string) => unknown[];
   getActiveClaudeSDKSessions: () => unknown;
   getActiveCursorSessions: () => unknown;
   getActiveCodexSessions: () => unknown;
   getActiveGeminiSessions: () => unknown;
+  getActiveKiroSessions: () => unknown;
 };
 
 /**
  * Normalizes potentially invalid provider names coming from websocket payloads.
  */
 function readProvider(value: unknown): LLMProvider {
-  if (value === 'claude' || value === 'cursor' || value === 'codex' || value === 'gemini') {
+  if (
+    value === 'claude'
+    || value === 'cursor'
+    || value === 'codex'
+    || value === 'gemini'
+    || value === 'kiro'
+  ) {
     return value;
   }
 
@@ -134,6 +144,11 @@ export function handleChatConnection(
         return;
       }
 
+      if (messageType === 'kiro-command') {
+        await dependencies.spawnKiro(data.command ?? '', data.options, writer);
+        return;
+      }
+
       if (messageType === 'cursor-resume') {
         await dependencies.spawnCursor(
           '',
@@ -158,6 +173,8 @@ export function handleChatConnection(
           success = dependencies.abortCodexSession(sessionId);
         } else if (provider === 'gemini') {
           success = dependencies.abortGeminiSession(sessionId);
+        } else if (provider === 'kiro') {
+          success = dependencies.abortKiroSession(sessionId);
         } else {
           success = await dependencies.abortClaudeSDKSession(sessionId);
         }
@@ -214,6 +231,8 @@ export function handleChatConnection(
           isActive = dependencies.isCodexSessionActive(sessionId);
         } else if (provider === 'gemini') {
           isActive = dependencies.isGeminiSessionActive(sessionId);
+        } else if (provider === 'kiro') {
+          isActive = dependencies.isKiroSessionActive(sessionId);
         } else {
           isActive = dependencies.isClaudeSDKSessionActive(sessionId);
           if (isActive) {
@@ -251,6 +270,7 @@ export function handleChatConnection(
             cursor: dependencies.getActiveCursorSessions(),
             codex: dependencies.getActiveCodexSessions(),
             gemini: dependencies.getActiveGeminiSessions(),
+            kiro: dependencies.getActiveKiroSessions(),
           },
         });
       }

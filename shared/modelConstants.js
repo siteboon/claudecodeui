@@ -97,6 +97,26 @@ export const GEMINI_MODELS = {
 };
 
 /**
+ * Kiro (AWS) Models
+ *
+ * Verified against `kiro-cli chat --list-models -f json` (Kiro CLI 2.3.0).
+ * Catalog can be fetched dynamically; the static list below is a conservative
+ * Claude-only subset suitable for v1.
+ */
+export const KIRO_MODELS = {
+  OPTIONS: [
+    { value: "auto", label: "Auto (router)" },
+    { value: "claude-opus-4.7", label: "Claude Opus 4.7" },
+    { value: "claude-opus-4.6", label: "Claude Opus 4.6" },
+    { value: "claude-sonnet-4.6", label: "Claude Sonnet 4.6" },
+    { value: "claude-sonnet-4.5", label: "Claude Sonnet 4.5" },
+    { value: "claude-haiku-4.5", label: "Claude Haiku 4.5" },
+  ],
+
+  DEFAULT: "auto",
+};
+
+/**
  * Ordered provider registry. Display order in selection UIs.
  */
 export const PROVIDERS = [
@@ -104,4 +124,5 @@ export const PROVIDERS = [
   { id: "codex", name: "OpenAI", models: CODEX_MODELS },
   { id: "gemini", name: "Google", models: GEMINI_MODELS },
   { id: "cursor", name: "Cursor", models: CURSOR_MODELS },
+  { id: "kiro", name: "AWS Kiro", models: KIRO_MODELS },
 ];
