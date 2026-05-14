@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -21,9 +22,30 @@ type CodeBlockProps = {
   children?: React.ReactNode;
 };
 
+const getCodeFontFamily = () => {
+  const font = localStorage.getItem('codeEditorFont') || 'default';
+  const customFont = localStorage.getItem('codeEditorCustomFont') || '';
+  
+  if (font === 'custom' && customFont.trim()) {
+    return customFont;
+  }
+  return 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
+};
+
 const CodeBlock = ({ node, inline, className, children, ...props }: CodeBlockProps) => {
   const { t } = useTranslation('chat');
   const [copied, setCopied] = useState(false);
+  const [fontFamily, setFontFamily] = useState(getCodeFontFamily);
+
+  useEffect(() => {
+    const handleFontChange = () => {
+      setFontFamily(getCodeFontFamily());
+    };
+
+    window.addEventListener('codeEditorSettingsChanged', handleFontChange);
+    return () => window.removeEventListener('codeEditorSettingsChanged', handleFontChange);
+  }, []);
+
   const raw = Array.isArray(children) ? children.join('') : String(children ?? '');
   const looksMultiline = /[\r\n]/.test(raw);
   const inlineDetected = inline || (node && node.type === 'inlineCode');
@@ -34,6 +56,7 @@ const CodeBlock = ({ node, inline, className, children, ...props }: CodeBlockPro
       <code
         className={`whitespace-pre-wrap break-words rounded-md border border-gray-200 bg-gray-100 px-1.5 py-0.5 font-mono text-[0.9em] text-gray-900 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-100 ${className || ''
           }`}
+        style={{ fontFamily }}
         {...props}
       >
         {children}
@@ -105,8 +128,7 @@ const CodeBlock = ({ node, inline, className, children, ...props }: CodeBlockPro
         }}
         codeTagProps={{
           style: {
-            fontFamily:
-              'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+            fontFamily,
           },
         }}
       >

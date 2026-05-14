@@ -3,11 +3,13 @@ import { useTheme } from '../../../contexts/ThemeContext';
 import { authenticatedFetch } from '../../../utils/api';
 import { useProviderAuthStatus } from '../../provider-auth/hooks/useProviderAuthStatus';
 import {
+  DEFAULT_APPEARANCE_FONT_SETTINGS,
   DEFAULT_CODE_EDITOR_SETTINGS,
   DEFAULT_CURSOR_PERMISSIONS,
 } from '../constants/constants';
 import type {
   AgentProvider,
+  AppearanceFontSettings,
   ClaudePermissionsState,
   CodeEditorSettingsState,
   CodexPermissionMode,
@@ -89,6 +91,14 @@ const readCodeEditorSettings = (): CodeEditorSettingsState => ({
   showMinimap: localStorage.getItem('codeEditorShowMinimap') !== 'false',
   lineNumbers: localStorage.getItem('codeEditorLineNumbers') !== 'false',
   fontSize: localStorage.getItem('codeEditorFontSize') ?? DEFAULT_CODE_EDITOR_SETTINGS.fontSize,
+  font: localStorage.getItem('codeEditorFont') ?? DEFAULT_CODE_EDITOR_SETTINGS.font,
+  customFont: localStorage.getItem('codeEditorCustomFont') ?? DEFAULT_CODE_EDITOR_SETTINGS.customFont,
+});
+
+const readAppearanceFontSettings = (): AppearanceFontSettings => ({
+  font: localStorage.getItem('appearanceFont') ?? DEFAULT_APPEARANCE_FONT_SETTINGS.font,
+  customFont: localStorage.getItem('appearanceCustomFont') ?? DEFAULT_APPEARANCE_FONT_SETTINGS.customFont,
+  fontSize: localStorage.getItem('appearanceFontSize') ?? DEFAULT_APPEARANCE_FONT_SETTINGS.fontSize,
 });
 
 const toResponseJson = async <T>(response: Response): Promise<T> => response.json() as Promise<T>;
@@ -124,6 +134,9 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
   const [projectSortOrder, setProjectSortOrder] = useState<ProjectSortOrder>('name');
   const [codeEditorSettings, setCodeEditorSettings] = useState<CodeEditorSettingsState>(() => (
     readCodeEditorSettings()
+  ));
+  const [appearanceFontSettings, setAppearanceFontSettings] = useState<AppearanceFontSettings>(() => (
+    readAppearanceFontSettings()
   ));
 
   const [claudePermissions, setClaudePermissions] = useState<ClaudePermissionsState>(() => (
@@ -284,6 +297,13 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     [],
   );
 
+  const updateAppearanceFontSetting = useCallback(
+    <K extends keyof AppearanceFontSettings>(key: K, value: AppearanceFontSettings[K]) => {
+      setAppearanceFontSettings((prev) => ({ ...prev, [key]: value }));
+    },
+    [],
+  );
+
   useEffect(() => {
     if (!isOpen) {
       return;
@@ -300,8 +320,17 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     localStorage.setItem('codeEditorShowMinimap', String(codeEditorSettings.showMinimap));
     localStorage.setItem('codeEditorLineNumbers', String(codeEditorSettings.lineNumbers));
     localStorage.setItem('codeEditorFontSize', codeEditorSettings.fontSize);
+    localStorage.setItem('codeEditorFont', codeEditorSettings.font);
+    localStorage.setItem('codeEditorCustomFont', codeEditorSettings.customFont);
     window.dispatchEvent(new Event('codeEditorSettingsChanged'));
   }, [codeEditorSettings]);
+
+  useEffect(() => {
+    localStorage.setItem('appearanceFont', appearanceFontSettings.font);
+    localStorage.setItem('appearanceCustomFont', appearanceFontSettings.customFont);
+    localStorage.setItem('appearanceFontSize', appearanceFontSettings.fontSize);
+    window.dispatchEvent(new Event('appearanceFontSettingsChanged'));
+  }, [appearanceFontSettings]);
 
   // Auto-save permissions and sort order with debounce
   const autoSaveTimerRef = useRef<number | null>(null);
@@ -367,6 +396,8 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     setProjectSortOrder,
     codeEditorSettings,
     updateCodeEditorSetting,
+    appearanceFontSettings,
+    updateAppearanceFontSetting,
     claudePermissions,
     setClaudePermissions,
     cursorPermissions,

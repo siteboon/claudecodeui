@@ -102,6 +102,21 @@
       "label": "Darkmode",
       "description": "Zwischen hellem und dunklem Design wechseln"
     },
+    "font": {
+      "label": "Schriftart",
+      "description": "Schriftart für die Benutzeroberfläche auswählen",
+      "default": "Standard",
+      "custom": "Benutzerdefiniert"
+    },
+    "customFont": {
+      "label": "Schriftartname",
+      "description": "Benutzerdefinierten Schriftartnamen eingeben",
+      "placeholder": "z.B. 'Inter', 'Roboto', sans-serif"
+    },
+    "fontSize": {
+      "label": "Schriftgröße",
+      "description": "Schriftgröße der Benutzeroberfläche in Pixeln"
+    },
     "projectSorting": {
       "label": "Projektsortierung",
       "description": "Wie Projekte in der Seitenleiste angeordnet werden",
@@ -125,6 +140,17 @@
       "lineNumbers": {
         "label": "Zeilennummern anzeigen",
         "description": "Zeilennummern im Editor anzeigen"
+      },
+      "font": {
+        "label": "Schriftart",
+        "description": "Schriftart für Codeblöcke auswählen",
+        "default": "Standard",
+        "custom": "Benutzerdefiniert"
+      },
+      "customFont": {
+        "label": "Schriftartname",
+        "description": "Benutzerdefinierten Monospace-Schriftartnamen eingeben",
+        "placeholder": "z.B. 'Fira Code', 'JetBrains Mono', monospace"
       },
       "fontSize": {
         "label": "Schriftgröße",

@@ -122,6 +122,21 @@
       "label": "深色模式",
       "description": "切换浅色和深色主题"
     },
+    "font": {
+      "label": "字体",
+      "description": "选择界面字体",
+      "default": "默认",
+      "custom": "自定义"
+    },
+    "customFont": {
+      "label": "字体名称",
+      "description": "输入自定义字体名称",
+      "placeholder": "例如：'Inter', 'Roboto', sans-serif"
+    },
+    "fontSize": {
+      "label": "字体大小",
+      "description": "界面字体大小（像素）"
+    },
     "projectSorting": {
       "label": "项目排序",
       "description": "项目在侧边栏中的排列方式",
@@ -145,6 +160,17 @@
       "lineNumbers": {
         "label": "显示行号",
         "description": "在编辑器中显示行号"
+      },
+      "font": {
+        "label": "字体",
+        "description": "选择代码块字体",
+        "default": "默认",
+        "custom": "自定义"
+      },
+      "customFont": {
+        "label": "字体名称",
+        "description": "输入自定义等宽字体名称",
+        "placeholder": "例如：'Fira Code', 'JetBrains Mono', monospace"
       },
       "fontSize": {
         "label": "字体大小",

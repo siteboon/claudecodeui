@@ -11,12 +11,13 @@ import {
 } from 'lucide-react';
 
 import type {
-  AgentCategory,
-  AgentProvider,
-  CodeEditorSettingsState,
-  CursorPermissionsState,
-  ProjectSortOrder,
-  SettingsMainTab,
+ AgentCategory,
+ AgentProvider,
+ AppearanceFontSettings,
+ CodeEditorSettingsState,
+ CursorPermissionsState,
+ ProjectSortOrder,
+ SettingsMainTab,
 } from '../types/types';
 
 export type SettingsMainTabMeta = {
@@ -48,6 +49,14 @@ export const DEFAULT_CODE_EDITOR_SETTINGS: CodeEditorSettingsState = {
   showMinimap: true,
   lineNumbers: true,
   fontSize: '14',
+  font: 'default',
+  customFont: '',
+};
+
+export const DEFAULT_APPEARANCE_FONT_SETTINGS: AppearanceFontSettings = {
+  font: 'default',
+  customFont: '',
+  fontSize: '16',
 };
 
 export const DEFAULT_CURSOR_PERMISSIONS: CursorPermissionsState = {

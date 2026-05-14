@@ -44,10 +44,18 @@ export type CursorPermissionsState = {
 };
 
 export type CodeEditorSettingsState = {
-  theme: 'dark' | 'light';
-  wordWrap: boolean;
-  showMinimap: boolean;
-  lineNumbers: boolean;
+ theme: 'dark' | 'light';
+ wordWrap: boolean;
+ showMinimap: boolean;
+ lineNumbers: boolean;
+ fontSize: string;
+ font: string;
+ customFont: string;
+};
+
+export type AppearanceFontSettings = {
+  font: string;
+  customFont: string;
   fontSize: string;
 };
 
