@@ -76,7 +76,7 @@ interface CommandExecutionResult {
   hasFileIncludes?: boolean;
 }
 
-type ModelCommandData = {
+export type ModelCommandData = {
   current?: {
     provider?: string;
     providerLabel?: string;
@@ -84,40 +84,64 @@ type ModelCommandData = {
   };
   available?: Partial<Record<LLMProvider, string[]>>;
   availableModels?: string[];
+  availableOptions?: Array<{
+    value: string;
+    label?: string;
+  }>;
+  defaultModel?: string;
 };
 
-const PROVIDER_LABELS: Record<LLMProvider, string> = {
-  claude: 'Claude',
-  cursor: 'Cursor',
-  codex: 'Codex',
-  gemini: 'Gemini',
-  opencode: 'OpenCode',
+export type CostCommandData = {
+  tokenUsage?: {
+    used?: number;
+    total?: number;
+    percentage?: number;
+  };
+  cost?: {
+    input?: string;
+    output?: string;
+    total?: string;
+  };
+  tokenBreakdown?: {
+    input?: number;
+    output?: number;
+    cache?: number;
+  };
+  provider?: string;
+  model?: string;
 };
 
-const isLLMProvider = (value: unknown): value is LLMProvider => (
-  value === 'claude'
-  || value === 'cursor'
-  || value === 'codex'
-  || value === 'gemini'
-  || value === 'opencode'
-);
+export type StatusCommandData = {
+  version?: string;
+  packageName?: string;
+  uptime?: string;
+  model?: string;
+  provider?: string;
+  nodeVersion?: string;
+  platform?: string;
+  pid?: number;
+  memoryUsage?: {
+    rssMb?: number;
+    heapUsedMb?: number;
+    heapTotalMb?: number;
+  };
+};
 
-const formatModelCommandMessage = (data: ModelCommandData): string => {
-  const currentProvider = isLLMProvider(data.current?.provider)
-    ? data.current.provider
-    : 'claude';
-  const providerLabel = data.current?.providerLabel || PROVIDER_LABELS[currentProvider];
-  const currentModel = data.current?.model || 'Unknown';
-  // `availableModels` is the current response shape; the keyed map keeps older
-  // server responses readable without reintroducing cross-provider rendering.
-  const availableModels = Array.isArray(data.availableModels)
-    ? data.availableModels
-    : data.available?.[currentProvider] ?? [];
-  const availableText = availableModels.length > 0
-    ? availableModels.join(', ')
-    : 'No models reported for this provider.';
+export type HelpCommandData = {
+  content?: string;
+  format?: string;
+  commands?: Array<{
+    name: string;
+    description?: string;
+    namespace?: string;
+  }>;
+};
 
-  return `**Current Model**: ${currentModel}\n\n**Provider**: ${providerLabel}\n\n**Available Models**:\n\n${availableText}`;
+export type CommandModalKind = 'help' | 'models' | 'cost' | 'status';
+
+export type CommandModalPayload = {
+  kind: CommandModalKind;
+  data: HelpCommandData | ModelCommandData | CostCommandData | StatusCommandData;
 };
 
 const createFakeSubmitEvent = () => {
@@ -186,6 +210,7 @@ export function useChatComposerState({
   const [imageErrors, setImageErrors] = useState<Map<string, string>>(new Map());
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
   const [thinkingMode, setThinkingMode] = useState('none');
+  const [commandModalPayload, setCommandModalPayload] = useState<CommandModalPayload | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputHighlightRef = useRef<HTMLDivElement>(null);
@@ -200,30 +225,32 @@ export function useChatComposerState({
       const { action, data } = result;
       switch (action) {
         case 'help':
-          addMessage({
-            type: 'assistant',
-            content: data.content,
-            timestamp: Date.now(),
+          setCommandModalPayload({
+            kind: 'help',
+            data: (data || {}) as HelpCommandData,
           });
           break;
 
         case 'models':
-          addMessage({
-            type: 'assistant',
-            content: formatModelCommandMessage(data as ModelCommandData),
-            timestamp: Date.now(),
+          setCommandModalPayload({
+            kind: 'models',
+            data: (data || {}) as ModelCommandData,
           });
           break;
 
         case 'cost': {
-          const costMessage = `**Token Usage**: ${data.tokenUsage.used.toLocaleString()} / ${data.tokenUsage.total.toLocaleString()} (${data.tokenUsage.percentage}%)\n\n**Estimated Cost**:\n- Input: $${data.cost.input}\n- Output: $${data.cost.output}\n- **Total**: $${data.cost.total}\n\n**Model**: ${data.model}`;
-          addMessage({ type: 'assistant', content: costMessage, timestamp: Date.now() });
+          setCommandModalPayload({
+            kind: 'cost',
+            data: (data || {}) as CostCommandData,
+          });
           break;
         }
 
         case 'status': {
-          const statusMessage = `**System Status**\n\n- Version: ${data.version}\n- Uptime: ${data.uptime}\n- Model: ${data.model}\n- Provider: ${data.provider}\n- Node.js: ${data.nodeVersion}\n- Platform: ${data.platform}`;
-          addMessage({ type: 'assistant', content: statusMessage, timestamp: Date.now() });
+          setCommandModalPayload({
+            kind: 'status',
+            data: (data || {}) as StatusCommandData,
+          });
           break;
         }
 
@@ -256,6 +283,10 @@ export function useChatComposerState({
     },
     [onFileOpen, onShowSettings, addMessage],
   );
+
+  const closeCommandModal = useCallback(() => {
+    setCommandModalPayload(null);
+  }, []);
 
   const handleCustomCommand = useCallback(async (result: CommandExecutionResult) => {
     const { content, hasBashCommands } = result;
@@ -502,13 +533,26 @@ export function useChatComposerState({
       }
 
       // Intercept slash commands only when "/" is the first input character.
+      // Also accept exact "help" as a convenience alias for users who expect CLI-style help.
       const commandInput = currentInput.trimEnd();
-      if (commandInput.startsWith('/')) {
+      const isHelpAlias = commandInput.trim().toLowerCase() === 'help';
+      if (commandInput.startsWith('/') || isHelpAlias) {
         const firstSpace = commandInput.indexOf(' ');
-        const commandName = firstSpace > 0 ? commandInput.slice(0, firstSpace) : commandInput;
-        const matchedCommand = slashCommands.find((cmd: SlashCommand) => cmd.name === commandName);
+        const commandName = isHelpAlias
+          ? '/help'
+          : firstSpace > 0 ? commandInput.slice(0, firstSpace) : commandInput;
+        const matchedCommand =
+          slashCommands.find((cmd: SlashCommand) => cmd.name === commandName) ||
+          (commandName === '/help'
+            ? ({
+                name: '/help',
+                description: 'Show help documentation for Claude Code',
+                namespace: 'builtin',
+                metadata: { type: 'builtin' },
+              } as SlashCommand)
+            : undefined);
         if (matchedCommand && matchedCommand.type !== 'skill') {
-          executeCommand(matchedCommand, commandInput);
+          executeCommand(matchedCommand, isHelpAlias ? '/help' : commandInput);
           setInput('');
           inputValueRef.current = '';
           setAttachedImages([]);
@@ -1018,5 +1062,7 @@ export function useChatComposerState({
     handleGrantToolPermission,
     handleInputFocusChange,
     isInputFocused,
+    commandModalPayload,
+    closeCommandModal,
   };
 }

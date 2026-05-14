@@ -14,6 +14,7 @@ import { useSessionStore } from '../../../stores/useSessionStore';
 
 import ChatMessagesPane from './subcomponents/ChatMessagesPane';
 import ChatComposer from './subcomponents/ChatComposer';
+import CommandResultModal from './subcomponents/CommandResultModal';
 
 
 type PendingViewSession = {
@@ -172,7 +173,9 @@ function ChatInterface({
     handlePermissionDecision,
     handleGrantToolPermission,
     handleInputFocusChange,
-    isInputFocused,
+    isInputFocused: _isInputFocused,
+    commandModalPayload,
+    closeCommandModal,
   } = useChatComposerState({
     selectedProject,
     selectedSession,
@@ -424,6 +427,11 @@ function ChatInterface({
       </div>
 
       <QuickSettingsPanel />
+
+      <CommandResultModal
+        payload={commandModalPayload}
+        onClose={closeCommandModal}
+      />
     </PermissionContext.Provider>
   );
 }

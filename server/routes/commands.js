@@ -50,6 +50,10 @@ export const executeModelsCommand = async (args, context) => {
     getProviderModelOptions(currentProvider, context),
   );
   const availableModels = catalog.OPTIONS.map((option) => option.value);
+  const availableOptions = catalog.OPTIONS.map((option) => ({
+    value: option.value,
+    label: option.label,
+  }));
   const currentModel = typeof context?.model === 'string' && context.model
     ? context.model
     : catalog.DEFAULT;
@@ -67,6 +71,8 @@ export const executeModelsCommand = async (args, context) => {
         [currentProvider]: availableModels,
       },
       availableModels,
+      availableOptions,
+      defaultModel: catalog.DEFAULT,
       message: args.length > 0
         ? `Switching to model: ${args[0]}`
         : `Current model: ${currentModel}`
@@ -218,7 +224,12 @@ Custom commands can be created in:
       action: 'help',
       data: {
         content: helpText,
-        format: 'markdown'
+        format: 'markdown',
+        commands: builtInCommands.map((command) => ({
+          name: command.name,
+          description: command.description,
+          namespace: command.namespace,
+        })),
       }
     };
   },
@@ -292,11 +303,17 @@ Custom commands can be created in:
           total,
           percentage,
         },
+        tokenBreakdown: {
+          input: inputTokens,
+          output: outputTokens,
+          cache: cacheTokens,
+        },
         cost: {
           input: inputCost.toFixed(4),
           output: outputCost.toFixed(4),
           total: totalCost.toFixed(4),
         },
+        provider,
         model,
       },
     };
@@ -325,6 +342,7 @@ Custom commands can be created in:
 
     const statusProvider = context?.provider || 'claude';
     const statusCatalog = await providerModelsService.getProviderModels(statusProvider);
+    const memoryUsage = process.memoryUsage();
 
     return {
       type: 'builtin',
@@ -337,7 +355,13 @@ Custom commands can be created in:
         model: context?.model || statusCatalog.DEFAULT,
         provider: statusProvider,
         nodeVersion: process.version,
-        platform: process.platform
+        platform: process.platform,
+        pid: process.pid,
+        memoryUsage: {
+          rssMb: Math.round(memoryUsage.rss / 1024 / 1024),
+          heapUsedMb: Math.round(memoryUsage.heapUsed / 1024 / 1024),
+          heapTotalMb: Math.round(memoryUsage.heapTotal / 1024 / 1024),
+        }
       }
     };
   },
