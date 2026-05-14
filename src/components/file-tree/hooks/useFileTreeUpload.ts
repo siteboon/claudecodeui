@@ -1,6 +1,5 @@
 import { useCallback, useState, useRef } from 'react';
 import type { Project } from '../../../types/app';
-import { api } from '../../../utils/api';
 
 type UseFileTreeUploadOptions = {
   selectedProject: Project | null;
@@ -57,6 +56,45 @@ const readAllDirectoryEntries = async (directoryEntry: FileSystemDirectoryEntry,
   return files;
 };
 
+// Shared upload logic using XMLHttpRequest for progress tracking
+const uploadFilesWithProgress = (
+  url: string,
+  formData: FormData,
+  token: string | null,
+  onProgress: (percent: number) => void,
+): Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }> => {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        const percent = Math.round((event.loaded / event.total) * 100);
+        onProgress(percent);
+      }
+    };
+
+    xhr.onload = () => {
+      const response = {
+        ok: xhr.status >= 200 && xhr.status < 300,
+        status: xhr.status,
+        json: () => Promise.resolve(JSON.parse(xhr.responseText)),
+      };
+      resolve(response);
+    };
+
+    xhr.onerror = () => {
+      reject(new Error('Network error during upload'));
+    };
+
+    xhr.send(formData);
+  });
+};
+
 export const useFileTreeUpload = ({
   selectedProject,
   onRefresh,
@@ -65,7 +103,68 @@ export const useFileTreeUpload = ({
   const [isDragOver, setIsDragOver] = useState(false);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [operationLoading, setOperationLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const treeRef = useRef<HTMLDivElement>(null);
+  const isUploadingRef = useRef(false);
+
+  const performUpload = useCallback(async (files: File[], targetPath: string) => {
+    if (isUploadingRef.current) return;
+    if (files.length === 0) {
+      return;
+    }
+
+    if (!selectedProject) {
+      showToast('No project selected', 'error');
+      return;
+    }
+
+    isUploadingRef.current = true;
+    setOperationLoading(true);
+    setUploadProgress(0);
+
+    try {
+      const formData = new FormData();
+      formData.append('targetPath', targetPath);
+
+      const relativePaths: string[] = [];
+      files.forEach((file) => {
+        const cleanFile = new File([file], file.name.split('/').pop()!, {
+          type: file.type,
+          lastModified: file.lastModified,
+        });
+        formData.append('files', cleanFile);
+        relativePaths.push(file.name);
+      });
+
+      formData.append('relativePaths', JSON.stringify(relativePaths));
+
+      const token = localStorage.getItem('auth-token');
+      const url = `/api/projects/${encodeURIComponent(selectedProject.projectId)}/files/upload`;
+
+      const response = await uploadFilesWithProgress(
+        url,
+        formData,
+        token,
+        (percent) => setUploadProgress(percent),
+      );
+
+      if (!response.ok) {
+        const data = (await response.json()) as { error?: string };
+        throw new Error(data.error || 'Upload failed');
+      }
+
+      showToast(`Uploaded ${files.length} file(s)`, 'success');
+      onRefresh();
+    } catch (err) {
+      console.error('Upload error:', err);
+      showToast(err instanceof Error ? err.message : 'Upload failed', 'error');
+    } finally {
+      isUploadingRef.current = false;
+      setOperationLoading(false);
+      setUploadProgress(0);
+      setDropTarget(null);
+    }
+  }, [selectedProject, onRefresh, showToast]);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -94,7 +193,6 @@ export const useFileTreeUpload = ({
     setIsDragOver(false);
 
     const targetPath = dropTarget || '';
-    setOperationLoading(true);
 
     try {
       const files: File[] = [];
@@ -129,54 +227,21 @@ export const useFileTreeUpload = ({
       }
 
       if (files.length === 0) {
-        setOperationLoading(false);
         setDropTarget(null);
         return;
       }
 
-      const formData = new FormData();
-      formData.append('targetPath', targetPath);
-
-      // Store relative paths separately since FormData strips path info from File.name
-      const relativePaths: string[] = [];
-      files.forEach((file) => {
-        // Create a new file with just the filename (without path) for FormData
-        // but store the relative path separately
-        const cleanFile = new File([file], file.name.split('/').pop()!, {
-          type: file.type,
-          lastModified: file.lastModified
-        });
-        formData.append('files', cleanFile);
-        relativePaths.push(file.name); // Keep the full relative path
-      });
-
-      // Send relative paths as a JSON array
-      formData.append('relativePaths', JSON.stringify(relativePaths));
-
-      const response = await api.post(
-        // File upload endpoint is keyed by DB projectId post-migration.
-        `/projects/${encodeURIComponent(selectedProject!.projectId)}/files/upload`,
-        formData
-      );
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Upload failed');
-      }
-
-      showToast(
-        `Uploaded ${files.length} file(s)`,
-        'success'
-      );
-      onRefresh();
+      await performUpload(files, targetPath);
     } catch (err) {
-      console.error('Upload error:', err);
+      console.error('Drop error:', err);
       showToast(err instanceof Error ? err.message : 'Upload failed', 'error');
-    } finally {
-      setOperationLoading(false);
-      setDropTarget(null);
     }
-  }, [dropTarget, selectedProject, onRefresh, showToast]);
+  }, [dropTarget, performUpload, showToast]);
+
+  // Handle file selection from the upload button's file input
+  const handleFileSelect = useCallback((files: File[], targetPath?: string) => {
+    performUpload(files, targetPath || '');
+  }, [performUpload]);
 
   const handleItemDragOver = useCallback((e: React.DragEvent, itemPath: string) => {
     e.preventDefault();
@@ -194,11 +259,13 @@ export const useFileTreeUpload = ({
     isDragOver,
     dropTarget,
     operationLoading,
+    uploadProgress,
     treeRef,
     handleDragEnter,
     handleDragOver,
     handleDragLeave,
     handleDrop,
+    handleFileSelect,
     handleItemDragOver,
     handleItemDrop,
     setDropTarget,
