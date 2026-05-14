@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
+import TOML from '@iarna/toml';
 import spawn from 'cross-spawn';
 
 import type { IProviderAuth } from '@/shared/interfaces.js';
@@ -12,8 +13,130 @@ type CodexCredentialsStatus = {
   authenticated: boolean;
   email: string | null;
   method: string | null;
-  error?: string;
+  error: string | null;
 };
+
+const AUTHENTICATED_EMAIL = 'Authenticated';
+const API_KEY_EMAIL = 'API Key Auth';
+
+const readEmailFromIdToken = (idToken: string): string => {
+  try {
+    const parts = idToken.split('.');
+    if (parts.length >= 2) {
+      const payload = readObjectRecord(JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8')));
+      return readOptionalString(payload?.email) ?? readOptionalString(payload?.user) ?? AUTHENTICATED_EMAIL;
+    }
+  } catch {
+    // Ignore malformed token payloads and fall back to a generic label.
+  }
+
+  return AUTHENTICATED_EMAIL;
+};
+
+const readAuthJsonStatus = async (codexHome: string): Promise<CodexCredentialsStatus | null> => {
+  const authPath = path.join(codexHome, 'auth.json');
+  const content = await readFile(authPath, 'utf8');
+  const auth = readObjectRecord(JSON.parse(content)) ?? {};
+  const tokens = readObjectRecord(auth.tokens) ?? {};
+  const idToken = readOptionalString(tokens.id_token);
+  const accessToken = readOptionalString(tokens.access_token);
+
+  if (idToken || accessToken) {
+    return {
+      authenticated: true,
+      email: idToken ? readEmailFromIdToken(idToken) : AUTHENTICATED_EMAIL,
+      method: 'credentials_file',
+      error: null,
+    };
+  }
+
+  if (readOptionalString(auth.OPENAI_API_KEY)) {
+    return {
+      authenticated: true,
+      email: API_KEY_EMAIL,
+      method: 'api_key',
+      error: null,
+    };
+  }
+
+  return null;
+};
+
+const readConfigTomlStatus = async (
+  codexHome: string,
+  env: NodeJS.ProcessEnv,
+): Promise<CodexCredentialsStatus | null> => {
+  const configPath = path.join(codexHome, 'config.toml');
+  const content = await readFile(configPath, 'utf8');
+  const config = readObjectRecord(TOML.parse(content)) ?? {};
+  const providerName = readOptionalString(config.model_provider);
+  const providers = readObjectRecord(config.model_providers) ?? {};
+  const providerConfig = providerName ? readObjectRecord(providers[providerName]) : null;
+  const envKey = readOptionalString(providerConfig?.env_key);
+
+  if (envKey && readOptionalString(env[envKey])) {
+    return {
+      authenticated: true,
+      email: API_KEY_EMAIL,
+      method: 'api_key',
+      error: null,
+    };
+  }
+
+  return null;
+};
+
+export async function checkStatus(): Promise<CodexCredentialsStatus> {
+  const codexHome = path.join(os.homedir(), '.codex');
+  let readError: string | null = null;
+
+  try {
+    const authStatus = await readAuthJsonStatus(codexHome);
+    if (authStatus) {
+      return authStatus;
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+      readError = error instanceof Error ? error.message : 'Failed to read Codex auth';
+    }
+  }
+
+  try {
+    const configStatus = await readConfigTomlStatus(codexHome, process.env);
+    if (configStatus) {
+      return configStatus;
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+      readError = readError ?? (error instanceof Error ? error.message : 'Failed to read Codex config');
+    }
+  }
+
+  if (readOptionalString(process.env.OPENAI_API_KEY)) {
+    return {
+      authenticated: true,
+      email: API_KEY_EMAIL,
+      method: 'api_key',
+      error: null,
+    };
+  }
+
+  if (readError) {
+    return {
+      authenticated: false,
+      email: null,
+      method: null,
+      error: readError,
+    };
+  }
+
+  return {
+    authenticated: false,
+    email: null,
+    method: null,
+    error: 'Codex not configured',
+  };
+}
 
 export class CodexProviderAuth implements IProviderAuth {
   /**
@@ -46,55 +169,9 @@ export class CodexProviderAuth implements IProviderAuth {
   }
 
   /**
-   * Reads Codex auth.json and checks OAuth tokens or an API key fallback.
+   * Reads Codex auth status from either auth.json or config.toml env_key-based setups.
    */
   private async checkCredentials(): Promise<CodexCredentialsStatus> {
-    try {
-      const authPath = path.join(os.homedir(), '.codex', 'auth.json');
-      const content = await readFile(authPath, 'utf8');
-      const auth = readObjectRecord(JSON.parse(content)) ?? {};
-      const tokens = readObjectRecord(auth.tokens) ?? {};
-      const idToken = readOptionalString(tokens.id_token);
-      const accessToken = readOptionalString(tokens.access_token);
-
-      if (idToken || accessToken) {
-        return {
-          authenticated: true,
-          email: idToken ? this.readEmailFromIdToken(idToken) : 'Authenticated',
-          method: 'credentials_file',
-        };
-      }
-
-      if (readOptionalString(auth.OPENAI_API_KEY)) {
-        return { authenticated: true, email: 'API Key Auth', method: 'api_key' };
-      }
-
-      return { authenticated: false, email: null, method: null, error: 'No valid tokens found' };
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      return {
-        authenticated: false,
-        email: null,
-        method: null,
-        error: code === 'ENOENT' ? 'Codex not configured' : error instanceof Error ? error.message : 'Failed to read Codex auth',
-      };
-    }
-  }
-
-  /**
-   * Extracts the user email from a Codex id_token when a readable JWT payload exists.
-   */
-  private readEmailFromIdToken(idToken: string): string {
-    try {
-      const parts = idToken.split('.');
-      if (parts.length >= 2) {
-        const payload = readObjectRecord(JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8')));
-        return readOptionalString(payload?.email) ?? readOptionalString(payload?.user) ?? 'Authenticated';
-      }
-    } catch {
-      // Fall back to a generic authenticated marker if the token payload is not readable.
-    }
-
-    return 'Authenticated';
+    return checkStatus();
   }
 }
