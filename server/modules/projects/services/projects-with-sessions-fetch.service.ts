@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import path from 'node:path';
 
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
@@ -22,6 +23,7 @@ type SessionRepositoryRow = {
   custom_name?: string | null;
   updated_at?: string | null;
   created_at?: string | null;
+  jsonl_path?: string | null;
 };
 
 export type ProjectListItem = {
@@ -124,11 +126,51 @@ function normalizeSessionPagination(options: SessionPaginationOptions = {}): { l
   };
 }
 
+/**
+ * Counts human ("user" role) messages in a Claude JSONL session file.
+ * Each line is a JSON object; we count lines where `role === "user"` and
+ * the content is not a tool result (i.e. actual user prompts, not tool outputs).
+ * Returns 0 if the file is missing or unreadable.
+ */
+function countUserMessagesInJsonl(jsonlPath: string): number {
+  try {
+    const content = fsSync.readFileSync(jsonlPath, 'utf8');
+    const lines = content.split(/\r?\n/);
+    let count = 0;
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const data = JSON.parse(trimmed) as Record<string, unknown>;
+        if (data.type === 'user') {
+          // Only count genuine user prompts, not tool_result messages
+          const message = data.message as Record<string, unknown> | undefined;
+          const content = message?.content;
+          const isToolResult =
+            Array.isArray(content) &&
+            content.some(
+              (item) => (item as Record<string, unknown>)?.type === 'tool_result',
+            );
+          if (!isToolResult) {
+            count += 1;
+          }
+        }
+      } catch {
+        // Skip malformed lines
+      }
+    }
+    return count;
+  } catch {
+    return 0;
+  }
+}
+
 function mapSessionRowToSummary(row: SessionRepositoryRow): SessionSummary {
+  const messageCount = row.jsonl_path ? countUserMessagesInJsonl(row.jsonl_path) : 0;
   return {
     id: row.session_id,
     summary: row.custom_name || '',
-    messageCount: 0,
+    messageCount,
     lastActivity: row.updated_at ?? row.created_at ?? new Date().toISOString(),
   };
 }
