@@ -1,11 +1,16 @@
 import { spawn } from 'node:child_process';
 import fsSync from 'node:fs';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
 import crossSpawn from 'cross-spawn';
 
 import type { LLMProvider, ProviderModelOption, ProviderModelsDefinition } from '@/shared/types.js';
 
 const OPEN_CODE_MODELS_TIMEOUT_MS = 20_000;
+export const PROVIDER_MODELS_CACHE_TTL_MS = 2 * 24 * 60 * 60 * 1000;
+const PROVIDER_MODELS_CACHE_VERSION = 1;
 
 /**
  * Claude (Anthropic) — SDK-style ids used by the UI and claude-sdk.js.
@@ -101,6 +106,31 @@ const BUILTIN_BY_PROVIDER: Record<Exclude<LLMProvider, 'opencode'>, ProviderMode
   gemini: GEMINI_MODELS,
 };
 
+type ProviderModelsOptions = {
+  cwd?: string;
+};
+
+type ProviderModelsLoader = (
+  provider: LLMProvider,
+  options?: ProviderModelsOptions,
+) => Promise<ProviderModelsDefinition>;
+
+type ProviderModelsCacheEntry = {
+  expiresAt: number;
+  models: ProviderModelsDefinition;
+};
+
+type ProviderModelsCacheFile = {
+  version: number;
+  entries: Record<string, ProviderModelsCacheEntry>;
+};
+
+type ProviderModelsServiceDependencies = {
+  cachePath?: string;
+  loadModels?: ProviderModelsLoader;
+  now?: () => number;
+};
+
 const MODEL_ID_LINE = /^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*$/i;
 
 const parseOpenCodeModelsStdout = (stdout: string): string[] => {
@@ -142,6 +172,81 @@ const resolveOpenCodeCwd = (cwd?: string): string => {
     return cwd;
   }
   return process.cwd();
+};
+
+const getProviderModelsCachePath = (): string =>
+  process.env.CLOUDCLI_PROVIDER_MODELS_CACHE_PATH
+  || path.join(os.homedir(), '.cloudcli', 'provider-models-cache.json');
+
+const getProviderModelsCacheKey = (
+  provider: LLMProvider,
+  options?: ProviderModelsOptions,
+): string => {
+  if (provider === 'opencode') {
+    return `${provider}:${resolveOpenCodeCwd(options?.cwd)}`;
+  }
+
+  return provider;
+};
+
+const isProviderModelOption = (value: unknown): value is ProviderModelOption => (
+  Boolean(value)
+  && typeof value === 'object'
+  && typeof (value as ProviderModelOption).value === 'string'
+  && typeof (value as ProviderModelOption).label === 'string'
+);
+
+const isProviderModelsDefinition = (value: unknown): value is ProviderModelsDefinition => (
+  Boolean(value)
+  && typeof value === 'object'
+  && Array.isArray((value as ProviderModelsDefinition).OPTIONS)
+  && (value as ProviderModelsDefinition).OPTIONS.every(isProviderModelOption)
+  && typeof (value as ProviderModelsDefinition).DEFAULT === 'string'
+);
+
+const isProviderModelsCacheEntry = (value: unknown): value is ProviderModelsCacheEntry => (
+  Boolean(value)
+  && typeof value === 'object'
+  && typeof (value as ProviderModelsCacheEntry).expiresAt === 'number'
+  && isProviderModelsDefinition((value as ProviderModelsCacheEntry).models)
+);
+
+const readProviderModelsCacheFile = async (
+  cachePath: string,
+): Promise<ProviderModelsCacheFile | null> => {
+  try {
+    const raw = await readFile(cachePath, 'utf8');
+    const parsed = JSON.parse(raw) as Partial<ProviderModelsCacheFile>;
+    if (parsed.version !== PROVIDER_MODELS_CACHE_VERSION || !parsed.entries || typeof parsed.entries !== 'object') {
+      return null;
+    }
+
+    const entries = Object.fromEntries(
+      Object.entries(parsed.entries).filter((entry): entry is [string, ProviderModelsCacheEntry] =>
+        isProviderModelsCacheEntry(entry[1]),
+      ),
+    );
+    return { version: PROVIDER_MODELS_CACHE_VERSION, entries };
+  } catch {
+    return null;
+  }
+};
+
+const writeProviderModelsCacheFile = async (
+  cachePath: string,
+  entries: Map<string, ProviderModelsCacheEntry>,
+  now: number,
+): Promise<void> => {
+  const serializableEntries = Object.fromEntries(
+    [...entries.entries()].filter(([, entry]) => entry.expiresAt > now),
+  );
+  const payload: ProviderModelsCacheFile = {
+    version: PROVIDER_MODELS_CACHE_VERSION,
+    entries: serializableEntries,
+  };
+
+  await mkdir(path.dirname(cachePath), { recursive: true });
+  await writeFile(cachePath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
 };
 
 const runOpenCodeModelsCommand = (cwd?: string): Promise<string> =>
@@ -222,7 +327,133 @@ async function getProviderModelsInternal(
   }
 }
 
-export const providerModelsService = {
-  getProviderModels: (provider: LLMProvider, options?: { cwd?: string }): Promise<ProviderModelsDefinition> =>
-    getProviderModelsInternal(provider, options),
+export const createProviderModelsService = (dependencies: ProviderModelsServiceDependencies = {}) => {
+  const memoryCache = new Map<string, ProviderModelsCacheEntry>();
+  const pendingRequests = new Map<string, Promise<ProviderModelsDefinition>>();
+  const loadModels = dependencies.loadModels ?? getProviderModelsInternal;
+  const now = dependencies.now ?? (() => Date.now());
+  let persistedCacheLoaded = false;
+  let persistedCacheLoadPromise: Promise<void> | null = null;
+
+  const loadPersistedCache = async (cachePath: string): Promise<void> => {
+    if (persistedCacheLoaded) {
+      return;
+    }
+
+    if (!persistedCacheLoadPromise) {
+      persistedCacheLoadPromise = (async () => {
+        const cacheFile = await readProviderModelsCacheFile(cachePath);
+        const currentTime = now();
+        for (const [key, entry] of Object.entries(cacheFile?.entries ?? {})) {
+          if (entry.expiresAt > currentTime) {
+            memoryCache.set(key, entry);
+          }
+        }
+        persistedCacheLoaded = true;
+      })().finally(() => {
+        persistedCacheLoadPromise = null;
+      });
+    }
+
+    await persistedCacheLoadPromise;
+  };
+
+  const persistCache = async (cachePath: string): Promise<void> => {
+    try {
+      await writeProviderModelsCacheFile(cachePath, memoryCache, now());
+    } catch (error) {
+      console.warn('Unable to persist provider models cache:', error);
+    }
+  };
+
+  const setCacheEntry = async (
+    cachePath: string,
+    cacheKey: string,
+    models: ProviderModelsDefinition,
+  ): Promise<void> => {
+    const entry = {
+      expiresAt: now() + PROVIDER_MODELS_CACHE_TTL_MS,
+      models,
+    };
+    memoryCache.set(cacheKey, entry);
+
+    await persistCache(cachePath);
+  };
+
+  const loadAndCacheModels = (
+    provider: LLMProvider,
+    options: ProviderModelsOptions | undefined,
+    cachePath: string,
+    cacheKey: string,
+  ): Promise<ProviderModelsDefinition> => {
+    const request = loadModels(provider, options)
+      .then(async (models) => {
+        await setCacheEntry(cachePath, cacheKey, models);
+        return models;
+      })
+      .finally(() => {
+        pendingRequests.delete(cacheKey);
+      });
+
+    pendingRequests.set(cacheKey, request);
+    return request;
+  };
+
+  const pruneExpiredMemoryEntry = (cacheKey: string, currentTime: number): ProviderModelsDefinition | null => {
+    const cachedEntry = memoryCache.get(cacheKey);
+    if (!cachedEntry) {
+      return null;
+    }
+
+    if (cachedEntry.expiresAt > currentTime) {
+      return cachedEntry.models;
+    }
+
+    memoryCache.delete(cacheKey);
+    return null;
+  };
+
+  const getProviderModels = async (
+    provider: LLMProvider,
+    options?: ProviderModelsOptions,
+  ): Promise<ProviderModelsDefinition> => {
+    const cachePath = dependencies.cachePath ?? getProviderModelsCachePath();
+    const cacheKey = getProviderModelsCacheKey(provider, options);
+    const cachedModels = pruneExpiredMemoryEntry(cacheKey, now());
+    if (cachedModels) {
+      return cachedModels;
+    }
+
+    const pendingRequest = pendingRequests.get(cacheKey);
+    if (pendingRequest) {
+      return pendingRequest;
+    }
+
+    await loadPersistedCache(cachePath);
+    const persistedModels = pruneExpiredMemoryEntry(cacheKey, now());
+    if (persistedModels) {
+      return persistedModels;
+    }
+
+    const postLoadPendingRequest = pendingRequests.get(cacheKey);
+    if (postLoadPendingRequest) {
+      return postLoadPendingRequest;
+    }
+
+    return loadAndCacheModels(provider, options, cachePath, cacheKey);
+  };
+
+  const clearCache = (): void => {
+    memoryCache.clear();
+    pendingRequests.clear();
+    persistedCacheLoaded = false;
+    persistedCacheLoadPromise = null;
+  };
+
+  return {
+    getProviderModels,
+    clearCache,
+  };
 };
+
+export const providerModelsService = createProviderModelsService();

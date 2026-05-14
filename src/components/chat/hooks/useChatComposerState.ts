@@ -55,8 +55,6 @@ interface UseChatComposerStateArgs {
   pendingViewSessionRef: { current: PendingViewSession | null };
   scrollToBottom: () => void;
   addMessage: (msg: ChatMessage) => void;
-  clearMessages: () => void;
-  rewindMessages: (count: number) => void;
   setIsLoading: (loading: boolean) => void;
   setCanAbortSession: (canAbort: boolean) => void;
   setClaudeStatus: (status: { text: string; tokens: number; can_interrupt: boolean } | null) => void;
@@ -77,6 +75,50 @@ interface CommandExecutionResult {
   hasBashCommands?: boolean;
   hasFileIncludes?: boolean;
 }
+
+type ModelCommandData = {
+  current?: {
+    provider?: string;
+    providerLabel?: string;
+    model?: string;
+  };
+  available?: Partial<Record<LLMProvider, string[]>>;
+  availableModels?: string[];
+};
+
+const PROVIDER_LABELS: Record<LLMProvider, string> = {
+  claude: 'Claude',
+  cursor: 'Cursor',
+  codex: 'Codex',
+  gemini: 'Gemini',
+  opencode: 'OpenCode',
+};
+
+const isLLMProvider = (value: unknown): value is LLMProvider => (
+  value === 'claude'
+  || value === 'cursor'
+  || value === 'codex'
+  || value === 'gemini'
+  || value === 'opencode'
+);
+
+const formatModelCommandMessage = (data: ModelCommandData): string => {
+  const currentProvider = isLLMProvider(data.current?.provider)
+    ? data.current.provider
+    : 'claude';
+  const providerLabel = data.current?.providerLabel || PROVIDER_LABELS[currentProvider];
+  const currentModel = data.current?.model || 'Unknown';
+  // `availableModels` is the current response shape; the keyed map keeps older
+  // server responses readable without reintroducing cross-provider rendering.
+  const availableModels = Array.isArray(data.availableModels)
+    ? data.availableModels
+    : data.available?.[currentProvider] ?? [];
+  const availableText = availableModels.length > 0
+    ? availableModels.join(', ')
+    : 'No models reported for this provider.';
+
+  return `**Current Model**: ${currentModel}\n\n**Provider**: ${providerLabel}\n\n**Available Models**:\n\n${availableText}`;
+};
 
 const createFakeSubmitEvent = () => {
   return { preventDefault: () => undefined } as unknown as FormEvent<HTMLFormElement>;
@@ -125,8 +167,6 @@ export function useChatComposerState({
   pendingViewSessionRef,
   scrollToBottom,
   addMessage,
-  clearMessages,
-  rewindMessages,
   setIsLoading,
   setCanAbortSession,
   setClaudeStatus,
@@ -159,10 +199,6 @@ export function useChatComposerState({
     (result: CommandExecutionResult) => {
       const { action, data } = result;
       switch (action) {
-        case 'clear':
-          clearMessages();
-          break;
-
         case 'help':
           addMessage({
             type: 'assistant',
@@ -171,10 +207,10 @@ export function useChatComposerState({
           });
           break;
 
-        case 'model':
+        case 'models':
           addMessage({
             type: 'assistant',
-            content: `**Current Model**: ${data.current.model}\n\n**Available Models**:\n\nClaude: ${data.available.claude.join(', ')}\n\nCursor: ${data.available.cursor.join(', ')}`,
+            content: formatModelCommandMessage(data as ModelCommandData),
             timestamp: Date.now(),
           });
           break;
@@ -214,28 +250,11 @@ export function useChatComposerState({
           onShowSettings?.();
           break;
 
-        case 'rewind':
-          if (data.error) {
-            addMessage({
-              type: 'assistant',
-              content: `Warning: ${data.message}`,
-              timestamp: Date.now(),
-            });
-          } else {
-            rewindMessages(data.steps * 2);
-            addMessage({
-              type: 'assistant',
-              content: `Rewound ${data.steps} step(s). ${data.message}`,
-              timestamp: Date.now(),
-            });
-          }
-          break;
-
         default:
           console.warn('Unknown built-in command action:', action);
       }
     },
-    [onFileOpen, onShowSettings, addMessage, clearMessages, rewindMessages],
+    [onFileOpen, onShowSettings, addMessage],
   );
 
   const handleCustomCommand = useCallback(async (result: CommandExecutionResult) => {

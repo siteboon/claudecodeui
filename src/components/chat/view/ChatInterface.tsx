@@ -87,8 +87,6 @@ function ChatInterface({
   const {
     chatMessages,
     addMessage,
-    clearMessages,
-    rewindMessages,
     isLoading,
     setIsLoading,
     currentSessionId,
@@ -200,8 +198,6 @@ function ChatInterface({
     pendingViewSessionRef,
     scrollToBottom,
     addMessage,
-    clearMessages,
-    rewindMessages,
     setIsLoading,
     setCanAbortSession,
     setClaudeStatus,

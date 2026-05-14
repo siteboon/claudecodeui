@@ -15,6 +15,65 @@ const APP_ROOT = findAppRoot(__dirname);
 
 const router = express.Router();
 
+const MODEL_PROVIDERS = ['claude', 'cursor', 'codex', 'gemini', 'opencode'];
+
+const MODEL_PROVIDER_LABELS = {
+  claude: 'Claude',
+  cursor: 'Cursor',
+  codex: 'Codex',
+  gemini: 'Gemini',
+  opencode: 'OpenCode',
+};
+
+const readModelProvider = (value) => {
+  if (typeof value !== 'string') {
+    return 'claude';
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return MODEL_PROVIDERS.includes(normalized) ? normalized : 'claude';
+};
+
+const getProviderModelOptions = (provider, context) => {
+  if (provider !== 'opencode') {
+    return undefined;
+  }
+
+  const cwd = typeof context?.projectPath === 'string' ? context.projectPath : undefined;
+  return { cwd };
+};
+
+export const executeModelsCommand = async (args, context) => {
+  const currentProvider = readModelProvider(context?.provider);
+  const catalog = await providerModelsService.getProviderModels(
+    currentProvider,
+    getProviderModelOptions(currentProvider, context),
+  );
+  const availableModels = catalog.OPTIONS.map((option) => option.value);
+  const currentModel = typeof context?.model === 'string' && context.model
+    ? context.model
+    : catalog.DEFAULT;
+
+  return {
+    type: 'builtin',
+    action: 'models',
+    data: {
+      current: {
+        provider: currentProvider,
+        providerLabel: MODEL_PROVIDER_LABELS[currentProvider],
+        model: currentModel
+      },
+      available: {
+        [currentProvider]: availableModels,
+      },
+      availableModels,
+      message: args.length > 0
+        ? `Switching to model: ${args[0]}`
+        : `Current model: ${currentModel}`
+    }
+  };
+};
+
 /**
  * Recursively scan directory for command files (.md)
  * @param {string} dir - Directory to scan
@@ -90,14 +149,8 @@ const builtInCommands = [
     metadata: { type: 'builtin' }
   },
   {
-    name: '/clear',
-    description: 'Clear the conversation history',
-    namespace: 'builtin',
-    metadata: { type: 'builtin' }
-  },
-  {
-    name: '/model',
-    description: 'Switch or view the current AI model',
+    name: '/models',
+    description: 'View available models for the current provider',
     namespace: 'builtin',
     metadata: { type: 'builtin' }
   },
@@ -125,12 +178,6 @@ const builtInCommands = [
     namespace: 'builtin',
     metadata: { type: 'builtin' }
   },
-  {
-    name: '/rewind',
-    description: 'Rewind the conversation to a previous state',
-    namespace: 'builtin',
-    metadata: { type: 'builtin' }
-  }
 ];
 
 /**
@@ -176,58 +223,7 @@ Custom commands can be created in:
     };
   },
 
-  '/clear': async (args, context) => {
-    return {
-      type: 'builtin',
-      action: 'clear',
-      data: {
-        message: 'Conversation history cleared'
-      }
-    };
-  },
-
-  '/model': async (args, context) => {
-    const [claude, cursor, codex, gemini, opencode] = await Promise.all([
-      providerModelsService.getProviderModels('claude'),
-      providerModelsService.getProviderModels('cursor'),
-      providerModelsService.getProviderModels('codex'),
-      providerModelsService.getProviderModels('gemini'),
-      providerModelsService.getProviderModels('opencode'),
-    ]);
-
-    const availableModels = {
-      claude: claude.OPTIONS.map(o => o.value),
-      cursor: cursor.OPTIONS.map(o => o.value),
-      codex: codex.OPTIONS.map(o => o.value),
-      gemini: gemini.OPTIONS.map(o => o.value),
-      opencode: opencode.OPTIONS.map(o => o.value),
-    };
-
-    const currentProvider = context?.provider || 'claude';
-    const defaults = {
-      claude: claude.DEFAULT,
-      cursor: cursor.DEFAULT,
-      codex: codex.DEFAULT,
-      gemini: gemini.DEFAULT,
-      opencode: opencode.DEFAULT,
-    };
-    const currentModel = context?.model || defaults[currentProvider] || claude.DEFAULT;
-
-    return {
-      type: 'builtin',
-      action: 'model',
-      data: {
-        current: {
-          provider: currentProvider,
-          model: currentModel
-        },
-        available: availableModels,
-        message: args.length > 0
-          ? `Switching to model: ${args[0]}`
-          : `Current model: ${currentModel}`
-      }
-    };
-  },
+  '/models': executeModelsCommand,
 
   '/cost': async (args, context) => {
     const tokenUsage = context?.tokenUsage || {};
@@ -390,30 +386,6 @@ Custom commands can be created in:
       action: 'config',
       data: {
         message: 'Opening settings...'
-      }
-    };
-  },
-
-  '/rewind': async (args, context) => {
-    const steps = args[0] ? parseInt(args[0]) : 1;
-
-    if (isNaN(steps) || steps < 1) {
-      return {
-        type: 'builtin',
-        action: 'rewind',
-        data: {
-          error: 'Invalid steps parameter',
-          message: 'Usage: /rewind [number] - Rewind conversation by N steps (default: 1)'
-        }
-      };
-    }
-
-    return {
-      type: 'builtin',
-      action: 'rewind',
-      data: {
-        steps,
-        message: `Rewinding conversation by ${steps} step${steps > 1 ? 's' : ''}...`
       }
     };
   }
