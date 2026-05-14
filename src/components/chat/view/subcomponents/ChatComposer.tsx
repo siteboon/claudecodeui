@@ -295,6 +295,7 @@ export default function ChatComposer({
 
             <PromptInputTextarea
               ref={textareaRef}
+              dir="auto"
               value={input}
               onChange={onInputChange}
               onClick={onTextareaClick}
