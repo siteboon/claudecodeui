@@ -254,6 +254,110 @@ function recomputeMergedIfNeeded(slot: SessionSlot): boolean {
   return true;
 }
 
+/**
+ * Reconcile realtime messages against server messages after a server fetch.
+ * Drops realtime entries the server has a canonical version of — either by
+ * exact id match, or, for client-generated placeholders (`local_*`, `text_*`,
+ * `__streaming_*`), by role+kind+content match against any server message.
+ * Content matching avoids timestamp-only heuristics that could prematurely
+ * drop a queued local prompt when the server's latest timestamp advances
+ * past it from an earlier response before the new prompt's canonical lands.
+ * Keeps everything else so in-flight responses aren't wiped when the file
+ * watcher fires a refresh before the provider finishes writing its JSONL.
+ */
+function reconcileRealtimeAgainstServer(slot: SessionSlot): void {
+  const serverIds = new Set(slot.serverMessages.map(m => m.id));
+  const isClientPlaceholder = (id?: string) =>
+    Boolean(id) && (id!.startsWith('local_') || id!.startsWith('text_') || id!.startsWith('__streaming_'));
+
+  // Kind-aware signature for dedupe. Different message kinds carry their
+  // meaningful data in different fields (`text`/`thinking` use `content`,
+  // `tool_use` uses the tool metadata, `task_notification` uses `summary`,
+  // etc.). Falling back to `content` alone would risk matching unrelated
+  // placeholders whose `content` happens to be the same empty string.
+  // Returns null when the message lacks a comparable signature so it isn't
+  // consumed by a coincidentally-empty server entry.
+  const comparableSignature = (msg: NormalizedMessage): string | null => {
+    const anyMsg = msg as {
+      kind: string;
+      content?: string;
+      summary?: string;
+      toolId?: string;
+      toolName?: string;
+      toolInput?: unknown;
+    };
+    switch (anyMsg.kind) {
+      case 'text':
+      case 'thinking':
+      case 'error':
+      case 'stream_delta':
+      case 'interactive_prompt':
+        return anyMsg.content || null;
+      case 'task_notification':
+        return anyMsg.summary || null;
+      case 'tool_use':
+        if (!anyMsg.toolId && !anyMsg.toolName) return null;
+        return `${anyMsg.toolName || ''}::${anyMsg.toolId || ''}::${JSON.stringify(anyMsg.toolInput ?? null)}`;
+      default:
+        return null;
+    }
+  };
+
+  // Consume-once matching: each server message can absorb at most one
+  // placeholder, so two identical-content prompts (e.g. "ok" twice in a row)
+  // don't both get hidden just because the first one already has a canonical
+  // on the server.
+  //
+  // The match window is restricted to:
+  //   1. the last MATCH_WINDOW server messages (insertion order — most
+  //      recent), and
+  //   2. server messages whose timestamp is no older than
+  //      MATCH_LOOKBACK_MS before the placeholder's timestamp.
+  // Otherwise an assistant who legitimately produces an identical short
+  // reply twice could see the second placeholder match the first canonical
+  // copy from earlier in the history — making the newer reply disappear
+  // until a later refresh. 30 min covers slow tool-use placeholders that
+  // sit in flight while the user idles between send and canonical landing.
+  const MATCH_WINDOW = 50;
+  const MATCH_LOOKBACK_MS = 30 * 60 * 1000;
+  const windowStart = Math.max(0, slot.serverMessages.length - MATCH_WINDOW);
+
+  const parseTs = (value: string | undefined): number =>
+    value === undefined ? Number.NaN : Date.parse(value);
+
+  const consumedServerIds = new Set<string>();
+  const takeCanonicalMatch = (m: NormalizedMessage): boolean => {
+    const mRole = (m as { role?: string }).role;
+    const mSig = comparableSignature(m);
+    if (mSig === null) return false;
+    const mTs = parseTs(m.timestamp);
+    for (let i = windowStart; i < slot.serverMessages.length; i++) {
+      const s = slot.serverMessages[i];
+      if (consumedServerIds.has(s.id)) continue;
+      if (s.kind !== m.kind) continue;
+      if ((s as { role?: string }).role !== mRole) continue;
+      if (comparableSignature(s) !== mSig) continue;
+      // Reject server messages that are older than the placeholder's
+      // timestamp by more than the lookback slack. If either timestamp is
+      // missing/unparseable, accept the match (legacy paths without
+      // timestamps still benefit from the window cap above).
+      if (!Number.isNaN(mTs)) {
+        const sTs = parseTs(s.timestamp);
+        if (!Number.isNaN(sTs) && sTs < mTs - MATCH_LOOKBACK_MS) continue;
+      }
+      consumedServerIds.add(s.id);
+      return true;
+    }
+    return false;
+  };
+
+  slot.realtimeMessages = slot.realtimeMessages.filter(m => {
+    if (serverIds.has(m.id)) return false;
+    if (isClientPlaceholder(m.id) && takeCanonicalMatch(m)) return false;
+    return true;
+  });
+}
+
 // ─── Stale threshold ─────────────────────────────────────────────────────────
 
 const STALE_THRESHOLD_MS = 30_000;
@@ -362,6 +466,7 @@ export function useSessionStore() {
       slot.offset = (opts.offset ?? 0) + messages.length;
       slot.fetchedAt = Date.now();
       slot.status = 'idle';
+      reconcileRealtimeAgainstServer(slot);
       recomputeMergedIfNeeded(slot);
       if (data.tokenUsage) {
         slot.tokenUsage = data.tokenUsage;
@@ -488,8 +593,7 @@ export function useSessionStore() {
       slot.total = data.total ?? slot.serverMessages.length;
       slot.hasMore = Boolean(data.hasMore);
       slot.fetchedAt = Date.now();
-      // drop realtime messages that the server has caught up with to prevent unbounded growth.
-      slot.realtimeMessages = [];
+      reconcileRealtimeAgainstServer(slot);
       recomputeMergedIfNeeded(slot);
       notify(resolvedSessionId);
     } catch (error) {

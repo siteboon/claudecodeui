@@ -28,6 +28,13 @@ import {
     reconnectSessionWriter,
 } from './claude-sdk.js';
 import {
+    queryClaudeStream,
+    abortClaudeStreamSession,
+    isClaudeStreamSessionActive,
+    getActiveClaudeStreamSessions,
+    reconnectStreamSessionWriter,
+} from './claude-stream.js';
+import {
     spawnCursor,
     abortCursorSession,
     isCursorSessionActive,
@@ -45,6 +52,11 @@ import {
     isGeminiSessionActive,
     getActiveGeminiSessions,
 } from './gemini-cli.js';
+
+// Feature flag: use long-lived CLI process per chat session instead of SDK per-message spawn.
+// First message pays cold start (~22s); subsequent messages in the same session are ~12s.
+// MVP: uses --dangerously-skip-permissions; no UI approval prompts.
+const CLAUDE_STREAM_MODE = process.env.CLAUDE_STREAM_MODE === '1';
 import sessionManager from './sessionManager.js';
 import {
     stripAnsiSequences,
@@ -109,6 +121,13 @@ const wss = createWebSocketServer(server, {
         getActiveCursorSessions,
         getActiveCodexSessions,
         getActiveGeminiSessions,
+        // Long-lived Claude CLI process path (opt-in via CLAUDE_STREAM_MODE=1).
+        claudeStreamMode: CLAUDE_STREAM_MODE,
+        queryClaudeStream,
+        abortClaudeStreamSession,
+        isClaudeStreamSessionActive,
+        getActiveClaudeStreamSessions,
+        reconnectStreamSessionWriter,
     },
     shell: {
         getSessionById: (sessionId) => sessionManager.getSession(sessionId),
