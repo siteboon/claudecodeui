@@ -260,6 +260,13 @@ export function useChatRealtimeHandlers({
         }
         accumulatedStreamRef.current = '';
 
+        // Refresh from server so the canonical JSONL history replaces any
+        // client-side streaming echoes, and the chat view shows the final
+        // committed messages instead of stale realtime copies.
+        if (sid) {
+          void sessionStore.refreshFromServer(sid);
+        }
+
         setIsLoading(false);
         setCanAbortSession(false);
         setClaudeStatus(null);
