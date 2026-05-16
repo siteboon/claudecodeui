@@ -43,6 +43,24 @@ function createRequestId() {
   return crypto.randomBytes(16).toString('hex');
 }
 
+function resolveSdkPermissionMode(permissionMode, toolsSettings = {}, options = {}) {
+  const isRoot = options.isRoot ?? (typeof process.getuid === 'function' && process.getuid() === 0);
+
+  if (permissionMode === 'bypassPermissions') {
+    return isRoot ? 'dontAsk' : 'bypassPermissions';
+  }
+
+  if (toolsSettings.skipPermissions && permissionMode !== 'plan') {
+    return isRoot ? 'dontAsk' : 'bypassPermissions';
+  }
+
+  if (permissionMode && permissionMode !== 'default') {
+    return permissionMode;
+  }
+
+  return undefined;
+}
+
 function waitForToolApproval(requestId, options = {}) {
   const { timeoutMs = TOOL_APPROVAL_TIMEOUT_MS, signal, onCancel, metadata } = options;
 
@@ -163,11 +181,6 @@ function mapCliOptionsToSDK(options = {}) {
     sdkOptions.cwd = cwd;
   }
 
-  // Map permission mode
-  if (permissionMode && permissionMode !== 'default') {
-    sdkOptions.permissionMode = permissionMode;
-  }
-
   // Map tool settings
   const settings = toolsSettings || {
     allowedTools: [],
@@ -175,10 +188,9 @@ function mapCliOptionsToSDK(options = {}) {
     skipPermissions: false
   };
 
-  // Handle tool permissions
-  if (settings.skipPermissions && permissionMode !== 'plan') {
-    // When skipping permissions, use bypassPermissions mode
-    sdkOptions.permissionMode = 'bypassPermissions';
+  const resolvedPermissionMode = resolveSdkPermissionMode(permissionMode, settings);
+  if (resolvedPermissionMode) {
+    sdkOptions.permissionMode = resolvedPermissionMode;
   }
 
   let allowedTools = [...(settings.allowedTools || [])];
@@ -833,5 +845,6 @@ export {
   getActiveClaudeSDKSessions,
   resolveToolApproval,
   getPendingApprovalsForSession,
-  reconnectSessionWriter
+  reconnectSessionWriter,
+  resolveSdkPermissionMode
 };
