@@ -490,9 +490,18 @@ async function queryClaudeSDK(command, options = {}, ws) {
     });
   };
 
+  // Only writers that finalize streaming on the client side (WebSocket UI, SSE
+  // endpoints) can consume the partial-message events; other callers
+  // (commit-message generator, ResponseCollector) just collect the consolidated
+  // assistant message, so we leave streaming off for them.
+  const writerStreams = Boolean(ws?.isWebSocketWriter || ws?.isSSEStreamWriter);
+
   try {
     // Map CLI options to SDK format
     const sdkOptions = mapCliOptionsToSDK(options);
+    if (writerStreams) {
+      sdkOptions.includePartialMessages = true;
+    }
 
     // Load MCP configuration
     const mcpServers = await loadMcpConfig(options.cwd);
@@ -639,6 +648,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
     // Process streaming messages
     console.log('Starting async generator loop for session:', capturedSessionId || 'NEW');
+    let textWasStreamed = false;
     for await (const message of queryInstance) {
       // Capture session ID from first message
       if (message.session_id && !capturedSessionId) {
@@ -660,9 +670,38 @@ async function queryClaudeSDK(command, options = {}, ws) {
         // session_id already captured
       }
 
+      // Track text deltas streamed via includePartialMessages so we can avoid
+      // re-emitting the same text from the consolidated assistant message below.
+      if (
+        message.type === 'stream_event' &&
+        message.event?.type === 'content_block_delta' &&
+        message.event?.delta?.type === 'text_delta'
+      ) {
+        textWasStreamed = true;
+      }
+
       // Transform and normalize message via adapter
-      const transformedMessage = transformMessage(message);
+      let transformedMessage = transformMessage(message);
       const sid = capturedSessionId || sessionId || null;
+
+      // Strip text parts from the consolidated assistant message when text was
+      // already streamed for this turn — otherwise the client renders both the
+      // streamed buffer (finalized by stream_end) and a duplicate text message.
+      // Only applies to streaming writers; non-streaming consumers need the
+      // consolidated text payload to remain intact.
+      if (
+        writerStreams &&
+        textWasStreamed &&
+        message.type === 'assistant' &&
+        Array.isArray(message.message?.content)
+      ) {
+        const filtered = message.message.content.filter((part) => part.type !== 'text');
+        transformedMessage = {
+          ...transformedMessage,
+          message: { ...message.message, content: filtered },
+        };
+        textWasStreamed = false;
+      }
 
       // Use adapter to normalize SDK events into NormalizedMessage[]
       const normalized = sessionsService.normalizeMessage('claude', transformedMessage, sid);
