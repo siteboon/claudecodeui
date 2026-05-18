@@ -6,8 +6,6 @@ import Tooltip from '../../../../shared/view/ui/Tooltip';
 interface ScrollNavigationProps {
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   chatMessages: ChatMessage[];
-  allMessagesLoaded: boolean;
-  loadAllMessages: () => void;
 }
 
 function truncateSnippet(content: string): string {
@@ -20,15 +18,12 @@ function truncateSnippet(content: string): string {
 export default function ScrollNavigation({
   scrollContainerRef,
   chatMessages,
-  allMessagesLoaded,
-  loadAllMessages,
 }: ScrollNavigationProps) {
   const { t } = useTranslation('chat');
   const [activeDotIndex, setActiveDotIndex] = useState(-1);
   const [isStripHovered, setIsStripHovered] = useState(false);
   const rafIdRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
-  const loadAllCalledRef = useRef(false);
 
   const userMessages = useMemo(
     () => chatMessages.filter((m) => m.type === 'user'),
@@ -37,21 +32,6 @@ export default function ScrollNavigation({
 
   const shouldShow = userMessages.length >= 1;
 
-  // Auto-load all messages on first mount so every dot appears
-  useEffect(() => {
-    if (!allMessagesLoaded && !loadAllCalledRef.current && userMessages.length > 0) {
-      loadAllCalledRef.current = true;
-      loadAllMessages();
-    }
-  }, [allMessagesLoaded, loadAllMessages, userMessages.length]);
-
-  // Reset loadAllCalledRef when session changes (messages become empty then refill)
-  useEffect(() => {
-    if (chatMessages.length === 0) {
-      loadAllCalledRef.current = false;
-    }
-  }, [chatMessages.length]);
-
   const scheduleUpdate = useCallback(() => {
     if (rafIdRef.current != null) return;
     rafIdRef.current = requestAnimationFrame(() => {
@@ -59,30 +39,26 @@ export default function ScrollNavigation({
       const container = scrollContainerRef.current;
       if (!container) return;
 
-      const elements = container.querySelectorAll<HTMLDivElement>('.chat-message.user');
-      if (elements.length === 0) {
-        setActiveDotIndex(-1);
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const maxScroll = scrollHeight - clientHeight;
+      if (maxScroll <= 0) {
+        setActiveDotIndex(userMessages.length > 0 ? userMessages.length - 1 : -1);
         return;
       }
 
-      const { scrollTop, clientHeight } = container;
-      const viewCenter = scrollTop + clientHeight / 2;
+      // Proportional position of scroll within content
+      const scrollRatio = scrollTop / maxScroll;
+      // Map to the closest user message index
+      const totalUserMessages = userMessages.length;
+      if (totalUserMessages <= 1) {
+        setActiveDotIndex(0);
+        return;
+      }
 
-      let bestIndex = 0;
-      let bestDist = Infinity;
-
-      elements.forEach((el, i) => {
-        const center = el.offsetTop + el.clientHeight / 2;
-        const dist = Math.abs(center - viewCenter);
-        if (dist < bestDist) {
-          bestDist = dist;
-          bestIndex = i;
-        }
-      });
-
-      if (mountedRef.current) setActiveDotIndex(bestIndex);
+      const activeIdx = Math.round(scrollRatio * (totalUserMessages - 1));
+      if (mountedRef.current) setActiveDotIndex(activeIdx);
     });
-  }, [scrollContainerRef]);
+  }, [scrollContainerRef, userMessages.length]);
 
   useEffect(() => {
     const container = scrollContainerRef.current;
@@ -92,7 +68,7 @@ export default function ScrollNavigation({
   }, [scrollContainerRef, scheduleUpdate]);
 
   useEffect(() => {
-    const timer = setTimeout(() => scheduleUpdate(), 300);
+    const timer = setTimeout(() => scheduleUpdate(), 200);
     return () => clearTimeout(timer);
   }, [chatMessages.length, scheduleUpdate]);
 
@@ -108,27 +84,38 @@ export default function ScrollNavigation({
     (index: number) => {
       const container = scrollContainerRef.current;
       if (!container) return;
+
       const elements = container.querySelectorAll<HTMLDivElement>('.chat-message.user');
-      const target = elements[index];
-      if (target) {
-        target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      if (elements.length > index) {
+        // Message is rendered, scroll directly
+        elements[index].scrollIntoView({ block: 'center', behavior: 'smooth' });
+        return;
       }
+
+      // Message not rendered yet — scroll proportionally
+      const totalUserMessages = userMessages.length;
+      if (totalUserMessages <= 1) return;
+
+      const targetRatio = index / (totalUserMessages - 1);
+      const maxScroll = container.scrollHeight - container.clientHeight;
+      container.scrollTo({
+        top: targetRatio * maxScroll,
+        behavior: 'smooth',
+      });
     },
-    [scrollContainerRef],
+    [scrollContainerRef, userMessages.length],
   );
 
   if (!shouldShow) return null;
 
-  const totalDots = userMessages.length;
-
   return (
     <div
-      className="pointer-events-none absolute right-0.5 top-1/2 z-10 flex -translate-y-1/2 flex-col items-center"
+      className="pointer-events-none absolute right-0.5 top-0 z-20 flex h-full w-6 flex-col items-center"
       onMouseEnter={() => setIsStripHovered(true)}
       onMouseLeave={() => setIsStripHovered(false)}
     >
       <div
-        className={`pointer-events-auto flex flex-col items-center rounded-full border px-1.5 py-3 backdrop-blur-sm transition-opacity duration-200 ${
+        className={`pointer-events-auto flex h-full w-full flex-col items-center justify-evenly rounded-full border px-1.5 py-8 backdrop-blur-sm transition-opacity duration-200 ${
           isStripHovered ? 'opacity-100' : 'opacity-50'
         } bg-background/80 border-border/50`}
       >
@@ -151,12 +138,9 @@ export default function ScrollNavigation({
                 onClick={() => scrollToDot(i)}
                 className={`block cursor-pointer rounded-full transition-all duration-150 ${
                   isActive
-                    ? 'h-[8px] w-[8px] bg-blue-500 hover:bg-blue-400'
-                    : 'h-[6px] w-[6px] bg-muted-foreground/70 hover:bg-muted-foreground hover:h-[8px] hover:w-[8px]'
+                    ? 'h-[10px] w-[10px] bg-blue-500 hover:bg-blue-400'
+                    : 'h-[7px] w-[7px] bg-muted-foreground/70 hover:bg-muted-foreground hover:h-[9px] hover:w-[9px]'
                 }`}
-                style={{
-                  marginBlock: totalDots > 1 ? 6 : 0,
-                }}
                 aria-label={t('scrollNav.jumpToMessage', { index: i + 1 })}
               />
             </Tooltip>
