@@ -31,6 +31,24 @@ export function createWebSocketServer(
   });
 
   wss.on('connection', (ws, request) => {
+    // Keep WebSocket alive across reverse-proxy idle timeouts (Cloudflare ~100s,
+    // AWS ALB 60s, nginx 60s, etc.). Without app-level pings these connections
+    // are silently torn down even when the UI is active, causing repeated
+    // reconnect cycles. ws library heartbeat is opt-in.
+    const HEARTBEAT_INTERVAL_MS = 30_000;
+    const heartbeat = setInterval(() => {
+      if (ws.readyState === ws.OPEN) {
+        try {
+          ws.ping();
+        } catch {
+          // socket may have been closed concurrently — interval will be cleared below
+        }
+      }
+    }, HEARTBEAT_INTERVAL_MS);
+    const stopHeartbeat = () => clearInterval(heartbeat);
+    ws.on('close', stopHeartbeat);
+    ws.on('error', stopHeartbeat);
+
     const incomingRequest = request as AuthenticatedWebSocketRequest;
     const url = incomingRequest.url ?? '/';
     const pathname = new URL(url, 'http://localhost').pathname;
