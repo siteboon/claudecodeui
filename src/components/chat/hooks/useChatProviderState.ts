@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { authenticatedFetch } from '../../../utils/api';
 import type { PendingPermissionRequest, PermissionMode } from '../types/types';
-import type { ProjectSession, LLMProvider, Project, ProviderModelsDefinition } from '../../../types/app';
+import type {
+  ProjectSession,
+  LLMProvider,
+  Project,
+  ProviderModelsCacheInfo,
+  ProviderModelsDefinition,
+} from '../../../types/app';
 
 const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   claude: 'opus',
@@ -29,6 +35,14 @@ interface UseChatProviderStateArgs {
   selectedProject: Project | null;
 }
 
+type ProviderModelsApiResponse = {
+  success?: boolean;
+  data?: {
+    models?: ProviderModelsDefinition;
+    cache?: ProviderModelsCacheInfo;
+  };
+};
+
 export function useChatProviderState({ selectedSession, selectedProject }: UseChatProviderStateArgs) {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('default');
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<PendingPermissionRequest[]>([]);
@@ -54,63 +68,78 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
   const [providerModelCatalog, setProviderModelCatalog] = useState<
     Partial<Record<LLMProvider, ProviderModelsDefinition>>
   >({});
+  const [providerModelCacheCatalog, setProviderModelCacheCatalog] = useState<
+    Partial<Record<LLMProvider, ProviderModelsCacheInfo>>
+  >({});
   const [providerModelsLoading, setProviderModelsLoading] = useState(true);
+  const [providerModelsRefreshing, setProviderModelsRefreshing] = useState(false);
 
   const lastProviderRef = useRef(provider);
+  const providerModelsRequestIdRef = useRef(0);
 
-  const workspacePath = selectedProject?.fullPath || selectedProject?.path || '';
-
-  useEffect(() => {
-    let cancelled = false;
+  const loadProviderModels = useCallback(async (options: { bypassCache?: boolean } = {}) => {
     const providers: LLMProvider[] = ['claude', 'cursor', 'codex', 'gemini', 'opencode'];
+    const requestId = providerModelsRequestIdRef.current + 1;
+    providerModelsRequestIdRef.current = requestId;
+    const isHardRefresh = options.bypassCache === true;
 
-    const load = async () => {
+    if (isHardRefresh) {
+      setProviderModelsRefreshing(true);
+    } else {
       setProviderModelsLoading(true);
-      try {
-        const results = await Promise.all(
-          providers.map(async (p) => {
-            const qs =
-              p === 'opencode' && workspacePath
-                ? `?workspacePath=${encodeURIComponent(workspacePath)}`
-                : '';
-            const response = await authenticatedFetch(`/api/providers/${p}/models${qs}`);
-            const body = (await response.json()) as {
-              success?: boolean;
-              data?: { models?: ProviderModelsDefinition };
-            };
-            if (!body.success || !body.data?.models) {
-              return null;
-            }
-            return body.data.models;
-          }),
-        );
+    }
 
-        if (cancelled) {
+    try {
+      const results = await Promise.all(
+        providers.map(async (p) => {
+          const params = new URLSearchParams();
+          if (options.bypassCache) {
+            params.set('bypassCache', 'true');
+          }
+
+          const queryString = params.toString();
+          const response = await authenticatedFetch(`/api/providers/${p}/models${queryString ? `?${queryString}` : ''}`);
+          const body = (await response.json()) as ProviderModelsApiResponse;
+          if (!body.success || !body.data?.models || !body.data?.cache) {
+            return null;
+          }
+
+          return body.data;
+        }),
+      );
+
+      if (providerModelsRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      const nextCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>> = {};
+      const nextCacheCatalog: Partial<Record<LLMProvider, ProviderModelsCacheInfo>> = {};
+
+      providers.forEach((p, i) => {
+        const entry = results[i];
+        if (!entry) {
           return;
         }
 
-        const next: Partial<Record<LLMProvider, ProviderModelsDefinition>> = {};
-        providers.forEach((p, i) => {
-          const entry = results[i];
-          if (entry) {
-            next[p] = entry;
-          }
-        });
-        setProviderModelCatalog(next);
-      } catch (error) {
-        console.error('Error loading provider models:', error);
-      } finally {
-        if (!cancelled) {
-          setProviderModelsLoading(false);
-        }
-      }
-    };
+        nextCatalog[p] = entry.models;
+        nextCacheCatalog[p] = entry.cache;
+      });
 
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [workspacePath]);
+      setProviderModelCatalog(nextCatalog);
+      setProviderModelCacheCatalog(nextCacheCatalog);
+    } catch (error) {
+      console.error('Error loading provider models:', error);
+    } finally {
+      if (providerModelsRequestIdRef.current === requestId) {
+        setProviderModelsLoading(false);
+        setProviderModelsRefreshing(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadProviderModels();
+  }, [loadProviderModels]);
 
   const pickStoredOrCurrent = (
     storageKey: string,
@@ -279,6 +308,9 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
     setPendingPermissionRequests,
     cyclePermissionMode,
     providerModelCatalog,
+    providerModelCacheCatalog,
     providerModelsLoading,
+    providerModelsRefreshing,
+    hardRefreshProviderModels: () => loadProviderModels({ bypassCache: true }),
   };
 }

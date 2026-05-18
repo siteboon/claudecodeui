@@ -939,9 +939,9 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       });
     }
 
-    const codexModels = await providerModelsService.getProviderModels('codex');
-    const geminiModels = await providerModelsService.getProviderModels('gemini');
-    const opencodeModels = await providerModelsService.getProviderModels('opencode', { cwd: finalProjectPath });
+    const codexModels = (await providerModelsService.getProviderModels('codex')).models;
+    const geminiModels = (await providerModelsService.getProviderModels('gemini')).models;
+    const opencodeModels = (await providerModelsService.getProviderModels('opencode')).models;
 
     // Start the appropriate session
     if (provider === 'claude') {

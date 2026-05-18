@@ -79,7 +79,10 @@ function ChatInterface({
     setPendingPermissionRequests,
     cyclePermissionMode,
     providerModelCatalog,
+    providerModelCacheCatalog,
     providerModelsLoading,
+    providerModelsRefreshing,
+    hardRefreshProviderModels,
   } = useChatProviderState({
     selectedSession,
     selectedProject,
@@ -328,7 +331,10 @@ function ChatInterface({
           opencodeModel={opencodeModel}
           setOpenCodeModel={setOpenCodeModel}
           providerModelCatalog={providerModelCatalog}
+          providerModelCacheCatalog={providerModelCacheCatalog}
           providerModelsLoading={providerModelsLoading}
+          providerModelsRefreshing={providerModelsRefreshing}
+          onHardRefreshProviderModels={hardRefreshProviderModels}
           tasksEnabled={tasksEnabled}
           isTaskMasterInstalled={isTaskMasterInstalled}
           onShowAllTasks={onShowAllTasks}
@@ -431,6 +437,10 @@ function ChatInterface({
       <CommandResultModal
         payload={commandModalPayload}
         onClose={closeCommandModal}
+        providerModelCatalog={providerModelCatalog}
+        providerModelCacheCatalog={providerModelCacheCatalog}
+        providerModelsRefreshing={providerModelsRefreshing}
+        onHardRefreshProviderModels={hardRefreshProviderModels}
       />
     </PermissionContext.Provider>
   );

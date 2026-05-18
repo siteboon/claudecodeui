@@ -7,6 +7,7 @@ import type {
   ProviderSkill,
   ProviderSkillListOptions,
   ProviderAuthStatus,
+  ProviderModelsDefinition,
   ProviderMcpServer,
   UpsertProviderMcpServerInput,
 } from '@/shared/types.js';
@@ -20,11 +21,30 @@ import type {
  */
 export interface IProvider {
   readonly id: LLMProvider;
+  readonly models: IProviderModels;
   readonly mcp: IProviderMcp;
   readonly auth: IProviderAuth;
   readonly skills: IProviderSkills;
   readonly sessions: IProviderSessions;
   readonly sessionSynchronizer: IProviderSessionSynchronizer;
+}
+
+// ---------------------------
+//----------------- PROVIDER MODEL INTERFACE ------------
+/**
+ * Model catalog contract for one provider.
+ *
+ * Implementations are responsible for resolving the provider's currently
+ * supported models and converting them into the shared
+ * `ProviderModelsDefinition` shape used by backend routes and frontend model
+ * pickers. The `DEFAULT` field should be the most appropriate default selection
+ * for that provider at the time the catalog is read.
+ */
+export interface IProviderModels {
+  /**
+   * Returns the provider's currently supported model catalog.
+   */
+  getSupportedModels(): Promise<ProviderModelsDefinition>;
 }
 
 // ---------------------------

@@ -17,7 +17,7 @@ import crypto from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
-import { CLAUDE_MODELS } from './modules/providers/services/provider-models.service.js';
+import { CLAUDE_FALLBACK_MODELS } from './modules/providers/list/claude/claude-models.provider.js';
 import { resolveClaudeCodeExecutablePath } from './shared/claude-cli-path.js';
 import {
   createNotificationEvent,
@@ -204,7 +204,7 @@ function mapCliOptionsToSDK(options = {}) {
 
   // Map model (default to sonnet)
   // Valid models: sonnet, opus, haiku, opusplan, sonnet[1m]
-  sdkOptions.model = options.model || CLAUDE_MODELS.DEFAULT;
+  sdkOptions.model = options.model || CLAUDE_FALLBACK_MODELS.DEFAULT;
   // Model logged at query start below
 
   // Map system prompt configuration

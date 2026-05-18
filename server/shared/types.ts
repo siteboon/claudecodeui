@@ -73,6 +73,7 @@ export type LLMProvider = 'claude' | 'codex' | 'gemini' | 'cursor' | 'opencode';
 export type ProviderModelOption = {
   value: string;
   label: string;
+  description?: string;
 };
 
 /**
@@ -81,6 +82,31 @@ export type ProviderModelOption = {
 export type ProviderModelsDefinition = {
   OPTIONS: ProviderModelOption[];
   DEFAULT: string;
+};
+
+/**
+ * Cache metadata returned alongside one provider model catalog.
+ *
+ * `updatedAt` is when the current cached snapshot was last refreshed from the
+ * provider itself. `expiresAt` is the backend cache expiry timestamp, and
+ * `source` tells callers whether the current response came from in-memory cache,
+ * persisted disk cache, or a fresh provider fetch.
+ */
+export type ProviderModelsCacheInfo = {
+  updatedAt: string;
+  expiresAt: string;
+  source: 'memory' | 'disk' | 'fresh';
+};
+
+/**
+ * Full provider model lookup result returned by the backend service layer.
+ *
+ * Use this shape when a caller needs both the selectable model catalog and the
+ * cache metadata that explains how current the catalog is.
+ */
+export type ProviderModelsResult = {
+  models: ProviderModelsDefinition;
+  cache: ProviderModelsCacheInfo;
 };
 
 /**

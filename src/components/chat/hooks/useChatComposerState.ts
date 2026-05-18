@@ -20,7 +20,7 @@ import type {
   PendingPermissionRequest,
   PermissionMode,
 } from '../types/types';
-import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
+import type { Project, ProjectSession, LLMProvider, ProviderModelsCacheInfo } from '../../../types/app';
 import { escapeRegExp } from '../utils/chatFormatting';
 
 import { useFileMentions } from './useFileMentions';
@@ -87,8 +87,10 @@ export type ModelCommandData = {
   availableOptions?: Array<{
     value: string;
     label?: string;
+    description?: string;
   }>;
   defaultModel?: string;
+  cache?: ProviderModelsCacheInfo;
 };
 
 export type CostCommandData = {

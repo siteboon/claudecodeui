@@ -16,11 +16,13 @@ import {
   Sparkles,
   TerminalSquare,
   Timer,
+  RefreshCw,
   X,
   Zap,
 } from 'lucide-react';
 
 import { Badge, Button, Dialog, DialogContent, DialogTitle, Input } from '../../../../shared/view/ui';
+import type { LLMProvider, ProviderModelsCacheInfo, ProviderModelsDefinition } from '../../../../types/app';
 import type {
   CommandModalPayload,
   CostCommandData,
@@ -32,6 +34,10 @@ import type {
 type CommandResultModalProps = {
   payload: CommandModalPayload | null;
   onClose: () => void;
+  providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
+  providerModelCacheCatalog: Partial<Record<LLMProvider, ProviderModelsCacheInfo>>;
+  providerModelsRefreshing: boolean;
+  onHardRefreshProviderModels: () => void;
 };
 
 type CommandEntry = {
@@ -43,6 +49,20 @@ type CommandEntry = {
 type ModelOption = {
   value: string;
   label?: string;
+  description?: string;
+};
+
+const formatUpdatedAt = (value?: string) => {
+  if (!value) {
+    return 'Not cached yet';
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return 'Not cached yet';
+  }
+
+  return parsed.toLocaleString();
 };
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -94,11 +114,13 @@ function MetricCard({
   value,
   icon: Icon,
   tone = 'neutral',
+  compact = false,
 }: {
   label: string;
   value: string;
   icon: typeof Activity;
   tone?: 'neutral' | 'primary' | 'success';
+  compact?: boolean;
 }) {
   const toneClass =
     tone === 'primary'
@@ -108,12 +130,16 @@ function MetricCard({
         : 'border-border/70 bg-background/75 text-muted-foreground';
 
   return (
-    <div className="group rounded-2xl border border-border/70 bg-background/75 p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-md">
-      <div className={`mb-3 inline-flex rounded-xl border p-2 ${toneClass}`}>
-        <Icon className="h-4 w-4" />
+    <div
+      className={`group rounded-2xl border border-border/70 bg-background/75 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-md ${
+        compact ? 'p-3' : 'p-4'
+      }`}
+    >
+      <div className={`inline-flex rounded-xl border ${compact ? 'mb-2 p-1.5' : 'mb-3 p-2'} ${toneClass}`}>
+        <Icon className={compact ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
       </div>
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      <p className="mt-1 break-all text-sm font-semibold text-foreground">{value}</p>
+      <p className={`${compact ? 'mt-0.5 text-[13px]' : 'mt-1 text-sm'} break-all font-semibold text-foreground`}>{value}</p>
     </div>
   );
 }
@@ -222,21 +248,39 @@ function HelpContent({ data }: { data: HelpCommandData }) {
   );
 }
 
-function ModelsContent({ data }: { data: ModelCommandData }) {
+function ModelsContent({
+  data,
+  providerModelCatalog,
+  providerModelCacheCatalog,
+  providerModelsRefreshing,
+  onHardRefreshProviderModels,
+}: {
+  data: ModelCommandData;
+  providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
+  providerModelCacheCatalog: Partial<Record<LLMProvider, ProviderModelsCacheInfo>>;
+  providerModelsRefreshing: boolean;
+  onHardRefreshProviderModels: () => void;
+}) {
   const [query, setQuery] = useState('');
   const [copiedModel, setCopiedModel] = useState<string | null>(null);
-  const currentProvider = data?.current?.provider || 'claude';
+  const currentProvider = (data?.current?.provider || 'claude') as LLMProvider;
   const currentModel = data?.current?.model || 'Unknown';
-  const defaultModel = data?.defaultModel || currentModel;
   const providerLabel = data?.current?.providerLabel || getProviderLabel(currentProvider);
+  const liveDefinition = providerModelCatalog[currentProvider];
+  const currentCache = providerModelCacheCatalog[currentProvider] ?? data?.cache;
   const availableOptions = useMemo<ModelOption[]>(() => {
+    if (liveDefinition?.OPTIONS && liveDefinition.OPTIONS.length > 0) {
+      return liveDefinition.OPTIONS;
+    }
+
     if (Array.isArray(data?.availableOptions) && data.availableOptions.length > 0) {
       return data.availableOptions;
     }
 
     const availableModels = Array.isArray(data?.availableModels) ? data.availableModels : [];
     return availableModels.map((model) => ({ value: model, label: model }));
-  }, [data]);
+  }, [data, liveDefinition]);
+  const defaultModel = liveDefinition?.DEFAULT || data?.defaultModel || currentModel;
 
   const filteredOptions = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -245,7 +289,7 @@ function ModelsContent({ data }: { data: ModelCommandData }) {
     }
 
     return availableOptions.filter((option) => {
-      const haystack = `${option.value} ${option.label || ''}`.toLowerCase();
+      const haystack = `${option.value} ${option.label || ''} ${option.description || ''}`.toLowerCase();
       return haystack.includes(normalized);
     });
   }, [availableOptions, query]);
@@ -264,25 +308,49 @@ function ModelsContent({ data }: { data: ModelCommandData }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
-      <div className="grid gap-3 md:grid-cols-[1.15fr_0.85fr]">
-        <div className="relative overflow-hidden rounded-3xl border border-primary/25 bg-primary/10 p-5">
+      <div className="flex flex-col gap-2 rounded-2xl border border-border/70 bg-muted/20 px-3 py-2.5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-foreground">Hard refresh provider catalogs</p>
+          <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+            Bypasses the 3-day backend cache and re-fetches models for every provider.
+          </p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Last updated for {providerLabel}: {formatUpdatedAt(currentCache?.updatedAt)}
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onHardRefreshProviderModels}
+          disabled={providerModelsRefreshing}
+          className="h-8 shrink-0 rounded-xl px-3"
+        >
+          <RefreshCw className={providerModelsRefreshing ? 'animate-spin' : ''} />
+          {providerModelsRefreshing ? 'Refreshing...' : 'Hard Refresh'}
+        </Button>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-[minmax(0,1.35fr)_minmax(0,0.48fr)_minmax(0,0.48fr)]">
+        <div className="relative overflow-hidden rounded-3xl border border-primary/25 bg-primary/10 p-4">
           <div className="pointer-events-none absolute -right-10 -top-12 h-36 w-36 rounded-full bg-primary/20 blur-3xl" />
           <div className="relative flex items-start justify-between gap-4">
             <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">Active model</p>
-              <h3 className="mt-2 break-all font-mono text-lg font-semibold text-foreground">{currentModel}</h3>
+              <h3 className="mt-1.5 break-all font-mono text-base font-semibold text-foreground">{currentModel}</h3>
               {activeOption?.label && activeOption.label !== currentModel && (
-                <p className="mt-1 text-sm text-muted-foreground">{activeOption.label}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{activeOption.label}</p>
+              )}
+              {activeOption?.description && (
+                <p className="mt-1.5 line-clamp-2 text-xs leading-5 text-muted-foreground">{activeOption.description}</p>
               )}
             </div>
             <Badge className="shrink-0 rounded-full bg-primary text-primary-foreground">Live</Badge>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <MetricCard label="Provider" value={providerLabel} icon={Server} tone="primary" />
-          <MetricCard label="Models" value={String(availableOptions.length)} icon={Layers3} />
-        </div>
+        <MetricCard label="Provider" value={providerLabel} icon={Server} tone="primary" compact />
+        <MetricCard label="Models" value={String(availableOptions.length)} icon={Layers3} compact />
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col rounded-3xl border border-border/70 bg-muted/15 p-3 sm:p-4">
@@ -319,6 +387,9 @@ function ModelsContent({ data }: { data: ModelCommandData }) {
                       </span>
                       {option.label && option.label !== option.value && (
                         <span className="mt-1 block text-xs text-muted-foreground">{option.label}</span>
+                      )}
+                      {option.description && (
+                        <span className="mt-1 block text-xs leading-5 text-muted-foreground">{option.description}</span>
                       )}
                       {isCurrent && <span className="mt-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">Current selection</span>}
                     </span>
@@ -443,9 +514,17 @@ function StatusContent({ data }: { data: StatusCommandData }) {
   );
 }
 
-export default function CommandResultModal({ payload, onClose }: CommandResultModalProps) {
+export default function CommandResultModal({
+  payload,
+  onClose,
+  providerModelCatalog,
+  providerModelCacheCatalog,
+  providerModelsRefreshing,
+  onHardRefreshProviderModels,
+}: CommandResultModalProps) {
   const isOpen = Boolean(payload);
   const kind = payload?.kind;
+  const isModelsModal = kind === 'models';
 
   const modalMeta = {
     help: {
@@ -482,23 +561,31 @@ export default function CommandResultModal({ payload, onClose }: CommandResultMo
       <DialogContent className="flex h-[min(92dvh,48rem)] w-[calc(100vw-1rem)] max-w-5xl flex-col overflow-hidden rounded-3xl border-border/80 bg-popover/95 p-0 shadow-2xl backdrop-blur-xl sm:w-[min(94vw,64rem)]">
         <DialogTitle>{activeMeta?.title || 'Command Result'}</DialogTitle>
 
-        <div className="relative shrink-0 overflow-hidden border-b border-border/70 bg-gradient-to-br from-primary/15 via-background to-muted/40 px-4 pb-4 pt-4 sm:px-6 sm:pb-5 sm:pt-5">
+        <div
+          className={`relative shrink-0 overflow-hidden border-b border-border/70 bg-gradient-to-br from-primary/15 via-background to-muted/40 ${
+            isModelsModal ? 'px-4 pb-3 pt-3 sm:px-5 sm:pb-4 sm:pt-4' : 'px-4 pb-4 pt-4 sm:px-6 sm:pb-5 sm:pt-5'
+          }`}
+        >
           <div className="pointer-events-none absolute -left-20 -top-24 h-56 w-56 rounded-full bg-primary/20 blur-3xl" />
           <div className="pointer-events-none absolute right-0 top-0 h-full w-1/2 bg-[radial-gradient(circle_at_top_right,hsl(var(--primary)/0.16),transparent_58%)]" />
 
           <div className="relative flex items-start justify-between gap-3">
             <div className="flex min-w-0 items-start gap-3 sm:items-center">
-              <div className="rounded-2xl border border-primary/30 bg-primary/10 p-3 text-primary shadow-sm">
-                <HeaderIcon className="h-5 w-5" />
+              <div
+                className={`rounded-2xl border border-primary/30 bg-primary/10 text-primary shadow-sm ${
+                  isModelsModal ? 'p-2.5' : 'p-3'
+                }`}
+              >
+                <HeaderIcon className={isModelsModal ? 'h-4 w-4' : 'h-5 w-5'} />
               </div>
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-primary/80">
                   {activeMeta?.eyebrow}
                 </p>
-                <p className="mt-1 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+                <p className={`mt-1 font-semibold tracking-tight text-foreground ${isModelsModal ? 'text-lg sm:text-xl' : 'text-xl sm:text-2xl'}`}>
                   {activeMeta?.title}
                 </p>
-                <p className="mt-1 max-w-2xl text-sm leading-5 text-muted-foreground">
+                <p className={`mt-1 max-w-2xl text-muted-foreground ${isModelsModal ? 'text-xs leading-5 sm:text-sm' : 'text-sm leading-5'}`}>
                   {activeMeta?.subtitle}
                 </p>
               </div>
@@ -519,7 +606,15 @@ export default function CommandResultModal({ payload, onClose }: CommandResultMo
 
         <div className="settings-content-enter min-h-0 flex-1 overflow-hidden px-4 py-4 sm:px-6 sm:py-5">
           {payload?.kind === 'help' && <HelpContent data={payload.data as HelpCommandData} />}
-          {payload?.kind === 'models' && <ModelsContent data={payload.data as ModelCommandData} />}
+          {payload?.kind === 'models' && (
+            <ModelsContent
+              data={payload.data as ModelCommandData}
+              providerModelCatalog={providerModelCatalog}
+              providerModelCacheCatalog={providerModelCacheCatalog}
+              providerModelsRefreshing={providerModelsRefreshing}
+              onHardRefreshProviderModels={onHardRefreshProviderModels}
+            />
+          )}
           {payload?.kind === 'cost' && <CostContent data={payload.data as CostCommandData} />}
           {payload?.kind === 'status' && <StatusContent data={payload.data as StatusCommandData} />}
         </div>

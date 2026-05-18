@@ -259,10 +259,9 @@ router.get(
   '/:provider/models',
   asyncHandler(async (req: Request, res: Response) => {
     const provider = parseProvider(req.params.provider);
-    const workspacePath = readOptionalQueryString(req.query.workspacePath);
-    const cwd = workspacePath;
-    const models = await providerModelsService.getProviderModels(provider, { cwd });
-    res.json(createApiSuccessResponse({ provider, models }));
+    const bypassCache = parseOptionalBooleanQuery(req.query.bypassCache, 'bypassCache') ?? false;
+    const result = await providerModelsService.getProviderModels(provider, { bypassCache });
+    res.json(createApiSuccessResponse({ provider, models: result.models, cache: result.cache }));
   }),
 );
 

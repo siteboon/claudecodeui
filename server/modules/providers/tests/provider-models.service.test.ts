@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -15,7 +15,49 @@ const createModels = (value: string): ProviderModelsDefinition => ({
   DEFAULT: value,
 });
 
-test('provider models are cached for the two-day ttl', async () => {
+test('provider models service delegates to the resolved provider model adapter', async () => {
+  const calls: LLMProvider[] = [];
+  const service = createProviderModelsService({
+    resolveProvider: (provider) => {
+      calls.push(provider);
+      return {
+        models: {
+          getSupportedModels: async () => createModels(`${provider}-models`),
+        },
+      };
+    },
+  });
+
+  const models = await service.getProviderModels('codex');
+
+  assert.deepEqual(calls, ['codex']);
+  assert.equal(models.models.DEFAULT, 'codex-models');
+  assert.equal(models.cache.source, 'fresh');
+});
+
+test('provider models service returns each provider adapter result without rewriting it', async () => {
+  const expectedModels: ProviderModelsDefinition = {
+    OPTIONS: [
+      { value: 'cursor-a', label: 'Cursor A' },
+      { value: 'cursor-b', label: 'Cursor B' },
+    ],
+    DEFAULT: 'cursor-b',
+  };
+
+  const service = createProviderModelsService({
+    resolveProvider: () => ({
+      models: {
+        getSupportedModels: async () => expectedModels,
+      },
+    }),
+  });
+
+  const models = await service.getProviderModels('cursor');
+
+  assert.deepEqual(models.models, expectedModels);
+});
+
+test('provider models are cached for the three-day ttl', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'provider-model-cache-ttl-'));
   let currentTime = 1_000;
   let loadCount = 0;
@@ -24,16 +66,21 @@ test('provider models are cached for the two-day ttl', async () => {
     const service = createProviderModelsService({
       cachePath: path.join(tempRoot, 'models-cache.json'),
       now: () => currentTime,
-      loadModels: async (provider: LLMProvider) => {
-        loadCount += 1;
-        return createModels(`${provider}-${loadCount}`);
-      },
+      resolveProvider: (provider) => ({
+        models: {
+          getSupportedModels: async () => {
+            loadCount += 1;
+            return createModels(`${provider}-${loadCount}`);
+          },
+        },
+      }),
     });
 
     const first = await service.getProviderModels('codex');
     const cached = await service.getProviderModels('codex');
     assert.equal(loadCount, 1);
-    assert.equal(cached.DEFAULT, first.DEFAULT);
+    assert.equal(cached.models.DEFAULT, first.models.DEFAULT);
+    assert.equal(cached.cache.source, 'memory');
 
     currentTime += PROVIDER_MODELS_CACHE_TTL_MS - 1;
     await service.getProviderModels('codex');
@@ -42,7 +89,7 @@ test('provider models are cached for the two-day ttl', async () => {
     currentTime += 2;
     const refreshed = await service.getProviderModels('codex');
     assert.equal(loadCount, 2);
-    assert.equal(refreshed.DEFAULT, 'codex-2');
+    assert.equal(refreshed.models.DEFAULT, 'codex-2');
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
@@ -55,18 +102,27 @@ test('provider model cache is persisted across service instances', async () => {
   try {
     const writer = createProviderModelsService({
       cachePath,
-      loadModels: async () => createModels('gemini-cached'),
+      resolveProvider: () => ({
+        models: {
+          getSupportedModels: async () => createModels('gemini-cached'),
+        },
+      }),
     });
     await writer.getProviderModels('gemini');
 
     const reader = createProviderModelsService({
       cachePath,
-      loadModels: async () => {
-        throw new Error('loader should not be called for persisted cache hits');
-      },
+      resolveProvider: () => ({
+        models: {
+          getSupportedModels: async () => {
+            throw new Error('loader should not be called for persisted cache hits');
+          },
+        },
+      }),
     });
     const models = await reader.getProviderModels('gemini');
-    assert.equal(models.DEFAULT, 'gemini-cached');
+    assert.equal(models.models.DEFAULT, 'gemini-cached');
+    assert.equal(models.cache.source, 'disk');
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
@@ -79,11 +135,15 @@ test('concurrent provider model requests share one load operation', async () => 
   try {
     const service = createProviderModelsService({
       cachePath: path.join(tempRoot, 'models-cache.json'),
-      loadModels: async () => {
-        loadCount += 1;
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        return createModels('claude-cached');
-      },
+      resolveProvider: () => ({
+        models: {
+          getSupportedModels: async () => {
+            loadCount += 1;
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            return createModels('claude-cached');
+          },
+        },
+      }),
     });
 
     const [first, second] = await Promise.all([
@@ -92,35 +152,40 @@ test('concurrent provider model requests share one load operation', async () => 
     ]);
 
     assert.equal(loadCount, 1);
-    assert.equal(first.DEFAULT, 'claude-cached');
-    assert.equal(second.DEFAULT, 'claude-cached');
+    assert.equal(first.models.DEFAULT, 'claude-cached');
+    assert.equal(second.models.DEFAULT, 'claude-cached');
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
 });
 
-test('opencode model cache is scoped by workspace cwd', async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'provider-model-cache-opencode-'));
-  const workspaceA = path.join(tempRoot, 'workspace-a');
-  const workspaceB = path.join(tempRoot, 'workspace-b');
+test('bypassCache forces a fresh provider fetch and updates cache metadata', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'provider-model-cache-refresh-'));
+  let currentTime = 1_000;
   let loadCount = 0;
 
   try {
-    await mkdir(workspaceA, { recursive: true });
-    await mkdir(workspaceB, { recursive: true });
-
     const service = createProviderModelsService({
       cachePath: path.join(tempRoot, 'models-cache.json'),
-      loadModels: async () => {
-        loadCount += 1;
-        return createModels(`opencode-${loadCount}`);
-      },
+      now: () => currentTime,
+      resolveProvider: (provider) => ({
+        models: {
+          getSupportedModels: async () => {
+            loadCount += 1;
+            return createModels(`${provider}-${loadCount}`);
+          },
+        },
+      }),
     });
 
-    await service.getProviderModels('opencode', { cwd: workspaceA });
-    await service.getProviderModels('opencode', { cwd: workspaceA });
-    await service.getProviderModels('opencode', { cwd: workspaceB });
+    const first = await service.getProviderModels('claude');
+    currentTime += 50;
+    const refreshed = await service.getProviderModels('claude', { bypassCache: true });
 
+    assert.equal(first.models.DEFAULT, 'claude-1');
+    assert.equal(refreshed.models.DEFAULT, 'claude-2');
+    assert.equal(refreshed.cache.source, 'fresh');
+    assert.notEqual(refreshed.cache.updatedAt, first.cache.updatedAt);
     assert.equal(loadCount, 2);
   } finally {
     await rm(tempRoot, { recursive: true, force: true });

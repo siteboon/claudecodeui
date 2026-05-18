@@ -34,26 +34,15 @@ const readModelProvider = (value) => {
   return MODEL_PROVIDERS.includes(normalized) ? normalized : "claude";
 };
 
-const getProviderModelOptions = (provider, context) => {
-  if (provider !== "opencode") {
-    return undefined;
-  }
-
-  const cwd =
-    typeof context?.projectPath === "string" ? context.projectPath : undefined;
-  return { cwd };
-};
-
 export const executeModelsCommand = async (args, context) => {
   const currentProvider = readModelProvider(context?.provider);
-  const catalog = await providerModelsService.getProviderModels(
-    currentProvider,
-    getProviderModelOptions(currentProvider, context),
-  );
+  const result = await providerModelsService.getProviderModels(currentProvider);
+  const catalog = result.models;
   const availableModels = catalog.OPTIONS.map((option) => option.value);
   const availableOptions = catalog.OPTIONS.map((option) => ({
     value: option.value,
     label: option.label,
+    description: option.description,
   }));
   const currentModel =
     typeof context?.model === "string" && context.model
@@ -75,6 +64,7 @@ export const executeModelsCommand = async (args, context) => {
       availableModels,
       availableOptions,
       defaultModel: catalog.DEFAULT,
+      cache: result.cache,
       message: `Current model: ${currentModel}`,
     },
   };
@@ -249,10 +239,7 @@ Custom commands can be created in:
   "/cost": async (args, context) => {
     const tokenUsage = context?.tokenUsage || {};
     const provider = readModelProvider(context?.provider);
-    const catalog = await providerModelsService.getProviderModels(
-      provider,
-      getProviderModelOptions(provider, context),
-    );
+    const catalog = (await providerModelsService.getProviderModels(provider)).models;
     const model = context?.model || catalog.DEFAULT;
 
     const used =
@@ -361,10 +348,7 @@ Custom commands can be created in:
         : `${uptimeMinutes}m`;
 
     const statusProvider = readModelProvider(context?.provider);
-    const statusCatalog = await providerModelsService.getProviderModels(
-      statusProvider,
-      getProviderModelOptions(statusProvider, context),
-    );
+    const statusCatalog = (await providerModelsService.getProviderModels(statusProvider)).models;
     const memoryUsage = process.memoryUsage();
 
     return {

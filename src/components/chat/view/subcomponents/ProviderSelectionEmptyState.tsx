@@ -1,12 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, RefreshCw } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 
 import { useServerPlatform } from "../../../../hooks/useServerPlatform";
-import type { ProjectSession, LLMProvider, ProviderModelsDefinition } from "../../../../types/app";
+import type {
+  ProjectSession,
+  LLMProvider,
+  ProviderModelsCacheInfo,
+  ProviderModelsDefinition,
+} from "../../../../types/app";
 import SessionProviderLogo from "../../../llm-logo-provider/SessionProviderLogo";
 import { NextTaskBanner } from "../../../task-master";
 import {
+  Button,
   Dialog,
   DialogTrigger,
   DialogContent,
@@ -48,7 +54,10 @@ type ProviderSelectionEmptyStateProps = {
   opencodeModel: string;
   setOpenCodeModel: (model: string) => void;
   providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
+  providerModelCacheCatalog: Partial<Record<LLMProvider, ProviderModelsCacheInfo>>;
   providerModelsLoading: boolean;
+  providerModelsRefreshing: boolean;
+  onHardRefreshProviderModels: () => void;
   tasksEnabled: boolean;
   isTaskMasterInstalled: boolean | null;
   onShowAllTasks?: (() => void) | null;
@@ -58,7 +67,7 @@ type ProviderSelectionEmptyStateProps = {
 type ProviderGroup = {
   id: LLMProvider;
   name: string;
-  models: { value: string; label: string }[];
+  models: { value: string; label: string; description?: string }[];
 };
 
 function getModelConfig(
@@ -92,6 +101,19 @@ function getProviderDisplayName(p: LLMProvider) {
   return "Gemini";
 }
 
+function formatUpdatedAt(value?: string) {
+  if (!value) {
+    return "Not cached yet";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "Not cached yet";
+  }
+
+  return parsed.toLocaleString();
+}
+
 export default function ProviderSelectionEmptyState({
   selectedSession,
   currentSessionId,
@@ -109,7 +131,10 @@ export default function ProviderSelectionEmptyState({
   opencodeModel,
   setOpenCodeModel,
   providerModelCatalog,
+  providerModelCacheCatalog,
   providerModelsLoading,
+  providerModelsRefreshing,
+  onHardRefreshProviderModels,
   tasksEnabled,
   isTaskMasterInstalled,
   onShowAllTasks,
@@ -155,6 +180,8 @@ export default function ProviderSelectionEmptyState({
     );
     return found?.label || currentModel;
   }, [provider, currentModel, providerModelCatalog]);
+
+  const currentProviderCache = providerModelCacheCatalog[provider];
 
   const setModelForProvider = useCallback(
     (providerId: LLMProvider, modelValue: string) => {
@@ -237,6 +264,32 @@ export default function ProviderSelectionEmptyState({
 
             <DialogContent className="max-w-md overflow-hidden p-0">
               <DialogTitle>Model Selector</DialogTitle>
+              <div className="border-b border-border/60 bg-muted/20 px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground">
+                      Hard refresh model catalogs
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      Bypasses the 3-day backend cache and re-fetches models for every provider.
+                    </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Last updated for {getProviderDisplayName(provider)}: {formatUpdatedAt(currentProviderCache?.updatedAt)}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={onHardRefreshProviderModels}
+                    disabled={providerModelsRefreshing}
+                    className="shrink-0 rounded-xl"
+                  >
+                    <RefreshCw className={providerModelsRefreshing ? "animate-spin" : ""} />
+                    {providerModelsRefreshing ? "Refreshing..." : "Hard Refresh"}
+                  </Button>
+                </div>
+              </div>
               <Command>
                 <CommandInput
                   placeholder={t("providerSelection.searchModels", {
@@ -274,11 +327,18 @@ export default function ProviderSelectionEmptyState({
                         return (
                           <CommandItem
                             key={`${group.id}-${model.value}`}
-                            value={`${group.name} ${model.label}`}
+                            value={`${group.name} ${model.label} ${model.description || ''}`}
                             onSelect={() => handleModelSelect(group.id, model.value)}
                             className="ml-4 border-l border-border/40 pl-4"
                           >
-                            <span className="flex-1 truncate">{model.label}</span>
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate">{model.label}</div>
+                              {model.description && (
+                                <div className="truncate text-xs text-muted-foreground">
+                                  {model.description}
+                                </div>
+                              )}
+                            </div>
                             {isSelected && (
                               <Check className="ml-auto h-4 w-4 shrink-0 text-primary" />
                             )}
