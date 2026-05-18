@@ -110,14 +110,14 @@ export default function ScrollNavigation({
 
   return (
     <div
-      className="pointer-events-none absolute right-0.5 top-0 z-20 flex h-full w-6 flex-col items-center"
-      onMouseEnter={() => setIsStripHovered(true)}
-      onMouseLeave={() => setIsStripHovered(false)}
+      className="pointer-events-none absolute right-0.5 top-0 z-10 flex h-full w-6 flex-col items-center"
     >
       <div
-        className={`pointer-events-auto flex h-full w-full flex-col items-center justify-evenly rounded-full border px-1.5 py-8 backdrop-blur-sm transition-opacity duration-200 ${
+        className={`pointer-events-auto flex h-full w-4 flex-col items-center justify-evenly rounded-full border px-0.5 py-4 backdrop-blur-sm transition-opacity duration-200 ${
           isStripHovered ? 'opacity-100' : 'opacity-50'
         } bg-background/80 border-border/50`}
+        onMouseEnter={() => setIsStripHovered(true)}
+        onMouseLeave={() => setIsStripHovered(false)}
       >
         {userMessages.map((msg, i) => {
           const isActive = i === activeDotIndex;
