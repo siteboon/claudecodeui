@@ -305,6 +305,7 @@ function ChatInterface({
             scrollContainerRef={scrollContainerRef}
             chatMessages={chatMessages}
           />
+          <div className="absolute inset-0">
           <ChatMessagesPane
           scrollContainerRef={scrollContainerRef}
           onWheel={handleScroll}
@@ -349,6 +350,7 @@ function ChatInterface({
           showThinking={showThinking}
           selectedProject={selectedProject}
         />
+          </div>
         </div>
 
         <ChatComposer
