@@ -110,10 +110,10 @@ export default function ScrollNavigation({
 
   return (
     <div
-      className="pointer-events-none absolute right-0.5 top-0 z-10 flex h-full w-6 flex-col items-center"
+      className="pointer-events-none absolute right-0 top-0 z-10 h-full w-5"
     >
       <div
-        className={`pointer-events-auto flex h-full w-4 flex-col items-center justify-evenly rounded-full border px-0.5 py-4 backdrop-blur-sm transition-opacity duration-200 ${
+        className={`pointer-events-auto flex h-full w-3 flex-col items-center justify-evenly rounded-full border px-0 py-4 backdrop-blur-sm transition-opacity duration-200 ${
           isStripHovered ? 'opacity-100' : 'opacity-50'
         } bg-background/80 border-border/50`}
         onMouseEnter={() => setIsStripHovered(true)}
