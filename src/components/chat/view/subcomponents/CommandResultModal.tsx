@@ -38,6 +38,16 @@ type CommandResultModalProps = {
   providerModelCacheCatalog: Partial<Record<LLMProvider, ProviderModelsCacheInfo>>;
   providerModelsRefreshing: boolean;
   onHardRefreshProviderModels: () => void;
+  currentSessionId: string | null;
+  onSelectProviderModel: (
+    provider: LLMProvider,
+    model: string,
+    sessionId?: string | null,
+  ) => Promise<{
+    scope: 'default' | 'session';
+    changed: boolean;
+    model: string;
+  }>;
 };
 
 type CommandEntry = {
@@ -254,15 +264,22 @@ function ModelsContent({
   providerModelCacheCatalog,
   providerModelsRefreshing,
   onHardRefreshProviderModels,
+  currentSessionId,
+  onSelectProviderModel,
 }: {
   data: ModelCommandData;
   providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
   providerModelCacheCatalog: Partial<Record<LLMProvider, ProviderModelsCacheInfo>>;
   providerModelsRefreshing: boolean;
   onHardRefreshProviderModels: () => void;
+  currentSessionId: string | null;
+  onSelectProviderModel: CommandResultModalProps['onSelectProviderModel'];
 }) {
   const [query, setQuery] = useState('');
   const [copiedModel, setCopiedModel] = useState<string | null>(null);
+  const [changingModel, setChangingModel] = useState<string | null>(null);
+  const [pendingSessionModel, setPendingSessionModel] = useState<string | null>(null);
+  const [selectionNotice, setSelectionNotice] = useState<string | null>(null);
   const currentProvider = (data?.current?.provider || 'claude') as LLMProvider;
   const currentModel = data?.current?.model || 'Unknown';
   const providerLabel = data?.current?.providerLabel || getProviderLabel(currentProvider);
@@ -295,6 +312,7 @@ function ModelsContent({
   }, [availableOptions, query]);
 
   const activeOption = availableOptions.find((option) => option.value === currentModel);
+  const hasConcreteSessionId = typeof currentSessionId === 'string' && currentSessionId.trim().length > 0;
 
   const copyModel = (model: string) => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -304,6 +322,26 @@ function ModelsContent({
     window.setTimeout(() => {
       setCopiedModel((current) => (current === model ? null : current));
     }, 1300);
+  };
+
+  const handleSelectModel = async (model: string) => {
+    setChangingModel(model);
+    try {
+      const result = await onSelectProviderModel(currentProvider, model, currentSessionId);
+      if (result.scope === 'session') {
+        setPendingSessionModel(result.model);
+        setSelectionNotice(`Next response will resume with ${result.model}.`);
+        return;
+      }
+
+      setPendingSessionModel(null);
+      setSelectionNotice(`Default ${providerLabel} model set to ${result.model}.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to change the model right now.';
+      setSelectionNotice(message);
+    } finally {
+      setChangingModel(null);
+    }
   };
 
   return (
@@ -331,6 +369,13 @@ function ModelsContent({
         </Button>
       </div>
 
+      <div className="rounded-2xl border border-border/60 bg-background/50 px-3 py-2 text-xs text-muted-foreground">
+        {hasConcreteSessionId
+          ? 'Selecting a model stores a session override and applies it on the next response for this session.'
+          : 'Selecting a model updates the default model used for new turns in this provider.'}
+        {selectionNotice && <span className="ml-2 text-foreground">{selectionNotice}</span>}
+      </div>
+
       <div className="grid gap-3 md:grid-cols-[minmax(0,1.35fr)_minmax(0,0.48fr)_minmax(0,0.48fr)]">
         <div className="relative overflow-hidden rounded-3xl border border-primary/25 bg-primary/10 p-4">
           <div className="pointer-events-none absolute -right-10 -top-12 h-36 w-36 rounded-full bg-primary/20 blur-3xl" />
@@ -343,6 +388,11 @@ function ModelsContent({
               )}
               {activeOption?.description && (
                 <p className="mt-1.5 line-clamp-2 text-xs leading-5 text-muted-foreground">{activeOption.description}</p>
+              )}
+              {pendingSessionModel && pendingSessionModel !== currentModel && (
+                <p className="mt-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
+                  Next response: {pendingSessionModel}
+                </p>
               )}
             </div>
             <Badge className="shrink-0 rounded-full bg-primary text-primary-foreground">Live</Badge>
@@ -367,20 +417,27 @@ function ModelsContent({
               {filteredOptions.map((option, index) => {
                 const isCurrent = option.value === currentModel;
                 const wasCopied = copiedModel === option.value;
+                const isPendingSelection = option.value === pendingSessionModel;
+                const isChanging = option.value === changingModel;
                 return (
-                  <button
+                  <div
                     key={option.value}
-                    type="button"
-                    onClick={() => copyModel(option.value)}
-                    className={`settings-content-enter group flex min-h-[4.5rem] w-full items-start justify-between gap-3 rounded-2xl border p-3 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                    className={`settings-content-enter group flex min-h-[4.5rem] items-start gap-3 rounded-2xl border p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
                       isCurrent
                         ? 'border-primary/45 bg-primary/10'
-                        : 'border-border/70 bg-background/80 hover:border-primary/30 hover:bg-background'
+                        : isPendingSelection
+                          ? 'border-emerald-500/35 bg-emerald-500/10'
+                          : 'border-border/70 bg-background/80 hover:border-primary/30 hover:bg-background'
                     }`}
                     style={{ animationDelay: `${Math.min(index * 14, 180)}ms` }}
-                    aria-label={`Copy model id ${option.value}`}
                   >
-                    <span className="min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => handleSelectModel(option.value)}
+                      disabled={Boolean(changingModel)}
+                      className="min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      aria-label={`Use model ${option.value}`}
+                    >
                       <span className="flex items-center gap-2">
                         <span className="break-all font-mono text-sm font-semibold text-foreground">{option.value}</span>
                         {isCurrent && <BadgeCheck className="h-4 w-4 shrink-0 text-primary" />}
@@ -392,11 +449,26 @@ function ModelsContent({
                         <span className="mt-1 block text-xs leading-5 text-muted-foreground">{option.description}</span>
                       )}
                       {isCurrent && <span className="mt-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">Current selection</span>}
-                    </span>
-                    <span className="rounded-lg border border-border/70 bg-muted/30 p-2 text-muted-foreground transition-colors group-hover:text-primary">
+                      {isPendingSelection && !isCurrent && (
+                        <span className="mt-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-400">
+                          Next response selection
+                        </span>
+                      )}
+                      {isChanging && (
+                        <span className="mt-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
+                          Applying...
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => copyModel(option.value)}
+                      className="rounded-lg border border-border/70 bg-muted/30 p-2 text-muted-foreground transition-colors group-hover:text-primary"
+                      aria-label={`Copy model id ${option.value}`}
+                    >
                       {wasCopied ? <Check className="h-4 w-4" /> : <Clipboard className="h-4 w-4" />}
-                    </span>
-                  </button>
+                    </button>
+                  </div>
                 );
               })}
             </div>
@@ -521,6 +593,8 @@ export default function CommandResultModal({
   providerModelCacheCatalog,
   providerModelsRefreshing,
   onHardRefreshProviderModels,
+  currentSessionId,
+  onSelectProviderModel,
 }: CommandResultModalProps) {
   const isOpen = Boolean(payload);
   const kind = payload?.kind;
@@ -613,6 +687,8 @@ export default function CommandResultModal({
               providerModelCacheCatalog={providerModelCacheCatalog}
               providerModelsRefreshing={providerModelsRefreshing}
               onHardRefreshProviderModels={onHardRefreshProviderModels}
+              currentSessionId={currentSessionId}
+              onSelectProviderModel={onSelectProviderModel}
             />
           )}
           {payload?.kind === 'cost' && <CostContent data={payload.data as CostCommandData} />}

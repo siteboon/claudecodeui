@@ -17,6 +17,7 @@ import { Codex } from '@openai/codex-sdk';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
+import { providerModelsService } from './modules/providers/services/provider-models.service.js';
 import { createNormalizedMessage } from './shared/utils.js';
 
 // Track active sessions
@@ -202,6 +203,12 @@ export async function queryCodex(command, options = {}, ws) {
     permissionMode = 'default'
   } = options;
 
+  const resolvedModel = await providerModelsService.resolveResumeModel(
+    'codex',
+    sessionId,
+    model,
+  );
+
   const workingDirectory = cwd || projectPath || process.cwd();
   const { sandboxMode, approvalPolicy } = mapPermissionModeToCodexOptions(permissionMode);
 
@@ -222,7 +229,7 @@ export async function queryCodex(command, options = {}, ws) {
       skipGitRepoCheck: true,
       sandboxMode,
       approvalPolicy,
-      model
+      model: resolvedModel
     };
 
     // Start or resume thread

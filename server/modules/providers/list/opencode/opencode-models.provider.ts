@@ -5,15 +5,18 @@ import crossSpawn from 'cross-spawn';
 
 import type { IProviderModels } from '@/shared/interfaces.js';
 import type {
+  ProviderChangeActiveModelInput,
   ProviderCurrentActiveModel,
   ProviderModelOption,
   ProviderModelsDefinition,
+  ProviderSessionActiveModelChange,
 } from '@/shared/types.js';
 import {
   buildDefaultProviderCurrentActiveModel,
   getOpenCodeDatabasePath,
   readObjectRecord,
   readOptionalString,
+  writeProviderSessionActiveModelChange,
 } from '@/shared/utils.js';
 
 export const OPENCODE_FALLBACK_MODELS: ProviderModelsDefinition = {
@@ -219,5 +222,11 @@ export class OpenCodeProviderModels implements IProviderModels {
     }
 
     return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());
+  }
+
+  async changeActiveModel(
+    input: ProviderChangeActiveModelInput,
+  ): Promise<ProviderSessionActiveModelChange> {
+    return writeProviderSessionActiveModelChange('opencode', input);
   }
 }

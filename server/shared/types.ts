@@ -124,6 +124,37 @@ export type ProviderCurrentActiveModel = {
 };
 
 /**
+ * Input payload used when one session needs to use a different model on its
+ * next resumed turn.
+ *
+ * This is a backend-owned session override, not a claim that the provider has
+ * already switched the currently running session in-place. Provider adapters
+ * persist this request so the next CLI/SDK resume can inject the chosen model
+ * using the provider-specific mechanism supported by that runtime.
+ */
+export type ProviderChangeActiveModelInput = {
+  sessionId: string;
+  model: string;
+};
+
+/**
+ * Provider-neutral session model-change state.
+ *
+ * `supported` indicates whether the provider adapter supports the app's
+ * session-scoped resume override flow. `changed` is the persisted boolean the
+ * resume layer checks before forcing a model on the next resumed turn. When
+ * `changed` is `false`, `model` is `null` and the runtime should use the
+ * normal request/default model selection path.
+ */
+export type ProviderSessionActiveModelChange = {
+  provider: LLMProvider;
+  sessionId: string;
+  supported: boolean;
+  changed: boolean;
+  model: string | null;
+};
+
+/**
  * Message/event variants emitted by provider adapters and normalized transports.
  *
  * Keep this union in sync with event kinds produced by provider session adapters.

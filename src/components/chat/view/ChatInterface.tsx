@@ -83,6 +83,7 @@ function ChatInterface({
     providerModelsLoading,
     providerModelsRefreshing,
     hardRefreshProviderModels,
+    selectProviderModel,
   } = useChatProviderState({
     selectedSession,
     selectedProject,
@@ -441,6 +442,8 @@ function ChatInterface({
         providerModelCacheCatalog={providerModelCacheCatalog}
         providerModelsRefreshing={providerModelsRefreshing}
         onHardRefreshProviderModels={hardRefreshProviderModels}
+        currentSessionId={currentSessionId || selectedSession?.id || null}
+        onSelectProviderModel={selectProviderModel}
       />
     </PermissionContext.Provider>
   );

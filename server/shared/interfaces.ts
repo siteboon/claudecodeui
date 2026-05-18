@@ -7,9 +7,11 @@ import type {
   ProviderSkill,
   ProviderSkillListOptions,
   ProviderAuthStatus,
+  ProviderChangeActiveModelInput,
   ProviderCurrentActiveModel,
   ProviderModelsDefinition,
   ProviderMcpServer,
+  ProviderSessionActiveModelChange,
   UpsertProviderMcpServerInput,
 } from '@/shared/types.js';
 
@@ -55,6 +57,19 @@ export interface IProviderModels {
    * no active model can be resolved.
    */
   getCurrentActiveModel(sessionId?: string): Promise<ProviderCurrentActiveModel>;
+
+  /**
+   * Persists a session-scoped model override that the next resumed turn should
+   * honor for this provider.
+   *
+   * This does not require the provider to mutate an already running remote
+   * session in-place. Instead, adapters store the user's explicit model choice
+   * so the backend resume path can add the correct provider-native model option
+   * on the next CLI/SDK invocation for the same session.
+   */
+  changeActiveModel(
+    input: ProviderChangeActiveModelInput,
+  ): Promise<ProviderSessionActiveModelChange>;
 }
 
 // ---------------------------

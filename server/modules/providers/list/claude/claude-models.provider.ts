@@ -1,16 +1,21 @@
-import { spawn } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 
 import { query, type ModelInfo, type Options } from '@anthropic-ai/claude-agent-sdk';
-import crossSpawn from 'cross-spawn';
 
+import { sessionsDb } from '@/modules/database/index.js';
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
 import type { IProviderModels } from '@/shared/interfaces.js';
 import type {
+  ProviderChangeActiveModelInput,
   ProviderCurrentActiveModel,
   ProviderModelOption,
   ProviderModelsDefinition,
+  ProviderSessionActiveModelChange,
 } from '@/shared/types.js';
-import { buildDefaultProviderCurrentActiveModel } from '@/shared/utils.js';
+import {
+  buildDefaultProviderCurrentActiveModel,
+  writeProviderSessionActiveModelChange,
+} from '@/shared/utils.js';
 
 export const CLAUDE_FALLBACK_MODELS: ProviderModelsDefinition = {
   OPTIONS: [
@@ -26,13 +31,23 @@ export const CLAUDE_FALLBACK_MODELS: ProviderModelsDefinition = {
 
 type ClaudeModelQueryOptions = Pick<Options, 'env' | 'pathToClaudeCodeExecutable' | 'permissionMode'>;
 type ClaudeInitEvent = {
+  sessionId?: string;
+  session_id?: string;
   type?: string;
   subtype?: string;
   model?: string;
+  message?: {
+    content?: unknown;
+    model?: string;
+  };
 };
 
-const CLAUDE_ACTIVE_MODEL_TIMEOUT_MS = 20_000;
-const claudeSpawn = process.platform === 'win32' ? crossSpawn : spawn;
+const ANSI_PATTERN = new RegExp(
+  '[\\u001B\\u009B][[\\]()#;?]*(?:'
+  + '(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]'
+  + '|(?:[\\dA-PR-TZcf-ntqry=><~]))',
+  'g',
+);
 
 const buildClaudeQueryOptions = (): ClaudeModelQueryOptions => ({
   env: { ...process.env },
@@ -74,82 +89,94 @@ const buildClaudeModelsDefinition = (models: ModelInfo[]): ProviderModelsDefinit
   };
 };
 
-const runClaudeSessionModelCommand = async (sessionId: string): Promise<ProviderCurrentActiveModel | null> => {
-  const cliPath = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH);
+const extractClaudeEventModel = (event: ClaudeInitEvent, sessionId: string): string | null => {
+  const eventSessionId = event.sessionId ?? event.session_id;
+  if (eventSessionId && eventSessionId !== sessionId) {
+    return null;
+  }
 
-  return new Promise((resolve, reject) => {
-    const child = claudeSpawn(
-      cliPath,
-      ['-p', '--verbose', '--output-format', 'stream-json', '--resume', sessionId, 'ok'],
-      {
-        env: { ...process.env },
-        windowsHide: true,
-      },
-    );
+  const contentModel = extractClaudeModelFromMessageContent(event.message?.content);
+  if (contentModel) {
+    return contentModel;
+  }
 
-    let stdout = '';
-    let stderr = '';
-    let settled = false;
+  const directModel = event.model?.trim();
+  if (directModel) {
+    return directModel;
+  }
 
-    const timer = setTimeout(() => {
-      child.kill('SIGTERM');
-      if (!settled) {
-        settled = true;
-        reject(new Error('Claude current-model lookup timed out'));
+  const messageModel = event.message?.model?.trim();
+  return messageModel || null;
+};
+
+const stripAnsi = (value: string): string => value.replace(ANSI_PATTERN, '');
+
+const extractTaggedContent = (content: string, tagName: string): string | null => {
+  const escapedTagName = tagName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = new RegExp(`<${escapedTagName}>([\\s\\S]*?)<\\/${escapedTagName}>`).exec(content);
+  return match ? match[1] : null;
+};
+
+const extractClaudeModelFromTextContent = (content: string): string | null => {
+  const localCommandStdout = extractTaggedContent(content, 'local-command-stdout');
+  if (localCommandStdout !== null) {
+    const cleanedStdout = stripAnsi(localCommandStdout).replace(/\s+/g, ' ').trim();
+    const changedModel = /(?:set|changed|switched)\s+model\s+to\s+(.+?)\.?$/i.exec(cleanedStdout);
+    if (changedModel?.[1]?.trim()) {
+      return changedModel[1].trim();
+    }
+  }
+
+  const modelTag = extractTaggedContent(content, 'model')?.trim();
+  return modelTag || null;
+};
+
+const extractClaudeModelFromMessageContent = (content: unknown): string | null => {
+  if (typeof content === 'string') {
+    return extractClaudeModelFromTextContent(content);
+  }
+
+  if (!Array.isArray(content)) {
+    return null;
+  }
+
+  for (const part of content) {
+    if (!part || typeof part !== 'object' || !('text' in part) || typeof part.text !== 'string') {
+      continue;
+    }
+
+    const model = extractClaudeModelFromTextContent(part.text);
+    if (model) {
+      return model;
+    }
+  }
+
+  return null;
+};
+
+const readClaudeSessionModelFromJsonl = async (
+  sessionId: string,
+  jsonlPath: string,
+): Promise<ProviderCurrentActiveModel | null> => {
+  const content = await readFile(jsonlPath, 'utf8');
+  const lines = content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    try {
+      const event = JSON.parse(lines[index]) as ClaudeInitEvent;
+      const model = extractClaudeEventModel(event, sessionId);
+      if (model) {
+        return { model };
       }
-    }, CLAUDE_ACTIVE_MODEL_TIMEOUT_MS);
+    } catch {
+      // Skip malformed JSONL lines that can happen during concurrent writes.
+    }
+  }
 
-    const finish = (error: Error | null, result: ProviderCurrentActiveModel | null) => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      clearTimeout(timer);
-
-      if (error) {
-        reject(error);
-        return;
-      }
-
-      resolve(result);
-    };
-
-    child.stdout?.on('data', (chunk: Buffer) => {
-      stdout += chunk.toString();
-    });
-
-    child.stderr?.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString();
-    });
-
-    child.on('error', (error) => {
-      finish(error instanceof Error ? error : new Error(String(error)), null);
-    });
-
-    child.on('close', () => {
-      const lines = `${stdout}\n${stderr}`
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean);
-
-      for (const line of lines) {
-        try {
-          const event = JSON.parse(line) as ClaudeInitEvent;
-          if (event.type === 'system' && event.subtype === 'init' && event.model) {
-            finish(null, {
-              model: event.model,
-            });
-            return;
-          }
-        } catch {
-          // The Claude CLI mixes non-JSON lines into verbose output; ignore them.
-        }
-      }
-
-      finish(null, null);
-    });
-  });
+  return null;
 };
 
 export class ClaudeProviderModels implements IProviderModels {
@@ -161,7 +188,7 @@ export class ClaudeProviderModels implements IProviderModels {
       // instance, so we create a lightweight query and immediately close it
       // after reading the control-plane metadata.
       queryInstance = query({
-        prompt: '',
+        prompt: 'Get supported models',
         options: buildClaudeQueryOptions(),
       });
 
@@ -181,7 +208,10 @@ export class ClaudeProviderModels implements IProviderModels {
     }
 
     try {
-      const activeModel = await runClaudeSessionModelCommand(sessionId);
+      const jsonlPath = sessionsDb.getSessionById(sessionId)?.jsonl_path;
+      const activeModel = jsonlPath
+        ? await readClaudeSessionModelFromJsonl(sessionId, jsonlPath)
+        : null;
       if (activeModel?.model) {
         return activeModel;
       }
@@ -190,5 +220,11 @@ export class ClaudeProviderModels implements IProviderModels {
     }
 
     return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());
+  }
+
+  async changeActiveModel(
+    input: ProviderChangeActiveModelInput,
+  ): Promise<ProviderSessionActiveModelChange> {
+    return writeProviderSessionActiveModelChange('claude', input);
   }
 }

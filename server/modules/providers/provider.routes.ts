@@ -6,7 +6,13 @@ import { providerModelsService } from '@/modules/providers/services/provider-mod
 import { providerSkillsService } from '@/modules/providers/services/skills.service.js';
 import { sessionConversationsSearchService } from '@/modules/providers/services/session-conversations-search.service.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
-import type { LLMProvider, McpScope, McpTransport, UpsertProviderMcpServerInput } from '@/shared/types.js';
+import type {
+  LLMProvider,
+  McpScope,
+  McpTransport,
+  ProviderChangeActiveModelInput,
+  UpsertProviderMcpServerInput,
+} from '@/shared/types.js';
 import { AppError, asyncHandler, createApiSuccessResponse } from '@/shared/utils.js';
 
 const router = express.Router();
@@ -246,6 +252,29 @@ const parseSessionSearchLimit = (value: unknown): number => {
   return Math.max(1, Math.min(parsed, 100));
 };
 
+const parseChangeActiveModelPayload = (payload: unknown): ProviderChangeActiveModelInput => {
+  if (!payload || typeof payload !== 'object') {
+    throw new AppError('Request body must be an object.', {
+      code: 'INVALID_REQUEST_BODY',
+      statusCode: 400,
+    });
+  }
+
+  const body = payload as Record<string, unknown>;
+  const model = readOptionalQueryString(body.model);
+  if (!model) {
+    throw new AppError('model is required.', {
+      code: 'MODEL_REQUIRED',
+      statusCode: 400,
+    });
+  }
+
+  return {
+    sessionId: '',
+    model,
+  };
+};
+
 router.get(
   '/:provider/auth/status',
   asyncHandler(async (req: Request, res: Response) => {
@@ -262,6 +291,20 @@ router.get(
     const bypassCache = parseOptionalBooleanQuery(req.query.bypassCache, 'bypassCache') ?? false;
     const result = await providerModelsService.getProviderModels(provider, { bypassCache });
     res.json(createApiSuccessResponse({ provider, models: result.models, cache: result.cache }));
+  }),
+);
+
+router.post(
+  '/:provider/sessions/:sessionId/active-model',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const sessionId = parseSessionId(req.params.sessionId);
+    const payload = parseChangeActiveModelPayload(req.body);
+    const result = await providerModelsService.changeActiveModel(provider, {
+      ...payload,
+      sessionId,
+    });
+    res.json(createApiSuccessResponse(result));
   }),
 );
 

@@ -6,11 +6,14 @@ import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import type { IProvider } from '@/shared/interfaces.js';
 import type {
   LLMProvider,
+  ProviderChangeActiveModelInput,
   ProviderCurrentActiveModel,
   ProviderModelsCacheInfo,
   ProviderModelsDefinition,
   ProviderModelsResult,
+  ProviderSessionActiveModelChange,
 } from '@/shared/types.js';
+import { readProviderSessionActiveModelChange } from '@/shared/utils.js';
 
 export const PROVIDER_MODELS_CACHE_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 const PROVIDER_MODELS_CACHE_VERSION = 1;
@@ -18,6 +21,7 @@ const PROVIDER_MODELS_CACHE_VERSION = 1;
 type ProviderModelsServiceDependencies = {
   resolveProvider?: (provider: LLMProvider) => Pick<IProvider, 'models'>;
   cachePath?: string;
+  activeModelChangesPath?: string;
   now?: () => number;
 };
 
@@ -132,6 +136,7 @@ const writeProviderModelsCacheFile = async (
 export const createProviderModelsService = (dependencies: ProviderModelsServiceDependencies = {}) => {
   const resolveProvider = dependencies.resolveProvider ?? providerRegistry.resolveProvider;
   const cachePath = dependencies.cachePath ?? getProviderModelsCachePath();
+  const activeModelChangesPath = dependencies.activeModelChangesPath;
   const now = dependencies.now ?? (() => Date.now());
   const memoryCache = new Map<LLMProvider, ProviderModelsCacheEntry>();
   const pendingRequests = new Map<LLMProvider, Promise<ProviderModelsResult>>();
@@ -270,6 +275,36 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     sessionId?: string,
   ): Promise<ProviderCurrentActiveModel> => resolveProvider(provider).models.getCurrentActiveModel(sessionId);
 
+  const changeActiveModel = async (
+    provider: LLMProvider,
+    input: ProviderChangeActiveModelInput,
+  ): Promise<ProviderSessionActiveModelChange> => resolveProvider(provider).models.changeActiveModel(input);
+
+  const getChangedActiveModel = async (
+    provider: LLMProvider,
+    sessionId: string,
+  ): Promise<ProviderSessionActiveModelChange> => readProviderSessionActiveModelChange(provider, sessionId, {
+    filePath: activeModelChangesPath,
+  });
+
+  const resolveResumeModel = async (
+    provider: LLMProvider,
+    sessionId: string | undefined,
+    requestedModel?: string | null,
+  ): Promise<string | undefined> => {
+    const normalizedRequestedModel = typeof requestedModel === 'string' ? requestedModel.trim() : '';
+    if (!sessionId?.trim()) {
+      return normalizedRequestedModel || undefined;
+    }
+
+    const changedModel = await getChangedActiveModel(provider, sessionId);
+    if (changedModel.supported && changedModel.changed && changedModel.model?.trim()) {
+      return changedModel.model.trim();
+    }
+
+    return normalizedRequestedModel || undefined;
+  };
+
   const clearCache = (): void => {
     memoryCache.clear();
     pendingRequests.clear();
@@ -280,6 +315,9 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
   return {
     getProviderModels,
     getCurrentActiveModel,
+    getChangedActiveModel,
+    changeActiveModel,
+    resolveResumeModel,
     clearCache,
   };
 };

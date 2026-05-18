@@ -4,6 +4,7 @@ import crossSpawn from 'cross-spawn';
 
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
+import { providerModelsService } from './modules/providers/services/provider-models.service.js';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
 import { createNormalizedMessage } from './shared/utils.js';
 
@@ -28,17 +29,6 @@ async function spawnOpenCode(command, options = {}, ws) {
     let sessionCreatedSent = false;
     let stdoutLineBuffer = '';
     let terminalNotificationSent = false;
-
-    const args = ['run', '--format', 'json'];
-    if (sessionId) {
-      args.push('--session', sessionId);
-    }
-    if (model) {
-      args.push('--model', model);
-    }
-    if (command && command.trim()) {
-      args.push(command.trim());
-    }
 
     const notifyTerminalState = ({ code = null, error = null } = {}) => {
       if (terminalNotificationSent) {
@@ -66,16 +56,6 @@ async function spawnOpenCode(command, options = {}, ws) {
         error: error || `OpenCode CLI exited with code ${code}`,
       });
     };
-
-    const opencodeProcess = spawnFunction('opencode', args, {
-      cwd: workingDir,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env },
-    });
-
-    activeOpenCodeProcesses.set(processKey, opencodeProcess);
-    opencodeProcess.sessionId = processKey;
-    opencodeProcess.stdin.end();
 
     const registerSession = (nextSessionId) => {
       if (!nextSessionId || capturedSessionId === nextSessionId) {
@@ -130,89 +110,112 @@ async function spawnOpenCode(command, options = {}, ws) {
       }
     };
 
-    opencodeProcess.stdout.on('data', (data) => {
-      stdoutLineBuffer += data.toString();
-      const completeLines = stdoutLineBuffer.split(/\r?\n/);
-      stdoutLineBuffer = completeLines.pop() || '';
+    void providerModelsService.resolveResumeModel('opencode', sessionId, model).then((resolvedModel) => {
+      const args = ['run', '--format', 'json'];
+      if (sessionId) {
+        args.push('--session', sessionId);
+      }
+      if (resolvedModel) {
+        args.push('--model', resolvedModel);
+      }
+      if (command && command.trim()) {
+        args.push(command.trim());
+      }
 
-      completeLines.forEach((line) => {
-        processOpenCodeOutputLine(line.trim());
+      const opencodeProcess = spawnFunction('opencode', args, {
+        cwd: workingDir,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env },
       });
-    });
 
-    opencodeProcess.stderr.on('data', (data) => {
-      const stderrText = data.toString();
-      if (!stderrText.trim()) {
-        return;
-      }
+      activeOpenCodeProcesses.set(processKey, opencodeProcess);
+      opencodeProcess.sessionId = processKey;
+      opencodeProcess.stdin.end();
 
-      ws.send(createNormalizedMessage({
-        kind: 'error',
-        content: stderrText,
-        sessionId: capturedSessionId || sessionId || null,
-        provider: 'opencode',
-      }));
-    });
+      opencodeProcess.stdout.on('data', (data) => {
+        stdoutLineBuffer += data.toString();
+        const completeLines = stdoutLineBuffer.split(/\r?\n/);
+        stdoutLineBuffer = completeLines.pop() || '';
 
-    opencodeProcess.on('close', async (code) => {
-      const finalSessionId = capturedSessionId || sessionId || processKey;
-      activeOpenCodeProcesses.delete(finalSessionId);
-      activeOpenCodeProcesses.delete(processKey);
+        completeLines.forEach((line) => {
+          processOpenCodeOutputLine(line.trim());
+        });
+      });
 
-      if (stdoutLineBuffer.trim()) {
-        processOpenCodeOutputLine(stdoutLineBuffer.trim());
-        stdoutLineBuffer = '';
-      }
-
-      ws.send(createNormalizedMessage({
-        kind: 'complete',
-        exitCode: code,
-        isNewSession: !sessionId && !!command,
-        sessionId: finalSessionId,
-        provider: 'opencode',
-      }));
-
-      if (code === 0) {
-        notifyTerminalState({ code });
-        resolve();
-        return;
-      }
-
-      if (code === 127 || code === null) {
-        const installed = await providerAuthService.isProviderInstalled('opencode');
-        if (!installed) {
-          ws.send(createNormalizedMessage({
-            kind: 'error',
-            content: 'OpenCode CLI is not installed. Install it from https://opencode.ai/docs/',
-            sessionId: finalSessionId,
-            provider: 'opencode',
-          }));
+      opencodeProcess.stderr.on('data', (data) => {
+        const stderrText = data.toString();
+        if (!stderrText.trim()) {
+          return;
         }
-      }
 
-      notifyTerminalState({ code });
-      reject(new Error(code === null ? 'OpenCode CLI process was terminated' : `OpenCode CLI exited with code ${code}`));
-    });
+        ws.send(createNormalizedMessage({
+          kind: 'error',
+          content: stderrText,
+          sessionId: capturedSessionId || sessionId || null,
+          provider: 'opencode',
+        }));
+      });
 
-    opencodeProcess.on('error', async (error) => {
-      const finalSessionId = capturedSessionId || sessionId || processKey;
-      activeOpenCodeProcesses.delete(finalSessionId);
-      activeOpenCodeProcesses.delete(processKey);
+      opencodeProcess.on('close', async (code) => {
+        const finalSessionId = capturedSessionId || sessionId || processKey;
+        activeOpenCodeProcesses.delete(finalSessionId);
+        activeOpenCodeProcesses.delete(processKey);
 
-      const installed = await providerAuthService.isProviderInstalled('opencode');
-      const errorContent = !installed
-        ? 'OpenCode CLI is not installed. Install it from https://opencode.ai/docs/'
-        : error.message;
+        if (stdoutLineBuffer.trim()) {
+          processOpenCodeOutputLine(stdoutLineBuffer.trim());
+          stdoutLineBuffer = '';
+        }
 
-      ws.send(createNormalizedMessage({
-        kind: 'error',
-        content: errorContent,
-        sessionId: finalSessionId,
-        provider: 'opencode',
-      }));
-      notifyTerminalState({ error });
-      reject(error);
-    });
+        ws.send(createNormalizedMessage({
+          kind: 'complete',
+          exitCode: code,
+          isNewSession: !sessionId && !!command,
+          sessionId: finalSessionId,
+          provider: 'opencode',
+        }));
+
+        if (code === 0) {
+          notifyTerminalState({ code });
+          resolve();
+          return;
+        }
+
+        if (code === 127 || code === null) {
+          const installed = await providerAuthService.isProviderInstalled('opencode');
+          if (!installed) {
+            ws.send(createNormalizedMessage({
+              kind: 'error',
+              content: 'OpenCode CLI is not installed. Install it from https://opencode.ai/docs/',
+              sessionId: finalSessionId,
+              provider: 'opencode',
+            }));
+          }
+        }
+
+        notifyTerminalState({ code });
+        reject(new Error(code === null ? 'OpenCode CLI process was terminated' : `OpenCode CLI exited with code ${code}`));
+      });
+
+      opencodeProcess.on('error', async (error) => {
+        const finalSessionId = capturedSessionId || sessionId || processKey;
+        activeOpenCodeProcesses.delete(finalSessionId);
+        activeOpenCodeProcesses.delete(processKey);
+
+        const installed = await providerAuthService.isProviderInstalled('opencode');
+        const errorContent = !installed
+          ? 'OpenCode CLI is not installed. Install it from https://opencode.ai/docs/'
+          : error.message;
+
+        ws.send(createNormalizedMessage({
+          kind: 'error',
+          content: errorContent,
+          sessionId: finalSessionId,
+          provider: 'opencode',
+        }));
+        notifyTerminalState({ error });
+        reject(error);
+      });
+    }).catch(reject);
   });
 }
 

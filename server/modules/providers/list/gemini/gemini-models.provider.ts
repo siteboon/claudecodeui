@@ -1,6 +1,14 @@
 import type { IProviderModels } from '@/shared/interfaces.js';
-import type { ProviderCurrentActiveModel, ProviderModelsDefinition } from '@/shared/types.js';
-import { buildDefaultProviderCurrentActiveModel } from '@/shared/utils.js';
+import type {
+  ProviderChangeActiveModelInput,
+  ProviderCurrentActiveModel,
+  ProviderModelsDefinition,
+  ProviderSessionActiveModelChange,
+} from '@/shared/types.js';
+import {
+  buildDefaultProviderCurrentActiveModel,
+  writeProviderSessionActiveModelChange,
+} from '@/shared/utils.js';
 
 export const GEMINI_FALLBACK_MODELS: ProviderModelsDefinition = {
   OPTIONS: [
@@ -24,5 +32,11 @@ export class GeminiProviderModels implements IProviderModels {
 
   async getCurrentActiveModel(): Promise<ProviderCurrentActiveModel> {
     return buildDefaultProviderCurrentActiveModel(GEMINI_FALLBACK_MODELS);
+  }
+
+  async changeActiveModel(
+    input: ProviderChangeActiveModelInput,
+  ): Promise<ProviderSessionActiveModelChange> {
+    return writeProviderSessionActiveModelChange('gemini', input);
   }
 }

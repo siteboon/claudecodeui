@@ -43,6 +43,17 @@ type ProviderModelsApiResponse = {
   };
 };
 
+type ChangeActiveModelApiResponse = {
+  success?: boolean;
+  data?: {
+    provider?: LLMProvider;
+    sessionId?: string;
+    supported?: boolean;
+    changed?: boolean;
+    model?: string | null;
+  };
+};
+
 export function useChatProviderState({ selectedSession, selectedProject }: UseChatProviderStateArgs) {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('default');
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<PendingPermissionRequest[]>([]);
@@ -76,6 +87,35 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
 
   const lastProviderRef = useRef(provider);
   const providerModelsRequestIdRef = useRef(0);
+
+  const setStoredProviderModel = useCallback((targetProvider: LLMProvider, model: string) => {
+    if (targetProvider === 'claude') {
+      setClaudeModel(model);
+      localStorage.setItem('claude-model', model);
+      return;
+    }
+
+    if (targetProvider === 'cursor') {
+      setCursorModel(model);
+      localStorage.setItem('cursor-model', model);
+      return;
+    }
+
+    if (targetProvider === 'codex') {
+      setCodexModel(model);
+      localStorage.setItem('codex-model', model);
+      return;
+    }
+
+    if (targetProvider === 'gemini') {
+      setGeminiModel(model);
+      localStorage.setItem('gemini-model', model);
+      return;
+    }
+
+    setOpenCodeModel(model);
+    localStorage.setItem('opencode-model', model);
+  }, []);
 
   const loadProviderModels = useCallback(async (options: { bypassCache?: boolean } = {}) => {
     const providers: LLMProvider[] = ['claude', 'cursor', 'codex', 'gemini', 'opencode'];
@@ -289,6 +329,41 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
     }
   }, [permissionMode, provider, selectedSession?.id]);
 
+  const selectProviderModel = useCallback(async (
+    targetProvider: LLMProvider,
+    model: string,
+    sessionId?: string | null,
+  ) => {
+    const normalizedSessionId = typeof sessionId === 'string' ? sessionId.trim() : '';
+    if (!normalizedSessionId) {
+      setStoredProviderModel(targetProvider, model);
+      return {
+        scope: 'default' as const,
+        changed: false,
+        model,
+      };
+    }
+
+    const response = await authenticatedFetch(
+      `/api/providers/${targetProvider}/sessions/${encodeURIComponent(normalizedSessionId)}/active-model`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ model }),
+      },
+    );
+
+    const body = (await response.json()) as ChangeActiveModelApiResponse;
+    if (!response.ok || !body.success || !body.data?.supported) {
+      throw new Error('Unable to change the active model for this session.');
+    }
+
+    return {
+      scope: 'session' as const,
+      changed: body.data.changed === true,
+      model: body.data.model || model,
+    };
+  }, [setStoredProviderModel]);
+
   return {
     provider,
     setProvider,
@@ -312,5 +387,6 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
     providerModelsLoading,
     providerModelsRefreshing,
     hardRefreshProviderModels: () => loadProviderModels({ bypassCache: true }),
+    selectProviderModel,
   };
 }

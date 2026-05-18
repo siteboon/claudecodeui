@@ -6,14 +6,17 @@ import TOML from '@iarna/toml';
 
 import type { IProviderModels } from '@/shared/interfaces.js';
 import type {
+  ProviderChangeActiveModelInput,
   ProviderCurrentActiveModel,
   ProviderModelOption,
   ProviderModelsDefinition,
+  ProviderSessionActiveModelChange,
 } from '@/shared/types.js';
 import {
   buildDefaultProviderCurrentActiveModel,
   readObjectRecord,
   readOptionalString,
+  writeProviderSessionActiveModelChange,
 } from '@/shared/utils.js';
 
 export const CODEX_FALLBACK_MODELS: ProviderModelsDefinition = {
@@ -112,5 +115,11 @@ export class CodexProviderModels implements IProviderModels {
     } catch {
       return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());
     }
+  }
+
+  async changeActiveModel(
+    input: ProviderChangeActiveModelInput,
+  ): Promise<ProviderSessionActiveModelChange> {
+    return writeProviderSessionActiveModelChange('codex', input);
   }
 }
