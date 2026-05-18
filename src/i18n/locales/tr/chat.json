@@ -271,5 +271,14 @@
   },
   "tasks": {
     "nextTaskPrompt": "Sonraki görevi başlat"
+  },
+  "scrollNav": {
+    "jumpTo": "Git: {{snippet}}",
+    "jumpToMessage": "{{index}}. mesaja git",
+    "loadAll": "Tümünü yükle",
+    "first": "İlk",
+    "previous": "Önceki",
+    "next": "Sonraki",
+    "last": "Son"
   }
 }
