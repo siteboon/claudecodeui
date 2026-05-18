@@ -253,5 +253,9 @@
   },
   "tasks": {
     "nextTaskPrompt": "다음 작업 시작"
+  },
+  "scrollNav": {
+    "jumpTo": "이동: {{snippet}}",
+    "jumpToMessage": "{{index}}번 메시지로 이동"
   }
 }

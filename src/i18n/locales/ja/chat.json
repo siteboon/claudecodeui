@@ -238,5 +238,9 @@
     "providers": {
       "assistant": "Assistant"
     }
+  },
+  "scrollNav": {
+    "jumpTo": "ジャンプ: {{snippet}}",
+    "jumpToMessage": "{{index}}番目のメッセージに移動"
   }
 }

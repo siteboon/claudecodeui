@@ -271,5 +271,9 @@
   },
   "tasks": {
     "nextTaskPrompt": "Sonraki görevi başlat"
+  },
+  "scrollNav": {
+    "jumpTo": "Git: {{snippet}}",
+    "jumpToMessage": "{{index}}. mesaja git"
   }
 }

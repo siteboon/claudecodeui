@@ -253,5 +253,9 @@
   },
   "tasks": {
     "nextTaskPrompt": "开始下一个任务"
+  },
+  "scrollNav": {
+    "jumpTo": "跳转到: {{snippet}}",
+    "jumpToMessage": "跳转到第 {{index}} 条消息"
   }
 }

@@ -271,5 +271,9 @@
   },
   "tasks": {
     "nextTaskPrompt": "Start the next task"
+  },
+  "scrollNav": {
+    "jumpTo": "Jump to: {{snippet}}",
+    "jumpToMessage": "Jump to message {{index}}"
   }
 }

@@ -6,6 +6,7 @@ import type { Project, ProjectSession, LLMProvider } from '../../../../types/app
 import { getIntrinsicMessageKey } from '../../utils/messageKeys';
 import MessageComponent from './MessageComponent';
 import ProviderSelectionEmptyState from './ProviderSelectionEmptyState';
+import ScrollNavigation from './ScrollNavigation';
 
 interface ChatMessagesPaneProps {
   scrollContainerRef: RefObject<HTMLDivElement>;
@@ -251,6 +252,11 @@ export default function ChatMessagesPane({
           })}
         </>
       )}
+
+      <ScrollNavigation
+        scrollContainerRef={scrollContainerRef}
+        chatMessages={chatMessages}
+      />
     </div>
   );
 }
