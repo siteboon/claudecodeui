@@ -304,6 +304,10 @@ function ChatInterface({
           <ScrollNavigation
             scrollContainerRef={scrollContainerRef}
             chatMessages={chatMessages}
+            loadAllMessages={loadAllMessages}
+            allMessagesLoaded={allMessagesLoaded}
+            totalMessages={totalMessages}
+            sessionMessagesCount={chatMessages.length}
           />
           <div className="absolute inset-0">
           <ChatMessagesPane

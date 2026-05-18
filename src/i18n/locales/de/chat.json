@@ -274,6 +274,11 @@
   },
   "scrollNav": {
     "jumpTo": "Springe zu: {{snippet}}",
-    "jumpToMessage": "Springe zu Nachricht {{index}}"
+    "jumpToMessage": "Springe zu Nachricht {{index}}",
+    "loadAll": "Alle laden",
+    "first": "Erste",
+    "previous": "Vorherige",
+    "next": "Nächste",
+    "last": "Letzte"
   }
 }

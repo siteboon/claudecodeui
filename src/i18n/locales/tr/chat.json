@@ -274,6 +274,11 @@
   },
   "scrollNav": {
     "jumpTo": "Git: {{snippet}}",
-    "jumpToMessage": "{{index}}. mesaja git"
+    "jumpToMessage": "{{index}}. mesaja git",
+    "loadAll": "Tümünü yükle",
+    "first": "İlk",
+    "previous": "Önceki",
+    "next": "Sonraki",
+    "last": "Son"
   }
 }
