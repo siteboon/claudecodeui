@@ -256,6 +256,8 @@ export default function ChatMessagesPane({
       <ScrollNavigation
         scrollContainerRef={scrollContainerRef}
         chatMessages={chatMessages}
+        allMessagesLoaded={allMessagesLoaded}
+        loadAllMessages={loadAllMessages}
       />
     </div>
   );

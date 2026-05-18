@@ -6,6 +6,8 @@ import Tooltip from '../../../../shared/view/ui/Tooltip';
 interface ScrollNavigationProps {
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   chatMessages: ChatMessage[];
+  allMessagesLoaded: boolean;
+  loadAllMessages: () => void;
 }
 
 function truncateSnippet(content: string): string {
@@ -15,19 +17,40 @@ function truncateSnippet(content: string): string {
     .slice(0, 60) + ((content || '').length > 60 ? '...' : '');
 }
 
-export default function ScrollNavigation({ scrollContainerRef, chatMessages }: ScrollNavigationProps) {
+export default function ScrollNavigation({
+  scrollContainerRef,
+  chatMessages,
+  allMessagesLoaded,
+  loadAllMessages,
+}: ScrollNavigationProps) {
   const { t } = useTranslation('chat');
   const [activeDotIndex, setActiveDotIndex] = useState(-1);
   const [isStripHovered, setIsStripHovered] = useState(false);
   const rafIdRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
+  const loadAllCalledRef = useRef(false);
 
   const userMessages = useMemo(
     () => chatMessages.filter((m) => m.type === 'user'),
     [chatMessages],
   );
 
-  const shouldShow = userMessages.length >= 3;
+  const shouldShow = userMessages.length >= 1;
+
+  // Auto-load all messages on first mount so every dot appears
+  useEffect(() => {
+    if (!allMessagesLoaded && !loadAllCalledRef.current && userMessages.length > 0) {
+      loadAllCalledRef.current = true;
+      loadAllMessages();
+    }
+  }, [allMessagesLoaded, loadAllMessages, userMessages.length]);
+
+  // Reset loadAllCalledRef when session changes (messages become empty then refill)
+  useEffect(() => {
+    if (chatMessages.length === 0) {
+      loadAllCalledRef.current = false;
+    }
+  }, [chatMessages.length]);
 
   const scheduleUpdate = useCallback(() => {
     if (rafIdRef.current != null) return;
@@ -61,22 +84,18 @@ export default function ScrollNavigation({ scrollContainerRef, chatMessages }: S
     });
   }, [scrollContainerRef]);
 
-  // Scroll listener for active dot tracking
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
-
     container.addEventListener('scroll', scheduleUpdate, { passive: true });
     return () => container.removeEventListener('scroll', scheduleUpdate);
   }, [scrollContainerRef, scheduleUpdate]);
 
-  // Initial position + re-compute when messages change
   useEffect(() => {
-    const timer = setTimeout(() => scheduleUpdate(), 200);
+    const timer = setTimeout(() => scheduleUpdate(), 300);
     return () => clearTimeout(timer);
   }, [chatMessages.length, scheduleUpdate]);
 
-  // Cleanup RAF on unmount
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -100,6 +119,8 @@ export default function ScrollNavigation({ scrollContainerRef, chatMessages }: S
 
   if (!shouldShow) return null;
 
+  const totalDots = userMessages.length;
+
   return (
     <div
       className="pointer-events-none absolute right-0.5 top-1/2 z-10 flex -translate-y-1/2 flex-col items-center"
@@ -107,8 +128,8 @@ export default function ScrollNavigation({ scrollContainerRef, chatMessages }: S
       onMouseLeave={() => setIsStripHovered(false)}
     >
       <div
-        className={`pointer-events-auto flex flex-col items-center rounded-full border py-2 backdrop-blur-sm transition-opacity duration-200 ${
-          isStripHovered ? 'opacity-100' : 'opacity-40'
+        className={`pointer-events-auto flex flex-col items-center rounded-full border px-1.5 py-3 backdrop-blur-sm transition-opacity duration-200 ${
+          isStripHovered ? 'opacity-100' : 'opacity-50'
         } bg-background/80 border-border/50`}
       >
         {userMessages.map((msg, i) => {
@@ -128,12 +149,14 @@ export default function ScrollNavigation({ scrollContainerRef, chatMessages }: S
               <button
                 type="button"
                 onClick={() => scrollToDot(i)}
-                className={`block rounded-full transition-all duration-150 ${
+                className={`block cursor-pointer rounded-full transition-all duration-150 ${
                   isActive
-                    ? 'h-[6px] w-[6px] bg-blue-500 hover:bg-blue-400'
-                    : 'h-[4px] w-[4px] bg-muted-foreground/60 hover:bg-muted-foreground'
+                    ? 'h-[8px] w-[8px] bg-blue-500 hover:bg-blue-400'
+                    : 'h-[6px] w-[6px] bg-muted-foreground/70 hover:bg-muted-foreground hover:h-[8px] hover:w-[8px]'
                 }`}
-                style={{ marginTop: i === 0 ? 0 : 2 }}
+                style={{
+                  marginBlock: totalDots > 1 ? 6 : 0,
+                }}
                 aria-label={t('scrollNav.jumpToMessage', { index: i + 1 })}
               />
             </Tooltip>
