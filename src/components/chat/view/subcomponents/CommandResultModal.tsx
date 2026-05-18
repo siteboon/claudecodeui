@@ -9,7 +9,6 @@ import {
   Command as CommandIcon,
   Cpu,
   Gauge,
-  Layers3,
   Package,
   Search,
   Server,
@@ -345,69 +344,77 @@ function ModelsContent({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4">
-      <div className="flex flex-col gap-2 rounded-2xl border border-border/70 bg-muted/20 px-3 py-2.5 lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-foreground">Hard refresh provider catalogs</p>
-          <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
-            Bypasses the 3-day backend cache and re-fetches models for every provider.
-          </p>
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            Last updated for {providerLabel}: {formatUpdatedAt(currentCache?.updatedAt)}
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={onHardRefreshProviderModels}
-          disabled={providerModelsRefreshing}
-          className="h-8 shrink-0 rounded-xl px-3"
-        >
-          <RefreshCw className={providerModelsRefreshing ? 'animate-spin' : ''} />
-          {providerModelsRefreshing ? 'Refreshing...' : 'Hard Refresh'}
-        </Button>
-      </div>
+    <div className="flex h-full min-h-0 flex-col gap-2.5">
+      <div className="rounded-2xl border border-border/70 bg-muted/20 p-2.5">
+        <div className="grid gap-2.5 lg:grid-cols-[minmax(0,1.75fr)_minmax(13rem,0.75fr)_auto] lg:items-start">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="secondary" className="rounded-lg border border-primary/20 bg-primary/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">
+                {providerLabel}
+              </Badge>
+              <Badge variant="secondary" className="rounded-lg px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-foreground">
+                {availableOptions.length} models
+              </Badge>
+            </div>
 
-      <div className="rounded-2xl border border-border/60 bg-background/50 px-3 py-2 text-xs text-muted-foreground">
-        {hasConcreteSessionId
-          ? 'Selecting a model stores a session override and applies it on the next response for this session.'
-          : 'Selecting a model updates the default model used for new turns in this provider.'}
-        {selectionNotice && <span className="ml-2 text-foreground">{selectionNotice}</span>}
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-[minmax(0,1.35fr)_minmax(0,0.48fr)_minmax(0,0.48fr)]">
-        <div className="relative overflow-hidden rounded-3xl border border-primary/25 bg-primary/10 p-4">
-          <div className="pointer-events-none absolute -right-10 -top-12 h-36 w-36 rounded-full bg-primary/20 blur-3xl" />
-          <div className="relative flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">Active model</p>
-              <h3 className="mt-1.5 break-all font-mono text-base font-semibold text-foreground">{currentModel}</h3>
+            <div className="mt-2 rounded-xl border border-primary/15 bg-primary/[0.06] px-3 py-2">
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-primary">Active Model</p>
+              <p className="mt-1 break-all font-mono text-[0.98rem] font-semibold leading-5 text-foreground sm:text-[1.05rem]">
+                {currentModel}
+              </p>
               {activeOption?.label && activeOption.label !== currentModel && (
-                <p className="mt-1 text-xs text-muted-foreground">{activeOption.label}</p>
+                <p className="mt-1 text-[11px] font-medium text-foreground/85">{activeOption.label}</p>
               )}
               {activeOption?.description && (
-                <p className="mt-1.5 line-clamp-2 text-xs leading-5 text-muted-foreground">{activeOption.description}</p>
+                <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">{activeOption.description}</p>
               )}
               {pendingSessionModel && pendingSessionModel !== currentModel && (
-                <p className="mt-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
+                <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">
                   Next response: {pendingSessionModel}
                 </p>
               )}
             </div>
-            <Badge className="shrink-0 rounded-full bg-primary text-primary-foreground">Live</Badge>
           </div>
+
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+            <div className="rounded-xl border border-border/60 bg-background/55 px-2.5 py-1.5">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground/80">Default</p>
+              <p className="mt-1 break-all font-mono text-[11px] font-medium text-foreground">{defaultModel}</p>
+            </div>
+            <div className="rounded-xl border border-border/60 bg-background/55 px-2.5 py-1.5">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground/80">Updated</p>
+              <p className="mt-1 text-[11px] font-medium text-foreground">{formatUpdatedAt(currentCache?.updatedAt)}</p>
+            </div>
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onHardRefreshProviderModels}
+            disabled={providerModelsRefreshing}
+            className="h-8 shrink-0 rounded-xl px-3 lg:self-start"
+          >
+            <RefreshCw className={providerModelsRefreshing ? 'animate-spin' : ''} />
+            {providerModelsRefreshing ? 'Refreshing...' : 'Hard Refresh'}
+          </Button>
         </div>
 
-        <MetricCard label="Provider" value={providerLabel} icon={Server} tone="primary" compact />
-        <MetricCard label="Models" value={String(availableOptions.length)} icon={Layers3} compact />
+        <div className="mt-2 border-t border-border/50 pt-1.5 text-[11px] text-muted-foreground">
+          {hasConcreteSessionId
+            ? 'Selecting a model stores a session override and applies it on the next response for this session.'
+            : 'Selecting a model updates the default model used for new turns in this provider.'}
+          {selectionNotice && <span className="ml-2 text-foreground">{selectionNotice}</span>}
+        </div>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col rounded-3xl border border-border/70 bg-muted/15 p-3 sm:p-4">
-        <div className="mb-3 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
-          <SearchField value={query} onChange={setQuery} placeholder={`Search ${providerLabel} models...`} />
+        <div className="mb-2.5 grid gap-2 sm:grid-cols-[1fr_auto] sm:items-center">
+          <div className="min-w-0">
+            <SearchField value={query} onChange={setQuery} placeholder={`Search ${providerLabel} models...`} />
+          </div>
           <Badge variant="secondary" className="h-9 justify-center rounded-xl px-3 font-mono text-xs">
-            default: {defaultModel}
+            {filteredOptions.length} shown
           </Badge>
         </div>
 
@@ -653,13 +660,13 @@ export default function CommandResultModal({
                 <HeaderIcon className={isModelsModal ? 'h-4 w-4' : 'h-5 w-5'} />
               </div>
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-primary/80">
+                <p className="text-[12px] font-bold uppercase tracking-[0.22em] text-primary">
                   {activeMeta?.eyebrow}
                 </p>
-                <p className={`mt-1 font-semibold tracking-tight text-foreground ${isModelsModal ? 'text-lg sm:text-xl' : 'text-xl sm:text-2xl'}`}>
+                <p className={`mt-1 font-semibold tracking-tight text-foreground ${isModelsModal ? 'text-xl sm:text-2xl' : 'text-xl sm:text-2xl'}`}>
                   {activeMeta?.title}
                 </p>
-                <p className={`mt-1 max-w-2xl text-muted-foreground ${isModelsModal ? 'text-xs leading-5 sm:text-sm' : 'text-sm leading-5'}`}>
+                <p className={`mt-1 max-w-2xl ${isModelsModal ? 'text-sm leading-5 text-foreground/75' : 'text-sm leading-5 text-muted-foreground'}`}>
                   {activeMeta?.subtitle}
                 </p>
               </div>
