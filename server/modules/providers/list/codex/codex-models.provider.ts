@@ -2,9 +2,19 @@ import { readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
+import TOML from '@iarna/toml';
+
 import type { IProviderModels } from '@/shared/interfaces.js';
-import type { ProviderModelOption, ProviderModelsDefinition } from '@/shared/types.js';
-import { readObjectRecord, readOptionalString } from '@/shared/utils.js';
+import type {
+  ProviderCurrentActiveModel,
+  ProviderModelOption,
+  ProviderModelsDefinition,
+} from '@/shared/types.js';
+import {
+  buildDefaultProviderCurrentActiveModel,
+  readObjectRecord,
+  readOptionalString,
+} from '@/shared/utils.js';
 
 export const CODEX_FALLBACK_MODELS: ProviderModelsDefinition = {
   OPTIONS: [
@@ -27,6 +37,7 @@ type CodexCachedModel = {
 };
 
 const CODEX_MODELS_CACHE_PATH = path.join(os.homedir(), '.codex', 'models_cache.json');
+const CODEX_CONFIG_PATH = path.join(os.homedir(), '.codex', 'config.toml');
 
 const isCodexCachedModel = (value: unknown): value is CodexCachedModel => {
   const record = readObjectRecord(value);
@@ -83,6 +94,23 @@ export class CodexProviderModels implements IProviderModels {
       return buildCodexModelsDefinition(models);
     } catch {
       return CODEX_FALLBACK_MODELS;
+    }
+  }
+
+  async getCurrentActiveModel(): Promise<ProviderCurrentActiveModel> {
+    try {
+      const raw = await readFile(CODEX_CONFIG_PATH, 'utf8');
+      const parsed = readObjectRecord(TOML.parse(raw));
+      const model = readOptionalString(parsed?.model);
+      if (!model) {
+        return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());
+      }
+
+      return {
+        model,
+      };
+    } catch {
+      return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());
     }
   }
 }

@@ -23,6 +23,8 @@ import type {
   ApiSuccessShape,
   AppErrorOptions,
   NormalizedMessage,
+  ProviderCurrentActiveModel,
+  ProviderModelsDefinition,
   ProviderSkillSource,
   WorkspacePathValidationResult,
 } from '@/shared/types.js';
@@ -415,6 +417,24 @@ export const readStringRecord = (value: unknown): Record<string, string> | undef
 };
 
 // ---------------------------
+//----------------- PROVIDER MODEL LOOKUP UTILITIES ------------
+/**
+ * Builds the standard "default current model" result used when a provider
+ * cannot resolve a session-backed active model.
+ *
+ * Provider model adapters should call this after loading their supported model
+ * catalog so the fallback stays aligned with the provider's current `DEFAULT`
+ * selection instead of drifting to a hard-coded duplicate.
+ */
+export function buildDefaultProviderCurrentActiveModel(
+  models: ProviderModelsDefinition,
+): ProviderCurrentActiveModel {
+  return {
+    model: models.DEFAULT,
+  };
+}
+
+// ---------------------------
 //----------------- WEBSOCKET PAYLOAD PARSING UTILITIES ------------
 /**
  * Parses one websocket message payload into a plain JSON object record.
@@ -740,6 +760,34 @@ export function readJsonRecord(value: unknown): AnyRecord | null {
  */
 export function getOpenCodeDatabasePath(): string {
   return path.join(os.homedir(), '.local', 'share', 'opencode', 'opencode.db');
+}
+
+// ---------------------------
+//----------------- SAFE DIRECTORY NAME UTILITIES ------------
+/**
+ * Validates that a user or provider supplied identifier can safely be treated
+ * as one leaf directory name under an existing root folder.
+ *
+ * Use this before composing paths like `<root>/<session-id>/file.db>` to block
+ * path traversal and accidental nested paths. The returned string is trimmed but
+ * otherwise unchanged so callers can still match the provider's on-disk naming.
+ */
+export function sanitizeLeafDirectoryName(inputName: string, label = 'directory name'): string {
+  const normalized = inputName.trim();
+  if (!normalized) {
+    throw new Error(`${label} is required.`);
+  }
+
+  if (
+    normalized.includes('..')
+    || normalized.includes(path.posix.sep)
+    || normalized.includes(path.win32.sep)
+    || normalized !== path.basename(normalized)
+  ) {
+    throw new Error(`Invalid ${label} "${inputName}".`);
+  }
+
+  return normalized;
 }
 
 // ---------------------------

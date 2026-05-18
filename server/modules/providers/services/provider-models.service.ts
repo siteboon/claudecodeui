@@ -6,6 +6,7 @@ import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import type { IProvider } from '@/shared/interfaces.js';
 import type {
   LLMProvider,
+  ProviderCurrentActiveModel,
   ProviderModelsCacheInfo,
   ProviderModelsDefinition,
   ProviderModelsResult,
@@ -264,6 +265,11 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     return loadAndCacheModels(provider);
   };
 
+  const getCurrentActiveModel = async (
+    provider: LLMProvider,
+    sessionId?: string,
+  ): Promise<ProviderCurrentActiveModel> => resolveProvider(provider).models.getCurrentActiveModel(sessionId);
+
   const clearCache = (): void => {
     memoryCache.clear();
     pendingRequests.clear();
@@ -273,6 +279,7 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
 
   return {
     getProviderModels,
+    getCurrentActiveModel,
     clearCache,
   };
 };

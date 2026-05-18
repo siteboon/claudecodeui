@@ -7,6 +7,7 @@ import type {
   ProviderSkill,
   ProviderSkillListOptions,
   ProviderAuthStatus,
+  ProviderCurrentActiveModel,
   ProviderModelsDefinition,
   ProviderMcpServer,
   UpsertProviderMcpServerInput,
@@ -45,6 +46,15 @@ export interface IProviderModels {
    * Returns the provider's currently supported model catalog.
    */
   getSupportedModels(): Promise<ProviderModelsDefinition>;
+
+  /**
+   * Returns the currently active model for one session or provider runtime.
+   *
+   * Implementations must use the provider-specific lookup mechanism approved
+   * for that provider and fall back only to the provider catalog default when
+   * no active model can be resolved.
+   */
+  getCurrentActiveModel(sessionId?: string): Promise<ProviderCurrentActiveModel>;
 }
 
 // ---------------------------

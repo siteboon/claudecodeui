@@ -1,8 +1,16 @@
+import { spawn } from 'node:child_process';
+
 import { query, type ModelInfo, type Options } from '@anthropic-ai/claude-agent-sdk';
+import crossSpawn from 'cross-spawn';
 
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
 import type { IProviderModels } from '@/shared/interfaces.js';
-import type { ProviderModelOption, ProviderModelsDefinition } from '@/shared/types.js';
+import type {
+  ProviderCurrentActiveModel,
+  ProviderModelOption,
+  ProviderModelsDefinition,
+} from '@/shared/types.js';
+import { buildDefaultProviderCurrentActiveModel } from '@/shared/utils.js';
 
 export const CLAUDE_FALLBACK_MODELS: ProviderModelsDefinition = {
   OPTIONS: [
@@ -17,6 +25,14 @@ export const CLAUDE_FALLBACK_MODELS: ProviderModelsDefinition = {
 };
 
 type ClaudeModelQueryOptions = Pick<Options, 'env' | 'pathToClaudeCodeExecutable' | 'permissionMode'>;
+type ClaudeInitEvent = {
+  type?: string;
+  subtype?: string;
+  model?: string;
+};
+
+const CLAUDE_ACTIVE_MODEL_TIMEOUT_MS = 20_000;
+const claudeSpawn = process.platform === 'win32' ? crossSpawn : spawn;
 
 const buildClaudeQueryOptions = (): ClaudeModelQueryOptions => ({
   env: { ...process.env },
@@ -58,6 +74,84 @@ const buildClaudeModelsDefinition = (models: ModelInfo[]): ProviderModelsDefinit
   };
 };
 
+const runClaudeSessionModelCommand = async (sessionId: string): Promise<ProviderCurrentActiveModel | null> => {
+  const cliPath = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH);
+
+  return new Promise((resolve, reject) => {
+    const child = claudeSpawn(
+      cliPath,
+      ['-p', '--verbose', '--output-format', 'stream-json', '--resume', sessionId, 'ok'],
+      {
+        env: { ...process.env },
+        windowsHide: true,
+      },
+    );
+
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+
+    const timer = setTimeout(() => {
+      child.kill('SIGTERM');
+      if (!settled) {
+        settled = true;
+        reject(new Error('Claude current-model lookup timed out'));
+      }
+    }, CLAUDE_ACTIVE_MODEL_TIMEOUT_MS);
+
+    const finish = (error: Error | null, result: ProviderCurrentActiveModel | null) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      clearTimeout(timer);
+
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve(result);
+    };
+
+    child.stdout?.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+
+    child.stderr?.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+
+    child.on('error', (error) => {
+      finish(error instanceof Error ? error : new Error(String(error)), null);
+    });
+
+    child.on('close', () => {
+      const lines = `${stdout}\n${stderr}`
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+
+      for (const line of lines) {
+        try {
+          const event = JSON.parse(line) as ClaudeInitEvent;
+          if (event.type === 'system' && event.subtype === 'init' && event.model) {
+            finish(null, {
+              model: event.model,
+            });
+            return;
+          }
+        } catch {
+          // The Claude CLI mixes non-JSON lines into verbose output; ignore them.
+        }
+      }
+
+      finish(null, null);
+    });
+  });
+};
+
 export class ClaudeProviderModels implements IProviderModels {
   async getSupportedModels(): Promise<ProviderModelsDefinition> {
     let queryInstance: ReturnType<typeof query> | null = null;
@@ -79,5 +173,22 @@ export class ClaudeProviderModels implements IProviderModels {
     } finally {
       queryInstance?.close();
     }
+  }
+
+  async getCurrentActiveModel(sessionId?: string): Promise<ProviderCurrentActiveModel> {
+    if (!sessionId?.trim()) {
+      return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());
+    }
+
+    try {
+      const activeModel = await runClaudeSessionModelCommand(sessionId);
+      if (activeModel?.model) {
+        return activeModel;
+      }
+    } catch {
+      // Fall through to the provider default when the session-backed lookup fails.
+    }
+
+    return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());
   }
 }

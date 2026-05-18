@@ -1,9 +1,20 @@
+import { access, readdir } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { spawn } from 'node:child_process';
 
 import crossSpawn from 'cross-spawn';
 
 import type { IProviderModels } from '@/shared/interfaces.js';
-import type { ProviderModelOption, ProviderModelsDefinition } from '@/shared/types.js';
+import type {
+  ProviderCurrentActiveModel,
+  ProviderModelOption,
+  ProviderModelsDefinition,
+} from '@/shared/types.js';
+import {
+  buildDefaultProviderCurrentActiveModel,
+  sanitizeLeafDirectoryName,
+} from '@/shared/utils.js';
 
 export const CURSOR_FALLBACK_MODELS: ProviderModelsDefinition = {
   OPTIONS: [
@@ -24,6 +35,7 @@ type CursorModelRow = {
 };
 
 const CURSOR_MODELS_TIMEOUT_MS = 10_000;
+const CURSOR_CHATS_ROOT = path.join(os.homedir(), '.cursor', 'chats');
 const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
 const ANSI_PATTERN = new RegExp(
   // eslint-disable-next-line no-control-regex
@@ -167,6 +179,31 @@ const buildCursorModelsDefinition = (models: CursorModelRow[]): ProviderModelsDe
   };
 };
 
+const resolveCursorSessionStorePath = async (sessionId: string): Promise<string | null> => {
+  const safeSessionId = sanitizeLeafDirectoryName(sessionId, 'cursor session id');
+
+  try {
+    const workspaceEntries = await readdir(CURSOR_CHATS_ROOT, { withFileTypes: true });
+    for (const workspaceEntry of workspaceEntries) {
+      if (!workspaceEntry.isDirectory()) {
+        continue;
+      }
+
+      const storeDbPath = path.join(CURSOR_CHATS_ROOT, workspaceEntry.name, safeSessionId, 'store.db');
+      try {
+        await access(storeDbPath);
+        return storeDbPath;
+      } catch {
+        // Keep scanning sibling workspaces until the matching session directory is found.
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+};
+
 export class CursorProviderModels implements IProviderModels {
   async getSupportedModels(): Promise<ProviderModelsDefinition> {
     try {
@@ -176,5 +213,48 @@ export class CursorProviderModels implements IProviderModels {
     } catch {
       return CURSOR_FALLBACK_MODELS;
     }
+  }
+
+  async getCurrentActiveModel(sessionId?: string): Promise<ProviderCurrentActiveModel> {
+    if (!sessionId?.trim()) {
+      return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());
+    }
+
+    try {
+      const storeDbPath = await resolveCursorSessionStorePath(sessionId);
+      if (!storeDbPath) {
+        return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());
+      }
+
+      const { default: Database } = await import('better-sqlite3');
+      const db = new Database(storeDbPath, { readonly: true, fileMustExist: true });
+
+      try {
+        const row = db.prepare(`SELECT value FROM meta WHERE key='0' LIMIT 1;`).get() as {
+          value?: Buffer | string;
+        } | undefined;
+        const metadataText = Buffer.isBuffer(row?.value)
+          ? row.value.toString('utf8')
+          : typeof row?.value === 'string' && row.value.trim()
+            ? Buffer.from(row.value.trim(), 'hex').toString('utf8')
+            : '';
+        if (!metadataText) {
+          return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());
+        }
+
+        const metadata = JSON.parse(metadataText) as { lastUsedModel?: string };
+        if (typeof metadata.lastUsedModel === 'string' && metadata.lastUsedModel.trim()) {
+          return {
+            model: metadata.lastUsedModel.trim(),
+          };
+        }
+      } finally {
+        db.close();
+      }
+    } catch {
+      // Fall through to the provider default when Cursor metadata cannot be read.
+    }
+
+    return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());
   }
 }

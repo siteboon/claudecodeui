@@ -8,27 +8,42 @@ import {
   createProviderModelsService,
   PROVIDER_MODELS_CACHE_TTL_MS,
 } from '@/modules/providers/services/provider-models.service.js';
-import type { LLMProvider, ProviderModelsDefinition } from '@/shared/types.js';
+import type {
+  LLMProvider,
+  ProviderCurrentActiveModel,
+  ProviderModelsDefinition,
+} from '@/shared/types.js';
 
 const createModels = (value: string): ProviderModelsDefinition => ({
   OPTIONS: [{ value, label: value }],
   DEFAULT: value,
 });
 
+const createCurrentActiveModel = (model: string): ProviderCurrentActiveModel => ({
+  model,
+});
+
+const createEphemeralCachePath = (): string => path.join(
+  os.tmpdir(),
+  `provider-model-cache-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
+);
+
 test('provider models service delegates to the resolved provider model adapter', async () => {
   const calls: LLMProvider[] = [];
   const service = createProviderModelsService({
+    cachePath: createEphemeralCachePath(),
     resolveProvider: (provider) => {
       calls.push(provider);
       return {
         models: {
           getSupportedModels: async () => createModels(`${provider}-models`),
+          getCurrentActiveModel: async () => createCurrentActiveModel(`${provider}-active`),
         },
       };
     },
   });
 
-  const models = await service.getProviderModels('codex');
+  const models = await service.getProviderModels('codex', { bypassCache: true });
 
   assert.deepEqual(calls, ['codex']);
   assert.equal(models.models.DEFAULT, 'codex-models');
@@ -45,14 +60,16 @@ test('provider models service returns each provider adapter result without rewri
   };
 
   const service = createProviderModelsService({
+    cachePath: createEphemeralCachePath(),
     resolveProvider: () => ({
       models: {
         getSupportedModels: async () => expectedModels,
+        getCurrentActiveModel: async () => createCurrentActiveModel('cursor-active'),
       },
     }),
   });
 
-  const models = await service.getProviderModels('cursor');
+  const models = await service.getProviderModels('cursor', { bypassCache: true });
 
   assert.deepEqual(models.models, expectedModels);
 });
@@ -72,6 +89,7 @@ test('provider models are cached for the three-day ttl', async () => {
             loadCount += 1;
             return createModels(`${provider}-${loadCount}`);
           },
+          getCurrentActiveModel: async () => createCurrentActiveModel(`${provider}-active`),
         },
       }),
     });
@@ -105,6 +123,7 @@ test('provider model cache is persisted across service instances', async () => {
       resolveProvider: () => ({
         models: {
           getSupportedModels: async () => createModels('gemini-cached'),
+          getCurrentActiveModel: async () => createCurrentActiveModel('gemini-active'),
         },
       }),
     });
@@ -117,6 +136,7 @@ test('provider model cache is persisted across service instances', async () => {
           getSupportedModels: async () => {
             throw new Error('loader should not be called for persisted cache hits');
           },
+          getCurrentActiveModel: async () => createCurrentActiveModel('gemini-active'),
         },
       }),
     });
@@ -142,6 +162,7 @@ test('concurrent provider model requests share one load operation', async () => 
             await new Promise((resolve) => setTimeout(resolve, 20));
             return createModels('claude-cached');
           },
+          getCurrentActiveModel: async () => createCurrentActiveModel('claude-active'),
         },
       }),
     });
@@ -174,6 +195,7 @@ test('bypassCache forces a fresh provider fetch and updates cache metadata', asy
             loadCount += 1;
             return createModels(`${provider}-${loadCount}`);
           },
+          getCurrentActiveModel: async () => createCurrentActiveModel(`${provider}-active-${loadCount}`),
         },
       }),
     });
@@ -190,4 +212,24 @@ test('bypassCache forces a fresh provider fetch and updates cache metadata', asy
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
+});
+
+test('provider models service delegates current active model lookups to the provider adapter', async () => {
+  const calls: Array<{ provider: LLMProvider; sessionId?: string }> = [];
+  const service = createProviderModelsService({
+    resolveProvider: (provider) => ({
+      models: {
+        getSupportedModels: async () => createModels(`${provider}-models`),
+        getCurrentActiveModel: async (sessionId) => {
+          calls.push({ provider, sessionId });
+          return createCurrentActiveModel(`${provider}-${sessionId}`);
+        },
+      },
+    }),
+  });
+
+  const activeModel = await service.getCurrentActiveModel('opencode', 'session-123');
+
+  assert.deepEqual(calls, [{ provider: 'opencode', sessionId: 'session-123' }]);
+  assert.equal(activeModel.model, 'opencode-session-123');
 });

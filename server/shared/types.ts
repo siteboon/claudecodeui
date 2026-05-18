@@ -109,6 +109,20 @@ export type ProviderModelsResult = {
   cache: ProviderModelsCacheInfo;
 };
 
+// ---------------------------
+//----------------- PROVIDER ACTIVE MODEL TYPES ------------
+/**
+ * Provider-neutral result for the model that is actively driving a session or
+ * provider runtime at the time of lookup.
+ *
+ * `model` must always be populated. Provider adapters should use the
+ * provider-specific lookup method requested by the caller, and only fall back
+ * to the provider catalog `DEFAULT` value when the active model cannot be read.
+ */
+export type ProviderCurrentActiveModel = {
+  model: string;
+};
+
 /**
  * Message/event variants emitted by provider adapters and normalized transports.
  *

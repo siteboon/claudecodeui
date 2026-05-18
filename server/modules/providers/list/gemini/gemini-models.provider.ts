@@ -1,5 +1,6 @@
 import type { IProviderModels } from '@/shared/interfaces.js';
-import type { ProviderModelsDefinition } from '@/shared/types.js';
+import type { ProviderCurrentActiveModel, ProviderModelsDefinition } from '@/shared/types.js';
+import { buildDefaultProviderCurrentActiveModel } from '@/shared/utils.js';
 
 export const GEMINI_FALLBACK_MODELS: ProviderModelsDefinition = {
   OPTIONS: [
@@ -19,5 +20,9 @@ export const GEMINI_FALLBACK_MODELS: ProviderModelsDefinition = {
 export class GeminiProviderModels implements IProviderModels {
   async getSupportedModels(): Promise<ProviderModelsDefinition> {
     return GEMINI_FALLBACK_MODELS;
+  }
+
+  async getCurrentActiveModel(): Promise<ProviderCurrentActiveModel> {
+    return buildDefaultProviderCurrentActiveModel(GEMINI_FALLBACK_MODELS);
   }
 }

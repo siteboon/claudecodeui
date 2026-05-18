@@ -1,9 +1,20 @@
+import Database from 'better-sqlite3';
 import { spawn } from 'node:child_process';
 
 import crossSpawn from 'cross-spawn';
 
 import type { IProviderModels } from '@/shared/interfaces.js';
-import type { ProviderModelOption, ProviderModelsDefinition } from '@/shared/types.js';
+import type {
+  ProviderCurrentActiveModel,
+  ProviderModelOption,
+  ProviderModelsDefinition,
+} from '@/shared/types.js';
+import {
+  buildDefaultProviderCurrentActiveModel,
+  getOpenCodeDatabasePath,
+  readObjectRecord,
+  readOptionalString,
+} from '@/shared/utils.js';
 
 export const OPENCODE_FALLBACK_MODELS: ProviderModelsDefinition = {
   OPTIONS: [
@@ -64,6 +75,32 @@ const buildOpenCodeDefinitionFromIds = (ids: string[]): ProviderModelsDefinition
     OPTIONS: options,
     DEFAULT: defaultValue,
   };
+};
+
+const parseOpenCodeSessionModelValue = (rawModel: unknown): string | null => {
+  if (typeof rawModel === 'string') {
+    const trimmed = rawModel.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    try {
+      return parseOpenCodeSessionModelValue(JSON.parse(trimmed));
+    } catch {
+      return trimmed;
+    }
+  }
+
+  const record = readObjectRecord(rawModel);
+  if (!record) {
+    return null;
+  }
+
+  return readOptionalString(record.id)
+    ?? readOptionalString(record.model)
+    ?? readOptionalString(record.name)
+    ?? readOptionalString(record.value)
+    ?? null;
 };
 
 const runOpenCodeModelsCommand = (): Promise<string> => new Promise((resolve, reject) => {
@@ -135,5 +172,52 @@ export class OpenCodeProviderModels implements IProviderModels {
     } catch {
       return OPENCODE_FALLBACK_MODELS;
     }
+  }
+
+  async getCurrentActiveModel(sessionId?: string): Promise<ProviderCurrentActiveModel> {
+    if (!sessionId?.trim()) {
+      return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());
+    }
+
+    try {
+      const dbPath = getOpenCodeDatabasePath();
+      const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+
+      try {
+        const row = db.prepare(`
+          SELECT
+            s.id AS sessionId,
+            s.model AS model,
+            s.agent AS agent,
+            s.directory AS directory,
+            s.time_updated AS timeUpdated,
+            s.time_created AS timeCreated
+          FROM session s
+          WHERE s.id = ?
+          ORDER BY COALESCE(s.time_updated, s.time_created, 0) DESC
+          LIMIT 1
+        `).get(sessionId) as {
+          sessionId?: string;
+          model?: unknown;
+          agent?: string | null;
+          directory?: string | null;
+          timeUpdated?: number | null;
+          timeCreated?: number | null;
+        } | undefined;
+
+        const model = parseOpenCodeSessionModelValue(row?.model);
+        if (model) {
+          return {
+            model,
+          };
+        }
+      } finally {
+        db.close();
+      }
+    } catch {
+      // Fall through to the provider default when OpenCode session lookup fails.
+    }
+
+    return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());
   }
 }

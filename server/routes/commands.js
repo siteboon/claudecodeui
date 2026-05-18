@@ -34,20 +34,36 @@ const readModelProvider = (value) => {
   return MODEL_PROVIDERS.includes(normalized) ? normalized : "claude";
 };
 
+const hasConcreteSessionId = (value) =>
+  typeof value === "string" && value.trim().length > 0;
+
+const resolveCommandModel = async (provider, catalog, sessionId) => {
+  if (!hasConcreteSessionId(sessionId)) {
+    return catalog.DEFAULT;
+  }
+
+  const currentActiveModel = await providerModelsService.getCurrentActiveModel(
+    provider,
+    sessionId,
+  );
+  return currentActiveModel?.model || catalog.DEFAULT;
+};
+
 export const executeModelsCommand = async (args, context) => {
   const currentProvider = readModelProvider(context?.provider);
   const result = await providerModelsService.getProviderModels(currentProvider);
   const catalog = result.models;
+  const currentModel = await resolveCommandModel(
+    currentProvider,
+    catalog,
+    context?.sessionId,
+  );
   const availableModels = catalog.OPTIONS.map((option) => option.value);
   const availableOptions = catalog.OPTIONS.map((option) => ({
     value: option.value,
     label: option.label,
     description: option.description,
   }));
-  const currentModel =
-    typeof context?.model === "string" && context.model
-      ? context.model
-      : catalog.DEFAULT;
 
   return {
     type: "builtin",
@@ -240,7 +256,7 @@ Custom commands can be created in:
     const tokenUsage = context?.tokenUsage || {};
     const provider = readModelProvider(context?.provider);
     const catalog = (await providerModelsService.getProviderModels(provider)).models;
-    const model = context?.model || catalog.DEFAULT;
+    const model = await resolveCommandModel(provider, catalog, context?.sessionId);
 
     const used =
       Number(
@@ -349,6 +365,7 @@ Custom commands can be created in:
 
     const statusProvider = readModelProvider(context?.provider);
     const statusCatalog = (await providerModelsService.getProviderModels(statusProvider)).models;
+    const model = await resolveCommandModel(statusProvider, statusCatalog, context?.sessionId);
     const memoryUsage = process.memoryUsage();
 
     return {
@@ -359,7 +376,7 @@ Custom commands can be created in:
         packageName,
         uptime: uptimeFormatted,
         uptimeSeconds: Math.floor(uptime),
-        model: context?.model || statusCatalog.DEFAULT,
+        model,
         provider: statusProvider,
         nodeVersion: process.version,
         platform: process.platform,
