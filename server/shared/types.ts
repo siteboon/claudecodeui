@@ -65,7 +65,94 @@ export type AuthenticatedWebSocketRequest = IncomingMessage & {
  * Use this as the source of truth whenever a function or payload needs to identify
  * a specific LLM integration.
  */
-export type LLMProvider = 'claude' | 'codex' | 'gemini' | 'cursor';
+export type LLMProvider = 'claude' | 'codex' | 'gemini' | 'cursor' | 'opencode';
+
+/**
+ * One selectable model row (matches legacy `shared/modelConstants.js` option shape).
+ */
+export type ProviderModelOption = {
+  value: string;
+  label: string;
+  description?: string;
+};
+
+/**
+ * Provider model catalog returned by `GET /api/providers/:provider/models`.
+ */
+export type ProviderModelsDefinition = {
+  OPTIONS: ProviderModelOption[];
+  DEFAULT: string;
+};
+
+/**
+ * Cache metadata returned alongside one provider model catalog.
+ *
+ * `updatedAt` is when the current cached snapshot was last refreshed from the
+ * provider itself. `expiresAt` is the backend cache expiry timestamp, and
+ * `source` tells callers whether the current response came from in-memory cache,
+ * persisted disk cache, or a fresh provider fetch.
+ */
+export type ProviderModelsCacheInfo = {
+  updatedAt: string;
+  expiresAt: string;
+  source: 'memory' | 'disk' | 'fresh';
+};
+
+/**
+ * Full provider model lookup result returned by the backend service layer.
+ *
+ * Use this shape when a caller needs both the selectable model catalog and the
+ * cache metadata that explains how current the catalog is.
+ */
+export type ProviderModelsResult = {
+  models: ProviderModelsDefinition;
+  cache: ProviderModelsCacheInfo;
+};
+
+// ---------------------------
+//----------------- PROVIDER ACTIVE MODEL TYPES ------------
+/**
+ * Provider-neutral result for the model that is actively driving a session or
+ * provider runtime at the time of lookup.
+ *
+ * `model` must always be populated. Provider adapters should use the
+ * provider-specific lookup method requested by the caller, and only fall back
+ * to the provider catalog `DEFAULT` value when the active model cannot be read.
+ */
+export type ProviderCurrentActiveModel = {
+  model: string;
+};
+
+/**
+ * Input payload used when one session needs to use a different model on its
+ * next resumed turn.
+ *
+ * This is a backend-owned session override, not a claim that the provider has
+ * already switched the currently running session in-place. Provider adapters
+ * persist this request so the next CLI/SDK resume can inject the chosen model
+ * using the provider-specific mechanism supported by that runtime.
+ */
+export type ProviderChangeActiveModelInput = {
+  sessionId: string;
+  model: string;
+};
+
+/**
+ * Provider-neutral session model-change state.
+ *
+ * `supported` indicates whether the provider adapter supports the app's
+ * session-scoped resume override flow. `changed` is the persisted boolean the
+ * resume layer checks before forcing a model on the next resumed turn. When
+ * `changed` is `false`, `model` is `null` and the runtime should use the
+ * normal request/default model selection path.
+ */
+export type ProviderSessionActiveModelChange = {
+  provider: LLMProvider;
+  sessionId: string;
+  supported: boolean;
+  changed: boolean;
+  model: string | null;
+};
 
 /**
  * Message/event variants emitted by provider adapters and normalized transports.

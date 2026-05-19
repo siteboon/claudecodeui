@@ -22,7 +22,13 @@ import type {
   AnyRecord,
   ApiSuccessShape,
   AppErrorOptions,
+  LLMProvider,
   NormalizedMessage,
+  ProviderChangeActiveModelInput,
+  ProviderCurrentActiveModel,
+  ProviderModelsDefinition,
+  ProviderSessionActiveModelChange,
+  ProviderSkillSource,
   WorkspacePathValidationResult,
 } from '@/shared/types.js';
 
@@ -414,6 +420,231 @@ export const readStringRecord = (value: unknown): Record<string, string> | undef
 };
 
 // ---------------------------
+//----------------- PROVIDER MODEL LOOKUP UTILITIES ------------
+/**
+ * Builds the standard "default current model" result used when a provider
+ * cannot resolve a session-backed active model.
+ *
+ * Provider model adapters should call this after loading their supported model
+ * catalog so the fallback stays aligned with the provider's current `DEFAULT`
+ * selection instead of drifting to a hard-coded duplicate.
+ */
+export function buildDefaultProviderCurrentActiveModel(
+  models: ProviderModelsDefinition,
+): ProviderCurrentActiveModel {
+  return {
+    model: models.DEFAULT,
+  };
+}
+
+// ---------------------------
+//----------------- PROVIDER SESSION MODEL CHANGE UTILITIES ------------
+type ProviderSessionActiveModelChangeCacheEntry = ProviderSessionActiveModelChange & {
+  updatedAt: string;
+};
+
+type ProviderSessionActiveModelChangeCacheFile = {
+  version: number;
+  entries: Record<string, ProviderSessionActiveModelChangeCacheEntry>;
+};
+
+const PROVIDER_SESSION_ACTIVE_MODEL_CHANGE_CACHE_VERSION = 1;
+
+/**
+ * Resolves the backend-owned cache file used for session-scoped resume model
+ * overrides.
+ *
+ * The file lives under `~/.cloudcli` because these overrides are an application
+ * concern rather than a provider-native config file. Providers, routes, and
+ * runtime command launchers should all use this helper instead of re-creating
+ * the path so the storage location stays consistent.
+ */
+export function getProviderSessionActiveModelChangesPath(): string {
+  return path.join(os.homedir(), '.cloudcli', 'provider-session-active-model-changes.json');
+}
+
+const buildProviderSessionActiveModelChangeKey = (
+  provider: LLMProvider,
+  sessionId: string,
+): string => `${provider}:${sessionId}`;
+
+const isProviderSessionActiveModelChangeCacheEntry = (
+  value: unknown,
+): value is ProviderSessionActiveModelChangeCacheEntry => {
+  const record = readObjectRecord(value);
+  return Boolean(
+    record
+    && typeof record.provider === 'string'
+    && typeof record.sessionId === 'string'
+    && typeof record.supported === 'boolean'
+    && typeof record.changed === 'boolean'
+    && (typeof record.model === 'string' || record.model === null)
+    && typeof record.updatedAt === 'string',
+  );
+};
+
+const readProviderSessionActiveModelChangeCacheFile = async (
+  filePath: string,
+): Promise<ProviderSessionActiveModelChangeCacheFile> => {
+  try {
+    const raw = await readFile(filePath, 'utf8');
+    const parsed = readObjectRecord(JSON.parse(raw));
+    if (
+      !parsed
+      || parsed.version !== PROVIDER_SESSION_ACTIVE_MODEL_CHANGE_CACHE_VERSION
+      || !readObjectRecord(parsed.entries)
+    ) {
+      return {
+        version: PROVIDER_SESSION_ACTIVE_MODEL_CHANGE_CACHE_VERSION,
+        entries: {},
+      };
+    }
+
+    const entries = Object.fromEntries(
+      Object.entries(parsed.entries).filter((entry): entry is [string, ProviderSessionActiveModelChangeCacheEntry] =>
+        isProviderSessionActiveModelChangeCacheEntry(entry[1]),
+      ),
+    );
+
+    return {
+      version: PROVIDER_SESSION_ACTIVE_MODEL_CHANGE_CACHE_VERSION,
+      entries,
+    };
+  } catch {
+    return {
+      version: PROVIDER_SESSION_ACTIVE_MODEL_CHANGE_CACHE_VERSION,
+      entries: {},
+    };
+  }
+};
+
+const writeProviderSessionActiveModelChangeCacheFile = async (
+  filePath: string,
+  payload: ProviderSessionActiveModelChangeCacheFile,
+): Promise<void> => {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+};
+
+const buildUnsupportedProviderSessionActiveModelChange = (
+  provider: LLMProvider,
+  sessionId: string,
+): ProviderSessionActiveModelChange => ({
+  provider,
+  sessionId,
+  supported: false,
+  changed: false,
+  model: null,
+});
+
+/**
+ * Reads the persisted session model-change state for one provider session.
+ *
+ * Runtime resume paths use this to decide whether they should inject a
+ * provider-specific model argument/thread option for the next resumed turn.
+ * Missing cache entries are normalized to `{ changed: false }` so callers can
+ * treat absence as "use the ordinary model selection flow".
+ */
+export async function readProviderSessionActiveModelChange(
+  provider: LLMProvider,
+  sessionId: string,
+  options: {
+    filePath?: string;
+    supported?: boolean;
+  } = {},
+): Promise<ProviderSessionActiveModelChange> {
+  const normalizedSessionId = sessionId.trim();
+  if (!normalizedSessionId) {
+    return buildUnsupportedProviderSessionActiveModelChange(provider, normalizedSessionId);
+  }
+
+  const supported = options.supported ?? true;
+  if (!supported) {
+    return buildUnsupportedProviderSessionActiveModelChange(provider, normalizedSessionId);
+  }
+
+  const filePath = options.filePath ?? getProviderSessionActiveModelChangesPath();
+  const cacheFile = await readProviderSessionActiveModelChangeCacheFile(filePath);
+  const cacheEntry = cacheFile.entries[
+    buildProviderSessionActiveModelChangeKey(provider, normalizedSessionId)
+  ];
+
+  if (!cacheEntry || !cacheEntry.changed || !cacheEntry.model?.trim()) {
+    return {
+      provider,
+      sessionId: normalizedSessionId,
+      supported: true,
+      changed: false,
+      model: null,
+    };
+  }
+
+  return {
+    provider,
+    sessionId: normalizedSessionId,
+    supported: true,
+    changed: true,
+    model: cacheEntry.model.trim(),
+  };
+}
+
+/**
+ * Persists a session model-change request for one provider.
+ *
+ * Provider adapters call this when the frontend explicitly selects a different
+ * model for an existing session. The stored `changed: true` flag is the single
+ * source of truth used later by resume paths to decide whether they should add
+ * a provider-native model override on the next invocation.
+ */
+export async function writeProviderSessionActiveModelChange(
+  provider: LLMProvider,
+  input: ProviderChangeActiveModelInput,
+  options: {
+    filePath?: string;
+    supported?: boolean;
+  } = {},
+): Promise<ProviderSessionActiveModelChange> {
+  const normalizedSessionId = input.sessionId.trim();
+  const normalizedModel = input.model.trim();
+  const supported = options.supported ?? true;
+
+  if (!supported) {
+    return buildUnsupportedProviderSessionActiveModelChange(provider, normalizedSessionId);
+  }
+
+  if (!normalizedSessionId || !normalizedModel) {
+    return {
+      provider,
+      sessionId: normalizedSessionId,
+      supported: true,
+      changed: false,
+      model: null,
+    };
+  }
+
+  const filePath = options.filePath ?? getProviderSessionActiveModelChangesPath();
+  const cacheFile = await readProviderSessionActiveModelChangeCacheFile(filePath);
+  cacheFile.entries[buildProviderSessionActiveModelChangeKey(provider, normalizedSessionId)] = {
+    provider,
+    sessionId: normalizedSessionId,
+    supported: true,
+    changed: true,
+    model: normalizedModel,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await writeProviderSessionActiveModelChangeCacheFile(filePath, cacheFile);
+
+  return {
+    provider,
+    sessionId: normalizedSessionId,
+    supported: true,
+    changed: true,
+    model: normalizedModel,
+  };
+}
+
+// ---------------------------
 //----------------- WEBSOCKET PAYLOAD PARSING UTILITIES ------------
 /**
  * Parses one websocket message payload into a plain JSON object record.
@@ -506,6 +737,67 @@ export const writeJsonConfig = async (filePath: string, data: Record<string, unk
 
 // ---------------------------
 //----------------- PROVIDER SKILL FILE UTILITIES ------------
+async function hasGitMarker(dirPath: string): Promise<boolean> {
+  try {
+    const gitMarkerStats = await stat(path.join(dirPath, '.git'));
+    return gitMarkerStats.isDirectory() || gitMarkerStats.isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Finds the highest git worktree root visible from a starting directory.
+ *
+ * Provider skill systems such as Codex and OpenCode walk upward through parent
+ * folders when resolving repository/project skills. Use this helper when a
+ * provider needs the topmost `.git` marker instead of only the nearest one, so
+ * monorepos and nested package folders discover shared root-level skills once.
+ */
+export async function findTopmostGitRoot(startPath: string): Promise<string | null> {
+  let currentPath = path.resolve(startPath);
+  let topmostGitRoot: string | null = null;
+
+  while (true) {
+    if (await hasGitMarker(currentPath)) {
+      topmostGitRoot = currentPath;
+    }
+
+    const parentPath = path.dirname(currentPath);
+    if (parentPath === currentPath) {
+      break;
+    }
+
+    currentPath = parentPath;
+  }
+
+  return topmostGitRoot;
+}
+
+/**
+ * Adds one provider skill source after normalizing and de-duplicating its root.
+ *
+ * Provider skill lookup rules often point at overlapping folders (for example a
+ * workspace folder can also be the git root). Use this helper while building a
+ * provider's `ProviderSkillSource[]` so the shared skills scanner reads each
+ * physical root once and still preserves provider-specific scope/command data.
+ */
+export function addUniqueProviderSkillSource(
+  sources: ProviderSkillSource[],
+  seenRootDirs: Set<string>,
+  source: ProviderSkillSource,
+): void {
+  const normalizedRootDir = path.resolve(source.rootDir);
+  if (seenRootDirs.has(normalizedRootDir)) {
+    return;
+  }
+
+  seenRootDirs.add(normalizedRootDir);
+  sources.push({ ...source, rootDir: normalizedRootDir });
+}
+
+// ---------------------------
+//----------------- PROVIDER SKILL MARKDOWN UTILITIES ------------
 /**
  * Finds direct child skill markdown files under a provider skill root.
  *
@@ -614,6 +906,98 @@ export function normalizeSessionName(rawValue: string | undefined, fallback: str
   }
 
   return normalized.slice(0, 120);
+}
+
+// ---------------------------
+//----------------- PROVIDER SESSION VALUE NORMALIZATION UTILITIES ------------
+/**
+ * Converts provider-native timestamps into ISO strings.
+ *
+ * Provider CLIs commonly persist epoch timestamps as milliseconds, seconds, or
+ * already-formatted date strings. Use this helper when normalizing session
+ * metadata or transcript events so every provider writes the same ISO timestamp
+ * shape to API responses and database rows.
+ */
+export function normalizeProviderTimestamp(value: unknown): string {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    const millis = value < 1_000_000_000_000 ? value * 1000 : value;
+    return new Date(millis).toISOString();
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return normalizeProviderTimestamp(parsed);
+    }
+
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) {
+      return date.toISOString();
+    }
+  }
+
+  return new Date().toISOString();
+}
+
+/**
+ * Parses a JSON string or narrows an existing object into a plain record.
+ *
+ * Use this when provider databases store structured JSON inside text columns.
+ * Invalid JSON, arrays, and primitive values return `null` so callers can skip
+ * malformed optional metadata without hiding the rest of a session transcript.
+ */
+export function readJsonRecord(value: unknown): AnyRecord | null {
+  if (typeof value !== 'string') {
+    return readObjectRecord(value);
+  }
+
+  try {
+    return readObjectRecord(JSON.parse(value));
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------
+//----------------- OPENCODE SESSION STORAGE UTILITIES ------------
+/**
+ * Resolves the OpenCode SQLite session database path.
+ *
+ * OpenCode stores session, message, part, and project metadata in one shared
+ * `opencode.db` file under its XDG data directory. Provider readers and
+ * synchronizers should use this path for read-only access and should never store
+ * it as a deletable transcript path for an individual app session row.
+ */
+export function getOpenCodeDatabasePath(): string {
+  return path.join(os.homedir(), '.local', 'share', 'opencode', 'opencode.db');
+}
+
+// ---------------------------
+//----------------- SAFE DIRECTORY NAME UTILITIES ------------
+/**
+ * Validates that a user or provider supplied identifier can safely be treated
+ * as one leaf directory name under an existing root folder.
+ *
+ * Use this before composing paths like `<root>/<session-id>/file.db>` to block
+ * path traversal and accidental nested paths. The returned string is trimmed but
+ * otherwise unchanged so callers can still match the provider's on-disk naming.
+ */
+export function sanitizeLeafDirectoryName(inputName: string, label = 'directory name'): string {
+  const normalized = inputName.trim();
+  if (!normalized) {
+    throw new Error(`${label} is required.`);
+  }
+
+  if (
+    normalized.includes('..')
+    || normalized.includes(path.posix.sep)
+    || normalized.includes(path.win32.sep)
+    || normalized !== path.basename(normalized)
+  ) {
+    throw new Error(`Invalid ${label} "${inputName}".`);
+  }
+
+  return normalized;
 }
 
 // ---------------------------
