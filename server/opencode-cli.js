@@ -29,6 +29,7 @@ async function spawnOpenCode(command, options = {}, ws) {
     let sessionCreatedSent = false;
     let stdoutLineBuffer = '';
     let terminalNotificationSent = false;
+    let opencodeProcess = null;
 
     const notifyTerminalState = ({ code = null, error = null } = {}) => {
       if (terminalNotificationSent) {
@@ -63,11 +64,13 @@ async function spawnOpenCode(command, options = {}, ws) {
       }
 
       capturedSessionId = nextSessionId;
-      if (processKey !== capturedSessionId) {
+      if (processKey !== capturedSessionId && opencodeProcess) {
         activeOpenCodeProcesses.delete(processKey);
         activeOpenCodeProcesses.set(capturedSessionId, opencodeProcess);
       }
-      opencodeProcess.sessionId = capturedSessionId;
+      if (opencodeProcess) {
+        opencodeProcess.sessionId = capturedSessionId;
+      }
 
       if (ws.setSessionId && typeof ws.setSessionId === 'function') {
         ws.setSessionId(capturedSessionId);
@@ -89,8 +92,20 @@ async function spawnOpenCode(command, options = {}, ws) {
         return;
       }
 
+      let response;
       try {
-        const response = JSON.parse(line);
+        response = JSON.parse(line);
+      } catch {
+        ws.send(createNormalizedMessage({
+          kind: 'stream_delta',
+          content: line,
+          sessionId: capturedSessionId || sessionId || null,
+          provider: 'opencode',
+        }));
+        return;
+      }
+
+      try {
         registerSession(readOpenCodeSessionId(response));
         const normalized = sessionsService.normalizeMessage(
           'opencode',
@@ -100,10 +115,12 @@ async function spawnOpenCode(command, options = {}, ws) {
         for (const msg of normalized) {
           ws.send(msg);
         }
-      } catch {
+      } catch (error) {
+        const errorContent = error instanceof Error ? error.message : String(error);
+        console.error('[OpenCode] Failed to process JSON output:', errorContent);
         ws.send(createNormalizedMessage({
-          kind: 'stream_delta',
-          content: line,
+          kind: 'error',
+          content: errorContent,
           sessionId: capturedSessionId || sessionId || null,
           provider: 'opencode',
         }));
@@ -122,7 +139,7 @@ async function spawnOpenCode(command, options = {}, ws) {
         args.push(command.trim());
       }
 
-      const opencodeProcess = spawnFunction('opencode', args, {
+      opencodeProcess = spawnFunction('opencode', args, {
         cwd: workingDir,
         stdio: ['pipe', 'pipe', 'pipe'],
         env: { ...process.env },
