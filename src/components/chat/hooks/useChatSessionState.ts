@@ -258,9 +258,14 @@ export function useChatSessionState({
 
   const chatMessages = useMemo(() => {
     const all = normalizedToChatMessages(storeMessages);
-    // Show pending user message when no session data exists yet (new session, pre-backend-response)
-    if (pendingUserMessage && all.length === 0) {
-      return [pendingUserMessage];
+    // Show pending user message until a user message actually appears in the store.
+    // This covers both the "no messages yet" case and the race condition where
+    // `stream_delta` (AI content) arrives in realtime before the echoed user
+    // message — without this check the pending message would disappear and the
+    // AI response would briefly appear as the first visible message.
+    const hasUserMessage = all.some((m) => m.type === 'user');
+    if (pendingUserMessage && !hasUserMessage) {
+      return [...all, pendingUserMessage];
     }
     if (viewHiddenCount > 0 && viewHiddenCount < all.length) return all.slice(0, -viewHiddenCount);
     return all;
