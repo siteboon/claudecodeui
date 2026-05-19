@@ -84,6 +84,15 @@ import itCodeEditor from './locales/it/codeEditor.json';
 // eslint-disable-next-line import-x/order
 import itTasks from './locales/it/tasks.json';
 
+import zhTWCommon from './locales/zh-TW/common.json';
+import zhTWSettings from './locales/zh-TW/settings.json';
+import zhTWAuth from './locales/zh-TW/auth.json';
+import zhTWSidebar from './locales/zh-TW/sidebar.json';
+import zhTWChat from './locales/zh-TW/chat.json';
+import zhTWCodeEditor from './locales/zh-TW/codeEditor.json';
+// eslint-disable-next-line import-x/order
+import zhTWTasks from './locales/zh-TW/tasks.json';
+
 // Import supported languages configuration
 import { languages } from './languages.js';
 
@@ -177,6 +186,15 @@ i18n
         chat: itChat,
         codeEditor: itCodeEditor,
         tasks: itTasks,
+      },
+      'zh-TW': {
+        common: zhTWCommon,
+        settings: zhTWSettings,
+        auth: zhTWAuth,
+        sidebar: zhTWSidebar,
+        chat: zhTWChat,
+        codeEditor: zhTWCodeEditor,
+        tasks: zhTWTasks,
       },
     },
 
