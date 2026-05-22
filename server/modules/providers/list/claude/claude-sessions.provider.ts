@@ -284,15 +284,56 @@ function buildLocalCommandDisplayText(payload: ClaudeLocalCommandPayload): strin
  * captured from the terminal. The web chat should receive readable plain text.
  */
 function stripAnsiFormatting(text: string): string {
-  return text.replace(/\u001B\[[0-9;?]*[ -/]*[@-~]/g, '');
+  return text.replace(/\[[0-9;?]*[ -/]*[@-~]/g, '');
+}
+
+/**
+ * Extracts the prompt text from a Task tool input for subagent echo-filtering.
+ */
+function extractSubagentPrompt(toolInput: unknown): string | null {
+  if (!toolInput) return null;
+  let parsed: AnyRecord = toolInput;
+  if (typeof toolInput === 'string') {
+    try {
+      parsed = JSON.parse(toolInput);
+    } catch {
+      return null;
+    }
+  }
+  return typeof parsed.prompt === 'string' ? parsed.prompt : null;
+}
+
+function normalizeWhitespace(s: string): string {
+  return s.replace(/[ \t]+/g, ' ').trim();
+}
+
+function isSubagentPromptEcho(text: string, subagentPrompts: Set<string> | null): boolean {
+  if (!subagentPrompts) return false;
+  const normalized = normalizeWhitespace(text);
+  for (const prompt of subagentPrompts) {
+    const np = normalizeWhitespace(prompt);
+    if (normalized === np || normalized.startsWith(np)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export class ClaudeSessionsProvider implements IProviderSessions {
   /**
    * Normalizes one Claude JSONL entry or live SDK stream event into the shared
    * message shape consumed by REST and WebSocket clients.
+   *
+   * @param subagentPrompts - Set of subagent task prompts to filter out.
+   *   These are "Task" tool prompts that also appear as separate user-role
+   *   messages in the JSONL — normalizing them would render them as user
+   *   chat bubbles which is incorrect.
    */
-  normalizeMessage(rawMessage: unknown, sessionId: string | null): NormalizedMessage[] {
+  normalizeMessage(
+    rawMessage: unknown,
+    sessionId: string | null,
+    subagentPrompts: Set<string> | null = null,
+  ): NormalizedMessage[] {
     const raw = readObjectRecord(rawMessage);
     if (!raw) {
       return [];
@@ -329,15 +370,18 @@ export class ClaudeSessionsProvider implements IProviderSessions {
           } else if (part.type === 'text') {
             const text = part.text || '';
             if (text && !isInternalContent(text)) {
-              messages.push(createNormalizedMessage({
-                id: `${baseId}_text_${partIndex}`,
-                sessionId,
-                timestamp: ts,
-                provider: PROVIDER,
-                kind: 'text',
-                role: 'user',
-                content: text,
-              }));
+              const isEcho = isSubagentPromptEcho(text, subagentPrompts);
+              if (!isEcho) {
+                messages.push(createNormalizedMessage({
+                  id: `${baseId}_text_${partIndex}`,
+                  sessionId,
+                  timestamp: ts,
+                  provider: PROVIDER,
+                  kind: 'text',
+                  role: 'user',
+                  content: text,
+                }));
+              }
             }
           }
         }
@@ -349,15 +393,18 @@ export class ClaudeSessionsProvider implements IProviderSessions {
             .filter(Boolean)
             .join('\n');
           if (textParts && !isInternalContent(textParts)) {
-            messages.push(createNormalizedMessage({
-              id: `${baseId}_text`,
-              sessionId,
-              timestamp: ts,
-              provider: PROVIDER,
-              kind: 'text',
-              role: 'user',
-              content: textParts,
-            }));
+            const isEcho = isSubagentPromptEcho(textParts, subagentPrompts);
+            if (!isEcho) {
+              messages.push(createNormalizedMessage({
+                id: `${baseId}_text`,
+                sessionId,
+                timestamp: ts,
+                provider: PROVIDER,
+                kind: 'text',
+                role: 'user',
+                content: textParts,
+              }));
+            }
           }
         }
       } else if (typeof raw.message.content === 'string') {
@@ -437,15 +484,17 @@ export class ClaudeSessionsProvider implements IProviderSessions {
         }
 
         if (text && !isInternalContent(text)) {
-          messages.push(createNormalizedMessage({
-            id: baseId,
-            sessionId,
-            timestamp: ts,
-            provider: PROVIDER,
-            kind: 'text',
-            role: 'user',
-            content: text,
-          }));
+          if (!isSubagentPromptEcho(text, subagentPrompts)) {
+            messages.push(createNormalizedMessage({
+              id: baseId,
+              sessionId,
+              timestamp: ts,
+              provider: PROVIDER,
+              kind: 'text',
+              role: 'user',
+              content: text,
+            }));
+          }
         }
       }
       return messages;
@@ -571,6 +620,29 @@ export class ClaudeSessionsProvider implements IProviderSessions {
 
     const rawMessages = Array.isArray(result) ? result : (result.messages || []);
 
+    /*
+     * Collect Task subagent prompts from raw messages so duplicate user-role
+     * echo messages can be filtered out during normalization.
+     */
+    const subagentPrompts = new Set<string>();
+    for (const raw of rawMessages) {
+      if (raw.message?.role === 'assistant' && Array.isArray(raw.message?.content)) {
+        for (const part of raw.message.content) {
+          if (part.type === 'tool_use' && part.name === 'Task') {
+            const prompt = extractSubagentPrompt(part.input);
+            if (prompt) {
+              subagentPrompts.add(prompt);
+            }
+          }
+        }
+      }
+    }
+
+    const normalized: NormalizedMessage[] = [];
+    for (const raw of rawMessages) {
+      normalized.push(...this.normalizeMessage(raw, sessionId, subagentPrompts.size > 0 ? subagentPrompts : null));
+    }
+
     const toolResultMap = new Map<string, ClaudeToolResult>();
     for (const raw of rawMessages) {
       if (raw.message?.role === 'user' && Array.isArray(raw.message?.content)) {
@@ -585,11 +657,6 @@ export class ClaudeSessionsProvider implements IProviderSessions {
           }
         }
       }
-    }
-
-    const normalized: NormalizedMessage[] = [];
-    for (const raw of rawMessages) {
-      normalized.push(...this.normalizeMessage(raw, sessionId));
     }
 
     for (const msg of normalized) {
