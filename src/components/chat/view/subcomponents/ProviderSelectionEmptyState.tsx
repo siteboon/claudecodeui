@@ -265,29 +265,29 @@ export default function ProviderSelectionEmptyState({
             <DialogContent className="max-w-md overflow-hidden p-0">
               <DialogTitle>Model Selector</DialogTitle>
               <div className="border-b border-border/60 bg-muted/20 px-4 py-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-foreground">
-                      Hard refresh model catalogs
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      Bypasses the 3-day backend cache and re-fetches models for every provider.
-                    </p>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      Last updated for {getProviderDisplayName(provider)}: {formatUpdatedAt(currentProviderCache?.updatedAt)}
-                    </p>
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-foreground">Choose a model</p>
+                      <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+                        Catalogs are cached for 3 days. Refresh after CLI/auth changes or if a model is missing.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={onHardRefreshProviderModels}
+                      disabled={providerModelsRefreshing}
+                      className="shrink-0 rounded-xl"
+                    >
+                      <RefreshCw className={providerModelsRefreshing ? "animate-spin" : ""} />
+                      {providerModelsRefreshing ? "Refreshing..." : "Refresh"}
+                    </Button>
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={onHardRefreshProviderModels}
-                    disabled={providerModelsRefreshing}
-                    className="shrink-0 rounded-xl"
-                  >
-                    <RefreshCw className={providerModelsRefreshing ? "animate-spin" : ""} />
-                    {providerModelsRefreshing ? "Refreshing..." : "Hard Refresh"}
-                  </Button>
+                  <p className="text-[11px] text-muted-foreground">
+                    Refresh checks every provider and replaces the cached catalogs. Last updated for {getProviderDisplayName(provider)}: {formatUpdatedAt(currentProviderCache?.updatedAt)}
+                  </p>
                 </div>
               </div>
               <Command>

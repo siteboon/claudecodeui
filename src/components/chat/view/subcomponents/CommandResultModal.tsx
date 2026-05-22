@@ -346,7 +346,7 @@ function ModelsContent({
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
       <div className="rounded-2xl border border-border/70 bg-muted/20 p-2.5">
-        <div className="grid gap-2.5 lg:grid-cols-[minmax(0,1.75fr)_minmax(13rem,0.75fr)_auto] lg:items-start">
+        <div className="grid gap-2.5 lg:grid-cols-[minmax(0,1.55fr)_minmax(12rem,0.7fr)_minmax(15rem,0.9fr)] lg:items-start">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="secondary" className="rounded-lg border border-primary/20 bg-primary/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">
@@ -387,17 +387,31 @@ function ModelsContent({
             </div>
           </div>
 
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onHardRefreshProviderModels}
-            disabled={providerModelsRefreshing}
-            className="h-8 shrink-0 rounded-xl px-3 lg:self-start"
-          >
-            <RefreshCw className={providerModelsRefreshing ? 'animate-spin' : ''} />
-            {providerModelsRefreshing ? 'Refreshing...' : 'Hard Refresh'}
-          </Button>
+          <div className="rounded-xl border border-border/60 bg-background/55 p-2.5">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground/80">
+                Catalog Refresh
+              </p>
+              <Badge variant="secondary" className="rounded-md px-1.5 py-0 text-[9px] uppercase tracking-[0.14em]">
+                All providers
+              </Badge>
+            </div>
+            <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
+              Model lists are cached for 3 days. Refresh after CLI, auth, or config changes,
+              or when a new model is missing.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onHardRefreshProviderModels}
+              disabled={providerModelsRefreshing}
+              className="mt-2 h-8 w-full rounded-xl px-3"
+            >
+              <RefreshCw className={providerModelsRefreshing ? 'animate-spin' : ''} />
+              {providerModelsRefreshing ? 'Refreshing catalogs...' : 'Refresh from providers'}
+            </Button>
+          </div>
         </div>
 
         <div className="mt-2 border-t border-border/50 pt-1.5 text-[11px] text-muted-foreground">
