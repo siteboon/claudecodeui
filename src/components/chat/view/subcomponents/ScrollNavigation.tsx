@@ -21,34 +21,34 @@ function truncateSnippet(content: string): string {
 
 function ArrowUpIcon() {
   return (
-    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M5 8V2M5 2L2 5M5 2L8 5" />
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <path d="M9 7L6 4L3 7" />
     </svg>
   );
 }
 
 function ArrowDownIcon() {
   return (
-    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M5 2V8M5 8L2 5M5 8L8 5" />
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <path d="M3 5L6 8L9 5" />
     </svg>
   );
 }
 
-function DoubleUpIcon() {
+function TopIcon() {
   return (
-    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M5 8V3M5 3L2 5.5M5 3L8 5.5" />
-      <path d="M5 6V1M5 1L2 3.5M5 1L8 3.5" />
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <path d="M2 5h8" />
+      <path d="M6 2L3.5 5.5h5z" />
     </svg>
   );
 }
 
-function DoubleDownIcon() {
+function BottomIcon() {
   return (
-    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M5 1V6M5 6L2 3.5M5 6L8 3.5" />
-      <path d="M5 3V8M5 8L2 5.5M5 8L8 5.5" />
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <path d="M3.5 6.5L6 10l2.5-3.5" />
+      <path d="M2 7h8" />
     </svg>
   );
 }
@@ -157,7 +157,7 @@ export default function ScrollNavigation({
 
       const elements = container.querySelectorAll<HTMLDivElement>('.chat-message.user');
       if (elements.length > index) {
-        elements[index].scrollIntoView({ block: 'center', behavior: 'smooth' });
+        elements[index].scrollIntoView({ block: 'center', behavior: 'instant' });
         return;
       }
 
@@ -166,43 +166,27 @@ export default function ScrollNavigation({
 
       const targetRatio = index / (totalUserMessages - 1);
       const maxScroll = container.scrollHeight - container.clientHeight;
-      container.scrollTo({
-        top: targetRatio * maxScroll,
-        behavior: 'smooth',
-      });
+      container.scrollTop = targetRatio * maxScroll;
     },
     [scrollContainerRef, userMessages.length],
   );
 
-  const scroll_to_top = useCallback(() => {
+  const scrollToTop = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
 
     ensureLoaded();
-
-    const elements = container.querySelectorAll<HTMLDivElement>('.chat-message.user');
-    if (elements.length > 0) {
-      elements[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
-      return;
-    }
-
-    container.scrollTo({ top: 0, behavior: 'smooth' });
+    container.scrollTop = 0;
   }, [scrollContainerRef, ensureLoaded]);
 
-  const scroll_to_bottom = useCallback(() => {
+  const scrollToBottom = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
 
-    const elements = container.querySelectorAll<HTMLDivElement>('.chat-message.user');
-    if (elements.length > 0) {
-      elements[elements.length - 1].scrollIntoView({ block: 'center', behavior: 'smooth' });
-      return;
-    }
-
-    container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+    container.scrollTop = container.scrollHeight;
   }, [scrollContainerRef]);
 
-  const scroll_prev = useCallback(() => {
+  const scrollPrev = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
 
@@ -223,10 +207,10 @@ export default function ScrollNavigation({
     }
 
     const targetIndex = Math.max(0, currentIndex - 1);
-    elements[targetIndex].scrollIntoView({ block: 'center', behavior: 'smooth' });
+    elements[targetIndex].scrollIntoView({ block: 'center', behavior: 'instant' });
   }, [scrollContainerRef]);
 
-  const scroll_next = useCallback(() => {
+  const scrollNext = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
 
@@ -246,7 +230,7 @@ export default function ScrollNavigation({
     }
 
     const targetIndex = Math.min(elements.length - 1, currentIndex + 1);
-    elements[targetIndex].scrollIntoView({ block: 'center', behavior: 'smooth' });
+    elements[targetIndex].scrollIntoView({ block: 'center', behavior: 'instant' });
   }, [scrollContainerRef]);
 
   if (!shouldShow) return null;
@@ -254,23 +238,23 @@ export default function ScrollNavigation({
   const navButtons = [
     {
       label: t('scrollNav.first'),
-      icon: <DoubleUpIcon />,
-      action: scroll_to_top,
+      icon: <TopIcon />,
+      action: scrollToTop,
     },
     {
       label: t('scrollNav.previous'),
       icon: <ArrowUpIcon />,
-      action: scroll_prev,
+      action: scrollPrev,
     },
     {
       label: t('scrollNav.next'),
       icon: <ArrowDownIcon />,
-      action: scroll_next,
+      action: scrollNext,
     },
     {
       label: t('scrollNav.last'),
-      icon: <DoubleDownIcon />,
-      action: scroll_to_bottom,
+      icon: <BottomIcon />,
+      action: scrollToBottom,
     },
   ];
 
