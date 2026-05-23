@@ -14,6 +14,7 @@ import { useSessionStore } from '../../../stores/useSessionStore';
 
 import ChatMessagesPane from './subcomponents/ChatMessagesPane';
 import ChatComposer from './subcomponents/ChatComposer';
+import ScrollNavigation from './subcomponents/ScrollNavigation';
 
 
 type PendingViewSession = {
@@ -299,7 +300,17 @@ function ChatInterface({
   return (
     <PermissionContext.Provider value={permissionContextValue}>
       <div className="flex h-full flex-col">
-        <ChatMessagesPane
+        <div className="relative flex-1">
+          <ScrollNavigation
+            scrollContainerRef={scrollContainerRef}
+            chatMessages={chatMessages}
+            loadAllMessages={loadAllMessages}
+            allMessagesLoaded={allMessagesLoaded}
+            totalMessages={totalMessages}
+            sessionMessagesCount={chatMessages.length}
+          />
+          <div className="absolute inset-0">
+          <ChatMessagesPane
           scrollContainerRef={scrollContainerRef}
           onWheel={handleScroll}
           onTouchMove={handleScroll}
@@ -343,6 +354,8 @@ function ChatInterface({
           showThinking={showThinking}
           selectedProject={selectedProject}
         />
+          </div>
+        </div>
 
         <ChatComposer
           pendingPermissionRequests={pendingPermissionRequests}

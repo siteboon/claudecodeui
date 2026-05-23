@@ -253,5 +253,14 @@
   },
   "tasks": {
     "nextTaskPrompt": "开始下一个任务"
+  },
+  "scrollNav": {
+    "jumpTo": "跳转到: {{snippet}}",
+    "jumpToMessage": "跳转到第 {{index}} 条消息",
+    "loadAll": "加载全部",
+    "first": "第一条",
+    "previous": "上一条",
+    "next": "下一条",
+    "last": "最后一条"
   }
 }
