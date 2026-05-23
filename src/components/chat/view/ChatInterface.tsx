@@ -104,10 +104,10 @@ function ChatInterface({
     visibleMessages,
     loadEarlierMessages,
     loadAllMessages,
+    loadMoreMessages,
     allMessagesLoaded,
     isLoadingAllMessages,
     loadAllJustFinished,
-    showLoadAllOverlay,
     claudeStatus,
     setClaudeStatus,
     createDiff,
@@ -306,6 +306,7 @@ function ChatInterface({
             chatMessages={chatMessages}
             loadAllMessages={loadAllMessages}
             allMessagesLoaded={allMessagesLoaded}
+            hasMoreMessages={hasMoreMessages}
             totalMessages={totalMessages}
             sessionMessagesCount={chatMessages.length}
           />
@@ -341,10 +342,10 @@ function ChatInterface({
           visibleMessages={visibleMessages}
           loadEarlierMessages={loadEarlierMessages}
           loadAllMessages={loadAllMessages}
+          loadMoreMessages={loadMoreMessages}
           allMessagesLoaded={allMessagesLoaded}
           isLoadingAllMessages={isLoadingAllMessages}
           loadAllJustFinished={loadAllJustFinished}
-          showLoadAllOverlay={showLoadAllOverlay}
           createDiff={createDiff}
           onFileOpen={onFileOpen}
           onShowSettings={onShowSettings}

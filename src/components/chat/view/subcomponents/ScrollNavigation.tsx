@@ -8,6 +8,7 @@ interface ScrollNavigationProps {
   chatMessages: ChatMessage[];
   loadAllMessages?: () => void;
   allMessagesLoaded?: boolean;
+  hasMoreMessages?: boolean;
   totalMessages?: number;
   sessionMessagesCount?: number;
 }
@@ -66,6 +67,7 @@ export default function ScrollNavigation({
   chatMessages,
   loadAllMessages,
   allMessagesLoaded = true,
+  hasMoreMessages = false,
   totalMessages = 0,
   sessionMessagesCount = 0,
 }: ScrollNavigationProps) {
@@ -74,6 +76,7 @@ export default function ScrollNavigation({
   const [isStripHovered, setIsStripHovered] = useState(false);
   const rafIdRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
+  const skipUpdateRef = useRef(false);
 
   const userMessages = useMemo(
     () => chatMessages.filter((m) => m.type === 'user'),
@@ -81,12 +84,16 @@ export default function ScrollNavigation({
   );
 
   const shouldShow = userMessages.length >= 1;
-  const hasMore = totalMessages > 0 && sessionMessagesCount > 0 && !allMessagesLoaded;
+  const hasMore = hasMoreMessages;
 
   const scheduleUpdate = useCallback(() => {
     if (rafIdRef.current != null) return;
     rafIdRef.current = requestAnimationFrame(() => {
       rafIdRef.current = null;
+      if (skipUpdateRef.current) {
+        skipUpdateRef.current = false;
+        return;
+      }
       const container = scrollContainerRef.current;
       if (!container) return;
 
@@ -129,29 +136,17 @@ export default function ScrollNavigation({
     };
   }, []);
 
-  // Lazy-load: ensure all messages are loaded before navigating
   const ensureLoaded = useCallback(() => {
     if (hasMore && loadAllMessages) {
       loadAllMessages();
     }
   }, [hasMore, loadAllMessages]);
 
-  // Load all messages after first paint — non-blocking, doesn't delay initial render
-  useEffect(() => {
-    if (!hasMore || !loadAllMessages) return;
-    const idle = (globalThis.requestIdleCallback ?? ((fn: () => void) => setTimeout(fn, 0)));
-    const handle = idle(() => {
-      if (mountedRef.current && hasMore) loadAllMessages();
-    });
-    return () => {
-      if ('cancelIdleCallback' in globalThis)
-        (globalThis as any).cancelIdleCallback(handle);
-      else clearTimeout(handle as any);
-    };
-  }, [hasMore, loadAllMessages]);
-
   const scrollToDot = useCallback(
     (index: number) => {
+      setActiveDotIndex(index);
+      skipUpdateRef.current = true;
+      ensureLoaded();
       const container = scrollContainerRef.current;
       if (!container) return;
 
@@ -168,14 +163,14 @@ export default function ScrollNavigation({
       const maxScroll = container.scrollHeight - container.clientHeight;
       container.scrollTop = targetRatio * maxScroll;
     },
-    [scrollContainerRef, userMessages.length],
+    [scrollContainerRef, userMessages.length, ensureLoaded],
   );
 
   const scrollToTop = useCallback(() => {
+    ensureLoaded();
     const container = scrollContainerRef.current;
     if (!container) return;
 
-    ensureLoaded();
     container.scrollTop = 0;
   }, [scrollContainerRef, ensureLoaded]);
 
