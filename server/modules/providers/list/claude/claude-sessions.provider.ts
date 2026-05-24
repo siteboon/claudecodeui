@@ -241,6 +241,24 @@ type ClaudeLocalCommandPayload = {
 };
 
 /**
+ * Detects SDK-generated context resumption summaries that appear as user-role
+ * messages with no isSynthetic or origin markers. These are injected by the
+ * Claude Code SDK when a conversation runs out of context and needs to resume.
+ */
+function isContextResumptionSummary(raw: AnyRecord): boolean {
+  const content = raw.message?.content;
+  if (!content) return false;
+
+  const text = typeof content === 'string'
+    ? content
+    : Array.isArray(content)
+      ? content.filter((p: AnyRecord) => p.type === 'text').map((p: AnyRecord) => p.text).join('\n')
+      : '';
+
+  return text.trim().startsWith('This session is being continued from a previous conversation');
+}
+
+/**
  * Converts Claude's hidden local command wrapper into structured metadata.
  *
  * The three tags often coexist in one string payload. Returning `null` lets the
@@ -373,6 +391,10 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       && (raw.origin?.kind === undefined || raw.origin?.kind === 'human');
 
     if (raw.message?.role === 'user' && raw.message?.content && raw.isMeta !== true) {
+      if (isContextResumptionSummary(raw)) {
+        return messages;
+      }
+
       if (Array.isArray(raw.message.content)) {
         for (let partIndex = 0; partIndex < raw.message.content.length; partIndex++) {
           const part = raw.message.content[partIndex];
