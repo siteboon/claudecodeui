@@ -359,6 +359,19 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     const ts = raw.timestamp || new Date().toISOString();
     const baseId = raw.uuid || generateMessageId('claude');
 
+    /*
+     * Filter out non-human user-role messages during streaming.
+     * SDK emits synthetic user messages (subagent prompts, internal
+     * bookkeeping) that have message.role === 'user' but should NOT be
+     * rendered as user chat bubbles. The `isSynthetic` flag or a non-`human`
+     * origin indicate these are system-generated, not keyboard input.
+     * This check is a no-op for pure tool_result containers — they have no
+     * text parts and are handled by the tool_result branch below.
+     */
+    const isHumanOrigin =
+      !raw.isSynthetic
+      && (raw.origin?.kind === undefined || raw.origin?.kind === 'human');
+
     if (raw.message?.role === 'user' && raw.message?.content && raw.isMeta !== true) {
       if (Array.isArray(raw.message.content)) {
         for (let partIndex = 0; partIndex < raw.message.content.length; partIndex++) {
@@ -378,7 +391,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
             }));
           } else if (part.type === 'text') {
             const text = part.text || '';
-            if (text && !isInternalContent(text)) {
+            if (text && !isInternalContent(text) && isHumanOrigin) {
               const isEcho = isSubagentPromptEcho(text, subagentPrompts);
               if (!isEcho) {
                 messages.push(createNormalizedMessage({
@@ -492,7 +505,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
           return messages;
         }
 
-        if (text && !isInternalContent(text)) {
+        if (text && !isInternalContent(text) && isHumanOrigin) {
           if (!isSubagentPromptEcho(text, subagentPrompts)) {
             messages.push(createNormalizedMessage({
               id: baseId,
