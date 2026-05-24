@@ -84,8 +84,13 @@ export const sessionsService = {
     providerName: string,
     raw: unknown,
     sessionId: string | null,
+    subagentPrompts: Set<string> | null = null,
   ): NormalizedMessage[] {
-    return providerRegistry.resolveProvider(providerName).sessions.normalizeMessage(raw, sessionId);
+    return providerRegistry.resolveProvider(providerName).sessions.normalizeMessage(
+      raw,
+      sessionId,
+      subagentPrompts,
+    );
   },
 
   /**

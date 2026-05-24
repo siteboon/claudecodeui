@@ -36,6 +36,17 @@ const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEO
 
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
+/**
+ * Extracts the prompt text from a Task subagent tool_use input.
+ * Mirrors the logic in claude-sessions.provider.ts extractSubagentPrompt().
+ */
+function extractSubagentPrompt(toolInput) {
+  if (!toolInput || typeof toolInput !== 'object') return null;
+  const prompt = typeof toolInput.prompt === 'string' ? toolInput.prompt : null;
+  if (!prompt) return null;
+  return prompt.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+}
+
 function createRequestId() {
   if (typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -481,6 +492,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
   let sessionCreatedSent = false;
   let tempImagePaths = [];
   let tempDir = null;
+  const streamingSubagentPrompts = new Set();
 
   const emitNotification = (event) => {
     notifyUserIfEnabled({
@@ -664,9 +676,37 @@ async function queryClaudeSDK(command, options = {}, ws) {
       const transformedMessage = transformMessage(message);
       const sid = capturedSessionId || sessionId || null;
 
+      // Collect Task subagent prompts so they can be filtered during normalization
+      if (message.type === 'assistant' || transformedMessage.message?.role === 'assistant') {
+        if (Array.isArray(transformedMessage.message?.content)) {
+          for (const part of transformedMessage.message.content) {
+            if (part.type === 'tool_use' && part.name === 'Task') {
+              const prompt = extractSubagentPrompt(part.input);
+              if (prompt) {
+                streamingSubagentPrompts.add(prompt);
+              }
+            }
+          }
+        }
+      }
+
+      // DEBUG: log SDK messages with user role to trace streaming bug
+      if (message.type === 'user' || transformedMessage.message?.role === 'user') {
+        console.log('[SDK-DEBUG-USER-MSG] type:', message.type, '| isSynthetic:', transformedMessage.isSynthetic, '| origin:', JSON.stringify(transformedMessage.origin), '| message.role:', transformedMessage.message?.role, '| content preview:', String(transformedMessage.message?.content || '').slice(0, 200), '| shouldQuery:', transformedMessage.shouldQuery, '| parentToolUseId:', transformedMessage.parentToolUseId);
+      }
+
       // Use adapter to normalize SDK events into NormalizedMessage[]
-      const normalized = sessionsService.normalizeMessage('claude', transformedMessage, sid);
+      const normalized = sessionsService.normalizeMessage(
+        'claude',
+        transformedMessage,
+        sid,
+        streamingSubagentPrompts.size > 0 ? streamingSubagentPrompts : null,
+      );
       for (const msg of normalized) {
+        // DEBUG: log normalized messages with user role
+        if (msg.kind === 'text' && msg.role === 'user') {
+          console.log('[NORMALIZED-USER-MSG] id:', msg.id, '| content preview:', String(msg.content || '').slice(0, 200));
+        }
         // Preserve parentToolUseId from SDK wrapper for subagent tool grouping
         if (transformedMessage.parentToolUseId && !msg.parentToolUseId) {
           msg.parentToolUseId = transformedMessage.parentToolUseId;
