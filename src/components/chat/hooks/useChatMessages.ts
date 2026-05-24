@@ -44,7 +44,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
 
         if (msg.role === 'user') {
           // Parse task notifications
-          const taskNotifRegex = /<task-notification>[\s\S]*?<status>([^<]*)<\/status>[\s\S]*?<summary>([^<]*)<\/summary>[\s\S]*?<\/task-notification>/;
+          const taskNotifRegex = /^<task-notification>[\s\S]*?<status>([^<]*)<\/status>[\s\S]*?<summary>([^<]*)<\/summary>[\s\S]*?<\/task-notification>$/;
           const taskNotifMatch = taskNotifRegex.exec(content);
           if (taskNotifMatch) {
             converted.push({
