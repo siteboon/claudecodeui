@@ -12,6 +12,10 @@ export interface ProjectSession {
   updated_at?: string;
   lastActivity?: string;
   messageCount?: number;
+  /** Original project_path from the sessions DB row. Used to resolve the correct
+   * cwd when resuming a session whose project differs from the currently
+   * selected project in the sidebar. */
+  projectPath?: string;
   __provider?: LLMProvider;
   // Tags the session with the owning project's DB `projectId` so UI handlers
   // (session switching, sidebar focus, etc.) can match against selectedProject.
