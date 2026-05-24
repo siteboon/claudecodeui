@@ -287,8 +287,13 @@ function buildLocalCommandDisplayText(payload: ClaudeLocalCommandPayload): strin
  * captured from the terminal. The web chat should receive readable plain text.
  */
 function stripAnsiFormatting(text: string): string {
-  return text.replace(/\[[0-9;?]*[ -/]*[@-~]/g, '');
+  return text
+    .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '')  // CSI sequences
+    .replace(/\x1b\][^\x07]*(?:\x07)?/g, '')    // OSC sequences
+    .replace(/\x1b[^\x1b[\x07-\r\n]/g, '')      // control sequences
+    .replace(/\r/g, '');
 }
+
 
 /**
  * Extracts the prompt text from a Task tool input for subagent echo-filtering.
