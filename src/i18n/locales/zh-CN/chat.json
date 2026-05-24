@@ -261,9 +261,9 @@
     "fromYou": "你",
     "aiReply": "AI 回复",
     "loadAll": "加载全部",
-    "first": "第一条",
+    "first": "顶部",
     "previous": "上一条",
     "next": "下一条",
-    "last": "最后一条"
+    "last": "底部"
   }
 }

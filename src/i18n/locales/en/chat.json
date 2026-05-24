@@ -279,9 +279,9 @@
     "fromYou": "You",
     "aiReply": "AI Reply",
     "loadAll": "Load all",
-    "first": "First",
+    "first": "Top",
     "previous": "Previous",
     "next": "Next",
-    "last": "Last"
+    "last": "Bottom"
   }
 }
