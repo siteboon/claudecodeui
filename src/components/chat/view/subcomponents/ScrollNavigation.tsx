@@ -62,6 +62,7 @@ function LoadAllIcon() {
   );
 }
 
+/** Vertical scroll navigation strip with dots, quick-jump buttons, and load-more controls. */
 export default function ScrollNavigation({
   scrollContainerRef,
   chatMessages,

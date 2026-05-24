@@ -35,6 +35,7 @@ type ClaudeHistoryMessagesResult =
     limit?: number | null;
   };
 
+/** Parse agent JSONL files to extract tool use/result pairs for injection into main messages. */
 async function parseAgentTools(filePath: string): Promise<AnyRecord[]> {
   const tools: AnyRecord[] = [];
 
@@ -102,6 +103,7 @@ async function parseAgentTools(filePath: string): Promise<AnyRecord[]> {
   return tools;
 }
 
+/** Read the main JSONL transcript and merge in subagent tool messages from agent-*.jsonl files. */
 async function getSessionMessages(
   sessionId: string,
   limit: number | null,
@@ -216,6 +218,7 @@ const INTERNAL_CONTENT_PREFIXES = [
   '[Request interrupted',
 ] as const;
 
+/** Check if content is an internal Claude CLI artifact that should not be shown to the user. */
 function isInternalContent(content: string): boolean {
   return INTERNAL_CONTENT_PREFIXES.some((prefix) => content.startsWith(prefix));
 }
@@ -303,6 +306,7 @@ function extractSubagentPrompt(toolInput: unknown): string | null {
   return typeof parsed.prompt === 'string' ? parsed.prompt : null;
 }
 
+/** Collapse all whitespace runs into single spaces and trim. */
 function normalizeWhitespace(s: string): string {
   return s.replace(/[ \t]+/g, ' ').trim();
 }
@@ -626,7 +630,8 @@ export class ClaudeSessionsProvider implements IProviderSessions {
      */
     const subagentPrompts = new Set<string>();
     for (const raw of rawMessages) {
-      if (raw.message?.role === 'assistant' && Array.isArray(raw.message?.content)) {
+      const isAssistant = raw.message?.role === 'assistant' || raw.type === 'assistant';
+      if (isAssistant && Array.isArray(raw.message?.content)) {
         for (const part of raw.message.content) {
           if (part.type === 'tool_use' && part.name === 'Task') {
             const prompt = extractSubagentPrompt(part.input);
@@ -677,24 +682,19 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       }
     }
 
-    const totalNormalized = normalized.length;
-    let total = 0;
-    for (const msg of normalized) {
-      if (msg.kind !== 'tool_result') {
-        total += 1;
-      }
-    }
+    const paginableMessages = normalized.filter((msg) => msg.kind !== 'tool_result');
+    const total = paginableMessages.length;
     const normalizedOffset = Math.max(0, offset);
     const normalizedLimit = limit === null ? null : Math.max(0, limit);
     const messages = normalizedLimit === null
-      ? normalized
-      : normalized.slice(
-          Math.max(0, totalNormalized - normalizedOffset - normalizedLimit),
-          Math.max(0, totalNormalized - normalizedOffset),
+      ? paginableMessages
+      : paginableMessages.slice(
+          Math.max(0, total - normalizedOffset - normalizedLimit),
+          Math.max(0, total - normalizedOffset),
         );
     const hasMore = normalizedLimit === null
       ? false
-      : Math.max(0, totalNormalized - normalizedOffset - normalizedLimit) > 0;
+      : Math.max(0, total - normalizedOffset - normalizedLimit) > 0;
 
     return {
       messages,

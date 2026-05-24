@@ -754,11 +754,15 @@ export function useChatSessionState({
     setVisibleMessageCount((prev) => prev + 100);
   }, []);
 
-  const loadMoreMessages = useCallback(() => {
+  const loadMoreMessages = useCallback(async () => {
     topLoadLockRef.current = false;
     const container = scrollContainerRef.current;
     if (!container) return;
-    loadOlderMessages(container);
+    try {
+      await loadOlderMessages(container);
+    } catch (error) {
+      console.error('[useChatSessionState] loadMoreMessages failed:', error);
+    }
   }, [loadOlderMessages]);
 
   return {
