@@ -59,7 +59,7 @@ export const sessionsDb = {
        ON CONFLICT(session_id) DO UPDATE SET
          provider = excluded.provider,
          updated_at = excluded.updated_at,
-         project_path = excluded.project_path,
+         project_path = COALESCE(NULLIF(excluded.project_path, ''), sessions.project_path),
          jsonl_path = excluded.jsonl_path,
          isArchived = 0,
          custom_name = COALESCE(excluded.custom_name, sessions.custom_name)`

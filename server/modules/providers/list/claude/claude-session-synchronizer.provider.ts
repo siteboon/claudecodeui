@@ -38,6 +38,13 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
 
     let processed = 0;
     for (const filePath of files) {
+      // Skip subagent JSONL files — they share the parent session's sessionId
+      // and would overwrite the correct jsonl_path with the subagent path
+      const pathSegments = path.normalize(filePath).split(path.sep);
+      if (pathSegments.includes('subagents')) {
+        continue;
+      }
+
       const parsed = await this.processSessionFile(filePath, nameMap);
       if (!parsed) {
         continue;

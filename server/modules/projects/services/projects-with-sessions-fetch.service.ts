@@ -12,6 +12,7 @@ type SessionSummary = {
   summary: string;
   messageCount: number;
   lastActivity: string;
+  projectPath?: string;
 };
 
 type SessionsByProvider = Record<'claude' | 'cursor' | 'codex' | 'gemini', SessionSummary[]>;
@@ -19,6 +20,7 @@ type SessionsByProvider = Record<'claude' | 'cursor' | 'codex' | 'gemini', Sessi
 type SessionRepositoryRow = {
   provider: string;
   session_id: string;
+  project_path?: string | null;
   custom_name?: string | null;
   updated_at?: string | null;
   created_at?: string | null;
@@ -130,6 +132,7 @@ function mapSessionRowToSummary(row: SessionRepositoryRow): SessionSummary {
     summary: row.custom_name || '',
     messageCount: 0,
     lastActivity: row.updated_at ?? row.created_at ?? new Date().toISOString(),
+    projectPath: row.project_path ?? undefined,
   };
 }
 
