@@ -311,9 +311,9 @@ function extractSubagentPrompt(toolInput: unknown): string | null {
   return typeof parsed.prompt === 'string' ? parsed.prompt : null;
 }
 
-/** Collapse all whitespace runs into single spaces and trim. */
+/** Collapse all whitespace runs (including newlines) into single spaces and trim. */
 function normalizeWhitespace(s: string): string {
-  return s.replace(/[ \t]+/g, ' ').trim();
+  return s.replace(/\s+/g, ' ').trim();
 }
 
 function isSubagentPromptEcho(text: string, subagentPrompts: Set<string> | null): boolean {
