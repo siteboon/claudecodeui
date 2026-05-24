@@ -1,9 +1,11 @@
-import express from 'express';
 import { promises as fs } from 'fs';
-import path from 'path';
 import os from 'os';
+import path from 'path';
+
+import express from 'express';
+
 import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants.js';
-import { parseFrontmatter } from '../utils/frontmatter.js';
+import { parseFrontMatter } from '../shared/frontmatter.js';
 import { findAppRoot, getModuleDir } from '../utils/runtime-paths.js';
 
 const __dirname = getModuleDir(import.meta.url);
@@ -40,7 +42,7 @@ async function scanCommandsDirectory(dir, baseDir, namespace) {
         // Parse markdown file for metadata
         try {
           const content = await fs.readFile(fullPath, 'utf8');
-          const { data: frontmatter, content: commandContent } = parseFrontmatter(content);
+          const { data: frontmatter, content: commandContent } = parseFrontMatter(content);
 
           // Calculate relative path from baseDir for command name
           const relativePath = path.relative(baseDir, fullPath);
@@ -513,7 +515,7 @@ router.post('/execute', async (req, res) => {
       }
     }
     const content = await fs.readFile(commandPath, 'utf8');
-    const { data: metadata, content: commandContent } = parseFrontmatter(content);
+    const { data: metadata, content: commandContent } = parseFrontMatter(content);
     // Basic argument replacement (will be enhanced in command parser utility)
     let processedContent = commandContent;
 

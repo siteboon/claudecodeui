@@ -35,6 +35,7 @@ type ClaudeHistoryMessagesResult =
     limit?: number | null;
   };
 
+/** Parse agent JSONL files to extract tool use/result pairs for injection into main messages. */
 async function parseAgentTools(filePath: string): Promise<AnyRecord[]> {
   const tools: AnyRecord[] = [];
 
@@ -102,6 +103,7 @@ async function parseAgentTools(filePath: string): Promise<AnyRecord[]> {
   return tools;
 }
 
+/** Read the main JSONL transcript and merge in subagent tool messages from agent-*.jsonl files. */
 async function getSessionMessages(
   sessionId: string,
   limit: number | null,
@@ -201,30 +203,164 @@ async function getSessionMessages(
 }
 
 /**
- * Claude writes internal command and system reminder entries into history.
- * Those are useful for the CLI but should not appear in the user-facing chat.
+ * Claude writes a mix of truly internal transcript rows and "UI-hidden" local
+ * command artifacts into the same JSONL stream.
+ *
+ * Important distinction:
+ * - system reminders / caveats / interruption banners should stay hidden
+ * - local command payloads (`<command-name>...`) and stdout wrappers
+ *   (`<local-command-stdout>...`) should be remapped into normal chat messages
+ *   instead of being discarded as internal content
  */
 const INTERNAL_CONTENT_PREFIXES = [
-  '<command-name>',
-  '<command-message>',
-  '<command-args>',
-  '<local-command-stdout>',
   '<system-reminder>',
   'Caveat:',
-  'This session is being continued from a previous',
   '[Request interrupted',
 ] as const;
 
+/** Check if content is an internal Claude CLI artifact that should not be shown to the user. */
 function isInternalContent(content: string): boolean {
   return INTERNAL_CONTENT_PREFIXES.some((prefix) => content.startsWith(prefix));
+}
+
+/**
+ * Claude wraps local slash-command metadata in lightweight XML-like tags inside
+ * a plain string payload. We intentionally parse only the small tag surface we
+ * care about instead of introducing a generic XML parser for untrusted history.
+ */
+function extractTaggedContent(content: string, tagName: string): string | null {
+  const escapedTagName = tagName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = new RegExp(`<${escapedTagName}>([\\s\\S]*?)<\\/${escapedTagName}>`).exec(content);
+  return match ? match[1] : null;
+}
+
+type ClaudeLocalCommandPayload = {
+  commandName: string;
+  commandMessage: string;
+  commandArgs: string;
+};
+
+/**
+ * Detects SDK-generated context resumption summaries that appear as user-role
+ * messages with no isSynthetic or origin markers. These are injected by the
+ * Claude Code SDK when a conversation runs out of context and needs to resume.
+ */
+function isContextResumptionSummary(raw: AnyRecord): boolean {
+  const content = raw.message?.content;
+  if (!content) return false;
+
+  const text = typeof content === 'string'
+    ? content
+    : Array.isArray(content)
+      ? content.filter((p: AnyRecord) => p.type === 'text').map((p: AnyRecord) => p.text).join('\n')
+      : '';
+
+  return text.trim().startsWith('This session is being continued from a previous conversation');
+}
+
+/**
+ * Converts Claude's hidden local command wrapper into structured metadata.
+ *
+ * The three tags often coexist in one string payload. Returning `null` lets the
+ * normal text path continue untouched for unrelated messages.
+ */
+function parseLocalCommandPayload(content: string): ClaudeLocalCommandPayload | null {
+  const commandName = extractTaggedContent(content, 'command-name');
+  const commandMessage = extractTaggedContent(content, 'command-message');
+  const commandArgs = extractTaggedContent(content, 'command-args');
+
+  if (commandName === null && commandMessage === null && commandArgs === null) {
+    return null;
+  }
+
+  return {
+    commandName: commandName ?? '',
+    commandMessage: commandMessage ?? '',
+    commandArgs: commandArgs ?? '',
+  };
+}
+
+/**
+ * Produces the short user-visible command string that should appear in chat.
+ *
+ * We prefer the slash-prefixed command name because that most closely matches
+ * what the user actually typed, and only fall back to the message body when the
+ * command name is unavailable in older transcript variants.
+ */
+function buildLocalCommandDisplayText(payload: ClaudeLocalCommandPayload): string {
+  const commandName = payload.commandName.trim();
+  const commandMessage = payload.commandMessage.trim();
+  const commandArgs = payload.commandArgs.trim();
+  const baseCommand = commandName || commandMessage;
+
+  if (!baseCommand) {
+    return '';
+  }
+
+  return commandArgs ? `${baseCommand} ${commandArgs}` : baseCommand;
+}
+
+/**
+ * Claude local-command stdout may contain ANSI styling codes because it was
+ * captured from the terminal. The web chat should receive readable plain text.
+ */
+function stripAnsiFormatting(text: string): string {
+  return text
+    .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '')  // CSI sequences
+    .replace(/\x1b\][^\x07]*(?:\x07)?/g, '')    // OSC sequences
+    .replace(/\x1b[^\x1b[\x07-\r\n]/g, '')      // control sequences
+    .replace(/\r/g, '');
+}
+
+
+/**
+ * Extracts the prompt text from a Task tool input for subagent echo-filtering.
+ */
+function extractSubagentPrompt(toolInput: unknown): string | null {
+  if (!toolInput) return null;
+  let parsed: AnyRecord = toolInput;
+  if (typeof toolInput === 'string') {
+    try {
+      parsed = JSON.parse(toolInput);
+    } catch {
+      return null;
+    }
+  }
+  return typeof parsed.prompt === 'string' ? parsed.prompt : null;
+}
+
+/** Collapse all whitespace runs (including newlines) into single spaces and trim. */
+function normalizeWhitespace(s: string): string {
+  return s.replace(/\s+/g, ' ').trim();
+}
+
+function isSubagentPromptEcho(text: string, subagentPrompts: Set<string> | null): boolean {
+  if (!subagentPrompts) return false;
+  const normalized = normalizeWhitespace(text);
+  for (const prompt of subagentPrompts) {
+    const np = normalizeWhitespace(prompt);
+    if (normalized === np || normalized.startsWith(np)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export class ClaudeSessionsProvider implements IProviderSessions {
   /**
    * Normalizes one Claude JSONL entry or live SDK stream event into the shared
    * message shape consumed by REST and WebSocket clients.
+   *
+   * @param subagentPrompts - Set of subagent task prompts to filter out.
+   *   These are "Task" tool prompts that also appear as separate user-role
+   *   messages in the JSONL — normalizing them would render them as user
+   *   chat bubbles which is incorrect.
    */
-  normalizeMessage(rawMessage: unknown, sessionId: string | null): NormalizedMessage[] {
+  normalizeMessage(
+    rawMessage: unknown,
+    sessionId: string | null,
+    subagentPrompts: Set<string> | null = null,
+  ): NormalizedMessage[] {
     const raw = readObjectRecord(rawMessage);
     if (!raw) {
       return [];
@@ -241,7 +377,24 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     const ts = raw.timestamp || new Date().toISOString();
     const baseId = raw.uuid || generateMessageId('claude');
 
-    if (raw.message?.role === 'user' && raw.message?.content) {
+    /*
+     * Filter out non-human user-role messages during streaming.
+     * SDK emits synthetic user messages (subagent prompts, internal
+     * bookkeeping) that have message.role === 'user' but should NOT be
+     * rendered as user chat bubbles. The `isSynthetic` flag or a non-`human`
+     * origin indicate these are system-generated, not keyboard input.
+     * This check is a no-op for pure tool_result containers — they have no
+     * text parts and are handled by the tool_result branch below.
+     */
+    const isHumanOrigin =
+      !raw.isSynthetic
+      && (raw.origin?.kind === undefined || raw.origin?.kind === 'human');
+
+    if (raw.message?.role === 'user' && raw.message?.content && raw.isMeta !== true) {
+      if (isContextResumptionSummary(raw)) {
+        return messages;
+      }
+
       if (Array.isArray(raw.message.content)) {
         for (let partIndex = 0; partIndex < raw.message.content.length; partIndex++) {
           const part = raw.message.content[partIndex];
@@ -260,16 +413,19 @@ export class ClaudeSessionsProvider implements IProviderSessions {
             }));
           } else if (part.type === 'text') {
             const text = part.text || '';
-            if (text && !isInternalContent(text)) {
-              messages.push(createNormalizedMessage({
-                id: `${baseId}_text_${partIndex}`,
-                sessionId,
-                timestamp: ts,
-                provider: PROVIDER,
-                kind: 'text',
-                role: 'user',
-                content: text,
-              }));
+            if (text && !isInternalContent(text) && isHumanOrigin) {
+              const isEcho = isSubagentPromptEcho(text, subagentPrompts);
+              if (!isEcho) {
+                messages.push(createNormalizedMessage({
+                  id: `${baseId}_text_${partIndex}`,
+                  sessionId,
+                  timestamp: ts,
+                  provider: PROVIDER,
+                  kind: 'text',
+                  role: 'user',
+                  content: text,
+                }));
+              }
             }
           }
         }
@@ -281,29 +437,108 @@ export class ClaudeSessionsProvider implements IProviderSessions {
             .filter(Boolean)
             .join('\n');
           if (textParts && !isInternalContent(textParts)) {
-            messages.push(createNormalizedMessage({
-              id: `${baseId}_text`,
-              sessionId,
-              timestamp: ts,
-              provider: PROVIDER,
-              kind: 'text',
-              role: 'user',
-              content: textParts,
-            }));
+            const isEcho = isSubagentPromptEcho(textParts, subagentPrompts);
+            if (!isEcho) {
+              messages.push(createNormalizedMessage({
+                id: `${baseId}_text`,
+                sessionId,
+                timestamp: ts,
+                provider: PROVIDER,
+                kind: 'text',
+                role: 'user',
+                content: textParts,
+              }));
+            }
           }
         }
       } else if (typeof raw.message.content === 'string') {
         const text = raw.message.content;
-        if (text && !isInternalContent(text)) {
+
+        /**
+         * Claude stores compact summaries as synthetic "user" rows so the CLI
+         * can resume the next session turn with the summary in-context.
+         *
+         * For the web UI this is much more useful as assistant-authored summary
+         * text; otherwise it is both filtered by the generic internal-prefix
+         * check and visually mislabeled as a user message.
+         */
+        if (raw.isCompactSummary === true && text.trim()) {
           messages.push(createNormalizedMessage({
             id: baseId,
             sessionId,
             timestamp: ts,
             provider: PROVIDER,
             kind: 'text',
-            role: 'user',
+            role: 'assistant',
             content: text,
+            isCompactSummary: true,
           }));
+          return messages;
+        }
+
+        /**
+         * Local slash commands are serialized as tagged text even though they
+         * are semantically a user action. Expose the parsed fields to the
+         * frontend and emit a plain user-visible command string so the command
+         * no longer disappears from history.
+         */
+        const localCommandPayload = parseLocalCommandPayload(text);
+        if (localCommandPayload) {
+          const displayText = buildLocalCommandDisplayText(localCommandPayload);
+          if (displayText) {
+            messages.push(createNormalizedMessage({
+              id: baseId,
+              sessionId,
+              timestamp: ts,
+              provider: PROVIDER,
+              kind: 'text',
+              role: 'user',
+              content: displayText,
+              commandName: localCommandPayload.commandName,
+              commandMessage: localCommandPayload.commandMessage,
+              commandArgs: localCommandPayload.commandArgs,
+              isLocalCommand: true,
+            }));
+          }
+          return messages;
+        }
+
+        /**
+         * Local command stdout is also written as a "user" row in Claude's
+         * transcript, but it is terminal output produced in response to the
+         * command. Re-label it as assistant text so the chat transcript matches
+         * the actual conversational flow seen by the user.
+         */
+        const localCommandStdout = extractTaggedContent(text, 'local-command-stdout');
+        if (localCommandStdout !== null) {
+          const stdoutText = stripAnsiFormatting(localCommandStdout).trim();
+          if (stdoutText) {
+            messages.push(createNormalizedMessage({
+              id: baseId,
+              sessionId,
+              timestamp: ts,
+              provider: PROVIDER,
+              kind: 'text',
+              role: 'assistant',
+              content: stdoutText,
+              isLocalCommandStdout: true,
+            }));
+          }
+          return messages;
+        }
+
+        if (text && !isInternalContent(text) && isHumanOrigin) {
+          if (!isSubagentPromptEcho(text, subagentPrompts)) {
+            messages.push(createNormalizedMessage({
+              id: baseId,
+              sessionId,
+              timestamp: ts,
+              provider: PROVIDER,
+              kind: 'text',
+              role: 'user',
+              content: text,
+            }));
+          }
         }
       }
       return messages;
@@ -418,7 +653,9 @@ export class ClaudeSessionsProvider implements IProviderSessions {
 
     let result: ClaudeHistoryResult;
     try {
-      result = await getSessionMessages(sessionId, limit, offset);
+      // Load full history first so `total` reflects frontend-normalized messages,
+      // not raw JSONL records.
+      result = await getSessionMessages(sessionId, null, 0);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`[ClaudeProvider] Failed to load session ${sessionId}:`, message);
@@ -426,8 +663,30 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     }
 
     const rawMessages = Array.isArray(result) ? result : (result.messages || []);
-    const total = Array.isArray(result) ? rawMessages.length : (result.total || 0);
-    const hasMore = Array.isArray(result) ? false : Boolean(result.hasMore);
+
+    /*
+     * Collect Task subagent prompts from raw messages so duplicate user-role
+     * echo messages can be filtered out during normalization.
+     */
+    const subagentPrompts = new Set<string>();
+    for (const raw of rawMessages) {
+      const isAssistant = raw.message?.role === 'assistant' || raw.type === 'assistant';
+      if (isAssistant && Array.isArray(raw.message?.content)) {
+        for (const part of raw.message.content) {
+          if (part.type === 'tool_use' && part.name === 'Task') {
+            const prompt = extractSubagentPrompt(part.input);
+            if (prompt) {
+              subagentPrompts.add(prompt);
+            }
+          }
+        }
+      }
+    }
+
+    const normalized: NormalizedMessage[] = [];
+    for (const raw of rawMessages) {
+      normalized.push(...this.normalizeMessage(raw, sessionId, subagentPrompts.size > 0 ? subagentPrompts : null));
+    }
 
     const toolResultMap = new Map<string, ClaudeToolResult>();
     for (const raw of rawMessages) {
@@ -443,11 +702,6 @@ export class ClaudeSessionsProvider implements IProviderSessions {
           }
         }
       }
-    }
-
-    const normalized: NormalizedMessage[] = [];
-    for (const raw of rawMessages) {
-      normalized.push(...this.normalizeMessage(raw, sessionId));
     }
 
     for (const msg of normalized) {
@@ -468,12 +722,26 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       }
     }
 
+    const paginableMessages = normalized.filter((msg) => msg.kind !== 'tool_result');
+    const total = paginableMessages.length;
+    const normalizedOffset = Math.max(0, offset);
+    const normalizedLimit = limit === null ? null : Math.max(0, limit);
+    const messages = normalizedLimit === null
+      ? paginableMessages
+      : paginableMessages.slice(
+          Math.max(0, total - normalizedOffset - normalizedLimit),
+          Math.max(0, total - normalizedOffset),
+        );
+    const hasMore = normalizedLimit === null
+      ? false
+      : Math.max(0, total - normalizedOffset - normalizedLimit) > 0;
+
     return {
-      messages: normalized,
+      messages,
       total,
       hasMore,
-      offset,
-      limit,
+      offset: normalizedOffset,
+      limit: normalizedLimit,
     };
   }
 }

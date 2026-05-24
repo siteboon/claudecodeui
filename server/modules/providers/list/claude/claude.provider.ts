@@ -3,11 +3,18 @@ import { ClaudeProviderAuth } from '@/modules/providers/list/claude/claude-auth.
 import { ClaudeMcpProvider } from '@/modules/providers/list/claude/claude-mcp.provider.js';
 import { ClaudeSessionSynchronizer } from '@/modules/providers/list/claude/claude-session-synchronizer.provider.js';
 import { ClaudeSessionsProvider } from '@/modules/providers/list/claude/claude-sessions.provider.js';
-import type { IProviderAuth, IProviderSessionSynchronizer, IProviderSessions } from '@/shared/interfaces.js';
+import { ClaudeSkillsProvider } from '@/modules/providers/list/claude/claude-skills.provider.js';
+import type {
+  IProviderAuth,
+  IProviderSessionSynchronizer,
+  IProviderSkills,
+  IProviderSessions,
+} from '@/shared/interfaces.js';
 
 export class ClaudeProvider extends AbstractProvider {
   readonly mcp = new ClaudeMcpProvider();
   readonly auth: IProviderAuth = new ClaudeProviderAuth();
+  readonly skills: IProviderSkills = new ClaudeSkillsProvider();
   readonly sessions: IProviderSessions = new ClaudeSessionsProvider();
   readonly sessionSynchronizer: IProviderSessionSynchronizer = new ClaudeSessionSynchronizer();
 

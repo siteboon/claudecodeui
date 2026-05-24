@@ -18,16 +18,18 @@ const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> =
   },
   {
     provider: 'cursor',
-    rootPath: path.join(os.homedir(), '.cursor', 'chats'),
+    rootPath: path.join(os.homedir(), '.cursor', 'projects'),
   },
   {
     provider: 'codex',
     rootPath: path.join(os.homedir(), '.codex', 'sessions'),
   },
-  {
-    provider: 'gemini',
-    rootPath: path.join(os.homedir(), '.gemini', 'sessions'),
-  },
+  // {
+  //   provider: 'gemini',
+  //   rootPath: path.join(os.homedir(), '.gemini', 'sessions'),
+  // },
+  // Keep `sessions/` watcher disabled: Gemini also mirrors artifacts there,
+  // which causes duplicate synchronization events.
   {
     provider: 'gemini',
     rootPath: path.join(os.homedir(), '.gemini', 'tmp'),

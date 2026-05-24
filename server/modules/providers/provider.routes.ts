@@ -2,6 +2,7 @@ import express, { type Request, type Response } from 'express';
 
 import { providerAuthService } from '@/modules/providers/services/provider-auth.service.js';
 import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
+import { providerSkillsService } from '@/modules/providers/services/skills.service.js';
 import { sessionConversationsSearchService } from '@/modules/providers/services/session-conversations-search.service.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
 import type { LLMProvider, McpScope, McpTransport, UpsertProviderMcpServerInput } from '@/shared/types.js';
@@ -247,6 +248,17 @@ router.get(
   }),
 );
 
+// ----------------- Skills routes -----------------
+router.get(
+  '/:provider/skills',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const workspacePath = readOptionalQueryString(req.query.workspacePath);
+    const skills = await providerSkillsService.listProviderSkills(provider, { workspacePath });
+    res.json(createApiSuccessResponse({ provider, skills }));
+  }),
+);
+
 // ----------------- MCP routes -----------------
 router.get(
   '/:provider/mcp/servers',
@@ -311,12 +323,33 @@ router.post(
 );
 
 // ----------------- Session routes -----------------
+router.get(
+  '/sessions/archived',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const sessions = sessionsService.listArchivedSessions();
+    res.json(createApiSuccessResponse({ sessions }));
+  }),
+);
+
 router.delete(
   '/sessions/:sessionId',
   asyncHandler(async (req: Request, res: Response) => {
     const sessionId = parseSessionId(req.params.sessionId);
-    const deletedFromDisk = parseOptionalBooleanQuery(req.query.deletedFromDisk, 'deletedFromDisk') ?? false;
-    const result = await sessionsService.deleteSessionById(sessionId, deletedFromDisk);
+    const force = parseOptionalBooleanQuery(req.query.force, 'force') ?? false;
+    const deletedFromDisk = parseOptionalBooleanQuery(req.query.deletedFromDisk, 'deletedFromDisk') ?? force;
+    const result = await sessionsService.deleteOrArchiveSessionById(sessionId, {
+      force,
+      deletedFromDisk,
+    });
+    res.json(createApiSuccessResponse(result));
+  }),
+);
+
+router.post(
+  '/sessions/:sessionId/restore',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const result = sessionsService.restoreSessionById(sessionId);
     res.json(createApiSuccessResponse(result));
   }),
 );

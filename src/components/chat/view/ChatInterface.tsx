@@ -14,6 +14,7 @@ import { useSessionStore } from '../../../stores/useSessionStore';
 
 import ChatMessagesPane from './subcomponents/ChatMessagesPane';
 import ChatComposer from './subcomponents/ChatComposer';
+import ScrollNavigation from './subcomponents/ScrollNavigation';
 
 
 type PendingViewSession = {
@@ -34,7 +35,6 @@ function ChatInterface({
   onSessionProcessing,
   onSessionNotProcessing,
   processingSessions,
-  onReplaceTemporarySession,
   onNavigateToSession,
   onShowSettings,
   autoExpandTools,
@@ -50,7 +50,6 @@ function ChatInterface({
   const { t } = useTranslation('chat');
 
   const sessionStore = useSessionStore();
-  const streamBufferRef = useRef('');
   const streamTimerRef = useRef<number | null>(null);
   const accumulatedStreamRef = useRef('');
   const pendingViewSessionRef = useRef<PendingViewSession | null>(null);
@@ -60,7 +59,6 @@ function ChatInterface({
       clearTimeout(streamTimerRef.current);
       streamTimerRef.current = null;
     }
-    streamBufferRef.current = '';
     accumulatedStreamRef.current = '';
   }, []);
 
@@ -106,10 +104,10 @@ function ChatInterface({
     visibleMessages,
     loadEarlierMessages,
     loadAllMessages,
+    loadMoreMessages,
     allMessagesLoaded,
     isLoadingAllMessages,
     loadAllJustFinished,
-    showLoadAllOverlay,
     claudeStatus,
     setClaudeStatus,
     createDiff,
@@ -225,7 +223,6 @@ function ChatInterface({
   useChatRealtimeHandlers({
     latestMessage,
     provider,
-    selectedProject,
     selectedSession,
     currentSessionId,
     setCurrentSessionId,
@@ -235,13 +232,11 @@ function ChatInterface({
     setTokenBudget,
     setPendingPermissionRequests,
     pendingViewSessionRef,
-    streamBufferRef,
     streamTimerRef,
     accumulatedStreamRef,
     onSessionInactive,
     onSessionProcessing,
     onSessionNotProcessing,
-    onReplaceTemporarySession,
     onNavigateToSession,
     onWebSocketReconnect: handleWebSocketReconnect,
     sessionStore,
@@ -305,7 +300,18 @@ function ChatInterface({
   return (
     <PermissionContext.Provider value={permissionContextValue}>
       <div className="flex h-full flex-col">
-        <ChatMessagesPane
+        <div className="relative flex-1">
+          <ScrollNavigation
+            scrollContainerRef={scrollContainerRef}
+            chatMessages={chatMessages}
+            loadAllMessages={loadAllMessages}
+            allMessagesLoaded={allMessagesLoaded}
+            hasMoreMessages={hasMoreMessages}
+            totalMessages={totalMessages}
+            sessionMessagesCount={chatMessages.length}
+          />
+          <div className="absolute inset-0">
+          <ChatMessagesPane
           scrollContainerRef={scrollContainerRef}
           onWheel={handleScroll}
           onTouchMove={handleScroll}
@@ -336,10 +342,10 @@ function ChatInterface({
           visibleMessages={visibleMessages}
           loadEarlierMessages={loadEarlierMessages}
           loadAllMessages={loadAllMessages}
+          loadMoreMessages={loadMoreMessages}
           allMessagesLoaded={allMessagesLoaded}
           isLoadingAllMessages={isLoadingAllMessages}
           loadAllJustFinished={loadAllJustFinished}
-          showLoadAllOverlay={showLoadAllOverlay}
           createDiff={createDiff}
           onFileOpen={onFileOpen}
           onShowSettings={onShowSettings}
@@ -349,6 +355,8 @@ function ChatInterface({
           showThinking={showThinking}
           selectedProject={selectedProject}
         />
+          </div>
+        </div>
 
         <ChatComposer
           pendingPermissionRequests={pendingPermissionRequests}

@@ -25,7 +25,7 @@ type SidebarModalsProps = {
   onConfirmDeleteProject: (deleteData?: boolean) => void;
   sessionDeleteConfirmation: SessionDeleteConfirmation | null;
   onCancelDeleteSession: () => void;
-  onConfirmDeleteSession: () => void;
+  onConfirmDeleteSession: (hardDelete?: boolean) => void;
   showVersionModal: boolean;
   onCloseVersionModal: () => void;
   releaseInfo: ReleaseInfo | null;
@@ -133,7 +133,7 @@ export default function SidebarModals({
                   onClick={() => onConfirmDeleteProject(false)}
                 >
                   <EyeOff className="mr-2 h-4 w-4" />
-                  {t('deleteConfirmation.removeFromSidebar')}
+                  {t('deleteConfirmation.archiveProject', 'Archive project')}
                 </Button>
                 <Button
                   variant="destructive"
@@ -173,22 +173,34 @@ export default function SidebarModals({
                       ?
                     </p>
                     <p className="mt-3 text-xs text-muted-foreground">
-                      {t('deleteConfirmation.cannotUndo')}
+                      {sessionDeleteConfirmation.isArchived
+                        ? t('deleteConfirmation.archivedSessionNotice', 'This session is already archived. You can keep it hidden or delete it permanently.')
+                        : t('deleteConfirmation.archiveSessionNotice', 'Archive keeps the session out of the active list while preserving its history.')}
                     </p>
                   </div>
                 </div>
               </div>
-              <div className="flex gap-3 border-t border-border bg-muted/30 p-4">
-                <Button variant="outline" className="flex-1" onClick={onCancelDeleteSession}>
-                  {t('actions.cancel')}
-                </Button>
+              <div className="flex flex-col gap-2 border-t border-border bg-muted/30 p-4">
+                {!sessionDeleteConfirmation.isArchived && (
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start"
+                    onClick={() => onConfirmDeleteSession(false)}
+                  >
+                    <EyeOff className="mr-2 h-4 w-4" />
+                    {t('deleteConfirmation.archiveSession', 'Archive session')}
+                  </Button>
+                )}
                 <Button
                   variant="destructive"
-                  className="flex-1 bg-red-600 text-white hover:bg-red-700"
-                  onClick={onConfirmDeleteSession}
+                  className="w-full justify-start bg-red-600 text-white hover:bg-red-700"
+                  onClick={() => onConfirmDeleteSession(true)}
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
-                  {t('actions.delete')}
+                  {t('deleteConfirmation.deleteSessionPermanently', 'Delete permanently')}
+                </Button>
+                <Button variant="ghost" className="w-full" onClick={onCancelDeleteSession}>
+                  {t('actions.cancel')}
                 </Button>
               </div>
             </div>

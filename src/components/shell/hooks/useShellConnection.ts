@@ -6,6 +6,16 @@ import type { Project, ProjectSession } from '../../../types/app';
 import { TERMINAL_INIT_DELAY_MS } from '../constants/constants';
 import { getShellWebSocketUrl, parseShellMessage, sendSocketMessage } from '../utils/socket';
 
+function resolveShellProjectPath(
+  session: ProjectSession | null | undefined,
+  project: Project | null | undefined,
+): string {
+  if (session?.projectPath) {
+    return session.projectPath;
+  }
+  return (project?.fullPath || project?.path || '') ?? '';
+}
+
 const ANSI_ESCAPE_REGEX =
   /(?:\u001B\[[0-?]*[ -/]*[@-~]|\u009B[0-?]*[ -/]*[@-~]|\u001B\][^\u0007\u001B]*(?:\u0007|\u001B\\)|\u009D[^\u0007\u009C]*(?:\u0007|\u009C)|\u001B[PX^_][^\u001B]*\u001B\\|[\u0090\u0098\u009E\u009F][^\u009C]*\u009C|\u001B[@-Z\\-_])/g;
 const PROCESS_EXIT_REGEX = /Process exited with code (\d+)/;
@@ -144,7 +154,7 @@ export function useShellConnection({
 
             sendSocketMessage(socket, {
               type: 'init',
-              projectPath: currentProject.fullPath || currentProject.path || '',
+              projectPath: resolveShellProjectPath(selectedSessionRef.current, currentProject),
               sessionId: isPlainShellRef.current ? null : selectedSessionRef.current?.id || null,
               hasSession: isPlainShellRef.current ? false : Boolean(selectedSessionRef.current),
               provider: isPlainShellRef.current ? 'plain-shell' : (selectedSessionRef.current?.__provider || localStorage.getItem('selected-provider') || 'claude'),

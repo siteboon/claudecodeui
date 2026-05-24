@@ -75,6 +75,10 @@ function Sidebar({
     sessionDeleteConfirmation,
     showVersionModal,
     filteredProjects,
+    archivedProjects,
+    archivedSessions,
+    archivedSessionsCount,
+    isArchivedSessionsLoading,
     toggleProject,
     handleSessionClick,
     toggleStarProject,
@@ -90,6 +94,9 @@ function Sidebar({
     requestProjectDelete,
     confirmDeleteProject,
     handleProjectSelect,
+    openArchivedSession,
+    restoreArchivedProject,
+    restoreArchivedSession,
     refreshProjects,
     updateSessionSummary,
     collapseSidebar: handleCollapseSidebar,
@@ -184,8 +191,8 @@ function Sidebar({
 
   return (
     <>
-      <SidebarModals
-        projects={projects}
+        <SidebarModals
+          projects={projects}
         showSettings={showSettings}
         settingsInitialTab={settingsInitialTab}
         onCloseSettings={onCloseSettings}
@@ -217,22 +224,38 @@ function Sidebar({
         />
       ) : (
         <>
-          <SidebarContent
+        <SidebarContent
             isPWA={isPWA}
             isMobile={isMobile}
             isLoading={isLoading}
             projects={projects}
+            archivedProjects={archivedProjects}
+            archivedSessions={archivedSessions}
+            archivedSessionsCount={archivedSessionsCount}
+            isArchivedSessionsLoading={isArchivedSessionsLoading}
             searchFilter={searchFilter}
             onSearchFilterChange={setSearchFilter}
             onClearSearchFilter={() => setSearchFilter('')}
             searchMode={searchMode}
-            onSearchModeChange={(mode: 'projects' | 'conversations') => {
+            onSearchModeChange={(mode) => {
               setSearchMode(mode);
               if (mode === 'projects') clearConversationResults();
             }}
             conversationResults={conversationResults}
             isSearching={isSearching}
             searchProgress={searchProgress}
+            onRestoreArchivedProject={restoreArchivedProject}
+            onArchivedSessionClick={openArchivedSession}
+            onRestoreArchivedSession={restoreArchivedSession}
+            onDeleteArchivedSession={(session) => {
+              showDeleteSessionConfirmation(
+                session.projectId,
+                session.sessionId,
+                session.sessionTitle,
+                session.provider,
+                { isArchived: true },
+              );
+            }}
             onConversationResultClick={(projectId: string | null, sessionId: string, provider: string, messageTimestamp?: string | null, messageSnippet?: string | null) => {
               // `projectId` (DB key) is the canonical identifier post-migration.
               // The server emits null when it can't resolve a project row for

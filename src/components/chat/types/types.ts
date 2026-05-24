@@ -28,6 +28,7 @@ export interface SubagentChildTool {
 export interface ChatMessage {
   type: string;
   content?: string;
+  displayText?: string;
   timestamp: string | number | Date;
   images?: ChatImage[];
   reasoning?: string;
@@ -40,6 +41,12 @@ export interface ChatMessage {
   toolResult?: ToolResult | null;
   toolId?: string;
   toolCallId?: string;
+  commandName?: string;
+  commandMessage?: string;
+  commandArgs?: string;
+  isLocalCommand?: boolean;
+  isLocalCommandStdout?: boolean;
+  isCompactSummary?: boolean;
   isSubagentContainer?: boolean;
   subagentState?: {
     childTools: SubagentChildTool[];
@@ -108,7 +115,6 @@ export interface ChatInterfaceProps {
   onSessionProcessing?: (sessionId?: string | null) => void;
   onSessionNotProcessing?: (sessionId?: string | null) => void;
   processingSessions?: Set<string>;
-  onReplaceTemporarySession?: (sessionId?: string | null) => void;
   onNavigateToSession?: (targetSessionId: string, options?: SessionNavigationOptions) => void;
   onShowSettings?: () => void;
   autoExpandTools?: boolean;

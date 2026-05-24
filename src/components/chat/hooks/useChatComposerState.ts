@@ -10,6 +10,7 @@ import type {
   TouchEvent,
 } from 'react';
 import { useDropzone } from 'react-dropzone';
+
 import { authenticatedFetch } from '../../../utils/api';
 import { thinkingModes } from '../constants/thinkingModes';
 import { grantClaudeToolPermission } from '../utils/chatPermissions';
@@ -21,8 +22,19 @@ import type {
 } from '../types/types';
 import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
 import { escapeRegExp } from '../utils/chatFormatting';
+
 import { useFileMentions } from './useFileMentions';
 import { type SlashCommand, useSlashCommands } from './useSlashCommands';
+
+function resolveEffectiveProjectPath(
+  session: ProjectSession | null,
+  project: Project | null,
+): string {
+  if (session?.projectPath) {
+    return session.projectPath;
+  }
+  return (project?.fullPath || project?.path || '') ?? '';
+}
 
 type PendingViewSession = {
   sessionId: string | null;
@@ -79,9 +91,6 @@ interface CommandExecutionResult {
 const createFakeSubmitEvent = () => {
   return { preventDefault: () => undefined } as unknown as FormEvent<HTMLFormElement>;
 };
-
-const isTemporarySessionId = (sessionId: string | null | undefined) =>
-  Boolean(sessionId && sessionId.startsWith('new-session-'));
 
 const getNotificationSessionSummary = (
   selectedSession: ProjectSession | null,
@@ -153,6 +162,7 @@ export function useChatComposerState({
     ((event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>) => Promise<void>) | null
   >(null);
   const inputValueRef = useRef(input);
+  const selectedProjectId = selectedProject?.projectId;
 
   const handleBuiltInCommand = useCallback(
     (result: CommandExecutionResult) => {
@@ -362,6 +372,7 @@ export function useChatComposerState({
     handleCommandMenuKeyDown,
   } = useSlashCommands({
     selectedProject,
+    provider,
     input,
     setInput,
     textareaRef,
@@ -471,14 +482,14 @@ export function useChatComposerState({
         return;
       }
 
-      // Intercept slash commands: if input starts with /commandName, execute as command with args
-      const trimmedInput = currentInput.trim();
-      if (trimmedInput.startsWith('/')) {
-        const firstSpace = trimmedInput.indexOf(' ');
-        const commandName = firstSpace > 0 ? trimmedInput.slice(0, firstSpace) : trimmedInput;
+      // Intercept slash commands only when "/" is the first input character.
+      const commandInput = currentInput.trimEnd();
+      if (commandInput.startsWith('/')) {
+        const firstSpace = commandInput.indexOf(' ');
+        const commandName = firstSpace > 0 ? commandInput.slice(0, firstSpace) : commandInput;
         const matchedCommand = slashCommands.find((cmd: SlashCommand) => cmd.name === commandName);
-        if (matchedCommand) {
-          executeCommand(matchedCommand, trimmedInput);
+        if (matchedCommand && matchedCommand.type !== 'skill') {
+          executeCommand(matchedCommand, commandInput);
           setInput('');
           inputValueRef.current = '';
           setAttachedImages([]);
@@ -533,7 +544,6 @@ export function useChatComposerState({
 
       const effectiveSessionId =
         currentSessionId || selectedSession?.id || sessionStorage.getItem('cursorSessionId');
-      const sessionToActivate = effectiveSessionId || `new-session-${Date.now()}`;
 
       const userMessage: ChatMessage = {
         type: 'user',
@@ -559,10 +569,12 @@ export function useChatComposerState({
           // Reset stale pending IDs from previous interrupted runs before creating a new one.
           sessionStorage.removeItem('pendingSessionId');
         }
+        // For new sessions we intentionally keep this as `null` until the backend
+        // emits `session_created` with the canonical provider session id.
         pendingViewSessionRef.current = { sessionId: null, startedAt: Date.now() };
       }
-      onSessionActive?.(sessionToActivate);
-      if (effectiveSessionId && !isTemporarySessionId(effectiveSessionId)) {
+      if (effectiveSessionId) {
+        onSessionActive?.(effectiveSessionId);
         onSessionProcessing?.(effectiveSessionId);
       }
 
@@ -592,7 +604,7 @@ export function useChatComposerState({
       };
 
       const toolsSettings = getToolsSettings();
-      const resolvedProjectPath = selectedProject.fullPath || selectedProject.path || '';
+      const resolvedProjectPath = resolveEffectiveProjectPath(selectedSession, selectedProject);
       const sessionSummary = getNotificationSessionSummary(selectedSession, currentInput);
 
       if (provider === 'cursor') {
@@ -713,27 +725,27 @@ export function useChatComposerState({
   }, [input]);
 
   useEffect(() => {
-    if (!selectedProject) {
+    if (!selectedProjectId) {
       return;
     }
-    const savedInput = safeLocalStorage.getItem(`draft_input_${selectedProject.projectId}`) || '';
+    const savedInput = safeLocalStorage.getItem(`draft_input_${selectedProjectId}`) || '';
     setInput((previous) => {
       const next = previous === savedInput ? previous : savedInput;
       inputValueRef.current = next;
       return next;
     });
-  }, [selectedProject?.projectId]);
+  }, [selectedProjectId]);
 
   useEffect(() => {
-    if (!selectedProject) {
+    if (!selectedProjectId) {
       return;
     }
     if (input !== '') {
-      safeLocalStorage.setItem(`draft_input_${selectedProject.projectId}`, input);
+      safeLocalStorage.setItem(`draft_input_${selectedProjectId}`, input);
     } else {
-      safeLocalStorage.removeItem(`draft_input_${selectedProject.projectId}`);
+      safeLocalStorage.removeItem(`draft_input_${selectedProjectId}`);
     }
-  }, [input, selectedProject]);
+  }, [input, selectedProjectId]);
 
   useEffect(() => {
     if (!textareaRef.current) {
@@ -868,7 +880,7 @@ export function useChatComposerState({
     ];
 
     const targetSessionId =
-      candidateSessionIds.find((sessionId) => Boolean(sessionId) && !isTemporarySessionId(sessionId)) || null;
+      candidateSessionIds.find((sessionId) => Boolean(sessionId)) || null;
 
     if (!targetSessionId) {
       console.warn('Abort requested but no concrete session ID is available yet.');
