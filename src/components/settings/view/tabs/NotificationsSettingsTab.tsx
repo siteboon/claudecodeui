@@ -1,5 +1,7 @@
-import { Bell, BellOff, BellRing, Loader2 } from 'lucide-react';
+import { useState } from 'react';
+import { Bell, BellOff, BellRing, Loader2, Volume2, VolumeX } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { isNotificationSoundEnabled, playCompletionSound, setNotificationSoundEnabled } from '../../../../utils/notification-sound';
 import type { NotificationPreferencesState } from '../../types/types';
 
 type NotificationsSettingsTabProps = {
@@ -22,9 +24,19 @@ export default function NotificationsSettingsTab({
   onDisablePush,
 }: NotificationsSettingsTabProps) {
   const { t } = useTranslation('settings');
+  const [soundEnabled, setSoundEnabled] = useState(() => isNotificationSoundEnabled());
 
   const pushSupported = pushPermission !== 'unsupported';
   const pushDenied = pushPermission === 'denied';
+
+  const handleToggleSound = () => {
+    const next = !soundEnabled;
+    setSoundEnabled(next);
+    setNotificationSoundEnabled(next);
+    if (next) {
+      playCompletionSound();
+    }
+  };
 
   return (
     <div className="space-y-6 md:space-y-8">
@@ -138,6 +150,43 @@ export default function NotificationsSettingsTab({
             />
             {t('notifications.events.error')}
           </label>
+        </div>
+      </div>
+
+      <div className="space-y-4 bg-card border border-border rounded-lg p-4">
+        <h4 className="font-medium text-foreground">{t('notifications.sound.title')}</h4>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {soundEnabled ? (
+              <Volume2 className="w-4 h-4 text-blue-600" />
+            ) : (
+              <VolumeX className="w-4 h-4 text-muted-foreground" />
+            )}
+            <div>
+              <div className="text-sm text-foreground">{t('notifications.sound.enabled')}</div>
+              <div className="text-xs text-muted-foreground">{t('notifications.sound.description')}</div>
+            </div>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={soundEnabled}
+            aria-label={t('notifications.sound.enabled')}
+            onClick={handleToggleSound}
+            className={`relative inline-flex h-7 w-12 flex-shrink-0 touch-manipulation cursor-pointer items-center rounded-full border-2 transition-colors duration-200 ${
+              soundEnabled
+                ? 'border-primary bg-primary'
+                : 'border-border bg-muted'
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 rounded-full shadow-sm transition-transform duration-200 ${
+                soundEnabled
+                  ? 'translate-x-[22px] bg-white'
+                  : 'translate-x-[2px] bg-foreground/60 dark:bg-foreground/80'
+              }`}
+            />
+          </button>
         </div>
       </div>
     </div>

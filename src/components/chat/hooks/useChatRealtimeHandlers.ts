@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 
+import { isNotificationSoundEnabled, playCompletionSound } from '../../../utils/notification-sound';
 import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
 import type { PendingPermissionRequest, SessionNavigationOptions } from '../types/types';
 import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
@@ -272,6 +273,11 @@ export function useChatRealtimeHandlers({
           // No special UI action needed beyond clearing loading state above
           // The backend already sent any abort-related messages
           break;
+        }
+
+        // Play completion sound if enabled
+        if (isNotificationSoundEnabled()) {
+          playCompletionSound();
         }
 
         const actualSessionId =
