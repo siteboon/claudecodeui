@@ -1,5 +1,8 @@
 const STORAGE_KEY = 'notificationSoundEnabled';
 
+/**
+ * Returns whether the notification sound is enabled.
+ */
 export function isNotificationSoundEnabled(): boolean {
   if (typeof window === 'undefined') return false;
   try {
@@ -9,6 +12,9 @@ export function isNotificationSoundEnabled(): boolean {
   }
 }
 
+/**
+ * Persists the notification sound preference to localStorage.
+ */
 export function setNotificationSoundEnabled(enabled: boolean): void {
   if (typeof window === 'undefined') return;
   try {
@@ -18,6 +24,9 @@ export function setNotificationSoundEnabled(enabled: boolean): void {
   }
 }
 
+/**
+ * Plays a two-tone completion sound using the Web Audio API.
+ */
 export function playCompletionSound(): void {
   if (typeof window === 'undefined') return;
   try {
