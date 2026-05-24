@@ -758,10 +758,13 @@ export function useChatSessionState({
     topLoadLockRef.current = false;
     const container = scrollContainerRef.current;
     if (!container) return;
+    setIsLoadingMoreMessages(true);
     try {
       await loadOlderMessages(container);
     } catch (error) {
       console.error('[useChatSessionState] loadMoreMessages failed:', error);
+    } finally {
+      setIsLoadingMoreMessages(false);
     }
   }, [loadOlderMessages]);
 
