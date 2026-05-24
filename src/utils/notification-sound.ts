@@ -11,7 +11,11 @@ export function isNotificationSoundEnabled(): boolean {
 
 export function setNotificationSoundEnabled(enabled: boolean): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(STORAGE_KEY, String(enabled));
+  try {
+    localStorage.setItem(STORAGE_KEY, String(enabled));
+  } catch {
+    // Restricted storage context
+  }
 }
 
 export function playCompletionSound(): void {

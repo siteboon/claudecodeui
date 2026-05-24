@@ -119,7 +119,8 @@
     "sound": {
       "title": "声音",
       "enabled": "完成音效",
-      "description": "运行完成时播放提示音"
+      "description": "运行完成时播放提示音",
+      "test": "试听"
     }
   },
   "appearanceSettings": {

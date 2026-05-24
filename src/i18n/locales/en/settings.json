@@ -119,7 +119,8 @@
     "sound": {
       "title": "Sound",
       "enabled": "Completion Sound",
-      "description": "Play a sound when a run finishes"
+      "description": "Play a sound when a run finishes",
+      "test": "Test"
     }
   },
   "appearanceSettings": {
