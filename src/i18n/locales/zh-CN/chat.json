@@ -258,6 +258,8 @@
   "scrollNav": {
     "jumpTo": "跳转到: {{snippet}}",
     "jumpToMessage": "跳转到第 {{index}} 条消息",
+    "fromYou": "你",
+    "aiReply": "AI 回复",
     "loadAll": "加载全部",
     "first": "第一条",
     "previous": "上一条",

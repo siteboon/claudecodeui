@@ -83,7 +83,7 @@ export default function ScrollNavigation({
     [chatMessages],
   );
 
-  const shouldShow = userMessages.length >= 1;
+  const shouldShow = chatMessages.length >= 1;
   const hasMore = hasMoreMessages;
 
   const scheduleUpdate = useCallback(() => {
@@ -136,17 +136,10 @@ export default function ScrollNavigation({
     };
   }, []);
 
-  const ensureLoaded = useCallback(() => {
-    if (hasMore && loadAllMessages) {
-      loadAllMessages();
-    }
-  }, [hasMore, loadAllMessages]);
-
   const scrollToDot = useCallback(
     (index: number) => {
       setActiveDotIndex(index);
       skipUpdateRef.current = true;
-      ensureLoaded();
       const container = scrollContainerRef.current;
       if (!container) return;
 
@@ -163,16 +156,15 @@ export default function ScrollNavigation({
       const maxScroll = container.scrollHeight - container.clientHeight;
       container.scrollTop = targetRatio * maxScroll;
     },
-    [scrollContainerRef, userMessages.length, ensureLoaded],
+    [scrollContainerRef, userMessages.length],
   );
 
   const scrollToTop = useCallback(() => {
-    ensureLoaded();
     const container = scrollContainerRef.current;
     if (!container) return;
 
     container.scrollTop = 0;
-  }, [scrollContainerRef, ensureLoaded]);
+  }, [scrollContainerRef]);
 
   const scrollToBottom = useCallback(() => {
     const container = scrollContainerRef.current;
@@ -230,26 +222,31 @@ export default function ScrollNavigation({
 
   if (!shouldShow) return null;
 
+  const hasUserMessages = userMessages.length > 0;
   const navButtons = [
     {
       label: t('scrollNav.first'),
       icon: <TopIcon />,
       action: scrollToTop,
+      disabled: false,
     },
     {
       label: t('scrollNav.previous'),
       icon: <ArrowUpIcon />,
       action: scrollPrev,
+      disabled: !hasUserMessages,
     },
     {
       label: t('scrollNav.next'),
       icon: <ArrowDownIcon />,
       action: scrollNext,
+      disabled: !hasUserMessages,
     },
     {
       label: t('scrollNav.last'),
       icon: <BottomIcon />,
       action: scrollToBottom,
+      disabled: false,
     },
   ];
 
@@ -286,7 +283,12 @@ export default function ScrollNavigation({
               <button
                 type="button"
                 onClick={btn.action}
-                className="rounded p-1 text-muted-foreground transition-all duration-150 hover:text-foreground"
+                disabled={btn.disabled}
+                className={`rounded p-1 transition-all duration-150 ${
+                  btn.disabled
+                    ? 'text-muted-foreground/30 cursor-default'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
                 aria-label={btn.label}
               >
                 {btn.icon}
@@ -295,41 +297,45 @@ export default function ScrollNavigation({
           ))}
         </div>
 
-        {/* Divider */}
-        <div className={`mx-auto my-0.5 border-t border-border/40 transition-all duration-150 ${
-          isStripHovered ? 'w-5 opacity-100' : 'w-0 opacity-0'
-        }`} />
+        {/* Dots section — only render when there are user messages */}
+        {userMessages.length > 0 && (
+          <>
+            {/* Divider */}
+            <div className={`mx-auto my-0.5 border-t border-border/40 transition-all duration-150 ${
+              isStripHovered ? 'w-5 opacity-100' : 'w-0 opacity-0'
+            }`} />
 
-        {/* Dots section */}
-        <div className="flex flex-1 w-full flex-col items-center justify-evenly px-0 py-1">
-          {userMessages.map((msg, i) => {
-            const isActive = i === activeDotIndex;
-            const snippet = truncateSnippet(msg.content || '');
+            <div className="flex flex-1 w-full flex-col items-center justify-evenly px-0 py-1">
+              {userMessages.map((msg, i) => {
+                const isActive = i === activeDotIndex;
+                const snippet = truncateSnippet(msg.content || '');
 
-            return (
-              <Tooltip
-                key={`${i}-${String(msg.timestamp).slice(0, 8)}`}
-                content={t('scrollNav.jumpToMessage', {
-                  index: i + 1,
-                  snippet,
-                })}
-                position="left"
-                delay={150}
-              >
-                <button
-                  type="button"
-                  onClick={() => scrollToDot(i)}
-                  className={`block cursor-pointer rounded-full transition-all duration-150 ${
-                    isActive
-                      ? 'h-[10px] w-[10px] bg-blue-500 hover:bg-blue-400'
-                      : 'h-[7px] w-[7px] bg-muted-foreground/70 hover:bg-muted-foreground hover:h-[9px] hover:w-[9px]'
-                  }`}
-                  aria-label={t('scrollNav.jumpToMessage', { index: i + 1 })}
-                />
-              </Tooltip>
-            );
-          })}
-        </div>
+                return (
+                  <Tooltip
+                    key={`${i}-${String(msg.timestamp).slice(0, 8)}`}
+                    content={t('scrollNav.jumpToMessage', {
+                      index: i + 1,
+                      snippet,
+                    })}
+                    position="left"
+                    delay={150}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => scrollToDot(i)}
+                      className={`block cursor-pointer rounded-full transition-all duration-150 ${
+                        isActive
+                          ? 'h-[10px] w-[10px] bg-blue-500 hover:bg-blue-400'
+                          : 'h-[7px] w-[7px] bg-muted-foreground/70 hover:bg-muted-foreground hover:h-[9px] hover:w-[9px]'
+                      }`}
+                      aria-label={t('scrollNav.jumpToMessage', { index: i + 1 })}
+                    />
+                  </Tooltip>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
