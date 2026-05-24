@@ -167,26 +167,36 @@ export default function NotificationsSettingsTab({
               <div className="text-xs text-muted-foreground">{t('notifications.sound.description')}</div>
             </div>
           </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={soundEnabled}
-            aria-label={t('notifications.sound.enabled')}
-            onClick={handleToggleSound}
-            className={`relative inline-flex h-7 w-12 flex-shrink-0 touch-manipulation cursor-pointer items-center rounded-full border-2 transition-colors duration-200 ${
-              soundEnabled
-                ? 'border-primary bg-primary'
-                : 'border-border bg-muted'
-            }`}
-          >
-            <span
-              className={`pointer-events-none inline-block h-5 w-5 rounded-full shadow-sm transition-transform duration-200 ${
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => playCompletionSound()}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-border bg-background text-foreground hover:bg-accent transition-colors"
+            >
+              <Volume2 className="w-3.5 h-3.5" />
+              {t('notifications.sound.test')}
+            </button>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={soundEnabled}
+              aria-label={t('notifications.sound.enabled')}
+              onClick={handleToggleSound}
+              className={`relative inline-flex h-7 w-12 flex-shrink-0 touch-manipulation cursor-pointer items-center rounded-full border-2 transition-colors duration-200 ${
                 soundEnabled
-                  ? 'translate-x-[22px] bg-white'
-                  : 'translate-x-[2px] bg-foreground/60 dark:bg-foreground/80'
+                  ? 'border-primary bg-primary'
+                  : 'border-border bg-muted'
               }`}
-            />
-          </button>
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 rounded-full shadow-sm transition-transform duration-200 ${
+                  soundEnabled
+                    ? 'translate-x-[22px] bg-white'
+                    : 'translate-x-[2px] bg-foreground/60 dark:bg-foreground/80'
+                }`}
+              />
+            </button>
+          </div>
         </div>
       </div>
     </div>

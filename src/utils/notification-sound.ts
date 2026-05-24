@@ -33,8 +33,9 @@ export function playCompletionSound(): void {
     const now = ctx.currentTime;
     playTone(880, now, 0.12);
     playTone(1100, now + 0.15, 0.2);
-    ctx.close();
-  } catch {
-    // AudioContext not available
+    setTimeout(() => ctx.close(), 600);
+    console.log('[notification-sound] playing completion sound');
+  } catch (err) {
+    console.error('[notification-sound] failed to play:', err);
   }
 }
