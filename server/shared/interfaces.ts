@@ -84,7 +84,7 @@ export interface IProviderMcp {
  * shared transport shapes consumed by API routes and realtime streams.
  */
 export interface IProviderSessions {
-  normalizeMessage(raw: unknown, sessionId: string | null): NormalizedMessage[];
+  normalizeMessage(raw: unknown, sessionId: string | null, subagentPrompts?: Set<string> | null): NormalizedMessage[];
   fetchHistory(sessionId: string, options?: FetchHistoryOptions): Promise<FetchHistoryResult>;
 }
 
