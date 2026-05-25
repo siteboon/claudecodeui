@@ -68,7 +68,7 @@ export type AuthenticatedWebSocketRequest = IncomingMessage & {
 export type LLMProvider = 'claude' | 'codex' | 'gemini' | 'cursor' | 'opencode';
 
 /**
- * One selectable model row (matches legacy `shared/modelConstants.js` option shape).
+ * One selectable model row (matches the documentation `public/modelConstants.js` option shape).
  */
 export type ProviderModelOption = {
   value: string;
