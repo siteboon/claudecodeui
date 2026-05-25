@@ -223,6 +223,15 @@ function isInternalContent(content: string): boolean {
   return INTERNAL_CONTENT_PREFIXES.some((prefix) => content.startsWith(prefix));
 }
 
+/** Check if text content is an image (base64 or data URI) that should not render as a user chat bubble. */
+function isImageContent(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed.startsWith('data:image/')) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * Claude wraps local slash-command metadata in lightweight XML-like tags inside
  * a plain string payload. We intentionally parse only the small tag surface we
@@ -414,6 +423,9 @@ export class ClaudeSessionsProvider implements IProviderSessions {
           } else if (part.type === 'text') {
             const text = part.text || '';
             if (text && !isInternalContent(text) && isHumanOrigin) {
+              if (isImageContent(text)) {
+                continue;
+              }
               const isEcho = isSubagentPromptEcho(text, subagentPrompts);
               if (!isEcho) {
                 messages.push(createNormalizedMessage({

@@ -222,4 +222,20 @@ export const sessionsDb = {
     const db = getConnection();
     return db.prepare('DELETE FROM sessions WHERE session_id = ?').run(sessionId).changes > 0;
   },
+
+  /**
+   * Returns all sessions that have a non-empty custom_name so the service layer
+   * can sync them to the provider's history file on startup.
+   */
+  getSessionsWithCustomName(): Array<{ session_id: string; custom_name: string; project_path: string | null; jsonl_path: string | null; created_at: string }> {
+    const db = getConnection();
+    return db
+      .prepare(
+        `SELECT session_id, custom_name, project_path, jsonl_path, created_at
+         FROM sessions
+         WHERE custom_name IS NOT NULL AND custom_name != ''
+         ORDER BY updated_at DESC`
+      )
+      .all() as Array<{ session_id: string; custom_name: string; project_path: string | null; jsonl_path: string | null; created_at: string }>;
+  },
 };

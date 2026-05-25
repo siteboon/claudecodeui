@@ -5,6 +5,7 @@ import { promises as fsPromises } from 'node:fs';
 import chokidar, { type FSWatcher } from 'chokidar';
 
 import { sessionSynchronizerService } from '@/modules/providers/services/session-synchronizer.service.js';
+import { sessionsService } from '@/modules/providers/services/sessions.service.js';
 import { WS_OPEN_STATE, connectedClients } from '@/modules/websocket/index.js';
 import type { LLMProvider } from '@/shared/types.js';
 import { getProjectsWithSessions } from '@/modules/projects/index.js';
@@ -222,6 +223,13 @@ export async function initializeSessionsWatcher(): Promise<void> {
     processedByProvider: initialSync.processedByProvider,
     failures: initialSync.failures,
   });
+
+  try {
+    await sessionsService.syncSessionNames();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Failed to sync session names to history', { error: message });
+  }
 
   for (const { provider, rootPath } of PROVIDER_WATCH_PATHS) {
     try {
