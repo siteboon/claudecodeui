@@ -48,7 +48,8 @@ const projectsHaveChanges = (
       Boolean(nextProject.isStarred) !== Boolean(prevProject.isStarred) ||
       serialize(nextProject.sessionMeta) !== serialize(prevProject.sessionMeta) ||
       serialize(nextProject.sessions) !== serialize(prevProject.sessions) ||
-      serialize(nextProject.taskmaster) !== serialize(prevProject.taskmaster);
+      serialize(nextProject.taskmaster) !== serialize(prevProject.taskmaster) ||
+      serialize(nextProject.worktrees) !== serialize(prevProject.worktrees);
 
     if (baseChanged) {
       return true;

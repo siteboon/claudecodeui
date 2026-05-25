@@ -1,12 +1,14 @@
-import { Check, Edit2, Trash2, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Check, Edit2, GitBranch, Star, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { Badge, Button } from '../../../../shared/view/ui';
 import { cn } from '../../../../lib/utils';
-import type { Project, ProjectSession, LLMProvider } from '../../../../types/app';
+import type { Project, ProjectSession, LLMProvider, Worktree } from '../../../../types/app';
 import type { SessionWithProvider } from '../../types/types';
 import { createSessionViewModel } from '../../utils/utils';
 import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
+import { useStarredSessions } from '../../../../hooks/useStarredSessions';
 
 type SidebarSessionItemProps = {
   project: Project;
@@ -27,13 +29,14 @@ type SidebarSessionItemProps = {
     sessionTitle: string,
     provider: LLMProvider,
   ) => void;
+  // The worktree list to offer on right-click. When provided with >1 entries,
+  // users can pick a worktree to open this session against. Null/empty hides
+  // the menu (non-git projects, single-worktree repos).
+  worktreesForOpenIn?: Worktree[];
+  onOpenSessionInWorktree?: (session: SessionWithProvider, project: Project, worktree: Worktree) => void;
   t: TFunction;
 };
 
-/**
- * Compact relative time for sidebar rows:
- * <1m, Xm, Xhr, Xd.
- */
 const formatCompactSessionAge = (dateString: string, currentTime: Date): string => {
   const date = new Date(dateString);
   if (Number.isNaN(date.getTime())) {
@@ -72,14 +75,42 @@ export default function SidebarSessionItem({
   onProjectSelect,
   onSessionSelect,
   onDeleteSession,
+  worktreesForOpenIn,
+  onOpenSessionInWorktree,
   t,
 }: SidebarSessionItemProps) {
   const sessionView = createSessionViewModel(session, currentTime, t);
   const isSelected = selectedSession?.id === session.id;
   const compactSessionAge = formatCompactSessionAge(sessionView.sessionTime, currentTime);
 
-  // Sessions are owned by a project identified by `projectId` (DB primary key)
-  // after the projectName → projectId migration.
+  const { isStarred: isSessionStar, toggle: toggleSessionStar } = useStarredSessions();
+  const sessionStarred = isSessionStar(session.id);
+
+  const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  const canOpenInWorktree = Boolean(
+    onOpenSessionInWorktree && worktreesForOpenIn && worktreesForOpenIn.length > 1,
+  );
+
+  useEffect(() => {
+    if (!menuPosition) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuPosition(null);
+      }
+    };
+    const handleEsc = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenuPosition(null);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEsc);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEsc);
+    };
+  }, [menuPosition]);
+
   const selectMobileSession = () => {
     onProjectSelect(project);
     onSessionSelect(session, project.projectId);
@@ -93,8 +124,19 @@ export default function SidebarSessionItem({
     onDeleteSession(project.projectId, session.id, sessionView.sessionName, session.__provider);
   };
 
+  const handleContextMenu = (event: React.MouseEvent) => {
+    if (!canOpenInWorktree) return;
+    event.preventDefault();
+    setMenuPosition({ x: event.clientX, y: event.clientY });
+  };
+
+  const handleWorktreePick = (worktree: Worktree) => {
+    setMenuPosition(null);
+    onOpenSessionInWorktree?.(session, project, worktree);
+  };
+
   return (
-    <div className="group relative">
+    <div className="group relative" onContextMenu={handleContextMenu}>
       {sessionView.isActive && (
         <div className="absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2 transform">
           <div className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
@@ -123,7 +165,35 @@ export default function SidebarSessionItem({
             </div>
 
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <span
+                  role="button"
+                  tabIndex={0}
+                  className={cn(
+                    'flex h-4 w-4 flex-shrink-0 cursor-pointer items-center justify-center rounded transition-colors',
+                    sessionStarred
+                      ? 'text-yellow-500 hover:text-yellow-600 dark:text-yellow-400'
+                      : 'text-muted-foreground/30 hover:text-yellow-500 dark:hover:text-yellow-400',
+                  )}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    toggleSessionStar(session.id);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      toggleSessionStar(session.id);
+                    }
+                  }}
+                  aria-pressed={sessionStarred}
+                  aria-label={sessionStarred ? 'Unstar session' : 'Star session'}
+                  title={sessionStarred ? 'Unstar session' : 'Star session'}
+                >
+                  <Star
+                    className={cn('h-3 w-3', sessionStarred && 'fill-current')}
+                  />
+                </span>
                 <div className="truncate text-xs font-medium text-foreground">{sessionView.sessionName}</div>
                 {compactSessionAge && (
                   <span className="ml-auto flex-shrink-0 text-[11px] text-muted-foreground">{compactSessionAge}</span>
@@ -138,6 +208,22 @@ export default function SidebarSessionItem({
               </div>
             </div>
 
+            <button
+              className={cn(
+                'ml-1 flex h-5 w-5 items-center justify-center rounded-md transition-transform active:scale-95',
+                sessionStarred
+                  ? 'text-yellow-500 dark:text-yellow-400'
+                  : 'text-muted-foreground/50',
+              )}
+              onClick={(event) => {
+                event.stopPropagation();
+                toggleSessionStar(session.id);
+              }}
+              aria-pressed={sessionStarred}
+              aria-label={sessionStarred ? 'Unstar session' : 'Star session'}
+            >
+              <Star className={cn('h-3 w-3', sessionStarred && 'fill-current')} />
+            </button>
             {!sessionView.isCursorSession && (
               <button
                 className="ml-1 flex h-5 w-5 items-center justify-center rounded-md bg-red-50 opacity-70 transition-transform active:scale-95 dark:bg-red-900/20"
@@ -165,7 +251,35 @@ export default function SidebarSessionItem({
           <div className="flex w-full min-w-0 items-start gap-2">
             <SessionProviderLogo provider={session.__provider} className="mt-0.5 h-3 w-3 flex-shrink-0" />
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <span
+                  role="button"
+                  tabIndex={0}
+                  className={cn(
+                    'flex h-4 w-4 flex-shrink-0 cursor-pointer items-center justify-center rounded transition-colors',
+                    sessionStarred
+                      ? 'text-yellow-500 hover:text-yellow-600 dark:text-yellow-400'
+                      : 'text-muted-foreground/30 hover:text-yellow-500 dark:hover:text-yellow-400',
+                  )}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    toggleSessionStar(session.id);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      toggleSessionStar(session.id);
+                    }
+                  }}
+                  aria-pressed={sessionStarred}
+                  aria-label={sessionStarred ? 'Unstar session' : 'Star session'}
+                  title={sessionStarred ? 'Unstar session' : 'Star session'}
+                >
+                  <Star
+                    className={cn('h-3 w-3', sessionStarred && 'fill-current')}
+                  />
+                </span>
                 <div className="truncate text-xs font-medium text-foreground">{sessionView.sessionName}</div>
                 {compactSessionAge && (
                   <span className="ml-auto flex-shrink-0 text-[11px] text-muted-foreground transition-opacity duration-200 group-hover:opacity-0">
@@ -222,6 +336,19 @@ export default function SidebarSessionItem({
               </>
             ) : (
               <>
+                {canOpenInWorktree && (
+                  <button
+                    className="flex h-6 w-6 items-center justify-center rounded bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/40"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+                      setMenuPosition({ x: rect.left, y: rect.bottom + 4 });
+                    }}
+                    title="Open in worktree"
+                  >
+                    <GitBranch className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                  </button>
+                )}
                 <button
                   className="flex h-6 w-6 items-center justify-center rounded bg-gray-50 hover:bg-gray-100 dark:bg-gray-900/20 dark:hover:bg-gray-900/40"
                   onClick={(event) => {
@@ -248,6 +375,37 @@ export default function SidebarSessionItem({
             )}
           </div>
       </div>
+
+      {menuPosition && canOpenInWorktree && (
+        <div
+          ref={menuRef}
+          className="fixed z-50 min-w-[220px] rounded-md border border-border bg-popover p-1 shadow-lg"
+          style={{ left: menuPosition.x, top: menuPosition.y }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            Open in worktree
+          </div>
+          {worktreesForOpenIn?.map((worktree) => {
+            const branchLabel = worktree.branch ?? 'detached';
+            const worktreeName = worktree.path.split('/').filter(Boolean).pop() || worktree.path;
+            return (
+              <button
+                key={worktree.path}
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs text-foreground hover:bg-accent"
+                onClick={() => handleWorktreePick(worktree)}
+              >
+                <GitBranch className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                <span className="truncate" title={worktree.path}>{worktreeName}</span>
+                <span className="ml-auto flex-shrink-0 text-[10px] text-muted-foreground">{branchLabel}</span>
+                {worktree.isMain && (
+                  <span className="flex-shrink-0 rounded bg-primary/10 px-1 py-px text-[9px] uppercase text-primary">main</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

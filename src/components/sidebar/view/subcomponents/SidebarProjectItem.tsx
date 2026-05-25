@@ -3,7 +3,7 @@ import type { TFunction } from 'i18next';
 
 import { Button } from '../../../../shared/view/ui';
 import { cn } from '../../../../lib/utils';
-import type { Project, ProjectSession, LLMProvider } from '../../../../types/app';
+import type { Project, ProjectSession, LLMProvider, Worktree } from '../../../../types/app';
 import type { MCPServerStatus, SessionWithProvider } from '../../types/types';
 import { getTaskIndicatorStatus } from '../../utils/utils';
 
@@ -44,6 +44,14 @@ type SidebarProjectItemProps = {
   ) => void;
   onLoadMoreSessions: (projectId: string) => void;
   onNewSession: (project: Project) => void;
+  expandedWorktrees: Set<string>;
+  selectedWorktreePath: string | null;
+  onToggleWorktree: (worktreePath: string) => void;
+  onWorktreeSelect: (project: Project, worktree: Worktree) => void;
+  onWorktreeNewSession: (project: Project, worktree: Worktree) => void;
+  onCreateWorktree: (projectId: string, name: string) => Promise<{ ok: true } | { ok: false; error: { code: string; message: string } }>;
+  onRemoveWorktree: (projectId: string, worktreePath: string, force?: boolean) => Promise<{ ok: true } | { ok: false; error: { code: string; message: string } }>;
+  onOpenSessionInWorktree: (session: SessionWithProvider, project: Project, worktree: Worktree) => void;
   onEditingSessionNameChange: (value: string) => void;
   onStartEditingSession: (sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
@@ -85,6 +93,14 @@ export default function SidebarProjectItem({
   onDeleteSession,
   onLoadMoreSessions,
   onNewSession,
+  expandedWorktrees,
+  selectedWorktreePath,
+  onToggleWorktree,
+  onWorktreeSelect,
+  onWorktreeNewSession,
+  onCreateWorktree,
+  onRemoveWorktree,
+  onOpenSessionInWorktree,
   onEditingSessionNameChange,
   onStartEditingSession,
   onCancelEditingSession,
@@ -99,6 +115,8 @@ export default function SidebarProjectItem({
   const sessionCountDisplay = getSessionCountDisplay(project, sessions);
   const sessionCountLabel = `${sessionCountDisplay} session${totalSessionCount === 1 ? '' : 's'}`;
   const taskStatus = getTaskIndicatorStatus(project, mcpServerStatus);
+  const worktreeCount = project.worktrees?.length ?? 0;
+  const showWorktreeBadge = worktreeCount > 1;
 
   const toggleProject = () => onToggleProject(project.projectId);
   const toggleStarProject = () => onToggleStarProject(project.projectId);
@@ -311,8 +329,18 @@ export default function SidebarProjectItem({
                 </div>
               ) : (
                 <div>
-                  <div className="truncate text-sm font-semibold text-foreground" title={project.displayName}>
-                    {project.displayName}
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="truncate text-sm font-semibold text-foreground" title={project.displayName}>
+                      {project.displayName}
+                    </span>
+                    {showWorktreeBadge && (
+                      <span
+                        className="flex-shrink-0 rounded bg-primary/10 px-1.5 py-px text-[10px] font-medium text-primary"
+                        title={`${worktreeCount} worktrees`}
+                      >
+                        {worktreeCount} wt
+                      </span>
+                    )}
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {sessionCountDisplay}
@@ -414,6 +442,14 @@ export default function SidebarProjectItem({
         currentTime={currentTime}
         editingSession={editingSession}
         editingSessionName={editingSessionName}
+        expandedWorktrees={expandedWorktrees}
+        selectedWorktreePath={selectedWorktreePath}
+        onToggleWorktree={onToggleWorktree}
+        onWorktreeSelect={onWorktreeSelect}
+        onWorktreeNewSession={onWorktreeNewSession}
+        onCreateWorktree={onCreateWorktree}
+        onRemoveWorktree={onRemoveWorktree}
+        onOpenSessionInWorktree={onOpenSessionInWorktree}
         onEditingSessionNameChange={onEditingSessionNameChange}
         onStartEditingSession={onStartEditingSession}
         onCancelEditingSession={onCancelEditingSession}

@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import type { TFunction } from 'i18next';
 
-import type { LoadingProgress, Project, ProjectSession, LLMProvider } from '../../../../types/app';
+import type { LoadingProgress, Project, ProjectSession, LLMProvider, Worktree } from '../../../../types/app';
 import type { MCPServerStatus, SessionWithProvider } from '../../types/types';
 
 import SidebarProjectItem from './SidebarProjectItem';
@@ -44,6 +44,14 @@ export type SidebarProjectListProps = {
     provider: LLMProvider,
   ) => void;
   onNewSession: (project: Project) => void;
+  expandedWorktrees: Set<string>;
+  selectedWorktreePath: string | null;
+  onToggleWorktree: (worktreePath: string) => void;
+  onWorktreeSelect: (project: Project, worktree: Worktree) => void;
+  onWorktreeNewSession: (project: Project, worktree: Worktree) => void;
+  onCreateWorktree: (projectId: string, name: string) => Promise<{ ok: true } | { ok: false; error: { code: string; message: string } }>;
+  onRemoveWorktree: (projectId: string, worktreePath: string, force?: boolean) => Promise<{ ok: true } | { ok: false; error: { code: string; message: string } }>;
+  onOpenSessionInWorktree: (session: SessionWithProvider, project: Project, worktree: Worktree) => void;
   onEditingSessionNameChange: (value: string) => void;
   onStartEditingSession: (sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
@@ -83,6 +91,14 @@ export default function SidebarProjectList({
   onSessionSelect,
   onDeleteSession,
   onNewSession,
+  expandedWorktrees,
+  selectedWorktreePath,
+  onToggleWorktree,
+  onWorktreeSelect,
+  onWorktreeNewSession,
+  onCreateWorktree,
+  onRemoveWorktree,
+  onOpenSessionInWorktree,
   onEditingSessionNameChange,
   onStartEditingSession,
   onCancelEditingSession,
@@ -147,6 +163,14 @@ export default function SidebarProjectList({
               onDeleteSession={onDeleteSession}
               onLoadMoreSessions={onLoadMoreSessions}
               onNewSession={onNewSession}
+              expandedWorktrees={expandedWorktrees}
+              selectedWorktreePath={selectedWorktreePath}
+              onToggleWorktree={onToggleWorktree}
+              onWorktreeSelect={onWorktreeSelect}
+              onWorktreeNewSession={onWorktreeNewSession}
+              onCreateWorktree={onCreateWorktree}
+              onRemoveWorktree={onRemoveWorktree}
+              onOpenSessionInWorktree={onOpenSessionInWorktree}
               onEditingSessionNameChange={onEditingSessionNameChange}
               onStartEditingSession={onStartEditingSession}
               onCancelEditingSession={onCancelEditingSession}

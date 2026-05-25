@@ -1,7 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '../../../utils/api';
-import { useAuth } from '../../auth/context/AuthContext';
 import { useWebSocket } from '../../../contexts/WebSocketContext';
 import type {
   TaskMasterContextError,
@@ -57,9 +56,18 @@ export function useTaskMaster() {
   return context;
 }
 
+// Local-only build: no user auth gating. Hoisted so the reference is stable
+// across renders — otherwise every useCallback depending on `user` gets a new
+// identity each render and effects fetch in a loop until Chrome runs out of
+// sockets (ERR_INSUFFICIENT_RESOURCES).
+const LOCAL_USER = { username: 'local' } as const;
+const LOCAL_TOKEN = 'local' as const;
+
 export function TaskMasterProvider({ children }: { children: React.ReactNode }) {
   const { latestMessage } = useWebSocket();
-  const { user, token, isLoading: isAuthLoading } = useAuth();
+  const user = LOCAL_USER;
+  const token = LOCAL_TOKEN;
+  const isAuthLoading = false;
 
   const [projects, setProjects] = useState<TaskMasterProject[]>([]);
   const [currentProject, setCurrentProjectState] = useState<TaskMasterProject | null>(null);

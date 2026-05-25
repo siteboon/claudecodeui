@@ -53,7 +53,6 @@ import {
     shouldAutoOpenUrlFromOutput,
 } from './utils/url-detection.js';
 import gitRoutes from './routes/git.js';
-import authRoutes from './routes/auth.js';
 import cursorRoutes from './routes/cursor.js';
 import taskmasterRoutes from './routes/taskmaster.js';
 import mcpUtilsRoutes from './routes/mcp-utils.js';
@@ -148,9 +147,6 @@ app.get('/health', (req, res) => {
 
 // Optional API key validation (if configured)
 app.use('/api', validateApiKey);
-
-// Authentication routes (public)
-app.use('/api/auth', authRoutes);
 
 // Projects API Routes (protected)
 app.use('/api/projects', authenticateToken, projectModuleRoutes);

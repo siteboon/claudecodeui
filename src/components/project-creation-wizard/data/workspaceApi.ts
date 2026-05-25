@@ -131,12 +131,6 @@ const buildCloneProgressQuery = ({
     query.set('newGithubToken', newGithubToken.trim());
   }
 
-  // EventSource cannot send custom headers, so the auth token is passed as query.
-  const authToken = localStorage.getItem('auth-token');
-  if (authToken) {
-    query.set('token', authToken);
-  }
-
   return query.toString();
 };
 

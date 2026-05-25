@@ -7,6 +7,8 @@ import { AppError, asyncHandler, createApiSuccessResponse } from '@/shared/utils
 import { getArchivedProjectsWithSessions, getProjectSessionsPage, getProjectsWithSessions } from '@/modules/projects/services/projects-with-sessions-fetch.service.js';
 import { deleteOrArchiveProject, restoreArchivedProject } from '@/modules/projects/services/project-delete.service.js';
 import { applyLegacyStarredProjectIds, toggleProjectStar } from '@/modules/projects/services/project-star.service.js';
+import { createWorktree, removeWorktree } from '@/modules/projects/services/git-worktrees-manage.service.js';
+import { projectsDb } from '@/modules/database/index.js';
 
 const router = express.Router();
 
@@ -257,6 +259,45 @@ router.delete(
     const projectId = typeof req.params.projectId === 'string' ? req.params.projectId : '';
     const force = req.query.force === 'true';
     await deleteOrArchiveProject(projectId, force);
+    res.json({ success: true });
+  }),
+);
+
+router.post(
+  '/:projectId/worktrees',
+  asyncHandler(async (req, res) => {
+    const projectId = typeof req.params.projectId === 'string' ? req.params.projectId : '';
+    const projectRow = projectsDb.getProjectById(projectId);
+    if (!projectRow) {
+      throw new AppError(`Project "${projectId}" was not found.`, {
+        code: 'PROJECT_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    const body = (req.body ?? {}) as { name?: unknown };
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+
+    const created = await createWorktree(projectRow.project_path, name);
+    res.json({ success: true, worktree: created });
+  }),
+);
+
+router.delete(
+  '/:projectId/worktrees',
+  asyncHandler(async (req, res) => {
+    const projectId = typeof req.params.projectId === 'string' ? req.params.projectId : '';
+    const projectRow = projectsDb.getProjectById(projectId);
+    if (!projectRow) {
+      throw new AppError(`Project "${projectId}" was not found.`, {
+        code: 'PROJECT_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    const worktreePath = typeof req.query.path === 'string' ? req.query.path : '';
+    const force = req.query.force === 'true';
+    await removeWorktree(projectRow.project_path, worktreePath, { force });
     res.json({ success: true });
   }),
 );

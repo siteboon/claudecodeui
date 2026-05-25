@@ -3,7 +3,7 @@ import type { TFunction } from 'i18next';
 
 import { api } from '../../../utils/api';
 import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
-import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
+import type { Project, ProjectSession, LLMProvider, Worktree } from '../../../types/app';
 import type {
   ArchivedProjectListItem,
   ArchivedSessionListItem,
@@ -14,6 +14,7 @@ import type {
   SessionWithProvider,
 } from '../types/types';
 import {
+  buildWorktreeProject,
   clearLegacyStarredProjectIds,
   filterProjects,
   getAllSessions,
@@ -115,6 +116,8 @@ export function useSidebarController({
 }: UseSidebarControllerArgs) {
   const paletteOps = usePaletteOps();
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
+  const [expandedWorktrees, setExpandedWorktrees] = useState<Set<string>>(new Set());
+  const [selectedWorktreePath, setSelectedWorktreePath] = useState<string | null>(null);
   const [editingProject, setEditingProject] = useState<string | null>(null);
   const [showNewProject, setShowNewProject] = useState(false);
   const [editingName, setEditingName] = useState('');
@@ -430,6 +433,18 @@ export function useSidebarController({
       const next = new Set<string>();
       if (!prev.has(projectId)) {
         next.add(projectId);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleWorktree = useCallback((worktreePath: string) => {
+    setExpandedWorktrees((prev) => {
+      const next = new Set(prev);
+      if (next.has(worktreePath)) {
+        next.delete(worktreePath);
+      } else {
+        next.add(worktreePath);
       }
       return next;
     });
@@ -769,10 +784,81 @@ export function useSidebarController({
 
   const handleProjectSelect = useCallback(
     (project: Project) => {
+      setSelectedWorktreePath(null);
       onProjectSelect(project);
       setCurrentProject(project);
     },
     [onProjectSelect, setCurrentProject],
+  );
+
+  const handleWorktreeSelect = useCallback(
+    (project: Project, worktree: Worktree) => {
+      const derived = buildWorktreeProject(project, worktree);
+      setSelectedWorktreePath(worktree.path);
+      onProjectSelect(derived);
+      setCurrentProject(derived);
+    },
+    [onProjectSelect, setCurrentProject],
+  );
+
+  // Surfaces server-side AppError details (code, message) so callers can show
+  // a clear toast/alert when worktree mutations fail.
+  const parseApiError = async (response: Response): Promise<{ code: string; message: string }> => {
+    try {
+      const body = await response.json();
+      const err = (body && typeof body === 'object' ? (body as { error?: { code?: string; message?: string } }).error : null) ?? null;
+      return {
+        code: err?.code ?? `HTTP_${response.status}`,
+        message: err?.message ?? response.statusText ?? 'Request failed',
+      };
+    } catch {
+      return { code: `HTTP_${response.status}`, message: response.statusText || 'Request failed' };
+    }
+  };
+
+  const createWorktreeForProject = useCallback(
+    async (projectId: string, name: string): Promise<{ ok: true } | { ok: false; error: { code: string; message: string } }> => {
+      try {
+        const response = await api.createWorktree(projectId, name);
+        if (!response.ok) {
+          const error = await parseApiError(response);
+          return { ok: false, error };
+        }
+        try { await onRefresh(); } catch (refreshErr) { console.warn('[Sidebar] refresh after create failed', refreshErr); }
+        return { ok: true };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('[Sidebar] createWorktree threw', err);
+        return { ok: false, error: { code: 'NETWORK_ERROR', message } };
+      }
+    },
+    [onRefresh],
+  );
+
+  const removeWorktreeForProject = useCallback(
+    async (projectId: string, worktreePath: string, force = false): Promise<{ ok: true } | { ok: false; error: { code: string; message: string } }> => {
+      try {
+        const response = await api.removeWorktree(projectId, worktreePath, force);
+        if (!response.ok) {
+          const error = await parseApiError(response);
+          return { ok: false, error };
+        }
+        setSelectedWorktreePath((prev) => (prev === worktreePath ? null : prev));
+        setExpandedWorktrees((prev) => {
+          if (!prev.has(worktreePath)) return prev;
+          const next = new Set(prev);
+          next.delete(worktreePath);
+          return next;
+        });
+        try { await onRefresh(); } catch (refreshErr) { console.warn('[Sidebar] refresh after delete failed', refreshErr); }
+        return { ok: true };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('[Sidebar] removeWorktree threw', err);
+        return { ok: false, error: { code: 'NETWORK_ERROR', message } };
+      }
+    },
+    [onRefresh],
   );
 
   const openArchivedSession = useCallback((session: ArchivedSessionListItem) => {
@@ -919,6 +1005,12 @@ export function useSidebarController({
     archivedSessionsCount: archivedProjects.length + archivedSessions.length,
     isArchivedSessionsLoading,
     toggleProject,
+    expandedWorktrees,
+    toggleWorktree,
+    selectedWorktreePath,
+    handleWorktreeSelect,
+    createWorktreeForProject,
+    removeWorktreeForProject,
     handleSessionClick,
     toggleStarProject,
     isProjectStarred,

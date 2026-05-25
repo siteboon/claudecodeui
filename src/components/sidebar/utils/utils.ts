@@ -92,6 +92,31 @@ export const createSessionViewModel = (
   };
 };
 
+/**
+ * Build a project view that points at a specific worktree — same projectId
+ * (DB identity) but with `path`/`fullPath` and session arrays swapped to the
+ * worktree's. Lets the rest of the app (chat, shell, git) treat the worktree
+ * as the active working directory without per-worktree wiring.
+ */
+export const buildWorktreeProject = (
+  project: Project,
+  worktree: {
+    path: string;
+    sessions?: Project['sessions'];
+    cursorSessions?: Project['cursorSessions'];
+    codexSessions?: Project['codexSessions'];
+    geminiSessions?: Project['geminiSessions'];
+  },
+): Project => ({
+  ...project,
+  path: worktree.path,
+  fullPath: worktree.path,
+  sessions: worktree.sessions,
+  cursorSessions: worktree.cursorSessions,
+  codexSessions: worktree.codexSessions,
+  geminiSessions: worktree.geminiSessions,
+});
+
 export const getAllSessions = (project: Project): SessionWithProvider[] => {
   const claudeSessions = [...(project.sessions || [])].map((session) => ({
     ...session,

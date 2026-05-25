@@ -6,6 +6,7 @@ import { sessionSynchronizerService } from '@/modules/providers/index.js';
 import { WS_OPEN_STATE, connectedClients } from '@/modules/websocket/index.js';
 import type { RealtimeClientConnection } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
+import { getWorktreesForRepo, type Worktree } from '@/modules/projects/services/git-worktrees.service.js';
 
 type SessionSummary = {
   id: string;
@@ -24,6 +25,13 @@ type SessionRepositoryRow = {
   created_at?: string | null;
 };
 
+export type WorktreeWithSessions = Worktree & {
+  sessions: SessionSummary[];
+  cursorSessions: SessionSummary[];
+  codexSessions: SessionSummary[];
+  geminiSessions: SessionSummary[];
+};
+
 export type ProjectListItem = {
   projectId: string;
   path: string;
@@ -38,6 +46,7 @@ export type ProjectListItem = {
     hasMore: boolean;
     total: number;
   };
+  worktrees: WorktreeWithSessions[];
 };
 
 export type ArchivedProjectListItem = ProjectListItem & {
@@ -217,10 +226,18 @@ export async function getProjectsWithSessions(
     isStarred?: number;
   }>;
   const totalProjects = projectRows.length;
+
+  // Worktree discovery runs in parallel across all projects to keep
+  // total latency bounded; per-project git calls are ~5ms each.
+  const worktreeResults = await Promise.allSettled(
+    projectRows.map((row) => getWorktreesForRepo(row.project_path)),
+  );
+
   const projects: ProjectListItem[] = [];
   let processedProjects = 0;
 
-  for (const row of projectRows) {
+  for (let i = 0; i < projectRows.length; i += 1) {
+    const row = projectRows[i];
     processedProjects += 1;
 
     const projectId = row.project_id;
@@ -243,6 +260,34 @@ export async function getProjectsWithSessions(
       offset: options.sessionsOffset,
     });
 
+    const worktreeList = worktreeResults[i].status === 'fulfilled'
+      ? (worktreeResults[i] as PromiseFulfilledResult<Worktree[]>).value
+      : [];
+
+    const worktrees: WorktreeWithSessions[] = worktreeList.map((wt) => {
+      // For the main worktree, reuse the page we already fetched above.
+      if (wt.path === projectPath) {
+        return {
+          ...wt,
+          sessions: sessionsPage.sessionsByProvider.claude,
+          cursorSessions: sessionsPage.sessionsByProvider.cursor,
+          codexSessions: sessionsPage.sessionsByProvider.codex,
+          geminiSessions: sessionsPage.sessionsByProvider.gemini,
+        };
+      }
+      const wtPage = readProjectSessionsPageByPath(wt.path, {
+        limit: options.sessionsLimit,
+        offset: options.sessionsOffset,
+      });
+      return {
+        ...wt,
+        sessions: wtPage.sessionsByProvider.claude,
+        cursorSessions: wtPage.sessionsByProvider.cursor,
+        codexSessions: wtPage.sessionsByProvider.codex,
+        geminiSessions: wtPage.sessionsByProvider.gemini,
+      };
+    });
+
     projects.push({
       projectId,
       path: projectPath,
@@ -257,6 +302,7 @@ export async function getProjectsWithSessions(
         hasMore: sessionsPage.hasMore,
         total: sessionsPage.total,
       },
+      worktrees,
     });
   }
 
@@ -266,7 +312,20 @@ export async function getProjectsWithSessions(
     total: totalProjects,
   });
 
-  return projects;
+  // Dedupe: if project B's path is a non-main worktree of project A's repo, and
+  // A is the main worktree of that repo, drop B — its sessions are already
+  // accessible under A's worktree list. Prevents the same checkout from showing
+  // up as both a top-level project and a child worktree of another project.
+  const projectsByPath = new Map(projects.map((project) => [project.path, project]));
+  const filteredProjects = projects.filter((project) => {
+    const mainWorktree = project.worktrees.find((worktree) => worktree.isMain);
+    if (!mainWorktree) return true; // not a git repo, keep
+    if (mainWorktree.path === project.path) return true; // this project IS the main worktree
+    // Drop only if the main worktree's path is itself a registered project.
+    return !projectsByPath.has(mainWorktree.path);
+  });
+
+  return filteredProjects;
 }
 
 /**
@@ -313,6 +372,7 @@ export async function getArchivedProjectsWithSessions(
         hasMore: sessionsPage.hasMore,
         total: sessionsPage.total,
       },
+      worktrees: [],
     });
   }
 

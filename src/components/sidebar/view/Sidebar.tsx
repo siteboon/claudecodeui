@@ -2,14 +2,14 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useDeviceSettings } from '../../../hooks/useDeviceSettings';
-import { useVersionCheck } from '../../../hooks/useVersionCheck';
 import { useUiPreferences } from '../../../hooks/useUiPreferences';
 import { useSidebarController } from '../hooks/useSidebarController';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
-import type { Project, LLMProvider } from '../../../types/app';
-import type { MCPServerStatus, SidebarProps } from '../types/types';
+import type { Project, LLMProvider, Worktree } from '../../../types/app';
+import { buildWorktreeProject } from '../utils/utils';
+import type { MCPServerStatus, SessionWithProvider, SidebarProps } from '../types/types';
 
 import SidebarCollapsed from './subcomponents/SidebarCollapsed';
 import SidebarContent from './subcomponents/SidebarContent';
@@ -42,10 +42,6 @@ function Sidebar({
 }: SidebarProps) {
   const { t } = useTranslation(['sidebar', 'common']);
   const { isPWA } = useDeviceSettings({ trackMobile: false });
-  const { updateAvailable, latestVersion, currentVersion, releaseInfo, installMode } = useVersionCheck(
-    'siteboon',
-    'claudecodeui',
-  );
   const { preferences, setPreference } = useUiPreferences();
   const { sidebarVisible } = preferences;
   const { setCurrentProject, mcpServerStatus } = useTaskMaster() as TaskMasterSidebarContext;
@@ -73,13 +69,18 @@ function Sidebar({
     deletingProjects,
     deleteConfirmation,
     sessionDeleteConfirmation,
-    showVersionModal,
     filteredProjects,
     archivedProjects,
     archivedSessions,
     archivedSessionsCount,
     isArchivedSessionsLoading,
     toggleProject,
+    expandedWorktrees,
+    toggleWorktree,
+    selectedWorktreePath,
+    handleWorktreeSelect,
+    createWorktreeForProject,
+    removeWorktreeForProject,
     handleSessionClick,
     toggleStarProject,
     isProjectStarred,
@@ -108,7 +109,6 @@ function Sidebar({
     setSearchFilter,
     setDeleteConfirmation,
     setSessionDeleteConfirmation,
-    setShowVersionModal,
   } = useSidebarController({
     projects,
     selectedProject,
@@ -138,6 +138,18 @@ function Sidebar({
 
   const handleProjectCreated = () => {
     void paletteOps.refreshProjects();
+  };
+
+  const handleWorktreeNewSession = (project: Project, worktree: Worktree) => {
+    handleWorktreeSelect(project, worktree);
+    onNewSession(buildWorktreeProject(project, worktree));
+  };
+
+  // Opens an existing session against a *different* worktree of the same project.
+  // The session id is unchanged; only the working directory (selectedProject.path) swaps.
+  const handleOpenSessionInWorktree = (session: SessionWithProvider, project: Project, worktree: Worktree) => {
+    handleWorktreeSelect(project, worktree);
+    handleSessionClick(session, project.projectId);
   };
 
   const projectListProps: SidebarProjectListProps = {
@@ -174,6 +186,14 @@ function Sidebar({
     onDeleteSession: showDeleteSessionConfirmation,
     onLoadMoreSessions: loadMoreSessionsForProject,
     onNewSession,
+    expandedWorktrees,
+    selectedWorktreePath,
+    onToggleWorktree: toggleWorktree,
+    onWorktreeSelect: handleWorktreeSelect,
+    onWorktreeNewSession: handleWorktreeNewSession,
+    onCreateWorktree: createWorktreeForProject,
+    onRemoveWorktree: removeWorktreeForProject,
+    onOpenSessionInWorktree: handleOpenSessionInWorktree,
     onEditingSessionNameChange: setEditingSessionName,
     onStartEditingSession: (sessionId, initialName) => {
       setEditingSession(sessionId);
@@ -205,12 +225,6 @@ function Sidebar({
         sessionDeleteConfirmation={sessionDeleteConfirmation}
         onCancelDeleteSession={() => setSessionDeleteConfirmation(null)}
         onConfirmDeleteSession={confirmDeleteSession}
-        showVersionModal={showVersionModal}
-        onCloseVersionModal={() => setShowVersionModal(false)}
-        releaseInfo={releaseInfo}
-        currentVersion={currentVersion}
-        latestVersion={latestVersion}
-        installMode={installMode}
         t={t}
       />
 
@@ -218,8 +232,6 @@ function Sidebar({
         <SidebarCollapsed
           onExpand={handleExpandSidebar}
           onShowSettings={onShowSettings}
-          updateAvailable={updateAvailable}
-          onShowVersionModal={() => setShowVersionModal(true)}
           t={t}
         />
       ) : (
@@ -289,11 +301,6 @@ function Sidebar({
             isRefreshing={isRefreshing}
             onCreateProject={() => setShowNewProject(true)}
             onCollapseSidebar={handleCollapseSidebar}
-            updateAvailable={updateAvailable}
-            releaseInfo={releaseInfo}
-            latestVersion={latestVersion}
-            currentVersion={currentVersion}
-            onShowVersionModal={() => setShowVersionModal(true)}
             onShowSettings={onShowSettings}
             projectListProps={projectListProps}
             t={t}

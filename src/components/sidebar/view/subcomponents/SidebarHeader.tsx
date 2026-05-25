@@ -1,10 +1,9 @@
-import { Archive, Folder, FolderPlus, MessageSquare, Plus, RefreshCw, Search, X, PanelLeftClose } from 'lucide-react';
+import { Archive, Folder, FolderPlus, MessageSquare, Plus, RefreshCw, Search, Star, X, PanelLeftClose } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import { Button, Input, Tooltip } from '../../../../shared/view/ui';
 import { IS_PLATFORM } from '../../../../constants/config';
 import { cn } from '../../../../lib/utils';
 import type { SidebarSearchMode } from '../../types/types';
-import GitHubStarBadge from './GitHubStarBadge';
 
 const MOD_KEY =
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
@@ -120,8 +119,6 @@ export default function SidebarHeader({
           </div>
         </div>
 
-        <GitHubStarBadge />
-
         {/* Search bar */}
         {showSearchTools && (
           <div className="mt-2.5 space-y-2">
@@ -153,6 +150,22 @@ export default function SidebarHeader({
                 <MessageSquare className="h-3 w-3" />
                 {t('search.modeConversations')}
               </button>
+              <Tooltip content="Starred sessions" position="top">
+                <button
+                  onClick={() => onSearchModeChange('starred')}
+                  aria-pressed={searchMode === 'starred'}
+                  aria-label="Starred sessions"
+                  title="Starred sessions"
+                  className={cn(
+                    "flex items-center justify-center rounded-md px-2.5 py-1.5 text-xs font-medium transition-all",
+                    searchMode === 'starred'
+                      ? "bg-background shadow-sm text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Star className="h-3 w-3" />
+                </button>
+              </Tooltip>
               <Tooltip content={t('search.archiveOnlyTooltip', 'Archive only')} position="top">
                 <button
                   onClick={() => onSearchModeChange('archived')}
@@ -270,6 +283,22 @@ export default function SidebarHeader({
                 <MessageSquare className="h-3 w-3" />
                 {t('search.modeConversations')}
               </button>
+              <Tooltip content="Starred sessions" position="top">
+                <button
+                  onClick={() => onSearchModeChange('starred')}
+                  aria-pressed={searchMode === 'starred'}
+                  aria-label="Starred sessions"
+                  title="Starred sessions"
+                  className={cn(
+                    "flex items-center justify-center rounded-md px-2.5 py-1.5 text-xs font-medium transition-all",
+                    searchMode === 'starred'
+                      ? "bg-background shadow-sm text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Star className="h-3 w-3" />
+                </button>
+              </Tooltip>
               <Tooltip content={t('search.archiveOnlyTooltip', 'Archive only')} position="top">
                 <button
                   onClick={() => onSearchModeChange('archived')}

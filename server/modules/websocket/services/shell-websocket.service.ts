@@ -33,6 +33,36 @@ const ptySessionsMap = new Map<string, PtySessionEntry>();
 const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
 const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
 
+// Coalesce pty output into ~one frame per animation tick — without this,
+// every pty `data` event becomes a separate JSON-encoded WS frame and the
+// terminal feels sluggish on heavy output (build logs, `ls -R`, etc).
+const OUTPUT_FLUSH_MS = 16;
+const outputFlushBuffers = new WeakMap<WebSocket, { chunks: string[]; timer: NodeJS.Timeout | null }>();
+
+function sendBufferedOutput(ws: WebSocket): void {
+  const entry = outputFlushBuffers.get(ws);
+  if (!entry) return;
+  entry.timer = null;
+  if (entry.chunks.length === 0) return;
+  const combined = entry.chunks.join('');
+  entry.chunks = [];
+  if (ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'output', data: combined }));
+  }
+}
+
+function queueOutput(ws: WebSocket, chunk: string): void {
+  let entry = outputFlushBuffers.get(ws);
+  if (!entry) {
+    entry = { chunks: [], timer: null };
+    outputFlushBuffers.set(ws, entry);
+  }
+  entry.chunks.push(chunk);
+  if (!entry.timer) {
+    entry.timer = setTimeout(() => sendBufferedOutput(ws), OUTPUT_FLUSH_MS);
+  }
+}
+
 type ShellWebSocketDependencies = {
   getSessionById: (sessionId: string) => { cliSessionId?: string } | null | undefined;
   stripAnsiSequences: (content: string) => string;
@@ -219,14 +249,14 @@ export function handleShellConnection(
           );
 
           if (existingSession.buffer.length > 0) {
-            existingSession.buffer.forEach((bufferedData) => {
-              ws.send(
-                JSON.stringify({
-                  type: 'output',
-                  data: bufferedData,
-                })
-              );
-            });
+            // Coalesce the entire scrollback into one frame so reconnecting
+            // doesn't fire thousands of WS messages on heavy-output sessions.
+            ws.send(
+              JSON.stringify({
+                type: 'output',
+                data: existingSession.buffer.join(''),
+              })
+            );
           }
 
           existingSession.ws = ws;
@@ -346,12 +376,7 @@ export function handleShellConnection(
               emitAuthUrl(bestUrl, true);
             }
 
-            session.ws.send(
-              JSON.stringify({
-                type: 'output',
-                data: outputData,
-              })
-            );
+            queueOutput(session.ws, outputData);
           }
         });
 
@@ -431,6 +456,12 @@ export function handleShellConnection(
   });
 
   ws.on('close', () => {
+    const pendingFlush = outputFlushBuffers.get(ws);
+    if (pendingFlush?.timer) {
+      clearTimeout(pendingFlush.timer);
+    }
+    outputFlushBuffers.delete(ws);
+
     if (!ptySessionKey) {
       return;
     }

@@ -204,6 +204,16 @@ function ChatInterface({
     setPendingPermissionRequests,
   });
 
+  // When a new session is started (via the sidebar "New session" button),
+  // focus the composer so the user can immediately start typing.
+  useEffect(() => {
+    if (!newSessionTrigger) return;
+    const handle = window.requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(handle);
+  }, [newSessionTrigger, textareaRef]);
+
   // On WebSocket reconnect, re-fetch the current session's messages from the server
   // so missed streaming events are shown. Also reset isLoading.
   const handleWebSocketReconnect = useCallback(async () => {

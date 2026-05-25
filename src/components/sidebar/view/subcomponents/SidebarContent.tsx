@@ -3,13 +3,13 @@ import { Archive, Folder, MessageSquare, RotateCcw, Search, Trash2 } from 'lucid
 import type { TFunction } from 'i18next';
 import { ScrollArea } from '../../../../shared/view/ui';
 import type { Project } from '../../../../types/app';
-import type { ReleaseInfo } from '../../../../types/sharedTypes';
 import type { ConversationSearchResults, SearchProgress } from '../../hooks/useSidebarController';
 import type { ArchivedProjectListItem, ArchivedSessionListItem, SidebarSearchMode } from '../../types/types';
 import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
 import SidebarFooter from './SidebarFooter';
 import SidebarHeader from './SidebarHeader';
 import SidebarProjectList, { type SidebarProjectListProps } from './SidebarProjectList';
+import SidebarStarredView from './SidebarStarredView';
 import { getAllSessions } from '../../utils/utils';
 
 function HighlightedSnippet({ snippet, highlights }: { snippet: string; highlights: { start: number; end: number }[] }) {
@@ -137,11 +137,6 @@ type SidebarContentProps = {
   isRefreshing: boolean;
   onCreateProject: () => void;
   onCollapseSidebar: () => void;
-  updateAvailable: boolean;
-  releaseInfo: ReleaseInfo | null;
-  latestVersion: string | null;
-  currentVersion: string;
-  onShowVersionModal: () => void;
   onShowSettings: () => void;
   projectListProps: SidebarProjectListProps;
   t: TFunction;
@@ -173,11 +168,6 @@ export default function SidebarContent({
   isRefreshing,
   onCreateProject,
   onCollapseSidebar,
-  updateAvailable,
-  releaseInfo,
-  latestVersion,
-  currentVersion,
-  onShowVersionModal,
   onShowSettings,
   projectListProps,
   t,
@@ -188,7 +178,7 @@ export default function SidebarContent({
 
   return (
     <div
-      className="flex h-full flex-col bg-background/80 backdrop-blur-sm md:w-72 md:select-none"
+      className="flex h-full flex-col bg-background/80 backdrop-blur-sm md:w-96 md:select-none"
       style={{}}
     >
       <SidebarHeader
@@ -508,17 +498,20 @@ export default function SidebarContent({
               ))}
             </div>
           )
+        ) : searchMode === 'starred' ? (
+          <SidebarStarredView
+            projects={projects}
+            searchFilter={searchFilter}
+            onProjectSelect={projectListProps.onProjectSelect}
+            onSessionSelect={projectListProps.onSessionSelect}
+            t={t}
+          />
         ) : (
           <SidebarProjectList {...projectListProps} />
         )}
       </ScrollArea>
 
       <SidebarFooter
-        updateAvailable={updateAvailable}
-        releaseInfo={releaseInfo}
-        latestVersion={latestVersion}
-        currentVersion={currentVersion}
-        onShowVersionModal={onShowVersionModal}
         onShowSettings={onShowSettings}
         t={t}
       />
