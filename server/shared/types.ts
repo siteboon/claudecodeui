@@ -365,6 +365,7 @@ export type ProjectRepositoryRow = {
   project_id: string;
   project_path: string;
   custom_project_name: string | null;
+  cached_display_name: string | null;
   isStarred: number;
   isArchived: number;
 };

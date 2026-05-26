@@ -8,6 +8,7 @@ const projectRow = {
   project_id: 'project-1',
   project_path: '/workspace/my-project',
   custom_project_name: 'my-project',
+  cached_display_name: null,
   isStarred: 0,
   isArchived: 0,
 };

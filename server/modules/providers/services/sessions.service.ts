@@ -64,21 +64,44 @@ function resolveProjectDisplayName(
 }
 
 /**
- * Sets the custom title for a session by appending a custom-title entry
- * to the session's JSONL file. This is what `claude -r` reads to display
- * session names.
+ * Writes a custom-title entry to the session's JSONL file as the last line.
+ * Any existing custom-title entries for the same session are removed first,
+ * so new messages appended by Claude CLI don't bury the entry.
  */
 async function setSessionTitle(sessionId: string, title: string): Promise<void> {
   const session = sessionsDb.getSessionById(sessionId);
   if (!session?.jsonl_path) return;
 
   try {
+    const content = await fsp.readFile(session.jsonl_path, 'utf8');
+    const lines = content.split(/\r?\n/);
+    // Strip any existing custom-title entries for this session
+    const cleaned = lines.filter((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return true;
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (
+          typeof parsed === 'object' &&
+          parsed !== null &&
+          (parsed as Record<string, unknown>).type === 'custom-title' &&
+          (parsed as Record<string, unknown>).sessionId === sessionId
+        ) {
+          return false;
+        }
+      } catch {
+        // skip non-JSON lines
+      }
+      return true;
+    });
+
     const entry = JSON.stringify({
       type: 'custom-title',
       customTitle: title,
       sessionId,
     });
-    await fsp.appendFile(session.jsonl_path, '\n' + entry, 'utf8');
+    const result = cleaned.filter((l) => l.length > 0).join('\n') + '\n' + entry;
+    await fsp.writeFile(session.jsonl_path, result, 'utf8');
   } catch {
     // Session file may not exist or may be locked
   }
@@ -87,6 +110,8 @@ async function setSessionTitle(sessionId: string, title: string): Promise<void> 
 /**
  * Scans all sessions with custom_name and syncs them to their session JSONL files
  * on startup so `claude -r` displays the CloudCLI session names.
+ * Removes any existing custom-title entries and appends a fresh one at the end,
+ * so entries buried by subsequent messages are re-surfaced.
  */
 async function syncAllSessionNamesToHistory(): Promise<void> {
   const sessions = sessionsDb.getSessionsWithCustomName();
@@ -98,11 +123,10 @@ async function syncAllSessionNamesToHistory(): Promise<void> {
     try {
       const content = await fsp.readFile(session.jsonl_path, 'utf8');
       const lines = content.split(/\r?\n/);
-      let hasCustomTitle = false;
-
-      for (const line of lines) {
+      // Strip any existing custom-title entries for this session
+      const cleaned = lines.filter((line) => {
         const trimmed = line.trim();
-        if (!trimmed) continue;
+        if (!trimmed) return true;
         try {
           const parsed = JSON.parse(trimmed);
           if (
@@ -111,23 +135,22 @@ async function syncAllSessionNamesToHistory(): Promise<void> {
             (parsed as Record<string, unknown>).type === 'custom-title' &&
             (parsed as Record<string, unknown>).sessionId === session.session_id
           ) {
-            hasCustomTitle = true;
-            break;
+            return false;
           }
         } catch {
           // skip non-JSON lines
         }
-      }
+        return true;
+      });
 
-      if (!hasCustomTitle) {
-        const entry = JSON.stringify({
-          type: 'custom-title',
-          customTitle: session.custom_name,
-          sessionId: session.session_id,
-        });
-        await fsp.appendFile(session.jsonl_path, '\n' + entry, 'utf8');
-        synced++;
-      }
+      const entry = JSON.stringify({
+        type: 'custom-title',
+        customTitle: session.custom_name,
+        sessionId: session.session_id,
+      });
+      const result = cleaned.filter((l) => l.length > 0).join('\n') + '\n' + entry;
+      await fsp.writeFile(session.jsonl_path, result, 'utf8');
+      synced++;
     } catch {
       // Session file may not exist
     }

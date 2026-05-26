@@ -27,7 +27,7 @@ export const projectsDb = {
             ON CONFLICT(project_path) DO UPDATE SET
             isArchived = 0
             WHERE projects.isArchived = 1
-            RETURNING project_id, project_path, custom_project_name, isStarred, isArchived
+            RETURNING project_id, project_path, custom_project_name, cached_display_name, isStarred, isArchived
         `).get(attemptedId, normalizedProjectPath, normalizedProjectName) as ProjectRepositoryRow | undefined;
 
         if (row) {
@@ -48,7 +48,7 @@ export const projectsDb = {
         const db = getConnection();
         const normalizedProjectPath = normalizeProjectPath(projectPath);
         const row = db.prepare(`
-            SELECT project_id, project_path, custom_project_name, isStarred, isArchived
+            SELECT project_id, project_path, custom_project_name, cached_display_name, isStarred, isArchived
             FROM projects
             WHERE project_path = ?
         `).get(normalizedProjectPath) as ProjectRepositoryRow | undefined;
@@ -59,7 +59,7 @@ export const projectsDb = {
     getProjectById(projectId: string): ProjectRepositoryRow | null {
         const db = getConnection();
         const row = db.prepare(`
-            SELECT project_id, project_path, custom_project_name, isStarred, isArchived
+            SELECT project_id, project_path, custom_project_name, cached_display_name, isStarred, isArchived
             FROM projects
             WHERE project_id = ?
         `).get(projectId) as ProjectRepositoryRow | undefined;
@@ -89,7 +89,7 @@ export const projectsDb = {
     getProjectPaths(): ProjectRepositoryRow[] {
         const db = getConnection();
         return db.prepare(`
-            SELECT project_id, project_path, custom_project_name, isStarred, isArchived
+            SELECT project_id, project_path, custom_project_name, cached_display_name, isStarred, isArchived
             FROM projects
             WHERE isArchived = 0
         `).all() as ProjectRepositoryRow[];
@@ -102,7 +102,7 @@ export const projectsDb = {
     getArchivedProjectPaths(): ProjectRepositoryRow[] {
         const db = getConnection();
         return db.prepare(`
-            SELECT project_id, project_path, custom_project_name, isStarred, isArchived
+            SELECT project_id, project_path, custom_project_name, cached_display_name, isStarred, isArchived
             FROM projects
             WHERE isArchived = 1
         `).all() as ProjectRepositoryRow[];
@@ -192,5 +192,14 @@ export const projectsDb = {
             DELETE FROM projects
             WHERE project_id = ?
         `).run(projectId);
+    },
+
+    setCachedDisplayName(projectId: string, displayName: string | null): void {
+        const db = getConnection();
+        db.prepare(`
+            UPDATE projects
+            SET cached_display_name = ?
+            WHERE project_id = ?
+        `).run(displayName, projectId);
     },
 };

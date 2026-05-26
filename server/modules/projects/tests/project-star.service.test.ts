@@ -9,6 +9,7 @@ type ProjectRow = {
   project_id: string;
   project_path: string;
   custom_project_name: string | null;
+  cached_display_name: string | null;
   isStarred: number;
   isArchived: number;
 };
@@ -52,6 +53,7 @@ test('toggleProjectStar flips star state and persists it', () => {
         project_id: 'project-1',
         project_path: '/workspace/project-1',
         custom_project_name: 'project-1',
+        cached_display_name: null,
         isStarred: 0,
         isArchived: 0,
       }) as ProjectRow;
@@ -84,6 +86,7 @@ test('applyLegacyStarredProjectIds stars only valid, unstarred projects', () => 
           project_id: 'project-a',
           project_path: '/workspace/project-a',
           custom_project_name: 'A',
+          cached_display_name: null,
           isStarred: 0,
           isArchived: 0,
         } as ProjectRow;

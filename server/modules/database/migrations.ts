@@ -125,6 +125,7 @@ const rebuildProjectsTableWithPrimaryKeySchema = (db: Database): void => {
     addColumnToTableIfNotExists(db, 'projects', columnNames, 'custom_project_name', 'TEXT DEFAULT NULL');
     addColumnToTableIfNotExists(db, 'projects', columnNames, 'isStarred', 'BOOLEAN DEFAULT 0');
     addColumnToTableIfNotExists(db, 'projects', columnNames, 'isArchived', 'BOOLEAN DEFAULT 0');
+    addColumnToTableIfNotExists(db, 'projects', columnNames, 'cached_display_name', 'TEXT DEFAULT NULL');
     db.exec(`
       UPDATE projects
       SET project_id = ${SQLITE_UUID_SQL}
@@ -168,15 +169,22 @@ const rebuildProjectsTableWithPrimaryKeySchema = (db: Database): void => {
         project_id TEXT PRIMARY KEY NOT NULL,
         project_path TEXT NOT NULL UNIQUE,
         custom_project_name TEXT DEFAULT NULL,
+        cached_display_name TEXT DEFAULT NULL,
         isStarred BOOLEAN DEFAULT 0,
         isArchived BOOLEAN DEFAULT 0
       )
     `);
+
+    const cachedDisplayNameExpression = columnNames.includes('cached_display_name')
+      ? 'cached_display_name'
+      : 'NULL';
+
     db.exec(`
       WITH source_rows AS (
         SELECT
           ${projectPathExpression} AS project_path,
           ${customProjectNameExpression} AS custom_project_name,
+          ${cachedDisplayNameExpression} AS cached_display_name,
           ${isStarredExpression} AS isStarred,
           ${isArchivedExpression} AS isArchived,
           ${projectIdExpression} AS candidate_project_id,
@@ -188,6 +196,7 @@ const rebuildProjectsTableWithPrimaryKeySchema = (db: Database): void => {
         SELECT
           project_path,
           custom_project_name,
+          cached_display_name,
           isStarred,
           isArchived,
           candidate_project_id,
@@ -204,6 +213,7 @@ const rebuildProjectsTableWithPrimaryKeySchema = (db: Database): void => {
           END AS project_id,
           project_path,
           custom_project_name,
+          cached_display_name,
           isStarred,
           isArchived
         FROM deduped_paths
@@ -213,6 +223,7 @@ const rebuildProjectsTableWithPrimaryKeySchema = (db: Database): void => {
         project_id,
         project_path,
         custom_project_name,
+        cached_display_name,
         isStarred,
         isArchived
       )
@@ -220,6 +231,7 @@ const rebuildProjectsTableWithPrimaryKeySchema = (db: Database): void => {
         project_id,
         project_path,
         custom_project_name,
+        cached_display_name,
         isStarred,
         isArchived
       FROM prepared_rows

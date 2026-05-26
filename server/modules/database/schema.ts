@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS projects (
     project_id TEXT PRIMARY KEY NOT NULL,
     project_path TEXT NOT NULL UNIQUE,
     custom_project_name TEXT DEFAULT NULL,
+    cached_display_name TEXT DEFAULT NULL,
     isStarred BOOLEAN DEFAULT 0,
     isArchived BOOLEAN DEFAULT 0
 );

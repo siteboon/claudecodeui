@@ -205,6 +205,7 @@ function broadcastProgress(progress: ProgressUpdate) {
 
 /**
  * Reads all projects from DB and returns provider-bucketed session summaries.
+ * Uses cached_display_name to avoid reading package.json on every call.
  */
 export async function getProjectsWithSessions(
   options: GetProjectsWithSessionsOptions = {}
@@ -217,11 +218,39 @@ export async function getProjectsWithSessions(
     project_id: string;
     project_path: string;
     custom_project_name?: string | null;
+    cached_display_name?: string | null;
     isStarred?: number;
   }>;
   const totalProjects = projectRows.length;
   const projects: ProjectListItem[] = [];
   let processedProjects = 0;
+
+  // Collect projects that need their display name resolved from disk
+  const needsRefresh = new Map<string, typeof projectRows[0]>();
+
+  for (const row of projectRows) {
+    const hasCustomName = row.custom_project_name && row.custom_project_name.trim().length > 0;
+    const hasCache = row.cached_display_name && row.cached_display_name.trim().length > 0;
+    if (!hasCustomName && !hasCache) {
+      needsRefresh.set(row.project_id, row);
+    }
+  }
+
+  // Batch-resolve missing display names in parallel
+  const resolved = await Promise.allSettled(
+    Array.from(needsRefresh.values()).map(async (row) => {
+      const name = await generateDisplayName(path.basename(row.project_path) || row.project_path, row.project_path);
+      projectsDb.setCachedDisplayName(row.project_id, name);
+      return { projectId: row.project_id, name };
+    }),
+  );
+
+  const cacheMap = new Map<string, string>();
+  for (const r of resolved) {
+    if (r.status === 'fulfilled') {
+      cacheMap.set(r.value.projectId, r.value.name);
+    }
+  }
 
   for (const row of projectRows) {
     processedProjects += 1;
@@ -237,9 +266,11 @@ export async function getProjectsWithSessions(
     });
 
     const displayName =
-      row.custom_project_name && row.custom_project_name.trim().length > 0
+      (row.custom_project_name && row.custom_project_name.trim().length > 0)
         ? row.custom_project_name
-        : await generateDisplayName(path.basename(projectPath) || projectPath, projectPath);
+        : (row.cached_display_name && row.cached_display_name.trim().length > 0)
+          ? row.cached_display_name
+          : cacheMap.get(projectId) || path.basename(projectPath) || projectPath;
 
     const sessionsPage = readProjectSessionsPageByPath(projectPath, {
       limit: options.sessionsLimit,
@@ -288,6 +319,7 @@ export async function getArchivedProjectsWithSessions(
     project_id: string;
     project_path: string;
     custom_project_name?: string | null;
+    cached_display_name?: string | null;
     isStarred?: number;
   }>;
 
@@ -295,9 +327,11 @@ export async function getArchivedProjectsWithSessions(
 
   for (const row of projectRows) {
     const displayName =
-      row.custom_project_name && row.custom_project_name.trim().length > 0
+      (row.custom_project_name && row.custom_project_name.trim().length > 0)
         ? row.custom_project_name
-        : await generateDisplayName(path.basename(row.project_path) || row.project_path, row.project_path);
+        : (row.cached_display_name && row.cached_display_name.trim().length > 0)
+          ? row.cached_display_name
+          : await generateDisplayName(path.basename(row.project_path) || row.project_path, row.project_path);
 
     const sessionsPage = readProjectSessionsIncludingArchived(row.project_path);
 
