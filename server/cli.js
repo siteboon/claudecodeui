@@ -455,7 +455,7 @@ async function sandboxCommand(args) {
             await new Promise(resolve => setTimeout(resolve, 5000));
 
             console.log(`${c.info('▶')} Launching CloudCLI web server...`);
-            sbx(['exec', opts.name, 'bash', '-c', 'cloudcli start --port 3001 &']);
+            sbx(['exec', opts.name, 'bash', '-c', 'nohup cloudcli start --port 3001 > /tmp/cloudcli-ui.log 2>&1 & disown']);
 
             console.log(`${c.info('▶')} Forwarding port ${opts.port} → 3001...`);
             try {
@@ -554,7 +554,7 @@ async function sandboxCommand(args) {
 
             // Step 3: Start CloudCLI inside the sandbox
             console.log(`${c.info('▶')} Launching CloudCLI web server...`);
-            sbx(['exec', opts.name, 'bash', '-c', 'cloudcli start --port 3001 &']);
+            sbx(['exec', opts.name, 'bash', '-c', 'nohup cloudcli start --port 3001 > /tmp/cloudcli-ui.log 2>&1 & disown']);
 
             // Step 4: Forward port
             console.log(`${c.info('▶')} Forwarding port ${opts.port} → 3001...`);
