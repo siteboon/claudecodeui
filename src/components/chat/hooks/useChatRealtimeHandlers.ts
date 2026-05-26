@@ -339,9 +339,12 @@ export function useChatRealtimeHandlers({
         }
 
         // Refresh from server so the canonical JSONL history replaces any
-        // client-side streaming echoes with committed messages.
-        if (sid) {
-          void sessionStore.refreshFromServer(sid);
+        // client-side streaming echoes with committed messages. Use the first
+        // available session ID — resolved actual ID, fallback to original sid,
+        // or pending session for the post-submission resolution path.
+        const resolvedSessionId = actualSessionId ?? sid ?? pendingSessionId;
+        if (resolvedSessionId) {
+          void sessionStore.refreshFromServer(resolvedSessionId);
         }
         break;
       }

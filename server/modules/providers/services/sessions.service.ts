@@ -63,55 +63,70 @@ function resolveProjectDisplayName(
   return path.basename(projectPath) || projectPath;
 }
 
+const HISTORY_JSONL_PATH = path.join(os.homedir(), '.claude', 'history.jsonl');
+
 /**
- * Writes a custom-title entry to the session's JSONL file as the last line.
- * Any existing custom-title entries for the same session are removed first,
- * so new messages appended by Claude CLI don't bury the entry.
+ * Updates the display name for a session in ~/.claude/history.jsonl.
+ * `claude -r` reads entries from this global file, grouped by project path.
+ * All existing entries for the session are updated in-place so the project
+ * path stays correct. If no entries exist, a new one is created using the
+ * session's project_path from the DB.
  */
-async function setSessionTitle(sessionId: string, title: string): Promise<void> {
+async function updateSessionDisplayNameInHistory(sessionId: string, displayName: string): Promise<void> {
   const session = sessionsDb.getSessionById(sessionId);
-  if (!session?.jsonl_path) return;
+  const projectPath = session?.project_path || os.homedir();
 
   try {
-    const content = await fsp.readFile(session.jsonl_path, 'utf8');
+    const content = await fsp.readFile(HISTORY_JSONL_PATH, 'utf8');
     const lines = content.split(/\r?\n/);
-    // Strip any existing custom-title entries for this session
-    const cleaned = lines.filter((line) => {
+    const updatedLines = [];
+    let found = false;
+
+    for (const line of lines) {
       const trimmed = line.trim();
-      if (!trimmed) return true;
+      if (!trimmed) {
+        updatedLines.push(line);
+        continue;
+      }
       try {
         const parsed = JSON.parse(trimmed);
         if (
           typeof parsed === 'object' &&
           parsed !== null &&
-          (parsed as Record<string, unknown>).type === 'custom-title' &&
           (parsed as Record<string, unknown>).sessionId === sessionId
         ) {
-          return false;
+          found = true;
+          (parsed as Record<string, unknown>).display = displayName;
+          updatedLines.push(JSON.stringify(parsed));
+          continue;
         }
       } catch {
         // skip non-JSON lines
       }
-      return true;
-    });
+      updatedLines.push(line);
+    }
 
-    const entry = JSON.stringify({
-      type: 'custom-title',
-      customTitle: title,
-      sessionId,
-    });
-    const result = cleaned.filter((l) => l.length > 0).join('\n') + '\n' + entry;
-    await fsp.writeFile(session.jsonl_path, result, 'utf8');
+    // If no existing entry, append one with the correct project path
+    if (!found) {
+      const newEntry = JSON.stringify({
+        display: displayName,
+        pastedContents: {},
+        timestamp: Date.now(),
+        project: projectPath,
+        sessionId,
+      });
+      updatedLines.push(newEntry);
+    }
+
+    await fsp.writeFile(HISTORY_JSONL_PATH, updatedLines.join('\n'), 'utf8');
   } catch {
-    // Session file may not exist or may be locked
+    // history.jsonl may not exist
   }
 }
 
 /**
- * Scans all sessions with custom_name and syncs them to their session JSONL files
- * on startup so `claude -r` displays the CloudCLI session names.
- * Removes any existing custom-title entries and appends a fresh one at the end,
- * so entries buried by subsequent messages are re-surfaced.
+ * Scans all sessions with custom_name and updates ~/.claude/history.jsonl
+ * so `claude -r` displays the CloudCLI session names.
  */
 async function syncAllSessionNamesToHistory(): Promise<void> {
   const sessions = sessionsDb.getSessionsWithCustomName();
@@ -119,45 +134,16 @@ async function syncAllSessionNamesToHistory(): Promise<void> {
 
   let synced = 0;
   for (const session of sessions) {
-    if (!session.jsonl_path) continue;
     try {
-      const content = await fsp.readFile(session.jsonl_path, 'utf8');
-      const lines = content.split(/\r?\n/);
-      // Strip any existing custom-title entries for this session
-      const cleaned = lines.filter((line) => {
-        const trimmed = line.trim();
-        if (!trimmed) return true;
-        try {
-          const parsed = JSON.parse(trimmed);
-          if (
-            typeof parsed === 'object' &&
-            parsed !== null &&
-            (parsed as Record<string, unknown>).type === 'custom-title' &&
-            (parsed as Record<string, unknown>).sessionId === session.session_id
-          ) {
-            return false;
-          }
-        } catch {
-          // skip non-JSON lines
-        }
-        return true;
-      });
-
-      const entry = JSON.stringify({
-        type: 'custom-title',
-        customTitle: session.custom_name,
-        sessionId: session.session_id,
-      });
-      const result = cleaned.filter((l) => l.length > 0).join('\n') + '\n' + entry;
-      await fsp.writeFile(session.jsonl_path, result, 'utf8');
+      await updateSessionDisplayNameInHistory(session.session_id, session.custom_name);
       synced++;
     } catch {
-      // Session file may not exist
+      // Skip failed sessions
     }
   }
 
   if (synced > 0) {
-    console.log(`[Sessions] Synced ${synced} session name(s) to session JSONL files`);
+    console.log(`[Sessions] Synced ${synced} session name(s) to ~/.claude/history.jsonl`);
   }
 }
 
@@ -332,7 +318,7 @@ export const sessionsService = {
     }
 
     sessionsDb.updateSessionCustomName(sessionId, summary);
-    void setSessionTitle(sessionId, summary);
+    void updateSessionDisplayNameInHistory(sessionId, summary);
     return { sessionId, summary };
   },
 
