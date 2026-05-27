@@ -244,6 +244,15 @@ export default function RecentSessions({
             {t('projects.showAll', { defaultValue: 'Show all' })} {knownTotal}
           </button>
         )}
+        {expanded && hidden === 0 && showAll && sessions.length > DEFAULT_VISIBLE && (
+          <button
+            type="button"
+            onClick={() => setShowAll(false)}
+            className="rounded px-1 text-[10px] font-medium normal-case tracking-normal text-muted-foreground hover:text-foreground"
+          >
+            {t('projects.showLess', { defaultValue: 'Show less' })}
+          </button>
+        )}
       </div>
 
       {expanded && (

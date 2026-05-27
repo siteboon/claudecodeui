@@ -27,6 +27,7 @@
     "recent": "Recent",
     "worktreesUpper": "Worktrees",
     "showAll": "Show all",
+    "showLess": "Show less",
     "emptyWorktree": "empty · click to start",
     "staleWorktree": "archived",
     "messages": "messages",

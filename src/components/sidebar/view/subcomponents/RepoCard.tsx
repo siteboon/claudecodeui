@@ -322,6 +322,7 @@ function lastActivityLabelFor(
   const date = new Date(latest.lastActivity || latest.createdAt || 0);
   const diffMs = now.getTime() - date.getTime();
   const minutes = Math.floor(diffMs / 60_000);
+  if (minutes < 1) return t('time.justNow', { defaultValue: 'just now' });
   if (minutes < 60) return t('time.minutesAgo', { defaultValue: '{{count}}m ago', count: minutes });
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return t('time.hoursAgo', { defaultValue: '{{count}}h ago', count: hours });
