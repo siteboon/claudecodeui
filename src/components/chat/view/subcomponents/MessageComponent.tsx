@@ -214,11 +214,11 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
             {message.isToolUse ? (
               <>
                 <div className="flex flex-col">
-                  <div className="flex items-start gap-1">
+                  <div className="flex items-center gap-1">
                     <button
                       type="button"
                       onClick={() => setIsToolCollapsed((v) => !v)}
-                      className="mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground/50 transition-colors hover:bg-muted hover:text-muted-foreground"
+                      className="shrink-0 rounded p-0.5 text-muted-foreground/50 transition-colors hover:bg-muted hover:text-muted-foreground"
                       title={isToolCollapsed ? 'Expand' : 'Collapse'}
                     >
                       {isToolCollapsed
@@ -226,11 +226,20 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                         : <ChevronDown className="h-3.5 w-3.5" />
                       }
                     </button>
-                    <div className="min-w-0 flex-1">
-                      <Markdown className="prose prose-sm max-w-none dark:prose-invert">
-                        {String(message.displayText || '')}
-                      </Markdown>
-                    </div>
+                    {isToolCollapsed ? (
+                      <span className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
+                        <code className="rounded bg-muted px-1 py-0.5 text-xs font-mono text-foreground/70">{message.toolName || 'Tool'}</code>
+                        <span className="truncate opacity-60">
+                          {String(message.displayText || '').replace(/\*\*|__|`|\[|\]/g, '').split('\n').find(l => l.trim()) || ''}
+                        </span>
+                      </span>
+                    ) : (
+                      <div className="min-w-0 flex-1">
+                        <Markdown className="prose prose-sm max-w-none dark:prose-invert">
+                          {String(message.displayText || '')}
+                        </Markdown>
+                      </div>
+                    )}
                   </div>
                 </div>
 
