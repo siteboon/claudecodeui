@@ -2,14 +2,21 @@ import type { VerifyClientCallbackSync } from 'ws';
 
 import type { AuthenticatedWebSocketRequest } from '@/shared/types.js';
 
+type WebSocketUser = {
+  id?: string | number;
+  userId?: string | number;
+  username?: string;
+  [key: string]: unknown;
+};
+
 type WebSocketAuthDependencies = {
   isPlatform: boolean;
-  authenticateWebSocket: (token: string | null) => {
-    id?: string | number;
-    userId?: string | number;
-    username?: string;
-    [key: string]: unknown;
-  } | null;
+  authenticateWebSocket: (token: string | null) => WebSocketUser | null;
+  // Optional: resolve the user vouched for by a trusted reverse-proxy header on the
+  // upgrade request (forward-auth / SSO). Mirrors the REST authenticateToken path.
+  resolveTrustedProxyUser?: (
+    req: AuthenticatedWebSocketRequest
+  ) => WebSocketUser | null;
 };
 
 /**
@@ -32,6 +39,16 @@ export function verifyWebSocketClient(
 
     request.user = user;
     console.log('[OK] Platform mode WebSocket authenticated for user:', user.username);
+    return true;
+  }
+
+  // Trusted reverse-proxy header auth: the upstream proxy already verified the user, and
+  // the upgrade request carries both the identity header and the proxy's source socket —
+  // so this mirrors the REST authenticateToken path and needs no JWT on the WS handshake.
+  const proxyUser = dependencies.resolveTrustedProxyUser?.(request);
+  if (proxyUser) {
+    request.user = proxyUser;
+    console.log('[OK] WebSocket authenticated via trusted proxy for user:', proxyUser.username);
     return true;
   }
 

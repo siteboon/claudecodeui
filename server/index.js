@@ -68,7 +68,7 @@ import providerRoutes from './modules/providers/provider.routes.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
 import { initializeDatabase, projectsDb } from './modules/database/index.js';
 import { configureWebPush } from './services/vapid-keys.js';
-import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
+import { validateApiKey, authenticateToken, authenticateWebSocket, resolveTrustedProxyUser } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
 import { c } from './utils/colors.js';
 
@@ -88,6 +88,7 @@ const wss = createWebSocketServer(server, {
     verifyClient: {
         isPlatform: IS_PLATFORM,
         authenticateWebSocket,
+        resolveTrustedProxyUser,
     },
     chat: {
         queryClaudeSDK,

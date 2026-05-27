@@ -2,7 +2,7 @@ import express from 'express';
 import bcrypt from 'bcrypt';
 import { userDb } from '../modules/database/index.js';
 import { getConnection } from '../modules/database/connection.js';
-import { generateToken, authenticateToken } from '../middleware/auth.js';
+import { generateToken, authenticateToken, resolveTrustedProxyUser } from '../middleware/auth.js';
 
 const router = express.Router();
 const db = getConnection();
@@ -11,7 +11,21 @@ const db = getConnection();
 router.get('/status', async (req, res) => {
   try {
     const hasUsers = await userDb.hasUsers();
-    res.json({ 
+
+    // Behind a trusted authenticating reverse proxy, transparently establish a
+    // session from the proxy-vouched identity so no second local login is needed.
+    const proxyUser = resolveTrustedProxyUser(req);
+    if (proxyUser) {
+      const token = generateToken(proxyUser);
+      return res.json({
+        needsSetup: false,
+        isAuthenticated: true,
+        token,
+        user: { id: proxyUser.id, username: proxyUser.username }
+      });
+    }
+
+    res.json({
       needsSetup: !hasUsers,
       isAuthenticated: false // Will be overridden by frontend if token exists
     });

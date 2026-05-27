@@ -89,6 +89,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       setNeedsSetup(false);
 
+      // Trusted reverse-proxy auto-login: the backend established a session from a
+      // proxy-vouched identity and returned a token — adopt it and skip the login form.
+      if (statusPayload?.token && statusPayload.user) {
+        setSession(statusPayload.user, statusPayload.token);
+        await checkOnboardingStatus();
+        return;
+      }
+
       if (!token) {
         return;
       }
@@ -113,7 +121,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [checkOnboardingStatus, clearSession, token]);
+  }, [checkOnboardingStatus, clearSession, setSession, token]);
 
   useEffect(() => {
     if (IS_PLATFORM) {

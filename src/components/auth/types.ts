@@ -17,6 +17,11 @@ export type AuthSessionPayload = {
 
 export type AuthStatusPayload = {
   needsSetup?: boolean;
+  // Present when the backend established a session from a trusted reverse-proxy
+  // identity (forward-auth); the client adopts the token and skips the login form.
+  isAuthenticated?: boolean;
+  token?: string;
+  user?: AuthUser;
 };
 
 export type AuthUserPayload = {
