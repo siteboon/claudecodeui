@@ -581,6 +581,21 @@ export function useSessionStore() {
     }
   }, [notify, resolveSessionId]);
 
+  const popLastUserMessage = useCallback((sessionId: string) => {
+    const resolvedSessionId = resolveSessionId(sessionId) ?? sessionId;
+    const slot = storeRef.current.get(resolvedSessionId);
+    if (!slot) return;
+    const messages = slot.realtimeMessages;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].kind === 'text' && messages[i].role === 'user') {
+        slot.realtimeMessages = [...messages.slice(0, i), ...messages.slice(i + 1)];
+        recomputeMergedIfNeeded(slot);
+        notify(resolvedSessionId);
+        return;
+      }
+    }
+  }, [getSlot, notify, resolveSessionId]);
+
   /**
    * Get merged messages for a session (for rendering).
    */
@@ -677,6 +692,7 @@ export function useSessionStore() {
     updateStreaming,
     finalizeStreaming,
     clearRealtime,
+    popLastUserMessage,
     getMessages,
     getSessionSlot,
     replaceSessionId,
@@ -684,7 +700,7 @@ export function useSessionStore() {
     getSlot, has, fetchFromServer, fetchMore,
     appendRealtime, appendRealtimeBatch, refreshFromServer,
     setActiveSession, setStatus, isStale, updateStreaming, finalizeStreaming,
-    clearRealtime, getMessages, getSessionSlot, replaceSessionId,
+    clearRealtime, popLastUserMessage, getMessages, getSessionSlot, replaceSessionId,
   ]);
 }
 

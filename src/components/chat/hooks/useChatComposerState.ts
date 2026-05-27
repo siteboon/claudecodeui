@@ -54,9 +54,11 @@ interface UseChatComposerStateArgs {
   onShowSettings?: () => void;
   pendingViewSessionRef: { current: PendingViewSession | null };
   scrollToBottom: () => void;
+  chatMessages: ChatMessage[];
   addMessage: (msg: ChatMessage) => void;
   clearMessages: () => void;
   rewindMessages: (count: number) => void;
+  removeLastUserMessage: () => void;
   setIsLoading: (loading: boolean) => void;
   setCanAbortSession: (canAbort: boolean) => void;
   setClaudeStatus: (status: { text: string; tokens: number; can_interrupt: boolean } | null) => void;
@@ -123,15 +125,19 @@ export function useChatComposerState({
   onShowSettings,
   pendingViewSessionRef,
   scrollToBottom,
+  chatMessages,
   addMessage,
   clearMessages,
   rewindMessages,
+  removeLastUserMessage,
   setIsLoading,
   setCanAbortSession,
   setClaudeStatus,
   setIsUserScrolledUp,
   setPendingPermissionRequests,
 }: UseChatComposerStateArgs) {
+  const lastSubmittedInputRef = useRef<string>('');
+
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
       // Draft inputs are keyed by the DB projectId so per-project drafts
@@ -542,6 +548,7 @@ export function useChatComposerState({
         timestamp: new Date(),
       };
 
+      lastSubmittedInputRef.current = currentInput;
       addMessage(userMessage);
       setIsLoading(true); // Processing banner starts
       setCanAbortSession(true);
@@ -856,6 +863,22 @@ export function useChatComposerState({
       return;
     }
 
+    // If the agent hasn't responded yet (last message is still the user's),
+    // remove the user bubble and restore input so the user can edit and resend.
+    const lastMsg = chatMessages[chatMessages.length - 1];
+    const noAgentResponseYet = lastMsg?.type === 'user' && lastSubmittedInputRef.current;
+    if (noAgentResponseYet) {
+      removeLastUserMessage();
+      setInput(lastSubmittedInputRef.current);
+      inputValueRef.current = lastSubmittedInputRef.current;
+      lastSubmittedInputRef.current = '';
+      setIsLoading(false);
+      setCanAbortSession(false);
+      setClaudeStatus(null);
+      setTimeout(() => textareaRef.current?.focus(), 50);
+      return;
+    }
+
     const pendingSessionId =
       typeof window !== 'undefined' ? sessionStorage.getItem('pendingSessionId') : null;
     const cursorSessionId =
@@ -882,7 +905,7 @@ export function useChatComposerState({
       sessionId: targetSessionId,
       provider,
     });
-  }, [canAbortSession, currentSessionId, pendingViewSessionRef, provider, selectedSession?.id, sendMessage]);
+  }, [canAbortSession, chatMessages, removeLastUserMessage, setIsLoading, setCanAbortSession, setClaudeStatus, currentSessionId, pendingViewSessionRef, provider, selectedSession?.id, sendMessage]);
 
   const handleGrantToolPermission = useCallback(
     (suggestion: { entry: string; toolName: string }) => {

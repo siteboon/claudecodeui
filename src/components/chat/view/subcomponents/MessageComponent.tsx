@@ -55,6 +55,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
       (prevMessage.type === 'error'));
   const messageRef = useRef<HTMLDivElement | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isToolCollapsed, setIsToolCollapsed] = useState(false);
   const permissionSuggestion = getClaudePermissionSuggestion(message, provider);
   const [permissionGrantState, setPermissionGrantState] = useState<PermissionGrantState>('idle');
   const userCopyContent = String(message.content || '');
@@ -212,14 +213,27 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
             {message.isToolUse ? (
               <>
                 <div className="flex flex-col">
-                  <div className="flex flex-col">
-                    <Markdown className="prose prose-sm max-w-none dark:prose-invert">
-                      {String(message.displayText || '')}
-                    </Markdown>
+                  <div className="flex items-start gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setIsToolCollapsed((v) => !v)}
+                      className="mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground/50 transition-colors hover:bg-muted hover:text-muted-foreground"
+                      title={isToolCollapsed ? 'Expand' : 'Collapse'}
+                    >
+                      {isToolCollapsed
+                        ? <ChevronRight className="h-3.5 w-3.5" />
+                        : <ChevronDown className="h-3.5 w-3.5" />
+                      }
+                    </button>
+                    <div className="min-w-0 flex-1">
+                      <Markdown className="prose prose-sm max-w-none dark:prose-invert">
+                        {String(message.displayText || '')}
+                      </Markdown>
+                    </div>
                   </div>
                 </div>
 
-                {message.toolInput && (
+                {!isToolCollapsed && message.toolInput && (
                   <ToolRenderer
                     toolName={message.toolName || 'UnknownTool'}
                     toolInput={message.toolInput}
@@ -238,7 +252,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                 )}
 
                 {/* Tool Result Section */}
-                {message.toolResult && !shouldHideToolResult(message.toolName || 'UnknownTool', message.toolResult) && (
+                {!isToolCollapsed && message.toolResult && !shouldHideToolResult(message.toolName || 'UnknownTool', message.toolResult) && (
                   message.toolResult.isError ? (
                     // Error results - red error box with content
                     <div

@@ -290,6 +290,14 @@ export function useChatSessionState({
 
   const rewindMessages = useCallback((count: number) => setViewHiddenCount(count), []);
 
+  const removeLastUserMessage = useCallback(() => {
+    if (activeSessionId) {
+      sessionStore.popLastUserMessage(activeSessionId);
+    } else {
+      setPendingUserMessage(null);
+    }
+  }, [activeSessionId, sessionStore]);
+
   const scrollToBottom = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
@@ -778,6 +786,7 @@ export function useChatSessionState({
     addMessage,
     clearMessages,
     rewindMessages,
+    removeLastUserMessage,
     isLoading,
     setIsLoading,
     currentSessionId,
