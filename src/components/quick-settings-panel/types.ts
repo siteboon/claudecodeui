@@ -3,6 +3,7 @@ import type { LucideIcon } from 'lucide-react';
 
 export type PreferenceToggleKey =
   | 'autoExpandTools'
+  | 'collapseToolsByDefault'
   | 'showRawParameters'
   | 'showThinking'
   | 'showCompactSummaries'

@@ -59,6 +59,7 @@
     },
     "darkMode": "Dark Mode",
     "autoExpandTools": "Auto-expand tools",
+    "collapseToolsByDefault": "Collapse tool blocks by default",
     "showRawParameters": "Show raw parameters",
     "showThinking": "Show thinking",
     "showCompactSummaries": "Show compact summaries",

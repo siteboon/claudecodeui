@@ -23,6 +23,7 @@ export default function QuickSettingsPanelView() {
 
   const quickSettingsPreferences = useMemo<QuickSettingsPreferences>(() => ({
     autoExpandTools: preferences.autoExpandTools,
+    collapseToolsByDefault: preferences.collapseToolsByDefault,
     showRawParameters: preferences.showRawParameters,
     showThinking: preferences.showThinking,
     showCompactSummaries: preferences.showCompactSummaries,
@@ -30,6 +31,7 @@ export default function QuickSettingsPanelView() {
     sendByCtrlEnter: preferences.sendByCtrlEnter,
   }), [
     preferences.autoExpandTools,
+    preferences.collapseToolsByDefault,
     preferences.autoScrollToBottom,
     preferences.sendByCtrlEnter,
     preferences.showRawParameters,

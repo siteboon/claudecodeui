@@ -1,6 +1,7 @@
 import {
   ArrowDown,
   Brain,
+  ChevronDown,
   Eye,
   Languages,
   Maximize2,
@@ -28,6 +29,11 @@ export const TOOL_DISPLAY_TOGGLES: PreferenceToggleItem[] = [
     key: 'autoExpandTools',
     labelKey: 'quickSettings.autoExpandTools',
     icon: Maximize2,
+  },
+  {
+    key: 'collapseToolsByDefault',
+    labelKey: 'quickSettings.collapseToolsByDefault',
+    icon: ChevronDown,
   },
   {
     key: 'showRawParameters',

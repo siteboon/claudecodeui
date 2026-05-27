@@ -2,6 +2,7 @@ import { useEffect, useReducer, useRef } from 'react';
 
 type UiPreferences = {
   autoExpandTools: boolean;
+  collapseToolsByDefault: boolean;
   showRawParameters: boolean;
   showThinking: boolean;
   showCompactSummaries: boolean;
@@ -35,6 +36,7 @@ type UiPreferencesAction =
 
 const DEFAULTS: UiPreferences = {
   autoExpandTools: false,
+  collapseToolsByDefault: false,
   showRawParameters: false,
   showThinking: true,
   showCompactSummaries: false,

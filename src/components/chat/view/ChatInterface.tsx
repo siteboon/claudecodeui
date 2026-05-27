@@ -37,6 +37,7 @@ function ChatInterface({
   onNavigateToSession,
   onShowSettings,
   autoExpandTools,
+  collapseToolsByDefault,
   showRawParameters,
   showThinking,
   showCompactSummaries,
@@ -356,6 +357,7 @@ function ChatInterface({
           onShowSettings={onShowSettings}
           onGrantToolPermission={handleGrantToolPermission}
           autoExpandTools={autoExpandTools}
+          collapseToolsByDefault={collapseToolsByDefault}
           showRawParameters={showRawParameters}
           showThinking={showThinking}
           showCompactSummaries={showCompactSummaries}

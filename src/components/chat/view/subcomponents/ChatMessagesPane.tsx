@@ -47,6 +47,7 @@ interface ChatMessagesPaneProps {
   onShowSettings?: () => void;
   onGrantToolPermission: (suggestion: { entry: string; toolName: string }) => { success: boolean };
   autoExpandTools?: boolean;
+  collapseToolsByDefault?: boolean;
   showRawParameters?: boolean;
   showThinking?: boolean;
   showCompactSummaries?: boolean;
@@ -93,6 +94,7 @@ export default function ChatMessagesPane({
   onShowSettings,
   onGrantToolPermission,
   autoExpandTools,
+  collapseToolsByDefault,
   showRawParameters,
   showThinking,
   showCompactSummaries,
@@ -244,6 +246,7 @@ export default function ChatMessagesPane({
                 onShowSettings={onShowSettings}
                 onGrantToolPermission={onGrantToolPermission}
                 autoExpandTools={autoExpandTools}
+                collapseToolsByDefault={collapseToolsByDefault}
                 showRawParameters={showRawParameters}
                 showThinking={showThinking}
                 showCompactSummaries={showCompactSummaries}

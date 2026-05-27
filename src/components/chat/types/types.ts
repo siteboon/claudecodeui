@@ -118,6 +118,7 @@ export interface ChatInterfaceProps {
   onNavigateToSession?: (targetSessionId: string, options?: SessionNavigationOptions) => void;
   onShowSettings?: () => void;
   autoExpandTools?: boolean;
+  collapseToolsByDefault?: boolean;
   showRawParameters?: boolean;
   showThinking?: boolean;
   showCompactSummaries?: boolean;
