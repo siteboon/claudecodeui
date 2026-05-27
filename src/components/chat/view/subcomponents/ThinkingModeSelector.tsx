@@ -154,17 +154,17 @@ function ThinkingModeSelector({ selectedMode, onModeChange, onClose, className =
 
           setIsOpen(true);
         }}
-        className={`flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium transition-all duration-150 ${
+        className={`flex h-7 items-center gap-1 rounded-md border px-2 text-xs font-medium transition-all duration-150 ${
           isActive
-            ? `${currentMode.color} ${activeBg}`
-            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            ? `border-transparent ${currentMode.color} ${activeBg}`
+            : 'border-border/60 bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
         }`}
         title={t('thinkingMode.buttonTitle', { mode: currentMode.name })}
         aria-haspopup="dialog"
         aria-expanded={isOpen}
       >
         <IconComponent className="h-3.5 w-3.5 shrink-0" />
-        <span className="hidden sm:inline">
+        <span className="whitespace-nowrap">
           {isActive ? currentMode.name : 'Think'}
         </span>
       </button>
