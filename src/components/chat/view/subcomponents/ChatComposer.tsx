@@ -19,6 +19,7 @@ import ImageAttachment from './ImageAttachment';
 import PermissionRequestsBanner from './PermissionRequestsBanner';
 import ThinkingModeSelector from './ThinkingModeSelector';
 import TokenUsagePie from './TokenUsagePie';
+import UsagePill from './UsagePill';
 import {
   PromptInput,
   PromptInputHeader,
@@ -101,6 +102,7 @@ interface ChatComposerProps {
   placeholder: string;
   isTextareaExpanded: boolean;
   sendByCtrlEnter?: boolean;
+  onOpenSettings?: () => void;
 }
 
 export default function ChatComposer({
@@ -156,6 +158,7 @@ export default function ChatComposer({
   placeholder,
   isTextareaExpanded,
   sendByCtrlEnter,
+  onOpenSettings,
 }: ChatComposerProps) {
   const { t } = useTranslation('chat');
   const textareaRect = textareaRef.current?.getBoundingClientRect();
@@ -362,6 +365,10 @@ export default function ChatComposer({
             )}
 
             <TokenUsagePie used={tokenBudget?.used || 0} total={tokenBudget?.total || parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000} />
+
+            {provider === 'claude' && (
+              <UsagePill onOpenSettings={onOpenSettings} />
+            )}
 
             <PromptInputButton
               tooltip={{ content: t('input.showAllCommands') }}

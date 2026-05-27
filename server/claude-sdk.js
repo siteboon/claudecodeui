@@ -639,6 +639,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
     // Process streaming messages
     console.log('Starting async generator loop for session:', capturedSessionId || 'NEW');
+    let compactionOccurred = false;
     for await (const message of queryInstance) {
       // Capture session ID from first message
       if (message.session_id && !capturedSessionId) {
@@ -674,6 +675,11 @@ async function queryClaudeSDK(command, options = {}, ws) {
         ws.send(msg);
       }
 
+      // Track compaction so the result's high token count doesn't stay pinned at 100%
+      if (message.type === 'system' && message.subtype === 'status' && message.status === 'compacting') {
+        compactionOccurred = true;
+      }
+
       // Extract and send token budget updates from result messages
       if (message.type === 'result') {
         const models = Object.keys(message.modelUsage || {});
@@ -682,7 +688,13 @@ async function queryClaudeSDK(command, options = {}, ws) {
         }
         const tokenBudgetData = extractTokenBudget(message);
         if (tokenBudgetData) {
-          ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+          // After compaction the result shows the tokens used TO DO the compaction (all
+          // old context as input), which reads as 100%.  Send used:0 so the indicator
+          // resets; the accurate new context size appears after the next user turn.
+          const budgetToSend = compactionOccurred
+            ? { used: 0, total: tokenBudgetData.total }
+            : tokenBudgetData;
+          ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: budgetToSend, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
         }
       }
     }

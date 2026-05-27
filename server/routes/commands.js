@@ -133,6 +133,25 @@ const builtInCommands = [
   }
 ];
 
+// Claude Code CLI commands that are passed directly to the SDK (not handled by the UI server).
+// Adding them here makes them visible in the slash menu; selecting inserts them into the composer.
+const cliCommands = [
+  {
+    name: '/compact',
+    description: 'Compact conversation context to free up token budget',
+    namespace: 'cli',
+    type: 'cli',
+    metadata: { type: 'cli' }
+  },
+  {
+    name: '/doctor',
+    description: 'Check Claude Code environment and configuration',
+    namespace: 'cli',
+    type: 'cli',
+    metadata: { type: 'cli' }
+  }
+];
+
 /**
  * Built-in command handlers
  * Each handler returns { type: 'builtin', action: string, data: any }
@@ -440,7 +459,7 @@ router.post('/list', async (req, res) => {
     customCommands.sort((a, b) => a.name.localeCompare(b.name));
 
     res.json({
-      builtIn: builtInCommands,
+      builtIn: [...builtInCommands, ...cliCommands],
       custom: customCommands,
       count: allCommands.length
     });

@@ -1,5 +1,7 @@
-import { Bell, BellOff, BellRing, Loader2 } from 'lucide-react';
+import { Bell, BellOff, BellRing, Loader2, Volume2 } from 'lucide-react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { isAudioEnabled, isAudioCompleteEnabled, setAudioEnabled, setAudioCompleteEnabled } from '../../../../utils/audioNotification';
 import type { NotificationPreferencesState } from '../../types/types';
 
 type NotificationsSettingsTabProps = {
@@ -22,6 +24,18 @@ export default function NotificationsSettingsTab({
   onDisablePush,
 }: NotificationsSettingsTabProps) {
   const { t } = useTranslation('settings');
+  const [audioEnabled, setAudioEnabledState] = useState(() => isAudioEnabled());
+  const [audioCompleteEnabled, setAudioCompleteEnabledState] = useState(() => isAudioCompleteEnabled());
+
+  const handleAudioToggle = (enabled: boolean) => {
+    setAudioEnabled(enabled);
+    setAudioEnabledState(enabled);
+  };
+
+  const handleAudioCompleteToggle = (enabled: boolean) => {
+    setAudioCompleteEnabled(enabled);
+    setAudioCompleteEnabledState(enabled);
+  };
 
   const pushSupported = pushPermission !== 'unsupported';
   const pushDenied = pushPermission === 'denied';
@@ -139,6 +153,32 @@ export default function NotificationsSettingsTab({
             {t('notifications.events.error')}
           </label>
         </div>
+      </div>
+
+      <div className="space-y-4 bg-card border border-border rounded-lg p-4">
+        <div className="flex items-center gap-3">
+          <Volume2 className="w-4 h-4 text-muted-foreground" />
+          <h4 className="font-medium text-foreground">{t('notifications.audio.title')}</h4>
+        </div>
+        <p className="text-sm text-muted-foreground">{t('notifications.audio.description')}</p>
+        <label className="flex items-center gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            checked={audioCompleteEnabled}
+            onChange={(e) => handleAudioCompleteToggle(e.target.checked)}
+            className="w-4 h-4"
+          />
+          {t('notifications.audio.complete')}
+        </label>
+        <label className="flex items-center gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            checked={audioEnabled}
+            onChange={(e) => handleAudioToggle(e.target.checked)}
+            className="w-4 h-4"
+          />
+          {t('notifications.audio.actionRequired')}
+        </label>
       </div>
     </div>
   );

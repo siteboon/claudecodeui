@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { useCredentialsSettings } from '../../../hooks/useCredentialsSettings';
 import ApiKeysSection from './sections/ApiKeysSection';
 import GithubCredentialsSection from './sections/GithubCredentialsSection';
+import ClaudeSessionKeySection from './sections/ClaudeSessionKeySection';
 import NewApiKeyAlert from './sections/NewApiKeyAlert';
 
 export default function CredentialsSettingsTab() {
@@ -85,6 +86,8 @@ export default function CredentialsSettingsTab() {
         onToggleGithubCredential={toggleGithubCredential}
         onDeleteGithubCredential={deleteGithubCredential}
       />
+
+      <ClaudeSessionKeySection />
 
     </div>
   );

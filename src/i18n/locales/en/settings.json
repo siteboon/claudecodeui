@@ -61,6 +61,7 @@
     "autoExpandTools": "Auto-expand tools",
     "showRawParameters": "Show raw parameters",
     "showThinking": "Show thinking",
+    "showCompactSummaries": "Show compact summaries",
     "autoScrollToBottom": "Auto-scroll to bottom",
     "sendByCtrlEnter": "Send by Ctrl+Enter",
     "sendByCtrlEnterDescription": "When enabled, pressing Ctrl+Enter will send the message instead of just Enter. This is useful for IME users to avoid accidental sends.",
@@ -115,6 +116,12 @@
       "actionRequired": "Action required",
       "stop": "Run stopped",
       "error": "Run failed"
+    },
+    "audio": {
+      "title": "Audio Notifications",
+      "description": "Play a sound in the browser tab. Works when the tab is active; use Web Push for background/mobile notifications.",
+      "complete": "Play sound when Claude finishes a response",
+      "actionRequired": "Play sound when action is required"
     }
   },
   "appearanceSettings": {
@@ -486,5 +493,21 @@
     "installAriaLabel": "Plugin git repository URL",
     "tab": "tab",
     "runningStatus": "running"
+  },
+  "claudeSessionKey": {
+    "title": "Claude.ai Session Key",
+    "description": "Enables subscription usage tracking displayed next to the token counter in the chat composer. Only active during Claude provider sessions.",
+    "placeholder": "Paste your sessionKey cookie value",
+    "addButton": "Add Key",
+    "update": "Update",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "cancel": "Cancel",
+    "delete": "Remove key",
+    "confirmDelete": "Remove the Claude.ai session key?",
+    "keySet": "Session key is configured",
+    "saveError": "Failed to save. Please try again.",
+    "howToGetHint": "Find your sessionKey in browser DevTools → Application → Cookies → claude.ai"
   }
 }

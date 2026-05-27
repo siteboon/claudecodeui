@@ -4,6 +4,7 @@ import {
   Eye,
   Languages,
   Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import type { PreferenceToggleItem } from './types';
 
@@ -37,6 +38,11 @@ export const TOOL_DISPLAY_TOGGLES: PreferenceToggleItem[] = [
     key: 'showThinking',
     labelKey: 'quickSettings.showThinking',
     icon: Brain,
+  },
+  {
+    key: 'showCompactSummaries',
+    labelKey: 'quickSettings.showCompactSummaries',
+    icon: Minimize2,
   },
 ];
 

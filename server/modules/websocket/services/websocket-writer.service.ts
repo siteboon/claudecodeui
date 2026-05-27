@@ -1,4 +1,4 @@
-import { WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
+import { broadcastToSessionSubscribers, registerSessionConnection, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
 import type { RealtimeClientConnection } from '@/shared/types.js';
 
 /**
@@ -19,8 +19,13 @@ export class WebSocketWriter {
   }
 
   send(data: unknown): void {
+    const serialized = JSON.stringify(data);
     if (this.ws.readyState === WS_OPEN_STATE) {
-      this.ws.send(JSON.stringify(data));
+      this.ws.send(serialized);
+    }
+    // Broadcast to every other window that opened the same session
+    if (this.sessionId) {
+      broadcastToSessionSubscribers(this.sessionId, serialized, this.ws);
     }
   }
 
@@ -30,6 +35,9 @@ export class WebSocketWriter {
 
   setSessionId(sessionId: string): void {
     this.sessionId = sessionId;
+    // Auto-register this window as a subscriber so it also receives broadcasts
+    // from future turns initiated by other windows on the same session.
+    registerSessionConnection(sessionId, this.ws);
   }
 
   getSessionId(): string | null {

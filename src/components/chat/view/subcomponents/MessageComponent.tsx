@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
 import type {
   ChatMessage,
@@ -31,6 +32,7 @@ type MessageComponentProps = {
   autoExpandTools?: boolean;
   showRawParameters?: boolean;
   showThinking?: boolean;
+  showCompactSummaries?: boolean;
   selectedProject?: Project | null;
   provider: Provider | string;
 };
@@ -44,7 +46,7 @@ type InteractiveOption = {
 type PermissionGrantState = 'idle' | 'granted' | 'error';
 const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'Edit', 'Write', 'ApplyPatch']);
 
-const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, onShowSettings, onGrantToolPermission, autoExpandTools, showRawParameters, showThinking, selectedProject, provider }: MessageComponentProps) => {
+const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, onShowSettings, onGrantToolPermission, autoExpandTools, showRawParameters, showThinking, showCompactSummaries, selectedProject, provider }: MessageComponentProps) => {
   const { t } = useTranslation('chat');
   const isGrouped = prevMessage && prevMessage.type === message.type &&
     ((prevMessage.type === 'assistant') ||
@@ -105,9 +107,33 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
 
   const formattedTime = useMemo(() => new Date(message.timestamp).toLocaleTimeString(), [message.timestamp]);
   const shouldHideThinkingMessage = Boolean(message.isThinking && !showThinking);
+  const [compactExpanded, setCompactExpanded] = useState(false);
 
   if (shouldHideThinkingMessage) {
     return null;
+  }
+
+  if (message.isCompactSummary && !showCompactSummaries) {
+    return (
+      <div className="px-3 sm:px-0 my-1">
+        <button
+          type="button"
+          onClick={() => setCompactExpanded((v) => !v)}
+          className="flex w-full items-center gap-2 rounded-lg border border-dashed border-border/60 bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/50"
+        >
+          {compactExpanded ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
+          <span className="font-medium">{t('compactSummary.label', { defaultValue: 'Compacted context' })}</span>
+          <span className="ml-auto opacity-60">{compactExpanded ? t('compactSummary.collapse', { defaultValue: 'click to collapse' }) : t('compactSummary.hint', { defaultValue: 'click to expand' })}</span>
+        </button>
+        {compactExpanded && (
+          <div className="mt-1 rounded-lg border border-dashed border-border/40 bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
+            <Markdown className="prose prose-xs prose-gray max-w-none dark:prose-invert opacity-70">
+              {String(message.content || '')}
+            </Markdown>
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (

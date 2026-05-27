@@ -7,6 +7,7 @@ type WebSocketContextType = {
   sendMessage: (message: any) => void;
   latestMessage: any | null;
   isConnected: boolean;
+  onPageVisible: (callback: () => void) => () => void;
 };
 
 const WebSocketContext = createContext<WebSocketContextType | null>(null);
@@ -33,7 +34,21 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   const [latestMessage, setLatestMessage] = useState<any>(null);
   const [isConnected, setIsConnected] = useState(false);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pageVisibleCallbacksRef = useRef<Set<() => void>>(new Set());
   const { token } = useAuth();
+
+  // Notify subscribers when the browser tab becomes visible again
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        for (const cb of pageVisibleCallbacksRef.current) {
+          cb();
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
 
   useEffect(() => {
     connect();
@@ -107,13 +122,19 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     }
   }, []);
 
+  const onPageVisible = useCallback((callback: () => void) => {
+    pageVisibleCallbacksRef.current.add(callback);
+    return () => pageVisibleCallbacksRef.current.delete(callback);
+  }, []);
+
   const value: WebSocketContextType = useMemo(() =>
   ({
     ws: wsRef.current,
     sendMessage,
     latestMessage,
-    isConnected
-  }), [sendMessage, latestMessage, isConnected]);
+    isConnected,
+    onPageVisible,
+  }), [sendMessage, latestMessage, isConnected, onPageVisible]);
 
   return value;
 };

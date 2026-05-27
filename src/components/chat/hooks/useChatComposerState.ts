@@ -478,7 +478,7 @@ export function useChatComposerState({
         const firstSpace = commandInput.indexOf(' ');
         const commandName = firstSpace > 0 ? commandInput.slice(0, firstSpace) : commandInput;
         const matchedCommand = slashCommands.find((cmd: SlashCommand) => cmd.name === commandName);
-        if (matchedCommand && matchedCommand.type !== 'skill') {
+        if (matchedCommand && matchedCommand.type !== 'skill' && matchedCommand.type !== 'cli') {
           executeCommand(matchedCommand, commandInput);
           setInput('');
           inputValueRef.current = '';

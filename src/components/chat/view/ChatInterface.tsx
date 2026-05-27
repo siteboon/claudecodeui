@@ -39,6 +39,7 @@ function ChatInterface({
   autoExpandTools,
   showRawParameters,
   showThinking,
+  showCompactSummaries,
   autoScrollToBottom,
   sendByCtrlEnter,
   externalMessageUpdate,
@@ -204,6 +205,19 @@ function ChatInterface({
     setPendingPermissionRequests,
   });
 
+  // When the browser tab becomes visible again, re-query session status so:
+  // (1) isLoading/spinner is cleared if the session finished while the tab was hidden,
+  // (2) this window registers as a broadcast subscriber if the session is still running.
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (!document.hidden && currentSessionId && ws) {
+        sendMessage({ type: 'check-session-status', sessionId: currentSessionId, provider });
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [currentSessionId, ws, sendMessage, provider]);
+
   // On WebSocket reconnect, re-fetch the current session's messages from the server
   // so missed streaming events are shown. Also reset isLoading.
   const handleWebSocketReconnect = useCallback(async () => {
@@ -341,6 +355,7 @@ function ChatInterface({
           autoExpandTools={autoExpandTools}
           showRawParameters={showRawParameters}
           showThinking={showThinking}
+          showCompactSummaries={showCompactSummaries}
           selectedProject={selectedProject}
         />
 
@@ -410,6 +425,7 @@ function ChatInterface({
           })}
           isTextareaExpanded={isTextareaExpanded}
           sendByCtrlEnter={sendByCtrlEnter}
+          onOpenSettings={onShowSettings}
         />
       </div>
 

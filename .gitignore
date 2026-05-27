@@ -128,10 +128,6 @@ dev-debug.log
 *.sw?
 # OS specific
 
-# Task files
-tasks.json
-tasks/ 
-
 # Translations
 !src/i18n/locales/en/tasks.json
 !src/i18n/locales/ja/tasks.json
@@ -142,3 +138,7 @@ tasks/
 
 # Git worktrees
 .worktrees/
+
+# Task files
+# tasks.json
+# tasks/ 

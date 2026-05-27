@@ -69,6 +69,10 @@ const isPromiseLike = (value: unknown): value is Promise<unknown> =>
 const isSkillCommand = (command: SlashCommand) =>
   command.type === 'skill' || command.metadata?.type === 'skill';
 
+// CLI commands are passed directly to the SDK — insert into input like skills rather than calling the UI API.
+const isCliCommand = (command: SlashCommand) =>
+  command.type === 'cli' || command.namespace === 'cli';
+
 const dedupeProviderSkills = (skills: ProviderSkill[]): ProviderSkill[] => {
   const seenCommands = new Set<string>();
 
@@ -210,7 +214,7 @@ export function useSlashCommands({
         const allCommands: SlashCommand[] = [
           ...((data.builtIn || []) as SlashCommand[]).map((command) => ({
             ...command,
-            type: 'built-in',
+            type: command.namespace === 'cli' ? 'cli' : 'built-in',
           })),
           ...skillCommands,
           ...((data.custom || []) as SlashCommand[]).map((command) => ({
@@ -332,7 +336,7 @@ export function useSlashCommands({
 
   const selectCommandFromKeyboard = useCallback(
     (command: SlashCommand) => {
-      if (isSkillCommand(command)) {
+      if (isSkillCommand(command) || isCliCommand(command)) {
         insertCommandIntoInput(command);
         return;
       }
@@ -354,7 +358,7 @@ export function useSlashCommands({
       }
 
       trackCommandUsage(command);
-      if (isSkillCommand(command)) {
+      if (isSkillCommand(command) || isCliCommand(command)) {
         insertCommandIntoInput(command);
         return;
       }

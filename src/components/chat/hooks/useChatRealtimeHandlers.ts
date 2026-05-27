@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 
 import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
+import { playActionRequiredSound, playCompletedSound } from '../../../utils/audioNotification';
 import type { PendingPermissionRequest, SessionNavigationOptions } from '../types/types';
 import type { ProjectSession, LLMProvider } from '../../../types/app';
 import type { SessionStore, NormalizedMessage } from '../../../stores/useSessionStore';
@@ -224,6 +225,12 @@ export function useChatRealtimeHandlers({
       sessionStore.appendRealtime(sid, msg as NormalizedMessage);
     }
 
+    // After compaction the old token count is stale — clear it so the indicator
+    // resets to 0% rather than staying pinned at 100%.
+    if (msg.isCompactSummary) {
+      setTokenBudget(null);
+    }
+
     // --- UI side effects for specific kinds ---
     switch (msg.kind) {
       case 'session_created': {
@@ -274,6 +281,8 @@ export function useChatRealtimeHandlers({
           // The backend already sent any abort-related messages
           break;
         }
+
+        playCompletedSound();
 
         const actualSessionId =
           typeof msg.actualSessionId === 'string' && msg.actualSessionId.trim().length > 0
@@ -340,6 +349,7 @@ export function useChatRealtimeHandlers({
 
       case 'permission_request': {
         if (!msg.requestId) break;
+        playActionRequiredSound();
         setPendingPermissionRequests((prev) => {
           if (prev.some((r: PendingPermissionRequest) => r.requestId === msg.requestId)) return prev;
           return [...prev, {

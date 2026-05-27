@@ -217,8 +217,10 @@ export const sessionsService = {
 
   /**
    * Renames one session by id without requiring the caller to pass provider.
+   * Also writes a custom-title event to the session's JSONL file so the CLI
+   * /resume list reflects the renamed name.
    */
-  renameSessionById(sessionId: string, summary: string): { sessionId: string; summary: string } {
+  async renameSessionById(sessionId: string, summary: string): Promise<{ sessionId: string; summary: string }> {
     const session = sessionsDb.getSessionById(sessionId);
     if (!session) {
       throw new AppError(`Session "${sessionId}" was not found.`, {
@@ -228,6 +230,18 @@ export const sessionsService = {
     }
 
     sessionsDb.updateSessionCustomName(sessionId, summary);
+
+    // Write a custom-title event to the JSONL file so the CLI /resume list
+    // reflects the renamed name (matches the format Claude CLI's /rename writes).
+    if (session.jsonl_path) {
+      try {
+        const event = JSON.stringify({ type: 'custom-title', customTitle: summary, sessionId }) + '\n';
+        await fsp.appendFile(session.jsonl_path, event, 'utf8');
+      } catch {
+        // Non-fatal: DB name is already updated; JSONL write is best-effort.
+      }
+    }
+
     return { sessionId, summary };
   },
 };

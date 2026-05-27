@@ -1,5 +1,5 @@
 import express from 'express';
-import { userDb } from '../modules/database/index.js';
+import { userDb, credentialsDb } from '../modules/database/index.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { getSystemGitConfig } from '../utils/gitConfig.js';
 import { spawn } from 'child_process';
@@ -117,6 +117,61 @@ router.get('/onboarding-status', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error checking onboarding status:', error);
     res.status(500).json({ error: 'Failed to check onboarding status' });
+  }
+});
+
+router.get('/claude-session-key', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const key = credentialsDb.getActiveCredential(userId, 'claude_session');
+    res.json({ success: true, hasKey: Boolean(key) });
+  } catch (error) {
+    console.error('Error getting claude session key:', error);
+    res.status(500).json({ error: 'Failed to get session key status' });
+  }
+});
+
+router.put('/claude-session-key', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { sessionKey } = req.body;
+
+    if (!sessionKey || typeof sessionKey !== 'string' || !sessionKey.trim()) {
+      return res.status(400).json({ error: 'Session key is required' });
+    }
+
+    // Delete all existing keys of this type before creating the new one
+    const existing = credentialsDb.getCredentials(userId, 'claude_session');
+    for (const cred of existing) {
+      credentialsDb.deleteCredential(userId, cred.id);
+    }
+
+    credentialsDb.createCredential(
+      userId,
+      'claude_session',
+      'claude_session',
+      sessionKey.trim(),
+      'Claude.ai session key for usage tracking'
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error saving claude session key:', error);
+    res.status(500).json({ error: 'Failed to save session key' });
+  }
+});
+
+router.delete('/claude-session-key', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const existing = credentialsDb.getCredentials(userId, 'claude_session');
+    for (const cred of existing) {
+      credentialsDb.deleteCredential(userId, cred.id);
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting claude session key:', error);
+    res.status(500).json({ error: 'Failed to delete session key' });
   }
 });
 

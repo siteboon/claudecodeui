@@ -304,6 +304,15 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       return [createNormalizedMessage({ kind: 'stream_end', sessionId, provider: PROVIDER })];
     }
 
+    // SDK status messages — forward compacting state so the UI shows a clear message
+    // instead of cycling through generic "Thinking / Processing / ..." words.
+    if (raw.type === 'system' && raw.subtype === 'status') {
+      if (raw.status === 'compacting') {
+        return [createNormalizedMessage({ kind: 'status', text: 'Compacting context...', sessionId, provider: PROVIDER, canInterrupt: true })];
+      }
+      return [];
+    }
+
     const messages: NormalizedMessage[] = [];
     const ts = raw.timestamp || new Date().toISOString();
     const baseId = raw.uuid || generateMessageId('claude');

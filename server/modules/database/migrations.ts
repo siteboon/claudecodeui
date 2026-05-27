@@ -382,6 +382,23 @@ const rebuildSessionsTableWithProjectSchema = (db: Database): void => {
   }
 };
 
+const removeAgentSidechainSessions = (db: Database): void => {
+  if (!tableExists(db, 'sessions')) {
+    return;
+  }
+
+  // Sessions whose jsonl_path points to an agent-*.jsonl sidechain file were
+  // corrupted by a prior sync bug that indexed sub-agent transcripts as parent sessions.
+  // Delete them so they can be re-synced from the correct file on next startup.
+  const result = db.prepare(
+    "DELETE FROM sessions WHERE jsonl_path LIKE '%/agent-%'"
+  ).run();
+
+  if (result.changes > 0) {
+    console.log(`Running migration: Removed ${result.changes} agent-sidechain-corrupted session(s)`);
+  }
+};
+
 const ensureProjectsForSessionPaths = (db: Database): void => {
   if (!tableExists(db, 'sessions')) {
     return;
@@ -428,6 +445,7 @@ export const runMigrations = (db: Database) => {
     migrateLegacyWorkspaceTableIntoProjects(db);
     rebuildSessionsTableWithProjectSchema(db);
     migrateLegacySessionNames(db);
+    removeAgentSidechainSessions(db);
     ensureProjectsForSessionPaths(db);
 
     db.exec('CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id)');

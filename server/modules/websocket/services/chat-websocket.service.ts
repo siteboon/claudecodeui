@@ -1,6 +1,10 @@
 import type { WebSocket } from 'ws';
 
-import { connectedClients } from '@/modules/websocket/services/websocket-state.service.js';
+import {
+  connectedClients,
+  registerSessionConnection,
+  unregisterFromAllSessions,
+} from '@/modules/websocket/services/websocket-state.service.js';
 import { WebSocketWriter } from '@/modules/websocket/services/websocket-writer.service.js';
 import type {
   AnyRecord,
@@ -216,9 +220,12 @@ export function handleChatConnection(
           isActive = dependencies.isGeminiSessionActive(sessionId);
         } else {
           isActive = dependencies.isClaudeSDKSessionActive(sessionId);
-          if (isActive) {
-            dependencies.reconnectSessionWriter(sessionId, ws);
-          }
+        }
+
+        // Register this window as a subscriber for the session's broadcast stream
+        // so all open windows receive live events, not only the one that started the run.
+        if (isActive && sessionId) {
+          registerSessionConnection(sessionId, ws);
         }
 
         writer.send({
@@ -267,5 +274,6 @@ export function handleChatConnection(
   ws.on('close', () => {
     console.log('[INFO] Chat client disconnected');
     connectedClients.delete(ws);
+    unregisterFromAllSessions(ws);
   });
 }
