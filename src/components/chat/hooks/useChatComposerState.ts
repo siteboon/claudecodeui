@@ -137,6 +137,12 @@ export function useChatComposerState({
   setPendingPermissionRequests,
 }: UseChatComposerStateArgs) {
   const lastSubmittedInputRef = useRef<string>('');
+  // Mirror chatMessages in a ref so abort callbacks always read the latest value
+  // without stale closure issues (e.g. when ESC fires before the re-render that
+  // adds the user message has completed).
+  const chatMessagesRef = useRef<ChatMessage[]>(chatMessages);
+  // Keep the ref current every render so abort callbacks read latest messages.
+  chatMessagesRef.current = chatMessages;
 
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
@@ -865,7 +871,10 @@ export function useChatComposerState({
 
     // If the agent hasn't responded yet (last message is still the user's),
     // remove the user bubble and restore input so the user can edit and resend.
-    const lastMsg = chatMessages[chatMessages.length - 1];
+    // Use the ref (not the closure value) to avoid stale-state races when ESC
+    // fires before the re-render that added the user message has flushed.
+    const msgs = chatMessagesRef.current;
+    const lastMsg = msgs[msgs.length - 1];
     const noAgentResponseYet = lastMsg?.type === 'user' && lastSubmittedInputRef.current;
     if (noAgentResponseYet) {
       removeLastUserMessage();
@@ -905,7 +914,7 @@ export function useChatComposerState({
       sessionId: targetSessionId,
       provider,
     });
-  }, [canAbortSession, chatMessages, removeLastUserMessage, setIsLoading, setCanAbortSession, setClaudeStatus, currentSessionId, pendingViewSessionRef, provider, selectedSession?.id, sendMessage]);
+  }, [canAbortSession, removeLastUserMessage, setIsLoading, setCanAbortSession, setClaudeStatus, currentSessionId, pendingViewSessionRef, provider, selectedSession?.id, sendMessage]);
 
   const handleGrantToolPermission = useCallback(
     (suggestion: { entry: string; toolName: string }) => {
