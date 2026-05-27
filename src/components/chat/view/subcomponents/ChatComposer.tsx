@@ -18,8 +18,7 @@ import ClaudeStatus from './ClaudeStatus';
 import ImageAttachment from './ImageAttachment';
 import PermissionRequestsBanner from './PermissionRequestsBanner';
 import ThinkingModeSelector from './ThinkingModeSelector';
-import TokenUsagePie from './TokenUsagePie';
-import UsagePill from './UsagePill';
+import ContextUsagePill from './ContextUsagePill';
 import {
   PromptInput,
   PromptInputHeader,
@@ -320,6 +319,21 @@ export default function ChatComposer({
               <ImageIcon />
             </PromptInputButton>
 
+            <PromptInputButton
+              tooltip={{ content: t('input.showAllCommands') }}
+              onClick={onToggleCommandMenu}
+              className="relative"
+            >
+              <MessageSquareIcon />
+              {slashCommandsCount > 0 && (
+                <span
+                  className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground"
+                >
+                  {slashCommandsCount}
+                </span>
+              )}
+            </PromptInputButton>
+
             <button
               type="button"
               onClick={onModeSwitch}
@@ -364,26 +378,12 @@ export default function ChatComposer({
               <ThinkingModeSelector selectedMode={thinkingMode} onModeChange={setThinkingMode} onClose={() => {}} className="" />
             )}
 
-            <TokenUsagePie used={tokenBudget?.used || 0} total={tokenBudget?.total || parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000} />
-
-            {provider === 'claude' && (
-              <UsagePill onOpenSettings={onOpenSettings} />
-            )}
-
-            <PromptInputButton
-              tooltip={{ content: t('input.showAllCommands') }}
-              onClick={onToggleCommandMenu}
-              className="relative"
-            >
-              <MessageSquareIcon />
-              {slashCommandsCount > 0 && (
-                <span
-                  className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground"
-                >
-                  {slashCommandsCount}
-                </span>
-              )}
-            </PromptInputButton>
+            <ContextUsagePill
+              used={tokenBudget?.used || 0}
+              total={tokenBudget?.total || parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000}
+              provider={provider as string}
+              onOpenSettings={onOpenSettings}
+            />
 
             {hasInput && (
               <PromptInputButton

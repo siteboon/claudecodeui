@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { BarChart2, RefreshCw } from 'lucide-react';
 import { authenticatedFetch } from '../../../../utils/api';
 
 type Bucket = {
@@ -23,10 +23,10 @@ type UsagePillProps = {
 
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
-function getColor(pct: number): string {
-  if (pct < 50) return 'text-blue-500';
-  if (pct < 75) return 'text-amber-500';
-  return 'text-red-500';
+function pctColor(pct: number): string {
+  if (pct < 50) return 'text-blue-500 dark:text-blue-400';
+  if (pct < 75) return 'text-amber-500 dark:text-amber-400';
+  return 'text-red-500 dark:text-red-400';
 }
 
 export default function UsagePill({ onOpenSettings }: UsagePillProps) {
@@ -35,7 +35,6 @@ export default function UsagePill({ onOpenSettings }: UsagePillProps) {
   const [loading, setLoading] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Fast check: does the user have a session key configured?
   useEffect(() => {
     authenticatedFetch('/api/user/claude-session-key')
       .then((r) => r.json() as Promise<{ success: boolean; hasKey: boolean }>)
@@ -60,7 +59,6 @@ export default function UsagePill({ onOpenSettings }: UsagePillProps) {
     }
   }, []);
 
-  // Start fetching usage data once we know a key exists
   useEffect(() => {
     if (!hasKey) return;
     void fetchUsage();
@@ -68,27 +66,26 @@ export default function UsagePill({ onOpenSettings }: UsagePillProps) {
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [hasKey, fetchUsage]);
 
-  // Not yet determined
   if (hasKey === null) return null;
 
-  // No key configured
   if (!hasKey) {
     if (!onOpenSettings) return null;
     return (
       <button
+        type="button"
         onClick={onOpenSettings}
-        className="text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors whitespace-nowrap"
         title="Set up Claude.ai usage tracking"
+        className="flex h-7 items-center gap-1 rounded-md border border-dashed border-border/50 px-2 text-xs text-muted-foreground/50 transition-colors hover:border-border hover:text-muted-foreground"
       >
-        Usage: set up
+        <BarChart2 className="h-3 w-3" />
+        <span className="hidden sm:inline">Usage</span>
       </button>
     );
   }
 
-  // Key exists but data still loading
   if (!data) {
     return (
-      <div className="flex items-center gap-1 text-xs text-muted-foreground/50">
+      <div className="flex h-7 items-center px-1 text-xs text-muted-foreground/40">
         <RefreshCw className="h-3 w-3 animate-spin" />
       </div>
     );
@@ -100,35 +97,36 @@ export default function UsagePill({ onOpenSettings }: UsagePillProps) {
   const weeklyPct = allModels?.pct ?? null;
   const hasValues = sessionPct !== null || weeklyPct !== null;
 
-  const titleLines = [
+  const tooltip = [
     session ? `Session: ${session.pct ?? '?'}%${session.reset_in ? ` (resets in ${session.reset_in})` : ''}` : null,
-    allModels ? `Weekly (all): ${allModels.pct ?? '?'}%${allModels.reset_in ? ` (resets in ${allModels.reset_in})` : ''}` : null,
+    allModels ? `Weekly: ${allModels.pct ?? '?'}%${allModels.reset_in ? ` (resets in ${allModels.reset_in})` : ''}` : null,
     data.plan ? `Plan: ${data.plan}` : null,
     data.error ? `Error: ${data.error}` : null,
   ].filter(Boolean).join('\n');
 
   return (
-    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+    <div className="flex items-center gap-0.5 text-xs">
       {data.error && !hasValues ? (
-        <span title={data.error} className="cursor-help text-destructive">!</span>
+        <span title={data.error} className="cursor-help px-1 text-destructive">!</span>
       ) : hasValues ? (
-        <span title={titleLines} className="flex cursor-default items-center gap-1">
+        <span title={tooltip} className="flex cursor-default items-center gap-1 tabular-nums">
           {sessionPct !== null && (
-            <span className={getColor(sessionPct)}>S{sessionPct}%</span>
+            <span className={pctColor(sessionPct)}>{sessionPct}%</span>
           )}
           {sessionPct !== null && weeklyPct !== null && (
-            <span className="text-muted-foreground/40">/</span>
+            <span className="text-muted-foreground/30">·</span>
           )}
           {weeklyPct !== null && (
-            <span className={getColor(weeklyPct)}>W{weeklyPct}%</span>
+            <span className={`${pctColor(weeklyPct)} text-muted-foreground/70`}>{weeklyPct}%</span>
           )}
         </span>
       ) : null}
       <button
+        type="button"
         onClick={() => void fetchUsage(true)}
         disabled={loading}
-        title="Refresh usage data"
-        className="p-0.5 transition-colors hover:text-foreground disabled:opacity-50"
+        title="Refresh usage"
+        className="rounded p-0.5 text-muted-foreground/40 transition-colors hover:text-muted-foreground disabled:opacity-30"
       >
         <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
       </button>

@@ -131,6 +131,15 @@ function ThinkingModeSelector({ selectedMode, onModeChange, onClose, className =
 
   const currentMode = translatedModes.find(mode => mode.id === selectedMode) || translatedModes[0];
   const IconComponent = currentMode.icon || Brain;
+  const isActive = selectedMode !== 'none';
+
+  const activeBgMap: Record<string, string> = {
+    'text-blue-600':   'bg-blue-50   hover:bg-blue-100   dark:bg-blue-950/40  dark:hover:bg-blue-950/60',
+    'text-purple-600': 'bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-950/60',
+    'text-indigo-600': 'bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-950/60',
+    'text-red-600':    'bg-red-50    hover:bg-red-100    dark:bg-red-950/40   dark:hover:bg-red-950/60',
+  };
+  const activeBg = activeBgMap[currentMode.color] ?? 'bg-muted hover:bg-muted/80';
 
   return (
     <div className={`relative ${className}`} ref={containerRef}>
@@ -145,15 +154,19 @@ function ThinkingModeSelector({ selectedMode, onModeChange, onClose, className =
 
           setIsOpen(true);
         }}
-        className={`flex h-10 w-10 items-center justify-center rounded-full transition-all duration-200 sm:h-10 sm:w-10 ${selectedMode === 'none'
-            ? 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600'
-            : 'bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:hover:bg-blue-800'
-          }`}
+        className={`flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium transition-all duration-150 ${
+          isActive
+            ? `${currentMode.color} ${activeBg}`
+            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+        }`}
         title={t('thinkingMode.buttonTitle', { mode: currentMode.name })}
         aria-haspopup="dialog"
         aria-expanded={isOpen}
       >
-        <IconComponent className={`h-5 w-5 ${currentMode.color}`} />
+        <IconComponent className="h-3.5 w-3.5 shrink-0" />
+        <span className="hidden sm:inline">
+          {isActive ? currentMode.name : 'Think'}
+        </span>
       </button>
 
       {isOpen && typeof document !== 'undefined' && createPortal(
