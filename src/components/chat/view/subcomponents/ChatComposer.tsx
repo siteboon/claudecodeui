@@ -13,12 +13,12 @@ import type {
 } from 'react';
 import { ImageIcon, MessageSquareIcon, XIcon, ArrowDownIcon } from 'lucide-react';
 import type { PendingPermissionRequest, PermissionMode, Provider } from '../../types/types';
-import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS, GEMINI_MODELS } from '../../../../../shared/modelConstants';
 import CommandMenu from './CommandMenu';
 import ClaudeStatus from './ClaudeStatus';
 import ImageAttachment from './ImageAttachment';
 import PermissionRequestsBanner from './PermissionRequestsBanner';
 import ThinkingModeSelector from './ThinkingModeSelector';
+import ModelSelector from './ModelSelector';
 import ContextUsagePill from './ContextUsagePill';
 import {
   PromptInput,
@@ -104,6 +104,7 @@ interface ChatComposerProps {
   sendByCtrlEnter?: boolean;
   onOpenSettings?: () => void;
   currentModel: string;
+  onModelChange: (model: string) => void;
 }
 
 export default function ChatComposer({
@@ -161,14 +162,9 @@ export default function ChatComposer({
   sendByCtrlEnter,
   onOpenSettings,
   currentModel,
+  onModelChange,
 }: ChatComposerProps) {
   const { t } = useTranslation('chat');
-
-  const modelOptions = provider === 'cursor' ? CURSOR_MODELS.OPTIONS
-    : provider === 'codex' ? CODEX_MODELS.OPTIONS
-    : provider === 'gemini' ? GEMINI_MODELS.OPTIONS
-    : CLAUDE_MODELS.OPTIONS;
-  const modelLabel = modelOptions.find((m) => m.value === currentModel)?.label ?? currentModel;
   const textareaRect = textareaRef.current?.getBoundingClientRect();
   const commandMenuPosition = {
     top: textareaRect ? Math.max(16, textareaRect.top - 316) : 0,
@@ -379,9 +375,11 @@ export default function ChatComposer({
               <ThinkingModeSelector selectedMode={thinkingMode} onModeChange={setThinkingMode} onClose={() => {}} className="" />
             )}
 
-            <div className="flex h-7 items-center rounded-md border border-border/60 bg-muted/50 px-2 text-xs font-medium text-muted-foreground">
-              {modelLabel}
-            </div>
+            <ModelSelector
+              provider={provider as string}
+              currentModel={currentModel}
+              onModelChange={onModelChange}
+            />
 
             <ContextUsagePill
               used={tokenBudget?.used || 0}

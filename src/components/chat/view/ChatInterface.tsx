@@ -427,6 +427,12 @@ function ChatInterface({
           sendByCtrlEnter={sendByCtrlEnter}
           onOpenSettings={onShowSettings}
           currentModel={provider === 'cursor' ? cursorModel : provider === 'codex' ? codexModel : provider === 'gemini' ? geminiModel : claudeModel}
+          onModelChange={(model) => {
+            if (provider === 'cursor') setCursorModel(model);
+            else if (provider === 'codex') setCodexModel(model);
+            else if (provider === 'gemini') setGeminiModel(model);
+            else setClaudeModel(model);
+          }}
         />
       </div>
 
