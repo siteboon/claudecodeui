@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { useAuth } from '../../../components/auth/context/AuthContext';
 import { useDeviceSettings } from '../../../hooks/useDeviceSettings';
 import { useVersionCheck } from '../../../hooks/useVersionCheck';
 import { useUiPreferences } from '../../../hooks/useUiPreferences';
@@ -41,6 +42,7 @@ function Sidebar({
   isMobile,
 }: SidebarProps) {
   const { t } = useTranslation(['sidebar', 'common']);
+  const { logout } = useAuth();
   const { isPWA } = useDeviceSettings({ trackMobile: false });
   const { updateAvailable, latestVersion, currentVersion, releaseInfo, installMode } = useVersionCheck(
     'siteboon',
@@ -220,6 +222,7 @@ function Sidebar({
           onShowSettings={onShowSettings}
           updateAvailable={updateAvailable}
           onShowVersionModal={() => setShowVersionModal(true)}
+          onLogout={logout}
           t={t}
         />
       ) : (

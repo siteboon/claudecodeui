@@ -68,7 +68,9 @@
     "rename": "Rename",
     "joinCommunity": "Join Community",
     "reportIssue": "Report Issue",
-    "starOnGithub": "Star on GitHub"
+    "starOnGithub": "Star on GitHub",
+    "logout": "Logout",
+    "logoutConfirm": "Are you sure you want to sign out?"
   },
   "branding": {
     "openSource": "Open Source"

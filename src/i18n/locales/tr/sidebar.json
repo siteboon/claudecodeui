@@ -68,7 +68,9 @@
     "rename": "Yeniden Adlandır",
     "joinCommunity": "Topluluğa Katıl",
     "reportIssue": "Sorun Bildir",
-    "starOnGithub": "GitHub'da Yıldızla"
+    "starOnGithub": "GitHub'da Yıldızla",
+    "logout": "Çıkış Yap",
+    "logoutConfirm": "Çıkış yapmak istediğinizden emin misiniz?"
   },
   "branding": {
     "openSource": "Açık Kaynak"

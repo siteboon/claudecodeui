@@ -68,7 +68,9 @@
     "rename": "Rinomina",
     "joinCommunity": "Unisciti alla community",
     "reportIssue": "Segnala problema",
-    "starOnGithub": "Metti stella su GitHub"
+    "starOnGithub": "Metti stella su GitHub",
+    "logout": "Esci",
+    "logoutConfirm": "Sei sicuro di voler uscire?"
   },
   "branding": {
     "openSource": "Open Source"

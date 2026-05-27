@@ -68,7 +68,9 @@
     "rename": "重命名",
     "joinCommunity": "加入社区",
     "reportIssue": "报告问题",
-    "starOnGithub": "在GitHub上加星"
+    "starOnGithub": "在GitHub上加星",
+    "logout": "退出登录",
+    "logoutConfirm": "确定要退出登录吗？"
   },
   "branding": {
     "openSource": "开源"

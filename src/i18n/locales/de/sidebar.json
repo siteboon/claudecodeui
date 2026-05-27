@@ -68,7 +68,9 @@
     "rename": "Umbenennen",
     "joinCommunity": "Community beitreten",
     "reportIssue": "Problem melden",
-    "starOnGithub": "Stern auf GitHub"
+    "starOnGithub": "Stern auf GitHub",
+    "logout": "Abmelden",
+    "logoutConfirm": "Möchten Sie sich wirklich abmelden?"
   },
   "branding": {
     "openSource": "Open Source"

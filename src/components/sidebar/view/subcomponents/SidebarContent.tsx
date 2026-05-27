@@ -4,6 +4,7 @@ import type { TFunction } from 'i18next';
 import { ScrollArea } from '../../../../shared/view/ui';
 import type { Project } from '../../../../types/app';
 import type { ReleaseInfo } from '../../../../types/sharedTypes';
+import { useAuth } from '../../../auth/context/AuthContext';
 import type { ConversationSearchResults, SearchProgress } from '../../hooks/useSidebarController';
 import type { ArchivedProjectListItem, ArchivedSessionListItem, SidebarSearchMode } from '../../types/types';
 import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
@@ -182,6 +183,7 @@ export default function SidebarContent({
   projectListProps,
   t,
 }: SidebarContentProps) {
+  const { logout } = useAuth();
   const showConversationSearch = searchMode === 'conversations' && searchFilter.trim().length >= 2;
   const hasPartialResults = conversationResults && conversationResults.results.length > 0;
   const groupedArchivedSessions = groupArchivedSessionsByProject(archivedSessions);
@@ -520,6 +522,7 @@ export default function SidebarContent({
         currentVersion={currentVersion}
         onShowVersionModal={onShowVersionModal}
         onShowSettings={onShowSettings}
+        onLogout={logout}
         t={t}
       />
     </div>

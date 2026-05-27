@@ -67,7 +67,9 @@
     "rename": "이름 변경",
     "joinCommunity": "커뮤니티 참여",
     "reportIssue": "문제 신고",
-    "starOnGithub": "GitHub에서 스타"
+    "starOnGithub": "GitHub에서 스타",
+    "logout": "로그아웃",
+    "logoutConfirm": "로그아웃하시겠습니까?"
   },
   "branding": {
     "openSource": "오픈 소스"

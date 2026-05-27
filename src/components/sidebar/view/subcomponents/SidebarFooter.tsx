@@ -1,6 +1,8 @@
-import { Settings, ArrowUpCircle, Bug } from 'lucide-react';
+import { useState } from 'react';
+import { Settings, ArrowUpCircle, Bug, LogOut } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import { IS_PLATFORM } from '../../../../constants/config';
+import { Dialog, DialogContent } from '../../../../shared/view/ui/Dialog';
 import type { ReleaseInfo } from '../../../../types/sharedTypes';
 
 const GITHUB_ISSUES_URL = 'https://github.com/siteboon/claudecodeui/issues/new';
@@ -24,6 +26,7 @@ type SidebarFooterProps = {
   onShowVersionModal: () => void;
   onShowSettings: () => void;
   t: TFunction;
+  onLogout: () => void;
 };
 
 export default function SidebarFooter({
@@ -34,9 +37,47 @@ export default function SidebarFooter({
   onShowVersionModal,
   onShowSettings,
   t,
+  onLogout,
 }: SidebarFooterProps) {
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  const handleLogoutClick = () => setShowLogoutConfirm(true);
+  const handleLogoutConfirm = () => {
+    setShowLogoutConfirm(false);
+    onLogout();
+  };
+
   return (
     <div className="flex-shrink-0" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0)' }}>
+      {/* Logout confirmation dialog */}
+      <Dialog open={showLogoutConfirm} onOpenChange={setShowLogoutConfirm}>
+        <DialogContent className="max-w-sm p-6">
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
+                <LogOut className="h-5 w-5 text-red-600 dark:text-red-400" />
+              </div>
+              <h3 className="text-lg font-semibold">{t('actions.logout')}</h3>
+            </div>
+            <p className="text-sm text-muted-foreground">{t('actions.logoutConfirm')}</p>
+            <div className="flex justify-end gap-2">
+              <button
+                className="rounded-lg px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                onClick={() => setShowLogoutConfirm(false)}
+              >
+                {t('actions.cancel', { ns: 'sidebar' })}
+              </button>
+              <button
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700"
+                onClick={handleLogoutConfirm}
+              >
+                {t('actions.logout')}
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Update banner */}
       {updateAvailable && (
         <>
@@ -125,6 +166,19 @@ export default function SidebarFooter({
         </button>
       </div>
 
+      {/* Desktop logout */}
+      {!IS_PLATFORM && (
+        <div className="hidden px-2 md:block">
+          <button
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-red-50/80 hover:text-red-600 dark:hover:bg-red-900/15 dark:hover:text-red-400"
+            onClick={handleLogoutClick}
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            <span className="text-sm">{t('actions.logout')}</span>
+          </button>
+        </div>
+      )}
+
       {/* Desktop version brand line (OSS mode only) */}
       {!IS_PLATFORM && (
         <div className="hidden px-3 py-2 text-center md:block">
@@ -181,6 +235,21 @@ export default function SidebarFooter({
           <span className="text-base font-medium text-foreground">{t('actions.settings')}</span>
         </button>
       </div>
+
+      {/* Mobile logout */}
+      {!IS_PLATFORM && (
+        <div className="px-3 pb-3 pt-2 md:hidden">
+          <button
+            className="flex h-12 w-full items-center gap-3.5 rounded-xl bg-muted/40 px-4 transition-all hover:bg-red-50/60 active:scale-[0.98] dark:hover:bg-red-900/15"
+            onClick={handleLogoutClick}
+          >
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-background/80">
+              <LogOut className="w-4.5 h-4.5 text-muted-foreground" />
+            </div>
+            <span className="text-base font-medium text-foreground">{t('actions.logout')}</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

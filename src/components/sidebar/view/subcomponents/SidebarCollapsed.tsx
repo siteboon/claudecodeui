@@ -1,5 +1,8 @@
-import { Settings, Sparkles, PanelLeftOpen, Bug } from 'lucide-react';
+import { useState } from 'react';
+import { Settings, Sparkles, PanelLeftOpen, Bug, LogOut } from 'lucide-react';
 import type { TFunction } from 'i18next';
+import { IS_PLATFORM } from '../../../../constants/config';
+import { Dialog, DialogContent } from '../../../../shared/view/ui/Dialog';
 
 const DISCORD_INVITE_URL = 'https://discord.gg/buxwujPNRE';
 const GITHUB_ISSUES_URL = 'https://github.com/siteboon/claudecodeui/issues/new';
@@ -17,6 +20,7 @@ type SidebarCollapsedProps = {
   onShowSettings: () => void;
   updateAvailable: boolean;
   onShowVersionModal: () => void;
+  onLogout: () => void;
   t: TFunction;
 };
 
@@ -25,9 +29,45 @@ export default function SidebarCollapsed({
   onShowSettings,
   updateAvailable,
   onShowVersionModal,
+  onLogout,
   t,
 }: SidebarCollapsedProps) {
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
   return (
+    <>
+      {/* Logout confirmation dialog */}
+      <Dialog open={showLogoutConfirm} onOpenChange={setShowLogoutConfirm}>
+        <DialogContent className="max-w-sm p-6">
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
+                <LogOut className="h-5 w-5 text-red-600 dark:text-red-400" />
+              </div>
+              <h3 className="text-lg font-semibold">{t('actions.logout')}</h3>
+            </div>
+            <p className="text-sm text-muted-foreground">{t('actions.logoutConfirm')}</p>
+            <div className="flex justify-end gap-2">
+              <button
+                className="rounded-lg px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                onClick={() => setShowLogoutConfirm(false)}
+              >
+                {t('actions.cancel')}
+              </button>
+              <button
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700"
+                onClick={() => {
+                  setShowLogoutConfirm(false);
+                  onLogout();
+                }}
+              >
+                {t('actions.logout')}
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
     <div className="flex h-full w-12 flex-col items-center gap-1 bg-background/80 py-3 backdrop-blur-sm">
       {/* Expand button with brand logo */}
       <button
@@ -50,6 +90,18 @@ export default function SidebarCollapsed({
       >
         <Settings className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground" />
       </button>
+
+      {/* Logout */}
+      {!IS_PLATFORM && (
+        <button
+          onClick={() => setShowLogoutConfirm(true)}
+          className="group flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-red-50/80 dark:hover:bg-red-900/15"
+          aria-label={t('actions.logout')}
+          title={t('actions.logout')}
+        >
+          <LogOut className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-red-600 dark:group-hover:text-red-400" />
+        </button>
+      )}
 
       {/* Report Issue */}
       <a
@@ -88,5 +140,6 @@ export default function SidebarCollapsed({
         </button>
       )}
     </div>
+    </>
   );
 }
