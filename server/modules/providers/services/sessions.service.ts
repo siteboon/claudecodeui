@@ -1,6 +1,8 @@
 import fsp from 'node:fs/promises';
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import readline from 'node:readline';
 
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
@@ -11,6 +13,8 @@ import type {
   NormalizedMessage,
 } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
+
+const CLAUDE_PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects');
 
 type ArchivedSessionListItem = {
   sessionId: string;
@@ -67,10 +71,10 @@ const HISTORY_JSONL_PATH = path.join(os.homedir(), '.claude', 'history.jsonl');
 
 /**
  * Updates the display name for a session in ~/.claude/history.jsonl.
- * `claude -r` reads entries from this global file, grouped by project path.
- * All existing entries for the session are updated in-place so the project
- * path stays correct. If no entries exist, a new one is created using the
- * session's project_path from the DB.
+ * `claude -r` reads entries from this global file with a 100-entry limit per
+ * project. Duplicate entries for the same session consume slots, so we keep
+ * only one entry per session — the latest one with the correct display name.
+ * If no entries exist, a new one is created.
  */
 async function updateSessionDisplayNameInHistory(sessionId: string, displayName: string): Promise<void> {
   const session = sessionsDb.getSessionById(sessionId);
@@ -79,13 +83,16 @@ async function updateSessionDisplayNameInHistory(sessionId: string, displayName:
   try {
     const content = await fsp.readFile(HISTORY_JSONL_PATH, 'utf8');
     const lines = content.split(/\r?\n/);
-    const updatedLines = [];
-    let found = false;
+
+    // Collect all entries, keeping only the last one per sessionId
+    const lastBySession = new Map<string, string>();
+    const otherLines = [];
+    const nonJsonLines = []; // lines that aren't valid JSON objects
 
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed) {
-        updatedLines.push(line);
+        nonJsonLines.push(line);
         continue;
       }
       try {
@@ -93,57 +100,259 @@ async function updateSessionDisplayNameInHistory(sessionId: string, displayName:
         if (
           typeof parsed === 'object' &&
           parsed !== null &&
-          (parsed as Record<string, unknown>).sessionId === sessionId
+          (parsed as Record<string, unknown>).sessionId !== undefined
         ) {
-          found = true;
-          (parsed as Record<string, unknown>).display = displayName;
-          updatedLines.push(JSON.stringify(parsed));
+          const sid = String((parsed as Record<string, unknown>).sessionId);
+          // Update display for our target, keep last entry per session
+          if (sid === sessionId) {
+            (parsed as Record<string, unknown>).display = displayName;
+          }
+          lastBySession.set(sid, JSON.stringify(parsed));
           continue;
         }
       } catch {
         // skip non-JSON lines
       }
-      updatedLines.push(line);
+      nonJsonLines.push(line);
     }
 
     // If no existing entry, append one with the correct project path
-    if (!found) {
-      const newEntry = JSON.stringify({
+    if (!lastBySession.has(sessionId)) {
+      lastBySession.set(sessionId, JSON.stringify({
         display: displayName,
         pastedContents: {},
         timestamp: Date.now(),
         project: projectPath,
         sessionId,
-      });
-      updatedLines.push(newEntry);
+      }));
     }
 
-    await fsp.writeFile(HISTORY_JSONL_PATH, updatedLines.join('\n'), 'utf8');
+    // Sort all entries by timestamp to preserve file order
+    const sortedEntries = [...lastBySession.values()].sort((a, b) => {
+      try {
+        const ta = (JSON.parse(a) as Record<string, unknown>).timestamp;
+        const tb = (JSON.parse(b) as Record<string, unknown>).timestamp;
+        return Number(ta) - Number(tb);
+      } catch {
+        return 0;
+      }
+    });
+
+    const finalLines = [...nonJsonLines, ...sortedEntries];
+    await fsp.writeFile(HISTORY_JSONL_PATH, finalLines.join('\n'), 'utf8');
   } catch {
     // history.jsonl may not exist
   }
 }
 
 /**
- * Scans all sessions with custom_name and updates ~/.claude/history.jsonl
- * so `claude -r` displays the CloudCLI session names.
+ * Writes a custom-title entry to a session JSONL file so `claude -r` can
+ * pick it up. `claude -r` reads the **last** custom-title, so we update all
+ * existing entries and also prepend one as fallback.
  */
-async function syncAllSessionNamesToHistory(): Promise<void> {
-  const sessions = sessionsDb.getSessionsWithCustomName();
-  if (sessions.length === 0) return;
+async function writeSessionCustomTitle(sessionId: string, jsonlPath: string, title: string): Promise<void> {
+  try {
+    const content = await fsp.readFile(jsonlPath, 'utf8');
+    const lines = content.split(/\n/);
+    let found = false;
 
-  let synced = 0;
-  for (const session of sessions) {
-    try {
-      await updateSessionDisplayNameInHistory(session.session_id, session.custom_name);
-      synced++;
-    } catch {
-      // Skip failed sessions
+    // Update ALL existing custom-title entries (claude -r reads the last one)
+    for (let i = 0; i < lines.length; i++) {
+      try {
+        const data = JSON.parse(lines[i].trim()) as Record<string, unknown>;
+        if (data.type === 'custom-title') {
+          (data as Record<string, unknown>).customTitle = title;
+          lines[i] = JSON.stringify(data);
+          found = true;
+        }
+      } catch {
+        // skip non-JSON lines
+      }
     }
+
+    if (found) {
+      await fsp.writeFile(jsonlPath, lines.join('\n'), 'utf8');
+      return;
+    }
+
+    // No custom-title found — prepend one
+    const newEntry = JSON.stringify({ type: 'custom-title', customTitle: title });
+    const newLines = [newEntry, ...lines];
+    await fsp.writeFile(jsonlPath, newLines.join('\n'), 'utf8');
+  } catch {
+    // file may not exist or be unreadable
+  }
+}
+
+/**
+ * Extracts a display name from a session JSONL file.
+ * Priority: custom-title > ai-title > last-prompt
+ */
+async function extractSessionDisplayName(filePath: string): Promise<string | null> {
+  try {
+    const fileStream = fs.createReadStream(filePath, { encoding: 'utf8' });
+    const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
+
+    let aiTitle: string | undefined;
+    let lastPrompt: string | undefined;
+
+    for await (const line of rl) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const data = JSON.parse(trimmed) as Record<string, unknown>;
+        const type = typeof data.type === 'string' ? data.type : undefined;
+        if (type === 'custom-title' && typeof data.customTitle === 'string') {
+          return data.customTitle.trim() || null;
+        }
+        if (type === 'ai-title' && typeof data.aiTitle === 'string') {
+          aiTitle = data.aiTitle.trim() || undefined;
+        }
+        if (type === 'last-prompt' && typeof data.lastPrompt === 'string') {
+          lastPrompt = data.lastPrompt.trim() || undefined;
+        }
+      } catch {
+        // skip non-JSON lines
+      }
+    }
+
+    return (aiTitle || lastPrompt || null)?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Builds a Map<sessionId, { displayName, projectPath }> from all session JSONL
+ * files on disk + DB custom_names (DB takes precedence).
+ */
+async function buildSessionNameMap(): Promise<Map<string, { displayName: string; projectPath: string }>> {
+  const nameMap = new Map<string, { displayName: string; projectPath: string }>();
+
+  // 1. DB custom_name entries (highest priority)
+  const dbSessions = sessionsDb.getSessionsWithCustomName();
+  for (const s of dbSessions) {
+    nameMap.set(s.session_id, { displayName: s.custom_name, projectPath: s.project_path || os.homedir() });
   }
 
-  if (synced > 0) {
-    console.log(`[Sessions] Synced ${synced} session name(s) to ~/.claude/history.jsonl`);
+  // 2. All session JSONL files on disk
+  try {
+    const entries = await fsp.readdir(CLAUDE_PROJECTS_DIR, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const projectDir = path.join(CLAUDE_PROJECTS_DIR, entry.name);
+      try {
+        const files = await fsp.readdir(projectDir);
+        for (const fileName of files) {
+          if (!fileName.endsWith('.jsonl')) continue;
+          const filePath = path.join(projectDir, fileName);
+          const sessionId = fileName.slice(0, -6);
+
+          // Skip if already in DB
+          if (nameMap.has(sessionId)) continue;
+
+          const displayName = await extractSessionDisplayName(filePath);
+          if (!displayName) continue;
+
+          // Determine project path from directory name
+          // Directory names are URL-encoded paths like "-Users-xiawenhua" or "-Users-xiawenhua-hermes-agent"
+          const dirName = entry.name;
+          let projectPath = os.homedir();
+          try {
+            const decoded = decodeURIComponent(dirName);
+            projectPath = decoded.startsWith('/') ? decoded : os.homedir();
+          } catch {
+            // keep default
+          }
+
+          nameMap.set(sessionId, { displayName, projectPath });
+        }
+      } catch {
+        // skip unreadable directories
+      }
+    }
+  } catch {
+    // claude/projects directory may not exist
+  }
+
+  return nameMap;
+}
+
+/**
+ * Scans all sessions with custom_name and updates ~/.claude/history.jsonl
+ * so `claude -r` displays the CloudCLI session names.
+ * Also discovers sessions on disk that aren't in the DB yet.
+ */
+async function syncAllSessionNamesToHistory(): Promise<void> {
+  const nameMap = await buildSessionNameMap();
+  if (nameMap.size === 0) return;
+
+  try {
+    const content = await fsp.readFile(HISTORY_JSONL_PATH, 'utf8');
+    const lines = content.split(/\r?\n/);
+
+    // Keep only the last entry per session, update display names
+    const lastBySession = new Map<string, string>();
+    const nonJsonLines = [];
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        nonJsonLines.push(line);
+        continue;
+      }
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (typeof parsed === 'object' && parsed !== null && (parsed as Record<string, unknown>).sessionId !== undefined) {
+          const sid = String((parsed as Record<string, unknown>).sessionId);
+          const nameEntry = nameMap.get(sid);
+          if (nameEntry) {
+            (parsed as Record<string, unknown>).display = nameEntry.displayName;
+            (parsed as Record<string, unknown>).project = nameEntry.projectPath;
+          }
+          lastBySession.set(sid, JSON.stringify(parsed));
+          continue;
+        }
+      } catch {
+        // skip non-JSON lines
+      }
+      nonJsonLines.push(line);
+    }
+
+    // Add entries for sessions not yet in history.jsonl
+    for (const [sid, info] of nameMap) {
+      if (!lastBySession.has(sid)) {
+        lastBySession.set(sid, JSON.stringify({
+          display: info.displayName,
+          pastedContents: {},
+          timestamp: Date.now(),
+          project: info.projectPath,
+          sessionId: sid,
+        }));
+      }
+    }
+
+    // Sort by timestamp
+    const sortedEntries = [...lastBySession.values()].sort((a, b) => {
+      try {
+        return Number(JSON.parse(a).timestamp) - Number(JSON.parse(b).timestamp);
+      } catch {
+        return 0;
+      }
+    });
+
+    const finalLines = [...nonJsonLines, ...sortedEntries];
+    await fsp.writeFile(HISTORY_JSONL_PATH, finalLines.join('\n'), 'utf8');
+    console.log(`[Sessions] Synced ${nameMap.size} session name(s) to ~/.claude/history.jsonl`);
+  } catch {
+    // history.jsonl may not exist — fall back to per-session sync
+    for (const [sid, info] of nameMap) {
+      try {
+        await updateSessionDisplayNameInHistory(sid, info.displayName);
+      } catch {
+        // skip
+      }
+    }
   }
 }
 
@@ -319,6 +528,9 @@ export const sessionsService = {
 
     sessionsDb.updateSessionCustomName(sessionId, summary);
     void updateSessionDisplayNameInHistory(sessionId, summary);
+    if (session.jsonl_path) {
+      void writeSessionCustomTitle(sessionId, session.jsonl_path, summary);
+    }
     return { sessionId, summary };
   },
 

@@ -387,22 +387,33 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     const baseId = raw.uuid || generateMessageId('claude');
 
     /*
-     * Filter out non-human user-role messages during streaming.
-     * SDK emits synthetic user messages (subagent prompts, internal
-     * bookkeeping) that have message.role === 'user' but should NOT be
-     * rendered as user chat bubbles. The `isSynthetic` flag or a non-`human`
-     * origin indicate these are system-generated, not keyboard input.
-     * This check is a no-op for pure tool_result containers — they have no
-     * text parts and are handled by the tool_result branch below.
+     * SDK emits `type: 'user'` messages that are NOT real user keyboard input.
+     * They are context injection (skill directories, image metadata, tool errors)
+     * and subagent task prompts. Real user messages are rendered client-side via
+     * the pendingUserMessage mechanism, so SDK user-role text echoes are redundant.
+     *
+     * We detect these by checking if the message contains ONLY tool_result parts
+     * (valid, needed for attachment) vs having text parts (should be filtered).
+     *
+     * Note: isSynthetic/origin fields are NOT available in current SDK versions.
      */
-    const isHumanOrigin =
-      !raw.isSynthetic
-      && (raw.origin?.kind === undefined || raw.origin?.kind === 'human');
-
     if (raw.message?.role === 'user' && raw.message?.content && raw.isMeta !== true) {
       if (isContextResumptionSummary(raw)) {
         return messages;
       }
+
+      /*
+       * SDK streaming `type: 'user'` messages are NOT real user keyboard input.
+       * They are system context injection (skill directories, image metadata,
+       * tool errors) and subagent task prompts. Real user messages are rendered
+       * client-side via the pendingUserMessage mechanism.
+       *
+       * JSONL history messages don't have `type: 'user'` at the top level —
+       * they use `message.role === 'user'` instead. Use this to distinguish.
+       *
+       * Note: isSynthetic/origin fields are NOT available in current SDK versions.
+       */
+      const isSdkStreamingUser = raw.type === 'user';
 
       if (Array.isArray(raw.message.content)) {
         for (let partIndex = 0; partIndex < raw.message.content.length; partIndex++) {
@@ -422,7 +433,9 @@ export class ClaudeSessionsProvider implements IProviderSessions {
             }));
           } else if (part.type === 'text') {
             const text = part.text || '';
-            if (text && !isInternalContent(text) && isHumanOrigin) {
+            // Skip SDK streaming text — they're system context, not user input
+            if (isSdkStreamingUser) continue;
+            if (text && !isInternalContent(text)) {
               if (isImageContent(text)) {
                 continue;
               }
@@ -539,7 +552,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
           return messages;
         }
 
-        if (text && !isInternalContent(text) && isHumanOrigin) {
+        if (text && !isInternalContent(text) && !isSdkStreamingUser) {
           if (!isSubagentPromptEcho(text, subagentPrompts)) {
             messages.push(createNormalizedMessage({
               id: baseId,
