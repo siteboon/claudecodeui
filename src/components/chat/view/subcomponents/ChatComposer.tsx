@@ -12,7 +12,7 @@ import type {
   TouchEvent,
 } from 'react';
 import { ImageIcon, MessageSquareIcon, XIcon, ArrowDownIcon } from 'lucide-react';
-import type { PendingPermissionRequest, PermissionMode, Provider } from '../../types/types';
+import type { ChatMessage, PendingPermissionRequest, PermissionMode, Provider } from '../../types/types';
 import CommandMenu from './CommandMenu';
 import ClaudeStatus from './ClaudeStatus';
 import ImageAttachment from './ImageAttachment';
@@ -54,6 +54,7 @@ interface ChatComposerProps {
   ) => void;
   handleGrantToolPermission: (suggestion: { entry: string; toolName: string }) => { success: boolean };
   claudeStatus: { text: string; tokens: number; can_interrupt: boolean } | null;
+  messages: ChatMessage[];
   isLoading: boolean;
   onAbortSession: () => void;
   provider: Provider | string;
@@ -112,6 +113,7 @@ export default function ChatComposer({
   handlePermissionDecision,
   handleGrantToolPermission,
   claudeStatus,
+  messages,
   isLoading,
   onAbortSession,
   provider,
@@ -185,6 +187,7 @@ export default function ChatComposer({
       {!hasPendingPermissions && (
         <ClaudeStatus
           status={claudeStatus}
+          messages={messages}
           isLoading={isLoading}
           onAbort={onAbortSession}
           provider={provider}

@@ -264,6 +264,12 @@
     },
     "providers": {
       "assistant": "Assistant"
+    },
+    "activity": {
+      "title": "Live activity",
+      "waiting": "Waiting for activity…",
+      "show": "Show what the agent is doing",
+      "hide": "Hide activity"
     }
   },
   "projectSelection": {

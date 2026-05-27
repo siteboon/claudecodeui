@@ -369,6 +369,7 @@ function ChatInterface({
           handlePermissionDecision={handlePermissionDecision}
           handleGrantToolPermission={handleGrantToolPermission}
           claudeStatus={claudeStatus}
+          messages={chatMessages}
           isLoading={isLoading}
           onAbortSession={handleAbortSession}
           provider={provider}

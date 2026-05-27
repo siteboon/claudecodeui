@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ChevronDown } from 'lucide-react';
 import { cn } from '../../../../lib/utils';
 import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
+import type { ChatMessage, ToolResult } from '../../types/types';
 
 type ClaudeStatusProps = {
   status: {
@@ -12,6 +14,7 @@ type ClaudeStatusProps = {
   onAbort?: () => void;
   isLoading: boolean;
   provider?: string;
+  messages?: ChatMessage[];
 };
 
 const ACTION_KEYS = [
@@ -37,15 +40,153 @@ function formatElapsedTime(totalSeconds: number) {
   return mins < 1 ? `${secs}s` : `${mins}m ${secs}s`;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Live activity feed (terminal / CLI style)                          */
+/* ------------------------------------------------------------------ */
+
+type ActivityKind = 'tool' | 'result' | 'thinking' | 'assistant';
+interface ActivityLine {
+  kind: ActivityKind;
+  text: string;
+}
+
+function stripMd(value: unknown): string {
+  return String(value || '')
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/\*\*|__|`/g, '')
+    .replace(/^#+\s*/gm, '')
+    .trim();
+}
+
+function firstLine(value: string): string {
+  return value.split('\n').find((line) => line.trim()) || '';
+}
+
+function truncate(value: string, max: number): string {
+  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+}
+
+function summarizeToolInput(input: unknown): string {
+  if (typeof input === 'string') {
+    const line = firstLine(input.trim());
+    return line ? `(${truncate(line, 90)})` : '';
+  }
+  if (!input || typeof input !== 'object') return '';
+  const obj = input as Record<string, unknown>;
+  const candidate =
+    obj.command ?? obj.file_path ?? obj.path ?? obj.pattern ?? obj.query ?? obj.url ?? obj.prompt ?? obj.description ?? obj.todos;
+  if (typeof candidate === 'string' && candidate.trim()) {
+    return `(${truncate(firstLine(candidate), 90)})`;
+  }
+  return '';
+}
+
+function previewToolResult(result: ToolResult | null | undefined): string {
+  if (!result) return '';
+  const content = (result as ToolResult).content;
+  let text = '';
+  if (typeof content === 'string') {
+    text = content;
+  } else if (Array.isArray(content)) {
+    text = content.map((part) => (typeof part === 'string' ? part : (part as { text?: string })?.text || '')).join('\n');
+  } else if (content && typeof content === 'object') {
+    text = (content as { text?: string }).text || '';
+  }
+  const line = firstLine(stripMd(text));
+  return line ? truncate(line, 110) : '';
+}
+
+// Build a compact CLI-style log of what the agent has done since the last user prompt.
+function buildActivityLines(messages: ChatMessage[]): ActivityLine[] {
+  if (!messages?.length) return [];
+
+  let start = 0;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i]?.type === 'user') {
+      start = i + 1;
+      break;
+    }
+  }
+  const turn = messages.slice(start);
+  const lines: ActivityLine[] = [];
+
+  for (const message of turn) {
+    if (message.isThinking || message.type === 'thinking') {
+      const text = stripMd(message.reasoning || message.displayText || message.content);
+      if (text) lines.push({ kind: 'thinking', text: truncate(firstLine(text), 140) });
+      continue;
+    }
+
+    if (message.isToolUse) {
+      const name = message.toolName || 'Tool';
+      lines.push({ kind: 'tool', text: `${name}${summarizeToolInput(message.toolInput)}` });
+      const preview = previewToolResult(message.toolResult);
+      if (preview) lines.push({ kind: 'result', text: preview });
+      continue;
+    }
+
+    if (message.type === 'tool_result' || message.toolResult) {
+      const preview = previewToolResult(message.toolResult);
+      if (preview) lines.push({ kind: 'result', text: preview });
+      continue;
+    }
+
+    if (message.type === 'assistant') {
+      const text = stripMd(message.displayText || message.content);
+      if (text) lines.push({ kind: 'assistant', text: truncate(text, 200) });
+    }
+  }
+
+  // Cap to the most recent activity so the panel stays readable.
+  return lines.slice(-40);
+}
+
+function ActivityRow({ line }: { line: ActivityLine }) {
+  switch (line.kind) {
+    case 'tool':
+      return (
+        <div className="flex items-start gap-1.5">
+          <span className="select-none text-emerald-400">⏺</span>
+          <span className="break-words text-slate-200">{line.text}</span>
+        </div>
+      );
+    case 'result':
+      return (
+        <div className="flex items-start gap-1.5 pl-2">
+          <span className="select-none text-slate-600">⎿</span>
+          <span className="break-words text-slate-500">{line.text}</span>
+        </div>
+      );
+    case 'thinking':
+      return (
+        <div className="flex items-start gap-1.5">
+          <span className="select-none text-purple-400/80">✻</span>
+          <span className="break-words italic text-slate-400">{line.text}</span>
+        </div>
+      );
+    case 'assistant':
+    default:
+      return (
+        <div className="flex items-start gap-1.5">
+          <span className="select-none text-sky-400/80">⏺</span>
+          <span className="break-words text-slate-300">{line.text}</span>
+        </div>
+      );
+  }
+}
+
 export default function ClaudeStatus({
   status,
   onAbort,
   isLoading,
   provider = 'claude',
+  messages = [],
 }: ClaudeStatusProps) {
   const { t } = useTranslation('chat');
   const [elapsedTime, setElapsedTime] = useState(0);
   const [dots, setDots] = useState('');
+  const [expanded, setExpanded] = useState(false);
+  const logRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!isLoading) {
@@ -65,6 +206,18 @@ export default function ClaudeStatus({
       clearInterval(dotTimer);
     };
   }, [isLoading]);
+
+  const activityLines = useMemo(
+    () => (expanded ? buildActivityLines(messages) : []),
+    [expanded, messages],
+  );
+
+  // Keep the terminal pinned to the latest activity as new lines stream in.
+  useEffect(() => {
+    if (expanded && logRef.current) {
+      logRef.current.scrollTop = logRef.current.scrollHeight;
+    }
+  }, [expanded, activityLines.length]);
 
   if (!isLoading && !status) return null;
 
@@ -101,6 +254,18 @@ export default function ClaudeStatus({
 
         {/* Right Side: Metrics & Actions */}
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setExpanded((prev) => !prev)}
+            aria-expanded={expanded}
+            title={t(expanded ? 'claudeStatus.activity.hide' : 'claudeStatus.activity.show', {
+              defaultValue: expanded ? 'Hide activity' : 'Show what the agent is doing',
+            })}
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <ChevronDown className={cn('h-3.5 w-3.5 transition-transform duration-200', expanded && 'rotate-180')} />
+          </button>
+
           {isLoading && status?.can_interrupt !== false && onAbort && (
             <>
               <div className="hidden items-center rounded-md bg-muted/50 px-2 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground sm:flex">
@@ -124,6 +289,39 @@ export default function ClaudeStatus({
           )}
         </div>
       </div>
+
+      {/* Expandable terminal-style activity panel */}
+      {expanded && (
+        <div className="animate-in fade-in slide-in-from-top-1 mx-auto mt-2 max-w-4xl overflow-hidden rounded-xl border border-border/50 bg-slate-950 shadow-lg duration-200">
+          <div className="flex items-center justify-between border-b border-white/5 px-3 py-1.5">
+            <div className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-red-500/70" />
+              <span className="h-2 w-2 rounded-full bg-amber-500/70" />
+              <span className="h-2 w-2 rounded-full bg-emerald-500/70" />
+              <span className="ml-2 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                {t('claudeStatus.activity.title', { defaultValue: 'Live activity' })}
+              </span>
+            </div>
+            <span className="text-[10px] uppercase tracking-wider text-slate-600">{providerLabel}</span>
+          </div>
+
+          <div
+            ref={logRef}
+            className="max-h-64 space-y-1 overflow-y-auto px-3 py-2 font-mono text-[11px] leading-relaxed"
+          >
+            {activityLines.length === 0 ? (
+              <p className="text-slate-600">
+                {t('claudeStatus.activity.waiting', { defaultValue: 'Waiting for activity…' })}
+              </p>
+            ) : (
+              activityLines.map((line, index) => <ActivityRow key={index} line={line} />)
+            )}
+            {isLoading && (
+              <span className="inline-block h-3 w-1.5 animate-pulse bg-emerald-400/80 align-middle" />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
