@@ -741,9 +741,11 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
     void (async () => {
       const authStatus = await checkAuthStatus(loginProvider);
 
-      if (exitCode === 0) {
-        setSaveStatus(authStatus.authenticated ? 'success' : 'error');
+      if (exitCode !== 0) {
+        console.warn(`Login process exited with code ${exitCode}; refreshing auth status before setting save status.`);
       }
+
+      setSaveStatus(authStatus.authenticated ? 'success' : 'error');
     })();
   }, [checkAuthStatus, loginProvider]);
 
