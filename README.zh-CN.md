@@ -15,7 +15,7 @@
   <a href="https://trendshift.io/repositories/15586" target="_blank"><img src="https://trendshift.io/api/badge/repositories/15586" alt="siteboon%2Fclaudecodeui | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 </p>
 
-<div align="right"><i><a href="./README.md">English</a> · <a href="./README.ru.md">Русский</a> · <a href="./README.de.md">Deutsch</a> · <a href="./README.ko.md">한국어</a> · <b>中文</b> · <a href="./README.ja.md">日本語</a></i></div>
+<div align="right"><i><a href="./README.md">English</a> · <a href="./README.ru.md">Русский</a> · <a href="./README.de.md">Deutsch</a> · <a href="./README.ko.md">한국어</a> · <b>中文</b> · <a href="./README.ja.md">日本語</a> · <a href="./README.tr.md">Türkçe</a></i></div>
 
 ---
 
@@ -72,22 +72,34 @@
 
 ### 自托管（开源）
 
+#### npm
+
 启动 CloudCLI UI，只需一行 `npx`（需要 Node.js v22+）：
 
 ```bash
-npx @siteboon/claude-code-ui
+npx @cloudcli-ai/cloudcli
 ```
 
 或进行全局安装，便于日常使用：
 
 ```bash
-npm install -g @siteboon/claude-code-ui
+npm install -g @cloudcli-ai/cloudcli
 cloudcli
 ```
 
 打开 `http://localhost:3001`，系统会自动发现所有现有会话。
 
-更多配置选项、PM2、远程服务器设置等，请参阅 **[文档 →](https://cloudcli.ai/docs)**
+更多配置选项、PM2、远程服务器设置等，请参阅 **[文档 →](https://cloudcli.ai/docs)**。
+
+#### Docker Sandboxes（实验性）
+
+在隔离的沙箱中运行代理，具有虚拟机管理程序级别的隔离。默认启动 Claude Code。需要 [`sbx` CLI](https://docs.docker.com/ai/sandboxes/get-started/)。
+
+```
+npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
+```
+
+支持 Claude Code、Codex 和 Gemini CLI。详情请参阅 [沙箱文档](docker/)。
 
 ---
 
@@ -99,7 +111,7 @@ CloudCLI UI 是 CloudCLI Cloud 的开源 UI 层。你可以在本地机器上自
 |---|---|---|
 | **适合对象** | 需要为本地代理会话提供完整 UI 的开发者 | 需要部署在云端，随时从任何地方访问代理的团队与开发者 |
 | **访问方式** | 通过 `[yourip]:port` 在浏览器中访问 | 浏览器、任意 IDE、REST API、n8n |
-| **设置** | `npx @siteboon/claude-code-ui` | 无需设置 |
+| **设置** | `npx @cloudcli-ai/cloudcli` | 无需设置 |
 | **机器需保持开机吗** | 是 | 否 |
 | **移动端访问** | 网络内任意浏览器 | 任意设备（原生应用即将推出） |
 | **可用会话** | 自动发现 `~/.claude` 中的所有会话 | 云端环境内的会话 |

@@ -89,12 +89,14 @@
     "permissionMode": "Permission Mode",
     "modes": {
       "default": "Default Mode",
+      "auto": "Auto Mode",
       "acceptEdits": "Accept Edits",
       "bypassPermissions": "Bypass Permissions",
       "plan": "Plan Mode"
     },
     "descriptions": {
       "default": "Only trusted commands (ls, cat, grep, git status, etc.) run automatically. Other commands are skipped. Can write to workspace.",
+      "auto": "A model classifier decides per tool call whether to approve or deny. Hands-off, but safer than Bypass — denials still happen.",
       "acceptEdits": "All commands run automatically within the workspace. Full auto mode with sandboxed execution.",
       "bypassPermissions": "Full system access with no restrictions. All commands run automatically with full disk and network access. Use with caution.",
       "plan": "Planning mode - no commands are executed"
@@ -188,7 +190,8 @@
       "codex": "Ready to use Codex with {{model}}. Start typing your message below.",
       "gemini": "Ready to use Gemini with {{model}}. Start typing your message below.",
       "default": "Select a provider above to begin"
-    }
+    },
+    "pressToSearch": "Press <kbd>{{shortcut}}</kbd> to search sessions, files, and commits"
   },
   "session": {
     "continue": {

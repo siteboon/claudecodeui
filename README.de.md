@@ -15,7 +15,7 @@
   <a href="https://trendshift.io/repositories/15586" target="_blank"><img src="https://trendshift.io/api/badge/repositories/15586" alt="siteboon%2Fclaudecodeui | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 </p>
 
-<div align="right"><i><a href="./README.md">English</a> · <a href="./README.ru.md">Русский</a> · <b>Deutsch</b> · <a href="./README.ko.md">한국어</a> · <a href="./README.zh-CN.md">中文</a> · <a href="./README.ja.md">日本語</a></i></div>
+<div align="right"><i><a href="./README.md">English</a> · <a href="./README.ru.md">Русский</a> · <b>Deutsch</b> · <a href="./README.ko.md">한국어</a> · <a href="./README.zh-CN.md">中文</a> · <a href="./README.ja.md">日本語</a> · <a href="./README.tr.md">Türkçe</a></i></div>
 
 ---
 
@@ -76,16 +76,18 @@ Der schnellste Einstieg – keine lokale Einrichtung erforderlich. Erhalte eine 
 
 ### Self-Hosted (Open Source)
 
+#### npm
+
 CloudCLI UI sofort mit **npx** ausprobieren (erfordert **Node.js** v22+):
 
 ```bash
-npx @siteboon/claude-code-ui
+npx @cloudcli-ai/cloudcli
 ```
 
 Oder **global** installieren für regelmäßige Nutzung:
 
 ```bash
-npm install -g @siteboon/claude-code-ui
+npm install -g @cloudcli-ai/cloudcli
 cloudcli
 ```
 
@@ -93,6 +95,15 @@ cloudcli
 
 Die **[Dokumentation →](https://cloudcli.ai/docs)** enthält weitere Konfigurationsoptionen, PM2, Remote-Server-Einrichtung und mehr.
 
+#### Docker Sandboxes (Experimentell)
+
+Agents in isolierten Sandboxes mit Hypervisor-Isolation ausführen. Standardmäßig wird Claude Code gestartet. Erfordert die [`sbx` CLI](https://docs.docker.com/ai/sandboxes/get-started/).
+
+```
+npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
+```
+
+Unterstützt Claude Code, Codex und Gemini CLI. Weitere Details in der [Sandbox-Dokumentation](docker/).
 
 ---
 
@@ -104,7 +115,7 @@ CloudCLI UI ist die Open-Source-UI-Schicht, die CloudCLI Cloud antreibt. Du kann
 |---|---|---|
 | **Am besten für** | Entwickler:innen, die eine vollständige UI für lokale Agent-Sitzungen auf ihrem eigenen Rechner möchten | Teams und Entwickler:innen, die Agents in der Cloud betreiben möchten, überall erreichbar |
 | **Zugriff** | Browser via `[deineIP]:port` | Browser, jede IDE, REST API, n8n |
-| **Einrichtung** | `npx @siteboon/claude-code-ui` | Keine Einrichtung erforderlich |
+| **Einrichtung** | `npx @cloudcli-ai/cloudcli` | Keine Einrichtung erforderlich |
 | **Rechner muss laufen** | Ja | Nein |
 | **Mobiler Zugriff** | Jeder Browser im Netzwerk | Jedes Gerät, native App in Entwicklung |
 | **Verfügbare Sitzungen** | Alle Sitzungen automatisch aus `~/.claude` erkannt | Alle Sitzungen in deiner Cloud-Umgebung |
