@@ -13,14 +13,16 @@
 export const CLAUDE_MODELS = {
   // Models in SDK format (what the actual SDK accepts)
   OPTIONS: [
-    { value: "sonnet", label: "Sonnet" },
     { value: "opus", label: "Opus" },
+    { value: "sonnet", label: "Sonnet" },
     { value: "haiku", label: "Haiku" },
+    { value: "claude-opus-4-6", label: "Opus 4.6" },
     { value: "opusplan", label: "Opus Plan" },
     { value: "sonnet[1m]", label: "Sonnet [1M]" },
+    { value: "opus[1m]", label: "Opus [1M]" },
   ],
 
-  DEFAULT: "sonnet",
+  DEFAULT: "opus",
 };
 
 /**
@@ -49,7 +51,7 @@ export const CURSOR_MODELS = {
     { value: "grok", label: "Grok" },
   ],
 
-  DEFAULT: "gpt-5-3-codex",
+  DEFAULT: "gpt-5.3-codex",
 };
 
 /**
@@ -57,7 +59,9 @@ export const CURSOR_MODELS = {
  */
 export const CODEX_MODELS = {
   OPTIONS: [
+    { value: "gpt-5.5", label: "GPT-5.5" },
     { value: "gpt-5.4", label: "GPT-5.4" },
+    { value: "gpt-5.4-mini", label: "GPT-5.4 mini" },
     { value: "gpt-5.3-codex", label: "GPT-5.3 Codex" },
     { value: "gpt-5.2-codex", label: "GPT-5.2 Codex" },
     { value: "gpt-5.2", label: "GPT-5.2" },
@@ -80,6 +84,7 @@ export const GEMINI_MODELS = {
     { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
     { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
     { value: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite" },
+    { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite" },
     { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
     { value: "gemini-2.0-pro-exp", label: "Gemini 2.0 Pro Experimental" },
     {
@@ -88,5 +93,15 @@ export const GEMINI_MODELS = {
     },
   ],
 
-  DEFAULT: "gemini-2.5-flash",
+  DEFAULT: "gemini-3.1-pro-preview",
 };
+
+/**
+ * Ordered provider registry. Display order in selection UIs.
+ */
+export const PROVIDERS = [
+  { id: "claude", name: "Anthropic", models: CLAUDE_MODELS },
+  { id: "codex", name: "OpenAI", models: CODEX_MODELS },
+  { id: "gemini", name: "Google", models: GEMINI_MODELS },
+  { id: "cursor", name: "Cursor", models: CURSOR_MODELS },
+];

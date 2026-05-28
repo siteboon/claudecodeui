@@ -88,12 +88,14 @@
     "permissionMode": "権限モード",
     "modes": {
       "default": "デフォルトモード",
+      "auto": "Auto Mode",
       "acceptEdits": "編集を許可",
       "bypassPermissions": "権限をバイパス",
       "plan": "プランモード"
     },
     "descriptions": {
       "default": "信頼されたコマンド（ls、cat、grep、git statusなど）のみ自動実行。その他のコマンドはスキップ。ワークスペースへの書き込みは可能。",
+      "auto": "A model classifier decides per tool call whether to approve or deny. Hands-off, but safer than Bypass — denials still happen.",
       "acceptEdits": "ワークスペース内ですべてのコマンドを自動実行。サンドボックス環境での完全自動モード。",
       "bypassPermissions": "制限なしの完全なシステムアクセス。すべてのコマンドがディスクとネットワークへの完全なアクセスで自動実行されます。注意して使用してください。",
       "plan": "プランニングモード - コマンドは実行されません"
@@ -165,7 +167,8 @@
       "cursor": "{{model}}でCursorを使用する準備ができました。下にメッセージを入力してください。",
       "codex": "{{model}}でCodexを使用する準備ができました。下にメッセージを入力してください。",
       "default": "上からプロバイダーを選択して開始してください"
-    }
+    },
+    "pressToSearch": "<kbd>{{shortcut}}</kbd> を押してセッション、ファイル、コミットを検索"
   },
   "session": {
     "continue": {

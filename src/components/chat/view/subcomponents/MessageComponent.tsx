@@ -11,6 +11,7 @@ import { formatUsageLimitText } from '../../utils/chatFormatting';
 import { getClaudePermissionSuggestion } from '../../utils/chatPermissions';
 import type { Project } from '../../../../types/app';
 import { ToolRenderer, shouldHideToolResult } from '../../tools';
+import { Reasoning, ReasoningTrigger, ReasoningContent } from '../../../../shared/view/ui';
 import { Markdown } from './Markdown';
 import MessageCopyControl from './MessageCopyControl';
 
@@ -68,7 +69,8 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
   const shouldShowUserCopyControl = message.type === 'user' && userCopyContent.trim().length > 0;
   const shouldShowAssistantCopyControl = message.type === 'assistant' &&
     assistantCopyContent.trim().length > 0 &&
-    !isCommandOrFileEditToolResponse;
+    !isCommandOrFileEditToolResponse &&
+    !message.isThinking;
 
 
   useEffect(() => {
@@ -378,36 +380,30 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                 </div>
               </div>
             ) : message.isThinking ? (
-              /* Thinking messages - collapsible by default */
-              <div className="text-sm text-gray-700 dark:text-gray-300">
-                <details className="group">
-                  <summary className="flex cursor-pointer items-center gap-2 font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
-                    <svg className="h-3 w-3 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                    <span>{t('thinking.emoji')}</span>
-                  </summary>
-                  <div className="mt-2 border-l-2 border-gray-300 pl-4 text-sm text-gray-600 dark:border-gray-600 dark:text-gray-400">
-                    <Markdown className="prose prose-sm prose-gray max-w-none dark:prose-invert">
-                      {message.content}
-                    </Markdown>
+              /* Thinking messages — Reasoning component (ai-elements pattern) */
+              <Reasoning defaultOpen={false}>
+                <ReasoningTrigger />
+                <ReasoningContent>
+                  <Markdown className="prose prose-sm prose-gray max-w-none dark:prose-invert">
+                    {message.content}
+                  </Markdown>
+                  <div className="mt-3 flex items-center text-[11px]">
+                    <MessageCopyControl content={String(message.content || '')} messageType="assistant" />
                   </div>
-                </details>
-              </div>
+                </ReasoningContent>
+              </Reasoning>
             ) : (
               <div className="text-sm text-gray-700 dark:text-gray-300">
-                {/* Thinking accordion for reasoning */}
+                {/* Reasoning accordion */}
                 {showThinking && message.reasoning && (
-                  <details className="mb-3">
-                    <summary className="cursor-pointer font-medium text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
-                      {t('thinking.emoji')}
-                    </summary>
-                    <div className="mt-2 border-l-2 border-gray-300 pl-4 text-sm italic text-gray-600 dark:border-gray-600 dark:text-gray-400">
+                  <Reasoning className="mb-3" defaultOpen={false}>
+                    <ReasoningTrigger />
+                    <ReasoningContent>
                       <div className="whitespace-pre-wrap">
                         {message.reasoning}
                       </div>
-                    </div>
-                  </details>
+                    </ReasoningContent>
+                  </Reasoning>
                 )}
 
                 {(() => {

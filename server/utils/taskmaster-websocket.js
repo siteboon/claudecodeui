@@ -7,20 +7,25 @@
  */
 
 /**
- * Broadcast TaskMaster project update to all connected clients
+ * Broadcast TaskMaster project update to all connected clients.
+ *
+ * The payload key is `projectId` post-migration so frontend listeners can
+ * match notifications against the DB-assigned project identifier they
+ * already use everywhere else.
+ *
  * @param {WebSocket.Server} wss - WebSocket server instance
- * @param {string} projectName - Name of the updated project
+ * @param {string} projectId - DB id of the updated project
  * @param {Object} taskMasterData - Updated TaskMaster data
  */
-export function broadcastTaskMasterProjectUpdate(wss, projectName, taskMasterData) {
-    if (!wss || !projectName) {
-        console.warn('TaskMaster WebSocket broadcast: Missing wss or projectName');
+export function broadcastTaskMasterProjectUpdate(wss, projectId, taskMasterData) {
+    if (!wss || !projectId) {
+        console.warn('TaskMaster WebSocket broadcast: Missing wss or projectId');
         return;
     }
 
     const message = {
         type: 'taskmaster-project-updated',
-        projectName,
+        projectId,
         taskMasterData,
         timestamp: new Date().toISOString()
     };
@@ -38,20 +43,21 @@ export function broadcastTaskMasterProjectUpdate(wss, projectName, taskMasterDat
 }
 
 /**
- * Broadcast TaskMaster tasks update for a specific project
- * @param {WebSocket.Server} wss - WebSocket server instance  
- * @param {string} projectName - Name of the project with updated tasks
+ * Broadcast TaskMaster tasks update for a specific project.
+ *
+ * @param {WebSocket.Server} wss - WebSocket server instance
+ * @param {string} projectId - DB id of the project with updated tasks
  * @param {Object} tasksData - Updated tasks data
  */
-export function broadcastTaskMasterTasksUpdate(wss, projectName, tasksData) {
-    if (!wss || !projectName) {
-        console.warn('TaskMaster WebSocket broadcast: Missing wss or projectName');
+export function broadcastTaskMasterTasksUpdate(wss, projectId, tasksData) {
+    if (!wss || !projectId) {
+        console.warn('TaskMaster WebSocket broadcast: Missing wss or projectId');
         return;
     }
 
     const message = {
         type: 'taskmaster-tasks-updated',
-        projectName,
+        projectId,
         tasksData,
         timestamp: new Date().toISOString()
     };
