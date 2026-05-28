@@ -3,6 +3,7 @@ import crossSpawn from 'cross-spawn';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
+import { providerModelsService } from './modules/providers/services/provider-models.service.js';
 import { createNormalizedMessage } from './shared/utils.js';
 
 // Use cross-spawn on Windows for better command execution
@@ -28,6 +29,7 @@ function isWorkspaceTrustPrompt(text = '') {
 async function spawnCursor(command, options = {}, ws) {
   return new Promise(async (resolve, reject) => {
     const { sessionId, projectPath, cwd, resume, toolsSettings, skipPermissions, model, sessionSummary } = options;
+    const resolvedModel = await providerModelsService.resolveResumeModel('cursor', sessionId, model);
     let capturedSessionId = sessionId; // Track session ID throughout the process
     let sessionCreatedSent = false; // Track if we've already sent session-created event
     let hasRetriedWithTrust = false;
@@ -52,9 +54,10 @@ async function spawnCursor(command, options = {}, ws) {
       // Provide a prompt (works for both new and resumed sessions)
       baseArgs.push('-p', command);
 
-      // Add model flag if specified (only meaningful for new sessions; harmless on resume)
-      if (!sessionId && model) {
-        baseArgs.push('--model', model);
+      // Model overrides are applied to both new and resumed sessions so a
+      // session-scoped change request can take effect on the next turn.
+      if (resolvedModel) {
+        baseArgs.push('--model', resolvedModel);
       }
 
       // Request streaming JSON when we are providing a prompt

@@ -85,6 +85,7 @@ export const createSessionViewModel = (
     isCursorSession: session.__provider === 'cursor',
     isCodexSession: session.__provider === 'codex',
     isGeminiSession: session.__provider === 'gemini',
+    isOpenCodeSession: session.__provider === 'opencode',
     isActive: diffInMinutes < 10,
     sessionName: getSessionName(session, t),
     sessionTime: getSessionTime(session),
@@ -113,7 +114,12 @@ export const getAllSessions = (project: Project): SessionWithProvider[] => {
     __provider: 'gemini' as const,
   }));
 
-  return [...claudeSessions, ...cursorSessions, ...codexSessions, ...geminiSessions].sort(
+  const opencodeSessions = (project.opencodeSessions || []).map((session) => ({
+    ...session,
+    __provider: 'opencode' as const,
+  }));
+
+  return [...claudeSessions, ...cursorSessions, ...codexSessions, ...geminiSessions, ...opencodeSessions].sort(
     (a, b) => getSessionDate(b).getTime() - getSessionDate(a).getTime(),
   );
 };
