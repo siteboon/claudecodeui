@@ -144,12 +144,16 @@ export default function ScrollNavigation({
       const container = scrollContainerRef.current;
       if (!container) return;
 
-      const elements = container.querySelectorAll<HTMLDivElement>('.chat-message.user');
-      if (elements.length > index) {
-        elements[index].scrollIntoView({ block: 'center', behavior: 'instant' });
+      // Use data-user-index to find the exact logical user message
+      const el = container.querySelector<HTMLDivElement>(
+        `.chat-message.user[data-user-index="${index}"]`,
+      );
+      if (el) {
+        el.scrollIntoView({ block: 'center', behavior: 'instant' });
         return;
       }
 
+      // Fallback: ratio-based scroll for messages not in DOM
       const totalUserMessages = userMessages.length;
       if (totalUserMessages <= 1) return;
 
@@ -175,51 +179,14 @@ export default function ScrollNavigation({
   }, [scrollContainerRef]);
 
   const scrollPrev = useCallback(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    const elements = container.querySelectorAll<HTMLDivElement>('.chat-message.user');
-    if (elements.length === 0) return;
-
-    const { scrollTop, clientHeight } = container;
-    const viewportCenter = scrollTop + clientHeight / 2;
-
-    let currentIndex = 0;
-    for (let i = 0; i < elements.length; i++) {
-      const top = elements[i].getBoundingClientRect().top - container.getBoundingClientRect().top + scrollTop;
-      if (top <= viewportCenter) {
-        currentIndex = i;
-      } else {
-        break;
-      }
-    }
-
-    const targetIndex = Math.max(0, currentIndex - 1);
-    elements[targetIndex].scrollIntoView({ block: 'center', behavior: 'instant' });
-  }, [scrollContainerRef]);
+    const targetIndex = Math.max(0, activeDotIndex - 1);
+    scrollToDot(targetIndex);
+  }, [activeDotIndex, scrollToDot]);
 
   const scrollNext = useCallback(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    const elements = container.querySelectorAll<HTMLDivElement>('.chat-message.user');
-    if (elements.length === 0) return;
-
-    const { scrollTop, clientHeight } = container;
-    const viewportCenter = scrollTop + clientHeight / 2;
-
-    let currentIndex = elements.length - 1;
-    for (let i = elements.length - 1; i >= 0; i--) {
-      const top = elements[i].getBoundingClientRect().top - container.getBoundingClientRect().top + scrollTop;
-      if (top <= viewportCenter) {
-        currentIndex = i;
-        break;
-      }
-    }
-
-    const targetIndex = Math.min(elements.length - 1, currentIndex + 1);
-    elements[targetIndex].scrollIntoView({ block: 'center', behavior: 'instant' });
-  }, [scrollContainerRef]);
+    const targetIndex = Math.min(userMessages.length - 1, activeDotIndex + 1);
+    scrollToDot(targetIndex);
+  }, [activeDotIndex, userMessages.length, scrollToDot]);
 
   if (!shouldShow) return null;
 

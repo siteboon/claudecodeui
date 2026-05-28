@@ -403,17 +403,14 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       }
 
       /*
-       * SDK streaming `type: 'user'` messages are NOT real user keyboard input.
-       * They are system context injection (skill directories, image metadata,
-       * tool errors) and subagent task prompts. Real user messages are rendered
-       * client-side via the pendingUserMessage mechanism.
-       *
-       * JSONL history messages don't have `type: 'user'` at the top level —
-       * they use `message.role === 'user'` instead. Use this to distinguish.
-       *
-       * Note: isSynthetic/origin fields are NOT available in current SDK versions.
+       * Only real user keyboard input messages have `permissionMode`
+       * (set by the CLI when writing to JSONL). SDK streaming messages,
+       * subagent tool results, and system context injection do NOT.
+       * Real user messages are rendered client-side via pendingUserMessage,
+       * so we only show text content when permissionMode is present.
+       * Tool result parts are always preserved for attachments.
        */
-      const isSdkStreamingUser = raw.type === 'user';
+      const isRealUserMessage = !!raw.permissionMode;
 
       if (Array.isArray(raw.message.content)) {
         for (let partIndex = 0; partIndex < raw.message.content.length; partIndex++) {
@@ -433,8 +430,8 @@ export class ClaudeSessionsProvider implements IProviderSessions {
             }));
           } else if (part.type === 'text') {
             const text = part.text || '';
-            // Skip SDK streaming text — they're system context, not user input
-            if (isSdkStreamingUser) continue;
+            // Only show text content for real user messages (has permissionMode)
+            if (!isRealUserMessage) continue;
             if (text && !isInternalContent(text)) {
               if (isImageContent(text)) {
                 continue;
@@ -455,7 +452,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
           }
         }
 
-        if (messages.length === 0) {
+        if (messages.length === 0 && isRealUserMessage) {
           const textParts = raw.message.content
             .filter((part: AnyRecord) => part.type === 'text')
             .map((part: AnyRecord) => part.text)
@@ -552,7 +549,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
           return messages;
         }
 
-        if (text && !isInternalContent(text) && !isSdkStreamingUser) {
+        if (text && !isInternalContent(text) && isRealUserMessage) {
           if (!isSubagentPromptEcho(text, subagentPrompts)) {
             messages.push(createNormalizedMessage({
               id: baseId,

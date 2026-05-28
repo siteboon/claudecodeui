@@ -228,25 +228,37 @@ export default function ChatMessagesPane({
             </div>
           )}
 
-          {visibleMessages.map((message, index) => {
-            const prevMessage = index > 0 ? visibleMessages[index - 1] : null;
-            return (
-              <MessageComponent
-                key={getMessageKey(message)}
-                message={message}
-                prevMessage={prevMessage}
-                createDiff={createDiff}
-                onFileOpen={onFileOpen}
-                onShowSettings={onShowSettings}
-                onGrantToolPermission={onGrantToolPermission}
-                autoExpandTools={autoExpandTools}
-                showRawParameters={showRawParameters}
-                showThinking={showThinking}
-                selectedProject={selectedProject}
-                provider={provider}
-              />
-            );
-          })}
+          {(() => {
+            let userIdx = 0;
+            // Count user messages before visibleMessages to know the starting index
+            const visStartIdx = chatMessages.indexOf(visibleMessages[0]);
+            if (visStartIdx >= 0) {
+              for (let i = 0; i < visStartIdx; i++) {
+                if (chatMessages[i].type === 'user') userIdx++;
+              }
+            }
+            return visibleMessages.map((message, index) => {
+              const prevMessage = index > 0 ? visibleMessages[index - 1] : null;
+              const uIdx: number | undefined = message.type === 'user' ? userIdx++ : undefined;
+              return (
+                <MessageComponent
+                  key={getMessageKey(message)}
+                  message={message}
+                  prevMessage={prevMessage}
+                  userMessageIndex={uIdx}
+                  createDiff={createDiff}
+                  onFileOpen={onFileOpen}
+                  onShowSettings={onShowSettings}
+                  onGrantToolPermission={onGrantToolPermission}
+                  autoExpandTools={autoExpandTools}
+                  showRawParameters={showRawParameters}
+                  showThinking={showThinking}
+                  selectedProject={selectedProject}
+                  provider={provider}
+                />
+              );
+            });
+          })()}
         </>
       )}
     </div>
