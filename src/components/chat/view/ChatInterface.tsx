@@ -1,14 +1,17 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
+import PermissionContext from '../../../contexts/PermissionContext';
 import { QuickSettingsPanel } from '../../quick-settings-panel';
 import type { ChatInterfaceProps, Provider  } from '../types/types';
-import type { SessionProvider } from '../../../types/app';
+import type { LLMProvider } from '../../../types/app';
 import { useChatProviderState } from '../hooks/useChatProviderState';
 import { useChatSessionState } from '../hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '../hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '../hooks/useChatComposerState';
 import { useSessionStore } from '../../../stores/useSessionStore';
+
 import ChatMessagesPane from './subcomponents/ChatMessagesPane';
 import ChatComposer from './subcomponents/ChatComposer';
 
@@ -31,7 +34,6 @@ function ChatInterface({
   onSessionProcessing,
   onSessionNotProcessing,
   processingSessions,
-  onReplaceTemporarySession,
   onNavigateToSession,
   onShowSettings,
   autoExpandTools,
@@ -40,13 +42,13 @@ function ChatInterface({
   autoScrollToBottom,
   sendByCtrlEnter,
   externalMessageUpdate,
+  newSessionTrigger,
   onShowAllTasks,
 }: ChatInterfaceProps) {
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
   const { t } = useTranslation('chat');
 
   const sessionStore = useSessionStore();
-  const streamBufferRef = useRef('');
   const streamTimerRef = useRef<number | null>(null);
   const accumulatedStreamRef = useRef('');
   const pendingViewSessionRef = useRef<PendingViewSession | null>(null);
@@ -56,7 +58,6 @@ function ChatInterface({
       clearTimeout(streamTimerRef.current);
       streamTimerRef.current = null;
     }
-    streamBufferRef.current = '';
     accumulatedStreamRef.current = '';
   }, []);
 
@@ -120,6 +121,7 @@ function ChatInterface({
     sendMessage,
     autoScrollToBottom,
     externalMessageUpdate,
+    newSessionTrigger,
     processingSessions,
     resetStreamingState,
     pendingViewSessionRef,
@@ -165,7 +167,6 @@ function ChatInterface({
     syncInputOverlayScroll,
     handleClearInput,
     handleAbortSession,
-    handleTranscript,
     handlePermissionDecision,
     handleGrantToolPermission,
     handleInputFocusChange,
@@ -208,10 +209,11 @@ function ChatInterface({
   // so missed streaming events are shown. Also reset isLoading.
   const handleWebSocketReconnect = useCallback(async () => {
     if (!selectedProject || !selectedSession) return;
-    const providerVal = (localStorage.getItem('selected-provider') as SessionProvider) || 'claude';
+    const providerVal = (localStorage.getItem('selected-provider') as LLMProvider) || 'claude';
     await sessionStore.refreshFromServer(selectedSession.id, {
-      provider: (selectedSession.__provider || providerVal) as SessionProvider,
-      projectName: selectedProject.name,
+      provider: (selectedSession.__provider || providerVal) as LLMProvider,
+      // Use DB projectId; legacy folder-derived projectName is no longer accepted here.
+      projectId: selectedProject.projectId,
       projectPath: selectedProject.fullPath || selectedProject.path || '',
     });
     setIsLoading(false);
@@ -221,7 +223,6 @@ function ChatInterface({
   useChatRealtimeHandlers({
     latestMessage,
     provider,
-    selectedProject,
     selectedSession,
     currentSessionId,
     setCurrentSessionId,
@@ -231,13 +232,11 @@ function ChatInterface({
     setTokenBudget,
     setPendingPermissionRequests,
     pendingViewSessionRef,
-    streamBufferRef,
     streamTimerRef,
     accumulatedStreamRef,
     onSessionInactive,
     onSessionProcessing,
     onSessionNotProcessing,
-    onReplaceTemporarySession,
     onNavigateToSession,
     onWebSocketReconnect: handleWebSocketReconnect,
     sessionStore,
@@ -269,6 +268,11 @@ function ChatInterface({
     };
   }, [resetStreamingState]);
 
+  const permissionContextValue = useMemo(() => ({
+    pendingPermissionRequests,
+    handlePermissionDecision,
+  }), [pendingPermissionRequests, handlePermissionDecision]);
+
   if (!selectedProject) {
     const selectedProviderLabel =
       provider === 'cursor'
@@ -294,7 +298,7 @@ function ChatInterface({
   }
 
   return (
-    <>
+    <PermissionContext.Provider value={permissionContextValue}>
       <div className="flex h-full flex-col">
         <ChatMessagesPane
           scrollContainerRef={scrollContainerRef}
@@ -339,7 +343,6 @@ function ChatInterface({
           showRawParameters={showRawParameters}
           showThinking={showThinking}
           selectedProject={selectedProject}
-          isLoading={isLoading}
         />
 
         <ChatComposer
@@ -396,7 +399,6 @@ function ChatInterface({
           onTextareaScrollSync={syncInputOverlayScroll}
           onTextareaInput={handleTextareaInput}
           onInputFocusChange={handleInputFocusChange}
-          isInputFocused={isInputFocused}
           placeholder={t('input.placeholder', {
             provider:
               provider === 'cursor'
@@ -409,12 +411,11 @@ function ChatInterface({
           })}
           isTextareaExpanded={isTextareaExpanded}
           sendByCtrlEnter={sendByCtrlEnter}
-          onTranscript={handleTranscript}
         />
       </div>
 
       <QuickSettingsPanel />
-    </>
+    </PermissionContext.Provider>
   );
 }
 

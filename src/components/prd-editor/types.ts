@@ -1,7 +1,8 @@
 export type PrdFile = {
   name?: string;
   path?: string;
-  projectName?: string;
+  // DB projectId used to resolve the project path when fetching file content.
+  projectId?: string;
   content?: string;
   isExisting?: boolean;
 };

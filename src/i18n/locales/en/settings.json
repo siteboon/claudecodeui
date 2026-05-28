@@ -55,8 +55,7 @@
       "appearance": "Appearance",
       "toolDisplay": "Tool Display",
       "viewOptions": "View Options",
-      "inputSettings": "Input Settings",
-      "whisperDictation": "Whisper Dictation"
+      "inputSettings": "Input Settings"
     },
     "darkMode": "Dark Mode",
     "autoExpandTools": "Auto-expand tools",
@@ -71,16 +70,6 @@
       "openPanel": "Open settings panel",
       "draggingStatus": "Dragging...",
       "toggleAndMove": "Click to toggle, drag to move"
-    },
-    "whisper": {
-      "modes": {
-        "default": "Default Mode",
-        "defaultDescription": "Direct transcription of your speech",
-        "prompt": "Prompt Enhancement",
-        "promptDescription": "Transform rough ideas into clear, detailed AI prompts",
-        "vibe": "Vibe Mode",
-        "vibeDescription": "Format ideas as clear agent instructions with details"
-      }
     }
   },
   "terminalShortcuts": {
@@ -106,8 +95,8 @@
     "apiTokens": "API & Tokens",
     "tasks": "Tasks",
     "notifications": "Notifications",
-    "plugins": "Plugins"
-
+    "plugins": "Plugins",
+    "about": "About"
   },
   "notifications": {
     "title": "Notifications",

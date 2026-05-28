@@ -55,8 +55,7 @@
       "appearance": "외관",
       "toolDisplay": "도구 표시",
       "viewOptions": "보기 옵션",
-      "inputSettings": "입력 설정",
-      "whisperDictation": "Whisper 음성 인식"
+      "inputSettings": "입력 설정"
     },
     "darkMode": "다크 모드",
     "autoExpandTools": "도구 자동 펼치기",
@@ -71,16 +70,6 @@
       "openPanel": "설정 패널 열기",
       "draggingStatus": "드래그 중...",
       "toggleAndMove": "클릭하여 토글, 드래그하여 이동"
-    },
-    "whisper": {
-      "modes": {
-        "default": "기본 모드",
-        "defaultDescription": "음성을 그대로 텍스트로 변환",
-        "prompt": "프롬프트 향상",
-        "promptDescription": "거친 아이디어를 명확하고 상세한 AI 프롬프트로 변환",
-        "vibe": "Vibe 모드",
-        "vibeDescription": "아이디어를 상세한 에이전트 지침 형식으로 변환"
-      }
     }
   },
   "terminalShortcuts": {
@@ -106,8 +95,8 @@
     "apiTokens": "API & 토큰",
     "tasks": "작업",
     "notifications": "알림",
-    "plugins": "플러그인"
-
+    "plugins": "플러그인",
+    "about": "정보"
   },
   "notifications": {
     "title": "알림",

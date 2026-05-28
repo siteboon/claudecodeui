@@ -1,13 +1,17 @@
-import express from 'express';
 import { promises as fs } from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import os from 'os';
-import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants.js';
-import { parseFrontmatter } from '../utils/frontmatter.js';
+import path from 'path';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import express from 'express';
+
+import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants.js';
+import { parseFrontMatter } from '../shared/frontmatter.js';
+import { findAppRoot, getModuleDir } from '../utils/runtime-paths.js';
+
+const __dirname = getModuleDir(import.meta.url);
+// This route reads the top-level package.json for the status command, so it needs the real
+// app root even after compilation moves the route file under dist-server/server/routes.
+const APP_ROOT = findAppRoot(__dirname);
 
 const router = express.Router();
 
@@ -38,7 +42,7 @@ async function scanCommandsDirectory(dir, baseDir, namespace) {
         // Parse markdown file for metadata
         try {
           const content = await fs.readFile(fullPath, 'utf8');
-          const { data: frontmatter, content: commandContent } = parseFrontmatter(content);
+          const { data: frontmatter, content: commandContent } = parseFrontMatter(content);
 
           // Calculate relative path from baseDir for command name
           const relativePath = path.relative(baseDir, fullPath);
@@ -292,7 +296,7 @@ Custom commands can be created in:
 
   '/status': async (args, context) => {
     // Read version from package.json
-    const packageJsonPath = path.join(path.dirname(__dirname), '..', 'package.json');
+    const packageJsonPath = path.join(APP_ROOT, 'package.json');
     let version = 'unknown';
     let packageName = 'claude-code-ui';
 
@@ -319,7 +323,7 @@ Custom commands can be created in:
         packageName,
         uptime: uptimeFormatted,
         uptimeSeconds: Math.floor(uptime),
-        model: context?.model || 'claude-sonnet-4.5',
+        model: context?.model || CLAUDE_MODELS.DEFAULT,
         provider: context?.provider || 'claude',
         nodeVersion: process.version,
         platform: process.platform
@@ -451,55 +455,6 @@ router.post('/list', async (req, res) => {
 });
 
 /**
- * POST /api/commands/load
- * Load a specific command file and return its content and metadata
- */
-router.post('/load', async (req, res) => {
-  try {
-    const { commandPath } = req.body;
-
-    if (!commandPath) {
-      return res.status(400).json({
-        error: 'Command path is required'
-      });
-    }
-
-    // Security: Prevent path traversal
-    const resolvedPath = path.resolve(commandPath);
-    if (!resolvedPath.startsWith(path.resolve(os.homedir())) &&
-        !resolvedPath.includes('.claude/commands')) {
-      return res.status(403).json({
-        error: 'Access denied',
-        message: 'Command must be in .claude/commands directory'
-      });
-    }
-
-    // Read and parse the command file
-    const content = await fs.readFile(commandPath, 'utf8');
-    const { data: metadata, content: commandContent } = parseFrontmatter(content);
-
-    res.json({
-      path: commandPath,
-      metadata,
-      content: commandContent
-    });
-  } catch (error) {
-    if (error.code === 'ENOENT') {
-      return res.status(404).json({
-        error: 'Command not found',
-        message: `Command file not found: ${req.body.commandPath}`
-      });
-    }
-
-    console.error('Error loading command:', error);
-    res.status(500).json({
-      error: 'Failed to load command',
-      message: error.message
-    });
-  }
-});
-
-/**
  * POST /api/commands/execute
  * Execute a command with argument replacement
  * This endpoint prepares the command content but doesn't execute bash commands yet
@@ -561,7 +516,7 @@ router.post('/execute', async (req, res) => {
       }
     }
     const content = await fs.readFile(commandPath, 'utf8');
-    const { data: metadata, content: commandContent } = parseFrontmatter(content);
+    const { data: metadata, content: commandContent } = parseFrontMatter(content);
     // Basic argument replacement (will be enhanced in command parser utility)
     let processedContent = commandContent;
 

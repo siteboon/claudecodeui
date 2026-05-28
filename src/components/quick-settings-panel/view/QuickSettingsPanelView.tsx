@@ -73,7 +73,6 @@ export default function QuickSettingsPanelView() {
           <QuickSettingsPanelHeader />
           <QuickSettingsContent
             isDarkMode={isDarkMode}
-            isMobile={isMobile}
             preferences={quickSettingsPreferences}
             onPreferenceChange={handlePreferenceChange}
           />

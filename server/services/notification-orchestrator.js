@@ -1,5 +1,6 @@
 import webPush from 'web-push';
-import { notificationPreferencesDb, pushSubscriptionsDb, sessionNamesDb } from '../database/db.js';
+
+import { notificationPreferencesDb, pushSubscriptionsDb, sessionsDb } from '../modules/database/index.js';
 
 const KIND_TO_PREF_KEY = {
   action_required: 'actionRequired',
@@ -107,7 +108,7 @@ function resolveSessionName(event) {
     return null;
   }
 
-  return normalizeSessionName(sessionNamesDb.getName(event.sessionId, event.provider));
+  return normalizeSessionName(sessionsDb.getSessionName(event.sessionId, event.provider));
 }
 
 function buildPushBody(event) {
@@ -125,7 +126,7 @@ function buildPushBody(event) {
   const message = CODE_MAP[event.code] || 'You have a new notification';
 
   return {
-    title: sessionName || 'Claude Code UI',
+    title: sessionName || 'CloudCLI',
     body: `${providerLabel}: ${message}`,
     data: {
       sessionId: event.sessionId || null,
