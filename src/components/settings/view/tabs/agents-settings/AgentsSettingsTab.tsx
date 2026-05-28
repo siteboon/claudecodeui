@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
-import { useServerPlatform } from '../../../../../hooks/useServerPlatform';
 import type { AgentCategory, AgentProvider } from '../../../types/types';
 
 import type { AgentContext, AgentsSettingsTabProps } from './types';
@@ -23,22 +22,10 @@ export default function AgentsSettingsTab({
 }: AgentsSettingsTabProps) {
   const [selectedAgent, setSelectedAgent] = useState<AgentProvider>('claude');
   const [selectedCategory, setSelectedCategory] = useState<AgentCategory>('account');
-  const { isWindowsServer } = useServerPlatform();
 
   const visibleAgents = useMemo<AgentProvider[]>(() => {
-    const all: AgentProvider[] = ['claude', 'cursor', 'codex', 'gemini', 'opencode'];
-    if (isWindowsServer) {
-      return all.filter((id) => id !== 'cursor');
-    }
-
-    return all;
-  }, [isWindowsServer]);
-
-  useEffect(() => {
-    if (isWindowsServer && selectedAgent === 'cursor') {
-      setSelectedAgent('claude');
-    }
-  }, [isWindowsServer, selectedAgent]);
+    return ['claude', 'cursor', 'codex', 'gemini', 'opencode'];
+  }, []);
 
   const agentContextById = useMemo<Record<AgentProvider, AgentContext>>(() => ({
     claude: {
