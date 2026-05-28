@@ -21,27 +21,563 @@ import {
 
 export const CURSOR_FALLBACK_MODELS: ProviderModelsDefinition = {
   OPTIONS: [
-    { value: "opus-4.6-thinking", label: "Claude 4.6 Opus (Thinking)" },
-    { value: "gpt-5.3-codex", label: "GPT-5.3" },
-    { value: "gpt-5.2-high", label: "GPT-5.2 High" },
-    { value: "gemini-3-pro", label: "Gemini 3 Pro" },
-    { value: "opus-4.5-thinking", label: "Claude 4.5 Opus (Thinking)" },
-    { value: "gpt-5.2", label: "GPT-5.2" },
-    { value: "gpt-5.1", label: "GPT-5.1" },
-    { value: "gpt-5.1-high", label: "GPT-5.1 High" },
-    { value: "composer-1", label: "Composer 1" },
-    { value: "auto", label: "Auto" },
-    { value: "sonnet-4.5", label: "Claude 4.5 Sonnet" },
-    { value: "sonnet-4.5-thinking", label: "Claude 4.5 Sonnet (Thinking)" },
-    { value: "opus-4.5", label: "Claude 4.5 Opus" },
-    { value: "gpt-5.1-codex", label: "GPT-5.1 Codex" },
-    { value: "gpt-5.1-codex-high", label: "GPT-5.1 Codex High" },
-    { value: "gpt-5.1-codex-max", label: "GPT-5.1 Codex Max" },
-    { value: "gpt-5.1-codex-max-high", label: "GPT-5.1 Codex Max High" },
-    { value: "opus-4.1", label: "Claude 4.1 Opus" },
-    { value: "grok", label: "Grok" },
+    {
+      value: "auto",
+      label: "auto",
+      description: "Auto",
+    },
+    {
+      value: "composer-2-fast",
+      label: "composer-2-fast",
+      description: "Composer 2 Fast",
+    },
+    {
+      value: "composer-2",
+      label: "composer-2",
+      description: "Composer 2",
+    },
+    {
+      value: "gpt-5.3-codex-low",
+      label: "gpt-5.3-codex-low",
+      description: "Codex 5.3 Low",
+    },
+    {
+      value: "gpt-5.3-codex-low-fast",
+      label: "gpt-5.3-codex-low-fast",
+      description: "Codex 5.3 Low Fast",
+    },
+    {
+      value: "gpt-5.3-codex",
+      label: "gpt-5.3-codex",
+      description: "Codex 5.3",
+    },
+    {
+      value: "gpt-5.3-codex-fast",
+      label: "gpt-5.3-codex-fast",
+      description: "Codex 5.3 Fast",
+    },
+    {
+      value: "gpt-5.3-codex-high",
+      label: "gpt-5.3-codex-high",
+      description: "Codex 5.3 High",
+    },
+    {
+      value: "gpt-5.3-codex-high-fast",
+      label: "gpt-5.3-codex-high-fast",
+      description: "Codex 5.3 High Fast",
+    },
+    {
+      value: "gpt-5.3-codex-xhigh",
+      label: "gpt-5.3-codex-xhigh",
+      description: "Codex 5.3 Extra High",
+    },
+    {
+      value: "gpt-5.3-codex-xhigh-fast",
+      label: "gpt-5.3-codex-xhigh-fast",
+      description: "Codex 5.3 Extra High Fast",
+    },
+    {
+      value: "gpt-5.2",
+      label: "gpt-5.2",
+      description: "GPT-5.2",
+    },
+    {
+      value: "gpt-5.2-codex-low",
+      label: "gpt-5.2-codex-low",
+      description: "Codex 5.2 Low",
+    },
+    {
+      value: "gpt-5.2-codex-low-fast",
+      label: "gpt-5.2-codex-low-fast",
+      description: "Codex 5.2 Low Fast",
+    },
+    {
+      value: "gpt-5.2-codex",
+      label: "gpt-5.2-codex",
+      description: "Codex 5.2",
+    },
+    {
+      value: "gpt-5.2-codex-fast",
+      label: "gpt-5.2-codex-fast",
+      description: "Codex 5.2 Fast",
+    },
+    {
+      value: "gpt-5.2-codex-high",
+      label: "gpt-5.2-codex-high",
+      description: "Codex 5.2 High",
+    },
+    {
+      value: "gpt-5.2-codex-high-fast",
+      label: "gpt-5.2-codex-high-fast",
+      description: "Codex 5.2 High Fast",
+    },
+    {
+      value: "gpt-5.2-codex-xhigh",
+      label: "gpt-5.2-codex-xhigh",
+      description: "Codex 5.2 Extra High",
+    },
+    {
+      value: "gpt-5.2-codex-xhigh-fast",
+      label: "gpt-5.2-codex-xhigh-fast",
+      description: "Codex 5.2 Extra High Fast",
+    },
+    {
+      value: "gpt-5.1-codex-max-low",
+      label: "gpt-5.1-codex-max-low",
+      description: "Codex 5.1 Max Low",
+    },
+    {
+      value: "gpt-5.1-codex-max-low-fast",
+      label: "gpt-5.1-codex-max-low-fast",
+      description: "Codex 5.1 Max Low Fast",
+    },
+    {
+      value: "gpt-5.1-codex-max-medium",
+      label: "gpt-5.1-codex-max-medium",
+      description: "Codex 5.1 Max",
+    },
+    {
+      value: "gpt-5.1-codex-max-medium-fast",
+      label: "gpt-5.1-codex-max-medium-fast",
+      description: "Codex 5.1 Max Medium Fast",
+    },
+    {
+      value: "gpt-5.1-codex-max-high",
+      label: "gpt-5.1-codex-max-high",
+      description: "Codex 5.1 Max High",
+    },
+    {
+      value: "gpt-5.1-codex-max-high-fast",
+      label: "gpt-5.1-codex-max-high-fast",
+      description: "Codex 5.1 Max High Fast",
+    },
+    {
+      value: "gpt-5.1-codex-max-xhigh",
+      label: "gpt-5.1-codex-max-xhigh",
+      description: "Codex 5.1 Max Extra High",
+    },
+    {
+      value: "gpt-5.1-codex-max-xhigh-fast",
+      label: "gpt-5.1-codex-max-xhigh-fast",
+      description: "Codex 5.1 Max Extra High Fast",
+    },
+    {
+      value: "composer-2.5",
+      label: "composer-2.5",
+      description: "Composer 2.5",
+    },
+    {
+      value: "gpt-5.5-high",
+      label: "gpt-5.5-high",
+      description: "GPT-5.5 1M High",
+    },
+    {
+      value: "gpt-5.5-high-fast",
+      label: "gpt-5.5-high-fast",
+      description: "GPT-5.5 High Fast",
+    },
+    {
+      value: "claude-opus-4-7-thinking-high",
+      label: "claude-opus-4-7-thinking-high",
+      description: "Opus 4.7 1M High Thinking",
+    },
+    {
+      value: "gpt-5.4-high",
+      label: "gpt-5.4-high",
+      description: "GPT-5.4 1M High",
+    },
+    {
+      value: "gpt-5.4-high-fast",
+      label: "gpt-5.4-high-fast",
+      description: "GPT-5.4 High Fast",
+    },
+    {
+      value: "claude-4.6-opus-high-thinking",
+      label: "claude-4.6-opus-high-thinking",
+      description: "Opus 4.6 1M Thinking",
+    },
+    {
+      value: "claude-4.6-opus-high-thinking-fast",
+      label: "claude-4.6-opus-high-thinking-fast",
+      description: "Opus 4.6 1M Thinking Fast",
+    },
+    {
+      value: "composer-2.5-fast",
+      label: "composer-2.5-fast",
+      description: "Composer 2.5 Fast",
+    },
+    {
+      value: "gpt-5.5-none",
+      label: "gpt-5.5-none",
+      description: "GPT-5.5 1M None",
+    },
+    {
+      value: "gpt-5.5-none-fast",
+      label: "gpt-5.5-none-fast",
+      description: "GPT-5.5 None Fast",
+    },
+    {
+      value: "gpt-5.5-low",
+      label: "gpt-5.5-low",
+      description: "GPT-5.5 1M Low",
+    },
+    {
+      value: "gpt-5.5-low-fast",
+      label: "gpt-5.5-low-fast",
+      description: "GPT-5.5 Low Fast",
+    },
+    {
+      value: "gpt-5.5-medium",
+      label: "gpt-5.5-medium",
+      description: "GPT-5.5 1M",
+    },
+    {
+      value: "gpt-5.5-medium-fast",
+      label: "gpt-5.5-medium-fast",
+      description: "GPT-5.5 Fast",
+    },
+    {
+      value: "gpt-5.5-extra-high",
+      label: "gpt-5.5-extra-high",
+      description: "GPT-5.5 1M Extra High",
+    },
+    {
+      value: "gpt-5.5-extra-high-fast",
+      label: "gpt-5.5-extra-high-fast",
+      description: "GPT-5.5 Extra High Fast",
+    },
+    {
+      value: "claude-4.6-sonnet-medium",
+      label: "claude-4.6-sonnet-medium",
+      description: "Sonnet 4.6 1M",
+    },
+    {
+      value: "claude-4.6-sonnet-medium-thinking",
+      label: "claude-4.6-sonnet-medium-thinking",
+      description: "Sonnet 4.6 1M Thinking",
+    },
+    {
+      value: "claude-opus-4-7-low",
+      label: "claude-opus-4-7-low",
+      description: "Opus 4.7 1M Low",
+    },
+    {
+      value: "claude-opus-4-7-low-fast",
+      label: "claude-opus-4-7-low-fast",
+      description: "Opus 4.7 1M Low Fast",
+    },
+    {
+      value: "claude-opus-4-7-medium",
+      label: "claude-opus-4-7-medium",
+      description: "Opus 4.7 1M Medium",
+    },
+    {
+      value: "claude-opus-4-7-medium-fast",
+      label: "claude-opus-4-7-medium-fast",
+      description: "Opus 4.7 1M Medium Fast",
+    },
+    {
+      value: "claude-opus-4-7-high",
+      label: "claude-opus-4-7-high",
+      description: "Opus 4.7 1M High",
+    },
+    {
+      value: "claude-opus-4-7-high-fast",
+      label: "claude-opus-4-7-high-fast",
+      description: "Opus 4.7 1M High Fast",
+    },
+    {
+      value: "claude-opus-4-7-xhigh",
+      label: "claude-opus-4-7-xhigh",
+      description: "Opus 4.7 1M",
+    },
+    {
+      value: "claude-opus-4-7-xhigh-fast",
+      label: "claude-opus-4-7-xhigh-fast",
+      description: "Opus 4.7 1M Fast",
+    },
+    {
+      value: "claude-opus-4-7-max",
+      label: "claude-opus-4-7-max",
+      description: "Opus 4.7 1M Max",
+    },
+    {
+      value: "claude-opus-4-7-max-fast",
+      label: "claude-opus-4-7-max-fast",
+      description: "Opus 4.7 1M Max Fast",
+    },
+    {
+      value: "claude-opus-4-7-thinking-low",
+      label: "claude-opus-4-7-thinking-low",
+      description: "Opus 4.7 1M Low Thinking",
+    },
+    {
+      value: "claude-opus-4-7-thinking-low-fast",
+      label: "claude-opus-4-7-thinking-low-fast",
+      description: "Opus 4.7 1M Low Thinking Fast",
+    },
+    {
+      value: "claude-opus-4-7-thinking-medium",
+      label: "claude-opus-4-7-thinking-medium",
+      description: "Opus 4.7 1M Medium Thinking",
+    },
+    {
+      value: "claude-opus-4-7-thinking-medium-fast",
+      label: "claude-opus-4-7-thinking-medium-fast",
+      description: "Opus 4.7 1M Medium Thinking Fast",
+    },
+    {
+      value: "claude-opus-4-7-thinking-high-fast",
+      label: "claude-opus-4-7-thinking-high-fast",
+      description: "Opus 4.7 1M High Thinking Fast",
+    },
+    {
+      value: "claude-opus-4-7-thinking-xhigh",
+      label: "claude-opus-4-7-thinking-xhigh",
+      description: "Opus 4.7 1M Thinking",
+    },
+    {
+      value: "claude-opus-4-7-thinking-xhigh-fast",
+      label: "claude-opus-4-7-thinking-xhigh-fast",
+      description: "Opus 4.7 1M Thinking Fast",
+    },
+    {
+      value: "claude-opus-4-7-thinking-max",
+      label: "claude-opus-4-7-thinking-max",
+      description: "Opus 4.7 1M Max Thinking",
+    },
+    {
+      value: "claude-opus-4-7-thinking-max-fast",
+      label: "claude-opus-4-7-thinking-max-fast",
+      description: "Opus 4.7 1M Max Thinking Fast",
+    },
+    {
+      value: "grok-build-0.1",
+      label: "grok-build-0.1",
+      description: "Grok Build 0.1 1M",
+    },
+    {
+      value: "gpt-5.4-low",
+      label: "gpt-5.4-low",
+      description: "GPT-5.4 1M Low",
+    },
+    {
+      value: "gpt-5.4-medium",
+      label: "gpt-5.4-medium",
+      description: "GPT-5.4 1M",
+    },
+    {
+      value: "gpt-5.4-medium-fast",
+      label: "gpt-5.4-medium-fast",
+      description: "GPT-5.4 Fast",
+    },
+    {
+      value: "gpt-5.4-xhigh",
+      label: "gpt-5.4-xhigh",
+      description: "GPT-5.4 1M Extra High",
+    },
+    {
+      value: "gpt-5.4-xhigh-fast",
+      label: "gpt-5.4-xhigh-fast",
+      description: "GPT-5.4 Extra High Fast",
+    },
+    {
+      value: "claude-4.6-opus-high",
+      label: "claude-4.6-opus-high",
+      description: "Opus 4.6 1M",
+    },
+    {
+      value: "claude-4.6-opus-max",
+      label: "claude-4.6-opus-max",
+      description: "Opus 4.6 1M Max",
+    },
+    {
+      value: "claude-4.6-opus-max-thinking",
+      label: "claude-4.6-opus-max-thinking",
+      description: "Opus 4.6 1M Max Thinking",
+    },
+    {
+      value: "claude-4.6-opus-max-thinking-fast",
+      label: "claude-4.6-opus-max-thinking-fast",
+      description: "Opus 4.6 1M Max Thinking Fast",
+    },
+    {
+      value: "claude-4.5-opus-high",
+      label: "claude-4.5-opus-high",
+      description: "Opus 4.5",
+    },
+    {
+      value: "claude-4.5-opus-high-thinking",
+      label: "claude-4.5-opus-high-thinking",
+      description: "Opus 4.5 Thinking",
+    },
+    {
+      value: "gpt-5.2-low",
+      label: "gpt-5.2-low",
+      description: "GPT-5.2 Low",
+    },
+    {
+      value: "gpt-5.2-low-fast",
+      label: "gpt-5.2-low-fast",
+      description: "GPT-5.2 Low Fast",
+    },
+    {
+      value: "gpt-5.2-fast",
+      label: "gpt-5.2-fast",
+      description: "GPT-5.2 Fast",
+    },
+    {
+      value: "gpt-5.2-high",
+      label: "gpt-5.2-high",
+      description: "GPT-5.2 High",
+    },
+    {
+      value: "gpt-5.2-high-fast",
+      label: "gpt-5.2-high-fast",
+      description: "GPT-5.2 High Fast",
+    },
+    {
+      value: "gpt-5.2-xhigh",
+      label: "gpt-5.2-xhigh",
+      description: "GPT-5.2 Extra High",
+    },
+    {
+      value: "gpt-5.2-xhigh-fast",
+      label: "gpt-5.2-xhigh-fast",
+      description: "GPT-5.2 Extra High Fast",
+    },
+    {
+      value: "gemini-3.1-pro",
+      label: "gemini-3.1-pro",
+      description: "Gemini 3.1 Pro",
+    },
+    {
+      value: "gpt-5.4-mini-none",
+      label: "gpt-5.4-mini-none",
+      description: "GPT-5.4 Mini None",
+    },
+    {
+      value: "gpt-5.4-mini-low",
+      label: "gpt-5.4-mini-low",
+      description: "GPT-5.4 Mini Low",
+    },
+    {
+      value: "gpt-5.4-mini-medium",
+      label: "gpt-5.4-mini-medium",
+      description: "GPT-5.4 Mini",
+    },
+    {
+      value: "gpt-5.4-mini-high",
+      label: "gpt-5.4-mini-high",
+      description: "GPT-5.4 Mini High",
+    },
+    {
+      value: "gpt-5.4-mini-xhigh",
+      label: "gpt-5.4-mini-xhigh",
+      description: "GPT-5.4 Mini Extra High",
+    },
+    {
+      value: "gpt-5.4-nano-none",
+      label: "gpt-5.4-nano-none",
+      description: "GPT-5.4 Nano None",
+    },
+    {
+      value: "gpt-5.4-nano-low",
+      label: "gpt-5.4-nano-low",
+      description: "GPT-5.4 Nano Low",
+    },
+    {
+      value: "gpt-5.4-nano-medium",
+      label: "gpt-5.4-nano-medium",
+      description: "GPT-5.4 Nano",
+    },
+    {
+      value: "gpt-5.4-nano-high",
+      label: "gpt-5.4-nano-high",
+      description: "GPT-5.4 Nano High",
+    },
+    {
+      value: "gpt-5.4-nano-xhigh",
+      label: "gpt-5.4-nano-xhigh",
+      description: "GPT-5.4 Nano Extra High",
+    },
+    {
+      value: "grok-4.3",
+      label: "grok-4.3",
+      description: "Grok 4.3 1M",
+    },
+    {
+      value: "claude-4.5-sonnet",
+      label: "claude-4.5-sonnet",
+      description: "Sonnet 4.5",
+    },
+    {
+      value: "claude-4.5-sonnet-thinking",
+      label: "claude-4.5-sonnet-thinking",
+      description: "Sonnet 4.5 Thinking",
+    },
+    {
+      value: "gpt-5.1-low",
+      label: "gpt-5.1-low",
+      description: "GPT-5.1 Low",
+    },
+    {
+      value: "gpt-5.1",
+      label: "gpt-5.1",
+      description: "GPT-5.1",
+    },
+    {
+      value: "gpt-5.1-high",
+      label: "gpt-5.1-high",
+      description: "GPT-5.1 High",
+    },
+    {
+      value: "gemini-3-flash",
+      label: "gemini-3-flash",
+      description: "Gemini 3 Flash",
+    },
+    {
+      value: "gemini-3.5-flash",
+      label: "gemini-3.5-flash",
+      description: "Gemini 3.5 Flash",
+    },
+    {
+      value: "gpt-5.1-codex-mini-low",
+      label: "gpt-5.1-codex-mini-low",
+      description: "Codex 5.1 Mini Low",
+    },
+    {
+      value: "gpt-5.1-codex-mini",
+      label: "gpt-5.1-codex-mini",
+      description: "Codex 5.1 Mini",
+    },
+    {
+      value: "gpt-5.1-codex-mini-high",
+      label: "gpt-5.1-codex-mini-high",
+      description: "Codex 5.1 Mini High",
+    },
+    {
+      value: "claude-4-sonnet",
+      label: "claude-4-sonnet",
+      description: "Sonnet 4",
+    },
+    {
+      value: "claude-4-sonnet-thinking",
+      label: "claude-4-sonnet-thinking",
+      description: "Sonnet 4 Thinking",
+    },
+    {
+      value: "gpt-5-mini",
+      label: "gpt-5-mini",
+      description: "GPT-5 Mini",
+    },
+    {
+      value: "kimi-k2.5",
+      label: "kimi-k2.5",
+      description: "Kimi K2.5",
+    },
   ],
-  DEFAULT: 'composer-2-fast',
+  DEFAULT: "composer-2.5-fast",
 };
 
 type CursorModelRow = {
@@ -281,3 +817,4 @@ export class CursorProviderModels implements IProviderModels {
     return writeProviderSessionActiveModelChange('cursor', input);
   }
 }
+
