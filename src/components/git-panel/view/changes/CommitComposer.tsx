@@ -1,6 +1,5 @@
 import { Check, ChevronDown, GitCommit, RefreshCw, Sparkles } from 'lucide-react';
 import { useState } from 'react';
-import MicButton from '../../../mic-button/view/MicButton';
 import type { ConfirmationRequest } from '../../types/types';
 
 // Persists commit messages across unmount/remount, keyed by project path
@@ -147,13 +146,6 @@ export default function CommitComposer({
                   <Sparkles className="h-4 w-4" />
                 )}
               </button>
-              <div style={{ display: 'none' }}>
-                <MicButton
-                  onTranscript={(transcript) => setCommitMessage(transcript)}
-                  mode="default"
-                  className="p-1.5"
-                />
-              </div>
             </div>
           </div>
 
