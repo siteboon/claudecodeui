@@ -1,15 +1,16 @@
 import { useTranslation } from 'react-i18next';
 import { useCallback, useRef } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
+
 import type { ChatMessage } from '../../types/types';
 import type {
   Project,
   ProjectSession,
   LLMProvider,
-  ProviderModelsCacheInfo,
   ProviderModelsDefinition,
 } from '../../../../types/app';
 import { getIntrinsicMessageKey } from '../../utils/messageKeys';
+
 import MessageComponent from './MessageComponent';
 import ProviderSelectionEmptyState from './ProviderSelectionEmptyState';
 
@@ -35,10 +36,7 @@ interface ChatMessagesPaneProps {
   opencodeModel: string;
   setOpenCodeModel: (model: string) => void;
   providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
-  providerModelCacheCatalog: Partial<Record<LLMProvider, ProviderModelsCacheInfo>>;
   providerModelsLoading: boolean;
-  providerModelsRefreshing: boolean;
-  onHardRefreshProviderModels: () => void;
   tasksEnabled: boolean;
   isTaskMasterInstalled: boolean | null;
   onShowAllTasks?: (() => void) | null;
@@ -87,10 +85,7 @@ export default function ChatMessagesPane({
   opencodeModel,
   setOpenCodeModel,
   providerModelCatalog,
-  providerModelCacheCatalog,
   providerModelsLoading,
-  providerModelsRefreshing,
-  onHardRefreshProviderModels,
   tasksEnabled,
   isTaskMasterInstalled,
   onShowAllTasks,
@@ -177,10 +172,7 @@ export default function ChatMessagesPane({
           opencodeModel={opencodeModel}
           setOpenCodeModel={setOpenCodeModel}
           providerModelCatalog={providerModelCatalog}
-          providerModelCacheCatalog={providerModelCacheCatalog}
           providerModelsLoading={providerModelsLoading}
-          providerModelsRefreshing={providerModelsRefreshing}
-          onHardRefreshProviderModels={onHardRefreshProviderModels}
           tasksEnabled={tasksEnabled}
           isTaskMasterInstalled={isTaskMasterInstalled}
           onShowAllTasks={onShowAllTasks}

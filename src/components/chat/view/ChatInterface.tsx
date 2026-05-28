@@ -332,10 +332,7 @@ function ChatInterface({
           opencodeModel={opencodeModel}
           setOpenCodeModel={setOpenCodeModel}
           providerModelCatalog={providerModelCatalog}
-          providerModelCacheCatalog={providerModelCacheCatalog}
           providerModelsLoading={providerModelsLoading}
-          providerModelsRefreshing={providerModelsRefreshing}
-          onHardRefreshProviderModels={hardRefreshProviderModels}
           tasksEnabled={tasksEnabled}
           isTaskMasterInstalled={isTaskMasterInstalled}
           onShowAllTasks={onShowAllTasks}

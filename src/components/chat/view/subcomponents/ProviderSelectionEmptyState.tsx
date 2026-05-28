@@ -1,18 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ChevronDown, RefreshCw } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 
 import { useServerPlatform } from "../../../../hooks/useServerPlatform";
 import type {
   ProjectSession,
   LLMProvider,
-  ProviderModelsCacheInfo,
   ProviderModelsDefinition,
 } from "../../../../types/app";
 import SessionProviderLogo from "../../../llm-logo-provider/SessionProviderLogo";
 import { NextTaskBanner } from "../../../task-master";
 import {
-  Button,
   Dialog,
   DialogTrigger,
   DialogContent,
@@ -54,10 +52,7 @@ type ProviderSelectionEmptyStateProps = {
   opencodeModel: string;
   setOpenCodeModel: (model: string) => void;
   providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
-  providerModelCacheCatalog: Partial<Record<LLMProvider, ProviderModelsCacheInfo>>;
   providerModelsLoading: boolean;
-  providerModelsRefreshing: boolean;
-  onHardRefreshProviderModels: () => void;
   tasksEnabled: boolean;
   isTaskMasterInstalled: boolean | null;
   onShowAllTasks?: (() => void) | null;
@@ -101,19 +96,6 @@ function getProviderDisplayName(p: LLMProvider) {
   return "Gemini";
 }
 
-function formatUpdatedAt(value?: string) {
-  if (!value) {
-    return "Not cached yet";
-  }
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return "Not cached yet";
-  }
-
-  return parsed.toLocaleString();
-}
-
 export default function ProviderSelectionEmptyState({
   selectedSession,
   currentSessionId,
@@ -131,10 +113,7 @@ export default function ProviderSelectionEmptyState({
   opencodeModel,
   setOpenCodeModel,
   providerModelCatalog,
-  providerModelCacheCatalog,
   providerModelsLoading,
-  providerModelsRefreshing,
-  onHardRefreshProviderModels,
   tasksEnabled,
   isTaskMasterInstalled,
   onShowAllTasks,
@@ -180,8 +159,6 @@ export default function ProviderSelectionEmptyState({
     );
     return found?.label || currentModel;
   }, [provider, currentModel, providerModelCatalog]);
-
-  const currentProviderCache = providerModelCacheCatalog[provider];
 
   const setModelForProvider = useCallback(
     (providerId: LLMProvider, modelValue: string) => {
@@ -265,30 +242,7 @@ export default function ProviderSelectionEmptyState({
             <DialogContent className="max-w-md overflow-hidden p-0">
               <DialogTitle>Model Selector</DialogTitle>
               <div className="border-b border-border/60 bg-muted/20 px-4 py-3">
-                <div className="space-y-2">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-foreground">Choose a model</p>
-                      <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
-                        Catalogs are cached for 3 days. Refresh after CLI/auth changes or if a model is missing.
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={onHardRefreshProviderModels}
-                      disabled={providerModelsRefreshing}
-                      className="shrink-0 rounded-xl"
-                    >
-                      <RefreshCw className={providerModelsRefreshing ? "animate-spin" : ""} />
-                      {providerModelsRefreshing ? "Refreshing..." : "Refresh"}
-                    </Button>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    Refresh checks every provider and replaces the cached catalogs. Last updated for {getProviderDisplayName(provider)}: {formatUpdatedAt(currentProviderCache?.updatedAt)}
-                  </p>
-                </div>
+                <p className="text-sm font-semibold text-foreground">Choose a model</p>
               </div>
               <Command>
                 <CommandInput
