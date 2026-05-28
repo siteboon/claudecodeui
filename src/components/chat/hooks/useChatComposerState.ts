@@ -42,7 +42,10 @@ interface UseChatComposerStateArgs {
   claudeModel: string;
   setClaudeModel: (model: string) => void;
   codexModel: string;
+  setCursorModel: (model: string) => void;
+  setCodexModel: (model: string) => void;
   geminiModel: string;
+  setGeminiModel: (model: string) => void;
   isLoading: boolean;
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
@@ -79,6 +82,34 @@ interface CommandExecutionResult {
   hasFileIncludes?: boolean;
 }
 
+type ModelCommandData = {
+  provider: LLMProvider;
+  requestedModel: string | null;
+  valid: boolean;
+  current: {
+    provider: LLMProvider;
+    model: string;
+  };
+  available: Record<LLMProvider, string[]>;
+  availableForProvider: string[];
+  newModel: string | null;
+  message: string;
+};
+
+const MODEL_STORAGE_KEYS: Record<LLMProvider, string> = {
+  claude: 'claude-model',
+  cursor: 'cursor-model',
+  codex: 'codex-model',
+  gemini: 'gemini-model',
+};
+
+const PROVIDER_LABELS: Record<LLMProvider, string> = {
+  claude: 'Claude',
+  cursor: 'Cursor',
+  codex: 'Codex',
+  gemini: 'Gemini',
+};
+
 const createFakeSubmitEvent = () => {
   return { preventDefault: () => undefined } as unknown as FormEvent<HTMLFormElement>;
 };
@@ -112,7 +143,10 @@ export function useChatComposerState({
   claudeModel,
   setClaudeModel,
   codexModel,
+  setCursorModel,
+  setCodexModel,
   geminiModel,
+  setGeminiModel,
   isLoading,
   canAbortSession,
   tokenBudget,
@@ -172,17 +206,30 @@ export function useChatComposerState({
           });
           break;
 
-        case 'model':
-          if (data.newModel) {
-            setClaudeModel(data.newModel);
-            safeLocalStorage.setItem('claude-model', data.newModel);
+        case 'model': {
+          const modelData = data as ModelCommandData;
+          const modelSetters: Record<LLMProvider, (model: string) => void> = {
+            claude: setClaudeModel,
+            cursor: setCursorModel,
+            codex: setCodexModel,
+            gemini: setGeminiModel,
+          };
+
+          if (modelData.valid && modelData.newModel) {
+            modelSetters[modelData.provider](modelData.newModel);
+            safeLocalStorage.setItem(MODEL_STORAGE_KEYS[modelData.provider], modelData.newModel);
           }
+
+          const activeProviderName = PROVIDER_LABELS[modelData.provider];
+          const availableModels = modelData.availableForProvider.join(', ');
+          const modelMessage = `**${activeProviderName} Model**: ${modelData.current.model}\n\n${modelData.message}\n\n**Available ${activeProviderName} Models**:\n\n${availableModels}`;
           addMessage({
             type: 'assistant',
-            content: `**Current Model**: ${data.current.model}\n\n**Available Models**:\n\nClaude: ${data.available.claude.join(', ')}\n\nCursor: ${data.available.cursor.join(', ')}`,
+            content: modelMessage,
             timestamp: Date.now(),
           });
           break;
+        }
 
         case 'cost': {
           const costMessage = `**Token Usage**: ${data.tokenUsage.used.toLocaleString()} / ${data.tokenUsage.total.toLocaleString()} (${data.tokenUsage.percentage}%)\n\n**Estimated Cost**:\n- Input: $${data.cost.input}\n- Output: $${data.cost.output}\n- **Total**: $${data.cost.total}\n\n**Model**: ${data.model}`;
@@ -240,7 +287,7 @@ export function useChatComposerState({
           console.warn('Unknown built-in command action:', action);
       }
     },
-    [onFileOpen, onShowSettings, addMessage, clearMessages, rewindMessages, setClaudeModel],
+    [onFileOpen, onShowSettings, addMessage, clearMessages, rewindMessages, setClaudeModel, setCursorModel, setCodexModel, setGeminiModel],
   );
 
   const handleCustomCommand = useCallback(async (result: CommandExecutionResult) => {

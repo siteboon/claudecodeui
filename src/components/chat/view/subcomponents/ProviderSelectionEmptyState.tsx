@@ -135,10 +135,6 @@ export default function ProviderSelectionEmptyState({
     codexModel,
     geminiModel,
   );
-  const modelOptions = modelConfig.OPTIONS.some(({ value }) => value === currentModel)
-    ? modelConfig.OPTIONS
-    : [...modelConfig.OPTIONS, { value: currentModel, label: currentModel }];
-
   const currentModelLabel = useMemo(() => {
     const config = getModelConfig(provider);
     const found = config.OPTIONS.find(

@@ -4,7 +4,7 @@ import path from 'path';
 
 import express from 'express';
 
-import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants.js';
+import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS, GEMINI_MODELS } from '../../shared/modelConstants.js';
 import { parseFrontMatter } from '../shared/frontmatter.js';
 import { findAppRoot, getModuleDir } from '../utils/runtime-paths.js';
 
@@ -187,29 +187,62 @@ Custom commands can be created in:
   },
 
   '/model': async (args, context) => {
-    // Read available models from centralized constants
     const availableModels = {
       claude: CLAUDE_MODELS.OPTIONS.map(o => o.value),
       cursor: CURSOR_MODELS.OPTIONS.map(o => o.value),
-      codex: CODEX_MODELS.OPTIONS.map(o => o.value)
+      codex: CODEX_MODELS.OPTIONS.map(o => o.value),
+      gemini: GEMINI_MODELS.OPTIONS.map(o => o.value)
+    };
+    const defaultModels = {
+      claude: CLAUDE_MODELS.DEFAULT,
+      cursor: CURSOR_MODELS.DEFAULT,
+      codex: CODEX_MODELS.DEFAULT,
+      gemini: GEMINI_MODELS.DEFAULT
+    };
+    const providerNames = {
+      claude: 'Claude',
+      cursor: 'Cursor',
+      codex: 'Codex',
+      gemini: 'Gemini'
     };
 
-    const currentProvider = context?.provider || 'claude';
-    const currentModel = context?.model || CLAUDE_MODELS.DEFAULT;
+    const requestedProvider = context?.provider || 'claude';
+    const currentProvider = Object.prototype.hasOwnProperty.call(availableModels, requestedProvider)
+      ? requestedProvider
+      : 'claude';
+    const currentModel = context?.model || defaultModels[currentProvider];
+    const requestedModel = args.length > 0 ? args[0] : null;
+    const providerModels = availableModels[currentProvider];
+    const isValid = requestedModel === null || providerModels.includes(requestedModel);
+    const newModel = isValid ? requestedModel : null;
+    const availableList = providerModels.join(', ');
+    const message = requestedModel === null
+      ? `Current ${providerNames[currentProvider]} model: ${currentModel}`
+      : isValid
+        ? `Switching ${providerNames[currentProvider]} model to: ${requestedModel}`
+        : `Invalid ${providerNames[currentProvider]} model: ${requestedModel}. Available models: ${availableList}`;
 
     return {
       type: 'builtin',
       action: 'model',
       data: {
+        provider: currentProvider,
+        requestedModel,
+        valid: isValid,
+        validation: {
+          provider: currentProvider,
+          requestedModel,
+          valid: isValid,
+          availableModels: providerModels
+        },
         current: {
           provider: currentProvider,
           model: currentModel
         },
         available: availableModels,
-        newModel: args.length > 0 ? args[0] : null,
-        message: args.length > 0
-          ? `Switching to model: ${args[0]}`
-          : `Current model: ${currentModel}`
+        availableForProvider: providerModels,
+        newModel,
+        message
       }
     };
   },
