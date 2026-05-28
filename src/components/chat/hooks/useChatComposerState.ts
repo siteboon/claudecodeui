@@ -16,6 +16,7 @@ import { thinkingModes } from '../constants/thinkingModes';
 import { grantClaudeToolPermission } from '../utils/chatPermissions';
 import { safeLocalStorage } from '../utils/chatStorage';
 import type {
+  ChatImage,
   ChatMessage,
   PendingPermissionRequest,
   PermissionMode,
@@ -553,7 +554,7 @@ export function useChatComposerState({
         messageContent = `${selectedThinkingMode.prefix}: ${currentInput}`;
       }
 
-      let uploadedImages: unknown[] = [];
+      let uploadedImages: ChatImage[] = [];
       if (attachedImages.length > 0) {
         const formData = new FormData();
         attachedImages.forEach((file) => {
@@ -591,7 +592,7 @@ export function useChatComposerState({
       const userMessage: ChatMessage = {
         type: 'user',
         content: currentInput,
-        images: uploadedImages as any,
+        images: uploadedImages,
         timestamp: new Date(),
       };
 
