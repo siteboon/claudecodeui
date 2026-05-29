@@ -1,14 +1,10 @@
 import { readFile } from 'node:fs/promises';
 
-import { query, type ModelInfo, type Options } from '@anthropic-ai/claude-agent-sdk';
-
 import { sessionsDb } from '@/modules/database/index.js';
-import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
 import type { IProviderModels } from '@/shared/interfaces.js';
 import type {
   ProviderChangeActiveModelInput,
   ProviderCurrentActiveModel,
-  ProviderModelOption,
   ProviderModelsDefinition,
   ProviderSessionActiveModelChange,
 } from '@/shared/types.js';
@@ -19,17 +15,29 @@ import {
 
 export const CLAUDE_FALLBACK_MODELS: ProviderModelsDefinition = {
   OPTIONS: [
-    { value: 'default', label: 'Default (recommended)' },
-    { value: 'sonnet[1m]', label: 'Sonnet (1M context)' },
-    { value: 'opus', label: 'Opus' },
-    { value: 'opus[1m]', label: 'Opus (1M context)' },
-    { value: 'haiku', label: 'Haiku' },
-    { value: 'sonnet', label: 'sonnet' },
+    {
+      value: 'default',
+      label: 'Default (recommended)',
+      description: 'Use the default model (currently Opus 4.7 (1M context)) · $5/$25 per Mtok',
+    },
+    {
+      value: 'sonnet',
+      label: 'Sonnet',
+      description: 'Sonnet 4.6 · Best for everyday tasks · $3/$15 per Mtok',
+    },
+    {
+      value: 'sonnet[1m]',
+      label: 'Sonnet (1M context)',
+      description: 'Sonnet 4.6 for long sessions · $3/$15 per Mtok',
+    },
+    {
+      value: 'haiku',
+      label: 'Haiku',
+      description: 'Haiku 4.5 · Fastest for quick answers · $1/$5 per Mtok',
+    },
   ],
   DEFAULT: 'default',
 };
-
-type ClaudeModelQueryOptions = Pick<Options, 'env' | 'pathToClaudeCodeExecutable' | 'permissionMode'>;
 type ClaudeInitEvent = {
   sessionId?: string;
   session_id?: string;
@@ -48,46 +56,6 @@ const ANSI_PATTERN = new RegExp(
   + '|(?:[\\dA-PR-TZcf-ntqry=><~]))',
   'g',
 );
-
-const buildClaudeQueryOptions = (): ClaudeModelQueryOptions => ({
-  env: { ...process.env },
-  pathToClaudeCodeExecutable: resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH),
-  permissionMode: 'default',
-});
-
-const mapClaudeModel = (model: ModelInfo): ProviderModelOption => ({
-  value: model.value,
-  label: model.displayName || model.value,
-  description: model.description || undefined,
-});
-
-const buildClaudeModelsDefinition = (models: ModelInfo[]): ProviderModelsDefinition => {
-  const options: ProviderModelOption[] = [];
-  const seenValues = new Set<string>();
-
-  for (const model of models) {
-    const mappedModel = mapClaudeModel(model);
-    if (seenValues.has(mappedModel.value)) {
-      continue;
-    }
-
-    seenValues.add(mappedModel.value);
-    options.push(mappedModel);
-  }
-
-  if (options.length === 0) {
-    return CLAUDE_FALLBACK_MODELS;
-  }
-
-  const defaultValue = options.find((option) => option.value === 'default')?.value
-    ?? options[0]?.value
-    ?? CLAUDE_FALLBACK_MODELS.DEFAULT;
-
-  return {
-    OPTIONS: options,
-    DEFAULT: defaultValue,
-  };
-};
 
 const extractClaudeEventModel = (event: ClaudeInitEvent, sessionId: string): string | null => {
   const eventSessionId = event.sessionId ?? event.session_id;
@@ -181,25 +149,18 @@ const readClaudeSessionModelFromJsonl = async (
 
 export class ClaudeProviderModels implements IProviderModels {
   async getSupportedModels(): Promise<ProviderModelsDefinition> {
-    let queryInstance: ReturnType<typeof query> | null = null;
-
-    try {
-      // The SDK exposes its runtime model catalog on the initialized query
-      // instance, so we create a lightweight query and immediately close it
-      // after reading the control-plane metadata.
-      queryInstance = query({
-        prompt: 'Get supported models',
-        options: buildClaudeQueryOptions(),
-      });
-
-      const supportedModels = await queryInstance.supportedModels();
-
-      return buildClaudeModelsDefinition(supportedModels);
-    } catch {
-      return CLAUDE_FALLBACK_MODELS;
-    } finally {
-      queryInstance?.close();
-    }
+    // claude creates a new jsonl file as a separate session for this request.
+    // As a result, it lists the workspace where this is invoked when it shouldn't.
+    //
+    // Disabled for now:
+    // const queryInstance = query({
+    //   prompt: 'Get supported models',
+    //   options: buildClaudeQueryOptions(),
+    // });
+    // const supportedModels = await queryInstance.supportedModels();
+    // queryInstance.close();
+    // return buildClaudeModelsDefinition(supportedModels);
+    return CLAUDE_FALLBACK_MODELS;
   }
 
   async getCurrentActiveModel(sessionId?: string): Promise<ProviderCurrentActiveModel> {
