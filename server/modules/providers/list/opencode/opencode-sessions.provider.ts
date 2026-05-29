@@ -28,9 +28,9 @@ type OpenCodeHistoryRow = {
 type OpenCodeTokenTotals = {
   inputTokens: number;
   outputTokens: number;
-  cacheReadTokens: number;
-  cacheCreationTokens: number;
   reasoningTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
 };
 
 const openOpenCodeDatabase = (): Database.Database | null => {
@@ -106,11 +106,13 @@ const buildTokenUsage = (totals: OpenCodeTokenTotals | undefined): AnyRecord | u
   }
 
   const inputTokens = totals.inputTokens;
+  const displayInputTokens = inputTokens + totals.cacheReadTokens;
   const outputTokens = totals.outputTokens;
-  const cacheReadTokens = totals.cacheReadTokens;
-  const cacheCreationTokens = totals.cacheCreationTokens;
-  const reasoningTokens = totals.reasoningTokens;
-  const used = inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens + reasoningTokens;
+  const used = inputTokens
+    + outputTokens
+    + totals.reasoningTokens
+    + totals.cacheReadTokens
+    + totals.cacheWriteTokens;
 
   if (used <= 0) {
     return undefined;
@@ -118,12 +120,48 @@ const buildTokenUsage = (totals: OpenCodeTokenTotals | undefined): AnyRecord | u
 
   return {
     used,
-    total: used,
-    inputTokens,
+    inputTokens: displayInputTokens,
     outputTokens,
-    cacheReadTokens,
-    cacheCreationTokens,
+    breakdown: {
+      input: displayInputTokens,
+      output: outputTokens,
+    },
   };
+};
+
+const readOpenCodeSessionColumnTokenUsage = (
+  db: Database.Database,
+  sessionId: string,
+): AnyRecord | undefined => {
+  const columns = db.prepare('PRAGMA table_info(session)').all() as { name: string }[];
+  const columnNames = new Set(columns.map((column) => column.name));
+  const requiredColumns = ['tokens_input', 'tokens_output', 'tokens_reasoning', 'tokens_cache_read', 'tokens_cache_write'];
+  if (!requiredColumns.every((column) => columnNames.has(column))) {
+    return undefined;
+  }
+
+  const row = db.prepare(`
+    SELECT
+      tokens_input AS inputTokens,
+      tokens_output AS outputTokens,
+      tokens_reasoning AS reasoningTokens,
+      tokens_cache_read AS cacheReadTokens,
+      tokens_cache_write AS cacheWriteTokens
+    FROM session
+    WHERE id = ?
+  `).get(sessionId) as OpenCodeTokenTotals | undefined;
+
+  if (!row) {
+    return undefined;
+  }
+
+  return buildTokenUsage({
+    inputTokens: Number(row.inputTokens ?? 0),
+    outputTokens: Number(row.outputTokens ?? 0),
+    reasoningTokens: Number(row.reasoningTokens ?? 0),
+    cacheReadTokens: Number(row.cacheReadTokens ?? 0),
+    cacheWriteTokens: Number(row.cacheWriteTokens ?? 0),
+  });
 };
 
 /**
@@ -135,13 +173,18 @@ const aggregateOpenCodeSessionTokenUsage = (
   db: Database.Database,
   sessionId: string,
 ): AnyRecord | undefined => {
+  const sessionColumnUsage = readOpenCodeSessionColumnTokenUsage(db, sessionId);
+  if (sessionColumnUsage) {
+    return sessionColumnUsage;
+  }
+
   const rows = db.prepare('SELECT data FROM message WHERE session_id = ?').all(sessionId) as { data: string }[];
 
   let inputTokens = 0;
   let outputTokens = 0;
-  let cacheReadTokens = 0;
-  let cacheCreationTokens = 0;
   let reasoningTokens = 0;
+  let cacheReadTokens = 0;
+  let cacheWriteTokens = 0;
 
   for (const row of rows) {
     const info = readJsonRecord(row.data);
@@ -159,15 +202,15 @@ const aggregateOpenCodeSessionTokenUsage = (
     reasoningTokens += Number(tokens.reasoning ?? 0);
     const cache = readObjectRecord(tokens.cache);
     cacheReadTokens += Number(cache?.read ?? 0);
-    cacheCreationTokens += Number(cache?.write ?? 0);
+    cacheWriteTokens += Number(cache?.write ?? 0);
   }
 
   return buildTokenUsage({
     inputTokens,
     outputTokens,
-    cacheReadTokens,
-    cacheCreationTokens,
     reasoningTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
   });
 };
 
