@@ -25,7 +25,7 @@ import PluginIcon from './PluginIcon';
 const STARTER_PLUGIN_URL = 'https://github.com/cloudcli-ai/cloudcli-plugin-starter';
 const TERMINAL_PLUGIN_URL = 'https://github.com/cloudcli-ai/cloudcli-plugin-terminal';
 const SCHEDULED_PROMPT_PLUGIN_URL = 'https://github.com/grostim/cloudcli-cron';
-const CLAUDE_WATCH_PLUGIN_URL = 'https://github.com/satsuki19980613/claude-watch';
+const CLAUDE_WATCH_PLUGIN_URL = 'https://github.com/satsuki19980613/cloudcli-claude-watch';
 
 type PluginRecommendation = {
   id: string;
@@ -57,10 +57,10 @@ const OFFICIAL_PLUGIN_RECOMMENDATIONS: PluginRecommendation[] = [
 
 const UNOFFICIAL_PLUGIN_RECOMMENDATIONS: PluginRecommendation[] = [
   {
-    id: 'claude-watch',
+    id: 'cloudcli-claude-watch',
     translationKey: 'claudeWatchPlugin',
     repoUrl: CLAUDE_WATCH_PLUGIN_URL,
-    installedNames: ['claude-watch'],
+    installedNames: ['cloudcli-claude-watch'],
     icon: Activity,
     source: 'unofficial',
   },
@@ -320,10 +320,12 @@ function RecommendationSection({
 function PluginRecommendationCard({
   recommendation,
   onInstall,
+  disabled,
   installing,
 }: {
   recommendation: PluginRecommendation;
   onInstall: () => void;
+  disabled: boolean;
   installing: boolean;
 }) {
   const { t } = useTranslation('settings');
@@ -367,7 +369,7 @@ function PluginRecommendationCard({
           </div>
           <button
             onClick={onInstall}
-            disabled={installing}
+            disabled={disabled}
             className="flex flex-shrink-0 items-center gap-1.5 rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             {installing ? (
@@ -421,13 +423,17 @@ export default function PluginSettingsTab() {
   };
 
   const handleInstallRecommendation = async (recommendation: PluginRecommendation) => {
+    if (installingRecommendation) return;
     setInstallingRecommendation(recommendation.id);
     setInstallError(null);
-    const result = await installPlugin(recommendation.repoUrl);
-    if (!result.success) {
-      setInstallError(result.error || t('pluginSettings.installFailed'));
+    try {
+      const result = await installPlugin(recommendation.repoUrl);
+      if (!result.success) {
+        setInstallError(result.error || t('pluginSettings.installFailed'));
+      }
+    } finally {
+      setInstallingRecommendation(null);
     }
-    setInstallingRecommendation(null);
   };
 
   const handleUninstall = async (name: string) => {
@@ -563,6 +569,7 @@ export default function PluginSettingsTab() {
                   key={recommendation.id}
                   recommendation={recommendation}
                   onInstall={() => void handleInstallRecommendation(recommendation)}
+                  disabled={!!installingRecommendation}
                   installing={installingRecommendation === recommendation.id}
                 />
               ))}
@@ -580,6 +587,7 @@ export default function PluginSettingsTab() {
                   key={recommendation.id}
                   recommendation={recommendation}
                   onInstall={() => void handleInstallRecommendation(recommendation)}
+                  disabled={!!installingRecommendation}
                   installing={installingRecommendation === recommendation.id}
                 />
               ))}
