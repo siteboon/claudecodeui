@@ -37,6 +37,7 @@ Current provider ids in this repo are:
 - `codex`
 - `cursor`
 - `gemini`
+- `opencode`
 
 Those ids are mirrored in backend unions and frontend provider constants. If
 adding a new provider, update every place that hardcodes this list.
@@ -55,7 +56,8 @@ server/modules/providers/list/<provider>/
   <provider>-session-synchronizer.provider.ts
 ```
 
-The existing provider folders are `claude`, `codex`, `cursor`, and `gemini`.
+The existing provider folders are `claude`, `codex`, `cursor`, `gemini`, and
+`opencode`.
 
 ## What Each Facet Does
 
@@ -81,7 +83,7 @@ The existing provider folders are `claude`, `codex`, `cursor`, and `gemini`.
 - Update `server/modules/providers/provider.routes.ts`.
 - Update `server/routes/agent.js` if the provider is launchable from the agent runtime.
 - Update `server/index.js` if the provider needs runtime boot or shutdown wiring.
-- Update `shared/modelConstants.js` if the provider appears in UI provider pickers.
+- Update `public/modelConstants.js` if the provider appears in README or public API docs.
 - Update `src/components/chat/hooks/useChatProviderState.ts` and
   `src/components/chat/view/subcomponents/ProviderSelectionEmptyState.tsx` if
   the provider should be selectable in chat.
@@ -122,6 +124,7 @@ Current MCP formats in this repo are:
 | Codex | `.codex/config.toml` | `user`, `project` | `stdio`, `http` |
 | Cursor | `.cursor/mcp.json` | `user`, `project` | `stdio`, `http` |
 | Gemini | `.gemini/settings.json` | `user`, `project` | `stdio`, `http` |
+| OpenCode | `~/.config/opencode/opencode.json` or `<workspace>/opencode.json` (`.jsonc` is read when present) | `user`, `project` | `stdio`, `http` |
 
 5. Implement skills.
 
@@ -142,6 +145,7 @@ Current skill discovery roots are:
 | Codex | `~/.agents/skills`, `~/.codex/skills/.system`, `/etc/codex/skills` | `<workspace>/.agents/skills`, `path.dirname(workspacePath)/.agents/skills`, topmost git root `.agents/skills` | `$` | Overlapping roots are deduplicated before scanning. |
 | Cursor | `~/.cursor/skills` | `<workspace>/.cursor/skills`, `<workspace>/.agents/skills` | `/` | Uses slash-style commands. |
 | Gemini | `~/.gemini/skills`, `~/.agents/skills` | `<workspace>/.gemini/skills`, `<workspace>/.agents/skills` | `/` | Uses slash-style commands. |
+| OpenCode | `~/.config/opencode/skills`, `~/.claude/skills`, `~/.agents/skills` | Cwd-to-topmost-git-root `.opencode/skills`, `.claude/skills`, and `.agents/skills` | `/` | Reuses OpenCode, Claude, and Agents skill locations. Overlapping roots are deduplicated before scanning. |
 
 Command forms currently used by the providers are:
 
@@ -150,6 +154,7 @@ Command forms currently used by the providers are:
 - Codex skills: `$skill-name`
 - Cursor skills: `/skill-name`
 - Gemini skills: `/skill-name`
+- OpenCode skills: `/skill-name`
 
 6. Implement sessions.
 
@@ -187,6 +192,7 @@ Current session sync roots are:
 | Codex | `~/.codex/sessions/**/*.jsonl` | Uses `~/.codex/session_index.jsonl` for title lookup and the last `task_complete` message for a fallback title. |
 | Cursor | `~/.cursor/projects/**/*.jsonl` | Uses sibling `worker.log` to recover `workspacePath`, then derives the session title from the first user prompt. |
 | Gemini | `~/.gemini/tmp/**/*.jsonl` | Current full scans only index temp JSONL chat artifacts. Single-file sync also accepts legacy `.json` files. |
+| OpenCode | `~/.local/share/opencode/opencode.db` | Reads active sessions/messages/parts from OpenCode's shared SQLite database and stores `jsonl_path` as `null` so deleting one app session cannot remove the shared DB. |
 
 8. Register the provider.
 
@@ -203,10 +209,11 @@ If the provider can run live chat sessions, update the runtime entrypoints too:
 
 If the provider is visible in the UI, update:
 
-- `shared/modelConstants.js`
+- provider model fallback files under `server/modules/providers/list/<provider>/`
 - `src/components/chat/hooks/useChatProviderState.ts`
 - `src/components/chat/view/subcomponents/ProviderSelectionEmptyState.tsx`
 - `src/components/provider-auth/view/ProviderLoginModal.tsx`
+- `src/components/mcp/constants.ts`
 
 ## Minimal Wrapper Template
 
@@ -324,6 +331,7 @@ Useful tests in this repo:
 
 - `server/modules/providers/tests/mcp.test.ts`
 - `server/modules/providers/tests/skills.test.ts`
+- `server/modules/providers/tests/opencode-sessions.test.ts`
 
 If you touch sessions or session synchronization, add or update focused tests
 alongside the implementation.

@@ -170,6 +170,93 @@ test('providerMcpService handles codex MCP TOML config and capability validation
 });
 
 /**
+ * This test covers OpenCode MCP support for user/project config files, JSONC-compatible
+ * reads, and validation for unsupported scope/transport combinations.
+ */
+test('providerMcpService handles opencode MCP config and capability validation', { concurrency: false }, async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-mcp-opencode-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  await fs.mkdir(workspacePath, { recursive: true });
+  await fs.mkdir(path.join(tempRoot, '.config', 'opencode'), { recursive: true });
+  await fs.writeFile(
+    path.join(tempRoot, '.config', 'opencode', 'opencode.jsonc'),
+    `{
+      // Existing comments should not block OpenCode MCP reads.
+      "mcp": {}
+    }\n`,
+    'utf8',
+  );
+
+  const restoreHomeDir = patchHomeDir(tempRoot);
+  try {
+    await providerMcpService.upsertProviderMcpServer('opencode', {
+      name: 'opencode-user-stdio',
+      scope: 'user',
+      transport: 'stdio',
+      command: 'node',
+      args: ['server.js'],
+      env: { API_KEY: 'x' },
+    });
+
+    await providerMcpService.upsertProviderMcpServer('opencode', {
+      name: 'opencode-project-http',
+      scope: 'project',
+      transport: 'http',
+      url: 'https://opencode.example.com/mcp',
+      headers: { Authorization: 'Bearer token' },
+      workspacePath,
+    });
+
+    const userConfig = await readJson(path.join(tempRoot, '.config', 'opencode', 'opencode.jsonc'));
+    const userServers = userConfig.mcp as Record<string, unknown>;
+    const userStdio = userServers['opencode-user-stdio'] as Record<string, unknown>;
+    assert.equal(userStdio.type, 'local');
+    assert.deepEqual(userStdio.command, ['node', 'server.js']);
+    assert.deepEqual(userStdio.environment, { API_KEY: 'x' });
+
+    const projectConfig = await readJson(path.join(workspacePath, 'opencode.json'));
+    const projectServers = projectConfig.mcp as Record<string, unknown>;
+    const projectHttp = projectServers['opencode-project-http'] as Record<string, unknown>;
+    assert.equal(projectHttp.type, 'remote');
+    assert.equal(projectHttp.url, 'https://opencode.example.com/mcp');
+
+    const grouped = await providerMcpService.listProviderMcpServers('opencode', { workspacePath });
+    assert.ok(grouped.user.some((server) => server.name === 'opencode-user-stdio' && server.transport === 'stdio'));
+    assert.ok(grouped.project.some((server) => server.name === 'opencode-project-http' && server.transport === 'http'));
+
+    await assert.rejects(
+      providerMcpService.upsertProviderMcpServer('opencode', {
+        name: 'opencode-local',
+        scope: 'local',
+        transport: 'stdio',
+        command: 'node',
+      }),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'MCP_SCOPE_NOT_SUPPORTED' &&
+        error.statusCode === 400,
+    );
+
+    await assert.rejects(
+      providerMcpService.upsertProviderMcpServer('opencode', {
+        name: 'opencode-sse',
+        scope: 'project',
+        transport: 'sse',
+        url: 'https://example.com/sse',
+        workspacePath,
+      }),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'MCP_TRANSPORT_NOT_SUPPORTED' &&
+        error.statusCode === 400,
+    );
+  } finally {
+    restoreHomeDir();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+/**
  * This test covers Gemini/Cursor MCP JSON formats and user/project scope persistence.
  */
 test('providerMcpService handles gemini and cursor MCP JSON config formats', { concurrency: false }, async () => {
@@ -254,8 +341,7 @@ test('providerMcpService global adder writes to all providers and rejects unsupp
       workspacePath,
     });
 
-    const expectCursorGlobal = process.platform !== 'win32';
-    assert.equal(globalResult.length, expectCursorGlobal ? 4 : 3);
+    assert.equal(globalResult.length, 5);
     assert.ok(globalResult.every((entry) => entry.created === true));
 
     const claudeProject = await readJson(path.join(workspacePath, '.mcp.json'));
@@ -267,10 +353,11 @@ test('providerMcpService global adder writes to all providers and rejects unsupp
     const geminiProject = await readJson(path.join(workspacePath, '.gemini', 'settings.json'));
     assert.ok((geminiProject.mcpServers as Record<string, unknown>)['global-http']);
 
-    if (expectCursorGlobal) {
-      const cursorProject = await readJson(path.join(workspacePath, '.cursor', 'mcp.json'));
-      assert.ok((cursorProject.mcpServers as Record<string, unknown>)['global-http']);
-    }
+    const opencodeProject = await readJson(path.join(workspacePath, 'opencode.json'));
+    assert.ok((opencodeProject.mcp as Record<string, unknown>)['global-http']);
+
+    const cursorProject = await readJson(path.join(workspacePath, '.cursor', 'mcp.json'));
+    assert.ok((cursorProject.mcpServers as Record<string, unknown>)['global-http']);
 
     await assert.rejects(
       providerMcpService.addMcpServerToAllProviders({
