@@ -624,19 +624,23 @@ export function useChatSessionState({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatMessages.length, isLoadingSessionMessages, searchTarget]);
 
-  // Token usage fetch for Claude
+  // Initial token usage fetch for providers with file-backed usage data.
   useEffect(() => {
     if (!selectedProject || !selectedSession?.id) {
       setTokenBudget(null);
       return;
     }
     const sessionProvider = selectedSession.__provider || 'claude';
-    if (sessionProvider !== 'claude') return;
+    if (sessionProvider !== 'claude' && sessionProvider !== 'codex' && sessionProvider !== 'gemini' && sessionProvider !== 'opencode') {
+      setTokenBudget(null);
+      return;
+    }
 
     const fetchInitialTokenUsage = async () => {
       try {
         // Token usage endpoint is now keyed by the DB projectId.
-        const url = `/api/projects/${selectedProject.projectId}/sessions/${selectedSession.id}/token-usage`;
+        const params = new URLSearchParams({ provider: sessionProvider });
+        const url = `/api/projects/${selectedProject.projectId}/sessions/${selectedSession.id}/token-usage?${params.toString()}`;
         const response = await authenticatedFetch(url);
         if (response.ok) {
           setTokenBudget(await response.json());

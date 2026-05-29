@@ -1,5 +1,29 @@
 // Gemini Response Handler - JSON Stream processing
 import { sessionsService } from './modules/providers/services/sessions.service.js';
+import { createNormalizedMessage } from './shared/utils.js';
+
+function buildGeminiTokenBudget(tokens) {
+  if (!tokens || typeof tokens !== 'object') {
+    return null;
+  }
+
+  const inputTokens = Number(tokens.input || 0);
+  const outputTokens = Number(tokens.output || 0);
+  const used = Number(tokens.total || inputTokens + outputTokens || 0);
+  if (used <= 0) {
+    return null;
+  }
+
+  return {
+    used,
+    inputTokens,
+    outputTokens,
+    breakdown: {
+      input: inputTokens,
+      output: outputTokens,
+    },
+  };
+}
 
 class GeminiResponseHandler {
   constructor(ws, options = {}) {
@@ -59,6 +83,17 @@ class GeminiResponseHandler {
     const normalized = sessionsService.normalizeMessage('gemini', event, sid);
     for (const msg of normalized) {
       this.ws.send(msg);
+    }
+
+    const tokenBudget = buildGeminiTokenBudget(event.tokens);
+    if (tokenBudget) {
+      this.ws.send(createNormalizedMessage({
+        kind: 'status',
+        text: 'token_budget',
+        tokenBudget,
+        sessionId: sid,
+        provider: 'gemini',
+      }));
     }
   }
 
