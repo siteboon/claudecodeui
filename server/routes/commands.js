@@ -291,12 +291,6 @@ Custom commands can be created in:
     const hasTokenBreakdown = inputTokensRaw > 0 || outputTokens > 0;
     const used = reportedUsed || inputTokensRaw + outputTokens;
 
-    // If we only have total used tokens, keep the list populated without guessing output.
-    const inputTokens =
-      hasTokenBreakdown
-        ? inputTokensRaw
-        : used;
-
     return {
       type: "builtin",
       action: "cost",
@@ -305,10 +299,14 @@ Custom commands can be created in:
           used,
           total,
         },
-        tokenBreakdown: {
-          input: inputTokens,
-          output: outputTokens,
-        },
+        ...(hasTokenBreakdown
+          ? {
+              tokenBreakdown: {
+                input: inputTokensRaw,
+                output: outputTokens,
+              },
+            }
+          : {}),
         provider,
         model,
       },

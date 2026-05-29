@@ -495,12 +495,31 @@ function CostContent({ data }: { data: CostCommandData }) {
   const total = Number(data.tokenUsage?.total ?? 0);
   const model = data.model || 'Unknown';
   const provider = getProviderLabel(data.provider, data.provider || 'Unknown');
-  const inputTokens = Number(data.tokenBreakdown?.input ?? 0);
-  const outputTokens = Number(data.tokenBreakdown?.output ?? 0);
+  const hasBreakdown =
+    typeof data.tokenBreakdown?.input === 'number' ||
+    typeof data.tokenBreakdown?.output === 'number';
   const usageRows = [
     { label: 'Total tokens used', value: formatNumber(used), icon: Activity },
-    { label: 'Input tokens', value: formatNumber(inputTokens), icon: TerminalSquare },
-    { label: 'Output tokens', value: formatNumber(outputTokens), icon: Coins },
+    ...(hasBreakdown
+      ? [
+          {
+            label: 'Input tokens',
+            value: formatNumber(Number(data.tokenBreakdown?.input ?? 0)),
+            icon: TerminalSquare,
+          },
+          {
+            label: 'Output tokens',
+            value: formatNumber(Number(data.tokenBreakdown?.output ?? 0)),
+            icon: Coins,
+          },
+        ]
+      : [
+          {
+            label: 'Breakdown',
+            value: 'Unavailable',
+            icon: TerminalSquare,
+          },
+        ]),
     ...(total > 0
       ? [{ label: 'Context window', value: formatNumber(total), icon: Gauge }]
       : []),

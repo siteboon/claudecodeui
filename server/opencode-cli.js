@@ -28,8 +28,9 @@ function readOpenCodeTokenUsage(sessionId) {
     return null;
   }
 
-  const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+  let db = null;
   try {
+    db = new Database(dbPath, { readonly: true, fileMustExist: true });
     const columns = db.prepare('PRAGMA table_info(session)').all();
     const columnNames = new Set(columns.map((column) => column.name));
     const requiredColumns = ['tokens_input', 'tokens_output', 'tokens_reasoning', 'tokens_cache_read', 'tokens_cache_write'];
@@ -72,8 +73,12 @@ function readOpenCodeTokenUsage(sessionId) {
         output: outputTokens,
       },
     };
+  } catch {
+    return null;
   } finally {
-    db.close();
+    if (db) {
+      db.close();
+    }
   }
 }
 
