@@ -36,7 +36,7 @@ export const CLAUDE_FALLBACK_MODELS: ProviderModelsDefinition = {
       description: 'Haiku 4.5 · Fastest for quick answers · $1/$5 per Mtok',
     },
   ],
-  DEFAULT: 'default',
+  DEFAULT: 'sonnet',
 };
 type ClaudeInitEvent = {
   sessionId?: string;
