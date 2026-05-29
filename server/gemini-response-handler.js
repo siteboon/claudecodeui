@@ -7,10 +7,13 @@ function buildGeminiTokenBudget(tokens) {
     return null;
   }
 
-  const inputTokens = Number(tokens.input || 0);
-  const outputTokens = Number(tokens.output || 0);
-  const used = Number(tokens.total || inputTokens + outputTokens || 0);
-  if (used <= 0) {
+  const parsedInputTokens = Number(tokens.input);
+  const parsedOutputTokens = Number(tokens.output);
+  const inputTokens = Number.isFinite(parsedInputTokens) ? parsedInputTokens : 0;
+  const outputTokens = Number.isFinite(parsedOutputTokens) ? parsedOutputTokens : 0;
+  const parsedUsed = Number(tokens.total);
+  const used = Number.isFinite(parsedUsed) ? parsedUsed : inputTokens + outputTokens;
+  if (!Number.isFinite(used) || used <= 0) {
     return null;
   }
 
