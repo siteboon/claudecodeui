@@ -45,6 +45,7 @@
     "removeFromFavorites": "Rimuovi dai preferiti",
     "editSessionName": "Modifica manualmente il nome della sessione",
     "deleteSession": "Elimina questa sessione permanentemente",
+    "activeSessionIndicator": "Sessione attiva di recente (ultimi 10 minuti)",
     "save": "Salva",
     "cancel": "Annulla",
     "clearSearch": "Cancella ricerca",
