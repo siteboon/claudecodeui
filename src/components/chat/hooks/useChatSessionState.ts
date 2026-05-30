@@ -268,9 +268,14 @@ export function useChatSessionState({
 
   const chatMessages = useMemo(() => {
     const all = normalizedToChatMessages(storeMessages);
-    // Show pending user message when no session data exists yet (new session, pre-backend-response)
-    if (pendingUserMessage && all.length === 0) {
-      return [pendingUserMessage];
+    // Show pending user message until a user message actually appears in the store.
+    // This covers both the "no messages yet" case and the race condition where
+    // `stream_delta` (AI content) arrives in realtime before the echoed user
+    // message — without this check the pending message would disappear and the
+    // AI response would briefly appear as the first visible message.
+    const hasUserMessage = all.some((m) => m.type === 'user');
+    if (pendingUserMessage && !hasUserMessage) {
+      return [...all, pendingUserMessage];
     }
     if (viewHiddenCount > 0 && viewHiddenCount < all.length) return all.slice(0, -viewHiddenCount);
     return all;
@@ -350,24 +355,13 @@ export function useChatSessionState({
     [hasMoreMessages, isLoadingMoreMessages, selectedProject, selectedSession, sessionStore],
   );
 
-  const handleScroll = useCallback(async () => {
+  const handleScroll = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
 
     const nearBottom = isNearBottom();
     setIsUserScrolledUp(!nearBottom);
-
-    if (!allMessagesLoadedRef.current) {
-      const scrolledNearTop = container.scrollTop < 100;
-      if (!scrolledNearTop) { topLoadLockRef.current = false; return; }
-      if (topLoadLockRef.current) {
-        if (container.scrollTop > 20) topLoadLockRef.current = false;
-        return;
-      }
-      const didLoad = await loadOlderMessages(container);
-      if (didLoad) topLoadLockRef.current = true;
-    }
-  }, [isNearBottom, loadOlderMessages]);
+  }, [isNearBottom]);
 
   useLayoutEffect(() => {
     if (!pendingScrollRestoreRef.current || !scrollContainerRef.current) return;
@@ -722,21 +716,10 @@ export function useChatSessionState({
 
   // "Load all" overlay
   const prevLoadingRef = useRef(false);
+  // "Load more" buttons — show whenever there are more messages
   useEffect(() => {
-    const wasLoading = prevLoadingRef.current;
-    prevLoadingRef.current = isLoadingMoreMessages;
-
-    if (wasLoading && !isLoadingMoreMessages && hasMoreMessages) {
-      if (loadAllOverlayTimerRef.current) clearTimeout(loadAllOverlayTimerRef.current);
-      setShowLoadAllOverlay(true);
-      loadAllOverlayTimerRef.current = setTimeout(() => setShowLoadAllOverlay(false), 2000);
-    }
-    if (!hasMoreMessages && !isLoadingMoreMessages) {
-      if (loadAllOverlayTimerRef.current) clearTimeout(loadAllOverlayTimerRef.current);
-      setShowLoadAllOverlay(false);
-    }
-    return () => { if (loadAllOverlayTimerRef.current) clearTimeout(loadAllOverlayTimerRef.current); };
-  }, [isLoadingMoreMessages, hasMoreMessages]);
+    setShowLoadAllOverlay(hasMoreMessages && !allMessagesLoaded);
+  }, [hasMoreMessages, allMessagesLoaded]);
 
   const loadAllMessages = useCallback(async () => {
     if (!selectedSession || !selectedProject) return;
@@ -791,6 +774,20 @@ export function useChatSessionState({
     setVisibleMessageCount((prev) => prev + 100);
   }, []);
 
+  const loadMoreMessages = useCallback(async () => {
+    topLoadLockRef.current = false;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    setIsLoadingMoreMessages(true);
+    try {
+      await loadOlderMessages(container);
+    } catch (error) {
+      console.error('[useChatSessionState] loadMoreMessages failed:', error);
+    } finally {
+      setIsLoadingMoreMessages(false);
+    }
+  }, [loadOlderMessages]);
+
   return {
     chatMessages,
     addMessage,
@@ -813,6 +810,7 @@ export function useChatSessionState({
     visibleMessages,
     loadEarlierMessages,
     loadAllMessages,
+    loadMoreMessages,
     allMessagesLoaded,
     isLoadingAllMessages,
     loadAllJustFinished,
