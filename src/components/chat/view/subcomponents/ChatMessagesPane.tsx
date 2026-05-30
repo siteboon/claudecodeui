@@ -49,10 +49,10 @@ interface ChatMessagesPaneProps {
   visibleMessages: ChatMessage[];
   loadEarlierMessages: () => void;
   loadAllMessages: () => void;
+  loadMoreMessages: () => void;
   allMessagesLoaded: boolean;
   isLoadingAllMessages: boolean;
   loadAllJustFinished: boolean;
-  showLoadAllOverlay: boolean;
   createDiff: any;
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
@@ -98,10 +98,10 @@ export default function ChatMessagesPane({
   visibleMessages,
   loadEarlierMessages,
   loadAllMessages,
+  loadMoreMessages,
   allMessagesLoaded,
   isLoadingAllMessages,
   loadAllJustFinished,
-  showLoadAllOverlay,
   createDiff,
   onFileOpen,
   onShowSettings,
@@ -145,7 +145,7 @@ export default function ChatMessagesPane({
       ref={scrollContainerRef}
       onWheel={onWheel}
       onTouchMove={onTouchMove}
-      className="relative flex-1 space-y-3 overflow-y-auto overflow-x-hidden px-0 py-3 sm:space-y-4 sm:p-4"
+      className="relative h-full space-y-3 overflow-y-auto overflow-x-hidden px-0 py-3 sm:space-y-4 sm:p-4"
     >
       {isLoadingSessionMessages && chatMessages.length === 0 ? (
         <div className="mt-8 text-center text-gray-500 dark:text-gray-400">
@@ -180,55 +180,53 @@ export default function ChatMessagesPane({
         />
       ) : (
         <>
-          {/* Loading indicator for older messages (hide when load-all is active) */}
-          {isLoadingMoreMessages && !isLoadingAllMessages && !allMessagesLoaded && (
+          {/* Loading indicator for older messages */}
+          {(isLoadingMoreMessages || isLoadingAllMessages) && !allMessagesLoaded && (
             <div className="py-3 text-center text-gray-500 dark:text-gray-400">
               <div className="flex items-center justify-center space-x-2">
                 <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-gray-400" />
-                <p className="text-sm">{t('session.loading.olderMessages')}</p>
+                <p className="text-sm">{isLoadingAllMessages ? t('session.messages.loadingAll') : t('session.loading.olderMessages')}</p>
               </div>
             </div>
           )}
 
-          {/* Indicator showing there are more messages to load (hide when all loaded) */}
-          {hasMoreMessages && !isLoadingMoreMessages && !allMessagesLoaded && (
+          {/* "Load more" buttons — show when there are more messages */}
+          {hasMoreMessages && !isLoadingMoreMessages && !isLoadingAllMessages && !allMessagesLoaded && (
             <div className="border-b border-gray-200 py-2 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
               {totalMessages > 0 && (
                 <span>
                   {t('session.messages.showingOf', { shown: sessionMessagesCount, total: totalMessages })}{' '}
-                  <span className="text-xs">{t('session.messages.scrollToLoad')}</span>
                 </span>
               )}
+              <div className="mt-1.5 flex items-center justify-center gap-3">
+                <button
+                  className="flex items-center space-x-1 rounded-full bg-gray-200 px-3 py-1 text-xs font-medium text-gray-700 shadow transition-all duration-200 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                  onClick={loadMoreMessages}
+                >
+                  <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                  </svg>
+                  <span>{t('session.messages.loadMore', { count: 20 }) || `加载更多(20条)`}</span>
+                </button>
+                <button
+                  className="flex items-center space-x-1 rounded-full bg-blue-600 px-3 py-1 text-xs font-medium text-white shadow transition-all duration-200 hover:scale-105 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+                  onClick={loadAllMessages}
+                >
+                  <span>{t('session.messages.loadAll')} {totalMessages > 0 && `(${totalMessages})`}</span>
+                </button>
+              </div>
             </div>
           )}
 
-          {/* Floating "Load all messages" overlay */}
-          {(showLoadAllOverlay || isLoadingAllMessages || loadAllJustFinished) && (
+          {/* "All loaded" success indicator */}
+          {loadAllJustFinished && (
             <div className="pointer-events-none sticky top-2 z-20 flex justify-center">
-              {loadAllJustFinished ? (
-                <div className="flex items-center space-x-2 rounded-full bg-green-600 px-4 py-1.5 text-xs font-medium text-white shadow-lg dark:bg-green-500">
-                  <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span>{t('session.messages.allLoaded')}</span>
-                </div>
-              ) : (
-                <button
-                  className="pointer-events-auto flex items-center space-x-2 rounded-full bg-blue-600 px-4 py-1.5 text-xs font-medium text-white shadow-lg transition-all duration-200 hover:scale-105 hover:bg-blue-700 disabled:cursor-wait disabled:opacity-75 dark:bg-blue-500 dark:hover:bg-blue-600"
-                  onClick={loadAllMessages}
-                  disabled={isLoadingAllMessages}
-                >
-                  {isLoadingAllMessages && (
-                    <div className="h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                  )}
-                  <span>
-                    {isLoadingAllMessages
-                      ? t('session.messages.loadingAll')
-                      : <>{t('session.messages.loadAll')} {totalMessages > 0 && `(${totalMessages})`}</>
-                    }
-                  </span>
-                </button>
-              )}
+              <div className="flex items-center space-x-2 rounded-full bg-green-600 px-4 py-1.5 text-xs font-medium text-white shadow-lg dark:bg-green-500">
+                <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                </svg>
+                <span>{t('session.messages.allLoaded')}</span>
+              </div>
             </div>
           )}
 

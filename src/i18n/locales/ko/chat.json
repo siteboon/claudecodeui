@@ -217,5 +217,14 @@
   },
   "tasks": {
     "nextTaskPrompt": "다음 작업 시작"
+  },
+  "scrollNav": {
+    "jumpTo": "이동: {{snippet}}",
+    "jumpToMessage": "{{index}}번 메시지로 이동",
+    "loadAll": "전체 로드",
+    "first": "첫 번째",
+    "previous": "이전",
+    "next": "다음",
+    "last": "마지막"
   }
 }
