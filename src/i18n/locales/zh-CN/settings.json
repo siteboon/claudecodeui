@@ -115,6 +115,12 @@
       "actionRequired": "需要处理",
       "stop": "运行已停止",
       "error": "运行失败"
+    },
+    "sound": {
+      "title": "声音",
+      "enabled": "完成音效",
+      "description": "运行完成时播放提示音",
+      "test": "试听"
     }
   },
   "appearanceSettings": {
