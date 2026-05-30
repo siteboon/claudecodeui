@@ -129,6 +129,7 @@ async function spawnGemini(command, options = {}, ws) {
     let capturedSessionId = sessionId; // Track session ID throughout the process
     let sessionCreatedSent = false; // Track if we've already sent session-created event
     let assistantBlocks = []; // Accumulate the full response blocks including tools
+    let stderrHasInvalidSession = false; // Detect stale cliSessionId errors
 
     // Use tools settings passed from frontend, or defaults
     const settings = toolsSettings || {
@@ -147,9 +148,14 @@ async function spawnGemini(command, options = {}, ws) {
 
     // If we have a sessionId, we want to resume
     if (sessionId) {
-        const session = sessionManager.getSession(sessionId);
-        if (session && session.cliSessionId) {
-            args.push('--resume', session.cliSessionId);
+        if (options._resumeLatest) {
+            // Fallback: stale/mismatched cliSessionId — let Gemini pick the newest file
+            args.push('--resume', 'latest');
+        } else {
+            const session = sessionManager.getSession(sessionId);
+            if (session && session.cliSessionId) {
+                args.push('--resume', session.cliSessionId);
+            }
         }
     }
 
@@ -424,7 +430,8 @@ async function spawnGemini(command, options = {}, ws) {
                     }
 
                     const sess = sessionManager.getSession(capturedSessionId);
-                    if (sess && !sess.cliSessionId) {
+                    if (sess) {
+                        // Always refresh so stale IDs from prior Gemini runs are replaced
                         sess.cliSessionId = discoveredSessionId;
                         sessionManager.saveSession(capturedSessionId);
                     }
@@ -463,6 +470,10 @@ async function spawnGemini(command, options = {}, ws) {
                 return;
             }
 
+            if (errorMsg.toLowerCase().includes('invalid session identifier')) {
+                stderrHasInvalidSession = true;
+            }
+
             const socketSessionId = typeof ws.getSessionId === 'function' ? ws.getSessionId() : (capturedSessionId || sessionId);
             ws.send(createNormalizedMessage({ kind: 'error', content: errorMsg, sessionId: socketSessionId, provider: 'gemini' }));
         });
@@ -486,7 +497,11 @@ async function spawnGemini(command, options = {}, ws) {
                 sessionManager.addMessage(finalSessionId, 'assistant', assistantBlocks);
             }
 
-            ws.send(createNormalizedMessage({ kind: 'complete', exitCode: code, isNewSession: !sessionId && !!command, sessionId: finalSessionId, provider: 'gemini' }));
+            // Suppress 'complete' when we're about to retry — the retry emits its own
+            const willRetry = code === 42 && sessionId && stderrHasInvalidSession && !options._retried;
+            if (!willRetry) {
+                ws.send(createNormalizedMessage({ kind: 'complete', exitCode: code, isNewSession: !sessionId && !!command, sessionId: finalSessionId, provider: 'gemini' }));
+            }
 
             // Clean up temporary image files if any
             if (geminiProcess.tempImagePaths && geminiProcess.tempImagePaths.length > 0) {
@@ -501,6 +516,20 @@ async function spawnGemini(command, options = {}, ws) {
             if (code === 0) {
                 notifyTerminalState({ code });
                 resolve();
+            } else if (code === 42 && sessionId && stderrHasInvalidSession && !options._retried) {
+                // Gemini rejected --resume <id> because the stored cliSessionId is stale.
+                // Clear it and retry once with --resume latest so the newest chat file is used.
+                const staleSession = sessionManager.getSession(sessionId);
+                if (staleSession) {
+                    staleSession.cliSessionId = null;
+                    sessionManager.saveSession(sessionId);
+                }
+                try {
+                    await spawnGemini(command, { ...options, _retried: true, _resumeLatest: true }, ws);
+                    resolve();
+                } catch (retryErr) {
+                    reject(retryErr);
+                }
             } else {
                 const socketSessionId = typeof ws.getSessionId === 'function' ? ws.getSessionId() : finalSessionId;
 
