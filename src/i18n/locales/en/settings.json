@@ -472,6 +472,12 @@
     "starterPluginLabel": "Starter Plugin",
     "starter": "Starter",
     "docs": "Docs",
+    "sections": {
+      "officialTitle": "Official Plugins",
+      "officialDescription": "Maintained by the CloudCLI team and ready for direct install.",
+      "unofficialTitle": "Other Plugins",
+      "unofficialDescription": "Unofficial plugins and integrations from other users. Review the source before installing."
+    },
     "starterPlugin": {
       "name": "Project Stats",
       "badge": "starter",
@@ -482,6 +488,18 @@
       "name": "Terminal",
       "badge": "official",
       "description": "Integrated terminal with full shell access directly within the interface.",
+      "install": "Install"
+    },
+    "scheduledPromptPlugin": {
+      "name": "Scheduled Prompts",
+      "badge": "unofficial",
+      "description": "Schedule workspace prompts, review run history, and manage recurring local tasks.",
+      "install": "Install"
+    },
+    "claudeWatchPlugin": {
+      "name": "Claude Watch",
+      "badge": "unofficial",
+      "description": "Watch long-running Claude Code sessions for hangs and expose process controls.",
       "install": "Install"
     },
     "morePlugins": "More",
