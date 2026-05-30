@@ -132,7 +132,13 @@ function buildShellCommand(
     }
 
     if (hasSession && resumeId) {
-      return `${command} --resume "${resumeId}"`;
+      // resumeId is the stored cliSessionId. If Gemini restarted since we last
+      // ran, that UUID is gone — fall back to latest (scoped to this project's
+      // chats dir), then to a fresh session as last resort.
+      if (os.platform() === 'win32') {
+        return `${command} --resume "${resumeId}"; if ($LASTEXITCODE -ne 0) { ${command} --resume latest }; if ($LASTEXITCODE -ne 0) { ${command} }`;
+      }
+      return `${command} --resume "${resumeId}" || ${command} --resume latest || ${command}`;
     }
     return command;
   }
