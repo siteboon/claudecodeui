@@ -84,6 +84,7 @@ function chatMessageToNormalized(
     kind: 'text',
     role: msg.type === 'user' ? 'user' : 'assistant',
     content: msg.content || '',
+    ...(msg.images && msg.images.length > 0 ? { images: msg.images as Array<{ data: string; name: string }> } : {}),
   } as NormalizedMessage;
 }
 
@@ -502,17 +503,16 @@ export function useChatSessionState({
       try {
         const provider = (localStorage.getItem('selected-provider') as Provider) || 'claude';
 
-        // Skip store refresh during active streaming
-        if (!isLoading) {
-          await sessionStore.refreshFromServer(selectedSession.id, {
-            provider: (selectedSession.__provider || provider) as LLMProvider,
-            projectId: selectedProject.projectId,
-            projectPath: selectedProject.fullPath || selectedProject.path || '',
-          });
+        // Shell/external sessions have no WebSocket stream — always refresh regardless of isLoading.
+        // UI-initiated sessions skip refresh during active streaming to avoid clobbering realtime data.
+        await sessionStore.refreshFromServer(selectedSession.id, {
+          provider: (selectedSession.__provider || provider) as LLMProvider,
+          projectId: selectedProject.projectId,
+          projectPath: selectedProject.fullPath || selectedProject.path || '',
+        });
 
-          if (Boolean(autoScrollToBottom) && isNearBottom()) {
-            setTimeout(() => scrollToBottom(), 200);
-          }
+        if (Boolean(autoScrollToBottom) && isNearBottom()) {
+          setTimeout(() => scrollToBottom(), 200);
         }
       } catch (error) {
         console.error('Error reloading messages from external update:', error);
@@ -528,7 +528,6 @@ export function useChatSessionState({
     selectedProject,
     selectedSession,
     sessionStore,
-    isLoading,
   ]);
 
   // Search navigation target

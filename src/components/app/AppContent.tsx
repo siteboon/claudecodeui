@@ -196,6 +196,7 @@ function AppContentInner() {
           onShowSettings={() => setShowSettings(true)}
           externalMessageUpdate={externalMessageUpdate}
           newSessionTrigger={newSessionTrigger}
+          onNewSession={handleNewSession}
         />
       </div>
 

@@ -55,6 +55,7 @@ export type MainContentProps = {
   onShowSettings: () => void;
   externalMessageUpdate: number;
   newSessionTrigger: number;
+  onNewSession?: (project: Project) => void;
 };
 
 export type MainContentHeaderProps = {

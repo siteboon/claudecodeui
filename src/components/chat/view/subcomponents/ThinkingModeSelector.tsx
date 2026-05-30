@@ -164,7 +164,7 @@ function ThinkingModeSelector({ selectedMode, onModeChange, onClose, className =
         aria-expanded={isOpen}
       >
         <IconComponent className="h-3.5 w-3.5 shrink-0" />
-        <span className="whitespace-nowrap">
+        <span className="hidden whitespace-nowrap sm:inline">
           {isActive ? currentMode.name : 'Think'}
         </span>
       </button>

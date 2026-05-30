@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, GitFork } from 'lucide-react';
 import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
 import type {
   ChatMessage,
@@ -15,6 +15,7 @@ import { ToolRenderer, shouldHideToolResult } from '../../tools';
 import { Reasoning, ReasoningTrigger, ReasoningContent } from '../../../../shared/view/ui';
 import { Markdown } from './Markdown';
 import MessageCopyControl from './MessageCopyControl';
+import ImageLightbox from './ImageLightbox';
 
 type DiffLine = {
   type: string;
@@ -36,6 +37,7 @@ type MessageComponentProps = {
   showCompactSummaries?: boolean;
   selectedProject?: Project | null;
   provider: Provider | string;
+  onForkFromMessage?: (message: ChatMessage) => void;
 };
 
 type InteractiveOption = {
@@ -47,7 +49,7 @@ type InteractiveOption = {
 type PermissionGrantState = 'idle' | 'granted' | 'error';
 const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'Edit', 'Write', 'ApplyPatch']);
 
-const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, onShowSettings, onGrantToolPermission, autoExpandTools, collapseToolsByDefault, showRawParameters, showThinking, showCompactSummaries, selectedProject, provider }: MessageComponentProps) => {
+const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, onShowSettings, onGrantToolPermission, autoExpandTools, collapseToolsByDefault, showRawParameters, showThinking, showCompactSummaries, selectedProject, provider, onForkFromMessage }: MessageComponentProps) => {
   const { t } = useTranslation('chat');
   const isGrouped = prevMessage && prevMessage.type === message.type &&
     ((prevMessage.type === 'assistant') ||
@@ -57,6 +59,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
   const messageRef = useRef<HTMLDivElement | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isToolCollapsed, setIsToolCollapsed] = useState(() => Boolean(collapseToolsByDefault && message.isToolUse));
+  const [lightboxSrc, setLightboxSrc] = useState<{ src: string; alt: string } | null>(null);
   const permissionSuggestion = getClaudePermissionSuggestion(message, provider);
   const [permissionGrantState, setPermissionGrantState] = useState<PermissionGrantState>('idle');
   const userCopyContent = String(message.content || '');
@@ -107,7 +110,12 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
     };
   }, [autoExpandTools, isExpanded, message.isToolUse]);
 
-  const formattedTime = useMemo(() => new Date(message.timestamp).toLocaleTimeString(), [message.timestamp]);
+  const formattedTime = useMemo(() => {
+    const d = new Date(message.timestamp);
+    const date = d.toLocaleDateString(undefined, { month: '2-digit', day: '2-digit' });
+    const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    return `${date} ${time}`;
+  }, [message.timestamp]);
   const shouldHideThinkingMessage = Boolean(message.isThinking && !showThinking);
   const [compactExpanded, setCompactExpanded] = useState(false);
 
@@ -159,12 +167,30 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                     src={img.data}
                     alt={img.name}
                     className="h-auto max-w-full cursor-pointer rounded-lg transition-opacity hover:opacity-90"
-                    onClick={() => window.open(img.data, '_blank')}
+                    onClick={() => setLightboxSrc({ src: img.data, alt: img.name })}
                   />
                 ))}
               </div>
             )}
+            {lightboxSrc && (
+              <ImageLightbox
+                src={lightboxSrc.src}
+                alt={lightboxSrc.alt}
+                onClose={() => setLightboxSrc(null)}
+              />
+            )}
             <div className="mt-1 flex items-center justify-end gap-1 text-xs text-blue-100">
+              {onForkFromMessage && (
+                <button
+                  type="button"
+                  onClick={() => onForkFromMessage(message)}
+                  className="p-1 rounded hover:bg-blue-500/30 transition-opacity"
+                  title="Fork conversation from here"
+                  aria-label="Fork conversation"
+                >
+                  <GitFork className="h-3 w-3" />
+                </button>
+              )}
               {shouldShowUserCopyControl && (
                 <MessageCopyControl content={userCopyContent} messageType="user" />
               )}
@@ -508,7 +534,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                 {shouldShowAssistantCopyControl && (
                   <MessageCopyControl content={assistantCopyContent} messageType="assistant" />
                 )}
-                {!isGrouped && <span>{formattedTime}</span>}
+                <span>{formattedTime}</span>
               </div>
             )}
           </div>

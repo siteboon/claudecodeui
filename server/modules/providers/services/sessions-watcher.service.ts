@@ -234,8 +234,8 @@ export async function initializeSessionsWatcher(): Promise<void> {
         followSymlinks: false,
         depth: 6,
         usePolling: true,
-        interval: 6_000,
-        binaryInterval: 6_000,
+        interval: 2_000,
+        binaryInterval: 2_000,
       });
 
       watcher

@@ -25,6 +25,7 @@ import { escapeRegExp } from '../utils/chatFormatting';
 
 import { useFileMentions } from './useFileMentions';
 import { type SlashCommand, useSlashCommands } from './useSlashCommands';
+import { useQueuedPrompt } from './useQueuedPrompt';
 
 type PendingViewSession = {
   sessionId: string | null;
@@ -146,8 +147,6 @@ export function useChatComposerState({
 
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
-      // Draft inputs are keyed by the DB projectId so per-project drafts
-      // survive display-name changes.
       return safeLocalStorage.getItem(`draft_input_${selectedProject.projectId}`) || '';
     }
     return '';
@@ -160,11 +159,23 @@ export function useChatComposerState({
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputHighlightRef = useRef<HTMLDivElement>(null);
+  const isSubmittingRef = useRef(false);
   const handleSubmitRef = useRef<
     ((event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>) => Promise<void>) | null
   >(null);
   const inputValueRef = useRef(input);
   const selectedProjectId = selectedProject?.projectId;
+
+  const { queuedPrompt, enqueue: enqueuePrompt, clearQueue: clearQueuedPrompt } = useQueuedPrompt({
+    isLoading,
+    onFire: (text) => {
+      setInput(text);
+      inputValueRef.current = text;
+      setTimeout(() => {
+        handleSubmitRef.current?.(createFakeSubmitEvent());
+      }, 0);
+    },
+  });
 
   const handleBuiltInCommand = useCallback(
     (result: CommandExecutionResult) => {
@@ -480,7 +491,16 @@ export function useChatComposerState({
     ) => {
       event.preventDefault();
       const currentInput = inputValueRef.current;
-      if (!currentInput.trim() || isLoading || !selectedProject) {
+      if (!currentInput.trim() || !selectedProject) {
+        return;
+      }
+      if (isLoading) {
+        enqueuePrompt(currentInput);
+        setInput('');
+        inputValueRef.current = '';
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+        }
         return;
       }
 
@@ -512,10 +532,22 @@ export function useChatComposerState({
         messageContent = `${selectedThinkingMode.prefix}: ${currentInput}`;
       }
 
+      if (isSubmittingRef.current) return;
+      isSubmittingRef.current = true;
+
+      // Clear input immediately to prevent double-submit during async upload
+      const imagesToUpload = [...attachedImages];
+      setInput('');
+      inputValueRef.current = '';
+      setAttachedImages([]);
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
+
       let uploadedImages: unknown[] = [];
-      if (attachedImages.length > 0) {
+      if (imagesToUpload.length > 0) {
         const formData = new FormData();
-        attachedImages.forEach((file) => {
+        imagesToUpload.forEach((file) => {
           formData.append('images', file);
         });
 
@@ -540,6 +572,7 @@ export function useChatComposerState({
             content: `Failed to upload images: ${message}`,
             timestamp: new Date(),
           });
+          isSubmittingRef.current = false;
           return;
         }
       }
@@ -557,6 +590,7 @@ export function useChatComposerState({
       lastSubmittedInputRef.current = currentInput;
       addMessage(userMessage);
       setIsLoading(true); // Processing banner starts
+      isSubmittingRef.current = false; // safe to release: isLoading now guards re-entry
       setCanAbortSession(true);
       setClaudeStatus({
         text: 'Processing',
@@ -675,18 +709,11 @@ export function useChatComposerState({
         });
       }
 
-      setInput('');
-      inputValueRef.current = '';
       resetCommandMenuState();
-      setAttachedImages([]);
       setUploadingImages(new Map());
       setImageErrors(new Map());
       setIsTextareaExpanded(false);
       setThinkingMode('none');
-
-      if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto';
-      }
 
       safeLocalStorage.removeItem(`draft_input_${selectedProject.projectId}`);
     },
@@ -697,6 +724,7 @@ export function useChatComposerState({
       codexModel,
       currentSessionId,
       cursorModel,
+      enqueuePrompt,
       executeCommand,
       geminiModel,
       isLoading,
@@ -737,6 +765,9 @@ export function useChatComposerState({
       inputValueRef.current = next;
       return next;
     });
+    // Clear any queued prompt when project changes — prevents leaked sends to wrong project.
+    // Sequence: user queues in Project A → switches to Project B → isLoading resets → queue fires with B's context.
+    clearQueuedPrompt();
   }, [selectedProjectId]);
 
   useEffect(() => {
@@ -999,6 +1030,8 @@ export function useChatComposerState({
     getInputProps,
     isDragActive,
     openImagePicker: open,
+    queuedPrompt,
+    clearQueuedPrompt,
     handleSubmit,
     handleInputChange,
     handleKeyDown,

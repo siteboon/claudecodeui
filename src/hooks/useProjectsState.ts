@@ -467,6 +467,23 @@ export function useProjectsState({
       setSelectedProject(updatedSelectedProject);
     }
 
+    // Auto-switch to a newly detected shell session when no active UI session is running.
+    // This handles: user opens `claude` in terminal → UI auto-navigates to that session.
+    if (!hasActiveSession && !selectedSession) {
+      const isAddEvent =
+        projectsMessage.changeType === 'add' ||
+        (projectsMessage.changeTypes ?? []).includes('add');
+      if (isAddEvent && projectsMessage.updatedSessionId) {
+        const newShellSession = getProjectSessions(updatedSelectedProject).find(
+          (s) => s.id === projectsMessage.updatedSessionId,
+        );
+        if (newShellSession) {
+          setSelectedSession(newShellSession);
+          return;
+        }
+      }
+    }
+
     if (!selectedSession) {
       return;
     }

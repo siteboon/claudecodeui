@@ -51,6 +51,7 @@ function MainContent({
   onShowSettings,
   externalMessageUpdate,
   newSessionTrigger,
+  onNewSession,
 }: MainContentProps) {
   const { preferences } = useUiPreferences();
   const { autoExpandTools, collapseToolsByDefault, showRawParameters, showThinking, showCompactSummaries, autoScrollToBottom, sendByCtrlEnter } = preferences;
@@ -147,6 +148,7 @@ function MainContent({
                 sendByCtrlEnter={sendByCtrlEnter}
                 externalMessageUpdate={externalMessageUpdate}
                 newSessionTrigger={newSessionTrigger}
+                onNewSession={onNewSession}
                 onShowAllTasks={tasksEnabled ? () => setActiveTab('tasks') : null}
               />
             </ErrorBoundary>

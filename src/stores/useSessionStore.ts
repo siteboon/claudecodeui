@@ -54,7 +54,7 @@ export interface NormalizedMessage {
   isLocalCommand?: boolean;
   isLocalCommandStdout?: boolean;
   isCompactSummary?: boolean;
-  images?: string[];
+  images?: Array<{ data: string; name: string }> | string[];
   toolName?: string;
   toolInput?: unknown;
   toolId?: string;
@@ -484,7 +484,26 @@ export function useSessionStore() {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
 
-      slot.serverMessages = data.messages || [];
+      const incomingServerMessages: NormalizedMessage[] = data.messages || [];
+
+      // Preserve image data from realtime user messages — the server history
+      // stores text only, so merge any base64 images back into matching server rows.
+      const realtimeImgMessages = slot.realtimeMessages.filter(
+        (m) => m.role === 'user' && m.images && (m.images as Array<{ data: string; name: string }>).length > 0,
+      );
+      if (realtimeImgMessages.length > 0) {
+        for (const rm of realtimeImgMessages) {
+          const fp = (rm.content || '').trim();
+          const serverRow = incomingServerMessages.find(
+            (m) => m.role === 'user' && (m.content || '').trim() === fp,
+          );
+          if (serverRow && (!serverRow.images || (serverRow.images as unknown[]).length === 0)) {
+            serverRow.images = rm.images;
+          }
+        }
+      }
+
+      slot.serverMessages = incomingServerMessages;
       slot.total = data.total ?? slot.serverMessages.length;
       slot.hasMore = Boolean(data.hasMore);
       slot.fetchedAt = Date.now();

@@ -11,7 +11,7 @@ import type {
   SetStateAction,
   TouchEvent,
 } from 'react';
-import { ImageIcon, MessageSquareIcon, XIcon, ArrowDownIcon } from 'lucide-react';
+import { ImageIcon, MessageSquareIcon, XIcon, ArrowDownIcon, ClockIcon, ListIcon } from 'lucide-react';
 import type { ChatMessage, PendingPermissionRequest, PermissionMode, Provider } from '../../types/types';
 import CommandMenu from './CommandMenu';
 import ClaudeStatus from './ClaudeStatus';
@@ -106,6 +106,9 @@ interface ChatComposerProps {
   onOpenSettings?: () => void;
   currentModel: string;
   onModelChange: (model: string) => void;
+  queuedPrompt?: string | null;
+  onClearQueuedPrompt?: () => void;
+  onTogglePromptNav?: () => void;
 }
 
 export default function ChatComposer({
@@ -165,6 +168,9 @@ export default function ChatComposer({
   onOpenSettings,
   currentModel,
   onModelChange,
+  queuedPrompt,
+  onClearQueuedPrompt,
+  onTogglePromptNav,
 }: ChatComposerProps) {
   const { t } = useTranslation('chat');
   const textareaRect = textareaRef.current?.getBoundingClientRect();
@@ -183,7 +189,8 @@ export default function ChatComposer({
   const hasPendingPermissions = pendingPermissionRequests.length > 0;
 
   return (
-    <div className="flex-shrink-0 p-2 pb-2 sm:p-4 sm:pb-4 md:p-4 md:pb-6">
+    <div className="flex-shrink-0" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+      <div className="p-2 pb-2 sm:p-4 sm:pb-4 md:p-4 md:pb-6">
       {!hasPendingPermissions && (
         <ClaudeStatus
           status={claudeStatus}
@@ -205,6 +212,28 @@ export default function ChatComposer({
       )}
 
       {!hasQuestionPanel && <div className="relative mx-auto max-w-4xl">
+        {queuedPrompt && (
+          <div className="mb-2 flex items-start gap-2 rounded-xl border border-amber-300/60 bg-amber-50/80 px-3 py-2 text-xs text-amber-800 shadow-sm backdrop-blur-md dark:border-amber-600/40 dark:bg-amber-900/15 dark:text-amber-200">
+            <ClockIcon className="mt-0.5 h-3 w-3 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="text-[10px] uppercase tracking-wide opacity-70">
+                {t('input.queuedPrompt', { defaultValue: 'Queued — sends when current task finishes' })}
+              </div>
+              <div className="truncate">{queuedPrompt}</div>
+            </div>
+            {onClearQueuedPrompt && (
+              <button
+                type="button"
+                onClick={onClearQueuedPrompt}
+                className="flex-shrink-0 rounded p-1 hover:bg-amber-200/50 dark:hover:bg-amber-800/30"
+                title={t('input.clearQueuedPrompt', { defaultValue: 'Cancel queued prompt' })}
+                aria-label="Cancel queued"
+              >
+                <XIcon className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+        )}
         {isUserScrolledUp && hasMessages && (
           <div className="absolute -top-10 left-0 right-0 z-10 flex justify-center">
             <button
@@ -318,8 +347,8 @@ export default function ChatComposer({
             />
         </PromptInputBody>
 
-        <PromptInputFooter>
-          <PromptInputTools>
+        <PromptInputFooter className="justify-start gap-2">
+          <PromptInputTools className="flex-1 min-w-0 overflow-x-clip">
             <PromptInputButton
               tooltip={{ content: t('input.attachImages') }}
               onClick={openImagePicker}
@@ -333,6 +362,15 @@ export default function ChatComposer({
             >
               <MessageSquareIcon />
             </PromptInputButton>
+
+            {onTogglePromptNav && hasMessages && (
+              <PromptInputButton
+                tooltip={{ content: t('input.showPromptNav', { defaultValue: 'Prompts' }) }}
+                onClick={onTogglePromptNav}
+              >
+                <ListIcon />
+              </PromptInputButton>
+            )}
 
             <button
               type="button"
@@ -364,7 +402,7 @@ export default function ChatComposer({
                             : 'bg-primary'
                   }`}
                 />
-                <span className="whitespace-nowrap">
+                <span className="hidden whitespace-nowrap sm:inline">
                   {permissionMode === 'default' && t('codex.modes.default')}
                   {permissionMode === 'acceptEdits' && t('codex.modes.acceptEdits')}
                   {permissionMode === 'auto' && t('codex.modes.auto')}
@@ -384,18 +422,11 @@ export default function ChatComposer({
               onModelChange={onModelChange}
             />
 
-            <ContextUsagePill
-              used={tokenBudget?.used || 0}
-              total={tokenBudget?.total || parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000}
-              provider={provider as string}
-              onOpenSettings={onOpenSettings}
-            />
-
             {hasInput && (
               <PromptInputButton
                 tooltip={{ content: t('input.clearInput', { defaultValue: 'Clear input' }) }}
                 onClick={onClearInput}
-                className="hidden sm:No-flex"
+                className="hidden sm:flex"
               >
                 <XIcon />
               </PromptInputButton>
@@ -403,22 +434,24 @@ export default function ChatComposer({
 
           </PromptInputTools>
 
-          <div className="flex items-center gap-2">
-            <div
-              className={`hidden text-xs text-muted-foreground/50 transition-opacity duration-200 lg:block ${
-                input.trim() ? 'opacity-0' : 'opacity-100'
-              }`}
-            >
-              {sendByCtrlEnter ? t('input.hintText.ctrlEnter') : t('input.hintText.enter')}
-            </div>
+          <ContextUsagePill
+            used={tokenBudget?.used || 0}
+            total={tokenBudget?.total || parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000}
+            provider={provider as string}
+            onOpenSettings={onOpenSettings}
+          />
+
+          <div className="flex flex-shrink-0 items-center pl-1">
             <PromptInputSubmit
-              disabled={!input.trim() || isLoading}
+              disabled={!input.trim()}
               className="h-10 w-10 sm:h-10 sm:w-10"
               onMouseDown={(event) => {
+                // Prevent textarea losing focus; form onSubmit fires the actual submit
                 event.preventDefault();
-                onSubmit(event as unknown as MouseEvent<HTMLButtonElement>);
               }}
               onTouchStart={(event) => {
+                // On mobile, preventDefault blocks synthetic click/form-submit that follows
+                // touchstart, so we must call onSubmit manually here.
                 event.preventDefault();
                 onSubmit(event as unknown as TouchEvent<HTMLButtonElement>);
               }}
@@ -427,6 +460,7 @@ export default function ChatComposer({
         </PromptInputFooter>
       </PromptInput>
       </div>}
+      </div>
     </div>
   );
 }

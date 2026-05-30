@@ -1,10 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import PermissionContext from '../../../contexts/PermissionContext';
 import { QuickSettingsPanel } from '../../quick-settings-panel';
-import type { ChatInterfaceProps, Provider  } from '../types/types';
+import type { ChatInterfaceProps, ChatMessage, Provider  } from '../types/types';
 import type { LLMProvider } from '../../../types/app';
 import { useChatProviderState } from '../hooks/useChatProviderState';
 import { useChatSessionState } from '../hooks/useChatSessionState';
@@ -14,6 +14,8 @@ import { useSessionStore } from '../../../stores/useSessionStore';
 
 import ChatMessagesPane from './subcomponents/ChatMessagesPane';
 import ChatComposer from './subcomponents/ChatComposer';
+import PinnedUserMessage from './subcomponents/PinnedUserMessage';
+import PromptNavPanel from './subcomponents/PromptNavPanel';
 
 
 type PendingViewSession = {
@@ -45,10 +47,13 @@ function ChatInterface({
   sendByCtrlEnter,
   externalMessageUpdate,
   newSessionTrigger,
+  onNewSession,
   onShowAllTasks,
 }: ChatInterfaceProps) {
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
   const { t } = useTranslation('chat');
+
+  const [showPromptNav, setShowPromptNav] = useState(false);
 
   const sessionStore = useSessionStore();
   const streamTimerRef = useRef<number | null>(null);
@@ -161,6 +166,8 @@ function ChatInterface({
     getInputProps,
     isDragActive,
     openImagePicker,
+    queuedPrompt,
+    clearQueuedPrompt,
     handleSubmit,
     handleInputChange,
     handleKeyDown,
@@ -290,6 +297,47 @@ function ChatInterface({
     handlePermissionDecision,
   }), [pendingPermissionRequests, handlePermissionDecision]);
 
+  const userMessages = useMemo(
+    () => chatMessages.filter((m) => m.type === 'user'),
+    [chatMessages],
+  );
+
+  const lastUserMessage = useMemo(() => {
+    const last = userMessages[userMessages.length - 1];
+    return last ? String(last.content || '') : null;
+  }, [userMessages]);
+
+  const userPrompts = useMemo(
+    () =>
+      userMessages.map((m, idx) => ({
+        id: String(m.timestamp || idx),
+        text: String(m.content || ''),
+        timestamp: (m.timestamp instanceof Date ? m.timestamp.toISOString() : m.timestamp) ?? Date.now(),
+      })),
+    [userMessages],
+  );
+
+  const handleJumpToPrompt = useCallback((id: string) => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const target = container.querySelector<HTMLElement>(`[data-message-timestamp="${CSS.escape(id)}"]`);
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      target.classList.add('ring-2', 'ring-primary/40', 'rounded-xl');
+      setTimeout(() => {
+        target.classList.remove('ring-2', 'ring-primary/40', 'rounded-xl');
+      }, 1500);
+    }
+  }, [scrollContainerRef]);
+
+  const handleForkFromMessage = useCallback((message: ChatMessage) => {
+    if (!selectedProject) return;
+    const forkContent = String(message.content || '');
+    onNewSession?.(selectedProject);
+    setInput(forkContent);
+    setTimeout(() => textareaRef.current?.focus(), 100);
+  }, [selectedProject, onNewSession, setInput, textareaRef]);
+
   if (!selectedProject) {
     const selectedProviderLabel =
       provider === 'cursor'
@@ -317,6 +365,11 @@ function ChatInterface({
   return (
     <PermissionContext.Provider value={permissionContextValue}>
       <div className="flex h-full flex-col">
+        {chatMessages.length > 0 && (
+          <div className="px-2 pt-2 sm:px-4">
+            <PinnedUserMessage lastUserMessage={lastUserMessage} />
+          </div>
+        )}
         <ChatMessagesPane
           scrollContainerRef={scrollContainerRef}
           onWheel={handleScroll}
@@ -362,6 +415,7 @@ function ChatInterface({
           showThinking={showThinking}
           showCompactSummaries={showCompactSummaries}
           selectedProject={selectedProject}
+          onForkFromMessage={handleForkFromMessage}
         />
 
         <ChatComposer
@@ -439,8 +493,18 @@ function ChatInterface({
             else if (provider === 'gemini') setGeminiModel(model);
             else setClaudeModel(model);
           }}
+          queuedPrompt={queuedPrompt}
+          onClearQueuedPrompt={clearQueuedPrompt}
+          onTogglePromptNav={() => setShowPromptNav((v) => !v)}
         />
       </div>
+
+      <PromptNavPanel
+        isOpen={showPromptNav}
+        onClose={() => setShowPromptNav(false)}
+        prompts={userPrompts}
+        onJumpTo={handleJumpToPrompt}
+      />
 
       <QuickSettingsPanel />
     </PermissionContext.Provider>

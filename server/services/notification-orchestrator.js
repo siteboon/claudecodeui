@@ -112,22 +112,37 @@ function resolveSessionName(event) {
 }
 
 function buildPushBody(event) {
-  const CODE_MAP = {
-    'permission.required': event.meta?.toolName
-      ? `Action Required: Tool "${event.meta.toolName}" needs approval`
-      : 'Action Required: A tool needs your approval',
-    'run.stopped': event.meta?.stopReason || 'Run Stopped: The run has stopped',
-    'run.failed': event.meta?.error ? `Run Failed: ${event.meta.error}` : 'Run Failed: The run encountered an error',
-    'agent.notification': event.meta?.message ? String(event.meta.message) : 'You have a new notification',
-    'push.enabled': 'Push notifications are now enabled!'
-  };
   const providerLabel = PROVIDER_LABELS[event.provider] || 'Assistant';
   const sessionName = resolveSessionName(event);
-  const message = CODE_MAP[event.code] || 'You have a new notification';
+
+  const TITLE_MAP = {
+    'permission.required': 'Action Required',
+    'run.stopped': 'Task Complete',
+    'run.failed': 'Task Failed',
+    'agent.notification': 'New Message',
+    'push.enabled': 'Notifications Enabled',
+  };
+
+  const detail = {
+    'permission.required': event.meta?.toolName
+      ? `${providerLabel} needs approval to use "${event.meta.toolName}"`
+      : `${providerLabel} needs your approval to continue`,
+    'run.stopped': `${providerLabel} finished the task`,
+    'run.failed': event.meta?.error
+      ? `${providerLabel} failed: ${String(event.meta.error).slice(0, 120)}`
+      : `${providerLabel} encountered an error`,
+    'agent.notification': event.meta?.message
+      ? String(event.meta.message)
+      : `${providerLabel} sent a notification`,
+    'push.enabled': 'Push notifications are now enabled!',
+  }[event.code] || `${providerLabel}: You have a new notification`;
+
+  const title = TITLE_MAP[event.code] || 'CloudCLI';
+  const body = sessionName ? `${sessionName} · ${detail}` : detail;
 
   return {
-    title: sessionName || 'CloudCLI',
-    body: `${providerLabel}: ${message}`,
+    title,
+    body,
     data: {
       sessionId: event.sessionId || null,
       code: event.code,

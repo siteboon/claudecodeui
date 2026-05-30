@@ -52,6 +52,7 @@ interface ChatMessagesPaneProps {
   showThinking?: boolean;
   showCompactSummaries?: boolean;
   selectedProject: Project;
+  onForkFromMessage?: (message: ChatMessage) => void;
 }
 
 export default function ChatMessagesPane({
@@ -99,6 +100,7 @@ export default function ChatMessagesPane({
   showThinking,
   showCompactSummaries,
   selectedProject,
+  onForkFromMessage,
 }: ChatMessagesPaneProps) {
   const { t } = useTranslation('chat');
   const messageKeyMapRef = useRef<WeakMap<ChatMessage, string>>(new WeakMap());
@@ -252,6 +254,7 @@ export default function ChatMessagesPane({
                 showCompactSummaries={showCompactSummaries}
                 selectedProject={selectedProject}
                 provider={provider}
+                onForkFromMessage={onForkFromMessage}
               />
             );
           })}
