@@ -119,6 +119,29 @@ async function buildGeminiProcessEnv() {
     return processEnv;
 }
 
+/**
+ * Spawns a Gemini CLI process for a given command and streams its output over a WebSocket.
+ *
+ * Handles session resumption (including automatic retry when a stored cliSessionId has gone
+ * stale after a Gemini restart), tool-use permission enforcement, image attachments, and
+ * graceful fallback to `--resume latest` on exit-code 42 + "Invalid session identifier".
+ *
+ * @param {string} command - The user prompt to send to Gemini, or an empty string for a
+ *   passive resume (session reconnect with no new message).
+ * @param {object} [options={}] - Spawn options.
+ * @param {string}  [options.sessionId]      - Existing session ID to resume.
+ * @param {string}  [options.projectPath]    - Gemini metadata directory for the project.
+ * @param {string}  [options.cwd]            - Working directory for the Gemini process.
+ * @param {object}  [options.toolsSettings]  - Allowed/disallowed tools and permission flags.
+ * @param {string}  [options.permissionMode] - Permission mode passed to Gemini.
+ * @param {Array}   [options.images]         - Base-64 image attachments.
+ * @param {string}  [options.sessionSummary] - Optional summary injected into the session.
+ * @param {string}  [options.model]          - Model override; resolved via providerModelsService if omitted.
+ * @param {boolean} [options._retried]       - Internal flag — set on the automatic retry to prevent loops.
+ * @param {boolean} [options._resumeLatest]  - Internal flag — uses `--resume latest` instead of a specific ID.
+ * @param {object} ws - WebSocket-compatible writer used to stream events to the client.
+ * @returns {Promise<void>} Resolves when the Gemini process exits cleanly; rejects on unrecoverable errors.
+ */
 async function spawnGemini(command, options = {}, ws) {
     const { sessionId, projectPath, cwd, toolsSettings, permissionMode, images, sessionSummary } = options;
     const resolvedModel = await providerModelsService.resolveResumeModel(
