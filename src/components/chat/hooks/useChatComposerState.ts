@@ -97,17 +97,10 @@ export type CostCommandData = {
   tokenUsage?: {
     used?: number;
     total?: number;
-    percentage?: number;
-  };
-  cost?: {
-    input?: string;
-    output?: string;
-    total?: string;
   };
   tokenBreakdown?: {
     input?: number;
     output?: number;
-    cache?: number;
   };
   provider?: string;
   model?: string;

@@ -85,6 +85,12 @@ const createOpenCodeDatabase = async (homeDir: string, workspacePath: string): P
         path TEXT,
         agent TEXT,
         model TEXT,
+        cost REAL NOT NULL DEFAULT 0,
+        tokens_input INTEGER NOT NULL DEFAULT 0,
+        tokens_output INTEGER NOT NULL DEFAULT 0,
+        tokens_reasoning INTEGER NOT NULL DEFAULT 0,
+        tokens_cache_read INTEGER NOT NULL DEFAULT 0,
+        tokens_cache_write INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (project_id) REFERENCES project(id) ON DELETE CASCADE
       );
 
@@ -124,9 +130,10 @@ const createOpenCodeDatabase = async (homeDir: string, workspacePath: string): P
     );
     db.prepare(`
       INSERT INTO session (
-        id, project_id, slug, directory, title, version, time_created, time_updated, time_archived
+        id, project_id, slug, directory, title, version, time_created, time_updated, time_archived,
+        tokens_input, tokens_output, tokens_reasoning, tokens_cache_read, tokens_cache_write
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       'open-session-1',
       'project-1',
@@ -137,6 +144,11 @@ const createOpenCodeDatabase = async (homeDir: string, workspacePath: string): P
       1_700_000_000_000,
       1_700_000_004_000,
       null,
+      10,
+      20,
+      7,
+      3,
+      2,
     );
 
     const userMessageData = JSON.stringify({
@@ -302,12 +314,13 @@ test('OpenCode sessions provider reads sqlite history and token usage', { concur
     assert.equal(history.messages[3]?.kind, 'tool_use');
     assert.deepEqual(history.messages[3]?.toolResult, { content: 'ok', isError: false });
     assert.deepEqual(history.tokenUsage, {
-      used: 35,
-      total: 35,
-      inputTokens: 10,
+      used: 42,
+      inputTokens: 13,
       outputTokens: 20,
-      cacheReadTokens: 3,
-      cacheCreationTokens: 2,
+      breakdown: {
+        input: 13,
+        output: 20,
+      },
     });
 
     const paged = await provider.fetchHistory('open-session-1', { limit: 2, offset: 0 });

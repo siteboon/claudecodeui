@@ -10,8 +10,9 @@ import { spawn } from 'child_process';
 import express from 'express';
 import cors from 'cors';
 import mime from 'mime-types';
+import Database from 'better-sqlite3';
 
-import { AppError, WORKSPACES_ROOT, validateWorkspacePath } from '@/shared/utils.js';
+import { AppError, WORKSPACES_ROOT, getOpenCodeDatabasePath, validateWorkspacePath } from '@/shared/utils.js';
 import { closeSessionsWatcher, initializeSessionsWatcher } from '@/modules/providers/index.js';
 import { createWebSocketServer } from '@/modules/websocket/index.js';
 
@@ -72,7 +73,7 @@ import geminiRoutes from './routes/gemini.js';
 import pluginsRoutes from './routes/plugins.js';
 import providerRoutes from './modules/providers/provider.routes.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
-import { initializeDatabase, projectsDb } from './modules/database/index.js';
+import { initializeDatabase, projectsDb, sessionsDb } from './modules/database/index.js';
 import { configureWebPush } from './services/vapid-keys.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
@@ -1141,33 +1142,127 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
             return res.json({
                 used: 0,
                 total: 0,
-                breakdown: { input: 0, cacheCreation: 0, cacheRead: 0 },
+                inputTokens: 0,
+                outputTokens: 0,
+                breakdown: { input: 0, output: 0 },
                 unsupported: true,
                 message: 'Token usage tracking not available for Cursor sessions'
             });
         }
 
-        // Handle Gemini sessions - they are raw logs in our current setup
         if (provider === 'gemini') {
+            const session = sessionsDb.getSessionById(safeSessionId);
+            const sessionFilePath = session?.jsonl_path;
+            if (!sessionFilePath) {
+                return res.json({
+                    used: 0,
+                    inputTokens: 0,
+                    outputTokens: 0,
+                    breakdown: { input: 0, output: 0 },
+                    unsupported: true,
+                    message: 'Token usage tracking not available for this Gemini session'
+                });
+            }
+
+            let fileContent;
+            try {
+                fileContent = await fsPromises.readFile(sessionFilePath, 'utf8');
+            } catch (error) {
+                if (error.code === 'ENOENT') {
+                    return res.status(404).json({ error: 'Session file not found', path: sessionFilePath });
+                }
+                throw error;
+            }
+
+            const lines = fileContent.trim().split('\n');
+            let inputTokens = 0;
+            let outputTokens = 0;
+            let totalTokens = 0;
+
+            for (let i = lines.length - 1; i >= 0; i--) {
+                try {
+                    const entry = JSON.parse(lines[i]);
+                    if (!entry.tokens || typeof entry.tokens !== 'object') {
+                        continue;
+                    }
+
+                    inputTokens = Number(entry.tokens.input || 0);
+                    outputTokens = Number(entry.tokens.output || 0);
+                    totalTokens = Number(entry.tokens.total || inputTokens + outputTokens || 0);
+                    break;
+                } catch {
+                    continue;
+                }
+            }
+
             return res.json({
-                used: 0,
-                total: 0,
-                breakdown: { input: 0, cacheCreation: 0, cacheRead: 0 },
-                unsupported: true,
-                message: 'Token usage tracking not available for Gemini sessions'
+                used: totalTokens,
+                inputTokens,
+                outputTokens,
+                breakdown: {
+                    input: inputTokens,
+                    output: outputTokens
+                }
             });
         }
 
-        // OpenCode token totals are surfaced through provider history reads.
-        // This legacy endpoint only knows file-backed session formats.
         if (provider === 'opencode') {
-            return res.json({
-                used: 0,
-                total: 0,
-                breakdown: { input: 0, cacheCreation: 0, cacheRead: 0 },
-                unsupported: true,
-                message: 'Token usage tracking is available in OpenCode session history, not this legacy endpoint'
-            });
+            const dbPath = getOpenCodeDatabasePath();
+            if (!fs.existsSync(dbPath)) {
+                return res.status(404).json({ error: 'OpenCode database not found' });
+            }
+
+            const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+            try {
+                const columns = db.prepare('PRAGMA table_info(session)').all();
+                const columnNames = new Set(columns.map((column) => column.name));
+                const requiredColumns = ['tokens_input', 'tokens_output', 'tokens_reasoning', 'tokens_cache_read', 'tokens_cache_write'];
+                if (!requiredColumns.every((column) => columnNames.has(column))) {
+                    return res.json({
+                        used: 0,
+                        inputTokens: 0,
+                        outputTokens: 0,
+                        breakdown: { input: 0, output: 0 },
+                        unsupported: true,
+                        message: 'Token usage tracking is not available in this OpenCode database schema'
+                    });
+                }
+
+                const row = db.prepare(`
+                    SELECT
+                        tokens_input AS inputTokens,
+                        tokens_output AS outputTokens,
+                        tokens_reasoning AS reasoningTokens,
+                        tokens_cache_read AS cacheReadTokens,
+                        tokens_cache_write AS cacheWriteTokens
+                    FROM session
+                    WHERE id = ?
+                `).get(safeSessionId);
+
+                if (!row) {
+                    return res.status(404).json({ error: 'OpenCode session not found', sessionId: safeSessionId });
+                }
+
+                const inputTokens = Number(row.inputTokens || 0) + Number(row.cacheReadTokens || 0);
+                const outputTokens = Number(row.outputTokens || 0);
+                const totalUsed = Number(row.inputTokens || 0)
+                    + outputTokens
+                    + Number(row.reasoningTokens || 0)
+                    + Number(row.cacheReadTokens || 0)
+                    + Number(row.cacheWriteTokens || 0);
+
+                return res.json({
+                    used: totalUsed,
+                    inputTokens,
+                    outputTokens,
+                    breakdown: {
+                        input: inputTokens,
+                        output: outputTokens
+                    }
+                });
+            } finally {
+                db.close();
+            }
         }
 
         // Handle Codex sessions
@@ -1210,6 +1305,8 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
                 throw error;
             }
             const lines = fileContent.trim().split('\n');
+            let inputTokens = 0;
+            let outputTokens = 0;
             let totalTokens = 0;
             let contextWindow = 200000; // Default for Codex/OpenAI
 
@@ -1222,7 +1319,9 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
                     if (entry.type === 'event_msg' && entry.payload?.type === 'token_count' && entry.payload?.info) {
                         const tokenInfo = entry.payload.info;
                         if (tokenInfo.total_token_usage) {
-                            totalTokens = tokenInfo.total_token_usage.total_tokens || 0;
+                            inputTokens = tokenInfo.total_token_usage.input_tokens || 0;
+                            outputTokens = tokenInfo.total_token_usage.output_tokens || 0;
+                            totalTokens = tokenInfo.total_token_usage.total_tokens || inputTokens + outputTokens;
                         }
                         if (tokenInfo.model_context_window) {
                             contextWindow = tokenInfo.model_context_window;
@@ -1237,7 +1336,13 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
 
             return res.json({
                 used: totalTokens,
-                total: contextWindow
+                total: contextWindow,
+                inputTokens,
+                outputTokens,
+                breakdown: {
+                    input: inputTokens,
+                    output: outputTokens
+                }
             });
         }
 
@@ -1280,8 +1385,7 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
         const parsedContextWindow = parseInt(process.env.CONTEXT_WINDOW, 10);
         const contextWindow = Number.isFinite(parsedContextWindow) ? parsedContextWindow : 160000;
         let inputTokens = 0;
-        let cacheCreationTokens = 0;
-        let cacheReadTokens = 0;
+        let outputTokens = 0;
 
         // Find the latest assistant message with usage data (scan from end)
         for (let i = lines.length - 1; i >= 0; i--) {
@@ -1294,8 +1398,7 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
 
                     // Use token counts from latest assistant message only
                     inputTokens = usage.input_tokens || 0;
-                    cacheCreationTokens = usage.cache_creation_input_tokens || 0;
-                    cacheReadTokens = usage.cache_read_input_tokens || 0;
+                    outputTokens = usage.output_tokens || 0;
 
                     break; // Stop after finding the latest assistant message
                 }
@@ -1305,16 +1408,16 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
             }
         }
 
-        // Calculate total context usage (excluding output_tokens, as per ccusage)
-        const totalUsed = inputTokens + cacheCreationTokens + cacheReadTokens;
+        const totalUsed = inputTokens + outputTokens;
 
         res.json({
             used: totalUsed,
             total: contextWindow,
+            inputTokens,
+            outputTokens,
             breakdown: {
                 input: inputTokens,
-                cacheCreation: cacheCreationTokens,
-                cacheRead: cacheReadTokens
+                output: outputTokens
             }
         });
     } catch (error) {
