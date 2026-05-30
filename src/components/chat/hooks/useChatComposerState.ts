@@ -27,6 +27,20 @@ import { escapeRegExp } from '../utils/chatFormatting';
 import { useFileMentions } from './useFileMentions';
 import { type SlashCommand, useSlashCommands } from './useSlashCommands';
 
+function resolveEffectiveProjectPath(
+  session: ProjectSession | null,
+  project: Project | null,
+): string {
+  if (session?.projectPath) {
+    return session.projectPath;
+  }
+  return (project?.fullPath || project?.path || '') ?? '';
+}
+
+type PendingViewSession = {
+  startedAt: number;
+};
+
 interface UseChatComposerStateArgs {
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
@@ -720,6 +734,8 @@ export function useChatComposerState({
       };
 
       const toolsSettings = getToolsSettings();
+      const resolvedProjectPath = resolveEffectiveProjectPath(selectedSession, selectedProject);
+      const sessionSummary = getNotificationSessionSummary(selectedSession, currentInput);
       const model =
         provider === 'cursor'
           ? cursorModel
