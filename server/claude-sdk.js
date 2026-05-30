@@ -736,11 +736,6 @@ async function queryClaudeSDK(command, options = {}, ws) {
         }
       }
 
-      // DEBUG: log SDK messages with user role to trace streaming bug
-      if (message.type === 'user' || transformedMessage.message?.role === 'user') {
-        console.log('[SDK-DEBUG-USER-MSG] type:', message.type, '| isSynthetic:', transformedMessage.isSynthetic, '| origin:', JSON.stringify(transformedMessage.origin), '| message.role:', transformedMessage.message?.role, '| content preview:', String(transformedMessage.message?.content || '').slice(0, 200), '| shouldQuery:', transformedMessage.shouldQuery, '| parentToolUseId:', transformedMessage.parentToolUseId);
-      }
-
       // Use adapter to normalize SDK events into NormalizedMessage[]
       const normalized = sessionsService.normalizeMessage(
         'claude',
@@ -749,10 +744,6 @@ async function queryClaudeSDK(command, options = {}, ws) {
         streamingSubagentPrompts.size > 0 ? streamingSubagentPrompts : null,
       );
       for (const msg of normalized) {
-        // DEBUG: log normalized messages with user role
-        if (msg.kind === 'text' && msg.role === 'user') {
-          console.log('[NORMALIZED-USER-MSG] id:', msg.id, '| content preview:', String(msg.content || '').slice(0, 200));
-        }
         // Preserve parentToolUseId from SDK wrapper for subagent tool grouping
         if (transformedMessage.parentToolUseId && !msg.parentToolUseId) {
           msg.parentToolUseId = transformedMessage.parentToolUseId;
