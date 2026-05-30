@@ -182,6 +182,7 @@
       "showingLast": "Showing last {{count}} messages ({{total}} total)",
       "loadEarlier": "Load earlier messages",
       "loadAll": "Load all messages",
+      "loadMore": "Load {{count}} more",
       "loadingAll": "Loading all messages...",
       "allLoaded": "All messages loaded",
       "perfWarning": "All messages loaded — scrolling may be slower. Click \"Scroll to bottom\" to restore performance."
@@ -246,5 +247,16 @@
   },
   "tasks": {
     "nextTaskPrompt": "Start the next task"
+  },
+  "scrollNav": {
+    "jumpTo": "Jump to: {{snippet}}",
+    "jumpToMessage": "Jump to message {{index}}",
+    "fromYou": "You",
+    "aiReply": "AI Reply",
+    "loadAll": "Load all",
+    "first": "Top",
+    "previous": "Previous",
+    "next": "Next",
+    "last": "Bottom"
   }
 }
