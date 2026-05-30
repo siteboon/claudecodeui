@@ -130,6 +130,7 @@ async function spawnGemini(command, options = {}, ws) {
     let sessionCreatedSent = false; // Track if we've already sent session-created event
     let assistantBlocks = []; // Accumulate the full response blocks including tools
     let stderrHasInvalidSession = false; // Detect stale cliSessionId errors
+    let invalidSessionStderrBuffer = []; // Hold invalid-session messages until we know if we'll retry
 
     // Use tools settings passed from frontend, or defaults
     const settings = toolsSettings || {
@@ -470,11 +471,20 @@ async function spawnGemini(command, options = {}, ws) {
                 return;
             }
 
+            const socketSessionId = typeof ws.getSessionId === 'function' ? ws.getSessionId() : (capturedSessionId || sessionId);
+
             if (errorMsg.toLowerCase().includes('invalid session identifier')) {
                 stderrHasInvalidSession = true;
             }
 
-            const socketSessionId = typeof ws.getSessionId === 'function' ? ws.getSessionId() : (capturedSessionId || sessionId);
+            // If this is an invalid-session error and a retry is possible, buffer it
+            // rather than sending immediately — it will be discarded on a successful
+            // retry, or flushed to the client if the retry also fails / won't happen.
+            if (stderrHasInvalidSession && !options._retried) {
+                invalidSessionStderrBuffer.push({ errorMsg, socketSessionId });
+                return;
+            }
+
             ws.send(createNormalizedMessage({ kind: 'error', content: errorMsg, sessionId: socketSessionId, provider: 'gemini' }));
         });
 
@@ -497,9 +507,14 @@ async function spawnGemini(command, options = {}, ws) {
                 sessionManager.addMessage(finalSessionId, 'assistant', assistantBlocks);
             }
 
-            // Suppress 'complete' when we're about to retry — the retry emits its own
+            // Suppress 'complete' (and buffered invalid-session errors) when we're
+            // about to retry — the retry emits its own events. If no retry, flush
+            // any buffered messages so the client sees the real error.
             const willRetry = code === 42 && sessionId && stderrHasInvalidSession && !options._retried;
             if (!willRetry) {
+                for (const { errorMsg, socketSessionId } of invalidSessionStderrBuffer) {
+                    ws.send(createNormalizedMessage({ kind: 'error', content: errorMsg, sessionId: socketSessionId, provider: 'gemini' }));
+                }
                 ws.send(createNormalizedMessage({ kind: 'complete', exitCode: code, isNewSession: !sessionId && !!command, sessionId: finalSessionId, provider: 'gemini' }));
             }
 
