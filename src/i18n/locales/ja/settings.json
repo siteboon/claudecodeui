@@ -115,6 +115,12 @@
       "actionRequired": "対応が必要",
       "stop": "実行停止",
       "error": "実行失敗"
+    },
+    "sound": {
+      "title": "Sound",
+      "enabled": "Completion Sound",
+      "description": "Play a sound when a run finishes",
+      "test": "Test"
     }
   },
   "appearanceSettings": {

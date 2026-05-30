@@ -180,7 +180,7 @@ export default function NotificationsSettingsTab({
               type="button"
               role="switch"
               aria-checked={soundEnabled}
-              aria-label={t('notifications.sound.enabled')}
+              aria-label={t('notifications.sound.title')}
               onClick={handleToggleSound}
               className={`relative inline-flex h-7 w-12 flex-shrink-0 touch-manipulation cursor-pointer items-center rounded-full border-2 transition-colors duration-200 ${
                 soundEnabled
