@@ -766,9 +766,14 @@ export function useChatComposerState({
       return next;
     });
     // Clear any queued prompt when project changes — prevents leaked sends to wrong project.
-    // Sequence: user queues in Project A → switches to Project B → isLoading resets → queue fires with B's context.
     clearQueuedPrompt();
   }, [selectedProjectId]);
+
+  // Also clear queue when session changes within same project — same leak vector.
+  const selectedSessionId = selectedSession?.id;
+  useEffect(() => {
+    clearQueuedPrompt();
+  }, [selectedSessionId]);
 
   useEffect(() => {
     if (!selectedProjectId) {
