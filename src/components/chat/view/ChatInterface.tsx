@@ -10,6 +10,7 @@ import { useChatProviderState } from '../hooks/useChatProviderState';
 import { useChatSessionState } from '../hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '../hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '../hooks/useChatComposerState';
+import { useWhisperDictation } from '../hooks/useWhisperDictation';
 import { useSessionStore } from '../../../stores/useSessionStore';
 
 import ChatMessagesPane from './subcomponents/ChatMessagesPane';
@@ -330,6 +331,12 @@ function ChatInterface({
     }
   }, [scrollContainerRef]);
 
+  const { state: dictationState, errorMessage: dictationError, toggleRecording } = useWhisperDictation({
+    onTranscription: (text) => {
+      setInput((prev) => prev ? `${prev} ${text}` : text);
+    },
+  });
+
   const handleForkFromMessage = useCallback((message: ChatMessage) => {
     if (!selectedProject) return;
     const forkContent = String(message.content || '');
@@ -496,6 +503,9 @@ function ChatInterface({
           queuedPrompt={queuedPrompt}
           onClearQueuedPrompt={clearQueuedPrompt}
           onTogglePromptNav={() => setShowPromptNav((v) => !v)}
+          dictationState={dictationState}
+          dictationError={dictationError}
+          onToggleDictation={toggleRecording}
         />
       </div>
 

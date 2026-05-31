@@ -11,7 +11,7 @@ import type {
   SetStateAction,
   TouchEvent,
 } from 'react';
-import { ImageIcon, MessageSquareIcon, XIcon, ArrowDownIcon, ClockIcon, ListIcon } from 'lucide-react';
+import { ImageIcon, MessageSquareIcon, XIcon, ArrowDownIcon, ClockIcon, ListIcon, MicIcon, MicOffIcon, LoaderIcon } from 'lucide-react';
 import type { ChatMessage, PendingPermissionRequest, PermissionMode, Provider } from '../../types/types';
 import CommandMenu from './CommandMenu';
 import ClaudeStatus from './ClaudeStatus';
@@ -109,6 +109,9 @@ interface ChatComposerProps {
   queuedPrompt?: string | null;
   onClearQueuedPrompt?: () => void;
   onTogglePromptNav?: () => void;
+  dictationState?: 'idle' | 'recording' | 'transcribing' | 'error';
+  dictationError?: string | null;
+  onToggleDictation?: () => void;
 }
 
 export default function ChatComposer({
@@ -171,6 +174,9 @@ export default function ChatComposer({
   queuedPrompt,
   onClearQueuedPrompt,
   onTogglePromptNav,
+  dictationState = 'idle',
+  dictationError,
+  onToggleDictation,
 }: ChatComposerProps) {
   const { t } = useTranslation('chat');
   const textareaRect = textareaRef.current?.getBoundingClientRect();
@@ -355,6 +361,37 @@ export default function ChatComposer({
             >
               <ImageIcon />
             </PromptInputButton>
+
+            {onToggleDictation && (
+              <PromptInputButton
+                tooltip={{
+                  content: dictationState === 'recording'
+                    ? t('input.stopDictation', { defaultValue: 'Stop recording' })
+                    : dictationState === 'transcribing'
+                      ? t('input.transcribing', { defaultValue: 'Transcribing…' })
+                      : dictationState === 'error'
+                        ? (dictationError || t('input.dictationError', { defaultValue: 'Dictation error' }))
+                        : t('input.startDictation', { defaultValue: 'Dictate with Whisper' }),
+                }}
+                onClick={onToggleDictation}
+                disabled={dictationState === 'transcribing'}
+                className={
+                  dictationState === 'recording'
+                    ? 'text-red-500 animate-pulse'
+                    : dictationState === 'error'
+                      ? 'text-red-400'
+                      : ''
+                }
+              >
+                {dictationState === 'transcribing' ? (
+                  <LoaderIcon className="animate-spin" />
+                ) : dictationState === 'recording' ? (
+                  <MicOffIcon />
+                ) : (
+                  <MicIcon />
+                )}
+              </PromptInputButton>
+            )}
 
             <PromptInputButton
               tooltip={{ content: t('input.showAllCommands') }}

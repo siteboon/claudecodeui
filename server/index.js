@@ -1116,6 +1116,53 @@ app.post('/api/projects/:projectId/upload-images', authenticateToken, async (req
     }
 });
 
+// POST /api/transcribe - Forward audio to Whisper ASR service and return transcription text.
+// Whisper endpoint is configured via WHISPER_URL env var (default: http://192.168.1.16:9000).
+app.post('/api/transcribe', authenticateToken, async (req, res) => {
+    try {
+        const multer = (await import('multer')).default;
+        const fs = (await import('fs')).promises;
+        const os = (await import('os')).default;
+
+        const whisperBase = process.env.WHISPER_URL || 'http://192.168.1.16:9000';
+        const whisperUrl = `${whisperBase}/asr?task=transcribe&language=auto&output=json`;
+
+        const storage = multer.diskStorage({
+            destination: (_req, _file, cb) => cb(null, os.tmpdir()),
+            filename: (_req, _file, cb) => cb(null, `whisper-${Date.now()}-${Math.random().toString(36).slice(2)}.webm`),
+        });
+        const upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024 } });
+
+        upload.single('audio')(req, res, async (err) => {
+            if (err) return res.status(400).json({ error: err.message });
+            if (!req.file) return res.status(400).json({ error: 'No audio file provided' });
+
+            try {
+                // Use native Node 18+ FormData + fetch (no extra deps)
+                const fileBuffer = await fs.readFile(req.file.path);
+                const blob = new Blob([fileBuffer], { type: req.file.mimetype || 'audio/webm' });
+                const form = new FormData();
+                form.append('audio_file', blob, req.file.originalname || 'audio.webm');
+
+                const whisperRes = await fetch(whisperUrl, { method: 'POST', body: form });
+                if (!whisperRes.ok) {
+                    const errText = await whisperRes.text();
+                    return res.status(502).json({ error: `Whisper error ${whisperRes.status}: ${errText.slice(0, 200)}` });
+                }
+
+                const data = await whisperRes.json();
+                const text = (data.text || '').trim();
+                res.json({ text });
+            } finally {
+                fs.unlink(req.file.path).catch(() => {});
+            }
+        });
+    } catch (error) {
+        console.error('Transcribe endpoint error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Get token usage for a specific session. `projectId` is the DB primary key;
 // the Claude branch below resolves it to an absolute path via the DB.
 app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticateToken, async (req, res) => {
