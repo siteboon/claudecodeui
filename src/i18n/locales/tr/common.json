@@ -176,7 +176,6 @@
     },
     "step3": {
       "reviewConfig": "Yapılandırmanı Gözden Geçir",
-      "workspaceType": "Çalışma Alanı Türü:",
       "existingWorkspace": "Mevcut Çalışma Alanı",
       "newWorkspace": "Yeni Çalışma Alanı",
       "path": "Yol:",

@@ -14,10 +14,10 @@ import { useSessionStore } from '../../../stores/useSessionStore';
 
 import ChatMessagesPane from './subcomponents/ChatMessagesPane';
 import ChatComposer from './subcomponents/ChatComposer';
+import CommandResultModal from './subcomponents/CommandResultModal';
 
 
 type PendingViewSession = {
-  sessionId: string | null;
   startedAt: number;
 };
 
@@ -34,7 +34,6 @@ function ChatInterface({
   onSessionProcessing,
   onSessionNotProcessing,
   processingSessions,
-  onReplaceTemporarySession,
   onNavigateToSession,
   onShowSettings,
   autoExpandTools,
@@ -43,13 +42,13 @@ function ChatInterface({
   autoScrollToBottom,
   sendByCtrlEnter,
   externalMessageUpdate,
+  newSessionTrigger,
   onShowAllTasks,
 }: ChatInterfaceProps) {
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
   const { t } = useTranslation('chat');
 
   const sessionStore = useSessionStore();
-  const streamBufferRef = useRef('');
   const streamTimerRef = useRef<number | null>(null);
   const accumulatedStreamRef = useRef('');
   const pendingViewSessionRef = useRef<PendingViewSession | null>(null);
@@ -59,7 +58,6 @@ function ChatInterface({
       clearTimeout(streamTimerRef.current);
       streamTimerRef.current = null;
     }
-    streamBufferRef.current = '';
     accumulatedStreamRef.current = '';
   }, []);
 
@@ -74,19 +72,26 @@ function ChatInterface({
     setCodexModel,
     geminiModel,
     setGeminiModel,
+    opencodeModel,
+    setOpenCodeModel,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
     cyclePermissionMode,
+    providerModelCatalog,
+    providerModelCacheCatalog,
+    providerModelsLoading,
+    providerModelsRefreshing,
+    hardRefreshProviderModels,
+    selectProviderModel,
   } = useChatProviderState({
     selectedSession,
+    selectedProject,
   });
 
   const {
     chatMessages,
     addMessage,
-    clearMessages,
-    rewindMessages,
     isLoading,
     setIsLoading,
     currentSessionId,
@@ -123,6 +128,7 @@ function ChatInterface({
     sendMessage,
     autoScrollToBottom,
     externalMessageUpdate,
+    newSessionTrigger,
     processingSessions,
     resetStreamingState,
     pendingViewSessionRef,
@@ -171,7 +177,9 @@ function ChatInterface({
     handlePermissionDecision,
     handleGrantToolPermission,
     handleInputFocusChange,
-    isInputFocused,
+    isInputFocused: _isInputFocused,
+    commandModalPayload,
+    closeCommandModal,
   } = useChatComposerState({
     selectedProject,
     selectedSession,
@@ -183,6 +191,7 @@ function ChatInterface({
     claudeModel,
     codexModel,
     geminiModel,
+    opencodeModel,
     isLoading,
     canAbortSession,
     tokenBudget,
@@ -196,8 +205,6 @@ function ChatInterface({
     pendingViewSessionRef,
     scrollToBottom,
     addMessage,
-    clearMessages,
-    rewindMessages,
     setIsLoading,
     setCanAbortSession,
     setClaudeStatus,
@@ -212,7 +219,8 @@ function ChatInterface({
     const providerVal = (localStorage.getItem('selected-provider') as LLMProvider) || 'claude';
     await sessionStore.refreshFromServer(selectedSession.id, {
       provider: (selectedSession.__provider || providerVal) as LLMProvider,
-      projectName: selectedProject.name,
+      // Use DB projectId; legacy folder-derived projectName is no longer accepted here.
+      projectId: selectedProject.projectId,
       projectPath: selectedProject.fullPath || selectedProject.path || '',
     });
     setIsLoading(false);
@@ -222,7 +230,6 @@ function ChatInterface({
   useChatRealtimeHandlers({
     latestMessage,
     provider,
-    selectedProject,
     selectedSession,
     currentSessionId,
     setCurrentSessionId,
@@ -232,13 +239,12 @@ function ChatInterface({
     setTokenBudget,
     setPendingPermissionRequests,
     pendingViewSessionRef,
-    streamBufferRef,
     streamTimerRef,
     accumulatedStreamRef,
     onSessionInactive,
+    onSessionActive,
     onSessionProcessing,
     onSessionNotProcessing,
-    onReplaceTemporarySession,
     onNavigateToSession,
     onWebSocketReconnect: handleWebSocketReconnect,
     sessionStore,
@@ -283,6 +289,8 @@ function ChatInterface({
           ? t('messageTypes.codex')
           : provider === 'gemini'
             ? t('messageTypes.gemini')
+            : provider === 'opencode'
+              ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
             : t('messageTypes.claude');
 
     return (
@@ -321,6 +329,10 @@ function ChatInterface({
           setCodexModel={setCodexModel}
           geminiModel={geminiModel}
           setGeminiModel={setGeminiModel}
+          opencodeModel={opencodeModel}
+          setOpenCodeModel={setOpenCodeModel}
+          providerModelCatalog={providerModelCatalog}
+          providerModelsLoading={providerModelsLoading}
           tasksEnabled={tasksEnabled}
           isTaskMasterInstalled={isTaskMasterInstalled}
           onShowAllTasks={onShowAllTasks}
@@ -409,6 +421,8 @@ function ChatInterface({
                   ? t('messageTypes.codex')
                   : provider === 'gemini'
                     ? t('messageTypes.gemini')
+                    : provider === 'opencode'
+                      ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
                     : t('messageTypes.claude'),
           })}
           isTextareaExpanded={isTextareaExpanded}
@@ -417,6 +431,17 @@ function ChatInterface({
       </div>
 
       <QuickSettingsPanel />
+
+      <CommandResultModal
+        payload={commandModalPayload}
+        onClose={closeCommandModal}
+        providerModelCatalog={providerModelCatalog}
+        providerModelCacheCatalog={providerModelCacheCatalog}
+        providerModelsRefreshing={providerModelsRefreshing}
+        onHardRefreshProviderModels={hardRefreshProviderModels}
+        currentSessionId={currentSessionId || selectedSession?.id || null}
+        onSelectProviderModel={selectProviderModel}
+      />
     </PermissionContext.Provider>
   );
 }

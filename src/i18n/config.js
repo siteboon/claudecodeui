@@ -187,7 +187,7 @@ i18n
     fallbackLng: 'en',
 
     // Enable debug mode in development (logs missing keys to console)
-    debug: import.meta.env.DEV,
+    debug: false,
 
     // Namespaces - load only what's needed
     ns: ['common', 'settings', 'auth', 'sidebar', 'chat', 'codeEditor', 'tasks'],
