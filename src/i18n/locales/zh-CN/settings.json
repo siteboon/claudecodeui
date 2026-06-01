@@ -55,8 +55,7 @@
       "appearance": "外观",
       "toolDisplay": "工具显示",
       "viewOptions": "视图选项",
-      "inputSettings": "输入设置",
-      "whisperDictation": "Whisper 听写"
+      "inputSettings": "输入设置"
     },
     "darkMode": "深色模式",
     "autoExpandTools": "自动展开工具",
@@ -71,16 +70,6 @@
       "openPanel": "打开设置面板",
       "draggingStatus": "正在拖拽...",
       "toggleAndMove": "点击切换，拖拽移动"
-    },
-    "whisper": {
-      "modes": {
-        "default": "默认模式",
-        "defaultDescription": "直接转录您的语音",
-        "prompt": "提示词增强",
-        "promptDescription": "将粗略的想法转化为清晰、详细的 AI 提示词",
-        "vibe": "Vibe 模式",
-        "vibeDescription": "将想法格式化为带有详细说明的清晰智能体指令"
-      }
     }
   },
   "terminalShortcuts": {
@@ -106,8 +95,8 @@
     "apiTokens": "API 和令牌",
     "tasks": "任务",
     "notifications": "通知",
-    "plugins": "插件"
-    
+    "plugins": "插件",
+    "about": "关于"
   },
   "notifications": {
     "title": "通知",

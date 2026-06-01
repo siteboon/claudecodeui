@@ -1,6 +1,10 @@
 import { spawn } from 'child_process';
 import crossSpawn from 'cross-spawn';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
+import { sessionsService } from './modules/providers/services/sessions.service.js';
+import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
+import { providerModelsService } from './modules/providers/services/provider-models.service.js';
+import { createNormalizedMessage } from './shared/utils.js';
 
 // Use cross-spawn on Windows for better command execution
 const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
@@ -25,6 +29,7 @@ function isWorkspaceTrustPrompt(text = '') {
 async function spawnCursor(command, options = {}, ws) {
   return new Promise(async (resolve, reject) => {
     const { sessionId, projectPath, cwd, resume, toolsSettings, skipPermissions, model, sessionSummary } = options;
+    const resolvedModel = await providerModelsService.resolveResumeModel('cursor', sessionId, model);
     let capturedSessionId = sessionId; // Track session ID throughout the process
     let sessionCreatedSent = false; // Track if we've already sent session-created event
     let hasRetriedWithTrust = false;
@@ -49,9 +54,10 @@ async function spawnCursor(command, options = {}, ws) {
       // Provide a prompt (works for both new and resumed sessions)
       baseArgs.push('-p', command);
 
-      // Add model flag if specified (only meaningful for new sessions; harmless on resume)
-      if (!sessionId && model) {
-        baseArgs.push('--model', model);
+      // Model overrides are applied to both new and resumed sessions so a
+      // session-scoped change request can take effect on the next turn.
+      if (resolvedModel) {
+        baseArgs.push('--model', resolvedModel);
       }
 
       // Request streaming JSON when we are providing a prompt
@@ -147,7 +153,6 @@ async function spawnCursor(command, options = {}, ws) {
 
         try {
           const response = JSON.parse(line);
-          console.log('Parsed JSON response:', response);
 
           // Handle different message types
           switch (response.type) {
@@ -156,7 +161,6 @@ async function spawnCursor(command, options = {}, ws) {
                 // Capture session ID
                 if (response.session_id && !capturedSessionId) {
                   capturedSessionId = response.session_id;
-                  console.log('Captured session ID:', capturedSessionId);
 
                   // Update process key with captured session ID
                   if (processKey !== capturedSessionId) {
@@ -172,96 +176,56 @@ async function spawnCursor(command, options = {}, ws) {
                   // Send session-created event only once for new sessions
                   if (!sessionId && !sessionCreatedSent) {
                     sessionCreatedSent = true;
-                    ws.send({
-                      type: 'session-created',
-                      sessionId: capturedSessionId,
-                      model: response.model,
-                      cwd: response.cwd
-                    });
+                    ws.send(createNormalizedMessage({ kind: 'session_created', newSessionId: capturedSessionId, model: response.model, cwd: response.cwd, sessionId: capturedSessionId, provider: 'cursor' }));
                   }
                 }
 
-                // Send system info to frontend
-                ws.send({
-                  type: 'cursor-system',
-                  data: response,
-                  sessionId: capturedSessionId || sessionId || null
-                });
+                // System info — no longer needed by the frontend (session-lifecycle 'created' handles nav).
               }
               break;
 
             case 'user':
-              // Forward user message
-              ws.send({
-                type: 'cursor-user',
-                data: response,
-                sessionId: capturedSessionId || sessionId || null
-              });
+              // User messages are not displayed in the UI — skip.
               break;
 
             case 'assistant':
               // Accumulate assistant message chunks
               if (response.message && response.message.content && response.message.content.length > 0) {
-                const textContent = response.message.content[0].text;
-
-                // Send as Claude-compatible format for frontend
-                ws.send({
-                  type: 'claude-response',
-                  data: {
-                    type: 'content_block_delta',
-                    delta: {
-                      type: 'text_delta',
-                      text: textContent
-                    }
-                  },
-                  sessionId: capturedSessionId || sessionId || null
-                });
+                const normalized = sessionsService.normalizeMessage('cursor', response, capturedSessionId || sessionId || null);
+                for (const msg of normalized) ws.send(msg);
               }
               break;
 
-            case 'result':
-              // Session complete
-              console.log('Cursor session result:', response);
-
-              // Do not emit an extra content_block_stop here.
-              // The UI already finalizes the streaming message in cursor-result handling,
-              // and emitting both can produce duplicate assistant messages.
-              ws.send({
-                type: 'cursor-result',
-                sessionId: capturedSessionId || sessionId,
-                data: response,
-                success: response.subtype === 'success'
-              });
+            case 'result': {
+              // Session complete — send stream end + lifecycle complete with result payload
+              const resultText = typeof response.result === 'string' ? response.result : '';
+              ws.send(createNormalizedMessage({
+                kind: 'complete',
+                exitCode: response.subtype === 'success' ? 0 : 1,
+                resultText,
+                isError: response.subtype !== 'success',
+                sessionId: capturedSessionId || sessionId, provider: 'cursor',
+              }));
               break;
+            }
 
             default:
-              // Forward any other message types
-              ws.send({
-                type: 'cursor-response',
-                data: response,
-                sessionId: capturedSessionId || sessionId || null
-              });
+              // Unknown message types — ignore.
           }
         } catch (parseError) {
-          console.log('Non-JSON response:', line);
-
           if (shouldSuppressForTrustRetry(line)) {
             return;
           }
 
-          // If not JSON, send as raw text
-          ws.send({
-            type: 'cursor-output',
-            data: line,
-            sessionId: capturedSessionId || sessionId || null
-          });
+          // If not JSON, send as stream delta via adapter
+          const normalized = sessionsService.normalizeMessage('cursor', line, capturedSessionId || sessionId || null);
+          for (const msg of normalized) ws.send(msg);
         }
       };
 
       // Handle stdout (streaming JSON responses)
       cursorProcess.stdout.on('data', (data) => {
         const rawOutput = data.toString();
-        console.log('Cursor CLI stdout:', rawOutput);
 
         // Stream chunks can split JSON objects across packets; keep trailing partial line.
         stdoutLineBuffer += rawOutput;
@@ -282,18 +246,11 @@ async function spawnCursor(command, options = {}, ws) {
           return;
         }
 
-        ws.send({
-          type: 'cursor-error',
-          error: stderrText,
-          sessionId: capturedSessionId || sessionId || null,
-          provider: 'cursor'
-        });
+        ws.send(createNormalizedMessage({ kind: 'error', content: stderrText, sessionId: capturedSessionId || sessionId || null, provider: 'cursor' }));
       });
 
       // Handle process completion
       cursorProcess.on('close', async (code) => {
-        console.log(`Cursor CLI process exited with code ${code}`);
-
         const finalSessionId = capturedSessionId || sessionId || processKey;
         activeCursorProcesses.delete(finalSessionId);
 
@@ -314,13 +271,7 @@ async function spawnCursor(command, options = {}, ws) {
           return;
         }
 
-        ws.send({
-          type: 'claude-complete',
-          sessionId: finalSessionId,
-          exitCode: code,
-          provider: 'cursor',
-          isNewSession: !sessionId && !!command // Flag to indicate this was a new session
-        });
+        ws.send(createNormalizedMessage({ kind: 'complete', exitCode: code, isNewSession: !sessionId && !!command, sessionId: finalSessionId, provider: 'cursor' }));
 
         if (code === 0) {
           notifyTerminalState({ code });
@@ -332,19 +283,20 @@ async function spawnCursor(command, options = {}, ws) {
       });
 
       // Handle process errors
-      cursorProcess.on('error', (error) => {
+      cursorProcess.on('error', async (error) => {
         console.error('Cursor CLI process error:', error);
 
         // Clean up process reference on error
         const finalSessionId = capturedSessionId || sessionId || processKey;
         activeCursorProcesses.delete(finalSessionId);
 
-        ws.send({
-          type: 'cursor-error',
-          error: error.message,
-          sessionId: capturedSessionId || sessionId || null,
-          provider: 'cursor'
-        });
+        // Check if Cursor CLI is installed for a clearer error message
+        const installed = await providerAuthService.isProviderInstalled('cursor');
+        const errorContent = !installed
+          ? 'Cursor CLI is not installed. Please install it from https://cursor.com'
+          : error.message;
+
+        ws.send(createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider: 'cursor' }));
         notifyTerminalState({ error });
 
         settleOnce(() => reject(error));

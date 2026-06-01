@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { copyTextToClipboard } from '../../../../utils/clipboard';
+import { ToolStatusBadge } from './ToolStatusBadge';
+import type { ToolStatus } from './ToolStatusBadge';
 
 type ActionType = 'copy' | 'open-file' | 'jump-to-results' | 'none';
 
@@ -23,6 +25,7 @@ interface OneLineDisplayProps {
   resultId?: string;
   toolResult?: any;
   toolId?: string;
+  status?: ToolStatus;
 }
 
 /**
@@ -40,14 +43,15 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
   style,
   wrapText = false,
   colorScheme = {
-    primary: 'text-gray-700 dark:text-gray-300',
-    secondary: 'text-gray-500 dark:text-gray-400',
+    primary: 'text-foreground',
+    secondary: 'text-muted-foreground',
     background: '',
-    border: 'border-gray-300 dark:border-gray-600',
-    icon: 'text-gray-500 dark:text-gray-400'
+    border: 'border-border',
+    icon: 'text-muted-foreground',
   },
   toolResult,
-  toolId
+  toolId,
+  status,
 }) => {
   const [copied, setCopied] = useState(false);
   const isTerminal = style === 'terminal';
@@ -55,9 +59,7 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
   const handleAction = async () => {
     if (action === 'copy' && value) {
       const didCopy = await copyTextToClipboard(value);
-      if (!didCopy) {
-        return;
-      }
+      if (!didCopy) return;
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } else if (onAction) {
@@ -68,7 +70,7 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
   const renderCopyButton = () => (
     <button
       onClick={handleAction}
-      className="ml-1 flex-shrink-0 text-gray-400 opacity-0 transition-all hover:text-gray-600 group-hover:opacity-100 dark:hover:text-gray-200"
+      className="ml-1 flex-shrink-0 text-muted-foreground/40 opacity-0 transition-all hover:text-muted-foreground group-hover:opacity-100"
       title="Copy to clipboard"
       aria-label="Copy to clipboard"
     >
@@ -84,7 +86,7 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
     </button>
   );
 
-  // Terminal style: dark pill only around the command
+  // Terminal style: dark pill around the command
   if (isTerminal) {
     return (
       <div className="group my-1">
@@ -100,12 +102,13 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
                 <span className="select-none text-green-600 dark:text-green-500">$ </span>{value}
               </code>
             </div>
+            {status && <ToolStatusBadge status={status} className="mt-0.5" />}
             {action === 'copy' && renderCopyButton()}
           </div>
         </div>
         {secondary && (
           <div className="ml-7 mt-1">
-            <span className="text-[11px] italic text-gray-400 dark:text-gray-500">
+            <span className="text-[11px] italic text-muted-foreground/60">
               {secondary}
             </span>
           </div>
@@ -114,20 +117,21 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
     );
   }
 
-  // File open style - show filename only, full path on hover
+  // File open style
   if (action === 'open-file') {
     const displayName = value.split('/').pop() || value;
     return (
       <div className={`group flex items-center gap-1.5 border-l-2 ${colorScheme.border} my-0.5 py-0.5 pl-3`}>
-        <span className="flex-shrink-0 text-xs text-gray-500 dark:text-gray-400">{label || toolName}</span>
-        <span className="text-[10px] text-gray-300 dark:text-gray-600">/</span>
+        <span className="flex-shrink-0 text-xs text-muted-foreground">{label || toolName}</span>
+        <span className="text-[10px] text-muted-foreground/40">/</span>
         <button
           onClick={handleAction}
-          className="truncate font-mono text-xs text-blue-600 transition-colors hover:text-blue-700 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
+          className="truncate font-mono text-xs text-primary transition-colors hover:text-primary/80 hover:underline"
           title={value}
         >
           {displayName}
         </button>
+        {status && <ToolStatusBadge status={status} className="ml-auto" />}
       </div>
     );
   }
@@ -136,20 +140,21 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
   if (action === 'jump-to-results') {
     return (
       <div className={`group flex items-center gap-1.5 border-l-2 ${colorScheme.border} my-0.5 py-0.5 pl-3`}>
-        <span className="flex-shrink-0 text-xs text-gray-500 dark:text-gray-400">{label || toolName}</span>
-        <span className="text-[10px] text-gray-300 dark:text-gray-600">/</span>
+        <span className="flex-shrink-0 text-xs text-muted-foreground">{label || toolName}</span>
+        <span className="text-[10px] text-muted-foreground/40">/</span>
         <span className={`min-w-0 flex-1 truncate font-mono text-xs ${colorScheme.primary}`}>
           {value}
         </span>
         {secondary && (
-          <span className="flex-shrink-0 text-[11px] italic text-gray-400 dark:text-gray-500">
+          <span className="flex-shrink-0 text-[11px] italic text-muted-foreground/60">
             {secondary}
           </span>
         )}
+        {status && <ToolStatusBadge status={status} />}
         {toolResult && (
           <a
             href={`#tool-result-${toolId}`}
-            className="flex flex-shrink-0 items-center gap-0.5 text-[11px] text-blue-600 transition-colors hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+            className="flex flex-shrink-0 items-center gap-0.5 text-[11px] text-primary transition-colors hover:text-primary/80"
           >
             <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -167,10 +172,10 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
         <span className={`${colorScheme.icon} flex-shrink-0 text-xs`}>{icon}</span>
       )}
       {!icon && (label || toolName) && (
-        <span className="flex-shrink-0 text-xs text-gray-500 dark:text-gray-400">{label || toolName}</span>
+        <span className="flex-shrink-0 text-xs text-muted-foreground">{label || toolName}</span>
       )}
       {(icon || label || toolName) && (
-        <span className="text-[10px] text-gray-300 dark:text-gray-600">/</span>
+        <span className="text-[10px] text-muted-foreground/40">/</span>
       )}
       <span className={`font-mono text-xs ${wrapText ? 'whitespace-pre-wrap break-all' : 'truncate'} min-w-0 flex-1 ${colorScheme.primary}`}>
         {value}
@@ -180,6 +185,7 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
           {secondary}
         </span>
       )}
+      {status && <ToolStatusBadge status={status} />}
       {action === 'copy' && renderCopyButton()}
     </div>
   );

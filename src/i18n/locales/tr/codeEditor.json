@@ -1,0 +1,36 @@
+{
+  "toolbar": {
+    "changes": "değişiklik",
+    "previousChange": "Önceki değişiklik",
+    "nextChange": "Sonraki değişiklik",
+    "hideDiff": "Diff vurgusunu gizle",
+    "showDiff": "Diff vurgusunu göster",
+    "settings": "Editör Ayarları",
+    "collapse": "Editörü daralt",
+    "expand": "Editörü tüm genişliğe aç"
+  },
+  "loading": "{{fileName}} yükleniyor...",
+  "header": {
+    "showingChanges": "Değişiklikler gösteriliyor"
+  },
+  "actions": {
+    "download": "Dosyayı indir",
+    "save": "Kaydet",
+    "saving": "Kaydediliyor...",
+    "saved": "Kaydedildi!",
+    "exitFullscreen": "Tam ekrandan çık",
+    "fullscreen": "Tam ekran",
+    "close": "Kapat",
+    "previewMarkdown": "Markdown önizle",
+    "editMarkdown": "Markdown düzenle"
+  },
+  "footer": {
+    "lines": "Satır:",
+    "characters": "Karakter:",
+    "shortcuts": "Kaydetmek için Ctrl+S • Kapatmak için Esc"
+  },
+  "binaryFile": {
+    "title": "Binary Dosya",
+    "message": "\"{{fileName}}\" dosyası binary olduğu için metin editöründe gösterilemez."
+  }
+}

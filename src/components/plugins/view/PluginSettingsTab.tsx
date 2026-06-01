@@ -1,11 +1,93 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Trash2, RefreshCw, GitBranch, Loader2, ServerCrash, ShieldAlert, ExternalLink, BookOpen, Download, BarChart3 } from 'lucide-react';
+import {
+  Activity,
+  BarChart3,
+  BookOpen,
+  Clock,
+  Download,
+  ExternalLink,
+  GitBranch,
+  Loader2,
+  RefreshCw,
+  ServerCrash,
+  ShieldAlert,
+  Terminal,
+  Trash2,
+  type LucideIcon,
+} from 'lucide-react';
+
 import { usePlugins } from '../../../contexts/PluginsContext';
 import type { Plugin } from '../../../contexts/PluginsContext';
+
 import PluginIcon from './PluginIcon';
 
 const STARTER_PLUGIN_URL = 'https://github.com/cloudcli-ai/cloudcli-plugin-starter';
+const TERMINAL_PLUGIN_URL = 'https://github.com/cloudcli-ai/cloudcli-plugin-terminal';
+const SCHEDULED_PROMPT_PLUGIN_URL = 'https://github.com/grostim/cloudcli-cron';
+const CLAUDE_WATCH_PLUGIN_URL = 'https://github.com/satsuki19980613/cloudcli-claude-watch';
+
+type PluginRecommendation = {
+  id: string;
+  translationKey: string;
+  repoUrl: string;
+  installedNames: string[];
+  icon: LucideIcon;
+  source: 'official' | 'unofficial';
+};
+
+const OFFICIAL_PLUGIN_RECOMMENDATIONS: PluginRecommendation[] = [
+  {
+    id: 'project-stats',
+    translationKey: 'starterPlugin',
+    repoUrl: STARTER_PLUGIN_URL,
+    installedNames: ['project-stats'],
+    icon: BarChart3,
+    source: 'official',
+  },
+  {
+    id: 'web-terminal',
+    translationKey: 'terminalPlugin',
+    repoUrl: TERMINAL_PLUGIN_URL,
+    installedNames: ['web-terminal'],
+    icon: Terminal,
+    source: 'official',
+  },
+];
+
+const UNOFFICIAL_PLUGIN_RECOMMENDATIONS: PluginRecommendation[] = [
+  {
+    id: 'cloudcli-claude-watch',
+    translationKey: 'claudeWatchPlugin',
+    repoUrl: CLAUDE_WATCH_PLUGIN_URL,
+    installedNames: ['cloudcli-claude-watch'],
+    icon: Activity,
+    source: 'unofficial',
+  },
+  {
+    id: 'workspace-scheduled-prompts',
+    translationKey: 'scheduledPromptPlugin',
+    repoUrl: SCHEDULED_PROMPT_PLUGIN_URL,
+    installedNames: ['workspace-scheduled-prompts'],
+    icon: Clock,
+    source: 'unofficial',
+  },
+];
+
+function repoSlug(repoUrl: string) {
+  return repoUrl.replace(/^https?:\/\/(www\.)?github\.com\//, '');
+}
+
+function normalizeRepoUrl(repoUrl: string | null) {
+  return repoUrl?.replace(/\.git$/, '').replace(/\/$/, '').toLowerCase() ?? null;
+}
+
+function pluginMatchesRecommendation(plugin: Plugin, recommendation: PluginRecommendation) {
+  return (
+    recommendation.installedNames.includes(plugin.name)
+    || normalizeRepoUrl(plugin.repoUrl) === normalizeRepoUrl(recommendation.repoUrl)
+  );
+}
 
 /* ─── Toggle Switch ─────────────────────────────────────────────────────── */
 function ToggleSwitch({ checked, onChange, ariaLabel }: { checked: boolean; onChange: (v: boolean) => void; ariaLabel: string }) {
@@ -207,56 +289,95 @@ function PluginCard({
   );
 }
 
-/* ─── Starter Plugin Card ───────────────────────────────────────────────── */
-function StarterPluginCard({ onInstall, installing }: { onInstall: () => void; installing: boolean }) {
+/* ─── Recommendation Section ────────────────────────────────────────────── */
+function RecommendationSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="space-y-2">
+      <div>
+        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {title}
+        </h4>
+        <p className="mt-0.5 text-xs text-muted-foreground/70">
+          {description}
+        </p>
+      </div>
+      <div className="space-y-2">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+/* ─── Plugin Recommendation Card ────────────────────────────────────────── */
+function PluginRecommendationCard({
+  recommendation,
+  onInstall,
+  disabled,
+  installing,
+}: {
+  recommendation: PluginRecommendation;
+  onInstall: () => void;
+  disabled: boolean;
+  installing: boolean;
+}) {
   const { t } = useTranslation('settings');
+  const Icon = recommendation.icon;
+  const isOfficial = recommendation.source === 'official';
+  const accentClass = isOfficial ? 'bg-blue-500/30' : 'bg-amber-500/40';
+  const hoverClass = isOfficial ? 'hover:border-blue-400 dark:hover:border-blue-500' : 'hover:border-amber-400 dark:hover:border-amber-500';
+  const iconClass = isOfficial ? 'text-blue-500' : 'text-amber-500';
 
   return (
-    <div className="relative flex overflow-hidden rounded-lg border border-dashed border-border bg-card transition-all duration-200 hover:border-blue-400 dark:hover:border-blue-500">
-      <div className="w-[3px] flex-shrink-0 bg-blue-500/30" />
+    <div className={`relative flex overflow-hidden rounded-lg border border-dashed border-border bg-card transition-all duration-200 ${hoverClass}`}>
+      <div className={`w-[3px] flex-shrink-0 ${accentClass}`} />
       <div className="min-w-0 flex-1 p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
-            <div className="h-5 w-5 flex-shrink-0 text-blue-500">
-              <BarChart3 className="h-5 w-5" />
+            <div className={`h-5 w-5 flex-shrink-0 ${iconClass}`}>
+              <Icon className="h-5 w-5" />
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-semibold leading-none text-foreground">
-                  {t('pluginSettings.starterPlugin.name')}
-                </span>
-                <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600 dark:bg-blue-950/50 dark:text-blue-400">
-                  {t('pluginSettings.starterPlugin.badge')}
+                  {t(`pluginSettings.${recommendation.translationKey}.name`)}
                 </span>
                 <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
                   {t('pluginSettings.tab')}
                 </span>
               </div>
               <p className="mt-1 text-sm leading-snug text-muted-foreground">
-                {t('pluginSettings.starterPlugin.description')}
+                {t(`pluginSettings.${recommendation.translationKey}.description`)}
               </p>
               <a
-                href={STARTER_PLUGIN_URL}
+                href={recommendation.repoUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground/60 transition-colors hover:text-foreground"
               >
                 <GitBranch className="h-3 w-3" />
-                cloudcli-ai/cloudcli-plugin-starter
+                {repoSlug(recommendation.repoUrl)}
               </a>
             </div>
           </div>
           <button
             onClick={onInstall}
-            disabled={installing}
-            className="flex flex-shrink-0 items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+            disabled={disabled}
+            className="flex flex-shrink-0 items-center gap-1.5 rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             {installing ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
               <Download className="h-3.5 w-3.5" />
             )}
-            {installing ? t('pluginSettings.installing') : t('pluginSettings.starterPlugin.install')}
+            {installing ? t('pluginSettings.installing') : t(`pluginSettings.${recommendation.translationKey}.install`)}
           </button>
         </div>
       </div>
@@ -272,7 +393,7 @@ export default function PluginSettingsTab() {
 
   const [gitUrl, setGitUrl] = useState('');
   const [installing, setInstalling] = useState(false);
-  const [installingStarter, setInstallingStarter] = useState(false);
+  const [installingRecommendation, setInstallingRecommendation] = useState<string | null>(null);
   const [installError, setInstallError] = useState<string | null>(null);
   const [confirmUninstall, setConfirmUninstall] = useState<string | null>(null);
   const [updatingPlugins, setUpdatingPlugins] = useState<Set<string>>(new Set());
@@ -301,14 +422,18 @@ export default function PluginSettingsTab() {
     setInstalling(false);
   };
 
-  const handleInstallStarter = async () => {
-    setInstallingStarter(true);
+  const handleInstallRecommendation = async (recommendation: PluginRecommendation) => {
+    if (installingRecommendation) return;
+    setInstallingRecommendation(recommendation.id);
     setInstallError(null);
-    const result = await installPlugin(STARTER_PLUGIN_URL);
-    if (!result.success) {
-      setInstallError(result.error || t('pluginSettings.installFailed'));
+    try {
+      const result = await installPlugin(recommendation.repoUrl);
+      if (!result.success) {
+        setInstallError(result.error || t('pluginSettings.installFailed'));
+      }
+    } finally {
+      setInstallingRecommendation(null);
     }
-    setInstallingStarter(false);
   };
 
   const handleUninstall = async (name: string) => {
@@ -325,7 +450,50 @@ export default function PluginSettingsTab() {
     }
   };
 
-  const hasStarterInstalled = plugins.some((p) => p.name === 'project-stats');
+  const isRecommendationInstalled = (recommendation: PluginRecommendation) => {
+    return plugins.some((plugin) => pluginMatchesRecommendation(plugin, recommendation));
+  };
+
+  const isOfficialPlugin = (plugin: Plugin) => {
+    return OFFICIAL_PLUGIN_RECOMMENDATIONS.some((recommendation) => (
+      pluginMatchesRecommendation(plugin, recommendation)
+    ));
+  };
+
+  const officialPlugins = plugins.filter(isOfficialPlugin);
+  const otherPlugins = plugins.filter((plugin) => !isOfficialPlugin(plugin));
+  const officialRecommendations = OFFICIAL_PLUGIN_RECOMMENDATIONS.filter(
+    (recommendation) => !isRecommendationInstalled(recommendation),
+  );
+  const unofficialRecommendations = UNOFFICIAL_PLUGIN_RECOMMENDATIONS.filter(
+    (recommendation) => !isRecommendationInstalled(recommendation),
+  );
+  const hasOfficialSection = officialPlugins.length > 0 || officialRecommendations.length > 0;
+  const hasOtherSection = otherPlugins.length > 0 || unofficialRecommendations.length > 0;
+
+  const renderPluginCard = (plugin: Plugin, index: number) => {
+    const handleToggle = async (enabled: boolean) => {
+      const r = await togglePlugin(plugin.name, enabled);
+      if (!r.success) {
+        setInstallError(r.error || t('pluginSettings.toggleFailed'));
+      }
+    };
+
+    return (
+      <PluginCard
+        key={plugin.name}
+        plugin={plugin}
+        index={index}
+        onToggle={(enabled) => void handleToggle(enabled)}
+        onUpdate={() => void handleUpdate(plugin.name)}
+        onUninstall={() => void handleUninstall(plugin.name)}
+        updating={updatingPlugins.has(plugin.name)}
+        confirmingUninstall={confirmUninstall === plugin.name}
+        onCancelUninstall={() => setConfirmUninstall(null)}
+        updateError={updateErrors[plugin.name] ?? null}
+      />
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -382,74 +550,76 @@ export default function PluginSettingsTab() {
         </span>
       </p>
 
-      {/* Starter plugin suggestion — above the list */}
-      {!loading && !hasStarterInstalled && (
-        <StarterPluginCard onInstall={handleInstallStarter} installing={installingStarter} />
-      )}
-
-      {/* Plugin List */}
+      {/* Plugin sections */}
       {loading ? (
         <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
           {t('pluginSettings.scanningPlugins')}
         </div>
-      ) : plugins.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted-foreground">{t('pluginSettings.noPluginsInstalled')}</p>
       ) : (
-        <div className="space-y-2">
-          {plugins.map((plugin, index) => {
-            const handleToggle = async (enabled: boolean) => {
-              const r = await togglePlugin(plugin.name, enabled);
-              if (!r.success) {
-                setInstallError(r.error || t('pluginSettings.toggleFailed'));
-              }
-            };
+        <div className="space-y-4">
+          {hasOfficialSection && (
+            <RecommendationSection
+              title={t('pluginSettings.sections.officialTitle')}
+              description={t('pluginSettings.sections.officialDescription')}
+            >
+              {officialPlugins.map((plugin, index) => renderPluginCard(plugin, index))}
+              {officialRecommendations.map((recommendation) => (
+                <PluginRecommendationCard
+                  key={recommendation.id}
+                  recommendation={recommendation}
+                  onInstall={() => void handleInstallRecommendation(recommendation)}
+                  disabled={!!installingRecommendation}
+                  installing={installingRecommendation === recommendation.id}
+                />
+              ))}
+            </RecommendationSection>
+          )}
 
-            return (
-              <PluginCard
-                key={plugin.name}
-                plugin={plugin}
-                index={index}
-                onToggle={(enabled) => void handleToggle(enabled)}
-                onUpdate={() => void handleUpdate(plugin.name)}
-                onUninstall={() => void handleUninstall(plugin.name)}
-                updating={updatingPlugins.has(plugin.name)}
-                confirmingUninstall={confirmUninstall === plugin.name}
-                onCancelUninstall={() => setConfirmUninstall(null)}
-                updateError={updateErrors[plugin.name] ?? null}
-              />
-            );
-          })}
+          {hasOtherSection && (
+            <RecommendationSection
+              title={t('pluginSettings.sections.unofficialTitle')}
+              description={t('pluginSettings.sections.unofficialDescription')}
+            >
+              {otherPlugins.map((plugin, index) => renderPluginCard(plugin, officialPlugins.length + index))}
+              {unofficialRecommendations.map((recommendation) => (
+                <PluginRecommendationCard
+                  key={recommendation.id}
+                  recommendation={recommendation}
+                  onInstall={() => void handleInstallRecommendation(recommendation)}
+                  disabled={!!installingRecommendation}
+                  installing={installingRecommendation === recommendation.id}
+                />
+              ))}
+            </RecommendationSection>
+          )}
         </div>
       )}
 
-      {/* Build your own */}
-      <div className="flex items-center justify-between gap-4 border-t border-border/50 pt-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <BookOpen className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground/40" />
-          <span className="text-xs text-muted-foreground/60">
-            {t('pluginSettings.buildYourOwn')}
-          </span>
-        </div>
-        <div className="flex flex-shrink-0 items-center gap-3">
-          <a
-            href={STARTER_PLUGIN_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground/60 transition-colors hover:text-foreground"
-          >
-            {t('pluginSettings.starter')} <ExternalLink className="h-2.5 w-2.5" />
-          </a>
-          <span className="text-muted-foreground/20">·</span>
-          <a
-            href="https://cloudcli.ai/docs/plugin-overview"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground/60 transition-colors hover:text-foreground"
-          >
-            {t('pluginSettings.docs')} <ExternalLink className="h-2.5 w-2.5" />
-          </a>
-        </div>
+      {/* Starter plugin */}
+      <div className="flex items-center justify-center gap-3 border-t border-border/50 pt-2">
+        <BookOpen className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground/40" />
+        <span className="text-xs text-muted-foreground/60">
+          {t('pluginSettings.starterPluginLabel')}
+        </span>
+        <span className="text-muted-foreground/20">·</span>
+        <a
+          href={STARTER_PLUGIN_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-muted-foreground/60 transition-colors hover:text-foreground"
+        >
+          {t('pluginSettings.starter')} <ExternalLink className="h-2.5 w-2.5" />
+        </a>
+        <span className="text-muted-foreground/20">·</span>
+        <a
+          href="https://cloudcli.ai/docs/plugin-overview"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-muted-foreground/60 transition-colors hover:text-foreground"
+        >
+          {t('pluginSettings.docs')} <ExternalLink className="h-2.5 w-2.5" />
+        </a>
       </div>
     </div>
   );

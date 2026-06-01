@@ -1,9 +1,11 @@
-import type { CliProvider, ProviderStatusMap } from '../types';
+import type { LLMProvider } from '../../../../types/app';
+import type { ProviderAuthStatusMap } from '../../../provider-auth/types';
+
 import AgentConnectionCard from './AgentConnectionCard';
 
 type AgentConnectionsStepProps = {
-  providerStatuses: ProviderStatusMap;
-  onOpenProviderLogin: (provider: CliProvider) => void;
+  providerStatuses: ProviderAuthStatusMap;
+  onOpenProviderLogin: (provider: LLMProvider) => void;
 };
 
 const providerCards = [
@@ -34,6 +36,13 @@ const providerCards = [
     connectedClassName: 'bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800',
     iconContainerClassName: 'bg-teal-100 dark:bg-teal-900/30',
     loginButtonClassName: 'bg-teal-600 hover:bg-teal-700',
+  },
+  {
+    provider: 'opencode' as const,
+    title: 'OpenCode',
+    connectedClassName: 'bg-zinc-100 dark:bg-zinc-800/50 border-zinc-300 dark:border-zinc-600',
+    iconContainerClassName: 'bg-zinc-100 dark:bg-zinc-800',
+    loginButtonClassName: 'bg-zinc-800 hover:bg-zinc-900 dark:bg-zinc-700 dark:hover:bg-zinc-600',
   },
 ];
 

@@ -17,21 +17,29 @@ import crypto from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
-import { CLAUDE_MODELS } from '../shared/modelConstants.js';
+import {
+  CLAUDE_BEDROCK_MODELS,
+  CLAUDE_FALLBACK_MODELS,
+} from './modules/providers/list/claude/claude-models.provider.js';
 import { isTruthyValue, loadClaudeSettingsEnv } from './utils/env-helpers.js';
+import { providerModelsService } from './modules/providers/services/provider-models.service.js';
+import { resolveClaudeCodeExecutablePath } from './shared/claude-cli-path.js';
 import {
   createNotificationEvent,
   notifyRunFailed,
   notifyRunStopped,
   notifyUserIfEnabled
 } from './services/notification-orchestrator.js';
+import { sessionsService } from './modules/providers/services/sessions.service.js';
+import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
+import { createNormalizedMessage } from './shared/utils.js';
 
 const activeSessions = new Map();
 const pendingToolApprovals = new Map();
 
 const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEOUT_MS, 10) || 55000;
 
-const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion']);
+const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
 function createRequestId() {
   if (typeof crypto.randomUUID === 'function') {
@@ -143,9 +151,17 @@ function matchesToolPermission(entry, toolName, input) {
  * @returns {Object} SDK-compatible options
  */
 async function mapCliOptionsToSDK(options = {}) {
-  const { sessionId, cwd, toolsSettings, permissionMode, images } = options;
+  const { sessionId, cwd, toolsSettings, permissionMode } = options;
 
   const sdkOptions = {};
+
+  // Forward all host env vars (e.g. ANTHROPIC_BASE_URL) to the subprocess.
+  // Since SDK 0.2.113, options.env replaces process.env instead of overlaying it.
+  sdkOptions.env = { ...process.env };
+
+  // Resolve the executable eagerly on Windows because the SDK uses raw child_process.spawn,
+  // which does not reliably follow npm's shell wrappers like cross-spawn does.
+  sdkOptions.pathToClaudeCodeExecutable = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH);
 
   // Map working directory
   if (cwd) {
@@ -191,11 +207,9 @@ async function mapCliOptionsToSDK(options = {}) {
 
   sdkOptions.disallowedTools = settings.disallowedTools || [];
 
-  // Map model (default to sonnet). In Bedrock mode this resolves model aliases
-  // (sonnet/opus/haiku) to configured inference profile IDs when available.
+  // Map model. In Bedrock mode this resolves UI aliases to model IDs.
   const settingsEnv = await loadClaudeSettingsEnv();
   sdkOptions.model = resolveClaudeModel(options.model, settingsEnv);
-  console.log(`Using model: ${sdkOptions.model}`);
 
   // Map system prompt configuration
   sdkOptions.systemPrompt = {
@@ -274,43 +288,68 @@ function transformMessage(sdkMessage) {
   return sdkMessage;
 }
 
+function readNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 /**
- * Extracts token usage from SDK result messages
- * @param {Object} resultMessage - SDK result message
+ * Extracts token usage from SDK messages.
+ * Prefers per-step `message.usage` (Claude message payload), then falls back
+ * to result-level usage/modelUsage for compatibility across SDK versions.
+ * @param {Object} sdkMessage - SDK stream message
  * @returns {Object|null} Token budget object or null
  */
-function extractTokenBudget(resultMessage) {
-  if (resultMessage.type !== 'result' || !resultMessage.modelUsage) {
+function extractTokenBudget(sdkMessage) {
+  if (!sdkMessage || typeof sdkMessage !== 'object') {
     return null;
   }
 
-  // Get the first model's usage data
-  const modelKey = Object.keys(resultMessage.modelUsage)[0];
-  const modelData = resultMessage.modelUsage[modelKey];
+  const messageUsage = sdkMessage.message?.usage || sdkMessage.usage;
+  if (messageUsage && typeof messageUsage === 'object') {
+    const inputTokens = readNumber(messageUsage.input_tokens ?? messageUsage.inputTokens);
+    const outputTokens = readNumber(messageUsage.output_tokens ?? messageUsage.outputTokens);
+    const totalUsed = inputTokens + outputTokens;
+    const contextWindow = parseInt(process.env.CONTEXT_WINDOW, 10) || 160000;
 
-  if (!modelData) {
+    return {
+      used: totalUsed,
+      total: contextWindow,
+      inputTokens,
+      outputTokens,
+      breakdown: {
+        input: inputTokens,
+        output: outputTokens,
+      },
+    };
+  }
+
+  if (!sdkMessage.modelUsage || typeof sdkMessage.modelUsage !== 'object') {
     return null;
   }
 
-  // Use cumulative tokens if available (tracks total for the session)
-  // Otherwise fall back to per-request tokens
-  const inputTokens = modelData.cumulativeInputTokens || modelData.inputTokens || 0;
-  const outputTokens = modelData.cumulativeOutputTokens || modelData.outputTokens || 0;
-  const cacheReadTokens = modelData.cumulativeCacheReadInputTokens || modelData.cacheReadInputTokens || 0;
-  const cacheCreationTokens = modelData.cumulativeCacheCreationInputTokens || modelData.cacheCreationInputTokens || 0;
+  // Fallback for older SDK messages with only modelUsage
+  const modelKey = Object.keys(sdkMessage.modelUsage)[0];
+  const modelData = sdkMessage.modelUsage[modelKey];
 
-  // Total used = input + output + cache tokens
-  const totalUsed = inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
+  if (!modelData || typeof modelData !== 'object') {
+    return null;
+  }
 
-  // Use configured context window budget from environment (default 160000)
-  // This is the user's budget limit, not the model's context window
-  const contextWindow = parseInt(process.env.CONTEXT_WINDOW) || 160000;
-
-  console.log(`Token calculation: input=${inputTokens}, output=${outputTokens}, cache=${cacheReadTokens + cacheCreationTokens}, total=${totalUsed}/${contextWindow}`);
+  const inputTokens = readNumber(modelData.cumulativeInputTokens ?? modelData.inputTokens);
+  const outputTokens = readNumber(modelData.cumulativeOutputTokens ?? modelData.outputTokens);
+  const totalUsed = inputTokens + outputTokens;
+  const contextWindow = parseInt(process.env.CONTEXT_WINDOW, 10) || 160000;
 
   return {
     used: totalUsed,
-    total: contextWindow
+    total: contextWindow,
+    inputTokens,
+    outputTokens,
+    breakdown: {
+      input: inputTokens,
+      output: outputTokens,
+    },
   };
 }
 
@@ -362,7 +401,7 @@ async function handleImages(command, images, cwd) {
       modifiedCommand = command + imageNote;
     }
 
-    console.log(`Processed ${tempImagePaths.length} images to temp directory: ${tempDir}`);
+    // Images processed
     return { modifiedCommand, tempImagePaths, tempDir };
   } catch (error) {
     console.error('Error processing images for SDK:', error);
@@ -395,7 +434,7 @@ async function cleanupTempFiles(tempImagePaths, tempDir) {
       );
     }
 
-    console.log(`Cleaned up ${tempImagePaths.length} temp image files`);
+    // Temp files cleaned
   } catch (error) {
     console.error('Error during temp file cleanup:', error);
   }
@@ -415,7 +454,7 @@ async function loadMcpConfig(cwd) {
       await fs.access(claudeConfigPath);
     } catch (error) {
       // File doesn't exist, return null
-      console.log('No ~/.claude.json found, proceeding without MCP servers');
+      // No config file
       return null;
     }
 
@@ -435,7 +474,7 @@ async function loadMcpConfig(cwd) {
     // Add global MCP servers
     if (claudeConfig.mcpServers && typeof claudeConfig.mcpServers === 'object') {
       mcpServers = { ...claudeConfig.mcpServers };
-      console.log(`Loaded ${Object.keys(mcpServers).length} global MCP servers`);
+      // Global MCP servers loaded
     }
 
     // Add/override with project-specific MCP servers
@@ -443,17 +482,14 @@ async function loadMcpConfig(cwd) {
       const projectConfig = claudeConfig.claudeProjects[cwd];
       if (projectConfig && projectConfig.mcpServers && typeof projectConfig.mcpServers === 'object') {
         mcpServers = { ...mcpServers, ...projectConfig.mcpServers };
-        console.log(`Loaded ${Object.keys(projectConfig.mcpServers).length} project-specific MCP servers`);
+        // Project MCP servers merged
       }
     }
 
     // Return null if no servers found
     if (Object.keys(mcpServers).length === 0) {
-      console.log('No MCP servers configured');
       return null;
     }
-
-    console.log(`Total MCP servers loaded: ${Object.keys(mcpServers).length}`);
     return mcpServers;
   } catch (error) {
     console.error('Error loading MCP config:', error.message);
@@ -478,19 +514,19 @@ function resolveClaudeEnvValue(key, settingsEnv) {
 /**
  * Resolves a UI model alias (e.g. "sonnet") to the actual model ID.
  *
- * When Bedrock is enabled, looks up the alias in CLAUDE_MODELS.BEDROCK
+ * When Bedrock is enabled, looks up the alias in CLAUDE_BEDROCK_MODELS
  * for sensible defaults. Users can still override via ANTHROPIC_MODEL
  * (in env or ~/.claude/settings.json) for custom inference profiles.
  */
 function resolveClaudeModel(modelAlias, settingsEnv) {
-  const requestedModel = modelAlias || CLAUDE_MODELS.DEFAULT;
+  const requestedModel = modelAlias || CLAUDE_FALLBACK_MODELS.DEFAULT;
   const isBedrockEnabled = isTruthyValue(resolveClaudeEnvValue('CLAUDE_CODE_USE_BEDROCK', settingsEnv));
   if (!isBedrockEnabled) {
     return requestedModel;
   }
 
   // If the caller passed a specific model ID (not a UI alias), honour it directly
-  const UI_ALIASES = new Set(Object.keys(CLAUDE_MODELS.BEDROCK));
+  const UI_ALIASES = new Set(Object.keys(CLAUDE_BEDROCK_MODELS));
   if (modelAlias && !UI_ALIASES.has(requestedModel)) {
     return requestedModel;
   }
@@ -501,8 +537,7 @@ function resolveClaudeModel(modelAlias, settingsEnv) {
     return explicitModel;
   }
 
-  // Look up in centralized Bedrock constants
-  return CLAUDE_MODELS.BEDROCK[requestedModel] || requestedModel;
+  return CLAUDE_BEDROCK_MODELS[requestedModel] || requestedModel;
 }
 
 /**
@@ -528,8 +563,17 @@ async function queryClaudeSDK(command, options = {}, ws) {
   };
 
   try {
+    const resolvedModel = await providerModelsService.resolveResumeModel(
+      'claude',
+      sessionId,
+      options.model,
+    );
+
     // Map CLI options to SDK format
-    const sdkOptions = await mapCliOptionsToSDK(options);
+    const sdkOptions = await mapCliOptionsToSDK({
+      ...options,
+      model: resolvedModel || options.model,
+    });
 
     // Load MCP configuration
     const mcpServers = await loadMcpConfig(options.cwd);
@@ -563,6 +607,12 @@ async function queryClaudeSDK(command, options = {}, ws) {
       }]
     };
 
+    // Caveat: in 'auto' and 'bypassPermissions' modes the SDK resolves approval
+    // at the permission-mode step and skips this callback, so interactive tools
+    // (AskUserQuestion, ExitPlanMode) won't reach the UI — the classifier/bypass
+    // auto-approves them and the model acts on a generated answer. Move these
+    // tools to a PreToolUse hook (runs before the mode check) if we need them
+    // to work in those modes.
     sdkOptions.canUseTool = async (toolName, input, context) => {
       const requiresInteraction = TOOLS_REQUIRING_INTERACTION.has(toolName);
 
@@ -587,13 +637,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
       }
 
       const requestId = createRequestId();
-      ws.send({
-        type: 'claude-permission-request',
-        requestId,
-        toolName,
-        input,
-        sessionId: capturedSessionId || sessionId || null
-      });
+      ws.send(createNormalizedMessage({ kind: 'permission_request', requestId, toolName, input, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
       emitNotification(createNotificationEvent({
         provider: 'claude',
         sessionId: capturedSessionId || sessionId || null,
@@ -615,12 +659,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
           _receivedAt: new Date(),
         },
         onCancel: (reason) => {
-          ws.send({
-            type: 'claude-permission-cancelled',
-            requestId,
-            reason,
-            sessionId: capturedSessionId || sessionId || null
-          });
+          ws.send(createNormalizedMessage({ kind: 'permission_cancelled', requestId, reason, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
         }
       });
       if (!decision) {
@@ -696,40 +735,30 @@ async function queryClaudeSDK(command, options = {}, ws) {
         // Send session-created event only once for new sessions
         if (!sessionId && !sessionCreatedSent) {
           sessionCreatedSent = true;
-          ws.send({
-            type: 'session-created',
-            sessionId: capturedSessionId
-          });
-        } else {
-          console.log('Not sending session-created. sessionId:', sessionId, 'sessionCreatedSent:', sessionCreatedSent);
+          ws.send(createNormalizedMessage({ kind: 'session_created', newSessionId: capturedSessionId, sessionId: capturedSessionId, provider: 'claude' }));
         }
       } else {
-        console.log('No session_id in message or already captured. message.session_id:', message.session_id, 'capturedSessionId:', capturedSessionId);
+        // session_id already captured
       }
 
-      // Transform and send message to WebSocket
+      // Transform and normalize message via adapter
       const transformedMessage = transformMessage(message);
-      ws.send({
-        type: 'claude-response',
-        data: transformedMessage,
-        sessionId: capturedSessionId || sessionId || null
-      });
+      const sid = capturedSessionId || sessionId || null;
 
-      // Extract and send token budget updates from result messages
-      if (message.type === 'result') {
-        const models = Object.keys(message.modelUsage || {});
-        if (models.length > 0) {
-          console.log("---> Model was sent using:", models);
+      // Use adapter to normalize SDK events into NormalizedMessage[]
+      const normalized = sessionsService.normalizeMessage('claude', transformedMessage, sid);
+      for (const msg of normalized) {
+        // Preserve parentToolUseId from SDK wrapper for subagent tool grouping
+        if (transformedMessage.parentToolUseId && !msg.parentToolUseId) {
+          msg.parentToolUseId = transformedMessage.parentToolUseId;
         }
-        const tokenBudget = extractTokenBudget(message);
-        if (tokenBudget) {
-          console.log('Token budget from modelUsage:', tokenBudget);
-          ws.send({
-            type: 'token-budget',
-            data: tokenBudget,
-            sessionId: capturedSessionId || sessionId || null
-          });
-        }
+        ws.send(msg);
+      }
+
+      // Extract and send token budget updates from assistant/result usage payloads
+      const tokenBudgetData = extractTokenBudget(message);
+      if (tokenBudgetData) {
+        ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
       }
     }
 
@@ -742,13 +771,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
     await cleanupTempFiles(tempImagePaths, tempDir);
 
     // Send completion event
-    console.log('Streaming complete, sending claude-complete event');
-    ws.send({
-      type: 'claude-complete',
-      sessionId: capturedSessionId,
-      exitCode: 0,
-      isNewSession: !sessionId && !!command
-    });
+    ws.send(createNormalizedMessage({ kind: 'complete', exitCode: 0, isNewSession: !sessionId && !!command, sessionId: capturedSessionId, provider: 'claude' }));
     notifyRunStopped({
       userId: ws?.userId || null,
       provider: 'claude',
@@ -756,7 +779,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
       sessionName: sessionSummary,
       stopReason: 'completed'
     });
-    console.log('claude-complete event sent');
+    // Complete
 
   } catch (error) {
     console.error('SDK query error:', error);
@@ -769,12 +792,14 @@ async function queryClaudeSDK(command, options = {}, ws) {
     // Clean up temporary image files on error
     await cleanupTempFiles(tempImagePaths, tempDir);
 
+    // Check if Claude CLI is installed for a clearer error message
+    const installed = await providerAuthService.isProviderInstalled('claude');
+    const errorContent = !installed
+      ? 'Claude Code is not installed. Please install it first: https://docs.anthropic.com/en/docs/claude-code'
+      : error.message;
+
     // Send error to WebSocket
-    ws.send({
-      type: 'claude-error',
-      error: error.message,
-      sessionId: capturedSessionId || sessionId || null
-    });
+    ws.send(createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
     notifyRunFailed({
       userId: ws?.userId || null,
       provider: 'claude',
@@ -782,8 +807,6 @@ async function queryClaudeSDK(command, options = {}, ws) {
       sessionName: sessionSummary,
       error
     });
-
-    throw error;
   }
 }
 

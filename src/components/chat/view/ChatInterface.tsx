@@ -1,18 +1,23 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
+import PermissionContext from '../../../contexts/PermissionContext';
 import { QuickSettingsPanel } from '../../quick-settings-panel';
 import type { ChatInterfaceProps, Provider  } from '../types/types';
+import type { LLMProvider } from '../../../types/app';
 import { useChatProviderState } from '../hooks/useChatProviderState';
 import { useChatSessionState } from '../hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '../hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '../hooks/useChatComposerState';
+import { useSessionStore } from '../../../stores/useSessionStore';
+
 import ChatMessagesPane from './subcomponents/ChatMessagesPane';
 import ChatComposer from './subcomponents/ChatComposer';
+import CommandResultModal from './subcomponents/CommandResultModal';
 
 
 type PendingViewSession = {
-  sessionId: string | null;
   startedAt: number;
 };
 
@@ -29,7 +34,6 @@ function ChatInterface({
   onSessionProcessing,
   onSessionNotProcessing,
   processingSessions,
-  onReplaceTemporarySession,
   onNavigateToSession,
   onShowSettings,
   autoExpandTools,
@@ -38,13 +42,15 @@ function ChatInterface({
   autoScrollToBottom,
   sendByCtrlEnter,
   externalMessageUpdate,
+  newSessionTrigger,
   onShowAllTasks,
 }: ChatInterfaceProps) {
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
   const { t } = useTranslation('chat');
 
-  const streamBufferRef = useRef('');
+  const sessionStore = useSessionStore();
   const streamTimerRef = useRef<number | null>(null);
+  const accumulatedStreamRef = useRef('');
   const pendingViewSessionRef = useRef<PendingViewSession | null>(null);
 
   const resetStreamingState = useCallback(() => {
@@ -52,7 +58,7 @@ function ChatInterface({
       clearTimeout(streamTimerRef.current);
       streamTimerRef.current = null;
     }
-    streamBufferRef.current = '';
+    accumulatedStreamRef.current = '';
   }, []);
 
   const {
@@ -66,28 +72,34 @@ function ChatInterface({
     setCodexModel,
     geminiModel,
     setGeminiModel,
+    opencodeModel,
+    setOpenCodeModel,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
     cyclePermissionMode,
+    providerModelCatalog,
+    providerModelCacheCatalog,
+    providerModelsLoading,
+    providerModelsRefreshing,
+    hardRefreshProviderModels,
+    selectProviderModel,
   } = useChatProviderState({
     selectedSession,
+    selectedProject,
   });
 
   const {
     chatMessages,
-    setChatMessages,
+    addMessage,
     isLoading,
     setIsLoading,
     currentSessionId,
     setCurrentSessionId,
-    sessionMessages,
-    setSessionMessages,
     isLoadingSessionMessages,
     isLoadingMoreMessages,
     hasMoreMessages,
     totalMessages,
-    setIsSystemSessionChange,
     canAbortSession,
     setCanAbortSession,
     isUserScrolledUp,
@@ -109,7 +121,6 @@ function ChatInterface({
     scrollToBottom,
     scrollToBottomAndReset,
     handleScroll,
-    loadSessionMessages,
   } = useChatSessionState({
     selectedProject,
     selectedSession,
@@ -117,9 +128,11 @@ function ChatInterface({
     sendMessage,
     autoScrollToBottom,
     externalMessageUpdate,
+    newSessionTrigger,
     processingSessions,
     resetStreamingState,
     pendingViewSessionRef,
+    sessionStore,
   });
 
   const {
@@ -161,11 +174,12 @@ function ChatInterface({
     syncInputOverlayScroll,
     handleClearInput,
     handleAbortSession,
-    handleTranscript,
     handlePermissionDecision,
     handleGrantToolPermission,
     handleInputFocusChange,
-    isInputFocused,
+    isInputFocused: _isInputFocused,
+    commandModalPayload,
+    closeCommandModal,
   } = useChatComposerState({
     selectedProject,
     selectedSession,
@@ -177,6 +191,7 @@ function ChatInterface({
     claudeModel,
     codexModel,
     geminiModel,
+    opencodeModel,
     isLoading,
     canAbortSession,
     tokenBudget,
@@ -189,8 +204,7 @@ function ChatInterface({
     onShowSettings,
     pendingViewSessionRef,
     scrollToBottom,
-    setChatMessages,
-    setSessionMessages,
+    addMessage,
     setIsLoading,
     setCanAbortSession,
     setClaudeStatus,
@@ -198,46 +212,42 @@ function ChatInterface({
     setPendingPermissionRequests,
   });
 
-  // On WebSocket reconnect, re-fetch the current session's messages from JSONL so missed
-  // streaming events (e.g. from long tool calls while iOS had the tab backgrounded) are shown.
-  // Also reset isLoading — if the server restarted or the session died mid-stream, the client
-  // would be stuck in "Processing..." forever without this reset.
+  // On WebSocket reconnect, re-fetch the current session's messages from the server
+  // so missed streaming events are shown. Also reset isLoading.
   const handleWebSocketReconnect = useCallback(async () => {
     if (!selectedProject || !selectedSession) return;
-    const provider = (localStorage.getItem('selected-provider') as any) || 'claude';
-    const messages = await loadSessionMessages(selectedProject.name, selectedSession.id, false, provider);
-    if (messages && messages.length > 0) {
-      setChatMessages(messages);
-    }
-    // Reset loading state — if the session is still active, new WebSocket messages will
-    // set it back to true. If it died, this clears the permanent frozen state.
+    const providerVal = (localStorage.getItem('selected-provider') as LLMProvider) || 'claude';
+    await sessionStore.refreshFromServer(selectedSession.id, {
+      provider: (selectedSession.__provider || providerVal) as LLMProvider,
+      // Use DB projectId; legacy folder-derived projectName is no longer accepted here.
+      projectId: selectedProject.projectId,
+      projectPath: selectedProject.fullPath || selectedProject.path || '',
+    });
     setIsLoading(false);
     setCanAbortSession(false);
-  }, [selectedProject, selectedSession, loadSessionMessages, setChatMessages, setIsLoading, setCanAbortSession]);
+  }, [selectedProject, selectedSession, sessionStore, setIsLoading, setCanAbortSession]);
 
   useChatRealtimeHandlers({
     latestMessage,
     provider,
-    selectedProject,
     selectedSession,
     currentSessionId,
     setCurrentSessionId,
-    setChatMessages,
     setIsLoading,
     setCanAbortSession,
     setClaudeStatus,
     setTokenBudget,
-    setIsSystemSessionChange,
     setPendingPermissionRequests,
     pendingViewSessionRef,
-    streamBufferRef,
     streamTimerRef,
+    accumulatedStreamRef,
     onSessionInactive,
+    onSessionActive,
     onSessionProcessing,
     onSessionNotProcessing,
-    onReplaceTemporarySession,
     onNavigateToSession,
     onWebSocketReconnect: handleWebSocketReconnect,
+    sessionStore,
   });
 
   useEffect(() => {
@@ -266,6 +276,11 @@ function ChatInterface({
     };
   }, [resetStreamingState]);
 
+  const permissionContextValue = useMemo(() => ({
+    pendingPermissionRequests,
+    handlePermissionDecision,
+  }), [pendingPermissionRequests, handlePermissionDecision]);
+
   if (!selectedProject) {
     const selectedProviderLabel =
       provider === 'cursor'
@@ -274,6 +289,8 @@ function ChatInterface({
           ? t('messageTypes.codex')
           : provider === 'gemini'
             ? t('messageTypes.gemini')
+            : provider === 'opencode'
+              ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
             : t('messageTypes.claude');
 
     return (
@@ -291,7 +308,7 @@ function ChatInterface({
   }
 
   return (
-    <>
+    <PermissionContext.Provider value={permissionContextValue}>
       <div className="flex h-full flex-col">
         <ChatMessagesPane
           scrollContainerRef={scrollContainerRef}
@@ -312,6 +329,10 @@ function ChatInterface({
           setCodexModel={setCodexModel}
           geminiModel={geminiModel}
           setGeminiModel={setGeminiModel}
+          opencodeModel={opencodeModel}
+          setOpenCodeModel={setOpenCodeModel}
+          providerModelCatalog={providerModelCatalog}
+          providerModelsLoading={providerModelsLoading}
           tasksEnabled={tasksEnabled}
           isTaskMasterInstalled={isTaskMasterInstalled}
           onShowAllTasks={onShowAllTasks}
@@ -319,7 +340,7 @@ function ChatInterface({
           isLoadingMoreMessages={isLoadingMoreMessages}
           hasMoreMessages={hasMoreMessages}
           totalMessages={totalMessages}
-          sessionMessagesCount={sessionMessages.length}
+          sessionMessagesCount={chatMessages.length}
           visibleMessageCount={visibleMessageCount}
           visibleMessages={visibleMessages}
           loadEarlierMessages={loadEarlierMessages}
@@ -336,7 +357,6 @@ function ChatInterface({
           showRawParameters={showRawParameters}
           showThinking={showThinking}
           selectedProject={selectedProject}
-          isLoading={isLoading}
         />
 
         <ChatComposer
@@ -393,7 +413,6 @@ function ChatInterface({
           onTextareaScrollSync={syncInputOverlayScroll}
           onTextareaInput={handleTextareaInput}
           onInputFocusChange={handleInputFocusChange}
-          isInputFocused={isInputFocused}
           placeholder={t('input.placeholder', {
             provider:
               provider === 'cursor'
@@ -402,16 +421,28 @@ function ChatInterface({
                   ? t('messageTypes.codex')
                   : provider === 'gemini'
                     ? t('messageTypes.gemini')
+                    : provider === 'opencode'
+                      ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
                     : t('messageTypes.claude'),
           })}
           isTextareaExpanded={isTextareaExpanded}
           sendByCtrlEnter={sendByCtrlEnter}
-          onTranscript={handleTranscript}
         />
       </div>
 
       <QuickSettingsPanel />
-    </>
+
+      <CommandResultModal
+        payload={commandModalPayload}
+        onClose={closeCommandModal}
+        providerModelCatalog={providerModelCatalog}
+        providerModelCacheCatalog={providerModelCacheCatalog}
+        providerModelsRefreshing={providerModelsRefreshing}
+        onHardRefreshProviderModels={hardRefreshProviderModels}
+        currentSessionId={currentSessionId || selectedSession?.id || null}
+        onSelectProviderModel={selectProviderModel}
+      />
+    </PermissionContext.Provider>
   );
 }
 

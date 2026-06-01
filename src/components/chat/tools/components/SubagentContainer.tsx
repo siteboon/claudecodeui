@@ -1,6 +1,7 @@
 import React from 'react';
 import type { SubagentChildTool } from '../../types/types';
 import { CollapsibleSection } from './CollapsibleSection';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../../../../shared/view/ui';
 
 interface SubagentContainerProps {
   toolInput: unknown;
@@ -65,21 +66,21 @@ export const SubagentContainer: React.FC<SubagentContainerProps> = ({
       >
         {/* Prompt/request to the subagent */}
         {prompt && (
-          <div className="mb-2 line-clamp-4 whitespace-pre-wrap break-words text-xs text-gray-600 dark:text-gray-400">
+          <div className="mb-2 line-clamp-4 whitespace-pre-wrap break-words text-xs text-muted-foreground">
             {prompt}
           </div>
         )}
 
         {/* Current tool indicator (while running) */}
         {currentTool && !isComplete && (
-          <div className="mt-1 flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+          <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
             <span className="h-1.5 w-1.5 flex-shrink-0 animate-pulse rounded-full bg-purple-500 dark:bg-purple-400" />
-            <span className="text-gray-400 dark:text-gray-500">Currently:</span>
-            <span className="font-medium text-gray-600 dark:text-gray-300">{currentTool.toolName}</span>
+            <span className="text-muted-foreground/60">Currently:</span>
+            <span className="font-medium text-foreground">{currentTool.toolName}</span>
             {getCompactToolDisplay(currentTool.toolName, currentTool.toolInput) && (
               <>
-                <span className="text-gray-300 dark:text-gray-600">/</span>
-                <span className="truncate font-mono text-gray-500 dark:text-gray-400">
+                <span className="text-muted-foreground/40">/</span>
+                <span className="truncate font-mono text-muted-foreground">
                   {getCompactToolDisplay(currentTool.toolName, currentTool.toolInput)}
                 </span>
               </>
@@ -99,10 +100,10 @@ export const SubagentContainer: React.FC<SubagentContainerProps> = ({
 
         {/* Tool history (collapsed) */}
         {childTools.length > 0 && (
-          <details className="group/history mt-2">
-            <summary className="flex cursor-pointer items-center gap-1 text-[11px] text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300">
+          <Collapsible className="mt-2">
+            <CollapsibleTrigger className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground">
               <svg
-                className="h-2.5 w-2.5 flex-shrink-0 transition-transform duration-150 group-open/history:rotate-90"
+                className="h-2.5 w-2.5 flex-shrink-0 transition-transform duration-150 data-[state=open]:rotate-90"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -110,29 +111,31 @@ export const SubagentContainer: React.FC<SubagentContainerProps> = ({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
               <span>View tool history ({childTools.length})</span>
-            </summary>
-            <div className="mt-1 space-y-0.5 border-l border-gray-200 pl-3 dark:border-gray-700">
-              {childTools.map((child, index) => (
-                <div key={child.toolId} className="flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
-                  <span className="w-4 flex-shrink-0 text-right text-gray-400 dark:text-gray-500">{index + 1}.</span>
-                  <span className="font-medium">{child.toolName}</span>
-                  {getCompactToolDisplay(child.toolName, child.toolInput) && (
-                    <span className="truncate font-mono text-gray-400 dark:text-gray-500">
-                      {getCompactToolDisplay(child.toolName, child.toolInput)}
-                    </span>
-                  )}
-                  {child.toolResult?.isError && (
-                    <span className="flex-shrink-0 text-red-500">(error)</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </details>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="mt-1 space-y-0.5 border-l border-border pl-3">
+                {childTools.map((child, index) => (
+                  <div key={child.toolId} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                    <span className="w-4 flex-shrink-0 text-right text-muted-foreground/60">{index + 1}.</span>
+                    <span className="font-medium text-foreground">{child.toolName}</span>
+                    {getCompactToolDisplay(child.toolName, child.toolInput) && (
+                      <span className="truncate font-mono text-muted-foreground/70">
+                        {getCompactToolDisplay(child.toolName, child.toolInput)}
+                      </span>
+                    )}
+                    {child.toolResult?.isError && (
+                      <span className="flex-shrink-0 text-red-500">(error)</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
         )}
 
         {/* Final result */}
         {isComplete && toolResult && (
-          <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
+          <div className="mt-2 text-xs text-muted-foreground">
             {(() => {
               let content = toolResult.content;
 

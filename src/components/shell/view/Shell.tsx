@@ -207,15 +207,23 @@ export default function Shell({
 
   if (minimal) {
     return (
-      <ShellMinimalView
-        terminalContainerRef={terminalContainerRef}
-        authUrl={authUrl}
-        authUrlVersion={authUrlVersion}
-        initialCommand={initialCommand}
-        isConnected={isConnected}
-        openAuthUrlInBrowser={openAuthUrlInBrowser}
-        copyAuthUrlToClipboard={copyAuthUrlToClipboard}
-      />
+      <>
+        <ShellMinimalView
+          terminalContainerRef={terminalContainerRef}
+          authUrl={authUrl}
+          authUrlVersion={authUrlVersion}
+          initialCommand={initialCommand}
+          isConnected={isConnected}
+          openAuthUrlInBrowser={openAuthUrlInBrowser}
+          copyAuthUrlToClipboard={copyAuthUrlToClipboard}
+        />
+        <TerminalShortcutsPanel
+          wsRef={wsRef}
+          terminalRef={terminalRef}
+          isConnected={isConnected}
+          bottomOffset="bottom-0"
+        />
+      </>
     );
   }
 

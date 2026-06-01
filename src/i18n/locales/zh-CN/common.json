@@ -84,7 +84,7 @@
     "openInEditor": "在编辑器中打开"
   },
   "mainContent": {
-    "loading": "正在加载 Claude Code UI",
+    "loading": "正在加载 CloudCLI",
     "settingUpWorkspace": "正在设置您的工作空间...",
     "chooseProject": "选择您的项目",
     "selectProjectDescription": "从侧边栏选择一个项目以开始使用 Claude 进行编程。每个项目包含您的聊天会话和文件历史。",
@@ -176,7 +176,6 @@
     },
     "step3": {
       "reviewConfig": "查看您的配置",
-      "workspaceType": "工作区类型：",
       "existingWorkspace": "现有工作区",
       "newWorkspace": "新建工作区",
       "path": "路径：",
@@ -245,7 +244,7 @@
     "viewFullRelease": "查看完整发布",
     "updateProgress": "更新进度：",
     "manualUpgrade": "手动升级：",
-    "npmUpgradeCommand": "npm install -g @siteboon/claude-code-ui@latest",
+    "npmUpgradeCommand": "npm install -g @cloudcli-ai/cloudcli@latest",
     "manualUpgradeHint": "或点击'立即更新'以自动运行更新。",
     "updateCompleted": "更新成功完成！",
     "restartServer": "请重启服务器以应用更改。",
