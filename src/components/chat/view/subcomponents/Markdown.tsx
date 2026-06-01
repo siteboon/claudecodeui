@@ -7,11 +7,13 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useTranslation } from 'react-i18next';
 import { normalizeInlineCodeFences } from '../../utils/chatFormatting';
+import { transformImagePathsToMarkdown } from '../../utils/imageUrls';
 import { copyTextToClipboard } from '../../../../utils/clipboard';
 
 type MarkdownProps = {
   children: React.ReactNode;
   className?: string;
+  projectId?: string | number;
 };
 
 type CodeBlockProps = {
@@ -128,6 +130,15 @@ const markdownComponents = {
       {children}
     </a>
   ),
+  img: ({ src, alt }: { src?: string; alt?: string }) => (
+    <img
+      src={src}
+      alt={alt || ''}
+      className="my-2 max-h-96 max-w-full cursor-pointer rounded-lg border border-gray-200 dark:border-gray-700"
+      onClick={() => { if (src) window.open(src, '_blank', 'noopener,noreferrer'); }}
+      loading="lazy"
+    />
+  ),
   p: ({ children }: { children?: React.ReactNode }) => <div className="mb-2 last:mb-0">{children}</div>,
   table: ({ children }: { children?: React.ReactNode }) => (
     <div className="my-2 overflow-x-auto">
@@ -143,8 +154,12 @@ const markdownComponents = {
   ),
 };
 
-export function Markdown({ children, className }: MarkdownProps) {
-  const content = normalizeInlineCodeFences(String(children ?? ''));
+export function Markdown({ children, className, projectId }: MarkdownProps) {
+  const raw = normalizeInlineCodeFences(String(children ?? ''));
+  const content = useMemo(
+    () => (projectId ? transformImagePathsToMarkdown(raw, projectId) : raw),
+    [raw, projectId],
+  );
   const remarkPlugins = useMemo(() => [remarkGfm, remarkMath], []);
   const rehypePlugins = useMemo(() => [rehypeKatex], []);
 

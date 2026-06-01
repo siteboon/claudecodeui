@@ -11,6 +11,8 @@
 
 ### New features
 
+- **Whisper dictation** — mic button in chat composer records audio and transcribes via a self-hosted Whisper ASR instance (WebSocket streaming). Configure endpoint and keyboard shortcut in Settings → Voice. Default shortcut: `Ctrl+Shift+M`.
+- **Inline image rendering** — Claude-generated images saved to `.images/` inside the project directory render inline in the chat. Claude is instructed via system prompt to save images there. Image paths in assistant text are auto-converted to inline images.
 - **Queued prompts** — submit a message while a session is active; it queues and fires automatically when the current task finishes. Banner shows the queued text with a cancel button. Queue clears on project or session switch to prevent cross-session leaks.
 - **Collapsible tool blocks** — tool use blocks collapse by default with a one-line summary (tool name + first line of input). Expand individually or toggle all via Quick Settings.
 - **Expandable activity feed** — status pill in the toolbar opens a terminal-style scrollable feed of recent tool activity.

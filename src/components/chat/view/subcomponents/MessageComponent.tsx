@@ -16,6 +16,7 @@ import { Reasoning, ReasoningTrigger, ReasoningContent } from '../../../../share
 import { Markdown } from './Markdown';
 import MessageCopyControl from './MessageCopyControl';
 import ImageLightbox from './ImageLightbox';
+import { buildFileUrl, parseUserContentForImages } from '../../utils/imageUrls';
 
 type DiffLine = {
   type: string;
@@ -137,7 +138,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
         </button>
         {compactExpanded && (
           <div className="mt-1 rounded-lg border border-dashed border-border/40 bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
-            <Markdown className="prose prose-xs prose-gray max-w-none dark:prose-invert opacity-70">
+            <Markdown projectId={selectedProject?.projectId} className="prose prose-xs prose-gray max-w-none dark:prose-invert opacity-70">
               {String(message.content || '')}
             </Markdown>
           </div>
@@ -154,20 +155,31 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
     >
       {message.type === 'user' ? (
         /* User message bubble on the right */
+        (() => {
+          const rawContent = String(message.content || '');
+          const { text: displayText, imagePaths } = parseUserContentForImages(rawContent);
+          const inlineImages = (message.images && message.images.length > 0)
+            ? message.images.map((img) => ({ src: img.data, name: img.name }))
+            : [];
+          const pathImages = selectedProject && imagePaths.length > 0
+            ? imagePaths.map((p) => ({ src: buildFileUrl(p, selectedProject.projectId), name: p.split('/').pop() || 'image' }))
+            : [];
+          const allImages = inlineImages.length > 0 ? inlineImages : pathImages;
+          return (
         <div className="flex w-full items-end space-x-0 sm:w-auto sm:max-w-[85%] sm:space-x-3 md:max-w-md lg:max-w-lg xl:max-w-xl">
           <div className="group flex-1 rounded-2xl rounded-br-md bg-blue-600 px-3 py-2 text-white shadow-sm sm:flex-initial sm:px-4">
             <div className="whitespace-pre-wrap break-words text-sm">
-              {message.content}
+              {displayText}
             </div>
-            {message.images && message.images.length > 0 && (
+            {allImages.length > 0 && (
               <div className="mt-2 grid grid-cols-2 gap-2">
-                {message.images.map((img, idx) => (
+                {allImages.map((img, idx) => (
                   <img
                     key={img.name || idx}
-                    src={img.data}
+                    src={img.src}
                     alt={img.name}
                     className="h-auto max-w-full cursor-pointer rounded-lg transition-opacity hover:opacity-90"
-                    onClick={() => setLightboxSrc({ src: img.data, alt: img.name })}
+                    onClick={() => setLightboxSrc({ src: img.src, alt: img.name })}
                   />
                 ))}
               </div>
@@ -203,6 +215,8 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
             </div>
           )}
         </div>
+          );
+        })()
       ) : message.isTaskNotification ? (
         /* Compact task notification on the left */
         <div className="w-full">
@@ -261,7 +275,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                       </span>
                     ) : (
                       <div className="min-w-0 flex-1">
-                        <Markdown className="prose prose-sm max-w-none dark:prose-invert">
+                        <Markdown projectId={selectedProject?.projectId} className="prose prose-sm max-w-none dark:prose-invert">
                           {String(message.displayText || '')}
                         </Markdown>
                       </div>
@@ -302,7 +316,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                         <span className="text-xs font-medium text-red-700 dark:text-red-300">{t('messageTypes.error')}</span>
                       </div>
                       <div className="relative text-sm text-red-900 dark:text-red-100">
-                        <Markdown className="prose prose-sm prose-red max-w-none dark:prose-invert">
+                        <Markdown projectId={selectedProject?.projectId} className="prose prose-sm prose-red max-w-none dark:prose-invert">
                           {String(message.toolResult.content || '')}
                         </Markdown>
                         {permissionSuggestion && (
@@ -460,7 +474,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
               <Reasoning defaultOpen={false}>
                 <ReasoningTrigger />
                 <ReasoningContent>
-                  <Markdown className="prose prose-sm prose-gray max-w-none dark:prose-invert">
+                  <Markdown projectId={selectedProject?.projectId} className="prose prose-sm prose-gray max-w-none dark:prose-invert">
                     {message.content}
                   </Markdown>
                   <div className="mt-3 flex items-center text-[11px]">
@@ -517,7 +531,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
 
                   // Normal rendering for non-JSON content
                   return message.type === 'assistant' ? (
-                    <Markdown className="prose prose-sm prose-gray max-w-none dark:prose-invert">
+                    <Markdown projectId={selectedProject?.projectId} className="prose prose-sm prose-gray max-w-none dark:prose-invert">
                       {content}
                     </Markdown>
                   ) : (

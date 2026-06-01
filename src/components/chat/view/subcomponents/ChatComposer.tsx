@@ -112,6 +112,7 @@ interface ChatComposerProps {
   dictationState?: 'idle' | 'recording' | 'transcribing' | 'error';
   dictationError?: string | null;
   onToggleDictation?: () => void;
+  dictationShortcutLabel?: string;
 }
 
 export default function ChatComposer({
@@ -177,6 +178,7 @@ export default function ChatComposer({
   dictationState = 'idle',
   dictationError,
   onToggleDictation,
+  dictationShortcutLabel = 'Ctrl+Shift+M',
 }: ChatComposerProps) {
   const { t } = useTranslation('chat');
   const textareaRect = textareaRef.current?.getBoundingClientRect();
@@ -371,7 +373,7 @@ export default function ChatComposer({
                       ? t('input.transcribing', { defaultValue: 'Transcribing…' })
                       : dictationState === 'error'
                         ? (dictationError || t('input.dictationError', { defaultValue: 'Dictation error' }))
-                        : t('input.startDictation', { defaultValue: 'Dictate with Whisper' }),
+                        : t('input.startDictation', { defaultValue: `Dictate with Whisper (${dictationShortcutLabel})` }),
                 }}
                 onClick={onToggleDictation}
                 disabled={dictationState === 'transcribing'}
@@ -496,6 +498,11 @@ export default function ChatComposer({
           </div>
         </PromptInputFooter>
       </PromptInput>
+      {dictationState === 'error' && dictationError && (
+        <div className="mt-1 px-3 py-1.5 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-xs text-red-700 dark:text-red-300">
+          Dictation error: {dictationError}
+        </div>
+      )}
       </div>}
       </div>
     </div>

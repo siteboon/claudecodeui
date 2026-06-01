@@ -213,6 +213,15 @@ function mapCliOptionsToSDK(options = {}) {
     preset: 'claude_code'  // Required to use CLAUDE.md
   };
 
+  // Append image-saving guidance so Claude stores generated images inside the project tree,
+  // where the file-serving endpoint can reach them.
+  sdkOptions.appendSystemPrompt =
+    'When you generate or create image files that you want to display to the user, ' +
+    'save them inside the current project directory under an ".images/" subfolder ' +
+    '(e.g. ".images/output.png", ".images/chart.png"). ' +
+    'Do NOT save them to /tmp or any path outside the project directory. ' +
+    'The UI automatically renders images stored within the project directory as inline images in the chat.';
+
   // Map setting sources for CLAUDE.md loading
   // This loads CLAUDE.md from project, user (~/.config/claude/CLAUDE.md), and local directories
   sdkOptions.settingSources = ['project', 'user', 'local'];

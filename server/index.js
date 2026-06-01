@@ -1125,7 +1125,9 @@ app.post('/api/transcribe', authenticateToken, async (req, res) => {
         const os = (await import('os')).default;
 
         const whisperBase = process.env.WHISPER_URL || 'http://192.168.1.16:9000';
-        const whisperUrl = `${whisperBase}/asr?task=transcribe&language=auto&output=json`;
+        const language = req.query.language || 'auto';
+        const task = req.query.task === 'translate' ? 'translate' : 'transcribe';
+        const whisperUrl = `${whisperBase}/asr?task=${encodeURIComponent(task)}&language=${encodeURIComponent(language)}&output=json`;
 
         const storage = multer.diskStorage({
             destination: (_req, _file, cb) => cb(null, os.tmpdir()),

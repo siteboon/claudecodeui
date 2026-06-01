@@ -11,6 +11,7 @@ import { useChatSessionState } from '../hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '../hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '../hooks/useChatComposerState';
 import { useWhisperDictation } from '../hooks/useWhisperDictation';
+import { loadWhisperSettings, matchesShortcut, formatShortcut } from '../../settings/view/tabs/VoiceSettingsTab';
 import { useSessionStore } from '../../../stores/useSessionStore';
 
 import ChatMessagesPane from './subcomponents/ChatMessagesPane';
@@ -337,6 +338,21 @@ function ChatInterface({
     },
   });
 
+  const dictationShortcutLabel = formatShortcut(loadWhisperSettings().shortcut);
+
+  useEffect(() => {
+    const handleDictationShortcut = (event: KeyboardEvent) => {
+      if (event.repeat || event.defaultPrevented) return;
+      const { shortcut } = loadWhisperSettings();
+      if (matchesShortcut(event, shortcut)) {
+        event.preventDefault();
+        toggleRecording();
+      }
+    };
+    document.addEventListener('keydown', handleDictationShortcut, { capture: true });
+    return () => document.removeEventListener('keydown', handleDictationShortcut, { capture: true });
+  }, [toggleRecording]);
+
   const handleForkFromMessage = useCallback((message: ChatMessage) => {
     if (!selectedProject) return;
     const forkContent = String(message.content || '');
@@ -506,6 +522,7 @@ function ChatInterface({
           dictationState={dictationState}
           dictationError={dictationError}
           onToggleDictation={toggleRecording}
+          dictationShortcutLabel={dictationShortcutLabel}
         />
       </div>
 
