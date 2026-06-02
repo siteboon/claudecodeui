@@ -17,7 +17,8 @@ import crypto from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
-import { CLAUDE_MODELS } from '../shared/modelConstants.js';
+import { CLAUDE_FALLBACK_MODELS } from './modules/providers/list/claude/claude-models.provider.js';
+import { providerModelsService } from './modules/providers/services/provider-models.service.js';
 import { resolveClaudeCodeExecutablePath } from './shared/claude-cli-path.js';
 import {
   createNotificationEvent,
@@ -204,7 +205,7 @@ function mapCliOptionsToSDK(options = {}) {
 
   // Map model (default to sonnet)
   // Valid models: sonnet, opus, haiku, opusplan, sonnet[1m]
-  sdkOptions.model = options.model || CLAUDE_MODELS.DEFAULT;
+  sdkOptions.model = options.model || CLAUDE_FALLBACK_MODELS.DEFAULT;
   // Model logged at query start below
 
   // Map system prompt configuration
@@ -293,43 +294,68 @@ function transformMessage(sdkMessage) {
   return sdkMessage;
 }
 
+function readNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 /**
- * Extracts token usage from SDK result messages
- * @param {Object} resultMessage - SDK result message
+ * Extracts token usage from SDK messages.
+ * Prefers per-step `message.usage` (Claude message payload), then falls back
+ * to result-level usage/modelUsage for compatibility across SDK versions.
+ * @param {Object} sdkMessage - SDK stream message
  * @returns {Object|null} Token budget object or null
  */
-function extractTokenBudget(resultMessage) {
-  if (resultMessage.type !== 'result' || !resultMessage.modelUsage) {
+function extractTokenBudget(sdkMessage) {
+  if (!sdkMessage || typeof sdkMessage !== 'object') {
     return null;
   }
 
-  // Get the first model's usage data
-  const modelKey = Object.keys(resultMessage.modelUsage)[0];
-  const modelData = resultMessage.modelUsage[modelKey];
+  const messageUsage = sdkMessage.message?.usage || sdkMessage.usage;
+  if (messageUsage && typeof messageUsage === 'object') {
+    const inputTokens = readNumber(messageUsage.input_tokens ?? messageUsage.inputTokens);
+    const outputTokens = readNumber(messageUsage.output_tokens ?? messageUsage.outputTokens);
+    const totalUsed = inputTokens + outputTokens;
+    const contextWindow = parseInt(process.env.CONTEXT_WINDOW, 10) || 160000;
 
-  if (!modelData) {
+    return {
+      used: totalUsed,
+      total: contextWindow,
+      inputTokens,
+      outputTokens,
+      breakdown: {
+        input: inputTokens,
+        output: outputTokens,
+      },
+    };
+  }
+
+  if (!sdkMessage.modelUsage || typeof sdkMessage.modelUsage !== 'object') {
     return null;
   }
 
-  // Use cumulative tokens if available (tracks total for the session)
-  // Otherwise fall back to per-request tokens
-  const inputTokens = modelData.cumulativeInputTokens || modelData.inputTokens || 0;
-  const outputTokens = modelData.cumulativeOutputTokens || modelData.outputTokens || 0;
-  const cacheReadTokens = modelData.cumulativeCacheReadInputTokens || modelData.cacheReadInputTokens || 0;
-  const cacheCreationTokens = modelData.cumulativeCacheCreationInputTokens || modelData.cacheCreationInputTokens || 0;
+  // Fallback for older SDK messages with only modelUsage
+  const modelKey = Object.keys(sdkMessage.modelUsage)[0];
+  const modelData = sdkMessage.modelUsage[modelKey];
 
-  // Total used = input + output + cache tokens
-  const totalUsed = inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
+  if (!modelData || typeof modelData !== 'object') {
+    return null;
+  }
 
-  // Use configured context window budget from environment (default 160000)
-  // This is the user's budget limit, not the model's context window
-  const contextWindow = parseInt(process.env.CONTEXT_WINDOW) || 160000;
-
-  // Token calc logged via token-budget WS event
+  const inputTokens = readNumber(modelData.cumulativeInputTokens ?? modelData.inputTokens);
+  const outputTokens = readNumber(modelData.cumulativeOutputTokens ?? modelData.outputTokens);
+  const totalUsed = inputTokens + outputTokens;
+  const contextWindow = parseInt(process.env.CONTEXT_WINDOW, 10) || 160000;
 
   return {
     used: totalUsed,
-    total: contextWindow
+    total: contextWindow,
+    inputTokens,
+    outputTokens,
+    breakdown: {
+      input: inputTokens,
+      output: outputTokens,
+    },
   };
 }
 
@@ -478,8 +504,17 @@ async function queryClaudeSDK(command, options = {}, ws) {
   };
 
   try {
+    const resolvedModel = await providerModelsService.resolveResumeModel(
+      'claude',
+      sessionId,
+      options.model,
+    );
+
     // Map CLI options to SDK format
-    const sdkOptions = mapCliOptionsToSDK(options);
+    const sdkOptions = mapCliOptionsToSDK({
+      ...options,
+      model: resolvedModel || options.model,
+    });
 
     // Load MCP configuration
     const mcpServers = await loadMcpConfig(options.cwd);

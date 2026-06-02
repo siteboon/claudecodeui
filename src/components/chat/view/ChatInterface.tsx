@@ -18,10 +18,10 @@ import ChatMessagesPane from './subcomponents/ChatMessagesPane';
 import ChatComposer from './subcomponents/ChatComposer';
 import PinnedUserMessage from './subcomponents/PinnedUserMessage';
 import PromptNavPanel from './subcomponents/PromptNavPanel';
+import CommandResultModal from './subcomponents/CommandResultModal';
 
 
 type PendingViewSession = {
-  sessionId: string | null;
   startedAt: number;
 };
 
@@ -81,12 +81,21 @@ function ChatInterface({
     setCodexModel,
     geminiModel,
     setGeminiModel,
+    opencodeModel,
+    setOpenCodeModel,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
     cyclePermissionMode,
+    providerModelCatalog,
+    providerModelCacheCatalog,
+    providerModelsLoading,
+    providerModelsRefreshing,
+    hardRefreshProviderModels,
+    selectProviderModel,
   } = useChatProviderState({
     selectedSession,
+    selectedProject,
   });
 
   const {
@@ -182,7 +191,9 @@ function ChatInterface({
     handlePermissionDecision,
     handleGrantToolPermission,
     handleInputFocusChange,
-    isInputFocused,
+    isInputFocused: _isInputFocused,
+    commandModalPayload,
+    closeCommandModal,
   } = useChatComposerState({
     selectedProject,
     selectedSession,
@@ -194,6 +205,7 @@ function ChatInterface({
     claudeModel,
     codexModel,
     geminiModel,
+    opencodeModel,
     isLoading,
     canAbortSession,
     tokenBudget,
@@ -261,6 +273,7 @@ function ChatInterface({
     streamTimerRef,
     accumulatedStreamRef,
     onSessionInactive,
+    onSessionActive,
     onSessionProcessing,
     onSessionNotProcessing,
     onNavigateToSession,
@@ -369,6 +382,8 @@ function ChatInterface({
           ? t('messageTypes.codex')
           : provider === 'gemini'
             ? t('messageTypes.gemini')
+            : provider === 'opencode'
+              ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
             : t('messageTypes.claude');
 
     return (
@@ -412,6 +427,10 @@ function ChatInterface({
           setCodexModel={setCodexModel}
           geminiModel={geminiModel}
           setGeminiModel={setGeminiModel}
+          opencodeModel={opencodeModel}
+          setOpenCodeModel={setOpenCodeModel}
+          providerModelCatalog={providerModelCatalog}
+          providerModelsLoading={providerModelsLoading}
           tasksEnabled={tasksEnabled}
           isTaskMasterInstalled={isTaskMasterInstalled}
           onShowAllTasks={onShowAllTasks}
@@ -504,6 +523,8 @@ function ChatInterface({
                   ? t('messageTypes.codex')
                   : provider === 'gemini'
                     ? t('messageTypes.gemini')
+                    : provider === 'opencode'
+                      ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
                     : t('messageTypes.claude'),
           })}
           isTextareaExpanded={isTextareaExpanded}
@@ -534,6 +555,17 @@ function ChatInterface({
       />
 
       <QuickSettingsPanel />
+
+      <CommandResultModal
+        payload={commandModalPayload}
+        onClose={closeCommandModal}
+        providerModelCatalog={providerModelCatalog}
+        providerModelCacheCatalog={providerModelCacheCatalog}
+        providerModelsRefreshing={providerModelsRefreshing}
+        onHardRefreshProviderModels={hardRefreshProviderModels}
+        currentSessionId={currentSessionId || selectedSession?.id || null}
+        onSelectProviderModel={selectProviderModel}
+      />
     </PermissionContext.Provider>
   );
 }

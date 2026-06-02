@@ -20,6 +20,7 @@ import PermissionRequestsBanner from './PermissionRequestsBanner';
 import ThinkingModeSelector from './ThinkingModeSelector';
 import ModelSelector from './ModelSelector';
 import ContextUsagePill from './ContextUsagePill';
+import TokenUsageSummary from './TokenUsageSummary';
 import {
   PromptInput,
   PromptInputHeader,
@@ -62,7 +63,7 @@ interface ChatComposerProps {
   onModeSwitch: () => void;
   thinkingMode: string;
   setThinkingMode: Dispatch<SetStateAction<string>>;
-  tokenBudget: { used?: number; total?: number } | null;
+  tokenBudget: Record<string, unknown> | null;
   slashCommandsCount: number;
   onToggleCommandMenu: () => void;
   hasInput: boolean;
@@ -461,6 +462,23 @@ export default function ChatComposer({
               onModelChange={onModelChange}
             />
 
+            <TokenUsageSummary usage={tokenBudget} />
+
+            <PromptInputButton
+              tooltip={{ content: t('input.showAllCommands') }}
+              onClick={onToggleCommandMenu}
+              className="relative"
+            >
+              <MessageSquareIcon />
+              {slashCommandsCount > 0 && (
+                <span
+                  className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground"
+                >
+                  {slashCommandsCount}
+                </span>
+              )}
+            </PromptInputButton>
+
             {hasInput && (
               <PromptInputButton
                 tooltip={{ content: t('input.clearInput', { defaultValue: 'Clear input' }) }}
@@ -484,16 +502,6 @@ export default function ChatComposer({
             <PromptInputSubmit
               disabled={!input.trim()}
               className="h-10 w-10 sm:h-10 sm:w-10"
-              onMouseDown={(event) => {
-                // Prevent textarea losing focus; form onSubmit fires the actual submit
-                event.preventDefault();
-              }}
-              onTouchStart={(event) => {
-                // On mobile, preventDefault blocks synthetic click/form-submit that follows
-                // touchstart, so we must call onSubmit manually here.
-                event.preventDefault();
-                onSubmit(event as unknown as TouchEvent<HTMLButtonElement>);
-              }}
             />
           </div>
         </PromptInputFooter>

@@ -8,7 +8,6 @@ import type { ProjectSession, LLMProvider } from '../../../types/app';
 import type { SessionStore, NormalizedMessage } from '../../../stores/useSessionStore';
 
 type PendingViewSession = {
-  sessionId: string | null;
   startedAt: number;
 };
 
@@ -64,6 +63,7 @@ interface UseChatRealtimeHandlersArgs {
   streamTimerRef: MutableRefObject<number | null>;
   accumulatedStreamRef: MutableRefObject<string>;
   onSessionInactive?: (sessionId?: string | null) => void;
+  onSessionActive?: (sessionId?: string | null) => void;
   onSessionProcessing?: (sessionId?: string | null) => void;
   onSessionNotProcessing?: (sessionId?: string | null) => void;
   onNavigateToSession?: (sessionId: string, options?: SessionNavigationOptions) => void;
@@ -90,6 +90,7 @@ export function useChatRealtimeHandlers({
   streamTimerRef,
   accumulatedStreamRef,
   onSessionInactive,
+  onSessionActive,
   onSessionProcessing,
   onSessionNotProcessing,
   onNavigateToSession,
@@ -105,7 +106,7 @@ export function useChatRealtimeHandlers({
     lastProcessedMessageRef.current = latestMessage;
 
     const activeViewSessionId =
-      selectedSession?.id || currentSessionId || pendingViewSessionRef.current?.sessionId || null;
+      selectedSession?.id || currentSessionId || null;
 
     /* ---------------------------------------------------------------- */
     /*  Legacy messages (no `kind` field) — handle and return           */
@@ -152,10 +153,12 @@ export function useChatRealtimeHandlers({
             statusSessionId === currentSessionId || (selectedSession && statusSessionId === selectedSession.id);
 
           if (msg.isProcessing) {
+            onSessionActive?.(statusSessionId);
             onSessionProcessing?.(statusSessionId);
             if (isCurrentSession) { setIsLoading(true); setCanAbortSession(true); }
             return;
           }
+
           onSessionInactive?.(statusSessionId);
           onSessionNotProcessing?.(statusSessionId);
           if (isCurrentSession) {
@@ -242,15 +245,21 @@ export function useChatRealtimeHandlers({
         if (!currentSessionId) {
           console.log('Session created with ID:', newSessionId);
           console.log('Existing session ID:', currentSessionId);
-          sessionStorage.setItem('pendingSessionId', newSessionId);
-          if (pendingViewSessionRef.current && !pendingViewSessionRef.current.sessionId) {
-            pendingViewSessionRef.current.sessionId = newSessionId;
-          }
           setCurrentSessionId(newSessionId);
           setPendingPermissionRequests((prev) =>
             prev.map((r) => (r.sessionId ? r : { ...r, sessionId: newSessionId })),
           );
         }
+        pendingViewSessionRef.current = null;
+        onSessionActive?.(newSessionId);
+        onSessionProcessing?.(newSessionId);
+        setIsLoading(true);
+        setCanAbortSession(true);
+        setClaudeStatus({
+          text: 'Processing',
+          tokens: 0,
+          can_interrupt: true,
+        });
         onNavigateToSession?.(newSessionId);
         break;
       }
@@ -273,6 +282,7 @@ export function useChatRealtimeHandlers({
         setPendingPermissionRequests([]);
         onSessionInactive?.(sid);
         onSessionNotProcessing?.(sid);
+        pendingViewSessionRef.current = null;
 
         // Handle aborted case
         if (msg.aborted) {
@@ -288,16 +298,10 @@ export function useChatRealtimeHandlers({
           typeof msg.actualSessionId === 'string' && msg.actualSessionId.trim().length > 0
             ? msg.actualSessionId
             : null;
-        const pendingSessionId = sessionStorage.getItem('pendingSessionId');
-        const completedSuccessfully = msg.exitCode === undefined || msg.exitCode === 0;
         const isVisibleSession =
           Boolean(
             sid
-            && (
-              sid === activeViewSessionId
-              || sid === pendingSessionId
-              || pendingViewSessionRef.current?.sessionId === sid
-            ),
+            && sid === activeViewSessionId,
           );
 
         if (actualSessionId && sid && actualSessionId !== sid) {
@@ -305,17 +309,6 @@ export function useChatRealtimeHandlers({
 
           if (isVisibleSession) {
             setCurrentSessionId(actualSessionId);
-
-            if (pendingViewSessionRef.current) {
-              const pendingSession = pendingViewSessionRef.current.sessionId;
-              if (!pendingSession || pendingSession === sid) {
-                pendingViewSessionRef.current.sessionId = actualSessionId;
-              }
-            }
-          }
-
-          if (completedSuccessfully && pendingSessionId === sid) {
-            sessionStorage.removeItem('pendingSessionId');
           }
 
           if (isVisibleSession) {
@@ -325,16 +318,6 @@ export function useChatRealtimeHandlers({
           break;
         }
 
-        // Clear pending session
-        if (pendingSessionId && !currentSessionId && completedSuccessfully) {
-          const resolvedSessionId = actualSessionId || pendingSessionId;
-          setCurrentSessionId(resolvedSessionId);
-          if (actualSessionId) {
-            onNavigateToSession?.(resolvedSessionId, { replace: true });
-          }
-          sessionStorage.removeItem('pendingSessionId');
-          setTimeout(() => { void paletteOps.refreshProjects(); }, 500);
-        }
         break;
       }
 
@@ -344,6 +327,7 @@ export function useChatRealtimeHandlers({
         setClaudeStatus(null);
         onSessionInactive?.(sid);
         onSessionNotProcessing?.(sid);
+        pendingViewSessionRef.current = null;
         break;
       }
 
@@ -409,6 +393,7 @@ export function useChatRealtimeHandlers({
     streamTimerRef,
     accumulatedStreamRef,
     onSessionInactive,
+    onSessionActive,
     onSessionProcessing,
     onSessionNotProcessing,
     onNavigateToSession,
