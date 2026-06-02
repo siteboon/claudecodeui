@@ -5,6 +5,8 @@ const TasksSettingsContext = createContext({
   tasksEnabled: true,
   setTasksEnabled: () => {},
   toggleTasksEnabled: () => {},
+  githubIssuesEnabled: true,
+  setGithubIssuesEnabled: () => {},
   isTaskMasterInstalled: null,
   isTaskMasterReady: null,
   installationStatus: null,
@@ -21,10 +23,19 @@ export const useTasksSettings = () => {
 
 export const TasksSettingsProvider = ({ children }) => {
   const [tasksEnabled, setTasksEnabled] = useState(() => {
-    // Load from localStorage on initialization
     const saved = localStorage.getItem('tasks-enabled');
-    return saved !== null ? JSON.parse(saved) : true; // Default to true
+    return saved !== null ? JSON.parse(saved) : true;
   });
+
+  const [githubIssuesEnabled, setGithubIssuesEnabledState] = useState(() => {
+    const saved = localStorage.getItem('github-issues-enabled');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
+  const setGithubIssuesEnabled = (enabled) => {
+    setGithubIssuesEnabledState(enabled);
+    localStorage.setItem('github-issues-enabled', JSON.stringify(enabled));
+  };
   
   const [isTaskMasterInstalled, setIsTaskMasterInstalled] = useState(null);
   const [isTaskMasterReady, setIsTaskMasterReady] = useState(null);
@@ -79,6 +90,8 @@ export const TasksSettingsProvider = ({ children }) => {
     tasksEnabled,
     setTasksEnabled,
     toggleTasksEnabled,
+    githubIssuesEnabled,
+    setGithubIssuesEnabled,
     isTaskMasterInstalled,
     isTaskMasterReady,
     installationStatus,

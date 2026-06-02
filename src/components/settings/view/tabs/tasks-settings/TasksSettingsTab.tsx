@@ -8,6 +8,8 @@ import SettingsToggle from '../../SettingsToggle';
 type TasksSettingsContextValue = {
   tasksEnabled: boolean;
   setTasksEnabled: (enabled: boolean) => void;
+  githubIssuesEnabled: boolean;
+  setGithubIssuesEnabled: (enabled: boolean) => void;
   isTaskMasterInstalled: boolean | null;
   isCheckingInstallation: boolean;
 };
@@ -17,12 +19,29 @@ export default function TasksSettingsTab() {
   const {
     tasksEnabled,
     setTasksEnabled,
+    githubIssuesEnabled,
+    setGithubIssuesEnabled,
     isTaskMasterInstalled,
     isCheckingInstallation,
   } = useTasksSettings() as TasksSettingsContextValue;
 
   return (
     <div className="space-y-8">
+      <SettingsSection title="GitHub Issues">
+        <SettingsCard>
+          <SettingsRow
+            label="Enable GitHub Issues"
+            description="Show GitHub Issues board as a standalone tab in the main navigation"
+          >
+            <SettingsToggle
+              checked={githubIssuesEnabled}
+              onChange={setGithubIssuesEnabled}
+              ariaLabel="Enable GitHub Issues"
+            />
+          </SettingsRow>
+        </SettingsCard>
+      </SettingsSection>
+
       <SettingsSection title={t('mainTabs.tasks')}>
         {isCheckingInstallation ? (
           <SettingsCard className="p-4">

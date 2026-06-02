@@ -2,6 +2,7 @@ import express from 'express';
 
 import { projectsDb } from '../modules/database/index.js';
 import * as ghService from '../modules/github/github.service.js';
+import * as issuesService from '../modules/github/github-issues.service.js';
 import * as syncService from '../modules/github/github-sync.service.js';
 import { broadcastTaskMasterTasksUpdate } from '../utils/taskmaster-websocket.js';
 
@@ -155,6 +156,91 @@ router.post('/webhook/:projectId', async (req, res) => {
     } catch (err) {
         console.error('[GitHub Webhook] error:', err.message);
         // Already sent 202, nothing to do
+    }
+});
+
+// GET /api/github/issues/:projectId — fetch all issues (cached 60s)
+router.get('/issues/:projectId', async (req, res) => {
+    try {
+        const projectPath = await resolveProjectPathFromId(req.params.projectId);
+        if (!projectPath) return res.status(404).json({ error: 'Project not found' });
+
+        const result = await issuesService.fetchIssues(projectPath);
+        res.json({ ...result, columns: issuesService.COLUMNS });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/github/issues/:projectId/:issueNumber/comments
+router.get('/issues/:projectId/:issueNumber/comments', async (req, res) => {
+    try {
+        const projectPath = await resolveProjectPathFromId(req.params.projectId);
+        if (!projectPath) return res.status(404).json({ error: 'Project not found' });
+
+        const comments = await issuesService.fetchComments(projectPath, req.params.issueNumber);
+        res.json({ comments });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PATCH /api/github/issues/:projectId/:issueNumber — update state/labels/title
+router.patch('/issues/:projectId/:issueNumber', async (req, res) => {
+    try {
+        const projectPath = await resolveProjectPathFromId(req.params.projectId);
+        if (!projectPath) return res.status(404).json({ error: 'Project not found' });
+
+        const updated = await issuesService.patchIssue(projectPath, req.params.issueNumber, req.body);
+        res.json({ ok: true, issue: updated });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/github/prioritize/:projectId — AI priority suggestions
+// Accepts { issues: [{number, title, body, labels, state}] }
+// Returns { priorities: [{number, priority, reason}] }
+router.post('/prioritize/:projectId', async (req, res) => {
+    try {
+        const projectPath = await resolveProjectPathFromId(req.params.projectId);
+        if (!projectPath) return res.status(404).json({ error: 'Project not found' });
+
+        const { issues } = req.body;
+        if (!Array.isArray(issues) || issues.length === 0) {
+            return res.status(400).json({ error: 'issues array required' });
+        }
+
+        // Build a simple heuristic-based priority (no LLM needed):
+        // high = bug/critical/security labels or words in title
+        // medium = enhancement/feature
+        // low = everything else
+        const HIGH_SIGNALS = /\b(bug|crash|critical|security|broken|error|fail|urgent|blocker|regression)\b/i;
+        const MEDIUM_SIGNALS = /\b(feature|enhancement|improve|add|implement|refactor)\b/i;
+
+        const priorities = issues.map(issue => {
+            const text = `${issue.title} ${issue.body ?? ''}`;
+            const labelNames = (issue.labels ?? []).map(l => l.name ?? l).join(' ');
+            const combined = `${text} ${labelNames}`;
+
+            let priority = 'low';
+            let reason = 'No strong signals detected';
+
+            const bugLabel = (issue.labels ?? []).some(l => (l.name ?? l) === 'bug');
+            if (bugLabel || HIGH_SIGNALS.test(combined)) {
+                priority = 'high';
+                reason = bugLabel ? 'Labeled as bug' : 'Contains urgency signal in title/body';
+            } else if (MEDIUM_SIGNALS.test(combined)) {
+                priority = 'medium';
+                reason = 'Enhancement or feature request';
+            }
+
+            return { number: issue.number, priority, reason };
+        });
+
+        res.json({ priorities });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 

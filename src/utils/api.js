@@ -236,6 +236,24 @@ export const api = {
 
     sync: (projectId) =>
       authenticatedFetch(`/api/github/sync/${projectId}`, { method: 'POST' }),
+
+    getIssues: (projectId) =>
+      authenticatedFetch(`/api/github/issues/${projectId}`),
+
+    getComments: (projectId, issueNumber) =>
+      authenticatedFetch(`/api/github/issues/${projectId}/${issueNumber}/comments`),
+
+    updateIssue: (projectId, issueNumber, patch) =>
+      authenticatedFetch(`/api/github/issues/${projectId}/${issueNumber}`, {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
+      }),
+
+    prioritizeIssues: (projectId, issues) =>
+      authenticatedFetch(`/api/github/prioritize/${projectId}`, {
+        method: 'POST',
+        body: JSON.stringify({ issues }),
+      }),
   },
 
   // Browse filesystem for project suggestions

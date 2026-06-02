@@ -63,6 +63,7 @@ export type MainContentHeaderProps = {
   selectedProject: Project;
   selectedSession: ProjectSession | null;
   shouldShowTasksTab: boolean;
+  shouldShowGithubIssuesTab: boolean;
   isMobile: boolean;
   onMenuClick: () => void;
 };
