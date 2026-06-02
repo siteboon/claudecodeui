@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, X } from 'lucide-react';
-import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS, GEMINI_MODELS } from '../../../../../public/modelConstants';
+import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS, GEMINI_MODELS } from '../../../../../shared/modelConstants';
 
 type ModelSelectorProps = {
   provider: string;
