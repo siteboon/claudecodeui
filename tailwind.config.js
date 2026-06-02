@@ -58,6 +58,25 @@ export default {
         'safe-area-inset-bottom': 'env(safe-area-inset-bottom)',
         'mobile-nav': 'var(--mobile-nav-total)',
       },
+      keyframes: {
+        shimmer: {
+          '0%': { backgroundPosition: '200% 0' },
+          '100%': { backgroundPosition: '-200% 0' },
+        },
+        'dialog-overlay-show': {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+        'dialog-content-show': {
+          from: { opacity: '0', transform: 'translate(-50%, -48%) scale(0.96)' },
+          to: { opacity: '1', transform: 'translate(-50%, -50%) scale(1)' },
+        },
+      },
+      animation: {
+        shimmer: 'shimmer 2s linear infinite',
+        'dialog-overlay-show': 'dialog-overlay-show 150ms ease-out',
+        'dialog-content-show': 'dialog-content-show 150ms ease-out',
+      },
     },
   },
   plugins: [require('@tailwindcss/typography')],

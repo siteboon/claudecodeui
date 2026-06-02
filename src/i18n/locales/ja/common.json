@@ -176,7 +176,6 @@
     },
     "step3": {
       "reviewConfig": "設定の確認",
-      "workspaceType": "ワークスペースの種類:",
       "existingWorkspace": "既存のワークスペース",
       "newWorkspace": "新しいワークスペース",
       "path": "パス:",

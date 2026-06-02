@@ -1,10 +1,12 @@
-import { Check, ChevronDown, ChevronRight, Edit3, Folder, FolderOpen, Star, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Edit3, Star, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
+
 import { Button } from '../../../../shared/view/ui';
 import { cn } from '../../../../lib/utils';
-import type { Project, ProjectSession, SessionProvider } from '../../../../types/app';
+import type { Project, ProjectSession, LLMProvider } from '../../../../types/app';
 import type { MCPServerStatus, SessionWithProvider } from '../../types/types';
 import { getTaskIndicatorStatus } from '../../utils/utils';
+
 import TaskIndicator from './TaskIndicator';
 import SidebarProjectSessions from './SidebarProjectSessions';
 
@@ -19,7 +21,7 @@ type SidebarProjectItemProps = {
   editingName: string;
   sessions: SessionWithProvider[];
   initialSessionsLoaded: boolean;
-  isLoadingSessions: boolean;
+  isLoadingMoreSessions: boolean;
   currentTime: Date;
   editingSession: string | null;
   editingSessionName: string;
@@ -38,24 +40,20 @@ type SidebarProjectItemProps = {
     projectName: string,
     sessionId: string,
     sessionTitle: string,
-    provider: SessionProvider,
+    provider: LLMProvider,
   ) => void;
-  onLoadMoreSessions: (project: Project) => void;
+  onLoadMoreSessions: (projectId: string) => void;
   onNewSession: (project: Project) => void;
   onEditingSessionNameChange: (value: string) => void;
   onStartEditingSession: (sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
-  onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: SessionProvider) => void;
+  onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => void;
   t: TFunction;
 };
 
-const getSessionCountDisplay = (sessions: SessionWithProvider[], hasMoreSessions: boolean): string => {
-  const sessionCount = sessions.length;
-  if (hasMoreSessions && sessionCount >= 5) {
-    return `${sessionCount}+`;
-  }
-
-  return `${sessionCount}`;
+const getSessionCountDisplay = (project: Project, sessions: SessionWithProvider[]): string => {
+  const total = Number(project.sessionMeta?.total ?? sessions.length);
+  return String(total);
 };
 
 export default function SidebarProjectItem({
@@ -69,7 +67,7 @@ export default function SidebarProjectItem({
   editingName,
   sessions,
   initialSessionsLoaded,
-  isLoadingSessions,
+  isLoadingMoreSessions,
   currentTime,
   editingSession,
   editingSessionName,
@@ -93,22 +91,24 @@ export default function SidebarProjectItem({
   onSaveEditingSession,
   t,
 }: SidebarProjectItemProps) {
-  const isSelected = selectedProject?.name === project.name;
-  const isEditing = editingProject === project.name;
-  const hasMoreSessions = project.sessionMeta?.hasMore === true;
-  const sessionCountDisplay = getSessionCountDisplay(sessions, hasMoreSessions);
-  const sessionCountLabel = `${sessionCountDisplay} session${sessions.length === 1 ? '' : 's'}`;
+  // Project identity is tracked by the DB-assigned `projectId` everywhere
+  // after the projectName → projectId migration.
+  const isSelected = selectedProject?.projectId === project.projectId;
+  const isEditing = editingProject === project.projectId;
+  const totalSessionCount = Number(project.sessionMeta?.total ?? sessions.length);
+  const sessionCountDisplay = getSessionCountDisplay(project, sessions);
+  const sessionCountLabel = `${sessionCountDisplay} session${totalSessionCount === 1 ? '' : 's'}`;
   const taskStatus = getTaskIndicatorStatus(project, mcpServerStatus);
 
-  const toggleProject = () => onToggleProject(project.name);
-  const toggleStarProject = () => onToggleStarProject(project.name);
+  const toggleProject = () => onToggleProject(project.projectId);
+  const toggleStarProject = () => onToggleStarProject(project.projectId);
 
   const saveProjectName = () => {
-    onSaveProjectName(project.name);
+    onSaveProjectName(project.projectId);
   };
 
   const selectAndToggleProject = () => {
-    if (selectedProject?.name !== project.name) {
+    if (selectedProject?.projectId !== project.projectId) {
       onProjectSelect(project);
     }
 
@@ -131,18 +131,28 @@ export default function SidebarProjectItem({
           >
             <div className="flex items-center justify-between">
               <div className="flex min-w-0 flex-1 items-center gap-3">
-                <div
+                <button
                   className={cn(
-                    'w-8 h-8 rounded-lg flex items-center justify-center transition-colors',
-                    isExpanded ? 'bg-primary/10' : 'bg-muted',
+                    'w-8 h-8 rounded-lg flex items-center justify-center active:scale-90 transition-all duration-150 border',
+                    isStarred
+                      ? 'bg-yellow-500/10 dark:bg-yellow-900/30 border-yellow-200 dark:border-yellow-800'
+                      : 'bg-gray-500/10 dark:bg-gray-900/30 border-gray-200 dark:border-gray-800',
                   )}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    toggleStarProject();
+                  }}
+                  title={isStarred ? t('tooltips.removeFromFavorites') : t('tooltips.addToFavorites')}
                 >
-                  {isExpanded ? (
-                    <FolderOpen className="h-4 w-4 text-primary" />
-                  ) : (
-                    <Folder className="h-4 w-4 text-muted-foreground" />
-                  )}
-                </div>
+                  <Star
+                    className={cn(
+                      'w-4 h-4 transition-colors',
+                      isStarred
+                        ? 'text-yellow-600 dark:text-yellow-400 fill-current'
+                        : 'text-gray-600 dark:text-gray-400',
+                    )}
+                  />
+                </button>
 
                 <div className="min-w-0 flex-1">
                   {isEditing ? (
@@ -213,29 +223,6 @@ export default function SidebarProjectItem({
                 ) : (
                   <>
                     <button
-                      className={cn(
-                        'w-8 h-8 rounded-lg flex items-center justify-center active:scale-90 transition-all duration-150 border',
-                        isStarred
-                          ? 'bg-yellow-500/10 dark:bg-yellow-900/30 border-yellow-200 dark:border-yellow-800'
-                          : 'bg-gray-500/10 dark:bg-gray-900/30 border-gray-200 dark:border-gray-800',
-                      )}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        toggleStarProject();
-                      }}
-                      title={isStarred ? t('tooltips.removeFromFavorites') : t('tooltips.addToFavorites')}
-                    >
-                      <Star
-                        className={cn(
-                          'w-4 h-4 transition-colors',
-                          isStarred
-                            ? 'text-yellow-600 dark:text-yellow-400 fill-current'
-                            : 'text-gray-600 dark:text-gray-400',
-                        )}
-                      />
-                    </button>
-
-                    <button
                       className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-500/10 active:scale-90 dark:border-red-800 dark:bg-red-900/30"
                       onClick={(event) => {
                         event.stopPropagation();
@@ -281,11 +268,28 @@ export default function SidebarProjectItem({
           onClick={selectAndToggleProject}
         >
           <div className="flex min-w-0 flex-1 items-center gap-3">
-            {isExpanded ? (
-              <FolderOpen className="h-4 w-4 flex-shrink-0 text-primary" />
-            ) : (
-              <Folder className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
-            )}
+            <div
+              className={cn(
+                'w-6 h-6 flex items-center justify-center rounded cursor-pointer transition-all duration-200',
+                isStarred
+                  ? 'hover:bg-yellow-50 dark:hover:bg-yellow-900/20'
+                  : 'opacity-40 hover:opacity-100 hover:bg-accent',
+              )}
+              onClick={(event) => {
+                event.stopPropagation();
+                toggleStarProject();
+              }}
+              title={isStarred ? t('tooltips.removeFromFavorites') : t('tooltips.addToFavorites')}
+            >
+              <Star
+                className={cn(
+                  'w-3 h-3 transition-colors',
+                  isStarred
+                    ? 'text-yellow-600 dark:text-yellow-400 fill-current'
+                    : 'text-muted-foreground',
+                )}
+              />
+            </div>
             <div className="min-w-0 flex-1 text-left">
               {isEditing ? (
                 <div className="space-y-1">
@@ -353,26 +357,6 @@ export default function SidebarProjectItem({
             ) : (
               <>
                 <div
-                  className={cn(
-                    'w-6 h-6 opacity-0 group-hover:opacity-100 transition-all duration-200 flex items-center justify-center rounded cursor-pointer touch:opacity-100',
-                    isStarred ? 'hover:bg-yellow-50 dark:hover:bg-yellow-900/20 opacity-100' : 'hover:bg-accent',
-                  )}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    toggleStarProject();
-                  }}
-                  title={isStarred ? t('tooltips.removeFromFavorites') : t('tooltips.addToFavorites')}
-                >
-                  <Star
-                    className={cn(
-                      'w-3 h-3 transition-colors',
-                      isStarred
-                        ? 'text-yellow-600 dark:text-yellow-400 fill-current'
-                        : 'text-muted-foreground',
-                    )}
-                  />
-                </div>
-                <div
                   className="touch:opacity-100 flex h-6 w-6 cursor-pointer items-center justify-center rounded opacity-0 transition-all duration-200 hover:bg-accent group-hover:opacity-100"
                   onClick={(event) => {
                     event.stopPropagation();
@@ -409,7 +393,8 @@ export default function SidebarProjectItem({
         sessions={sessions}
         selectedSession={selectedSession}
         initialSessionsLoaded={initialSessionsLoaded}
-        isLoadingSessions={isLoadingSessions}
+        hasMoreSessions={Boolean(project.sessionMeta?.hasMore)}
+        isLoadingMoreSessions={isLoadingMoreSessions}
         currentTime={currentTime}
         editingSession={editingSession}
         editingSessionName={editingSessionName}

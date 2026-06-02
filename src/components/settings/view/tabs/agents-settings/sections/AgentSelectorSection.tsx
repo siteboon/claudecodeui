@@ -3,16 +3,16 @@ import SessionProviderLogo from '../../../../../llm-logo-provider/SessionProvide
 import type { AgentProvider } from '../../../../types/types';
 import type { AgentSelectorSectionProps } from '../types';
 
-const AGENT_PROVIDERS: AgentProvider[] = ['claude', 'cursor', 'codex', 'gemini'];
-
 const AGENT_NAMES: Record<AgentProvider, string> = {
   claude: 'Claude',
   cursor: 'Cursor',
   codex: 'Codex',
   gemini: 'Gemini',
+  opencode: 'OpenCode',
 };
 
 export default function AgentSelectorSection({
+  agents,
   selectedAgent,
   onSelectAgent,
   agentContextById,
@@ -20,11 +20,12 @@ export default function AgentSelectorSection({
   return (
     <div className="flex-shrink-0 border-b border-border px-3 py-2 md:px-4 md:py-3">
       <PillBar className="w-full md:w-auto">
-        {AGENT_PROVIDERS.map((agent) => {
+        {agents.map((agent) => {
           const dotColor =
             agent === 'claude' ? 'bg-blue-500' :
             agent === 'cursor' ? 'bg-purple-500' :
-            agent === 'gemini' ? 'bg-indigo-500' : 'bg-foreground/60';
+            agent === 'gemini' ? 'bg-indigo-500' :
+            agent === 'opencode' ? 'bg-zinc-500' : 'bg-foreground/60';
 
           return (
             <Pill

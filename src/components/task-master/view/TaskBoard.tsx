@@ -72,13 +72,14 @@ export default function TaskBoard({
   );
 
   const loadPrdAndOpenEditor = async (prd: PrdFile) => {
-    if (!currentProject?.name) {
+    // Projects are addressed by DB projectId; see the projectName → projectId migration.
+    if (!currentProject?.projectId) {
       return;
     }
 
     try {
       const response = await api.get(
-        `/taskmaster/prd/${encodeURIComponent(currentProject.name)}/${encodeURIComponent(prd.name)}`,
+        `/taskmaster/prd/${encodeURIComponent(currentProject.projectId)}/${encodeURIComponent(prd.name)}`,
       );
 
       if (!response.ok) {

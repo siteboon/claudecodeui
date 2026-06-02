@@ -1,89 +1,160 @@
-# CloudCLI — Docker Sandbox Templates
+<!-- Docker Hub short description (100 chars max): -->
+<!-- Sandbox templates for running AI coding agents with a web & mobile IDE (Claude Code, Codex, Gemini) -->
 
-Run AI coding agents with a full web IDE inside [Docker Sandboxes](https://docs.docker.com/ai/sandboxes/).
+# Sandboxed coding agents with a web & mobile IDE (CloudCLI)
 
-Instead of a terminal-only experience, get a browser-based interface with chat, file explorer, git panel, shell, and MCP configuration — all running safely inside an isolated sandbox.
+[Docker Sandbox](https://docs.docker.com/ai/sandboxes/) templates that add [CloudCLI](https://cloudcli.ai) on top of Claude Code, Codex, and Gemini CLI. You get a full web and mobile IDE accessible from any browser on any device.
 
-## Available Templates
+## Get started
 
-| Template | Base Image | Agent |
-|----------|-----------|-------|
-| `cloudcli-ai/sandbox:claude-code` | `docker/sandbox-templates:claude-code` | Claude Code |
-| `cloudcli-ai/sandbox:codex` | `docker/sandbox-templates:codex` | OpenAI Codex |
-| `cloudcli-ai/sandbox:gemini` | `docker/sandbox-templates:gemini` | Gemini CLI |
+### 1. Install the sbx CLI
 
-## Quick Start
+Docker Sandboxes run agents in isolated microVMs. Install the `sbx` CLI:
 
-### 1. Start a sandbox with the template
+- **macOS**: `brew install docker/tap/sbx`
+- **Windows**: `winget install -h Docker.sbx`
+- **Linux**: `sudo apt-get install docker-sbx`
+
+Full instructions: [docs.docker.com/ai/sandboxes/get-started](https://docs.docker.com/ai/sandboxes/get-started/)
+
+### 2. Store your API key
+
+`sbx` manages credentials securely — your API key never enters the sandbox. Store it once:
 
 ```bash
-sbx run --template docker.io/cloudcli-ai/sandbox:claude-code claude ~/my-project
+sbx login
+sbx secret set -g anthropic
 ```
 
-### 2. Forward the UI port
+### 3. Launch Claude Code
 
 ```bash
-sbx ports <sandbox-name> --publish 3001:3001
+npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
 ```
 
-### 3. Open the browser
+Open **http://localhost:3001**. Set a password on first visit. Start building.
 
+### Using a different agent
+
+Store the matching API key and pass `--agent`:
+
+```bash
+# OpenAI Codex
+sbx secret set -g openai
+npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project --agent codex
+
+# Gemini CLI
+sbx secret set -g google
+npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project --agent gemini
 ```
-http://localhost:3001
+
+### Available templates
+
+| Agent | Template |
+|-------|----------|
+| **Claude Code** (default) | `docker.io/cloudcliai/sandbox:claude-code` |
+| OpenAI Codex | `docker.io/cloudcliai/sandbox:codex` |
+| Gemini CLI | `docker.io/cloudcliai/sandbox:gemini` |
+
+These are used with `--template` when running `sbx` directly (see [Advanced usage](#advanced-usage)).
+
+## Managing sandboxes
+
+```bash
+sbx ls                               # List all sandboxes
+sbx stop my-project                  # Stop (preserves state)
+sbx start my-project                 # Restart a stopped sandbox
+sbx rm my-project                    # Remove everything
+sbx exec my-project bash             # Open a shell inside the sandbox
 ```
 
-On first visit you'll set a password — this protects the UI if the port is ever exposed beyond localhost.
+If you install CloudCLI globally (`npm install -g @cloudcli-ai/cloudcli`), you can also use:
 
-## What You Get
+```bash
+cloudcli sandbox ls
+cloudcli sandbox start my-project    # Restart and re-launch web UI
+cloudcli sandbox logs my-project     # View server logs
+```
 
-- **Chat** — Rich conversation UI with markdown rendering, code blocks, and message history
-- **Files** — Visual file tree with syntax-highlighted editor
-- **Git** — Diff viewer, staging, branch switching, and commit — all visual
+## What you get
+
+- **Chat** — Markdown rendering, code blocks, message history
+- **Files** — File tree with syntax-highlighted editor
+- **Git** — Diff viewer, staging, branch switching, commits
 - **Shell** — Built-in terminal emulator
-- **MCP** — Configure Model Context Protocol servers through the UI
+- **MCP** — Configure Model Context Protocol servers visually
 - **Mobile** — Works on tablet and phone browsers
 
-## Building Locally
-
-All Dockerfiles share scripts from `shared/`. Build with the `docker/` directory as context:
-
-```bash
-# Claude Code variant
-docker build -f docker/claude-code/Dockerfile -t cloudcli-sandbox:claude-code docker/
-
-# Codex variant
-docker build -f docker/codex/Dockerfile -t cloudcli-sandbox:codex docker/
-
-# Gemini variant
-docker build -f docker/gemini/Dockerfile -t cloudcli-sandbox:gemini docker/
-```
-
-## How It Works
-
-Each template extends Docker's official sandbox base image and adds:
-
-1. **Node.js 22** — Runtime for CloudCLI
-2. **CloudCLI** — Installed globally via `npm install -g @cloudcli-ai/cloudcli`
-3. **Auto-start** — The UI server starts in the background when the sandbox shell opens (port 3001)
-
-The agent (Claude Code, Codex, or Gemini) comes from the base image. CloudCLI connects to it and provides the web interface on top.
+Your project directory is mounted bidirectionally — edits propagate in real time, both ways.
 
 ## Configuration
 
-| Environment Variable | Default | Description |
-|---------------------|---------|-------------|
-| `SERVER_PORT` | `3001` | Port for the web UI |
-| `HOST` | `0.0.0.0` | Bind address |
-| `DATABASE_PATH` | `~/.cloudcli/auth.db` | SQLite database location |
-
-## Network Policies
-
-If your sandbox uses restricted network policies, allow the UI port:
+Set variables at creation time with `--env`:
 
 ```bash
-sbx policy allow network "localhost:3001"
+npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project --env SERVER_PORT=8080
 ```
+
+Or inside a running sandbox:
+
+```bash
+sbx exec my-project bash -c 'echo "export SERVER_PORT=8080" >> /etc/sandbox-persistent.sh'
+```
+
+Restart CloudCLI for changes to take effect:
+
+```bash
+sbx exec my-project bash -c 'pkill -f "server/index.js"'
+sbx exec -d my-project cloudcli start --port 3001
+```
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SERVER_PORT` | `3001` | Web UI port |
+| `HOST` | `0.0.0.0` | Bind address (must be `0.0.0.0` for `sbx ports`) |
+| `DATABASE_PATH` | `~/.cloudcli/auth.db` | SQLite database location |
+
+## Advanced usage
+
+For branch mode, multiple workspaces, memory limits, or the terminal agent experience, use `sbx` with the template:
+
+```bash
+# Terminal agent + web UI
+sbx run --template docker.io/cloudcliai/sandbox:claude-code claude ~/my-project --name my-project
+sbx ports my-project --publish 3001:3001
+
+# Branch mode (Git worktree isolation)
+sbx run --template docker.io/cloudcliai/sandbox:claude-code claude ~/my-project --branch my-feature
+
+# Multiple workspaces
+sbx run --template docker.io/cloudcliai/sandbox:claude-code claude ~/project ~/shared-libs:ro
+
+# Pass a prompt directly
+sbx run --template docker.io/cloudcliai/sandbox:claude-code claude ~/my-project -- "Fix the auth bug"
+```
+
+CloudCLI auto-starts via `.bashrc` when using `sbx run`.
+
+Full options in the [Docker Sandboxes usage guide](https://docs.docker.com/ai/sandboxes/usage/).
+
+## Network policies
+
+Sandboxes restrict outbound access by default. To reach host services from inside the sandbox:
+
+```bash
+sbx policy allow network localhost:11434
+# Inside the sandbox: curl http://host.docker.internal:11434
+```
+
+The web UI itself doesn't need a policy — access it via `sbx ports`.
+
+## Links
+
+- [CloudCLI Cloud](https://cloudcli.ai) — fully managed, no setup required
+- [Documentation](https://cloudcli.ai/docs) — full configuration guide
+- [Discord](https://discord.gg/buxwujPNRE) — community support
+- [GitHub](https://github.com/siteboon/claudecodeui) — source code and issues
 
 ## License
 
-These templates are free and open-source under the same license as CloudCLI (AGPL-3.0-or-later).
+AGPL-3.0-or-later
