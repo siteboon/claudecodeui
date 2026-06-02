@@ -377,6 +377,10 @@ export default function ChatComposer({
                         : t('input.startDictation', { defaultValue: `Dictate with Whisper (${dictationShortcutLabel})` }),
                 }}
                 onClick={onToggleDictation}
+                onTouchEnd={(e) => {
+                  e.preventDefault();
+                  if (dictationState !== 'transcribing') onToggleDictation();
+                }}
                 disabled={dictationState === 'transcribing'}
                 className={
                   dictationState === 'recording'
@@ -395,13 +399,6 @@ export default function ChatComposer({
                 )}
               </PromptInputButton>
             )}
-
-            <PromptInputButton
-              tooltip={{ content: t('input.showAllCommands') }}
-              onClick={onToggleCommandMenu}
-            >
-              <MessageSquareIcon />
-            </PromptInputButton>
 
             {onTogglePromptNav && hasMessages && (
               <PromptInputButton
@@ -492,8 +489,8 @@ export default function ChatComposer({
           </PromptInputTools>
 
           <ContextUsagePill
-            used={tokenBudget?.used || 0}
-            total={tokenBudget?.total || parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000}
+            used={(tokenBudget?.used as number) || 0}
+            total={(tokenBudget?.total as number) || parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000}
             provider={provider as string}
             onOpenSettings={onOpenSettings}
           />
