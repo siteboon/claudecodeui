@@ -154,7 +154,8 @@ export const useFileTreeUpload = ({
       formData.append('relativePaths', JSON.stringify(relativePaths));
 
       const response = await api.post(
-        `/projects/${encodeURIComponent(selectedProject!.name)}/files/upload`,
+        // File upload endpoint is keyed by DB projectId post-migration.
+        `/projects/${encodeURIComponent(selectedProject!.projectId)}/files/upload`,
         formData
       );
 

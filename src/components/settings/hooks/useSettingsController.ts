@@ -226,12 +226,19 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
   }, []);
 
   const handleLoginComplete = useCallback((exitCode: number) => {
-    if (exitCode !== 0 || !loginProvider) {
+    if (!loginProvider) {
       return;
     }
 
-    setSaveStatus('success');
-    void checkProviderAuthStatus(loginProvider);
+    void (async () => {
+      const authStatus = await checkProviderAuthStatus(loginProvider);
+
+      if (exitCode !== 0) {
+        console.warn(`Login process exited with code ${exitCode}; refreshing auth status before setting save status.`);
+      }
+
+      setSaveStatus(authStatus.authenticated ? 'success' : 'error');
+    })();
   }, [checkProviderAuthStatus, loginProvider]);
 
   const saveSettings = useCallback(async () => {
