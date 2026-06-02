@@ -8,12 +8,14 @@
  * - TaskMaster state and metadata management
  */
 
-import express from 'express';
-import fs from 'fs';
+import { spawn } from 'child_process';
 import path from 'path';
 import { promises as fsPromises } from 'fs';
-import { spawn } from 'child_process';
+
+import express from 'express';
+
 import { projectsDb } from '../modules/database/index.js';
+import { syncNewTasksToGitHub, syncTaskToGitHub } from '../modules/github/github-sync.service.js';
 import { detectTaskMasterMCPServer } from '../utils/mcp-detector.js';
 import { broadcastTaskMasterProjectUpdate, broadcastTaskMasterTasksUpdate } from '../utils/taskmaster-websocket.js';
 
@@ -594,25 +596,25 @@ router.post('/add-task/:projectId', async (req, res) => {
         }
 
         // Build the task-master add-task command
-        const args = ['task-master-ai', 'add-task'];
-        
+        const args = ['add-task'];
+
         if (prompt) {
             args.push('--prompt', prompt);
             args.push('--research'); // Use research for AI-generated tasks
         } else {
             args.push('--prompt', `Create a task titled "${title}" with description: ${description}`);
         }
-        
+
         if (priority) {
             args.push('--priority', priority);
         }
-        
+
         if (dependencies) {
             args.push('--dependencies', dependencies);
         }
 
         // Run task-master add-task command
-        const addTaskProcess = spawn('npx', args, {
+        const addTaskProcess = spawn('task-master', args, {
             cwd: projectPath,
             stdio: ['pipe', 'pipe', 'pipe']
         });
@@ -642,6 +644,11 @@ router.post('/add-task/:projectId', async (req, res) => {
                         projectId
                     );
                 }
+
+                // GitHub sync — fire and forget
+                syncNewTasksToGitHub(projectPath).catch(e =>
+                    console.error('[GitHub Sync] add-task:', e.message)
+                );
 
                 res.json({
                     projectId,
@@ -690,7 +697,7 @@ router.put('/update-task/:projectId/:taskId', async (req, res) => {
 
         // If only updating status, use set-status command
         if (status && Object.keys(req.body).length === 1) {
-            const setStatusProcess = spawn('npx', ['task-master-ai', 'set-status', `--id=${taskId}`, `--status=${status}`], {
+            const setStatusProcess = spawn('task-master', ['set-status', `--id=${taskId}`, `--status=${status}`], {
                 cwd: projectPath,
                 stdio: ['pipe', 'pipe', 'pipe']
             });
@@ -712,6 +719,11 @@ router.put('/update-task/:projectId/:taskId', async (req, res) => {
                     if (req.app.locals.wss) {
                         broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectId);
                     }
+
+                    // GitHub sync — fire and forget
+                    syncTaskToGitHub(projectPath, taskId).catch(e =>
+                        console.error('[GitHub Sync] set-status:', e.message)
+                    );
 
                     res.json({
                         projectId,
@@ -742,7 +754,7 @@ router.put('/update-task/:projectId/:taskId', async (req, res) => {
             
             const prompt = `Update task with the following changes: ${updates.join(', ')}`;
 
-            const updateProcess = spawn('npx', ['task-master-ai', 'update-task', `--id=${taskId}`, `--prompt=${prompt}`], {
+            const updateProcess = spawn('task-master', ['update-task', `--id=${taskId}`, `--prompt=${prompt}`], {
                 cwd: projectPath,
                 stdio: ['pipe', 'pipe', 'pipe']
             });
@@ -764,6 +776,11 @@ router.put('/update-task/:projectId/:taskId', async (req, res) => {
                     if (req.app.locals.wss) {
                         broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectId);
                     }
+
+                    // GitHub sync — fire and forget
+                    syncTaskToGitHub(projectPath, taskId).catch(e =>
+                        console.error('[GitHub Sync] update-task:', e.message)
+                    );
 
                     res.json({
                         projectId,
@@ -825,7 +842,7 @@ router.post('/parse-prd/:projectId', async (req, res) => {
         }
 
         // Build the command args
-        const args = ['task-master-ai', 'parse-prd', prdPath];
+        const args = ['parse-prd', prdPath];
         
         if (numTasks) {
             args.push('--num-tasks', numTasks.toString());
@@ -838,7 +855,7 @@ router.post('/parse-prd/:projectId', async (req, res) => {
         args.push('--research'); // Use research for better PRD parsing
 
         // Run task-master parse-prd command
-        const parsePRDProcess = spawn('npx', args, {
+        const parsePRDProcess = spawn('task-master', args, {
             cwd: projectPath,
             stdio: ['pipe', 'pipe', 'pipe']
         });

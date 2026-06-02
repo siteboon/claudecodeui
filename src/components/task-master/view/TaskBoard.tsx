@@ -8,6 +8,7 @@ import TaskBoardContent from './TaskBoardContent';
 import TaskBoardToolbar from './TaskBoardToolbar';
 import TaskEmptyState from './TaskEmptyState';
 import CreateTaskModal from './modals/CreateTaskModal';
+import GitHubSyncModal from './modals/GitHubSyncModal';
 import TaskHelpModal from './modals/TaskHelpModal';
 import TaskMasterSetupModal from './modals/TaskMasterSetupModal';
 
@@ -41,6 +42,7 @@ export default function TaskBoard({
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showSetupModal, setShowSetupModal] = useState(false);
+  const [showGitHubModal, setShowGitHubModal] = useState(false);
 
   const {
     searchTerm,
@@ -164,6 +166,7 @@ export default function TaskBoard({
         }}
         onOpenHelp={() => setShowHelpModal(true)}
         onOpenCreateTask={() => setShowCreateModal(true)}
+        onOpenGitHubSync={() => setShowGitHubModal(true)}
       />
 
       <TaskBoardContent
@@ -194,6 +197,12 @@ export default function TaskBoard({
         project={currentProject}
         onClose={() => setShowSetupModal(false)}
         onAfterClose={refreshAfterSetup}
+      />
+
+      <GitHubSyncModal
+        isOpen={showGitHubModal}
+        project={currentProject}
+        onClose={() => setShowGitHubModal(false)}
       />
     </div>
   );

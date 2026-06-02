@@ -215,6 +215,29 @@ export const api = {
       }),
   },
 
+  github: {
+    getConfig: (projectId) =>
+      authenticatedFetch(`/api/github/config/${projectId}`),
+
+    saveConfig: (projectId, config) =>
+      authenticatedFetch(`/api/github/config/${projectId}`, {
+        method: 'PUT',
+        body: JSON.stringify(config),
+      }),
+
+    deleteConfig: (projectId) =>
+      authenticatedFetch(`/api/github/config/${projectId}`, { method: 'DELETE' }),
+
+    testConnection: (projectId, { owner, repo, token }) =>
+      authenticatedFetch(`/api/github/test/${projectId}`, {
+        method: 'POST',
+        body: JSON.stringify({ owner, repo, token }),
+      }),
+
+    sync: (projectId) =>
+      authenticatedFetch(`/api/github/sync/${projectId}`, { method: 'POST' }),
+  },
+
   // Browse filesystem for project suggestions
   browseFilesystem: (dirPath = null) => {
     const params = new URLSearchParams();

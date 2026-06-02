@@ -113,6 +113,17 @@ export type TaskMasterContextValue = {
   clearError: () => void;
 };
 
+export type GitHubSyncConfig = {
+  configured: boolean;
+  enabled?: boolean;
+  owner?: string;
+  repo?: string;
+  hasToken?: boolean;
+  hasWebhookSecret?: boolean;
+  lastSync?: string | null;
+  taskCount?: number;
+};
+
 export type TaskBoardView = 'kanban' | 'list' | 'grid';
 
 export type TaskBoardSortField = 'id' | 'title' | 'status' | 'priority' | 'updated';

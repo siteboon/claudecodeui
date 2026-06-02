@@ -4,6 +4,7 @@ import {
   Columns,
   FileText,
   Filter,
+  Github,
   Grid,
   HelpCircle,
   List,
@@ -43,6 +44,7 @@ type TaskBoardToolbarProps = {
   onOpenPrd: (prd: PrdFile) => void;
   onOpenHelp: () => void;
   onOpenCreateTask: () => void;
+  onOpenGitHubSync?: () => void;
 };
 
 export default function TaskBoardToolbar({
@@ -72,6 +74,7 @@ export default function TaskBoardToolbar({
   onOpenPrd,
   onOpenHelp,
   onOpenCreateTask,
+  onOpenGitHubSync,
 }: TaskBoardToolbarProps) {
   const { t } = useTranslation('tasks');
   const [isPrdDropdownOpen, setIsPrdDropdownOpen] = useState(false);
@@ -167,6 +170,16 @@ export default function TaskBoardToolbar({
               >
                 <HelpCircle className="h-4 w-4" />
               </button>
+
+              {onOpenGitHubSync && (
+                <button
+                  onClick={onOpenGitHubSync}
+                  className="rounded-lg border border-gray-300 p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white"
+                  title="GitHub Issues Sync"
+                >
+                  <Github className="h-4 w-4" />
+                </button>
+              )}
 
               <div ref={dropdownRef} className="relative">
                 {existingPrds.length > 0 ? (

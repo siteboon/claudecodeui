@@ -63,6 +63,7 @@ import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
 import cursorRoutes from './routes/cursor.js';
 import taskmasterRoutes from './routes/taskmaster.js';
+import githubRoutes from './routes/github.js';
 import mcpUtilsRoutes from './routes/mcp-utils.js';
 import commandsRoutes from './routes/commands.js';
 import settingsRoutes from './routes/settings.js';
@@ -142,6 +143,7 @@ app.locals.wss = wss;
 app.use(cors({ exposedHeaders: ['X-Refreshed-Token'] }));
 app.use(express.json({
     limit: '50mb',
+    verify: (req, _res, buf) => { req.rawBody = buf; },
     type: (req) => {
         // Skip multipart/form-data requests (for file uploads like images)
         const contentType = req.headers['content-type'] || '';
@@ -179,6 +181,12 @@ app.use('/api/cursor', authenticateToken, cursorRoutes);
 
 // TaskMaster API Routes (protected)
 app.use('/api/taskmaster', authenticateToken, taskmasterRoutes);
+
+// GitHub Sync Routes — webhook is HMAC-verified (no JWT), all other routes require auth
+app.use('/api/github', (req, res, next) => {
+    if (req.path.startsWith('/webhook/')) return next();
+    return authenticateToken(req, res, next);
+}, githubRoutes);
 
 // MCP utilities
 app.use('/api/mcp-utils', authenticateToken, mcpUtilsRoutes);

@@ -18,6 +18,13 @@ export default function TaskMasterPanel({ isVisible }: TaskMasterPanelProps) {
   const [selectedTask, setSelectedTask] = useState<TaskMasterTask | null>(null);
   const [isTaskDetailOpen, setIsTaskDetailOpen] = useState(false);
 
+  // Keep selectedTask in sync with refreshed tasks so status/field changes reflect immediately
+  useEffect(() => {
+    if (!selectedTask) return;
+    const updated = tasks.find((t) => String(t.id) === String(selectedTask.id));
+    if (updated) setSelectedTask(updated);
+  }, [tasks]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [isPrdEditorOpen, setIsPrdEditorOpen] = useState(false);
   const [selectedPrd, setSelectedPrd] = useState<PrdFile | null>(null);
 
