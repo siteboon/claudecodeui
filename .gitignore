@@ -92,6 +92,7 @@ jspm_packages/
 tmp/
 temp/
 .tmp/
+temp-img/
 
 # Vite
 .vite/

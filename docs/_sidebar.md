@@ -1,0 +1,4 @@
+- [TO_DO — lista zadań forka claudecodeui](00_TO_DO.md)
+- [docs/ — Fork working notes](01_README.md)
+- [Architecture — claudecodeui (fork)](02_ARCHITECTURE.md)
+- [Access — Main Install (fork)](03_ACCESS.md)
