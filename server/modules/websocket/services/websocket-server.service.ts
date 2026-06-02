@@ -15,6 +15,12 @@ type WebSocketServerDependencies = {
   getPluginPort: Parameters<typeof handlePluginWsProxy>[2];
 };
 
+// BASE_PATH for subpath deployment (e.g. '/s/mealstead'). Leading slash, no trailing slash.
+const BASE_PATH = (() => {
+  const trimmed = (process.env.BASE_PATH || '').trim().replace(/^\/+|\/+$/g, '');
+  return trimmed ? `/${trimmed}` : '';
+})();
+
 /**
  * Creates and wires the server-wide websocket gateway used for chat, shell, and
  * plugin proxy routes.
@@ -33,7 +39,13 @@ export function createWebSocketServer(
   wss.on('connection', (ws, request) => {
     const incomingRequest = request as AuthenticatedWebSocketRequest;
     const url = incomingRequest.url ?? '/';
-    const pathname = new URL(url, 'http://localhost').pathname;
+    let pathname = new URL(url, 'http://localhost').pathname;
+
+    // Strip BASE_PATH prefix on segment boundary so subpath deployments
+    // route the same as direct ones. Avoid greedy prefix matching.
+    if (BASE_PATH && (pathname === BASE_PATH || pathname.startsWith(`${BASE_PATH}/`))) {
+      pathname = pathname.slice(BASE_PATH.length) || '/';
+    }
 
     if (pathname === '/shell') {
       handleShellConnection(ws, dependencies.shell);

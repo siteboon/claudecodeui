@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
+import { assetUrl } from '../../utils/basePath';
 
 type CursorLogoProps = {
   className?: string;
@@ -10,7 +11,7 @@ const CursorLogo = ({ className = 'w-5 h-5' }: CursorLogoProps) => {
 
   return (
     <img
-      src={isDarkMode ? "/icons/cursor-white.svg" : "/icons/cursor.svg"}
+      src={isDarkMode ? assetUrl("/icons/cursor-white.svg") : assetUrl("/icons/cursor.svg")}
       alt="Cursor"
       className={className}
     />

@@ -19,6 +19,7 @@ export default defineConfig(({ mode }) => {
   const serverPort = env.SERVER_PORT || env.PORT || 3001
 
   return {
+    base: env.VITE_BASE_PATH || '/',
     plugins: [react()],
     resolve: {
       alias: {
