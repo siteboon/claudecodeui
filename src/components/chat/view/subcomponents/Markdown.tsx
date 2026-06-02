@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -118,6 +118,50 @@ const CodeBlock = ({ node, inline, className, children, ...props }: CodeBlockPro
   );
 };
 
+const ImageWithLightbox = ({ src, alt }: { src?: string; alt?: string }) => {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
+
+  return (
+    <>
+      <img
+        src={src}
+        alt={alt || ''}
+        className="my-2 max-h-48 max-w-full cursor-zoom-in rounded-lg border border-gray-200 object-contain dark:border-gray-700"
+        onClick={() => setOpen(true)}
+        loading="lazy"
+      />
+      {open && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setOpen(false)}
+        >
+          <div className="relative max-h-full max-w-full" onClick={e => e.stopPropagation()}>
+            <button
+              className="absolute -right-3 -top-3 flex h-7 w-7 items-center justify-center rounded-full bg-gray-800 text-white hover:bg-gray-700"
+              onClick={() => setOpen(false)}
+              aria-label="Close"
+            >
+              ✕
+            </button>
+            <img
+              src={src}
+              alt={alt || ''}
+              className="max-h-[85vh] max-w-[90vw] rounded-lg object-contain"
+            />
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
 const markdownComponents = {
   code: CodeBlock,
   blockquote: ({ children }: { children?: React.ReactNode }) => (
@@ -130,15 +174,7 @@ const markdownComponents = {
       {children}
     </a>
   ),
-  img: ({ src, alt }: { src?: string; alt?: string }) => (
-    <img
-      src={src}
-      alt={alt || ''}
-      className="my-2 max-h-96 max-w-full cursor-pointer rounded-lg border border-gray-200 dark:border-gray-700"
-      onClick={() => { if (src) window.open(src, '_blank', 'noopener,noreferrer'); }}
-      loading="lazy"
-    />
-  ),
+  img: ImageWithLightbox,
   p: ({ children }: { children?: React.ReactNode }) => <div className="mb-2 last:mb-0">{children}</div>,
   table: ({ children }: { children?: React.ReactNode }) => (
     <div className="my-2 overflow-x-auto">

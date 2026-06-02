@@ -217,8 +217,8 @@ function mapCliOptionsToSDK(options = {}) {
   // where the file-serving endpoint can reach them.
   sdkOptions.appendSystemPrompt =
     'When you generate or create image files that you want to display to the user, ' +
-    'save them inside the current project directory under an ".images/" subfolder ' +
-    '(e.g. ".images/output.png", ".images/chart.png"). ' +
+    'save them inside the current project directory under a "temp-img/" subfolder ' +
+    '(e.g. "temp-img/output.png", "temp-img/chart.png"). ' +
     'Do NOT save them to /tmp or any path outside the project directory. ' +
     'The UI automatically renders images stored within the project directory as inline images in the chat.';
 
@@ -350,9 +350,9 @@ async function handleImages(command, images, cwd) {
   }
 
   try {
-    // Create temp directory in the project directory
+    // Create persistent image directory in the project directory
     const workingDir = cwd || process.cwd();
-    tempDir = path.join(workingDir, '.tmp', 'images', Date.now().toString());
+    tempDir = path.join(workingDir, 'temp-img', Date.now().toString());
     await fs.mkdir(tempDir, { recursive: true });
 
     // Save each image to a temp file
@@ -394,30 +394,8 @@ async function handleImages(command, images, cwd) {
  * @param {Array<string>} tempImagePaths - Array of temp file paths to delete
  * @param {string} tempDir - Temp directory to remove
  */
-async function cleanupTempFiles(tempImagePaths, tempDir) {
-  if (!tempImagePaths || tempImagePaths.length === 0) {
-    return;
-  }
-
-  try {
-    // Delete individual temp files
-    for (const imagePath of tempImagePaths) {
-      await fs.unlink(imagePath).catch(err =>
-        console.error(`Failed to delete temp image ${imagePath}:`, err)
-      );
-    }
-
-    // Delete temp directory
-    if (tempDir) {
-      await fs.rm(tempDir, { recursive: true, force: true }).catch(err =>
-        console.error(`Failed to delete temp directory ${tempDir}:`, err)
-      );
-    }
-
-    // Temp files cleaned
-  } catch (error) {
-    console.error('Error during temp file cleanup:', error);
-  }
+async function cleanupTempFiles(_tempImagePaths, _tempDir) {
+  // Images saved to temp-img/ are kept for display in chat — no cleanup.
 }
 
 /**
