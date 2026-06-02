@@ -89,12 +89,14 @@
     "permissionMode": "İzin Modu",
     "modes": {
       "default": "Varsayılan Mod",
+      "auto": "Auto Mode",
       "acceptEdits": "Düzenlemeleri Kabul Et",
       "bypassPermissions": "İzinleri Atla",
       "plan": "Plan Modu"
     },
     "descriptions": {
       "default": "Sadece güvenilir komutlar (ls, cat, grep, git status, vb.) otomatik çalışır. Diğer komutlar atlanır. Çalışma alanına yazabilir.",
+      "auto": "A model classifier decides per tool call whether to approve or deny. Hands-off, but safer than Bypass — denials still happen.",
       "acceptEdits": "Tüm komutlar çalışma alanı içinde otomatik çalışır. Sandbox'lu çalıştırma ile tam otomatik mod.",
       "bypassPermissions": "Kısıtlama olmadan tam sistem erişimi. Tüm komutlar tam disk ve ağ erişimiyle otomatik çalışır. Dikkatli kullan.",
       "plan": "Planlama modu — hiçbir komut çalıştırılmaz"
@@ -188,7 +190,8 @@
       "codex": "Codex'i {{model}} ile kullanmaya hazır. Mesajını aşağıya yazmaya başla.",
       "gemini": "Gemini'yi {{model}} ile kullanmaya hazır. Mesajını aşağıya yazmaya başla.",
       "default": "Başlamak için yukarıdan bir sağlayıcı seç"
-    }
+    },
+    "pressToSearch": "Oturumlarda, dosyalarda ve commit'lerde arama yapmak için <kbd>{{shortcut}}</kbd> tuşlarına bas"
   },
   "session": {
     "continue": {

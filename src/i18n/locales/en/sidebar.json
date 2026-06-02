@@ -45,9 +45,11 @@
     "removeFromFavorites": "Remove from favorites",
     "editSessionName": "Manually edit session name",
     "deleteSession": "Delete this session permanently",
+    "activeSessionIndicator": "Recently active session (last 10 minutes)",
     "save": "Save",
     "cancel": "Cancel",
-    "clearSearch": "Clear search"
+    "clearSearch": "Clear search",
+    "openCommandPalette": "Open command palette"
   },
   "navigation": {
     "chat": "Chat",

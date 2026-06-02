@@ -12,6 +12,9 @@ type PluginTabContentProps = {
 
 type PluginContext = {
   theme: 'dark' | 'light';
+  // Plugin contract historically used `name` for the project identifier; we
+  // keep that key and populate it from the DB `projectId` so external plugins
+  // continue to receive a stable opaque id.
   project: { name: string; path: string } | null;
   session: { id: string; title: string } | null;
 };
@@ -25,7 +28,7 @@ function buildContext(
     theme: isDarkMode ? 'dark' : 'light',
     project: selectedProject
       ? {
-        name: selectedProject.name,
+        name: selectedProject.projectId,
         path: selectedProject.fullPath || selectedProject.path || '',
       }
       : null,

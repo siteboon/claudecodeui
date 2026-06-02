@@ -75,7 +75,7 @@
 - **Session Management** - Resume conversations, manage multiple sessions, and track history
 - **Plugin System** - Extend CloudCLI with custom plugins — add new tabs, backend services, and integrations. [Build your own →](https://github.com/cloudcli-ai/cloudcli-plugin-starter)
 - **TaskMaster AI Integration** *(Optional)* - Advanced project management with AI-powered task planning, PRD parsing, and workflow automation
-- **Model Compatibility** - Works with Claude, GPT, and Gemini model families (see [`shared/modelConstants.js`](https://github.com/siteboon/claudecodeui/blob/main/shared/modelConstants.js) for the full list of supported models)
+- **Model Compatibility** - Works with Claude, GPT, and Gemini model families (see [`public/modelConstants.js`](https://github.com/siteboon/claudecodeui/blob/main/public/modelConstants.js) for the full list of supported models)
 
 
 ## Quick Start

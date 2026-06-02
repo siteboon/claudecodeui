@@ -1,9 +1,11 @@
+import { execFile } from 'child_process';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { execFile } from 'child_process';
 import { promisify } from 'util';
+
 import { parse as parseShellCommand } from 'shell-quote';
-import { parseFrontmatter } from './frontmatter.js';
+
+import { parseFrontMatter } from '../shared/frontmatter.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -32,7 +34,7 @@ const BASH_COMMAND_ALLOWLIST = [
  */
 export function parseCommand(content) {
   try {
-    const parsed = parseFrontmatter(content);
+    const parsed = parseFrontMatter(content);
     return {
       data: parsed.data || {},
       content: parsed.content || '',

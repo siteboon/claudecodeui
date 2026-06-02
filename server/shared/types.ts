@@ -1,18 +1,164 @@
-// -------------- HTTP API response shapes for the server, shared across modules --------------
+import type { IncomingMessage } from 'node:http';
 
+//----------------- HTTP RESPONSE SHAPES ------------
+/**
+ * Canonical success envelope used by backend APIs that return a structured payload.
+ *
+ * Use this for route handlers that need a stable `success/data` shape so frontend
+ * consumers can parse responses consistently across endpoints.
+ */
 export type ApiSuccessShape<TData = unknown> = {
   success: true;
   data: TData;
 };
 
+/**
+ * Generic plain-object record used when parsing loosely typed JSON payloads.
+ *
+ * Use this only after runtime shape checks, not as a replacement for validated
+ * domain models.
+ */
 export type AnyRecord = Record<string, any>;
 
-// ---------------------------------------------------------------------------------------------
+// ---------------------------
+//----------------- WEBSOCKET TRANSPORT TYPES ------------
+/**
+ * Minimal websocket client contract used by backend broadcaster services.
+ *
+ * Any transport object added to `connectedClients` must implement these two
+ * members so shared services can safely send JSON strings and check whether the
+ * socket is still open before broadcasting.
+ */
+export type RealtimeClientConnection = {
+  readyState: number;
+  send(data: string): void;
+};
 
-export type LLMProvider = 'claude' | 'codex' | 'gemini' | 'cursor';
+/**
+ * Authenticated user payload attached to websocket upgrade requests.
+ *
+ * Platform and OSS auth flows currently use either `id` or `userId`; both are
+ * represented here so websocket handlers can resolve a stable writer user id.
+ */
+export type AuthenticatedWebSocketUser = {
+  id?: string | number;
+  userId?: string | number;
+  username?: string;
+  [key: string]: unknown;
+};
 
-// ---------------------------------------------------------------------------------------------
+/**
+ * HTTP upgrade request shape after websocket authentication succeeds.
+ *
+ * `verifyClient` populates `request.user` with the authenticated payload, and
+ * downstream websocket handlers rely on this extended request type.
+ */
+export type AuthenticatedWebSocketRequest = IncomingMessage & {
+  user?: AuthenticatedWebSocketUser;
+};
 
+// ---------------------------
+//----------------- PROVIDER MESSAGE MODEL ------------
+/**
+ * Providers supported by the unified server runtime.
+ *
+ * Use this as the source of truth whenever a function or payload needs to identify
+ * a specific LLM integration.
+ */
+export type LLMProvider = 'claude' | 'codex' | 'gemini' | 'cursor' | 'opencode';
+
+/**
+ * One selectable model row (matches the documentation `public/modelConstants.js` option shape).
+ */
+export type ProviderModelOption = {
+  value: string;
+  label: string;
+  description?: string;
+};
+
+/**
+ * Provider model catalog returned by `GET /api/providers/:provider/models`.
+ */
+export type ProviderModelsDefinition = {
+  OPTIONS: ProviderModelOption[];
+  DEFAULT: string;
+};
+
+/**
+ * Cache metadata returned alongside one provider model catalog.
+ *
+ * `updatedAt` is when the current cached snapshot was last refreshed from the
+ * provider itself. `expiresAt` is the backend cache expiry timestamp, and
+ * `source` tells callers whether the current response came from in-memory cache,
+ * persisted disk cache, or a fresh provider fetch.
+ */
+export type ProviderModelsCacheInfo = {
+  updatedAt: string;
+  expiresAt: string;
+  source: 'memory' | 'disk' | 'fresh';
+};
+
+/**
+ * Full provider model lookup result returned by the backend service layer.
+ *
+ * Use this shape when a caller needs both the selectable model catalog and the
+ * cache metadata that explains how current the catalog is.
+ */
+export type ProviderModelsResult = {
+  models: ProviderModelsDefinition;
+  cache: ProviderModelsCacheInfo;
+};
+
+// ---------------------------
+//----------------- PROVIDER ACTIVE MODEL TYPES ------------
+/**
+ * Provider-neutral result for the model that is actively driving a session or
+ * provider runtime at the time of lookup.
+ *
+ * `model` must always be populated. Provider adapters should use the
+ * provider-specific lookup method requested by the caller, and only fall back
+ * to the provider catalog `DEFAULT` value when the active model cannot be read.
+ */
+export type ProviderCurrentActiveModel = {
+  model: string;
+};
+
+/**
+ * Input payload used when one session needs to use a different model on its
+ * next resumed turn.
+ *
+ * This is a backend-owned session override, not a claim that the provider has
+ * already switched the currently running session in-place. Provider adapters
+ * persist this request so the next CLI/SDK resume can inject the chosen model
+ * using the provider-specific mechanism supported by that runtime.
+ */
+export type ProviderChangeActiveModelInput = {
+  sessionId: string;
+  model: string;
+};
+
+/**
+ * Provider-neutral session model-change state.
+ *
+ * `supported` indicates whether the provider adapter supports the app's
+ * session-scoped resume override flow. `changed` is the persisted boolean the
+ * resume layer checks before forcing a model on the next resumed turn. When
+ * `changed` is `false`, `model` is `null` and the runtime should use the
+ * normal request/default model selection path.
+ */
+export type ProviderSessionActiveModelChange = {
+  provider: LLMProvider;
+  sessionId: string;
+  supported: boolean;
+  changed: boolean;
+  model: string | null;
+};
+
+/**
+ * Message/event variants emitted by provider adapters and normalized transports.
+ *
+ * Keep this union in sync with event kinds produced by provider session adapters.
+ */
 export type MessageKind =
   | 'text'
   | 'tool_use'
@@ -30,11 +176,10 @@ export type MessageKind =
   | 'task_notification';
 
 /**
- * Provider-neutral message event emitted over REST and realtime transports.
+ * Provider-neutral message envelope used in REST responses and realtime channels.
  *
- * Providers all produce their own native SDK/CLI event shapes, so this type keeps
- * the common envelope strict while allowing provider-specific details to ride
- * along as optional properties.
+ * Every provider-specific message must be converted into this shape before being
+ * emitted outside provider-specific modules.
  */
 export type NormalizedMessage = {
   id: string;
@@ -44,6 +189,21 @@ export type NormalizedMessage = {
   kind: MessageKind;
   role?: 'user' | 'assistant';
   content?: string;
+  /**
+   * Optional display-oriented metadata used by providers that need to expose
+   * richer transcript artifacts without introducing a brand-new message kind.
+   *
+   * Current Claude usage:
+   * - local slash commands expose parsed command fields
+   * - compact summaries are flagged so the UI can treat them differently later
+   */
+  displayText?: string;
+  commandName?: string;
+  commandMessage?: string;
+  commandArgs?: string;
+  isLocalCommand?: boolean;
+  isLocalCommandStdout?: boolean;
+  isCompactSummary?: boolean;
   images?: unknown;
   toolName?: string;
   toolInput?: unknown;
@@ -73,21 +233,21 @@ export type NormalizedMessage = {
 };
 
 /**
- * Pagination and provider lookup options for reading persisted session history.
+ * Shared options used to fetch historical provider messages.
+ *
+ * Consumers should pass provider-specific lookup hints (`projectPath`) only
+ * when the selected provider requires them.
  */
 export type FetchHistoryOptions = {
-  /** Claude project folder name. Required by Claude history lookup. */
-  projectName?: string;
-  /** Absolute workspace path. Required by Cursor to compute its chat hash. */
   projectPath?: string;
-  /** Page size. `null` means all messages. */
   limit?: number | null;
-  /** Pagination offset from the newest messages. */
   offset?: number;
 };
 
 /**
- * Provider-neutral history result returned by the unified messages endpoint.
+ * Standardized response payload returned from provider history readers.
+ *
+ * Use this as the contract for APIs that return paginated conversation history.
  */
 export type FetchHistoryResult = {
   messages: NormalizedMessage[];
@@ -98,21 +258,103 @@ export type FetchHistoryResult = {
   tokenUsage?: unknown;
 };
 
-// ---------------------------------------------------------------------------------------------
+// ---------------------------
+//----------------- PROVIDER SKILL TYPES ------------
+/**
+ * Scope where a provider skill definition was discovered.
+ *
+ * Provider skill adapters should use this to describe the origin of each
+ * skill markdown file without leaking provider-specific folder names into route
+ * contracts. `repo` is used for Codex repository lookup locations, while
+ * `project` is used for providers that treat workspace-local skills as project
+ * scoped.
+ */
+export type ProviderSkillScope = 'user' | 'project' | 'plugin' | 'repo' | 'admin' | 'system';
 
+/**
+ * Shared input accepted by provider skill listing operations.
+ *
+ * Routes pass `workspacePath` when a caller wants project/repository skills for
+ * a specific folder. Providers should fall back to the backend process cwd when
+ * this option is omitted.
+ */
+export type ProviderSkillListOptions = {
+  workspacePath?: string;
+};
+
+/**
+ * Normalized skill record returned by provider skill adapters.
+ *
+ * The `command` value is the exact invocation text the selected provider expects
+ * for this skill. Claude plugin skills use a namespaced command such as
+ * `/plugin-name:skill-name`, while Codex skills use the `$skill-name` form.
+ * `sourcePath` points to the skill markdown file that produced the record so
+ * callers can distinguish duplicate skill names across scopes.
+ */
+export type ProviderSkill = {
+  provider: LLMProvider;
+  name: string;
+  description: string;
+  command: string;
+  scope: ProviderSkillScope;
+  sourcePath: string;
+  pluginName?: string;
+  pluginId?: string;
+};
+
+/**
+ * Internal source descriptor consumed by shared provider skill discovery logic.
+ *
+ * Concrete provider adapters build these records from their native lookup rules.
+ * The shared skills provider then scans `rootDir` for child skill markdown files
+ * and uses `commandForSkill` or `commandPrefix` to produce the provider-specific
+ * invocation command. Set `recursive` only when a provider stores skills under
+ * arbitrary nested folders below the source root.
+ */
+export type ProviderSkillSource = {
+  scope: ProviderSkillScope;
+  rootDir: string;
+  recursive?: boolean;
+  commandPrefix?: '/' | '$';
+  commandForSkill?: (skillName: string) => string;
+  pluginName?: string;
+  pluginId?: string;
+};
+
+// ---------------------------
+//----------------- SHARED ERROR TYPES ------------
+/**
+ * Optional metadata used when constructing application-level errors.
+ *
+ * `statusCode` should reflect the HTTP response status, while `code` identifies
+ * the stable machine-readable error category.
+ */
 export type AppErrorOptions = {
   code?: string;
   statusCode?: number;
   details?: unknown;
 };
 
-// -------------------- MCP related shared types --------------------
+// ---------------------------
+//----------------- MCP TYPES ------------
+/**
+ * Scope where an MCP server definition is stored and resolved.
+ *
+ * `user` is global for a user account, `local` is provider-local, and `project`
+ * is tied to a specific project path.
+ */
 export type McpScope = 'user' | 'local' | 'project';
 
+/**
+ * Transport protocol used by an MCP server definition.
+ */
 export type McpTransport = 'stdio' | 'http' | 'sse';
 
 /**
- * Provider MCP server descriptor normalized for frontend consumption.
+ * Normalized MCP server model exposed to frontend and route handlers.
+ *
+ * Provider adapters should map provider-native config to this structure before
+ * returning results.
  */
 export type ProviderMcpServer = {
   provider: LLMProvider;
@@ -131,7 +373,10 @@ export type ProviderMcpServer = {
 };
 
 /**
- * Shared payload shape for MCP server create/update operations.
+ * Payload for create/update MCP server operations.
+ *
+ * Routes and services should accept this type, validate it, and then persist it
+ * through provider-specific MCP repositories.
  */
 export type UpsertProviderMcpServerInput = {
   name: string;
@@ -149,18 +394,13 @@ export type UpsertProviderMcpServerInput = {
   envHttpHeaders?: Record<string, string>;
 };
 
-// ---------------------------------------------------------------------------------------------
-
-// -------------------- Provider auth status types --------------------
+// ---------------------------
+//----------------- PROVIDER AUTH TYPES ------------
 /**
- * Result of a provider status check (installation + authentication).
+ * Authentication status result returned by provider health checks.
  *
- * installed - Whether the provider's CLI/SDK is available
- * provider - Provider id the status belongs to
- * authenticated - Whether valid credentials exist
- * email - User email or auth method identifier
- * method - Auth method (e.g. 'api_key', 'credentials_file')
- * [error] - Error message if not installed or not authenticated
+ * This shape is consumed by settings/status endpoints to report installation and
+ * credential state for each provider.
  */
 export type ProviderAuthStatus = {
   installed: boolean;
@@ -168,5 +408,85 @@ export type ProviderAuthStatus = {
   authenticated: boolean;
   email: string | null;
   method: string | null;
+  error?: string;
+};
+
+// ---------------------------
+//----------------- SHARED DATABASE CREDENTIAL TYPES ------------
+/**
+ * Safe credential view returned by credential listing APIs.
+ *
+ * This intentionally excludes the raw credential secret while still exposing
+ * metadata needed for UI rendering and management operations.
+ */
+export type CredentialPublicRow = {
+  id: number;
+  credential_name: string;
+  credential_type: string;
+  description: string | null;
+  created_at: string;
+  is_active: number;
+};
+
+/**
+ * Result returned after creating a credential record.
+ *
+ * Use this return shape when callers need the created id and display metadata,
+ * but must never receive the stored secret value.
+ */
+export type CreateCredentialResult = {
+  id: number | bigint;
+  credentialName: string;
+  credentialType: string;
+};
+
+// ---------------------------
+//----------------- PROJECT PERSISTENCE TYPES ------------
+/**
+ * Canonical project row shape returned by the projects repository.
+ *
+ * Use this type whenever backend services need to pass around one database
+ * project record without leaking raw SQL row typing across modules.
+ */
+export type ProjectRepositoryRow = {
+  project_id: string;
+  project_path: string;
+  custom_project_name: string | null;
+  isStarred: number;
+  isArchived: number;
+};
+
+/**
+ * Result category returned by `projectsDb.createProjectPath`.
+ *
+ * `created` means a fresh row was inserted, `reactivated_archived` means an
+ * existing archived path was accepted and updated, and `active_conflict` means
+ * an already-active path blocked project creation.
+ */
+export type CreateProjectPathOutcome =
+  | 'created'
+  | 'reactivated_archived'
+  | 'active_conflict';
+
+/**
+ * Structured result returned by project-path upsert operations.
+ *
+ * Services should use this result to decide whether a request succeeded,
+ * should return a conflict, or needs follow-up retrieval of row metadata.
+ */
+export type CreateProjectPathResult = {
+  outcome: CreateProjectPathOutcome;
+  project: ProjectRepositoryRow | null;
+};
+
+/**
+ * Validation result for user-supplied workspace/project paths.
+ *
+ * `resolvedPath` is present only when validation succeeds. `error` is present
+ * only when validation fails and is suitable for user-facing diagnostics.
+ */
+export type WorkspacePathValidationResult = {
+  valid: boolean;
+  resolvedPath?: string;
   error?: string;
 };
