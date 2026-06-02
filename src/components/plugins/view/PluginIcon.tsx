@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import DOMPurify from 'dompurify';
+
 import { authenticatedFetch } from '../../../utils/api';
 
 type Props = {
@@ -10,38 +12,43 @@ type Props = {
 // Module-level cache so repeated renders don't re-fetch
 const svgCache = new Map<string, string>();
 
+const FORBIDDEN_SVG_TAGS = [
+  'script',
+  'foreignObject',
+  'iframe',
+  'object',
+  'embed',
+  'link',
+  'meta',
+  'style',
+  'animate',
+  'set',
+  'animateTransform',
+  'animateMotion',
+];
+
+const FORBIDDEN_SVG_ATTRS = [
+  'href',
+  'xlink:href',
+  'src',
+  'style',
+];
+
 function sanitizeSvg(svgText: string): string | null {
+  const sanitized = DOMPurify.sanitize(svgText, {
+    USE_PROFILES: { svg: true, svgFilters: true },
+    FORBID_TAGS: FORBIDDEN_SVG_TAGS,
+    FORBID_ATTR: FORBIDDEN_SVG_ATTRS,
+  });
+
+  if (!sanitized) return null;
+
   try {
-    const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+    const doc = new DOMParser().parseFromString(sanitized, 'image/svg+xml');
     const root = doc.documentElement;
     if (!root || root.nodeName.toLowerCase() !== 'svg') return null;
-
-    doc
-      .querySelectorAll('script,foreignObject,iframe,object,embed,link,meta,style')
-      .forEach((el) => el.remove());
-
-    const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
-    const elements: Element[] = [root];
-    while (walker.nextNode()) {
-      elements.push(walker.currentNode as Element);
-    }
-
-    elements.forEach((el) => {
-      Array.from(el.attributes).forEach((attr) => {
-        const name = attr.name.toLowerCase();
-        const value = attr.value.trim().toLowerCase();
-        if (
-          name.startsWith('on') ||
-          name === 'href' ||
-          name === 'xlink:href' ||
-          value.startsWith('javascript:')
-        ) {
-          el.removeAttribute(attr.name);
-        }
-      });
-    });
-
-    return new XMLSerializer().serializeToString(root);
+    if (doc.querySelector('parsererror')) return null;
+    return sanitized;
   } catch {
     return null;
   }
