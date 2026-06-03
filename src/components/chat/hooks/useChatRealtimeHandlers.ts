@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 
+import { isNotificationSoundEnabled, playCompletionSound } from '../../../utils/notification-sound';
 import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
 import type { PendingPermissionRequest, SessionNavigationOptions } from '../types/types';
 import type { ProjectSession, LLMProvider } from '../../../types/app';
@@ -285,6 +286,11 @@ export function useChatRealtimeHandlers({
           break;
         }
 
+        // Play completion sound if enabled
+        if (isNotificationSoundEnabled()) {
+          playCompletionSound();
+        }
+
         const actualSessionId =
           typeof msg.actualSessionId === 'string' && msg.actualSessionId.trim().length > 0
             ? msg.actualSessionId
@@ -306,9 +312,31 @@ export function useChatRealtimeHandlers({
             onNavigateToSession?.(actualSessionId, { replace: true });
             setTimeout(() => { void paletteOps.refreshProjects(); }, 500);
           }
+
+          // Refresh from server using the resolved session ID so we fetch the
+          // correct canonical JSONL history, replacing any client-side streaming
+          // echoes with committed messages.
+          void sessionStore.refreshFromServer(actualSessionId);
           break;
         }
 
+        // Clear pending session if we reached this far (complete event, not aborted)
+        const pendingSessionId = sessionStorage.getItem('pendingSessionId');
+        if (pendingSessionId && !currentSessionId) {
+          const resolvedSessionId = actualSessionId || pendingSessionId;
+          setCurrentSessionId(resolvedSessionId);
+          if (actualSessionId) {
+            onNavigateToSession?.(resolvedSessionId, { replace: true });
+          }
+          sessionStorage.removeItem('pendingSessionId');
+          setTimeout(() => { void paletteOps.refreshProjects(); }, 500);
+        }
+
+        // Refresh from server so the canonical JSONL history replaces any
+        // client-side streaming echoes with committed messages.
+        if (sid) {
+          void sessionStore.refreshFromServer(sid);
+        }
         break;
       }
 
