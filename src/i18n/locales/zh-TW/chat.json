@@ -89,14 +89,14 @@
     "permissionMode": "權限模式",
     "modes": {
       "default": "預設模式",
-      "auto": "Auto Mode",
+      "auto": "自動模式",
       "acceptEdits": "編輯模式",
       "bypassPermissions": "無限制模式",
       "plan": "計畫模式"
     },
     "descriptions": {
       "default": "只有受信任的指令（ls、cat、grep、git status 等）自動執行。其他指令將被略過。可以寫入工作區。",
-      "auto": "A model classifier decides per tool call whether to approve or deny. Hands-off, but safer than Bypass — denials still happen.",
+      "auto": "由模型分類器針對每次工具呼叫決定核准或拒絕。免手動操作，但比 Bypass 安全——仍可能發生拒絕。",
       "acceptEdits": "工作區內的所有指令自動執行。完全自動模式，具有沙箱執行功能。",
       "bypassPermissions": "完全的系統存取，無限制。所有指令自動執行，具有完整的磁碟和網路存取權限。請謹慎使用。",
       "plan": "計畫模式 - 不執行任何指令"
@@ -223,29 +223,29 @@
   },
   "claudeStatus": {
     "actions": {
-      "thinking": "Thinking",
-      "processing": "Processing",
-      "analyzing": "Analyzing",
-      "working": "Working",
-      "computing": "Computing",
-      "reasoning": "Reasoning"
+      "thinking": "思考中",
+      "processing": "處理中",
+      "analyzing": "分析中",
+      "working": "執行中",
+      "computing": "運算中",
+      "reasoning": "推理中"
     },
     "state": {
-      "live": "Live",
-      "paused": "Paused"
+      "live": "進行中",
+      "paused": "已暫停"
     },
     "elapsed": {
-      "seconds": "{{count}}s",
-      "minutesSeconds": "{{minutes}}m {{seconds}}s",
-      "label": "{{time}} elapsed",
-      "startingNow": "Starting now"
+      "seconds": "{{count}} 秒",
+      "minutesSeconds": "{{minutes}} 分 {{seconds}} 秒",
+      "label": "已過 {{time}}",
+      "startingNow": "正要開始"
     },
     "controls": {
-      "stopGeneration": "Stop Generation",
-      "pressEscToStop": "Press Esc anytime to stop"
+      "stopGeneration": "停止生成",
+      "pressEscToStop": "隨時按 Esc 即可停止"
     },
     "providers": {
-      "assistant": "Assistant"
+      "assistant": "助理"
     }
   },
   "projectSelection": {

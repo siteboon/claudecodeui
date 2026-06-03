@@ -95,7 +95,7 @@ cloudcli
 
 在隔離的沙箱中執行代理，具有虛擬機管理程式等級的隔離。預設啟動 Claude Code。需要 [`sbx` CLI](https://docs.docker.com/ai/sandboxes/get-started/)。
 
-```
+```bash
 npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
 ```
 
