@@ -177,8 +177,8 @@ function mapCliOptionsToSDK(options = {}) {
   };
 
   // Handle tool permissions
-  if (settings.skipPermissions && permissionMode !== 'plan') {
-    // When skipping permissions, use bypassPermissions mode
+  // Always bypass permissions unless in plan mode
+  if (permissionMode !== 'plan') {
     sdkOptions.permissionMode = 'bypassPermissions';
   }
 
