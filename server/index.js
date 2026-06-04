@@ -1564,17 +1564,28 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
         try {
             await acquire();
             try {
-                const stats = await fsPromises.stat(itemPath);
-                item.size = stats.size;
-                item.modified = stats.mtime.toISOString();
+              const stats = await fsPromises.lstat(itemPath);
+              item.size = stats.size;
+              item.modified = stats.mtime.toISOString();
 
-                // Convert permissions to rwx format
-                const mode = stats.mode;
-                const ownerPerm = (mode >> 6) & 7;
-                const groupPerm = (mode >> 3) & 7;
-                const otherPerm = mode & 7;
-                item.permissions = ((mode >> 6) & 7).toString() + ((mode >> 3) & 7).toString() + (mode & 7).toString();
-                item.permissionsRwx = permToRwx(ownerPerm) + permToRwx(groupPerm) + permToRwx(otherPerm);
+              // Mark symlinks so UI can distinguish them
+              if (stats.isSymbolicLink()) {
+                item.isSymlink = true;
+              }
+
+              // Convert permissions to rwx format
+              const mode = stats.mode;
+              const ownerPerm = (mode >> 6) & 7;
+              const groupPerm = (mode >> 3) & 7;
+              const otherPerm = mode & 7;
+              item.permissions =
+                ((mode >> 6) & 7).toString() +
+                ((mode >> 3) & 7).toString() +
+                (mode & 7).toString();
+              item.permissionsRwx =
+                permToRwx(ownerPerm) +
+                permToRwx(groupPerm) +
+                permToRwx(otherPerm);
             } finally {
                 release();
             }
