@@ -7,6 +7,7 @@ import { Terminal } from '@xterm/xterm';
 import type { Project } from '../../../types/app';
 import {
   CODEX_DEVICE_AUTH_URL,
+  isWebglDisabled,
   TERMINAL_INIT_DELAY_MS,
   TERMINAL_OPTIONS,
   TERMINAL_RESIZE_DELAY_MS,
@@ -96,10 +97,16 @@ export function useShellTerminal({
       nextTerminal.loadAddon(new WebLinksAddon());
     }
 
-    try {
-      nextTerminal.loadAddon(new WebglAddon());
-    } catch {
-      console.warn('[Shell] WebGL renderer unavailable, using Canvas fallback');
+    // The WebGL renderer is fast but rasterizes fallback glyphs (e.g. CJK) into
+    // a texture atlas poorly, sometimes showing them as boxes. Allow opting out
+    // (localStorage 'terminal-disable-webgl' or VITE_TERMINAL_DISABLE_WEBGL) to
+    // fall back to the DOM renderer, which renders CJK reliably.
+    if (!isWebglDisabled()) {
+      try {
+        nextTerminal.loadAddon(new WebglAddon());
+      } catch {
+        console.warn('[Shell] WebGL renderer unavailable, using Canvas fallback');
+      }
     }
 
     nextTerminal.open(terminalContainerRef.current);

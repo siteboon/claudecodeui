@@ -15,7 +15,12 @@ export const PROMPT_MIN_OPTIONS = 2;
 export const TERMINAL_OPTIONS: ITerminalOptions = {
   cursorBlink: true,
   fontSize: 14,
-  fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+  // Includes cross-platform CJK monospace fallbacks so the WebGL/Canvas glyph
+  // atlas has an explicit font to rasterize Japanese/Chinese/Korean from,
+  // instead of routing CJK through generic `monospace` (which renders as tofu).
+  fontFamily:
+    'Menlo, Monaco, "Courier New", "Noto Sans Mono CJK JP", "Noto Sans CJK JP", ' +
+    'Meiryo, "MS Gothic", "Microsoft YaHei", "PingFang SC", "Hiragino Sans", monospace',
   allowProposedApi: true,
   allowTransparency: false,
   convertEol: true,
@@ -68,3 +73,28 @@ export const TERMINAL_OPTIONS: ITerminalOptions = {
     ],
   },
 };
+
+/**
+ * Whether the xterm.js WebGL renderer should be disabled in favor of the DOM
+ * renderer. The WebGL/Canvas glyph atlas handles font-fallback glyphs (e.g. CJK)
+ * poorly and can render them as boxes; the DOM renderer uses native browser text
+ * rendering and is reliable for CJK even with an imperfect font stack.
+ *
+ * Resolution order (no rebuild needed for the first):
+ *   1. localStorage 'terminal-disable-webgl' === 'true'
+ *   2. VITE_TERMINAL_DISABLE_WEBGL === 'true' (build-time default)
+ * Defaults to keeping WebGL enabled.
+ */
+export function isWebglDisabled(): boolean {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const stored = localStorage.getItem('terminal-disable-webgl');
+      if (stored === 'true') return true;
+      if (stored === 'false') return false;
+    }
+  } catch {
+    // localStorage may be unavailable (privacy mode / non-browser); fall through.
+  }
+
+  return import.meta.env.VITE_TERMINAL_DISABLE_WEBGL === 'true';
+}
