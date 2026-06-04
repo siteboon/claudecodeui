@@ -45,6 +45,7 @@
     "removeFromFavorites": "お気に入りから削除",
     "editSessionName": "セッション名を手動で編集",
     "deleteSession": "このセッションを完全に削除",
+    "activeSessionIndicator": "最近アクティブなセッション（過去10分以内）",
     "save": "保存",
     "cancel": "キャンセル",
     "openCommandPalette": "コマンドパレットを開く"
