@@ -42,7 +42,7 @@ async function unlinkJsonlIfExists(filePath: string): Promise<void> {
  * Loads all session rows for the project path and removes each distinct `jsonl_path` file on disk.
  */
 export async function deleteSessionJsonlFilesForProjectPath(projectPath: string): Promise<void> {
-  const sessions = sessionsDb.getSessionsByProjectPath(projectPath);
+  const sessions = sessionsDb.getSessionsByProjectPathIncludingArchived(projectPath);
   const paths = uniqueJsonlPathsFromSessions(sessions);
 
   for (const filePath of paths) {
@@ -72,4 +72,19 @@ export async function deleteOrArchiveProject(projectId: string, force: boolean):
   await deleteSessionJsonlFilesForProjectPath(row.project_path);
   sessionsDb.deleteSessionsByProjectPath(row.project_path);
   projectsDb.deleteProjectById(projectId);
+}
+
+/**
+ * Restores one archived project row back into the active project list.
+ */
+export function restoreArchivedProject(projectId: string): void {
+  const row = projectsDb.getProjectById(projectId);
+  if (!row) {
+    throw new AppError(`Unknown projectId: ${projectId}`, {
+      code: 'PROJECT_NOT_FOUND',
+      statusCode: 404,
+    });
+  }
+
+  projectsDb.updateProjectIsArchivedById(projectId, false);
 }

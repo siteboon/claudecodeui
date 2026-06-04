@@ -39,33 +39,37 @@ export class GeminiSessionSynchronizer implements IProviderSessionSynchronizer {
   async synchronize(since?: Date): Promise<number> {
     const projectHashLookup = this.buildProjectHashLookup();
 
-    const legacySessionFiles = await findFilesRecursivelyCreatedAfter(
-      path.join(this.geminiHome, 'sessions'),
-      '.json',
-      since ?? null
-    );
-    const legacyTempFiles = await findFilesRecursivelyCreatedAfter(
-      path.join(this.geminiHome, 'tmp'),
-      '.json',
-      since ?? null
-    );
-    const jsonlSessionFiles = await findFilesRecursivelyCreatedAfter(
-      path.join(this.geminiHome, 'sessions'),
-      '.jsonl',
-      since ?? null
-    );
+    // const legacySessionFiles = await findFilesRecursivelyCreatedAfter(
+    //   path.join(this.geminiHome, 'sessions'),
+    //   '.json',
+    //   since ?? null
+    // );
+    // Gemini creates overlapping artifacts across `sessions/` and `tmp/`.
+    // We currently index only `tmp/*/chats/*.jsonl` because those files are the
+    // live transcript source and avoid duplicate session rows from mirrored files.
+    // const legacyTempFiles = await findFilesRecursivelyCreatedAfter(
+    //   path.join(this.geminiHome, 'tmp'),
+    //   '.json',
+    //   since ?? null
+    // );
+    // const jsonlSessionFiles = await findFilesRecursivelyCreatedAfter(
+    //   path.join(this.geminiHome, 'sessions'),
+    //   '.jsonl',
+    //   since ?? null
+    // );
     const jsonlTempFiles = await findFilesRecursivelyCreatedAfter(
       path.join(this.geminiHome, 'tmp'),
       '.jsonl',
       since ?? null
     );
 
-    // Process legacy JSON first, then JSONL. If both exist for a session id,
-    // the JSONL artifact becomes the canonical jsonl_path via upsert.
+    // Current strategy: index only temp chat JSONL artifacts.
     const files = [
-      ...legacySessionFiles,
-      ...legacyTempFiles,
-      ...jsonlSessionFiles,
+      // ...legacySessionFiles,
+      // Intentionally disabled to avoid duplicate indexing from mirrored
+      // `sessions/*.json` and `sessions/*.jsonl` artifacts.
+      // ...legacyTempFiles,
+      // ...jsonlSessionFiles,
       ...jsonlTempFiles,
     ];
 

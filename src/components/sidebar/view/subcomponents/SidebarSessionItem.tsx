@@ -1,7 +1,8 @@
+import { useEffect, useRef } from 'react';
 import { Check, Edit2, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
-import { Badge, Button } from '../../../../shared/view/ui';
+import { Badge, Button, Tooltip } from '../../../../shared/view/ui';
 import { cn } from '../../../../lib/utils';
 import type { Project, ProjectSession, LLMProvider } from '../../../../types/app';
 import type { SessionWithProvider } from '../../types/types';
@@ -76,7 +77,28 @@ export default function SidebarSessionItem({
 }: SidebarSessionItemProps) {
   const sessionView = createSessionViewModel(session, currentTime, t);
   const isSelected = selectedSession?.id === session.id;
+  const isEditing = editingSession === session.id;
   const compactSessionAge = formatCompactSessionAge(sessionView.sessionTime, currentTime);
+  const editingContainerRef = useRef<HTMLDivElement>(null);
+
+  // The rename panel sits inside a group-hover opacity wrapper, so leaving the row
+  // would visually hide it. While editing, dismiss only when the user clicks outside
+  // the panel (matches Escape / cancel-button behaviour).
+  useEffect(() => {
+    if (!isEditing) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const container = editingContainerRef.current;
+      if (container && !container.contains(event.target as Node)) {
+        onCancelEditingSession();
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [isEditing, onCancelEditingSession]);
 
   // Sessions are owned by a project identified by `projectId` (DB primary key)
   // after the projectName → projectId migration.
@@ -97,7 +119,13 @@ export default function SidebarSessionItem({
     <div className="group relative">
       {sessionView.isActive && (
         <div className="absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2 transform">
-          <div className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
+          <Tooltip content={t('tooltips.activeSessionIndicator')} position="right">
+            <div
+              role="status"
+              aria-label={t('tooltips.activeSessionIndicator')}
+              className="h-2 w-2 animate-pulse rounded-full bg-green-500"
+            />
+          </Tooltip>
         </div>
       )}
 
@@ -168,7 +196,12 @@ export default function SidebarSessionItem({
               <div className="flex items-center gap-2">
                 <div className="truncate text-xs font-medium text-foreground">{sessionView.sessionName}</div>
                 {compactSessionAge && (
-                  <span className="ml-auto flex-shrink-0 text-[11px] text-muted-foreground transition-opacity duration-200 group-hover:opacity-0">
+                  <span
+                    className={cn(
+                      'ml-auto flex-shrink-0 text-[11px] text-muted-foreground transition-opacity duration-200',
+                      isEditing ? 'opacity-0' : 'group-hover:opacity-0',
+                    )}
+                  >
                     {compactSessionAge}
                   </span>
                 )}
@@ -180,8 +213,14 @@ export default function SidebarSessionItem({
           </div>
         </Button>
 
-        <div className="absolute right-2 top-1/2 flex -translate-y-1/2 transform items-center gap-1 opacity-0 transition-all duration-200 group-hover:opacity-100">
-            {editingSession === session.id ? (
+        <div
+          ref={editingContainerRef}
+          className={cn(
+            'absolute right-2 top-1/2 flex -translate-y-1/2 transform items-center gap-1 transition-all duration-200',
+            isEditing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+          )}
+        >
+            {isEditing ? (
               <>
                 <input
                   type="text"
@@ -239,7 +278,7 @@ export default function SidebarSessionItem({
                       event.stopPropagation();
                       requestDeleteSession();
                     }}
-                    title={t('tooltips.deleteSession')}
+                    title={t('tooltips.deleteSessionOptions', 'Archive or permanently delete this session')}
                   >
                     <Trash2 className="h-3 w-3 text-red-600 dark:text-red-400" />
                   </button>

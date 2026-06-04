@@ -95,6 +95,19 @@ export const projectsDb = {
         `).all() as ProjectRepositoryRow[];
     },
 
+    /**
+     * Archived rows are queried separately so archive-focused UIs can present
+     * hidden workspaces without reintroducing them into the active sidebar list.
+     */
+    getArchivedProjectPaths(): ProjectRepositoryRow[] {
+        const db = getConnection();
+        return db.prepare(`
+            SELECT project_id, project_path, custom_project_name, isStarred, isArchived
+            FROM projects
+            WHERE isArchived = 1
+        `).all() as ProjectRepositoryRow[];
+    },
+
     getCustomProjectName(projectPath: string): string | null {
         const db = getConnection();
         const normalizedProjectPath = normalizeProjectPath(projectPath);

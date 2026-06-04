@@ -2,7 +2,7 @@ import express from 'express';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
-import { CURSOR_MODELS } from '../../shared/modelConstants.js';
+import { CURSOR_FALLBACK_MODELS } from '../modules/providers/list/cursor/cursor-models.provider.js';
 
 const router = express.Router();
 
@@ -29,7 +29,7 @@ router.get('/config', async (req, res) => {
         config: {
           version: 1,
           model: {
-            modelId: CURSOR_MODELS.DEFAULT,
+            modelId: CURSOR_FALLBACK_MODELS.DEFAULT,
             displayName: 'GPT-5',
           },
           permissions: {

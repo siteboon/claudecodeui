@@ -60,7 +60,7 @@
 - **会话管理** - 恢复对话、管理多个会话并跟踪历史记录
 - **插件系统** - 通过自定义选项卡、后端服务与集成扩展 CloudCLI。 [开始构建 →](https://github.com/cloudcli-ai/cloudcli-plugin-starter)
 - **TaskMaster AI 集成** *(可选)* - 结合 AI 任务规划、PRD 分析与工作流自动化，实现高级项目管理
-- **模型兼容性** - 支持 Claude、GPT、Gemini 模型家族（完整支持列表见 [`shared/modelConstants.js`](shared/modelConstants.js)）
+- **模型兼容性** - 支持 Claude、GPT、Gemini 模型家族（完整支持列表见 [`public/modelConstants.js`](public/modelConstants.js)）
 
 ## 快速开始
 

@@ -157,7 +157,11 @@ export default tseslint.config(
         },
         {
           type: "backend-shared-utils", // shared backend runtime helpers that modules may import directly
-          pattern: ["server/shared/utils.{js,ts}", "server/shared/claude-cli-path.ts"], // classify the shared utils file so modules can depend on it explicitly
+          pattern: [
+            "server/shared/utils.{js,ts}",
+            "server/shared/frontmatter.ts",
+            "server/shared/claude-cli-path.ts",
+          ], // classify shared utility files so modules can depend on them explicitly
           mode: "file",
         },
         {

@@ -11,8 +11,9 @@ import { decodeHtmlEntities, unescapeWithMathProtection, formatUsageLimitText } 
  * Convert NormalizedMessage[] from the session store into ChatMessage[]
  * that the existing UI components expect.
  *
- * Internal/system content (e.g. <system-reminder>, <command-name>) is already
- * filtered server-side by the Claude provider module.
+ * Truly internal/system content is already filtered server-side. Some Claude
+ * transcript artifacts such as local slash commands and compact summaries are
+ * intentionally preserved and annotated so they can render like normal chat.
  */
 export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMessage[] {
   const converted: ChatMessage[] = [];
@@ -26,6 +27,16 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
   }
 
   for (const msg of messages) {
+    const sharedMetadata = {
+      displayText: msg.displayText,
+      commandName: msg.commandName,
+      commandMessage: msg.commandMessage,
+      commandArgs: msg.commandArgs,
+      isLocalCommand: msg.isLocalCommand,
+      isLocalCommandStdout: msg.isLocalCommandStdout,
+      isCompactSummary: msg.isCompactSummary,
+    };
+
     switch (msg.kind) {
       case 'text': {
         const content = msg.content || '';
@@ -42,12 +53,14 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
               timestamp: msg.timestamp,
               isTaskNotification: true,
               taskStatus: taskNotifMatch[1]?.trim() || 'completed',
+              ...sharedMetadata,
             });
           } else {
             converted.push({
               type: 'user',
               content: unescapeWithMathProtection(decodeHtmlEntities(content)),
               timestamp: msg.timestamp,
+              ...sharedMetadata,
             });
           }
         } else {
@@ -58,6 +71,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
             type: 'assistant',
             content: text,
             timestamp: msg.timestamp,
+            ...sharedMetadata,
           });
         }
         break;
@@ -106,6 +120,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
                 isComplete: Boolean(toolResult),
               }
             : undefined,
+          ...sharedMetadata,
         });
         break;
       }
@@ -117,6 +132,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
             content: unescapeWithMathProtection(msg.content),
             timestamp: msg.timestamp,
             isThinking: true,
+            ...sharedMetadata,
           });
         }
         break;
@@ -126,6 +142,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           type: 'error',
           content: msg.content || 'Unknown error',
           timestamp: msg.timestamp,
+          ...sharedMetadata,
         });
         break;
 
@@ -135,6 +152,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           content: msg.content || '',
           timestamp: msg.timestamp,
           isInteractivePrompt: true,
+          ...sharedMetadata,
         });
         break;
 
@@ -145,6 +163,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           timestamp: msg.timestamp,
           isTaskNotification: true,
           taskStatus: msg.status || 'completed',
+          ...sharedMetadata,
         });
         break;
 
@@ -155,6 +174,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
             content: msg.content,
             timestamp: msg.timestamp,
             isStreaming: true,
+            ...sharedMetadata,
           });
         }
         break;

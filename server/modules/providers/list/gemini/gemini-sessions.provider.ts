@@ -88,22 +88,15 @@ function buildGeminiTokenUsage(tokens: unknown): AnyRecord | undefined {
   const record = tokens as AnyRecord;
   const input = Number(record.input || 0);
   const output = Number(record.output || 0);
-  const cached = Number(record.cached || 0);
-  const thoughts = Number(record.thoughts || 0);
-  const tool = Number(record.tool || 0);
-
-  const totalFromFields = input + output + cached + thoughts + tool;
-  const total = Number(record.total || totalFromFields || 0);
+  const total = Number(record.total || input + output || 0);
 
   return {
     used: total,
-    total: total,
+    inputTokens: input,
+    outputTokens: output,
     breakdown: {
       input,
       output,
-      cached,
-      thoughts,
-      tool,
     },
   };
 }
@@ -528,10 +521,16 @@ export class GeminiSessionsProvider implements IProviderSessions {
     const messages = pageLimit === null
       ? normalized.slice(start)
       : normalized.slice(start, start + pageLimit);
+    let total = 0;
+    for (const msg of normalized) {
+      if (msg.kind !== 'tool_result') {
+        total += 1;
+      }
+    }
 
     return {
       messages,
-      total: normalized.length,
+      total,
       hasMore: pageLimit === null ? false : start + pageLimit < normalized.length,
       offset: start,
       limit: pageLimit,

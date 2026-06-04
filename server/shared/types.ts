@@ -65,7 +65,94 @@ export type AuthenticatedWebSocketRequest = IncomingMessage & {
  * Use this as the source of truth whenever a function or payload needs to identify
  * a specific LLM integration.
  */
-export type LLMProvider = 'claude' | 'codex' | 'gemini' | 'cursor';
+export type LLMProvider = 'claude' | 'codex' | 'gemini' | 'cursor' | 'opencode';
+
+/**
+ * One selectable model row (matches the documentation `public/modelConstants.js` option shape).
+ */
+export type ProviderModelOption = {
+  value: string;
+  label: string;
+  description?: string;
+};
+
+/**
+ * Provider model catalog returned by `GET /api/providers/:provider/models`.
+ */
+export type ProviderModelsDefinition = {
+  OPTIONS: ProviderModelOption[];
+  DEFAULT: string;
+};
+
+/**
+ * Cache metadata returned alongside one provider model catalog.
+ *
+ * `updatedAt` is when the current cached snapshot was last refreshed from the
+ * provider itself. `expiresAt` is the backend cache expiry timestamp, and
+ * `source` tells callers whether the current response came from in-memory cache,
+ * persisted disk cache, or a fresh provider fetch.
+ */
+export type ProviderModelsCacheInfo = {
+  updatedAt: string;
+  expiresAt: string;
+  source: 'memory' | 'disk' | 'fresh';
+};
+
+/**
+ * Full provider model lookup result returned by the backend service layer.
+ *
+ * Use this shape when a caller needs both the selectable model catalog and the
+ * cache metadata that explains how current the catalog is.
+ */
+export type ProviderModelsResult = {
+  models: ProviderModelsDefinition;
+  cache: ProviderModelsCacheInfo;
+};
+
+// ---------------------------
+//----------------- PROVIDER ACTIVE MODEL TYPES ------------
+/**
+ * Provider-neutral result for the model that is actively driving a session or
+ * provider runtime at the time of lookup.
+ *
+ * `model` must always be populated. Provider adapters should use the
+ * provider-specific lookup method requested by the caller, and only fall back
+ * to the provider catalog `DEFAULT` value when the active model cannot be read.
+ */
+export type ProviderCurrentActiveModel = {
+  model: string;
+};
+
+/**
+ * Input payload used when one session needs to use a different model on its
+ * next resumed turn.
+ *
+ * This is a backend-owned session override, not a claim that the provider has
+ * already switched the currently running session in-place. Provider adapters
+ * persist this request so the next CLI/SDK resume can inject the chosen model
+ * using the provider-specific mechanism supported by that runtime.
+ */
+export type ProviderChangeActiveModelInput = {
+  sessionId: string;
+  model: string;
+};
+
+/**
+ * Provider-neutral session model-change state.
+ *
+ * `supported` indicates whether the provider adapter supports the app's
+ * session-scoped resume override flow. `changed` is the persisted boolean the
+ * resume layer checks before forcing a model on the next resumed turn. When
+ * `changed` is `false`, `model` is `null` and the runtime should use the
+ * normal request/default model selection path.
+ */
+export type ProviderSessionActiveModelChange = {
+  provider: LLMProvider;
+  sessionId: string;
+  supported: boolean;
+  changed: boolean;
+  model: string | null;
+};
 
 /**
  * Message/event variants emitted by provider adapters and normalized transports.
@@ -102,6 +189,21 @@ export type NormalizedMessage = {
   kind: MessageKind;
   role?: 'user' | 'assistant';
   content?: string;
+  /**
+   * Optional display-oriented metadata used by providers that need to expose
+   * richer transcript artifacts without introducing a brand-new message kind.
+   *
+   * Current Claude usage:
+   * - local slash commands expose parsed command fields
+   * - compact summaries are flagged so the UI can treat them differently later
+   */
+  displayText?: string;
+  commandName?: string;
+  commandMessage?: string;
+  commandArgs?: string;
+  isLocalCommand?: boolean;
+  isLocalCommandStdout?: boolean;
+  isCompactSummary?: boolean;
   images?: unknown;
   toolName?: string;
   toolInput?: unknown;
@@ -154,6 +256,69 @@ export type FetchHistoryResult = {
   offset: number;
   limit: number | null;
   tokenUsage?: unknown;
+};
+
+// ---------------------------
+//----------------- PROVIDER SKILL TYPES ------------
+/**
+ * Scope where a provider skill definition was discovered.
+ *
+ * Provider skill adapters should use this to describe the origin of each
+ * skill markdown file without leaking provider-specific folder names into route
+ * contracts. `repo` is used for Codex repository lookup locations, while
+ * `project` is used for providers that treat workspace-local skills as project
+ * scoped.
+ */
+export type ProviderSkillScope = 'user' | 'project' | 'plugin' | 'repo' | 'admin' | 'system';
+
+/**
+ * Shared input accepted by provider skill listing operations.
+ *
+ * Routes pass `workspacePath` when a caller wants project/repository skills for
+ * a specific folder. Providers should fall back to the backend process cwd when
+ * this option is omitted.
+ */
+export type ProviderSkillListOptions = {
+  workspacePath?: string;
+};
+
+/**
+ * Normalized skill record returned by provider skill adapters.
+ *
+ * The `command` value is the exact invocation text the selected provider expects
+ * for this skill. Claude plugin skills use a namespaced command such as
+ * `/plugin-name:skill-name`, while Codex skills use the `$skill-name` form.
+ * `sourcePath` points to the skill markdown file that produced the record so
+ * callers can distinguish duplicate skill names across scopes.
+ */
+export type ProviderSkill = {
+  provider: LLMProvider;
+  name: string;
+  description: string;
+  command: string;
+  scope: ProviderSkillScope;
+  sourcePath: string;
+  pluginName?: string;
+  pluginId?: string;
+};
+
+/**
+ * Internal source descriptor consumed by shared provider skill discovery logic.
+ *
+ * Concrete provider adapters build these records from their native lookup rules.
+ * The shared skills provider then scans `rootDir` for child skill markdown files
+ * and uses `commandForSkill` or `commandPrefix` to produce the provider-specific
+ * invocation command. Set `recursive` only when a provider stores skills under
+ * arbitrary nested folders below the source root.
+ */
+export type ProviderSkillSource = {
+  scope: ProviderSkillScope;
+  rootDir: string;
+  recursive?: boolean;
+  commandPrefix?: '/' | '$';
+  commandForSkill?: (skillName: string) => string;
+  pluginName?: string;
+  pluginId?: string;
 };
 
 // ---------------------------

@@ -8,13 +8,14 @@ type SessionRow = {
   project_path: string | null;
   jsonl_path: string | null;
   custom_name: string | null;
+  isArchived: number;
   created_at: string;
   updated_at: string;
 };
 
 type SessionMetadataLookupRow = Pick<
   SessionRow,
-  'session_id' | 'provider' | 'project_path' | 'jsonl_path' | 'custom_name' | 'created_at' | 'updated_at'
+  'session_id' | 'provider' | 'project_path' | 'jsonl_path' | 'custom_name' | 'isArchived' | 'created_at' | 'updated_at'
 >;
 
 function normalizeTimestamp(value?: string): string | null {
@@ -53,13 +54,14 @@ export const sessionsDb = {
     projectsDb.createProjectPath(normalizedProjectPath);
 
     db.prepare(
-      `INSERT INTO sessions (session_id, provider, custom_name, project_path, jsonl_path, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))
+      `INSERT INTO sessions (session_id, provider, custom_name, project_path, jsonl_path, isArchived, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 0, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))
        ON CONFLICT(session_id) DO UPDATE SET
          provider = excluded.provider,
          updated_at = excluded.updated_at,
          project_path = excluded.project_path,
          jsonl_path = excluded.jsonl_path,
+         isArchived = 0,
          custom_name = COALESCE(excluded.custom_name, sessions.custom_name)`
     ).run(
       sessionId,
@@ -87,7 +89,7 @@ export const sessionsDb = {
     const db = getConnection();
     const row = db
       .prepare(
-        `SELECT session_id, provider, project_path, jsonl_path, custom_name, created_at, updated_at
+        `SELECT session_id, provider, project_path, jsonl_path, custom_name, isArchived, created_at, updated_at
          FROM sessions
          WHERE session_id = ?
          ORDER BY updated_at DESC
@@ -102,8 +104,25 @@ export const sessionsDb = {
     const db = getConnection();
     return db
       .prepare(
-        `SELECT session_id, provider, project_path, jsonl_path, custom_name, created_at, updated_at
-         FROM sessions`
+        `SELECT session_id, provider, project_path, jsonl_path, custom_name, isArchived, created_at, updated_at
+         FROM sessions
+         WHERE isArchived = 0`
+      )
+      .all() as SessionRow[];
+  },
+
+  /**
+   * Archived rows are intentionally queried separately so the caller can render
+   * them in a dedicated view without reintroducing them into active session lists.
+   */
+  getArchivedSessions(): SessionRow[] {
+    const db = getConnection();
+    return db
+      .prepare(
+        `SELECT session_id, provider, project_path, jsonl_path, custom_name, isArchived, created_at, updated_at
+         FROM sessions
+         WHERE isArchived = 1
+         ORDER BY datetime(COALESCE(updated_at, created_at)) DESC, session_id DESC`
       )
       .all() as SessionRow[];
   },
@@ -113,7 +132,24 @@ export const sessionsDb = {
     const normalizedProjectPath = normalizeProjectPath(projectPath);
     return db
       .prepare(
-        `SELECT session_id, provider, project_path, jsonl_path, custom_name, created_at, updated_at
+        `SELECT session_id, provider, project_path, jsonl_path, custom_name, isArchived, created_at, updated_at
+         FROM sessions
+         WHERE project_path = ?
+           AND isArchived = 0`
+      )
+      .all(normalizedProjectPath) as SessionRow[];
+  },
+
+  /**
+   * Permanent project deletion must see every session row for the path,
+   * including archived ones, so their transcript files can be cleaned up.
+   */
+  getSessionsByProjectPathIncludingArchived(projectPath: string): SessionRow[] {
+    const db = getConnection();
+    const normalizedProjectPath = normalizeProjectPath(projectPath);
+    return db
+      .prepare(
+        `SELECT session_id, provider, project_path, jsonl_path, custom_name, isArchived, created_at, updated_at
          FROM sessions
          WHERE project_path = ?`
       )
@@ -125,9 +161,10 @@ export const sessionsDb = {
     const normalizedProjectPath = normalizeProjectPath(projectPath);
     return db
       .prepare(
-        `SELECT session_id, provider, project_path, jsonl_path, custom_name, created_at, updated_at
+        `SELECT session_id, provider, project_path, jsonl_path, custom_name, isArchived, created_at, updated_at
          FROM sessions
          WHERE project_path = ?
+           AND isArchived = 0
          ORDER BY datetime(COALESCE(updated_at, created_at)) DESC, session_id DESC
          LIMIT ? OFFSET ?`
       )
@@ -141,7 +178,8 @@ export const sessionsDb = {
       .prepare(
         `SELECT COUNT(*) AS count
          FROM sessions
-         WHERE project_path = ?`
+         WHERE project_path = ?
+           AND isArchived = 0`
       )
       .get(normalizedProjectPath) as { count: number } | undefined;
 
@@ -165,6 +203,19 @@ export const sessionsDb = {
       .get(sessionId, provider) as { custom_name: string | null } | undefined;
 
     return row?.custom_name ?? null;
+  },
+
+  /**
+   * Soft-delete and restore both use the same flag update so callers keep the
+   * row, metadata, and file path intact while toggling visibility.
+   */
+  updateSessionIsArchived(sessionId: string, isArchived: boolean): void {
+    const db = getConnection();
+    db.prepare(
+      `UPDATE sessions
+       SET isArchived = ?
+       WHERE session_id = ?`
+    ).run(isArchived ? 1 : 0, sessionId);
   },
 
   deleteSessionById(sessionId: string): boolean {
