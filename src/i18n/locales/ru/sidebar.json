@@ -45,9 +45,11 @@
     "removeFromFavorites": "Удалить из избранного",
     "editSessionName": "Вручную редактировать имя сеанса",
     "deleteSession": "Удалить этот сеанс навсегда",
+    "activeSessionIndicator": "Недавно активный сеанс (последние 10 минут)",
     "save": "Сохранить",
     "cancel": "Отмена",
-    "clearSearch": "Очистить поиск"
+    "clearSearch": "Очистить поиск",
+    "openCommandPalette": "Открыть палитру команд"
   },
   "navigation": {
     "chat": "Чат",
