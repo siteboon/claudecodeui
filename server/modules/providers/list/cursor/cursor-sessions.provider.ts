@@ -4,7 +4,12 @@ import path from 'node:path';
 
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
-import { createNormalizedMessage, generateMessageId, readObjectRecord } from '@/shared/utils.js';
+import {
+  createNormalizedMessage,
+  generateMessageId,
+  readObjectRecord,
+  sanitizeLeafDirectoryName,
+} from '@/shared/utils.js';
 
 const PROVIDER = 'cursor';
 
@@ -186,24 +191,6 @@ function normalizeCursorToolInput(toolName: string, rawInput: unknown): unknown 
   return normalized;
 }
 
-function sanitizeCursorSessionId(sessionId: string): string {
-  const normalized = sessionId.trim();
-  if (!normalized) {
-    throw new Error('Cursor session id is required.');
-  }
-
-  if (
-    normalized.includes('..')
-    || normalized.includes(path.posix.sep)
-    || normalized.includes(path.win32.sep)
-    || normalized !== path.basename(normalized)
-  ) {
-    throw new Error(`Invalid cursor session id "${sessionId}".`);
-  }
-
-  return normalized;
-}
-
 export class CursorSessionsProvider implements IProviderSessions {
   /**
    * Loads Cursor's SQLite blob DAG and returns message blobs in conversation
@@ -214,7 +201,7 @@ export class CursorSessionsProvider implements IProviderSessions {
     const { default: Database } = await import('better-sqlite3');
 
     const cwdId = crypto.createHash('md5').update(projectPath || process.cwd()).digest('hex');
-    const safeSessionId = sanitizeCursorSessionId(sessionId);
+    const safeSessionId = sanitizeLeafDirectoryName(sessionId, 'cursor session id');
     const baseChatsPath = path.join(os.homedir(), '.cursor', 'chats', cwdId);
     const storeDbPath = path.join(baseChatsPath, safeSessionId, 'store.db');
     const resolvedBaseChatsPath = path.resolve(baseChatsPath);

@@ -20,14 +20,13 @@ import type {
   PendingPermissionRequest,
   PermissionMode,
 } from '../types/types';
-import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
+import type { Project, ProjectSession, LLMProvider, ProviderModelsCacheInfo } from '../../../types/app';
 import { escapeRegExp } from '../utils/chatFormatting';
 
 import { useFileMentions } from './useFileMentions';
 import { type SlashCommand, useSlashCommands } from './useSlashCommands';
 
 type PendingViewSession = {
-  sessionId: string | null;
   startedAt: number;
 };
 
@@ -42,6 +41,7 @@ interface UseChatComposerStateArgs {
   claudeModel: string;
   codexModel: string;
   geminiModel: string;
+  opencodeModel: string;
   isLoading: boolean;
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
@@ -55,8 +55,6 @@ interface UseChatComposerStateArgs {
   pendingViewSessionRef: { current: PendingViewSession | null };
   scrollToBottom: () => void;
   addMessage: (msg: ChatMessage) => void;
-  clearMessages: () => void;
-  rewindMessages: (count: number) => void;
   setIsLoading: (loading: boolean) => void;
   setCanAbortSession: (canAbort: boolean) => void;
   setClaudeStatus: (status: { text: string; tokens: number; can_interrupt: boolean } | null) => void;
@@ -77,6 +75,69 @@ interface CommandExecutionResult {
   hasBashCommands?: boolean;
   hasFileIncludes?: boolean;
 }
+
+export type ModelCommandData = {
+  current?: {
+    provider?: string;
+    providerLabel?: string;
+    model?: string;
+  };
+  available?: Partial<Record<LLMProvider, string[]>>;
+  availableModels?: string[];
+  availableOptions?: Array<{
+    value: string;
+    label?: string;
+    description?: string;
+  }>;
+  defaultModel?: string;
+  cache?: ProviderModelsCacheInfo;
+};
+
+export type CostCommandData = {
+  tokenUsage?: {
+    used?: number;
+    total?: number;
+  };
+  tokenBreakdown?: {
+    input?: number;
+    output?: number;
+  };
+  provider?: string;
+  model?: string;
+};
+
+export type StatusCommandData = {
+  version?: string;
+  packageName?: string;
+  uptime?: string;
+  model?: string;
+  provider?: string;
+  nodeVersion?: string;
+  platform?: string;
+  pid?: number;
+  memoryUsage?: {
+    rssMb?: number;
+    heapUsedMb?: number;
+    heapTotalMb?: number;
+  };
+};
+
+export type HelpCommandData = {
+  content?: string;
+  format?: string;
+  commands?: Array<{
+    name: string;
+    description?: string;
+    namespace?: string;
+  }>;
+};
+
+export type CommandModalKind = 'help' | 'models' | 'cost' | 'status';
+
+export type CommandModalPayload = {
+  kind: CommandModalKind;
+  data: HelpCommandData | ModelCommandData | CostCommandData | StatusCommandData;
+};
 
 const createFakeSubmitEvent = () => {
   return { preventDefault: () => undefined } as unknown as FormEvent<HTMLFormElement>;
@@ -111,6 +172,7 @@ export function useChatComposerState({
   claudeModel,
   codexModel,
   geminiModel,
+  opencodeModel,
   isLoading,
   canAbortSession,
   tokenBudget,
@@ -124,8 +186,6 @@ export function useChatComposerState({
   pendingViewSessionRef,
   scrollToBottom,
   addMessage,
-  clearMessages,
-  rewindMessages,
   setIsLoading,
   setCanAbortSession,
   setClaudeStatus,
@@ -145,6 +205,7 @@ export function useChatComposerState({
   const [imageErrors, setImageErrors] = useState<Map<string, string>>(new Map());
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
   const [thinkingMode, setThinkingMode] = useState('none');
+  const [commandModalPayload, setCommandModalPayload] = useState<CommandModalPayload | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputHighlightRef = useRef<HTMLDivElement>(null);
@@ -158,35 +219,33 @@ export function useChatComposerState({
     (result: CommandExecutionResult) => {
       const { action, data } = result;
       switch (action) {
-        case 'clear':
-          clearMessages();
-          break;
-
         case 'help':
-          addMessage({
-            type: 'assistant',
-            content: data.content,
-            timestamp: Date.now(),
+          setCommandModalPayload({
+            kind: 'help',
+            data: (data || {}) as HelpCommandData,
           });
           break;
 
-        case 'model':
-          addMessage({
-            type: 'assistant',
-            content: `**Current Model**: ${data.current.model}\n\n**Available Models**:\n\nClaude: ${data.available.claude.join(', ')}\n\nCursor: ${data.available.cursor.join(', ')}`,
-            timestamp: Date.now(),
+        case 'models':
+          setCommandModalPayload({
+            kind: 'models',
+            data: (data || {}) as ModelCommandData,
           });
           break;
 
         case 'cost': {
-          const costMessage = `**Token Usage**: ${data.tokenUsage.used.toLocaleString()} / ${data.tokenUsage.total.toLocaleString()} (${data.tokenUsage.percentage}%)\n\n**Estimated Cost**:\n- Input: $${data.cost.input}\n- Output: $${data.cost.output}\n- **Total**: $${data.cost.total}\n\n**Model**: ${data.model}`;
-          addMessage({ type: 'assistant', content: costMessage, timestamp: Date.now() });
+          setCommandModalPayload({
+            kind: 'cost',
+            data: (data || {}) as CostCommandData,
+          });
           break;
         }
 
         case 'status': {
-          const statusMessage = `**System Status**\n\n- Version: ${data.version}\n- Uptime: ${data.uptime}\n- Model: ${data.model}\n- Provider: ${data.provider}\n- Node.js: ${data.nodeVersion}\n- Platform: ${data.platform}`;
-          addMessage({ type: 'assistant', content: statusMessage, timestamp: Date.now() });
+          setCommandModalPayload({
+            kind: 'status',
+            data: (data || {}) as StatusCommandData,
+          });
           break;
         }
 
@@ -213,29 +272,16 @@ export function useChatComposerState({
           onShowSettings?.();
           break;
 
-        case 'rewind':
-          if (data.error) {
-            addMessage({
-              type: 'assistant',
-              content: `Warning: ${data.message}`,
-              timestamp: Date.now(),
-            });
-          } else {
-            rewindMessages(data.steps * 2);
-            addMessage({
-              type: 'assistant',
-              content: `Rewound ${data.steps} step(s). ${data.message}`,
-              timestamp: Date.now(),
-            });
-          }
-          break;
-
         default:
           console.warn('Unknown built-in command action:', action);
       }
     },
-    [onFileOpen, onShowSettings, addMessage, clearMessages, rewindMessages],
+    [onFileOpen, onShowSettings, addMessage],
   );
+
+  const closeCommandModal = useCallback(() => {
+    setCommandModalPayload(null);
+  }, []);
 
   const handleCustomCommand = useCallback(async (result: CommandExecutionResult) => {
     const { content, hasBashCommands } = result;
@@ -285,7 +331,15 @@ export function useChatComposerState({
           projectId: selectedProject.projectId,
           sessionId: currentSessionId,
           provider,
-          model: provider === 'cursor' ? cursorModel : provider === 'codex' ? codexModel : provider === 'gemini' ? geminiModel : claudeModel,
+          model: provider === 'cursor'
+            ? cursorModel
+            : provider === 'codex'
+              ? codexModel
+              : provider === 'gemini'
+                ? geminiModel
+                : provider === 'opencode'
+                  ? opencodeModel
+                  : claudeModel,
           tokenUsage: tokenBudget,
         };
 
@@ -337,6 +391,7 @@ export function useChatComposerState({
       currentSessionId,
       cursorModel,
       geminiModel,
+      opencodeModel,
       handleBuiltInCommand,
       handleCustomCommand,
       input,
@@ -473,13 +528,26 @@ export function useChatComposerState({
       }
 
       // Intercept slash commands only when "/" is the first input character.
+      // Also accept exact "help" as a convenience alias for users who expect CLI-style help.
       const commandInput = currentInput.trimEnd();
-      if (commandInput.startsWith('/')) {
+      const isHelpAlias = commandInput.trim().toLowerCase() === 'help';
+      if (commandInput.startsWith('/') || isHelpAlias) {
         const firstSpace = commandInput.indexOf(' ');
-        const commandName = firstSpace > 0 ? commandInput.slice(0, firstSpace) : commandInput;
-        const matchedCommand = slashCommands.find((cmd: SlashCommand) => cmd.name === commandName);
+        const commandName = isHelpAlias
+          ? '/help'
+          : firstSpace > 0 ? commandInput.slice(0, firstSpace) : commandInput;
+        const matchedCommand =
+          slashCommands.find((cmd: SlashCommand) => cmd.name === commandName) ||
+          (commandName === '/help'
+            ? ({
+                name: '/help',
+                description: 'Show help documentation for Claude Code',
+                namespace: 'builtin',
+                metadata: { type: 'builtin' },
+              } as SlashCommand)
+            : undefined);
         if (matchedCommand && matchedCommand.type !== 'skill') {
-          executeCommand(matchedCommand, commandInput);
+          executeCommand(matchedCommand, isHelpAlias ? '/help' : commandInput);
           setInput('');
           inputValueRef.current = '';
           setAttachedImages([]);
@@ -555,13 +623,9 @@ export function useChatComposerState({
       setTimeout(() => scrollToBottom(), 100);
 
       if (!effectiveSessionId && !selectedSession?.id) {
-        if (typeof window !== 'undefined') {
-          // Reset stale pending IDs from previous interrupted runs before creating a new one.
-          sessionStorage.removeItem('pendingSessionId');
-        }
-        // For new sessions we intentionally keep this as `null` until the backend
-        // emits `session_created` with the canonical provider session id.
-        pendingViewSessionRef.current = { sessionId: null, startedAt: Date.now() };
+        // This tracks only that a request is in flight before the provider has
+        // emitted its real session id; routing still waits for session_created.
+        pendingViewSessionRef.current = { startedAt: Date.now() };
       }
       if (effectiveSessionId) {
         onSessionActive?.(effectiveSessionId);
@@ -577,6 +641,8 @@ export function useChatComposerState({
                 ? 'codex-settings'
                 : provider === 'gemini'
                   ? 'gemini-settings'
+                  : provider === 'opencode'
+                    ? 'opencode-settings'
                   : 'claude-settings';
           const savedSettings = safeLocalStorage.getItem(settingsKey);
           if (savedSettings) {
@@ -644,6 +710,20 @@ export function useChatComposerState({
             toolsSettings,
           },
         });
+      } else if (provider === 'opencode') {
+        sendMessage({
+          type: 'opencode-command',
+          command: messageContent,
+          sessionId: effectiveSessionId,
+          options: {
+            cwd: resolvedProjectPath,
+            projectPath: resolvedProjectPath,
+            sessionId: effectiveSessionId,
+            resume: Boolean(effectiveSessionId),
+            model: opencodeModel,
+            sessionSummary,
+          },
+        });
       } else {
         sendMessage({
           type: 'claude-command',
@@ -686,6 +766,7 @@ export function useChatComposerState({
       cursorModel,
       executeCommand,
       geminiModel,
+      opencodeModel,
       isLoading,
       onSessionActive,
       onSessionProcessing,
@@ -856,15 +937,11 @@ export function useChatComposerState({
       return;
     }
 
-    const pendingSessionId =
-      typeof window !== 'undefined' ? sessionStorage.getItem('pendingSessionId') : null;
     const cursorSessionId =
       typeof window !== 'undefined' ? sessionStorage.getItem('cursorSessionId') : null;
 
     const candidateSessionIds = [
       currentSessionId,
-      pendingViewSessionRef.current?.sessionId || null,
-      pendingSessionId,
       provider === 'cursor' ? cursorSessionId : null,
       selectedSession?.id || null,
     ];
@@ -882,7 +959,7 @@ export function useChatComposerState({
       sessionId: targetSessionId,
       provider,
     });
-  }, [canAbortSession, currentSessionId, pendingViewSessionRef, provider, selectedSession?.id, sendMessage]);
+  }, [canAbortSession, currentSessionId, provider, selectedSession?.id, sendMessage]);
 
   const handleGrantToolPermission = useCallback(
     (suggestion: { entry: string; toolName: string }) => {
@@ -980,5 +1057,7 @@ export function useChatComposerState({
     handleGrantToolPermission,
     handleInputFocusChange,
     isInputFocused,
+    commandModalPayload,
+    closeCommandModal,
   };
 }
