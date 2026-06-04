@@ -1500,11 +1500,45 @@ const IGNORED_DIRS = new Set([
     '.gradle', '.idea', 'coverage', '.nyc_output'
 ]);
 
+const DEFAULT_FS_CONCURRENCY = 64;
+const parsedFsConcurrency = Number.parseInt(process.env.FS_CONCURRENCY || '', 10);
+const FS_CONCURRENCY = Number.isFinite(parsedFsConcurrency) && parsedFsConcurrency > 0
+    ? parsedFsConcurrency
+    : DEFAULT_FS_CONCURRENCY;
+let activeFsOperations = 0;
+const pendingFsOperations = [];
+
+async function acquire() {
+    if (activeFsOperations < FS_CONCURRENCY) {
+        activeFsOperations += 1;
+        return;
+    }
+
+    await new Promise((resolve) => {
+        pendingFsOperations.push(resolve);
+    });
+}
+
+function release() {
+    const next = pendingFsOperations.shift();
+    if (next) {
+        next();
+        return;
+    }
+
+    activeFsOperations = Math.max(0, activeFsOperations - 1);
+}
+
 async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden = true) {
     // Using fsPromises from import
     let entries;
     try {
-        entries = await fsPromises.readdir(dirPath, { withFileTypes: true });
+        await acquire();
+        try {
+            entries = await fsPromises.readdir(dirPath, { withFileTypes: true });
+        } finally {
+            release();
+        }
     } catch (error) {
         // Only log non-permission errors to avoid spam
         if (error.code !== 'EACCES' && error.code !== 'EPERM') {
@@ -1513,7 +1547,7 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
         return [];
     }
 
-    const filteredEntries = entries.filter((entry) => !IGNORED_DIRS.has(entry.name));
+    const filteredEntries = entries.filter((entry) => !(entry.isDirectory() && IGNORED_DIRS.has(entry.name)));
 
     // Process every entry in parallel. On high-latency filesystems (NFS/SMB)
     // serial stat() was the real bottleneck — issuing them concurrently lets
@@ -1528,17 +1562,22 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
 
         // Get file stats for additional metadata
         try {
-            const stats = await fsPromises.stat(itemPath);
-            item.size = stats.size;
-            item.modified = stats.mtime.toISOString();
+            await acquire();
+            try {
+                const stats = await fsPromises.stat(itemPath);
+                item.size = stats.size;
+                item.modified = stats.mtime.toISOString();
 
-            // Convert permissions to rwx format
-            const mode = stats.mode;
-            const ownerPerm = (mode >> 6) & 7;
-            const groupPerm = (mode >> 3) & 7;
-            const otherPerm = mode & 7;
-            item.permissions = ((mode >> 6) & 7).toString() + ((mode >> 3) & 7).toString() + (mode & 7).toString();
-            item.permissionsRwx = permToRwx(ownerPerm) + permToRwx(groupPerm) + permToRwx(otherPerm);
+                // Convert permissions to rwx format
+                const mode = stats.mode;
+                const ownerPerm = (mode >> 6) & 7;
+                const groupPerm = (mode >> 3) & 7;
+                const otherPerm = mode & 7;
+                item.permissions = ((mode >> 6) & 7).toString() + ((mode >> 3) & 7).toString() + (mode & 7).toString();
+                item.permissionsRwx = permToRwx(ownerPerm) + permToRwx(groupPerm) + permToRwx(otherPerm);
+            } finally {
+                release();
+            }
         } catch (statError) {
             // If stat fails, provide default values
             item.size = 0;
@@ -1551,6 +1590,9 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
             // Recurse. Let readdir's own EACCES bubble up through the catch in
             // the recursive call rather than doing a separate access() probe
             // (which doubled the round-trip count on SMB without adding info).
+            // The recursive call starts with a bounded readdir; holding a permit
+            // for the whole subtree can deadlock when sibling directories are
+            // waiting on their own children.
             item.children = await getFileTree(itemPath, maxDepth, currentDepth + 1, showHidden);
         }
 
