@@ -136,6 +136,13 @@ function buildShellCommand(
     return command;
   }
 
+  if (provider === 'opencode') {
+    if (hasSession && sessionId) {
+      return `opencode --session "${sessionId}"`;
+    }
+    return initialCommand || 'opencode';
+  }
+
   const command = initialCommand || 'claude';
   if (hasSession && sessionId) {
     if (os.platform() === 'win32') {
@@ -389,6 +396,8 @@ export function handleShellConnection(
                 ? 'Codex'
                 : provider === 'gemini'
                   ? 'Gemini'
+                  : provider === 'opencode'
+                    ? 'OpenCode'
                   : 'Claude';
           welcomeMsg = hasSession
             ? `\x1b[36mResuming ${providerName} session ${sessionId} in: ${projectPath}\x1b[0m\r\n`

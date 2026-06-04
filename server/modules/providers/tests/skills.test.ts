@@ -378,6 +378,72 @@ test('providerSkillsService lists codex repository, user, and system skills', { 
 });
 
 /**
+ * This test covers OpenCode skill lookup across cwd-to-git-root project folders
+ * plus the global OpenCode/Claude/Agents compatibility locations.
+ */
+test('providerSkillsService lists opencode project and user compatibility skills', { concurrency: false }, async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-skills-opencode-'));
+  const repoRoot = path.join(tempRoot, 'repo');
+  const workspacePath = path.join(repoRoot, 'packages', 'app');
+  await fs.mkdir(path.join(repoRoot, '.git'), { recursive: true });
+  await fs.mkdir(workspacePath, { recursive: true });
+
+  const restoreHomeDir = patchHomeDir(tempRoot);
+  try {
+    await writeSkill(
+      path.join(workspacePath, '.opencode', 'skills'),
+      'opencode-cwd-dir',
+      'opencode-cwd',
+      'OpenCode cwd skill',
+    );
+    await writeSkill(
+      path.join(repoRoot, 'packages', '.claude', 'skills'),
+      'opencode-claude-parent-dir',
+      'opencode-claude-parent',
+      'OpenCode Claude parent skill',
+    );
+    await writeSkill(
+      path.join(repoRoot, '.agents', 'skills'),
+      'opencode-agents-root-dir',
+      'opencode-agents-root',
+      'OpenCode Agents root skill',
+    );
+    await writeSkill(
+      path.join(tempRoot, '.config', 'opencode', 'skills'),
+      'opencode-user-dir',
+      'opencode-user',
+      'OpenCode user skill',
+    );
+    await writeSkill(
+      path.join(tempRoot, '.claude', 'skills'),
+      'opencode-claude-user-dir',
+      'opencode-claude-user',
+      'OpenCode Claude user skill',
+    );
+    await writeSkill(
+      path.join(tempRoot, '.agents', 'skills'),
+      'opencode-agents-user-dir',
+      'opencode-agents-user',
+      'OpenCode Agents user skill',
+    );
+
+    const skills = await providerSkillsService.listProviderSkills('opencode', { workspacePath });
+    const byName = new Map(skills.map((skill) => [skill.name, skill]));
+
+    assert.equal(byName.get('opencode-cwd')?.scope, 'project');
+    assert.equal(byName.get('opencode-claude-parent')?.scope, 'project');
+    assert.equal(byName.get('opencode-agents-root')?.scope, 'project');
+    assert.equal(byName.get('opencode-user')?.scope, 'user');
+    assert.equal(byName.get('opencode-claude-user')?.scope, 'user');
+    assert.equal(byName.get('opencode-agents-user')?.scope, 'user');
+    assert.equal(byName.get('opencode-cwd')?.command, '/opencode-cwd');
+  } finally {
+    restoreHomeDir();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+/**
  * This test covers Gemini and Cursor skill directory rules, including shared
  * `.agents/skills` project support.
  */
