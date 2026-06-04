@@ -322,6 +322,10 @@
       "claudeDescription": "Эквивалентно флагу --dangerously-skip-permissions",
       "cursorDescription": "Эквивалентно флагу -f в Cursor CLI"
     },
+    "useWorktree": {
+      "label": "Использовать изоляцию git worktree",
+      "description": "Запускает Claude Code в изолированном git worktree. Эквивалентно флагу --worktree."
+    },
     "allowedTools": {
       "title": "Разрешенные инструменты",
       "description": "Инструменты, которые автоматически разрешены без запроса разрешения",

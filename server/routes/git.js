@@ -46,6 +46,15 @@ function spawnAsync(command, args, options = {}) {
   });
 }
 
+// git writes its actual diagnostics to stderr (which spawnAsync attaches to the
+// error), while error.message is only "Command failed: ...". Combine them so
+// callers can pattern-match the real output instead of the fixed message string.
+function gitErrorText(error) {
+  return [error?.stderr, error?.stdout, error?.message]
+    .filter(Boolean)
+    .join('\n');
+}
+
 // Input validation helpers (defense-in-depth)
 function validateCommitRef(commit) {
   // Allow hex hashes, HEAD, HEAD~N, HEAD^N, tag names, branch names
@@ -689,20 +698,31 @@ router.post('/checkout', async (req, res) => {
   const { project, branch } = req.body;
   
   if (!project || !branch) {
-    return res.status(400).json({ error: 'Project id and branch are required' });
+    return res.status(400).json({ success: false, error: 'Project id and branch are required' });
   }
 
   try {
     const projectPath = await getActualProjectPath(project);
-    
+
     // Checkout the branch
     validateBranchName(branch);
+
+    // Block checkout in linked worktrees — each worktree is tied to its branch
+    const worktreeInfo = await getWorktreeInfo(projectPath);
+    if (worktreeInfo?.isWorktree) {
+      return res.status(400).json({
+        success: false,
+        error: 'This project is a git worktree — switching branches is not supported. Each worktree is tied to its own branch.',
+      });
+    }
+
     const { stdout } = await spawnAsync('git', ['checkout', branch], { cwd: projectPath });
-    
+
     res.json({ success: true, output: stdout });
   } catch (error) {
     console.error('Git checkout error:', error);
-    res.status(500).json({ error: error.message });
+    const detail = error.stderr?.trim() || error.message;
+    res.status(500).json({ success: false, error: detail });
   }
 });
 
@@ -1207,25 +1227,27 @@ router.post('/pull', async (req, res) => {
   } catch (error) {
     console.error('Git pull error:', error);
 
-    // Enhanced error handling for common pull scenarios
+    // Enhanced error handling for common pull scenarios. git's real output is on
+    // stderr, so match against that (error.message is just "Command failed: ...").
+    const output = gitErrorText(error);
     let errorMessage = 'Pull failed';
-    let details = error.message;
-    
-    if (error.message.includes('CONFLICT')) {
+    let details = error.stderr?.trim() || error.message;
+
+    if (output.includes('CONFLICT')) {
       errorMessage = 'Merge conflicts detected';
       details = 'Pull created merge conflicts. Please resolve conflicts manually in the editor, then commit the changes.';
-    } else if (error.message.includes('Please commit your changes or stash them')) {
-      errorMessage = 'Uncommitted changes detected';  
+    } else if (output.includes('Please commit your changes or stash them')) {
+      errorMessage = 'Uncommitted changes detected';
       details = 'Please commit or stash your local changes before pulling.';
-    } else if (error.message.includes('Could not resolve hostname')) {
+    } else if (output.includes('Could not resolve hostname')) {
       errorMessage = 'Network error';
       details = 'Unable to connect to remote repository. Check your internet connection.';
-    } else if (error.message.includes('fatal: \'origin\' does not appear to be a git repository')) {
+    } else if (output.includes("does not appear to be a git repository")) {
       errorMessage = 'Remote not configured';
       details = 'No remote repository configured. Add a remote with: git remote add origin <url>';
-    } else if (error.message.includes('diverged')) {
+    } else if (/diverg(ed|ent)/.test(output)) {
       errorMessage = 'Branches have diverged';
-      details = 'Your local branch and remote branch have diverged. Consider fetching first to review changes.';
+      details = 'Your local branch and the remote have diverged (each has commits the other lacks). Reconcile them by rebasing or merging — e.g. run "git pull --rebase" or "git pull --no-rebase" in the project, then try again.';
     }
     
     res.status(500).json({ 
@@ -1275,26 +1297,28 @@ router.post('/push', async (req, res) => {
   } catch (error) {
     console.error('Git push error:', error);
     
-    // Enhanced error handling for common push scenarios
+    // Enhanced error handling for common push scenarios. git's real output is on
+    // stderr, so match against that (error.message is just "Command failed: ...").
+    const output = gitErrorText(error);
     let errorMessage = 'Push failed';
-    let details = error.message;
-    
-    if (error.message.includes('rejected')) {
+    let details = error.stderr?.trim() || error.message;
+
+    if (output.includes('rejected')) {
       errorMessage = 'Push rejected';
       details = 'The remote has newer commits. Pull first to merge changes before pushing.';
-    } else if (error.message.includes('non-fast-forward')) {
+    } else if (output.includes('non-fast-forward')) {
       errorMessage = 'Non-fast-forward push';
       details = 'Your branch is behind the remote. Pull the latest changes first.';
-    } else if (error.message.includes('Could not resolve hostname')) {
+    } else if (output.includes('Could not resolve hostname')) {
       errorMessage = 'Network error';
       details = 'Unable to connect to remote repository. Check your internet connection.';
-    } else if (error.message.includes('fatal: \'origin\' does not appear to be a git repository')) {
+    } else if (output.includes("does not appear to be a git repository")) {
       errorMessage = 'Remote not configured';
       details = 'No remote repository configured. Add a remote with: git remote add origin <url>';
-    } else if (error.message.includes('Permission denied')) {
+    } else if (output.includes('Permission denied')) {
       errorMessage = 'Authentication failed';
       details = 'Permission denied. Check your credentials or SSH keys.';
-    } else if (error.message.includes('no upstream branch')) {
+    } else if (output.includes('no upstream branch')) {
       errorMessage = 'No upstream branch';
       details = 'No upstream branch configured. Use: git push --set-upstream origin <branch>';
     }
@@ -1489,5 +1513,45 @@ router.post('/delete-untracked', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+/**
+ * Detect whether a directory is a git worktree and resolve the main repository root.
+ *
+ * Uses `git rev-parse --git-common-dir` (Git 2.5+) to distinguish linked worktrees
+ * from the primary worktree.  Returns `null` when the directory is not inside a git
+ * repository or when an older git version is used.
+ *
+ * @param {string} projectPath – absolute path to the directory to inspect
+ * @returns {Promise<{isWorktree: boolean, worktreeRoot: string, mainRepoRoot: string, branchName: string} | null>}
+ */
+export async function getWorktreeInfo(projectPath) {
+  try {
+    const [toplevel, commonDir, gitDir, branch] = await Promise.all([
+      spawnAsync('git', ['rev-parse', '--show-toplevel'], { cwd: projectPath }).then(r => r.stdout.trim()),
+      spawnAsync('git', ['rev-parse', '--git-common-dir'], { cwd: projectPath }).then(r => r.stdout.trim()),
+      spawnAsync('git', ['rev-parse', '--git-dir'], { cwd: projectPath }).then(r => r.stdout.trim()),
+      getCurrentBranchName(projectPath).catch(() => ''),
+    ]);
+
+    const resolvedCommon = path.resolve(projectPath, commonDir);
+    const resolvedGit = path.resolve(projectPath, gitDir);
+    const isLinkedWorktree = resolvedCommon !== resolvedGit;
+
+    // The main repo root is the parent of the .git directory that --git-common-dir points to.
+    const mainRepoRoot = isLinkedWorktree
+      ? path.dirname(resolvedCommon)
+      : toplevel;
+
+    return {
+      isWorktree: isLinkedWorktree,
+      worktreeRoot: toplevel,
+      mainRepoRoot,
+      branchName: branch,
+    };
+  } catch {
+    // Not a git repo, git too old, or other failure – graceful degradation.
+    return null;
+  }
+}
 
 export default router;
