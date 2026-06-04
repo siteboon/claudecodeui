@@ -36,8 +36,12 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   const { token } = useAuth();
 
   useEffect(() => {
+    // The cleanup below sets unmountedRef = true. Without this reset, every
+    // re-run of the effect (e.g. on token refresh) would short-circuit connect()
+    // at its unmounted guard and leave the socket permanently disconnected.
+    unmountedRef.current = false;
     connect();
-    
+
     return () => {
       unmountedRef.current = true;
       if (reconnectTimeoutRef.current) {
