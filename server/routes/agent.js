@@ -4,15 +4,16 @@ import path from 'path';
 import os from 'os';
 import { promises as fs } from 'fs';
 import crypto from 'crypto';
-import { userDb, apiKeysDb, githubTokensDb } from '../database/db.js';
-import { addProjectManually } from '../projects.js';
+import { userDb, apiKeysDb, githubTokensDb, projectsDb } from '../modules/database/index.js';
 import { queryClaudeSDK } from '../claude-sdk.js';
 import { spawnCursor } from '../cursor-cli.js';
 import { queryCodex } from '../openai-codex.js';
 import { spawnGemini } from '../gemini-cli.js';
+import { spawnOpenCode } from '../opencode-cli.js';
 import { Octokit } from '@octokit/rest';
-import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants.js';
+import { providerModelsService } from '../modules/providers/services/provider-models.service.js';
 import { IS_PLATFORM } from '../constants/config.js';
+import { normalizeProjectPath } from '../shared/utils.js';
 
 const router = express.Router();
 
@@ -475,6 +476,7 @@ class SSEStreamWriter {
 
   setSessionId(sessionId) {
     this.sessionId = sessionId;
+    this.send({ type: 'session-id', sessionId });
   }
 
   getSessionId() {
@@ -607,7 +609,7 @@ class ResponseCollector {
 /**
  * POST /api/agent
  *
- * Trigger an AI agent (Claude or Cursor) to work on a project.
+ * Trigger an AI agent to work on a project.
  * Supports automatic GitHub branch and pull request creation after successful completion.
  *
  * ================================================================================================
@@ -632,7 +634,7 @@ class ResponseCollector {
  *                          - Source for auto-generated branch names (if createBranch=true and no branchName)
  *                          - Fallback for PR title if no commits are made
  *
- * @param {string} provider - (Optional) AI provider to use. Options: 'claude' | 'cursor' | 'codex' | 'gemini'
+ * @param {string} provider - (Optional) AI provider to use. Options: 'claude' | 'cursor' | 'codex' | 'gemini' | 'opencode'
  *                           Default: 'claude'
  *
  * @param {boolean} stream - (Optional) Enable Server-Sent Events (SSE) streaming for real-time updates.
@@ -750,7 +752,7 @@ class ResponseCollector {
  * Input Validations (400 Bad Request):
  *   - Either githubUrl OR projectPath must be provided (not neither)
  *   - message must be non-empty string
- *   - provider must be 'claude', 'cursor', 'codex', or 'gemini'
+ *   - provider must be 'claude', 'cursor', 'codex', 'gemini', or 'opencode'
  *   - createBranch/createPR requires githubUrl OR projectPath (not neither)
  *   - branchName must pass Git naming rules (if provided)
  *
@@ -839,7 +841,7 @@ class ResponseCollector {
  *   }
  */
 router.post('/', validateExternalApiKey, async (req, res) => {
-  const { githubUrl, projectPath, message, provider = 'claude', model, githubToken, branchName } = req.body;
+  const { githubUrl, projectPath, message, provider = 'claude', model, githubToken, branchName, sessionId } = req.body;
 
   // Parse stream and cleanup as booleans (handle string "true"/"false" from curl)
   const stream = req.body.stream === undefined ? true : (req.body.stream === true || req.body.stream === 'true');
@@ -858,8 +860,8 @@ router.post('/', validateExternalApiKey, async (req, res) => {
     return res.status(400).json({ error: 'message is required' });
   }
 
-  if (!['claude', 'cursor', 'codex', 'gemini'].includes(provider)) {
-    return res.status(400).json({ error: 'provider must be "claude", "cursor", "codex", or "gemini"' });
+  if (!['claude', 'cursor', 'codex', 'gemini', 'opencode'].includes(provider)) {
+    return res.status(400).json({ error: 'provider must be "claude", "cursor", "codex", "gemini", or "opencode"' });
   }
 
   // Validate GitHub branch/PR creation requirements
@@ -889,7 +891,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       finalProjectPath = await cloneGitHubRepo(githubUrl.trim(), tokenToUse, targetPath);
     } else {
       // Use existing project path
-      finalProjectPath = path.resolve(projectPath);
+      finalProjectPath = normalizeProjectPath(path.resolve(projectPath));
 
       // Verify the path exists
       try {
@@ -899,19 +901,14 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       }
     }
 
-    // Register the project (or use existing registration)
-    let project;
-    try {
-      project = await addProjectManually(finalProjectPath);
-      console.log('📦 Project registered:', project);
-    } catch (error) {
-      // If project already exists, that's fine - continue with the existing registration
-      if (error.message && error.message.includes('Project already configured')) {
-        console.log('📦 Using existing project registration for:', finalProjectPath);
-        project = { path: finalProjectPath };
-      } else {
-        throw error;
-      }
+    finalProjectPath = normalizeProjectPath(finalProjectPath);
+
+    // Register project path in DB (or reuse existing active registration)
+    const registrationResult = projectsDb.createProjectPath(finalProjectPath, null);
+    if (registrationResult.outcome === 'active_conflict') {
+      console.log('Project registration already exists for:', finalProjectPath);
+    } else {
+      console.log('Project registered:', registrationResult.project);
     }
 
     // Set up writer based on streaming mode
@@ -942,6 +939,10 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       });
     }
 
+    const codexModels = (await providerModelsService.getProviderModels('codex')).models;
+    const geminiModels = (await providerModelsService.getProviderModels('gemini')).models;
+    const opencodeModels = (await providerModelsService.getProviderModels('opencode')).models;
+
     // Start the appropriate session
     if (provider === 'claude') {
       console.log('🤖 Starting Claude SDK session');
@@ -949,7 +950,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       await queryClaudeSDK(message.trim(), {
         projectPath: finalProjectPath,
         cwd: finalProjectPath,
-        sessionId: null, // New session
+        sessionId: sessionId || null,
         model: model,
         permissionMode: 'bypassPermissions' // Bypass all permissions for API calls
       }, writer);
@@ -960,7 +961,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       await spawnCursor(message.trim(), {
         projectPath: finalProjectPath,
         cwd: finalProjectPath,
-        sessionId: null, // New session
+        sessionId: sessionId || null,
         model: model || undefined,
         skipPermissions: true // Bypass permissions for Cursor
       }, writer);
@@ -970,8 +971,8 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       await queryCodex(message.trim(), {
         projectPath: finalProjectPath,
         cwd: finalProjectPath,
-        sessionId: null,
-        model: model || CODEX_MODELS.DEFAULT,
+        sessionId: sessionId || null,
+        model: model || codexModels.DEFAULT,
         permissionMode: 'bypassPermissions'
       }, writer);
     } else if (provider === 'gemini') {
@@ -980,9 +981,18 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       await spawnGemini(message.trim(), {
         projectPath: finalProjectPath,
         cwd: finalProjectPath,
-        sessionId: null,
-        model: model,
+        sessionId: sessionId || null,
+        model: model || geminiModels.DEFAULT,
         skipPermissions: true // CLI mode bypasses permissions
+      }, writer);
+    } else if (provider === 'opencode') {
+      console.log('Starting OpenCode CLI session');
+
+      await spawnOpenCode(message.trim(), {
+        projectPath: finalProjectPath,
+        cwd: finalProjectPath,
+        sessionId: sessionId || null,
+        model: model || opencodeModels.DEFAULT
       }, writer);
     }
 
@@ -1124,7 +1134,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
           } else {
             prBody += `Agent task: ${message}`;
           }
-          prBody += '\n\n---\n*This pull request was automatically created by Claude Code UI Agent.*';
+          prBody += '\n\n---\n*This pull request was automatically created by CloudCLI.ai Agent.*';
 
           console.log(`📝 PR Title: ${prTitle}`);
 

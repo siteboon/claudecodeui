@@ -84,7 +84,7 @@
     "openInEditor": "Im Editor öffnen"
   },
   "mainContent": {
-    "loading": "Claude Code UI wird geladen",
+    "loading": "CloudCLI wird geladen",
     "settingUpWorkspace": "Arbeitsbereich wird eingerichtet...",
     "chooseProject": "Projekt auswählen",
     "selectProjectDescription": "Wähl ein Projekt aus der Seitenleiste, um mit Claude zu programmieren. Jedes Projekt enthält deine Chat-Sitzungen und den Dateiverlauf.",
@@ -176,7 +176,6 @@
     },
     "step3": {
       "reviewConfig": "Konfiguration überprüfen",
-      "workspaceType": "Arbeitsbereichstyp:",
       "existingWorkspace": "Vorhandener Arbeitsbereich",
       "newWorkspace": "Neuer Arbeitsbereich",
       "path": "Pfad:",
@@ -215,7 +214,7 @@
     "viewFullRelease": "Vollständige Version anzeigen",
     "updateProgress": "Update-Fortschritt:",
     "manualUpgrade": "Manuelles Upgrade:",
-    "npmUpgradeCommand": "npm install -g @siteboon/claude-code-ui@latest",
+    "npmUpgradeCommand": "npm install -g @cloudcli-ai/cloudcli@latest",
     "manualUpgradeHint": "Oder klick auf \"Jetzt aktualisieren\", um das Update automatisch durchzuführen.",
     "updateCompleted": "Update erfolgreich abgeschlossen!",
     "restartServer": "Bitte starte den Server neu, um die Änderungen anzuwenden.",

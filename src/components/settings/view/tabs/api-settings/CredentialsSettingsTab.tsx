@@ -1,14 +1,11 @@
 import { useTranslation } from 'react-i18next';
-import { useVersionCheck } from '../../../../../hooks/useVersionCheck';
 import { useCredentialsSettings } from '../../../hooks/useCredentialsSettings';
 import ApiKeysSection from './sections/ApiKeysSection';
 import GithubCredentialsSection from './sections/GithubCredentialsSection';
 import NewApiKeyAlert from './sections/NewApiKeyAlert';
-import VersionInfoSection from './sections/VersionInfoSection';
 
 export default function CredentialsSettingsTab() {
   const { t } = useTranslation('settings');
-  const { updateAvailable, latestVersion, currentVersion, releaseInfo } = useVersionCheck('siteboon', 'claudecodeui');
   const {
     apiKeys,
     githubCredentials,
@@ -89,12 +86,6 @@ export default function CredentialsSettingsTab() {
         onDeleteGithubCredential={deleteGithubCredential}
       />
 
-      <VersionInfoSection
-        currentVersion={currentVersion}
-        updateAvailable={updateAvailable}
-        latestVersion={latestVersion}
-        releaseInfo={releaseInfo}
-      />
     </div>
   );
 }

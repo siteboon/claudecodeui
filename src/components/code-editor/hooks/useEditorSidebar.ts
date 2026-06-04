@@ -29,11 +29,13 @@ export const useEditorSidebar = ({
       setEditingFile({
         name: fileName,
         path: filePath,
-        projectName: selectedProject?.name,
+        // DB projectId is forwarded to the editor so it can read/save files
+        // via `/api/projects/:projectId/file` endpoints.
+        projectId: selectedProject?.projectId,
         diffInfo,
       });
     },
-    [selectedProject?.name],
+    [selectedProject?.projectId],
   );
 
   const handleCloseEditor = useCallback(() => {

@@ -15,7 +15,7 @@
   <a href="https://trendshift.io/repositories/15586" target="_blank"><img src="https://trendshift.io/api/badge/repositories/15586" alt="siteboon%2Fclaudecodeui | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 </p>
 
-<div align="right"><i><a href="./README.md">English</a> · <a href="./README.ru.md">Русский</a> · <a href="./README.de.md">Deutsch</a> · <b>한국어</b> · <a href="./README.zh-CN.md">中文</a> · <a href="./README.ja.md">日本語</a></i></div>
+<div align="right"><i><a href="./README.md">English</a> · <a href="./README.ru.md">Русский</a> · <a href="./README.de.md">Deutsch</a> · <b>한국어</b> · <a href="./README.zh-CN.md">中文</a> · <a href="./README.ja.md">日本語</a> · <a href="./README.tr.md">Türkçe</a></i></div>
 
 ---
 
@@ -60,7 +60,7 @@
 - **세션 관리** - 대화를 재개하고, 여러 세션을 관리하며 기록을 추적
 - **플러그인 시스템** - 커스텀 탭, 백엔드 서비스, 통합을 추가하여 CloudCLI 확장. [직접 빌드 →](https://github.com/cloudcli-ai/cloudcli-plugin-starter)
 - **TaskMaster AI 통합** *(선택사항)* - AI 중심의 작업 계획, PRD 파싱, 워크플로 자동화를 통한 고급 프로젝트 관리
-- **모델 호환성** - Claude, GPT, Gemini 모델 계열에서 작동 (`shared/modelConstants.js`에서 전체 지원 모델 확인)
+- **모델 호환성** - Claude, GPT, Gemini 모델 계열에서 작동 (`public/modelConstants.js`에서 전체 지원 모델 확인)
 
 ## 빠른 시작
 
@@ -72,22 +72,34 @@
 
 ### 셀프 호스트 (오픈 소스)
 
+#### npm
+
 **npx**로 즉시 CloudCLI UI를 실행하세요 (Node.js v22+ 필요):
 
 ```bash
-npx @siteboon/claude-code-ui
+npx @cloudcli-ai/cloudcli
 ```
 
 **정기적으로 사용한다면 전역 설치:**
 
 ```bash
-npm install -g @siteboon/claude-code-ui
+npm install -g @cloudcli-ai/cloudcli
 cloudcli
 ```
 
 `http://localhost:3001`을 열면 기존 세션이 자동으로 발견됩니다.
 
-자세한 구성 옵션, PM2, 원격 서버 설정 등은 **[문서 →](https://cloudcli.ai/docs)**를 참고하세요
+자세한 구성 옵션, PM2, 원격 서버 설정 등은 **[문서 →](https://cloudcli.ai/docs)**를 참고하세요.
+
+#### Docker Sandboxes (실험적)
+
+하이퍼바이저 수준 격리로 에이전트를 샌드박스에서 실행합니다. 기본 에이전트는 Claude Code입니다. [`sbx` CLI](https://docs.docker.com/ai/sandboxes/get-started/)가 필요합니다.
+
+```
+npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
+```
+
+Claude Code, Codex, Gemini CLI를 지원합니다. 자세한 내용은 [샌드박스 문서](docker/)를 참고하세요.
 
 ---
 
@@ -99,7 +111,7 @@ CloudCLI UI는 CloudCLI Cloud를 구동하는 오픈 소스 UI 계층입니다. 
 |---|---|---|
 | **적합한 대상** | 로컬 에이전트 세션을 위한 전체 UI가 필요한 개발자 | 어디서든 접근 가능한 클라우드에서 에이전트를 운영하고자 하는 팀 및 개발자 |
 | **접근 방법** | `[yourip]:port`를 통해 브라우저 접속 | 브라우저, IDE, REST API, n8n |
-| **설정** | `npx @siteboon/claude-code-ui` | 설정 불필요 |
+| **설정** | `npx @cloudcli-ai/cloudcli` | 설정 불필요 |
 | **기기 유지 필요 여부** | 예 (머신 켜둬야 함) | 아니오 |
 | **모바일 접근** | 네트워크 내 브라우저 | 모든 기기 (네이티브 앱 예정) |
 | **세션 접근** | `~/.claude`에서 자동 발견 | 클라우드 환경 내 세션 |

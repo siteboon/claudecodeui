@@ -1,0 +1,43 @@
+{
+  "name": "@siteboon/claude-code-ui",
+  "version": "2.0.0",
+  "description": "This package has moved to @cloudcli-ai/cloudcli",
+  "type": "module",
+  "main": "index.js",
+  "bin": {
+    "claude-code-ui": "./bin.js",
+    "cloudcli": "./bin.js"
+  },
+  "homepage": "https://cloudcli.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/siteboon/claudecodeui.git"
+  },
+  "bugs": {
+    "url": "https://github.com/siteboon/claudecodeui/issues"
+  },
+  "keywords": [
+    "claude code",
+    "claude-code",
+    "claude-code-ui",
+    "cloudcli",
+    "codex",
+    "gemini",
+    "gemini-cli",
+    "cursor",
+    "cursor-cli",
+    "anthropic",
+    "openai",
+    "google",
+    "coding-agent",
+    "web-ui",
+    "ui",
+    "mobile IDE"
+  ],
+  "author": "CloudCLI UI Contributors",
+  "dependencies": {
+    "@cloudcli-ai/cloudcli": "*"
+  },
+  "deprecated": "This package has been renamed to @cloudcli-ai/cloudcli. Please install @cloudcli-ai/cloudcli instead.",
+  "license": "AGPL-3.0-or-later"
+}

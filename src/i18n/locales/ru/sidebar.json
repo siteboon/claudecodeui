@@ -2,7 +2,7 @@
   "projects": {
     "title": "Проекты",
     "newProject": "Новый проект",
-    "deleteProject": "Удалить проект",
+    "deleteProject": "Убрать проект",
     "renameProject": "Переименовать проект",
     "noProjects": "Проекты не найдены",
     "loadingProjects": "Загрузка проектов...",
@@ -20,7 +20,7 @@
     "runClaudeCli": "Запустите Claude CLI в каталоге проекта для начала работы"
   },
   "app": {
-    "title": "Claude Code UI",
+    "title": "CloudCLI",
     "subtitle": "Интерфейс AI помощника для программирования"
   },
   "sessions": {
@@ -40,14 +40,16 @@
     "createProject": "Создать новый проект",
     "refresh": "Обновить проекты и сеансы (Ctrl+R)",
     "renameProject": "Переименовать проект (F2)",
-    "deleteProject": "Удалить пустой проект (Delete)",
+    "deleteProject": "Убрать проект из боковой панели (Delete)",
     "addToFavorites": "Добавить в избранное",
     "removeFromFavorites": "Удалить из избранного",
     "editSessionName": "Вручную редактировать имя сеанса",
     "deleteSession": "Удалить этот сеанс навсегда",
+    "activeSessionIndicator": "Недавно активный сеанс (последние 10 минут)",
     "save": "Сохранить",
     "cancel": "Отмена",
-    "clearSearch": "Очистить поиск"
+    "clearSearch": "Очистить поиск",
+    "openCommandPalette": "Открыть палитру команд"
   },
   "navigation": {
     "chat": "Чат",
@@ -65,7 +67,12 @@
     "save": "Сохранить",
     "delete": "Удалить",
     "rename": "Переименовать",
-    "joinCommunity": "Присоединиться к сообществу"
+    "joinCommunity": "Присоединиться к сообществу",
+    "reportIssue": "Сообщить о проблеме",
+    "starOnGithub": "Звезда на GitHub"
+  },
+  "branding": {
+    "openSource": "Открытый исходный код"
   },
   "status": {
     "active": "Активен",
@@ -90,14 +97,14 @@
     "deleteSuccess": "Успешно удалено",
     "errorOccurred": "Произошла ошибка",
     "deleteSessionConfirm": "Вы уверены, что хотите удалить этот сеанс? Это действие нельзя отменить.",
-    "deleteProjectConfirm": "Вы уверены, что хотите удалить этот пустой проект? Это действие нельзя отменить.",
+    "deleteProjectConfirm": "Убрать этот проект из боковой панели? Файлы проекта, воспоминания и данные сеансов не будут удалены.",
     "enterProjectPath": "Пожалуйста, введите путь к проекту",
     "deleteSessionFailed": "Не удалось удалить сеанс. Попробуйте снова.",
     "deleteSessionError": "Ошибка при удалении сеанса. Попробуйте снова.",
     "renameSessionFailed": "Не удалось переименовать сеанс. Попробуйте снова.",
     "renameSessionError": "Ошибка при переименовании сеанса. Попробуйте снова.",
-    "deleteProjectFailed": "Не удалось удалить проект. Попробуйте снова.",
-    "deleteProjectError": "Ошибка при удалении проекта. Попробуйте снова.",
+    "deleteProjectFailed": "Не удалось убрать проект. Попробуйте снова.",
+    "deleteProjectError": "Ошибка при удалении проекта из списка. Попробуйте снова.",
     "createProjectFailed": "Не удалось создать проект. Попробуйте снова.",
     "createProjectError": "Ошибка при создании проекта. Попробуйте снова."
   },
@@ -121,14 +128,16 @@
     "projectsScanned_other": "{{count}} проектов просканировано"
   },
   "deleteConfirmation": {
-    "deleteProject": "Удалить проект",
+    "deleteProject": "Убрать проект",
     "deleteSession": "Удалить сеанс",
-    "confirmDelete": "Вы уверены, что хотите удалить",
+    "confirmDelete": "Что вы хотите сделать с",
     "sessionCount_one": "Этот проект содержит {{count}} разговор.",
     "sessionCount_few": "Этот проект содержит {{count}} разговора.",
     "sessionCount_many": "Этот проект содержит {{count}} разговоров.",
     "sessionCount_other": "Этот проект содержит {{count}} разговоров.",
-    "allConversationsDeleted": "Все разговоры будут удалены навсегда.",
-    "cannotUndo": "Это действие нельзя отменить."
+    "removeFromSidebar": "Убрать только из боковой панели",
+    "deleteAllData": "Удалить все данные навсегда",
+    "allConversationsDeleted": "Проект будет убран из боковой панели. Ваши файлы, воспоминания и данные сеансов сохранятся.",
+    "cannotUndo": "Вы сможете добавить проект позже."
   }
 }

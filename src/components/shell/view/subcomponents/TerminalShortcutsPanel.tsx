@@ -55,7 +55,7 @@ export default function TerminalShortcutsPanel({
   wsRef,
   terminalRef,
   isConnected,
-  bottomOffset = 'bottom-14',
+  bottomOffset = 'bottom-0',
 }: TerminalShortcutsPanelProps) {
   const { t } = useTranslation('settings');
   const [ctrlActive, setCtrlActive] = useState(false);

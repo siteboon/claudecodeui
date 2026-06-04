@@ -1,11 +1,12 @@
-import type { SessionProvider } from '../../types/app';
+import type { LLMProvider } from '../../types/app';
 import ClaudeLogo from './ClaudeLogo';
 import CodexLogo from './CodexLogo';
 import CursorLogo from './CursorLogo';
 import GeminiLogo from './GeminiLogo';
+import OpenCodeLogo from './OpenCodeLogo';
 
 type SessionProviderLogoProps = {
-  provider?: SessionProvider | string | null;
+  provider?: LLMProvider | string | null;
   className?: string;
 };
 
@@ -23,6 +24,10 @@ export default function SessionProviderLogo({
 
   if (provider === 'gemini') {
     return <GeminiLogo className={className} />;
+  }
+
+  if (provider === 'opencode') {
+    return <OpenCodeLogo className={className} />;
   }
 
   return <ClaudeLogo className={className} />;

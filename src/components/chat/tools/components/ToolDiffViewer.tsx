@@ -33,7 +33,12 @@ export const ToolDiffViewer: React.FC<ToolDiffViewerProps> = ({
     : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400';
 
   const diffLines = useMemo(
-    () => createDiff(oldContent, newContent),
+    () => {
+      if (oldContent === undefined || newContent === undefined) {
+        return [];
+      }
+      return createDiff(oldContent, newContent)
+    },
     [createDiff, oldContent, newContent]
   );
 

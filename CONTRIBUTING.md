@@ -153,4 +153,4 @@ This automatically:
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the [GPL-3.0 License](LICENSE).
+By contributing, you agree that your contributions will be licensed under the [AGPL-3.0-or-later License](LICENSE), including the additional terms specified in Section 7 of the LICENSE file.

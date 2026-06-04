@@ -59,16 +59,18 @@ export function useFileMentions({ selectedProject, input, setInput, textareaRef 
     const abortController = new AbortController();
 
     const fetchProjectFiles = async () => {
-      const projectName = selectedProject?.name;
+      // File list is keyed by DB projectId now; the backend resolves it to
+      // the project's path before reading.
+      const projectId = selectedProject?.projectId;
       setFileList([]);
       setFilteredFiles([]);
-      if (!projectName) {
+      if (!projectId) {
         return;
       }
 
 
       try {
-        const response = await api.getFiles(projectName, { signal: abortController.signal });
+        const response = await api.getFiles(projectId, { signal: abortController.signal });
         if (!response.ok) {
           return;
         }
@@ -88,7 +90,7 @@ export function useFileMentions({ selectedProject, input, setInput, textareaRef 
     return () => {
       abortController.abort();
     };
-  }, [selectedProject?.name]);
+  }, [selectedProject?.projectId]);
 
   useEffect(() => {
     const textBeforeCursor = input.slice(0, cursorPosition);
