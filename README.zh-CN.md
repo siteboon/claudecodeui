@@ -15,7 +15,7 @@
   <a href="https://trendshift.io/repositories/15586" target="_blank"><img src="https://trendshift.io/api/badge/repositories/15586" alt="siteboon%2Fclaudecodeui | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 </p>
 
-<div align="right"><i><a href="./README.md">English</a> · <a href="./README.ru.md">Русский</a> · <a href="./README.de.md">Deutsch</a> · <a href="./README.ko.md">한국어</a> · <b>中文</b> · <a href="./README.ja.md">日本語</a></i></div>
+<div align="right"><i><a href="./README.md">English</a> · <a href="./README.ru.md">Русский</a> · <a href="./README.de.md">Deutsch</a> · <a href="./README.ko.md">한국어</a> · <b>中文</b> · <a href="./README.ja.md">日本語</a> · <a href="./README.tr.md">Türkçe</a></i></div>
 
 ---
 
@@ -60,7 +60,7 @@
 - **会话管理** - 恢复对话、管理多个会话并跟踪历史记录
 - **插件系统** - 通过自定义选项卡、后端服务与集成扩展 CloudCLI。 [开始构建 →](https://github.com/cloudcli-ai/cloudcli-plugin-starter)
 - **TaskMaster AI 集成** *(可选)* - 结合 AI 任务规划、PRD 分析与工作流自动化，实现高级项目管理
-- **模型兼容性** - 支持 Claude、GPT、Gemini 模型家族（完整支持列表见 [`shared/modelConstants.js`](shared/modelConstants.js)）
+- **模型兼容性** - 支持 Claude、GPT、Gemini 模型家族（完整支持列表见 [`public/modelConstants.js`](public/modelConstants.js)）
 
 ## 快速开始
 
@@ -71,6 +71,8 @@
 **[立即开始 CloudCLI Cloud](https://cloudcli.ai)**
 
 ### 自托管（开源）
+
+#### npm
 
 启动 CloudCLI UI，只需一行 `npx`（需要 Node.js v22+）：
 
@@ -87,7 +89,17 @@ cloudcli
 
 打开 `http://localhost:3001`，系统会自动发现所有现有会话。
 
-更多配置选项、PM2、远程服务器设置等，请参阅 **[文档 →](https://cloudcli.ai/docs)**
+更多配置选项、PM2、远程服务器设置等，请参阅 **[文档 →](https://cloudcli.ai/docs)**。
+
+#### Docker Sandboxes（实验性）
+
+在隔离的沙箱中运行代理，具有虚拟机管理程序级别的隔离。默认启动 Claude Code。需要 [`sbx` CLI](https://docs.docker.com/ai/sandboxes/get-started/)。
+
+```
+npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
+```
+
+支持 Claude Code、Codex 和 Gemini CLI。详情请参阅 [沙箱文档](docker/)。
 
 ---
 

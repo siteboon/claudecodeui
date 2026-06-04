@@ -176,7 +176,6 @@
     },
     "step3": {
       "reviewConfig": "Review Your Configuration",
-      "workspaceType": "Workspace Type:",
       "existingWorkspace": "Existing Workspace",
       "newWorkspace": "New Workspace",
       "path": "Path:",

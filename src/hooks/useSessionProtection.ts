@@ -44,23 +44,6 @@ export function useSessionProtection() {
     });
   }, []);
 
-  const replaceTemporarySession = useCallback((realSessionId?: string | null) => {
-    if (!realSessionId) {
-      return;
-    }
-
-    setActiveSessions((prev) => {
-      const next = new Set<string>();
-      for (const sessionId of prev) {
-        if (!sessionId.startsWith('new-session-')) {
-          next.add(sessionId);
-        }
-      }
-      next.add(realSessionId);
-      return next;
-    });
-  }, []);
-
   return {
     activeSessions,
     processingSessions,
@@ -68,6 +51,5 @@ export function useSessionProtection() {
     markSessionAsInactive,
     markSessionAsProcessing,
     markSessionAsNotProcessing,
-    replaceTemporarySession,
   };
 }

@@ -39,14 +39,16 @@ export default function PRDEditor({
     projectPath,
   });
 
+  // PRD hooks are now addressed by DB `projectId`; the backend resolves the
+  // `.taskmaster/docs` folder from the `projects` table.
   const { existingPrds, refreshExistingPrds } = usePrdRegistry({
-    projectName: project?.name,
+    projectId: project?.projectId,
   });
 
   const isExistingFile = useMemo(() => !isNewFile || Boolean(file?.isExisting), [file?.isExisting, isNewFile]);
 
   const { savePrd, saving, saveSuccess } = usePrdSave({
-    projectName: project?.name,
+    projectId: project?.projectId,
     existingPrds,
     isExistingFile,
     onAfterSave: async () => {
