@@ -45,6 +45,7 @@
     "removeFromFavorites": "Favorilerden çıkar",
     "editSessionName": "Oturum adını elle düzenle",
     "deleteSession": "Bu oturumu kalıcı olarak sil",
+    "activeSessionIndicator": "Yakın zamanda etkin oturum (son 10 dakika)",
     "save": "Kaydet",
     "cancel": "İptal",
     "clearSearch": "Aramayı temizle",

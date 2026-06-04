@@ -120,7 +120,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
         /* User message bubble on the right */
         <div className="flex w-full items-end space-x-0 sm:w-auto sm:max-w-[85%] sm:space-x-3 md:max-w-md lg:max-w-lg xl:max-w-xl">
           <div className="group flex-1 rounded-2xl rounded-br-md bg-blue-600 px-3 py-2 text-white shadow-sm sm:flex-initial sm:px-4">
-            <div className="whitespace-pre-wrap break-words text-sm">
+            <div dir="auto" className="whitespace-pre-wrap break-words text-sm">
               {message.content}
             </div>
             {message.images && message.images.length > 0 && (
@@ -176,7 +176,19 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                 </div>
               )}
               <div className="text-sm font-medium text-gray-900 dark:text-white">
-                {message.type === 'error' ? t('messageTypes.error') : message.type === 'tool' ? t('messageTypes.tool') : (provider === 'cursor' ? t('messageTypes.cursor') : provider === 'codex' ? t('messageTypes.codex') : provider === 'gemini' ? t('messageTypes.gemini') : t('messageTypes.claude'))}
+                {message.type === 'error'
+                  ? t('messageTypes.error')
+                  : message.type === 'tool'
+                    ? t('messageTypes.tool')
+                    : (provider === 'cursor'
+                        ? t('messageTypes.cursor')
+                        : provider === 'codex'
+                          ? t('messageTypes.codex')
+                          : provider === 'gemini'
+                            ? t('messageTypes.gemini')
+                            : provider === 'opencode'
+                              ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
+                              : t('messageTypes.claude'))}
               </div>
             </div>
           )}
@@ -393,7 +405,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                 </ReasoningContent>
               </Reasoning>
             ) : (
-              <div className="text-sm text-gray-700 dark:text-gray-300">
+              <div dir="auto" className="text-sm text-gray-700 dark:text-gray-300">
                 {/* Reasoning accordion */}
                 {showThinking && message.reasoning && (
                   <Reasoning className="mb-3" defaultOpen={false}>

@@ -9,10 +9,10 @@ const frontmatterOptions = {
   engines: {
     js: disabledFrontmatterEngine,
     javascript: disabledFrontmatterEngine,
-    json: disabledFrontmatterEngine
-  }
+    json: disabledFrontmatterEngine,
+  },
 };
 
-export function parseFrontmatter(content) {
+export function parseFrontMatter(content: string) {
   return matter(content, frontmatterOptions);
 }
