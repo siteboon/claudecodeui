@@ -20,7 +20,13 @@ export function verifyWebSocketClient(
   dependencies: WebSocketAuthDependencies
 ): boolean {
   const request = info.req as AuthenticatedWebSocketRequest;
-  console.log('WebSocket connection attempt to:', request.url);
+  const upgradeUrl = new URL(request.url ?? '/', 'http://localhost');
+  const loggedUrl = new URL(upgradeUrl);
+  if (loggedUrl.searchParams.has('token')) {
+    loggedUrl.searchParams.set('token', 'REDACTED');
+  }
+
+  console.log('WebSocket connection attempt to:', `${loggedUrl.pathname}${loggedUrl.search}`);
 
   // Platform mode: use the first DB user and skip token checks.
   if (dependencies.isPlatform) {
@@ -36,7 +42,6 @@ export function verifyWebSocketClient(
   }
 
   // OSS mode: read JWT from query string first, then Authorization header.
-  const upgradeUrl = new URL(request.url ?? '/', 'http://localhost');
   const token =
     upgradeUrl.searchParams.get('token') ??
     request.headers.authorization?.split(' ')[1] ??
