@@ -1,8 +1,9 @@
-import { Check, Clock, Edit2, Trash2, X } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+import { Check, Edit2, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
-import { Badge, Button } from '../../../../shared/view/ui';
+
+import { Badge, Button, Tooltip } from '../../../../shared/view/ui';
 import { cn } from '../../../../lib/utils';
-import { formatTimeAgo } from '../../../../utils/dateUtils';
 import type { Project, ProjectSession, LLMProvider } from '../../../../types/app';
 import type { SessionWithProvider } from '../../types/types';
 import { createSessionViewModel } from '../../utils/utils';
@@ -30,6 +31,34 @@ type SidebarSessionItemProps = {
   t: TFunction;
 };
 
+/**
+ * Compact relative time for sidebar rows:
+ * <1m, Xm, Xhr, Xd.
+ */
+const formatCompactSessionAge = (dateString: string, currentTime: Date): string => {
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  const diffInMinutes = Math.floor(Math.max(0, currentTime.getTime() - date.getTime()) / (1000 * 60));
+  if (diffInMinutes < 1) {
+    return '<1m';
+  }
+
+  if (diffInMinutes < 60) {
+    return `${diffInMinutes}m`;
+  }
+
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) {
+    return `${diffInHours}hr`;
+  }
+
+  const diffInDays = Math.floor(diffInHours / 24);
+  return `${diffInDays}d`;
+};
+
 export default function SidebarSessionItem({
   project,
   session,
@@ -48,25 +77,55 @@ export default function SidebarSessionItem({
 }: SidebarSessionItemProps) {
   const sessionView = createSessionViewModel(session, currentTime, t);
   const isSelected = selectedSession?.id === session.id;
+  const isEditing = editingSession === session.id;
+  const compactSessionAge = formatCompactSessionAge(sessionView.sessionTime, currentTime);
+  const editingContainerRef = useRef<HTMLDivElement>(null);
 
+  // The rename panel sits inside a group-hover opacity wrapper, so leaving the row
+  // would visually hide it. While editing, dismiss only when the user clicks outside
+  // the panel (matches Escape / cancel-button behaviour).
+  useEffect(() => {
+    if (!isEditing) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const container = editingContainerRef.current;
+      if (container && !container.contains(event.target as Node)) {
+        onCancelEditingSession();
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [isEditing, onCancelEditingSession]);
+
+  // Sessions are owned by a project identified by `projectId` (DB primary key)
+  // after the projectName → projectId migration.
   const selectMobileSession = () => {
     onProjectSelect(project);
-    onSessionSelect(session, project.name);
+    onSessionSelect(session, project.projectId);
   };
 
   const saveEditedSession = () => {
-    onSaveEditingSession(project.name, session.id, editingSessionName, session.__provider);
+    onSaveEditingSession(project.projectId, session.id, editingSessionName, session.__provider);
   };
 
   const requestDeleteSession = () => {
-    onDeleteSession(project.name, session.id, sessionView.sessionName, session.__provider);
+    onDeleteSession(project.projectId, session.id, sessionView.sessionName, session.__provider);
   };
 
   return (
     <div className="group relative">
       {sessionView.isActive && (
         <div className="absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2 transform">
-          <div className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
+          <Tooltip content={t('tooltips.activeSessionIndicator')} position="right">
+            <div
+              role="status"
+              aria-label={t('tooltips.activeSessionIndicator')}
+              className="h-2 w-2 animate-pulse rounded-full bg-green-500"
+            />
+          </Tooltip>
         </div>
       )}
 
@@ -92,20 +151,18 @@ export default function SidebarSessionItem({
             </div>
 
             <div className="min-w-0 flex-1">
-              <div className="truncate text-xs font-medium text-foreground">{sessionView.sessionName}</div>
-              <div className="mt-0.5 flex items-center gap-1">
-                <Clock className="h-2.5 w-2.5 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">
-                  {formatTimeAgo(sessionView.sessionTime, currentTime, t)}
-                </span>
+              <div className="flex items-center gap-2">
+                <div className="truncate text-xs font-medium text-foreground">{sessionView.sessionName}</div>
+                {compactSessionAge && (
+                  <span className="ml-auto flex-shrink-0 text-[11px] text-muted-foreground">{compactSessionAge}</span>
+                )}
+              </div>
+              <div className="mt-0.5 flex items-center">
                 {sessionView.messageCount > 0 && (
-                  <Badge variant="secondary" className="ml-auto px-1 py-0 text-xs">
+                  <Badge variant="secondary" className="px-1 py-0 text-xs">
                     {sessionView.messageCount}
                   </Badge>
                 )}
-                <span className="ml-1 opacity-70">
-                  <SessionProviderLogo provider={session.__provider} className="h-3 w-3" />
-                </span>
               </div>
             </div>
 
@@ -131,35 +188,39 @@ export default function SidebarSessionItem({
             'w-full justify-start p-2 h-auto font-normal text-left hover:bg-accent/50 transition-colors duration-200',
             isSelected && 'bg-accent text-accent-foreground',
           )}
-          onClick={() => onSessionSelect(session, project.name)}
+          onClick={() => onSessionSelect(session, project.projectId)}
         >
           <div className="flex w-full min-w-0 items-start gap-2">
             <SessionProviderLogo provider={session.__provider} className="mt-0.5 h-3 w-3 flex-shrink-0" />
             <div className="min-w-0 flex-1">
-              <div className="truncate text-xs font-medium text-foreground">{sessionView.sessionName}</div>
-              <div className="mt-0.5 flex items-center gap-1">
-                <Clock className="h-2.5 w-2.5 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">
-                  {formatTimeAgo(sessionView.sessionTime, currentTime, t)}
-                </span>
-                {sessionView.messageCount > 0 && (
-                  <Badge
-                    variant="secondary"
-                    className="ml-auto px-1 py-0 text-xs transition-opacity group-hover:opacity-0"
+              <div className="flex items-center gap-2">
+                <div className="truncate text-xs font-medium text-foreground">{sessionView.sessionName}</div>
+                {compactSessionAge && (
+                  <span
+                    className={cn(
+                      'ml-auto flex-shrink-0 text-[11px] text-muted-foreground transition-opacity duration-200',
+                      isEditing ? 'opacity-0' : 'group-hover:opacity-0',
+                    )}
                   >
-                    {sessionView.messageCount}
-                  </Badge>
+                    {compactSessionAge}
+                  </span>
                 )}
-                <span className="ml-1 opacity-70 transition-opacity group-hover:opacity-0">
-                  <SessionProviderLogo provider={session.__provider} className="h-3 w-3" />
-                </span>
+              </div>
+              <div className="mt-0.5 flex items-center">
+                {sessionView.messageCount > 0 && <Badge variant="secondary" className="px-1 py-0 text-xs">{sessionView.messageCount}</Badge>}
               </div>
             </div>
           </div>
         </Button>
 
-        <div className="absolute right-2 top-1/2 flex -translate-y-1/2 transform items-center gap-1 opacity-0 transition-all duration-200 group-hover:opacity-100">
-            {editingSession === session.id ? (
+        <div
+          ref={editingContainerRef}
+          className={cn(
+            'absolute right-2 top-1/2 flex -translate-y-1/2 transform items-center gap-1 transition-all duration-200',
+            isEditing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+          )}
+        >
+            {isEditing ? (
               <>
                 <input
                   type="text"
@@ -217,7 +278,7 @@ export default function SidebarSessionItem({
                       event.stopPropagation();
                       requestDeleteSession();
                     }}
-                    title={t('tooltips.deleteSession')}
+                    title={t('tooltips.deleteSessionOptions', 'Archive or permanently delete this session')}
                   >
                     <Trash2 className="h-3 w-3 text-red-600 dark:text-red-400" />
                   </button>

@@ -7,8 +7,10 @@ export type McpImportMode = 'form' | 'json';
 export type McpFormMode = 'provider' | 'global';
 export type KeyValueMap = Record<string, string>;
 
+// Internal MCP shape; `projectId` replaces the legacy `name` field from the
+// projectName → projectId migration.
 export type McpProject = {
-  name: string;
+  projectId: string;
   displayName?: string;
   fullPath?: string;
   path?: string;

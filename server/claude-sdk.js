@@ -17,7 +17,9 @@ import crypto from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
-import { CLAUDE_MODELS } from '../shared/modelConstants.js';
+import { CLAUDE_FALLBACK_MODELS } from './modules/providers/list/claude/claude-models.provider.js';
+import { providerModelsService } from './modules/providers/services/provider-models.service.js';
+import { resolveClaudeCodeExecutablePath } from './shared/claude-cli-path.js';
 import {
   createNotificationEvent,
   notifyRunFailed,
@@ -153,11 +155,9 @@ function mapCliOptionsToSDK(options = {}) {
   // Since SDK 0.2.113, options.env replaces process.env instead of overlaying it.
   sdkOptions.env = { ...process.env };
 
-  // Use CLAUDE_CLI_PATH if explicitly set, otherwise fall back to 'claude' on PATH.
-  // The SDK 0.2.113+ looks for a bundled native binary optional dep by default;
-  // this fallback ensures users who installed via the official installer still work
-  // even when npm prune --production has removed those optional deps.
-  sdkOptions.pathToClaudeCodeExecutable = process.env.CLAUDE_CLI_PATH || 'claude';
+  // Resolve the executable eagerly on Windows because the SDK uses raw child_process.spawn,
+  // which does not reliably follow npm's shell wrappers like cross-spawn does.
+  sdkOptions.pathToClaudeCodeExecutable = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH);
 
   // Map working directory
   if (cwd) {
@@ -205,7 +205,7 @@ function mapCliOptionsToSDK(options = {}) {
 
   // Map model (default to sonnet)
   // Valid models: sonnet, opus, haiku, opusplan, sonnet[1m]
-  sdkOptions.model = options.model || CLAUDE_MODELS.DEFAULT;
+  sdkOptions.model = options.model || CLAUDE_FALLBACK_MODELS.DEFAULT;
   // Model logged at query start below
 
   // Map system prompt configuration
@@ -285,43 +285,68 @@ function transformMessage(sdkMessage) {
   return sdkMessage;
 }
 
+function readNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 /**
- * Extracts token usage from SDK result messages
- * @param {Object} resultMessage - SDK result message
+ * Extracts token usage from SDK messages.
+ * Prefers per-step `message.usage` (Claude message payload), then falls back
+ * to result-level usage/modelUsage for compatibility across SDK versions.
+ * @param {Object} sdkMessage - SDK stream message
  * @returns {Object|null} Token budget object or null
  */
-function extractTokenBudget(resultMessage) {
-  if (resultMessage.type !== 'result' || !resultMessage.modelUsage) {
+function extractTokenBudget(sdkMessage) {
+  if (!sdkMessage || typeof sdkMessage !== 'object') {
     return null;
   }
 
-  // Get the first model's usage data
-  const modelKey = Object.keys(resultMessage.modelUsage)[0];
-  const modelData = resultMessage.modelUsage[modelKey];
+  const messageUsage = sdkMessage.message?.usage || sdkMessage.usage;
+  if (messageUsage && typeof messageUsage === 'object') {
+    const inputTokens = readNumber(messageUsage.input_tokens ?? messageUsage.inputTokens);
+    const outputTokens = readNumber(messageUsage.output_tokens ?? messageUsage.outputTokens);
+    const totalUsed = inputTokens + outputTokens;
+    const contextWindow = parseInt(process.env.CONTEXT_WINDOW, 10) || 160000;
 
-  if (!modelData) {
+    return {
+      used: totalUsed,
+      total: contextWindow,
+      inputTokens,
+      outputTokens,
+      breakdown: {
+        input: inputTokens,
+        output: outputTokens,
+      },
+    };
+  }
+
+  if (!sdkMessage.modelUsage || typeof sdkMessage.modelUsage !== 'object') {
     return null;
   }
 
-  // Use cumulative tokens if available (tracks total for the session)
-  // Otherwise fall back to per-request tokens
-  const inputTokens = modelData.cumulativeInputTokens || modelData.inputTokens || 0;
-  const outputTokens = modelData.cumulativeOutputTokens || modelData.outputTokens || 0;
-  const cacheReadTokens = modelData.cumulativeCacheReadInputTokens || modelData.cacheReadInputTokens || 0;
-  const cacheCreationTokens = modelData.cumulativeCacheCreationInputTokens || modelData.cacheCreationInputTokens || 0;
+  // Fallback for older SDK messages with only modelUsage
+  const modelKey = Object.keys(sdkMessage.modelUsage)[0];
+  const modelData = sdkMessage.modelUsage[modelKey];
 
-  // Total used = input + output + cache tokens
-  const totalUsed = inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
+  if (!modelData || typeof modelData !== 'object') {
+    return null;
+  }
 
-  // Use configured context window budget from environment (default 160000)
-  // This is the user's budget limit, not the model's context window
-  const contextWindow = parseInt(process.env.CONTEXT_WINDOW) || 160000;
-
-  // Token calc logged via token-budget WS event
+  const inputTokens = readNumber(modelData.cumulativeInputTokens ?? modelData.inputTokens);
+  const outputTokens = readNumber(modelData.cumulativeOutputTokens ?? modelData.outputTokens);
+  const totalUsed = inputTokens + outputTokens;
+  const contextWindow = parseInt(process.env.CONTEXT_WINDOW, 10) || 160000;
 
   return {
     used: totalUsed,
-    total: contextWindow
+    total: contextWindow,
+    inputTokens,
+    outputTokens,
+    breakdown: {
+      input: inputTokens,
+      output: outputTokens,
+    },
   };
 }
 
@@ -492,8 +517,17 @@ async function queryClaudeSDK(command, options = {}, ws) {
   };
 
   try {
+    const resolvedModel = await providerModelsService.resolveResumeModel(
+      'claude',
+      sessionId,
+      options.model,
+    );
+
     // Map CLI options to SDK format
-    const sdkOptions = mapCliOptionsToSDK(options);
+    const sdkOptions = mapCliOptionsToSDK({
+      ...options,
+      model: resolvedModel || options.model,
+    });
 
     // Load MCP configuration
     const mcpServers = await loadMcpConfig(options.cwd);
@@ -527,6 +561,12 @@ async function queryClaudeSDK(command, options = {}, ws) {
       }]
     };
 
+    // Caveat: in 'auto' and 'bypassPermissions' modes the SDK resolves approval
+    // at the permission-mode step and skips this callback, so interactive tools
+    // (AskUserQuestion, ExitPlanMode) won't reach the UI — the classifier/bypass
+    // auto-approves them and the model acts on a generated answer. Move these
+    // tools to a PreToolUse hook (runs before the mode check) if we need them
+    // to work in those modes.
     sdkOptions.canUseTool = async (toolName, input, context) => {
       const requiresInteraction = TOOLS_REQUIRING_INTERACTION.has(toolName);
 
@@ -669,16 +709,10 @@ async function queryClaudeSDK(command, options = {}, ws) {
         ws.send(msg);
       }
 
-      // Extract and send token budget updates from result messages
-      if (message.type === 'result') {
-        const models = Object.keys(message.modelUsage || {});
-        if (models.length > 0) {
-          // Model info available in result message
-        }
-        const tokenBudgetData = extractTokenBudget(message);
-        if (tokenBudgetData) {
-          ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
-        }
+      // Extract and send token budget updates from assistant/result usage payloads
+      const tokenBudgetData = extractTokenBudget(message);
+      if (tokenBudgetData) {
+        ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
       }
     }
 

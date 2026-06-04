@@ -13,9 +13,24 @@ import fs from 'fs';
 import path from 'path';
 import { promises as fsPromises } from 'fs';
 import { spawn } from 'child_process';
-import { extractProjectDirectory } from '../projects.js';
+import { projectsDb } from '../modules/database/index.js';
 import { detectTaskMasterMCPServer } from '../utils/mcp-detector.js';
 import { broadcastTaskMasterProjectUpdate, broadcastTaskMasterTasksUpdate } from '../utils/taskmaster-websocket.js';
+
+/**
+ * Resolve the absolute project directory from a DB-assigned `projectId`.
+ *
+ * TaskMaster routes used to accept a Claude-encoded folder name (`projectName`)
+ * and derive the path from JSONL history. After the projectId migration the
+ * only identifier we accept is the primary key of the `projects` table, so
+ * every handler calls this helper and 404s when the id is unknown.
+ */
+async function resolveProjectPathFromId(projectId) {
+  if (!projectId) {
+    return null;
+  }
+  return projectsDb.getProjectPathById(projectId);
+}
 
 const router = express.Router();
 
@@ -132,21 +147,22 @@ router.get('/installation-status', async (req, res) => {
 });
 
 /**
- * GET /api/taskmaster/tasks/:projectName
+ * GET /api/taskmaster/tasks/:projectId
  * Load actual tasks from .taskmaster/tasks/tasks.json
+ *
+ * `projectId` is the DB primary key of the project; the folder is resolved via
+ * the projects table rather than extracted from Claude JSONL history.
  */
-router.get('/tasks/:projectName', async (req, res) => {
+router.get('/tasks/:projectId', async (req, res) => {
     try {
-        const { projectName } = req.params;
-        
-        // Get project path
-        let projectPath;
-        try {
-            projectPath = await extractProjectDirectory(projectName);
-        } catch (error) {
+        const { projectId } = req.params;
+
+        // Get project path via the DB; the legacy JSONL-based resolver is gone.
+        const projectPath = await resolveProjectPathFromId(projectId);
+        if (!projectPath) {
             return res.status(404).json({
                 error: 'Project not found',
-                message: `Project "${projectName}" does not exist`
+                message: `Project "${projectId}" does not exist`
             });
         }
 
@@ -158,7 +174,7 @@ router.get('/tasks/:projectName', async (req, res) => {
             await fsPromises.access(tasksFilePath);
         } catch (error) {
             return res.json({
-                projectName,
+                projectId,
                 tasks: [],
                 message: 'No tasks.json file found'
             });
@@ -213,7 +229,7 @@ router.get('/tasks/:projectName', async (req, res) => {
             }));
 
             res.json({
-                projectName,
+                projectId,
                 projectPath,
                 tasks: transformedTasks,
                 currentTag,
@@ -247,21 +263,19 @@ router.get('/tasks/:projectName', async (req, res) => {
 });
 
 /**
- * GET /api/taskmaster/prd/:projectName
+ * GET /api/taskmaster/prd/:projectId
  * List all PRD files in the project's .taskmaster/docs directory
  */
-router.get('/prd/:projectName', async (req, res) => {
+router.get('/prd/:projectId', async (req, res) => {
     try {
-        const { projectName } = req.params;
-        
-        // Get project path
-        let projectPath;
-        try {
-            projectPath = await extractProjectDirectory(projectName);
-        } catch (error) {
+        const { projectId } = req.params;
+
+        // projectId → projectPath lookup through the DB (post-migration).
+        const projectPath = await resolveProjectPathFromId(projectId);
+        if (!projectPath) {
             return res.status(404).json({
                 error: 'Project not found',
-                message: `Project "${projectName}" does not exist`
+                message: `Project "${projectId}" does not exist`
             });
         }
 
@@ -272,7 +286,7 @@ router.get('/prd/:projectName', async (req, res) => {
             await fsPromises.access(docsPath, fs.constants.R_OK);
         } catch (error) {
             return res.json({
-                projectName,
+                projectId,
                 prdFiles: [],
                 message: 'No .taskmaster/docs directory found'
             });
@@ -299,7 +313,7 @@ router.get('/prd/:projectName', async (req, res) => {
             }
 
             res.json({
-                projectName,
+                projectId,
                 projectPath,
                 prdFiles: prdFiles.sort((a, b) => new Date(b.modified) - new Date(a.modified)),
                 timestamp: new Date().toISOString()
@@ -323,12 +337,12 @@ router.get('/prd/:projectName', async (req, res) => {
 });
 
 /**
- * POST /api/taskmaster/prd/:projectName
+ * POST /api/taskmaster/prd/:projectId
  * Create or update a PRD file in the project's .taskmaster/docs directory
  */
-router.post('/prd/:projectName', async (req, res) => {
+router.post('/prd/:projectId', async (req, res) => {
     try {
-        const { projectName } = req.params;
+        const { projectId } = req.params;
         const { fileName, content } = req.body;
 
         if (!fileName || !content) {
@@ -346,14 +360,12 @@ router.post('/prd/:projectName', async (req, res) => {
             });
         }
 
-        // Get project path
-        let projectPath;
-        try {
-            projectPath = await extractProjectDirectory(projectName);
-        } catch (error) {
+        // Resolve the project folder through the DB using the projectId param.
+        const projectPath = await resolveProjectPathFromId(projectId);
+        if (!projectPath) {
             return res.status(404).json({
                 error: 'Project not found',
-                message: `Project "${projectName}" does not exist`
+                message: `Project "${projectId}" does not exist`
             });
         }
 
@@ -379,7 +391,7 @@ router.post('/prd/:projectName', async (req, res) => {
             const stats = await fsPromises.stat(filePath);
 
             res.json({
-                projectName,
+                projectId,
                 projectPath,
                 fileName,
                 filePath: path.relative(projectPath, filePath),
@@ -408,21 +420,18 @@ router.post('/prd/:projectName', async (req, res) => {
 });
 
 /**
- * GET /api/taskmaster/prd/:projectName/:fileName
+ * GET /api/taskmaster/prd/:projectId/:fileName
  * Get content of a specific PRD file
  */
-router.get('/prd/:projectName/:fileName', async (req, res) => {
+router.get('/prd/:projectId/:fileName', async (req, res) => {
     try {
-        const { projectName, fileName } = req.params;
-        
-        // Get project path
-        let projectPath;
-        try {
-            projectPath = await extractProjectDirectory(projectName);
-        } catch (error) {
+        const { projectId, fileName } = req.params;
+
+        const projectPath = await resolveProjectPathFromId(projectId);
+        if (!projectPath) {
             return res.status(404).json({
                 error: 'Project not found',
-                message: `Project "${projectName}" does not exist`
+                message: `Project "${projectId}" does not exist`
             });
         }
 
@@ -444,7 +453,7 @@ router.get('/prd/:projectName/:fileName', async (req, res) => {
             const stats = await fsPromises.stat(filePath);
 
             res.json({
-                projectName,
+                projectId,
                 projectPath,
                 fileName,
                 filePath: path.relative(projectPath, filePath),
@@ -473,21 +482,18 @@ router.get('/prd/:projectName/:fileName', async (req, res) => {
 });
 
 /**
- * POST /api/taskmaster/init/:projectName
+ * POST /api/taskmaster/init/:projectId
  * Initialize TaskMaster in a project
  */
-router.post('/init/:projectName', async (req, res) => {
+router.post('/init/:projectId', async (req, res) => {
     try {
-        const { projectName } = req.params;
-        
-        // Get project path
-        let projectPath;
-        try {
-            projectPath = await extractProjectDirectory(projectName);
-        } catch (error) {
+        const { projectId } = req.params;
+
+        const projectPath = await resolveProjectPathFromId(projectId);
+        if (!projectPath) {
             return res.status(404).json({
                 error: 'Project not found',
-                message: `Project "${projectName}" does not exist`
+                message: `Project "${projectId}" does not exist`
             });
         }
 
@@ -522,17 +528,19 @@ router.post('/init/:projectName', async (req, res) => {
 
         initProcess.on('close', (code) => {
             if (code === 0) {
-                // Broadcast TaskMaster project update via WebSocket
+                // Broadcast TaskMaster project update via WebSocket. The
+                // WebSocket payload keeps using `projectId` so the frontend
+                // can match notifications against the current selection.
                 if (req.app.locals.wss) {
                     broadcastTaskMasterProjectUpdate(
-                        req.app.locals.wss, 
-                        projectName, 
+                        req.app.locals.wss,
+                        projectId,
                         { hasTaskmaster: true, status: 'initialized' }
                     );
                 }
 
                 res.json({
-                    projectName,
+                    projectId,
                     projectPath,
                     message: 'TaskMaster initialized successfully',
                     output: stdout,
@@ -562,12 +570,12 @@ router.post('/init/:projectName', async (req, res) => {
 });
 
 /**
- * POST /api/taskmaster/add-task/:projectName
+ * POST /api/taskmaster/add-task/:projectId
  * Add a new task to the project
  */
-router.post('/add-task/:projectName', async (req, res) => {
+router.post('/add-task/:projectId', async (req, res) => {
     try {
-        const { projectName } = req.params;
+        const { projectId } = req.params;
         const { prompt, title, description, priority = 'medium', dependencies } = req.body;
 
         if (!prompt && (!title || !description)) {
@@ -576,15 +584,12 @@ router.post('/add-task/:projectName', async (req, res) => {
                 message: 'Either "prompt" or both "title" and "description" are required'
             });
         }
-        
-        // Get project path
-        let projectPath;
-        try {
-            projectPath = await extractProjectDirectory(projectName);
-        } catch (error) {
+
+        const projectPath = await resolveProjectPathFromId(projectId);
+        if (!projectPath) {
             return res.status(404).json({
                 error: 'Project not found',
-                message: `Project "${projectName}" does not exist`
+                message: `Project "${projectId}" does not exist`
             });
         }
 
@@ -629,16 +634,17 @@ router.post('/add-task/:projectName', async (req, res) => {
             console.log('Stderr:', stderr);
             
             if (code === 0) {
-                // Broadcast task update via WebSocket
+                // Broadcast task update via WebSocket using the projectId so
+                // clients subscribed to this project get notified immediately.
                 if (req.app.locals.wss) {
                     broadcastTaskMasterTasksUpdate(
-                        req.app.locals.wss, 
-                        projectName
+                        req.app.locals.wss,
+                        projectId
                     );
                 }
 
                 res.json({
-                    projectName,
+                    projectId,
                     projectPath,
                     message: 'Task added successfully',
                     output: stdout,
@@ -666,22 +672,19 @@ router.post('/add-task/:projectName', async (req, res) => {
 });
 
 /**
- * PUT /api/taskmaster/update-task/:projectName/:taskId
+ * PUT /api/taskmaster/update-task/:projectId/:taskId
  * Update a specific task using TaskMaster CLI
  */
-router.put('/update-task/:projectName/:taskId', async (req, res) => {
+router.put('/update-task/:projectId/:taskId', async (req, res) => {
     try {
-        const { projectName, taskId } = req.params;
+        const { projectId, taskId } = req.params;
         const { title, description, status, priority, details } = req.body;
-        
-        // Get project path
-        let projectPath;
-        try {
-            projectPath = await extractProjectDirectory(projectName);
-        } catch (error) {
+
+        const projectPath = await resolveProjectPathFromId(projectId);
+        if (!projectPath) {
             return res.status(404).json({
                 error: 'Project not found',
-                message: `Project "${projectName}" does not exist`
+                message: `Project "${projectId}" does not exist`
             });
         }
 
@@ -707,11 +710,11 @@ router.put('/update-task/:projectName/:taskId', async (req, res) => {
                 if (code === 0) {
                     // Broadcast task update via WebSocket
                     if (req.app.locals.wss) {
-                        broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectName);
+                        broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectId);
                     }
 
                     res.json({
-                        projectName,
+                        projectId,
                         projectPath,
                         taskId,
                         message: 'Task status updated successfully',
@@ -759,11 +762,11 @@ router.put('/update-task/:projectName/:taskId', async (req, res) => {
                 if (code === 0) {
                     // Broadcast task update via WebSocket
                     if (req.app.locals.wss) {
-                        broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectName);
+                        broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectId);
                     }
 
                     res.json({
-                        projectName,
+                        projectId,
                         projectPath,
                         taskId,
                         message: 'Task updated successfully',
@@ -793,22 +796,19 @@ router.put('/update-task/:projectName/:taskId', async (req, res) => {
 });
 
 /**
- * POST /api/taskmaster/parse-prd/:projectName
+ * POST /api/taskmaster/parse-prd/:projectId
  * Parse a PRD file to generate tasks
  */
-router.post('/parse-prd/:projectName', async (req, res) => {
+router.post('/parse-prd/:projectId', async (req, res) => {
     try {
-        const { projectName } = req.params;
+        const { projectId } = req.params;
         const { fileName = 'prd.txt', numTasks, append = false } = req.body;
-        
-        // Get project path
-        let projectPath;
-        try {
-            projectPath = await extractProjectDirectory(projectName);
-        } catch (error) {
+
+        const projectPath = await resolveProjectPathFromId(projectId);
+        if (!projectPath) {
             return res.status(404).json({
                 error: 'Project not found',
-                message: `Project "${projectName}" does not exist`
+                message: `Project "${projectId}" does not exist`
             });
         }
 
@@ -859,13 +859,13 @@ router.post('/parse-prd/:projectName', async (req, res) => {
                 // Broadcast task update via WebSocket
                 if (req.app.locals.wss) {
                     broadcastTaskMasterTasksUpdate(
-                        req.app.locals.wss, 
-                        projectName
+                        req.app.locals.wss,
+                        projectId
                     );
                 }
 
                 res.json({
-                    projectName,
+                    projectId,
                     projectPath,
                     prdFile: fileName,
                     message: 'PRD parsed and tasks generated successfully',
@@ -1340,12 +1340,12 @@ Description of the business problem, data sources, and expected insights.
 });
 
 /**
- * POST /api/taskmaster/apply-template/:projectName
+ * POST /api/taskmaster/apply-template/:projectId
  * Apply a PRD template to create a new PRD file
  */
-router.post('/apply-template/:projectName', async (req, res) => {
+router.post('/apply-template/:projectId', async (req, res) => {
     try {
-        const { projectName } = req.params;
+        const { projectId } = req.params;
         const { templateId, fileName = 'prd.txt', customizations = {} } = req.body;
 
         if (!templateId) {
@@ -1355,14 +1355,11 @@ router.post('/apply-template/:projectName', async (req, res) => {
             });
         }
 
-        // Get project path
-        let projectPath;
-        try {
-            projectPath = await extractProjectDirectory(projectName);
-        } catch (error) {
+        const projectPath = await resolveProjectPathFromId(projectId);
+        if (!projectPath) {
             return res.status(404).json({
                 error: 'Project not found',
-                message: `Project "${projectName}" does not exist`
+                message: `Project "${projectId}" does not exist`
             });
         }
 
@@ -1401,7 +1398,7 @@ router.post('/apply-template/:projectName', async (req, res) => {
             await fsPromises.writeFile(filePath, content, 'utf8');
 
             res.json({
-                projectName,
+                projectId,
                 projectPath,
                 templateId,
                 templateName: template.name,
