@@ -34,7 +34,6 @@ function AppContentInner() {
     markSessionAsInactive,
     markSessionAsProcessing,
     markSessionAsNotProcessing,
-    replaceTemporarySession,
   } = useSessionProtection();
 
   const {
@@ -44,6 +43,7 @@ function AppContentInner() {
     sidebarOpen,
     isLoadingProjects,
     externalMessageUpdate,
+    newSessionTrigger,
     setActiveTab,
     setSidebarOpen,
     setIsInputFocused,
@@ -190,10 +190,12 @@ function AppContentInner() {
           onSessionProcessing={markSessionAsProcessing}
           onSessionNotProcessing={markSessionAsNotProcessing}
           processingSessions={processingSessions}
-          onReplaceTemporarySession={replaceTemporarySession}
-          onNavigateToSession={(targetSessionId: string) => navigate(`/session/${targetSessionId}`)}
+          onNavigateToSession={(targetSessionId: string, options) =>
+            navigate(`/session/${targetSessionId}`, { replace: Boolean(options?.replace) })
+          }
           onShowSettings={() => setShowSettings(true)}
           externalMessageUpdate={externalMessageUpdate}
+          newSessionTrigger={newSessionTrigger}
         />
       </div>
 

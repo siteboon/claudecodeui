@@ -15,7 +15,24 @@ type GeminiCredentialsStatus = {
   error?: string;
 };
 
+type GeminiAuthType =
+  | 'oauth-personal'
+  | 'gemini-api-key'
+  | 'vertex-ai'
+  | 'compute-default-credentials'
+  | 'gateway'
+  | 'cloud-shell'
+  | null;
+
 export class GeminiProviderAuth implements IProviderAuth {
+  /**
+   * Gemini CLI can override its home root via GEMINI_CLI_HOME.
+   * Use the same resolution so status checks match runtime behavior.
+   */
+  private getGeminiCliHome(): string {
+    return process.env.GEMINI_CLI_HOME?.trim() || os.homedir();
+  }
+
   /**
    * Checks whether the Gemini CLI is available on this host.
    */
@@ -59,6 +76,88 @@ export class GeminiProviderAuth implements IProviderAuth {
   }
 
   /**
+   * Parses dotenv-style key/value pairs.
+   */
+  private parseEnvFile(content: string): Record<string, string> {
+    const parsed: Record<string, string> = {};
+
+    for (const rawLine of content.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('#')) {
+        continue;
+      }
+
+      const normalizedLine = line.startsWith('export ')
+        ? line.slice('export '.length).trim()
+        : line;
+      const separatorIndex = normalizedLine.indexOf('=');
+      if (separatorIndex <= 0) {
+        continue;
+      }
+
+      const key = normalizedLine.slice(0, separatorIndex).trim();
+      if (!key) {
+        continue;
+      }
+
+      let value = normalizedLine.slice(separatorIndex + 1).trim();
+      const quoted = (value.startsWith('"') && value.endsWith('"')) || (value.startsWith('\'') && value.endsWith('\''));
+      if (quoted) {
+        value = value.slice(1, -1);
+      } else {
+        value = value.replace(/\s+#.*$/, '').trim();
+      }
+
+      parsed[key] = value;
+    }
+
+    return parsed;
+  }
+
+  /**
+   * Loads user-level auth env in Gemini's "first file found" order.
+   */
+  private async loadUserLevelAuthEnv(): Promise<Record<string, string>> {
+    const geminiCliHome = this.getGeminiCliHome();
+    const envCandidates = [
+      path.join(geminiCliHome, '.gemini', '.env'),
+      path.join(geminiCliHome, '.env'),
+    ];
+
+    for (const envPath of envCandidates) {
+      try {
+        const content = await readFile(envPath, 'utf8');
+        return this.parseEnvFile(content);
+      } catch {
+        // Continue to the next fallback.
+      }
+    }
+
+    return {};
+  }
+
+  /**
+   * Reads Gemini's selected auth type from settings.json when available.
+   */
+  private async readSelectedAuthType(): Promise<GeminiAuthType> {
+    try {
+      const settingsPath = path.join(this.getGeminiCliHome(), '.gemini', 'settings.json');
+      const content = await readFile(settingsPath, 'utf8');
+      const settings = readObjectRecord(JSON.parse(content));
+      const security = readObjectRecord(settings?.security);
+      const auth = readObjectRecord(security?.auth);
+      const selectedType = readOptionalString(auth?.selectedType);
+      if (!selectedType) {
+        return null;
+      }
+
+      return selectedType as GeminiAuthType;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Checks Gemini credentials from API key env vars or local OAuth credential files.
    */
   private async checkCredentials(): Promise<GeminiCredentialsStatus> {
@@ -66,8 +165,46 @@ export class GeminiProviderAuth implements IProviderAuth {
       return { authenticated: true, email: 'API Key Auth', method: 'api_key' };
     }
 
+    const userEnv = await this.loadUserLevelAuthEnv();
+    if (readOptionalString(userEnv.GEMINI_API_KEY)) {
+      return { authenticated: true, email: 'API Key Auth', method: 'api_key' };
+    }
+
+    const selectedType = await this.readSelectedAuthType();
+    if (selectedType === 'vertex-ai') {
+      const hasGoogleApiKey = Boolean(
+        process.env.GOOGLE_API_KEY?.trim()
+        || readOptionalString(userEnv.GOOGLE_API_KEY)
+      );
+      const hasProject = Boolean(
+        process.env.GOOGLE_CLOUD_PROJECT?.trim()
+        || process.env.GOOGLE_CLOUD_PROJECT_ID?.trim()
+        || readOptionalString(userEnv.GOOGLE_CLOUD_PROJECT)
+        || readOptionalString(userEnv.GOOGLE_CLOUD_PROJECT_ID)
+      );
+      const hasLocation = Boolean(
+        process.env.GOOGLE_CLOUD_LOCATION?.trim()
+        || readOptionalString(userEnv.GOOGLE_CLOUD_LOCATION)
+      );
+      const hasServiceAccount = Boolean(
+        process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim()
+        || readOptionalString(userEnv.GOOGLE_APPLICATION_CREDENTIALS)
+      );
+
+      if (hasGoogleApiKey || hasServiceAccount || (hasProject && hasLocation)) {
+        return { authenticated: true, email: 'Vertex AI Auth', method: 'vertex_ai' };
+      }
+
+      return {
+        authenticated: false,
+        email: null,
+        method: 'vertex_ai',
+        error: 'Gemini is set to Vertex AI, but required env vars are missing',
+      };
+    }
+
     try {
-      const credsPath = path.join(os.homedir(), '.gemini', 'oauth_creds.json');
+      const credsPath = path.join(this.getGeminiCliHome(), '.gemini', 'oauth_creds.json');
       const content = await readFile(credsPath, 'utf8');
       const creds = readObjectRecord(JSON.parse(content)) ?? {};
       const accessToken = readOptionalString(creds.access_token);
@@ -106,6 +243,25 @@ export class GeminiProviderAuth implements IProviderAuth {
         method: 'credentials_file',
       };
     } catch {
+      if (selectedType === 'gemini-api-key') {
+        return {
+          authenticated: false,
+          email: null,
+          method: 'api_key',
+          error: 'Gemini is set to "Use Gemini API key", but GEMINI_API_KEY is unavailable',
+        };
+      }
+
+      if (selectedType === 'oauth-personal') {
+        return {
+          authenticated: false,
+          email: null,
+          method: 'credentials_file',
+          error: 'Gemini is set to Google sign-in, but no cached OAuth credentials were found',
+        };
+      }
+
+      // If no explicit auth type was selected, surface the generic "not configured" error.
       return {
         authenticated: false,
         email: null,
@@ -140,7 +296,7 @@ export class GeminiProviderAuth implements IProviderAuth {
    */
   private async getActiveAccountEmail(): Promise<string | null> {
     try {
-      const accPath = path.join(os.homedir(), '.gemini', 'google_accounts.json');
+      const accPath = path.join(this.getGeminiCliHome(), '.gemini', 'google_accounts.json');
       const accContent = await readFile(accPath, 'utf8');
       const accounts = readObjectRecord(JSON.parse(accContent));
       return readOptionalString(accounts?.active) ?? null;

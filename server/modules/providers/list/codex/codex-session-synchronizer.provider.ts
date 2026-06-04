@@ -1,5 +1,6 @@
 import os from 'node:os';
 import path from 'node:path';
+import { readFile } from 'node:fs/promises';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import {
@@ -99,7 +100,7 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
     filePath: string,
     nameMap: Map<string, string>
   ): Promise<ParsedSession | null> {
-    return extractFirstValidJsonlData(filePath, (rawData) => {
+    const parsed = await extractFirstValidJsonlData(filePath, (rawData) => {
       const data = rawData as Record<string, unknown>;
       const payload = data.payload as Record<string, unknown> | undefined;
       const sessionId = typeof payload?.id === 'string' ? payload.id : undefined;
@@ -112,8 +113,67 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
       return {
         sessionId,
         projectPath,
-        sessionName: normalizeSessionName(nameMap.get(sessionId), 'Untitled Codex Session'),
       };
     });
+
+    if (!parsed) {
+      return null;
+    }
+
+    const existingSession = sessionsDb.getSessionById(parsed.sessionId);
+    const existingSessionName = existingSession?.custom_name;
+    if (existingSessionName && existingSessionName !== 'Untitled Codex Session') {
+      return {
+        ...parsed,
+        sessionName: normalizeSessionName(existingSessionName, 'Untitled Codex Session'),
+      };
+    }
+
+    let sessionName = nameMap.get(parsed.sessionId);
+    if (!sessionName) {
+      sessionName = await this.extractLastAgentMessageFromEnd(filePath);
+    }
+
+    return {
+      ...parsed,
+      sessionName: normalizeSessionName(sessionName, 'Untitled Codex Session'),
+    };
+  }
+
+  private async extractLastAgentMessageFromEnd(filePath: string): Promise<string | undefined> {
+    try {
+      const content = await readFile(filePath, 'utf8');
+      const lines = content.split(/\r?\n/);
+
+      for (let index = lines.length - 1; index >= 0; index -= 1) {
+        const line = lines[index]?.trim();
+        if (!line) {
+          continue;
+        }
+
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(line);
+        } catch {
+          continue;
+        }
+
+        const data = parsed as Record<string, unknown>;
+        const eventType = typeof data.type === 'string' ? data.type : undefined;
+        const payload = data.payload as Record<string, unknown> | undefined;
+        const payloadType = typeof payload?.type === 'string' ? payload.type : undefined;
+        const lastAgentMessage = typeof payload?.last_agent_message === 'string'
+          ? payload.last_agent_message
+          : undefined;
+
+        if (eventType === 'event_msg' && payloadType === 'task_complete' && lastAgentMessage?.trim()) {
+          return lastAgentMessage;
+        }
+      }
+    } catch {
+      // Ignore missing/unreadable files so sync can continue.
+    }
+
+    return undefined;
   }
 }

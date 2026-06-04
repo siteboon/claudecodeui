@@ -520,7 +520,9 @@ export class CodexSessionsProvider implements IProviderSessions {
 
     let result: CodexHistoryResult;
     try {
-      result = await getCodexSessionMessages(sessionId, limit, offset);
+      // Load full history first so `total` reflects frontend-normalized messages,
+      // not raw JSONL records.
+      result = await getCodexSessionMessages(sessionId, null, 0);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`[CodexProvider] Failed to load session ${sessionId}:`, message);
@@ -528,8 +530,6 @@ export class CodexSessionsProvider implements IProviderSessions {
     }
 
     const rawMessages = Array.isArray(result) ? result : (result.messages || []);
-    const total = Array.isArray(result) ? rawMessages.length : (result.total || 0);
-    const hasMore = Array.isArray(result) ? false : Boolean(result.hasMore);
     const tokenUsage = Array.isArray(result) ? undefined : result.tokenUsage;
 
     const normalized: NormalizedMessage[] = [];
@@ -552,12 +552,31 @@ export class CodexSessionsProvider implements IProviderSessions {
       }
     }
 
+    const totalNormalized = normalized.length;
+    let total = 0;
+    for (const msg of normalized) {
+      if (msg.kind !== 'tool_result') {
+        total += 1;
+      }
+    }
+    const normalizedOffset = Math.max(0, offset);
+    const normalizedLimit = limit === null ? null : Math.max(0, limit);
+    const messages = normalizedLimit === null
+      ? normalized
+      : normalized.slice(
+          Math.max(0, totalNormalized - normalizedOffset - normalizedLimit),
+          Math.max(0, totalNormalized - normalizedOffset),
+        );
+    const hasMore = normalizedLimit === null
+      ? false
+      : Math.max(0, totalNormalized - normalizedOffset - normalizedLimit) > 0;
+
     return {
-      messages: normalized,
+      messages,
       total,
       hasMore,
-      offset,
-      limit,
+      offset: normalizedOffset,
+      limit: normalizedLimit,
       tokenUsage,
     };
   }

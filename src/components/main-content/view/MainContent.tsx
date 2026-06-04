@@ -47,10 +47,10 @@ function MainContent({
   onSessionProcessing,
   onSessionNotProcessing,
   processingSessions,
-  onReplaceTemporarySession,
   onNavigateToSession,
   onShowSettings,
   externalMessageUpdate,
+  newSessionTrigger,
 }: MainContentProps) {
   const { preferences } = useUiPreferences();
   const { autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter } = preferences;
@@ -136,7 +136,6 @@ function MainContent({
                 onSessionProcessing={onSessionProcessing}
                 onSessionNotProcessing={onSessionNotProcessing}
                 processingSessions={processingSessions}
-                onReplaceTemporarySession={onReplaceTemporarySession}
                 onNavigateToSession={onNavigateToSession}
                 onShowSettings={onShowSettings}
                 autoExpandTools={autoExpandTools}
@@ -145,6 +144,7 @@ function MainContent({
                 autoScrollToBottom={autoScrollToBottom}
                 sendByCtrlEnter={sendByCtrlEnter}
                 externalMessageUpdate={externalMessageUpdate}
+                newSessionTrigger={newSessionTrigger}
                 onShowAllTasks={tasksEnabled ? () => setActiveTab('tasks') : null}
               />
             </ErrorBoundary>
