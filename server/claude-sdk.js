@@ -790,6 +790,10 @@ async function appendInterruptedAssistantEntry(sessionId, cwd, partialText) {
   let parentUuid = null;
   let detectedModel = 'claude-sonnet-4-6';
   let detectedGitBranch = '';
+  // Safety assumption: interrupt() is called only after this function returns,
+  // so the SDK subprocess cannot write new entries between our read and append.
+  // If that invariant ever changes, replace with an atomic tempfile+rename write
+  // or an explicit file lock to avoid TOCTOU issues.
   try {
     const raw = await fs.readFile(jsonlPath, 'utf8');
     const lines = raw.split('\n').filter(Boolean);
