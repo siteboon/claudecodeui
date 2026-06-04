@@ -6,6 +6,7 @@ import type {
   FormEvent,
   KeyboardEvent,
   MouseEvent,
+  MutableRefObject,
   SetStateAction,
   TouchEvent,
 } from 'react';
@@ -60,6 +61,7 @@ interface UseChatComposerStateArgs {
   setClaudeStatus: (status: { text: string; tokens: number; can_interrupt: boolean } | null) => void;
   setIsUserScrolledUp: (isScrolledUp: boolean) => void;
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
+  accumulatedStreamRef?: MutableRefObject<string>;
 }
 
 interface MentionableFile {
@@ -191,6 +193,7 @@ export function useChatComposerState({
   setClaudeStatus,
   setIsUserScrolledUp,
   setPendingPermissionRequests,
+  accumulatedStreamRef,
 }: UseChatComposerStateArgs) {
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
@@ -954,12 +957,23 @@ export function useChatComposerState({
       return;
     }
 
+    // Optimistically clear loading state immediately.
+    setIsLoading(false);
+    setCanAbortSession(false);
+    setClaudeStatus(null);
+
+    const partialResponse =
+      accumulatedStreamRef && typeof accumulatedStreamRef.current === 'string'
+        ? accumulatedStreamRef.current
+        : '';
+
     sendMessage({
       type: 'abort-session',
       sessionId: targetSessionId,
       provider,
+      partialResponse,
     });
-  }, [canAbortSession, currentSessionId, provider, selectedSession?.id, sendMessage]);
+  }, [accumulatedStreamRef, canAbortSession, currentSessionId, provider, selectedSession?.id, sendMessage, setIsLoading, setCanAbortSession, setClaudeStatus]);
 
   const handleGrantToolPermission = useCallback(
     (suggestion: { entry: string; toolName: string }) => {

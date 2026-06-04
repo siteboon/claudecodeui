@@ -30,7 +30,7 @@ type ChatWebSocketDependencies = {
   queryCodex: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
   spawnGemini: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
   spawnOpenCode: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
-  abortClaudeSDKSession: (sessionId: string) => Promise<boolean>;
+  abortClaudeSDKSession: (sessionId: string, partialResponse?: string) => Promise<boolean>;
   abortCursorSession: (sessionId: string) => boolean;
   abortCodexSession: (sessionId: string) => boolean;
   abortGeminiSession: (sessionId: string) => boolean;
@@ -170,7 +170,7 @@ export function handleChatConnection(
         } else if (provider === 'opencode') {
           success = dependencies.abortOpenCodeSession(sessionId);
         } else {
-          success = await dependencies.abortClaudeSDKSession(sessionId);
+          success = await dependencies.abortClaudeSDKSession(sessionId, typeof data.partialResponse === 'string' ? data.partialResponse : '');
         }
 
         writer.send(

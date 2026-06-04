@@ -233,14 +233,15 @@ function mapCliOptionsToSDK(options = {}) {
  * @param {Array<string>} tempImagePaths - Temp image file paths for cleanup
  * @param {string} tempDir - Temp directory for cleanup
  */
-function addSession(sessionId, queryInstance, tempImagePaths = [], tempDir = null, writer = null) {
+function addSession(sessionId, queryInstance, tempImagePaths = [], tempDir = null, writer = null, cwd = null) {
   activeSessions.set(sessionId, {
     instance: queryInstance,
     startTime: Date.now(),
     status: 'active',
     tempImagePaths,
     tempDir,
-    writer
+    writer,
+    cwd
   });
 }
 
@@ -669,7 +670,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
     // Track the query instance for abort capability
     if (capturedSessionId) {
-      addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir, ws);
+      addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir, ws, options.cwd || null);
     }
 
     // Process streaming messages
@@ -679,7 +680,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
       if (message.session_id && !capturedSessionId) {
 
         capturedSessionId = message.session_id;
-        addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir, ws);
+        addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir, ws, options.cwd || null);
 
         // Set session ID on writer
         if (ws.setSessionId && typeof ws.setSessionId === 'function') {
@@ -765,11 +766,110 @@ async function queryClaudeSDK(command, options = {}, ws) {
 }
 
 /**
+ * Encode an absolute working directory the same way the Claude Agent SDK
+ * does when naming its per-project storage folder under ~/.claude/projects/.
+ */
+function encodeProjectDir(cwd) {
+  if (!cwd) return '';
+  return cwd.replace(/\//g, '-');
+}
+
+/**
+ * Append a synthetic assistant entry capturing the partial streamed response
+ * to the SDK's JSONL session history file so Claude sees its interrupted reply
+ * on the next turn.
+ */
+async function appendInterruptedAssistantEntry(sessionId, cwd, partialText) {
+  if (!sessionId || !cwd || typeof partialText !== 'string') return false;
+  const trimmed = partialText.trim();
+  if (!trimmed) return false;
+
+  const projectDir = path.join(os.homedir(), '.claude', 'projects', encodeProjectDir(cwd));
+  const jsonlPath = path.join(projectDir, `${sessionId}.jsonl`);
+
+  let parentUuid = null;
+  let detectedModel = 'claude-sonnet-4-6';
+  let detectedGitBranch = '';
+  try {
+    const raw = await fs.readFile(jsonlPath, 'utf8');
+    const lines = raw.split('\n').filter(Boolean);
+    if (lines.length === 0) return false;
+    const last = JSON.parse(lines[lines.length - 1]);
+    parentUuid = last.uuid || null;
+    if (last.message && last.message.model) detectedModel = last.message.model;
+    if (last.gitBranch) detectedGitBranch = last.gitBranch;
+
+    const lastMsg = last.message || {};
+    if (
+      last.type === 'assistant' &&
+      Array.isArray(lastMsg.content) &&
+      lastMsg.content.some(
+        (b) => b && b.type === 'text' && typeof b.text === 'string' && b.text.includes('[generation interrupted]')
+      )
+    ) {
+      return false;
+    }
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return false;
+    console.warn(`Could not read JSONL for partial-response append (${jsonlPath}):`, err.message);
+    return false;
+  }
+
+  const uuid = (typeof crypto.randomUUID === 'function')
+    ? crypto.randomUUID()
+    : crypto.randomBytes(16).toString('hex');
+
+  const entry = {
+    parentUuid,
+    isSidechain: false,
+    message: {
+      model: detectedModel,
+      id: `msg_interrupted_${uuid.replace(/-/g, '').slice(0, 24)}`,
+      type: 'message',
+      role: 'assistant',
+      content: [
+        {
+          type: 'text',
+          text: `${trimmed}\n\n[generation interrupted]`
+        }
+      ],
+      stop_reason: 'end_turn',
+      stop_sequence: null,
+      usage: {
+        input_tokens: 0,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0,
+        output_tokens: 0
+      }
+    },
+    type: 'assistant',
+    uuid,
+    timestamp: new Date().toISOString(),
+    userType: 'external',
+    entrypoint: 'sdk-ts',
+    cwd,
+    sessionId,
+    version: '2.1.118',
+    gitBranch: detectedGitBranch
+  };
+
+  try {
+    await fs.appendFile(jsonlPath, JSON.stringify(entry) + '\n', 'utf8');
+    console.log(`Persisted interrupted assistant partial (${trimmed.length} chars) to ${jsonlPath}`);
+    return true;
+  } catch (err) {
+    console.warn(`Failed to append interrupted assistant entry to ${jsonlPath}:`, err.message);
+    return false;
+  }
+}
+
+/**
  * Aborts an active SDK session
  * @param {string} sessionId - Session identifier
+ * @param {string} [partialResponse] - Partial assistant text captured by the UI
  * @returns {boolean} True if session was aborted, false if not found
  */
-async function abortClaudeSDKSession(sessionId) {
+async function abortClaudeSDKSession(sessionId, partialResponse = '') {
   const session = getSession(sessionId);
 
   if (!session) {
@@ -779,6 +879,15 @@ async function abortClaudeSDKSession(sessionId) {
 
   try {
     console.log(`Aborting SDK session: ${sessionId}`);
+
+    // Persist partial response BEFORE interrupting.
+    if (partialResponse && typeof partialResponse === 'string' && partialResponse.trim()) {
+      try {
+        await appendInterruptedAssistantEntry(sessionId, session.cwd, partialResponse);
+      } catch (writeError) {
+        console.warn('Failed to persist partial response on abort:', writeError?.message || writeError);
+      }
+    }
 
     // Call interrupt() on the query instance
     await session.instance.interrupt();
