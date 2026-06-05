@@ -1,6 +1,7 @@
 import type { MutableRefObject, RefObject } from 'react';
 import type { FitAddon } from '@xterm/addon-fit';
 import type { Terminal } from '@xterm/xterm';
+
 import type { Project, ProjectSession } from '../../../types/app';
 
 export type AuthCopyStatus = 'idle' | 'copied' | 'failed';
@@ -15,6 +16,7 @@ export type ShellInitMessage = {
   rows: number;
   initialCommand: string | null | undefined;
   isPlainShell: boolean;
+  forceRestart?: boolean;
 };
 
 export type ShellResizeMessage = {
@@ -69,8 +71,8 @@ export type UseShellRuntimeResult = {
   isConnecting: boolean;
   authUrl: string;
   authUrlVersion: number;
-  connectToShell: () => void;
-  disconnectFromShell: () => void;
+  connectToShell: (options?: { forceRestart?: boolean }) => void;
+  disconnectFromShell: (options?: { suppressAutoConnect?: boolean }) => void;
   openAuthUrlInBrowser: (url?: string) => boolean;
   copyAuthUrlToClipboard: (url?: string) => Promise<boolean>;
 };
