@@ -229,7 +229,7 @@
       "disconnect": "Disconnect",
       "disconnectTitle": "Disconnect from shell",
       "restart": "Restart",
-      "restartTitle": "Restart Shell (disconnect first)",
+      "restartTitle": "Restart Shell",
       "connect": "Continue in Shell",
       "connectTitle": "Connect to shell"
     },

@@ -1,3 +1,5 @@
+import { Loader2, RotateCcw } from 'lucide-react';
+
 type ShellConnectionOverlayProps = {
   mode: 'loading' | 'connect' | 'connecting';
   description: string;
@@ -19,40 +21,42 @@ export default function ShellConnectionOverlay({
 }: ShellConnectionOverlayProps) {
   if (mode === 'loading') {
     return (
-      <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90">
-        <div className="text-white">{loadingLabel}</div>
+      <div className="absolute inset-0 z-20 flex items-center justify-center bg-gray-950/90">
+        <div className="inline-flex items-center gap-2 text-sm font-medium text-gray-100">
+          <Loader2 className="h-4 w-4 animate-spin text-blue-300" aria-hidden="true" />
+          <span>{loadingLabel}</span>
+        </div>
       </div>
     );
   }
 
   if (mode === 'connect') {
     return (
-      <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90 p-4">
-        <div className="w-full max-w-sm text-center">
+      <div className="absolute inset-0 z-20 flex items-center justify-center bg-gray-950/90 p-6">
+        <div className="flex w-full max-w-md flex-col items-center gap-3 text-center">
           <button
+            type="button"
             onClick={onConnect}
-            className="flex w-full items-center justify-center space-x-2 rounded-lg bg-green-600 px-6 py-3 text-base font-medium text-white transition-colors hover:bg-green-700 sm:w-auto"
+            className="pointer-events-auto inline-flex min-h-12 w-full max-w-xs cursor-pointer items-center justify-center gap-2 rounded-md bg-emerald-600 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-emerald-950/30 transition-colors hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:ring-offset-2 focus:ring-offset-gray-950 active:bg-emerald-700"
             title={connectTitle}
           >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-            <span>{connectLabel}</span>
+            <RotateCcw className="h-4 w-4" aria-hidden="true" />
+            <span className="min-w-0 truncate">{connectLabel}</span>
           </button>
-          <p className="mt-3 px-2 text-sm text-gray-400">{description}</p>
+          <p className="max-w-md break-words px-2 text-sm leading-6 text-gray-300">{description}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90 p-4">
-      <div className="w-full max-w-sm text-center">
-        <div className="flex items-center justify-center space-x-3 text-yellow-400">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-yellow-400 border-t-transparent"></div>
+    <div className="absolute inset-0 z-20 flex items-center justify-center bg-gray-950/90 p-6">
+      <div className="flex w-full max-w-md flex-col items-center gap-3 text-center">
+        <div className="flex items-center justify-center gap-3 text-yellow-300">
+          <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
           <span className="text-base font-medium">{connectingLabel}</span>
         </div>
-        <p className="mt-3 px-2 text-sm text-gray-400">{description}</p>
+        <p className="max-w-md break-words px-2 text-sm leading-6 text-gray-300">{description}</p>
       </div>
     </div>
   );
