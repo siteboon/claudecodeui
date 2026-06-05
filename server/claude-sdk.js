@@ -304,7 +304,11 @@ function extractTokenBudget(sdkMessage) {
 
   const messageUsage = sdkMessage.message?.usage || sdkMessage.usage;
   if (messageUsage && typeof messageUsage === 'object') {
-    const inputTokens = readNumber(messageUsage.input_tokens ?? messageUsage.inputTokens);
+    const directInputTokens = readNumber(messageUsage.input_tokens ?? messageUsage.inputTokens);
+    const cacheCreationTokens = readNumber(messageUsage.cache_creation_input_tokens ?? messageUsage.cacheCreationInputTokens ?? messageUsage.cacheCreationTokens);
+    const cacheReadTokens = readNumber(messageUsage.cache_read_input_tokens ?? messageUsage.cacheReadInputTokens ?? messageUsage.cacheReadTokens);
+    const cacheTokens = cacheCreationTokens + cacheReadTokens;
+    const inputTokens = directInputTokens + cacheTokens;
     const outputTokens = readNumber(messageUsage.output_tokens ?? messageUsage.outputTokens);
     const totalUsed = inputTokens + outputTokens;
     const contextWindow = parseInt(process.env.CONTEXT_WINDOW, 10) || 160000;
@@ -314,6 +318,9 @@ function extractTokenBudget(sdkMessage) {
       total: contextWindow,
       inputTokens,
       outputTokens,
+      cacheReadTokens,
+      cacheCreationTokens,
+      cacheTokens,
       breakdown: {
         input: inputTokens,
         output: outputTokens,

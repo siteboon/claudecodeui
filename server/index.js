@@ -87,6 +87,11 @@ const installMode = fs.existsSync(path.join(APP_ROOT, '.git')) ? 'git' : 'npm';
 
 console.log('SERVER_PORT from env:', process.env.SERVER_PORT);
 
+function readUsageNumber(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
 const app = express();
 const server = http.createServer(app);
 
@@ -1386,6 +1391,8 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
         const contextWindow = Number.isFinite(parsedContextWindow) ? parsedContextWindow : 160000;
         let inputTokens = 0;
         let outputTokens = 0;
+        let cacheReadTokens = 0;
+        let cacheCreationTokens = 0;
 
         // Find the latest assistant message with usage data (scan from end)
         for (let i = lines.length - 1; i >= 0; i--) {
@@ -1397,8 +1404,11 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
                     const usage = entry.message.usage;
 
                     // Use token counts from latest assistant message only
-                    inputTokens = usage.input_tokens || 0;
-                    outputTokens = usage.output_tokens || 0;
+                    const directInputTokens = readUsageNumber(usage.input_tokens ?? usage.inputTokens);
+                    cacheReadTokens = readUsageNumber(usage.cache_read_input_tokens ?? usage.cacheReadInputTokens ?? usage.cacheReadTokens);
+                    cacheCreationTokens = readUsageNumber(usage.cache_creation_input_tokens ?? usage.cacheCreationInputTokens ?? usage.cacheCreationTokens);
+                    inputTokens = directInputTokens + cacheReadTokens + cacheCreationTokens;
+                    outputTokens = readUsageNumber(usage.output_tokens ?? usage.outputTokens);
 
                     break; // Stop after finding the latest assistant message
                 }
@@ -1409,12 +1419,16 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
         }
 
         const totalUsed = inputTokens + outputTokens;
+        const cacheTokens = cacheReadTokens + cacheCreationTokens;
 
         res.json({
             used: totalUsed,
             total: contextWindow,
             inputTokens,
             outputTokens,
+            cacheReadTokens,
+            cacheCreationTokens,
+            cacheTokens,
             breakdown: {
                 input: inputTokens,
                 output: outputTokens
