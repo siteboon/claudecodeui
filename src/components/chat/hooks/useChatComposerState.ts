@@ -311,7 +311,7 @@ export function useChatComposerState({
   }, [addMessage]);
 
   const executeCommand = useCallback(
-    async (command: SlashCommand, rawInput?: string) => {
+    async (command: SlashCommand, rawInput?: string, options?: { preserveInput?: boolean }) => {
       if (!command || !selectedProject) {
         return;
       }
@@ -368,8 +368,10 @@ export function useChatComposerState({
         const result = (await response.json()) as CommandExecutionResult;
         if (result.type === 'builtin') {
           handleBuiltInCommand(result);
-          setInput('');
-          inputValueRef.current = '';
+          if (!options?.preserveInput) {
+            setInput('');
+            inputValueRef.current = '';
+          }
         } else if (result.type === 'custom') {
           await handleCustomCommand(result);
         }
@@ -399,6 +401,19 @@ export function useChatComposerState({
       tokenBudget,
     ],
   );
+
+  const showCostModal = useCallback(() => {
+    executeCommand(
+      {
+        name: '/cost',
+        description: 'Display token usage information',
+        namespace: 'builtin',
+        metadata: { type: 'builtin' },
+      } as SlashCommand,
+      '/cost',
+      { preserveInput: true },
+    );
+  }, [executeCommand]);
 
   const {
     slashCommands,
@@ -1049,5 +1064,6 @@ export function useChatComposerState({
     isInputFocused,
     commandModalPayload,
     closeCommandModal,
+    showCostModal,
   };
 }

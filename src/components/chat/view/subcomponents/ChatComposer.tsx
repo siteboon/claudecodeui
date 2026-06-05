@@ -58,6 +58,7 @@ interface ChatComposerProps {
   permissionMode: PermissionMode | string;
   onModeSwitch: () => void;
   tokenBudget: Record<string, unknown> | null;
+  onShowTokenUsage: () => void;
   slashCommandsCount: number;
   onToggleCommandMenu: () => void;
   hasInput: boolean;
@@ -111,6 +112,7 @@ export default function ChatComposer({
   permissionMode,
   onModeSwitch,
   tokenBudget,
+  onShowTokenUsage,
   slashCommandsCount,
   onToggleCommandMenu,
   hasInput,
@@ -353,7 +355,7 @@ export default function ChatComposer({
               </div>
             </button>
 
-            <TokenUsageSummary usage={tokenBudget} />
+            <TokenUsageSummary usage={tokenBudget} onClick={onShowTokenUsage} />
 
             <PromptInputButton
               tooltip={{ content: t('input.showAllCommands') }}
