@@ -1,6 +1,6 @@
 {
   "name": "@cloudcli-ai/cloudcli",
-  "version": "1.33.0",
+  "version": "1.33.1",
   "description": "A web-based UI for Claude Code CLI",
   "type": "module",
   "main": "dist-server/server/index.js",
@@ -67,7 +67,7 @@
   "author": "CloudCLI UI Contributors",
   "license": "AGPL-3.0-or-later",
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.116",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.165",
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-html": "^6.4.9",
     "@codemirror/lang-javascript": "^6.2.4",

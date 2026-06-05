@@ -138,42 +138,6 @@
     "clearInput": "Girdiyi temizle",
     "scrollToBottom": "En alta git"
   },
-  "thinkingMode": {
-    "selector": {
-      "title": "Düşünme Modu",
-      "description": "Uzatılmış düşünme, Claude'a alternatifleri değerlendirmek için daha fazla zaman verir",
-      "active": "Aktif",
-      "tip": "Daha yüksek düşünme modları daha fazla zaman alır ama daha kapsamlı analiz sağlar"
-    },
-    "modes": {
-      "none": {
-        "name": "Standart",
-        "description": "Normal Claude yanıtı",
-        "prefix": ""
-      },
-      "think": {
-        "name": "Düşün",
-        "description": "Temel uzatılmış düşünme",
-        "prefix": "think"
-      },
-      "thinkHard": {
-        "name": "Daha Fazla Düşün",
-        "description": "Daha kapsamlı değerlendirme",
-        "prefix": "think hard"
-      },
-      "thinkHarder": {
-        "name": "Derin Düşün",
-        "description": "Alternatiflerle derin analiz",
-        "prefix": "think harder"
-      },
-      "ultrathink": {
-        "name": "Ultra Düşün",
-        "description": "Maksimum düşünme bütçesi",
-        "prefix": "ultrathink"
-      }
-    },
-    "buttonTitle": "Düşünme modu: {{mode}}"
-  },
   "providerSelection": {
     "title": "AI Asistanını Seç",
     "description": "Yeni bir konuşma başlatmak için bir sağlayıcı seç",

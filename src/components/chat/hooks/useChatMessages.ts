@@ -7,6 +7,12 @@ import type { NormalizedMessage } from '../../../stores/useSessionStore';
 import type { ChatMessage, SubagentChildTool } from '../types/types';
 import { decodeHtmlEntities, unescapeWithMathProtection, formatUsageLimitText } from '../utils/chatFormatting';
 
+function formatToolResultContent(content: unknown): string {
+  const text = typeof content === 'string' ? content : JSON.stringify(content);
+  const toolUseErrorMatch = /^<tool_use_error>([\s\S]*)<\/tool_use_error>$/.exec(text.trim());
+  return toolUseErrorMatch ? toolUseErrorMatch[1] : text;
+}
+
 /**
  * Convert NormalizedMessage[] from the session store into ChatMessage[]
  * that the existing UI components expect.
@@ -20,7 +26,12 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
 
   // First pass: collect tool results for attachment
   const toolResultMap = new Map<string, NormalizedMessage>();
+  const toolUseIds = new Set<string>();
   for (const msg of messages) {
+    if (msg.kind === 'tool_use' && msg.toolId) {
+      toolUseIds.add(msg.toolId);
+    }
+
     if (msg.kind === 'tool_result' && msg.toolId) {
       toolResultMap.set(msg.toolId, msg);
     }
@@ -97,7 +108,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
 
         const toolResult = tr
           ? {
-              content: typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content),
+              content: formatToolResultContent(tr.content),
               isError: Boolean(tr.isError),
               toolUseResult: (tr as any).toolUseResult,
             }
@@ -191,8 +202,25 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
         break;
 
       // tool_result is handled via attachment to tool_use above
-      case 'tool_result':
+      case 'tool_result': {
+        if (msg.toolId && toolUseIds.has(msg.toolId)) {
+          break;
+        }
+
+        const content = formatToolResultContent(msg.content || '');
+        if (!content.trim()) {
+          break;
+        }
+
+        converted.push({
+          type: msg.isError ? 'error' : 'assistant',
+          content,
+          timestamp: msg.timestamp,
+          toolId: msg.toolId,
+          ...sharedMetadata,
+        });
         break;
+      }
 
       default:
         break;
