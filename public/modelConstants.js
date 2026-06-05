@@ -11,7 +11,7 @@ export const CLAUDE_MODELS = {
     {
       value: "default",
       label: "Default (recommended)",
-      description: "Use the default model (currently Opus 4.7 (1M context)) · $5/$25 per Mtok",
+      description: "Use the default model (currently Opus 4.8 (1M context)) · $5/$25 per Mtok",
     },
     {
       value: "sonnet",
