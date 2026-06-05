@@ -18,7 +18,12 @@ export const CLAUDE_FALLBACK_MODELS: ProviderModelsDefinition = {
     {
       value: 'default',
       label: 'Default (recommended)',
-      description: 'Use the default model (currently Sonnet 4.6) · $3/$15 per Mtok',
+      description: 'Use the default model (currently Opus 4.8 (1M context)) · $5/$25 per Mtok',
+    },
+    {
+      value: "sonnet",
+      label: "Sonnet",
+      description: "Sonnet 4.6 · Best for everyday tasks · $3/$15 per Mtok",
     },
     {
       value: 'sonnet[1m]',
@@ -27,8 +32,8 @@ export const CLAUDE_FALLBACK_MODELS: ProviderModelsDefinition = {
     },
     {
       value: 'opus[1m]',
-      label: 'Opus 4.7 (1M context)',
-      description: 'Opus 4.7 with 1M context · Most capable for complex work · $5/$25 per Mtok',
+      label: 'Opus 4.8 (1M context)',
+      description: 'Opus 4.8 with 1M context · Most capable for complex work · $5/$25 per Mtok',
     },
     {
       value: 'haiku',
