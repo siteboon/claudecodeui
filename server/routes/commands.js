@@ -268,16 +268,35 @@ Custom commands can be created in:
           tokenUsage.contextWindow ??
           0,
       ) || 0;
-    const inputTokensRaw =
+    const normalizedInputValue =
+      tokenUsage.inputTokens ??
+      tokenUsage.input ??
+      tokenUsage.cumulativeInputTokens ??
+      tokenUsage.breakdown?.input ??
+      tokenUsage.promptTokens;
+    const directInputTokens =
       Number(
-        tokenUsage.inputTokens ??
-          tokenUsage.input ??
+        normalizedInputValue ??
           tokenUsage.input_tokens ??
-          tokenUsage.cumulativeInputTokens ??
-          tokenUsage.breakdown?.input ??
-          tokenUsage.promptTokens ??
+          0
+      ) || 0;
+    const cacheReadTokens =
+      Number(
+        tokenUsage.cacheReadTokens ??
+          tokenUsage.cache_read_input_tokens ??
+          tokenUsage.cacheReadInputTokens ??
           0,
       ) || 0;
+    const cacheCreationTokens =
+      Number(
+        tokenUsage.cacheCreationTokens ??
+          tokenUsage.cache_creation_input_tokens ??
+          tokenUsage.cacheCreationInputTokens ??
+          0,
+      ) || 0;
+    const inputTokens = normalizedInputValue == null
+      ? directInputTokens + cacheReadTokens + cacheCreationTokens
+      : directInputTokens;
     const outputTokens =
       Number(
         tokenUsage.outputTokens ??
@@ -288,8 +307,9 @@ Custom commands can be created in:
           tokenUsage.completionTokens ??
           0,
       ) || 0;
-    const hasTokenBreakdown = inputTokensRaw > 0 || outputTokens > 0;
-    const used = reportedUsed || inputTokensRaw + outputTokens;
+    const computedUsed = inputTokens + outputTokens;
+    const hasTokenBreakdown = computedUsed > 0;
+    const used = Math.max(reportedUsed, computedUsed);
 
     return {
       type: "builtin",
@@ -302,7 +322,7 @@ Custom commands can be created in:
         ...(hasTokenBreakdown
           ? {
               tokenBreakdown: {
-                input: inputTokensRaw,
+                input: inputTokens,
                 output: outputTokens,
               },
             }
