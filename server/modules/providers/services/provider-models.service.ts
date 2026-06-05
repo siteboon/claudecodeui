@@ -17,6 +17,7 @@ import { readProviderSessionActiveModelChange } from '@/shared/utils.js';
 
 export const PROVIDER_MODELS_CACHE_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 const PROVIDER_MODELS_CACHE_VERSION = 1;
+const UNCACHED_PROVIDERS = new Set<LLMProvider>(['claude']);
 
 type ProviderModelsServiceDependencies = {
   resolveProvider?: (provider: LLMProvider) => Pick<IProvider, 'models'>;
@@ -232,10 +233,42 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     return request;
   };
 
+  const loadDirectModels = (
+    provider: LLMProvider,
+  ): Promise<ProviderModelsResult> => {
+    const request = resolveProvider(provider).models.getSupportedModels()
+      .then((models) => {
+        const currentTime = now();
+        return {
+          models,
+          cache: {
+            updatedAt: new Date(currentTime).toISOString(),
+            expiresAt: new Date(currentTime).toISOString(),
+            source: 'fresh' as const,
+          },
+        };
+      })
+      .finally(() => {
+        pendingRequests.delete(provider);
+      });
+
+    pendingRequests.set(provider, request);
+    return request;
+  };
+
   const getProviderModels = async (
     provider: LLMProvider,
     options: ProviderModelsOptions = {},
   ): Promise<ProviderModelsResult> => {
+    if (UNCACHED_PROVIDERS.has(provider)) {
+      const pendingRequest = pendingRequests.get(provider);
+      if (pendingRequest) {
+        return pendingRequest;
+      }
+
+      return loadDirectModels(provider);
+    }
+
     if (options.bypassCache) {
       const pendingRequest = pendingRequests.get(provider);
       if (pendingRequest) {

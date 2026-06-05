@@ -564,11 +564,15 @@ export function shouldHideToolResult(toolName: string, toolResult: any): boolean
 
   if (!config.result) return false;
 
+  // Hidden/success-only configs suppress noisy successful output, but errors
+  // still need to be visible so failed tool calls are diagnosable.
+  if (toolResult?.isError) return false;
+
   // Always hidden
   if (config.result.hidden) return true;
 
   // Hide on success only
-  if (config.result.hideOnSuccess && toolResult && !toolResult.isError) {
+  if (config.result.hideOnSuccess && toolResult) {
     return true;
   }
 
