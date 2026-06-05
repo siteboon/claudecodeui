@@ -2,23 +2,16 @@ import { useTranslation } from 'react-i18next';
 import type {
   ChangeEvent,
   ClipboardEvent,
-  Dispatch,
   FormEvent,
   KeyboardEvent,
   MouseEvent,
   ReactNode,
   RefObject,
-  SetStateAction,
   TouchEvent,
 } from 'react';
 import { ImageIcon, MessageSquareIcon, XIcon, ArrowDownIcon } from 'lucide-react';
+
 import type { PendingPermissionRequest, PermissionMode, Provider } from '../../types/types';
-import CommandMenu from './CommandMenu';
-import ClaudeStatus from './ClaudeStatus';
-import ImageAttachment from './ImageAttachment';
-import PermissionRequestsBanner from './PermissionRequestsBanner';
-import ThinkingModeSelector from './ThinkingModeSelector';
-import TokenUsageSummary from './TokenUsageSummary';
 import {
   PromptInput,
   PromptInputHeader,
@@ -29,6 +22,12 @@ import {
   PromptInputButton,
   PromptInputSubmit,
 } from '../../../../shared/view/ui';
+
+import CommandMenu from './CommandMenu';
+import ClaudeStatus from './ClaudeStatus';
+import ImageAttachment from './ImageAttachment';
+import PermissionRequestsBanner from './PermissionRequestsBanner';
+import TokenUsageSummary from './TokenUsageSummary';
 
 interface MentionableFile {
   name: string;
@@ -58,8 +57,6 @@ interface ChatComposerProps {
   provider: Provider | string;
   permissionMode: PermissionMode | string;
   onModeSwitch: () => void;
-  thinkingMode: string;
-  setThinkingMode: Dispatch<SetStateAction<string>>;
   tokenBudget: Record<string, unknown> | null;
   slashCommandsCount: number;
   onToggleCommandMenu: () => void;
@@ -113,8 +110,6 @@ export default function ChatComposer({
   provider,
   permissionMode,
   onModeSwitch,
-  thinkingMode,
-  setThinkingMode,
   tokenBudget,
   slashCommandsCount,
   onToggleCommandMenu,
@@ -358,10 +353,6 @@ export default function ChatComposer({
               </div>
             </button>
 
-            {provider === 'claude' && (
-              <ThinkingModeSelector selectedMode={thinkingMode} onModeChange={setThinkingMode} onClose={() => {}} className="" />
-            )}
-
             <TokenUsageSummary usage={tokenBudget} />
 
             <PromptInputButton
@@ -383,7 +374,7 @@ export default function ChatComposer({
               <PromptInputButton
                 tooltip={{ content: t('input.clearInput', { defaultValue: 'Clear input' }) }}
                 onClick={onClearInput}
-                className="hidden sm:No-flex"
+                className="hidden sm:flex"
               >
                 <XIcon />
               </PromptInputButton>
@@ -400,7 +391,8 @@ export default function ChatComposer({
               {sendByCtrlEnter ? t('input.hintText.ctrlEnter') : t('input.hintText.enter')}
             </div>
             <PromptInputSubmit
-              disabled={!input.trim() || isLoading}
+              onClick={isLoading ? onAbortSession : undefined}
+              disabled={!isLoading && !input.trim()}
               className="h-10 w-10 sm:h-10 sm:w-10"
             />
           </div>
