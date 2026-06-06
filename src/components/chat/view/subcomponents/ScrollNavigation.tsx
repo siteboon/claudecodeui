@@ -105,14 +105,25 @@ export default function ScrollNavigation({
         return;
       }
 
-      const scrollRatio = scrollTop / maxScroll;
       const totalUserMessages = userMessages.length;
       if (totalUserMessages <= 1) {
         setActiveDotIndex(0);
         return;
       }
 
-      const activeIdx = Math.round(scrollRatio * (totalUserMessages - 1));
+      // Use DOM element positions instead of scroll ratio —
+      // messages have varying heights so ratio-based indexing drifts.
+      const elements = container.querySelectorAll<HTMLDivElement>('.chat-message.user');
+      const viewportCenter = scrollTop + clientHeight / 2;
+      let activeIdx = elements.length - 1;
+      for (let i = 0; i < elements.length; i++) {
+        const top = elements[i].getBoundingClientRect().top - container.getBoundingClientRect().top + scrollTop;
+        if (top <= viewportCenter) {
+          activeIdx = i;
+        } else {
+          break;
+        }
+      }
       if (mountedRef.current) setActiveDotIndex(activeIdx);
     });
   }, [scrollContainerRef, userMessages.length]);
