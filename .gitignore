@@ -142,3 +142,10 @@ tasks/
 
 # Git worktrees
 .worktrees/
+
+# Voice sidecar (Python) — generated, machine-specific, not committed
+voice-sidecar/.venv/
+voice-sidecar/voice_messages/
+voice-sidecar/**/__pycache__/
+*.pyc
+*.wav

@@ -26,6 +26,7 @@ import {
 import CommandMenu from './CommandMenu';
 import ClaudeStatus from './ClaudeStatus';
 import ImageAttachment from './ImageAttachment';
+import VoiceInputButton from './VoiceInputButton';
 import PermissionRequestsBanner from './PermissionRequestsBanner';
 import TokenUsageSummary from './TokenUsageSummary';
 
@@ -89,6 +90,7 @@ interface ChatComposerProps {
   renderInputWithMentions: (text: string) => ReactNode;
   textareaRef: RefObject<HTMLTextAreaElement>;
   input: string;
+  onVoiceTranscript?: (text: string) => void;
   onInputChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
   onTextareaClick: (event: MouseEvent<HTMLTextAreaElement>) => void;
   onTextareaKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
@@ -143,6 +145,7 @@ export default function ChatComposer({
   renderInputWithMentions,
   textareaRef,
   input,
+  onVoiceTranscript,
   onInputChange,
   onTextareaClick,
   onTextareaKeyDown,
@@ -314,6 +317,8 @@ export default function ChatComposer({
             >
               <ImageIcon />
             </PromptInputButton>
+
+            {onVoiceTranscript && <VoiceInputButton onTranscript={onVoiceTranscript} />}
 
             <button
               type="button"
