@@ -71,10 +71,14 @@ router.get(
     const skipSynchronization =
       readQueryStringValue(req.query.skipSynchronization).trim() === '1' ||
       readQueryStringValue(req.query.skipSync).trim() === '1';
+    const fastDisplayNames =
+      readQueryStringValue(req.query.fastDisplayNames).trim() === '1' ||
+      readQueryStringValue(req.query.fastNames).trim() === '1';
     const sessionsLimit = readOptionalNumericQueryValue(req.query.sessionsLimit) ?? undefined;
     const sessionsOffset = readOptionalNumericQueryValue(req.query.sessionsOffset) ?? undefined;
     const projects = await getProjectsWithSessions({
       skipSynchronization,
+      fastDisplayNames,
       sessionsLimit,
       sessionsOffset,
     });
