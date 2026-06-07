@@ -54,7 +54,6 @@ type ProgressUpdate = {
 
 type GetProjectsWithSessionsOptions = {
   skipSynchronization?: boolean;
-  fastDisplayNames?: boolean;
   sessionsLimit?: number;
   sessionsOffset?: number;
 };
@@ -115,15 +114,6 @@ export async function generateDisplayName(projectName: string, actualProjectDir:
   }
 
   return projectPath;
-}
-
-function generateFastDisplayName(projectPath: string): string {
-  if (projectPath.startsWith('/')) {
-    const parts = projectPath.split('/').filter(Boolean);
-    return parts[parts.length - 1] || projectPath;
-  }
-
-  return projectPath.replace(/-/g, '/');
 }
 
 function normalizeSessionPagination(options: SessionPaginationOptions = {}): { limit: number; offset: number } {
@@ -249,9 +239,7 @@ export async function getProjectsWithSessions(
     const displayName =
       row.custom_project_name && row.custom_project_name.trim().length > 0
         ? row.custom_project_name
-        : options.fastDisplayNames
-          ? generateFastDisplayName(projectPath)
-          : await generateDisplayName(path.basename(projectPath) || projectPath, projectPath);
+        : await generateDisplayName(path.basename(projectPath) || projectPath, projectPath);
 
     const sessionsPage = readProjectSessionsPageByPath(projectPath, {
       limit: options.sessionsLimit,
