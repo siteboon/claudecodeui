@@ -279,6 +279,16 @@ export async function queryCodex(command, options = {}, ws) {
         startedAt: new Date().toISOString()
       });
     };
+    const markSessionFinished = (id) => {
+      if (!id) {
+        return;
+      }
+
+      const session = activeCodexSessions.get(id);
+      if (session && session.status !== 'aborted') {
+        session.status = 'completed';
+      }
+    };
 
     // Existing sessions can be tracked immediately; new sessions are tracked after thread.started.
     if (capturedSessionId) {
@@ -324,6 +334,10 @@ export async function queryCodex(command, options = {}, ws) {
         continue;
       }
 
+      if (event.type === 'turn.completed' || event.type === 'turn.failed') {
+        markSessionFinished(capturedSessionId || sessionId);
+      }
+
       const transformed = transformCodexEvent(event);
 
       // Normalize the transformed event into NormalizedMessage(s) via adapter
@@ -354,6 +368,8 @@ export async function queryCodex(command, options = {}, ws) {
 
     // Send completion event
     if (!terminalFailure) {
+      markSessionFinished(capturedSessionId || sessionId);
+
       sendMessage(ws, createNormalizedMessage({
         kind: 'complete',
         actualSessionId: capturedSessionId || thread.id || sessionId || null,

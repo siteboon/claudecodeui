@@ -98,6 +98,7 @@ export function useChatRealtimeHandlers({
 }: UseChatRealtimeHandlersArgs) {
   const paletteOps = usePaletteOps();
   const lastProcessedMessageRef = useRef<LatestChatMessage | null>(null);
+  const terminalSessionIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!latestMessage) return;
@@ -151,6 +152,17 @@ export function useChatRealtimeHandlers({
           const isCurrentSession =
             statusSessionId === currentSessionId || (selectedSession && statusSessionId === selectedSession.id);
 
+          if (msg.isProcessing && terminalSessionIdsRef.current.has(statusSessionId)) {
+            onSessionInactive?.(statusSessionId);
+            onSessionNotProcessing?.(statusSessionId);
+            if (isCurrentSession) {
+              setIsLoading(false);
+              setCanAbortSession(false);
+              setClaudeStatus(null);
+            }
+            return;
+          }
+
           if (msg.isProcessing) {
             onSessionActive?.(statusSessionId);
             onSessionProcessing?.(statusSessionId);
@@ -179,6 +191,10 @@ export function useChatRealtimeHandlers({
     /* ---------------------------------------------------------------- */
 
     const sid = msg.sessionId || activeViewSessionId;
+
+    if (sid && msg.kind === 'session_created') {
+      terminalSessionIdsRef.current.delete(sid);
+    }
 
     // --- Streaming: buffer for performance ---
     if (msg.kind === 'stream_delta') {
@@ -258,6 +274,10 @@ export function useChatRealtimeHandlers({
       }
 
       case 'complete': {
+        if (sid) {
+          terminalSessionIdsRef.current.add(sid);
+        }
+
         // Flush any remaining streaming state
         if (streamTimerRef.current) {
           clearTimeout(streamTimerRef.current);
@@ -313,6 +333,10 @@ export function useChatRealtimeHandlers({
       }
 
       case 'error': {
+        if (sid) {
+          terminalSessionIdsRef.current.add(sid);
+        }
+
         setIsLoading(false);
         setCanAbortSession(false);
         setClaudeStatus(null);

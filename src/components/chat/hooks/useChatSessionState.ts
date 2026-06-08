@@ -131,6 +131,8 @@ export function useChatSessionState({
   const pendingInitialScrollRef = useRef(true);
   const messagesOffsetRef = useRef(0);
   const scrollPositionRef = useRef({ height: 0, top: 0 });
+  const previousProcessingSessionsRef = useRef<Set<string> | null>(null);
+  const previousProcessingSessionViewIdRef = useRef<string | null>(null);
   const loadAllFinishedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadAllOverlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastLoadedSessionKeyRef = useRef<string | null>(null);
@@ -693,9 +695,17 @@ export function useChatSessionState({
 
   useEffect(() => {
     const activeViewSessionId = selectedSession?.id || currentSessionId;
+    const previousProcessingSessions = previousProcessingSessionsRef.current;
+    const previousProcessingSessionViewId = previousProcessingSessionViewIdRef.current;
+    previousProcessingSessionsRef.current = processingSessions ?? null;
+    previousProcessingSessionViewIdRef.current = activeViewSessionId ?? null;
+
     if (!activeViewSessionId || !processingSessions) return;
+
+    const activeViewSessionChanged = previousProcessingSessionViewId !== activeViewSessionId;
+    const wasProcessing = previousProcessingSessions?.has(activeViewSessionId) ?? false;
     const shouldBeProcessing = processingSessions.has(activeViewSessionId);
-    if (shouldBeProcessing && !isLoading) {
+    if (shouldBeProcessing && (!wasProcessing || activeViewSessionChanged) && !isLoading) {
       setIsLoading(true);
       setCanAbortSession(true);
     }
