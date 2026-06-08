@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -7,10 +8,20 @@ const DEFAULT_CLAUDE_COMMAND = 'claude';
 const CLAUDE_SCRIPT_EXTENSIONS = new Set(['.cjs', '.js', '.jsx', '.mjs', '.ts', '.tsx']);
 const CLAUDE_WRAPPER_SEGMENTS = ['node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe'] as const;
 
+/**
+ * Package name prefix used by claude-agent-sdk optional platform packages.
+ * The SDK ships a bundled, version-matched claude binary inside these packages.
+ * Using this binary is the most reliable choice because it is guaranteed to be
+ * protocol-compatible with the installed SDK version — no CLAUDE_CLI_PATH
+ * configuration is needed.
+ */
+const SDK_PKG_PREFIX = '@anthropic-ai/claude-agent-sdk';
+
 export type ResolveClaudeCodeExecutablePathDependencies = {
   execFileSync?: typeof execFileSync;
   existsSync?: typeof fs.existsSync;
   platform?: NodeJS.Platform;
+  arch?: string;
   readFileSync?: typeof fs.readFileSync;
 };
 
@@ -31,6 +42,72 @@ function stripWrappingQuotes(value: string): string {
 
 function isPathLike(value: string): boolean {
   return value.includes('/') || value.includes('\\');
+}
+
+/**
+ * Attempts to find the claude binary that is bundled inside the installed
+ * @anthropic-ai/claude-agent-sdk platform packages.
+ *
+ * The SDK distributes a claude binary alongside itself in optional packages
+ * named `@anthropic-ai/claude-agent-sdk-<platform>-<arch>` (e.g.
+ * `@anthropic-ai/claude-agent-sdk-linux-x64`). Using this binary instead of
+ * a system-installed one guarantees protocol compatibility with the SDK
+ * version that is actually installed.
+ *
+ * This removes the need to set `CLAUDE_CLI_PATH` in the vast majority of
+ * deployments, including Docker containers that use a base image with a
+ * different (possibly incompatible) claude version pre-installed.
+ */
+function resolveSDKBundledBinary(
+  existsSync: typeof fs.existsSync,
+  platform: NodeJS.Platform,
+  arch: string,
+): string | null {
+  const suffix = platform === 'win32' ? '.exe' : '';
+
+  // Ordered list of platform package names to try
+  let pkgNames: string[];
+  if (platform === 'linux') {
+    pkgNames = [
+      `${SDK_PKG_PREFIX}-linux-${arch}`,
+      `${SDK_PKG_PREFIX}-linux-${arch}-musl`,
+    ];
+  } else if (platform === 'darwin') {
+    pkgNames = [`${SDK_PKG_PREFIX}-darwin-${arch}`];
+  } else if (platform === 'win32') {
+    pkgNames = [`${SDK_PKG_PREFIX}-win32-${arch}`];
+  } else {
+    return null;
+  }
+
+  // Use createRequire so that resolution starts from *this* file's location,
+  // which ensures we find the SDK packages bundled alongside claudecodeui.
+  const requireFromHere = createRequire(import.meta.url);
+
+  for (const pkg of pkgNames) {
+    try {
+      // Resolve the package root via its package.json, then append binary name
+      const pkgJsonPath = requireFromHere.resolve(`${pkg}/package.json`);
+      const candidate = path.join(path.dirname(pkgJsonPath), `claude${suffix}`);
+      if (existsSync(candidate)) {
+        return candidate;
+      }
+    } catch {
+      // package not installed or not resolvable — try next
+    }
+
+    try {
+      // Some packages expose the binary via an exports map or main field
+      const candidate = requireFromHere.resolve(`${pkg}/claude${suffix}`);
+      if (existsSync(candidate)) {
+        return candidate;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return null;
 }
 
 function resolveClaudeWrapperBinary(
@@ -74,6 +151,10 @@ function resolveClaudeWrapperBinary(
  * Returns candidate paths to check for the claude binary on Linux/macOS,
  * in priority order. These cover the native installer, nvm, and common npm
  * global prefix locations so users don't need to set CLAUDE_CLI_PATH manually.
+ *
+ * Note: the SDK-bundled binary is tried BEFORE these paths in
+ * resolveUnixClaudeExecutablePath() because it is guaranteed to be
+ * version-compatible with the installed SDK.
  */
 function getUnixCandidatePaths(): string[] {
   const home = os.homedir();
@@ -112,34 +193,56 @@ function getUnixCandidatePaths(): string[] {
 
 /**
  * Tries to resolve the claude binary on Unix-like systems.
- * Resolution order:
+ *
+ * Resolution order (highest to lowest priority):
+ *  0. SDK-bundled binary  — found inside `@anthropic-ai/claude-agent-sdk-<platform>`
+ *                           node_modules. This is tried FIRST because it is
+ *                           guaranteed to be protocol-compatible with the
+ *                           installed SDK, regardless of what is on PATH.
+ *                           Eliminates the need for CLAUDE_CLI_PATH in Docker
+ *                           containers and CI environments.
  *  1. Explicit CLAUDE_CLI_PATH / configuredPath (if it looks like an absolute path)
  *  2. Well-known install locations (native installer, nvm, npm global…)
  *  3. PATH lookup via `which` / `command -v`
- *  4. Fall back to bare 'claude' (lets the OS PATH decide at spawn time)
+ *  4. Bare 'claude' — last resort, lets the OS PATH decide at spawn time
+ *
+ * For users who swap the Claude Code harness to use a third-party AI backend
+ * (e.g. MiniMax, Together, OpenRouter) via ANTHROPIC_BASE_URL +
+ * ANTHROPIC_AUTH_TOKEN, the binary itself is still the official claude binary;
+ * only the API endpoint and credentials change. Automatic detection means
+ * these users need no extra configuration beyond their provider env vars.
  */
 function resolveUnixClaudeExecutablePath(
   configuredPath: string,
   deps: Required<ResolveClaudeCodeExecutablePathDependencies>,
 ): string {
-  // If the caller supplied an explicit absolute/relative path, honour it directly.
+  // Priority 0: SDK-bundled binary (version-matched, no config required).
+  // Only auto-use when no explicit path is configured.
+  if (!isPathLike(configuredPath) && !path.isAbsolute(configuredPath)) {
+    const sdkBundled = resolveSDKBundledBinary(deps.existsSync, deps.platform, deps.arch);
+    if (sdkBundled) {
+      return sdkBundled;
+    }
+  }
+
+  // Priority 1: Explicit absolute/relative path → honour it directly.
   if (isPathLike(configuredPath) || path.isAbsolute(configuredPath)) {
     return configuredPath;
   }
 
-  // configuredPath is 'claude' (the default) – try well-known locations first.
+  // Priority 2: Well-known install locations.
   for (const candidate of getUnixCandidatePaths()) {
     if (deps.existsSync(candidate)) {
       return candidate;
     }
   }
 
-  // Try resolving via the shell (which / command -v)
+  // Priority 3: Shell PATH lookup (which / command -v).
   for (const whichCmd of ['which', 'command']) {
     try {
-      const args = whichCmd === 'command' ? ['-v', configuredPath] : [configuredPath];
-      const stdout = deps.execFileSync(whichCmd === 'command' ? '/bin/sh' : whichCmd,
-        whichCmd === 'command' ? ['-c', `command -v ${configuredPath}`] : args,
+      const stdout = deps.execFileSync(
+        whichCmd === 'command' ? '/bin/sh' : whichCmd,
+        whichCmd === 'command' ? ['-c', `command -v ${configuredPath}`] : [configuredPath],
         {
           encoding: 'utf8',
           stdio: ['ignore', 'pipe', 'ignore'],
@@ -155,7 +258,7 @@ function resolveUnixClaudeExecutablePath(
     }
   }
 
-  // Last resort: return the bare command and let the OS resolve it at spawn time.
+  // Priority 4: Last resort — return the bare command and let the OS decide.
   return configuredPath;
 }
 
@@ -177,6 +280,12 @@ function resolveWindowsClaudeExecutablePath(
 
   if (explicitPath) {
     return resolveClaudeWrapperBinary(configuredPath, deps) ?? configuredPath;
+  }
+
+  // Auto-detect SDK-bundled binary on Windows too
+  const sdkBundled = resolveSDKBundledBinary(deps.existsSync, deps.platform, deps.arch);
+  if (sdkBundled) {
+    return sdkBundled;
   }
 
   try {
@@ -217,6 +326,7 @@ export function resolveClaudeCodeExecutablePath(
     execFileSync: dependencies.execFileSync ?? execFileSync,
     existsSync: dependencies.existsSync ?? fs.existsSync,
     platform: dependencies.platform ?? process.platform,
+    arch: dependencies.arch ?? process.arch,
     readFileSync: dependencies.readFileSync ?? fs.readFileSync,
   };
 
