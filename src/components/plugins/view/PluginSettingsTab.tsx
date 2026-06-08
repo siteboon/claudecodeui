@@ -26,7 +26,7 @@ const STARTER_PLUGIN_URL = 'https://github.com/cloudcli-ai/cloudcli-plugin-start
 const TERMINAL_PLUGIN_URL = 'https://github.com/cloudcli-ai/cloudcli-plugin-terminal';
 const SCHEDULED_PROMPT_PLUGIN_URL = 'https://github.com/grostim/cloudcli-cron';
 const CLAUDE_WATCH_PLUGIN_URL = 'https://github.com/satsuki19980613/cloudcli-claude-watch';
-const PRISM_CLOUDCLI = 'https://github.com/jakeefr/cloudcli-plugin-prism';
+const PRISM_CLOUDCLI_PLUGIN_URL = 'https://github.com/jakeefr/cloudcli-plugin-prism';
 
 type PluginRecommendation = {
   id: string;
@@ -76,7 +76,7 @@ const UNOFFICIAL_PLUGIN_RECOMMENDATIONS: PluginRecommendation[] = [
   {
     id: 'prism-cloudcli',
     translationKey: 'prismCloudCLI',
-    repoUrl: PRISM_CLOUDCLI,
+    repoUrl: PRISM_CLOUDCLI_PLUGIN_URL,
     installedNames: ['prism-cloudcli'],
     icon: Activity,
     source: 'unofficial'
