@@ -43,6 +43,16 @@ export const CLAUDE_FALLBACK_MODELS: ProviderModelsDefinition = {
   ],
   DEFAULT: 'default',
 };
+
+export const CLAUDE_BEDROCK_MODELS: Record<string, string> = {
+  default: 'anthropic.claude-sonnet-4-6',
+  sonnet: 'anthropic.claude-sonnet-4-6',
+  'sonnet[1m]': 'anthropic.claude-sonnet-4-6',
+  opus: 'anthropic.claude-opus-4-6-v1',
+  opusplan: 'anthropic.claude-opus-4-6-v1',
+  haiku: 'anthropic.claude-haiku-4-5-20251001-v1:0',
+};
+
 type ClaudeInitEvent = {
   sessionId?: string;
   session_id?: string;

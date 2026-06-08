@@ -17,7 +17,11 @@ import crypto from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
-import { CLAUDE_FALLBACK_MODELS } from './modules/providers/list/claude/claude-models.provider.js';
+import {
+  CLAUDE_BEDROCK_MODELS,
+  CLAUDE_FALLBACK_MODELS,
+} from './modules/providers/list/claude/claude-models.provider.js';
+import { isTruthyValue, loadClaudeSettingsEnv } from './utils/env-helpers.js';
 import { providerModelsService } from './modules/providers/services/provider-models.service.js';
 import { resolveClaudeCodeExecutablePath } from './shared/claude-cli-path.js';
 import {
@@ -146,7 +150,7 @@ function matchesToolPermission(entry, toolName, input) {
  * @param {Object} options - CLI options
  * @returns {Object} SDK-compatible options
  */
-function mapCliOptionsToSDK(options = {}) {
+async function mapCliOptionsToSDK(options = {}) {
   const { sessionId, cwd, toolsSettings, permissionMode } = options;
 
   const sdkOptions = {};
@@ -203,10 +207,9 @@ function mapCliOptionsToSDK(options = {}) {
 
   sdkOptions.disallowedTools = settings.disallowedTools || [];
 
-  // Map model (default to sonnet)
-  // Valid models: sonnet, opus, haiku, opusplan, sonnet[1m]
-  sdkOptions.model = options.model || CLAUDE_FALLBACK_MODELS.DEFAULT;
-  // Model logged at query start below
+  // Map model. In Bedrock mode this resolves UI aliases to model IDs.
+  const settingsEnv = await loadClaudeSettingsEnv();
+  sdkOptions.model = resolveClaudeModel(options.model, settingsEnv);
 
   // Map system prompt configuration
   sdkOptions.systemPrompt = {
@@ -501,6 +504,49 @@ async function loadMcpConfig(cwd) {
   }
 }
 
+function resolveClaudeEnvValue(key, settingsEnv) {
+  const processValue = process.env[key];
+  if (typeof processValue === 'string' && processValue.trim()) {
+    return processValue.trim();
+  }
+
+  const settingsValue = settingsEnv[key];
+  if (typeof settingsValue === 'string' && settingsValue.trim()) {
+    return settingsValue.trim();
+  }
+
+  return '';
+}
+
+/**
+ * Resolves a UI model alias (e.g. "sonnet") to the actual model ID.
+ *
+ * When Bedrock is enabled, looks up the alias in CLAUDE_BEDROCK_MODELS
+ * for sensible defaults. Users can still override via ANTHROPIC_MODEL
+ * (in env or ~/.claude/settings.json) for custom inference profiles.
+ */
+function resolveClaudeModel(modelAlias, settingsEnv) {
+  const requestedModel = modelAlias || CLAUDE_FALLBACK_MODELS.DEFAULT;
+  const isBedrockEnabled = isTruthyValue(resolveClaudeEnvValue('CLAUDE_CODE_USE_BEDROCK', settingsEnv));
+  if (!isBedrockEnabled) {
+    return requestedModel;
+  }
+
+  // If the caller passed a specific model ID (not a UI alias), honour it directly
+  const UI_ALIASES = new Set(Object.keys(CLAUDE_BEDROCK_MODELS));
+  if (modelAlias && !UI_ALIASES.has(requestedModel)) {
+    return requestedModel;
+  }
+
+  // Allow explicit env override for custom inference profiles / regions
+  const explicitModel = resolveClaudeEnvValue('ANTHROPIC_MODEL', settingsEnv);
+  if (explicitModel) {
+    return explicitModel;
+  }
+
+  return CLAUDE_BEDROCK_MODELS[requestedModel] || requestedModel;
+}
+
 /**
  * Executes a Claude query using the SDK
  * @param {string} command - User prompt/command
@@ -531,7 +577,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
     );
 
     // Map CLI options to SDK format
-    const sdkOptions = mapCliOptionsToSDK({
+    const sdkOptions = await mapCliOptionsToSDK({
       ...options,
       model: resolvedModel || options.model,
     });

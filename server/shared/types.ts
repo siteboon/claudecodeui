@@ -408,6 +408,7 @@ export type ProviderAuthStatus = {
   authenticated: boolean;
   email: string | null;
   method: string | null;
+  isBedrock?: boolean;
   error?: string;
 };
 

@@ -15,6 +15,7 @@ type ProviderAuthStatusPayload = {
   authenticated?: boolean;
   email?: string | null;
   method?: string | null;
+  isBedrock?: boolean;
   error?: string | null;
 };
 
@@ -37,6 +38,7 @@ const toProviderAuthStatus = (
   authenticated: Boolean(payload.authenticated),
   email: payload.email ?? null,
   method: payload.method ?? null,
+  isBedrock: Boolean(payload.isBedrock),
   error: payload.error ?? fallbackError,
   loading: false,
 });

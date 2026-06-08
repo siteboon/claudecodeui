@@ -13,7 +13,17 @@ type ClaudeCredentialsStatus = {
   authenticated: boolean;
   email: string | null;
   method: string | null;
+  isBedrock?: boolean;
   error?: string;
+};
+
+const isTruthyValue = (value: unknown): boolean => {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
 };
 
 const hasErrorCode = (error: unknown, code: string): boolean => (
@@ -59,6 +69,7 @@ export class ClaudeProviderAuth implements IProviderAuth {
       authenticated: credentials.authenticated,
       email: credentials.authenticated ? credentials.email || 'Authenticated' : credentials.email,
       method: credentials.method,
+      isBedrock: Boolean(credentials.isBedrock),
       error: credentials.authenticated ? undefined : credentials.error || 'Not authenticated',
     };
   }
@@ -92,6 +103,17 @@ export class ClaudeProviderAuth implements IProviderAuth {
     }
 
     const settingsEnv = await this.loadSettingsEnv();
+    const bedrockEnabled = isTruthyValue(process.env.CLAUDE_CODE_USE_BEDROCK)
+      || isTruthyValue(readOptionalString(settingsEnv.CLAUDE_CODE_USE_BEDROCK));
+    if (bedrockEnabled) {
+      return {
+        authenticated: true,
+        email: 'AWS Bedrock',
+        method: 'bedrock',
+        isBedrock: true,
+      };
+    }
+
     if (readOptionalString(settingsEnv.ANTHROPIC_API_KEY)) {
       return { authenticated: true, email: 'API Key Auth', method: 'api_key' };
     }
