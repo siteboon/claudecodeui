@@ -2,12 +2,64 @@ import express from 'express';
 import { spawn } from 'child_process';
 import path from 'path';
 import { promises as fs } from 'fs';
-import { projectsDb } from '../modules/database/index.js';
+import { projectsDb, githubTokensDb } from '../modules/database/index.js';
 import { queryClaudeSDK } from '../claude-sdk.js';
 import { spawnCursor } from '../cursor-cli.js';
 
 const router = express.Router();
 const COMMIT_DIFF_CHARACTER_LIMIT = 500_000;
+
+/**
+ * Injects a GitHub token into a git remote URL so that push/pull/fetch
+ * operations can authenticate without requiring the user to configure
+ * git credentials separately.
+ *
+ * Transforms: https://github.com/user/repo
+ *        into: https://<token>@github.com/user/repo
+ *
+ * If the remote URL is SSH or already has credentials embedded, it is
+ * returned unchanged. If no token is found for the user it is also a no-op.
+ */
+async function withGithubToken(projectPath, userId, fn) {
+  if (!userId) return fn(null);
+
+  // Find the most recently active GitHub token for this user
+  let token;
+  try {
+    token = githubTokensDb.getActiveGithubToken(userId);
+  } catch {
+    token = null;
+  }
+
+  if (!token) return fn(null);
+
+  // Read the current remote URL
+  let originalUrl;
+  try {
+    const { stdout } = await spawnAsync('git', ['remote', 'get-url', 'origin'], { cwd: projectPath });
+    originalUrl = stdout.trim();
+  } catch {
+    return fn(null); // no remote configured – nothing to do
+  }
+
+  // Only HTTPS remotes can embed a token; leave SSH alone
+  if (!originalUrl.startsWith('https://')) return fn(null);
+
+  // Build authenticated URL (avoid double-embedding)
+  const urlObj = new URL(originalUrl);
+  if (urlObj.username) return fn(null); // already has credentials
+  urlObj.username = token;
+  urlObj.password = '';
+  const authenticatedUrl = urlObj.toString().replace(':@', '@');
+
+  try {
+    await spawnAsync('git', ['remote', 'set-url', 'origin', authenticatedUrl], { cwd: projectPath });
+    return await fn(token);
+  } finally {
+    // Always restore original URL so credentials are never persisted on disk
+    await spawnAsync('git', ['remote', 'set-url', 'origin', originalUrl], { cwd: projectPath }).catch(() => {});
+  }
+}
 
 function spawnAsync(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -1151,7 +1203,10 @@ router.post('/fetch', async (req, res) => {
     }
 
     validateRemoteName(remoteName);
-    const { stdout } = await spawnAsync('git', ['fetch', remoteName], { cwd: projectPath });
+    const userId = req.user?.id;
+    const { stdout } = await withGithubToken(projectPath, userId, () =>
+      spawnAsync('git', ['fetch', remoteName], { cwd: projectPath })
+    );
 
     res.json({ success: true, output: stdout || 'Fetch completed successfully', remoteName });
   } catch (error) {
@@ -1196,7 +1251,10 @@ router.post('/pull', async (req, res) => {
 
     validateRemoteName(remoteName);
     validateBranchName(remoteBranch);
-    const { stdout } = await spawnAsync('git', ['pull', remoteName, remoteBranch], { cwd: projectPath });
+    const userId = req.user?.id;
+    const { stdout } = await withGithubToken(projectPath, userId, () =>
+      spawnAsync('git', ['pull', remoteName, remoteBranch], { cwd: projectPath })
+    );
 
     res.json({
       success: true,
@@ -1264,7 +1322,10 @@ router.post('/push', async (req, res) => {
 
     validateRemoteName(remoteName);
     validateBranchName(remoteBranch);
-    const { stdout } = await spawnAsync('git', ['push', remoteName, remoteBranch], { cwd: projectPath });
+    const userId = req.user?.id;
+    const { stdout } = await withGithubToken(projectPath, userId, () =>
+      spawnAsync('git', ['push', remoteName, remoteBranch], { cwd: projectPath })
+    );
 
     res.json({
       success: true,
@@ -1349,7 +1410,10 @@ router.post('/publish', async (req, res) => {
 
     // Publish the branch (set upstream and push)
     validateRemoteName(remoteName);
-    const { stdout } = await spawnAsync('git', ['push', '--set-upstream', remoteName, branch], { cwd: projectPath });
+    const userId = req.user?.id;
+    const { stdout } = await withGithubToken(projectPath, userId, () =>
+      spawnAsync('git', ['push', '--set-upstream', remoteName, branch], { cwd: projectPath })
+    );
     
     res.json({ 
       success: true, 

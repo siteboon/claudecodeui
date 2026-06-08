@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 const DEFAULT_CLAUDE_COMMAND = 'claude';
@@ -53,10 +54,10 @@ function resolveClaudeWrapperBinary(
   const matches = content.matchAll(/["']([^"'\\\r\n]*claude\.exe)["']/gi);
   for (const match of matches) {
     const rawTarget = match[1]
-      .replace(/^\$basedir[\\/]/i, '')
-      .replace(/^%dp0%[\\/]/i, '')
-      .replace(/^%~dp0[\\/]/i, '');
-    const normalizedTarget = rawTarget.replace(/[\\/]/g, pathApi.sep);
+      .replace(/^\$basedir[\\\/]/i, '')
+      .replace(/^%dp0%[\\\/]/i, '')
+      .replace(/^%~dp0[\\\/]/i, '');
+    const normalizedTarget = rawTarget.replace(/[\\\/]/g, pathApi.sep);
     const candidate = pathApi.isAbsolute(normalizedTarget)
       ? normalizedTarget
       : pathApi.resolve(pathApi.dirname(wrapperPath), normalizedTarget);
@@ -67,6 +68,95 @@ function resolveClaudeWrapperBinary(
   }
 
   return null;
+}
+
+/**
+ * Returns candidate paths to check for the claude binary on Linux/macOS,
+ * in priority order. These cover the native installer, nvm, and common npm
+ * global prefix locations so users don't need to set CLAUDE_CLI_PATH manually.
+ */
+function getUnixCandidatePaths(): string[] {
+  const home = os.homedir();
+  const candidates: string[] = [
+    // Native Anthropic installer (Linux/macOS)
+    path.join(home, '.local', 'bin', 'claude'),
+    // macOS native installer
+    path.join(home, 'Library', 'Application Support', 'Claude', 'claude'),
+    // Common npm global prefixes
+    '/usr/local/bin/claude',
+    '/usr/bin/claude',
+    // npm global on common Linux distros
+    '/usr/local/share/npm-global/bin/claude',
+    // nvm active version
+    path.join(home, '.nvm', 'current', 'bin', 'claude'),
+    // Homebrew (macOS/Linux)
+    '/opt/homebrew/bin/claude',
+    '/home/linuxbrew/.linuxbrew/bin/claude',
+  ];
+
+  // Also probe nvm versioned installs (picks whatever exists)
+  try {
+    const nvmDir = path.join(home, '.nvm', 'versions', 'node');
+    if (fs.existsSync(nvmDir)) {
+      const versions = fs.readdirSync(nvmDir);
+      for (const v of versions.sort().reverse()) {
+        candidates.push(path.join(nvmDir, v, 'bin', 'claude'));
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return candidates;
+}
+
+/**
+ * Tries to resolve the claude binary on Unix-like systems.
+ * Resolution order:
+ *  1. Explicit CLAUDE_CLI_PATH / configuredPath (if it looks like an absolute path)
+ *  2. Well-known install locations (native installer, nvm, npm global…)
+ *  3. PATH lookup via `which` / `command -v`
+ *  4. Fall back to bare 'claude' (lets the OS PATH decide at spawn time)
+ */
+function resolveUnixClaudeExecutablePath(
+  configuredPath: string,
+  deps: Required<ResolveClaudeCodeExecutablePathDependencies>,
+): string {
+  // If the caller supplied an explicit absolute/relative path, honour it directly.
+  if (isPathLike(configuredPath) || path.isAbsolute(configuredPath)) {
+    return configuredPath;
+  }
+
+  // configuredPath is 'claude' (the default) – try well-known locations first.
+  for (const candidate of getUnixCandidatePaths()) {
+    if (deps.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  // Try resolving via the shell (which / command -v)
+  for (const whichCmd of ['which', 'command']) {
+    try {
+      const args = whichCmd === 'command' ? ['-v', configuredPath] : [configuredPath];
+      const stdout = deps.execFileSync(whichCmd === 'command' ? '/bin/sh' : whichCmd,
+        whichCmd === 'command' ? ['-c', `command -v ${configuredPath}`] : args,
+        {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+          timeout: 3000,
+        },
+      );
+      const resolved = stdout.trim().split('\n')[0]?.trim();
+      if (resolved && deps.existsSync(resolved)) {
+        return resolved;
+      }
+    } catch {
+      // not available
+    }
+  }
+
+  // Last resort: return the bare command and let the OS resolve it at spawn time.
+  return configuredPath;
 }
 
 function resolveWindowsClaudeExecutablePath(
@@ -131,9 +221,10 @@ export function resolveClaudeCodeExecutablePath(
   };
 
   const normalizedPath = stripWrappingQuotes(configuredPath || DEFAULT_CLAUDE_COMMAND);
-  if (deps.platform !== 'win32') {
-    return normalizedPath;
+
+  if (deps.platform === 'win32') {
+    return resolveWindowsClaudeExecutablePath(normalizedPath, deps);
   }
 
-  return resolveWindowsClaudeExecutablePath(normalizedPath, deps);
+  return resolveUnixClaudeExecutablePath(normalizedPath, deps);
 }
