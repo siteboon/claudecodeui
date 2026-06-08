@@ -42,6 +42,26 @@ export default function GithubBoard() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiToast, setAiToast] = useState<string | null>(null);
 
+  // Collapsed columns (persisted)
+  const [collapsedColumns, setCollapsedColumns] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('github-board-collapsed-columns');
+      return saved ? new Set(JSON.parse(saved) as string[]) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  const toggleColumnCollapse = (columnId: string) => {
+    setCollapsedColumns(prev => {
+      const next = new Set(prev);
+      if (next.has(columnId)) next.delete(columnId);
+      else next.add(columnId);
+      localStorage.setItem('github-board-collapsed-columns', JSON.stringify([...next]));
+      return next;
+    });
+  };
+
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const projectId = currentProject?.projectId;
 
@@ -73,7 +93,12 @@ export default function GithubBoard() {
       });
       setData({ ...d, issues, columns });
     } catch (e: unknown) {
-      setError((e as Error).message);
+      const msg = (e as Error).message;
+      if (msg.includes('401') || msg.toLowerCase().includes('bad credentials')) {
+        setNotConfigured(true);
+      } else {
+        setError(msg);
+      }
     } finally {
       if (!silent) setLoading(false);
     }
@@ -187,9 +212,10 @@ export default function GithubBoard() {
     return true;
   });
 
-  // Only show columns that have matching issues
-  const visibleColumns = data.columns.filter(col => filteredIssues.some(i => i.columnId === col.id));
-  const columnCount = visibleColumns.length || 1;
+  // Show every column so collapsed empty columns stay reachable; collapsed ones render as a thin bar.
+  const visibleColumns = data.columns.filter(
+    col => collapsedColumns.has(col.id) || filteredIssues.some(i => i.columnId === col.id),
+  );
 
   const SORT_LABELS: Record<SortKey, string> = { updated: 'Updated', created: 'Created', priority: 'Priority', comments: 'Comments' };
 
@@ -299,13 +325,22 @@ export default function GithubBoard() {
       </div>
 
       {/* Kanban */}
-      <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))` }}
-        onClick={() => setShowSortMenu(false)}>
+      <div
+        className="grid gap-4"
+        style={{
+          gridTemplateColumns: visibleColumns
+            .map(col => (collapsedColumns.has(col.id) ? '52px' : 'minmax(0, 1fr)'))
+            .join(' '),
+        }}
+        onClick={() => setShowSortMenu(false)}
+      >
         {visibleColumns.map(col => (
           <GithubKanbanColumn
             key={col.id}
             column={col}
             issues={filteredIssues.filter(i => i.columnId === col.id).sort(sortFn)}
+            collapsed={collapsedColumns.has(col.id)}
+            onToggleCollapse={() => toggleColumnCollapse(col.id)}
             onIssueClick={setSelectedIssue}
           />
         ))}
