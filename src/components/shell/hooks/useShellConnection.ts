@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MutableRefObject } from 'react';
 import type { FitAddon } from '@xterm/addon-fit';
 import type { Terminal } from '@xterm/xterm';
+
 import type { Project, ProjectSession } from '../../../types/app';
 import { TERMINAL_INIT_DELAY_MS } from '../constants/constants';
 import { getShellWebSocketUrl, parseShellMessage, sendSocketMessage } from '../utils/socket';
@@ -31,8 +32,8 @@ type UseShellConnectionResult = {
   isConnected: boolean;
   isConnecting: boolean;
   closeSocket: () => void;
-  connectToShell: () => void;
-  disconnectFromShell: () => void;
+  connectToShell: (options?: { forceRestart?: boolean }) => void;
+  disconnectFromShell: (options?: { suppressAutoConnect?: boolean }) => void;
 };
 
 export function useShellConnection({
@@ -54,6 +55,8 @@ export function useShellConnection({
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const connectingRef = useRef(false);
+  const forceRestartOnInitRef = useRef(false);
+  const suppressAutoConnectRef = useRef(false);
 
   const handleProcessCompletion = useCallback(
     (output: string) => {
@@ -141,6 +144,8 @@ export function useShellConnection({
             }
 
             currentFitAddon.fit();
+            const forceRestart = forceRestartOnInitRef.current;
+            forceRestartOnInitRef.current = false;
 
             sendSocketMessage(socket, {
               type: 'init',
@@ -152,6 +157,7 @@ export function useShellConnection({
               rows: currentTerminal.rows,
               initialCommand: initialCommandRef.current,
               isPlainShell: isPlainShellRef.current,
+              forceRestart,
             });
           }, TERMINAL_INIT_DELAY_MS);
         };
@@ -177,6 +183,7 @@ export function useShellConnection({
         setIsConnected(false);
         setIsConnecting(false);
         connectingRef.current = false;
+        forceRestartOnInitRef.current = false;
       }
     },
     [
@@ -195,27 +202,40 @@ export function useShellConnection({
     ],
   );
 
-  const connectToShell = useCallback(() => {
+  const connectToShell = useCallback((options?: { forceRestart?: boolean }) => {
     if (!isInitialized || isConnected || isConnecting || connectingRef.current) {
       return;
     }
 
+    forceRestartOnInitRef.current = Boolean(options?.forceRestart);
+    suppressAutoConnectRef.current = false;
     connectingRef.current = true;
     setIsConnecting(true);
     connectWebSocket(true);
   }, [connectWebSocket, isConnected, isConnecting, isInitialized]);
 
-  const disconnectFromShell = useCallback(() => {
+  const disconnectFromShell = useCallback((options?: { suppressAutoConnect?: boolean }) => {
+    if (options?.suppressAutoConnect) {
+      suppressAutoConnectRef.current = true;
+    }
+
     closeSocket();
     clearTerminalScreen();
     setIsConnected(false);
     setIsConnecting(false);
     connectingRef.current = false;
+    forceRestartOnInitRef.current = false;
     setAuthUrl('');
   }, [clearTerminalScreen, closeSocket, setAuthUrl]);
 
   useEffect(() => {
-    if (!autoConnect || !isInitialized || isConnecting || isConnected) {
+    if (
+      !autoConnect ||
+      suppressAutoConnectRef.current ||
+      !isInitialized ||
+      isConnecting ||
+      isConnected
+    ) {
       return;
     }
 

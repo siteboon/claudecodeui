@@ -1,0 +1,142 @@
+{
+  "notConfigured": {
+    "title": "TaskMaster AI 尚未設定",
+    "description": "TaskMaster 協助將複雜的專案分解為可管理的任務，搭配 AI 驅動的輔助功能",
+    "whatIsTitle": "🎯 什麼是 TaskMaster？",
+    "features": {
+      "aiPowered": "AI 驅動的任務管理：將複雜專案分解為可管理的子任務",
+      "prdTemplates": "PRD 範本：從產品需求文件產生任務",
+      "dependencyTracking": "相依性追蹤：了解任務關係和執行順序",
+      "progressVisualization": "進度視覺化：看板和詳細的任務分析",
+      "cliIntegration": "CLI 整合：使用 taskmaster 指令進行進階工作流程"
+    },
+    "initializeButton": "初始化 TaskMaster AI"
+  },
+  "gettingStarted": {
+    "title": "開始使用 TaskMaster",
+    "subtitle": "TaskMaster 已初始化！以下是接下來要做的事：",
+    "steps": {
+      "createPRD": {
+        "title": "建立產品需求文件（PRD）",
+        "description": "討論您的專案構想並建立描述您想建立什麼的 PRD。",
+        "addButton": "新增 PRD",
+        "existingPRDs": "現有的 PRD："
+      },
+      "generateTasks": {
+        "title": "從 PRD 產生任務",
+        "description": "一旦您有了 PRD，請 AI 助手解析它，TaskMaster 將自動將其分解為可管理的任務，包含實作細節。"
+      },
+      "analyzeTasks": {
+        "title": "分析並展開任務",
+        "description": "請 AI 助手分析任務複雜度，並將其展開為詳細的子任務以便於實作。"
+      },
+      "startBuilding": {
+        "title": "開始建構",
+        "description": "請 AI 助手開始處理任務、更新狀態，並在專案演進時新增任務。"
+      }
+    },
+    "tip": "💡 提示：從 PRD 開始可以充分利用 TaskMaster 的 AI 驅動任務產生功能"
+  },
+  "setupModal": {
+    "title": "TaskMaster 設定",
+    "subtitle": "{{projectName}} 的互動式 CLI",
+    "willStart": "TaskMaster 初始化將自動開始",
+    "completed": "TaskMaster 設定完成！您現在可以關閉此視窗。",
+    "closeButton": "關閉",
+    "closeContinueButton": "關閉並繼續"
+  },
+  "helpGuide": {
+    "title": "開始使用 TaskMaster",
+    "subtitle": "您的高效任務管理指南",
+    "examples": {
+      "parsePRD": "💬 範例：\n「我剛用 Claude Task Master 初始化了一個新專案。我有一個 PRD 在 .taskmaster/docs/prd.txt。你能幫我解析它並設定初始任務嗎？」",
+      "expandTask": "💬 範例：\n「任務 5 看起來很複雜。你能把它分解成子任務嗎？」",
+      "addTask": "💬 範例：\n「請新增一個任務來實作使用 Cloudinary 的使用者個人頭像上傳功能，研究最佳方法。」"
+    },
+    "moreExamples": "查看更多範例和使用模式 →",
+    "proTips": {
+      "title": "💡 專業提示",
+      "search": "使用搜尋列快速找到特定任務",
+      "views": "使用檢視切換在看板、清單和網格檢視之間切換",
+      "filters": "使用篩選器聚焦特定任務狀態或優先順序",
+      "details": "點擊任何任務以查看詳細資訊和管理子任務"
+    },
+    "learnMore": {
+      "title": "📚 了解更多",
+      "description": "TaskMaster AI 是為開發者打造的進階任務管理系統。取得文件、範例並為專案做出貢獻。",
+      "githubButton": "在 GitHub 上查看"
+    }
+  },
+  "search": {
+    "placeholder": "搜尋任務..."
+  },
+  "filters": {
+    "button": "篩選",
+    "status": "狀態",
+    "priority": "優先順序",
+    "sortBy": "排序依據",
+    "allStatuses": "所有狀態",
+    "allPriorities": "所有優先順序",
+    "showing": "顯示 {{filtered}} / {{total}} 個任務",
+    "clearFilters": "清除篩選"
+  },
+  "sort": {
+    "id": "ID",
+    "status": "狀態",
+    "priority": "優先順序",
+    "idAsc": "ID（遞增）",
+    "idDesc": "ID（遞減）",
+    "titleAsc": "標題（A-Z）",
+    "titleDesc": "標題（Z-A）",
+    "statusAsc": "狀態（待處理優先）",
+    "statusDesc": "狀態（已完成優先）",
+    "priorityAsc": "優先順序（高優先）",
+    "priorityDesc": "優先順序（低優先）"
+  },
+  "views": {
+    "kanban": "看板檢視",
+    "list": "清單檢視",
+    "grid": "網格檢視"
+  },
+  "kanban": {
+    "pending": "📋 待辦",
+    "inProgress": "🚀 進行中",
+    "done": "✅ 已完成",
+    "blocked": "🚫 已封鎖",
+    "deferred": "⏳ 已延後",
+    "cancelled": "❌ 已取消",
+    "noTasksYet": "尚無任務",
+    "tasksWillAppear": "任務將顯示在這裡",
+    "moveTasksHere": "開始後將任務移到這裡",
+    "completedTasksHere": "已完成的任務顯示在這裡",
+    "statusTasksHere": "此狀態的任務將顯示在這裡"
+  },
+  "buttons": {
+    "help": "TaskMaster 入門指南",
+    "prds": "PRD",
+    "addPRD": "新增 PRD",
+    "addTask": "新增任務",
+    "createNewPRD": "建立新 PRD",
+    "prdsAvailable": "{{count}} 個 PRD 可用"
+  },
+  "prd": {
+    "modified": "修改時間：{{date}}"
+  },
+  "statuses": {
+    "pending": "待處理",
+    "in-progress": "進行中",
+    "done": "已完成",
+    "blocked": "已封鎖",
+    "deferred": "已延後",
+    "cancelled": "已取消"
+  },
+  "priorities": {
+    "high": "高",
+    "medium": "中",
+    "low": "低"
+  },
+  "noMatchingTasks": {
+    "title": "沒有符合篩選條件的任務",
+    "description": "嘗試調整您的搜尋或篩選條件。"
+  }
+}

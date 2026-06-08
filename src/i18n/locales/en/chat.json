@@ -18,7 +18,8 @@
     "claude": "Claude",
     "cursor": "Cursor",
     "codex": "Codex",
-    "gemini": "Gemini"
+    "gemini": "Gemini",
+    "opencode": "OpenCode"
   },
   "tools": {
     "settings": "Tool Settings",
@@ -138,42 +139,6 @@
     "clearInput": "Clear input",
     "scrollToBottom": "Scroll to bottom"
   },
-  "thinkingMode": {
-    "selector": {
-      "title": "Thinking Mode",
-      "description": "Extended thinking gives Claude more time to evaluate alternatives",
-      "active": "Active",
-      "tip": "Higher thinking modes take more time but provide more thorough analysis"
-    },
-    "modes": {
-      "none": {
-        "name": "Standard",
-        "description": "Regular Claude response",
-        "prefix": ""
-      },
-      "think": {
-        "name": "Think",
-        "description": "Basic extended thinking",
-        "prefix": "think"
-      },
-      "thinkHard": {
-        "name": "Think Hard",
-        "description": "More thorough evaluation",
-        "prefix": "think hard"
-      },
-      "thinkHarder": {
-        "name": "Think Harder",
-        "description": "Deep analysis with alternatives",
-        "prefix": "think harder"
-      },
-      "ultrathink": {
-        "name": "Ultrathink",
-        "description": "Maximum thinking budget",
-        "prefix": "ultrathink"
-      }
-    },
-    "buttonTitle": "Thinking mode: {{mode}}"
-  },
   "providerSelection": {
     "title": "Choose Your AI Assistant",
     "description": "Select a provider to start a new conversation",
@@ -189,6 +154,7 @@
       "cursor": "Ready to use Cursor with {{model}}. Start typing your message below.",
       "codex": "Ready to use Codex with {{model}}. Start typing your message below.",
       "gemini": "Ready to use Gemini with {{model}}. Start typing your message below.",
+      "opencode": "Ready to use OpenCode with {{model}}. Start typing your message below.",
       "default": "Select a provider above to begin"
     },
     "pressToSearch": "Press <kbd>{{shortcut}}</kbd> to search sessions, files, and commits"
@@ -227,7 +193,7 @@
       "disconnect": "Disconnect",
       "disconnectTitle": "Disconnect from shell",
       "restart": "Restart",
-      "restartTitle": "Restart Shell (disconnect first)",
+      "restartTitle": "Restart Shell",
       "connect": "Continue in Shell",
       "connectTitle": "Connect to shell"
     },
