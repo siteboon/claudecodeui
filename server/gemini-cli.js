@@ -5,6 +5,7 @@ import path from 'path';
 
 import crossSpawn from 'cross-spawn';
 
+import { registerSudoRun, unregisterSudoRun } from './modules/sudo-askpass/sudo-askpass.service.js';
 import sessionManager from './sessionManager.js';
 import GeminiResponseHandler from './gemini-response-handler.js';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
@@ -281,6 +282,8 @@ async function spawnGemini(command, options = {}, ws) {
     }
 
     const spawnEnv = await buildGeminiProcessEnv();
+    const sudoRun = registerSudoRun(ws, options.sessionId, 'gemini');
+    Object.assign(spawnEnv, sudoRun.env);
 
     return new Promise((resolve, reject) => {
         const geminiProcess = spawnFunction(spawnCmd, spawnArgs, {
@@ -470,6 +473,7 @@ async function spawnGemini(command, options = {}, ws) {
         // Handle process completion
         geminiProcess.on('close', async (code) => {
             clearTimeout(timeout);
+            unregisterSudoRun(sudoRun.token);
 
             // Flush any remaining buffered content
             if (responseHandler) {
@@ -554,6 +558,7 @@ async function spawnGemini(command, options = {}, ws) {
 
         // Handle process errors
         geminiProcess.on('error', async (error) => {
+            unregisterSudoRun(sudoRun.token);
             // Clean up process reference on error
             const finalSessionId = capturedSessionId || sessionId || processKey;
             activeGeminiProcesses.delete(finalSessionId);

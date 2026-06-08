@@ -12,14 +12,17 @@
  * - WebSocket message streaming
  */
 
-import { query } from '@anthropic-ai/claude-agent-sdk';
 import crypto from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
+
+import { query } from '@anthropic-ai/claude-agent-sdk';
+
 import { CLAUDE_FALLBACK_MODELS } from './modules/providers/list/claude/claude-models.provider.js';
 import { providerModelsService } from './modules/providers/services/provider-models.service.js';
 import { resolveClaudeCodeExecutablePath } from './shared/claude-cli-path.js';
+import { registerSudoRun, unregisterSudoRun } from './modules/sudo-askpass/sudo-askpass.service.js';
 import {
   createNotificationEvent,
   notifyRunFailed,
@@ -514,6 +517,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
   let sessionCreatedSent = false;
   let tempImagePaths = [];
   let tempDir = null;
+  let sudoToken = null;
 
   const emitNotification = (event) => {
     notifyUserIfEnabled({
@@ -535,6 +539,11 @@ async function queryClaudeSDK(command, options = {}, ws) {
       ...options,
       model: resolvedModel || options.model,
     });
+
+    // Allow the agent's sudo commands to prompt for a password via the chat UI
+    const sudoRun = registerSudoRun(ws, capturedSessionId || sessionId, 'claude');
+    sudoToken = sudoRun.token;
+    sdkOptions.env = { ...sdkOptions.env, ...sudoRun.env };
 
     // Load MCP configuration
     const mcpServers = await loadMcpConfig(options.cwd);
@@ -768,6 +777,8 @@ async function queryClaudeSDK(command, options = {}, ws) {
       sessionName: sessionSummary,
       error
     });
+  } finally {
+    unregisterSudoRun(sudoToken);
   }
 }
 

@@ -28,7 +28,9 @@ export type MessageKind =
   | 'permission_cancelled'
   | 'session_created'
   | 'interactive_prompt'
-  | 'task_notification';
+  | 'task_notification'
+  | 'sudo_password_request'
+  | 'sudo_password_cancelled';
 
 export interface NormalizedMessage {
   id: string;

@@ -14,6 +14,7 @@ import {
 import { useShellRuntime } from '../hooks/useShellRuntime';
 import { sendSocketMessage } from '../utils/socket';
 import { getSessionDisplayName } from '../utils/auth';
+import { detectSudoPrompt } from '../utils/sudo';
 
 import ShellConnectionOverlay from './subcomponents/ShellConnectionOverlay';
 import ShellEmptyState from './subcomponents/ShellEmptyState';
@@ -47,10 +48,13 @@ export default function Shell({
   const { t } = useTranslation('chat');
   const [isRestarting, setIsRestarting] = useState(false);
   const [cliPromptOptions, setCliPromptOptions] = useState<CliPromptOption[] | null>(null);
+  const [sudoPrompt, setSudoPrompt] = useState<string | null>(null);
+  const [sudoPassword, setSudoPassword] = useState('');
   const promptCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restartAfterInitRef = useRef(false);
   const onOutputRef = useRef<(() => void) | null>(null);
+  const sudoInputRef = useRef<HTMLInputElement | null>(null);
 
   const {
     terminalContainerRef,
@@ -83,6 +87,12 @@ export default function Shell({
     if (!term) return;
     const buf = term.buffer.active;
     const lastContentRow = buf.baseY + buf.cursorY;
+
+    // sudo (and su) print their prompt on the cursor line and wait for hidden
+    // input. Surface it as a popup so the password never has to be typed blind.
+    const cursorLine = buf.getLine(lastContentRow)?.translateToString().trimEnd() ?? '';
+    setSudoPrompt(detectSudoPrompt(cursorLine));
+
     const scanEnd = Math.min(buf.baseY + buf.length - 1, lastContentRow + 10);
     const scanStart = Math.max(0, lastContentRow - PROMPT_BUFFER_SCAN_LINES);
     const lines: string[] = [];
@@ -156,6 +166,8 @@ export default function Shell({
         promptCheckTimer.current = null;
       }
       setCliPromptOptions(null);
+      setSudoPrompt(null);
+      setSudoPassword('');
     }
   }, [isConnected]);
 
@@ -183,6 +195,34 @@ export default function Shell({
     },
     [wsRef],
   );
+
+  const submitSudoPassword = useCallback(() => {
+    if (!sudoPrompt) {
+      return;
+    }
+    // Goes over the same input channel sudo always reads from; the terminal
+    // keeps echo off so the password is never rendered on screen.
+    sendInput(`${sudoPassword}\r`);
+    setSudoPassword('');
+    setSudoPrompt(null);
+    terminalRef.current?.focus();
+  }, [sendInput, sudoPassword, sudoPrompt, terminalRef]);
+
+  const cancelSudoPrompt = useCallback(() => {
+    sendInput('\x03'); // Ctrl-C aborts the pending sudo prompt
+    setSudoPassword('');
+    setSudoPrompt(null);
+    terminalRef.current?.focus();
+  }, [sendInput, terminalRef]);
+
+  // Focus the password field as soon as the prompt appears
+  useEffect(() => {
+    if (!sudoPrompt) {
+      return;
+    }
+    const frameId = window.requestAnimationFrame(() => sudoInputRef.current?.focus());
+    return () => window.cancelAnimationFrame(frameId);
+  }, [sudoPrompt]);
 
   const sessionDisplayName = useMemo(() => getSessionDisplayName(selectedSession), [selectedSession]);
   const sessionDisplayNameShort = useMemo(
@@ -351,6 +391,56 @@ export default function Shell({
                 Esc
               </button>
             </div>
+          </div>
+        )}
+
+        {sudoPrompt && isConnected && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/50 p-4">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                submitSudoPassword();
+              }}
+              className="w-full max-w-sm rounded-lg border border-gray-700 bg-gray-800 p-4 shadow-xl"
+            >
+              <div className="mb-1 flex items-center gap-2 text-sm font-medium text-gray-100">
+                <span aria-hidden>🔒</span>
+                <span>{t('shell.sudo.title')}</span>
+              </div>
+              <p className="mb-3 truncate font-mono text-xs text-gray-400" title={sudoPrompt}>
+                {sudoPrompt}
+              </p>
+              <input
+                ref={sudoInputRef}
+                type="password"
+                autoComplete="off"
+                value={sudoPassword}
+                onChange={(e) => setSudoPassword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    cancelSudoPrompt();
+                  }
+                }}
+                placeholder={t('shell.sudo.placeholder')}
+                className="mb-3 w-full rounded border border-gray-600 bg-gray-900 px-3 py-2 text-sm text-gray-100 outline-none focus:border-blue-500"
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={cancelSudoPrompt}
+                  className="rounded bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-200 transition-colors hover:bg-gray-600"
+                >
+                  {t('shell.sudo.cancel')}
+                </button>
+                <button
+                  type="submit"
+                  className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700"
+                >
+                  {t('shell.sudo.submit')}
+                </button>
+              </div>
+            </form>
           </div>
         )}
       </div>

@@ -19,6 +19,8 @@ import { createWebSocketServer } from '@/modules/websocket/index.js';
 import { getConnectableHost } from '../shared/networkHosts.js';
 
 import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
+import internalAskpassRoutes from './routes/internal-askpass.js';
+import { resolveSudoPassword, setServerPort } from './modules/sudo-askpass/sudo-askpass.service.js';
 import {
     queryClaudeSDK,
     abortClaudeSDKSession,
@@ -113,6 +115,7 @@ const wss = createWebSocketServer(server, {
         abortGeminiSession,
         abortOpenCodeSession,
         resolveToolApproval,
+        resolveSudoPassword,
         isClaudeSDKSessionActive,
         isCursorSessionActive,
         isCodexSessionActive,
@@ -161,6 +164,9 @@ app.get('/health', (req, res) => {
         installMode
     });
 });
+
+// Loopback-only sudo askpass bridge (guarded by per-run token, not JWT)
+app.use('/internal/askpass', internalAskpassRoutes);
 
 // Optional API key validation (if configured)
 app.use('/api', validateApiKey);
@@ -1633,6 +1639,7 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
 }
 
 const SERVER_PORT = process.env.SERVER_PORT || 3001;
+setServerPort(SERVER_PORT);
 const HOST = process.env.HOST || '0.0.0.0';
 const DISPLAY_HOST = getConnectableHost(HOST);
 const VITE_PORT = process.env.VITE_PORT || 5173;

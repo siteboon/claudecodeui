@@ -10,11 +10,13 @@ import { useChatProviderState } from '../hooks/useChatProviderState';
 import { useChatSessionState } from '../hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '../hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '../hooks/useChatComposerState';
+import { useSudoPasswordPrompt } from '../hooks/useSudoPasswordPrompt';
 import { useSessionStore } from '../../../stores/useSessionStore';
 
 import ChatMessagesPane from './subcomponents/ChatMessagesPane';
 import ChatComposer from './subcomponents/ChatComposer';
 import CommandResultModal from './subcomponents/CommandResultModal';
+import SudoPasswordModal from './subcomponents/SudoPasswordModal';
 
 
 type PendingViewSession = {
@@ -249,6 +251,27 @@ function ChatInterface({
     sessionStore,
   });
 
+  const { pendingSudoRequest, clearSudoRequest } = useSudoPasswordPrompt(latestMessage);
+
+  const handleSudoPasswordSubmit = useCallback(
+    (password: string) => {
+      if (!pendingSudoRequest) {
+        return;
+      }
+      sendMessage({ type: 'sudo-password-response', requestId: pendingSudoRequest.requestId, password });
+      clearSudoRequest();
+    },
+    [clearSudoRequest, pendingSudoRequest, sendMessage],
+  );
+
+  const handleSudoPasswordCancel = useCallback(() => {
+    if (!pendingSudoRequest) {
+      return;
+    }
+    sendMessage({ type: 'sudo-password-response', requestId: pendingSudoRequest.requestId, cancel: true });
+    clearSudoRequest();
+  }, [clearSudoRequest, pendingSudoRequest, sendMessage]);
+
   useEffect(() => {
     if (!isLoading || !canAbortSession) {
       return;
@@ -440,6 +463,14 @@ function ChatInterface({
         currentSessionId={currentSessionId || selectedSession?.id || null}
         onSelectProviderModel={selectProviderModel}
       />
+
+      {pendingSudoRequest && (
+        <SudoPasswordModal
+          request={pendingSudoRequest}
+          onSubmit={handleSudoPasswordSubmit}
+          onCancel={handleSudoPasswordCancel}
+        />
+      )}
     </PermissionContext.Provider>
   );
 }

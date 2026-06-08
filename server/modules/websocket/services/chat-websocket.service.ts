@@ -44,6 +44,10 @@ type ChatWebSocketDependencies = {
       rememberEntry?: unknown;
     }
   ) => void;
+  resolveSudoPassword: (
+    requestId: string,
+    payload: { password?: string; cancel?: boolean }
+  ) => void;
   isClaudeSDKSessionActive: (sessionId: string) => boolean;
   isCursorSessionActive: (sessionId: string) => boolean;
   isCodexSessionActive: (sessionId: string) => boolean;
@@ -193,6 +197,16 @@ export function handleChatConnection(
             updatedInput: data.updatedInput,
             message: typeof data.message === 'string' ? data.message : undefined,
             rememberEntry: data.rememberEntry,
+          });
+        }
+        return;
+      }
+
+      if (messageType === 'sudo-password-response') {
+        if (typeof data.requestId === 'string' && data.requestId.length > 0) {
+          dependencies.resolveSudoPassword(data.requestId, {
+            password: typeof data.password === 'string' ? data.password : undefined,
+            cancel: Boolean(data.cancel),
           });
         }
         return;

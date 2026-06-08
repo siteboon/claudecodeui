@@ -1,5 +1,8 @@
 import { spawn } from 'child_process';
+
 import crossSpawn from 'cross-spawn';
+
+import { registerSudoRun, unregisterSudoRun } from './modules/sudo-askpass/sudo-askpass.service.js';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
@@ -34,6 +37,7 @@ async function spawnCursor(command, options = {}, ws) {
     let sessionCreatedSent = false; // Track if we've already sent session-created event
     let hasRetriedWithTrust = false;
     let settled = false;
+    const sudoRun = registerSudoRun(ws, capturedSessionId || sessionId, 'cursor');
 
     // Use tools settings passed from frontend, or defaults
     const settings = toolsSettings || {
@@ -81,6 +85,7 @@ async function spawnCursor(command, options = {}, ws) {
         return;
       }
       settled = true;
+      unregisterSudoRun(sudoRun.token);
       callback();
     };
 
@@ -129,7 +134,7 @@ async function spawnCursor(command, options = {}, ws) {
       const cursorProcess = spawnFunction('cursor-agent', args, {
         cwd: workingDir,
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env } // Inherit all environment variables
+        env: { ...process.env, ...sudoRun.env } // Inherit env + sudo askpass bridge
       });
 
       activeCursorProcesses.set(processKey, cursorProcess);
