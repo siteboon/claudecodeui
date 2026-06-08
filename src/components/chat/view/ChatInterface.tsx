@@ -141,8 +141,6 @@ function ChatInterface({
     textareaRef,
     inputHighlightRef,
     isTextareaExpanded,
-    thinkingMode,
-    setThinkingMode,
     slashCommandsCount,
     filteredCommands,
     frequentCommands,
@@ -180,6 +178,7 @@ function ChatInterface({
     isInputFocused: _isInputFocused,
     commandModalPayload,
     closeCommandModal,
+    showCostModal,
   } = useChatComposerState({
     selectedProject,
     selectedSession,
@@ -369,9 +368,8 @@ function ChatInterface({
           provider={provider}
           permissionMode={permissionMode}
           onModeSwitch={cyclePermissionMode}
-          thinkingMode={thinkingMode}
-          setThinkingMode={setThinkingMode}
           tokenBudget={tokenBudget}
+          onShowTokenUsage={showCostModal}
           slashCommandsCount={slashCommandsCount}
           onToggleCommandMenu={handleToggleCommandMenu}
           hasInput={Boolean(input.trim())}

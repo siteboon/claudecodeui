@@ -138,42 +138,6 @@
     "clearInput": "Cancella input",
     "scrollToBottom": "Scorri in basso"
   },
-  "thinkingMode": {
-    "selector": {
-      "title": "Modalità ragionamento",
-      "description": "Il ragionamento esteso dà a Claude più tempo per valutare le alternative",
-      "active": "Attivo",
-      "tip": "Modalità di ragionamento più elevate richiedono più tempo ma forniscono un'analisi più approfondita"
-    },
-    "modes": {
-      "none": {
-        "name": "Standard",
-        "description": "Risposta Claude normale",
-        "prefix": ""
-      },
-      "think": {
-        "name": "Pensa",
-        "description": "Ragionamento esteso base",
-        "prefix": "think"
-      },
-      "thinkHard": {
-        "name": "Pensa di più",
-        "description": "Valutazione più approfondita",
-        "prefix": "think hard"
-      },
-      "thinkHarder": {
-        "name": "Pensa ancora",
-        "description": "Analisi profonda con alternative",
-        "prefix": "think harder"
-      },
-      "ultrathink": {
-        "name": "Ultrapensiero",
-        "description": "Budget massimo di ragionamento",
-        "prefix": "ultrathink"
-      }
-    },
-    "buttonTitle": "Modalità ragionamento: {{mode}}"
-  },
   "providerSelection": {
     "title": "Scegli il tuo assistente AI",
     "description": "Seleziona un provider per iniziare una nuova conversazione",
