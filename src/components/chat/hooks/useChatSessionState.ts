@@ -383,12 +383,47 @@ export function useChatSessionState({
     setIsUserScrolledUp(false);
   }, [selectedProject?.projectId, selectedSession?.id]);
 
-  // Initial scroll to bottom
+  // Initial scroll to bottom — robust to lazy content reflow.
+  // The previous implementation fired one scrollToBottom() at +200ms and
+  // cleared the pending flag. When markdown blocks, code highlighting, or
+  // images finished rendering after that window, scrollHeight grew but
+  // nothing re-anchored the viewport, leaving the chat tab visually
+  // "scrolled way up" with the latest assistant message off-screen.
+  //
+  // This version re-scrolls every animation frame while scrollHeight is
+  // still growing, capped at ~1s (60 frames) or 3 consecutive stable
+  // frames. Cancels cleanly on session change via the pending flag.
   useEffect(() => {
     if (!pendingInitialScrollRef.current || !scrollContainerRef.current || isLoadingSessionMessages) return;
     if (chatMessages.length === 0) { pendingInitialScrollRef.current = false; return; }
-    pendingInitialScrollRef.current = false;
-    if (!searchScrollActiveRef.current) setTimeout(() => scrollToBottom(), 200);
+    if (searchScrollActiveRef.current) { pendingInitialScrollRef.current = false; return; }
+
+    const container = scrollContainerRef.current;
+    let frame = 0;
+    let lastHeight = 0;
+    let stableCount = 0;
+    let rafId = 0;
+
+    const tick = () => {
+      if (!pendingInitialScrollRef.current || !scrollContainerRef.current) return;
+      container.scrollTop = container.scrollHeight;
+      if (container.scrollHeight === lastHeight) {
+        stableCount++;
+      } else {
+        stableCount = 0;
+        lastHeight = container.scrollHeight;
+      }
+      frame++;
+      if (stableCount < 3 && frame < 60) {
+        rafId = requestAnimationFrame(tick);
+      } else {
+        pendingInitialScrollRef.current = false;
+      }
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+    };
   }, [chatMessages.length, isLoadingSessionMessages, scrollToBottom]);
 
   // Main session loading effect — store-based
