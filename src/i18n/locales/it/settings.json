@@ -117,10 +117,10 @@
       "error": "Esecuzione fallita"
     },
     "sound": {
-      "title": "Sound",
-      "enabled": "Completion Sound",
-      "description": "Play a sound when a run finishes",
-      "test": "Test"
+      "title": "Audio",
+      "enabled": "Suono di completamento",
+      "description": "Riproduci un suono quando un'esecuzione termina",
+      "test": "Prova"
     }
   },
   "appearanceSettings": {

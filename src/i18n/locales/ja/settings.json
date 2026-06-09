@@ -117,10 +117,10 @@
       "error": "実行失敗"
     },
     "sound": {
-      "title": "Sound",
-      "enabled": "Completion Sound",
-      "description": "Play a sound when a run finishes",
-      "test": "Test"
+      "title": "サウンド",
+      "enabled": "完了サウンド",
+      "description": "実行が完了したときにサウンドを再生",
+      "test": "テスト"
     }
   },
   "appearanceSettings": {

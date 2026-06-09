@@ -117,9 +117,9 @@
       "error": "Çalıştırma başarısız"
     },
     "sound": {
-      "title": "Sound",
-      "enabled": "Completion Sound",
-      "description": "Play a sound when a run finishes",
+      "title": "Ses",
+      "enabled": "Tamamlanma Sesi",
+      "description": "Çalıştırma bittiğinde ses çal",
       "test": "Test"
     }
   },

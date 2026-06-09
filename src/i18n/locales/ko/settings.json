@@ -117,10 +117,10 @@
       "error": "실행 실패"
     },
     "sound": {
-      "title": "Sound",
-      "enabled": "Completion Sound",
-      "description": "Play a sound when a run finishes",
-      "test": "Test"
+      "title": "사운드",
+      "enabled": "완료 알림음",
+      "description": "실행이 완료되면 알림음을 재생합니다",
+      "test": "테스트"
     }
   },
   "appearanceSettings": {

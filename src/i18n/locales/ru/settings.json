@@ -462,28 +462,28 @@
     "runningStatus": "запущен"
   },
   "notifications": {
-    "title": "Notifications",
-    "description": "Control which notification events you receive.",
+    "title": "Уведомления",
+    "description": "Управляйте типами получаемых уведомлений.",
     "webPush": {
-      "title": "Web Push Notifications",
-      "enable": "Enable Push Notifications",
-      "disable": "Disable Push Notifications",
-      "enabled": "Push notifications are enabled",
-      "loading": "Updating...",
-      "unsupported": "Push notifications are not supported in this browser.",
-      "denied": "Push notifications are blocked. Please allow them in your browser settings."
+      "title": "Web Push уведомления",
+      "enable": "Включить Push уведомления",
+      "disable": "Отключить Push уведомления",
+      "enabled": "Push уведомления включены",
+      "loading": "Обновление...",
+      "unsupported": "Push уведомления не поддерживаются в этом браузере.",
+      "denied": "Push уведомления заблокированы. Пожалуйста, разрешите их в настройках браузера."
     },
     "events": {
-      "title": "Event Types",
-      "actionRequired": "Action required",
-      "stop": "Run stopped",
-      "error": "Run failed"
+      "title": "Типы событий",
+      "actionRequired": "Требуется действие",
+      "stop": "Выполнение остановлено",
+      "error": "Выполнение завершилось с ошибкой"
     },
     "sound": {
-      "title": "Sound",
-      "enabled": "Completion Sound",
-      "description": "Play a sound when a run finishes",
-      "test": "Test"
+      "title": "Звук",
+      "enabled": "Звук завершения",
+      "description": "Воспроизводить звук при завершении выполнения",
+      "test": "Тест"
     }
   }
 }

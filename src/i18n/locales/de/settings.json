@@ -462,28 +462,28 @@
     "runningStatus": "läuft"
   },
   "notifications": {
-    "title": "Notifications",
-    "description": "Control which notification events you receive.",
+    "title": "Benachrichtigungen",
+    "description": "Wähle aus, welche Benachrichtigungen du erhalten möchtest.",
     "webPush": {
-      "title": "Web Push Notifications",
-      "enable": "Enable Push Notifications",
-      "disable": "Disable Push Notifications",
-      "enabled": "Push notifications are enabled",
-      "loading": "Updating...",
-      "unsupported": "Push notifications are not supported in this browser.",
-      "denied": "Push notifications are blocked. Please allow them in your browser settings."
+      "title": "Web-Push-Benachrichtigungen",
+      "enable": "Push-Benachrichtigungen aktivieren",
+      "disable": "Push-Benachrichtigungen deaktivieren",
+      "enabled": "Push-Benachrichtigungen sind aktiviert",
+      "loading": "Wird aktualisiert...",
+      "unsupported": "Push-Benachrichtigungen werden in diesem Browser nicht unterstützt.",
+      "denied": "Push-Benachrichtigungen wurden blockiert. Bitte erlaube sie in deinen Browsereinstellungen."
     },
     "events": {
-      "title": "Event Types",
-      "actionRequired": "Action required",
-      "stop": "Run stopped",
-      "error": "Run failed"
+      "title": "Ereignistypen",
+      "actionRequired": "Aktion erforderlich",
+      "stop": "Ausführung gestoppt",
+      "error": "Ausführung fehlgeschlagen"
     },
     "sound": {
-      "title": "Sound",
-      "enabled": "Completion Sound",
-      "description": "Play a sound when a run finishes",
-      "test": "Test"
+      "title": "Ton",
+      "enabled": "Abschlusston",
+      "description": "Einen Ton abspielen, wenn eine Ausführung abgeschlossen ist",
+      "test": "Testen"
     }
   }
 }
