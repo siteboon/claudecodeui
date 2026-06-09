@@ -3,6 +3,12 @@
 All notable changes to CloudCLI UI will be documented in this file.
 
 
+## [](https://github.com/siteboon/claudecodeui/compare/v1.33.3...vnull) (2026-06-09)
+
+### New Features
+
+* adding Fable 5 in claude code ([ce327b6](https://github.com/siteboon/claudecodeui/commit/ce327b6fa9329aa3e9a3a1da7225ca01d3b06ac5))
+
 ## [1.33.3](https://github.com/siteboon/claudecodeui/compare/v1.33.2...v1.33.3) (2026-06-09)
 
 ### New Features
