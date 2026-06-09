@@ -33,7 +33,8 @@ function resolveConfig(req) {
 
 const router = express.Router();
 
-const VOICE_TIMEOUT_MS = Number(process.env.VOICE_TIMEOUT_MS || 60000);
+// Generous by default — local TTS can synthesize long messages at ~real-time on CPU.
+const VOICE_TIMEOUT_MS = Number(process.env.VOICE_TIMEOUT_MS || 300000);
 async function fetchWithTimeout(url, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), VOICE_TIMEOUT_MS);
@@ -42,6 +43,16 @@ async function fetchWithTimeout(url, options = {}) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+// Turn backend failures into a clear, actionable message for the client.
+function backendError(res, e) {
+  if (e && e.name === 'AbortError') {
+    return res.status(504).json({
+      error: `Voice backend timed out after ${Math.round(VOICE_TIMEOUT_MS / 1000)}s. Check your sidecar or API.`,
+    });
+  }
+  return res.status(502).json({ error: `Voice backend unreachable: ${e.message}` });
 }
 
 let _upload = null;
@@ -89,7 +100,7 @@ router.post('/transcribe', async (req, res) => {
       try { data = JSON.parse(text); } catch { data = { text }; }
       res.json({ text: data.text ?? '' });
     } catch (e) {
-      res.status(502).json({ error: `voice backend unreachable: ${e.message}` });
+      backendError(res, e);
     }
   });
 });
@@ -119,7 +130,7 @@ router.post('/tts', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.send(Buffer.from(await r.arrayBuffer()));
   } catch (e) {
-    res.status(502).json({ error: `voice backend unreachable: ${e.message}` });
+    backendError(res, e);
   }
 });
 

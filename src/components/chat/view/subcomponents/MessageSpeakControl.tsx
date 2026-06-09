@@ -8,7 +8,7 @@ import { useVoiceAvailable } from '../../hooks/useVoiceAvailable';
 const MessageSpeakControl = ({ content }: { content: string }) => {
   const { t } = useTranslation('chat');
   const available = useVoiceAvailable();
-  const { state, toggle } = useTts(() => content);
+  const { state, toggle, error } = useTts(() => content);
 
   if (!available) return null;
 
@@ -16,21 +16,28 @@ const MessageSpeakControl = ({ content }: { content: string }) => {
     state === 'playing' ? t('voice.stopSpeaking') : state === 'loading' ? t('voice.loading') : t('voice.speak');
 
   return (
-    <button
-      type="button"
-      onClick={toggle}
-      title={title}
-      aria-label={title}
-      className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-gray-400 transition-colors hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
-    >
-      {state === 'playing' ? (
-        <Square className="h-3.5 w-3.5" />
-      ) : state === 'loading' ? (
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-      ) : (
-        <Volume2 className="h-3.5 w-3.5" />
+    <span className="relative inline-flex">
+      {error && (
+        <span className="absolute bottom-full left-1/2 z-10 mb-1 max-w-[240px] -translate-x-1/2 whitespace-normal rounded bg-red-600 px-2 py-1 text-center text-xs text-white shadow-lg">
+          {error}
+        </span>
       )}
-    </button>
+      <button
+        type="button"
+        onClick={toggle}
+        title={title}
+        aria-label={title}
+        className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-gray-400 transition-colors hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+      >
+        {state === 'playing' ? (
+          <Square className="h-3.5 w-3.5" />
+        ) : state === 'loading' ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Volume2 className="h-3.5 w-3.5" />
+        )}
+      </button>
+    </span>
   );
 };
 
