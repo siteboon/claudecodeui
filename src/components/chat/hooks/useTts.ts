@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { authenticatedFetch } from '../../../utils/api';
+import { voiceConfigHeaders } from '../../../hooks/useVoiceConfig';
 
 // Only one message speaks at a time across the whole app.
 let stopActive: (() => void) | null = null;
@@ -36,8 +37,14 @@ export function useTts(getText: () => string) {
     if (stopActive) stopActive = null;
   }, [reset]);
 
-  // Cleanup on unmount.
-  useEffect(() => () => reset(), [reset]);
+  // Cleanup on unmount: drop the global stop handler if it points at us, then reset.
+  useEffect(
+    () => () => {
+      if (stopActive === stop) stopActive = null;
+      reset();
+    },
+    [reset, stop],
+  );
 
   const play = useCallback(async () => {
     if (stopActive) stopActive();
@@ -63,12 +70,16 @@ export function useTts(getText: () => string) {
       const res = await authenticatedFetch('/api/voice/tts', {
         method: 'POST',
         body: JSON.stringify({ text }),
+        headers: voiceConfigHeaders(),
       });
       if (!res.ok) throw new Error(`tts ${res.status}`);
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
+      if (audioRef.current !== audio) {
+        URL.revokeObjectURL(url); // stopped while loading; don't leak the blob URL
+        return;
+      }
       urlRef.current = url;
-      if (audioRef.current !== audio) return; // stopped while loading
       audio.src = url;
       audio.load();
       await audio.play();

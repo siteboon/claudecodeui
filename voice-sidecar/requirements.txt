@@ -1,9 +1,0 @@
-# CloudCLI voice sidecar — STT (faster-whisper) + TTS (Kokoro-82M)
-fastapi>=0.110.0
-uvicorn[standard]>=0.27.0
-python-multipart>=0.0.9
-faster-whisper>=1.0.0
-kokoro>=0.9.4
-misaki[en]>=0.9.4
-soundfile>=0.12.1
-numpy>=1.26.0

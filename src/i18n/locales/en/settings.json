@@ -49,6 +49,20 @@
     "resetToDefaults": "Reset to Defaults",
     "cancelChanges": "Cancel Changes"
   },
+  "voiceSettings": {
+    "title": "Voice",
+    "description": "Speech-to-text input and read-aloud, via an OpenAI-compatible audio backend.",
+    "enable": "Enable voice",
+    "enableDescription": "Show the mic button and the read-aloud button on messages.",
+    "backendTitle": "Backend",
+    "backendDescription": "Point at OpenAI, Groq, or a local server (LocalAI, Speaches, Kokoro-FastAPI). Leave blank to use the server default.",
+    "baseUrl": "Base URL",
+    "apiKey": "API key",
+    "sttModel": "Speech-to-text model",
+    "ttsModel": "Text-to-speech model",
+    "voice": "Voice",
+    "note": "The shown defaults work with OpenAI once you add a key. For other providers, set the base URL and model names to match."
+  },
   "quickSettings": {
     "title": "Quick Settings",
     "sections": {
@@ -63,6 +77,7 @@
     "showThinking": "Show thinking",
     "autoScrollToBottom": "Auto-scroll to bottom",
     "sendByCtrlEnter": "Send by Ctrl+Enter",
+    "voiceEnabled": "Voice (mic + read aloud)",
     "sendByCtrlEnterDescription": "When enabled, pressing Ctrl+Enter will send the message instead of just Enter. This is useful for IME users to avoid accidental sends.",
     "dragHandle": {
       "dragging": "Dragging handle",
@@ -93,6 +108,7 @@
     "appearance": "Appearance",
     "git": "Git",
     "apiTokens": "API & Tokens",
+    "voice": "Voice",
     "tasks": "Tasks",
     "notifications": "Notifications",
     "plugins": "Plugins",

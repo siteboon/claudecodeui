@@ -1,57 +1,51 @@
 # Voice (optional)
 
-Adds two opt-in voice features to the chat:
+Two opt-in voice features in the chat:
 
-- **Push-to-talk dictation** — a mic button in the composer records your voice, transcribes it
-  (speech-to-text), and drops the text into the input.
-- **Read-aloud** — a speaker button on each assistant message plays it back (text-to-speech).
+- **Push-to-talk dictation** — a mic button in the composer records, transcribes, and fills the input.
+- **Read-aloud** — a speaker button on each assistant message plays it back.
 
-Voice is **disabled by default**. The UI only appears when a voice backend is configured, so it has
-zero impact on installs that don't use it.
+Voice is **off by default**. Turn it on with the **Voice** toggle in Quick Settings or in
+**Settings → Voice**. When off, the mic and speaker controls are hidden.
 
-## Enable it
+## Backend
 
-Set `VOICE_SIDECAR_URL` for the server to point at a voice backend, then restart:
+Voice uses any **OpenAI-compatible audio backend**, configured in **Settings → Voice**:
 
-```bash
-VOICE_SIDECAR_URL=http://127.0.0.1:8765 npm run server
-```
-
-When set, `GET /api/voice/health` reports `{ "enabled": true }` and the mic + speaker controls appear.
-All voice requests are proxied through the app's authenticated `/api/voice/*` routes, so the backend
-itself only needs to listen on localhost and is never exposed directly.
-
-## Backend contract
-
-`VOICE_SIDECAR_URL` can point at **any** service that implements two endpoints:
-
-| Method & path | Request | Response |
+| Field | Example | Notes |
 |---|---|---|
-| `POST /transcribe` | multipart, field `audio` (webm/mp4/wav/…) | `{ "text": "..." }` |
-| `POST /tts` | form field `text` | audio bytes (`audio/*`, e.g. wav/mp3) |
+| Base URL | `https://api.openai.com/v1` | OpenAI, Groq, or a local server |
+| API key | `sk-…` | sent only to this app's backend, which proxies the request |
+| Speech-to-text model | `whisper-1`, `gpt-4o-transcribe`, `whisper-large-v3-turbo` | |
+| Text-to-speech model | `tts-1`, `gpt-4o-mini-tts`, `kokoro` | |
+| Voice | `alloy`, `af_heart`, … | depends on the backend |
 
-This keeps the feature provider-agnostic — you can back it with the bundled local sidecar, or a cloud
-transcription + TTS gateway, as long as it speaks that contract.
+The backend must expose the standard endpoints:
 
-## Reference backend: `voice-sidecar/`
-
-A local, no-API-key reference implementation using **faster-whisper** (STT) and **Kokoro-82M** (TTS),
-both CPU-capable.
-
-```bash
-cd voice-sidecar
-python -m venv .venv && . .venv/bin/activate    # (Windows: .venv\Scripts\activate)
-pip install -r requirements.txt
-python -m uvicorn app:app --host 127.0.0.1 --port 8765
+```
+POST {baseUrl}/audio/transcriptions   (multipart 'file' + 'model')   -> { "text": "..." }
+POST {baseUrl}/audio/speech           ({ model, voice, input })       -> audio bytes
 ```
 
-Then run the app with `VOICE_SIDECAR_URL=http://127.0.0.1:8765`.
+That covers OpenAI and Groq, plus local servers like **LocalAI**, **Speaches**, **Kokoro-FastAPI**,
+and **openedai-speech**. Requests are proxied through the app's authenticated `/api/voice/*` routes,
+so a local backend only needs to listen on localhost.
 
-Config (env, all optional) — see `voice-sidecar/.env.example`: `WHISPER_MODEL_SIZE`, `WHISPER_DEVICE`
-(`cpu`/`cuda`), `KOKORO_VOICE`, `VOICE_PORT`.
+### Server-side defaults (optional)
+
+Instead of (or as defaults behind) the Settings fields, you can set env vars on the server:
+
+```
+VOICE_API_BASE_URL=http://127.0.0.1:8765/v1
+VOICE_API_KEY=...
+VOICE_STT_MODEL=whisper-1
+VOICE_TTS_MODEL=tts-1
+VOICE_TTS_VOICE=alloy
+```
+
+Per-user Settings values override these. If neither is set, the voice routes return 503.
 
 ## Notes
 
-- The first read-aloud is slow (~10–20s) while the model lazy-loads; it's near-instant and cached after.
 - Recording needs a secure context (HTTPS or localhost) for microphone access.
-- On iOS, playback is tap-initiated (manual read-aloud) to satisfy Safari's autoplay policy.
+- On iOS, read-aloud is tap-initiated to satisfy Safari's autoplay policy.

@@ -1,5 +1,6 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { authenticatedFetch } from '../../../utils/api';
+import { voiceConfigHeaders } from '../../../hooks/useVoiceConfig';
 
 // Mobile-safe recording: iOS Safari 18.4+ supports webm/opus; older iOS needs mp4.
 const MIME_CANDIDATES = [
@@ -39,6 +40,15 @@ export function useVoiceInput(onTranscript: (text: string) => void, onError?: (m
     streamRef.current = null;
   };
 
+  // Stop the mic if the component unmounts mid-recording.
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      recorderRef.current = null;
+    };
+  }, []);
+
   const start = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -68,7 +78,11 @@ export function useVoiceInput(onTranscript: (text: string) => void, onError?: (m
           const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm';
           const fd = new FormData();
           fd.append('audio', blob, `recording.${ext}`);
-          const res = await authenticatedFetch('/api/voice/transcribe', { method: 'POST', body: fd });
+          const res = await authenticatedFetch('/api/voice/transcribe', {
+            method: 'POST',
+            body: fd,
+            headers: voiceConfigHeaders(),
+          });
           if (!res.ok) throw new Error(`transcribe ${res.status}`);
           const data = await res.json();
           const text = String(data?.text || '').trim();
