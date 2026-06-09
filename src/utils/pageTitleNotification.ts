@@ -33,10 +33,15 @@ const clearTitleIndicator = (): void => {
   }
 
   removeReturnListeners();
+  removePageInactiveListener();
 
   if (document.title.startsWith(getIndicatorPrefix())) {
     document.title = stripIndicator(document.title);
   }
+};
+
+const removePageInactiveListener = (): void => {
+  document.removeEventListener('visibilitychange', handlePageInactive);
 };
 
 const scheduleClear = (): void => {
@@ -47,6 +52,9 @@ const scheduleClear = (): void => {
   clearTimer = window.setTimeout(() => {
     clearTitleIndicator();
   }, TITLE_INDICATOR_CLEAR_DELAY_MS);
+
+  removePageInactiveListener();
+  document.addEventListener('visibilitychange', handlePageInactive, { once: true });
 };
 
 function handleUserReturn(): void {
@@ -57,6 +65,24 @@ function handleUserReturn(): void {
   // Background completions keep the marker indefinitely. A tab click normally
   // surfaces as visibility/focus, while an in-page click is a useful fallback.
   scheduleClear();
+}
+
+function handlePageInactive(): void {
+  if (document.visibilityState !== 'hidden') {
+    return;
+  }
+
+  if (clearTimer !== null) {
+    window.clearTimeout(clearTimer);
+    clearTimer = null;
+  }
+
+  if (!returnListenersAttached) {
+    document.addEventListener('visibilitychange', handleUserReturn);
+    window.addEventListener('focus', handleUserReturn, true);
+    window.addEventListener('click', handleUserReturn, true);
+    returnListenersAttached = true;
+  }
 }
 
 export const showCompletionTitleIndicator = (): void => {

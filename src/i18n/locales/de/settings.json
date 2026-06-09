@@ -94,15 +94,33 @@
     "git": "Git",
     "apiTokens": "API & Token",
     "tasks": "Aufgaben",
+    "notifications": "Benachrichtigungen",
     "plugins": "Plugins",
     "about": "Info"
   },
   "notifications": {
+    "title": "Benachrichtigungen",
+    "description": "Lege fest, welche Benachrichtigungen du erhältst.",
+    "webPush": {
+      "title": "Web-Push-Benachrichtigungen",
+      "enable": "Push-Benachrichtigungen aktivieren",
+      "disable": "Push-Benachrichtigungen deaktivieren",
+      "enabled": "Push-Benachrichtigungen sind aktiviert",
+      "loading": "Wird aktualisiert...",
+      "unsupported": "Push-Benachrichtigungen werden in diesem Browser nicht unterstützt.",
+      "denied": "Push-Benachrichtigungen sind blockiert. Bitte erlaube sie in den Browsereinstellungen."
+    },
     "sound": {
       "title": "Ton",
       "description": "Spielt einen kurzen Ton ab, wenn ein Chat-Lauf abgeschlossen ist.",
       "enabled": "Aktiviert",
       "test": "Ton testen"
+    },
+    "events": {
+      "title": "Ereignistypen",
+      "actionRequired": "Aktion erforderlich",
+      "stop": "Lauf gestoppt",
+      "error": "Lauf fehlgeschlagen"
     }
   },
   "appearanceSettings": {
