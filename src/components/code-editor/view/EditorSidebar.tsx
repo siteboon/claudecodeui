@@ -102,7 +102,7 @@ export default function EditorSidebar({
   const useFlexLayout = editorExpanded || (fillSpace && !hasManualWidth);
 
   return (
-    <div ref={containerRef} className={`flex h-full min-w-0 flex-shrink-0 ${editorExpanded ? 'flex-1' : ''}`}>
+    <div ref={containerRef} className={`flex h-full min-w-0 ${editorExpanded ? 'flex-1' : ''}`}>
       {!editorExpanded && (
         <div
           ref={resizeHandleRef}
