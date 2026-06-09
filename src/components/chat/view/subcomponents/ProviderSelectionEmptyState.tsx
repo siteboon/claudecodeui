@@ -277,11 +277,15 @@ export default function ProviderSelectionEmptyState({
                           >
                             <div className="min-w-0 flex-1">
                               <div className="truncate">{model.label}</div>
-                              {model.description && (
+                              {/* 
+                              // * Temporarly commented out because the description of models from claude 
+                              // * was a bit inconsistent.  Will return it back when it becomes more consistent.
+                              */}
+                              {/* {model.description && (
                                 <div className="truncate text-xs text-muted-foreground">
                                   {model.description}
                                 </div>
-                              )}
+                              )} */}
                             </div>
                             {isSelected && (
                               <Check className="ml-auto h-4 w-4 shrink-0 text-primary" />
@@ -321,6 +325,7 @@ export default function ProviderSelectionEmptyState({
 
           <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground/60">
             <Trans
+              ns="chat"
               i18nKey="providerSelection.pressToSearch"
               values={{ shortcut: MOD_KEY === "⌘" ? "⌘K" : "Ctrl+K" }}
               components={{

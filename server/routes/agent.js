@@ -592,12 +592,14 @@ class ResponseCollector {
       }
     }
 
+    const inputTokens = totalInput + totalCacheRead + totalCacheCreation;
+
     return {
-      inputTokens: totalInput,
+      inputTokens,
       outputTokens: totalOutput,
       cacheReadTokens: totalCacheRead,
       cacheCreationTokens: totalCacheCreation,
-      totalTokens: totalInput + totalOutput + totalCacheRead + totalCacheCreation
+      totalTokens: inputTokens + totalOutput
     };
   }
 }
