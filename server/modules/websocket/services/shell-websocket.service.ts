@@ -79,7 +79,7 @@ function parseShellMessage(rawMessage: RawData): ShellIncomingMessage | null {
 /**
  * Resolves provider command line for plain shell and agent-backed shell modes.
  */
-function buildShellCommand(
+export function buildShellCommand(
   message: ShellIncomingMessage,
   dependencies: ShellWebSocketDependencies
 ): string {
@@ -164,6 +164,30 @@ function buildShellCommand(
 }
 
 /**
+ * Builds the key used to look up / store the pty session.
+ *
+ * Mode discriminator: a plain shell and an agent shell with no selected
+ * session both resolve sessionId to 'default'. Without the modePrefix,
+ * toggling the Agent/Shell switch reuses the wrong pty ("[Reconnected to
+ * existing session]") instead of spawning the requested one.
+ */
+export function buildPtySessionKey(params: {
+  projectPath: string;
+  isPlainShell: boolean;
+  provider: string;
+  sessionId: string | null;
+  initialCommand: string;
+}): string {
+  const { projectPath, isPlainShell, provider, sessionId, initialCommand } = params;
+  const commandSuffix =
+    isPlainShell && initialCommand
+      ? `_cmd_${Buffer.from(initialCommand).toString('base64').slice(0, 16)}`
+      : '';
+  const modePrefix = isPlainShell ? 'plain' : provider;
+  return `${projectPath}_${modePrefix}_${sessionId ?? 'default'}${commandSuffix}`;
+}
+
+/**
  * Handles websocket connections used by the standalone shell terminal UI.
  */
 export function handleShellConnection(
@@ -205,16 +229,13 @@ export function handleShellConnection(
             initialCommand.includes('cursor-agent login') ||
             initialCommand.includes('auth login'));
 
-        const commandSuffix =
-          isPlainShell && initialCommand
-            ? `_cmd_${Buffer.from(initialCommand).toString('base64').slice(0, 16)}`
-            : '';
-        // Mode discriminator: a plain shell and an agent shell with no selected
-        // session both resolve sessionId to 'default'. Without this, toggling the
-        // Agent/Shell switch reuses the wrong pty ("[Reconnected to existing
-        // session]") instead of spawning the requested one.
-        const modePrefix = isPlainShell ? 'plain' : provider;
-        ptySessionKey = `${projectPath}_${modePrefix}_${sessionId ?? 'default'}${commandSuffix}`;
+        ptySessionKey = buildPtySessionKey({
+          projectPath,
+          isPlainShell,
+          provider,
+          sessionId,
+          initialCommand,
+        });
 
         if (isLoginCommand || forceRestart) {
           const oldSession = ptySessionsMap.get(ptySessionKey);
