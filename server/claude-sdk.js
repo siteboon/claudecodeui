@@ -204,7 +204,7 @@ function mapCliOptionsToSDK(options = {}) {
   sdkOptions.disallowedTools = settings.disallowedTools || [];
 
   // Map model (default to sonnet)
-  // Valid models: sonnet, opus, haiku, opusplan, sonnet[1m]
+  // Valid models: sonnet, opus, haiku, opusplan, sonnet[1m], fable
   sdkOptions.model = options.model || CLAUDE_FALLBACK_MODELS.DEFAULT;
   // Model logged at query start below
 

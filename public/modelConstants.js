@@ -15,6 +15,12 @@ export const CLAUDE_MODELS = {
         "Use the default model (currently Opus 4.8 (1M context)) · $5/$25 per Mtok",
     },
     {
+      value: "fable",
+      label: "Fable",
+      description:
+        "Fable 5 · Most capable for your hardest and longest-running tasks · Uses your limits ~2× faster than Opus",
+    },
+    {
       value: "sonnet",
       label: "Sonnet",
       description: "Sonnet 4.6 · Best for everyday tasks · $3/$15 per Mtok",
