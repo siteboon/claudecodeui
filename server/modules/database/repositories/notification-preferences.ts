@@ -10,6 +10,7 @@ type NotificationPreferences = {
   channels: {
     inApp: boolean;
     webPush: boolean;
+    sound: boolean;
   };
   events: {
     actionRequired: boolean;
@@ -22,6 +23,7 @@ const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   channels: {
     inApp: false,
     webPush: false,
+    sound: true,
   },
   events: {
     actionRequired: true,
@@ -37,6 +39,7 @@ function normalizeNotificationPreferences(value: unknown): NotificationPreferenc
     channels: {
       inApp: source.channels?.inApp === true,
       webPush: source.channels?.webPush === true,
+      sound: source.channels?.sound !== false,
     },
     events: {
       actionRequired: source.events?.actionRequired !== false,

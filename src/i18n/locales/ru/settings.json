@@ -97,6 +97,14 @@
     "plugins": "Плагины",
     "about": "О программе"
   },
+  "notifications": {
+    "sound": {
+      "title": "Звук",
+      "description": "Воспроизводить короткий сигнал при завершении запуска чата.",
+      "enabled": "Включено",
+      "test": "Проверить звук"
+    }
+  },
   "appearanceSettings": {
     "darkMode": {
       "label": "Темная тема",
