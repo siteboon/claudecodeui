@@ -74,10 +74,10 @@ const UNOFFICIAL_PLUGIN_RECOMMENDATIONS: PluginRecommendation[] = [
     source: 'unofficial',
   },
   {
-    id: 'prism-cloudcli',
+    id: 'prism',
     translationKey: 'prismCloudCLI',
     repoUrl: PRISM_CLOUDCLI_PLUGIN_URL,
-    installedNames: ['prism-cloudcli'],
+    installedNames: ['prism'],
     icon: Activity,
     source: 'unofficial'
   }
