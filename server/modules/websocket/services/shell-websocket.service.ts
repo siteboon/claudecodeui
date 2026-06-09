@@ -94,7 +94,16 @@ function buildShellCommand(
     provider === 'plain-shell';
 
   if (isPlainShell) {
-    return initialCommand;
+    if (initialCommand) {
+      return initialCommand;
+    }
+    // No command supplied: drop into an interactive login shell instead of
+    // `bash -c ""`, which would exit immediately and close the terminal.
+    if (os.platform() === 'win32') {
+      return initialCommand;
+    }
+    const loginShell = process.env.SHELL || 'bash';
+    return `exec "${loginShell}" -il`;
   }
 
   if (provider === 'cursor') {
@@ -200,7 +209,12 @@ export function handleShellConnection(
           isPlainShell && initialCommand
             ? `_cmd_${Buffer.from(initialCommand).toString('base64').slice(0, 16)}`
             : '';
-        ptySessionKey = `${projectPath}_${sessionId ?? 'default'}${commandSuffix}`;
+        // Mode discriminator: a plain shell and an agent shell with no selected
+        // session both resolve sessionId to 'default'. Without this, toggling the
+        // Agent/Shell switch reuses the wrong pty ("[Reconnected to existing
+        // session]") instead of spawning the requested one.
+        const modePrefix = isPlainShell ? 'plain' : provider;
+        ptySessionKey = `${projectPath}_${modePrefix}_${sessionId ?? 'default'}${commandSuffix}`;
 
         if (isLoginCommand || forceRestart) {
           const oldSession = ptySessionsMap.get(ptySessionKey);

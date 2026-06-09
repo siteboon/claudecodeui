@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import ChatInterface from '../../chat/view/ChatInterface';
 import FileTree from '../../file-tree/view/FileTree';
@@ -59,6 +59,16 @@ function MainContent({
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings() as TasksSettingsContextValue;
 
   const shouldShowTasksTab = Boolean(tasksEnabled && isTaskMasterInstalled);
+
+  // Shell tab can run either the agent CLI (claude/cursor/...) or a plain
+  // bash login shell. Persist the choice across tab switches.
+  const [shellMode, setShellMode] = useState<'agent' | 'plain'>(() =>
+    localStorage.getItem('shell-mode') === 'plain' ? 'plain' : 'agent',
+  );
+  const setShellModePersisted = (mode: 'agent' | 'plain') => {
+    localStorage.setItem('shell-mode', mode);
+    setShellMode(mode);
+  };
 
   const {
     editingFile,
@@ -157,13 +167,41 @@ function MainContent({
           )}
 
           {activeTab === 'shell' && (
-            <div className="h-full w-full overflow-hidden">
-              <StandaloneShell
-                project={selectedProject}
-                session={selectedSession}
-                showHeader={false}
-                isActive={activeTab === 'shell'}
-              />
+            <div className="flex h-full w-full flex-col overflow-hidden">
+              <div className="flex items-center gap-1 border-b border-gray-800 bg-gray-900 px-2 py-1">
+                <button
+                  type="button"
+                  onClick={() => setShellModePersisted('agent')}
+                  className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+                    shellMode === 'agent'
+                      ? 'bg-blue-600 text-white'
+                      : 'text-gray-300 hover:bg-gray-800'
+                  }`}
+                >
+                  Agent
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShellModePersisted('plain')}
+                  className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+                    shellMode === 'plain'
+                      ? 'bg-blue-600 text-white'
+                      : 'text-gray-300 hover:bg-gray-800'
+                  }`}
+                >
+                  Shell
+                </button>
+              </div>
+              <div className="min-h-0 flex-1">
+                <StandaloneShell
+                  key={shellMode}
+                  project={selectedProject}
+                  session={shellMode === 'plain' ? null : selectedSession}
+                  isPlainShell={shellMode === 'plain'}
+                  showHeader={false}
+                  isActive={activeTab === 'shell'}
+                />
+              </div>
             </div>
           )}
 
