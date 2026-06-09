@@ -393,7 +393,8 @@ export function useSlashCommands({
         return;
       }
 
-      const slashPattern = /^\/(\S*)$/;
+      // Match / at start of input OR after whitespace, capturing the /word up to cursor.
+      const slashPattern = /(?:^|\s)(\/\S*)$/;
       const match = textBeforeCursor.match(slashPattern);
 
       if (!match) {
@@ -401,8 +402,9 @@ export function useSlashCommands({
         return;
       }
 
-      const slashPos = 0;
-      const query = match[1];
+      // Compute actual position of / in the full input string.
+      const slashPos = match.index! + (match[0].length - match[1].length);
+      const query = match[1].slice(1); // strip leading /
 
       setSlashPosition(slashPos);
       setShowCommandMenu(true);
