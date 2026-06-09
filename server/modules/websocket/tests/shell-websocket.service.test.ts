@@ -5,6 +5,7 @@ import test from 'node:test';
 import {
   buildPtySessionKey,
   buildShellCommand,
+  buildShellSpawn,
 } from '@/modules/websocket/services/shell-websocket.service.js';
 
 const noopDependencies = {
@@ -167,4 +168,24 @@ test('buildPtySessionKey: an agent command does not add a command suffix', () =>
     initialCommand: 'claude --resume',
   });
   assert.equal(key, '/proj_claude_default');
+});
+
+test('buildShellSpawn: Windows plain shell (empty command) stays interactive with -NoExit', () => {
+  // `powershell.exe -Command ""` runs a no-op and exits immediately; -NoExit
+  // keeps the terminal open instead.
+  const { shell, args } = buildShellSpawn('win32', '');
+  assert.equal(shell, 'powershell.exe');
+  assert.deepEqual(args, ['-NoExit']);
+});
+
+test('buildShellSpawn: Windows with a command runs it via -Command', () => {
+  const { shell, args } = buildShellSpawn('win32', 'claude');
+  assert.equal(shell, 'powershell.exe');
+  assert.deepEqual(args, ['-Command', 'claude']);
+});
+
+test('buildShellSpawn: non-Windows runs via bash -c', () => {
+  const { shell, args } = buildShellSpawn('linux', 'exec "bash" -il');
+  assert.equal(shell, 'bash');
+  assert.deepEqual(args, ['-c', 'exec "bash" -il']);
 });

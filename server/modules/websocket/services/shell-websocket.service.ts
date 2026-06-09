@@ -188,6 +188,25 @@ export function buildPtySessionKey(params: {
 }
 
 /**
+ * Resolves the shell binary and spawn args for the current platform.
+ *
+ * On Windows an empty command (plain shell with no initial command) must use
+ * `-NoExit` rather than `-Command ""`: `powershell.exe -Command ""` runs a
+ * no-op and exits immediately, closing the terminal.
+ */
+export function buildShellSpawn(
+  platform: NodeJS.Platform,
+  shellCommand: string
+): { shell: string; args: string[] } {
+  if (platform === 'win32') {
+    return shellCommand
+      ? { shell: 'powershell.exe', args: ['-Command', shellCommand] }
+      : { shell: 'powershell.exe', args: ['-NoExit'] };
+  }
+  return { shell: 'bash', args: ['-c', shellCommand] };
+}
+
+/**
  * Handles websocket connections used by the standalone shell terminal UI.
  */
 export function handleShellConnection(
@@ -296,9 +315,7 @@ export function handleShellConnection(
         }
 
         const shellCommand = buildShellCommand(data, dependencies);
-        const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
-        const shellArgs =
-          os.platform() === 'win32' ? ['-Command', shellCommand] : ['-c', shellCommand];
+        const { shell, args: shellArgs } = buildShellSpawn(os.platform(), shellCommand);
         const termCols = readNumber(data.cols, 80);
         const termRows = readNumber(data.rows, 24);
 
