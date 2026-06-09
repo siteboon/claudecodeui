@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+
 import { useTheme } from '../../../contexts/ThemeContext';
 import { authenticatedFetch } from '../../../utils/api';
+import { setNotificationSoundEnabled } from '../../../utils/notificationSound';
 import { useProviderAuthStatus } from '../../provider-auth/hooks/useProviderAuthStatus';
 import {
   DEFAULT_CODE_EDITOR_SETTINGS,
@@ -107,6 +109,7 @@ const createDefaultNotificationPreferences = (): NotificationPreferencesState =>
   channels: {
     inApp: true,
     webPush: false,
+    sound: true,
   },
   events: {
     actionRequired: true,
@@ -114,6 +117,25 @@ const createDefaultNotificationPreferences = (): NotificationPreferencesState =>
     error: true,
   },
 });
+
+const normalizeNotificationPreferences = (
+  preferences?: Partial<NotificationPreferencesState> | null,
+): NotificationPreferencesState => {
+  const defaults = createDefaultNotificationPreferences();
+
+  return {
+    channels: {
+      inApp: preferences?.channels?.inApp ?? defaults.channels.inApp,
+      webPush: preferences?.channels?.webPush ?? defaults.channels.webPush,
+      sound: preferences?.channels?.sound ?? defaults.channels.sound,
+    },
+    events: {
+      actionRequired: preferences?.events?.actionRequired ?? defaults.events.actionRequired,
+      stop: preferences?.events?.stop ?? defaults.events.stop,
+      error: preferences?.events?.error ?? defaults.events.error,
+    },
+  };
+};
 
 export function useSettingsController({ isOpen, initialTab }: UseSettingsControllerArgs) {
   const { isDarkMode, toggleDarkMode } = useTheme() as ThemeContextValue;
@@ -186,7 +208,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
         if (notificationResponse.ok) {
           const notificationData = await toResponseJson<NotificationPreferencesResponse>(notificationResponse);
           if (notificationData.success && notificationData.preferences) {
-            setNotificationPreferences(notificationData.preferences);
+            setNotificationPreferences(normalizeNotificationPreferences(notificationData.preferences));
           } else {
             setNotificationPreferences(createDefaultNotificationPreferences());
           }
@@ -300,6 +322,10 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     void loadSettings();
     void refreshProviderAuthStatuses();
   }, [initialTab, isOpen, loadSettings, refreshProviderAuthStatuses]);
+
+  useEffect(() => {
+    setNotificationSoundEnabled(notificationPreferences.channels.sound);
+  }, [notificationPreferences.channels.sound]);
 
   useEffect(() => {
     localStorage.setItem('codeEditorTheme', codeEditorSettings.theme);

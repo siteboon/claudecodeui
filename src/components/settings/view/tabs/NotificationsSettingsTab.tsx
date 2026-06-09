@@ -1,5 +1,8 @@
-import { Bell, BellOff, BellRing, Loader2 } from 'lucide-react';
+import { Bell, BellOff, BellRing, Loader2, Play, Volume2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
+import { Button } from '../../../../shared/view/ui';
+import { playChatCompletionSound } from '../../../../utils/notificationSound';
 import type { NotificationPreferencesState } from '../../types/types';
 
 type NotificationsSettingsTabProps = {
@@ -80,6 +83,54 @@ export default function NotificationsSettingsTab({
             )}
           </div>
         )}
+      </div>
+
+      <div className="space-y-4 rounded-lg border border-border bg-card p-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Volume2 className="h-4 w-4 text-blue-600" />
+              <h4 className="font-medium text-foreground">
+                {t('notifications.sound.title', { defaultValue: 'Sound' })}
+              </h4>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {t('notifications.sound.description', {
+                defaultValue: 'Play a short tone when a chat run finishes.',
+              })}
+            </p>
+          </div>
+
+          <label className="flex shrink-0 items-center gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              checked={notificationPreferences.channels.sound}
+              onChange={(event) =>
+                onNotificationPreferencesChange({
+                  ...notificationPreferences,
+                  channels: {
+                    ...notificationPreferences.channels,
+                    sound: event.target.checked,
+                  },
+                })
+              }
+              className="h-4 w-4"
+            />
+            {t('notifications.sound.enabled', { defaultValue: 'Enabled' })}
+          </label>
+        </div>
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            void playChatCompletionSound({ force: true });
+          }}
+        >
+          <Play className="h-4 w-4" />
+          {t('notifications.sound.test', { defaultValue: 'Test sound' })}
+        </Button>
       </div>
 
       <div className="space-y-4 bg-card border border-border rounded-lg p-4">
