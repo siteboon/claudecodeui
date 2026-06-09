@@ -60,7 +60,7 @@
 - **工作階段管理** — 恢復對話、管理多個工作階段並追蹤歷史紀錄
 - **外掛系統** — 透過自訂分頁、後端服務與整合來擴充 CloudCLI。[開始建構 →](https://github.com/cloudcli-ai/cloudcli-plugin-starter)
 - **TaskMaster AI 整合** *(選用)* — 結合 AI 任務規劃、PRD 分析與工作流程自動化，實現進階專案管理
-- **模型相容性** — 支援 Claude、GPT、Gemini 模型家族（完整支援列表見 [`shared/modelConstants.js`](shared/modelConstants.js)）
+- **模型相容性** — 支援 Claude、GPT、Gemini 模型家族（完整支援列表可透過 `GET /api/providers/:provider/models` 介面取得）
 
 ## 快速開始
 

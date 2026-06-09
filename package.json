@@ -11,7 +11,6 @@
     "server/",
     "shared/",
     "public/api-docs.html",
-    "public/modelConstants.js",
     "dist/",
     "dist-server/",
     "scripts/",
