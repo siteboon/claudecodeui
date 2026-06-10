@@ -203,12 +203,12 @@ async function spawnOpenCode(command, options = {}, ws) {
       }
 
       const sudoRun = registerSudoRun(ws, sessionId, 'opencode');
-      Object.assign(spawnEnv, sudoRun.env);
+      const spawnEnv = { ...process.env, ...sudoRun.env };
 
       opencodeProcess = spawnFunction('opencode', args, {
         cwd: workingDir,
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env },
+        env: spawnEnv,
       });
 
       activeOpenCodeProcesses.set(processKey, opencodeProcess);
