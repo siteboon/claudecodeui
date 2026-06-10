@@ -13,6 +13,7 @@ export type VoiceSnapshot = { state: VoicePlayState; error: string | null };
 
 const IDLE: VoiceSnapshot = { state: 'idle', error: null };
 const CACHE_MAX = 24;
+const CLIENT_TIMEOUT_MS = 330000; // backstop; the server proxy already times out at 5 min
 
 // Stable id / cache key from a message's text (djb2).
 export function voiceId(content: string): string {
@@ -133,11 +134,14 @@ class VoicePlayer {
     try {
       let url = this.cache.get(id);
       if (!url) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), CLIENT_TIMEOUT_MS);
         const res = await authenticatedFetch('/api/voice/tts', {
           method: 'POST',
           body: JSON.stringify({ text: content }),
           headers: voiceConfigHeaders(),
-        });
+          signal: controller.signal,
+        }).finally(() => clearTimeout(timer));
         if (myToken !== this.token) return; // superseded by another play/stop
         if (!res.ok) {
           let msg = `Read-aloud failed (${res.status})`;
@@ -163,7 +167,8 @@ class VoicePlayer {
       this.emit();
     } catch (e) {
       if (myToken !== this.token) return;
-      this.setError(id, e instanceof Error ? e.message : 'Read-aloud failed');
+      const aborted = e instanceof Error && e.name === 'AbortError';
+      this.setError(id, aborted ? 'Read-aloud timed out.' : e instanceof Error ? e.message : 'Read-aloud failed');
     }
   }
 

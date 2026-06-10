@@ -55,6 +55,29 @@ function backendError(res, e) {
   return res.status(502).json({ error: `Voice backend unreachable: ${e.message}` });
 }
 
+// SSRF guard for the user-configurable backend URL: http/https only, and block the
+// link-local / cloud-metadata range. localhost/private are allowed on purpose so users
+// can run a local voice server (LocalAI, Speaches, etc.).
+function isAllowedBackendUrl(raw) {
+  let u;
+  try {
+    u = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+  if (u.hostname === '169.254.169.254' || u.hostname.startsWith('169.254.')) return false;
+  return true;
+}
+
+// Don't surface an upstream 401/403 as if the user's own app login failed.
+function upstreamError(res, status, text) {
+  if (status === 401 || status === 403) {
+    return res.status(502).json({ error: 'Voice backend rejected the request (check the API key).' });
+  }
+  return res.status(status).json({ error: text || 'voice backend error' });
+}
+
 let _upload = null;
 async function getUpload() {
   if (!_upload) {
@@ -77,6 +100,7 @@ router.get('/health', (req, res) => {
 router.post('/transcribe', async (req, res) => {
   const cfg = resolveConfig(req);
   if (!cfg.baseUrl) return res.status(503).json({ error: 'No voice backend configured' });
+  if (!isAllowedBackendUrl(cfg.baseUrl)) return res.status(400).json({ error: 'Invalid voice backend URL.' });
   const upload = await getUpload();
   upload.single('audio')(req, res, async (err) => {
     if (err) return res.status(400).json({ error: err.message });
@@ -95,7 +119,7 @@ router.post('/transcribe', async (req, res) => {
         body: fd,
       });
       const text = await r.text();
-      if (!r.ok) return res.status(r.status).json({ error: text || 'transcription failed' });
+      if (!r.ok) return upstreamError(res, r.status, text);
       let data;
       try { data = JSON.parse(text); } catch { data = { text }; }
       res.json({ text: data.text ?? '' });
@@ -109,6 +133,7 @@ router.post('/transcribe', async (req, res) => {
 router.post('/tts', async (req, res) => {
   const cfg = resolveConfig(req);
   if (!cfg.baseUrl) return res.status(503).json({ error: 'No voice backend configured' });
+  if (!isAllowedBackendUrl(cfg.baseUrl)) return res.status(400).json({ error: 'Invalid voice backend URL.' });
   const text = req.body?.text;
   if (!text || !text.trim()) return res.status(400).json({ error: 'text required' });
   try {
@@ -124,7 +149,7 @@ router.post('/tts', async (req, res) => {
     });
     if (!r.ok) {
       const errText = await r.text().catch(() => 'tts failed');
-      return res.status(r.status).json({ error: errText });
+      return upstreamError(res, r.status, errText);
     }
     res.setHeader('Content-Type', r.headers.get('content-type') || 'audio/mpeg');
     res.setHeader('Cache-Control', 'no-store');
