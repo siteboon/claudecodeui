@@ -125,7 +125,10 @@ router.post('/webhook/:projectId', async (req, res) => {
         // Verify webhook signature if secret configured
         if (config.webhookSecret) {
             const sig = req.headers['x-hub-signature-256'];
-            const rawBody = req.rawBody || JSON.stringify(req.body);
+            const rawBody = req.rawBody;
+            if (!rawBody) {
+                return res.status(400).json({ error: 'Missing raw body for signature verification' });
+            }
             if (!ghService.verifyWebhookSignature(config.webhookSecret, rawBody, sig)) {
                 return res.status(401).json({ error: 'Invalid webhook signature' });
             }

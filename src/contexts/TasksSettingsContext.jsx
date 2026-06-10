@@ -23,13 +23,17 @@ export const useTasksSettings = () => {
 
 export const TasksSettingsProvider = ({ children }) => {
   const [tasksEnabled, setTasksEnabled] = useState(() => {
-    const saved = localStorage.getItem('tasks-enabled');
-    return saved !== null ? JSON.parse(saved) : true;
+    try {
+      const saved = localStorage.getItem('tasks-enabled');
+      return saved !== null ? JSON.parse(saved) : true;
+    } catch { return true; }
   });
 
   const [githubIssuesEnabled, setGithubIssuesEnabledState] = useState(() => {
-    const saved = localStorage.getItem('github-issues-enabled');
-    return saved !== null ? JSON.parse(saved) : true;
+    try {
+      const saved = localStorage.getItem('github-issues-enabled');
+      return saved !== null ? JSON.parse(saved) : true;
+    } catch { return true; }
   });
 
   const setGithubIssuesEnabled = (enabled) => {
