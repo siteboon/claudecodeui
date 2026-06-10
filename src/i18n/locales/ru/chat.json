@@ -235,5 +235,14 @@
   },
   "tasks": {
     "nextTaskPrompt": "Начать следующую задачу"
+  },
+  "scrollNav": {
+    "jumpTo": "Перейти к: {{snippet}}",
+    "jumpToMessage": "Перейти к сообщению {{index}}",
+    "loadAll": "Загрузить всё",
+    "first": "Первое",
+    "previous": "Предыдущее",
+    "next": "Следующее",
+    "last": "Последнее"
   }
 }

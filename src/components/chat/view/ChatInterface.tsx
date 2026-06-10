@@ -15,6 +15,7 @@ import { useSessionStore } from '../../../stores/useSessionStore';
 import ChatMessagesPane from './subcomponents/ChatMessagesPane';
 import ChatComposer from './subcomponents/ChatComposer';
 import CommandResultModal from './subcomponents/CommandResultModal';
+import ScrollNavigation from './subcomponents/ScrollNavigation';
 
 
 type PendingViewSession = {
@@ -110,10 +111,10 @@ function ChatInterface({
     visibleMessages,
     loadEarlierMessages,
     loadAllMessages,
+    loadMoreMessages,
     allMessagesLoaded,
     isLoadingAllMessages,
     loadAllJustFinished,
-    showLoadAllOverlay,
     claudeStatus,
     setClaudeStatus,
     createDiff,
@@ -309,7 +310,18 @@ function ChatInterface({
   return (
     <PermissionContext.Provider value={permissionContextValue}>
       <div className="flex h-full flex-col">
-        <ChatMessagesPane
+        <div className="relative flex-1">
+          <ScrollNavigation
+            scrollContainerRef={scrollContainerRef}
+            chatMessages={chatMessages}
+            loadAllMessages={loadAllMessages}
+            allMessagesLoaded={allMessagesLoaded}
+            hasMoreMessages={hasMoreMessages}
+            totalMessages={totalMessages}
+            sessionMessagesCount={chatMessages.length}
+          />
+          <div className="absolute inset-0">
+          <ChatMessagesPane
           scrollContainerRef={scrollContainerRef}
           onWheel={handleScroll}
           onTouchMove={handleScroll}
@@ -344,10 +356,10 @@ function ChatInterface({
           visibleMessages={visibleMessages}
           loadEarlierMessages={loadEarlierMessages}
           loadAllMessages={loadAllMessages}
+          loadMoreMessages={loadMoreMessages}
           allMessagesLoaded={allMessagesLoaded}
           isLoadingAllMessages={isLoadingAllMessages}
           loadAllJustFinished={loadAllJustFinished}
-          showLoadAllOverlay={showLoadAllOverlay}
           createDiff={createDiff}
           onFileOpen={onFileOpen}
           onShowSettings={onShowSettings}
@@ -357,6 +369,8 @@ function ChatInterface({
           showThinking={showThinking}
           selectedProject={selectedProject}
         />
+          </div>
+        </div>
 
         <ChatComposer
           pendingPermissionRequests={pendingPermissionRequests}

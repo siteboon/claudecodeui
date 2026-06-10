@@ -202,5 +202,14 @@
     "providers": {
       "assistant": "Assistant"
     }
+  },
+  "scrollNav": {
+    "jumpTo": "ジャンプ: {{snippet}}",
+    "jumpToMessage": "{{index}}番目のメッセージに移動",
+    "loadAll": "全ロード",
+    "first": "最初",
+    "previous": "前へ",
+    "next": "次へ",
+    "last": "最後"
   }
 }
