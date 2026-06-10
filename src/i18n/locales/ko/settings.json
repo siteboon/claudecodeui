@@ -110,6 +110,12 @@
       "unsupported": "이 브라우저에서는 푸시 알림이 지원되지 않습니다.",
       "denied": "푸시 알림이 차단되었습니다. 브라우저 설정에서 허용해 주세요."
     },
+    "sound": {
+      "title": "소리",
+      "description": "채팅 실행이 완료되면 짧은 알림음을 재생합니다.",
+      "enabled": "사용",
+      "test": "소리 테스트"
+    },
     "events": {
       "title": "이벤트 유형",
       "actionRequired": "작업 필요",

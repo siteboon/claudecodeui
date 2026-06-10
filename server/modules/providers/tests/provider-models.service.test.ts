@@ -130,6 +130,37 @@ test('provider models are cached for the three-day ttl', async () => {
   }
 });
 
+test('claude provider models are always loaded directly from the provider', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'provider-model-cache-claude-direct-'));
+  let loadCount = 0;
+
+  try {
+    const service = createProviderModelsService({
+      cachePath: path.join(tempRoot, 'models-cache.json'),
+      resolveProvider: (provider) => ({
+        models: {
+          getSupportedModels: async () => {
+            loadCount += 1;
+            return createModels(`${provider}-${loadCount}`);
+          },
+          getCurrentActiveModel: async () => createCurrentActiveModel(`${provider}-active`),
+          changeActiveModel: async (input) => createSessionActiveModelChange(provider, input),
+        },
+      }),
+    });
+
+    const first = await service.getProviderModels('claude');
+    const second = await service.getProviderModels('claude');
+
+    assert.equal(loadCount, 2);
+    assert.equal(first.models.DEFAULT, 'claude-1');
+    assert.equal(second.models.DEFAULT, 'claude-2');
+    assert.equal(second.cache.source, 'fresh');
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('provider model cache is persisted across service instances', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'provider-model-cache-file-'));
   const cachePath = path.join(tempRoot, 'models-cache.json');
