@@ -346,6 +346,43 @@ export function createNormalizedMessage(fields: NormalizedMessageInput): Normali
   };
 }
 
+/**
+ * Build the unified terminal `complete` lifecycle message.
+ *
+ * Contract: every provider run ends with exactly one `complete` (the
+ * abort-session handler emits it on behalf of cancelled runs, so aborted runs
+ * must NOT emit their own). The frontend treats `complete` as the only
+ * terminal signal and never needs provider-specific handling:
+ *
+ * - `sessionId`     — the id the client knows this run by ('' if never discovered)
+ * - `actualSessionId` — canonical id after the run; equals `sessionId` unless
+ *                       the provider rewrote it mid-run
+ * - `exitCode`      — 0 on success; a missing/null code (e.g. killed process)
+ *                     is reported as failure
+ * - `success`       — exitCode === 0 and not aborted
+ * - `aborted`       — run was cancelled by the user
+ */
+export function createCompleteMessage(opts: {
+  provider: NormalizedMessage['provider'];
+  sessionId?: string | null;
+  actualSessionId?: string | null;
+  exitCode?: number | null;
+  aborted?: boolean;
+}): NormalizedMessage {
+  const exitCode = typeof opts.exitCode === 'number' ? opts.exitCode : 1;
+  const aborted = Boolean(opts.aborted);
+
+  return createNormalizedMessage({
+    kind: 'complete',
+    provider: opts.provider,
+    sessionId: opts.sessionId || null,
+    actualSessionId: opts.actualSessionId || opts.sessionId || null,
+    exitCode,
+    success: exitCode === 0 && !aborted,
+    aborted,
+  });
+}
+
 // ---------------------------
 //----------------- MCP CONFIG PARSING UTILITIES ------------
 /**

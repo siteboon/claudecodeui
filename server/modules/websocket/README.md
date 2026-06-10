@@ -133,9 +133,10 @@ flowchart TD
 
 ### Chat Notes
 
-1. `abort-session` returns a normalized `complete` message with `aborted: true`.
-2. `check-session-status` returns `{ type: "session-status", isProcessing }`.
-3. Claude status checks can reconnect output stream to the new socket via `reconnectSessionWriter`.
+1. **Unified terminal lifecycle**: every provider run ends with exactly one `complete` message built by `createCompleteMessage()` (`server/shared/utils.ts`), regardless of provider: `{ kind: "complete", sessionId, actualSessionId, exitCode, success, aborted }`. Failed runs emit an informational `error` message first, then the terminal `complete` with `success: false`. Mid-run `error` messages (e.g. stderr output) are non-terminal; the frontend only treats `complete` as end-of-run.
+2. `abort-session` sends the terminal `complete` (`aborted: true`) on behalf of the cancelled run; providers detect the abort and skip their own `complete` so the client sees exactly one.
+3. `check-session-status` returns `{ type: "session-status", isProcessing }`.
+4. Claude status checks can reconnect output stream to the new socket via `reconnectSessionWriter`.
 
 ## `/shell` Terminal Flow
 

@@ -12,12 +12,14 @@ import type {
   ProjectsUpdatedMessage,
 } from '../types/app';
 
+import type { SessionActivityMap } from './useSessionProtection';
+
 type UseProjectsStateArgs = {
   sessionId?: string;
   navigate: NavigateFunction;
   latestMessage: AppSocketMessage | null;
   isMobile: boolean;
-  activeSessions: Set<string>;
+  activeSessions: SessionActivityMap;
 };
 
 type FetchProjectsOptions = {

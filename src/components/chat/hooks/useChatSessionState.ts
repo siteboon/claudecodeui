@@ -2,6 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { MutableRefObject } from 'react';
 
 import { authenticatedFetch } from '../../../utils/api';
+import { PENDING_SESSION_ID } from '../../../hooks/useSessionProtection';
+import type { MarkSessionIdle, SessionActivityMap } from '../../../hooks/useSessionProtection';
 import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
 import type { SessionStore, NormalizedMessage } from '../../../stores/useSessionStore';
 import type { ChatMessage, Provider } from '../types/types';
@@ -12,10 +14,6 @@ import { normalizedToChatMessages } from './useChatMessages';
 const MESSAGES_PER_PAGE = 20;
 const INITIAL_VISIBLE_MESSAGES = 100;
 
-type PendingViewSession = {
-  startedAt: number;
-};
-
 interface UseChatSessionStateArgs {
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
@@ -24,9 +22,11 @@ interface UseChatSessionStateArgs {
   autoScrollToBottom?: boolean;
   externalMessageUpdate?: number;
   newSessionTrigger?: number;
-  processingSessions?: Set<string>;
+  processingSessions?: SessionActivityMap;
+  onSessionIdle?: MarkSessionIdle;
   resetStreamingState: () => void;
-  pendingViewSessionRef: MutableRefObject<PendingViewSession | null>;
+  /** When each session's `check-session-status` was last sent; guards stale idle replies. */
+  statusCheckSentAtRef: MutableRefObject<Map<string, number>>;
   sessionStore: SessionStore;
 }
 
@@ -99,21 +99,19 @@ export function useChatSessionState({
   externalMessageUpdate,
   newSessionTrigger,
   processingSessions,
+  onSessionIdle,
   resetStreamingState,
-  pendingViewSessionRef,
+  statusCheckSentAtRef,
   sessionStore,
 }: UseChatSessionStateArgs) {
-  const [isLoading, setIsLoading] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(selectedSession?.id || null);
   const [isLoadingSessionMessages, setIsLoadingSessionMessages] = useState(false);
   const [isLoadingMoreMessages, setIsLoadingMoreMessages] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [totalMessages, setTotalMessages] = useState(0);
-  const [canAbortSession, setCanAbortSession] = useState(false);
   const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
   const [tokenBudget, setTokenBudget] = useState<Record<string, unknown> | null>(null);
   const [visibleMessageCount, setVisibleMessageCount] = useState(INITIAL_VISIBLE_MESSAGES);
-  const [claudeStatus, setClaudeStatus] = useState<{ text: string; tokens: number; can_interrupt: boolean } | null>(null);
   const [allMessagesLoaded, setAllMessagesLoaded] = useState(false);
   const [isLoadingAllMessages, setIsLoadingAllMessages] = useState(false);
   const [loadAllJustFinished, setLoadAllJustFinished] = useState(false);
@@ -170,10 +168,7 @@ export function useChatSessionState({
      * - No coupling to unrelated external update signals.
      */
     resetStreamingState();
-    pendingViewSessionRef.current = null;
-    setClaudeStatus(null);
-    setCanAbortSession(false);
-    setIsLoading(false);
+    onSessionIdle?.(PENDING_SESSION_ID);
     setCurrentSessionId(null);
     setPendingUserMessage(null);
     sessionStorage.removeItem('cursorSessionId');
@@ -204,13 +199,29 @@ export function useChatSessionState({
       clearTimeout(loadAllFinishedTimerRef.current);
       loadAllFinishedTimerRef.current = null;
     }
-  }, [newSessionTrigger, pendingViewSessionRef, resetStreamingState]);
+  }, [newSessionTrigger, onSessionIdle, resetStreamingState]);
+
+  /* ---------------------------------------------------------------- */
+  /*  Derive processing state for the viewed session                  */
+  /* ---------------------------------------------------------------- */
+
+  const activeSessionId = selectedSession?.id || currentSessionId || null;
+
+  // The activity indicator always reflects the latest status of the session
+  // being viewed (or of the pending not-yet-created session on a fresh
+  // draft) — never stale local UI state from the last time it was open.
+  const sessionActivity = processingSessions?.get(activeSessionId ?? PENDING_SESSION_ID) ?? null;
+  const isProcessing = sessionActivity !== null;
+  const canAbortSession = isProcessing && sessionActivity.canInterrupt;
+
+  // Ref mirror so effects can read the latest map without re-running on
+  // every activity transition.
+  const processingSessionsRef = useRef(processingSessions);
+  processingSessionsRef.current = processingSessions;
 
   /* ---------------------------------------------------------------- */
   /*  Derive chatMessages from the store                              */
   /* ---------------------------------------------------------------- */
-
-  const activeSessionId = selectedSession?.id || currentSessionId || null;
   const [pendingUserMessage, setPendingUserMessage] = useState<ChatMessage | null>(null);
   const flushedPendingUserMessageRef = useRef<ChatMessage | null>(null);
 
@@ -430,16 +441,12 @@ export function useChatSessionState({
   useEffect(() => {
     if (!selectedSession || !selectedProject) {
       // A new provider run can be in flight before the router has a canonical
-      // selectedSession. Keep the processing banner alive until complete/error.
-      if (pendingViewSessionRef.current) {
+      // selectedSession. Keep the draft view intact until complete/error.
+      if (processingSessionsRef.current?.has(PENDING_SESSION_ID)) {
         return;
       }
 
       resetStreamingState();
-      pendingViewSessionRef.current = null;
-      setClaudeStatus(null);
-      setCanAbortSession(false);
-      setIsLoading(false);
       setCurrentSessionId(null);
       sessionStorage.removeItem('cursorSessionId');
       messagesOffsetRef.current = 0;
@@ -461,9 +468,6 @@ export function useChatSessionState({
     const sessionChanged = currentSessionId !== null && currentSessionId !== selectedSession.id;
     if (sessionChanged) {
       resetStreamingState();
-      pendingViewSessionRef.current = null;
-      setClaudeStatus(null);
-      setCanAbortSession(false);
     }
 
     // Reset pagination/scroll state
@@ -482,7 +486,6 @@ export function useChatSessionState({
 
     if (sessionChanged) {
       setTokenBudget(null);
-      setIsLoading(false);
     }
 
     setCurrentSessionId(selectedSession.id);
@@ -490,8 +493,11 @@ export function useChatSessionState({
       sessionStorage.setItem('cursorSessionId', selectedSession.id);
     }
 
-    // Check session status
+    // Reconcile processing state with the server. Recording the send time
+    // lets the reply handler discard idle replies that a newer request has
+    // since outdated.
     if (ws) {
+      statusCheckSentAtRef.current.set(selectedSession.id, Date.now());
       sendMessage({ type: 'check-session-status', sessionId: selectedSession.id, provider });
     }
 
@@ -516,11 +522,11 @@ export function useChatSessionState({
       setIsLoadingSessionMessages(false);
     });
   }, [
-    pendingViewSessionRef,
     resetStreamingState,
     selectedProject,
     selectedSession?.id,
     sendMessage,
+    statusCheckSentAtRef,
     ws,
     sessionStore,
   ]);
@@ -534,7 +540,7 @@ export function useChatSessionState({
         const provider = (localStorage.getItem('selected-provider') as Provider) || 'claude';
 
         // Skip store refresh during active streaming
-        if (!isLoading) {
+        if (!isProcessing) {
           await sessionStore.refreshFromServer(selectedSession.id, {
             provider: (selectedSession.__provider || provider) as LLMProvider,
             projectId: selectedProject.projectId,
@@ -559,7 +565,7 @@ export function useChatSessionState({
     selectedProject,
     selectedSession,
     sessionStore,
-    isLoading,
+    isProcessing,
   ]);
 
   // Search navigation target
@@ -726,16 +732,6 @@ export function useChatSessionState({
     return () => container.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
 
-  useEffect(() => {
-    const activeViewSessionId = selectedSession?.id || currentSessionId;
-    if (!activeViewSessionId || !processingSessions) return;
-    const shouldBeProcessing = processingSessions.has(activeViewSessionId);
-    if (shouldBeProcessing && !isLoading) {
-      setIsLoading(true);
-      setCanAbortSession(true);
-    }
-  }, [currentSessionId, isLoading, processingSessions, selectedSession?.id]);
-
   // "Load all" overlay
   const prevLoadingRef = useRef(false);
   useEffect(() => {
@@ -817,16 +813,15 @@ export function useChatSessionState({
     addMessage,
     clearMessages,
     rewindMessages,
-    isLoading,
-    setIsLoading,
+    sessionActivity,
+    isProcessing,
+    canAbortSession,
     currentSessionId,
     setCurrentSessionId,
     isLoadingSessionMessages,
     isLoadingMoreMessages,
     hasMoreMessages,
     totalMessages,
-    canAbortSession,
-    setCanAbortSession,
     isUserScrolledUp,
     setIsUserScrolledUp,
     tokenBudget,
@@ -839,8 +834,6 @@ export function useChatSessionState({
     isLoadingAllMessages,
     loadAllJustFinished,
     showLoadAllOverlay,
-    claudeStatus,
-    setClaudeStatus,
     createDiff,
     scrollContainerRef,
     scrollToBottom,

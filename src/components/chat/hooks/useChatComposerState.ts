@@ -12,6 +12,8 @@ import type {
 import { useDropzone } from 'react-dropzone';
 
 import { authenticatedFetch } from '../../../utils/api';
+import { PENDING_SESSION_ID } from '../../../hooks/useSessionProtection';
+import type { MarkSessionProcessing } from '../../../hooks/useSessionProtection';
 import { grantClaudeToolPermission } from '../utils/chatPermissions';
 import { safeLocalStorage } from '../utils/chatStorage';
 import type {
@@ -24,10 +26,6 @@ import { escapeRegExp } from '../utils/chatFormatting';
 
 import { useFileMentions } from './useFileMentions';
 import { type SlashCommand, useSlashCommands } from './useSlashCommands';
-
-type PendingViewSession = {
-  startedAt: number;
-};
 
 interface UseChatComposerStateArgs {
   selectedProject: Project | null;
@@ -46,17 +44,12 @@ interface UseChatComposerStateArgs {
   tokenBudget: Record<string, unknown> | null;
   sendMessage: (message: unknown) => void;
   sendByCtrlEnter?: boolean;
-  onSessionActive?: (sessionId?: string | null) => void;
-  onSessionProcessing?: (sessionId?: string | null) => void;
+  onSessionProcessing?: MarkSessionProcessing;
   onInputFocusChange?: (focused: boolean) => void;
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
-  pendingViewSessionRef: { current: PendingViewSession | null };
   scrollToBottom: () => void;
   addMessage: (msg: ChatMessage) => void;
-  setIsLoading: (loading: boolean) => void;
-  setCanAbortSession: (canAbort: boolean) => void;
-  setClaudeStatus: (status: { text: string; tokens: number; can_interrupt: boolean } | null) => void;
   setIsUserScrolledUp: (isScrolledUp: boolean) => void;
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
 }
@@ -177,17 +170,12 @@ export function useChatComposerState({
   tokenBudget,
   sendMessage,
   sendByCtrlEnter,
-  onSessionActive,
   onSessionProcessing,
   onInputFocusChange,
   onFileOpen,
   onShowSettings,
-  pendingViewSessionRef,
   scrollToBottom,
   addMessage,
-  setIsLoading,
-  setCanAbortSession,
-  setClaudeStatus,
   setIsUserScrolledUp,
   setPendingPermissionRequests,
 }: UseChatComposerStateArgs) {
@@ -620,26 +608,17 @@ export function useChatComposerState({
       };
 
       addMessage(userMessage);
-      setIsLoading(true); // Processing banner starts
-      setCanAbortSession(true);
-      setClaudeStatus({
-        text: 'Processing',
-        tokens: 0,
-        can_interrupt: true,
+      // Mark this request as processing in the per-session activity map (the
+      // single source of truth the indicator derives from). A brand-new
+      // conversation has no session id yet, so it is tracked under the
+      // pending placeholder until `session_created` announces the real id.
+      onSessionProcessing?.(effectiveSessionId || PENDING_SESSION_ID, {
+        statusText: null,
+        canInterrupt: true,
       });
 
       setIsUserScrolledUp(false);
       setTimeout(() => scrollToBottom(), 100);
-
-      if (!effectiveSessionId && !selectedSession?.id) {
-        // This tracks only that a request is in flight before the provider has
-        // emitted its real session id; routing still waits for session_created.
-        pendingViewSessionRef.current = { startedAt: Date.now() };
-      }
-      if (effectiveSessionId) {
-        onSessionActive?.(effectiveSessionId);
-        onSessionProcessing?.(effectiveSessionId);
-      }
 
       const getToolsSettings = () => {
         try {
@@ -776,19 +755,14 @@ export function useChatComposerState({
       geminiModel,
       opencodeModel,
       isLoading,
-      onSessionActive,
       onSessionProcessing,
-      pendingViewSessionRef,
       permissionMode,
       provider,
       resetCommandMenuState,
       scrollToBottom,
       selectedProject,
       sendMessage,
-      setCanAbortSession,
       addMessage,
-      setClaudeStatus,
-      setIsLoading,
       setIsUserScrolledUp,
       slashCommands,
     ],
@@ -1000,15 +974,11 @@ export function useChatComposerState({
         });
       });
 
-      setPendingPermissionRequests((previous) => {
-        const next = previous.filter((request) => !validIds.includes(request.requestId));
-        if (next.length === 0) {
-          setClaudeStatus(null);
-        }
-        return next;
-      });
+      setPendingPermissionRequests((previous) =>
+        previous.filter((request) => !validIds.includes(request.requestId)),
+      );
     },
-    [sendMessage, setClaudeStatus, setPendingPermissionRequests],
+    [sendMessage, setPendingPermissionRequests],
   );
 
   const [isInputFocused, setIsInputFocused] = useState(false);

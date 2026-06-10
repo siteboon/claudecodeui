@@ -17,10 +17,6 @@ import ChatComposer from './subcomponents/ChatComposer';
 import CommandResultModal from './subcomponents/CommandResultModal';
 
 
-type PendingViewSession = {
-  startedAt: number;
-};
-
 function ChatInterface({
   selectedProject,
   selectedSession,
@@ -29,10 +25,8 @@ function ChatInterface({
   latestMessage,
   onFileOpen,
   onInputFocusChange,
-  onSessionActive,
-  onSessionInactive,
   onSessionProcessing,
-  onSessionNotProcessing,
+  onSessionIdle,
   processingSessions,
   onNavigateToSession,
   onShowSettings,
@@ -51,7 +45,9 @@ function ChatInterface({
   const sessionStore = useSessionStore();
   const streamTimerRef = useRef<number | null>(null);
   const accumulatedStreamRef = useRef('');
-  const pendingViewSessionRef = useRef<PendingViewSession | null>(null);
+  // When each session's `check-session-status` was last sent; idle replies
+  // older than a later local request are discarded as stale.
+  const statusCheckSentAtRef = useRef(new Map<string, number>());
 
   const resetStreamingState = useCallback(() => {
     if (streamTimerRef.current) {
@@ -92,16 +88,15 @@ function ChatInterface({
   const {
     chatMessages,
     addMessage,
-    isLoading,
-    setIsLoading,
+    sessionActivity,
+    isProcessing,
+    canAbortSession,
     currentSessionId,
     setCurrentSessionId,
     isLoadingSessionMessages,
     isLoadingMoreMessages,
     hasMoreMessages,
     totalMessages,
-    canAbortSession,
-    setCanAbortSession,
     isUserScrolledUp,
     setIsUserScrolledUp,
     tokenBudget,
@@ -114,8 +109,6 @@ function ChatInterface({
     isLoadingAllMessages,
     loadAllJustFinished,
     showLoadAllOverlay,
-    claudeStatus,
-    setClaudeStatus,
     createDiff,
     scrollContainerRef,
     scrollToBottom,
@@ -130,8 +123,9 @@ function ChatInterface({
     externalMessageUpdate,
     newSessionTrigger,
     processingSessions,
+    onSessionIdle,
     resetStreamingState,
-    pendingViewSessionRef,
+    statusCheckSentAtRef,
     sessionStore,
   });
 
@@ -191,40 +185,40 @@ function ChatInterface({
     codexModel,
     geminiModel,
     opencodeModel,
-    isLoading,
+    isLoading: isProcessing,
     canAbortSession,
     tokenBudget,
     sendMessage,
     sendByCtrlEnter,
-    onSessionActive,
     onSessionProcessing,
     onInputFocusChange,
     onFileOpen,
     onShowSettings,
-    pendingViewSessionRef,
     scrollToBottom,
     addMessage,
-    setIsLoading,
-    setCanAbortSession,
-    setClaudeStatus,
     setIsUserScrolledUp,
     setPendingPermissionRequests,
   });
 
-  // On WebSocket reconnect, re-fetch the current session's messages from the server
-  // so missed streaming events are shown. Also reset isLoading.
+  // On WebSocket reconnect, re-fetch the current session's messages from the
+  // server so missed streaming events are shown, then re-check the session's
+  // processing status — the authoritative reply restores or clears the
+  // activity indicator depending on whether the run is still active.
   const handleWebSocketReconnect = useCallback(async () => {
     if (!selectedProject || !selectedSession) return;
-    const providerVal = (localStorage.getItem('selected-provider') as LLMProvider) || 'claude';
+    const providerVal =
+      selectedSession.__provider
+      || (localStorage.getItem('selected-provider') as LLMProvider)
+      || 'claude';
     await sessionStore.refreshFromServer(selectedSession.id, {
-      provider: (selectedSession.__provider || providerVal) as LLMProvider,
+      provider: providerVal as LLMProvider,
       // Use DB projectId; legacy folder-derived projectName is no longer accepted here.
       projectId: selectedProject.projectId,
       projectPath: selectedProject.fullPath || selectedProject.path || '',
     });
-    setIsLoading(false);
-    setCanAbortSession(false);
-  }, [selectedProject, selectedSession, sessionStore, setIsLoading, setCanAbortSession]);
+    statusCheckSentAtRef.current.set(selectedSession.id, Date.now());
+    sendMessage({ type: 'check-session-status', sessionId: selectedSession.id, provider: providerVal });
+  }, [selectedProject, selectedSession, sendMessage, sessionStore]);
 
   useChatRealtimeHandlers({
     latestMessage,
@@ -232,25 +226,20 @@ function ChatInterface({
     selectedSession,
     currentSessionId,
     setCurrentSessionId,
-    setIsLoading,
-    setCanAbortSession,
-    setClaudeStatus,
     setTokenBudget,
     setPendingPermissionRequests,
-    pendingViewSessionRef,
     streamTimerRef,
     accumulatedStreamRef,
-    onSessionInactive,
-    onSessionActive,
+    statusCheckSentAtRef,
     onSessionProcessing,
-    onSessionNotProcessing,
+    onSessionIdle,
     onNavigateToSession,
     onWebSocketReconnect: handleWebSocketReconnect,
     sessionStore,
   });
 
   useEffect(() => {
-    if (!isLoading || !canAbortSession) {
+    if (!canAbortSession) {
       return;
     }
 
@@ -267,7 +256,7 @@ function ChatInterface({
     return () => {
       document.removeEventListener('keydown', handleGlobalEscape, { capture: true });
     };
-  }, [canAbortSession, handleAbortSession, isLoading]);
+  }, [canAbortSession, handleAbortSession]);
 
   useEffect(() => {
     return () => {
@@ -362,10 +351,9 @@ function ChatInterface({
           pendingPermissionRequests={pendingPermissionRequests}
           handlePermissionDecision={handlePermissionDecision}
           handleGrantToolPermission={handleGrantToolPermission}
-          claudeStatus={claudeStatus}
-          isLoading={isLoading}
+          activity={sessionActivity}
+          isLoading={isProcessing}
           onAbortSession={handleAbortSession}
-          provider={provider}
           permissionMode={permissionMode}
           onModeSwitch={cyclePermissionMode}
           tokenBudget={tokenBudget}

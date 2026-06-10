@@ -4,13 +4,11 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
 import { showCompletionTitleIndicator } from '../../../utils/pageTitleNotification';
 import { playChatCompletionSound } from '../../../utils/notificationSound';
+import { PENDING_SESSION_ID } from '../../../hooks/useSessionProtection';
+import type { MarkSessionIdle, MarkSessionProcessing } from '../../../hooks/useSessionProtection';
 import type { PendingPermissionRequest, SessionNavigationOptions } from '../types/types';
 import type { ProjectSession, LLMProvider } from '../../../types/app';
 import type { SessionStore, NormalizedMessage } from '../../../stores/useSessionStore';
-
-type PendingViewSession = {
-  startedAt: number;
-};
 
 type LatestChatMessage = {
   type?: string;
@@ -55,18 +53,14 @@ interface UseChatRealtimeHandlersArgs {
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
   setCurrentSessionId: (sessionId: string | null) => void;
-  setIsLoading: (loading: boolean) => void;
-  setCanAbortSession: (canAbort: boolean) => void;
-  setClaudeStatus: (status: { text: string; tokens: number; can_interrupt: boolean } | null) => void;
   setTokenBudget: (budget: Record<string, unknown> | null) => void;
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
-  pendingViewSessionRef: MutableRefObject<PendingViewSession | null>;
   streamTimerRef: MutableRefObject<number | null>;
   accumulatedStreamRef: MutableRefObject<string>;
-  onSessionInactive?: (sessionId?: string | null) => void;
-  onSessionActive?: (sessionId?: string | null) => void;
-  onSessionProcessing?: (sessionId?: string | null) => void;
-  onSessionNotProcessing?: (sessionId?: string | null) => void;
+  /** When each session's `check-session-status` was last sent; guards stale idle replies. */
+  statusCheckSentAtRef: MutableRefObject<Map<string, number>>;
+  onSessionProcessing?: MarkSessionProcessing;
+  onSessionIdle?: MarkSessionIdle;
   onNavigateToSession?: (sessionId: string, options?: SessionNavigationOptions) => void;
   onWebSocketReconnect?: () => void;
   sessionStore: SessionStore;
@@ -82,18 +76,13 @@ export function useChatRealtimeHandlers({
   selectedSession,
   currentSessionId,
   setCurrentSessionId,
-  setIsLoading,
-  setCanAbortSession,
-  setClaudeStatus,
   setTokenBudget,
   setPendingPermissionRequests,
-  pendingViewSessionRef,
   streamTimerRef,
   accumulatedStreamRef,
-  onSessionInactive,
-  onSessionActive,
+  statusCheckSentAtRef,
   onSessionProcessing,
-  onSessionNotProcessing,
+  onSessionIdle,
   onNavigateToSession,
   onWebSocketReconnect,
   sessionStore,
@@ -138,35 +127,24 @@ export function useChatRealtimeHandlers({
 
           const status = msg.status;
           if (status) {
-            const statusInfo = {
-              text: status.text || 'Working...',
-              tokens: status.tokens || 0,
-              can_interrupt: status.can_interrupt !== undefined ? status.can_interrupt : true,
-            };
-            setClaudeStatus(statusInfo);
-            setIsLoading(true);
-            setCanAbortSession(statusInfo.can_interrupt);
+            onSessionProcessing?.(statusSessionId, {
+              statusText: status.text || null,
+              canInterrupt: status.can_interrupt !== false,
+            });
             return;
           }
 
-          // Legacy isProcessing format from check-session-status
-          const isCurrentSession =
-            statusSessionId === currentSessionId || (selectedSession && statusSessionId === selectedSession.id);
-
+          // Reply to check-session-status (or unsolicited processing update)
           if (msg.isProcessing) {
-            onSessionActive?.(statusSessionId);
             onSessionProcessing?.(statusSessionId);
-            if (isCurrentSession) { setIsLoading(true); setCanAbortSession(true); }
             return;
           }
 
-          onSessionInactive?.(statusSessionId);
-          onSessionNotProcessing?.(statusSessionId);
-          if (isCurrentSession) {
-            setIsLoading(false);
-            setCanAbortSession(false);
-            setClaudeStatus(null);
-          }
+          // Idle reply: ignore it if a newer request started after the check
+          // was sent — the reply describes the older request.
+          onSessionIdle?.(statusSessionId, {
+            ifStartedBefore: statusCheckSentAtRef.current.get(statusSessionId),
+          });
           return;
         }
 
@@ -238,23 +216,15 @@ export function useChatRealtimeHandlers({
         // We no longer synthesize client-side placeholder IDs. Until the provider
         // announces `session_created`, the active id is expected to be null.
         if (!currentSessionId) {
-          console.log('Session created with ID:', newSessionId);
-          console.log('Existing session ID:', currentSessionId);
           setCurrentSessionId(newSessionId);
           setPendingPermissionRequests((prev) =>
             prev.map((r) => (r.sessionId ? r : { ...r, sessionId: newSessionId })),
           );
         }
-        pendingViewSessionRef.current = null;
-        onSessionActive?.(newSessionId);
+        // The in-flight request now has a concrete session id: migrate the
+        // processing entry from the pending placeholder.
+        onSessionIdle?.(PENDING_SESSION_ID);
         onSessionProcessing?.(newSessionId);
-        setIsLoading(true);
-        setCanAbortSession(true);
-        setClaudeStatus({
-          text: 'Processing',
-          tokens: 0,
-          can_interrupt: true,
-        });
         onNavigateToSession?.(newSessionId);
         break;
       }
@@ -271,24 +241,27 @@ export function useChatRealtimeHandlers({
         }
         accumulatedStreamRef.current = '';
 
-        setIsLoading(false);
-        setCanAbortSession(false);
-        setClaudeStatus(null);
+        // `complete` is the unified terminal event — every provider run ends
+        // with exactly one, regardless of success, failure, or abort. The
+        // indicator derives from the processing map, so deleting the entry
+        // hides it immediately and atomically.
+        onSessionIdle?.(sid);
+        onSessionIdle?.(PENDING_SESSION_ID);
         setPendingPermissionRequests([]);
-        onSessionInactive?.(sid);
-        onSessionNotProcessing?.(sid);
-        pendingViewSessionRef.current = null;
 
         // Handle aborted case
         if (msg.aborted) {
           // Abort was requested — the complete event confirms it
-          // No special UI action needed beyond clearing loading state above
+          // No special UI action needed beyond clearing the processing entry above
           // The backend already sent any abort-related messages
           break;
         }
 
-        showCompletionTitleIndicator();
-        void playChatCompletionSound();
+        // Celebrate only successful runs (failed runs end with success: false).
+        if (msg.success !== false) {
+          showCompletionTitleIndicator();
+          void playChatCompletionSound();
+        }
 
         const actualSessionId =
           typeof msg.actualSessionId === 'string' && msg.actualSessionId.trim().length > 0
@@ -302,6 +275,7 @@ export function useChatRealtimeHandlers({
 
         if (actualSessionId && sid && actualSessionId !== sid) {
           sessionStore.replaceSessionId(sid, actualSessionId);
+          onSessionIdle?.(actualSessionId);
 
           if (isVisibleSession) {
             setCurrentSessionId(actualSessionId);
@@ -317,15 +291,9 @@ export function useChatRealtimeHandlers({
         break;
       }
 
-      case 'error': {
-        setIsLoading(false);
-        setCanAbortSession(false);
-        setClaudeStatus(null);
-        onSessionInactive?.(sid);
-        onSessionNotProcessing?.(sid);
-        pendingViewSessionRef.current = null;
-        break;
-      }
+      // 'error' is an informational message row, not a terminal event —
+      // providers emit it for mid-run stderr output too. Run teardown is
+      // always signalled by the unified 'complete' that follows.
 
       case 'permission_request': {
         if (!msg.requestId) break;
@@ -340,9 +308,7 @@ export function useChatRealtimeHandlers({
             receivedAt: new Date(),
           }];
         });
-        setIsLoading(true);
-        setCanAbortSession(true);
-        setClaudeStatus({ text: 'Waiting for permission', tokens: 0, can_interrupt: true });
+        onSessionProcessing?.(sid || PENDING_SESSION_ID);
         break;
       }
 
@@ -357,13 +323,10 @@ export function useChatRealtimeHandlers({
         if (msg.text === 'token_budget' && msg.tokenBudget) {
           setTokenBudget(msg.tokenBudget as Record<string, unknown>);
         } else if (msg.text) {
-          setClaudeStatus({
-            text: msg.text,
-            tokens: msg.tokens || 0,
-            can_interrupt: msg.canInterrupt !== undefined ? msg.canInterrupt : true,
+          onSessionProcessing?.(sid || PENDING_SESSION_ID, {
+            statusText: msg.text,
+            canInterrupt: msg.canInterrupt !== false,
           });
-          setIsLoading(true);
-          setCanAbortSession(msg.canInterrupt !== false);
         }
         break;
       }
@@ -379,18 +342,13 @@ export function useChatRealtimeHandlers({
     selectedSession,
     currentSessionId,
     setCurrentSessionId,
-    setIsLoading,
-    setCanAbortSession,
-    setClaudeStatus,
     setTokenBudget,
     setPendingPermissionRequests,
-    pendingViewSessionRef,
     streamTimerRef,
     accumulatedStreamRef,
-    onSessionInactive,
-    onSessionActive,
+    statusCheckSentAtRef,
     onSessionProcessing,
-    onSessionNotProcessing,
+    onSessionIdle,
     onNavigateToSession,
     onWebSocketReconnect,
     sessionStore,

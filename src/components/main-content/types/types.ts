@@ -1,9 +1,12 @@
 import type { Dispatch, SetStateAction } from 'react';
 
 import type { AppTab, Project, ProjectSession } from '../../../types/app';
+import type {
+  MarkSessionIdle,
+  MarkSessionProcessing,
+  SessionActivityMap,
+} from '../../../hooks/useSessionProtection';
 import type { SessionNavigationOptions } from '../../chat/types/types';
-
-export type SessionLifecycleHandler = (sessionId?: string | null) => void;
 
 export type TaskMasterTask = {
   id: string | number;
@@ -46,11 +49,9 @@ export type MainContentProps = {
   onMenuClick: () => void;
   isLoading: boolean;
   onInputFocusChange: (focused: boolean) => void;
-  onSessionActive: SessionLifecycleHandler;
-  onSessionInactive: SessionLifecycleHandler;
-  onSessionProcessing: SessionLifecycleHandler;
-  onSessionNotProcessing: SessionLifecycleHandler;
-  processingSessions: Set<string>;
+  onSessionProcessing: MarkSessionProcessing;
+  onSessionIdle: MarkSessionIdle;
+  processingSessions: SessionActivityMap;
   onNavigateToSession: (targetSessionId: string, options?: SessionNavigationOptions) => void;
   onShowSettings: () => void;
   externalMessageUpdate: number;

@@ -7,7 +7,7 @@ import type {
   AuthenticatedWebSocketRequest,
   LLMProvider,
 } from '@/shared/types.js';
-import { createNormalizedMessage, parseIncomingJsonObject } from '@/shared/utils.js';
+import { createCompleteMessage, parseIncomingJsonObject } from '@/shared/utils.js';
 
 type ChatIncomingMessage = AnyRecord & {
   type?: string;
@@ -173,14 +173,14 @@ export function handleChatConnection(
           success = await dependencies.abortClaudeSDKSession(sessionId);
         }
 
+        // Terminal complete on behalf of the cancelled run — providers skip
+        // their own complete for aborted runs so the client sees exactly one.
         writer.send(
-          createNormalizedMessage({
-            kind: 'complete',
+          createCompleteMessage({
+            provider,
+            sessionId,
             exitCode: success ? 0 : 1,
             aborted: true,
-            success,
-            sessionId,
-            provider,
           })
         );
         return;
@@ -202,13 +202,11 @@ export function handleChatConnection(
         const sessionId = typeof data.sessionId === 'string' ? data.sessionId : '';
         const success = dependencies.abortCursorSession(sessionId);
         writer.send(
-          createNormalizedMessage({
-            kind: 'complete',
+          createCompleteMessage({
+            provider: 'cursor',
+            sessionId,
             exitCode: success ? 0 : 1,
             aborted: true,
-            success,
-            sessionId,
-            provider: 'cursor',
           })
         );
         return;

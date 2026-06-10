@@ -1,4 +1,9 @@
 import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
+import type {
+  MarkSessionIdle,
+  MarkSessionProcessing,
+  SessionActivityMap,
+} from '../../../hooks/useSessionProtection';
 
 export type Provider = LLMProvider;
 
@@ -110,11 +115,9 @@ export interface ChatInterfaceProps {
   latestMessage: any;
   onFileOpen?: (filePath: string, diffInfo?: any) => void;
   onInputFocusChange?: (focused: boolean) => void;
-  onSessionActive?: (sessionId?: string | null) => void;
-  onSessionInactive?: (sessionId?: string | null) => void;
-  onSessionProcessing?: (sessionId?: string | null) => void;
-  onSessionNotProcessing?: (sessionId?: string | null) => void;
-  processingSessions?: Set<string>;
+  onSessionProcessing?: MarkSessionProcessing;
+  onSessionIdle?: MarkSessionIdle;
+  processingSessions?: SessionActivityMap;
   onNavigateToSession?: (targetSessionId: string, options?: SessionNavigationOptions) => void;
   onShowSettings?: () => void;
   autoExpandTools?: boolean;

@@ -28,12 +28,9 @@ function AppContentInner() {
   const wasConnectedRef = useRef(false);
 
   const {
-    activeSessions,
     processingSessions,
-    markSessionAsActive,
-    markSessionAsInactive,
-    markSessionAsProcessing,
-    markSessionAsNotProcessing,
+    markSessionProcessing,
+    markSessionIdle,
   } = useSessionProtection();
 
   const {
@@ -57,7 +54,7 @@ function AppContentInner() {
     navigate,
     latestMessage,
     isMobile,
-    activeSessions,
+    activeSessions: processingSessions,
   });
 
   usePaletteOpsRegister({
@@ -185,10 +182,8 @@ function AppContentInner() {
           onMenuClick={() => setSidebarOpen(true)}
           isLoading={isLoadingProjects}
           onInputFocusChange={setIsInputFocused}
-          onSessionActive={markSessionAsActive}
-          onSessionInactive={markSessionAsInactive}
-          onSessionProcessing={markSessionAsProcessing}
-          onSessionNotProcessing={markSessionAsNotProcessing}
+          onSessionProcessing={markSessionProcessing}
+          onSessionIdle={markSessionIdle}
           processingSessions={processingSessions}
           onNavigateToSession={(targetSessionId: string, options) =>
             navigate(`/session/${targetSessionId}`, { replace: Boolean(options?.replace) })
