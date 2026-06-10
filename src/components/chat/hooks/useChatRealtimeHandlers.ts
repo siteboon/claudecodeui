@@ -258,8 +258,9 @@ export function useChatRealtimeHandlers({
           break;
         }
 
-        // Clear pending session
-        if (pendingSessionId && !currentSessionId && completedSuccessfully) {
+        // Clear pending session if we reached this far (complete event, not aborted)
+        const pendingSessionId = sessionStorage.getItem('pendingSessionId');
+        if (pendingSessionId && !currentSessionId) {
           const resolvedSessionId = actualSessionId || pendingSessionId;
           setCurrentSessionId(resolvedSessionId);
           if (actualSessionId) {
