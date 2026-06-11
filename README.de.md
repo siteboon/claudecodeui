@@ -171,6 +171,7 @@ CloudCLI verfügt über ein Plugin-System, mit dem benutzerdefinierte Tabs mit e
 | **[Sessions](https://github.com/strykereye2/cloudcli-plugin-session-manager)** | Aktive Claude-Code-Sitzungen anzeigen, verwalten und beenden |
 | **[Token Cost Calculator](https://github.com/NightmareAway/cloudcli-plugin-token-cost-calculator)** | API-Kosten anhand von Modellpreisen und Token-Nutzung berechnen, mit Unterstützung für Preisvorlagen |
 | **[Task Queue](https://github.com/TadMSTR/cloudcli-plugin-task-queue)** | Task-Queue-Dashboard zum Anzeigen, Filtern und Starten von Agent-Aufgaben |
+| **[GitHub Issues Board](https://github.com/szmidtpiotr/claude-github-issue)** | Kanban-Board für GitHub Issues mit bidirektionaler TaskMaster-Synchronisierung und automatischer Installation des /github-task CLI-Skills |
 
 ### Eigenes Plugin erstellen
 
