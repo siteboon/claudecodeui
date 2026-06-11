@@ -31,6 +31,8 @@ import koSidebar from './locales/ko/sidebar.json';
 import koChat from './locales/ko/chat.json';
 // eslint-disable-next-line import-x/order
 import koCodeEditor from './locales/ko/codeEditor.json';
+// eslint-disable-next-line import-x/order
+import koTasks from './locales/ko/tasks.json';
 
 import zhCommon from './locales/zh-CN/common.json';
 import zhSettings from './locales/zh-CN/settings.json';
@@ -39,6 +41,8 @@ import zhSidebar from './locales/zh-CN/sidebar.json';
 import zhChat from './locales/zh-CN/chat.json';
 // eslint-disable-next-line import-x/order
 import zhCodeEditor from './locales/zh-CN/codeEditor.json';
+// eslint-disable-next-line import-x/order
+import zhTasks from './locales/zh-CN/tasks.json';
 
 import jaCommon from './locales/ja/common.json';
 import jaSettings from './locales/ja/settings.json';
@@ -133,6 +137,7 @@ i18n
         sidebar: koSidebar,
         chat: koChat,
         codeEditor: koCodeEditor,
+        tasks: koTasks,
       },
       'zh-CN': {
         common: zhCommon,
@@ -141,6 +146,7 @@ i18n
         sidebar: zhSidebar,
         chat: zhChat,
         codeEditor: zhCodeEditor,
+        tasks: zhTasks,
       },
       ja: {
         common: jaCommon,
