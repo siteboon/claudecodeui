@@ -112,7 +112,17 @@ const wss = createWebSocketServer(server, {
         getPendingApprovalsForSession,
     },
     shell: {
-        getSessionById: (sessionId) => sessionManager.getSession(sessionId),
+        resolveProviderSessionId: (sessionId, provider) => {
+            const dbSession = sessionsDb.getSessionById(sessionId);
+            const legacyGeminiSession =
+                provider === 'gemini' ? sessionManager.getSession(sessionId) : null;
+
+            if (dbSession) {
+                return dbSession.provider_session_id ?? legacyGeminiSession?.cliSessionId ?? null;
+            }
+
+            return legacyGeminiSession?.cliSessionId;
+        },
         stripAnsiSequences,
         normalizeDetectedUrl,
         extractUrlsFromText,
