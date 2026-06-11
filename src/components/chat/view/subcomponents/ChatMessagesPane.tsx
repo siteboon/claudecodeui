@@ -209,7 +209,7 @@ export default function ChatMessagesPane({
                   <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
                   </svg>
-                  <span>{t('session.messages.loadMore', { count: 20 })}</span>
+                  <span>{t('session.messages.loadMore', { count: Math.max(totalMessages - sessionMessagesCount, 0) })}</span>
                 </button>
                 <button
                   className="flex items-center space-x-1 rounded-full bg-blue-600 px-3 py-1 text-xs font-medium text-white shadow transition-all duration-200 hover:scale-105 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
