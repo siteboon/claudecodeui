@@ -189,10 +189,11 @@ function readProjectSessionsPageByPath(
   };
 }
 
-// Broadcast progress to all connected WebSocket clients
+// Broadcast progress to all connected WebSocket clients.
+// Uses the unified `kind` envelope like every other websocket frame.
 function broadcastProgress(progress: ProgressUpdate) {
   const message = JSON.stringify({
-    type: 'loading_progress',
+    kind: 'loading_progress',
     ...progress,
   });
 

@@ -70,32 +70,10 @@ export interface Project {
 }
 
 export interface LoadingProgress {
-  type?: 'loading_progress';
+  kind?: 'loading_progress';
   phase?: string;
   current: number;
   total: number;
   currentProject?: string;
   [key: string]: unknown;
 }
-
-export interface ProjectsUpdatedMessage {
-  type: 'projects_updated';
-  projects: Project[];
-  updatedSessionId?: string;
-  updatedSessionIds?: string[];
-  watchProvider?: LLMProvider;
-  watchProviders?: LLMProvider[];
-  changeType?: 'add' | 'change';
-  changeTypes?: Array<'add' | 'change'>;
-  batched?: boolean;
-  [key: string]: unknown;
-}
-
-export interface LoadingProgressMessage extends LoadingProgress {
-  type: 'loading_progress';
-}
-
-export type AppSocketMessage =
-  | LoadingProgressMessage
-  | ProjectsUpdatedMessage
-  | { type?: string;[key: string]: unknown };

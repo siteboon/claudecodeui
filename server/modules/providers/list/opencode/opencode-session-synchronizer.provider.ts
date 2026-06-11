@@ -112,7 +112,10 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
     }
 
     const fallbackTitle = 'Untitled OpenCode Session';
-    const existingSession = sessionsDb.getSessionById(sessionId);
+    // App-created sessions are keyed by an app id, so disk-discovered provider
+    // ids must be resolved through the provider-id mapping first.
+    const existingSession = sessionsDb.getSessionByProviderSessionId(sessionId)
+      ?? sessionsDb.getSessionById(sessionId);
     const existingName = existingSession?.custom_name;
     const nextName = existingName && existingName !== fallbackTitle
       ? existingName

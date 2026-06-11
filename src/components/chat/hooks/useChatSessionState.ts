@@ -2,7 +2,6 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { MutableRefObject } from 'react';
 
 import { authenticatedFetch } from '../../../utils/api';
-import { PENDING_SESSION_ID } from '../../../hooks/useSessionProtection';
 import type { MarkSessionIdle, SessionActivityMap } from '../../../hooks/useSessionProtection';
 import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
 import type { SessionStore, NormalizedMessage } from '../../../stores/useSessionStore';
@@ -25,8 +24,10 @@ interface UseChatSessionStateArgs {
   processingSessions?: SessionActivityMap;
   onSessionIdle?: MarkSessionIdle;
   resetStreamingState: () => void;
-  /** When each session's `check-session-status` was last sent; guards stale idle replies. */
+  /** When each session's `chat.subscribe` was last sent; guards stale idle acks. */
   statusCheckSentAtRef: MutableRefObject<Map<string, number>>;
+  /** Highest live seq observed per session; sent as `lastSeq` on subscribe. */
+  lastSeqRef: MutableRefObject<Map<string, number>>;
   sessionStore: SessionStore;
 }
 
@@ -102,6 +103,7 @@ export function useChatSessionState({
   onSessionIdle,
   resetStreamingState,
   statusCheckSentAtRef,
+  lastSeqRef,
   sessionStore,
 }: UseChatSessionStateArgs) {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(selectedSession?.id || null);
@@ -168,10 +170,8 @@ export function useChatSessionState({
      * - No coupling to unrelated external update signals.
      */
     resetStreamingState();
-    onSessionIdle?.(PENDING_SESSION_ID);
     setCurrentSessionId(null);
     setPendingUserMessage(null);
-    sessionStorage.removeItem('cursorSessionId');
     messagesOffsetRef.current = 0;
     setHasMoreMessages(false);
     setTotalMessages(0);
@@ -208,9 +208,10 @@ export function useChatSessionState({
   const activeSessionId = selectedSession?.id || currentSessionId || null;
 
   // The activity indicator always reflects the latest status of the session
-  // being viewed (or of the pending not-yet-created session on a fresh
-  // draft) — never stale local UI state from the last time it was open.
-  const sessionActivity = processingSessions?.get(activeSessionId ?? PENDING_SESSION_ID) ?? null;
+  // being viewed — never stale local UI state from the last time it was
+  // open. Session ids are concrete before any send, so no pending
+  // placeholder entry exists anymore.
+  const sessionActivity = (activeSessionId && processingSessions?.get(activeSessionId)) || null;
   const isProcessing = sessionActivity !== null;
   const canAbortSession = isProcessing && sessionActivity.canInterrupt;
 
@@ -440,15 +441,15 @@ export function useChatSessionState({
   // Main session loading effect — store-based
   useEffect(() => {
     if (!selectedSession || !selectedProject) {
-      // A new provider run can be in flight before the router has a canonical
-      // selectedSession. Keep the draft view intact until complete/error.
-      if (processingSessionsRef.current?.has(PENDING_SESSION_ID)) {
+      // A freshly created session can be mid-run before the router has a
+      // canonical selectedSession (the URL effect synthesizes one on the
+      // next render). Keep the active view intact instead of wiping it.
+      if (currentSessionId && processingSessionsRef.current?.has(currentSessionId)) {
         return;
       }
 
       resetStreamingState();
       setCurrentSessionId(null);
-      sessionStorage.removeItem('cursorSessionId');
       messagesOffsetRef.current = 0;
       setHasMoreMessages(false);
       setTotalMessages(0);
@@ -489,16 +490,21 @@ export function useChatSessionState({
     }
 
     setCurrentSessionId(selectedSession.id);
-    if (provider === 'cursor') {
-      sessionStorage.setItem('cursorSessionId', selectedSession.id);
-    }
 
-    // Reconcile processing state with the server. Recording the send time
-    // lets the reply handler discard idle replies that a newer request has
+    // Subscribe to the session's live run (if any): the ack reconciles the
+    // processing indicator, re-attaches a mid-flight stream to this socket,
+    // and replays any live events missed since `lastSeq`. Recording the send
+    // time lets the ack handler discard idle acks that a newer request has
     // since outdated.
     if (ws) {
       statusCheckSentAtRef.current.set(selectedSession.id, Date.now());
-      sendMessage({ type: 'check-session-status', sessionId: selectedSession.id, provider });
+      sendMessage({
+        type: 'chat.subscribe',
+        sessions: [{
+          sessionId: selectedSession.id,
+          lastSeq: lastSeqRef.current.get(selectedSession.id) ?? 0,
+        }],
+      });
     }
 
     lastLoadedSessionKeyRef.current = sessionKey;
@@ -527,6 +533,7 @@ export function useChatSessionState({
     selectedSession?.id,
     sendMessage,
     statusCheckSentAtRef,
+    lastSeqRef,
     ws,
     sessionStore,
   ]);

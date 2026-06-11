@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
+import { useWebSocket } from '../../../contexts/WebSocketContext';
 import PermissionContext from '../../../contexts/PermissionContext';
 import { QuickSettingsPanel } from '../../quick-settings-panel';
 import type { ChatInterfaceProps, Provider  } from '../types/types';
@@ -22,7 +23,6 @@ function ChatInterface({
   selectedSession,
   ws,
   sendMessage,
-  latestMessage,
   onFileOpen,
   onInputFocusChange,
   onSessionProcessing,
@@ -40,14 +40,19 @@ function ChatInterface({
   onShowAllTasks,
 }: ChatInterfaceProps) {
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
+  const { subscribe } = useWebSocket();
   const { t } = useTranslation('chat');
 
   const sessionStore = useSessionStore();
   const streamTimerRef = useRef<number | null>(null);
   const accumulatedStreamRef = useRef('');
-  // When each session's `check-session-status` was last sent; idle replies
-  // older than a later local request are discarded as stale.
+  // When each session's `chat.subscribe` was last sent; idle acks older than
+  // a later local request are discarded as stale.
   const statusCheckSentAtRef = useRef(new Map<string, number>());
+  // Highest live `seq` observed per session. Written by the realtime handler
+  // on every sequenced frame, read whenever a `chat.subscribe` is sent so the
+  // server replays only the events this client actually missed.
+  const lastSeqRef = useRef(new Map<string, number>());
 
   const resetStreamingState = useCallback(() => {
     if (streamTimerRef.current) {
@@ -126,8 +131,17 @@ function ChatInterface({
     onSessionIdle,
     resetStreamingState,
     statusCheckSentAtRef,
+    lastSeqRef,
     sessionStore,
   });
+
+  // Brand-new conversation: the composer allocated a stable session id via
+  // the session gateway before the first send. Record it locally and put it
+  // in the URL — this id never changes again, so there is no later handoff.
+  const handleSessionEstablished = useCallback((sessionId: string) => {
+    setCurrentSessionId(sessionId);
+    onNavigateToSession?.(sessionId);
+  }, [setCurrentSessionId, onNavigateToSession]);
 
   const {
     input,
@@ -191,6 +205,7 @@ function ChatInterface({
     sendMessage,
     sendByCtrlEnter,
     onSessionProcessing,
+    onSessionEstablished: handleSessionEstablished,
     onInputFocusChange,
     onFileOpen,
     onShowSettings,
@@ -201,9 +216,9 @@ function ChatInterface({
   });
 
   // On WebSocket reconnect, re-fetch the current session's messages from the
-  // server so missed streaming events are shown, then re-check the session's
-  // processing status — the authoritative reply restores or clears the
-  // activity indicator depending on whether the run is still active.
+  // server so missed streaming events are shown, then re-subscribe — the
+  // `chat_subscribed` ack restores or clears the activity indicator, replays
+  // missed live events, and re-attaches a still-running stream to this socket.
   const handleWebSocketReconnect = useCallback(async () => {
     if (!selectedProject || !selectedSession) return;
     const providerVal =
@@ -217,23 +232,28 @@ function ChatInterface({
       projectPath: selectedProject.fullPath || selectedProject.path || '',
     });
     statusCheckSentAtRef.current.set(selectedSession.id, Date.now());
-    sendMessage({ type: 'check-session-status', sessionId: selectedSession.id, provider: providerVal });
+    sendMessage({
+      type: 'chat.subscribe',
+      sessions: [{
+        sessionId: selectedSession.id,
+        lastSeq: lastSeqRef.current.get(selectedSession.id) ?? 0,
+      }],
+    });
   }, [selectedProject, selectedSession, sendMessage, sessionStore]);
 
   useChatRealtimeHandlers({
-    latestMessage,
+    subscribe,
     provider,
     selectedSession,
     currentSessionId,
-    setCurrentSessionId,
     setTokenBudget,
     setPendingPermissionRequests,
     streamTimerRef,
     accumulatedStreamRef,
+    lastSeqRef,
     statusCheckSentAtRef,
     onSessionProcessing,
     onSessionIdle,
-    onNavigateToSession,
     onWebSocketReconnect: handleWebSocketReconnect,
     sessionStore,
   });

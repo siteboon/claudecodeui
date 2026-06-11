@@ -5,7 +5,7 @@ import readline from 'node:readline';
 import { sessionsDb } from '@/modules/database/index.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
-import { createNormalizedMessage, generateMessageId, readObjectRecord } from '@/shared/utils.js';
+import { createNormalizedMessage, generateMessageId, readObjectRecord, sliceTailPage } from '@/shared/utils.js';
 
 const PROVIDER = 'gemini';
 
@@ -518,9 +518,9 @@ export class GeminiSessionsProvider implements IProviderSessions {
 
     const start = Math.max(0, offset);
     const pageLimit = limit === null ? null : Math.max(0, limit);
-    const messages = pageLimit === null
-      ? normalized.slice(start)
-      : normalized.slice(start, start + pageLimit);
+    // Tail pagination via the shared contract: offset 0 returns the most
+    // recent page, matching every other provider.
+    const { page, hasMore } = sliceTailPage(normalized, pageLimit, start);
     let total = 0;
     for (const msg of normalized) {
       if (msg.kind !== 'tool_result') {
@@ -529,9 +529,9 @@ export class GeminiSessionsProvider implements IProviderSessions {
     }
 
     return {
-      messages,
+      messages: page,
       total,
-      hasMore: pageLimit === null ? false : start + pageLimit < normalized.length,
+      hasMore,
       offset: start,
       limit: pageLimit,
       tokenUsage: result.tokenUsage,

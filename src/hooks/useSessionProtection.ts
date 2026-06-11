@@ -1,12 +1,5 @@
 import { useCallback, useState } from 'react';
 
-/**
- * Map key for a request that is in flight before the provider has announced
- * its real session id (a brand-new conversation). `session_created` migrates
- * the entry to the concrete session id.
- */
-export const PENDING_SESSION_ID = '__pending_session__';
-
 export interface SessionActivity {
   /** Provider-supplied status line; null renders the default activity label. */
   statusText: string | null;
@@ -34,9 +27,9 @@ export type MarkSessionIdle = (
  * Single source of truth for which sessions are actively processing a
  * request. Everything the chat UI shows (activity indicator, abort
  * availability, status text) is derived from this map; terminal events
- * (`complete`, `error`, abort, an authoritative idle status reply) delete the
- * entry atomically. The map also drives session protection: project refreshes
- * are suppressed for sessions that have an entry here.
+ * (`complete`, abort, an authoritative idle subscribe ack) delete the entry
+ * atomically. Session ids are always concrete (allocated before the first
+ * send), so entries are keyed by real session ids only.
  */
 export function useSessionProtection() {
   const [processingSessions, setProcessingSessions] = useState<Map<string, SessionActivity>>(
@@ -82,9 +75,9 @@ export function useSessionProtection() {
         return prev;
       }
 
-      // Guard against stale `check-session-status` replies: if a new request
-      // started after the check was sent, the idle reply describes the older
-      // request and must not clear the newer one.
+      // Guard against stale `chat_subscribed` idle acks: if a new request
+      // started after the subscribe was sent, the idle ack describes the
+      // older request and must not clear the newer one.
       if (opts?.ifStartedBefore !== undefined && existing.startedAt >= opts.ifStartedBefore) {
         return prev;
       }

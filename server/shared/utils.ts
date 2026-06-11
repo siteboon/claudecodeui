@@ -384,6 +384,47 @@ export function createCompleteMessage(opts: {
 }
 
 // ---------------------------
+//----------------- CONVERSATION HISTORY PAGINATION UTILITIES ------------
+/**
+ * Slices one page from the END of a chronologically ordered message list.
+ *
+ * This is the single pagination contract for conversation history across all
+ * providers: `offset = 0` returns the most recent `limit` items, increasing
+ * offsets walk backwards in time (for "scroll up to load older" UIs), and a
+ * `null` limit returns everything. Items must already be sorted oldest-first;
+ * the returned page preserves that order.
+ *
+ * Every provider history reader must use this helper instead of slicing
+ * manually so `offset`/`limit` query params behave identically regardless of
+ * which provider produced the session.
+ */
+export function sliceTailPage<T>(
+  items: T[],
+  limit: number | null,
+  offset: number,
+): { page: T[]; hasMore: boolean } {
+  const total = items.length;
+  const normalizedOffset = Math.max(0, offset);
+
+  if (limit === null) {
+    // A null limit returns the full list; offset still trims newest entries
+    // so "everything before the page I already have" stays expressible.
+    const end = Math.max(0, total - normalizedOffset);
+    return {
+      page: items.slice(0, end),
+      hasMore: false,
+    };
+  }
+
+  const end = Math.max(0, total - normalizedOffset);
+  const start = Math.max(0, end - Math.max(0, limit));
+  return {
+    page: items.slice(start, end),
+    hasMore: start > 0,
+  };
+}
+
+// ---------------------------
 //----------------- MCP CONFIG PARSING UTILITIES ------------
 /**
  * Safely narrows an unknown value to a plain object record.

@@ -5,6 +5,7 @@ import { normalizeProjectPath } from '@/shared/utils.js';
 type SessionRow = {
   session_id: string;
   provider: string;
+  provider_session_id: string | null;
   project_path: string | null;
   jsonl_path: string | null;
   custom_name: string | null;
@@ -13,10 +14,8 @@ type SessionRow = {
   updated_at: string;
 };
 
-type SessionMetadataLookupRow = Pick<
-  SessionRow,
-  'session_id' | 'provider' | 'project_path' | 'jsonl_path' | 'custom_name' | 'isArchived' | 'created_at' | 'updated_at'
->;
+const SESSION_ROW_COLUMNS =
+  'session_id, provider, provider_session_id, project_path, jsonl_path, custom_name, isArchived, created_at, updated_at';
 
 function normalizeTimestamp(value?: string): string | null {
   if (!value) return null;
@@ -35,8 +34,16 @@ function normalizeProjectPathForProvider(provider: string, projectPath: string):
 }
 
 export const sessionsDb = {
+  /**
+   * Upserts one session row discovered on disk by a provider synchronizer.
+   *
+   * The given id is the provider-native session id. Rows are keyed by
+   * `provider_session_id` so a session that was first created by the app
+   * (with an app-allocated `session_id`) is updated in place once its
+   * transcript shows up on disk, instead of producing a duplicate row.
+   */
   createSession(
-    sessionId: string,
+    providerSessionId: string,
     provider: string,
     projectPath: string,
     customName?: string,
@@ -53,19 +60,54 @@ export const sessionsDb = {
     // since it's a foreign key in the sessions table.
     projectsDb.createProjectPath(normalizedProjectPath);
 
+    const existing = db
+      .prepare(
+        `SELECT session_id FROM sessions
+         WHERE provider_session_id = ? AND provider = ?
+         LIMIT 1`
+      )
+      .get(providerSessionId, provider) as { session_id: string } | undefined;
+
+    if (existing) {
+      db.prepare(
+        `UPDATE sessions SET
+           provider = ?,
+           updated_at = COALESCE(?, CURRENT_TIMESTAMP),
+           project_path = ?,
+           jsonl_path = ?,
+           isArchived = 0,
+           custom_name = COALESCE(?, custom_name)
+         WHERE session_id = ?`
+      ).run(
+        provider,
+        updatedAtValue,
+        normalizedProjectPath,
+        jsonlPath ?? null,
+        customName ?? null,
+        existing.session_id
+      );
+
+      return existing.session_id;
+    }
+
+    // Sessions created outside the app (directly via the provider CLI) are
+    // keyed by the provider-native id for both columns. The ON CONFLICT path
+    // covers legacy rows that predate the provider_session_id mapping.
     db.prepare(
-      `INSERT INTO sessions (session_id, provider, custom_name, project_path, jsonl_path, isArchived, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 0, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))
+      `INSERT INTO sessions (session_id, provider, provider_session_id, custom_name, project_path, jsonl_path, isArchived, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 0, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))
        ON CONFLICT(session_id) DO UPDATE SET
          provider = excluded.provider,
+         provider_session_id = excluded.provider_session_id,
          updated_at = excluded.updated_at,
          project_path = excluded.project_path,
          jsonl_path = excluded.jsonl_path,
          isArchived = 0,
          custom_name = COALESCE(excluded.custom_name, sessions.custom_name)`
     ).run(
-      sessionId,
+      providerSessionId,
       provider,
+      providerSessionId,
       customName ?? null,
       normalizedProjectPath,
       jsonlPath ?? null,
@@ -73,7 +115,75 @@ export const sessionsDb = {
       updatedAtValue
     );
 
+    return providerSessionId;
+  },
+
+  /**
+   * Inserts one app-allocated session row before any provider run happens.
+   *
+   * The session gateway uses this when the frontend starts a brand-new chat:
+   * `session_id` is the stable app-facing id, while `provider_session_id`
+   * stays NULL until the provider runtime announces its own id and
+   * `assignProviderSessionId` records the mapping.
+   */
+  createAppSession(sessionId: string, provider: string, projectPath: string): string {
+    const db = getConnection();
+    const normalizedProjectPath = normalizeProjectPathForProvider(provider, projectPath);
+
+    projectsDb.createProjectPath(normalizedProjectPath);
+
+    db.prepare(
+      `INSERT INTO sessions (session_id, provider, provider_session_id, custom_name, project_path, jsonl_path, isArchived, created_at, updated_at)
+       VALUES (?, ?, NULL, NULL, ?, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+    ).run(sessionId, provider, normalizedProjectPath);
+
     return sessionId;
+  },
+
+  /**
+   * Records the provider-native session id for one app-allocated session.
+   *
+   * If the filesystem watcher indexed the provider transcript before this
+   * mapping was recorded (a duplicate row keyed by the provider id exists),
+   * the duplicate is merged into the app row: its transcript path and name
+   * are adopted and the duplicate row is removed. Runs in a transaction so
+   * the sidebar can never observe both rows at once.
+   */
+  assignProviderSessionId(sessionId: string, providerSessionId: string): void {
+    const db = getConnection();
+
+    const merge = db.transaction(() => {
+      const duplicate = db
+        .prepare(
+          `SELECT ${SESSION_ROW_COLUMNS} FROM sessions
+           WHERE (session_id = ? OR provider_session_id = ?)
+             AND session_id <> ?
+           LIMIT 1`
+        )
+        .get(providerSessionId, providerSessionId, sessionId) as SessionRow | undefined;
+
+      if (duplicate) {
+        db.prepare('DELETE FROM sessions WHERE session_id = ?').run(duplicate.session_id);
+        db.prepare(
+          `UPDATE sessions SET
+             provider_session_id = ?,
+             jsonl_path = COALESCE(jsonl_path, ?),
+             custom_name = COALESCE(custom_name, ?),
+             updated_at = CURRENT_TIMESTAMP
+           WHERE session_id = ?`
+        ).run(providerSessionId, duplicate.jsonl_path, duplicate.custom_name, sessionId);
+        return;
+      }
+
+      db.prepare(
+        `UPDATE sessions SET
+           provider_session_id = ?,
+           updated_at = CURRENT_TIMESTAMP
+         WHERE session_id = ?`
+      ).run(providerSessionId, sessionId);
+    });
+
+    merge();
   },
 
   updateSessionCustomName(sessionId: string, customName: string): void {
@@ -85,17 +195,39 @@ export const sessionsDb = {
     ).run(customName, sessionId);
   },
 
-  getSessionById(sessionId: string): SessionMetadataLookupRow | null {
+  getSessionById(sessionId: string): SessionRow | null {
     const db = getConnection();
     const row = db
       .prepare(
-        `SELECT session_id, provider, project_path, jsonl_path, custom_name, isArchived, created_at, updated_at
+        `SELECT ${SESSION_ROW_COLUMNS}
          FROM sessions
          WHERE session_id = ?
          ORDER BY updated_at DESC
          LIMIT 1`
       )
-      .get(sessionId) as SessionMetadataLookupRow | undefined;
+      .get(sessionId) as SessionRow | undefined;
+
+    return row ?? null;
+  },
+
+  /**
+   * Resolves one session row through the provider-native id.
+   *
+   * The filesystem watcher only knows provider ids (they come from transcript
+   * file names), so it uses this lookup to translate disk artifacts back to
+   * the app-facing session row before broadcasting sidebar updates.
+   */
+  getSessionByProviderSessionId(providerSessionId: string): SessionRow | null {
+    const db = getConnection();
+    const row = db
+      .prepare(
+        `SELECT ${SESSION_ROW_COLUMNS}
+         FROM sessions
+         WHERE provider_session_id = ?
+         ORDER BY updated_at DESC
+         LIMIT 1`
+      )
+      .get(providerSessionId) as SessionRow | undefined;
 
     return row ?? null;
   },
@@ -104,7 +236,7 @@ export const sessionsDb = {
     const db = getConnection();
     return db
       .prepare(
-        `SELECT session_id, provider, project_path, jsonl_path, custom_name, isArchived, created_at, updated_at
+        `SELECT ${SESSION_ROW_COLUMNS}
          FROM sessions
          WHERE isArchived = 0`
       )
@@ -119,7 +251,7 @@ export const sessionsDb = {
     const db = getConnection();
     return db
       .prepare(
-        `SELECT session_id, provider, project_path, jsonl_path, custom_name, isArchived, created_at, updated_at
+        `SELECT ${SESSION_ROW_COLUMNS}
          FROM sessions
          WHERE isArchived = 1
          ORDER BY datetime(COALESCE(updated_at, created_at)) DESC, session_id DESC`
@@ -132,7 +264,7 @@ export const sessionsDb = {
     const normalizedProjectPath = normalizeProjectPath(projectPath);
     return db
       .prepare(
-        `SELECT session_id, provider, project_path, jsonl_path, custom_name, isArchived, created_at, updated_at
+        `SELECT ${SESSION_ROW_COLUMNS}
          FROM sessions
          WHERE project_path = ?
            AND isArchived = 0`
@@ -149,7 +281,7 @@ export const sessionsDb = {
     const normalizedProjectPath = normalizeProjectPath(projectPath);
     return db
       .prepare(
-        `SELECT session_id, provider, project_path, jsonl_path, custom_name, isArchived, created_at, updated_at
+        `SELECT ${SESSION_ROW_COLUMNS}
          FROM sessions
          WHERE project_path = ?`
       )
@@ -161,7 +293,7 @@ export const sessionsDb = {
     const normalizedProjectPath = normalizeProjectPath(projectPath);
     return db
       .prepare(
-        `SELECT session_id, provider, project_path, jsonl_path, custom_name, isArchived, created_at, updated_at
+        `SELECT ${SESSION_ROW_COLUMNS}
          FROM sessions
          WHERE project_path = ?
            AND isArchived = 0

@@ -36,6 +36,12 @@ export interface NormalizedMessage {
   timestamp: string;
   provider: LLMProvider;
   kind: MessageKind;
+  /**
+   * Per-run monotonic sequence number assigned by the backend to live
+   * websocket events. Used to compute `lastSeq` for `chat.subscribe` replay;
+   * REST history messages do not carry it.
+   */
+  seq?: number;
 
   // kind-specific fields (flat for simplicity)
   role?: 'user' | 'assistant';
@@ -186,60 +192,6 @@ function computeMerged(server: NormalizedMessage[], realtime: NormalizedMessage[
   return dedupeAdjacentAssistantEchoes([...server, ...extra]);
 }
 
-function compareMessagesByTimestamp(left: NormalizedMessage, right: NormalizedMessage): number {
-  const leftTime = Date.parse(left.timestamp);
-  const rightTime = Date.parse(right.timestamp);
-
-  if (Number.isNaN(leftTime) || Number.isNaN(rightTime) || leftTime === rightTime) {
-    return 0;
-  }
-
-  return leftTime - rightTime;
-}
-
-function rewriteMessageSessionId(
-  msg: NormalizedMessage,
-  fromSessionId: string,
-  toSessionId: string,
-): NormalizedMessage {
-  const streamingSourceId = `__streaming_${fromSessionId}`;
-  const nextId = msg.id === streamingSourceId ? `__streaming_${toSessionId}` : msg.id;
-
-  if (msg.sessionId === toSessionId && nextId === msg.id) {
-    return msg;
-  }
-
-  return {
-    ...msg,
-    id: nextId,
-    sessionId: toSessionId,
-  };
-}
-
-function mergeMessagesById(
-  existing: NormalizedMessage[],
-  incoming: NormalizedMessage[],
-): NormalizedMessage[] {
-  if (existing.length === 0) return incoming;
-  if (incoming.length === 0) return existing;
-
-  const merged = [...existing, ...incoming];
-  const deduped: NormalizedMessage[] = [];
-  const seen = new Set<string>();
-
-  for (const msg of merged) {
-    if (seen.has(msg.id)) {
-      continue;
-    }
-
-    seen.add(msg.id);
-    deduped.push(msg);
-  }
-
-  deduped.sort(compareMessagesByTimestamp);
-  return deduped;
-}
-
 /**
  * Recompute slot.merged only when the input arrays have actually changed
  * (by reference). Returns true if merged was recomputed.
@@ -264,64 +216,39 @@ const MAX_REALTIME_MESSAGES = 500;
 
 export function useSessionStore() {
   const storeRef = useRef(new Map<string, SessionSlot>());
-  const sessionAliasesRef = useRef(new Map<string, string>());
   const activeSessionIdRef = useRef<string | null>(null);
-  // Bump to force re-render — only when the active session's data changes
+  // Bump to force re-render — only when the active session's data changes.
+  // Session ids are stable for the whole conversation lifetime (the backend
+  // allocates them before the first send), so slots are keyed directly with
+  // no alias/redirect indirection.
   const [, setTick] = useState(0);
   const notify = useCallback((sessionId: string) => {
-    const aliases = sessionAliasesRef.current;
-    let resolvedSessionId = sessionId;
-    const visited = new Set<string>();
-
-    while (aliases.has(resolvedSessionId) && !visited.has(resolvedSessionId)) {
-      visited.add(resolvedSessionId);
-      resolvedSessionId = aliases.get(resolvedSessionId)!;
-    }
-
-    if (resolvedSessionId === activeSessionIdRef.current) {
+    if (sessionId === activeSessionIdRef.current) {
       setTick(n => n + 1);
     }
   }, []);
 
-  const resolveSessionId = useCallback((sessionId: string | null | undefined): string | null => {
-    if (!sessionId) {
-      return null;
-    }
-
-    const aliases = sessionAliasesRef.current;
-    let resolvedSessionId = sessionId;
-    const visited = new Set<string>();
-
-    while (aliases.has(resolvedSessionId) && !visited.has(resolvedSessionId)) {
-      visited.add(resolvedSessionId);
-      resolvedSessionId = aliases.get(resolvedSessionId)!;
-    }
-
-    return resolvedSessionId;
+  const setActiveSession = useCallback((sessionId: string | null) => {
+    activeSessionIdRef.current = sessionId;
   }, []);
 
-  const setActiveSession = useCallback((sessionId: string | null) => {
-    activeSessionIdRef.current = resolveSessionId(sessionId);
-  }, [resolveSessionId]);
-
   const getSlot = useCallback((sessionId: string): SessionSlot => {
-    const resolvedSessionId = resolveSessionId(sessionId) ?? sessionId;
     const store = storeRef.current;
-    if (!store.has(resolvedSessionId)) {
-      store.set(resolvedSessionId, createEmptySlot());
+    if (!store.has(sessionId)) {
+      store.set(sessionId, createEmptySlot());
     }
-    return store.get(resolvedSessionId)!;
-  }, [resolveSessionId]);
+    return store.get(sessionId)!;
+  }, []);
 
   const has = useCallback((sessionId: string) => {
-    const resolvedSessionId = resolveSessionId(sessionId) ?? sessionId;
-    return storeRef.current.has(resolvedSessionId);
-  }, [resolveSessionId]);
+    return storeRef.current.has(sessionId);
+  }, []);
 
   /**
    * Fetch messages from the provider sessions endpoint and populate serverMessages.
    *
    * Provider and project metadata are resolved server-side from `sessionId`.
+   * The endpoint returns the standard `{ success, data }` envelope.
    */
   const fetchFromServer = useCallback(async (
     sessionId: string,
@@ -333,10 +260,9 @@ export function useSessionStore() {
       offset?: number;
     } = {},
   ) => {
-    const resolvedSessionId = resolveSessionId(sessionId) ?? sessionId;
-    const slot = getSlot(resolvedSessionId);
+    const slot = getSlot(sessionId);
     slot.status = 'loading';
-    notify(resolvedSessionId);
+    notify(sessionId);
 
     try {
       const params = new URLSearchParams();
@@ -346,14 +272,15 @@ export function useSessionStore() {
       }
 
       const qs = params.toString();
-      const url = `/api/providers/sessions/${encodeURIComponent(resolvedSessionId)}/messages${qs ? `?${qs}` : ''}`;
+      const url = `/api/providers/sessions/${encodeURIComponent(sessionId)}/messages${qs ? `?${qs}` : ''}`;
       const response = await authenticatedFetch(url);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
 
-      const data = await response.json();
+      const body = await response.json();
+      const data = body?.data ?? body;
       const messages: NormalizedMessage[] = data.messages || [];
 
       slot.serverMessages = messages;
@@ -367,15 +294,15 @@ export function useSessionStore() {
         slot.tokenUsage = data.tokenUsage;
       }
 
-      notify(resolvedSessionId);
+      notify(sessionId);
       return slot;
     } catch (error) {
-      console.error(`[SessionStore] fetch failed for ${resolvedSessionId}:`, error);
+      console.error(`[SessionStore] fetch failed for ${sessionId}:`, error);
       slot.status = 'error';
-      notify(resolvedSessionId);
+      notify(sessionId);
       return slot;
     }
-  }, [getSlot, notify, resolveSessionId]);
+  }, [getSlot, notify]);
 
   /**
    * Load older (paginated) messages and prepend to serverMessages.
@@ -389,8 +316,7 @@ export function useSessionStore() {
       limit?: number;
     } = {},
   ) => {
-    const resolvedSessionId = resolveSessionId(sessionId) ?? sessionId;
-    const slot = getSlot(resolvedSessionId);
+    const slot = getSlot(sessionId);
     if (!slot.hasMore) return slot;
 
     const params = new URLSearchParams();
@@ -399,12 +325,13 @@ export function useSessionStore() {
     params.append('offset', String(slot.offset));
 
     const qs = params.toString();
-    const url = `/api/providers/sessions/${encodeURIComponent(resolvedSessionId)}/messages${qs ? `?${qs}` : ''}`;
+    const url = `/api/providers/sessions/${encodeURIComponent(sessionId)}/messages${qs ? `?${qs}` : ''}`;
 
     try {
       const response = await authenticatedFetch(url);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json();
+      const body = await response.json();
+      const data = body?.data ?? body;
       const olderMessages: NormalizedMessage[] = data.messages || [];
 
       // Prepend older messages (they're earlier in the conversation)
@@ -412,45 +339,43 @@ export function useSessionStore() {
       slot.hasMore = Boolean(data.hasMore);
       slot.offset = slot.offset + olderMessages.length;
       recomputeMergedIfNeeded(slot);
-      notify(resolvedSessionId);
+      notify(sessionId);
       return slot;
     } catch (error) {
-      console.error(`[SessionStore] fetchMore failed for ${resolvedSessionId}:`, error);
+      console.error(`[SessionStore] fetchMore failed for ${sessionId}:`, error);
       return slot;
     }
-  }, [getSlot, notify, resolveSessionId]);
+  }, [getSlot, notify]);
 
   /**
    * Append a realtime (WebSocket) message to the correct session slot.
    * This works regardless of which session is actively viewed.
    */
   const appendRealtime = useCallback((sessionId: string, msg: NormalizedMessage) => {
-    const resolvedSessionId = resolveSessionId(sessionId) ?? sessionId;
-    const slot = getSlot(resolvedSessionId);
+    const slot = getSlot(sessionId);
     const normalizedMessage =
-      msg.sessionId === resolvedSessionId
+      msg.sessionId === sessionId
         ? msg
-        : { ...msg, sessionId: resolvedSessionId };
+        : { ...msg, sessionId };
     let updated = [...slot.realtimeMessages, normalizedMessage];
     if (updated.length > MAX_REALTIME_MESSAGES) {
       updated = updated.slice(-MAX_REALTIME_MESSAGES);
     }
     slot.realtimeMessages = updated;
     recomputeMergedIfNeeded(slot);
-    notify(resolvedSessionId);
-  }, [getSlot, notify, resolveSessionId]);
+    notify(sessionId);
+  }, [getSlot, notify]);
 
   /**
    * Append multiple realtime messages at once (batch).
    */
   const appendRealtimeBatch = useCallback((sessionId: string, msgs: NormalizedMessage[]) => {
     if (msgs.length === 0) return;
-    const resolvedSessionId = resolveSessionId(sessionId) ?? sessionId;
-    const slot = getSlot(resolvedSessionId);
+    const slot = getSlot(sessionId);
     const normalizedMessages = msgs.map((msg) =>
-      msg.sessionId === resolvedSessionId
+      msg.sessionId === sessionId
         ? msg
-        : { ...msg, sessionId: resolvedSessionId },
+        : { ...msg, sessionId },
     );
     let updated = [...slot.realtimeMessages, ...normalizedMessages];
     if (updated.length > MAX_REALTIME_MESSAGES) {
@@ -458,8 +383,8 @@ export function useSessionStore() {
     }
     slot.realtimeMessages = updated;
     recomputeMergedIfNeeded(slot);
-    notify(resolvedSessionId);
-  }, [getSlot, notify, resolveSessionId]);
+    notify(sessionId);
+  }, [getSlot, notify]);
 
   /**
    * Re-fetch serverMessages from the provider sessions endpoint.
@@ -472,17 +397,14 @@ export function useSessionStore() {
       projectPath?: string;
     } = {},
   ) => {
-    const resolvedSessionId = resolveSessionId(sessionId) ?? sessionId;
-    const slot = getSlot(resolvedSessionId);
+    const slot = getSlot(sessionId);
     try {
-      const params = new URLSearchParams();
-
-      const qs = params.toString();
-      const url = `/api/providers/sessions/${encodeURIComponent(resolvedSessionId)}/messages${qs ? `?${qs}` : ''}`;
+      const url = `/api/providers/sessions/${encodeURIComponent(sessionId)}/messages`;
       const response = await authenticatedFetch(url);
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json();
+      const body = await response.json();
+      const data = body?.data ?? body;
 
       slot.serverMessages = data.messages || [];
       slot.total = data.total ?? slot.serverMessages.length;
@@ -491,43 +413,40 @@ export function useSessionStore() {
       // drop realtime messages that the server has caught up with to prevent unbounded growth.
       slot.realtimeMessages = [];
       recomputeMergedIfNeeded(slot);
-      notify(resolvedSessionId);
+      notify(sessionId);
     } catch (error) {
-      console.error(`[SessionStore] refresh failed for ${resolvedSessionId}:`, error);
+      console.error(`[SessionStore] refresh failed for ${sessionId}:`, error);
     }
-  }, [getSlot, notify, resolveSessionId]);
+  }, [getSlot, notify]);
 
   /**
    * Update session status.
    */
   const setStatus = useCallback((sessionId: string, status: SessionStatus) => {
-    const resolvedSessionId = resolveSessionId(sessionId) ?? sessionId;
-    const slot = getSlot(resolvedSessionId);
+    const slot = getSlot(sessionId);
     slot.status = status;
-    notify(resolvedSessionId);
-  }, [getSlot, notify, resolveSessionId]);
+    notify(sessionId);
+  }, [getSlot, notify]);
 
   /**
    * Check if a session's data is stale (>30s old).
    */
   const isStale = useCallback((sessionId: string) => {
-    const resolvedSessionId = resolveSessionId(sessionId) ?? sessionId;
-    const slot = storeRef.current.get(resolvedSessionId);
+    const slot = storeRef.current.get(sessionId);
     if (!slot) return true;
     return Date.now() - slot.fetchedAt > STALE_THRESHOLD_MS;
-  }, [resolveSessionId]);
+  }, []);
 
   /**
    * Update or create a streaming message (accumulated text so far).
    * Uses a well-known ID so subsequent calls replace the same message.
    */
   const updateStreaming = useCallback((sessionId: string, accumulatedText: string, msgProvider: LLMProvider) => {
-    const resolvedSessionId = resolveSessionId(sessionId) ?? sessionId;
-    const slot = getSlot(resolvedSessionId);
-    const streamId = `__streaming_${resolvedSessionId}`;
+    const slot = getSlot(sessionId);
+    const streamId = `__streaming_${sessionId}`;
     const msg: NormalizedMessage = {
       id: streamId,
-      sessionId: resolvedSessionId,
+      sessionId,
       timestamp: new Date().toISOString(),
       provider: msgProvider,
       kind: 'stream_delta',
@@ -541,18 +460,17 @@ export function useSessionStore() {
       slot.realtimeMessages = [...slot.realtimeMessages, msg];
     }
     recomputeMergedIfNeeded(slot);
-    notify(resolvedSessionId);
-  }, [getSlot, notify, resolveSessionId]);
+    notify(sessionId);
+  }, [getSlot, notify]);
 
   /**
    * Finalize streaming: convert the streaming message to a regular text message.
    * The well-known streaming ID is replaced with a unique text message ID.
    */
   const finalizeStreaming = useCallback((sessionId: string) => {
-    const resolvedSessionId = resolveSessionId(sessionId) ?? sessionId;
-    const slot = storeRef.current.get(resolvedSessionId);
+    const slot = storeRef.current.get(sessionId);
     if (!slot) return;
-    const streamId = `__streaming_${resolvedSessionId}`;
+    const streamId = `__streaming_${sessionId}`;
     const idx = slot.realtimeMessages.findIndex(m => m.id === streamId);
     if (idx >= 0) {
       const stream = slot.realtimeMessages[idx];
@@ -564,104 +482,35 @@ export function useSessionStore() {
         role: 'assistant',
       };
       recomputeMergedIfNeeded(slot);
-      notify(resolvedSessionId);
+      notify(sessionId);
     }
-  }, [notify, resolveSessionId]);
+  }, [notify]);
 
   /**
    * Clear realtime messages for a session (e.g., after stream completes and server fetch catches up).
    */
   const clearRealtime = useCallback((sessionId: string) => {
-    const resolvedSessionId = resolveSessionId(sessionId) ?? sessionId;
-    const slot = storeRef.current.get(resolvedSessionId);
+    const slot = storeRef.current.get(sessionId);
     if (slot) {
       slot.realtimeMessages = [];
       recomputeMergedIfNeeded(slot);
-      notify(resolvedSessionId);
+      notify(sessionId);
     }
-  }, [notify, resolveSessionId]);
+  }, [notify]);
 
   /**
    * Get merged messages for a session (for rendering).
    */
   const getMessages = useCallback((sessionId: string): NormalizedMessage[] => {
-    const resolvedSessionId = resolveSessionId(sessionId) ?? sessionId;
-    return storeRef.current.get(resolvedSessionId)?.merged ?? [];
-  }, [resolveSessionId]);
+    return storeRef.current.get(sessionId)?.merged ?? [];
+  }, []);
 
   /**
    * Get session slot (for status, pagination info, etc.).
    */
   const getSessionSlot = useCallback((sessionId: string): SessionSlot | undefined => {
-    const resolvedSessionId = resolveSessionId(sessionId) ?? sessionId;
-    return storeRef.current.get(resolvedSessionId);
-  }, [resolveSessionId]);
-
-  const replaceSessionId = useCallback((fromSessionId: string, toSessionId: string) => {
-    const resolvedFromSessionId = resolveSessionId(fromSessionId) ?? fromSessionId;
-    const resolvedToSessionId = resolveSessionId(toSessionId) ?? toSessionId;
-
-    if (resolvedFromSessionId === resolvedToSessionId) {
-      sessionAliasesRef.current.set(fromSessionId, resolvedToSessionId);
-      return;
-    }
-
-    const store = storeRef.current;
-    const sourceSlot = store.get(resolvedFromSessionId);
-    const targetSlot = store.get(resolvedToSessionId) ?? createEmptySlot();
-
-    if (sourceSlot) {
-      const migratedServerMessages = sourceSlot.serverMessages.map((msg) =>
-        rewriteMessageSessionId(msg, resolvedFromSessionId, resolvedToSessionId),
-      );
-      const migratedRealtimeMessages = sourceSlot.realtimeMessages.map((msg) =>
-        rewriteMessageSessionId(msg, resolvedFromSessionId, resolvedToSessionId),
-      );
-
-      targetSlot.serverMessages = mergeMessagesById(targetSlot.serverMessages, migratedServerMessages);
-      targetSlot.realtimeMessages = mergeMessagesById(targetSlot.realtimeMessages, migratedRealtimeMessages);
-      if (targetSlot.realtimeMessages.length > MAX_REALTIME_MESSAGES) {
-        targetSlot.realtimeMessages = targetSlot.realtimeMessages.slice(-MAX_REALTIME_MESSAGES);
-      }
-      targetSlot.status =
-        sourceSlot.status === 'error'
-          ? 'error'
-          : sourceSlot.status === 'streaming' || targetSlot.status === 'streaming'
-            ? 'streaming'
-            : sourceSlot.status === 'loading' || targetSlot.status === 'loading'
-              ? 'loading'
-              : targetSlot.status;
-      targetSlot.fetchedAt = Math.max(targetSlot.fetchedAt, sourceSlot.fetchedAt, Date.now());
-      targetSlot.total = Math.max(
-        targetSlot.total,
-        sourceSlot.total,
-        targetSlot.serverMessages.length,
-        targetSlot.realtimeMessages.length,
-      );
-      targetSlot.hasMore = targetSlot.hasMore || sourceSlot.hasMore;
-      targetSlot.offset = Math.max(targetSlot.offset, sourceSlot.offset);
-      targetSlot.tokenUsage = targetSlot.tokenUsage ?? sourceSlot.tokenUsage;
-      recomputeMergedIfNeeded(targetSlot);
-
-      store.set(resolvedToSessionId, targetSlot);
-      store.delete(resolvedFromSessionId);
-    }
-
-    sessionAliasesRef.current.set(resolvedFromSessionId, resolvedToSessionId);
-    sessionAliasesRef.current.set(fromSessionId, resolvedToSessionId);
-
-    for (const [aliasSessionId, targetSessionId] of sessionAliasesRef.current.entries()) {
-      if (targetSessionId === resolvedFromSessionId) {
-        sessionAliasesRef.current.set(aliasSessionId, resolvedToSessionId);
-      }
-    }
-
-    if (activeSessionIdRef.current === resolvedFromSessionId) {
-      activeSessionIdRef.current = resolvedToSessionId;
-    }
-
-    notify(resolvedToSessionId);
-  }, [notify, resolveSessionId]);
+    return storeRef.current.get(sessionId);
+  }, []);
 
   return useMemo(() => ({
     getSlot,
@@ -679,12 +528,11 @@ export function useSessionStore() {
     clearRealtime,
     getMessages,
     getSessionSlot,
-    replaceSessionId,
   }), [
     getSlot, has, fetchFromServer, fetchMore,
     appendRealtime, appendRealtimeBatch, refreshFromServer,
     setActiveSession, setStatus, isStale, updateStreaming, finalizeStreaming,
-    clearRealtime, getMessages, getSessionSlot, replaceSessionId,
+    clearRealtime, getMessages, getSessionSlot,
   ]);
 }
 
