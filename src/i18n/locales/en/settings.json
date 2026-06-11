@@ -532,6 +532,12 @@
       "description": "Task queue dashboard to view, filter, and launch agent tasks.",
       "install": "Install"
     },
+    "githubIssuesBoardPlugin": {
+      "name": "GitHub Issues Board",
+      "badge": "unofficial",
+      "description": "Kanban board for GitHub Issues with bidirectional TaskMaster sync and /github-task CLI skill auto-install",
+      "install": "Install"
+    },
     "morePlugins": "More",
     "enable": "Enable",
     "disable": "Disable",

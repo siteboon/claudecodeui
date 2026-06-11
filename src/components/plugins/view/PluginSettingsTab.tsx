@@ -8,6 +8,7 @@ import {
   Clock,
   Download,
   ExternalLink,
+  Github,
   GitBranch,
   Loader2,
   ListTodo,
@@ -32,6 +33,7 @@ const PRISM_CLOUDCLI_PLUGIN_URL = 'https://github.com/jakeefr/cloudcli-plugin-pr
 const SESSION_MANAGER_PLUGIN_URL = 'https://github.com/strykereye2/cloudcli-plugin-session-manager';
 const TOKEN_COST_CALCULATOR_PLUGIN_URL = 'https://github.com/NightmareAway/cloudcli-plugin-token-cost-calculator';
 const TASK_QUEUE_PLUGIN_URL = 'https://github.com/TadMSTR/cloudcli-plugin-task-queue';
+const GITHUB_ISSUES_BOARD_PLUGIN_URL = 'https://github.com/szmidtpiotr/claude-github-issue';
 
 type PluginRecommendation = {
   id: string;
@@ -108,6 +110,14 @@ const UNOFFICIAL_PLUGIN_RECOMMENDATIONS: PluginRecommendation[] = [
     repoUrl: TASK_QUEUE_PLUGIN_URL,
     installedNames: ['task-queue'],
     icon: ListTodo,
+    source: 'unofficial',
+  },
+  {
+    id: 'claude-github-issue',
+    translationKey: 'githubIssuesBoardPlugin',
+    repoUrl: GITHUB_ISSUES_BOARD_PLUGIN_URL,
+    installedNames: ['claude-github-issue'],
+    icon: Github,
     source: 'unofficial',
   },
 ];

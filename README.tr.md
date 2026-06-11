@@ -170,6 +170,7 @@ CloudCLI, kendi frontend UI'sı ve isteğe bağlı Node.js arka ucu olan özel s
 | **[Sessions](https://github.com/strykereye2/cloudcli-plugin-session-manager)** | Aktif Claude Code oturumlarını görüntülemeni, yönetmeni ve sonlandırmanı sağlar |
 | **[Token Cost Calculator](https://github.com/NightmareAway/cloudcli-plugin-token-cost-calculator)** | Model fiyatları ve token kullanımından API maliyetlerini hesaplar; model fiyatı hazır ayarlarını destekler |
 | **[Task Queue](https://github.com/TadMSTR/cloudcli-plugin-task-queue)** | Ajan görevlerini görüntülemek, filtrelemek ve başlatmak için görev kuyruğu paneli |
+| **[GitHub Issues Board](https://github.com/szmidtpiotr/claude-github-issue)** | GitHub Issues için Kanban panosu; çift yönlü TaskMaster senkronizasyonu ve /github-task CLI becerisi otomatik kurulumu içerir |
 
 ### Kendi Eklentini Yaz
 
