@@ -62,6 +62,7 @@
     "showRawParameters": "Mostra parametri grezzi",
     "showThinking": "Mostra ragionamento",
     "autoScrollToBottom": "Scorrimento automatico in basso",
+    "showScrollNavigation": "Mostra navigazione di scorrimento",
     "sendByCtrlEnter": "Invia con Ctrl+Invio",
     "sendByCtrlEnterDescription": "Se abilitato, premere Ctrl+Invio invierà il messaggio invece di Invio. Utile per gli utenti IME per evitare invii accidentali.",
     "dragHandle": {

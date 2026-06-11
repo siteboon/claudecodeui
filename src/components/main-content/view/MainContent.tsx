@@ -53,7 +53,7 @@ function MainContent({
   newSessionTrigger,
 }: MainContentProps) {
   const { preferences } = useUiPreferences();
-  const { autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter } = preferences;
+  const { autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, showScrollNavigation, sendByCtrlEnter } = preferences;
 
   const { currentProject, setCurrentProject } = useTaskMaster() as TaskMasterContextValue;
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings() as TasksSettingsContextValue;
@@ -142,6 +142,7 @@ function MainContent({
                 showRawParameters={showRawParameters}
                 showThinking={showThinking}
                 autoScrollToBottom={autoScrollToBottom}
+                showScrollNavigation={showScrollNavigation}
                 sendByCtrlEnter={sendByCtrlEnter}
                 externalMessageUpdate={externalMessageUpdate}
                 newSessionTrigger={newSessionTrigger}

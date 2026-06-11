@@ -121,6 +121,7 @@ export interface ChatInterfaceProps {
   showRawParameters?: boolean;
   showThinking?: boolean;
   autoScrollToBottom?: boolean;
+  showScrollNavigation?: boolean;
   sendByCtrlEnter?: boolean;
   externalMessageUpdate?: number;
   newSessionTrigger?: number;

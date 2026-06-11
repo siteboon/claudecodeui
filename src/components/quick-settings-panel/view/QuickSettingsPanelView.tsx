@@ -26,10 +26,12 @@ export default function QuickSettingsPanelView() {
     showRawParameters: preferences.showRawParameters,
     showThinking: preferences.showThinking,
     autoScrollToBottom: preferences.autoScrollToBottom,
+    showScrollNavigation: preferences.showScrollNavigation,
     sendByCtrlEnter: preferences.sendByCtrlEnter,
   }), [
     preferences.autoExpandTools,
     preferences.autoScrollToBottom,
+    preferences.showScrollNavigation,
     preferences.sendByCtrlEnter,
     preferences.showRawParameters,
     preferences.showThinking,

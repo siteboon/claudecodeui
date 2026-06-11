@@ -273,7 +273,10 @@ export default function ScrollNavigation({
 
   return (
     <div
-      className="pointer-events-none absolute right-0 top-0 z-10 h-full"
+      // Offset from the right edge so the rail clears the message pane's native
+      // scrollbar (flush at right-0 it covers a classic Windows/Chrome scrollbar,
+      // making the scrollbar hard to grab).
+      className="pointer-events-none absolute right-3 top-0 z-10 h-full"
     >
       <div
         className={`pointer-events-auto flex h-full flex-col items-center rounded-full border backdrop-blur-sm transition-all duration-200 ${

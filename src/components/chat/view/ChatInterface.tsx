@@ -41,6 +41,7 @@ function ChatInterface({
   showRawParameters,
   showThinking,
   autoScrollToBottom,
+  showScrollNavigation,
   sendByCtrlEnter,
   externalMessageUpdate,
   newSessionTrigger,
@@ -311,15 +312,17 @@ function ChatInterface({
     <PermissionContext.Provider value={permissionContextValue}>
       <div className="flex h-full flex-col">
         <div className="relative flex-1">
-          <ScrollNavigation
-            scrollContainerRef={scrollContainerRef}
-            chatMessages={chatMessages}
-            loadAllMessages={loadAllMessages}
-            allMessagesLoaded={allMessagesLoaded}
-            hasMoreMessages={hasMoreMessages}
-            totalMessages={totalMessages}
-            sessionMessagesCount={chatMessages.length}
-          />
+          {showScrollNavigation && (
+            <ScrollNavigation
+              scrollContainerRef={scrollContainerRef}
+              chatMessages={chatMessages}
+              loadAllMessages={loadAllMessages}
+              allMessagesLoaded={allMessagesLoaded}
+              hasMoreMessages={hasMoreMessages}
+              totalMessages={totalMessages}
+              sessionMessagesCount={chatMessages.length}
+            />
+          )}
           <div className="absolute inset-0">
           <ChatMessagesPane
           scrollContainerRef={scrollContainerRef}

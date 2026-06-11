@@ -5,6 +5,7 @@ type UiPreferences = {
   showRawParameters: boolean;
   showThinking: boolean;
   autoScrollToBottom: boolean;
+  showScrollNavigation: boolean;
   sendByCtrlEnter: boolean;
   sidebarVisible: boolean;
 };
@@ -37,6 +38,7 @@ const DEFAULTS: UiPreferences = {
   showRawParameters: false,
   showThinking: true,
   autoScrollToBottom: true,
+  showScrollNavigation: false,
   sendByCtrlEnter: false,
   sidebarVisible: true,
 };
