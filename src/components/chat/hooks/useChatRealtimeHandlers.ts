@@ -279,6 +279,7 @@ export function useChatRealtimeHandlers({
 
           if (isVisibleSession) {
             setCurrentSessionId(actualSessionId);
+            void sessionStore.refreshFromServer(actualSessionId);
           }
 
           if (isVisibleSession) {
@@ -286,6 +287,10 @@ export function useChatRealtimeHandlers({
             setTimeout(() => { void paletteOps.refreshProjects(); }, 500);
           }
           break;
+        }
+
+        if (sid && isVisibleSession) {
+          void sessionStore.refreshFromServer(sid);
         }
 
         break;
