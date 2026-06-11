@@ -236,6 +236,25 @@ function isImageContent(text: string): boolean {
 }
 
 /**
+ * Strips the image annotation that claude-sdk.js appends to user commands
+ * before sending to Claude. Without this, the echoed user message content
+ * differs from the frontend pending message content, causing duplicate
+ * user bubbles during streaming.
+ */
+function stripImageAnnotation(text: string): string {
+  return text.replace(/\n\n\[Images provided at the following paths:\][\s\S]*$/g, '').trim();
+}
+
+/**
+ * Detects task-notification XML blocks that appear as user-role messages
+ * during streaming. These are internal SDK events, not human input.
+ */
+function isTaskNotification(text: string): boolean {
+  const trimmed = text.trim();
+  return trimmed.startsWith('<task-notification>') && trimmed.endsWith('</task-notification>');
+}
+
+/**
  * Claude wraps local slash-command metadata in lightweight XML-like tags inside
  * a plain string payload. We intentionally parse only the small tag surface we
  * care about instead of introducing a generic XML parser for untrusted history.
@@ -429,7 +448,11 @@ export class ClaudeSessionsProvider implements IProviderSessions {
               if (isImageContent(text)) {
                 continue;
               }
-              const isEcho = isSubagentPromptEcho(text, subagentPrompts);
+              if (isTaskNotification(text)) {
+                continue;
+              }
+              const cleanText = stripImageAnnotation(text);
+              const isEcho = isSubagentPromptEcho(cleanText, subagentPrompts);
               if (!isEcho) {
                 messages.push(createNormalizedMessage({
                   id: `${baseId}_text_${partIndex}`,
