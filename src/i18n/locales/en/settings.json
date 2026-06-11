@@ -514,6 +514,24 @@
       "description": "Session intelligence for Claude Code, inside CloudCLI. See why your sessions are burning tokens without leaving the browser.",
       "install": "Install"
     },
+    "sessionManagerPlugin": {
+      "name": "Sessions",
+      "badge": "unofficial",
+      "description": "View, manage, and kill active Claude Code sessions.",
+      "install": "Install"
+    },
+    "tokenCostCalculatorPlugin": {
+      "name": "Token Cost Calculator",
+      "badge": "unofficial",
+      "description": "Calculate API costs from model prices and token usage, with preset model pricing support.",
+      "install": "Install"
+    },
+    "taskQueuePlugin": {
+      "name": "Task Queue",
+      "badge": "unofficial",
+      "description": "Task queue dashboard to view, filter, and launch agent tasks.",
+      "install": "Install"
+    },
     "morePlugins": "More",
     "enable": "Enable",
     "disable": "Disable",
