@@ -19,6 +19,7 @@ import type {
   ChatMessage,
   PendingPermissionRequest,
   PermissionMode,
+  SessionEstablishedContext,
 } from '../types/types';
 import type { Project, ProjectSession, LLMProvider, ProviderModelsCacheInfo } from '../../../types/app';
 import { escapeRegExp } from '../utils/chatFormatting';
@@ -51,7 +52,7 @@ interface UseChatComposerStateArgs {
    * stable for the conversation's whole lifetime — the consumer navigates to
    * /session/:id and records it as the current session.
    */
-  onSessionEstablished?: (sessionId: string) => void;
+  onSessionEstablished?: (sessionId: string, context: SessionEstablishedContext) => void;
   onInputFocusChange?: (focused: boolean) => void;
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
@@ -606,6 +607,7 @@ export function useChatComposerState({
       }
 
       const resolvedProjectPath = selectedProject.fullPath || selectedProject.path || '';
+      const sessionSummary = getNotificationSessionSummary(selectedSession, currentInput);
 
       // The conversation always has a stable backend-allocated session id
       // BEFORE the first websocket send: brand-new chats allocate one here
@@ -646,7 +648,11 @@ export function useChatComposerState({
           return;
         }
 
-        onSessionEstablished?.(targetSessionId);
+        onSessionEstablished?.(targetSessionId, {
+          provider,
+          project: selectedProject,
+          summary: sessionSummary,
+        });
       }
 
       const userMessage: ChatMessage = {
@@ -696,8 +702,6 @@ export function useChatComposerState({
       };
 
       const toolsSettings = getToolsSettings();
-      const sessionSummary = getNotificationSessionSummary(selectedSession, currentInput);
-
       const model =
         provider === 'cursor'
           ? cursorModel

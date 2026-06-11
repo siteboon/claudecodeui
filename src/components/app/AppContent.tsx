@@ -46,6 +46,7 @@ function AppContentInner() {
     setShowSettings,
     openSettings,
     refreshProjectsSilently,
+    registerOptimisticSession,
     sidebarSharedProps,
     handleNewSession,
   } = useProjectsState({
@@ -171,6 +172,9 @@ function AppContentInner() {
           processingSessions={processingSessions}
           onNavigateToSession={(targetSessionId: string, options) =>
             navigate(`/session/${targetSessionId}`, { replace: Boolean(options?.replace) })
+          }
+          onSessionEstablished={(targetSessionId, context) =>
+            registerOptimisticSession({ sessionId: targetSessionId, ...context })
           }
           onShowSettings={() => setShowSettings(true)}
           externalMessageUpdate={externalMessageUpdate}

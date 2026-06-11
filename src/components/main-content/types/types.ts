@@ -6,7 +6,7 @@ import type {
   MarkSessionProcessing,
   SessionActivityMap,
 } from '../../../hooks/useSessionProtection';
-import type { SessionNavigationOptions } from '../../chat/types/types';
+import type { SessionEstablishedContext, SessionNavigationOptions } from '../../chat/types/types';
 
 export type TaskMasterTask = {
   id: string | number;
@@ -52,6 +52,7 @@ export type MainContentProps = {
   onSessionIdle: MarkSessionIdle;
   processingSessions: SessionActivityMap;
   onNavigateToSession: (targetSessionId: string, options?: SessionNavigationOptions) => void;
+  onSessionEstablished: (sessionId: string, context: SessionEstablishedContext) => void;
   onShowSettings: () => void;
   externalMessageUpdate: number;
   newSessionTrigger: number;

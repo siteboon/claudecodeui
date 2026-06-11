@@ -107,6 +107,12 @@ export type SessionNavigationOptions = {
   replace?: boolean;
 };
 
+export type SessionEstablishedContext = {
+  provider: LLMProvider;
+  project: Project;
+  summary?: string | null;
+};
+
 export interface ChatInterfaceProps {
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
@@ -118,6 +124,7 @@ export interface ChatInterfaceProps {
   onSessionIdle?: MarkSessionIdle;
   processingSessions?: SessionActivityMap;
   onNavigateToSession?: (targetSessionId: string, options?: SessionNavigationOptions) => void;
+  onSessionEstablished?: (sessionId: string, context: SessionEstablishedContext) => void;
   onShowSettings?: () => void;
   autoExpandTools?: boolean;
   showRawParameters?: boolean;

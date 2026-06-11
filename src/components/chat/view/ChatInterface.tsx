@@ -29,6 +29,7 @@ function ChatInterface({
   onSessionIdle,
   processingSessions,
   onNavigateToSession,
+  onSessionEstablished,
   onShowSettings,
   autoExpandTools,
   showRawParameters,
@@ -138,10 +139,11 @@ function ChatInterface({
   // Brand-new conversation: the composer allocated a stable session id via
   // the session gateway before the first send. Record it locally and put it
   // in the URL — this id never changes again, so there is no later handoff.
-  const handleSessionEstablished = useCallback((sessionId: string) => {
+  const handleSessionEstablished = useCallback<NonNullable<ChatInterfaceProps['onSessionEstablished']>>((sessionId, context) => {
     setCurrentSessionId(sessionId);
+    onSessionEstablished?.(sessionId, context);
     onNavigateToSession?.(sessionId);
-  }, [setCurrentSessionId, onNavigateToSession]);
+  }, [setCurrentSessionId, onSessionEstablished, onNavigateToSession]);
 
   const {
     input,

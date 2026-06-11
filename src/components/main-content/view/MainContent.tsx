@@ -45,6 +45,7 @@ function MainContent({
   onSessionIdle,
   processingSessions,
   onNavigateToSession,
+  onSessionEstablished,
   onShowSettings,
   externalMessageUpdate,
   newSessionTrigger,
@@ -131,6 +132,7 @@ function MainContent({
                 onSessionIdle={onSessionIdle}
                 processingSessions={processingSessions}
                 onNavigateToSession={onNavigateToSession}
+                onSessionEstablished={onSessionEstablished}
                 onShowSettings={onShowSettings}
                 autoExpandTools={autoExpandTools}
                 showRawParameters={showRawParameters}

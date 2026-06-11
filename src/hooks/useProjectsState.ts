@@ -44,6 +44,13 @@ type FetchProjectsOptions = {
   showLoadingState?: boolean;
 };
 
+type RegisterOptimisticSessionArgs = {
+  sessionId: string;
+  provider: LLMProvider;
+  project: Project;
+  summary?: string | null;
+};
+
 const serialize = (value: unknown) => JSON.stringify(value ?? null);
 
 const projectsHaveChanges = (
@@ -258,6 +265,21 @@ const upsertSessionIntoProject = (project: Project, event: SessionUpsertedEvent)
   return next;
 };
 
+const projectFromRegistration = (project: Project): Project => ({
+  projectId: project.projectId,
+  path: project.path || project.fullPath,
+  fullPath: project.fullPath || project.path || '',
+  displayName: project.displayName,
+  isStarred: project.isStarred,
+  sessions: project.sessions ?? [],
+  cursorSessions: project.cursorSessions ?? [],
+  codexSessions: project.codexSessions ?? [],
+  geminiSessions: project.geminiSessions ?? [],
+  opencodeSessions: project.opencodeSessions ?? [],
+  sessionMeta: project.sessionMeta ?? { hasMore: false, total: countLoadedProjectSessions(project) },
+  taskmaster: project.taskmaster,
+});
+
 const VALID_TABS: Set<string> = new Set(['chat', 'files', 'shell', 'git', 'tasks', 'preview']);
 
 const isValidTab = (tab: string): tab is AppTab => {
@@ -372,6 +394,75 @@ export function useProjectsState({
     // Keep chat view stable while still syncing sidebar/session metadata in background.
     await fetchProjects({ showLoadingState: false });
   }, [fetchProjects]);
+
+  const registerOptimisticSession = useCallback(({
+    sessionId: newSessionId,
+    provider,
+    project,
+    summary,
+  }: RegisterOptimisticSessionArgs) => {
+    if (!newSessionId || !project?.projectId) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const optimisticSession: ProjectSession = {
+      id: newSessionId,
+      summary: summary ?? '',
+      messageCount: 0,
+      createdAt: now,
+      created_at: now,
+      updated_at: now,
+      lastActivity: now,
+      __provider: provider,
+      __projectId: project.projectId,
+    };
+    const upsert: SessionUpsertedEvent = {
+      kind: 'session_upserted',
+      sessionId: newSessionId,
+      provider,
+      session: optimisticSession,
+      project: {
+        projectId: project.projectId,
+        path: project.path || project.fullPath,
+        fullPath: project.fullPath || project.path || '',
+        displayName: project.displayName,
+        isStarred: Boolean(project.isStarred),
+      },
+      timestamp: now,
+    };
+
+    setProjects((previousProjects) => {
+      const existingProject = previousProjects.find((candidate) => candidate.projectId === project.projectId);
+      if (!existingProject) {
+        return [upsertSessionIntoProject(projectFromRegistration(project), upsert), ...previousProjects];
+      }
+
+      const updatedProject = upsertSessionIntoProject(existingProject, upsert);
+      if (updatedProject === existingProject) {
+        return previousProjects;
+      }
+
+      return previousProjects.map((candidate) =>
+        candidate.projectId === existingProject.projectId ? updatedProject : candidate,
+      );
+    });
+
+    setSelectedProject((previousProject) => {
+      if (!previousProject || previousProject.projectId !== project.projectId) {
+        return previousProject;
+      }
+
+      const updatedProject = upsertSessionIntoProject(previousProject, upsert);
+      return updatedProject === previousProject ? previousProject : updatedProject;
+    });
+
+    setSelectedSession((previousSession) => (
+      previousSession?.id === newSessionId
+        ? { ...previousSession, ...optimisticSession }
+        : optimisticSession
+    ));
+  }, []);
 
   // Hydrates TaskMaster details for the given `projectId`. The project
   // identifier comes directly from the DB-driven /api/projects response.
@@ -950,6 +1041,7 @@ export function useProjectsState({
     openSettings,
     fetchProjects,
     refreshProjectsSilently,
+    registerOptimisticSession,
     sidebarSharedProps,
     handleProjectSelect,
     handleSessionSelect,
