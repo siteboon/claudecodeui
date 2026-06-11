@@ -202,6 +202,22 @@ export const chatRunRegistry = {
     return runs.get(appSessionId)?.status === 'running';
   },
 
+  listRunningRuns(): Array<{
+    sessionId: string;
+    provider: LLMProvider;
+    startedAt: number;
+    lastSeq: number;
+  }> {
+    return Array.from(runs.values())
+      .filter((run) => run.status === 'running')
+      .map((run) => ({
+        sessionId: run.appSessionId,
+        provider: run.provider,
+        startedAt: run.startedAt,
+        lastSeq: run.lastSeq,
+      }));
+  },
+
   /**
    * Re-attaches a run's outbound stream to a (new) websocket connection.
    *

@@ -3,6 +3,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
+import { chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import type {
   FetchHistoryOptions,
@@ -82,6 +83,21 @@ export const sessionsService = {
    */
   listProviderIds(): LLMProvider[] {
     return providerRegistry.listProviders().map((provider) => provider.id);
+  },
+
+  /**
+   * Returns app-facing ids for provider runs that are currently processing.
+   *
+   * This is intentionally status-only: callers that only need sidebar activity
+   * indicators should not attach to chat streams or request replayed messages.
+   */
+  listRunningSessions(): Array<{
+    sessionId: string;
+    provider: LLMProvider;
+    startedAt: number;
+    lastSeq: number;
+  }> {
+    return chatRunRegistry.listRunningRuns();
   },
 
   /**

@@ -124,6 +124,38 @@ test('complete marks the run finished and duplicate completes are dropped', asyn
   });
 });
 
+test('listRunningRuns returns only currently running app sessions', async () => {
+  await withIsolatedDatabase(() => {
+    sessionsDb.createAppSession('app-run-7', 'claude', '/workspace/demo');
+    sessionsDb.createAppSession('app-run-8', 'codex', '/workspace/demo');
+    const connection = new FakeConnection();
+
+    const completedRun = chatRunRegistry.startRun({
+      appSessionId: 'app-run-7',
+      provider: 'claude',
+      providerSessionId: null,
+      connection,
+      userId: null,
+    });
+    assert.ok(completedRun);
+
+    const runningRun = chatRunRegistry.startRun({
+      appSessionId: 'app-run-8',
+      provider: 'codex',
+      providerSessionId: null,
+      connection,
+      userId: null,
+    });
+    assert.ok(runningRun);
+
+    chatRunRegistry.completeRun('app-run-7', { exitCode: 0 });
+
+    const runningSessions = chatRunRegistry.listRunningRuns();
+    assert.deepEqual(runningSessions.map((session) => session.sessionId), ['app-run-8']);
+    assert.equal(runningSessions[0]?.provider, 'codex');
+  });
+});
+
 test('replayEvents returns only events after the requested seq', async () => {
   await withIsolatedDatabase(() => {
     sessionsDb.createAppSession('app-run-4', 'claude', '/workspace/demo');

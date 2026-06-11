@@ -128,10 +128,42 @@ function createEmptySlot(): SessionSlot {
  * assistant echo (same trimmed text), so finalized stream rows do not stack
  * on top of the persisted copy before realtime is cleared.
  */
+const LOCAL_USER_DEDUPE_WINDOW_MS = 5 * 60 * 1000;
+const LOCAL_USER_DEDUPE_CLOCK_SKEW_MS = 10_000;
+
 function userTextFingerprint(m: NormalizedMessage): string | null {
   if (m.kind !== 'text' || m.role !== 'user') return null;
   const t = (m.content || '').trim();
   return t.length > 0 ? t : null;
+}
+
+function readMessageTime(m: NormalizedMessage): number | null {
+  const time = Date.parse(m.timestamp);
+  return Number.isFinite(time) ? time : null;
+}
+
+function hasServerEchoForLocalUser(
+  localMessage: NormalizedMessage,
+  serverMessages: NormalizedMessage[],
+): boolean {
+  const localText = userTextFingerprint(localMessage);
+  const localTime = readMessageTime(localMessage);
+  if (!localText || localTime === null) {
+    return false;
+  }
+
+  return serverMessages.some((serverMessage) => {
+    if (userTextFingerprint(serverMessage) !== localText) {
+      return false;
+    }
+
+    const serverTime = readMessageTime(serverMessage);
+    return (
+      serverTime !== null
+      && serverTime >= localTime - LOCAL_USER_DEDUPE_CLOCK_SKEW_MS
+      && serverTime - localTime <= LOCAL_USER_DEDUPE_WINDOW_MS
+    );
+  });
 }
 
 /**
@@ -175,16 +207,13 @@ function computeMerged(server: NormalizedMessage[], realtime: NormalizedMessage[
   if (realtime.length === 0) return server;
   if (server.length === 0) return dedupeAdjacentAssistantEchoes(realtime);
   const serverIds = new Set(server.map(m => m.id));
-  const serverUserTexts = new Set(
-    server.map(userTextFingerprint).filter((t): t is string => t !== null),
-  );
   const extra = realtime.filter((m) => {
     if (serverIds.has(m.id)) return false;
     // Optimistic user rows use `local_*` ids; once the same text exists on the
-    // server-backed copy, drop the realtime echo to avoid duplicate bubbles.
+    // server-backed copy from the same send window, drop the realtime echo to
+    // avoid duplicate bubbles without hiding repeated prompts from history.
     if (m.id.startsWith('local_')) {
-      const fp = userTextFingerprint(m);
-      if (fp && serverUserTexts.has(fp)) return false;
+      if (hasServerEchoForLocalUser(m, server)) return false;
     }
     return true;
   });

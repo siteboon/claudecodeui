@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import type { TFunction } from 'i18next';
 
 import type { LoadingProgress, Project, ProjectSession, LLMProvider } from '../../../../types/app';
+import type { SessionActivityMap } from '../../../../hooks/useSessionProtection';
 import type { MCPServerStatus, SessionWithProvider } from '../../types/types';
 
 import SidebarProjectItem from './SidebarProjectItem';
@@ -27,6 +28,8 @@ export type SidebarProjectListProps = {
   getProjectSessions: (project: Project) => SessionWithProvider[];
   onLoadMoreSessions: (projectId: string) => void;
   loadingMoreProjects: Set<string>;
+  activeSessions: SessionActivityMap;
+  forceExpanded?: boolean;
   isProjectStarred: (projectName: string) => boolean;
   onEditingNameChange: (value: string) => void;
   onToggleProject: (projectName: string) => void;
@@ -71,6 +74,8 @@ export default function SidebarProjectList({
   getProjectSessions,
   onLoadMoreSessions,
   loadingMoreProjects,
+  activeSessions,
+  forceExpanded = false,
   isProjectStarred,
   onEditingNameChange,
   onToggleProject,
@@ -122,7 +127,7 @@ export default function SidebarProjectList({
               project={project}
               selectedProject={selectedProject}
               selectedSession={selectedSession}
-              isExpanded={expandedProjects.has(project.projectId)}
+              isExpanded={forceExpanded || expandedProjects.has(project.projectId)}
               isDeleting={deletingProjects.has(project.projectId)}
               isStarred={isProjectStarred(project.projectId)}
               editingProject={editingProject}
@@ -146,6 +151,7 @@ export default function SidebarProjectList({
               onSessionSelect={onSessionSelect}
               onDeleteSession={onDeleteSession}
               onLoadMoreSessions={onLoadMoreSessions}
+              activeSessions={activeSessions}
               onNewSession={onNewSession}
               onEditingSessionNameChange={onEditingSessionNameChange}
               onStartEditingSession={onStartEditingSession}

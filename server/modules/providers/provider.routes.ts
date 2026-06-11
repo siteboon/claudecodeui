@@ -421,6 +421,14 @@ router.post(
 );
 
 router.get(
+  '/sessions/running',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const sessions = sessionsService.listRunningSessions();
+    res.json(createApiSuccessResponse({ sessions }));
+  }),
+);
+
+router.get(
   '/sessions/archived',
   asyncHandler(async (_req: Request, res: Response) => {
     const sessions = sessionsService.listArchivedSessions();

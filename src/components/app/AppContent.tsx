@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -10,6 +10,33 @@ import { PaletteOpsProvider, usePaletteOpsRegister } from '../../contexts/Palett
 import { useDeviceSettings } from '../../hooks/useDeviceSettings';
 import { useSessionProtection } from '../../hooks/useSessionProtection';
 import { useProjectsState } from '../../hooks/useProjectsState';
+import { api } from '../../utils/api';
+
+type RunningSessionApiItem = {
+  sessionId?: unknown;
+  startedAt?: unknown;
+  statusText?: unknown;
+  canInterrupt?: unknown;
+};
+
+type RunningSessionsApiPayload = {
+  data?: {
+    sessions?: RunningSessionApiItem[];
+  };
+};
+
+const parseStartedAt = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
 
 export default function AppContent() {
   return (
@@ -30,6 +57,7 @@ function AppContentInner() {
     processingSessions,
     markSessionProcessing,
     markSessionIdle,
+    syncProcessingSessions,
   } = useSessionProtection();
 
   const {
@@ -56,6 +84,54 @@ function AppContentInner() {
     isMobile,
     activeSessions: processingSessions,
   });
+
+  const refreshRunningSessions = useCallback(async () => {
+    console.log("ASdsad")
+    try {
+      const response = await api.runningSessions();
+      if (!response.ok) {
+        return;
+      }
+
+      const payload = (await response.json()) as RunningSessionsApiPayload;
+      const sessions = Array.isArray(payload.data?.sessions) ? payload.data.sessions : [];
+
+      syncProcessingSessions(
+        sessions
+          .map((session) => {
+            if (typeof session.sessionId !== 'string' || !session.sessionId) {
+              return null;
+            }
+
+            return {
+              sessionId: session.sessionId,
+              startedAt: parseStartedAt(session.startedAt),
+              statusText: typeof session.statusText === 'string' ? session.statusText : undefined,
+              canInterrupt: typeof session.canInterrupt === 'boolean' ? session.canInterrupt : undefined,
+            };
+          })
+          .filter((session): session is NonNullable<typeof session> => Boolean(session)),
+      );
+    } catch (error) {
+      console.error('[AppContent] Failed to sync running sessions:', error);
+    }
+  }, [syncProcessingSessions]);
+
+  useEffect(() => {
+    void refreshRunningSessions();
+  }, [refreshRunningSessions]);
+
+  useEffect(() => {
+    if (processingSessions.size === 0) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      void refreshRunningSessions();
+    }, 5000);
+
+    return () => window.clearInterval(interval);
+  }, [processingSessions.size, refreshRunningSessions]);
 
   usePaletteOpsRegister({
     openSettings,

@@ -13,6 +13,13 @@ export interface SessionActivity {
 
 export type SessionActivityMap = ReadonlyMap<string, SessionActivity>;
 
+export type SessionActivitySnapshot = {
+  sessionId: string;
+  statusText?: string | null;
+  canInterrupt?: boolean;
+  startedAt?: number;
+};
+
 export type MarkSessionProcessing = (
   sessionId?: string | null,
   activity?: { statusText?: string | null; canInterrupt?: boolean },
@@ -22,6 +29,35 @@ export type MarkSessionIdle = (
   sessionId?: string | null,
   opts?: { ifStartedBefore?: number },
 ) => void;
+
+export type SyncProcessingSessions = (
+  sessions: readonly SessionActivitySnapshot[],
+) => void;
+
+const LOCAL_ACTIVITY_GRACE_MS = 10_000;
+
+const sessionActivityMapsMatch = (
+  left: ReadonlyMap<string, SessionActivity>,
+  right: ReadonlyMap<string, SessionActivity>,
+): boolean => {
+  if (left.size !== right.size) {
+    return false;
+  }
+
+  for (const [sessionId, leftActivity] of left) {
+    const rightActivity = right.get(sessionId);
+    if (
+      !rightActivity
+      || leftActivity.statusText !== rightActivity.statusText
+      || leftActivity.canInterrupt !== rightActivity.canInterrupt
+      || leftActivity.startedAt !== rightActivity.startedAt
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+};
 
 /**
  * Single source of truth for which sessions are actively processing a
@@ -88,9 +124,49 @@ export function useSessionProtection() {
     });
   }, []);
 
+  const syncProcessingSessions = useCallback<SyncProcessingSessions>((sessions) => {
+    const now = Date.now();
+
+    setProcessingSessions((prev) => {
+      const incoming = new Map<string, SessionActivitySnapshot>();
+      for (const session of sessions) {
+        if (!session.sessionId) {
+          continue;
+        }
+        incoming.set(session.sessionId, session);
+      }
+
+      const updated = new Map<string, SessionActivity>();
+
+      for (const [sessionId, snapshot] of incoming) {
+        const existing = prev.get(sessionId);
+        const snapshotStartedAt =
+          typeof snapshot.startedAt === 'number' && Number.isFinite(snapshot.startedAt) && snapshot.startedAt > 0
+            ? snapshot.startedAt
+            : undefined;
+
+        updated.set(sessionId, {
+          statusText:
+            snapshot.statusText !== undefined ? snapshot.statusText : existing?.statusText ?? null,
+          canInterrupt: snapshot.canInterrupt ?? existing?.canInterrupt ?? true,
+          startedAt: snapshotStartedAt ?? existing?.startedAt ?? now,
+        });
+      }
+
+      for (const [sessionId, activity] of prev) {
+        if (!incoming.has(sessionId) && now - activity.startedAt < LOCAL_ACTIVITY_GRACE_MS) {
+          updated.set(sessionId, activity);
+        }
+      }
+
+      return sessionActivityMapsMatch(prev, updated) ? prev : updated;
+    });
+  }, []);
+
   return {
     processingSessions,
     markSessionProcessing,
     markSessionIdle,
+    syncProcessingSessions,
   };
 }
