@@ -86,7 +86,6 @@ function AppContentInner() {
   });
 
   const refreshRunningSessions = useCallback(async () => {
-    console.log("ASdsad")
     try {
       const response = await api.runningSessions();
       if (!response.ok) {
