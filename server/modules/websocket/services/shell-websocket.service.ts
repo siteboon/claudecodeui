@@ -5,6 +5,7 @@ import path from 'node:path';
 import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
+import { sessionsDb } from '@/modules/database/index.js';
 import { parseIncomingJsonObject } from '@/shared/utils.js';
 
 type ShellIncomingMessage = {
@@ -76,6 +77,40 @@ function parseShellMessage(rawMessage: RawData): ShellIncomingMessage | null {
   return payload as ShellIncomingMessage;
 }
 
+const SAFE_SESSION_ID_PATTERN = /^[a-zA-Z0-9_.\-:]+$/;
+
+/**
+ * Maps the app-facing session id to the provider-native id used by CLIs.
+ *
+ * Chat history and provider artifacts on disk are keyed by the provider id,
+ * while the shell UI sends the stable app id from the session gateway.
+ */
+function resolveResumeSessionId(
+  appSessionId: string,
+  provider: string,
+  dependencies: ShellWebSocketDependencies
+): string | null {
+  try {
+    const sessionRow = sessionsDb.getSessionById(appSessionId);
+    const providerSessionId = sessionRow?.provider_session_id;
+    if (providerSessionId && SAFE_SESSION_ID_PATTERN.test(providerSessionId)) {
+      return providerSessionId;
+    }
+
+    if (provider === 'gemini') {
+      const geminiSession = dependencies.getSessionById(appSessionId);
+      const cliSessionId = geminiSession?.cliSessionId;
+      if (cliSessionId && SAFE_SESSION_ID_PATTERN.test(cliSessionId)) {
+        return cliSessionId;
+      }
+    }
+  } catch (error) {
+    console.error(`Failed to resolve resume session id for ${provider}:`, error);
+  }
+
+  return null;
+}
+
 /**
  * Resolves provider command line for plain shell and agent-backed shell modes.
  */
@@ -87,7 +122,6 @@ function buildShellCommand(
   const sessionId = readString(message.sessionId);
   const initialCommand = readString(message.initialCommand);
   const provider = readString(message.provider, 'claude');
-  const safeSessionIdPattern = /^[a-zA-Z0-9_.\-:]+$/;
   const isPlainShell =
     readBoolean(message.isPlainShell) ||
     (!!initialCommand && !hasSession) ||
@@ -97,59 +131,47 @@ function buildShellCommand(
     return initialCommand;
   }
 
+  const resumeId =
+    hasSession && sessionId ? resolveResumeSessionId(sessionId, provider, dependencies) : null;
+
   if (provider === 'cursor') {
-    if (hasSession && sessionId) {
-      return `cursor-agent --resume="${sessionId}"`;
+    if (resumeId) {
+      return `cursor-agent --resume="${resumeId}"`;
     }
     return 'cursor-agent';
   }
 
   if (provider === 'codex') {
-    if (hasSession && sessionId) {
+    if (resumeId) {
       if (os.platform() === 'win32') {
-        return `codex resume "${sessionId}"; if ($LASTEXITCODE -ne 0) { codex }`;
+        return `codex resume "${resumeId}"; if ($LASTEXITCODE -ne 0) { codex }`;
       }
-      return `codex resume "${sessionId}" || codex`;
+      return `codex resume "${resumeId}" || codex`;
     }
     return 'codex';
   }
 
   if (provider === 'gemini') {
     const command = initialCommand || 'gemini';
-    let resumeId = sessionId;
-    if (hasSession && sessionId) {
-      try {
-        const existingSession = dependencies.getSessionById(sessionId);
-        if (existingSession && existingSession.cliSessionId) {
-          resumeId = existingSession.cliSessionId;
-          if (!safeSessionIdPattern.test(resumeId)) {
-            resumeId = '';
-          }
-        }
-      } catch (error) {
-        console.error('Failed to get Gemini CLI session ID:', error);
-      }
-    }
-
-    if (hasSession && resumeId) {
+    if (resumeId) {
       return `${command} --resume "${resumeId}"`;
     }
     return command;
   }
 
   if (provider === 'opencode') {
-    if (hasSession && sessionId) {
-      return `opencode --session "${sessionId}"`;
+    if (resumeId) {
+      return `opencode --session "${resumeId}"`;
     }
     return initialCommand || 'opencode';
   }
 
   const command = initialCommand || 'claude';
-  if (hasSession && sessionId) {
+  if (resumeId) {
     if (os.platform() === 'win32') {
-      return `claude --resume "${sessionId}"; if ($LASTEXITCODE -ne 0) { claude }`;
+      return `claude --resume "${resumeId}"; if ($LASTEXITCODE -ne 0) { claude }`;
     }
-    return `claude --resume "${sessionId}" || claude`;
+    return `claude --resume "${resumeId}" || claude`;
   }
   return command;
 }
@@ -254,8 +276,7 @@ export function handleShellConnection(
           return;
         }
 
-        const safeSessionIdPattern = /^[a-zA-Z0-9_.\-:]+$/;
-        if (sessionId && !safeSessionIdPattern.test(sessionId)) {
+        if (sessionId && !SAFE_SESSION_ID_PATTERN.test(sessionId)) {
           ws.send(JSON.stringify({ type: 'error', message: 'Invalid session ID' }));
           return;
         }
