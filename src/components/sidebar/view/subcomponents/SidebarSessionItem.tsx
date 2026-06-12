@@ -82,6 +82,7 @@ export default function SidebarSessionItem({
   const isEditing = editingSession === session.id;
   const compactSessionAge = formatCompactSessionAge(sessionView.sessionTime, currentTime);
   const editingContainerRef = useRef<HTMLDivElement>(null);
+  const showRecentIndicator = !isProcessing && sessionView.isActive;
 
   // The rename panel sits inside a group-hover opacity wrapper, so leaving the row
   // would visually hide it. While editing, dismiss only when the user clicks outside
@@ -119,7 +120,7 @@ export default function SidebarSessionItem({
 
   return (
     <div className="group relative">
-      {!isProcessing && sessionView.isActive && (
+      {showRecentIndicator && (
         <div className="absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2 transform">
           <Tooltip content={t('tooltips.activeSessionIndicator')} position="right">
             <div
@@ -156,13 +157,15 @@ export default function SidebarSessionItem({
 
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <div className="truncate text-xs font-medium text-foreground">{sessionView.sessionName}</div>
+                <div className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">{sessionView.sessionName}</div>
                 {isProcessing ? (
-                  <Tooltip content={t('tooltips.processingSessionIndicator', 'Processing session')} position="top">
-                    <span className="ml-auto flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md text-muted-foreground transition-opacity duration-200 group-hover:opacity-0">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    </span>
-                  </Tooltip>
+                  <span className="ml-auto flex-shrink-0">
+                    <Tooltip content={t('tooltips.processingSessionIndicator', 'Processing session')} position="top">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      </span>
+                    </Tooltip>
+                  </span>
                 ) : compactSessionAge && (
                   <span className="ml-auto flex-shrink-0 text-[11px] text-muted-foreground">{compactSessionAge}</span>
                 )}
@@ -176,7 +179,7 @@ export default function SidebarSessionItem({
               </div>
             </div>
 
-            {!sessionView.isCursorSession && (
+            {!isProcessing && !sessionView.isCursorSession && (
               <button
                 className="ml-1 flex h-5 w-5 items-center justify-center rounded-md bg-red-50 opacity-70 transition-transform active:scale-95 dark:bg-red-900/20"
                 onClick={(event) => {
@@ -195,18 +198,42 @@ export default function SidebarSessionItem({
         <Button
           variant="ghost"
           className={cn(
-            'w-full justify-start p-2 h-auto font-normal text-left hover:bg-accent/50 transition-colors duration-200',
-            isSelected && 'bg-accent text-accent-foreground',
-            !isSelected && isProcessing && 'bg-muted/20 hover:bg-accent/50',
+            'h-auto w-full justify-start rounded-md border bg-card p-2 text-left font-normal transition-all duration-150',
+            isSelected ? 'border-primary/20 bg-primary/5' : 'border-border/30',
+            !isSelected && isProcessing
+              ? 'border-border/60 bg-muted/20 hover:bg-muted/25'
+              : !isSelected && sessionView.isActive
+                ? 'border-green-500/30 bg-green-50/5 hover:bg-green-50/10 dark:bg-green-900/5 dark:hover:bg-green-900/10'
+                : 'hover:bg-accent/50',
           )}
           onClick={() => onSessionSelect(session, project.projectId)}
         >
-          <div className="flex w-full min-w-0 items-start gap-2">
-            <SessionProviderLogo provider={session.__provider} className="mt-0.5 h-3 w-3 flex-shrink-0" />
+          <div className="flex w-full min-w-0 items-center gap-2">
+            <div
+              className={cn(
+                'flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md',
+                isSelected ? 'bg-primary/10' : 'bg-muted/50',
+              )}
+            >
+              <SessionProviderLogo provider={session.__provider} className="h-3 w-3" />
+            </div>
             <div className="min-w-0 flex-1">
-              <div className={cn('flex items-center gap-2', isProcessing && 'pr-7')}>
-                <div className="truncate text-xs font-medium text-foreground">{sessionView.sessionName}</div>
-                {!isProcessing && compactSessionAge && (
+              <div className="flex items-center gap-2">
+                <div className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">{sessionView.sessionName}</div>
+                {isProcessing ? (
+                  <span
+                    className={cn(
+                      'ml-auto flex-shrink-0 transition-opacity duration-200',
+                      isEditing ? 'opacity-0' : 'group-hover:opacity-0',
+                    )}
+                  >
+                    <Tooltip content={t('tooltips.processingSessionIndicator', 'Processing session')} position="top">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      </span>
+                    </Tooltip>
+                  </span>
+                ) : compactSessionAge && (
                   <span
                     className={cn(
                       'ml-auto flex-shrink-0 text-[11px] text-muted-foreground transition-opacity duration-200',
@@ -223,19 +250,6 @@ export default function SidebarSessionItem({
             </div>
           </div>
         </Button>
-
-        {isProcessing && (
-          <div
-            role="status"
-            aria-label={t('tooltips.processingSessionIndicator', 'Processing session')}
-            className={cn(
-              'pointer-events-none absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-opacity duration-200',
-              isEditing ? 'opacity-0' : 'group-hover:opacity-0',
-            )}
-          >
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          </div>
-        )}
 
         <div
           ref={editingContainerRef}
@@ -295,7 +309,7 @@ export default function SidebarSessionItem({
                 >
                   <Edit2 className="h-3 w-3 text-gray-600 dark:text-gray-400" />
                 </button>
-                {!sessionView.isCursorSession && (
+                {!isProcessing && !sessionView.isCursorSession && (
                   <button
                     className="flex h-6 w-6 items-center justify-center rounded bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40"
                     onClick={(event) => {
