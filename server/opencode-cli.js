@@ -194,6 +194,10 @@ async function spawnOpenCode(command, options = {}, ws) {
 
     void providerModelsService.resolveResumeModel('opencode', sessionId, model).then((resolvedModel) => {
       const args = ['run', '--format', 'json'];
+      // OpenCode's `run` command owns workspace selection through `--dir`.
+      // Relying on the child-process cwd alone is not enough on Linux, where
+      // the CLI can still resolve the session under the server install dir.
+      args.push('--dir', workingDir);
       if (sessionId) {
         args.push('--session', sessionId);
       }
