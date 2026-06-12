@@ -257,6 +257,43 @@ export const sessionsDb = {
     return normalizeSessionRow(row) ?? null;
   },
 
+  /**
+   * Finds the newest app-created session for a project that is still waiting
+   * for its provider-native id to be recorded.
+   *
+   * Primary intention: OpenCode can expose a new session in its shared
+   * `opencode.db` before the websocket runtime reports that same provider id
+   * back to our app. At that moment the sidebar already has an optimistic
+   * app-owned session row, but the watcher only knows the provider-native id.
+   *
+   * Without this lookup, the synchronizer would insert a second row keyed by
+   * the provider id, then `assignProviderSessionId()` would merge it a moment
+   * later. That eventually self-heals, but on slow networks the user can still
+   * briefly see two sidebar sessions for the same conversation.
+   *
+   * This helper lets the synchronizer claim the pending app row first, so the
+   * provider id is attached before any watcher-created row exists. The result
+   * is simpler than frontend dedupe and keeps the race resolved at the source.
+   */
+  findLatestPendingAppSession(provider: string, projectPath: string): SessionRow | null {
+    const db = getConnection();
+    const normalizedProjectPath = normalizeProjectPathForProvider(provider, projectPath);
+    const row = db
+      .prepare(
+        `SELECT ${SESSION_ROW_COLUMNS}
+         FROM sessions
+         WHERE provider = ?
+           AND project_path = ?
+           AND provider_session_id IS NULL
+           AND isArchived = 0
+         ORDER BY datetime(COALESCE(updated_at, created_at)) DESC, session_id DESC
+         LIMIT 1`
+      )
+      .get(provider, normalizedProjectPath) as SessionRow | undefined;
+
+    return normalizeSessionRow(row) ?? null;
+  },
+
   getAllSessions(): SessionRow[] {
     const db = getConnection();
     const rows = db
