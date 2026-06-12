@@ -1,5 +1,9 @@
-import { sessionsDb } from '@/modules/database/index.js';
+import path from 'node:path';
+
+import { projectsDb, sessionsDb } from '@/modules/database/index.js';
+import { generateDisplayName } from '@/modules/projects/index.js';
 import { ChatSessionWriter } from '@/modules/websocket/services/chat-session-writer.service.js';
+import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
 import type {
   LLMProvider,
   NormalizedMessage,
@@ -57,6 +61,48 @@ const MAX_BUFFERED_EVENTS_PER_RUN = 5000;
  * path all consult it instead of asking each provider runtime individually.
  */
 const runs = new Map<string, ChatRun>();
+
+async function broadcastCanonicalSessionUpsert(appSessionId: string): Promise<void> {
+  const row = sessionsDb.getSessionById(appSessionId);
+  if (!row || row.isArchived) {
+    return;
+  }
+
+  const projectPath = row.project_path;
+  const project = projectPath ? projectsDb.getProjectPath(projectPath) : null;
+  const displayName = project?.custom_project_name?.trim()
+    ? project.custom_project_name
+    : await generateDisplayName(path.basename(projectPath ?? '') || (projectPath ?? ''), projectPath);
+
+  const payload = JSON.stringify({
+    kind: 'session_upserted',
+    sessionId: row.session_id,
+    providerSessionId: row.provider_session_id,
+    provider: row.provider,
+    session: {
+      id: row.session_id,
+      summary: row.custom_name || '',
+      messageCount: 0,
+      lastActivity: row.updated_at ?? row.created_at ?? new Date().toISOString(),
+    },
+    project: project
+      ? {
+        projectId: project.project_id,
+        path: project.project_path,
+        fullPath: project.project_path,
+        displayName,
+        isStarred: Boolean(project.isStarred),
+      }
+      : null,
+    timestamp: new Date().toISOString(),
+  });
+
+  connectedClients.forEach((client) => {
+    if (client.readyState === WS_OPEN_STATE) {
+      client.send(payload);
+    }
+  });
+}
 
 function evictRunLater(appSessionId: string): void {
   const timer = setTimeout(() => {
@@ -132,6 +178,14 @@ function recordProviderSessionId(run: ChatRun, providerSessionId: string): void 
 
   try {
     sessionsDb.assignProviderSessionId(run.appSessionId, providerSessionId);
+    void broadcastCanonicalSessionUpsert(run.appSessionId).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('[ChatRunRegistry] Failed to broadcast canonical session mapping', {
+        appSessionId: run.appSessionId,
+        providerSessionId,
+        error: message,
+      });
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error('[ChatRunRegistry] Failed to persist provider session id mapping', {

@@ -6,7 +6,7 @@ import test from 'node:test';
 
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
-import type { NormalizedMessage } from '@/shared/types.js';
+import { connectedClients } from '@/modules/websocket/services/websocket-state.service.js';
 
 /**
  * Minimal stand-in for a websocket connection: collects every JSON frame the
@@ -14,10 +14,10 @@ import type { NormalizedMessage } from '@/shared/types.js';
  */
 class FakeConnection {
   readyState = 1; // WS_OPEN_STATE
-  frames: NormalizedMessage[] = [];
+  frames: Array<Record<string, unknown>> = [];
 
   send(data: string): void {
-    this.frames.push(JSON.parse(data) as NormalizedMessage);
+    this.frames.push(JSON.parse(data) as Record<string, unknown>);
   }
 }
 
@@ -33,6 +33,7 @@ async function withIsolatedDatabase(runTest: () => void | Promise<void>): Promis
   try {
     await runTest();
   } finally {
+    connectedClients.clear();
     chatRunRegistry.clearAll();
     closeConnection();
     if (previousDatabasePath === undefined) {
@@ -72,6 +73,7 @@ test('session_created is swallowed and persisted as the provider-id mapping', as
   await withIsolatedDatabase(() => {
     sessionsDb.createAppSession('app-run-2', 'cursor', '/workspace/demo');
     const connection = new FakeConnection();
+    connectedClients.add(connection as never);
     const run = chatRunRegistry.startRun({
       appSessionId: 'app-run-2',
       provider: 'cursor',
@@ -88,9 +90,12 @@ test('session_created is swallowed and persisted as the provider-id mapping', as
       newSessionId: 'cursor-native-7',
     });
 
-    // Never forwarded to the client...
-    assert.equal(connection.frames.length, 0);
-    // ...but recorded in the registry and persisted in the database.
+    // The provider-native event itself is never forwarded...
+    const sessionUpserts = connection.frames.filter((frame) => frame.kind === 'session_upserted');
+    assert.equal(sessionUpserts.length, 1);
+    assert.equal(sessionUpserts[0]?.sessionId, 'app-run-2');
+    assert.equal(sessionUpserts[0]?.providerSessionId, 'cursor-native-7');
+    // ...but the canonical mapping is recorded and persisted in the database.
     assert.equal(run.providerSessionId, 'cursor-native-7');
     assert.equal(sessionsDb.getSessionById('app-run-2')?.provider_session_id, 'cursor-native-7');
   });

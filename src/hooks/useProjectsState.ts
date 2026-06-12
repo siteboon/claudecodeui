@@ -29,6 +29,7 @@ type UseProjectsStateArgs = {
  */
 type SessionUpsertedEvent = ServerEvent & {
   sessionId: string;
+  providerSessionId?: string | null;
   provider: LLMProvider;
   session: ProjectSession;
   project: {
@@ -212,6 +213,26 @@ const mergeProjectSessionPage = (
   return mergedProject;
 };
 
+const getSessionAliasIds = (event: SessionUpsertedEvent): Set<string> => {
+  const ids = new Set<string>();
+  const add = (value: unknown) => {
+    if (typeof value !== 'string') {
+      return;
+    }
+
+    const trimmed = value.trim();
+    if (trimmed) {
+      ids.add(trimmed);
+    }
+  };
+
+  add(event.sessionId);
+  add(event.providerSessionId);
+  add(event.session?.id);
+
+  return ids;
+};
+
 /**
  * Resolves which provider bucket on a `Project` holds sessions for a provider.
  * The legacy payload keeps Claude sessions in `sessions` and the other
@@ -237,23 +258,47 @@ const providerBucketKey = (
 const upsertSessionIntoProject = (project: Project, event: SessionUpsertedEvent): Project => {
   const bucketKey = providerBucketKey(event.provider);
   const bucket = project[bucketKey] ?? [];
-  const existingIndex = bucket.findIndex((session) => session.id === event.sessionId);
+  const aliasIds = getSessionAliasIds(event);
+  const normalizedSession: ProjectSession = {
+    ...event.session,
+    id: event.sessionId,
+  };
+  const existingIndex = bucket.findIndex((session) => aliasIds.has(String(session.id)));
 
   let nextBucket: ProjectSession[];
+  let inserted = false;
   if (existingIndex >= 0) {
-    const existing = bucket[existingIndex];
-    const updated = { ...existing, ...event.session };
-    if (serialize(existing) === serialize(updated)) {
+    let changed = false;
+    nextBucket = [];
+
+    for (const [index, session] of bucket.entries()) {
+      if (index === existingIndex) {
+        const updated = { ...session, ...normalizedSession };
+        if (serialize(session) !== serialize(updated)) {
+          changed = true;
+        }
+        nextBucket.push(updated);
+        continue;
+      }
+
+      if (aliasIds.has(String(session.id))) {
+        changed = true;
+        continue;
+      }
+
+      nextBucket.push(session);
+    }
+
+    if (!changed) {
       return project;
     }
-    nextBucket = [...bucket];
-    nextBucket[existingIndex] = updated;
   } else {
-    nextBucket = [event.session, ...bucket];
+    nextBucket = [normalizedSession, ...bucket];
+    inserted = true;
   }
 
   const next: Project = { ...project, [bucketKey]: nextBucket };
-  if (existingIndex < 0) {
+  if (inserted) {
     const total = Number(project.sessionMeta?.total ?? 0) + 1;
     next.sessionMeta = {
       ...project.sessionMeta,
@@ -629,10 +674,40 @@ export function useProjectsState({
         const updated = upsertSessionIntoProject(previousProject, upsert);
         return updated === previousProject ? previousProject : updated;
       });
+
+      const aliasedSelectedSessionId =
+        typeof upsert.providerSessionId === 'string' && upsert.providerSessionId !== upsert.sessionId
+          ? upsert.providerSessionId
+          : null;
+      if (!aliasedSelectedSessionId) {
+        return;
+      }
+
+      const normalizedSelectedSession: ProjectSession = {
+        ...upsert.session,
+        id: upsert.sessionId,
+        __provider: upsert.provider,
+        __projectId: upsert.project?.projectId ?? currentSelectedSession?.__projectId,
+      };
+
+      setSelectedSession((previousSession) => {
+        if (previousSession?.id !== aliasedSelectedSessionId) {
+          return previousSession;
+        }
+
+        return {
+          ...previousSession,
+          ...normalizedSelectedSession,
+        };
+      });
+
+      if (sessionId === aliasedSelectedSessionId) {
+        navigate(`/session/${upsert.sessionId}`);
+      }
     };
 
     return subscribe(handleEvent);
-  }, [subscribe]);
+  }, [navigate, sessionId, subscribe]);
 
   useEffect(() => {
     return () => {

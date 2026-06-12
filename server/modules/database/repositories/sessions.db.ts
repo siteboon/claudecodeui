@@ -17,15 +17,40 @@ type SessionRow = {
 const SESSION_ROW_COLUMNS =
   'session_id, provider, provider_session_id, project_path, jsonl_path, custom_name, isArchived, created_at, updated_at';
 
+const SQLITE_UTC_TIMESTAMP_REGEX = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
+
 function normalizeTimestamp(value?: string): string | null {
   if (!value) return null;
 
-  const parsed = new Date(value);
+  // SQLite CURRENT_TIMESTAMP is stored as UTC without a timezone suffix.
+  // Normalize it here so every session reader returns canonical ISO strings
+  // and the sidebar never interprets fresh rows as local-time "hours old".
+  const normalizedValue = SQLITE_UTC_TIMESTAMP_REGEX.test(value)
+    ? `${value.replace(' ', 'T')}Z`
+    : value;
+
+  const parsed = new Date(normalizedValue);
   if (Number.isNaN(parsed.getTime())) {
     return null;
   }
 
   return parsed.toISOString();
+}
+
+function normalizeSessionRow<T extends SessionRow | null | undefined>(row: T): T {
+  if (!row) {
+    return row;
+  }
+
+  return {
+    ...row,
+    created_at: normalizeTimestamp(row.created_at) ?? row.created_at,
+    updated_at: normalizeTimestamp(row.updated_at) ?? row.updated_at,
+  };
+}
+
+function normalizeSessionRows(rows: SessionRow[]): SessionRow[] {
+  return rows.map((row) => normalizeSessionRow(row) as SessionRow);
 }
 
 function normalizeProjectPathForProvider(provider: string, projectPath: string): string {
@@ -207,7 +232,7 @@ export const sessionsDb = {
       )
       .get(sessionId) as SessionRow | undefined;
 
-    return row ?? null;
+    return normalizeSessionRow(row) ?? null;
   },
 
   /**
@@ -229,18 +254,20 @@ export const sessionsDb = {
       )
       .get(providerSessionId) as SessionRow | undefined;
 
-    return row ?? null;
+    return normalizeSessionRow(row) ?? null;
   },
 
   getAllSessions(): SessionRow[] {
     const db = getConnection();
-    return db
+    const rows = db
       .prepare(
         `SELECT ${SESSION_ROW_COLUMNS}
          FROM sessions
          WHERE isArchived = 0`
       )
       .all() as SessionRow[];
+
+    return normalizeSessionRows(rows);
   },
 
   /**
@@ -249,7 +276,7 @@ export const sessionsDb = {
    */
   getArchivedSessions(): SessionRow[] {
     const db = getConnection();
-    return db
+    const rows = db
       .prepare(
         `SELECT ${SESSION_ROW_COLUMNS}
          FROM sessions
@@ -257,12 +284,14 @@ export const sessionsDb = {
          ORDER BY datetime(COALESCE(updated_at, created_at)) DESC, session_id DESC`
       )
       .all() as SessionRow[];
+
+    return normalizeSessionRows(rows);
   },
 
   getSessionsByProjectPath(projectPath: string): SessionRow[] {
     const db = getConnection();
     const normalizedProjectPath = normalizeProjectPath(projectPath);
-    return db
+    const rows = db
       .prepare(
         `SELECT ${SESSION_ROW_COLUMNS}
          FROM sessions
@@ -270,6 +299,8 @@ export const sessionsDb = {
            AND isArchived = 0`
       )
       .all(normalizedProjectPath) as SessionRow[];
+
+    return normalizeSessionRows(rows);
   },
 
   /**
@@ -279,19 +310,21 @@ export const sessionsDb = {
   getSessionsByProjectPathIncludingArchived(projectPath: string): SessionRow[] {
     const db = getConnection();
     const normalizedProjectPath = normalizeProjectPath(projectPath);
-    return db
+    const rows = db
       .prepare(
         `SELECT ${SESSION_ROW_COLUMNS}
          FROM sessions
          WHERE project_path = ?`
       )
       .all(normalizedProjectPath) as SessionRow[];
+
+    return normalizeSessionRows(rows);
   },
 
   getSessionsByProjectPathPage(projectPath: string, limit: number, offset: number): SessionRow[] {
     const db = getConnection();
     const normalizedProjectPath = normalizeProjectPath(projectPath);
-    return db
+    const rows = db
       .prepare(
         `SELECT ${SESSION_ROW_COLUMNS}
          FROM sessions
@@ -301,6 +334,8 @@ export const sessionsDb = {
          LIMIT ? OFFSET ?`
       )
       .all(normalizedProjectPath, limit, offset) as SessionRow[];
+
+    return normalizeSessionRows(rows);
   },
 
   countSessionsByProjectPath(projectPath: string): number {
