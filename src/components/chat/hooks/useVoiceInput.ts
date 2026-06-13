@@ -26,8 +26,8 @@ export type VoiceInputState = 'idle' | 'recording' | 'transcribing';
 
 /**
  * Push-to-talk dictation. Records the mic, uploads to /api/voice/transcribe
- * (faster-whisper sidecar via the Express proxy), returns text via onTranscript.
- * Ported from tooler's VoiceInput.js.
+ * (an OpenAI-compatible speech-to-text backend via the Express proxy), and
+ * returns the transcript through onTranscript.
  */
 export function useVoiceInput(onTranscript: (text: string) => void, onError?: (msg: string) => void) {
   const [state, setState] = useState<VoiceInputState>('idle');

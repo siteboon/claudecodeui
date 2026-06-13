@@ -19,7 +19,12 @@ const ENV = {
   ttsFormat: process.env.VOICE_TTS_FORMAT || 'mp3',
 };
 
-// Per-request config: client headers (from the user's voice settings) override env defaults.
+/**
+ * Resolve the voice backend config for a request. Client headers (set from the
+ * user's in-app voice settings) take precedence over the server env defaults.
+ * @param {import('express').Request} req
+ * @returns {{baseUrl: string, apiKey: string, sttModel: string, ttsModel: string, ttsVoice: string}}
+ */
 function resolveConfig(req) {
   const h = req.headers;
   return {
@@ -35,6 +40,14 @@ const router = express.Router();
 
 // Generous by default — local TTS can synthesize long messages at ~real-time on CPU.
 const VOICE_TIMEOUT_MS = Number(process.env.VOICE_TIMEOUT_MS || 300000);
+
+/**
+ * fetch() with an AbortController timeout so a stalled backend can't hold the
+ * request open indefinitely. Aborts after VOICE_TIMEOUT_MS.
+ * @param {string} url
+ * @param {RequestInit} [options]
+ * @returns {Promise<Response>}
+ */
 async function fetchWithTimeout(url, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), VOICE_TIMEOUT_MS);
@@ -45,19 +58,29 @@ async function fetchWithTimeout(url, options = {}) {
   }
 }
 
-// Turn backend failures into a clear, actionable message for the client.
+/**
+ * Turn a backend fetch failure into a clear, actionable client response:
+ * 504 on timeout (AbortError), 502 otherwise.
+ * @param {import('express').Response} res
+ * @param {Error} e
+ */
 function backendError(res, e) {
   if (e && e.name === 'AbortError') {
     return res.status(504).json({
-      error: `Voice backend timed out after ${Math.round(VOICE_TIMEOUT_MS / 1000)}s. Check your sidecar or API.`,
+      error: `Voice backend timed out after ${Math.round(VOICE_TIMEOUT_MS / 1000)}s. Check your voice backend.`,
     });
   }
   return res.status(502).json({ error: `Voice backend unreachable: ${e.message}` });
 }
 
-// SSRF guard for the user-configurable backend URL: http/https only, and block the
-// link-local / cloud-metadata range. localhost/private are allowed on purpose so users
-// can run a local voice server (LocalAI, Speaches, etc.).
+/**
+ * SSRF guard for the user-configurable backend URL: allow http/https only and
+ * block the link-local / cloud-metadata range (169.254.x). localhost and private
+ * ranges are allowed on purpose so users can point at a local voice server
+ * (LocalAI, Speaches, Kokoro-FastAPI, etc.).
+ * @param {string} raw
+ * @returns {boolean}
+ */
 function isAllowedBackendUrl(raw) {
   let u;
   try {
@@ -70,7 +93,13 @@ function isAllowedBackendUrl(raw) {
   return true;
 }
 
-// Don't surface an upstream 401/403 as if the user's own app login failed.
+/**
+ * Relay an upstream (backend) error to the client without making an upstream
+ * 401/403 look like the user's own app login failed.
+ * @param {import('express').Response} res
+ * @param {number} status
+ * @param {string} [text]
+ */
 function upstreamError(res, status, text) {
   if (status === 401 || status === 403) {
     return res.status(502).json({ error: 'Voice backend rejected the request (check the API key).' });
@@ -79,6 +108,11 @@ function upstreamError(res, status, text) {
 }
 
 let _upload = null;
+/**
+ * Lazily build a memory-storage multer instance (25 MB cap) for audio uploads,
+ * so multer is only imported when the voice feature is actually used.
+ * @returns {Promise<import('multer').Multer>}
+ */
 async function getUpload() {
   if (!_upload) {
     const multer = (await import('multer')).default;
@@ -87,16 +121,27 @@ async function getUpload() {
   return _upload;
 }
 
+/**
+ * Build the Authorization header for the backend, or an empty object when no
+ * key is configured (e.g. a local server that needs none).
+ * @param {string} apiKey
+ * @returns {Record<string, string>}
+ */
 function authHeader(apiKey) {
   return apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
 }
 
-// GET /api/voice/health -> { configured } (true if a base URL is available)
+/**
+ * GET /api/voice/health -> { configured } (true when a backend base URL is set).
+ */
 router.get('/health', (req, res) => {
   res.json({ configured: Boolean(resolveConfig(req).baseUrl) });
 });
 
-// POST /api/voice/transcribe  (multipart 'audio') -> { text }
+/**
+ * POST /api/voice/transcribe (multipart 'audio') -> { text }.
+ * Forwards the uploaded audio to the backend's /audio/transcriptions endpoint.
+ */
 router.post('/transcribe', async (req, res) => {
   const cfg = resolveConfig(req);
   if (!cfg.baseUrl) return res.status(503).json({ error: 'No voice backend configured' });
@@ -129,7 +174,10 @@ router.post('/transcribe', async (req, res) => {
   });
 });
 
-// POST /api/voice/tts  { text } -> audio bytes
+/**
+ * POST /api/voice/tts { text } -> audio bytes.
+ * Forwards the text to the backend's /audio/speech endpoint and streams the audio back.
+ */
 router.post('/tts', async (req, res) => {
   const cfg = resolveConfig(req);
   if (!cfg.baseUrl) return res.status(503).json({ error: 'No voice backend configured' });
