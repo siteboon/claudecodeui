@@ -116,12 +116,15 @@ export function useVoiceInput(
   }, [onTranscript, onError]);
 
   // Stop recording. Pass { send: true } to auto-send the transcript once it's ready.
+  // Guard on the recorder's own state (not React state) so a double tap, or the mic
+  // and Send buttons both firing, can't call stop() on an already-inactive recorder.
   const stop = useCallback((opts?: { send?: boolean }) => {
-    if (recorderRef.current && state === 'recording') {
+    const rec = recorderRef.current;
+    if (rec && rec.state !== 'inactive') {
       sendRef.current = opts?.send ?? false;
-      recorderRef.current.stop();
+      rec.stop();
     }
-  }, [state]);
+  }, []);
 
   const toggle = useCallback(() => {
     if (state === 'recording') stop();
