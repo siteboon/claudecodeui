@@ -29,11 +29,16 @@ export type VoiceInputState = 'idle' | 'recording' | 'transcribing';
  * (an OpenAI-compatible speech-to-text backend via the Express proxy), and
  * returns the transcript through onTranscript.
  */
-export function useVoiceInput(onTranscript: (text: string) => void, onError?: (msg: string) => void) {
+export function useVoiceInput(
+  onTranscript: (text: string, send?: boolean) => void,
+  onError?: (msg: string) => void,
+) {
   const [state, setState] = useState<VoiceInputState>('idle');
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  // Whether the in-progress stop should auto-send the transcript (vs just fill the box).
+  const sendRef = useRef(false);
 
   const stopTracks = () => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -66,6 +71,9 @@ export function useVoiceInput(onTranscript: (text: string) => void, onError?: (m
 
       rec.onstop = async () => {
         stopTracks();
+        // Capture and clear the send intent for this stop before any async work.
+        const shouldSend = sendRef.current;
+        sendRef.current = false;
         const type = rec.mimeType || 'audio/webm';
         const blob = new Blob(chunksRef.current, { type });
         if (blob.size < 800) {
@@ -86,7 +94,7 @@ export function useVoiceInput(onTranscript: (text: string) => void, onError?: (m
           if (!res.ok) throw new Error(`transcribe ${res.status}`);
           const data = await res.json();
           const text = String(data?.text || '').trim();
-          if (text) onTranscript(text);
+          if (text) onTranscript(text, shouldSend);
           else onError?.('No speech detected');
         } catch (e) {
           onError?.(`Transcription failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -107,8 +115,12 @@ export function useVoiceInput(onTranscript: (text: string) => void, onError?: (m
     }
   }, [onTranscript, onError]);
 
-  const stop = useCallback(() => {
-    if (recorderRef.current && state === 'recording') recorderRef.current.stop();
+  // Stop recording. Pass { send: true } to auto-send the transcript once it's ready.
+  const stop = useCallback((opts?: { send?: boolean }) => {
+    if (recorderRef.current && state === 'recording') {
+      sendRef.current = opts?.send ?? false;
+      recorderRef.current.stop();
+    }
   }, [state]);
 
   const toggle = useCallback(() => {
@@ -116,5 +128,5 @@ export function useVoiceInput(onTranscript: (text: string) => void, onError?: (m
     else if (state === 'idle') start();
   }, [state, start, stop]);
 
-  return { state, toggle };
+  return { state, toggle, stop };
 }

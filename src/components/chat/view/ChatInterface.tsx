@@ -164,6 +164,7 @@ function ChatInterface({
     isDragActive,
     openImagePicker,
     handleSubmit,
+    handleVoiceTranscript,
     handleInputChange,
     handleKeyDown,
     handlePaste,
@@ -404,7 +405,7 @@ function ChatInterface({
           renderInputWithMentions={renderInputWithMentions}
           textareaRef={textareaRef}
           input={input}
-          onVoiceTranscript={(text) => setInput(input.trim() ? `${input.trim()} ${text}` : text)}
+          onVoiceTranscript={handleVoiceTranscript}
           onInputChange={handleInputChange}
           onTextareaClick={handleTextareaClick}
           onTextareaKeyDown={handleKeyDown}

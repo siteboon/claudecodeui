@@ -1,37 +1,20 @@
-import { useEffect, useRef, useState } from 'react';
-import { Mic, Square, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useVoiceInput } from '../../hooks/useVoiceInput';
-import { useVoiceAvailable } from '../../hooks/useVoiceAvailable';
+import { Mic, Square, Loader2 } from 'lucide-react';
+
 import { PromptInputButton } from '../../../../shared/view/ui';
+import type { VoiceInputState } from '../../hooks/useVoiceInput';
 
 type Props = {
-  onTranscript: (text: string) => void;
-  onError?: (msg: string) => void;
+  state: VoiceInputState;
+  onToggle: () => void;
+  errorMsg?: string | null;
 };
 
-// Push-to-talk mic button. Renders nothing unless the optional voice feature is enabled.
-// Surfaces transcription errors itself (transiently) so they aren't silently swallowed.
-export default function VoiceInputButton({ onTranscript, onError }: Props) {
+// Push-to-talk mic button (presentational). Recording state and the stop-and-send action
+// are owned by the composer so the main Send button can drive them too. This button just
+// starts recording and, while recording, stops and drops the transcript into the input box.
+export default function VoiceInputButton({ state, onToggle, errorMsg }: Props) {
   const { t } = useTranslation('chat');
-  const available = useVoiceAvailable();
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handleError = (msg: string) => {
-    onError?.(msg);
-    setErrorMsg(msg);
-    if (errorTimer.current) clearTimeout(errorTimer.current);
-    errorTimer.current = setTimeout(() => setErrorMsg(null), 4000);
-  };
-
-  const { state, toggle } = useVoiceInput(onTranscript, handleError);
-
-  useEffect(() => () => {
-    if (errorTimer.current) clearTimeout(errorTimer.current);
-  }, []);
-
-  if (!available) return null;
 
   const icon =
     state === 'recording' ? (
@@ -53,7 +36,7 @@ export default function VoiceInputButton({ onTranscript, onError }: Props) {
         tooltip={{ content: state === 'recording' ? t('voice.stopRecording') : t('voice.input') }}
         onClick={(e: { preventDefault: () => void }) => {
           e.preventDefault();
-          toggle();
+          onToggle();
         }}
       >
         {icon}
