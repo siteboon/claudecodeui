@@ -39,7 +39,12 @@ function resolveConfig(req) {
 const router = express.Router();
 
 // Generous by default — local TTS can synthesize long messages at ~real-time on CPU.
-const VOICE_TIMEOUT_MS = Number(process.env.VOICE_TIMEOUT_MS || 300000);
+// Guard against a non-numeric/zero override that would make setTimeout fire immediately.
+const DEFAULT_VOICE_TIMEOUT_MS = 300000;
+const _parsedTimeout = Number(process.env.VOICE_TIMEOUT_MS);
+const VOICE_TIMEOUT_MS = Number.isFinite(_parsedTimeout) && _parsedTimeout > 0
+  ? _parsedTimeout
+  : DEFAULT_VOICE_TIMEOUT_MS;
 
 /**
  * fetch() with an AbortController timeout so a stalled backend can't hold the
@@ -183,7 +188,7 @@ router.post('/tts', async (req, res) => {
   if (!cfg.baseUrl) return res.status(503).json({ error: 'No voice backend configured' });
   if (!isAllowedBackendUrl(cfg.baseUrl)) return res.status(400).json({ error: 'Invalid voice backend URL.' });
   const text = req.body?.text;
-  if (!text || !text.trim()) return res.status(400).json({ error: 'text required' });
+  if (typeof text !== 'string' || !text.trim()) return res.status(400).json({ error: 'text required' });
   try {
     const r = await fetchWithTimeout(`${cfg.baseUrl}/audio/speech`, {
       method: 'POST',

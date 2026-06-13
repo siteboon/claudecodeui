@@ -30,7 +30,8 @@ class VoicePlayer {
   private state: VoicePlayState = 'idle';
   private errorId: string | null = null;
   private errorMsg: string | null = null;
-  private token = 0; // bumps to cancel in-flight fetches
+  private token = 0; // bumps to ignore stale in-flight results
+  private activeController: AbortController | null = null; // aborts the in-flight TTS fetch
   private errorTimer: ReturnType<typeof setTimeout> | null = null;
   private listeners = new Set<() => void>();
 
@@ -89,11 +90,19 @@ class VoicePlayer {
   }
 
   stop() {
-    this.token++; // cancel any in-flight fetch
+    this.token++; // ignore any stale in-flight result
+    this.abortActive(); // and actually cancel the network request
     if (this.audio) this.audio.pause();
     this.state = 'idle';
     this.currentId = null;
     this.emit();
+  }
+
+  private abortActive() {
+    if (this.activeController) {
+      this.activeController.abort();
+      this.activeController = null;
+    }
   }
 
   private onEnded() {
@@ -130,18 +139,23 @@ class VoicePlayer {
     this.emit();
 
     const myToken = ++this.token;
+    this.abortActive(); // cancel any request this play supersedes
 
     try {
       let url = this.cache.get(id);
       if (!url) {
         const controller = new AbortController();
+        this.activeController = controller;
         const timer = setTimeout(() => controller.abort(), CLIENT_TIMEOUT_MS);
         const res = await authenticatedFetch('/api/voice/tts', {
           method: 'POST',
           body: JSON.stringify({ text: content }),
           headers: voiceConfigHeaders(),
           signal: controller.signal,
-        }).finally(() => clearTimeout(timer));
+        }).finally(() => {
+          clearTimeout(timer);
+          if (this.activeController === controller) this.activeController = null;
+        });
         if (myToken !== this.token) return; // superseded by another play/stop
         if (!res.ok) {
           let msg = `Read-aloud failed (${res.status})`;
