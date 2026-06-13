@@ -375,8 +375,8 @@ export const useFileTreeUpload = ({
   );
 
   const handleFileSelect = useCallback(
-    async (fileList: FileList | File[]) => {
-      await uploadFiles(Array.from(fileList), '');
+    async (fileList: FileList | File[], targetPath = '') => {
+      await uploadFiles(Array.from(fileList), targetPath);
     },
     [uploadFiles],
   );

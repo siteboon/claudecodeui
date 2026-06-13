@@ -92,10 +92,13 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
     return <Icon className={cn(ICON_SIZE_CLASS, color)} />;
   }, []);
 
+  const [selectedUploadDir, setSelectedUploadDir] = useState<string>('');
+
   // Centralized click behavior keeps file actions identical across all presentation modes.
   const handleItemClick = useCallback(
     (item: FileTreeNode) => {
       if (item.type === 'directory') {
+        setSelectedUploadDir(item.path);
         toggleDirectory(item.path);
         return;
       }
@@ -150,7 +153,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
         onViewModeChange={changeViewMode}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
-        onUploadFiles={upload.handleFileSelect}
+        onUploadFiles={(files) => upload.handleFileSelect(files, selectedUploadDir)}
         onNewFile={() => operations.handleStartCreate('', 'file')}
         onNewFolder={() => operations.handleStartCreate('', 'directory')}
         onRefresh={refreshFiles}
@@ -160,6 +163,23 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
         isUploading={upload.uploadProgress?.status === 'uploading'}
         uploadProgress={upload.uploadProgress?.progress ?? null}
       />
+
+      {selectedUploadDir && (
+        <div className="flex items-center gap-1.5 px-3 py-0.5 text-xs text-muted-foreground">
+          <span className="truncate">
+            {t('fileTree.uploadTarget', 'Upload target')}: {selectedUploadDir}
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelectedUploadDir('')}
+            className="shrink-0 rounded p-0.5 hover:text-foreground"
+            title={t('fileTree.uploadTargetReset', 'Reset upload target to project root')}
+            aria-label={t('fileTree.uploadTargetReset', 'Reset upload target to project root')}
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      )}
 
       <FileTreeUploadProgress upload={upload.uploadProgress} />
 
