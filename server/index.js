@@ -72,6 +72,8 @@ import userRoutes from './routes/user.js';
 import geminiRoutes from './routes/gemini.js';
 import pluginsRoutes from './routes/plugins.js';
 import providerRoutes from './modules/providers/provider.routes.js';
+import browserUseRoutes from './modules/browser-use/browser-use.routes.js';
+import { browserUseService } from './modules/browser-use/browser-use.service.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
 import { initializeDatabase, projectsDb, sessionsDb } from './modules/database/index.js';
 import { configureWebPush } from './services/vapid-keys.js';
@@ -200,6 +202,9 @@ app.use('/api/gemini', authenticateToken, geminiRoutes);
 
 // Plugins API Routes (protected)
 app.use('/api/plugins', authenticateToken, pluginsRoutes);
+
+// Browser Use API Routes (protected)
+app.use('/api/browser-use', authenticateToken, browserUseRoutes);
 
 // Unified provider MCP routes (protected)
 app.use('/api/providers', authenticateToken, providerRoutes);
@@ -1694,12 +1699,13 @@ async function startServer() {
 
         await closeSessionsWatcher();
         // Clean up plugin processes on shutdown
-        const shutdownPlugins = async () => {
+        const shutdownRuntimeServices = async () => {
+            await browserUseService.stopAllSessions();
             await stopAllPlugins();
             process.exit(0);
         };
-        process.on('SIGTERM', () => void shutdownPlugins());
-        process.on('SIGINT', () => void shutdownPlugins());
+        process.on('SIGTERM', () => void shutdownRuntimeServices());
+        process.on('SIGINT', () => void shutdownRuntimeServices());
     } catch (error) {
         console.error('[ERROR] Failed to start server:', error);
         process.exit(1);
