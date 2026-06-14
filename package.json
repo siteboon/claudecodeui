@@ -1,6 +1,7 @@
 {
   "name": "@cloudcli-ai/cloudcli",
   "version": "1.34.0",
+  "productName": "CloudCLI",
   "description": "A web-based UI for Claude Code CLI",
   "type": "module",
   "main": "dist-server/server/index.js",
@@ -8,6 +9,7 @@
     "cloudcli": "dist-server/server/cli.js"
   },
   "files": [
+    "electron/",
     "server/",
     "shared/",
     "public/api-docs.html",
@@ -30,6 +32,10 @@
     "server:dev": "tsx --tsconfig server/tsconfig.json server/index.js",
     "server:dev-watch": "tsx watch --tsconfig server/tsconfig.json server/index.js",
     "client": "vite",
+    "desktop": "electron electron/main.js",
+    "desktop:dev": "ELECTRON_DEV_URL=http://127.0.0.1:5173 electron electron/main.js",
+    "desktop:pack": "npm run build && electron-builder --dir",
+    "desktop:dist:mac": "npm run build && electron-builder --mac dmg zip",
     "build": "npm run build:client && npm run build:server",
     "build:client": "vite build",
     "prebuild:server": "node -e \"require('node:fs').rmSync('dist-server', { recursive: true, force: true })\"",
@@ -44,6 +50,53 @@
     "postinstall": "node scripts/fix-node-pty.js",
     "prepare": "husky",
     "update:platform": "./update-platform.sh"
+  },
+  "build": {
+    "appId": "ai.cloudcli.desktop",
+    "productName": "CloudCLI",
+    "artifactName": "CloudCLI-${version}-${arch}.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "extraMetadata": {
+      "main": "electron/main.js"
+    },
+    "files": [
+      "electron/",
+      "public/",
+      "dist/",
+      "dist-server/",
+      "shared/",
+      "server/",
+      "package.json"
+    ],
+    "protocols": [
+      {
+        "name": "CloudCLI",
+        "schemes": [
+          "cloudcli"
+        ]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "extendInfo": {
+        "CFBundleName": "CloudCLI",
+        "CFBundleDisplayName": "CloudCLI",
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLName": "CloudCLI",
+            "CFBundleURLSchemes": [
+              "cloudcli"
+            ]
+          }
+        ]
+      }
+    }
   },
   "keywords": [
     "claude code",
@@ -141,6 +194,8 @@
     "auto-changelog": "^2.5.0",
     "autoprefixer": "^10.4.16",
     "concurrently": "^8.2.2",
+    "electron": "^38.0.0",
+    "electron-builder": "^26.15.3",
     "eslint": "^9.39.3",
     "eslint-import-resolver-typescript": "^4.4.4",
     "eslint-plugin-boundaries": "^6.0.2",
