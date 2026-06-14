@@ -41,6 +41,26 @@ const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEO
 
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
+/**
+ * Extracts the prompt text from a Task subagent tool_use input.
+ * Mirrors the logic in claude-sessions.provider.ts extractSubagentPrompt().
+ * Handles both parsed objects and JSON-stringified input.
+ */
+function extractSubagentPrompt(toolInput) {
+  if (!toolInput) return null;
+  let parsed = toolInput;
+  if (typeof toolInput === 'string') {
+    try {
+      parsed = JSON.parse(toolInput);
+    } catch {
+      return null;
+    }
+  }
+  if (typeof parsed !== 'object') return null;
+  const prompt = typeof parsed.prompt === 'string' ? parsed.prompt : null;
+  if (!prompt) return null;
+  return prompt.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+}
 function createRequestId() {
   if (typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();

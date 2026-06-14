@@ -21,10 +21,14 @@ function load(): BookmarkedSession[] {
 }
 
 function save(bookmarks: BookmarkedSession[]) {
-  if (typeof localStorage !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(bookmarks));
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(bookmarks));
+    }
+    window.dispatchEvent(new Event('storage'));
+  } catch {
+    // localStorage may fail in private browsing mode or when quota is exceeded
   }
-  window.dispatchEvent(new Event('storage'));
 }
 
 export function useBookmarks(): {
