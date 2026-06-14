@@ -1,0 +1,53 @@
+{
+  "header": {
+    "fileNamePlaceholder": "PRD 파일 이름 입력",
+    "focusFileName": "파일 이름 입력창에 포커스",
+    "badge": "PRD",
+    "newBadge": "신규",
+    "subtitle": "제품 요구 사항 문서",
+    "togglePreview": "Markdown 미리보기",
+    "toggleEdit": "편집 모드로 전환",
+    "enableWrap": "자동 줄 바꿈 사용",
+    "disableWrap": "자동 줄 바꿈 중지",
+    "toggleTheme": "테마 전환",
+    "download": "PRD 다운로드",
+    "generateTasksTitle": "PRD 내용에서 작업 생성",
+    "generateTasks": "작업 생성",
+    "saved": "저장 완료!",
+    "saving": "저장 중...",
+    "save": "PRD 저장",
+    "exitFullscreen": "전체 화면 종료",
+    "fullscreen": "전체 화면",
+    "close": "닫기"
+  },
+  "footer": {
+    "lines": "줄 수",
+    "characters": "자수",
+    "words": "단어 수",
+    "format": "형식",
+    "markdown": "Markdown",
+    "shortcutHint": "Ctrl+S로 저장, Esc로 닫기"
+  },
+  "loading": {
+    "text": "PRD 로딩 중..."
+  },
+  "generateTasksModal": {
+    "title": "PRD에서 작업 생성",
+    "askClaudeTitle": "Claude Code에 직접 요청",
+    "askClaudeDesc": "이 PRD를 저장한 후 채팅에서 Claude Code에 파일을 분석하고 초기 작업을 생성하도록 요청하세요.",
+    "examplePrompt": "예시 프롬프트",
+    "examplePromptText": ".taskmaster/docs/{{fileName}}에 PRD가 있습니다. 분석하고 초기 작업을 생성해 주세요.",
+    "viewDocs": "TaskMaster 문서 보기",
+    "gotIt": "알겠습니다"
+  },
+  "overwriteModal": {
+    "title": "파일 이미 존재함",
+    "description": "\"{{fileName}}\"이라는 PRD가 이미 존재합니다. 덮어쓰시겠습니까?",
+    "cancel": "취소",
+    "saving": "저장 중...",
+    "overwrite": "덮어쓰기"
+  },
+  "alerts": {
+    "emptyContent": "작업을 생성하기 전에 PRD에 내용을 추가해 주세요."
+  }
+}

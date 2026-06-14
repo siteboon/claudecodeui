@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '../../../lib/utils';
 import { ensurePrdExtension } from '../utils/fileName';
 import GenerateTasksModal from './GenerateTasksModal';
@@ -33,6 +34,7 @@ export default function PrdEditorWorkspace({
   onClose,
   loadError,
 }: PrdEditorWorkspaceProps) {
+  const { t } = useTranslation('prd');
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
   const [previewMode, setPreviewMode] = useState<boolean>(false);
@@ -41,7 +43,7 @@ export default function PrdEditorWorkspace({
 
   const handleOpenGenerateTasks = () => {
     if (!content.trim()) {
-      alert('Please add content to the PRD before generating tasks.');
+      alert(t('alerts.emptyContent'));
       return;
     }
 

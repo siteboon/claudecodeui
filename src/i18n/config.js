@@ -23,6 +23,7 @@ import enChat from './locales/en/chat.json';
 import enCodeEditor from './locales/en/codeEditor.json';
 // eslint-disable-next-line import-x/order
 import enTasks from './locales/en/tasks.json';
+import enPrd from './locales/en/prd.json';
 
 import koCommon from './locales/ko/common.json';
 import koSettings from './locales/ko/settings.json';
@@ -33,6 +34,7 @@ import koChat from './locales/ko/chat.json';
 import koCodeEditor from './locales/ko/codeEditor.json';
 // eslint-disable-next-line import-x/order
 import koTasks from './locales/ko/tasks.json';
+import koPrd from './locales/ko/prd.json';
 
 import zhCommon from './locales/zh-CN/common.json';
 import zhSettings from './locales/zh-CN/settings.json';
@@ -43,6 +45,7 @@ import zhChat from './locales/zh-CN/chat.json';
 import zhCodeEditor from './locales/zh-CN/codeEditor.json';
 // eslint-disable-next-line import-x/order
 import zhTasks from './locales/zh-CN/tasks.json';
+import zhPrd from './locales/zh-CN/prd.json';
 
 import jaCommon from './locales/ja/common.json';
 import jaSettings from './locales/ja/settings.json';
@@ -52,6 +55,7 @@ import jaChat from './locales/ja/chat.json';
 import jaCodeEditor from './locales/ja/codeEditor.json';
 // eslint-disable-next-line import-x/order
 import jaTasks from './locales/ja/tasks.json';
+import jaPrd from './locales/ja/prd.json';
 
 import ruCommon from './locales/ru/common.json';
 import ruSettings from './locales/ru/settings.json';
@@ -61,6 +65,7 @@ import ruChat from './locales/ru/chat.json';
 import ruCodeEditor from './locales/ru/codeEditor.json';
 // eslint-disable-next-line import-x/order
 import ruTasks from './locales/ru/tasks.json';
+import ruPrd from './locales/ru/prd.json';
 
 import deCommon from './locales/de/common.json';
 import deSettings from './locales/de/settings.json';
@@ -70,6 +75,7 @@ import deChat from './locales/de/chat.json';
 import deCodeEditor from './locales/de/codeEditor.json';
 // eslint-disable-next-line import-x/order
 import deTasks from './locales/de/tasks.json';
+import dePrd from './locales/de/prd.json';
 
 import trCommon from './locales/tr/common.json';
 import trSettings from './locales/tr/settings.json';
@@ -79,6 +85,7 @@ import trChat from './locales/tr/chat.json';
 import trCodeEditor from './locales/tr/codeEditor.json';
 // eslint-disable-next-line import-x/order
 import trTasks from './locales/tr/tasks.json';
+import trPrd from './locales/tr/prd.json';
 import itCommon from './locales/it/common.json';
 import itSettings from './locales/it/settings.json';
 import itAuth from './locales/it/auth.json';
@@ -87,6 +94,7 @@ import itChat from './locales/it/chat.json';
 import itCodeEditor from './locales/it/codeEditor.json';
 // eslint-disable-next-line import-x/order
 import itTasks from './locales/it/tasks.json';
+import itPrd from './locales/it/prd.json';
 
 import zhTWCommon from './locales/zh-TW/common.json';
 import zhTWSettings from './locales/zh-TW/settings.json';
@@ -96,6 +104,7 @@ import zhTWChat from './locales/zh-TW/chat.json';
 import zhTWCodeEditor from './locales/zh-TW/codeEditor.json';
 // eslint-disable-next-line import-x/order
 import zhTWTasks from './locales/zh-TW/tasks.json';
+import zhTWPrd from './locales/zh-TW/prd.json';
 
 // Import supported languages configuration
 import { languages } from './languages.js';
@@ -129,6 +138,7 @@ i18n
         chat: enChat,
         codeEditor: enCodeEditor,
         tasks: enTasks,
+        prd: enPrd,
       },
       ko: {
         common: koCommon,
@@ -138,6 +148,7 @@ i18n
         chat: koChat,
         codeEditor: koCodeEditor,
         tasks: koTasks,
+        prd: koPrd,
       },
       'zh-CN': {
         common: zhCommon,
@@ -147,6 +158,7 @@ i18n
         chat: zhChat,
         codeEditor: zhCodeEditor,
         tasks: zhTasks,
+        prd: zhPrd,
       },
       ja: {
         common: jaCommon,
@@ -156,6 +168,7 @@ i18n
         chat: jaChat,
         codeEditor: jaCodeEditor,
         tasks: jaTasks,
+        prd: jaPrd,
       },
       ru: {
         common: ruCommon,
@@ -165,6 +178,7 @@ i18n
         chat: ruChat,
         codeEditor: ruCodeEditor,
         tasks: ruTasks,
+        prd: ruPrd,
       },
       de: {
         common: deCommon,
@@ -174,6 +188,7 @@ i18n
         chat: deChat,
         codeEditor: deCodeEditor,
         tasks: deTasks,
+        prd: dePrd,
       },
       tr: {
         common: trCommon,
@@ -183,6 +198,7 @@ i18n
         chat: trChat,
         codeEditor: trCodeEditor,
         tasks: trTasks,
+        prd: trPrd,
       },
       it: {
         common: itCommon,
@@ -192,6 +208,7 @@ i18n
         chat: itChat,
         codeEditor: itCodeEditor,
         tasks: itTasks,
+        prd: itPrd,
       },
       'zh-TW': {
         common: zhTWCommon,
@@ -201,6 +218,7 @@ i18n
         chat: zhTWChat,
         codeEditor: zhTWCodeEditor,
         tasks: zhTWTasks,
+        prd: zhTWPrd,
       },
     },
 
@@ -214,7 +232,7 @@ i18n
     debug: false,
 
     // Namespaces - load only what's needed
-    ns: ['common', 'settings', 'auth', 'sidebar', 'chat', 'codeEditor', 'tasks'],
+    ns: ['common', 'settings', 'auth', 'sidebar', 'chat', 'codeEditor', 'tasks', 'prd'],
     defaultNS: 'common',
 
     // Key separator for nested keys (default: '.')

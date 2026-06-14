@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Sparkles, X } from 'lucide-react';
 import { PRD_DOCS_URL } from '../constants';
 
@@ -12,6 +13,8 @@ export default function GenerateTasksModal({
   fileName,
   onClose,
 }: GenerateTasksModalProps) {
+  const { t } = useTranslation('prd');
+
   if (!isOpen) {
     return null;
   }
@@ -25,7 +28,7 @@ export default function GenerateTasksModal({
               <Sparkles className="h-4 w-4 text-purple-600 dark:text-purple-400" />
             </div>
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Generate Tasks from PRD
+              {t('generateTasksModal.title')}
             </h3>
           </div>
           <button
@@ -39,16 +42,16 @@ export default function GenerateTasksModal({
         <div className="space-y-4 p-6">
           <div className="rounded-lg border border-purple-200 bg-purple-50 p-4 dark:border-purple-800 dark:bg-purple-900/20">
             <h4 className="mb-2 font-semibold text-purple-900 dark:text-purple-100">
-              Ask Claude Code directly
+              {t('generateTasksModal.askClaudeTitle')}
             </h4>
             <p className="mb-3 text-sm text-purple-800 dark:text-purple-200">
-              Save this PRD, then ask Claude Code in chat to parse the file and create your initial tasks.
+              {t('generateTasksModal.askClaudeDesc')}
             </p>
 
             <div className="rounded border border-purple-200 bg-white p-3 dark:border-purple-700 dark:bg-gray-800">
-              <p className="mb-1 text-xs font-medium text-gray-600 dark:text-gray-400">Example prompt</p>
+              <p className="mb-1 text-xs font-medium text-gray-600 dark:text-gray-400">{t('generateTasksModal.examplePrompt')}</p>
               <p className="font-mono text-xs text-gray-900 dark:text-white">
-                I have a PRD at .taskmaster/docs/{fileName}. Parse it and create the initial tasks.
+                {t('generateTasksModal.examplePromptText', { fileName })}
               </p>
             </div>
           </div>
@@ -60,7 +63,7 @@ export default function GenerateTasksModal({
               rel="noopener noreferrer"
               className="inline-block text-sm font-medium text-purple-600 underline hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300"
             >
-              View TaskMaster documentation
+              {t('generateTasksModal.viewDocs')}
             </a>
           </div>
 
@@ -68,7 +71,7 @@ export default function GenerateTasksModal({
             onClick={onClose}
             className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
           >
-            Got it
+            {t('generateTasksModal.gotIt')}
           </button>
         </div>
       </div>
