@@ -44,10 +44,20 @@ const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode'])
 /**
  * Extracts the prompt text from a Task subagent tool_use input.
  * Mirrors the logic in claude-sessions.provider.ts extractSubagentPrompt().
+ * Handles both parsed objects and JSON-stringified input.
  */
 function extractSubagentPrompt(toolInput) {
-  if (!toolInput || typeof toolInput !== 'object') return null;
-  const prompt = typeof toolInput.prompt === 'string' ? toolInput.prompt : null;
+  if (!toolInput) return null;
+  let parsed = toolInput;
+  if (typeof toolInput === 'string') {
+    try {
+      parsed = JSON.parse(toolInput);
+    } catch {
+      return null;
+    }
+  }
+  if (typeof parsed !== 'object') return null;
+  const prompt = typeof parsed.prompt === 'string' ? parsed.prompt : null;
   if (!prompt) return null;
   return prompt.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
 }
@@ -696,7 +706,6 @@ async function queryClaudeSDK(command, options = {}, ws) {
     }
 
     // Process streaming messages
-    console.log('Starting async generator loop for session:', capturedSessionId || 'NEW');
     for await (const message of queryInstance) {
       // Capture session ID from first message
       if (message.session_id && !capturedSessionId) {
@@ -832,7 +841,7 @@ async function abortClaudeSDKSession(sessionId) {
   }
 
   try {
-    console.log(`Aborting SDK session: ${sessionId}`);
+    // Call interrupt() on the query instance
 
     // Mark before interrupting so the run loop knows not to emit its own
     // terminal complete (the abort handler sends the aborted one).
@@ -910,7 +919,6 @@ function reconnectSessionWriter(sessionId, newRawWs) {
   const session = getSession(sessionId);
   if (!session?.writer?.updateWebSocket) return false;
   session.writer.updateWebSocket(newRawWs);
-  console.log(`[RECONNECT] Writer swapped for session ${sessionId}`);
   return true;
 }
 
