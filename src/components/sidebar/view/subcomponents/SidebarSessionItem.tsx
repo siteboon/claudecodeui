@@ -195,16 +195,28 @@ export default function SidebarSessionItem({
               </div>
             </div>
 
-            {!isProcessing && (
-              <button
-                className="ml-1 flex h-5 w-5 items-center justify-center rounded-md bg-red-50 opacity-70 transition-transform active:scale-95 dark:bg-red-900/20"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  requestDeleteSession();
-                }}
-              >
-                <Trash2 className="h-2.5 w-2.5 text-red-600 dark:text-red-400" />
-              </button>
+            {!sessionView.isCursorSession && (
+              <>
+                <button
+                  className="ml-1 flex h-5 w-5 items-center justify-center rounded-md opacity-70 transition-transform active:scale-95 bg-blue-50 dark:bg-blue-900/20"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    requestToggleBookmark();
+                  }}
+                  title={isBookmarked ? t('bookmarks.unpin', 'Unpin session') : t('bookmarks.pin', 'Pin session')}
+                >
+                  <Pin className={cn('h-2.5 w-2.5', isBookmarked && 'fill-red-500 text-red-500 rotate-45', !isBookmarked && 'text-blue-600 dark:text-blue-400')} />
+                </button>
+                <button
+                  className="ml-1 flex h-5 w-5 items-center justify-center rounded-md bg-red-50 opacity-70 transition-transform active:scale-95 dark:bg-red-900/20"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    requestDeleteSession();
+                  }}
+                >
+                  <Trash2 className="h-2.5 w-2.5 text-red-600 dark:text-red-400" />
+                </button>
+              </>
             )}
           </div>
         </div>

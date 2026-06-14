@@ -276,7 +276,8 @@ export default function SidebarProjectItem({
           onClick={selectAndToggleProject}
         >
           <div className="flex min-w-0 flex-1 items-center gap-3">
-            <div
+            <button
+              type="button"
               className={cn(
                 'w-6 h-6 flex items-center justify-center rounded cursor-pointer transition-all duration-200',
                 isStarred
@@ -288,6 +289,7 @@ export default function SidebarProjectItem({
                 toggleStarProject();
               }}
               title={isStarred ? t('tooltips.removeFromFavorites') : t('tooltips.addToFavorites')}
+              aria-label={isStarred ? t('tooltips.removeFromFavorites') : t('tooltips.addToFavorites')}
             >
               <Star
                 className={cn(
@@ -297,7 +299,7 @@ export default function SidebarProjectItem({
                     : 'text-muted-foreground',
                 )}
               />
-            </div>
+            </button>
             <div className="min-w-0 flex-1 text-left">
               {isEditing ? (
                 <div className="space-y-1">

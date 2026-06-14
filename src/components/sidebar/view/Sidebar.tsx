@@ -313,7 +313,7 @@ function Sidebar({
             isBookmarked={isBookmarked}
             onToggleBookmark={toggleBookmark}
             onRemoveBookmark={removeBookmark}
-            onSelectBookmarkedSession={(projectId, sessionId) => {
+            onSelectBookmarkedSession={(projectId, sessionId, provider) => {
               const project = projects.find(p => p.projectId === projectId);
               if (project) {
                 handleProjectSelect(project);
@@ -322,7 +322,10 @@ function Sidebar({
                 if (existing) {
                   handleSessionClick(existing, project.projectId);
                 } else {
-                  handleSessionClick({ id: sessionId, __provider: 'claude' }, project.projectId);
+                  handleSessionClick(
+                    { id: sessionId, __provider: provider || 'claude' },
+                    project.projectId,
+                  );
                 }
               }
             }}
