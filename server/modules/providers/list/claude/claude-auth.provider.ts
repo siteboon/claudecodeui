@@ -20,6 +20,12 @@ const hasErrorCode = (error: unknown, code: string): boolean => (
   error instanceof Error && 'code' in error && error.code === code
 );
 
+type ClaudeCliAuthStatus = {
+  loggedIn?: boolean;
+  authMethod?: string;
+  email?: string | null;
+};
+
 export class ClaudeProviderAuth implements IProviderAuth {
   /**
    * Checks whether the Claude Code CLI is available on this host.
@@ -64,6 +70,61 @@ export class ClaudeProviderAuth implements IProviderAuth {
   }
 
   /**
+   * Asks the Claude CLI for its authentication status.
+   *
+   * This is the authoritative check: `claude auth status --json` resolves credentials
+   * the same way the CLI does at runtime, regardless of where they are stored. This is
+   * essential on macOS, where Claude Code stores OAuth credentials in the system Keychain
+   * rather than `~/.claude/.credentials.json` (see issue #556). Returns `null` when the
+   * subcommand is unavailable (older CLI versions) so callers can fall back to file checks.
+   */
+  private checkCliAuthStatus(): ClaudeCredentialsStatus | null {
+    const cliPath = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH);
+
+    let result;
+    try {
+      result = spawn.sync(cliPath, ['auth', 'status', '--json'], {
+        encoding: 'utf8',
+        timeout: 10000,
+      });
+    } catch {
+      return null;
+    }
+
+    // Non-zero exit or no stdout usually means the subcommand is unsupported on this CLI.
+    if (!result || result.status !== 0 || typeof result.stdout !== 'string' || !result.stdout.trim()) {
+      return null;
+    }
+
+    let parsed: ClaudeCliAuthStatus;
+    try {
+      parsed = JSON.parse(result.stdout) as ClaudeCliAuthStatus;
+    } catch {
+      return null;
+    }
+
+    if (typeof parsed.loggedIn !== 'boolean') {
+      // Unexpected shape — treat as "cannot tell" and let the file fallback decide.
+      return null;
+    }
+
+    if (!parsed.loggedIn) {
+      return {
+        authenticated: false,
+        email: null,
+        method: null,
+        error: 'Claude CLI is not authenticated. Run claude auth login or configure ANTHROPIC_API_KEY.',
+      };
+    }
+
+    return {
+      authenticated: true,
+      email: readOptionalString(parsed.email) ?? null,
+      method: parsed.authMethod ? `cli:${parsed.authMethod}` : 'cli',
+    };
+  }
+
+  /**
    * Reads Claude settings env values that the CLI can use even when the server process env is empty.
    */
   private async loadSettingsEnv(): Promise<Record<string, unknown>> {
@@ -81,7 +142,7 @@ export class ClaudeProviderAuth implements IProviderAuth {
    * Checks Claude credentials in the same priority order used by Claude Code.
    */
   private async checkCredentials(): Promise<ClaudeCredentialsStatus> {
-    const missingCredentialsError = 'Claude CLI is not authenticated. Run claude /login or configure ANTHROPIC_API_KEY.';
+    const missingCredentialsError = 'Claude CLI is not authenticated. Run claude auth login or configure ANTHROPIC_API_KEY.';
 
     if (process.env.ANTHROPIC_AUTH_TOKEN?.trim()) {
       return { authenticated: true, email: 'Auth Token', method: 'api_key' };
@@ -98,6 +159,13 @@ export class ClaudeProviderAuth implements IProviderAuth {
 
     if (readOptionalString(settingsEnv.ANTHROPIC_AUTH_TOKEN)) {
       return { authenticated: true, email: 'Configured via settings.json', method: 'api_key' };
+    }
+
+    // Authoritative, storage-agnostic check (covers the macOS Keychain). Only the file
+    // fallback below runs when the CLI is too old to support `auth status --json`.
+    const cliStatus = this.checkCliAuthStatus();
+    if (cliStatus) {
+      return cliStatus;
     }
 
     try {
@@ -122,7 +190,7 @@ export class ClaudeProviderAuth implements IProviderAuth {
           authenticated: false,
           email: null,
           method: null,
-          error: 'Claude login has expired. Run claude /login again.',
+          error: 'Claude login has expired. Run claude auth login again.',
         };
       }
 
@@ -133,12 +201,12 @@ export class ClaudeProviderAuth implements IProviderAuth {
         error: missingCredentialsError,
       };
     } catch (error) {
-      let errorMessage = 'Unable to read Claude credentials. Run claude /login again.';
+      let errorMessage = 'Unable to read Claude credentials. Run claude auth login again.';
 
       if (hasErrorCode(error, 'ENOENT')) {
         errorMessage = missingCredentialsError;
       } else if (error instanceof SyntaxError) {
-        errorMessage = 'Claude credentials are unreadable. Run claude /login again.';
+        errorMessage = 'Claude credentials are unreadable. Run claude auth login again.';
       }
 
       return {

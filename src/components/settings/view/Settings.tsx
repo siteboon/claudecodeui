@@ -38,7 +38,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     setGeminiPermissionMode,
     openLoginForProvider,
     showLoginModal,
-    setShowLoginModal,
+    handleLoginModalClose,
     loginProvider,
     handleLoginComplete,
   } = useSettingsController({
@@ -164,7 +164,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
       <ProviderLoginModal
         key={loginProvider || 'claude'}
         isOpen={showLoginModal}
-        onClose={() => setShowLoginModal(false)}
+        onClose={handleLoginModalClose}
         provider={loginProvider || 'claude'}
         onComplete={handleLoginComplete}
         isAuthenticated={isAuthenticated}

@@ -234,6 +234,16 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     setShowLoginModal(true);
   }, []);
 
+  const handleLoginModalClose = useCallback(() => {
+    setShowLoginModal(false);
+    // Re-check after the modal closes: some login flows (or a user closing the modal
+    // manually) never surface a clean process exit, so completion alone can't be relied
+    // on to refresh the status (issue #556).
+    if (loginProvider) {
+      void checkProviderAuthStatus(loginProvider);
+    }
+  }, [checkProviderAuthStatus, loginProvider]);
+
   const handleLoginComplete = useCallback((exitCode: number) => {
     if (!loginProvider) {
       return;
@@ -416,5 +426,6 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     setShowLoginModal,
     loginProvider,
     handleLoginComplete,
+    handleLoginModalClose,
   };
 }

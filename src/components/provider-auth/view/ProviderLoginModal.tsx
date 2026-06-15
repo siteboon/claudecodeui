@@ -26,7 +26,10 @@ const getProviderCommand = ({
   }
 
   if (provider === 'claude') {
-    return 'claude --dangerously-skip-permissions /login';
+    // `claude auth login` runs the OAuth flow and exits cleanly once it completes,
+    // which lets the shell report completion so the UI re-checks auth status. The old
+    // `claude /login` form dropped into an interactive REPL that never exits (issue #556).
+    return 'claude auth login';
   }
 
   if (provider === 'cursor') {
