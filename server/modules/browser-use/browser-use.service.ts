@@ -61,7 +61,7 @@ let installPromise: Promise<{ success: boolean; message: string }> | null = null
 let lastInstallMessage: string | null = null;
 
 const DEFAULT_SETTINGS: BrowserUseSettings = {
-  enabled: true,
+  enabled: false,
 };
 
 function getRuntime(): BrowserUseRuntime {
@@ -77,7 +77,7 @@ function readSettings(): BrowserUseSettings {
 
     const parsed = JSON.parse(raw) as Partial<BrowserUseSettings>;
     return {
-      enabled: parsed.enabled !== false,
+      enabled: parsed.enabled === true,
     };
   } catch (error: any) {
     console.warn('[Browser Use] Failed to read settings:', error?.message || error);
@@ -87,7 +87,7 @@ function readSettings(): BrowserUseSettings {
 
 function writeSettings(settings: BrowserUseSettings): BrowserUseSettings {
   const normalized = {
-    enabled: settings.enabled !== false,
+    enabled: settings.enabled === true,
   };
 
   appConfigDb.set(BROWSER_USE_SETTINGS_KEY, JSON.stringify(normalized));
@@ -168,6 +168,14 @@ function runCommand(command: string, args: string[]): Promise<void> {
   });
 }
 
+function formatInstallError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes('sudo') && message.includes('password')) {
+    return 'Installing Chromium system dependencies requires administrator privileges. Run `npx playwright install-deps chromium` on the machine where CloudCLI runs, then try again.';
+  }
+  return message || 'Failed to install Browser Use runtime.';
+}
+
 async function installRuntime(): Promise<{ success: boolean; message: string }> {
   if (installPromise) {
     return installPromise;
@@ -179,13 +187,18 @@ async function installRuntime(): Promise<{ success: boolean; message: string }> 
       lastInstallMessage = 'Installing Playwright package...';
       await runCommand(npmCommand, ['install', '--no-save', '--no-package-lock', 'playwright']);
 
+      if (process.platform === 'linux') {
+        lastInstallMessage = 'Installing Chromium system dependencies...';
+        await runCommand(npmCommand, ['exec', '--', 'playwright', 'install-deps', 'chromium']);
+      }
+
       lastInstallMessage = 'Installing Chromium runtime...';
       await runCommand(npmCommand, ['exec', '--', 'playwright', 'install', 'chromium']);
 
       lastInstallMessage = 'Browser Use runtime installed.';
       return { success: true, message: lastInstallMessage };
     } catch (error) {
-      lastInstallMessage = error instanceof Error ? error.message : 'Failed to install Browser Use runtime.';
+      lastInstallMessage = formatInstallError(error);
       return { success: false, message: lastInstallMessage };
     }
   })();
@@ -359,7 +372,7 @@ export const browserUseService = {
     const current = readSettings();
     return writeSettings({
       ...current,
-      enabled: settings.enabled ?? current.enabled,
+      enabled: typeof settings.enabled === 'boolean' ? settings.enabled : current.enabled,
     });
   },
 

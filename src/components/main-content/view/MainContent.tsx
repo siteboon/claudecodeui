@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 
 import ChatInterface from '../../chat/view/ChatInterface';
 import FileTree from '../../file-tree/view/FileTree';
@@ -11,6 +11,7 @@ import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { usePaletteOpsRegister } from '../../../contexts/PaletteOpsContext';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useUiPreferences } from '../../../hooks/useUiPreferences';
+import { authenticatedFetch } from '../../../utils/api';
 import { useEditorSidebar } from '../../code-editor/hooks/useEditorSidebar';
 import EditorSidebar from '../../code-editor/view/EditorSidebar';
 import type { Project } from '../../../types/app';
@@ -56,8 +57,10 @@ function MainContent({
 
   const { currentProject, setCurrentProject } = useTaskMaster() as TaskMasterContextValue;
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings() as TasksSettingsContextValue;
+  const [browserUseEnabled, setBrowserUseEnabled] = useState(false);
 
   const shouldShowTasksTab = Boolean(tasksEnabled && isTaskMasterInstalled);
+  const shouldShowBrowserTab = browserUseEnabled;
 
   const {
     editingFile,
@@ -91,6 +94,28 @@ function MainContent({
     }
   }, [shouldShowTasksTab, activeTab, setActiveTab]);
 
+  const loadBrowserUseSettings = useCallback(async () => {
+    try {
+      const response = await authenticatedFetch('/api/browser-use/settings');
+      const data = await response.json();
+      setBrowserUseEnabled(Boolean(response.ok && data?.success !== false && data?.data?.settings?.enabled));
+    } catch {
+      setBrowserUseEnabled(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadBrowserUseSettings();
+    window.addEventListener('browserUseSettingsChanged', loadBrowserUseSettings);
+    return () => window.removeEventListener('browserUseSettingsChanged', loadBrowserUseSettings);
+  }, [loadBrowserUseSettings]);
+
+  useEffect(() => {
+    if (!shouldShowBrowserTab && activeTab === 'browser') {
+      setActiveTab('chat');
+    }
+  }, [shouldShowBrowserTab, activeTab, setActiveTab]);
+
   usePaletteOpsRegister({
     openFile: (filePath: string) => {
       setActiveTab('files');
@@ -114,6 +139,7 @@ function MainContent({
         selectedProject={selectedProject}
         selectedSession={selectedSession}
         shouldShowTasksTab={shouldShowTasksTab}
+        shouldShowBrowserTab={shouldShowBrowserTab}
         isMobile={isMobile}
         onMenuClick={onMenuClick}
       />
@@ -172,7 +198,7 @@ function MainContent({
 
           {shouldShowTasksTab && <TaskMasterPanel isVisible={activeTab === 'tasks'} />}
 
-          {activeTab === 'browser' && (
+          {shouldShowBrowserTab && activeTab === 'browser' && (
             <div className="h-full overflow-hidden">
               <BrowserUsePanel isVisible={activeTab === 'browser'} />
             </div>

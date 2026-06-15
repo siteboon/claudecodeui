@@ -31,7 +31,7 @@ async function readJson<T>(response: Response): Promise<T> {
 }
 
 export default function BrowserUseSettingsTab() {
-  const [settings, setSettings] = useState<BrowserUseSettings>({ enabled: true });
+  const [settings, setSettings] = useState<BrowserUseSettings>({ enabled: false });
   const [status, setStatus] = useState<BrowserUseStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -67,6 +67,7 @@ export default function BrowserUseSettingsTab() {
       });
       const data = await readJson<{ data: { settings: BrowserUseSettings } }>(response);
       setSettings(data.data.settings);
+      window.dispatchEvent(new Event('browserUseSettingsChanged'));
       await loadState();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save Browser Use settings');
