@@ -15,6 +15,11 @@ export const languages = [
     nativeName: 'English',
   },
   {
+    value: 'fr',
+    label: 'French',
+    nativeName: 'Français',
+  },
+  {
     value: 'ko',
     label: 'Korean',
     nativeName: '한국어',
@@ -48,6 +53,8 @@ export const languages = [
     value: 'tr',
     label: 'Turkish',
     nativeName: 'Türkçe',
+  },
+  {
     value: 'it',
     label: 'Italian',
     nativeName: 'Italiano',
