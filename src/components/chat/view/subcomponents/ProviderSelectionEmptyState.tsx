@@ -242,9 +242,13 @@ export default function ProviderSelectionEmptyState({
             </DialogTrigger>
 
             <DialogContent className="max-w-md overflow-hidden p-0">
-              <DialogTitle>Model Selector</DialogTitle>
+              <DialogTitle>
+                {t("providerSelection.modelSelectorTitle", { defaultValue: "Model Selector" })}
+              </DialogTitle>
               <div className="border-b border-border/60 bg-muted/20 px-4 py-3">
-                <p className="text-sm font-semibold text-foreground">Choose a model</p>
+                <p className="text-sm font-semibold text-foreground">
+                  {t("providerSelection.chooseModel", { defaultValue: "Choose a model" })}
+                </p>
               </div>
               <Command>
                 <CommandInput

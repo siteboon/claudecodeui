@@ -20,21 +20,47 @@ const KIRO_BIN = process.env.KIRO_PATH ?? 'kiro-cli';
 export class KiroProviderAuth implements IProviderAuth {
   /**
    * Checks whether the Kiro CLI is installed and on PATH.
+   *
+   * Spawns asynchronously (rather than spawn.sync) so a slow or hung CLI cannot
+   * block the Node event loop while `getStatus()` runs; the process is killed if
+   * `--version` does not return within the timeout.
    */
-  private checkInstalled(): boolean {
-    try {
-      const result = spawn.sync(KIRO_BIN, ['--version'], { stdio: 'ignore', timeout: 5000 });
-      return result.status === 0;
-    } catch {
-      return false;
-    }
+  private checkInstalled(): Promise<boolean> {
+    return new Promise((resolve) => {
+      let settled = false;
+      let childProcess: ReturnType<typeof spawn> | undefined;
+
+      const finish = (value: boolean) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timeout);
+        resolve(value);
+      };
+
+      const timeout = setTimeout(() => {
+        childProcess?.kill();
+        finish(false);
+      }, 5000);
+
+      try {
+        childProcess = spawn(KIRO_BIN, ['--version'], { stdio: 'ignore' });
+      } catch {
+        finish(false);
+        return;
+      }
+
+      childProcess.on('close', (code) => finish(code === 0));
+      childProcess.on('error', () => finish(false));
+    });
   }
 
   /**
    * Returns Kiro CLI installation and IdC/BuilderId login status.
    */
   async getStatus(): Promise<ProviderAuthStatus> {
-    const installed = this.checkInstalled();
+    const installed = await this.checkInstalled();
 
     if (!installed) {
       return {
