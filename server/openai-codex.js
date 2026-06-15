@@ -14,10 +14,12 @@
  */
 
 import { Codex } from '@openai/codex-sdk';
+
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
 import { providerModelsService } from './modules/providers/services/provider-models.service.js';
+import { resolveCodexPermissionMode } from './codex-permission-mode.js';
 import { createNormalizedMessage } from './shared/utils.js';
 
 // Track active sessions
@@ -228,7 +230,7 @@ export async function queryCodex(command, options = {}, ws) {
     cwd,
     projectPath,
     model,
-    permissionMode = 'default'
+    permissionMode
   } = options;
 
   const resolvedModel = await providerModelsService.resolveResumeModel(
@@ -237,8 +239,10 @@ export async function queryCodex(command, options = {}, ws) {
     model,
   );
 
+  const hasExplicitPermissionMode = Object.prototype.hasOwnProperty.call(options, 'permissionMode');
+  const effectivePermissionMode = resolveCodexPermissionMode(permissionMode, hasExplicitPermissionMode);
   const workingDirectory = cwd || projectPath || process.cwd();
-  const { sandboxMode, approvalPolicy } = mapPermissionModeToCodexOptions(permissionMode);
+  const { sandboxMode, approvalPolicy } = mapPermissionModeToCodexOptions(effectivePermissionMode);
 
   let codex;
   let thread;
