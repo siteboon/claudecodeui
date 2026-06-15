@@ -501,9 +501,9 @@ export default function ScrollNavigation({
         onMouseEnter={() => setIsStripHovered(true)}
         onMouseLeave={() => { setIsStripHovered(false); setFocusedDotIndex(-1); }}
       >
-        {timelineNodes.map((node) => {
-          const isActive = timelineNodes.indexOf(node) === activeDotIndex;
-          const isFocused = timelineNodes.indexOf(node) === focusedDotIndex;
+        {timelineNodes.map((node, i) => {
+          const isActive = i === activeDotIndex;
+          const isFocused = i === focusedDotIndex;
           const isBookmarked = bookmarks.has(node.bookmarkId);
 
           const dotSizeClass = isFocused ? 'lg' : isActive ? 'md' : dotSize;
@@ -526,10 +526,10 @@ export default function ScrollNavigation({
             >
               <button
                 type="button"
-                onClick={() => scrollToNode(timelineNodes.indexOf(node))}
+                onClick={() => scrollToNode(i)}
                 onContextMenu={(e) => {
                   e.preventDefault();
-                  handleToggleBookmark(timelineNodes.indexOf(node));
+                  handleToggleBookmark(i);
                 }}
                 className={`flex items-center justify-center cursor-pointer transition-all duration-150 ${
                   isFocused ? 'scale-150' : 'hover:scale-125'
@@ -539,7 +539,7 @@ export default function ScrollNavigation({
                   outlineOffset: '2px',
                   borderRadius: isFocused ? '2px' : '0',
                 }}
-                aria-label={t('scrollNav.jumpToMessage', { index: timelineNodes.indexOf(node) + 1 })}
+                aria-label={t('scrollNav.jumpToMessage', { index: i + 1 })}
               >
                 <DotShape
                   type={node.dotType}
