@@ -492,6 +492,7 @@ export class CodexSessionsProvider implements IProviderSessions {
         timestamp: ts,
         provider: PROVIDER,
         kind: 'complete',
+        exitCode: 0,
       })];
     }
     if (raw.type === 'turn_failed') {

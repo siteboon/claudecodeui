@@ -245,6 +245,7 @@ export async function queryCodex(command, options = {}, ws) {
   let capturedSessionId = sessionId;
   let sessionCreatedSent = false;
   let terminalFailure = null;
+  let wasAborted = false;
   const abortController = new AbortController();
 
   try {
@@ -311,11 +312,13 @@ export async function queryCodex(command, options = {}, ws) {
 
       // Check if session was aborted
       if (abortController.signal.aborted) {
+        wasAborted = true;
         break;
       }
       if (capturedSessionId) {
         const session = activeCodexSessions.get(capturedSessionId);
         if (session?.status === 'aborted') {
+          wasAborted = true;
           break;
         }
       }
@@ -353,9 +356,10 @@ export async function queryCodex(command, options = {}, ws) {
     }
 
     // Send completion event
-    if (!terminalFailure) {
+    if (!terminalFailure && !wasAborted) {
       sendMessage(ws, createNormalizedMessage({
         kind: 'complete',
+        exitCode: 0,
         actualSessionId: capturedSessionId || thread.id || sessionId || null,
         sessionId: capturedSessionId || sessionId || null,
         provider: 'codex'
@@ -371,7 +375,7 @@ export async function queryCodex(command, options = {}, ws) {
 
   } catch (error) {
     const session = capturedSessionId ? activeCodexSessions.get(capturedSessionId) : null;
-    const wasAborted =
+    wasAborted = wasAborted ||
       session?.status === 'aborted' ||
       error?.name === 'AbortError' ||
       String(error?.message || '').toLowerCase().includes('aborted');
@@ -402,7 +406,7 @@ export async function queryCodex(command, options = {}, ws) {
     if (capturedSessionId) {
       const session = activeCodexSessions.get(capturedSessionId);
       if (session) {
-        session.status = session.status === 'aborted' ? 'aborted' : 'completed';
+        session.status = wasAborted || session.status === 'aborted' ? 'aborted' : 'completed';
       }
     }
   }
