@@ -110,6 +110,12 @@
       "unsupported": "此瀏覽器不支援推播通知。",
       "denied": "推播通知已被封鎖，請在瀏覽器設定中允許。"
     },
+    "sound": {
+      "title": "聲音",
+      "description": "聊天執行完成時播放短提示音。",
+      "enabled": "已啟用",
+      "test": "測試聲音"
+    },
     "events": {
       "title": "事件類型",
       "actionRequired": "需要處理",

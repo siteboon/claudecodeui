@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 
 import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
+import { showCompletionTitleIndicator } from '../../../utils/pageTitleNotification';
+import { playChatCompletionSound } from '../../../utils/notificationSound';
 import type { PendingPermissionRequest, SessionNavigationOptions } from '../types/types';
 import type { ProjectSession, LLMProvider } from '../../../types/app';
 import type { SessionStore, NormalizedMessage } from '../../../stores/useSessionStore';
@@ -284,6 +286,9 @@ export function useChatRealtimeHandlers({
           // The backend already sent any abort-related messages
           break;
         }
+
+        showCompletionTitleIndicator();
+        void playChatCompletionSound();
 
         const actualSessionId =
           typeof msg.actualSessionId === 'string' && msg.actualSessionId.trim().length > 0

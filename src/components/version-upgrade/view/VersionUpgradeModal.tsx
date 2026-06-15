@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useTranslation } from "react-i18next";
 import { authenticatedFetch } from "../../../utils/api";
 import { ReleaseInfo } from "../../../types/sharedTypes";
@@ -154,8 +156,10 @@ export function VersionUpgradeModal({
                             )}
                         </div>
                         <div className="max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-600 dark:bg-gray-700/50">
-                            <div className="prose prose-sm max-w-none whitespace-pre-wrap text-sm text-gray-700 dark:prose-invert dark:text-gray-300">
-                                {cleanChangelog(releaseInfo.body)}
+                            <div className="prose prose-sm max-w-none text-sm text-gray-700 dark:prose-invert dark:text-gray-300">
+                                <ReactMarkdown remarkPlugins={[remarkGfm]} components={changelogComponents}>
+                                    {cleanChangelog(releaseInfo.body)}
+                                </ReactMarkdown>
                             </div>
                         </div>
                     </div>
@@ -234,6 +238,14 @@ export function VersionUpgradeModal({
             </div>
         </div>
     );
+};
+
+const changelogComponents = {
+    a: ({ href, children }: { href?: string; children?: ReactNode }) => (
+        <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline dark:text-blue-400">
+            {children}
+        </a>
+    ),
 };
 
 // Clean up changelog by removing GitHub-specific metadata

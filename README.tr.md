@@ -62,7 +62,7 @@
 - **Oturum Yönetimi** — Konuşmalara devam et, birden fazla oturumu yönet ve geçmişi takip et
 - **Eklenti Sistemi** — CloudCLI'ı özel eklentilerle genişlet: yeni sekmeler, arka uç servisleri ve entegrasyonlar ekle. [Kendi eklentini yaz →](https://github.com/cloudcli-ai/cloudcli-plugin-starter)
 - **TaskMaster AI Entegrasyonu** *(İsteğe Bağlı)* — AI destekli görev planlama, PRD ayrıştırma ve iş akışı otomasyonu ile gelişmiş proje yönetimi
-- **Model Uyumluluğu** — Claude, GPT ve Gemini model aileleriyle çalışır (desteklenen tüm modeller için [`public/modelConstants.js`](public/modelConstants.js) dosyasına bak)
+- **Model Uyumluluğu** — Claude, GPT ve Gemini model aileleriyle çalışır (desteklenen tüm modeller için `GET /api/providers/:provider/models` API'sine bak)
 
 
 ## Hızlı Başlangıç
@@ -164,6 +164,13 @@ CloudCLI, kendi frontend UI'sı ve isteğe bağlı Node.js arka ucu olan özel s
 |---|---|
 | **[Project Stats](https://github.com/cloudcli-ai/cloudcli-plugin-starter)** | Mevcut projen için dosya sayıları, kod satırları, dosya türü dağılımı, en büyük dosyalar ve son değiştirilen dosyaları gösterir |
 | **[Web Terminal](https://github.com/cloudcli-ai/cloudcli-plugin-terminal)** | Çoklu sekme destekli tam xterm.js terminali |
+| **[Claude Watch](https://github.com/satsuki19980613/cloudcli-claude-watch)** | Uzun süren Claude Code oturumlarını takılmalara karşı izler ve süreç kontrolleri sunar |
+| **[CloudCLI Scheduler](https://github.com/grostim/cloudcli-cron)** | Çalışma alanı kapsamlı zamanlanmış prompt'lar oluşturur ve bunları Codex, Claude Code veya Gemini CLI gibi yerel CLI'larla çalıştırır |
+| **[PRISM CloudCLI](https://github.com/jakeefr/cloudcli-plugin-prism)** | CloudCLI içinde Claude Code oturum zekası ve token tüketimi görünürlüğü sağlar |
+| **[Sessions](https://github.com/strykereye2/cloudcli-plugin-session-manager)** | Aktif Claude Code oturumlarını görüntülemeni, yönetmeni ve sonlandırmanı sağlar |
+| **[Token Cost Calculator](https://github.com/NightmareAway/cloudcli-plugin-token-cost-calculator)** | Model fiyatları ve token kullanımından API maliyetlerini hesaplar; model fiyatı hazır ayarlarını destekler |
+| **[Task Queue](https://github.com/TadMSTR/cloudcli-plugin-task-queue)** | Ajan görevlerini görüntülemek, filtrelemek ve başlatmak için görev kuyruğu paneli |
+| **[GitHub Issues Board](https://github.com/szmidtpiotr/claude-github-issue)** | GitHub Issues için Kanban panosu; çift yönlü TaskMaster senkronizasyonu ve /github-task CLI becerisi otomatik kurulumu içerir |
 
 ### Kendi Eklentini Yaz
 

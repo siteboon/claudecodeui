@@ -85,6 +85,9 @@ const __dirname = getModuleDir(import.meta.url);
 // Resolving the app root once keeps every repo-level lookup below aligned across both layouts.
 const APP_ROOT = findAppRoot(__dirname);
 const installMode = fs.existsSync(path.join(APP_ROOT, '.git')) ? 'git' : 'npm';
+const MAX_FILE_UPLOAD_SIZE_MB = 200;
+const MAX_FILE_UPLOAD_SIZE_BYTES = MAX_FILE_UPLOAD_SIZE_MB * 1024 * 1024;
+const MAX_FILE_UPLOAD_COUNT = 20;
 
 console.log('SERVER_PORT from env:', process.env.SERVER_PORT);
 
@@ -900,27 +903,27 @@ const uploadFilesHandler = async (req, res) => {
             }
         }),
         limits: {
-            fileSize: 50 * 1024 * 1024, // 50MB limit
-            files: 20 // Max 20 files at once
+            fileSize: MAX_FILE_UPLOAD_SIZE_BYTES,
+            files: MAX_FILE_UPLOAD_COUNT
         }
     });
 
     // Use multer middleware
-    uploadMiddleware.array('files', 20)(req, res, async (err) => {
+    uploadMiddleware.array('files', MAX_FILE_UPLOAD_COUNT)(req, res, async (err) => {
         if (err) {
             console.error('Multer error:', err);
             if (err.code === 'LIMIT_FILE_SIZE') {
-                return res.status(400).json({ error: 'File too large. Maximum size is 50MB.' });
+                return res.status(400).json({ error: `File too large. Maximum size is ${MAX_FILE_UPLOAD_SIZE_MB}MB.` });
             }
             if (err.code === 'LIMIT_FILE_COUNT') {
-                return res.status(400).json({ error: 'Too many files. Maximum is 20 files.' });
+                return res.status(400).json({ error: `Too many files. Maximum is ${MAX_FILE_UPLOAD_COUNT} files.` });
             }
             return res.status(500).json({ error: err.message });
         }
 
         try {
             const { projectId } = req.params;
-            const { targetPath, relativePaths } = req.body;
+            const { targetPath, relativePaths, requestedFileCount: requestedFileCountRaw } = req.body;
 
             // Parse relative paths if provided (for folder uploads)
             let filePaths = [];
@@ -943,6 +946,11 @@ const uploadFilesHandler = async (req, res) => {
             if (!req.files || req.files.length === 0) {
                 return res.status(400).json({ error: 'No files provided' });
             }
+
+            const parsedRequestedFileCount = Number.parseInt(requestedFileCountRaw, 10);
+            const requestedFileCount = Number.isFinite(parsedRequestedFileCount) && parsedRequestedFileCount > 0
+                ? parsedRequestedFileCount
+                : req.files.length;
 
             // Resolve the project directory through the DB using the new projectId.
             const projectRoot = await projectsDb.getProjectPathById(projectId);
@@ -1022,8 +1030,10 @@ const uploadFilesHandler = async (req, res) => {
             res.json({
                 success: true,
                 files: uploadedFiles,
+                uploadedCount: uploadedFiles.length,
+                requestedFileCount,
                 targetPath: resolvedTargetDir,
-                message: `Uploaded ${uploadedFiles.length} file(s) successfully`
+                message: `Uploaded ${uploadedFiles.length} ${uploadedFiles.length === 1 ? 'file' : 'files'} successfully`
             });
         } catch (error) {
             console.error('Error uploading files:', error);

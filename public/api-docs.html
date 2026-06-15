@@ -820,31 +820,49 @@ data: {"type":"done"}</code></pre>
         </div>
     </div>
 
-    <script type="module">
-        // Import model constants
-        import { PROVIDERS } from './modelConstants.js';
-
+    <script>
         // Dynamic URL replacement
         const apiUrl = window.location.origin;
         document.querySelectorAll('.api-url').forEach(el => {
             el.textContent = apiUrl;
         });
 
-        // Dynamically populate model documentation
-        window.addEventListener('DOMContentLoaded', () => {
-            const modelCell = document.getElementById('model-options-cell');
-            if (modelCell) {
-                const providerModels = PROVIDERS.map(provider => {
-                    const models = provider.models.OPTIONS.map(m => `<code>${m.value}</code>`).join(', ');
-                    return `<strong>${provider.name}:</strong> ${models} (default: <code>${provider.models.DEFAULT}</code>)`;
-                }).join('<br><br>');
+        // Populate model documentation from the live provider API
+        const PROVIDER_ORDER = [
+            { id: 'claude',   name: 'Anthropic' },
+            { id: 'codex',    name: 'OpenAI' },
+            { id: 'gemini',   name: 'Google' },
+            { id: 'cursor',   name: 'Cursor' },
+            { id: 'opencode', name: 'OpenCode' },
+        ];
 
-                modelCell.innerHTML = `
-                    Model identifier for the AI provider:<br><br>
-                    ${providerModels}
-                `;
-            }
-        });
+        async function populateModels() {
+            const modelCell = document.getElementById('model-options-cell');
+            if (!modelCell) return;
+
+            const token = localStorage.getItem('auth-token');
+            const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+            const results = await Promise.allSettled(
+                PROVIDER_ORDER.map(({ id }) =>
+                    fetch(`/api/providers/${id}/models`, { headers }).then(r => r.json())
+                )
+            );
+
+            const providerModels = results.map((result, i) => {
+                const { name } = PROVIDER_ORDER[i];
+                if (result.status === 'rejected' || !result.value?.data?.models) {
+                    return `<strong>${name}:</strong> <em>unavailable</em>`;
+                }
+                const { OPTIONS, DEFAULT } = result.value.data.models;
+                const models = OPTIONS.map(m => `<code>${m.value}</code>`).join(', ');
+                return `<strong>${name}:</strong> ${models} (default: <code>${DEFAULT}</code>)`;
+            }).join('<br><br>');
+
+            modelCell.innerHTML = `Model identifier for the AI provider:<br><br>${providerModels}`;
+        }
+
+        document.addEventListener('DOMContentLoaded', populateModels);
 
         // Tab switching
         window.showTab = function(tabName) {

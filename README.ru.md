@@ -62,7 +62,7 @@
 - **Управление сессиями** - возобновляйте диалоги, управляйте несколькими сессиями и отслеживайте историю
 - **Система плагинов** - расширяйте CloudCLI кастомными плагинами — добавляйте новые вкладки, бэкенд-сервисы и интеграции. [Создать свой →](https://github.com/cloudcli-ai/cloudcli-plugin-starter)
 - **Интеграция с TaskMaster AI** *(опционально)* - продвинутое управление проектами с планированием задач на базе AI, разбором PRD и автоматизацией workflow
-- **Совместимость с моделями** - работает с семействами моделей Claude, GPT и Gemini (см. [`public/modelConstants.js`](public/modelConstants.js) для полного списка поддерживаемых моделей)
+- **Совместимость с моделями** - работает с семействами моделей Claude, GPT и Gemini (полный список поддерживаемых моделей доступен через `GET /api/providers/:provider/models`)
 
 
 ## Быстрый старт
@@ -164,6 +164,14 @@ CloudCLI UI — это open source UI-слой, на котором постро
 | Плагин | Описание |
 |---|---|
 | **[Project Stats](https://github.com/cloudcli-ai/cloudcli-plugin-starter)** | Показывает количество файлов, строки кода, разбивку по типам файлов, самые большие файлы и недавно изменённые файлы для текущего проекта |
+| **[Web Terminal](https://github.com/cloudcli-ai/cloudcli-plugin-terminal)** | Полноценный терминал xterm.js с поддержкой нескольких вкладок |
+| **[Claude Watch](https://github.com/satsuki19980613/cloudcli-claude-watch)** | Отслеживает зависания долгих сессий Claude Code и предоставляет управление процессами |
+| **[CloudCLI Scheduler](https://github.com/grostim/cloudcli-cron)** | Создаёт запланированные промпты для рабочей области и запускает их через локальную CLI, например Codex, Claude Code или Gemini CLI |
+| **[PRISM CloudCLI](https://github.com/jakeefr/cloudcli-plugin-prism)** | Аналитика сессий Claude Code внутри CloudCLI, включая видимость расхода токенов |
+| **[Sessions](https://github.com/strykereye2/cloudcli-plugin-session-manager)** | Просмотр, управление и завершение активных сессий Claude Code |
+| **[Token Cost Calculator](https://github.com/NightmareAway/cloudcli-plugin-token-cost-calculator)** | Расчёт стоимости API по ценам моделей и использованию токенов, с поддержкой пресетов цен |
+| **[Task Queue](https://github.com/TadMSTR/cloudcli-plugin-task-queue)** | Дашборд очереди задач для просмотра, фильтрации и запуска агентских задач |
+| **[GitHub Issues Board](https://github.com/szmidtpiotr/claude-github-issue)** | Kanban-доска для GitHub Issues с двусторонней синхронизацией TaskMaster и автоустановкой CLI-навыка /github-task |
 
 ### Создать свой
 

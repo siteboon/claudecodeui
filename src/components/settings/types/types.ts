@@ -1,4 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react';
+
 import type { LLMProvider } from '../../../types/app';
 import type { ProviderAuthStatus } from '../../provider-auth/types';
 
@@ -29,6 +30,7 @@ export type NotificationPreferencesState = {
   channels: {
     inApp: boolean;
     webPush: boolean;
+    sound: boolean;
   };
   events: {
     actionRequired: boolean;

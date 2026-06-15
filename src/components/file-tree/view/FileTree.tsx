@@ -1,6 +1,7 @@
 import { useCallback, useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, Check, X, Loader2, Folder, Upload } from 'lucide-react';
+
 import { cn } from '../../../lib/utils';
 import { ICON_SIZE_CLASS, getFileIconData } from '../constants/fileIcons';
 import { useExpandedDirectories } from '../hooks/useExpandedDirectories';
@@ -13,10 +14,12 @@ import type { FileTreeImageSelection, FileTreeNode } from '../types/types';
 import { formatFileSize, formatRelativeTime, isImageFile } from '../utils/fileTreeUtils';
 import { Project } from '../../../types/app';
 import { ScrollArea, Input } from '../../../shared/view/ui';
+
 import FileTreeBody from './FileTreeBody';
 import FileTreeDetailedColumns from './FileTreeDetailedColumns';
 import FileTreeHeader from './FileTreeHeader';
 import FileTreeLoadingState from './FileTreeLoadingState';
+import FileTreeUploadProgress from './FileTreeUploadProgress';
 import ImageViewer from './ImageViewer';
 
 
@@ -66,6 +69,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
     onRefresh: refreshFiles,
     showToast,
   });
+  const operationLoading = operations.operationLoading || upload.operationLoading;
 
   // Focus input when creating new item
   useEffect(() => {
@@ -146,13 +150,18 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
         onViewModeChange={changeViewMode}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
+        onUploadFiles={upload.handleFileSelect}
         onNewFile={() => operations.handleStartCreate('', 'file')}
         onNewFolder={() => operations.handleStartCreate('', 'directory')}
         onRefresh={refreshFiles}
         onCollapseAll={collapseAll}
         loading={loading}
-        operationLoading={operations.operationLoading}
+        operationLoading={operationLoading}
+        isUploading={upload.uploadProgress?.status === 'uploading'}
+        uploadProgress={upload.uploadProgress?.progress ?? null}
       />
+
+      <FileTreeUploadProgress upload={upload.uploadProgress} />
 
       {viewMode === 'detailed' && filteredFiles.length > 0 && <FileTreeDetailedColumns />}
 
@@ -184,7 +193,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
                 }, 100);
               }}
               className="h-6 flex-1 text-sm"
-              disabled={operations.operationLoading}
+              disabled={operationLoading}
             />
           </div>
         )}
@@ -213,7 +222,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
           handleConfirmRename={operations.handleConfirmRename}
           handleCancelRename={operations.handleCancelRename}
           renameInputRef={renameInputRef}
-          operationLoading={operations.operationLoading}
+          operationLoading={operationLoading}
         />
       </ScrollArea>
 
@@ -251,17 +260,17 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
             <div className="flex justify-end gap-2">
               <button
                 onClick={operations.handleCancelDelete}
-                disabled={operations.operationLoading}
+                disabled={operationLoading}
                 className="rounded-md px-3 py-1.5 text-sm transition-colors hover:bg-accent"
               >
                 {t('common.cancel', 'Cancel')}
               </button>
               <button
                 onClick={operations.handleConfirmDelete}
-                disabled={operations.operationLoading}
+                disabled={operationLoading}
                 className="flex items-center gap-2 rounded-md bg-red-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-red-700 disabled:opacity-50"
               >
-                {operations.operationLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                {operationLoading && <Loader2 className="h-4 w-4 animate-spin" />}
                 {t('fileTree.delete.confirm', 'Delete')}
               </button>
             </div>

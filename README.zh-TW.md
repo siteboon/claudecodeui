@@ -60,7 +60,7 @@
 - **工作階段管理** — 恢復對話、管理多個工作階段並追蹤歷史紀錄
 - **外掛系統** — 透過自訂分頁、後端服務與整合來擴充 CloudCLI。[開始建構 →](https://github.com/cloudcli-ai/cloudcli-plugin-starter)
 - **TaskMaster AI 整合** *(選用)* — 結合 AI 任務規劃、PRD 分析與工作流程自動化，實現進階專案管理
-- **模型相容性** — 支援 Claude、GPT、Gemini 模型家族（完整支援列表見 [`shared/modelConstants.js`](shared/modelConstants.js)）
+- **模型相容性** — 支援 Claude、GPT、Gemini 模型家族（完整支援列表可透過 `GET /api/providers/:provider/models` 介面取得）
 
 ## 快速開始
 
@@ -158,6 +158,14 @@ CloudCLI 配備外掛系統，允許你新增帶有自訂前端 UI 和選用 Nod
 | 外掛 | 描述 |
 |---|---|
 | **[Project Stats](https://github.com/cloudcli-ai/cloudcli-plugin-starter)** | 展示目前專案的檔案數、程式碼行數、檔案類型分佈、最大檔案以及最近修改的檔案 |
+| **[Web Terminal](https://github.com/cloudcli-ai/cloudcli-plugin-terminal)** | 支援多分頁的完整 xterm.js 終端機 |
+| **[Claude Watch](https://github.com/satsuki19980613/cloudcli-claude-watch)** | 監控長時間執行的 Claude Code 工作階段是否卡住，並提供程序控制 |
+| **[CloudCLI Scheduler](https://github.com/grostim/cloudcli-cron)** | 建立工作區範圍的排程提示詞，並透過 Codex、Claude Code 或 Gemini CLI 等本機 CLI 執行 |
+| **[PRISM CloudCLI](https://github.com/jakeefr/cloudcli-plugin-prism)** | 在 CloudCLI 中提供 Claude Code 工作階段智慧分析，包括 token 消耗可視化 |
+| **[Sessions](https://github.com/strykereye2/cloudcli-plugin-session-manager)** | 檢視、管理並終止作用中的 Claude Code 工作階段 |
+| **[Token Cost Calculator](https://github.com/NightmareAway/cloudcli-plugin-token-cost-calculator)** | 根據模型價格與 token 用量計算 API 成本，並支援模型價格預設 |
+| **[Task Queue](https://github.com/TadMSTR/cloudcli-plugin-task-queue)** | 用於檢視、篩選和啟動代理任務的任務佇列儀表板 |
+| **[GitHub Issues Board](https://github.com/szmidtpiotr/claude-github-issue)** | 用於 GitHub Issues 的看板，支援 TaskMaster 雙向同步和 /github-task CLI 技能自動安裝 |
 
 ### 自行建構
 

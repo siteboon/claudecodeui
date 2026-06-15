@@ -126,6 +126,12 @@
       "unsupported": "Push notifications are not supported in this browser.",
       "denied": "Push notifications are blocked. Please allow them in your browser settings."
     },
+    "sound": {
+      "title": "Sound",
+      "description": "Play a short tone when a chat run finishes.",
+      "enabled": "Enabled",
+      "test": "Test sound"
+    },
     "events": {
       "title": "Event Types",
       "actionRequired": "Action required",
@@ -516,6 +522,36 @@
       "name": "Claude Watch",
       "badge": "unofficial",
       "description": "Watch long-running Claude Code sessions for hangs and expose process controls.",
+      "install": "Install"
+    },
+    "prismCloudCLI": {
+      "name": "PRISM CloudCLI",
+      "badge": "unofficial",
+      "description": "Session intelligence for Claude Code, inside CloudCLI. See why your sessions are burning tokens without leaving the browser.",
+      "install": "Install"
+    },
+    "sessionManagerPlugin": {
+      "name": "Sessions",
+      "badge": "unofficial",
+      "description": "View, manage, and kill active Claude Code sessions.",
+      "install": "Install"
+    },
+    "tokenCostCalculatorPlugin": {
+      "name": "Token Cost Calculator",
+      "badge": "unofficial",
+      "description": "Calculate API costs from model prices and token usage, with preset model pricing support.",
+      "install": "Install"
+    },
+    "taskQueuePlugin": {
+      "name": "Task Queue",
+      "badge": "unofficial",
+      "description": "Task queue dashboard to view, filter, and launch agent tasks.",
+      "install": "Install"
+    },
+    "githubIssuesBoardPlugin": {
+      "name": "GitHub Issues Board",
+      "badge": "unofficial",
+      "description": "Kanban board for GitHub Issues with bidirectional TaskMaster sync and /github-task CLI skill auto-install",
       "install": "Install"
     },
     "morePlugins": "More",

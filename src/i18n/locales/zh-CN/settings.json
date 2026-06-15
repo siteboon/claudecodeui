@@ -110,6 +110,12 @@
       "unsupported": "此浏览器不支持推送通知。",
       "denied": "推送通知已被阻止，请在浏览器设置中允许。"
     },
+    "sound": {
+      "title": "声音",
+      "description": "聊天运行完成时播放短提示音。",
+      "enabled": "已启用",
+      "test": "测试声音"
+    },
     "events": {
       "title": "事件类型",
       "actionRequired": "需要处理",

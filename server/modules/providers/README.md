@@ -83,7 +83,7 @@ The existing provider folders are `claude`, `codex`, `cursor`, `gemini`, and
 - Update `server/modules/providers/provider.routes.ts`.
 - Update `server/routes/agent.js` if the provider is launchable from the agent runtime.
 - Update `server/index.js` if the provider needs runtime boot or shutdown wiring.
-- Update `public/modelConstants.js` if the provider appears in README or public API docs.
+- Update the `PROVIDER_ORDER` list in `public/api-docs.html` if the provider should appear in the public API docs.
 - Update `src/components/chat/hooks/useChatProviderState.ts` and
   `src/components/chat/view/subcomponents/ProviderSelectionEmptyState.tsx` if
   the provider should be selectable in chat.
