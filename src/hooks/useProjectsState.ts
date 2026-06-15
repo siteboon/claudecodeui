@@ -52,7 +52,55 @@ type RegisterOptimisticSessionArgs = {
   summary?: string | null;
 };
 
+type SessionBucketKey = 'sessions' | 'cursorSessions' | 'codexSessions' | 'geminiSessions' | 'opencodeSessions';
+type ProjectSessionBuckets = Pick<Project, SessionBucketKey>;
+type ProjectSessionPage = ProjectSessionBuckets & Pick<Project, 'sessionMeta'>;
+
+const DEFAULT_PROVIDER: LLMProvider = 'claude';
+
+const SESSION_PROVIDER_BUCKETS: ReadonlyArray<{ provider: LLMProvider; key: SessionBucketKey }> = [
+  { provider: 'claude', key: 'sessions' },
+  { provider: 'cursor', key: 'cursorSessions' },
+  { provider: 'codex', key: 'codexSessions' },
+  { provider: 'gemini', key: 'geminiSessions' },
+  { provider: 'opencode', key: 'opencodeSessions' },
+];
+
+const SESSION_BUCKET_KEYS = SESSION_PROVIDER_BUCKETS.map(({ key }) => key);
+const EXTERNAL_SESSION_BUCKET_KEYS = SESSION_PROVIDER_BUCKETS
+  .filter(({ key }) => key !== 'sessions')
+  .map(({ key }) => key);
+const SESSION_BUCKET_BY_PROVIDER = SESSION_PROVIDER_BUCKETS.reduce(
+  (byProvider, { provider, key }) => {
+    byProvider[provider] = key;
+    return byProvider;
+  },
+  {} as Record<LLMProvider, SessionBucketKey>,
+);
+
 const serialize = (value: unknown) => JSON.stringify(value ?? null);
+
+const isLLMProvider = (value: unknown): value is LLMProvider => (
+  typeof value === 'string' && value in SESSION_BUCKET_BY_PROVIDER
+);
+
+const readSelectedProvider = (): LLMProvider => {
+  try {
+    const storedProvider = localStorage.getItem('selected-provider');
+    return isLLMProvider(storedProvider) ? storedProvider : DEFAULT_PROVIDER;
+  } catch {
+    return DEFAULT_PROVIDER;
+  }
+};
+
+const getProjectSessionBucketValues = (project: Partial<Project>): ProjectSessionBuckets => {
+  const buckets = {} as ProjectSessionBuckets;
+  for (const bucketKey of SESSION_BUCKET_KEYS) {
+    buckets[bucketKey] = project[bucketKey] ?? [];
+  }
+
+  return buckets;
+};
 
 const projectsHaveChanges = (
   prevProjects: Project[],
@@ -86,11 +134,8 @@ const projectsHaveChanges = (
       return false;
     }
 
-    return (
-      serialize(nextProject.cursorSessions) !== serialize(prevProject.cursorSessions) ||
-      serialize(nextProject.codexSessions) !== serialize(prevProject.codexSessions) ||
-      serialize(nextProject.geminiSessions) !== serialize(prevProject.geminiSessions) ||
-      serialize(nextProject.opencodeSessions) !== serialize(prevProject.opencodeSessions)
+    return EXTERNAL_SESSION_BUCKET_KEYS.some((bucketKey) =>
+      serialize(nextProject[bucketKey]) !== serialize(prevProject[bucketKey]),
     );
   });
 };
@@ -122,16 +167,24 @@ const mergeTaskMasterCache = (nextProjects: Project[], previousProjects: Project
 };
 
 const getProjectSessions = (project: Project): ProjectSession[] => {
-  return [
-    ...(project.sessions ?? []),
-    ...(project.codexSessions ?? []),
-    ...(project.cursorSessions ?? []),
-    ...(project.geminiSessions ?? []),
-    ...(project.opencodeSessions ?? []),
-  ];
+  return SESSION_BUCKET_KEYS.flatMap((bucketKey) => project[bucketKey] ?? []);
 };
 
 const countLoadedProjectSessions = (project: Project): number => getProjectSessions(project).length;
+
+const findProjectSessionById = (
+  project: Project,
+  sessionId: string,
+): { session: ProjectSession; provider: LLMProvider } | null => {
+  for (const { provider, key } of SESSION_PROVIDER_BUCKETS) {
+    const session = project[key]?.find((candidate) => candidate.id === sessionId);
+    if (session) {
+      return { session, provider };
+    }
+  }
+
+  return null;
+};
 
 const mergeSessionProviderLists = (baseSessions: ProjectSession[], additionalSessions: ProjectSession[]): ProjectSession[] => {
   const merged = [...baseSessions];
@@ -169,14 +222,13 @@ const mergeExpandedSessionPages = (previousProjects: Project[], incomingProjects
       return incomingProject;
     }
 
-    const mergedProject: Project = {
-      ...incomingProject,
-      sessions: mergeSessionProviderLists(incomingProject.sessions ?? [], previousProject.sessions ?? []),
-      cursorSessions: mergeSessionProviderLists(incomingProject.cursorSessions ?? [], previousProject.cursorSessions ?? []),
-      codexSessions: mergeSessionProviderLists(incomingProject.codexSessions ?? [], previousProject.codexSessions ?? []),
-      geminiSessions: mergeSessionProviderLists(incomingProject.geminiSessions ?? [], previousProject.geminiSessions ?? []),
-      opencodeSessions: mergeSessionProviderLists(incomingProject.opencodeSessions ?? [], previousProject.opencodeSessions ?? []),
-    };
+    const mergedProject: Project = { ...incomingProject };
+    for (const bucketKey of SESSION_BUCKET_KEYS) {
+      mergedProject[bucketKey] = mergeSessionProviderLists(
+        incomingProject[bucketKey] ?? [],
+        previousProject[bucketKey] ?? [],
+      );
+    }
 
     const totalSessions = Number(incomingProject.sessionMeta?.total ?? previousLoadedCount);
     mergedProject.sessionMeta = {
@@ -191,16 +243,15 @@ const mergeExpandedSessionPages = (previousProjects: Project[], incomingProjects
 
 const mergeProjectSessionPage = (
   existingProject: Project,
-  sessionsPage: Pick<Project, 'sessions' | 'cursorSessions' | 'codexSessions' | 'geminiSessions' | 'opencodeSessions' | 'sessionMeta'>,
+  sessionsPage: ProjectSessionPage,
 ): Project => {
-  const mergedProject: Project = {
-    ...existingProject,
-    sessions: mergeSessionProviderLists(existingProject.sessions ?? [], sessionsPage.sessions ?? []),
-    cursorSessions: mergeSessionProviderLists(existingProject.cursorSessions ?? [], sessionsPage.cursorSessions ?? []),
-    codexSessions: mergeSessionProviderLists(existingProject.codexSessions ?? [], sessionsPage.codexSessions ?? []),
-    geminiSessions: mergeSessionProviderLists(existingProject.geminiSessions ?? [], sessionsPage.geminiSessions ?? []),
-    opencodeSessions: mergeSessionProviderLists(existingProject.opencodeSessions ?? [], sessionsPage.opencodeSessions ?? []),
-  };
+  const mergedProject: Project = { ...existingProject };
+  for (const bucketKey of SESSION_BUCKET_KEYS) {
+    mergedProject[bucketKey] = mergeSessionProviderLists(
+      existingProject[bucketKey] ?? [],
+      sessionsPage[bucketKey] ?? [],
+    );
+  }
 
   const totalSessions = Number(sessionsPage.sessionMeta?.total ?? existingProject.sessionMeta?.total ?? 0);
   mergedProject.sessionMeta = {
@@ -234,21 +285,6 @@ const getSessionAliasIds = (event: SessionUpsertedEvent): Set<string> => {
 };
 
 /**
- * Resolves which provider bucket on a `Project` holds sessions for a provider.
- * The legacy payload keeps Claude sessions in `sessions` and the other
- * providers in their own arrays.
- */
-const providerBucketKey = (
-  provider: LLMProvider,
-): 'sessions' | 'cursorSessions' | 'codexSessions' | 'geminiSessions' | 'opencodeSessions' => {
-  if (provider === 'cursor') return 'cursorSessions';
-  if (provider === 'codex') return 'codexSessions';
-  if (provider === 'gemini') return 'geminiSessions';
-  if (provider === 'opencode') return 'opencodeSessions';
-  return 'sessions';
-};
-
-/**
  * Upserts one session into the matching provider bucket of a project.
  *
  * Existing rows are updated in place (summary/lastActivity changes from the
@@ -256,7 +292,7 @@ const providerBucketKey = (
  * with fresh activity. `sessionMeta.total` grows only on insert.
  */
 const upsertSessionIntoProject = (project: Project, event: SessionUpsertedEvent): Project => {
-  const bucketKey = providerBucketKey(event.provider);
+  const bucketKey = SESSION_BUCKET_BY_PROVIDER[event.provider] ?? SESSION_BUCKET_BY_PROVIDER[DEFAULT_PROVIDER];
   const bucket = project[bucketKey] ?? [];
   const aliasIds = getSessionAliasIds(event);
   const normalizedSession: ProjectSession = {
@@ -316,14 +352,40 @@ const projectFromRegistration = (project: Project): Project => ({
   fullPath: project.fullPath || project.path || '',
   displayName: project.displayName,
   isStarred: project.isStarred,
-  sessions: project.sessions ?? [],
-  cursorSessions: project.cursorSessions ?? [],
-  codexSessions: project.codexSessions ?? [],
-  geminiSessions: project.geminiSessions ?? [],
-  opencodeSessions: project.opencodeSessions ?? [],
+  ...getProjectSessionBucketValues(project),
   sessionMeta: project.sessionMeta ?? { hasMore: false, total: countLoadedProjectSessions(project) },
   taskmaster: project.taskmaster,
 });
+
+const removeSessionFromProject = (project: Project, sessionIdToDelete: string): Project => {
+  const nextBuckets = {} as ProjectSessionBuckets;
+  let removedFromProject = false;
+
+  for (const bucketKey of SESSION_BUCKET_KEYS) {
+    const currentBucket = project[bucketKey] ?? [];
+    const nextBucket = currentBucket.filter((session) => session.id !== sessionIdToDelete);
+    nextBuckets[bucketKey] = nextBucket;
+    removedFromProject = removedFromProject || nextBucket.length !== currentBucket.length;
+  }
+
+  if (!removedFromProject) {
+    return project;
+  }
+
+  const updatedProject: Project = {
+    ...project,
+    ...nextBuckets,
+  };
+
+  const totalSessions = Math.max(0, Number(project.sessionMeta?.total ?? 0) - 1);
+  updatedProject.sessionMeta = {
+    ...project.sessionMeta,
+    total: totalSessions,
+    hasMore: countLoadedProjectSessions(updatedProject) < totalSessions,
+  };
+
+  return updatedProject;
+};
 
 const VALID_TABS: Set<string> = new Set(['chat', 'files', 'shell', 'git', 'tasks', 'preview']);
 
@@ -639,11 +701,7 @@ export function useProjectsState({
             fullPath: upsert.project.fullPath,
             displayName: upsert.project.displayName,
             isStarred: upsert.project.isStarred,
-            sessions: [],
-            cursorSessions: [],
-            codexSessions: [],
-            geminiSessions: [],
-            opencodeSessions: [],
+            ...getProjectSessionBucketValues({}),
             sessionMeta: { hasMore: false, total: 0 },
           } as Project;
 
@@ -725,77 +783,17 @@ export function useProjectsState({
 
     // Project membership is resolved through `projectId` after the migration.
     for (const project of projects) {
-      const claudeSession = project.sessions?.find((session) => session.id === sessionId);
-      if (claudeSession) {
+      const match = findProjectSessionById(project, sessionId);
+      if (match) {
         const shouldUpdateProject = selectedProject?.projectId !== project.projectId;
         const shouldUpdateSession =
-          selectedSession?.id !== sessionId || selectedSession.__provider !== 'claude';
+          selectedSession?.id !== sessionId || selectedSession.__provider !== match.provider;
 
         if (shouldUpdateProject) {
           setSelectedProject(project);
         }
         if (shouldUpdateSession) {
-          setSelectedSession({ ...claudeSession, __provider: 'claude' });
-        }
-        return;
-      }
-
-      const cursorSession = project.cursorSessions?.find((session) => session.id === sessionId);
-      if (cursorSession) {
-        const shouldUpdateProject = selectedProject?.projectId !== project.projectId;
-        const shouldUpdateSession =
-          selectedSession?.id !== sessionId || selectedSession.__provider !== 'cursor';
-
-        if (shouldUpdateProject) {
-          setSelectedProject(project);
-        }
-        if (shouldUpdateSession) {
-          setSelectedSession({ ...cursorSession, __provider: 'cursor' });
-        }
-        return;
-      }
-
-      const codexSession = project.codexSessions?.find((session) => session.id === sessionId);
-      if (codexSession) {
-        const shouldUpdateProject = selectedProject?.projectId !== project.projectId;
-        const shouldUpdateSession =
-          selectedSession?.id !== sessionId || selectedSession.__provider !== 'codex';
-
-        if (shouldUpdateProject) {
-          setSelectedProject(project);
-        }
-        if (shouldUpdateSession) {
-          setSelectedSession({ ...codexSession, __provider: 'codex' });
-        }
-        return;
-      }
-
-      const geminiSession = project.geminiSessions?.find((session) => session.id === sessionId);
-      if (geminiSession) {
-        const shouldUpdateProject = selectedProject?.projectId !== project.projectId;
-        const shouldUpdateSession =
-          selectedSession?.id !== sessionId || selectedSession.__provider !== 'gemini';
-
-        if (shouldUpdateProject) {
-          setSelectedProject(project);
-        }
-        if (shouldUpdateSession) {
-          setSelectedSession({ ...geminiSession, __provider: 'gemini' });
-        }
-        return;
-      }
-
-      const opencodeSession = project.opencodeSessions?.find((session) => session.id === sessionId);
-      if (opencodeSession) {
-        const shouldUpdateProject = selectedProject?.projectId !== project.projectId;
-        const shouldUpdateSession =
-          selectedSession?.id !== sessionId || selectedSession.__provider !== 'opencode';
-
-        if (shouldUpdateProject) {
-          setSelectedProject(project);
-        }
-        if (shouldUpdateSession) {
-          setSelectedSession({ ...opencodeSession, __provider: 'opencode' });
+          setSelectedSession({ ...match.session, __provider: match.provider });
         }
         return;
       }
@@ -815,27 +813,9 @@ export function useProjectsState({
       return;
     }
 
-    let providerFromStorage: string | null = null;
-    try {
-      providerFromStorage = localStorage.getItem('selected-provider');
-    } catch {
-      providerFromStorage = null;
-    }
-
-    const normalizedProvider: LLMProvider =
-      providerFromStorage === 'cursor'
-        ? 'cursor'
-        : providerFromStorage === 'codex'
-          ? 'codex'
-          : providerFromStorage === 'gemini'
-            ? 'gemini'
-            : providerFromStorage === 'opencode'
-              ? 'opencode'
-            : 'claude';
-
     setSelectedSession({
       id: sessionId,
-      __provider: normalizedProvider,
+      __provider: readSelectedProvider(),
       __projectId: selectedProject.projectId,
       summary: '',
     });
@@ -903,43 +883,7 @@ export function useProjectsState({
       }
 
       setProjects((prevProjects) =>
-        prevProjects.map((project) => {
-          const sessions = project.sessions?.filter((session) => session.id !== sessionIdToDelete) ?? [];
-          const cursorSessions = project.cursorSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [];
-          const codexSessions = project.codexSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [];
-          const geminiSessions = project.geminiSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [];
-          const opencodeSessions = project.opencodeSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [];
-
-          const removedFromProject = (
-            sessions.length !== (project.sessions?.length ?? 0)
-            || cursorSessions.length !== (project.cursorSessions?.length ?? 0)
-            || codexSessions.length !== (project.codexSessions?.length ?? 0)
-            || geminiSessions.length !== (project.geminiSessions?.length ?? 0)
-            || opencodeSessions.length !== (project.opencodeSessions?.length ?? 0)
-          );
-
-          if (!removedFromProject) {
-            return project;
-          }
-
-          const updatedProject: Project = {
-            ...project,
-            sessions,
-            cursorSessions,
-            codexSessions,
-            geminiSessions,
-            opencodeSessions,
-          };
-
-          const totalSessions = Math.max(0, Number(project.sessionMeta?.total ?? 0) - 1);
-          updatedProject.sessionMeta = {
-            ...project.sessionMeta,
-            total: totalSessions,
-            hasMore: countLoadedProjectSessions(updatedProject) < totalSessions,
-          };
-
-          return updatedProject;
-        }),
+        prevProjects.map((project) => removeSessionFromProject(project, sessionIdToDelete)),
       );
     },
     [navigate, selectedSession?.id],
@@ -1022,7 +966,7 @@ export function useProjectsState({
       throw new Error(message);
     }
 
-    const sessionsPage = (await response.json()) as Pick<Project, 'sessions' | 'cursorSessions' | 'codexSessions' | 'geminiSessions' | 'opencodeSessions' | 'sessionMeta'>;
+    const sessionsPage = (await response.json()) as ProjectSessionPage;
 
     let mergedProjectForSelection: Project | null = null;
     setProjects((previousProjects) =>
