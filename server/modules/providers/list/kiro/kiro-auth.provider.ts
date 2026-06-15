@@ -60,82 +60,95 @@ export class KiroProviderAuth implements IProviderAuth {
   }
 
   /**
-   * Reads the Kiro AWS SSO cache token and resolves the user email via whoami.
+   * Resolves login state from `kiro-cli whoami`, which is the source of truth
+   * across CLI versions.
    *
-   * The token JSON has fields {accessToken, refreshToken, expiresAt: ISO8601,
-   * authMethod: 'IdC' | 'BuilderId', region}. There is no JWT/email payload, so
-   * the email is fetched from `kiro-cli whoami` when a valid token exists.
+   * `whoami` is authoritative because the on-disk token location is not stable:
+   * kiro-cli <= 2.3.0 wrote `~/.aws/sso/cache/kiro-auth-token.json`, but later
+   * versions (verified on 2.7.0) write hashed-filename token files instead, so
+   * keying auth off that single path reports a logged-in user as expired. The
+   * token file is now only a best-effort hint used to enrich the method label
+   * and surface an explicit "expired" error; it never overrides whoami.
    */
   private async checkCredentials(): Promise<KiroCredentialsStatus> {
+    const whoami = await this.readWhoami();
+    const tokenHint = await this.readTokenHint();
+
+    if (whoami.loggedIn) {
+      return {
+        authenticated: true,
+        email: whoami.email ?? 'Authenticated',
+        method: whoami.method ?? tokenHint.method ?? 'sso',
+      };
+    }
+
+    // whoami says not logged in: prefer a precise "expired" error when the
+    // stale token file still explains why, otherwise a generic message.
+    return {
+      authenticated: false,
+      email: null,
+      method: whoami.method ?? tokenHint.method,
+      error: tokenHint.expired ? 'OAuth token has expired' : 'Not authenticated',
+    };
+  }
+
+  /**
+   * Best-effort read of the legacy SSO cache token for method/expiry hints.
+   *
+   * Returns empty hints when the file is absent (expected on newer CLIs) so a
+   * missing file never forces a not-authenticated result on its own.
+   */
+  private async readTokenHint(): Promise<{ method: string | null; expired: boolean }> {
     try {
       const tokenPath = path.join(os.homedir(), '.aws', 'sso', 'cache', 'kiro-auth-token.json');
       const content = await readFile(tokenPath, 'utf8');
       const token = readObjectRecord(JSON.parse(content)) ?? {};
+      const method = readOptionalString(token.authMethod) ?? null;
       const expiresAt = readOptionalString(token.expiresAt);
-      const authMethod = readOptionalString(token.authMethod) ?? 'sso';
-
-      if (!expiresAt) {
-        return { authenticated: false, email: null, method: null, error: 'Token has no expiresAt' };
-      }
-
-      const expiryMs = Date.parse(expiresAt);
-      if (!Number.isFinite(expiryMs) || expiryMs <= Date.now()) {
-        return {
-          authenticated: false,
-          email: null,
-          method: authMethod,
-          error: 'OAuth token has expired',
-        };
-      }
-
-      const email = await this.readEmailFromWhoami();
-      return {
-        authenticated: true,
-        email: email ?? 'Authenticated',
-        method: authMethod,
-      };
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      return {
-        authenticated: false,
-        email: null,
-        method: null,
-        error:
-          code === 'ENOENT'
-            ? 'Kiro not configured'
-            : error instanceof Error
-              ? error.message
-              : 'Failed to read Kiro auth',
-      };
+      const expiryMs = expiresAt ? Date.parse(expiresAt) : NaN;
+      const expired = Number.isFinite(expiryMs) ? expiryMs <= Date.now() : false;
+      return { method, expired };
+    } catch {
+      return { method: null, expired: false };
     }
   }
 
   /**
-   * Runs `kiro-cli whoami` to extract the signed-in email.
+   * Runs `kiro-cli whoami` and parses login state, email, and auth method.
    *
-   * Stdout shape (verified against kiro-cli 2.3.0):
-   *   Logged in with IAM Identity Center (https://...)
+   * Uses the plain (default) output format for cross-version compatibility
+   * (the `--format json` flag does not exist on older CLIs). Stdout shapes:
+   *   Logged in with IAM Identity Center (https://...)   -> method 'IdC'
+   *   Logged in with Builder ID                          -> method 'BuilderId'
    *   Email: someone@example.com
+   *   Not logged in                                      -> loggedIn false
+   *
+   * `whoami` exits 0 in both states, so login is determined from the text, not
+   * the exit code.
    */
-  private readEmailFromWhoami(): Promise<string | null> {
+  private readWhoami(): Promise<{ loggedIn: boolean; email: string | null; method: string | null }> {
     return new Promise((resolve) => {
       let processCompleted = false;
       let childProcess: ReturnType<typeof spawn> | undefined;
 
-      const timeout = setTimeout(() => {
-        if (!processCompleted) {
-          processCompleted = true;
-          childProcess?.kill();
-          resolve(null);
+      const finish = (value: { loggedIn: boolean; email: string | null; method: string | null }) => {
+        if (processCompleted) {
+          return;
         }
+        processCompleted = true;
+        clearTimeout(timeout);
+        resolve(value);
+      };
+
+      const timeout = setTimeout(() => {
+        childProcess?.kill();
+        finish({ loggedIn: false, email: null, method: null });
       }, 5000);
 
       try {
         childProcess = spawn(KIRO_BIN, ['whoami']);
       } catch {
-        clearTimeout(timeout);
-        processCompleted = true;
-        resolve(null);
+        finish({ loggedIn: false, email: null, method: null });
         return;
       }
 
@@ -145,22 +158,21 @@ export class KiroProviderAuth implements IProviderAuth {
       });
 
       childProcess.on('close', () => {
-        if (processCompleted) {
-          return;
+        const emailMatch = stdout.match(/Email:\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+        const loggedIn = /logged in with/i.test(stdout) || emailMatch !== null;
+        let method: string | null = null;
+        if (/identity center/i.test(stdout)) {
+          method = 'IdC';
+        } else if (/builder\s*id/i.test(stdout)) {
+          method = 'BuilderId';
+        } else if (loggedIn) {
+          method = 'sso';
         }
-        processCompleted = true;
-        clearTimeout(timeout);
-        const match = stdout.match(/Email:\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
-        resolve(match?.[1] ?? null);
+        finish({ loggedIn, email: emailMatch?.[1] ?? null, method });
       });
 
       childProcess.on('error', () => {
-        if (processCompleted) {
-          return;
-        }
-        processCompleted = true;
-        clearTimeout(timeout);
-        resolve(null);
+        finish({ loggedIn: false, email: null, method: null });
       });
     });
   }
