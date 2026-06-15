@@ -374,6 +374,14 @@ export const useFileTreeUpload = ({
     ],
   );
 
+  /**
+   * Upload the picked files into the given target folder.
+   *
+   * @param fileList   Files chosen via the File Explorer input or drop.
+   * @param targetPath Project-relative folder to upload into; defaults to ''
+   *                   (the project root). Validated server-side via
+   *                   validatePathInProject.
+   */
   const handleFileSelect = useCallback(
     async (fileList: FileList | File[], targetPath = '') => {
       await uploadFiles(Array.from(fileList), targetPath);

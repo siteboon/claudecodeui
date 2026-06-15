@@ -94,7 +94,14 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
 
   const [selectedUploadDir, setSelectedUploadDir] = useState<string>('');
 
-  // Centralized click behavior keeps file actions identical across all presentation modes.
+  /**
+   * Centralized click behavior keeps file actions identical across all
+   * presentation modes. Clicking a directory also marks it as the upload
+   * target, so subsequent File Explorer uploads land in that folder instead
+   * of the project root.
+   *
+   * @param item The file-tree node that was clicked.
+   */
   const handleItemClick = useCallback(
     (item: FileTreeNode) => {
       if (item.type === 'directory') {
