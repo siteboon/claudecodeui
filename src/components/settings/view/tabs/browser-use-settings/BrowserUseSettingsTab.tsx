@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Download, Loader2, MonitorPlay, RefreshCw } from 'lucide-react';
+import { Download, ExternalLink, Loader2 } from 'lucide-react';
 
 import { Button } from '../../../../../shared/view/ui';
 import { authenticatedFetch } from '../../../../../utils/api';
@@ -77,7 +77,7 @@ export default function BrowserUseSettingsTab() {
     }
   };
 
-  const installRuntime = async () => {
+  const installBrowserBinaries = async () => {
     setIsInstalling(true);
     setError(null);
     try {
@@ -85,13 +85,13 @@ export default function BrowserUseSettingsTab() {
       await readJson(response);
       await loadState();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to install Browser Use runtime');
+      setError(err instanceof Error ? err.message : 'Failed to install browser binaries');
     } finally {
       setIsInstalling(false);
     }
   };
 
-  const needsRuntime = Boolean(settings.enabled && status && (!status.playwrightInstalled || !status.chromiumInstalled));
+  const needsBrowserBinaries = Boolean(settings.enabled && status && (!status.playwrightInstalled || !status.chromiumInstalled));
 
   return (
     <div className="space-y-8">
@@ -100,6 +100,24 @@ export default function BrowserUseSettingsTab() {
         description="Manage local Playwright browser sessions used for captured browser screenshots and guarded navigation."
       >
         <SettingsCard divided>
+          <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-foreground">How Browser Use Works</div>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Learn what agents can do with browser sessions, when to share access, and what the current limitations are.
+              </p>
+            </div>
+            <a
+              href="https://cloudcli.ai/docs/user-guide/browser-use"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-9 flex-shrink-0 items-center justify-center gap-2 rounded-md border border-input bg-background px-3 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+            >
+              Open Guide
+              <ExternalLink className="h-4 w-4" />
+            </a>
+          </div>
+
           <SettingsRow
             label="Enable Browser Use"
             description="Allow CloudCLI to create owner-scoped Playwright browser sessions."
@@ -124,52 +142,49 @@ export default function BrowserUseSettingsTab() {
             />
           </SettingsRow>
 
-          <div className="space-y-4 px-4 py-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0 space-y-1">
-                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <MonitorPlay className="h-4 w-4 text-primary" />
-                  Runtime
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {status?.message || (isLoading ? 'Checking Browser Use runtime...' : 'Runtime status unavailable.')}
-                </p>
-                {status && (
-                  <div className="flex flex-wrap gap-2 pt-1 text-xs text-muted-foreground">
-                    <span className="rounded-md border border-border px-2 py-1">
-                      Playwright: {status.playwrightInstalled ? 'installed' : 'missing'}
-                    </span>
-                    <span className="rounded-md border border-border px-2 py-1">
-                      Chromium: {status.chromiumInstalled ? 'installed' : 'missing'}
-                    </span>
+          {(needsBrowserBinaries || error) && (
+            <div className="space-y-4 px-4 py-4">
+              {needsBrowserBinaries && (
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0 space-y-1">
+                    <div className="text-sm font-medium text-foreground">Browser binaries required</div>
+                    <p className="text-sm text-muted-foreground">
+                      {status?.message || 'Install the browser binaries needed to create Browser Use sessions.'}
+                    </p>
+                    <div className="flex flex-wrap gap-2 pt-1 text-xs text-muted-foreground">
+                      <span className="rounded-md border border-border px-2 py-1">
+                        Playwright: {status?.playwrightInstalled ? 'installed' : 'missing'}
+                      </span>
+                      <span className="rounded-md border border-border px-2 py-1">
+                        Chromium: {status?.chromiumInstalled ? 'installed' : 'missing'}
+                      </span>
+                    </div>
                   </div>
-                )}
-              </div>
 
-              <div className="flex flex-shrink-0 gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => void loadState()} disabled={isLoading || isInstalling}>
-                  <RefreshCw className="h-4 w-4" />
-                  Refresh
-                </Button>
-                {needsRuntime && (
-                  <Button type="button" size="sm" onClick={() => void installRuntime()} disabled={isInstalling || status?.installInProgress}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => void installBrowserBinaries()}
+                    disabled={isInstalling || status?.installInProgress}
+                    className="flex-shrink-0"
+                  >
                     {isInstalling || status?.installInProgress ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       <Download className="h-4 w-4" />
                     )}
-                    Install Runtime
+                    Install Binaries
                   </Button>
-                )}
-              </div>
-            </div>
+                </div>
+              )}
 
-            {error && (
-              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">
-                {error}
-              </div>
-            )}
-          </div>
+              {error && (
+                <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">
+                  {error}
+                </div>
+              )}
+            </div>
+          )}
         </SettingsCard>
       </SettingsSection>
     </div>

@@ -38,6 +38,15 @@ type BrowserUseSession = {
   message: string | null;
   agentAccessEnabled: boolean;
   profileName: string | null;
+  viewport: {
+    width: number;
+    height: number;
+  } | null;
+  cursor: {
+    x: number;
+    y: number;
+    actor: 'agent' | 'user';
+  } | null;
 };
 
 type PublicBrowserUseSession = Omit<BrowserUseSession, 'ownerId'>;
@@ -397,6 +406,10 @@ function ownerSessions(ownerId: string): BrowserUseSession[] {
   return [...sessions.values()].filter((session) => session.ownerId === ownerId);
 }
 
+function canAccessSession(ownerId: string, session: BrowserUseSession): boolean {
+  return session.ownerId === ownerId || session.ownerId === AGENT_OWNER_ID || session.agentAccessEnabled;
+}
+
 async function closeHandle(sessionId: string): Promise<void> {
   const handle = handles.get(sessionId);
   handles.delete(sessionId);
@@ -428,7 +441,34 @@ async function captureSession(session: BrowserUseSession, page: any): Promise<vo
   session.screenshotDataUrl = `data:image/jpeg;base64,${Buffer.from(screenshot).toString('base64')}`;
   session.title = await page.title().catch(() => null);
   session.url = page.url() || session.url;
+  session.viewport = page.viewportSize?.() || session.viewport;
   session.updatedAt = new Date().toISOString();
+}
+
+async function getActionPoint(page: any, input: { selector?: string; text?: string; x?: number; y?: number }) {
+  if (typeof input.x === 'number' && typeof input.y === 'number') {
+    return { x: input.x, y: input.y };
+  }
+
+  const locator = input.selector
+    ? page.locator(input.selector).first()
+    : input.text
+      ? page.getByText(input.text, { exact: false }).first()
+      : null;
+
+  if (!locator) {
+    return null;
+  }
+
+  const box = await locator.boundingBox().catch(() => null);
+  if (!box) {
+    return null;
+  }
+
+  return {
+    x: Math.round(box.x + box.width / 2),
+    y: Math.round(box.y + box.height / 2),
+  };
 }
 
 export const browserUseService = {
@@ -530,7 +570,7 @@ export const browserUseService = {
     const ownerId = getOwnerId(owner);
     await expireStaleSessions();
     return [...sessions.values()]
-      .filter((session) => session.ownerId === ownerId || session.ownerId === AGENT_OWNER_ID || session.agentAccessEnabled)
+      .filter((session) => canAccessSession(ownerId, session))
       .map(publicSession);
   },
 
@@ -556,6 +596,8 @@ export const browserUseService = {
       message: null,
       agentAccessEnabled: options?.agentAccessEnabled ?? createdBy === 'agent',
       profileName,
+      viewport: { width: 1440, height: 900 },
+      cursor: null,
     };
 
     const activeOwnerSessions = ownerSessions(ownerId).filter((item) => item.status === 'ready');
@@ -667,7 +709,7 @@ export const browserUseService = {
     await expireStaleSessions();
 
     const session = sessions.get(sessionId);
-    if (!session || session.ownerId !== ownerId) {
+    if (!session || !canAccessSession(ownerId, session)) {
       throw new Error('Browser session not found.');
     }
 
@@ -683,6 +725,7 @@ export const browserUseService = {
     const url = await normalizeUrl(rawUrl);
     await handle.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
     session.lastAction = `navigate:${url}`;
+    session.cursor = null;
     await captureSession(session, handle.page);
     return publicSession(session);
   },
@@ -726,6 +769,7 @@ export const browserUseService = {
     if (!handle?.page) {
       throw new Error('Browser runtime handle is not available.');
     }
+    const point = await getActionPoint(handle.page, input);
 
     if (input.selector) {
       await handle.page.locator(input.selector).first().click({ timeout: 10_000 });
@@ -738,6 +782,7 @@ export const browserUseService = {
     }
 
     session.lastAction = 'click';
+    session.cursor = point ? { ...point, actor: 'agent' } : null;
     await captureSession(session, handle.page);
     return publicSession(session);
   },
@@ -751,6 +796,9 @@ export const browserUseService = {
 
     if (input.selector) {
       await handle.page.locator(input.selector).first().fill(input.text, { timeout: 10_000 });
+      session.cursor = await getActionPoint(handle.page, input).then((point) => (
+        point ? { ...point, actor: 'agent' as const } : null
+      ));
     } else {
       await handle.page.keyboard.type(input.text);
     }
@@ -773,6 +821,11 @@ export const browserUseService = {
       await handle.page.locator(field.selector).first().fill(field.value, { timeout: 10_000 });
     }
     session.lastAction = 'fill_form';
+    if (fields[0]) {
+      session.cursor = await getActionPoint(handle.page, { selector: fields[0].selector }).then((point) => (
+        point ? { ...point, actor: 'agent' as const } : null
+      ));
+    }
     await captureSession(session, handle.page);
     return publicSession(session);
   },
@@ -797,6 +850,9 @@ export const browserUseService = {
     }
     await handle.page.locator(selector).first().selectOption(values, { timeout: 10_000 });
     session.lastAction = 'select_option';
+    session.cursor = await getActionPoint(handle.page, { selector }).then((point) => (
+      point ? { ...point, actor: 'agent' as const } : null
+    ));
     await captureSession(session, handle.page);
     return publicSession(session);
   },
@@ -864,7 +920,7 @@ export const browserUseService = {
   async stopSession(owner: BrowserUseOwner, sessionId: string) {
     const ownerId = getOwnerId(owner);
     const session = sessions.get(sessionId);
-    if (!session || (session.ownerId !== ownerId && session.ownerId !== AGENT_OWNER_ID && !session.agentAccessEnabled)) {
+    if (!session || !canAccessSession(ownerId, session)) {
       return { stopped: false };
     }
 
@@ -873,8 +929,63 @@ export const browserUseService = {
     session.status = 'stopped';
     session.updatedAt = new Date().toISOString();
     session.lastAction = 'stop';
-    session.message = 'Browser session stopped.';
+    session.message = 'Browser session stopped. Create a new session to continue browsing.';
     return { stopped: true, session: publicSession(session) };
+  },
+
+  async deleteSession(owner: BrowserUseOwner, sessionId: string) {
+    const ownerId = getOwnerId(owner);
+    const session = sessions.get(sessionId);
+    if (!session || !canAccessSession(ownerId, session)) {
+      return { deleted: false };
+    }
+
+    await closeHandle(sessionId);
+    sessions.delete(sessionId);
+    return { deleted: true, sessionId };
+  },
+
+  async userClick(owner: BrowserUseOwner, sessionId: string, input: { x: number; y: number }) {
+    const ownerId = getOwnerId(owner);
+    const session = sessions.get(sessionId);
+    if (!session || !canAccessSession(ownerId, session)) {
+      throw new Error('Browser session not found.');
+    }
+    if (session.status !== 'ready') {
+      throw new Error(session.message || 'Browser session is not available.');
+    }
+
+    const handle = handles.get(sessionId);
+    if (!handle?.page) {
+      throw new Error('Browser runtime handle is not available.');
+    }
+
+    await handle.page.mouse.click(input.x, input.y);
+    session.lastAction = 'click';
+    session.cursor = { x: input.x, y: input.y, actor: 'user' };
+    await captureSession(session, handle.page);
+    return publicSession(session);
+  },
+
+  async userPressKey(owner: BrowserUseOwner, sessionId: string, key: string) {
+    const ownerId = getOwnerId(owner);
+    const session = sessions.get(sessionId);
+    if (!session || !canAccessSession(ownerId, session)) {
+      throw new Error('Browser session not found.');
+    }
+    if (session.status !== 'ready') {
+      throw new Error(session.message || 'Browser session is not available.');
+    }
+
+    const handle = handles.get(sessionId);
+    if (!handle?.page) {
+      throw new Error('Browser runtime handle is not available.');
+    }
+
+    await handle.page.keyboard.press(key);
+    session.lastAction = `press_key:${key}`;
+    await captureSession(session, handle.page);
+    return publicSession(session);
   },
 
   async agentStopSession(sessionId: string) {

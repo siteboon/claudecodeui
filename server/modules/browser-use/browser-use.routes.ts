@@ -119,6 +119,33 @@ router.post('/sessions/:sessionId/navigate', async (req: AuthenticatedRequest, r
   }
 });
 
+router.post('/sessions/:sessionId/click', async (req: AuthenticatedRequest, res) => {
+  try {
+    const session = await browserUseService.userClick(requireUser(req), readParam(req.params.sessionId), {
+      x: Number(req.body?.x),
+      y: Number(req.body?.y),
+    });
+    res.json({ success: true, data: { session } });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to click browser session.',
+    });
+  }
+});
+
+router.post('/sessions/:sessionId/press-key', async (req: AuthenticatedRequest, res) => {
+  try {
+    const session = await browserUseService.userPressKey(requireUser(req), readParam(req.params.sessionId), String(req.body?.key || ''));
+    res.json({ success: true, data: { session } });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to send browser key input.',
+    });
+  }
+});
+
 router.post('/sessions/:sessionId/agent-access/grant', async (req: AuthenticatedRequest, res) => {
   try {
     const session = await browserUseService.grantAgentAccess(requireUser(req), readParam(req.params.sessionId));
@@ -151,6 +178,18 @@ router.post('/sessions/:sessionId/stop', async (req: AuthenticatedRequest, res) 
     res.status(400).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to stop browser session.',
+    });
+  }
+});
+
+router.delete('/sessions/:sessionId', async (req: AuthenticatedRequest, res) => {
+  try {
+    const result = await browserUseService.deleteSession(requireUser(req), readParam(req.params.sessionId));
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to delete browser session.',
     });
   }
 });
