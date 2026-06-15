@@ -5,7 +5,8 @@ import path from 'node:path';
 import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
-import { createCodexRuntimeEnv, getCodexShellCommand } from '@/shared/codex-cli-runtime.js';
+import { createUserShellRuntimeEnv } from '@/shared/cli-runtime-env.js';
+import { getCodexShellCommand } from '@/shared/codex-cli-runtime.js';
 import { parseIncomingJsonObject } from '@/shared/utils.js';
 
 type ShellIncomingMessage = {
@@ -286,14 +287,10 @@ export function handleShellConnection(
           os.platform() === 'win32' ? ['-Command', shellCommand] : ['-c', shellCommand];
         const termCols = readNumber(data.cols, 80);
         const termRows = readNumber(data.rows, 24);
-        const ptyEnv =
-          provider === 'codex'
-            ? createCodexRuntimeEnv()
-            : Object.fromEntries(
-                Object.entries(process.env).filter(
-                  (entry): entry is [string, string] => entry[1] !== undefined
-                )
-              );
+        // Plain terminals inherit the server process PATH, which npm can prefix with
+        // /opt/claudecodeui/node_modules/.bin. Put user CLI bins first so shell
+        // commands resolve like the user's login shell instead of the app install.
+        const ptyEnv = createUserShellRuntimeEnv();
 
         shellProcess = pty.spawn(shell, shellArgs, {
           name: 'xterm-256color',
