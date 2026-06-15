@@ -22,8 +22,54 @@ function readParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] || '' : value || '';
 }
 
-router.get('/status', (_req, res) => {
-  res.json({ success: true, data: browserUseService.getStatus() });
+router.get('/status', async (_req, res) => {
+  try {
+    res.json({ success: true, data: await browserUseService.getStatus() });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to load Browser Use status.',
+    });
+  }
+});
+
+router.get('/settings', async (_req, res) => {
+  try {
+    res.json({ success: true, data: { settings: await browserUseService.getSettings() } });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to load Browser Use settings.',
+    });
+  }
+});
+
+router.put('/settings', async (req, res) => {
+  try {
+    const settings = await browserUseService.updateSettings(req.body || {});
+    res.json({ success: true, data: { settings } });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to save Browser Use settings.',
+    });
+  }
+});
+
+router.post('/runtime/install', async (_req, res) => {
+  try {
+    const result = await browserUseService.installRuntime();
+    res.status(result.success ? 200 : 500).json({
+      success: result.success,
+      data: result,
+      error: result.success ? undefined : result.message,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to install Browser Use runtime.',
+    });
+  }
 });
 
 router.get('/sessions', async (req: AuthenticatedRequest, res) => {

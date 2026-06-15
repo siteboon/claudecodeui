@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ExternalLink, Globe, MonitorPlay, Navigation, Pause, RefreshCw, Square } from 'lucide-react';
+import { Download, ExternalLink, Globe, Loader2, MonitorPlay, Navigation, Pause, RefreshCw, Square } from 'lucide-react';
 
 import { Badge, Button } from '../../../shared/view/ui';
 import { authenticatedFetch } from '../../../utils/api';
@@ -8,6 +8,9 @@ type BrowserUseStatus = {
   enabled: boolean;
   available: boolean;
   runtime: 'cloud' | 'local';
+  playwrightInstalled: boolean;
+  chromiumInstalled: boolean;
+  installInProgress: boolean;
   sessionCount: number;
   mcpRecommended: boolean;
   message: string;
@@ -44,6 +47,7 @@ export default function BrowserUsePanel({ isVisible }: BrowserUsePanelProps) {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [targetUrl, setTargetUrl] = useState('https://example.com');
   const [isBusy, setIsBusy] = useState(false);
+  const [isInstalling, setIsInstalling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const selectedSession = useMemo(
@@ -108,6 +112,18 @@ export default function BrowserUsePanel({ isVisible }: BrowserUsePanelProps) {
     await readJson(response);
   });
 
+  const installRuntime = () => runAction(async () => {
+    setIsInstalling(true);
+    try {
+      const response = await authenticatedFetch('/api/browser-use/runtime/install', { method: 'POST' });
+      await readJson(response);
+    } finally {
+      setIsInstalling(false);
+    }
+  });
+
+  const canInstallRuntime = Boolean(status?.enabled && (!status.playwrightInstalled || !status.chromiumInstalled));
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
@@ -130,7 +146,7 @@ export default function BrowserUsePanel({ isVisible }: BrowserUsePanelProps) {
             <RefreshCw className="h-4 w-4" />
             Refresh
           </Button>
-          <Button size="sm" onClick={createSession} disabled={isBusy}>
+          <Button size="sm" onClick={createSession} disabled={isBusy || !status?.available}>
             <Globe className="h-4 w-4" />
             New Session
           </Button>
@@ -143,6 +159,22 @@ export default function BrowserUsePanel({ isVisible }: BrowserUsePanelProps) {
             <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Runtime</div>
             <div className="mt-2 text-sm text-foreground">{status?.available ? 'Available' : 'Setup required'}</div>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{status?.message || 'Loading Browser Use status...'}</p>
+            {canInstallRuntime && (
+              <Button
+                type="button"
+                size="sm"
+                className="mt-3 w-full"
+                onClick={installRuntime}
+                disabled={isBusy || isInstalling || status?.installInProgress}
+              >
+                {isInstalling || status?.installInProgress ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                Install Runtime
+              </Button>
+            )}
           </div>
 
           <div className="mt-3 space-y-2">
@@ -219,7 +251,7 @@ export default function BrowserUsePanel({ isVisible }: BrowserUsePanelProps) {
                       {selectedSession?.message || 'Create a browser session to start.'}
                     </div>
                     <p className="mt-2 text-xs leading-relaxed text-neutral-400">
-                      This panel shows captured browser screenshots. Interactive agent control should use the guarded Browser Use API.
+                      Install the Browser Use runtime from this panel or enable it from Settings.
                     </p>
                   </div>
                 )}

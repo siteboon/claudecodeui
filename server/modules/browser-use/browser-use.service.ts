@@ -1,13 +1,19 @@
 import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
+import { spawn } from 'node:child_process';
 import dns from 'node:dns/promises';
+import fs from 'node:fs';
+import fsPromises from 'node:fs/promises';
 import net from 'node:net';
+import os from 'node:os';
+import path from 'node:path';
 
 const require = createRequire(import.meta.url);
 const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
 const MAX_SESSIONS_PER_OWNER = Number.parseInt(process.env.CLOUDCLI_BROWSER_USE_MAX_SESSIONS_PER_OWNER || '3', 10);
 const SESSION_TTL_MS = Number.parseInt(process.env.CLOUDCLI_BROWSER_USE_SESSION_TTL_MS || String(30 * 60 * 1000), 10);
 const ALLOW_PRIVATE_NETWORKS = process.env.CLOUDCLI_BROWSER_USE_ALLOW_PRIVATE_NETWORKS === '1';
+const SETTINGS_PATH = path.join(os.homedir(), '.cloudcli', 'browser-use-settings.json');
 
 type BrowserUseRuntime = 'cloud' | 'local';
 type BrowserUseSessionStatus = 'ready' | 'stopped' | 'unavailable';
@@ -37,23 +43,71 @@ type BrowserUseOwner = {
   id: string | number;
 };
 
+type BrowserUseSettings = {
+  enabled: boolean;
+};
+
+type RuntimeReadiness = {
+  playwright: any | null;
+  playwrightInstalled: boolean;
+  chromiumInstalled: boolean;
+  chromiumExecutablePath: string | null;
+  installInProgress: boolean;
+  installMessage: string | null;
+};
+
 const sessions = new Map<string, BrowserUseSession>();
 const handles = new Map<string, RuntimeHandle>();
+let installPromise: Promise<{ success: boolean; message: string }> | null = null;
+let lastInstallMessage: string | null = null;
+
+const DEFAULT_SETTINGS: BrowserUseSettings = {
+  enabled: true,
+};
 
 function getRuntime(): BrowserUseRuntime {
   return IS_PLATFORM ? 'cloud' : 'local';
 }
 
-function isBrowserUseEnabled(): boolean {
-  return process.env.CLOUDCLI_BROWSER_USE_ENABLED === '1';
+async function readSettings(): Promise<BrowserUseSettings> {
+  try {
+    const raw = await fsPromises.readFile(SETTINGS_PATH, 'utf8');
+    const parsed = JSON.parse(raw) as Partial<BrowserUseSettings>;
+    return {
+      enabled: parsed.enabled !== false,
+    };
+  } catch (error: any) {
+    if (error?.code !== 'ENOENT') {
+      console.warn('[Browser Use] Failed to read settings:', error?.message || error);
+    }
+    return DEFAULT_SETTINGS;
+  }
 }
 
-function getSetupMessage(): string {
-  if (!isBrowserUseEnabled()) {
-    return 'Browser Use is disabled. Set CLOUDCLI_BROWSER_USE_ENABLED=1 after provisioning a Playwright/Chromium runtime.';
+async function writeSettings(settings: BrowserUseSettings): Promise<BrowserUseSettings> {
+  const normalized = {
+    enabled: settings.enabled !== false,
+  };
+
+  await fsPromises.mkdir(path.dirname(SETTINGS_PATH), { recursive: true });
+  await fsPromises.writeFile(SETTINGS_PATH, JSON.stringify(normalized, null, 2), 'utf8');
+  return normalized;
+}
+
+function getSetupMessage(settings: BrowserUseSettings, readiness: RuntimeReadiness): string {
+  if (!settings.enabled) {
+    return 'Browser Use is disabled in settings.';
   }
 
-  return 'Playwright is not available in this runtime. Install/provision Playwright or point CloudCLI at a managed browser worker.';
+  if (!readiness.playwrightInstalled) {
+    return 'Install Playwright and Chromium to use browser sessions.';
+  }
+
+  if (!readiness.chromiumInstalled) {
+    return 'Playwright is installed, but Chromium is missing. Install the Chromium runtime to continue.';
+  }
+
+  return readiness.installMessage || 'Browser Use runtime is not ready.';
 }
 
 function getPlaywright(): any | null {
@@ -61,6 +115,85 @@ function getPlaywright(): any | null {
     return require('playwright');
   } catch {
     return null;
+  }
+}
+
+function getRuntimeReadiness(): RuntimeReadiness {
+  const playwright = getPlaywright();
+  const readiness: RuntimeReadiness = {
+    playwright,
+    playwrightInstalled: Boolean(playwright),
+    chromiumInstalled: false,
+    chromiumExecutablePath: null,
+    installInProgress: Boolean(installPromise),
+    installMessage: lastInstallMessage,
+  };
+
+  if (!playwright) {
+    return readiness;
+  }
+
+  try {
+    const executablePath = playwright.chromium.executablePath();
+    readiness.chromiumExecutablePath = executablePath;
+    readiness.chromiumInstalled = Boolean(executablePath && fs.existsSync(executablePath));
+  } catch {
+    readiness.chromiumInstalled = false;
+  }
+
+  return readiness;
+}
+
+function runCommand(command: string, args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: process.cwd(),
+      env: process.env,
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const output: string[] = [];
+
+    child.stdout.on('data', (chunk) => output.push(String(chunk)));
+    child.stderr.on('data', (chunk) => output.push(String(chunk)));
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      reject(new Error(output.join('').trim() || `${command} ${args.join(' ')} exited with code ${code}`));
+    });
+  });
+}
+
+async function installRuntime(): Promise<{ success: boolean; message: string }> {
+  if (installPromise) {
+    return installPromise;
+  }
+
+  const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  installPromise = (async () => {
+    try {
+      lastInstallMessage = 'Installing Playwright package...';
+      await runCommand(npmCommand, ['install', '--no-save', '--no-package-lock', 'playwright']);
+
+      lastInstallMessage = 'Installing Chromium runtime...';
+      await runCommand(npmCommand, ['exec', '--', 'playwright', 'install', 'chromium']);
+
+      lastInstallMessage = 'Browser Use runtime installed.';
+      return { success: true, message: lastInstallMessage };
+    } catch (error) {
+      lastInstallMessage = error instanceof Error ? error.message : 'Failed to install Browser Use runtime.';
+      return { success: false, message: lastInstallMessage };
+    }
+  })();
+
+  try {
+    return await installPromise;
+  } finally {
+    installPromise = null;
   }
 }
 
@@ -218,19 +351,43 @@ async function captureSession(session: BrowserUseSession, page: any): Promise<vo
 }
 
 export const browserUseService = {
-  getStatus() {
-    const playwright = getPlaywright();
-    const enabled = isBrowserUseEnabled() && Boolean(playwright);
+  async getSettings() {
+    return readSettings();
+  },
+
+  async updateSettings(settings: Partial<BrowserUseSettings>) {
+    const current = await readSettings();
+    return writeSettings({
+      ...current,
+      enabled: settings.enabled ?? current.enabled,
+    });
+  },
+
+  async getStatus() {
+    const settings = await readSettings();
+    const readiness = getRuntimeReadiness();
+    const available = settings.enabled && readiness.playwrightInstalled && readiness.chromiumInstalled;
 
     return {
-      enabled,
+      enabled: settings.enabled,
       runtime: getRuntime(),
-      available: enabled,
+      available,
+      playwrightInstalled: readiness.playwrightInstalled,
+      chromiumInstalled: readiness.chromiumInstalled,
+      installInProgress: readiness.installInProgress,
       sessionCount: sessions.size,
       mcpRecommended: true,
-      message: enabled
+      message: available
         ? 'Browser Use runtime is available.'
-        : getSetupMessage(),
+        : getSetupMessage(settings, readiness),
+    };
+  },
+
+  async installRuntime() {
+    const result = await installRuntime();
+    return {
+      ...result,
+      status: await this.getStatus(),
     };
   },
 
@@ -264,14 +421,15 @@ export const browserUseService = {
       throw new Error(`Browser Use is limited to ${MAX_SESSIONS_PER_OWNER} active sessions per user.`);
     }
 
-    const playwright = getPlaywright();
-    if (!isBrowserUseEnabled() || !playwright) {
-      session.message = getSetupMessage();
+    const settings = await readSettings();
+    const readiness = getRuntimeReadiness();
+    if (!settings.enabled || !readiness.playwrightInstalled || !readiness.chromiumInstalled || !readiness.playwright) {
+      session.message = getSetupMessage(settings, readiness);
       sessions.set(session.id, session);
       return publicSession(session);
     }
 
-    const browser = await playwright.chromium.launch({
+    const browser = await readiness.playwright.chromium.launch({
       headless: true,
       args: ['--disable-dev-shm-usage'],
     });
