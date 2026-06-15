@@ -121,42 +121,6 @@
     "clearInput": "입력 지우기",
     "scrollToBottom": "맨 아래로 스크롤"
   },
-  "thinkingMode": {
-    "selector": {
-      "title": "Thinking 모드",
-      "description": "확장된 thinking은 Claude에게 대안을 평가할 시간을 더 줍니다",
-      "active": "활성",
-      "tip": "높은 thinking 모드는 시간이 더 걸리지만 더 철저한 분석을 제공합니다"
-    },
-    "modes": {
-      "none": {
-        "name": "Standard",
-        "description": "일반 Claude 응답",
-        "prefix": ""
-      },
-      "think": {
-        "name": "Think",
-        "description": "기본 확장 thinking",
-        "prefix": "think"
-      },
-      "thinkHard": {
-        "name": "Think Hard",
-        "description": "더 철저한 평가",
-        "prefix": "think hard"
-      },
-      "thinkHarder": {
-        "name": "Think Harder",
-        "description": "대안을 포함한 심층 분석",
-        "prefix": "think harder"
-      },
-      "ultrathink": {
-        "name": "Ultrathink",
-        "description": "최대 thinking 예산",
-        "prefix": "ultrathink"
-      }
-    },
-    "buttonTitle": "Thinking 모드: {{mode}}"
-  },
   "providerSelection": {
     "title": "AI 어시스턴트 선택",
     "description": "새 대화를 시작할 프로바이더를 선택하세요",

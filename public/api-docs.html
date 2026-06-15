@@ -820,32 +820,50 @@ data: {"type":"done"}</code></pre>
         </div>
     </div>
 
-    <script type="module">
-        // Import model constants
-        import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '/shared/modelConstants.js';
-
+    <script>
         // Dynamic URL replacement
         const apiUrl = window.location.origin;
         document.querySelectorAll('.api-url').forEach(el => {
             el.textContent = apiUrl;
         });
 
-        // Dynamically populate model documentation
-        window.addEventListener('DOMContentLoaded', () => {
-            const modelCell = document.getElementById('model-options-cell');
-            if (modelCell) {
-                const claudeModels = CLAUDE_MODELS.OPTIONS.map(m => `<code>${m.value}</code>`).join(', ');
-                const cursorModels = CURSOR_MODELS.OPTIONS.slice(0, 8).map(m => `<code>${m.value}</code>`).join(', ');
-                const codexModels = CODEX_MODELS.OPTIONS.map(m => `<code>${m.value}</code>`).join(', ');
+        // Populate model documentation from the live provider API
+        const PROVIDER_ORDER = [
+            { id: 'claude',   name: 'Anthropic' },
+            { id: 'codex',    name: 'OpenAI' },
+            { id: 'gemini',   name: 'Google' },
+            { id: 'cursor',   name: 'Cursor' },
+            { id: 'opencode', name: 'OpenCode' },
+            { id: 'kiro',     name: 'AWS Kiro' },
+        ];
 
-                modelCell.innerHTML = `
-                    Model identifier for the AI provider:<br><br>
-                    <strong>Claude:</strong> ${claudeModels} (default: <code>${CLAUDE_MODELS.DEFAULT}</code>)<br><br>
-                    <strong>Cursor:</strong> ${cursorModels}, and more (default: <code>${CURSOR_MODELS.DEFAULT}</code>)<br><br>
-                    <strong>Codex:</strong> ${codexModels} (default: <code>${CODEX_MODELS.DEFAULT}</code>)
-                `;
-            }
-        });
+        async function populateModels() {
+            const modelCell = document.getElementById('model-options-cell');
+            if (!modelCell) return;
+
+            const token = localStorage.getItem('auth-token');
+            const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+            const results = await Promise.allSettled(
+                PROVIDER_ORDER.map(({ id }) =>
+                    fetch(`/api/providers/${id}/models`, { headers }).then(r => r.json())
+                )
+            );
+
+            const providerModels = results.map((result, i) => {
+                const { name } = PROVIDER_ORDER[i];
+                if (result.status === 'rejected' || !result.value?.data?.models) {
+                    return `<strong>${name}:</strong> <em>unavailable</em>`;
+                }
+                const { OPTIONS, DEFAULT } = result.value.data.models;
+                const models = OPTIONS.map(m => `<code>${m.value}</code>`).join(', ');
+                return `<strong>${name}:</strong> ${models} (default: <code>${DEFAULT}</code>)`;
+            }).join('<br><br>');
+
+            modelCell.innerHTML = `Model identifier for the AI provider:<br><br>${providerModels}`;
+        }
+
+        document.addEventListener('DOMContentLoaded', populateModels);
 
         // Tab switching
         window.showTab = function(tabName) {

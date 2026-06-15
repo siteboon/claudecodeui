@@ -1,4 +1,21 @@
-export type LLMProvider = 'claude' | 'cursor' | 'codex' | 'gemini' | 'kiro';
+export type LLMProvider = 'claude' | 'cursor' | 'codex' | 'gemini' | 'opencode' | 'kiro';
+
+export type ProviderModelOption = {
+  value: string;
+  label: string;
+  description?: string;
+};
+
+export type ProviderModelsDefinition = {
+  OPTIONS: ProviderModelOption[];
+  DEFAULT: string;
+};
+
+export type ProviderModelsCacheInfo = {
+  updatedAt: string;
+  expiresAt: string;
+  source: 'memory' | 'disk' | 'fresh';
+};
 
 export type AppTab = 'chat' | 'files' | 'shell' | 'git' | 'tasks' | 'preview' | `plugin:${string}`;
 
@@ -46,6 +63,7 @@ export interface Project {
   cursorSessions?: ProjectSession[];
   codexSessions?: ProjectSession[];
   geminiSessions?: ProjectSession[];
+  opencodeSessions?: ProjectSession[];
   kiroSessions?: ProjectSession[];
   sessionMeta?: ProjectSessionMeta;
   taskmaster?: ProjectTaskmasterInfo;

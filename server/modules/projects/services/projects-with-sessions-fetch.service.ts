@@ -14,7 +14,7 @@ type SessionSummary = {
   lastActivity: string;
 };
 
-type SessionsByProvider = Record<'claude' | 'cursor' | 'codex' | 'gemini' | 'kiro', SessionSummary[]>;
+type SessionsByProvider = Record<'claude' | 'cursor' | 'codex' | 'gemini' | 'opencode' | 'kiro', SessionSummary[]>;
 
 type SessionRepositoryRow = {
   provider: string;
@@ -34,6 +34,7 @@ export type ProjectListItem = {
   cursorSessions: SessionSummary[];
   codexSessions: SessionSummary[];
   geminiSessions: SessionSummary[];
+  opencodeSessions: SessionSummary[];
   kiroSessions: SessionSummary[];
   sessionMeta: {
     hasMore: boolean;
@@ -75,6 +76,7 @@ export type ProjectSessionsPageApiView = {
   cursorSessions: SessionSummary[];
   codexSessions: SessionSummary[];
   geminiSessions: SessionSummary[];
+  opencodeSessions: SessionSummary[];
   kiroSessions: SessionSummary[];
   sessionMeta: {
     hasMore: boolean;
@@ -141,6 +143,7 @@ function bucketSessionRowsByProvider(rows: SessionRepositoryRow[]): SessionsByPr
     cursor: [],
     codex: [],
     gemini: [],
+    opencode: [],
     kiro: [],
   };
 
@@ -256,6 +259,7 @@ export async function getProjectsWithSessions(
       cursorSessions: sessionsPage.sessionsByProvider.cursor,
       codexSessions: sessionsPage.sessionsByProvider.codex,
       geminiSessions: sessionsPage.sessionsByProvider.gemini,
+      opencodeSessions: sessionsPage.sessionsByProvider.opencode,
       kiroSessions: sessionsPage.sessionsByProvider.kiro,
       sessionMeta: {
         hasMore: sessionsPage.hasMore,
@@ -313,6 +317,7 @@ export async function getArchivedProjectsWithSessions(
       cursorSessions: sessionsPage.sessionsByProvider.cursor,
       codexSessions: sessionsPage.sessionsByProvider.codex,
       geminiSessions: sessionsPage.sessionsByProvider.gemini,
+      opencodeSessions: sessionsPage.sessionsByProvider.opencode,
       kiroSessions: sessionsPage.sessionsByProvider.kiro,
       sessionMeta: {
         hasMore: sessionsPage.hasMore,
@@ -346,6 +351,7 @@ export async function getProjectSessionsPage(
     cursorSessions: sessionsPage.sessionsByProvider.cursor,
     codexSessions: sessionsPage.sessionsByProvider.codex,
     geminiSessions: sessionsPage.sessionsByProvider.gemini,
+    opencodeSessions: sessionsPage.sessionsByProvider.opencode,
     kiroSessions: sessionsPage.sessionsByProvider.kiro,
     sessionMeta: {
       hasMore: sessionsPage.hasMore,

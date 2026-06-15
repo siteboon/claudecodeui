@@ -1,0 +1,136 @@
+{
+  "projects": {
+    "title": "專案",
+    "newProject": "新增專案",
+    "deleteProject": "移除專案",
+    "renameProject": "重新命名專案",
+    "noProjects": "找不到專案",
+    "loadingProjects": "載入專案中...",
+    "searchPlaceholder": "搜尋專案...",
+    "projectNamePlaceholder": "專案名稱",
+    "starred": "星號標記",
+    "all": "全部",
+    "untitledSession": "未命名工作階段",
+    "newSession": "新工作階段",
+    "codexSession": "Codex 工作階段",
+    "fetchingProjects": "正在取得您的 Claude 專案和工作階段",
+    "projects": "專案",
+    "noMatchingProjects": "找不到符合的專案",
+    "tryDifferentSearch": "嘗試調整您的搜尋詞",
+    "runClaudeCli": "在專案目錄中執行 Claude CLI 以開始使用"
+  },
+  "app": {
+    "title": "CloudCLI",
+    "subtitle": "AI 程式開發助手"
+  },
+  "sessions": {
+    "title": "工作階段",
+    "newSession": "新增工作階段",
+    "deleteSession": "刪除工作階段",
+    "renameSession": "重新命名工作階段",
+    "noSessions": "暫無工作階段",
+    "loadingSessions": "載入工作階段中...",
+    "unnamed": "未命名",
+    "loading": "載入中...",
+    "showMore": "顯示更多工作階段"
+  },
+  "tooltips": {
+    "viewEnvironments": "查看環境",
+    "hideSidebar": "隱藏側邊欄",
+    "createProject": "建立新專案",
+    "refresh": "重新整理專案和工作階段 (Ctrl+R)",
+    "renameProject": "重新命名專案 (F2)",
+    "deleteProject": "從側邊欄移除專案 (Delete)",
+    "addToFavorites": "加入收藏",
+    "removeFromFavorites": "從收藏移除",
+    "editSessionName": "手動編輯工作階段名稱",
+    "deleteSession": "永久刪除此工作階段",
+    "save": "儲存",
+    "cancel": "取消",
+    "clearSearch": "清除搜尋",
+    "openCommandPalette": "開啟指令面板"
+  },
+  "navigation": {
+    "chat": "聊天",
+    "files": "檔案",
+    "git": "Git",
+    "terminal": "終端機",
+    "tasks": "任務"
+  },
+  "actions": {
+    "refresh": "重新整理",
+    "settings": "設定",
+    "collapseAll": "全部收合",
+    "expandAll": "全部展開",
+    "cancel": "取消",
+    "save": "儲存",
+    "delete": "刪除",
+    "rename": "重新命名",
+    "joinCommunity": "加入社群",
+    "reportIssue": "回報問題",
+    "starOnGithub": "在 GitHub 上加星"
+  },
+  "branding": {
+    "openSource": "開源"
+  },
+  "status": {
+    "active": "使用中",
+    "inactive": "非使用中",
+    "thinking": "思考中...",
+    "error": "錯誤",
+    "aborted": "已中止",
+    "unknown": "未知"
+  },
+  "time": {
+    "justNow": "剛剛",
+    "oneMinuteAgo": "1 分鐘前",
+    "minutesAgo": "{{count}} 分鐘前",
+    "oneHourAgo": "1 小時前",
+    "hoursAgo": "{{count}} 小時前",
+    "oneDayAgo": "1 天前",
+    "daysAgo": "{{count}} 天前"
+  },
+  "messages": {
+    "deleteConfirm": "確定要刪除嗎？",
+    "renameSuccess": "重新命名成功",
+    "deleteSuccess": "刪除成功",
+    "errorOccurred": "發生錯誤",
+    "deleteSessionConfirm": "確定要刪除此工作階段嗎？此操作無法復原。",
+    "deleteProjectConfirm": "從側邊欄移除此專案？您的專案檔案、記憶和工作階段資料不會被刪除。",
+    "enterProjectPath": "請輸入專案路徑",
+    "deleteSessionFailed": "刪除工作階段失敗，請重試。",
+    "deleteSessionError": "刪除工作階段時出錯，請重試。",
+    "renameSessionFailed": "重新命名工作階段失敗，請重試。",
+    "renameSessionError": "重新命名工作階段時出錯，請重試。",
+    "deleteProjectFailed": "移除專案失敗，請重試。",
+    "deleteProjectError": "移除專案時出錯，請重試。",
+    "createProjectFailed": "建立專案失敗，請重試。",
+    "createProjectError": "建立專案時出錯，請重試。"
+  },
+  "version": {
+    "updateAvailable": "有可用更新"
+  },
+  "search": {
+    "modeProjects": "專案",
+    "modeConversations": "對話",
+    "conversationsPlaceholder": "搜尋對話內容...",
+    "searching": "搜尋中...",
+    "noResults": "找不到結果",
+    "tryDifferentQuery": "嘗試不同的搜尋詞",
+    "matches_one": "{{count}} 個符合",
+    "matches_other": "{{count}} 個符合",
+    "projectsScanned_one": "{{count}} 個專案已掃描",
+    "projectsScanned_other": "{{count}} 個專案已掃描"
+  },
+  "deleteConfirmation": {
+    "deleteProject": "移除專案",
+    "deleteSession": "刪除工作階段",
+    "confirmDelete": "您想如何處理",
+    "sessionCount_one": "此專案包含 {{count}} 個對話。",
+    "sessionCount_other": "此專案包含 {{count}} 個對話。",
+    "removeFromSidebar": "僅從側邊欄移除",
+    "deleteAllData": "永久刪除所有資料",
+    "allConversationsDeleted": "專案將從側邊欄中移除。您的檔案、記憶和工作階段資料將會保留。",
+    "cannotUndo": "您可以稍後重新新增此專案。"
+  }
+}

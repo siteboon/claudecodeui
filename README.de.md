@@ -15,7 +15,7 @@
   <a href="https://trendshift.io/repositories/15586" target="_blank"><img src="https://trendshift.io/api/badge/repositories/15586" alt="siteboon%2Fclaudecodeui | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 </p>
 
-<div align="right"><i><a href="./README.md">English</a> · <a href="./README.ru.md">Русский</a> · <b>Deutsch</b> · <a href="./README.ko.md">한국어</a> · <a href="./README.zh-CN.md">中文</a> · <a href="./README.ja.md">日本語</a> · <a href="./README.tr.md">Türkçe</a></i></div>
+<div align="right"><i><a href="./README.md">English</a> · <a href="./README.ru.md">Русский</a> · <b>Deutsch</b> · <a href="./README.ko.md">한국어</a> · <a href="./README.zh-CN.md">简体中文</a> · <a href="./README.zh-TW.md">繁體中文</a> · <a href="./README.ja.md">日本語</a> · <a href="./README.tr.md">Türkçe</a></i></div>
 
 ---
 
@@ -62,7 +62,7 @@
 - **Sitzungsverwaltung** – Gespräche fortsetzen, mehrere Sitzungen verwalten und Verlauf nachverfolgen
 - **Plugin-System** – CloudCLI mit eigenen Plugins erweitern – neue Tabs, Backend-Dienste und Integrationen hinzufügen. [Eigenes Plugin erstellen →](https://github.com/cloudcli-ai/cloudcli-plugin-starter)
 - **TaskMaster AI Integration** *(Optional)* – Erweitertes Projektmanagement mit KI-gestützter Aufgabenplanung, PRD-Parsing und Workflow-Automatisierung
-- **Modell-Kompatibilität** – Funktioniert mit Claude, GPT und Gemini (vollständige Liste unterstützter Modelle in [`shared/modelConstants.js`](shared/modelConstants.js))
+- **Modell-Kompatibilität** – Funktioniert mit Claude, GPT und Gemini (vollständige Liste unterstützter Modelle zur Laufzeit über `GET /api/providers/:provider/models`)
 
 
 ## Schnellstart
@@ -164,6 +164,14 @@ CloudCLI verfügt über ein Plugin-System, mit dem benutzerdefinierte Tabs mit e
 | Plugin | Beschreibung |
 |---|---|
 | **[Project Stats](https://github.com/cloudcli-ai/cloudcli-plugin-starter)** | Zeigt Dateianzahl, Codezeilen, Dateityp-Aufschlüsselung, größte Dateien und zuletzt geänderte Dateien des aktuellen Projekts |
+| **[Web Terminal](https://github.com/cloudcli-ai/cloudcli-plugin-terminal)** | Vollwertiges xterm.js-Terminal mit Multi-Tab-Unterstützung |
+| **[Claude Watch](https://github.com/satsuki19980613/cloudcli-claude-watch)** | Überwacht lange laufende Claude-Code-Sitzungen auf Hänger und stellt Prozesssteuerungen bereit |
+| **[CloudCLI Scheduler](https://github.com/grostim/cloudcli-cron)** | Erstellt arbeitsbereichsbezogene geplante Prompts und führt sie über eine lokale CLI wie Codex, Claude Code oder Gemini CLI aus |
+| **[PRISM CloudCLI](https://github.com/jakeefr/cloudcli-plugin-prism)** | Sitzungsintelligenz für Claude Code in CloudCLI, inklusive Sichtbarkeit des Token-Verbrauchs |
+| **[Sessions](https://github.com/strykereye2/cloudcli-plugin-session-manager)** | Aktive Claude-Code-Sitzungen anzeigen, verwalten und beenden |
+| **[Token Cost Calculator](https://github.com/NightmareAway/cloudcli-plugin-token-cost-calculator)** | API-Kosten anhand von Modellpreisen und Token-Nutzung berechnen, mit Unterstützung für Preisvorlagen |
+| **[Task Queue](https://github.com/TadMSTR/cloudcli-plugin-task-queue)** | Task-Queue-Dashboard zum Anzeigen, Filtern und Starten von Agent-Aufgaben |
+| **[GitHub Issues Board](https://github.com/szmidtpiotr/claude-github-issue)** | Kanban-Board für GitHub Issues mit bidirektionaler TaskMaster-Synchronisierung und automatischer Installation des /github-task CLI-Skills |
 
 ### Eigenes Plugin erstellen
 

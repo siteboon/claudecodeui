@@ -88,22 +88,15 @@ function buildGeminiTokenUsage(tokens: unknown): AnyRecord | undefined {
   const record = tokens as AnyRecord;
   const input = Number(record.input || 0);
   const output = Number(record.output || 0);
-  const cached = Number(record.cached || 0);
-  const thoughts = Number(record.thoughts || 0);
-  const tool = Number(record.tool || 0);
-
-  const totalFromFields = input + output + cached + thoughts + tool;
-  const total = Number(record.total || totalFromFields || 0);
+  const total = Number(record.total || input + output || 0);
 
   return {
     used: total,
-    total: total,
+    inputTokens: input,
+    outputTokens: output,
     breakdown: {
       input,
       output,
-      cached,
-      thoughts,
-      tool,
     },
   };
 }

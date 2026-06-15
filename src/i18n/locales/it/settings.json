@@ -110,6 +110,12 @@
       "unsupported": "Le notifiche push non sono supportate in questo browser.",
       "denied": "Le notifiche push sono bloccate. Abilitale nelle impostazioni del browser."
     },
+    "sound": {
+      "title": "Suono",
+      "description": "Riproduci un breve tono quando termina un'esecuzione della chat.",
+      "enabled": "Attivato",
+      "test": "Prova suono"
+    },
     "events": {
       "title": "Tipi di evento",
       "actionRequired": "Azione richiesta",

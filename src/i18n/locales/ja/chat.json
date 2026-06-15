@@ -118,42 +118,6 @@
     "clickToChangeMode": "クリックで権限モードを変更（または入力欄でTab）",
     "showAllCommands": "すべてのコマンドを表示"
   },
-  "thinkingMode": {
-    "selector": {
-      "title": "思考モード",
-      "description": "拡張思考によりClaudeがより多くの選択肢を検討できます",
-      "active": "有効",
-      "tip": "高い思考モードは時間がかかりますが、より深い分析が得られます"
-    },
-    "modes": {
-      "none": {
-        "name": "標準",
-        "description": "通常のClaudeの応答",
-        "prefix": ""
-      },
-      "think": {
-        "name": "Think",
-        "description": "基本的な拡張思考",
-        "prefix": "think"
-      },
-      "thinkHard": {
-        "name": "Think Hard",
-        "description": "より深い検討",
-        "prefix": "think hard"
-      },
-      "thinkHarder": {
-        "name": "Think Harder",
-        "description": "代替案を含む深い分析",
-        "prefix": "think harder"
-      },
-      "ultrathink": {
-        "name": "Ultrathink",
-        "description": "最大限の思考予算",
-        "prefix": "ultrathink"
-      }
-    },
-    "buttonTitle": "思考モード: {{mode}}"
-  },
   "providerSelection": {
     "title": "AIアシスタントを選択",
     "description": "新しい会話を始めるプロバイダーを選択してください",

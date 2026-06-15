@@ -3,6 +3,100 @@
 All notable changes to CloudCLI UI will be documented in this file.
 
 
+## [](https://github.com/siteboon/claudecodeui/compare/v1.33.3...vnull) (2026-06-09)
+
+### New Features
+
+* adding Fable 5 in claude code ([ce327b6](https://github.com/siteboon/claudecodeui/commit/ce327b6fa9329aa3e9a3a1da7225ca01d3b06ac5))
+
+## [1.33.3](https://github.com/siteboon/claudecodeui/compare/v1.33.2...v1.33.3) (2026-06-09)
+
+### New Features
+
+* add file tree upload progress ([c235b05](https://github.com/siteboon/claudecodeui/commit/c235b05e1d3b626667dba4043b685512e3cd3d5d))
+* signal when chat runs complete ([d70dc07](https://github.com/siteboon/claudecodeui/commit/d70dc077bfbbfcf2ff4fa5514fabf7b4485861fa))
+
+### Bug Fixes
+
+* address notification review feedback ([602e6ad](https://github.com/siteboon/claudecodeui/commit/602e6ad4acba612a7ea66fb3bc7485054f5675ee))
+* align prism plugin name and id with manifest.json ([ca8fd0e](https://github.com/siteboon/claudecodeui/commit/ca8fd0ee235b6a3210157bd0d9af83024d4a2248))
+* **chat:** re-anchor initial scroll across lazy content reflow ([33a4e72](https://github.com/siteboon/claudecodeui/commit/33a4e72ca4f84df60aadfc4ff3f3467d6f5ae948))
+* keep editor toolbar in view on long unwrapped lines ([beae8c6](https://github.com/siteboon/claudecodeui/commit/beae8c6513daa7518b9de40d8bfde3bf08e7bc87))
+* **sandbox:** prevent server SIGHUP on sbx exec exit ([#792](https://github.com/siteboon/claudecodeui/issues/792)) ([f4a1614](https://github.com/siteboon/claudecodeui/commit/f4a1614a0a4ab4b65e8368d5e4221f015cb7555d)), closes [#791](https://github.com/siteboon/claudecodeui/issues/791)
+* slash command suggestions trigger at any / in input, not only at start ([#843](https://github.com/siteboon/claudecodeui/issues/843)) ([f7c0024](https://github.com/siteboon/claudecodeui/commit/f7c0024fe15057ad049c71e15e88adb482a4497f))
+* update naming convention ([3cd8995](https://github.com/siteboon/claudecodeui/commit/3cd89956ba06f0fc3e17d349b0c50baab4012658))
+
+### Maintenance
+
+* add prism plugin ([01dbe2a](https://github.com/siteboon/claudecodeui/commit/01dbe2a8bfcb3b265995f01f905b218d5f576f7b))
+
+## [1.33.2](https://github.com/siteboon/claudecodeui/compare/v1.33.1...v1.33.2) (2026-06-08)
+
+### New Features
+
+* **chat:** open cost modal from token usage ([f238050](https://github.com/siteboon/claudecodeui/commit/f238050b85c3b99a702a8635059735e1a3b3a4f4))
+* **i18n:** add Traditional Chinese (zh-TW) locale ([#773](https://github.com/siteboon/claudecodeui/issues/773)) ([c21a9f4](https://github.com/siteboon/claudecodeui/commit/c21a9f45610eb1eeb650d8e6cf8650e798f77f6f))
+
+### Bug Fixes
+
+* do not show model description in chat view ([d638a89](https://github.com/siteboon/claudecodeui/commit/d638a8982c7f75b08fc7f65f01d6d54989c790d1))
+* include Claude cache tokens in usage ([ed9cdf0](https://github.com/siteboon/claudecodeui/commit/ed9cdf01145fa0d063580bb76d30cfa7ee67af86))
+
+## [1.33.1](https://github.com/siteboon/claudecodeui/compare/v1.33.0...v1.33.1) (2026-06-05)
+
+### New Features
+
+* **chat:** auto-detect text direction for RTL languages ([#729](https://github.com/siteboon/claudecodeui/issues/729)) ([fa9eaf5](https://github.com/siteboon/claudecodeui/commit/fa9eaf5573a6f870a19fb62ab430ffd87c466582))
+
+### Bug Fixes
+
+* file tree concurrency ([#828](https://github.com/siteboon/claudecodeui/issues/828)) ([ebb0e59](https://github.com/siteboon/claudecodeui/commit/ebb0e59e8023c0a8040d168a5adffb7102e80561))
+* load claude models directly from provider ([cdcac18](https://github.com/siteboon/claudecodeui/commit/cdcac182d458a24908777568979c8e756f94428c))
+* plugin svg icon sanitization ([#817](https://github.com/siteboon/claudecodeui/issues/817)) ([d9e9df1](https://github.com/siteboon/claudecodeui/commit/d9e9df183f462c88c3b60975eb8254faa9168717))
+* recognize claude auth token env ([#818](https://github.com/siteboon/claudecodeui/issues/818)) ([43c33d5](https://github.com/siteboon/claudecodeui/commit/43c33d5cb1b41835dfe3bccd450c5a9c2441509b))
+* redact websocket auth token in logs ([#827](https://github.com/siteboon/claudecodeui/issues/827)) ([14ddbc7](https://github.com/siteboon/claudecodeui/commit/14ddbc7c57a01da9fb65fd87d8588532b11833fa))
+* remove thinking mode ([#835](https://github.com/siteboon/claudecodeui/issues/835)) ([2149b87](https://github.com/siteboon/claudecodeui/commit/2149b8776b7ebfec0eace413f4fc527ccb2324c0))
+* **shell:** disconnect and restart buttons ([#831](https://github.com/siteboon/claudecodeui/issues/831)) ([ef2fd48](https://github.com/siteboon/claudecodeui/commit/ef2fd48b46452d4b9e2bf1f5e3c30fafe19f27f2))
+* show Claude tool result errors ([bb8db58](https://github.com/siteboon/claudecodeui/commit/bb8db5815c2d20ee4fbfa02d14c886a56ef352e0))
+* **vite:** proxy /plugin-ws WebSocket requests to the backend in dev ([#757](https://github.com/siteboon/claudecodeui/issues/757)) ([96b16b4](https://github.com/siteboon/claudecodeui/commit/96b16b42e4f807d04ec743a5a4117a37a3f5e0d9))
+* **websocket:** add 30s server-side heartbeat to prevent proxy idle disconnects ([#770](https://github.com/siteboon/claudecodeui/issues/770)) ([2edfef2](https://github.com/siteboon/claudecodeui/commit/2edfef2e3f4271c29ae8670df9dd382a9eef7c3c)), closes [#769](https://github.com/siteboon/claudecodeui/issues/769)
+* **websocket:** reset unmountedRef on each effect re-run so token refresh reconnects ([#721](https://github.com/siteboon/claudecodeui/issues/721)) ([f082cdc](https://github.com/siteboon/claudecodeui/commit/f082cdc63bd0de90f8b3da1df6071e91ab545831))
+
+### Documentation
+
+* add nginx subpath deployment template ([#820](https://github.com/siteboon/claudecodeui/issues/820)) ([3ec76b5](https://github.com/siteboon/claudecodeui/commit/3ec76b5bb15a13cec41056f4c9b9c425195022fa))
+
+### Maintenance
+
+* update Claude fallback models ([94785bf](https://github.com/siteboon/claudecodeui/commit/94785bfa579d1f39a2bee0f9dd0f09fd0243bc79))
+* update package-lock.json ([c90b341](https://github.com/siteboon/claudecodeui/commit/c90b34108e86a3effdb5c6979ea7b1692d2b9da0))
+
+## [](https://github.com/siteboon/claudecodeui/compare/v1.32.0...vnull) (2026-06-01)
+
+### New Features
+
+* add opencode support ([#762](https://github.com/siteboon/claudecodeui/issues/762)) ([374e9de](https://github.com/siteboon/claudecodeui/commit/374e9de71934c41ce2c19c796e35a19234b240ec))
+* **sidebar:** tooltip for the active-session indicator dot ([#782](https://github.com/siteboon/claudecodeui/issues/782)) ([27e509a](https://github.com/siteboon/claudecodeui/commit/27e509a9b8bb25c35ae0abbda44c536e15c332c8))
+
+### Bug Fixes
+
+* **chat:** prevent double send on mobile by removing redundant submit handlers ([#719](https://github.com/siteboon/claudecodeui/issues/719)) ([dbc41dc](https://github.com/siteboon/claudecodeui/commit/dbc41dc91dbf1fb54f92f5536d64646b4e924f31))
+* preserve WebSocket frame type in plugin proxy ([#594](https://github.com/siteboon/claudecodeui/issues/594)) ([36b860e](https://github.com/siteboon/claudecodeui/commit/36b860e322454df62ebf5309018590b596e6b913)), closes [CoderLuii/HolyClaude#11](https://github.com/CoderLuii/HolyClaude/issues/11)
+* refine token usage reporting ([#807](https://github.com/siteboon/claudecodeui/issues/807)) ([38bf21d](https://github.com/siteboon/claudecodeui/commit/38bf21ddf554ed28676d86b5221c25adf6f07afd))
+* refresh Claude auth status after login flow ([#617](https://github.com/siteboon/claudecodeui/issues/617)) ([1e125f3](https://github.com/siteboon/claudecodeui/commit/1e125f3db5248399cd50dc3d40b1f8f44cf7ccb6))
+* **sidebar:** keep session rename input visible while editing ([#781](https://github.com/siteboon/claudecodeui/issues/781)) ([951f587](https://github.com/siteboon/claudecodeui/commit/951f58751c152fbbb3f8b3ce3c814c06c061de18))
+
+### Styling
+
+* fix project star button location by replacing folder icon ([#793](https://github.com/siteboon/claudecodeui/issues/793)) ([295bad9](https://github.com/siteboon/claudecodeui/commit/295bad9c006b669878cbf52940794f29f7370178))
+
+## [1.32.0](https://github.com/siteboon/claudecodeui/compare/v1.31.5...v1.32.0) (2026-05-13)
+
+### Bug Fixes
+
+* add clarification on auto mode ([392c73b](https://github.com/siteboon/claudecodeui/commit/392c73b6933600ea8a589c5d4eff5f7b830f99c5))
+* enhance regex to correctly parse wrapper file paths for claude.exe ([#741](https://github.com/siteboon/claudecodeui/issues/741)) ([beb0a50](https://github.com/siteboon/claudecodeui/commit/beb0a50413beddfb16f6b49103e1b6b80567cb90))
+
 ## [1.31.5](https://github.com/siteboon/claudecodeui/compare/v1.31.4...v1.31.5) (2026-04-30)
 
 ### New Features

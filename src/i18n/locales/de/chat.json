@@ -139,42 +139,6 @@
     "clearInput": "Eingabe leeren",
     "scrollToBottom": "Nach unten scrollen"
   },
-  "thinkingMode": {
-    "selector": {
-      "title": "Denkmodus",
-      "description": "Erweitertes Denken gibt Claude mehr Zeit, Alternativen zu evaluieren",
-      "active": "Aktiv",
-      "tip": "Höhere Denkmodi brauchen mehr Zeit, liefern aber eine gründlichere Analyse"
-    },
-    "modes": {
-      "none": {
-        "name": "Standard",
-        "description": "Reguläre Claude-Antwort",
-        "prefix": ""
-      },
-      "think": {
-        "name": "Denken",
-        "description": "Grundlegendes erweitertes Denken",
-        "prefix": "think"
-      },
-      "thinkHard": {
-        "name": "Intensiv denken",
-        "description": "Gründlichere Auswertung",
-        "prefix": "think hard"
-      },
-      "thinkHarder": {
-        "name": "Sehr intensiv denken",
-        "description": "Tiefgehende Analyse mit Alternativen",
-        "prefix": "think harder"
-      },
-      "ultrathink": {
-        "name": "Ultradenken",
-        "description": "Maximales Denkbudget",
-        "prefix": "ultrathink"
-      }
-    },
-    "buttonTitle": "Denkmodus: {{mode}}"
-  },
   "providerSelection": {
     "title": "KI-Assistent wählen",
     "description": "Anbieter auswählen, um eine neue Unterhaltung zu starten",

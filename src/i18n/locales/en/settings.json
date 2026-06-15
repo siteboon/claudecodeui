@@ -110,6 +110,12 @@
       "unsupported": "Push notifications are not supported in this browser.",
       "denied": "Push notifications are blocked. Please allow them in your browser settings."
     },
+    "sound": {
+      "title": "Sound",
+      "description": "Play a short tone when a chat run finishes.",
+      "enabled": "Enabled",
+      "test": "Test sound"
+    },
     "events": {
       "title": "Event Types",
       "actionRequired": "Action required",
@@ -322,6 +328,9 @@
       },
       "gemini": {
         "description": "Google Gemini AI assistant"
+      },
+      "opencode": {
+        "description": "OpenCode CLI assistant"
       }
     },
     "connectionStatus": "Connection Status",
@@ -416,7 +425,8 @@
     "description": {
       "claude": "Model Context Protocol servers provide additional tools and data sources to Claude",
       "cursor": "Model Context Protocol servers provide additional tools and data sources to Cursor",
-      "codex": "Model Context Protocol servers provide additional tools and data sources to Codex"
+      "codex": "Model Context Protocol servers provide additional tools and data sources to Codex",
+      "opencode": "Model Context Protocol servers provide additional tools and data sources to OpenCode"
     },
     "addButton": "Add MCP Server",
     "empty": "No MCP servers configured",
@@ -468,6 +478,12 @@
     "starterPluginLabel": "Starter Plugin",
     "starter": "Starter",
     "docs": "Docs",
+    "sections": {
+      "officialTitle": "Official Plugins",
+      "officialDescription": "Maintained by the CloudCLI team and ready for direct install.",
+      "unofficialTitle": "Other Plugins",
+      "unofficialDescription": "Unofficial plugins and integrations from other users. Review the source before installing."
+    },
     "starterPlugin": {
       "name": "Project Stats",
       "badge": "starter",
@@ -478,6 +494,48 @@
       "name": "Terminal",
       "badge": "official",
       "description": "Integrated terminal with full shell access directly within the interface.",
+      "install": "Install"
+    },
+    "scheduledPromptPlugin": {
+      "name": "Scheduled Prompts",
+      "badge": "unofficial",
+      "description": "Schedule workspace prompts, review run history, and manage recurring local tasks.",
+      "install": "Install"
+    },
+    "claudeWatchPlugin": {
+      "name": "Claude Watch",
+      "badge": "unofficial",
+      "description": "Watch long-running Claude Code sessions for hangs and expose process controls.",
+      "install": "Install"
+    },
+    "prismCloudCLI": {
+      "name": "PRISM CloudCLI",
+      "badge": "unofficial",
+      "description": "Session intelligence for Claude Code, inside CloudCLI. See why your sessions are burning tokens without leaving the browser.",
+      "install": "Install"
+    },
+    "sessionManagerPlugin": {
+      "name": "Sessions",
+      "badge": "unofficial",
+      "description": "View, manage, and kill active Claude Code sessions.",
+      "install": "Install"
+    },
+    "tokenCostCalculatorPlugin": {
+      "name": "Token Cost Calculator",
+      "badge": "unofficial",
+      "description": "Calculate API costs from model prices and token usage, with preset model pricing support.",
+      "install": "Install"
+    },
+    "taskQueuePlugin": {
+      "name": "Task Queue",
+      "badge": "unofficial",
+      "description": "Task queue dashboard to view, filter, and launch agent tasks.",
+      "install": "Install"
+    },
+    "githubIssuesBoardPlugin": {
+      "name": "GitHub Issues Board",
+      "badge": "unofficial",
+      "description": "Kanban board for GitHub Issues with bidirectional TaskMaster sync and /github-task CLI skill auto-install",
       "install": "Install"
     },
     "morePlugins": "More",

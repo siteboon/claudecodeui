@@ -110,6 +110,12 @@
       "unsupported": "Bu tarayıcıda push bildirimleri desteklenmiyor.",
       "denied": "Push bildirimleri engellendi. Lütfen tarayıcı ayarlarından izin ver."
     },
+    "sound": {
+      "title": "Ses",
+      "description": "Sohbet çalışması tamamlandığında kısa bir ton çal.",
+      "enabled": "Etkin",
+      "test": "Sesi test et"
+    },
     "events": {
       "title": "Etkinlik Türleri",
       "actionRequired": "Aksiyon gerekli",

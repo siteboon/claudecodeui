@@ -62,6 +62,7 @@ const projectsHaveChanges = (
       serialize(nextProject.cursorSessions) !== serialize(prevProject.cursorSessions) ||
       serialize(nextProject.codexSessions) !== serialize(prevProject.codexSessions) ||
       serialize(nextProject.geminiSessions) !== serialize(prevProject.geminiSessions) ||
+      serialize(nextProject.opencodeSessions) !== serialize(prevProject.opencodeSessions) ||
       serialize(nextProject.kiroSessions) !== serialize(prevProject.kiroSessions)
     );
   });
@@ -99,6 +100,7 @@ const getProjectSessions = (project: Project): ProjectSession[] => {
     ...(project.codexSessions ?? []),
     ...(project.cursorSessions ?? []),
     ...(project.geminiSessions ?? []),
+    ...(project.opencodeSessions ?? []),
     ...(project.kiroSessions ?? []),
   ];
 };
@@ -147,6 +149,7 @@ const mergeExpandedSessionPages = (previousProjects: Project[], incomingProjects
       cursorSessions: mergeSessionProviderLists(incomingProject.cursorSessions ?? [], previousProject.cursorSessions ?? []),
       codexSessions: mergeSessionProviderLists(incomingProject.codexSessions ?? [], previousProject.codexSessions ?? []),
       geminiSessions: mergeSessionProviderLists(incomingProject.geminiSessions ?? [], previousProject.geminiSessions ?? []),
+      opencodeSessions: mergeSessionProviderLists(incomingProject.opencodeSessions ?? [], previousProject.opencodeSessions ?? []),
       kiroSessions: mergeSessionProviderLists(incomingProject.kiroSessions ?? [], previousProject.kiroSessions ?? []),
     };
 
@@ -163,7 +166,7 @@ const mergeExpandedSessionPages = (previousProjects: Project[], incomingProjects
 
 const mergeProjectSessionPage = (
   existingProject: Project,
-  sessionsPage: Pick<Project, 'sessions' | 'cursorSessions' | 'codexSessions' | 'geminiSessions' | 'kiroSessions' | 'sessionMeta'>,
+  sessionsPage: Pick<Project, 'sessions' | 'cursorSessions' | 'codexSessions' | 'geminiSessions' | 'opencodeSessions' | 'kiroSessions' | 'sessionMeta'>,
 ): Project => {
   const mergedProject: Project = {
     ...existingProject,
@@ -171,6 +174,7 @@ const mergeProjectSessionPage = (
     cursorSessions: mergeSessionProviderLists(existingProject.cursorSessions ?? [], sessionsPage.cursorSessions ?? []),
     codexSessions: mergeSessionProviderLists(existingProject.codexSessions ?? [], sessionsPage.codexSessions ?? []),
     geminiSessions: mergeSessionProviderLists(existingProject.geminiSessions ?? [], sessionsPage.geminiSessions ?? []),
+    opencodeSessions: mergeSessionProviderLists(existingProject.opencodeSessions ?? [], sessionsPage.opencodeSessions ?? []),
     kiroSessions: mergeSessionProviderLists(existingProject.kiroSessions ?? [], sessionsPage.kiroSessions ?? []),
   };
 
@@ -560,6 +564,21 @@ export function useProjectsState({
         return;
       }
 
+      const opencodeSession = project.opencodeSessions?.find((session) => session.id === sessionId);
+      if (opencodeSession) {
+        const shouldUpdateProject = selectedProject?.projectId !== project.projectId;
+        const shouldUpdateSession =
+          selectedSession?.id !== sessionId || selectedSession.__provider !== 'opencode';
+
+        if (shouldUpdateProject) {
+          setSelectedProject(project);
+        }
+        if (shouldUpdateSession) {
+          setSelectedSession({ ...opencodeSession, __provider: 'opencode' });
+        }
+        return;
+      }
+
       const kiroSession = project.kiroSessions?.find((session) => session.id === sessionId);
       if (kiroSession) {
         const shouldUpdateProject = selectedProject?.projectId !== project.projectId;
@@ -602,9 +621,11 @@ export function useProjectsState({
           ? 'codex'
           : providerFromStorage === 'gemini'
             ? 'gemini'
-            : providerFromStorage === 'kiro'
-              ? 'kiro'
-              : 'claude';
+            : providerFromStorage === 'opencode'
+              ? 'opencode'
+              : providerFromStorage === 'kiro'
+                ? 'kiro'
+                : 'claude';
 
     setSelectedSession({
       id: sessionId,
@@ -686,6 +707,7 @@ export function useProjectsState({
           const cursorSessions = project.cursorSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [];
           const codexSessions = project.codexSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [];
           const geminiSessions = project.geminiSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [];
+          const opencodeSessions = project.opencodeSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [];
           const kiroSessions = project.kiroSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [];
 
           const removedFromProject = (
@@ -693,6 +715,7 @@ export function useProjectsState({
             || cursorSessions.length !== (project.cursorSessions?.length ?? 0)
             || codexSessions.length !== (project.codexSessions?.length ?? 0)
             || geminiSessions.length !== (project.geminiSessions?.length ?? 0)
+            || opencodeSessions.length !== (project.opencodeSessions?.length ?? 0)
             || kiroSessions.length !== (project.kiroSessions?.length ?? 0)
           );
 
@@ -706,6 +729,7 @@ export function useProjectsState({
             cursorSessions,
             codexSessions,
             geminiSessions,
+            opencodeSessions,
             kiroSessions,
           };
 
@@ -800,7 +824,7 @@ export function useProjectsState({
       throw new Error(message);
     }
 
-    const sessionsPage = (await response.json()) as Pick<Project, 'sessions' | 'cursorSessions' | 'codexSessions' | 'geminiSessions' | 'kiroSessions' | 'sessionMeta'>;
+    const sessionsPage = (await response.json()) as Pick<Project, 'sessions' | 'cursorSessions' | 'codexSessions' | 'geminiSessions' | 'opencodeSessions' | 'kiroSessions' | 'sessionMeta'>;
 
     let mergedProjectForSelection: Project | null = null;
     setProjects((previousProjects) =>

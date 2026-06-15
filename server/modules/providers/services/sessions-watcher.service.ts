@@ -35,6 +35,10 @@ const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> =
     rootPath: path.join(os.homedir(), '.gemini', 'tmp'),
   },
   {
+    provider: 'opencode',
+    rootPath: path.join(os.homedir(), '.local', 'share', 'opencode'),
+  },
+  {
     provider: 'kiro',
     rootPath: path.join(os.homedir(), '.kiro', 'sessions', 'cli'),
   },
@@ -71,6 +75,10 @@ let watcherRescheduleAfterRefresh = false;
  * Filters watcher events to provider-specific session artifact file types.
  */
 function isWatcherTargetFile(provider: LLMProvider, filePath: string): boolean {
+  if (provider === 'opencode') {
+    return path.basename(filePath) === 'opencode.db';
+  }
+
   if (provider === 'gemini') {
     return filePath.endsWith('.json') || filePath.endsWith('.jsonl');
   }

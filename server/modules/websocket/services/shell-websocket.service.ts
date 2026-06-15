@@ -18,6 +18,7 @@ type ShellIncomingMessage = {
   provider?: string;
   initialCommand?: string;
   isPlainShell?: boolean;
+  forceRestart?: boolean;
 };
 
 type PtySessionEntry = {
@@ -136,6 +137,13 @@ function buildShellCommand(
     return command;
   }
 
+  if (provider === 'opencode') {
+    if (hasSession && sessionId) {
+      return `opencode --session "${sessionId}"`;
+    }
+    return initialCommand || 'opencode';
+  }
+
   const command = initialCommand || 'claude';
   if (hasSession && sessionId) {
     if (os.platform() === 'win32') {
@@ -173,6 +181,7 @@ export function handleShellConnection(
         const hasSession = readBoolean(data.hasSession);
         const provider = readString(data.provider, 'claude');
         const initialCommand = readString(data.initialCommand);
+        const forceRestart = readBoolean(data.forceRestart);
         const isPlainShell =
           readBoolean(data.isPlainShell) ||
           (!!initialCommand && !hasSession) ||
@@ -193,7 +202,7 @@ export function handleShellConnection(
             : '';
         ptySessionKey = `${projectPath}_${sessionId ?? 'default'}${commandSuffix}`;
 
-        if (isLoginCommand) {
+        if (isLoginCommand || forceRestart) {
           const oldSession = ptySessionsMap.get(ptySessionKey);
           if (oldSession) {
             if (oldSession.timeoutId) {
@@ -204,7 +213,8 @@ export function handleShellConnection(
           }
         }
 
-        const existingSession = isLoginCommand ? null : ptySessionsMap.get(ptySessionKey);
+        const existingSession =
+          isLoginCommand || forceRestart ? null : ptySessionsMap.get(ptySessionKey);
         if (existingSession) {
           shellProcess = existingSession.pty;
           if (existingSession.timeoutId) {
@@ -361,6 +371,10 @@ export function handleShellConnection(
           }
 
           const session = ptySessionsMap.get(ptySessionKey);
+          if (session && session.pty !== shellProcess) {
+            return;
+          }
+
           if (session && session.ws && session.ws.readyState === WebSocket.OPEN) {
             session.ws.send(
               JSON.stringify({
@@ -389,6 +403,8 @@ export function handleShellConnection(
                 ? 'Codex'
                 : provider === 'gemini'
                   ? 'Gemini'
+                  : provider === 'opencode'
+                    ? 'OpenCode'
                   : 'Claude';
           welcomeMsg = hasSession
             ? `\x1b[36mResuming ${providerName} session ${sessionId} in: ${projectPath}\x1b[0m\r\n`
@@ -442,6 +458,10 @@ export function handleShellConnection(
 
     session.ws = null;
     session.timeoutId = setTimeout(() => {
+      if (ptySessionsMap.get(ptySessionKey as string) !== session) {
+        return;
+      }
+
       session.pty.kill();
       ptySessionsMap.delete(ptySessionKey as string);
     }, PTY_SESSION_TIMEOUT);

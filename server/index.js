@@ -10,8 +10,9 @@ import { spawn } from 'child_process';
 import express from 'express';
 import cors from 'cors';
 import mime from 'mime-types';
+import Database from 'better-sqlite3';
 
-import { AppError, WORKSPACES_ROOT, validateWorkspacePath } from '@/shared/utils.js';
+import { AppError, WORKSPACES_ROOT, getOpenCodeDatabasePath, validateWorkspacePath } from '@/shared/utils.js';
 import { closeSessionsWatcher, initializeSessionsWatcher } from '@/modules/providers/index.js';
 import { createWebSocketServer } from '@/modules/websocket/index.js';
 
@@ -46,6 +47,12 @@ import {
     getActiveGeminiSessions,
 } from './gemini-cli.js';
 import {
+    spawnOpenCode,
+    abortOpenCodeSession,
+    isOpenCodeSessionActive,
+    getActiveOpenCodeSessions,
+} from './opencode-cli.js';
+import {
     spawnKiro,
     abortKiroSession,
     isKiroSessionActive,
@@ -72,7 +79,7 @@ import geminiRoutes from './routes/gemini.js';
 import pluginsRoutes from './routes/plugins.js';
 import providerRoutes from './modules/providers/provider.routes.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
-import { initializeDatabase, projectsDb } from './modules/database/index.js';
+import { initializeDatabase, projectsDb, sessionsDb } from './modules/database/index.js';
 import { configureWebPush } from './services/vapid-keys.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
@@ -83,8 +90,16 @@ const __dirname = getModuleDir(import.meta.url);
 // Resolving the app root once keeps every repo-level lookup below aligned across both layouts.
 const APP_ROOT = findAppRoot(__dirname);
 const installMode = fs.existsSync(path.join(APP_ROOT, '.git')) ? 'git' : 'npm';
+const MAX_FILE_UPLOAD_SIZE_MB = 200;
+const MAX_FILE_UPLOAD_SIZE_BYTES = MAX_FILE_UPLOAD_SIZE_MB * 1024 * 1024;
+const MAX_FILE_UPLOAD_COUNT = 20;
 
 console.log('SERVER_PORT from env:', process.env.SERVER_PORT);
+
+function readUsageNumber(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -100,17 +115,20 @@ const wss = createWebSocketServer(server, {
         spawnCursor,
         queryCodex,
         spawnGemini,
+        spawnOpenCode,
         spawnKiro,
         abortClaudeSDKSession,
         abortCursorSession,
         abortCodexSession,
         abortGeminiSession,
+        abortOpenCodeSession,
         abortKiroSession,
         resolveToolApproval,
         isClaudeSDKSessionActive,
         isCursorSessionActive,
         isCodexSessionActive,
         isGeminiSessionActive,
+        isOpenCodeSessionActive,
         isKiroSessionActive,
         reconnectSessionWriter,
         getPendingApprovalsForSession,
@@ -118,6 +136,7 @@ const wss = createWebSocketServer(server, {
         getActiveCursorSessions,
         getActiveCodexSessions,
         getActiveGeminiSessions,
+        getActiveOpenCodeSessions,
         getActiveKiroSessions,
     },
     shell: {
@@ -891,27 +910,27 @@ const uploadFilesHandler = async (req, res) => {
             }
         }),
         limits: {
-            fileSize: 50 * 1024 * 1024, // 50MB limit
-            files: 20 // Max 20 files at once
+            fileSize: MAX_FILE_UPLOAD_SIZE_BYTES,
+            files: MAX_FILE_UPLOAD_COUNT
         }
     });
 
     // Use multer middleware
-    uploadMiddleware.array('files', 20)(req, res, async (err) => {
+    uploadMiddleware.array('files', MAX_FILE_UPLOAD_COUNT)(req, res, async (err) => {
         if (err) {
             console.error('Multer error:', err);
             if (err.code === 'LIMIT_FILE_SIZE') {
-                return res.status(400).json({ error: 'File too large. Maximum size is 50MB.' });
+                return res.status(400).json({ error: `File too large. Maximum size is ${MAX_FILE_UPLOAD_SIZE_MB}MB.` });
             }
             if (err.code === 'LIMIT_FILE_COUNT') {
-                return res.status(400).json({ error: 'Too many files. Maximum is 20 files.' });
+                return res.status(400).json({ error: `Too many files. Maximum is ${MAX_FILE_UPLOAD_COUNT} files.` });
             }
             return res.status(500).json({ error: err.message });
         }
 
         try {
             const { projectId } = req.params;
-            const { targetPath, relativePaths } = req.body;
+            const { targetPath, relativePaths, requestedFileCount: requestedFileCountRaw } = req.body;
 
             // Parse relative paths if provided (for folder uploads)
             let filePaths = [];
@@ -934,6 +953,11 @@ const uploadFilesHandler = async (req, res) => {
             if (!req.files || req.files.length === 0) {
                 return res.status(400).json({ error: 'No files provided' });
             }
+
+            const parsedRequestedFileCount = Number.parseInt(requestedFileCountRaw, 10);
+            const requestedFileCount = Number.isFinite(parsedRequestedFileCount) && parsedRequestedFileCount > 0
+                ? parsedRequestedFileCount
+                : req.files.length;
 
             // Resolve the project directory through the DB using the new projectId.
             const projectRoot = await projectsDb.getProjectPathById(projectId);
@@ -1013,8 +1037,10 @@ const uploadFilesHandler = async (req, res) => {
             res.json({
                 success: true,
                 files: uploadedFiles,
+                uploadedCount: uploadedFiles.length,
+                requestedFileCount,
                 targetPath: resolvedTargetDir,
-                message: `Uploaded ${uploadedFiles.length} file(s) successfully`
+                message: `Uploaded ${uploadedFiles.length} ${uploadedFiles.length === 1 ? 'file' : 'files'} successfully`
             });
         } catch (error) {
             console.error('Error uploading files:', error);
@@ -1141,20 +1167,67 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
             return res.json({
                 used: 0,
                 total: 0,
-                breakdown: { input: 0, cacheCreation: 0, cacheRead: 0 },
+                inputTokens: 0,
+                outputTokens: 0,
+                breakdown: { input: 0, output: 0 },
                 unsupported: true,
                 message: 'Token usage tracking not available for Cursor sessions'
             });
         }
 
-        // Handle Gemini sessions - they are raw logs in our current setup
         if (provider === 'gemini') {
+            const session = sessionsDb.getSessionById(safeSessionId);
+            const sessionFilePath = session?.jsonl_path;
+            if (!sessionFilePath) {
+                return res.json({
+                    used: 0,
+                    inputTokens: 0,
+                    outputTokens: 0,
+                    breakdown: { input: 0, output: 0 },
+                    unsupported: true,
+                    message: 'Token usage tracking not available for this Gemini session'
+                });
+            }
+
+            let fileContent;
+            try {
+                fileContent = await fsPromises.readFile(sessionFilePath, 'utf8');
+            } catch (error) {
+                if (error.code === 'ENOENT') {
+                    return res.status(404).json({ error: 'Session file not found', path: sessionFilePath });
+                }
+                throw error;
+            }
+
+            const lines = fileContent.trim().split('\n');
+            let inputTokens = 0;
+            let outputTokens = 0;
+            let totalTokens = 0;
+
+            for (let i = lines.length - 1; i >= 0; i--) {
+                try {
+                    const entry = JSON.parse(lines[i]);
+                    if (!entry.tokens || typeof entry.tokens !== 'object') {
+                        continue;
+                    }
+
+                    inputTokens = Number(entry.tokens.input || 0);
+                    outputTokens = Number(entry.tokens.output || 0);
+                    totalTokens = Number(entry.tokens.total || inputTokens + outputTokens || 0);
+                    break;
+                } catch {
+                    continue;
+                }
+            }
+
             return res.json({
-                used: 0,
-                total: 0,
-                breakdown: { input: 0, cacheCreation: 0, cacheRead: 0 },
-                unsupported: true,
-                message: 'Token usage tracking not available for Gemini sessions'
+                used: totalTokens,
+                inputTokens,
+                outputTokens,
+                breakdown: {
+                    input: inputTokens,
+                    output: outputTokens
+                }
             });
         }
 
@@ -1170,6 +1243,65 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
                 unsupported: true,
                 message: 'Token usage tracking not available for Kiro sessions'
             });
+        }
+
+        if (provider === 'opencode') {
+            const dbPath = getOpenCodeDatabasePath();
+            if (!fs.existsSync(dbPath)) {
+                return res.status(404).json({ error: 'OpenCode database not found' });
+            }
+
+            const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+            try {
+                const columns = db.prepare('PRAGMA table_info(session)').all();
+                const columnNames = new Set(columns.map((column) => column.name));
+                const requiredColumns = ['tokens_input', 'tokens_output', 'tokens_reasoning', 'tokens_cache_read', 'tokens_cache_write'];
+                if (!requiredColumns.every((column) => columnNames.has(column))) {
+                    return res.json({
+                        used: 0,
+                        inputTokens: 0,
+                        outputTokens: 0,
+                        breakdown: { input: 0, output: 0 },
+                        unsupported: true,
+                        message: 'Token usage tracking is not available in this OpenCode database schema'
+                    });
+                }
+
+                const row = db.prepare(`
+                    SELECT
+                        tokens_input AS inputTokens,
+                        tokens_output AS outputTokens,
+                        tokens_reasoning AS reasoningTokens,
+                        tokens_cache_read AS cacheReadTokens,
+                        tokens_cache_write AS cacheWriteTokens
+                    FROM session
+                    WHERE id = ?
+                `).get(safeSessionId);
+
+                if (!row) {
+                    return res.status(404).json({ error: 'OpenCode session not found', sessionId: safeSessionId });
+                }
+
+                const inputTokens = Number(row.inputTokens || 0) + Number(row.cacheReadTokens || 0);
+                const outputTokens = Number(row.outputTokens || 0);
+                const totalUsed = Number(row.inputTokens || 0)
+                    + outputTokens
+                    + Number(row.reasoningTokens || 0)
+                    + Number(row.cacheReadTokens || 0)
+                    + Number(row.cacheWriteTokens || 0);
+
+                return res.json({
+                    used: totalUsed,
+                    inputTokens,
+                    outputTokens,
+                    breakdown: {
+                        input: inputTokens,
+                        output: outputTokens
+                    }
+                });
+            } finally {
+                db.close();
+            }
         }
 
         // Handle Codex sessions
@@ -1212,6 +1344,8 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
                 throw error;
             }
             const lines = fileContent.trim().split('\n');
+            let inputTokens = 0;
+            let outputTokens = 0;
             let totalTokens = 0;
             let contextWindow = 200000; // Default for Codex/OpenAI
 
@@ -1224,7 +1358,9 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
                     if (entry.type === 'event_msg' && entry.payload?.type === 'token_count' && entry.payload?.info) {
                         const tokenInfo = entry.payload.info;
                         if (tokenInfo.total_token_usage) {
-                            totalTokens = tokenInfo.total_token_usage.total_tokens || 0;
+                            inputTokens = tokenInfo.total_token_usage.input_tokens || 0;
+                            outputTokens = tokenInfo.total_token_usage.output_tokens || 0;
+                            totalTokens = tokenInfo.total_token_usage.total_tokens || inputTokens + outputTokens;
                         }
                         if (tokenInfo.model_context_window) {
                             contextWindow = tokenInfo.model_context_window;
@@ -1239,7 +1375,13 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
 
             return res.json({
                 used: totalTokens,
-                total: contextWindow
+                total: contextWindow,
+                inputTokens,
+                outputTokens,
+                breakdown: {
+                    input: inputTokens,
+                    output: outputTokens
+                }
             });
         }
 
@@ -1282,8 +1424,9 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
         const parsedContextWindow = parseInt(process.env.CONTEXT_WINDOW, 10);
         const contextWindow = Number.isFinite(parsedContextWindow) ? parsedContextWindow : 160000;
         let inputTokens = 0;
-        let cacheCreationTokens = 0;
+        let outputTokens = 0;
         let cacheReadTokens = 0;
+        let cacheCreationTokens = 0;
 
         // Find the latest assistant message with usage data (scan from end)
         for (let i = lines.length - 1; i >= 0; i--) {
@@ -1295,9 +1438,11 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
                     const usage = entry.message.usage;
 
                     // Use token counts from latest assistant message only
-                    inputTokens = usage.input_tokens || 0;
-                    cacheCreationTokens = usage.cache_creation_input_tokens || 0;
-                    cacheReadTokens = usage.cache_read_input_tokens || 0;
+                    const directInputTokens = readUsageNumber(usage.input_tokens ?? usage.inputTokens);
+                    cacheReadTokens = readUsageNumber(usage.cache_read_input_tokens ?? usage.cacheReadInputTokens ?? usage.cacheReadTokens);
+                    cacheCreationTokens = readUsageNumber(usage.cache_creation_input_tokens ?? usage.cacheCreationInputTokens ?? usage.cacheCreationTokens);
+                    inputTokens = directInputTokens + cacheReadTokens + cacheCreationTokens;
+                    outputTokens = readUsageNumber(usage.output_tokens ?? usage.outputTokens);
 
                     break; // Stop after finding the latest assistant message
                 }
@@ -1307,16 +1452,20 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
             }
         }
 
-        // Calculate total context usage (excluding output_tokens, as per ccusage)
-        const totalUsed = inputTokens + cacheCreationTokens + cacheReadTokens;
+        const totalUsed = inputTokens + outputTokens;
+        const cacheTokens = cacheReadTokens + cacheCreationTokens;
 
         res.json({
             used: totalUsed,
             total: contextWindow,
+            inputTokens,
+            outputTokens,
+            cacheReadTokens,
+            cacheCreationTokens,
+            cacheTokens,
             breakdown: {
                 input: inputTokens,
-                cacheCreation: cacheCreationTokens,
-                cacheRead: cacheReadTokens
+                output: outputTokens
             }
         });
     } catch (error) {
@@ -1382,73 +1531,132 @@ function permToRwx(perm) {
     return r + w + x;
 }
 
+// Directories that are almost never interesting for a project tree but can
+// contain tens of thousands of files. Skipping them before recursion keeps
+// traversal time bounded on large monorepos and high-latency filesystems
+// (NFS / SMB).
+const IGNORED_DIRS = new Set([
+    // JS / TS toolchains
+    'node_modules', 'dist', 'build', '.next', '.nuxt', '.cache', '.parcel-cache',
+    // VCS
+    '.git', '.svn', '.hg',
+    // Python
+    '__pycache__', '.pytest_cache', '.mypy_cache', '.tox', 'venv', '.venv',
+    // Rust / Go / Java / Ruby
+    'target', 'vendor',
+    // Build output / IDE
+    '.gradle', '.idea', 'coverage', '.nyc_output'
+]);
+
+const DEFAULT_FS_CONCURRENCY = 64;
+const parsedFsConcurrency = Number.parseInt(process.env.FS_CONCURRENCY || '', 10);
+const FS_CONCURRENCY = Number.isFinite(parsedFsConcurrency) && parsedFsConcurrency > 0
+    ? parsedFsConcurrency
+    : DEFAULT_FS_CONCURRENCY;
+let activeFsOperations = 0;
+const pendingFsOperations = [];
+
+async function acquire() {
+    if (activeFsOperations < FS_CONCURRENCY) {
+        activeFsOperations += 1;
+        return;
+    }
+
+    await new Promise((resolve) => {
+        pendingFsOperations.push(resolve);
+    });
+}
+
+function release() {
+    const next = pendingFsOperations.shift();
+    if (next) {
+        next();
+        return;
+    }
+
+    activeFsOperations = Math.max(0, activeFsOperations - 1);
+}
+
 async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden = true) {
     // Using fsPromises from import
-    const items = [];
-
+    let entries;
     try {
-        const entries = await fsPromises.readdir(dirPath, { withFileTypes: true });
-
-        for (const entry of entries) {
-            // Debug: log all entries including hidden files
-
-
-            // Skip heavy build directories and VCS directories
-            if (entry.name === 'node_modules' ||
-                entry.name === 'dist' ||
-                entry.name === 'build' ||
-                entry.name === '.git' ||
-                entry.name === '.svn' ||
-                entry.name === '.hg') continue;
-
-            const itemPath = path.join(dirPath, entry.name);
-            const item = {
-                name: entry.name,
-                path: itemPath,
-                type: entry.isDirectory() ? 'directory' : 'file'
-            };
-
-            // Get file stats for additional metadata
-            try {
-                const stats = await fsPromises.stat(itemPath);
-                item.size = stats.size;
-                item.modified = stats.mtime.toISOString();
-
-                // Convert permissions to rwx format
-                const mode = stats.mode;
-                const ownerPerm = (mode >> 6) & 7;
-                const groupPerm = (mode >> 3) & 7;
-                const otherPerm = mode & 7;
-                item.permissions = ((mode >> 6) & 7).toString() + ((mode >> 3) & 7).toString() + (mode & 7).toString();
-                item.permissionsRwx = permToRwx(ownerPerm) + permToRwx(groupPerm) + permToRwx(otherPerm);
-            } catch (statError) {
-                // If stat fails, provide default values
-                item.size = 0;
-                item.modified = null;
-                item.permissions = '000';
-                item.permissionsRwx = '---------';
-            }
-
-            if (entry.isDirectory() && currentDepth < maxDepth) {
-                // Recursively get subdirectories but limit depth
-                try {
-                    // Check if we can access the directory before trying to read it
-                    await fsPromises.access(item.path, fs.constants.R_OK);
-                    item.children = await getFileTree(item.path, maxDepth, currentDepth + 1, showHidden);
-                } catch (e) {
-                    // Silently skip directories we can't access (permission denied, etc.)
-                    item.children = [];
-                }
-            }
-
-            items.push(item);
+        await acquire();
+        try {
+            entries = await fsPromises.readdir(dirPath, { withFileTypes: true });
+        } finally {
+            release();
         }
     } catch (error) {
         // Only log non-permission errors to avoid spam
         if (error.code !== 'EACCES' && error.code !== 'EPERM') {
             console.error('Error reading directory:', error);
         }
+        return [];
     }
+
+    const filteredEntries = entries.filter((entry) => !(entry.isDirectory() && IGNORED_DIRS.has(entry.name)));
+
+    // Process every entry in parallel. On high-latency filesystems (NFS/SMB)
+    // serial stat() was the real bottleneck — issuing them concurrently lets
+    // the kernel pipeline the round-trips and the recursive calls overlap too.
+    const items = await Promise.all(filteredEntries.map(async (entry) => {
+        const itemPath = path.join(dirPath, entry.name);
+        const item = {
+            name: entry.name,
+            path: itemPath,
+            type: entry.isDirectory() ? 'directory' : 'file'
+        };
+
+        // Get file stats for additional metadata
+        try {
+            await acquire();
+            try {
+              const stats = await fsPromises.lstat(itemPath);
+              item.size = stats.size;
+              item.modified = stats.mtime.toISOString();
+
+              // Mark symlinks so UI can distinguish them
+              if (stats.isSymbolicLink()) {
+                item.isSymlink = true;
+              }
+
+              // Convert permissions to rwx format
+              const mode = stats.mode;
+              const ownerPerm = (mode >> 6) & 7;
+              const groupPerm = (mode >> 3) & 7;
+              const otherPerm = mode & 7;
+              item.permissions =
+                ((mode >> 6) & 7).toString() +
+                ((mode >> 3) & 7).toString() +
+                (mode & 7).toString();
+              item.permissionsRwx =
+                permToRwx(ownerPerm) +
+                permToRwx(groupPerm) +
+                permToRwx(otherPerm);
+            } finally {
+                release();
+            }
+        } catch (statError) {
+            // If stat fails, provide default values
+            item.size = 0;
+            item.modified = null;
+            item.permissions = '000';
+            item.permissionsRwx = '---------';
+        }
+
+        if (entry.isDirectory() && currentDepth < maxDepth) {
+            // Recurse. Let readdir's own EACCES bubble up through the catch in
+            // the recursive call rather than doing a separate access() probe
+            // (which doubled the round-trip count on SMB without adding info).
+            // The recursive call starts with a bounded readdir; holding a permit
+            // for the whole subtree can deadlock when sibling directories are
+            // waiting on their own children.
+            item.children = await getFileTree(itemPath, maxDepth, currentDepth + 1, showHidden);
+        }
+
+        return item;
+    }));
 
     return items.sort((a, b) => {
         if (a.type !== b.type) {

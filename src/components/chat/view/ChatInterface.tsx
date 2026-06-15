@@ -14,10 +14,10 @@ import { useSessionStore } from '../../../stores/useSessionStore';
 
 import ChatMessagesPane from './subcomponents/ChatMessagesPane';
 import ChatComposer from './subcomponents/ChatComposer';
+import CommandResultModal from './subcomponents/CommandResultModal';
 
 
 type PendingViewSession = {
-  sessionId: string | null;
   startedAt: number;
 };
 
@@ -72,21 +72,28 @@ function ChatInterface({
     setCodexModel,
     geminiModel,
     setGeminiModel,
+    opencodeModel,
+    setOpenCodeModel,
     kiroModel,
     setKiroModel,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
     cyclePermissionMode,
+    providerModelCatalog,
+    providerModelCacheCatalog,
+    providerModelsLoading,
+    providerModelsRefreshing,
+    hardRefreshProviderModels,
+    selectProviderModel,
   } = useChatProviderState({
     selectedSession,
+    selectedProject,
   });
 
   const {
     chatMessages,
     addMessage,
-    clearMessages,
-    rewindMessages,
     isLoading,
     setIsLoading,
     currentSessionId,
@@ -136,8 +143,6 @@ function ChatInterface({
     textareaRef,
     inputHighlightRef,
     isTextareaExpanded,
-    thinkingMode,
-    setThinkingMode,
     slashCommandsCount,
     filteredCommands,
     frequentCommands,
@@ -172,7 +177,10 @@ function ChatInterface({
     handlePermissionDecision,
     handleGrantToolPermission,
     handleInputFocusChange,
-    isInputFocused,
+    isInputFocused: _isInputFocused,
+    commandModalPayload,
+    closeCommandModal,
+    showCostModal,
   } = useChatComposerState({
     selectedProject,
     selectedSession,
@@ -184,6 +192,7 @@ function ChatInterface({
     claudeModel,
     codexModel,
     geminiModel,
+    opencodeModel,
     kiroModel,
     isLoading,
     canAbortSession,
@@ -198,8 +207,6 @@ function ChatInterface({
     pendingViewSessionRef,
     scrollToBottom,
     addMessage,
-    clearMessages,
-    rewindMessages,
     setIsLoading,
     setCanAbortSession,
     setClaudeStatus,
@@ -237,6 +244,7 @@ function ChatInterface({
     streamTimerRef,
     accumulatedStreamRef,
     onSessionInactive,
+    onSessionActive,
     onSessionProcessing,
     onSessionNotProcessing,
     onNavigateToSession,
@@ -283,6 +291,8 @@ function ChatInterface({
           ? t('messageTypes.codex')
           : provider === 'gemini'
             ? t('messageTypes.gemini')
+            : provider === 'opencode'
+              ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
             : t('messageTypes.claude');
 
     return (
@@ -321,6 +331,10 @@ function ChatInterface({
           setCodexModel={setCodexModel}
           geminiModel={geminiModel}
           setGeminiModel={setGeminiModel}
+          opencodeModel={opencodeModel}
+          setOpenCodeModel={setOpenCodeModel}
+          providerModelCatalog={providerModelCatalog}
+          providerModelsLoading={providerModelsLoading}
           kiroModel={kiroModel}
           setKiroModel={setKiroModel}
           tasksEnabled={tasksEnabled}
@@ -359,9 +373,8 @@ function ChatInterface({
           provider={provider}
           permissionMode={permissionMode}
           onModeSwitch={cyclePermissionMode}
-          thinkingMode={thinkingMode}
-          setThinkingMode={setThinkingMode}
           tokenBudget={tokenBudget}
+          onShowTokenUsage={showCostModal}
           slashCommandsCount={slashCommandsCount}
           onToggleCommandMenu={handleToggleCommandMenu}
           hasInput={Boolean(input.trim())}
@@ -411,6 +424,8 @@ function ChatInterface({
                   ? t('messageTypes.codex')
                   : provider === 'gemini'
                     ? t('messageTypes.gemini')
+                    : provider === 'opencode'
+                      ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
                     : t('messageTypes.claude'),
           })}
           isTextareaExpanded={isTextareaExpanded}
@@ -419,6 +434,17 @@ function ChatInterface({
       </div>
 
       <QuickSettingsPanel />
+
+      <CommandResultModal
+        payload={commandModalPayload}
+        onClose={closeCommandModal}
+        providerModelCatalog={providerModelCatalog}
+        providerModelCacheCatalog={providerModelCacheCatalog}
+        providerModelsRefreshing={providerModelsRefreshing}
+        onHardRefreshProviderModels={hardRefreshProviderModels}
+        currentSessionId={currentSessionId || selectedSession?.id || null}
+        onSelectProviderModel={selectProviderModel}
+      />
     </PermissionContext.Provider>
   );
 }

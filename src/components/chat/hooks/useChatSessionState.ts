@@ -13,7 +13,6 @@ const MESSAGES_PER_PAGE = 20;
 const INITIAL_VISIBLE_MESSAGES = 100;
 
 type PendingViewSession = {
-  sessionId: string | null;
   startedAt: number;
 };
 
@@ -160,7 +159,7 @@ export function useChatSessionState({
      * Why this is essential:
      * - Chat keeps local state that is not fully derived from `selectedSession`:
      *   `currentSessionId`, `pendingUserMessage`, streaming/status flags, message
-     *   pagination/scroll bookkeeping, and pending session IDs in sessionStorage.
+     *   pagination/scroll bookkeeping, and provider-specific sessionStorage keys.
      * - If the user clicks New Session while already on the same route with no
      *   selected session, parent state updates can be idempotent and this local
      *   state would otherwise persist, making the click appear to "do nothing".
@@ -177,7 +176,6 @@ export function useChatSessionState({
     setIsLoading(false);
     setCurrentSessionId(null);
     setPendingUserMessage(null);
-    sessionStorage.removeItem('pendingSessionId');
     sessionStorage.removeItem('cursorSessionId');
     messagesOffsetRef.current = 0;
     setHasMoreMessages(false);
@@ -385,17 +383,58 @@ export function useChatSessionState({
     setIsUserScrolledUp(false);
   }, [selectedProject?.projectId, selectedSession?.id]);
 
-  // Initial scroll to bottom
+  // Initial scroll to bottom — robust to lazy content reflow.
+  // The previous implementation fired one scrollToBottom() at +200ms and
+  // cleared the pending flag. When markdown blocks, code highlighting, or
+  // images finished rendering after that window, scrollHeight grew but
+  // nothing re-anchored the viewport, leaving the chat tab visually
+  // "scrolled way up" with the latest assistant message off-screen.
+  //
+  // This version re-scrolls every animation frame while scrollHeight is
+  // still growing, capped at ~1s (60 frames) or 3 consecutive stable
+  // frames. Cancels cleanly on session change via the pending flag.
   useEffect(() => {
     if (!pendingInitialScrollRef.current || !scrollContainerRef.current || isLoadingSessionMessages) return;
     if (chatMessages.length === 0) { pendingInitialScrollRef.current = false; return; }
-    pendingInitialScrollRef.current = false;
-    if (!searchScrollActiveRef.current) setTimeout(() => scrollToBottom(), 200);
+    if (searchScrollActiveRef.current) { pendingInitialScrollRef.current = false; return; }
+
+    const container = scrollContainerRef.current;
+    let frame = 0;
+    let lastHeight = 0;
+    let stableCount = 0;
+    let rafId = 0;
+
+    const tick = () => {
+      if (!pendingInitialScrollRef.current || !scrollContainerRef.current) return;
+      container.scrollTop = container.scrollHeight;
+      if (container.scrollHeight === lastHeight) {
+        stableCount++;
+      } else {
+        stableCount = 0;
+        lastHeight = container.scrollHeight;
+      }
+      frame++;
+      if (stableCount < 3 && frame < 60) {
+        rafId = requestAnimationFrame(tick);
+      } else {
+        pendingInitialScrollRef.current = false;
+      }
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+    };
   }, [chatMessages.length, isLoadingSessionMessages, scrollToBottom]);
 
   // Main session loading effect — store-based
   useEffect(() => {
     if (!selectedSession || !selectedProject) {
+      // A new provider run can be in flight before the router has a canonical
+      // selectedSession. Keep the processing banner alive until complete/error.
+      if (pendingViewSessionRef.current) {
+        return;
+      }
+
       resetStreamingState();
       pendingViewSessionRef.current = null;
       setClaudeStatus(null);
@@ -537,10 +576,6 @@ export function useChatSessionState({
     }
   }, [selectedSession]);
 
-  useEffect(() => {
-    if (selectedSession?.id) pendingViewSessionRef.current = null;
-  }, [pendingViewSessionRef, selectedSession?.id]);
-
   // Scroll to search target
   useEffect(() => {
     if (!searchTarget || chatMessages.length === 0 || isLoadingSessionMessages) return;
@@ -624,19 +659,23 @@ export function useChatSessionState({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatMessages.length, isLoadingSessionMessages, searchTarget]);
 
-  // Token usage fetch for Claude
+  // Initial token usage fetch for providers with file-backed usage data.
   useEffect(() => {
     if (!selectedProject || !selectedSession?.id) {
       setTokenBudget(null);
       return;
     }
     const sessionProvider = selectedSession.__provider || 'claude';
-    if (sessionProvider !== 'claude') return;
+    if (sessionProvider !== 'claude' && sessionProvider !== 'codex' && sessionProvider !== 'gemini' && sessionProvider !== 'opencode') {
+      setTokenBudget(null);
+      return;
+    }
 
     const fetchInitialTokenUsage = async () => {
       try {
         // Token usage endpoint is now keyed by the DB projectId.
-        const url = `/api/projects/${selectedProject.projectId}/sessions/${selectedSession.id}/token-usage`;
+        const params = new URLSearchParams({ provider: sessionProvider });
+        const url = `/api/projects/${selectedProject.projectId}/sessions/${selectedSession.id}/token-usage?${params.toString()}`;
         const response = await authenticatedFetch(url);
         if (response.ok) {
           setTokenBudget(await response.json());
