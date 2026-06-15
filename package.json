@@ -83,6 +83,7 @@
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "electron/assets/logo-macos.icns",
+      "notarize": true,
       "target": [
         "dmg",
         "zip"

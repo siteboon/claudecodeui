@@ -1,0 +1,103 @@
+name: Desktop macOS Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to create or update (defaults to v<package version>)'
+        required: false
+        type: string
+      release_name:
+        description: 'Release name (defaults to "CloudCLI Desktop macOS <tag>")'
+        required: false
+        type: string
+      prerelease:
+        description: 'Mark the GitHub release as a prerelease'
+        required: true
+        default: false
+        type: boolean
+
+jobs:
+  build-macos:
+    name: Build signed macOS desktop app
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Resolve release metadata
+        id: release
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          TAG="${{ inputs.tag }}"
+          if [ -z "$TAG" ]; then
+            TAG="v${VERSION}"
+          fi
+
+          RELEASE_NAME="${{ inputs.release_name }}"
+          if [ -z "$RELEASE_NAME" ]; then
+            RELEASE_NAME="CloudCLI Desktop macOS ${TAG}"
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "release_name=$RELEASE_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Verify signing secrets are configured
+        run: |
+          test -n "$CSC_LINK"
+          test -n "$CSC_KEY_PASSWORD"
+          test -n "$APPLE_ID"
+          test -n "$APPLE_APP_SPECIFIC_PASSWORD"
+          test -n "$APPLE_TEAM_ID"
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Build signed and notarized macOS artifacts
+        run: npm run desktop:dist:mac -- --publish never
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Verify macOS artifacts
+        run: |
+          test -n "$(find release -maxdepth 1 -name '*.dmg' -print -quit)"
+          test -n "$(find release -maxdepth 1 -name '*.zip' -print -quit)"
+          shasum -a 256 release/*.{dmg,zip} > release/SHASUMS256.txt
+          cat release/SHASUMS256.txt
+
+      - name: Publish GitHub release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          name: ${{ steps.release.outputs.release_name }}
+          prerelease: ${{ inputs.prerelease }}
+          fail_on_unmatched_files: false
+          files: |
+            release/*.dmg
+            release/*.zip
+            release/*.yml
+            release/*.blockmap
+            release/SHASUMS256.txt
