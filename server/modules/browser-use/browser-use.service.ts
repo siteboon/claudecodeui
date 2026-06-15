@@ -1,18 +1,24 @@
 import { createRequire } from 'node:module';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import dns from 'node:dns/promises';
 import fs from 'node:fs';
+import os from 'node:os';
 import net from 'node:net';
+import path from 'node:path';
 
 import { appConfigDb } from '@/modules/database/repositories/app-config.js';
+import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
+import { getModuleDir } from '@/utils/runtime-paths.js';
 
 const require = createRequire(import.meta.url);
+const __dirname = getModuleDir(import.meta.url);
 const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
 const MAX_SESSIONS_PER_OWNER = Number.parseInt(process.env.CLOUDCLI_BROWSER_USE_MAX_SESSIONS_PER_OWNER || '3', 10);
 const SESSION_TTL_MS = Number.parseInt(process.env.CLOUDCLI_BROWSER_USE_SESSION_TTL_MS || String(30 * 60 * 1000), 10);
 const ALLOW_PRIVATE_NETWORKS = process.env.CLOUDCLI_BROWSER_USE_ALLOW_PRIVATE_NETWORKS === '1';
 const BROWSER_USE_SETTINGS_KEY = 'browser_use_settings';
+const BROWSER_USE_MCP_TOKEN_KEY = 'browser_use_mcp_token';
 
 type BrowserUseRuntime = 'cloud' | 'local';
 type BrowserUseSessionStatus = 'ready' | 'stopped' | 'unavailable';
@@ -20,6 +26,7 @@ type BrowserUseSessionStatus = 'ready' | 'stopped' | 'unavailable';
 type BrowserUseSession = {
   id: string;
   ownerId: string;
+  createdBy: 'user' | 'agent';
   runtime: BrowserUseRuntime;
   status: BrowserUseSessionStatus;
   url: string | null;
@@ -29,12 +36,15 @@ type BrowserUseSession = {
   updatedAt: string;
   lastAction: string | null;
   message: string | null;
+  agentAccessEnabled: boolean;
+  profileName: string | null;
 };
 
 type PublicBrowserUseSession = Omit<BrowserUseSession, 'ownerId'>;
 
 type RuntimeHandle = {
   browser?: any;
+  context?: any;
   page?: any;
 };
 
@@ -44,6 +54,7 @@ type BrowserUseOwner = {
 
 type BrowserUseSettings = {
   enabled: boolean;
+  agentToolsEnabled: boolean;
 };
 
 type RuntimeReadiness = {
@@ -62,7 +73,12 @@ let lastInstallMessage: string | null = null;
 
 const DEFAULT_SETTINGS: BrowserUseSettings = {
   enabled: false,
+  agentToolsEnabled: false,
 };
+const AGENT_OWNER_ID = 'agent';
+const PROFILE_ROOT = path.join(os.homedir(), '.cloudcli', 'browser-use', 'profiles');
+const MCP_SERVER_NAME = 'cloudcli-browser-use';
+const MCP_PROVIDERS = ['claude', 'codex', 'cursor', 'gemini', 'opencode'];
 
 function getRuntime(): BrowserUseRuntime {
   return IS_PLATFORM ? 'cloud' : 'local';
@@ -78,6 +94,7 @@ function readSettings(): BrowserUseSettings {
     const parsed = JSON.parse(raw) as Partial<BrowserUseSettings>;
     return {
       enabled: parsed.enabled === true,
+      agentToolsEnabled: parsed.agentToolsEnabled === true,
     };
   } catch (error: any) {
     console.warn('[Browser Use] Failed to read settings:', error?.message || error);
@@ -88,10 +105,21 @@ function readSettings(): BrowserUseSettings {
 function writeSettings(settings: BrowserUseSettings): BrowserUseSettings {
   const normalized = {
     enabled: settings.enabled === true,
+    agentToolsEnabled: settings.agentToolsEnabled === true,
   };
 
   appConfigDb.set(BROWSER_USE_SETTINGS_KEY, JSON.stringify(normalized));
   return normalized;
+}
+
+function getOrCreateMcpToken(): string {
+  const existing = appConfigDb.get(BROWSER_USE_MCP_TOKEN_KEY);
+  if (existing) {
+    return existing;
+  }
+  const token = randomBytes(32).toString('hex');
+  appConfigDb.set(BROWSER_USE_MCP_TOKEN_KEY, token);
+  return token;
 }
 
 function getSetupMessage(settings: BrowserUseSettings, readiness: RuntimeReadiness): string {
@@ -116,6 +144,45 @@ function getPlaywright(): any | null {
   } catch {
     return null;
   }
+}
+
+function getMcpCommand(): { command: string; args: string[] } {
+  const serverDir = path.resolve(__dirname, '..', '..');
+  const mcpScriptPath = path.join(serverDir, 'browser-use-mcp.js');
+  if (fs.existsSync(mcpScriptPath)) {
+    return {
+      command: process.execPath,
+      args: [mcpScriptPath],
+    };
+  }
+
+  return {
+    command: 'cloudcli',
+    args: ['browser-use-mcp'],
+  };
+}
+
+function getMcpApiUrl(): string {
+  const port = process.env.SERVER_PORT || process.env.PORT || '3001';
+  return `http://127.0.0.1:${port}/api/browser-use-mcp`;
+}
+
+function normalizeProfileName(profileName?: string | null): string | null {
+  const normalized = String(profileName || '').trim();
+  if (!normalized) {
+    return null;
+  }
+
+  return normalized.slice(0, 80);
+}
+
+function getProfilePath(profileName: string): string {
+  const safeName = profileName
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80) || 'default';
+  return path.join(PROFILE_ROOT, safeName);
 }
 
 function getRuntimeReadiness(): RuntimeReadiness {
@@ -333,6 +400,7 @@ function ownerSessions(ownerId: string): BrowserUseSession[] {
 async function closeHandle(sessionId: string): Promise<void> {
   const handle = handles.get(sessionId);
   handles.delete(sessionId);
+  await handle?.context?.close?.().catch(() => undefined);
   await handle?.browser?.close().catch(() => undefined);
 }
 
@@ -370,10 +438,24 @@ export const browserUseService = {
 
   async updateSettings(settings: Partial<BrowserUseSettings>) {
     const current = readSettings();
-    return writeSettings({
+    const nextSettings = {
       ...current,
       enabled: typeof settings.enabled === 'boolean' ? settings.enabled : current.enabled,
-    });
+      agentToolsEnabled: typeof settings.agentToolsEnabled === 'boolean'
+        ? settings.agentToolsEnabled
+        : current.agentToolsEnabled,
+    };
+    if (!nextSettings.enabled) {
+      nextSettings.agentToolsEnabled = false;
+    }
+
+    const next = writeSettings(nextSettings);
+    if (next.agentToolsEnabled) {
+      await this.registerAgentMcp();
+    } else if (current.agentToolsEnabled) {
+      await this.unregisterAgentMcp();
+    }
+    return next;
   },
 
   async getStatus() {
@@ -389,11 +471,51 @@ export const browserUseService = {
       chromiumInstalled: readiness.chromiumInstalled,
       installInProgress: readiness.installInProgress,
       sessionCount: sessions.size,
-      mcpRecommended: true,
+      agentToolsEnabled: settings.agentToolsEnabled,
+      mcpRecommended: !settings.agentToolsEnabled,
       message: available
         ? 'Browser Use runtime is available.'
         : getSetupMessage(settings, readiness),
     };
+  },
+
+  async registerAgentMcp() {
+    const { command, args } = getMcpCommand();
+    const results = await providerMcpService.addMcpServerToAllProviders({
+      name: MCP_SERVER_NAME,
+      scope: 'user',
+      transport: 'stdio',
+      command,
+      args,
+      env: {
+        CLOUDCLI_BROWSER_USE_MCP_TOKEN: getOrCreateMcpToken(),
+        CLOUDCLI_BROWSER_USE_API_URL: getMcpApiUrl(),
+      },
+    });
+    return { name: MCP_SERVER_NAME, command, args, results };
+  },
+
+  getMcpToken() {
+    return getOrCreateMcpToken();
+  },
+
+  async unregisterAgentMcp() {
+    const results = await Promise.all(MCP_PROVIDERS.map(async (provider) => {
+      try {
+        const result = await providerMcpService.removeProviderMcpServer(provider, {
+          name: MCP_SERVER_NAME,
+          scope: 'user',
+        });
+        return { provider, removed: result.removed };
+      } catch (error) {
+        return {
+          provider,
+          removed: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        };
+      }
+    }));
+    return { name: MCP_SERVER_NAME, results };
   },
 
   async installRuntime() {
@@ -407,17 +529,22 @@ export const browserUseService = {
   async listSessions(owner: BrowserUseOwner) {
     const ownerId = getOwnerId(owner);
     await expireStaleSessions();
-    return ownerSessions(ownerId).map(publicSession);
+    return [...sessions.values()]
+      .filter((session) => session.ownerId === ownerId || session.ownerId === AGENT_OWNER_ID || session.agentAccessEnabled)
+      .map(publicSession);
   },
 
-  async createSession(owner: BrowserUseOwner) {
+  async createSession(owner: BrowserUseOwner, options?: { createdBy?: 'user' | 'agent'; profileName?: string | null; agentAccessEnabled?: boolean }) {
     const ownerId = getOwnerId(owner);
     await expireStaleSessions();
+    const createdBy = options?.createdBy ?? 'user';
+    const profileName = normalizeProfileName(options?.profileName);
 
     const now = new Date().toISOString();
     const session: BrowserUseSession = {
       id: randomUUID(),
       ownerId,
+      createdBy,
       runtime: getRuntime(),
       status: 'unavailable',
       url: null,
@@ -427,6 +554,8 @@ export const browserUseService = {
       updatedAt: now,
       lastAction: 'create',
       message: null,
+      agentAccessEnabled: options?.agentAccessEnabled ?? createdBy === 'agent',
+      profileName,
     };
 
     const activeOwnerSessions = ownerSessions(ownerId).filter((item) => item.status === 'ready');
@@ -442,18 +571,95 @@ export const browserUseService = {
       return publicSession(session);
     }
 
-    const browser = await readiness.playwright.chromium.launch({
+    let browser: any | undefined;
+    let context: any | undefined;
+    let page: any;
+    const launchOptions = {
       headless: true,
       args: ['--disable-dev-shm-usage'],
-    });
-    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    };
+    const contextOptions = {
+      viewport: { width: 1440, height: 900 },
+      serviceWorkers: 'block',
+    };
+
+    if (profileName) {
+      fs.mkdirSync(PROFILE_ROOT, { recursive: true });
+      context = await readiness.playwright.chromium.launchPersistentContext(getProfilePath(profileName), {
+        ...launchOptions,
+        ...contextOptions,
+      });
+      page = context.pages()[0] || await context.newPage();
+    } else {
+      browser = await readiness.playwright.chromium.launch(launchOptions);
+      context = await browser.newContext(contextOptions);
+      page = await context.newPage();
+    }
     await attachRequestGuard(page);
     session.status = 'ready';
     session.message = 'Browser session is ready.';
     sessions.set(session.id, session);
-    handles.set(session.id, { browser, page });
+    handles.set(session.id, { browser, context, page });
     await captureSession(session, page);
     return publicSession(session);
+  },
+
+  async grantAgentAccess(owner: BrowserUseOwner, sessionId: string) {
+    const ownerId = getOwnerId(owner);
+    const session = sessions.get(sessionId);
+    if (!session || (session.ownerId !== ownerId && session.ownerId !== AGENT_OWNER_ID)) {
+      throw new Error('Browser session not found.');
+    }
+    session.agentAccessEnabled = true;
+    session.updatedAt = new Date().toISOString();
+    session.lastAction = 'agent_access:grant';
+    return publicSession(session);
+  },
+
+  async revokeAgentAccess(owner: BrowserUseOwner, sessionId: string) {
+    const ownerId = getOwnerId(owner);
+    const session = sessions.get(sessionId);
+    if (!session || (session.ownerId !== ownerId && session.ownerId !== AGENT_OWNER_ID)) {
+      throw new Error('Browser session not found.');
+    }
+    session.agentAccessEnabled = false;
+    session.updatedAt = new Date().toISOString();
+    session.lastAction = 'agent_access:revoke';
+    return publicSession(session);
+  },
+
+  async listAgentSessions() {
+    const settings = readSettings();
+    if (!settings.enabled || !settings.agentToolsEnabled) {
+      return [];
+    }
+    await expireStaleSessions();
+    return [...sessions.values()]
+      .filter((session) => session.agentAccessEnabled || session.ownerId === AGENT_OWNER_ID)
+      .map(publicSession);
+  },
+
+  async createAgentSession(options?: { profileName?: string | null }) {
+    const settings = readSettings();
+    if (!settings.enabled || !settings.agentToolsEnabled) {
+      throw new Error('Browser Use agent tools are disabled.');
+    }
+    return this.createSession(
+      { id: AGENT_OWNER_ID },
+      { createdBy: 'agent', profileName: options?.profileName, agentAccessEnabled: true },
+    );
+  },
+
+  async getAgentSession(sessionId: string) {
+    const settings = readSettings();
+    if (!settings.enabled || !settings.agentToolsEnabled) {
+      throw new Error('Browser Use agent tools are disabled.');
+    }
+    const session = sessions.get(sessionId);
+    if (!session || (!session.agentAccessEnabled && session.ownerId !== AGENT_OWNER_ID)) {
+      throw new Error('Browser session is not shared with agents.');
+    }
+    return session;
   },
 
   async navigate(owner: BrowserUseOwner, sessionId: string, rawUrl: string) {
@@ -481,10 +687,184 @@ export const browserUseService = {
     return publicSession(session);
   },
 
+  async agentNavigate(sessionId: string, rawUrl: string) {
+    await this.getAgentSession(sessionId);
+    return this.navigate({ id: AGENT_OWNER_ID }, sessionId, rawUrl).catch(async (error) => {
+      const session = await this.getAgentSession(sessionId);
+      if (session.ownerId !== AGENT_OWNER_ID) {
+        const url = await normalizeUrl(rawUrl);
+        const handle = handles.get(sessionId);
+        if (!handle?.page) {
+          throw new Error('Browser runtime handle is not available.');
+        }
+        await handle.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+        session.lastAction = `navigate:${url}`;
+        await captureSession(session, handle.page);
+        return publicSession(session);
+      }
+      throw error;
+    });
+  },
+
+  async agentSnapshot(sessionId: string) {
+    const session = await this.getAgentSession(sessionId);
+    const handle = handles.get(sessionId);
+    if (!handle?.page) {
+      throw new Error('Browser runtime handle is not available.');
+    }
+    await captureSession(session, handle.page);
+    const text = await handle.page.locator('body').innerText({ timeout: 5_000 }).catch(() => '');
+    return {
+      session: publicSession(session),
+      text: text.slice(0, 30_000),
+    };
+  },
+
+  async agentClick(sessionId: string, input: { selector?: string; text?: string; x?: number; y?: number }) {
+    const session = await this.getAgentSession(sessionId);
+    const handle = handles.get(sessionId);
+    if (!handle?.page) {
+      throw new Error('Browser runtime handle is not available.');
+    }
+
+    if (input.selector) {
+      await handle.page.locator(input.selector).first().click({ timeout: 10_000 });
+    } else if (input.text) {
+      await handle.page.getByText(input.text, { exact: false }).first().click({ timeout: 10_000 });
+    } else if (typeof input.x === 'number' && typeof input.y === 'number') {
+      await handle.page.mouse.click(input.x, input.y);
+    } else {
+      throw new Error('Provide selector, text, or x/y coordinates.');
+    }
+
+    session.lastAction = 'click';
+    await captureSession(session, handle.page);
+    return publicSession(session);
+  },
+
+  async agentType(sessionId: string, input: { selector?: string; text: string; submit?: boolean }) {
+    const session = await this.getAgentSession(sessionId);
+    const handle = handles.get(sessionId);
+    if (!handle?.page) {
+      throw new Error('Browser runtime handle is not available.');
+    }
+
+    if (input.selector) {
+      await handle.page.locator(input.selector).first().fill(input.text, { timeout: 10_000 });
+    } else {
+      await handle.page.keyboard.type(input.text);
+    }
+    if (input.submit) {
+      await handle.page.keyboard.press('Enter');
+    }
+
+    session.lastAction = 'type';
+    await captureSession(session, handle.page);
+    return publicSession(session);
+  },
+
+  async agentFillForm(sessionId: string, fields: Array<{ selector: string; value: string }>) {
+    const session = await this.getAgentSession(sessionId);
+    const handle = handles.get(sessionId);
+    if (!handle?.page) {
+      throw new Error('Browser runtime handle is not available.');
+    }
+    for (const field of fields) {
+      await handle.page.locator(field.selector).first().fill(field.value, { timeout: 10_000 });
+    }
+    session.lastAction = 'fill_form';
+    await captureSession(session, handle.page);
+    return publicSession(session);
+  },
+
+  async agentPressKey(sessionId: string, key: string) {
+    const session = await this.getAgentSession(sessionId);
+    const handle = handles.get(sessionId);
+    if (!handle?.page) {
+      throw new Error('Browser runtime handle is not available.');
+    }
+    await handle.page.keyboard.press(key);
+    session.lastAction = `press_key:${key}`;
+    await captureSession(session, handle.page);
+    return publicSession(session);
+  },
+
+  async agentSelectOption(sessionId: string, selector: string, values: string[]) {
+    const session = await this.getAgentSession(sessionId);
+    const handle = handles.get(sessionId);
+    if (!handle?.page) {
+      throw new Error('Browser runtime handle is not available.');
+    }
+    await handle.page.locator(selector).first().selectOption(values, { timeout: 10_000 });
+    session.lastAction = 'select_option';
+    await captureSession(session, handle.page);
+    return publicSession(session);
+  },
+
+  async agentWaitFor(sessionId: string, input: { text?: string; url?: string; timeoutMs?: number }) {
+    const session = await this.getAgentSession(sessionId);
+    const handle = handles.get(sessionId);
+    if (!handle?.page) {
+      throw new Error('Browser runtime handle is not available.');
+    }
+    const timeout = Math.max(250, Math.min(input.timeoutMs || 5_000, 30_000));
+    if (input.text) {
+      await handle.page.getByText(input.text, { exact: false }).first().waitFor({ timeout });
+    } else if (input.url) {
+      await handle.page.waitForURL(input.url, { timeout });
+    } else {
+      await handle.page.waitForTimeout(timeout);
+    }
+    session.lastAction = 'wait_for';
+    await captureSession(session, handle.page);
+    return publicSession(session);
+  },
+
+  async agentTabs(sessionId: string, input: { action?: 'list' | 'new' | 'select' | 'close'; index?: number; url?: string }) {
+    const session = await this.getAgentSession(sessionId);
+    const handle = handles.get(sessionId);
+    if (!handle?.context || !handle?.page) {
+      throw new Error('Browser runtime handle is not available.');
+    }
+    const action = input.action || 'list';
+    if (action === 'new') {
+      const page = await handle.context.newPage();
+      handles.set(sessionId, { ...handle, page });
+      await attachRequestGuard(page);
+      if (input.url) {
+        await this.agentNavigate(sessionId, input.url);
+      }
+    } else if (action === 'select') {
+      const page = handle.context.pages()[input.index || 0];
+      if (!page) {
+        throw new Error('Tab not found.');
+      }
+      handles.set(sessionId, { ...handle, page });
+    } else if (action === 'close') {
+      const pages = handle.context.pages();
+      const page = pages[input.index ?? pages.indexOf(handle.page)];
+      if (!page) {
+        throw new Error('Tab not found.');
+      }
+      await page.close();
+      handles.set(sessionId, { ...handle, page: handle.context.pages()[0] || await handle.context.newPage() });
+    }
+    const updatedHandle = handles.get(sessionId);
+    await captureSession(session, updatedHandle?.page || handle.page);
+    return {
+      session: publicSession(session),
+      tabs: handle.context.pages().map((page: any, index: number) => ({
+        index,
+        url: page.url(),
+        active: page === (updatedHandle?.page || handle.page),
+      })),
+    };
+  },
+
   async stopSession(owner: BrowserUseOwner, sessionId: string) {
     const ownerId = getOwnerId(owner);
     const session = sessions.get(sessionId);
-    if (!session || session.ownerId !== ownerId) {
+    if (!session || (session.ownerId !== ownerId && session.ownerId !== AGENT_OWNER_ID && !session.agentAccessEnabled)) {
       return { stopped: false };
     }
 
@@ -495,6 +875,11 @@ export const browserUseService = {
     session.lastAction = 'stop';
     session.message = 'Browser session stopped.';
     return { stopped: true, session: publicSession(session) };
+  },
+
+  async agentStopSession(sessionId: string) {
+    await this.getAgentSession(sessionId);
+    return this.stopSession({ id: AGENT_OWNER_ID }, sessionId);
   },
 
   async stopAllSessions() {

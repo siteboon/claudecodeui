@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Download, ExternalLink, Globe, Loader2, MonitorPlay, Navigation, Pause, RefreshCw, Square } from 'lucide-react';
+import { Bot, Download, ExternalLink, Globe, Loader2, MonitorPlay, Navigation, Pause, RefreshCw, Share2, Square, X } from 'lucide-react';
 
 import { Badge, Button } from '../../../shared/view/ui';
 import { authenticatedFetch } from '../../../utils/api';
@@ -12,6 +12,7 @@ type BrowserUseStatus = {
   chromiumInstalled: boolean;
   installInProgress: boolean;
   sessionCount: number;
+  agentToolsEnabled: boolean;
   mcpRecommended: boolean;
   message: string;
 };
@@ -27,6 +28,9 @@ type BrowserUseSession = {
   updatedAt: string;
   lastAction: string | null;
   message: string | null;
+  agentAccessEnabled: boolean;
+  createdBy: 'user' | 'agent';
+  profileName: string | null;
 };
 
 type BrowserUsePanelProps = {
@@ -112,6 +116,18 @@ export default function BrowserUsePanel({ isVisible }: BrowserUsePanelProps) {
     await readJson(response);
   });
 
+  const grantAgentAccess = () => runAction(async () => {
+    if (!selectedSession) return;
+    const response = await authenticatedFetch(`/api/browser-use/sessions/${selectedSession.id}/agent-access/grant`, { method: 'POST' });
+    await readJson(response);
+  });
+
+  const revokeAgentAccess = () => runAction(async () => {
+    if (!selectedSession) return;
+    const response = await authenticatedFetch(`/api/browser-use/sessions/${selectedSession.id}/agent-access/revoke`, { method: 'POST' });
+    await readJson(response);
+  });
+
   const installRuntime = () => runAction(async () => {
     setIsInstalling(true);
     try {
@@ -138,7 +154,7 @@ export default function BrowserUsePanel({ isVisible }: BrowserUsePanelProps) {
             )}
           </div>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Managed Playwright browser sessions with owner-scoped screenshots and navigation.
+            Create browser sessions, watch agent activity, and decide which sessions agents may control.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -159,6 +175,11 @@ export default function BrowserUsePanel({ isVisible }: BrowserUsePanelProps) {
             <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Runtime</div>
             <div className="mt-2 text-sm text-foreground">{status?.available ? 'Available' : 'Setup required'}</div>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{status?.message || 'Loading Browser Use status...'}</p>
+            {status?.enabled && (
+              <div className="mt-3 rounded-md border border-border/70 bg-background/60 px-2 py-2 text-xs text-muted-foreground">
+                Agent tools: {status.agentToolsEnabled ? 'enabled' : 'disabled in settings'}
+              </div>
+            )}
             {canInstallRuntime && (
               <Button
                 type="button"
@@ -178,6 +199,11 @@ export default function BrowserUsePanel({ isVisible }: BrowserUsePanelProps) {
           </div>
 
           <div className="mt-3 space-y-2">
+            <div className="rounded-lg border border-border/70 bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">
+              Agents can create their own browser sessions when browser tools are enabled. Use
+              <span className="font-medium text-foreground"> Give Agent Access </span>
+              to let agents control a session you created, and revoke access whenever you want.
+            </div>
             {sessions.map((session) => (
               <button
                 key={session.id}
@@ -191,6 +217,19 @@ export default function BrowserUsePanel({ isVisible }: BrowserUsePanelProps) {
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate font-medium">{session.title || session.url || 'Browser session'}</span>
                   <Badge variant="outline" className="text-[10px]">{session.status}</Badge>
+                </div>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {session.createdBy === 'agent' && (
+                    <span className="rounded border border-primary/30 px-1.5 py-0.5 text-[10px] text-primary">agent</span>
+                  )}
+                  {session.agentAccessEnabled && (
+                    <span className="rounded border border-emerald-500/30 px-1.5 py-0.5 text-[10px] text-emerald-600 dark:text-emerald-300">
+                      shared
+                    </span>
+                  )}
+                  {session.profileName && (
+                    <span className="rounded border border-border px-1.5 py-0.5 text-[10px]">profile: {session.profileName}</span>
+                  )}
                 </div>
                 <div className="mt-1 truncate text-xs">{session.url || session.message || session.id}</div>
               </button>
@@ -215,6 +254,17 @@ export default function BrowserUsePanel({ isVisible }: BrowserUsePanelProps) {
               <Navigation className="h-4 w-4" />
               Go
             </Button>
+            {selectedSession?.agentAccessEnabled ? (
+              <Button variant="outline" size="sm" onClick={revokeAgentAccess} disabled={isBusy || !selectedSession}>
+                <X className="h-4 w-4" />
+                Revoke Agent
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" onClick={grantAgentAccess} disabled={isBusy || !selectedSession || !status?.agentToolsEnabled}>
+                <Share2 className="h-4 w-4" />
+                Give Agent Access
+              </Button>
+            )}
             <Button variant="outline" size="sm" disabled>
               <Pause className="h-4 w-4" />
               Pause
@@ -236,6 +286,12 @@ export default function BrowserUsePanel({ isVisible }: BrowserUsePanelProps) {
               <div className="flex items-center gap-2 border-b border-border/60 px-3 py-2 text-xs text-muted-foreground">
                 <ExternalLink className="h-3.5 w-3.5" />
                 <span className="truncate">{selectedSession?.url || 'No page loaded'}</span>
+                {selectedSession?.agentAccessEnabled && (
+                  <span className="ml-auto inline-flex items-center gap-1 rounded border border-emerald-500/30 px-2 py-0.5 text-emerald-600 dark:text-emerald-300">
+                    <Bot className="h-3.5 w-3.5" />
+                    Agent access active
+                  </span>
+                )}
               </div>
               <div className="flex min-h-[360px] flex-1 items-center justify-center bg-neutral-950">
                 {selectedSession?.screenshotDataUrl ? (

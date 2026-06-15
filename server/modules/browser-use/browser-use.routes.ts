@@ -56,6 +56,18 @@ router.put('/settings', async (req, res) => {
   }
 });
 
+router.post('/agent-tools/register', async (_req, res) => {
+  try {
+    const result = await browserUseService.registerAgentMcp();
+    res.status(201).json({ success: true, data: result });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to register Browser Use MCP.',
+    });
+  }
+});
+
 router.post('/runtime/install', async (_req, res) => {
   try {
     const result = await browserUseService.installRuntime();
@@ -103,6 +115,30 @@ router.post('/sessions/:sessionId/navigate', async (req: AuthenticatedRequest, r
     res.status(400).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to navigate browser session.',
+    });
+  }
+});
+
+router.post('/sessions/:sessionId/agent-access/grant', async (req: AuthenticatedRequest, res) => {
+  try {
+    const session = await browserUseService.grantAgentAccess(requireUser(req), readParam(req.params.sessionId));
+    res.json({ success: true, data: { session } });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to grant agent access.',
+    });
+  }
+});
+
+router.post('/sessions/:sessionId/agent-access/revoke', async (req: AuthenticatedRequest, res) => {
+  try {
+    const session = await browserUseService.revokeAgentAccess(requireUser(req), readParam(req.params.sessionId));
+    res.json({ success: true, data: { session } });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to revoke agent access.',
     });
   }
 });

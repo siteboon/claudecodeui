@@ -10,6 +10,7 @@ import SettingsToggle from '../../SettingsToggle';
 
 type BrowserUseSettings = {
   enabled: boolean;
+  agentToolsEnabled: boolean;
 };
 
 type BrowserUseStatus = {
@@ -19,6 +20,7 @@ type BrowserUseStatus = {
   playwrightInstalled: boolean;
   chromiumInstalled: boolean;
   installInProgress: boolean;
+  agentToolsEnabled: boolean;
   message: string;
 };
 
@@ -31,7 +33,7 @@ async function readJson<T>(response: Response): Promise<T> {
 }
 
 export default function BrowserUseSettingsTab() {
-  const [settings, setSettings] = useState<BrowserUseSettings>({ enabled: false });
+  const [settings, setSettings] = useState<BrowserUseSettings>({ enabled: false, agentToolsEnabled: false });
   const [status, setStatus] = useState<BrowserUseStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -57,13 +59,13 @@ export default function BrowserUseSettingsTab() {
       .finally(() => setIsLoading(false));
   }, [loadState]);
 
-  const updateEnabled = async (enabled: boolean) => {
+  const updateSettings = async (nextSettings: Partial<BrowserUseSettings>) => {
     setIsSaving(true);
     setError(null);
     try {
       const response = await authenticatedFetch('/api/browser-use/settings', {
         method: 'PUT',
-        body: JSON.stringify({ enabled }),
+        body: JSON.stringify(nextSettings),
       });
       const data = await readJson<{ data: { settings: BrowserUseSettings } }>(response);
       setSettings(data.data.settings);
@@ -105,9 +107,21 @@ export default function BrowserUseSettingsTab() {
           >
             <SettingsToggle
               checked={settings.enabled}
-              onChange={(value) => void updateEnabled(value)}
+              onChange={(value) => void updateSettings({ enabled: value })}
               ariaLabel="Enable Browser Use"
               disabled={isLoading || isSaving}
+            />
+          </SettingsRow>
+
+          <SettingsRow
+            label="Enable Browser Tools for Agents"
+            description="Register the Browser Use MCP server for all agent providers. Agents can create browser sessions and control sessions shared with agents."
+          >
+            <SettingsToggle
+              checked={settings.agentToolsEnabled}
+              onChange={(value) => void updateSettings({ agentToolsEnabled: value })}
+              ariaLabel="Enable Browser Tools for Agents"
+              disabled={isLoading || isSaving || !settings.enabled}
             />
           </SettingsRow>
 
