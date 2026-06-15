@@ -52,60 +52,36 @@ type RegisterOptimisticSessionArgs = {
   summary?: string | null;
 };
 
-type SessionBucketKey = 'sessions' | 'cursorSessions' | 'codexSessions' | 'geminiSessions' | 'opencodeSessions';
-type ProjectSessionBuckets = Pick<Project, SessionBucketKey>;
-type ProjectSessionPage = ProjectSessionBuckets & Pick<Project, 'sessionMeta'>;
+type ProjectSessionPage = Pick<Project, 'sessions' | 'sessionMeta'>;
 
 const DEFAULT_PROVIDER: LLMProvider = 'claude';
 
-const SESSION_PROVIDER_BUCKETS: ReadonlyArray<{ provider: LLMProvider; key: SessionBucketKey }> = [
-  { provider: 'claude', key: 'sessions' },
-  { provider: 'cursor', key: 'cursorSessions' },
-  { provider: 'codex', key: 'codexSessions' },
-  { provider: 'gemini', key: 'geminiSessions' },
-  { provider: 'opencode', key: 'opencodeSessions' },
-];
-
-const SESSION_BUCKET_KEYS = SESSION_PROVIDER_BUCKETS.map(({ key }) => key);
-const EXTERNAL_SESSION_BUCKET_KEYS = SESSION_PROVIDER_BUCKETS
-  .filter(({ key }) => key !== 'sessions')
-  .map(({ key }) => key);
-const SESSION_BUCKET_BY_PROVIDER = SESSION_PROVIDER_BUCKETS.reduce(
-  (byProvider, { provider, key }) => {
-    byProvider[provider] = key;
-    return byProvider;
-  },
-  {} as Record<LLMProvider, SessionBucketKey>,
-);
-
 const serialize = (value: unknown) => JSON.stringify(value ?? null);
-
-const isLLMProvider = (value: unknown): value is LLMProvider => (
-  typeof value === 'string' && value in SESSION_BUCKET_BY_PROVIDER
-);
 
 const readSelectedProvider = (): LLMProvider => {
   try {
     const storedProvider = localStorage.getItem('selected-provider');
-    return isLLMProvider(storedProvider) ? storedProvider : DEFAULT_PROVIDER;
+    return storedProvider ? storedProvider as LLMProvider : DEFAULT_PROVIDER;
   } catch {
     return DEFAULT_PROVIDER;
   }
 };
 
-const getProjectSessionBucketValues = (project: Partial<Project>): ProjectSessionBuckets => {
-  const buckets = {} as ProjectSessionBuckets;
-  for (const bucketKey of SESSION_BUCKET_KEYS) {
-    buckets[bucketKey] = project[bucketKey] ?? [];
-  }
-
-  return buckets;
+const getSessionProvider = (session: ProjectSession): LLMProvider => {
+  const provider = session.__provider ?? session.provider;
+  return typeof provider === 'string' && provider.trim()
+    ? provider as LLMProvider
+    : DEFAULT_PROVIDER;
 };
+
+const normalizeSessionProvider = (session: ProjectSession): ProjectSession => ({
+  ...session,
+  __provider: getSessionProvider(session),
+});
 
 const projectsHaveChanges = (
   prevProjects: Project[],
   nextProjects: Project[],
-  includeExternalSessions: boolean,
 ): boolean => {
   if (prevProjects.length !== nextProjects.length) {
     return true;
@@ -117,25 +93,14 @@ const projectsHaveChanges = (
       return true;
     }
 
-    const baseChanged =
+    return (
       nextProject.projectId !== prevProject.projectId ||
       nextProject.displayName !== prevProject.displayName ||
       nextProject.fullPath !== prevProject.fullPath ||
       Boolean(nextProject.isStarred) !== Boolean(prevProject.isStarred) ||
       serialize(nextProject.sessionMeta) !== serialize(prevProject.sessionMeta) ||
       serialize(nextProject.sessions) !== serialize(prevProject.sessions) ||
-      serialize(nextProject.taskmaster) !== serialize(prevProject.taskmaster);
-
-    if (baseChanged) {
-      return true;
-    }
-
-    if (!includeExternalSessions) {
-      return false;
-    }
-
-    return EXTERNAL_SESSION_BUCKET_KEYS.some((bucketKey) =>
-      serialize(nextProject[bucketKey]) !== serialize(prevProject[bucketKey]),
+      serialize(nextProject.taskmaster) !== serialize(prevProject.taskmaster)
     );
   });
 };
@@ -167,24 +132,10 @@ const mergeTaskMasterCache = (nextProjects: Project[], previousProjects: Project
 };
 
 const getProjectSessions = (project: Project): ProjectSession[] => {
-  return SESSION_BUCKET_KEYS.flatMap((bucketKey) => project[bucketKey] ?? []);
+  return project.sessions ?? [];
 };
 
 const countLoadedProjectSessions = (project: Project): number => getProjectSessions(project).length;
-
-const findProjectSessionById = (
-  project: Project,
-  sessionId: string,
-): { session: ProjectSession; provider: LLMProvider } | null => {
-  for (const { provider, key } of SESSION_PROVIDER_BUCKETS) {
-    const session = project[key]?.find((candidate) => candidate.id === sessionId);
-    if (session) {
-      return { session, provider };
-    }
-  }
-
-  return null;
-};
 
 const mergeSessionProviderLists = (baseSessions: ProjectSession[], additionalSessions: ProjectSession[]): ProjectSession[] => {
   const merged = [...baseSessions];
@@ -222,13 +173,10 @@ const mergeExpandedSessionPages = (previousProjects: Project[], incomingProjects
       return incomingProject;
     }
 
-    const mergedProject: Project = { ...incomingProject };
-    for (const bucketKey of SESSION_BUCKET_KEYS) {
-      mergedProject[bucketKey] = mergeSessionProviderLists(
-        incomingProject[bucketKey] ?? [],
-        previousProject[bucketKey] ?? [],
-      );
-    }
+    const mergedProject: Project = {
+      ...incomingProject,
+      sessions: mergeSessionProviderLists(incomingProject.sessions ?? [], previousProject.sessions ?? []),
+    };
 
     const totalSessions = Number(incomingProject.sessionMeta?.total ?? previousLoadedCount);
     mergedProject.sessionMeta = {
@@ -245,13 +193,10 @@ const mergeProjectSessionPage = (
   existingProject: Project,
   sessionsPage: ProjectSessionPage,
 ): Project => {
-  const mergedProject: Project = { ...existingProject };
-  for (const bucketKey of SESSION_BUCKET_KEYS) {
-    mergedProject[bucketKey] = mergeSessionProviderLists(
-      existingProject[bucketKey] ?? [],
-      sessionsPage[bucketKey] ?? [],
-    );
-  }
+  const mergedProject: Project = {
+    ...existingProject,
+    sessions: mergeSessionProviderLists(existingProject.sessions ?? [], sessionsPage.sessions ?? []),
+  };
 
   const totalSessions = Number(sessionsPage.sessionMeta?.total ?? existingProject.sessionMeta?.total ?? 0);
   mergedProject.sessionMeta = {
@@ -285,35 +230,35 @@ const getSessionAliasIds = (event: SessionUpsertedEvent): Set<string> => {
 };
 
 /**
- * Upserts one session into the matching provider bucket of a project.
+ * Upserts one session into a project's normalized session list.
  *
  * Existing rows are updated in place (summary/lastActivity changes from the
  * watcher); new rows are prepended since the watcher only fires for sessions
  * with fresh activity. `sessionMeta.total` grows only on insert.
  */
 const upsertSessionIntoProject = (project: Project, event: SessionUpsertedEvent): Project => {
-  const bucketKey = SESSION_BUCKET_BY_PROVIDER[event.provider] ?? SESSION_BUCKET_BY_PROVIDER[DEFAULT_PROVIDER];
-  const bucket = project[bucketKey] ?? [];
+  const sessions = project.sessions ?? [];
   const aliasIds = getSessionAliasIds(event);
   const normalizedSession: ProjectSession = {
     ...event.session,
     id: event.sessionId,
+    __provider: event.provider,
   };
-  const existingIndex = bucket.findIndex((session) => aliasIds.has(String(session.id)));
+  const existingIndex = sessions.findIndex((session) => aliasIds.has(String(session.id)));
 
-  let nextBucket: ProjectSession[];
+  let nextSessions: ProjectSession[];
   let inserted = false;
   if (existingIndex >= 0) {
     let changed = false;
-    nextBucket = [];
+    nextSessions = [];
 
-    for (const [index, session] of bucket.entries()) {
+    for (const [index, session] of sessions.entries()) {
       if (index === existingIndex) {
         const updated = { ...session, ...normalizedSession };
         if (serialize(session) !== serialize(updated)) {
           changed = true;
         }
-        nextBucket.push(updated);
+        nextSessions.push(updated);
         continue;
       }
 
@@ -322,18 +267,18 @@ const upsertSessionIntoProject = (project: Project, event: SessionUpsertedEvent)
         continue;
       }
 
-      nextBucket.push(session);
+      nextSessions.push(session);
     }
 
     if (!changed) {
       return project;
     }
   } else {
-    nextBucket = [normalizedSession, ...bucket];
+    nextSessions = [normalizedSession, ...sessions];
     inserted = true;
   }
 
-  const next: Project = { ...project, [bucketKey]: nextBucket };
+  const next: Project = { ...project, sessions: nextSessions };
   if (inserted) {
     const total = Number(project.sessionMeta?.total ?? 0) + 1;
     next.sessionMeta = {
@@ -352,29 +297,21 @@ const projectFromRegistration = (project: Project): Project => ({
   fullPath: project.fullPath || project.path || '',
   displayName: project.displayName,
   isStarred: project.isStarred,
-  ...getProjectSessionBucketValues(project),
+  sessions: project.sessions ?? [],
   sessionMeta: project.sessionMeta ?? { hasMore: false, total: countLoadedProjectSessions(project) },
   taskmaster: project.taskmaster,
 });
 
 const removeSessionFromProject = (project: Project, sessionIdToDelete: string): Project => {
-  const nextBuckets = {} as ProjectSessionBuckets;
-  let removedFromProject = false;
-
-  for (const bucketKey of SESSION_BUCKET_KEYS) {
-    const currentBucket = project[bucketKey] ?? [];
-    const nextBucket = currentBucket.filter((session) => session.id !== sessionIdToDelete);
-    nextBuckets[bucketKey] = nextBucket;
-    removedFromProject = removedFromProject || nextBucket.length !== currentBucket.length;
-  }
-
-  if (!removedFromProject) {
+  const sessions = project.sessions ?? [];
+  const nextSessions = sessions.filter((session) => session.id !== sessionIdToDelete);
+  if (nextSessions.length === sessions.length) {
     return project;
   }
 
   const updatedProject: Project = {
     ...project,
-    ...nextBuckets,
+    sessions: nextSessions,
   };
 
   const totalSessions = Math.max(0, Number(project.sessionMeta?.total ?? 0) - 1);
@@ -484,7 +421,7 @@ export function useProjectsState({
           return mergedProjects;
         }
 
-        return projectsHaveChanges(prevProjects, mergedProjects, true)
+        return projectsHaveChanges(prevProjects, mergedProjects)
           ? mergedProjects
           : prevProjects;
       });
@@ -701,7 +638,7 @@ export function useProjectsState({
             fullPath: upsert.project.fullPath,
             displayName: upsert.project.displayName,
             isStarred: upsert.project.isStarred,
-            ...getProjectSessionBucketValues({}),
+            sessions: [],
             sessionMeta: { hasMore: false, total: 0 },
           } as Project;
 
@@ -783,17 +720,18 @@ export function useProjectsState({
 
     // Project membership is resolved through `projectId` after the migration.
     for (const project of projects) {
-      const match = findProjectSessionById(project, sessionId);
+      const match = project.sessions?.find((session) => session.id === sessionId);
       if (match) {
+        const normalizedSession = normalizeSessionProvider(match);
         const shouldUpdateProject = selectedProject?.projectId !== project.projectId;
         const shouldUpdateSession =
-          selectedSession?.id !== sessionId || selectedSession.__provider !== match.provider;
+          selectedSession?.id !== sessionId || selectedSession.__provider !== normalizedSession.__provider;
 
         if (shouldUpdateProject) {
           setSelectedProject(project);
         }
         if (shouldUpdateSession) {
-          setSelectedSession({ ...match.session, __provider: match.provider });
+          setSelectedSession(normalizedSession);
         }
         return;
       }
@@ -897,7 +835,7 @@ export function useProjectsState({
       const mergedProjects = mergeExpandedSessionPages(projects, projectsWithTaskMaster);
 
       setProjects((prevProjects) =>
-        projectsHaveChanges(prevProjects, mergedProjects, true) ? mergedProjects : prevProjects,
+        projectsHaveChanges(prevProjects, mergedProjects) ? mergedProjects : prevProjects,
       );
 
       if (!selectedProject) {

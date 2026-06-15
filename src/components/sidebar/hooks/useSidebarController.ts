@@ -594,16 +594,7 @@ export function useSidebarController({
 
     return sortedProjects.reduce<Project[]>((acc, project) => {
       const sessions = (project.sessions ?? []).filter((session) => activeSessionIds.has(String(session.id)));
-      const cursorSessions = (project.cursorSessions ?? []).filter((session) => activeSessionIds.has(String(session.id)));
-      const codexSessions = (project.codexSessions ?? []).filter((session) => activeSessionIds.has(String(session.id)));
-      const geminiSessions = (project.geminiSessions ?? []).filter((session) => activeSessionIds.has(String(session.id)));
-      const opencodeSessions = (project.opencodeSessions ?? []).filter((session) => activeSessionIds.has(String(session.id)));
-      const runningCount =
-        sessions.length
-        + cursorSessions.length
-        + codexSessions.length
-        + geminiSessions.length
-        + opencodeSessions.length;
+      const runningCount = sessions.length;
 
       if (runningCount === 0) {
         return acc;
@@ -612,10 +603,6 @@ export function useSidebarController({
       acc.push({
         ...project,
         sessions,
-        cursorSessions,
-        codexSessions,
-        geminiSessions,
-        opencodeSessions,
         sessionMeta: {
           ...project.sessionMeta,
           total: runningCount,
