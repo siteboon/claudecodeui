@@ -657,6 +657,8 @@ export function useChatComposerState({
                   ? 'gemini-settings'
                   : provider === 'opencode'
                     ? 'opencode-settings'
+                    : provider === 'kiro'
+                      ? 'kiro-settings'
                   : 'claude-settings';
           const savedSettings = safeLocalStorage.getItem(settingsKey);
           if (savedSettings) {

@@ -293,6 +293,8 @@ function ChatInterface({
             ? t('messageTypes.gemini')
             : provider === 'opencode'
               ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
+              : provider === 'kiro'
+                ? t('messageTypes.kiro', { defaultValue: 'Kiro' })
             : t('messageTypes.claude');
 
     return (
@@ -426,6 +428,8 @@ function ChatInterface({
                     ? t('messageTypes.gemini')
                     : provider === 'opencode'
                       ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
+                      : provider === 'kiro'
+                        ? t('messageTypes.kiro', { defaultValue: 'Kiro' })
                     : t('messageTypes.claude'),
           })}
           isTextareaExpanded={isTextareaExpanded}
