@@ -145,10 +145,11 @@ export function useShellTerminal({
         minimal &&
         isPlainShellRef.current &&
         activeAuthUrl &&
-        !event.ctrlKey &&
-        !event.metaKey &&
+        (event.ctrlKey || event.metaKey) &&
+        event.shiftKey &&
         !event.altKey &&
-        event.key?.toLowerCase() === 'c'
+        event.code === 'KeyC' &&
+        !nextTerminal.hasSelection()
       ) {
         event.preventDefault();
         event.stopPropagation();

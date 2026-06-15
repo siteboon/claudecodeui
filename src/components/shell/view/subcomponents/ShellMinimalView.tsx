@@ -48,6 +48,13 @@ export default function ShellMinimalView({
         style={{ outline: 'none' }}
       />
 
+      {hasAuthUrl && (
+        <div className="pointer-events-none absolute right-3 top-3 z-20 hidden max-w-sm rounded border border-gray-700/80 bg-gray-900/95 px-3 py-2 text-xs leading-5 text-gray-200 shadow-lg backdrop-blur-sm md:block">
+          Claude may show <span className="font-mono text-gray-100">c</span> to copy. In CloudCLI, use{' '}
+          <span className="font-mono text-gray-100">Ctrl/Cmd+Shift+C</span>.
+        </div>
+      )}
+
       {showMobileAuthPanel && (
         <div className="absolute inset-x-0 bottom-14 z-20 border-t border-gray-700/80 bg-gray-900/95 p-3 backdrop-blur-sm md:hidden">
           <div className="flex flex-col gap-2">
@@ -61,6 +68,10 @@ export default function ShellMinimalView({
                 Hide
               </button>
             </div>
+
+            <p className="text-[11px] leading-4 text-gray-400">
+              Claude may show <span className="font-mono text-gray-200">c</span> to copy. Use the Copy URL button below.
+            </p>
 
             <input
               type="text"
