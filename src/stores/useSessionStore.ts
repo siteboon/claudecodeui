@@ -9,8 +9,10 @@
 
 import { useCallback, useMemo, useRef, useState } from 'react';
 
-import { authenticatedFetch } from '../utils/api';
 import type { LLMProvider } from '../types/app';
+import { authenticatedFetch } from '../utils/api';
+
+import { isServerBackedRealtimeMessage, mergeRealtimeMessages } from './sessionMessageDedupe';
 
 // ─── NormalizedMessage (mirrors server/adapters/types.js) ────────────────────
 
@@ -118,9 +120,8 @@ function createEmptySlot(): SessionSlot {
 }
 
 /**
- * Compute merged messages: server + realtime, deduped by id and adjacent
- * assistant echo (same trimmed text), so finalized stream rows do not stack
- * on top of the persisted copy before realtime is cleared.
+ * Compute merged messages: server + realtime. Server rows remain the source of
+ * truth while stable realtime identities upsert in-flight duplicates.
  */
 function userTextFingerprint(m: NormalizedMessage): string | null {
   if (m.kind !== 'text' || m.role !== 'user') return null;
@@ -168,12 +169,11 @@ function dedupeAdjacentAssistantEchoes(merged: NormalizedMessage[]): NormalizedM
 function computeMerged(server: NormalizedMessage[], realtime: NormalizedMessage[]): NormalizedMessage[] {
   if (realtime.length === 0) return server;
   if (server.length === 0) return dedupeAdjacentAssistantEchoes(realtime);
-  const serverIds = new Set(server.map(m => m.id));
   const serverUserTexts = new Set(
     server.map(userTextFingerprint).filter((t): t is string => t !== null),
   );
   const extra = realtime.filter((m) => {
-    if (serverIds.has(m.id)) return false;
+    if (isServerBackedRealtimeMessage(server, m)) return false;
     // Optimistic user rows use `local_*` ids; once the same text exists on the
     // server-backed copy, drop the realtime echo to avoid duplicate bubbles.
     if (m.id.startsWith('local_')) {
@@ -431,11 +431,15 @@ export function useSessionStore() {
       msg.sessionId === resolvedSessionId
         ? msg
         : { ...msg, sessionId: resolvedSessionId };
-    let updated = [...slot.realtimeMessages, normalizedMessage];
-    if (updated.length > MAX_REALTIME_MESSAGES) {
-      updated = updated.slice(-MAX_REALTIME_MESSAGES);
-    }
-    slot.realtimeMessages = updated;
+    const result = mergeRealtimeMessages({
+      currentMessages: slot.realtimeMessages,
+      incomingMessages: [normalizedMessage],
+      serverMessages: slot.serverMessages,
+      maxMessages: MAX_REALTIME_MESSAGES,
+    });
+    if (!result.changed) return;
+
+    slot.realtimeMessages = result.messages;
     recomputeMergedIfNeeded(slot);
     notify(resolvedSessionId);
   }, [getSlot, notify, resolveSessionId]);
@@ -452,11 +456,15 @@ export function useSessionStore() {
         ? msg
         : { ...msg, sessionId: resolvedSessionId },
     );
-    let updated = [...slot.realtimeMessages, ...normalizedMessages];
-    if (updated.length > MAX_REALTIME_MESSAGES) {
-      updated = updated.slice(-MAX_REALTIME_MESSAGES);
-    }
-    slot.realtimeMessages = updated;
+    const result = mergeRealtimeMessages({
+      currentMessages: slot.realtimeMessages,
+      incomingMessages: normalizedMessages,
+      serverMessages: slot.serverMessages,
+      maxMessages: MAX_REALTIME_MESSAGES,
+    });
+    if (!result.changed) return;
+
+    slot.realtimeMessages = result.messages;
     recomputeMergedIfNeeded(slot);
     notify(resolvedSessionId);
   }, [getSlot, notify, resolveSessionId]);
