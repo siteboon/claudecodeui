@@ -91,8 +91,26 @@ export class ClaudeProviderAuth implements IProviderAuth {
       return null;
     }
 
-    // Non-zero exit or no stdout usually means the subcommand is unsupported on this CLI.
-    if (!result || result.status !== 0 || typeof result.stdout !== 'string' || !result.stdout.trim()) {
+    if (!result) {
+      return null;
+    }
+
+    // spawn.sync reports timeouts and spawn failures via result.error (e.g. ETIMEDOUT),
+    // not by throwing. That's an indeterminate state — the CLI could not answer — so we
+    // surface it explicitly rather than letting it fall through to the file check, which
+    // would wrongly report Keychain-only users as "not authenticated".
+    if (result.error) {
+      return {
+        authenticated: false,
+        email: null,
+        method: null,
+        error: 'Unable to check Claude CLI authentication status. Try running claude auth status --json in a terminal.',
+      };
+    }
+
+    // A non-zero exit with no stdout means the CLI ran but the subcommand is unsupported
+    // (older versions). Fall back to the file/env checks in that case.
+    if (result.status !== 0 || typeof result.stdout !== 'string' || !result.stdout.trim()) {
       return null;
     }
 
