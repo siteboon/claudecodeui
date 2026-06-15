@@ -23,7 +23,8 @@
     "files": "ファイル",
     "git": "ソース管理",
     "tasks": "タスク",
-    "browser": "Browser"
+    "browser": "Browser",
+    "computer": "Computer"
   },
   "status": {
     "loading": "読み込み中...",

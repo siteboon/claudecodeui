@@ -32,6 +32,10 @@ function getTabTitle(activeTab: AppTab, shouldShowTasksTab: boolean, t: (key: st
     return 'Browser Use';
   }
 
+  if (activeTab === 'computer') {
+    return 'Computer Use';
+  }
+
   return 'Project';
 }
 

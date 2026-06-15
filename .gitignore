@@ -142,3 +142,8 @@ tasks/
 
 # Git worktrees
 .worktrees/
+
+# Local desktop packaging artifacts
+cloudcli-sidebar-app-source.tar.gz
+cloudcli-sidebar.html
+electron/*.tar.gz

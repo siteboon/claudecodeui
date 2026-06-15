@@ -63,6 +63,7 @@ import pluginsRoutes from './routes/plugins.js';
 import providerRoutes from './modules/providers/provider.routes.js';
 import browserUseRoutes from './modules/browser-use/browser-use.routes.js';
 import { browserUseService } from './modules/browser-use/browser-use.service.js';
+import computerUseRoutes from './modules/computer-use/computer-use.routes.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
 import { initializeDatabase, projectsDb, sessionsDb } from './modules/database/index.js';
 import { configureWebPush } from './services/vapid-keys.js';
@@ -197,6 +198,9 @@ app.use('/api/plugins', authenticateToken, pluginsRoutes);
 
 // Browser Use API Routes (protected)
 app.use('/api/browser-use', authenticateToken, browserUseRoutes);
+
+// Computer Use API Routes (protected)
+app.use('/api/computer-use', authenticateToken, computerUseRoutes);
 
 // Unified provider MCP routes (protected)
 app.use('/api/providers', authenticateToken, providerRoutes);
@@ -1661,6 +1665,40 @@ const SERVER_PORT = process.env.SERVER_PORT || 3001;
 const HOST = process.env.HOST || '0.0.0.0';
 const DISPLAY_HOST = getConnectableHost(HOST);
 const VITE_PORT = process.env.VITE_PORT || 5173;
+const LOCAL_SERVER_MARKER_PATH = path.join(os.homedir(), '.cloudcli', 'local-server.json');
+
+async function writeLocalServerMarker() {
+    const marker = {
+        pid: process.pid,
+        host: HOST,
+        port: Number.parseInt(String(SERVER_PORT), 10),
+        url: `http://${DISPLAY_HOST}:${SERVER_PORT}`,
+        installMode,
+        appRoot: APP_ROOT,
+        updatedAt: new Date().toISOString(),
+    };
+
+    await fsPromises.mkdir(path.dirname(LOCAL_SERVER_MARKER_PATH), { recursive: true });
+    await fsPromises.writeFile(LOCAL_SERVER_MARKER_PATH, JSON.stringify(marker, null, 2), 'utf8');
+}
+
+async function removeLocalServerMarker() {
+    try {
+        const raw = await fsPromises.readFile(LOCAL_SERVER_MARKER_PATH, 'utf8');
+        const marker = JSON.parse(raw);
+        if (marker.pid && marker.pid !== process.pid) return;
+    } catch (error) {
+        if (error.code === 'ENOENT') return;
+    }
+
+    try {
+        await fsPromises.unlink(LOCAL_SERVER_MARKER_PATH);
+    } catch (error) {
+        if (error.code !== 'ENOENT') {
+            console.warn('[WARN] Could not remove local server marker:', error.message);
+        }
+    }
+}
 
 // Initialize database and start server
 async function startServer() {
@@ -1687,6 +1725,9 @@ async function startServer() {
    
         server.listen(SERVER_PORT, HOST, async () => {
             const appInstallPath = APP_ROOT;
+            await writeLocalServerMarker().catch((error) => {
+                console.warn('[WARN] Could not write local server marker:', error.message);
+            });
 
             console.log('');
             console.log(c.dim('═'.repeat(63)));
@@ -1712,6 +1753,7 @@ async function startServer() {
         const shutdownRuntimeServices = async () => {
             await browserUseService.stopAllSessions();
             await stopAllPlugins();
+            await removeLocalServerMarker();
             process.exit(0);
         };
         process.on('SIGTERM', () => void shutdownRuntimeServices());

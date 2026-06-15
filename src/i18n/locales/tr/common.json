@@ -23,7 +23,8 @@
     "files": "Dosyalar",
     "git": "Kaynak Kontrolü",
     "tasks": "Görevler",
-    "browser": "Browser"
+    "browser": "Browser",
+    "computer": "Computer"
   },
   "status": {
     "loading": "Yükleniyor...",

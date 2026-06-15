@@ -36,6 +36,7 @@
     "desktop:dev": "ELECTRON_DEV_URL=http://127.0.0.1:5173 electron electron/main.js",
     "desktop:pack": "npm run build && electron-builder --dir",
     "desktop:dist:mac": "npm run build && electron-builder --mac dmg zip",
+    "desktop:icon:mac": "node electron/scripts/generate-macos-icon.js",
     "build": "npm run build:client && npm run build:server",
     "build:client": "vite build",
     "prebuild:server": "node -e \"require('node:fs').rmSync('dist-server', { recursive: true, force: true })\"",
@@ -54,6 +55,7 @@
   "build": {
     "appId": "ai.cloudcli.desktop",
     "productName": "CloudCLI",
+    "asar": false,
     "artifactName": "CloudCLI-${version}-${arch}.${ext}",
     "directories": {
       "output": "release"
@@ -80,6 +82,7 @@
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
+      "icon": "electron/assets/logo-macos.icns",
       "target": [
         "dmg",
         "zip"

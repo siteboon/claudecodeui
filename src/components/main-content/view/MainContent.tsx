@@ -6,6 +6,7 @@ import StandaloneShell from '../../standalone-shell/view/StandaloneShell';
 import GitPanel from '../../git-panel/view/GitPanel';
 import PluginTabContent from '../../plugins/view/PluginTabContent';
 import { BrowserUsePanel } from '../../browser-use';
+import { ComputerUsePanel } from '../../computer-use';
 import type { MainContentProps } from '../types/types';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { usePaletteOpsRegister } from '../../../contexts/PaletteOpsContext';
@@ -175,6 +176,12 @@ function MainContent({
           {activeTab === 'browser' && (
             <div className="h-full overflow-hidden">
               <BrowserUsePanel isVisible={activeTab === 'browser'} />
+            </div>
+          )}
+
+          {activeTab === 'computer' && (
+            <div className="h-full overflow-hidden">
+              <ComputerUsePanel isVisible={activeTab === 'computer'} />
             </div>
           )}
 
