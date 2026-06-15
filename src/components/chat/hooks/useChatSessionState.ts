@@ -679,10 +679,6 @@ export function useChatSessionState({
       return;
     }
     const sessionProvider = selectedSession.__provider || 'claude';
-    if (sessionProvider !== 'claude' && sessionProvider !== 'codex' && sessionProvider !== 'gemini' && sessionProvider !== 'opencode') {
-      setTokenBudget(null);
-      return;
-    }
 
     const fetchInitialTokenUsage = async () => {
       try {
