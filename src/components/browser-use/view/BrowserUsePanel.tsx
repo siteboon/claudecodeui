@@ -266,6 +266,15 @@ export default function BrowserUsePanel({ isVisible }: BrowserUsePanelProps) {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <a
+            href="https://cloudcli.ai/docs/user-guide/browser-use"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-input bg-background px-3 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+          >
+            Guide
+            <ExternalLink className="h-4 w-4" />
+          </a>
           <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={isBusy}>
             <RefreshCw className="h-4 w-4" />
             Refresh
@@ -305,7 +314,7 @@ export default function BrowserUsePanel({ isVisible }: BrowserUsePanelProps) {
                 ) : (
                   <Download className="h-4 w-4" />
                 )}
-                Install Binaries
+                {isInstalling || status?.installInProgress ? 'Installing…' : 'Install Binaries'}
               </Button>
             </div>
           )}

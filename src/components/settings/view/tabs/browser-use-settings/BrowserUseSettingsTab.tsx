@@ -173,7 +173,7 @@ export default function BrowserUseSettingsTab() {
                     ) : (
                       <Download className="h-4 w-4" />
                     )}
-                    Install Binaries
+                    {isInstalling || status?.installInProgress ? 'Installing…' : 'Install Binaries'}
                   </Button>
                 </div>
               )}
