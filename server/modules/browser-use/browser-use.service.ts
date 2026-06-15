@@ -3,17 +3,16 @@ import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import dns from 'node:dns/promises';
 import fs from 'node:fs';
-import fsPromises from 'node:fs/promises';
 import net from 'node:net';
-import os from 'node:os';
-import path from 'node:path';
+
+import { appConfigDb } from '@/modules/database/repositories/app-config.js';
 
 const require = createRequire(import.meta.url);
 const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
 const MAX_SESSIONS_PER_OWNER = Number.parseInt(process.env.CLOUDCLI_BROWSER_USE_MAX_SESSIONS_PER_OWNER || '3', 10);
 const SESSION_TTL_MS = Number.parseInt(process.env.CLOUDCLI_BROWSER_USE_SESSION_TTL_MS || String(30 * 60 * 1000), 10);
 const ALLOW_PRIVATE_NETWORKS = process.env.CLOUDCLI_BROWSER_USE_ALLOW_PRIVATE_NETWORKS === '1';
-const SETTINGS_PATH = path.join(os.homedir(), '.cloudcli', 'browser-use-settings.json');
+const BROWSER_USE_SETTINGS_KEY = 'browser_use_settings';
 
 type BrowserUseRuntime = 'cloud' | 'local';
 type BrowserUseSessionStatus = 'ready' | 'stopped' | 'unavailable';
@@ -69,28 +68,29 @@ function getRuntime(): BrowserUseRuntime {
   return IS_PLATFORM ? 'cloud' : 'local';
 }
 
-async function readSettings(): Promise<BrowserUseSettings> {
+function readSettings(): BrowserUseSettings {
   try {
-    const raw = await fsPromises.readFile(SETTINGS_PATH, 'utf8');
+    const raw = appConfigDb.get(BROWSER_USE_SETTINGS_KEY);
+    if (!raw) {
+      return DEFAULT_SETTINGS;
+    }
+
     const parsed = JSON.parse(raw) as Partial<BrowserUseSettings>;
     return {
       enabled: parsed.enabled !== false,
     };
   } catch (error: any) {
-    if (error?.code !== 'ENOENT') {
-      console.warn('[Browser Use] Failed to read settings:', error?.message || error);
-    }
+    console.warn('[Browser Use] Failed to read settings:', error?.message || error);
     return DEFAULT_SETTINGS;
   }
 }
 
-async function writeSettings(settings: BrowserUseSettings): Promise<BrowserUseSettings> {
+function writeSettings(settings: BrowserUseSettings): BrowserUseSettings {
   const normalized = {
     enabled: settings.enabled !== false,
   };
 
-  await fsPromises.mkdir(path.dirname(SETTINGS_PATH), { recursive: true });
-  await fsPromises.writeFile(SETTINGS_PATH, JSON.stringify(normalized, null, 2), 'utf8');
+  appConfigDb.set(BROWSER_USE_SETTINGS_KEY, JSON.stringify(normalized));
   return normalized;
 }
 
@@ -356,7 +356,7 @@ export const browserUseService = {
   },
 
   async updateSettings(settings: Partial<BrowserUseSettings>) {
-    const current = await readSettings();
+    const current = readSettings();
     return writeSettings({
       ...current,
       enabled: settings.enabled ?? current.enabled,
@@ -364,7 +364,7 @@ export const browserUseService = {
   },
 
   async getStatus() {
-    const settings = await readSettings();
+    const settings = readSettings();
     const readiness = getRuntimeReadiness();
     const available = settings.enabled && readiness.playwrightInstalled && readiness.chromiumInstalled;
 
@@ -421,7 +421,7 @@ export const browserUseService = {
       throw new Error(`Browser Use is limited to ${MAX_SESSIONS_PER_OWNER} active sessions per user.`);
     }
 
-    const settings = await readSettings();
+    const settings = readSettings();
     const readiness = getRuntimeReadiness();
     if (!settings.enabled || !readiness.playwrightInstalled || !readiness.chromiumInstalled || !readiness.playwright) {
       session.message = getSetupMessage(settings, readiness);
