@@ -28,10 +28,14 @@ import {
 } from './services/notification-orchestrator.js';
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
-import { createNormalizedMessage } from './shared/utils.js';
+import { createCompleteMessage, createNormalizedMessage } from './shared/utils.js';
 
 const activeSessions = new Map();
 const pendingToolApprovals = new Map();
+// Sessions cancelled via abort-session. The abort handler already sent the
+// terminal `complete` (aborted: true) to the client, so the run loop must not
+// emit a second one when its generator winds down.
+const abortedSessionIds = new Set();
 
 const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEOUT_MS, 10) || 55000;
 
@@ -731,14 +735,18 @@ async function queryClaudeSDK(command, options = {}, ws) {
     // Clean up temporary image files
     await cleanupTempFiles(tempImagePaths, tempDir);
 
-    // Send completion event
-    ws.send(createNormalizedMessage({ kind: 'complete', exitCode: 0, isNewSession: !sessionId && !!command, sessionId: capturedSessionId, provider: 'claude' }));
+    // Send the terminal completion event — skipped for aborted runs, whose
+    // terminal `complete` (aborted: true) was already sent by abort-session.
+    const wasAborted = capturedSessionId ? abortedSessionIds.delete(capturedSessionId) : false;
+    if (!wasAborted) {
+      ws.send(createCompleteMessage({ provider: 'claude', sessionId: capturedSessionId || sessionId || null, exitCode: 0 }));
+    }
     notifyRunStopped({
       userId: ws?.userId || null,
       provider: 'claude',
       sessionId: capturedSessionId || sessionId || null,
       sessionName: sessionSummary,
-      stopReason: 'completed'
+      stopReason: wasAborted ? 'aborted' : 'completed'
     });
     // Complete
 
@@ -753,14 +761,22 @@ async function queryClaudeSDK(command, options = {}, ws) {
     // Clean up temporary image files on error
     await cleanupTempFiles(tempImagePaths, tempDir);
 
+    const wasAborted = capturedSessionId ? abortedSessionIds.delete(capturedSessionId) : false;
+    if (wasAborted) {
+      // The abort already produced the terminal complete; a generator throw
+      // caused by interrupt() is expected noise, not a user-facing error.
+      return;
+    }
+
     // Check if Claude CLI is installed for a clearer error message
     const installed = await providerAuthService.isProviderInstalled('claude');
     const errorContent = !installed
       ? 'Claude Code is not installed. Please install it first: https://docs.anthropic.com/en/docs/claude-code'
       : error.message;
 
-    // Send error to WebSocket
+    // Send error to WebSocket, then the terminal complete
     ws.send(createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+    ws.send(createCompleteMessage({ provider: 'claude', sessionId: capturedSessionId || sessionId || null, exitCode: 1 }));
     notifyRunFailed({
       userId: ws?.userId || null,
       provider: 'claude',
@@ -787,6 +803,10 @@ async function abortClaudeSDKSession(sessionId) {
   try {
     console.log(`Aborting SDK session: ${sessionId}`);
 
+    // Mark before interrupting so the run loop knows not to emit its own
+    // terminal complete (the abort handler sends the aborted one).
+    abortedSessionIds.add(sessionId);
+
     // Call interrupt() on the query instance
     await session.instance.interrupt();
 
@@ -802,6 +822,8 @@ async function abortClaudeSDKSession(sessionId) {
     return true;
   } catch (error) {
     console.error(`Error aborting session ${sessionId}:`, error);
+    // The run keeps going; let it emit its own terminal complete.
+    abortedSessionIds.delete(sessionId);
     return false;
   }
 }

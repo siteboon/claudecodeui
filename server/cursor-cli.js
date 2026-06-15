@@ -4,7 +4,7 @@ import { notifyRunFailed, notifyRunStopped } from './services/notification-orche
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
 import { providerModelsService } from './modules/providers/services/provider-models.service.js';
-import { createNormalizedMessage } from './shared/utils.js';
+import { createCompleteMessage, createNormalizedMessage } from './shared/utils.js';
 
 // Use cross-spawn on Windows for better command execution
 const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
@@ -34,6 +34,10 @@ async function spawnCursor(command, options = {}, ws) {
     let sessionCreatedSent = false; // Track if we've already sent session-created event
     let hasRetriedWithTrust = false;
     let settled = false;
+    // The unified lifecycle contract requires exactly one terminal `complete`
+    // per run. Cursor surfaces completion twice (the `result` JSON line and
+    // the process close), so the first emission wins.
+    let completeSent = false;
 
     // Use tools settings passed from frontend, or defaults
     const settings = toolsSettings || {
@@ -197,15 +201,15 @@ async function spawnCursor(command, options = {}, ws) {
               break;
 
             case 'result': {
-              // Session complete — send stream end + lifecycle complete with result payload
-              const resultText = typeof response.result === 'string' ? response.result : '';
-              ws.send(createNormalizedMessage({
-                kind: 'complete',
-                exitCode: response.subtype === 'success' ? 0 : 1,
-                resultText,
-                isError: response.subtype !== 'success',
-                sessionId: capturedSessionId || sessionId, provider: 'cursor',
-              }));
+              // Session complete — terminal lifecycle event for this run
+              if (!completeSent) {
+                completeSent = true;
+                ws.send(createCompleteMessage({
+                  provider: 'cursor',
+                  sessionId: capturedSessionId || sessionId || null,
+                  exitCode: response.subtype === 'success' ? 0 : 1,
+                }));
+              }
               break;
             }
 
@@ -271,7 +275,12 @@ async function spawnCursor(command, options = {}, ws) {
           return;
         }
 
-        ws.send(createNormalizedMessage({ kind: 'complete', exitCode: code, isNewSession: !sessionId && !!command, sessionId: finalSessionId, provider: 'cursor' }));
+        // Terminal complete — unless the `result` line already sent it, or the
+        // run was aborted (abort-session sent the aborted complete).
+        if (!completeSent && !cursorProcess.aborted) {
+          completeSent = true;
+          ws.send(createCompleteMessage({ provider: 'cursor', sessionId: finalSessionId, exitCode: code }));
+        }
 
         if (code === 0) {
           notifyTerminalState({ code });
@@ -297,6 +306,10 @@ async function spawnCursor(command, options = {}, ws) {
           : error.message;
 
         ws.send(createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider: 'cursor' }));
+        if (!completeSent && !cursorProcess.aborted) {
+          completeSent = true;
+          ws.send(createCompleteMessage({ provider: 'cursor', sessionId: capturedSessionId || sessionId || null, exitCode: 1 }));
+        }
         notifyTerminalState({ error });
 
         settleOnce(() => reject(error));
@@ -314,6 +327,9 @@ function abortCursorSession(sessionId) {
   const process = activeCursorProcesses.get(sessionId);
   if (process) {
     console.log(`Aborting Cursor session: ${sessionId}`);
+    // The abort handler sends the terminal complete (aborted: true); flag the
+    // process so its close handler does not emit a second one.
+    process.aborted = true;
     process.kill('SIGTERM');
     activeCursorProcesses.delete(sessionId);
     return true;

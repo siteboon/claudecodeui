@@ -38,17 +38,15 @@ function MainContent({
   setActiveTab,
   ws,
   sendMessage,
-  latestMessage,
   isMobile,
   onMenuClick,
   isLoading,
   onInputFocusChange,
-  onSessionActive,
-  onSessionInactive,
   onSessionProcessing,
-  onSessionNotProcessing,
+  onSessionIdle,
   processingSessions,
   onNavigateToSession,
+  onSessionEstablished,
   onShowSettings,
   externalMessageUpdate,
   newSessionTrigger,
@@ -129,15 +127,13 @@ function MainContent({
                 selectedSession={selectedSession}
                 ws={ws}
                 sendMessage={sendMessage}
-                latestMessage={latestMessage}
                 onFileOpen={handleFileOpen}
                 onInputFocusChange={onInputFocusChange}
-                onSessionActive={onSessionActive}
-                onSessionInactive={onSessionInactive}
                 onSessionProcessing={onSessionProcessing}
-                onSessionNotProcessing={onSessionNotProcessing}
+                onSessionIdle={onSessionIdle}
                 processingSessions={processingSessions}
                 onNavigateToSession={onNavigateToSession}
+                onSessionEstablished={onSessionEstablished}
                 onShowSettings={onShowSettings}
                 autoExpandTools={autoExpandTools}
                 showRawParameters={showRawParameters}

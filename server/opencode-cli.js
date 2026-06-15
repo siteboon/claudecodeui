@@ -8,7 +8,7 @@ import { sessionsService } from './modules/providers/services/sessions.service.j
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
 import { providerModelsService } from './modules/providers/services/provider-models.service.js';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
-import { createNormalizedMessage, getOpenCodeDatabasePath } from './shared/utils.js';
+import { createCompleteMessage, createNormalizedMessage, getOpenCodeDatabasePath } from './shared/utils.js';
 
 const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
 
@@ -92,6 +92,9 @@ async function spawnOpenCode(command, options = {}, ws) {
     let stdoutLineBuffer = '';
     let terminalNotificationSent = false;
     let opencodeProcess = null;
+    // Unified lifecycle contract: exactly one terminal `complete` per run
+    // (close and error handlers can both fire for spawn failures).
+    let completeSent = false;
 
     const notifyTerminalState = ({ code = null, error = null } = {}) => {
       if (terminalNotificationSent) {
@@ -191,6 +194,10 @@ async function spawnOpenCode(command, options = {}, ws) {
 
     void providerModelsService.resolveResumeModel('opencode', sessionId, model).then((resolvedModel) => {
       const args = ['run', '--format', 'json'];
+      // OpenCode's `run` command owns workspace selection through `--dir`.
+      // Relying on the child-process cwd alone is not enough on Linux, where
+      // the CLI can still resolve the session under the server install dir.
+      args.push('--dir', workingDir);
       if (sessionId) {
         args.push('--session', sessionId);
       }
@@ -256,13 +263,12 @@ async function spawnOpenCode(command, options = {}, ws) {
           }));
         }
 
-        ws.send(createNormalizedMessage({
-          kind: 'complete',
-          exitCode: code,
-          isNewSession: !sessionId && !!command,
-          sessionId: finalSessionId,
-          provider: 'opencode',
-        }));
+        // Terminal complete — skipped for aborted runs (abort-session
+        // already sent the aborted complete on this run's behalf).
+        if (!completeSent && !opencodeProcess.aborted) {
+          completeSent = true;
+          ws.send(createCompleteMessage({ provider: 'opencode', sessionId: finalSessionId, exitCode: code }));
+        }
 
         if (code === 0) {
           notifyTerminalState({ code });
@@ -302,6 +308,10 @@ async function spawnOpenCode(command, options = {}, ws) {
           sessionId: finalSessionId,
           provider: 'opencode',
         }));
+        if (!completeSent && !opencodeProcess.aborted) {
+          completeSent = true;
+          ws.send(createCompleteMessage({ provider: 'opencode', sessionId: finalSessionId, exitCode: 1 }));
+        }
         notifyTerminalState({ error });
         reject(error);
       });
@@ -315,6 +325,9 @@ function abortOpenCodeSession(sessionId) {
     return false;
   }
 
+  // The abort handler sends the terminal complete (aborted: true); flag the
+  // process so its close handler does not emit a second one.
+  process.aborted = true;
   process.kill('SIGTERM');
   activeOpenCodeProcesses.delete(sessionId);
   return true;

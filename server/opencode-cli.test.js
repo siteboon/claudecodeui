@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -12,6 +12,11 @@ const findEnvKey = (name) =>
 async function createFakeOpenCodeExecutable(binDir) {
   const scriptPath = path.join(binDir, 'opencode.js');
   await writeFile(scriptPath, `
+const capturePath = process.env.OPENCODE_ARGS_CAPTURE;
+if (capturePath) {
+  require('node:fs').writeFileSync(capturePath, JSON.stringify(process.argv.slice(2)));
+}
+
 const events = [
   { type: 'text', sessionID: 'open-live-1', text: 'assistant response' },
   { type: 'step_finish', sessionID: 'open-live-1' },
@@ -35,10 +40,12 @@ for (const event of events) {
 
 test('spawnOpenCode emits session_created before normalized live messages for new sessions', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'opencode-cli-live-'));
+  const argsCapturePath = path.join(tempRoot, 'opencode-args.json');
   const pathKey = findEnvKey('PATH');
   const pathExtKey = findEnvKey('PATHEXT');
   const previousPath = process.env[pathKey];
   const previousPathExt = process.env[pathExtKey];
+  const previousArgsCapture = process.env.OPENCODE_ARGS_CAPTURE;
   const messages = [];
   const writer = {
     userId: null,
@@ -54,6 +61,7 @@ test('spawnOpenCode emits session_created before normalized live messages for ne
   try {
     await createFakeOpenCodeExecutable(tempRoot);
     process.env[pathKey] = `${tempRoot}${path.delimiter}${previousPath || ''}`;
+    process.env.OPENCODE_ARGS_CAPTURE = argsCapturePath;
     if (process.platform === 'win32') {
       process.env[pathExtKey] = previousPathExt?.toUpperCase().includes('.CMD')
         ? previousPathExt
@@ -77,6 +85,11 @@ test('spawnOpenCode emits session_created before normalized live messages for ne
     assert.equal(streamEnd?.sessionId, 'open-live-1');
     assert.equal(complete?.sessionId, 'open-live-1');
     assert.equal(messages.some((message) => message.kind === 'error'), false);
+
+    const launchedArgs = JSON.parse(await readFile(argsCapturePath, 'utf8'));
+    assert.ok(Array.isArray(launchedArgs));
+    assert.deepEqual(launchedArgs.slice(0, 4), ['run', '--format', 'json', '--dir']);
+    assert.equal(launchedArgs[4], tempRoot);
   } finally {
     if (previousPath === undefined) {
       delete process.env[pathKey];
@@ -88,6 +101,12 @@ test('spawnOpenCode emits session_created before normalized live messages for ne
       delete process.env[pathExtKey];
     } else {
       process.env[pathExtKey] = previousPathExt;
+    }
+
+    if (previousArgsCapture === undefined) {
+      delete process.env.OPENCODE_ARGS_CAPTURE;
+    } else {
+      process.env.OPENCODE_ARGS_CAPTURE = previousArgsCapture;
     }
 
     await rm(tempRoot, { recursive: true, force: true });

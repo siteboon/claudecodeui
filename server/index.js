@@ -22,35 +22,24 @@ import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
 import {
     queryClaudeSDK,
     abortClaudeSDKSession,
-    isClaudeSDKSessionActive,
-    getActiveClaudeSDKSessions,
     resolveToolApproval,
     getPendingApprovalsForSession,
-    reconnectSessionWriter,
 } from './claude-sdk.js';
 import {
     spawnCursor,
     abortCursorSession,
-    isCursorSessionActive,
-    getActiveCursorSessions,
 } from './cursor-cli.js';
 import {
     queryCodex,
     abortCodexSession,
-    isCodexSessionActive,
-    getActiveCodexSessions,
 } from './openai-codex.js';
 import {
     spawnGemini,
     abortGeminiSession,
-    isGeminiSessionActive,
-    getActiveGeminiSessions,
 } from './gemini-cli.js';
 import {
     spawnOpenCode,
     abortOpenCodeSession,
-    isOpenCodeSessionActive,
-    getActiveOpenCodeSessions,
 } from './opencode-cli.js';
 import sessionManager from './sessionManager.js';
 import {
@@ -107,32 +96,35 @@ const wss = createWebSocketServer(server, {
         authenticateWebSocket,
     },
     chat: {
-        queryClaudeSDK,
-        spawnCursor,
-        queryCodex,
-        spawnGemini,
-        spawnOpenCode,
-        abortClaudeSDKSession,
-        abortCursorSession,
-        abortCodexSession,
-        abortGeminiSession,
-        abortOpenCodeSession,
+        spawnFns: {
+            claude: queryClaudeSDK,
+            cursor: spawnCursor,
+            codex: queryCodex,
+            gemini: spawnGemini,
+            opencode: spawnOpenCode,
+        },
+        abortFns: {
+            claude: abortClaudeSDKSession,
+            cursor: abortCursorSession,
+            codex: abortCodexSession,
+            gemini: abortGeminiSession,
+            opencode: abortOpenCodeSession,
+        },
         resolveToolApproval,
-        isClaudeSDKSessionActive,
-        isCursorSessionActive,
-        isCodexSessionActive,
-        isGeminiSessionActive,
-        isOpenCodeSessionActive,
-        reconnectSessionWriter,
         getPendingApprovalsForSession,
-        getActiveClaudeSDKSessions,
-        getActiveCursorSessions,
-        getActiveCodexSessions,
-        getActiveGeminiSessions,
-        getActiveOpenCodeSessions,
     },
     shell: {
-        getSessionById: (sessionId) => sessionManager.getSession(sessionId),
+        resolveProviderSessionId: (sessionId, provider) => {
+            const dbSession = sessionsDb.getSessionById(sessionId);
+            const legacyGeminiSession =
+                provider === 'gemini' ? sessionManager.getSession(sessionId) : null;
+
+            if (dbSession) {
+                return dbSession.provider_session_id ?? legacyGeminiSession?.cliSessionId ?? null;
+            }
+
+            return legacyGeminiSession?.cliSessionId;
+        },
         stripAnsiSequences,
         normalizeDetectedUrl,
         extractUrlsFromText,
@@ -1148,7 +1140,6 @@ app.post('/api/projects/:projectId/upload-images', authenticateToken, async (req
 app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticateToken, async (req, res) => {
     try {
         const { projectId, sessionId } = req.params;
-        const { provider = 'claude' } = req.query;
         const homeDir = os.homedir();
 
         // Allow only safe characters in sessionId
@@ -1156,6 +1147,18 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
         if (!safeSessionId || safeSessionId !== String(sessionId)) {
             return res.status(400).json({ error: 'Invalid sessionId' });
         }
+
+        // Provider artifacts on disk (JSONL file names, OpenCode sqlite rows)
+        // are keyed by the provider-native session id, while the caller sends
+        // the app-facing id. Resolve provider and id mapping from the indexed
+        // session row so the frontend does not choose provider-specific paths.
+        const sessionRow = sessionsDb.getSessionById(safeSessionId);
+        if (!sessionRow) {
+            return res.status(404).json({ error: 'Session not found', sessionId: safeSessionId });
+        }
+
+        const provider = sessionRow.provider || 'claude';
+        const providerNativeSessionId = sessionRow?.provider_session_id || safeSessionId;
 
         // Handle Cursor sessions - they use SQLite and don't have token usage info
         if (provider === 'cursor') {
@@ -1257,7 +1260,7 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
                         tokens_cache_write AS cacheWriteTokens
                     FROM session
                     WHERE id = ?
-                `).get(safeSessionId);
+                `).get(providerNativeSessionId);
 
                 if (!row) {
                     return res.status(404).json({ error: 'OpenCode session not found', sessionId: safeSessionId });
@@ -1298,7 +1301,7 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
                         if (entry.isDirectory()) {
                             const found = await findSessionFile(fullPath);
                             if (found) return found;
-                        } else if (entry.name.includes(safeSessionId) && entry.name.endsWith('.jsonl')) {
+                        } else if (entry.name.includes(providerNativeSessionId) && entry.name.endsWith('.jsonl')) {
                             return fullPath;
                         }
                     }
@@ -1382,12 +1385,19 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
         const encodedPath = projectPath.replace(/[^a-zA-Z0-9-]/g, '-');
         const projectDir = path.join(homeDir, '.claude', 'projects', encodedPath);
 
-        const jsonlPath = path.join(projectDir, `${safeSessionId}.jsonl`);
+        // Prefer the indexed transcript path (already produced by the trusted
+        // session synchronizer); fall back to the conventional location
+        // derived from the provider-native session id.
+        let jsonlPath = sessionRow?.jsonl_path;
+        if (!jsonlPath) {
+            jsonlPath = path.join(projectDir, `${providerNativeSessionId}.jsonl`);
 
-        // Constrain to projectDir
-        const rel = path.relative(path.resolve(projectDir), path.resolve(jsonlPath));
-        if (rel.startsWith('..') || path.isAbsolute(rel)) {
-            return res.status(400).json({ error: 'Invalid path' });
+            // Constrain the constructed path to projectDir (the id is
+            // caller-influenced in this fallback branch).
+            const rel = path.relative(path.resolve(projectDir), path.resolve(jsonlPath));
+            if (rel.startsWith('..') || path.isAbsolute(rel)) {
+                return res.status(400).json({ error: 'Invalid path' });
+            }
         }
 
         // Read and parse the JSONL file

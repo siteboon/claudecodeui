@@ -70,3 +70,15 @@ test('createSession reactivates archived rows when the session becomes active ag
     assert.equal(restoredSession?.isArchived, 0);
   });
 });
+
+test('repository reads normalize SQLite UTC timestamps to ISO strings', async () => {
+  await withIsolatedDatabase(() => {
+    sessionsDb.createAppSession('session-timezone', 'claude', '/workspace/demo-project');
+
+    const row = sessionsDb.getSessionById('session-timezone');
+    assert.ok(row?.created_at.endsWith('Z'));
+    assert.ok(row?.updated_at.endsWith('Z'));
+    assert.match(row?.created_at ?? '', /^\d{4}-\d{2}-\d{2}T/);
+    assert.match(row?.updated_at ?? '', /^\d{4}-\d{2}-\d{2}T/);
+  });
+});
