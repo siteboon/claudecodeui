@@ -454,9 +454,6 @@ export function useSessionStore() {
   const fetchFromServer = useCallback(async (
     sessionId: string,
     opts: {
-      provider?: LLMProvider;
-      projectId?: string;
-      projectPath?: string;
       limit?: number | null;
       offset?: number;
     } = {},
@@ -511,9 +508,6 @@ export function useSessionStore() {
   const fetchMore = useCallback(async (
     sessionId: string,
     opts: {
-      provider?: LLMProvider;
-      projectId?: string;
-      projectPath?: string;
       limit?: number;
     } = {},
   ) => {
@@ -592,11 +586,6 @@ export function useSessionStore() {
    */
   const refreshFromServer = useCallback(async (
     sessionId: string,
-    _opts: {
-      provider?: LLMProvider;
-      projectId?: string;
-      projectPath?: string;
-    } = {},
   ) => {
     const slot = getSlot(sessionId);
     try {

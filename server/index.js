@@ -1135,7 +1135,6 @@ app.post('/api/projects/:projectId/upload-images', authenticateToken, async (req
 app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticateToken, async (req, res) => {
     try {
         const { projectId, sessionId } = req.params;
-        const { provider = 'claude' } = req.query;
         const homeDir = os.homedir();
 
         // Allow only safe characters in sessionId
@@ -1146,8 +1145,14 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
 
         // Provider artifacts on disk (JSONL file names, OpenCode sqlite rows)
         // are keyed by the provider-native session id, while the caller sends
-        // the app-facing id. Resolve the mapping once for all branches below.
+        // the app-facing id. Resolve provider and id mapping from the indexed
+        // session row so the frontend does not choose provider-specific paths.
         const sessionRow = sessionsDb.getSessionById(safeSessionId);
+        if (!sessionRow) {
+            return res.status(404).json({ error: 'Session not found', sessionId: safeSessionId });
+        }
+
+        const provider = sessionRow.provider || 'claude';
         const providerNativeSessionId = sessionRow?.provider_session_id || safeSessionId;
 
         // Handle Cursor sessions - they use SQLite and don't have token usage info

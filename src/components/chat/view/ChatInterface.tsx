@@ -6,7 +6,6 @@ import { useWebSocket } from '../../../contexts/WebSocketContext';
 import PermissionContext from '../../../contexts/PermissionContext';
 import { QuickSettingsPanel } from '../../quick-settings-panel';
 import type { ChatInterfaceProps, Provider  } from '../types/types';
-import type { LLMProvider } from '../../../types/app';
 import { useChatProviderState } from '../hooks/useChatProviderState';
 import { useChatSessionState } from '../hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '../hooks/useChatRealtimeHandlers';
@@ -223,16 +222,7 @@ function ChatInterface({
   // missed live events, and re-attaches a still-running stream to this socket.
   const handleWebSocketReconnect = useCallback(async () => {
     if (!selectedProject || !selectedSession) return;
-    const providerVal =
-      selectedSession.__provider
-      || (localStorage.getItem('selected-provider') as LLMProvider)
-      || 'claude';
-    await sessionStore.refreshFromServer(selectedSession.id, {
-      provider: providerVal as LLMProvider,
-      // Use DB projectId; legacy folder-derived projectName is no longer accepted here.
-      projectId: selectedProject.projectId,
-      projectPath: selectedProject.fullPath || selectedProject.path || '',
-    });
+    await sessionStore.refreshFromServer(selectedSession.id);
     statusCheckSentAtRef.current.set(selectedSession.id, Date.now());
     sendMessage({
       type: 'chat.subscribe',
