@@ -14,10 +14,12 @@
  */
 
 import { Codex } from '@openai/codex-sdk';
+
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
 import { providerModelsService } from './modules/providers/services/provider-models.service.js';
+import { createCodexRuntimeEnv, resolveCodexExecutablePath } from './shared/codex-cli-runtime.js';
 import { createCompleteMessage, createNormalizedMessage } from './shared/utils.js';
 
 // Track active sessions
@@ -248,8 +250,11 @@ export async function queryCodex(command, options = {}, ws) {
   const abortController = new AbortController();
 
   try {
-    // Initialize Codex SDK
-    codex = new Codex();
+    // Initialize Codex SDK against the same user/global Codex runtime used by shell terminals.
+    codex = new Codex({
+      codexPathOverride: resolveCodexExecutablePath(),
+      env: createCodexRuntimeEnv(),
+    });
 
     // Thread options with sandbox and approval settings
     const threadOptions = {

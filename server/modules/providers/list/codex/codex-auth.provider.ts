@@ -6,6 +6,7 @@ import spawn from 'cross-spawn';
 
 import type { IProviderAuth } from '@/shared/interfaces.js';
 import type { ProviderAuthStatus } from '@/shared/types.js';
+import { createCodexRuntimeEnv, resolveCodexExecutablePath } from '@/shared/codex-cli-runtime.js';
 import { readObjectRecord, readOptionalString } from '@/shared/utils.js';
 
 type CodexCredentialsStatus = {
@@ -21,8 +22,12 @@ export class CodexProviderAuth implements IProviderAuth {
    */
   private checkInstalled(): boolean {
     try {
-      spawn.sync('codex', ['--version'], { stdio: 'ignore', timeout: 5000 });
-      return true;
+      const result = spawn.sync(resolveCodexExecutablePath(), ['--version'], {
+        env: createCodexRuntimeEnv(),
+        stdio: 'ignore',
+        timeout: 5000,
+      });
+      return !result.error && result.status === 0;
     } catch {
       return false;
     }

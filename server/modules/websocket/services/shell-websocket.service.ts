@@ -5,6 +5,7 @@ import path from 'node:path';
 import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
+import { createCodexRuntimeEnv, getCodexShellCommand } from '@/shared/codex-cli-runtime.js';
 import { parseIncomingJsonObject } from '@/shared/utils.js';
 
 type ShellIncomingMessage = {
@@ -137,13 +138,14 @@ function buildShellCommand(
   }
 
   if (provider === 'codex') {
+    const codexCommand = getCodexShellCommand();
     if (resumeSessionId) {
       if (os.platform() === 'win32') {
-        return `codex resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { codex }`;
+        return `${codexCommand} resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { ${codexCommand} }`;
       }
-      return `codex resume "${resumeSessionId}" || codex`;
+      return `${codexCommand} resume "${resumeSessionId}" || ${codexCommand}`;
     }
-    return 'codex';
+    return codexCommand;
   }
 
   if (provider === 'gemini') {
@@ -284,6 +286,14 @@ export function handleShellConnection(
           os.platform() === 'win32' ? ['-Command', shellCommand] : ['-c', shellCommand];
         const termCols = readNumber(data.cols, 80);
         const termRows = readNumber(data.rows, 24);
+        const ptyEnv =
+          provider === 'codex'
+            ? createCodexRuntimeEnv()
+            : Object.fromEntries(
+                Object.entries(process.env).filter(
+                  (entry): entry is [string, string] => entry[1] !== undefined
+                )
+              );
 
         shellProcess = pty.spawn(shell, shellArgs, {
           name: 'xterm-256color',
@@ -291,7 +301,7 @@ export function handleShellConnection(
           rows: termRows,
           cwd: resolvedProjectPath,
           env: {
-            ...process.env,
+            ...ptyEnv,
             TERM: 'xterm-256color',
             COLORTERM: 'truecolor',
             FORCE_COLOR: '3',
