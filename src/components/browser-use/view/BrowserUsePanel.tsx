@@ -7,7 +7,6 @@ import { authenticatedFetch } from '../../../utils/api';
 type BrowserUseStatus = {
   enabled: boolean;
   available: boolean;
-  runtime: 'cloud' | 'local';
   playwrightInstalled: boolean;
   chromiumInstalled: boolean;
   installInProgress: boolean;
@@ -19,7 +18,6 @@ type BrowserUseStatus = {
 
 type BrowserUseSession = {
   id: string;
-  runtime: 'cloud' | 'local';
   status: 'ready' | 'stopped' | 'unavailable';
   url: string | null;
   title: string | null;
@@ -147,11 +145,6 @@ export default function BrowserUsePanel({ isVisible }: BrowserUsePanelProps) {
           <div className="flex items-center gap-2">
             <MonitorPlay className="h-4 w-4 text-primary" />
             <h3 className="text-sm font-semibold text-foreground">Browser Use</h3>
-            {status && (
-              <Badge variant="outline" className="text-[11px]">
-                {status.runtime}
-              </Badge>
-            )}
           </div>
           <p className="mt-0.5 text-xs text-muted-foreground">
             Create browser sessions, watch agent activity, and decide which sessions agents may control.

@@ -16,7 +16,6 @@ type BrowserUseSettings = {
 type BrowserUseStatus = {
   enabled: boolean;
   available: boolean;
-  runtime: 'cloud' | 'local';
   playwrightInstalled: boolean;
   chromiumInstalled: boolean;
   installInProgress: boolean;
@@ -137,7 +136,6 @@ export default function BrowserUseSettingsTab() {
                 </p>
                 {status && (
                   <div className="flex flex-wrap gap-2 pt-1 text-xs text-muted-foreground">
-                    <span className="rounded-md border border-border px-2 py-1">Mode: {status.runtime}</span>
                     <span className="rounded-md border border-border px-2 py-1">
                       Playwright: {status.playwrightInstalled ? 'installed' : 'missing'}
                     </span>
