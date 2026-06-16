@@ -121,16 +121,12 @@ function AppContentInner() {
   }, [refreshRunningSessions]);
 
   useEffect(() => {
-    if (processingSessions.size === 0) {
-      return;
-    }
-
     const interval = window.setInterval(() => {
       void refreshRunningSessions();
     }, 5000);
 
     return () => window.clearInterval(interval);
-  }, [processingSessions.size, refreshRunningSessions]);
+  }, [refreshRunningSessions]);
 
   usePaletteOpsRegister({
     openSettings,

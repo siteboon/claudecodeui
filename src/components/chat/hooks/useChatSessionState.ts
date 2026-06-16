@@ -452,14 +452,31 @@ export function useChatSessionState({
       return;
     }
 
-    const sessionKey = `${selectedSession.id}:${selectedProject.projectId}`;
+    const selectedSessionId = selectedSession.id;
+    const sessionKey = `${selectedSessionId}:${selectedProject.projectId}`;
+
+    const subscribeToSelectedSession = () => {
+      if (!ws) {
+        return;
+      }
+
+      statusCheckSentAtRef.current.set(selectedSessionId, Date.now());
+      sendMessage({
+        type: 'chat.subscribe',
+        sessions: [{
+          sessionId: selectedSessionId,
+          lastSeq: lastSeqRef.current.get(selectedSessionId) ?? 0,
+        }],
+      });
+    };
 
     // Skip if already loaded and fresh
-    if (lastLoadedSessionKeyRef.current === sessionKey && sessionStore.has(selectedSession.id) && !sessionStore.isStale(selectedSession.id)) {
+    if (lastLoadedSessionKeyRef.current === sessionKey && sessionStore.has(selectedSessionId) && !sessionStore.isStale(selectedSessionId)) {
+      subscribeToSelectedSession();
       return;
     }
 
-    const sessionChanged = currentSessionId !== null && currentSessionId !== selectedSession.id;
+    const sessionChanged = currentSessionId !== null && currentSessionId !== selectedSessionId;
     if (sessionChanged) {
       resetStreamingState();
     }
@@ -482,29 +499,20 @@ export function useChatSessionState({
       setTokenBudget(null);
     }
 
-    setCurrentSessionId(selectedSession.id);
+    setCurrentSessionId(selectedSessionId);
 
     // Subscribe to the session's live run (if any): the ack reconciles the
     // processing indicator, re-attaches a mid-flight stream to this socket,
     // and replays any live events missed since `lastSeq`. Recording the send
     // time lets the ack handler discard idle acks that a newer request has
     // since outdated.
-    if (ws) {
-      statusCheckSentAtRef.current.set(selectedSession.id, Date.now());
-      sendMessage({
-        type: 'chat.subscribe',
-        sessions: [{
-          sessionId: selectedSession.id,
-          lastSeq: lastSeqRef.current.get(selectedSession.id) ?? 0,
-        }],
-      });
-    }
+    subscribeToSelectedSession();
 
     lastLoadedSessionKeyRef.current = sessionKey;
 
     // Fetch from server → store updates → chatMessages re-derives automatically
     setIsLoadingSessionMessages(true);
-    sessionStore.fetchFromServer(selectedSession.id, {
+    sessionStore.fetchFromServer(selectedSessionId, {
       limit: MESSAGES_PER_PAGE,
       offset: 0,
     }).then(slot => {
