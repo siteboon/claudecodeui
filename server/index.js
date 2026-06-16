@@ -62,6 +62,7 @@ import geminiRoutes from './routes/gemini.js';
 import pluginsRoutes from './routes/plugins.js';
 import providerRoutes from './modules/providers/provider.routes.js';
 import browserUseRoutes from './modules/browser-use/browser-use.routes.js';
+import browserUseMcpRoutes from './modules/browser-use/browser-use-mcp.routes.js';
 import { browserUseService } from './modules/browser-use/browser-use.service.js';
 import computerUseRoutes from './modules/computer-use/computer-use.routes.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
@@ -195,6 +196,9 @@ app.use('/api/gemini', authenticateToken, geminiRoutes);
 
 // Plugins API Routes (protected)
 app.use('/api/plugins', authenticateToken, pluginsRoutes);
+
+// Browser Use MCP bridge API (local token protected)
+app.use('/api/browser-use-mcp', browserUseMcpRoutes);
 
 // Browser Use API Routes (protected)
 app.use('/api/browser-use', authenticateToken, browserUseRoutes);

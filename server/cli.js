@@ -8,6 +8,7 @@
  *   (no args)     - Start the server (default)
  *   start         - Start the server
  *   sandbox       - Manage Docker sandbox environments
+ *   browser-use-mcp - Run Browser Use MCP stdio server
  *   status        - Show configuration and data locations
  *   help          - Show help information
  *   version       - Show version information
@@ -605,6 +606,10 @@ async function startServer() {
     await import('./index.js');
 }
 
+async function startBrowserUseMcp() {
+    await import('./browser-use-mcp.js');
+}
+
 // Parse CLI arguments
 function parseArgs(args) {
     const parsed = { command: 'start', options: {} };
@@ -657,6 +662,9 @@ async function main() {
             break;
         case 'sandbox':
             await sandboxCommand(remainingArgs || []);
+            break;
+        case 'browser-use-mcp':
+            await startBrowserUseMcp();
             break;
         case 'status':
         case 'info':
