@@ -202,7 +202,9 @@ export function useChatRealtimeHandlers({
           // indicator derives from the processing map, so deleting the entry
           // hides it immediately and atomically.
           onSessionIdle?.(sid);
-          setPendingPermissionRequests([]);
+          if (sid === activeViewSessionId) {
+            setPendingPermissionRequests([]);
+          }
 
           if (msg.aborted) {
             // Abort was requested — the complete event confirms it. No
@@ -232,17 +234,19 @@ export function useChatRealtimeHandlers({
 
         case 'permission_request': {
           if (!msg.requestId) break;
-          setPendingPermissionRequests((prev) => {
-            if (prev.some((r: PendingPermissionRequest) => r.requestId === msg.requestId)) return prev;
-            return [...prev, {
-              requestId: msg.requestId as string,
-              toolName: (msg.toolName as string) || 'UnknownTool',
-              input: msg.input,
-              context: msg.context,
-              sessionId: sid || null,
-              receivedAt: new Date(),
-            }];
-          });
+          if (sid === activeViewSessionId) {
+            setPendingPermissionRequests((prev) => {
+              if (prev.some((r: PendingPermissionRequest) => r.requestId === msg.requestId)) return prev;
+              return [...prev, {
+                requestId: msg.requestId as string,
+                toolName: (msg.toolName as string) || 'UnknownTool',
+                input: msg.input,
+                context: msg.context,
+                sessionId: sid || null,
+                receivedAt: new Date(),
+              }];
+            });
+          }
           if (sid) {
             onSessionProcessing?.(sid);
           }
@@ -250,7 +254,7 @@ export function useChatRealtimeHandlers({
         }
 
         case 'permission_cancelled': {
-          if (msg.requestId) {
+          if (msg.requestId && sid === activeViewSessionId) {
             setPendingPermissionRequests((prev) => prev.filter((r: PendingPermissionRequest) => r.requestId !== msg.requestId));
           }
           break;
