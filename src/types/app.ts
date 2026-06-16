@@ -29,6 +29,7 @@ export interface ProjectSession {
   updated_at?: string;
   lastActivity?: string;
   messageCount?: number;
+  provider?: LLMProvider;
   __provider?: LLMProvider;
   // Tags the session with the owning project's DB `projectId` so UI handlers
   // (session switching, sidebar focus, etc.) can match against selectedProject.
@@ -60,42 +61,16 @@ export interface Project {
   path?: string;
   isStarred?: boolean;
   sessions?: ProjectSession[];
-  cursorSessions?: ProjectSession[];
-  codexSessions?: ProjectSession[];
-  geminiSessions?: ProjectSession[];
-  opencodeSessions?: ProjectSession[];
   sessionMeta?: ProjectSessionMeta;
   taskmaster?: ProjectTaskmasterInfo;
   [key: string]: unknown;
 }
 
 export interface LoadingProgress {
-  type?: 'loading_progress';
+  kind?: 'loading_progress';
   phase?: string;
   current: number;
   total: number;
   currentProject?: string;
   [key: string]: unknown;
 }
-
-export interface ProjectsUpdatedMessage {
-  type: 'projects_updated';
-  projects: Project[];
-  updatedSessionId?: string;
-  updatedSessionIds?: string[];
-  watchProvider?: LLMProvider;
-  watchProviders?: LLMProvider[];
-  changeType?: 'add' | 'change';
-  changeTypes?: Array<'add' | 'change'>;
-  batched?: boolean;
-  [key: string]: unknown;
-}
-
-export interface LoadingProgressMessage extends LoadingProgress {
-  type: 'loading_progress';
-}
-
-export type AppSocketMessage =
-  | LoadingProgressMessage
-  | ProjectsUpdatedMessage
-  | { type?: string;[key: string]: unknown };

@@ -1,7 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
+import { chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import type {
   FetchHistoryOptions,
@@ -10,6 +12,12 @@ import type {
   NormalizedMessage,
 } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
+
+type CreateAppSessionResult = {
+  sessionId: string;
+  provider: LLMProvider;
+  projectPath: string;
+};
 
 type ArchivedSessionListItem = {
   sessionId: string;
@@ -78,6 +86,21 @@ export const sessionsService = {
   },
 
   /**
+   * Returns app-facing ids for provider runs that are currently processing.
+   *
+   * This is intentionally status-only: callers that only need sidebar activity
+   * indicators should not attach to chat streams or request replayed messages.
+   */
+  listRunningSessions(): Array<{
+    sessionId: string;
+    provider: LLMProvider;
+    startedAt: number;
+    lastSeq: number;
+  }> {
+    return chatRunRegistry.listRunningRuns();
+  },
+
+  /**
    * Normalizes one provider-native event into frontend session message events.
    */
   normalizeMessage(
@@ -89,12 +112,43 @@ export const sessionsService = {
   },
 
   /**
-   * Fetches persisted history by session id.
+   * Allocates a stable app-facing session id before any provider run happens.
+   *
+   * This is the entry point of the session gateway: the frontend calls this
+   * (via `POST /api/providers/sessions`) when the user starts a brand-new
+   * chat, navigates to the returned id immediately, and the id never changes
+   * for the lifetime of the conversation. The provider-native id is mapped to
+   * this row later, when the provider runtime announces it mid-run.
+   */
+  createAppSession(provider: LLMProvider, projectPath: string): CreateAppSessionResult {
+    const normalizedProjectPath = projectPath.trim();
+    if (!normalizedProjectPath) {
+      throw new AppError('projectPath is required.', {
+        code: 'PROJECT_PATH_REQUIRED',
+        statusCode: 400,
+      });
+    }
+
+    const sessionId = randomUUID();
+    sessionsDb.createAppSession(sessionId, provider, normalizedProjectPath);
+
+    return {
+      sessionId,
+      provider,
+      projectPath: normalizedProjectPath,
+    };
+  },
+
+  /**
+   * Fetches persisted history by app session id.
    *
    * Provider and provider-specific lookup hints are resolved from the indexed
-   * session metadata in the database.
+   * session metadata in the database. The provider adapter receives the
+   * provider-native session id (the one written into transcripts on disk),
+   * and every returned message is remapped back to the app session id so
+   * provider ids never reach the frontend.
    */
-  fetchHistory(
+  async fetchHistory(
     sessionId: string,
     options: Pick<FetchHistoryOptions, 'limit' | 'offset'> = {},
   ): Promise<FetchHistoryResult> {
@@ -106,12 +160,33 @@ export const sessionsService = {
       });
     }
 
+    // App-created sessions that never produced a provider transcript yet
+    // (e.g. first message still streaming) simply have no history.
+    if (!session.provider_session_id) {
+      return {
+        messages: [],
+        total: 0,
+        hasMore: false,
+        offset: options.offset ?? 0,
+        limit: options.limit ?? null,
+      };
+    }
+
     const provider = session.provider as LLMProvider;
-    return providerRegistry.resolveProvider(provider).sessions.fetchHistory(sessionId, {
+    const result = await providerRegistry.resolveProvider(provider).sessions.fetchHistory(sessionId, {
       limit: options.limit ?? null,
       offset: options.offset ?? 0,
       projectPath: session.project_path ?? '',
+      providerSessionId: session.provider_session_id,
     });
+
+    return {
+      ...result,
+      messages: result.messages.map((message) => ({
+        ...message,
+        sessionId,
+      })),
+    };
   },
 
   /**
