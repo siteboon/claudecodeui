@@ -1,0 +1,36 @@
+{
+  "toolbar": {
+    "changes": "modifications",
+    "previousChange": "Modification précédente",
+    "nextChange": "Modification suivante",
+    "hideDiff": "Masquer la mise en évidence des différences",
+    "showDiff": "Afficher la mise en évidence des différences",
+    "settings": "Paramètres de l'éditeur",
+    "collapse": "Réduire l'éditeur",
+    "expand": "Étendre l'éditeur en pleine largeur"
+  },
+  "loading": "Chargement de {{fileName}}...",
+  "header": {
+    "showingChanges": "Affichage des modifications"
+  },
+  "actions": {
+    "download": "Télécharger le fichier",
+    "save": "Enregistrer",
+    "saving": "Enregistrement...",
+    "saved": "Enregistré !",
+    "exitFullscreen": "Quitter le plein écran",
+    "fullscreen": "Plein écran",
+    "close": "Fermer",
+    "previewMarkdown": "Aperçu markdown",
+    "editMarkdown": "Modifier le markdown"
+  },
+  "footer": {
+    "lines": "Lignes :",
+    "characters": "Caractères :",
+    "shortcuts": "Ctrl+S pour enregistrer • Échap pour fermer"
+  },
+  "binaryFile": {
+    "title": "Fichier binaire",
+    "message": "Le fichier \"{{fileName}}\" ne peut pas être affiché dans l'éditeur de texte car c'est un fichier binaire."
+  }
+}
