@@ -80,4 +80,30 @@ export const providerMcpService = {
 
     return results;
   },
+
+  /**
+   * Removes one MCP server from every provider. Mirrors `addMcpServerToAllProviders`
+   * by iterating the live provider registry, so callers stay in sync with which
+   * providers exist instead of maintaining their own provider list.
+   */
+  async removeMcpServerFromAllProviders(
+    input: { name: string; scope?: McpScope; workspacePath?: string },
+  ): Promise<Array<{ provider: LLMProvider; removed: boolean; error?: string }>> {
+    const results: Array<{ provider: LLMProvider; removed: boolean; error?: string }> = [];
+    const providers = providerRegistry.listProviders();
+    for (const provider of providers) {
+      try {
+        const result = await provider.mcp.removeServer(input);
+        results.push({ provider: provider.id, removed: result.removed });
+      } catch (error) {
+        results.push({
+          provider: provider.id,
+          removed: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+
+    return results;
+  },
 };
