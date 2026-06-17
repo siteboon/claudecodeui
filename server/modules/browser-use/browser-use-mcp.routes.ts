@@ -8,8 +8,8 @@ function readBearerToken(header: unknown): string | null {
   if (typeof header !== 'string') {
     return null;
   }
-  const match = /^Bearer\s+(.+)$/i.exec(header.trim());
-  return match?.[1] || null;
+  const match = /^Bearer\s+(\S.*)$/i.exec(header.trim());
+  return match?.[1]?.trim() || null;
 }
 
 router.use((req, res, next) => {

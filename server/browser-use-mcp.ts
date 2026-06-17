@@ -35,6 +35,7 @@ const readNumber = (value: unknown): number | undefined =>
 
 const apiUrl = (process.env.CLOUDCLI_BROWSER_USE_API_URL || 'http://127.0.0.1:3001/api/browser-use-mcp').replace(/\/$/, '');
 const apiToken = process.env.CLOUDCLI_BROWSER_USE_MCP_TOKEN || '';
+const API_TIMEOUT_MS = Number.parseInt(process.env.CLOUDCLI_BROWSER_USE_API_TIMEOUT_MS || '60000', 10);
 
 async function callBrowserUseApi(toolName: string, input: Record<string, unknown>) {
   if (!apiToken) {
@@ -48,6 +49,7 @@ async function callBrowserUseApi(toolName: string, input: Record<string, unknown
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(input),
+    signal: AbortSignal.timeout(API_TIMEOUT_MS),
   });
   const data = await response.json() as { success?: boolean; data?: unknown; error?: string };
   if (!response.ok || data.success === false) {
@@ -378,7 +380,13 @@ process.stdin.on('data', (chunk) => {
     buffer = buffer.slice(messageEnd);
 
     void (async () => {
-      const request = JSON.parse(rawMessage) as JsonRpcRequest;
+      let request: JsonRpcRequest;
+      try {
+        request = JSON.parse(rawMessage) as JsonRpcRequest;
+      } catch (error) {
+        sendError(null, error);
+        return;
+      }
       try {
         const result = await handleMessage(request);
         sendResult(request.id, result);
