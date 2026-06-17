@@ -36,6 +36,7 @@
     "desktop:dev": "cross-env ELECTRON_DEV_URL=http://127.0.0.1:5173 electron electron/main.js",
     "desktop:pack": "npm run build && electron-builder --dir",
     "desktop:dist:mac": "npm run build && electron-builder --mac dmg zip",
+    "desktop:dist:win": "npm run build && electron-builder --win nsis zip",
     "desktop:icon:mac": "node electron/scripts/generate-macos-icon.js",
     "build": "npm run build:client && npm run build:server",
     "build:client": "vite build",
@@ -100,6 +101,12 @@
           }
         ]
       }
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ]
     }
   },
   "keywords": [

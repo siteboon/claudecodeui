@@ -167,7 +167,7 @@ export default function SidebarHeader({
                   aria-label={t('search.runningTooltip', 'Running sessions')}
                   title={t('search.runningTooltip', 'Running sessions')}
                   className={cn(
-                    "flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all",
+                    "flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-normal transition-all",
                     searchMode === 'running'
                       ? "bg-background shadow-sm text-foreground ring-1 ring-emerald-500/15"
                       : "text-muted-foreground hover:text-foreground"
@@ -307,7 +307,7 @@ export default function SidebarHeader({
                   aria-label={t('search.runningTooltip', 'Running sessions')}
                   title={t('search.runningTooltip', 'Running sessions')}
                   className={cn(
-                    "flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all",
+                    "flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-normal transition-all",
                     searchMode === 'running'
                       ? "bg-background shadow-sm text-foreground ring-1 ring-emerald-500/15"
                       : "text-muted-foreground hover:text-foreground"

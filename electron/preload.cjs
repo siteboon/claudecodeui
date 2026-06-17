@@ -14,8 +14,10 @@ if (window.location.protocol === 'file:') {
     refreshEnvironments: () => ipcRenderer.invoke('cloudcli-desktop:refresh-environments'),
     showEnvironmentPicker: () => ipcRenderer.invoke('cloudcli-desktop:show-environment-picker'),
     showLauncher: () => ipcRenderer.invoke('cloudcli-desktop:show-launcher'),
-    showComputerUsePreview: () => ipcRenderer.invoke('cloudcli-desktop:show-computer-use-preview'),
-    showDesktopAppMenu: () => ipcRenderer.invoke('cloudcli-desktop:show-desktop-app-menu'),
+    showComputerAccess: () => ipcRenderer.invoke('cloudcli-desktop:show-computer-access'),
+    updateComputerUse: (settings) => ipcRenderer.invoke('cloudcli-desktop:update-computer-use', settings),
+    showComputerAccessPermissions: () => ipcRenderer.invoke('cloudcli-desktop:show-computer-access-permissions'),
+    showDesktopSettings: () => ipcRenderer.invoke('cloudcli-desktop:show-desktop-settings'),
     showActiveEnvironmentActionsMenu: () => ipcRenderer.invoke('cloudcli-desktop:show-active-environment-actions-menu'),
     showEnvironmentActionsMenu: (environmentId) => ipcRenderer.invoke('cloudcli-desktop:show-environment-actions-menu', environmentId),
     switchTab: (tabId) => ipcRenderer.invoke('cloudcli-desktop:switch-tab', tabId),
@@ -23,6 +25,9 @@ if (window.location.protocol === 'file:') {
     updateSetting: (key, value) => ipcRenderer.invoke('cloudcli-desktop:update-setting', key, value),
     onStateUpdated: (callback) => {
       ipcRenderer.on('cloudcli-desktop:state-updated', (_event, state) => callback(state));
+    },
+    onLauncherCommand: (callback) => {
+      ipcRenderer.on('cloudcli-desktop:launcher-command', (_event, command) => callback(command));
     },
   });
 }

@@ -222,6 +222,7 @@ export class LocalServerController {
     this.desktopSettings = {
       keepLocalServerRunning: false,
       exposeLocalServerOnNetwork: false,
+      themeMode: 'system',
     };
   }
 
@@ -295,11 +296,13 @@ export class LocalServerController {
       this.desktopSettings = {
         keepLocalServerRunning: Boolean(stored.keepLocalServerRunning),
         exposeLocalServerOnNetwork: Boolean(stored.exposeLocalServerOnNetwork),
+        themeMode: stored.themeMode === 'light' || stored.themeMode === 'dark' ? stored.themeMode : 'system',
       };
     } catch {
       this.desktopSettings = {
         keepLocalServerRunning: false,
         exposeLocalServerOnNetwork: false,
+        themeMode: 'system',
       };
     }
   }
@@ -308,6 +311,7 @@ export class LocalServerController {
     this.desktopSettings = {
       keepLocalServerRunning: Boolean(nextSettings.keepLocalServerRunning),
       exposeLocalServerOnNetwork: Boolean(nextSettings.exposeLocalServerOnNetwork),
+      themeMode: nextSettings.themeMode === 'light' || nextSettings.themeMode === 'dark' ? nextSettings.themeMode : 'system',
     };
     await fs.mkdir(path.dirname(this.settingsPath), { recursive: true });
     await fs.writeFile(this.settingsPath, JSON.stringify(this.desktopSettings, null, 2), 'utf8');
@@ -321,7 +325,8 @@ export class LocalServerController {
 
     const wasExposeSetting = key === 'exposeLocalServerOnNetwork';
     const wasLocalRunning = Boolean(this.localServerUrl);
-    await this.saveDesktopSettings({ ...this.desktopSettings, [key]: Boolean(value) });
+    const nextValue = key === 'themeMode' ? value : Boolean(value);
+    await this.saveDesktopSettings({ ...this.desktopSettings, [key]: nextValue });
 
     return {
       desktopSettings: this.desktopSettings,

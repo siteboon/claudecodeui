@@ -1,0 +1,61 @@
+name: Desktop Windows Branch Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    name: Build unsigned Windows desktop artifact
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Resolve artifact metadata
+        id: artifact
+        shell: bash
+        run: |
+          SAFE_REF="$(printf '%s' "${GITHUB_REF_NAME}" | tr -c 'A-Za-z0-9._-' '-')"
+          echo "name=CloudCLI-windows-${SAFE_REF}-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+
+      - name: Build unsigned Windows artifacts
+        run: npm run desktop:dist:win -- --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Verify Windows artifacts
+        shell: bash
+        run: |
+          test -n "$(find release -maxdepth 1 -name '*.exe' -print -quit)"
+          test -n "$(find release -maxdepth 1 -name '*.zip' -print -quit)"
+          sha256sum release/*.{exe,zip} > release/SHASUMS256.txt
+          cat release/SHASUMS256.txt
+
+      - name: Upload branch build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: |
+            release/*.exe
+            release/*.zip
+            release/*.yml
+            release/*.blockmap
+            release/SHASUMS256.txt
+          if-no-files-found: error
+          retention-days: 14

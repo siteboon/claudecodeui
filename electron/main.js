@@ -71,7 +71,7 @@ async function promptComputerUseConsent(sessionId) {
     buttons: ['Allow this session', 'Deny'],
     defaultId: 0,
     cancelId: 1,
-    title: 'Computer Use request',
+    title: 'Computer Access request',
     message: 'An agent wants to control this computer',
     detail: [
       'A cloud agent is requesting control of your mouse, keyboard, and screen for this session.',
@@ -248,7 +248,7 @@ async function copyDiagnostics() {
   });
 }
 
-async function showMacComputerUsePermissions() {
+async function showMacComputerAccessPermissions() {
   if (process.platform !== 'darwin') return;
   const screenStatus = systemPreferences.getMediaAccessStatus('screen');
   const accessibilityTrusted = systemPreferences.isTrustedAccessibilityClient(false);
@@ -256,7 +256,7 @@ async function showMacComputerUsePermissions() {
     `Screen Recording: ${screenStatus === 'granted' ? 'granted' : 'not granted'}`,
     `Accessibility: ${accessibilityTrusted ? 'granted' : 'not granted'}`,
     '',
-    'Computer Use needs both permissions to capture the screen and control the mouse and keyboard.',
+    'Computer Access needs both permissions to capture the screen and control the mouse and keyboard.',
     'After granting a permission, fully quit and reopen CloudCLI so the change takes effect.',
   ].join('\n');
 
@@ -265,8 +265,8 @@ async function showMacComputerUsePermissions() {
     buttons: ['Open Screen Recording', 'Open Accessibility', 'Close'],
     defaultId: 0,
     cancelId: 2,
-    title: 'Computer Use Permissions',
-    message: 'Grant macOS permissions for Computer Use',
+    title: 'Computer Access Permissions',
+    message: 'Grant macOS permissions for Computer Access',
     detail,
   });
 
@@ -277,58 +277,21 @@ async function showMacComputerUsePermissions() {
   }
 }
 
-// Desktop control for cloud Computer Use: the desktop acts as a TeamViewer-style
-// agent for hosted environments. Enabling here lets cloud agents drive THIS
-// machine; the user picks whether to auto-connect or be asked per session.
-async function showComputerUsePreview() {
-  const state = computerAgent?.getState() || { enabled: false, consentMode: 'ask' };
-  const buttons = [];
-  const actions = [];
+async function showComputerAccess() {
+  await desktopWindow?.showLauncher();
+  desktopWindow?.emitLauncherCommand({ type: 'open-sheet', sheet: 'computer-access' });
+  return getDesktopState();
+}
 
-  if (!state.enabled) {
-    buttons.push('Enable — ask each session'); actions.push({ kind: 'enable', consentMode: 'ask' });
-    buttons.push('Enable — auto-connect'); actions.push({ kind: 'enable', consentMode: 'auto' });
-  } else {
-    buttons.push('Disable Computer Use'); actions.push({ kind: 'disable' });
-    const otherMode = state.consentMode === 'auto' ? 'ask' : 'auto';
-    buttons.push(`Switch to ${otherMode === 'auto' ? 'auto-connect' : 'ask each session'}`);
-    actions.push({ kind: 'enable', consentMode: otherMode });
-  }
-  if (process.platform === 'darwin') {
-    buttons.push('macOS Permissions…'); actions.push({ kind: 'permissions' });
-  }
-  buttons.push('Close'); actions.push({ kind: 'close' });
-
-  const statusLine = state.enabled
-    ? `Enabled — ${state.consentMode === 'auto' ? 'auto-connect' : 'ask each session'} · ${state.connectedCount || 0} environment(s) linked`
-    : 'Disabled';
-
-  const { response } = await dialog.showMessageBox(desktopWindow?.getMainWindow() || undefined, {
-    type: 'question',
-    buttons,
-    defaultId: 0,
-    cancelId: buttons.length - 1,
-    title: 'Computer Use (Desktop Agent)',
-    message: 'Let cloud agents control this computer',
-    detail: [
-      `Status: ${statusLine}`,
-      '',
-      'When enabled, agents running in your CloudCLI cloud environments can see this screen and drive its mouse and keyboard.',
-      '• Ask each session: you approve a prompt the first time each session wants control.',
-      '• Auto-connect: sessions can act without a prompt.',
-      process.platform === 'linux' ? '\nLinux needs X utilities (libxtst, imagemagick) installed to capture the screen and drive input.' : '',
-    ].join('\n'),
-  });
-
-  const action = actions[response];
-  if (!action) return;
-  if (action.kind === 'enable') {
-    await computerAgent?.saveSettings({ enabled: true, consentMode: action.consentMode });
-  } else if (action.kind === 'disable') {
-    await computerAgent?.saveSettings({ enabled: false, consentMode: state.consentMode });
-  } else if (action.kind === 'permissions') {
-    await showMacComputerUsePermissions();
-  }
+async function updateComputerUse(settings) {
+  const current = computerAgent?.getSettings() || { enabled: false, consentMode: 'ask' };
+  const next = {
+    enabled: typeof settings?.enabled === 'boolean' ? settings.enabled : current.enabled,
+    consentMode: settings?.consentMode === 'auto' ? 'auto' : 'ask',
+  };
+  await computerAgent?.saveSettings(next);
+  syncDesktopState();
+  return getDesktopState();
 }
 
 async function refreshCloudEnvironments({ showErrors = false } = {}) {
@@ -725,11 +688,16 @@ function registerIpcHandlers() {
     await desktopWindow.showLauncher();
     return getDesktopState();
   });
-  ipcMain.handle('cloudcli-desktop:show-computer-use-preview', async () => {
-    await showComputerUsePreview();
+  ipcMain.handle('cloudcli-desktop:show-computer-access', async () => {
+    await showComputerAccess();
     return getDesktopState();
   });
-  ipcMain.handle('cloudcli-desktop:show-desktop-app-menu', async () => desktopWindow.showDesktopAppMenu());
+  ipcMain.handle('cloudcli-desktop:update-computer-use', async (_event, settings) => updateComputerUse(settings));
+  ipcMain.handle('cloudcli-desktop:show-computer-use-permissions', async () => {
+    await showMacComputerAccessPermissions();
+    return getDesktopState();
+  });
+  ipcMain.handle('cloudcli-desktop:show-desktop-settings', async () => desktopWindow.showDesktopSettings());
   ipcMain.handle('cloudcli-desktop:show-active-environment-actions-menu', async () => desktopWindow.showActiveEnvironmentActionsMenu());
   ipcMain.handle('cloudcli-desktop:show-environment-actions-menu', async (_event, environmentId) => desktopWindow.showEnvironmentActionsMenu(environmentId));
   ipcMain.handle('cloudcli-desktop:switch-tab', async (_event, tabId) => desktopWindow.switchDesktopTab(tabId));
@@ -812,7 +780,7 @@ async function createDesktopWindow() {
       openCloudDashboard,
       refreshCloudEnvironments: () => refreshCloudEnvironments({ showErrors: true }),
       setActiveTarget,
-      showComputerUsePreview,
+      showComputerAccess,
       showEnvironmentPicker,
       showError,
       startEnvironment,

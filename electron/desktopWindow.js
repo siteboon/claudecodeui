@@ -209,6 +209,11 @@ export class DesktopWindowManager {
     this.mainWindow.webContents.send('cloudcli-desktop:state-updated', this.getDesktopState());
   }
 
+  emitLauncherCommand(command) {
+    if (!this.mainWindow || this.mainWindow.webContents.isDestroyed()) return;
+    this.mainWindow.webContents.send('cloudcli-desktop:launcher-command', command);
+  }
+
   async showTarget(target, { trackTab = true } = {}) {
     if (!this.mainWindow) return;
     if (trackTab) {
@@ -367,8 +372,8 @@ export class DesktopWindowManager {
             label: 'Services',
             submenu: [
               {
-                label: 'Computer Use Preview',
-                click: () => void this.actions.showComputerUsePreview(),
+                label: 'Computer Access',
+                click: () => void this.actions.showComputerAccess(),
               },
             ],
           },
@@ -565,19 +570,10 @@ export class DesktopWindowManager {
     this.tray.setContextMenu(Menu.buildFromTemplate(template));
   }
 
-  async showDesktopAppMenu() {
+  async showDesktopSettings() {
     if (!this.mainWindow) return this.getDesktopState();
-    const menu = Menu.buildFromTemplate([
-      {
-        label: 'Copy Diagnostics',
-        click: () => void this.actions.copyDiagnostics(),
-      },
-      {
-        label: 'Computer Use Preview',
-        click: () => void this.actions.showComputerUsePreview(),
-      },
-    ]);
-    menu.popup({ window: this.mainWindow });
+    await this.showLauncher();
+    this.emitLauncherCommand({ type: 'open-sheet', sheet: 'app-settings' });
     return this.getDesktopState();
   }
 
