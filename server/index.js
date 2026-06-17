@@ -199,10 +199,10 @@ app.use('/api/gemini', authenticateToken, geminiRoutes);
 // Plugins API Routes (protected)
 app.use('/api/plugins', authenticateToken, pluginsRoutes);
 
-// Browser Use MCP bridge API (local token protected)
+// Browser MCP bridge API (local token protected)
 app.use('/api/browser-use-mcp', browserUseMcpRoutes);
 
-// Browser Use API Routes (protected)
+// Browser API Routes (protected)
 app.use('/api/browser-use', authenticateToken, browserUseRoutes);
 
 // Computer Use MCP bridge API (local token protected)
@@ -1763,7 +1763,7 @@ async function startServer() {
             try {
                 await browserUseService.stopAllSessions();
             } catch (err) {
-                console.error('[Browser Use] Error stopping sessions during shutdown:', err?.message || err);
+                console.error('[Browser] Error stopping sessions during shutdown:', err?.message || err);
             }
             try {
                 await computerUseService.stopAllSessions();

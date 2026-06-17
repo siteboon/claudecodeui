@@ -71,7 +71,6 @@ function AppContentInner() {
     setActiveTab,
     setSidebarOpen,
     setIsInputFocused,
-    setShowSettings,
     openSettings,
     refreshProjectsSilently,
     registerOptimisticSession,
@@ -247,7 +246,7 @@ function AppContentInner() {
           onSessionEstablished={(targetSessionId, context) =>
             registerOptimisticSession({ sessionId: targetSessionId, ...context })
           }
-          onShowSettings={() => setShowSettings(true)}
+          onShowSettings={openSettings}
           externalMessageUpdate={externalMessageUpdate}
           newSessionTrigger={newSessionTrigger}
         />

@@ -7,6 +7,7 @@ import type {
   SessionActivityMap,
 } from '../../../hooks/useSessionProtection';
 import type { SessionEstablishedContext, SessionNavigationOptions } from '../../chat/types/types';
+import type { SettingsMainTab } from '../../settings/types/types';
 
 export type TaskMasterTask = {
   id: string | number;
@@ -53,7 +54,7 @@ export type MainContentProps = {
   processingSessions: SessionActivityMap;
   onNavigateToSession: (targetSessionId: string, options?: SessionNavigationOptions) => void;
   onSessionEstablished: (sessionId: string, context: SessionEstablishedContext) => void;
-  onShowSettings: () => void;
+  onShowSettings: (tab?: SettingsMainTab) => void;
   externalMessageUpdate: number;
   newSessionTrigger: number;
 };

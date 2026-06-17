@@ -53,7 +53,7 @@ async function callBrowserUseApi(toolName: string, input: Record<string, unknown
   });
   const data = await response.json() as { success?: boolean; data?: unknown; error?: string };
   if (!response.ok || data.success === false) {
-    throw new Error(data.error || `Browser Use API request failed (${response.status})`);
+    throw new Error(data.error || `Browser API request failed (${response.status})`);
   }
   return data.data;
 }
@@ -61,7 +61,7 @@ async function callBrowserUseApi(toolName: string, input: Record<string, unknown
 const sessionIdSchema = {
   type: 'object',
   properties: {
-    sessionId: { type: 'string', description: 'Browser Use session id.' },
+    sessionId: { type: 'string', description: 'Browser session id.' },
   },
   required: ['sessionId'],
 };
@@ -69,7 +69,7 @@ const sessionIdSchema = {
 const tools: ToolDefinition[] = [
   {
     name: 'browser_create_session',
-    description: 'Create a temporary Browser Use session that the agent can control. Optionally provide a background profileName to reuse cookies and storage.',
+    description: 'Create a temporary Browser session that the agent can control. Optionally provide a background profileName to reuse cookies and storage.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -79,22 +79,22 @@ const tools: ToolDefinition[] = [
   },
   {
     name: 'browser_list_sessions',
-    description: 'List Browser Use sessions currently available to agents.',
+    description: 'List Browser sessions currently available to agents.',
     inputSchema: { type: 'object', properties: {} },
   },
   {
     name: 'browser_snapshot',
-    description: 'Capture current page metadata, screenshot data URL, and visible body text for a Browser Use session.',
+    description: 'Capture current page metadata, screenshot data URL, and visible body text for a Browser session.',
     inputSchema: sessionIdSchema,
   },
   {
     name: 'browser_take_screenshot',
-    description: 'Capture the latest screenshot for a Browser Use session.',
+    description: 'Capture the latest screenshot for a Browser session.',
     inputSchema: sessionIdSchema,
   },
   {
     name: 'browser_navigate',
-    description: 'Navigate a Browser Use session to an HTTP or HTTPS URL.',
+    description: 'Navigate a Browser session to an HTTP or HTTPS URL.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -196,7 +196,7 @@ const tools: ToolDefinition[] = [
   },
   {
     name: 'browser_tabs',
-    description: 'List, open, select, or close tabs in a Browser Use session.',
+    description: 'List, open, select, or close tabs in a Browser session.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -210,7 +210,7 @@ const tools: ToolDefinition[] = [
   },
   {
     name: 'browser_close_session',
-    description: 'Stop a Browser Use session controlled by agents.',
+    description: 'Stop a Browser session controlled by agents.',
     inputSchema: sessionIdSchema,
   },
 ];
@@ -302,7 +302,7 @@ async function handleMessage(message: JsonRpcRequest) {
     return {
       protocolVersion: '2024-11-05',
       capabilities: { tools: {} },
-      serverInfo: { name: 'cloudcli-browser-use', version: '1.0.0' },
+      serverInfo: { name: 'cloudcli-browser', version: '1.0.0' },
     };
   }
 
@@ -327,8 +327,9 @@ async function handleMessage(message: JsonRpcRequest) {
 }
 
 function writeMessage(message: Record<string, unknown>) {
-  const payload = JSON.stringify(message);
-  process.stdout.write(`Content-Length: ${Buffer.byteLength(payload, 'utf8')}\r\n\r\n${payload}`);
+  // MCP stdio transport uses newline-delimited JSON (one JSON-RPC message per line,
+  // no embedded newlines). This is NOT the LSP Content-Length framing.
+  process.stdout.write(`${JSON.stringify(message)}\n`);
 }
 
 function sendResult(id: string | number | null | undefined, result: unknown) {
@@ -352,32 +353,17 @@ function sendError(id: string | number | null | undefined, error: unknown) {
   });
 }
 
-let buffer = Buffer.alloc(0);
+let buffer = '';
 
 process.stdin.on('data', (chunk) => {
-  buffer = Buffer.concat([buffer, chunk]);
-  while (true) {
-    const headerEnd = buffer.indexOf('\r\n\r\n');
-    if (headerEnd === -1) {
-      return;
-    }
-
-    const header = buffer.slice(0, headerEnd).toString('utf8');
-    const lengthMatch = /Content-Length:\s*(\d+)/i.exec(header);
-    if (!lengthMatch) {
-      buffer = buffer.slice(headerEnd + 4);
+  buffer += chunk.toString('utf8');
+  let newlineIndex: number;
+  while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+    const rawMessage = buffer.slice(0, newlineIndex).trim();
+    buffer = buffer.slice(newlineIndex + 1);
+    if (!rawMessage) {
       continue;
     }
-
-    const length = Number.parseInt(lengthMatch[1], 10);
-    const messageStart = headerEnd + 4;
-    const messageEnd = messageStart + length;
-    if (buffer.length < messageEnd) {
-      return;
-    }
-
-    const rawMessage = buffer.slice(messageStart, messageEnd).toString('utf8');
-    buffer = buffer.slice(messageEnd);
 
     void (async () => {
       let request: JsonRpcRequest;

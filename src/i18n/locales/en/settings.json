@@ -94,7 +94,7 @@
     "git": "Git",
     "apiTokens": "API & Tokens",
     "tasks": "Tasks",
-    "browser": "Browser Use",
+    "browser": "Browser",
     "computer": "Computer Use",
     "notifications": "Notifications",
     "plugins": "Plugins",
@@ -451,6 +451,10 @@
     "actions": {
       "edit": "Edit server",
       "delete": "Delete server"
+    },
+    "managed": {
+      "badge": "Managed",
+      "hint": "Managed by CloudCLI."
     },
     "help": {
       "title": "About Codex MCP",

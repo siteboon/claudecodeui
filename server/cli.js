@@ -8,7 +8,7 @@
  *   (no args)     - Start the server (default)
  *   start         - Start the server
  *   sandbox       - Manage Docker sandbox environments
- *   browser-use-mcp - Run Browser Use MCP stdio server
+ *   browser-use-mcp - Run Browser MCP stdio server
  *   status        - Show configuration and data locations
  *   help          - Show help information
  *   version       - Show version information
@@ -157,7 +157,7 @@ Usage:
 Commands:
   start            Start the CloudCLI server (default)
   sandbox          Manage Docker sandbox environments
-  browser-use-mcp  Run the Browser Use MCP stdio server
+  browser-use-mcp  Run the Browser MCP stdio server
   status           Show configuration and data locations
   update           Update to the latest version
   help             Show this help information

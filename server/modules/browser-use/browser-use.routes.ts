@@ -4,20 +4,6 @@ import { browserUseService } from '@/modules/browser-use/browser-use.service.js'
 
 const router = express.Router();
 
-type AuthenticatedRequest = express.Request & {
-  user?: {
-    id?: string | number;
-  };
-};
-
-function requireUser(req: AuthenticatedRequest): { id: string | number } {
-  const userId = req.user?.id;
-  if (userId === undefined || userId === null) {
-    throw new Error('Authenticated user is required.');
-  }
-  return { id: userId };
-}
-
 function readParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] || '' : value || '';
 }
@@ -28,7 +14,7 @@ router.get('/status', async (_req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to load Browser Use status.',
+      error: error instanceof Error ? error.message : 'Failed to load Browser status.',
     });
   }
 });
@@ -39,7 +25,7 @@ router.get('/settings', async (_req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to load Browser Use settings.',
+      error: error instanceof Error ? error.message : 'Failed to load Browser settings.',
     });
   }
 });
@@ -51,19 +37,7 @@ router.put('/settings', async (req, res) => {
   } catch (error) {
     res.status(400).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to save Browser Use settings.',
-    });
-  }
-});
-
-router.post('/agent-tools/register', async (_req, res) => {
-  try {
-    const result = await browserUseService.registerAgentMcp();
-    res.status(201).json({ success: true, data: result });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to register Browser Use MCP.',
+      error: error instanceof Error ? error.message : 'Failed to save Browser settings.',
     });
   }
 });
@@ -79,14 +53,14 @@ router.post('/runtime/install', async (_req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to install Browser Use runtime.',
+      error: error instanceof Error ? error.message : 'Failed to install Browser runtime.',
     });
   }
 });
 
-router.get('/sessions', async (req: AuthenticatedRequest, res) => {
+router.get('/sessions', async (_req, res) => {
   try {
-    res.json({ success: true, data: { sessions: await browserUseService.listSessions(requireUser(req)) } });
+    res.json({ success: true, data: { sessions: await browserUseService.listSessions() } });
   } catch (error) {
     res.status(401).json({
       success: false,
@@ -95,90 +69,9 @@ router.get('/sessions', async (req: AuthenticatedRequest, res) => {
   }
 });
 
-router.post('/sessions', async (req: AuthenticatedRequest, res) => {
+router.post('/sessions/:sessionId/stop', async (req, res) => {
   try {
-    const session = await browserUseService.createSession(requireUser(req));
-    res.status(session.status === 'unavailable' ? 202 : 201).json({ success: true, data: { session } });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to create browser session.',
-    });
-  }
-});
-
-router.post('/sessions/:sessionId/navigate', async (req: AuthenticatedRequest, res) => {
-  try {
-    const session = await browserUseService.navigate(requireUser(req), readParam(req.params.sessionId), String(req.body?.url || ''));
-    res.json({ success: true, data: { session } });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to navigate browser session.',
-    });
-  }
-});
-
-router.post('/sessions/:sessionId/click', async (req: AuthenticatedRequest, res) => {
-  try {
-    const x = Number(req.body?.x);
-    const y = Number(req.body?.y);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) {
-      throw new Error('Click requires numeric x and y coordinates.');
-    }
-    const session = await browserUseService.userClick(requireUser(req), readParam(req.params.sessionId), { x, y });
-    res.json({ success: true, data: { session } });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to click browser session.',
-    });
-  }
-});
-
-router.post('/sessions/:sessionId/press-key', async (req: AuthenticatedRequest, res) => {
-  try {
-    const key = String(req.body?.key || '').trim();
-    if (!key) {
-      throw new Error('A key is required.');
-    }
-    const session = await browserUseService.userPressKey(requireUser(req), readParam(req.params.sessionId), key);
-    res.json({ success: true, data: { session } });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to send browser key input.',
-    });
-  }
-});
-
-router.post('/sessions/:sessionId/agent-access/grant', async (req: AuthenticatedRequest, res) => {
-  try {
-    const session = await browserUseService.grantAgentAccess(requireUser(req), readParam(req.params.sessionId));
-    res.json({ success: true, data: { session } });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to grant agent access.',
-    });
-  }
-});
-
-router.post('/sessions/:sessionId/agent-access/revoke', async (req: AuthenticatedRequest, res) => {
-  try {
-    const session = await browserUseService.revokeAgentAccess(requireUser(req), readParam(req.params.sessionId));
-    res.json({ success: true, data: { session } });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to revoke agent access.',
-    });
-  }
-});
-
-router.post('/sessions/:sessionId/stop', async (req: AuthenticatedRequest, res) => {
-  try {
-    const result = await browserUseService.stopSession(requireUser(req), readParam(req.params.sessionId));
+    const result = await browserUseService.stopSession(readParam(req.params.sessionId));
     res.json({ success: true, data: result });
   } catch (error) {
     res.status(400).json({
@@ -188,9 +81,9 @@ router.post('/sessions/:sessionId/stop', async (req: AuthenticatedRequest, res) 
   }
 });
 
-router.delete('/sessions/:sessionId', async (req: AuthenticatedRequest, res) => {
+router.delete('/sessions/:sessionId', async (req, res) => {
   try {
-    const result = await browserUseService.deleteSession(requireUser(req), readParam(req.params.sessionId));
+    const result = await browserUseService.deleteSession(readParam(req.params.sessionId));
     res.json({ success: true, data: result });
   } catch (error) {
     res.status(400).json({
