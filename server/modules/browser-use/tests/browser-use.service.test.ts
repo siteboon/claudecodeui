@@ -14,17 +14,8 @@ test('browser use blocks private and local network addresses by default', () => 
   assert.equal(isBlockedBrowserUseAddress('2001:4860:4860::8888'), false);
 });
 
-test('browser use sessions are listed only for their owner', async () => {
-  const ownerA = { id: `owner-a-${Date.now()}-${Math.random()}` };
-  const ownerB = { id: `owner-b-${Date.now()}-${Math.random()}` };
+test('browser use monitor list starts empty without agent sessions', async () => {
+  const sessions = await browserUseService.listSessions();
 
-  const ownerASession = await browserUseService.createSession(ownerA);
-  await browserUseService.createSession(ownerB);
-
-  const ownerASessions = await browserUseService.listSessions(ownerA);
-  const ownerBSessions = await browserUseService.listSessions(ownerB);
-
-  assert.equal(ownerASessions.some((session) => session.id === ownerASession.id), true);
-  assert.equal(ownerBSessions.some((session) => session.id === ownerASession.id), false);
-  assert.equal(Object.hasOwn(ownerASession, 'ownerId'), false);
+  assert.deepEqual(sessions, []);
 });

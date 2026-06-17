@@ -8,7 +8,7 @@ import net from 'node:net';
 import path from 'node:path';
 
 import { appConfigDb } from '@/modules/database/index.js';
-import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
+import { providerMcpService } from '@/modules/providers/index.js';
 import { getModuleDir } from '@/utils/runtime-paths.js';
 
 const require = createRequire(import.meta.url);
@@ -26,7 +26,7 @@ type BrowserUseSessionStatus = 'ready' | 'stopped' | 'unavailable';
 type BrowserUseSession = {
   id: string;
   ownerId: string;
-  createdBy: 'user' | 'agent';
+  createdBy: 'agent';
   runtime: BrowserUseRuntime;
   status: BrowserUseSessionStatus;
   url: string | null;
@@ -36,7 +36,6 @@ type BrowserUseSession = {
   updatedAt: string;
   lastAction: string | null;
   message: string | null;
-  agentAccessEnabled: boolean;
   profileName: string | null;
   viewport: {
     width: number;
@@ -45,7 +44,7 @@ type BrowserUseSession = {
   cursor: {
     x: number;
     y: number;
-    actor: 'agent' | 'user';
+    actor: 'agent';
   } | null;
 };
 
@@ -57,13 +56,8 @@ type RuntimeHandle = {
   page?: any;
 };
 
-type BrowserUseOwner = {
-  id: string | number;
-};
-
 type BrowserUseSettings = {
   enabled: boolean;
-  agentToolsEnabled: boolean;
 };
 
 type RuntimeReadiness = {
@@ -82,7 +76,6 @@ let lastInstallMessage: string | null = null;
 
 const DEFAULT_SETTINGS: BrowserUseSettings = {
   enabled: false,
-  agentToolsEnabled: false,
 };
 const AGENT_OWNER_ID = 'agent';
 const PROFILE_ROOT = path.join(os.homedir(), '.cloudcli', 'browser-use', 'profiles');
@@ -103,7 +96,6 @@ function readSettings(): BrowserUseSettings {
     const parsed = JSON.parse(raw) as Partial<BrowserUseSettings>;
     return {
       enabled: parsed.enabled === true,
-      agentToolsEnabled: parsed.agentToolsEnabled === true,
     };
   } catch (error: any) {
     console.warn('[Browser Use] Failed to read settings:', error?.message || error);
@@ -114,7 +106,6 @@ function readSettings(): BrowserUseSettings {
 function writeSettings(settings: BrowserUseSettings): BrowserUseSettings {
   const normalized = {
     enabled: settings.enabled === true,
-    agentToolsEnabled: settings.agentToolsEnabled === true,
   };
 
   appConfigDb.set(BROWSER_USE_SETTINGS_KEY, JSON.stringify(normalized));
@@ -244,7 +235,6 @@ function runCommand(command: string, args: string[]): Promise<void> {
       fn();
     };
 
-    // Guard against a stuck npm/playwright process hanging the install request forever.
     const timer = setTimeout(() => {
       child.kill('SIGKILL');
       finish(() => reject(new Error(
@@ -307,14 +297,6 @@ async function installRuntime(): Promise<{ success: boolean; message: string }> 
   } finally {
     installPromise = null;
   }
-}
-
-function getOwnerId(owner: BrowserUseOwner): string {
-  if (owner.id === undefined || owner.id === null || String(owner.id).trim() === '') {
-    throw new Error('Authenticated user is required.');
-  }
-
-  return String(owner.id);
 }
 
 function isPrivateIpv4(address: string): boolean {
@@ -410,8 +392,6 @@ async function assertAllowedBrowserRequest(rawUrl: string): Promise<void> {
 }
 
 async function attachRequestGuard(context: any): Promise<void> {
-  // Attach at the context level so the guard also covers popups, window.open targets,
-  // and any replacement pages created during the session lifecycle.
   await context.route('**/*', async (route: any) => {
     try {
       await assertAllowedBrowserRequest(route.request().url());
@@ -429,10 +409,6 @@ function publicSession(session: BrowserUseSession): PublicBrowserUseSession {
 
 function ownerSessions(ownerId: string): BrowserUseSession[] {
   return [...sessions.values()].filter((session) => session.ownerId === ownerId);
-}
-
-function canAccessSession(ownerId: string, session: BrowserUseSession): boolean {
-  return session.ownerId === ownerId || session.ownerId === AGENT_OWNER_ID || session.agentAccessEnabled;
 }
 
 async function closeHandle(sessionId: string): Promise<void> {
@@ -504,21 +480,15 @@ export const browserUseService = {
   async updateSettings(settings: Partial<BrowserUseSettings>) {
     const current = readSettings();
     const nextSettings = {
-      ...current,
       enabled: typeof settings.enabled === 'boolean' ? settings.enabled : current.enabled,
-      agentToolsEnabled: typeof settings.agentToolsEnabled === 'boolean'
-        ? settings.agentToolsEnabled
-        : current.agentToolsEnabled,
     };
-    if (!nextSettings.enabled) {
-      nextSettings.agentToolsEnabled = false;
-    }
 
     const next = writeSettings(nextSettings);
-    if (next.agentToolsEnabled) {
+    if (next.enabled) {
       await this.registerAgentMcp();
-    } else if (current.agentToolsEnabled) {
+    } else if (current.enabled) {
       await this.unregisterAgentMcp();
+      await this.stopAllSessions();
     }
     return next;
   },
@@ -536,8 +506,6 @@ export const browserUseService = {
       chromiumInstalled: readiness.chromiumInstalled,
       installInProgress: readiness.installInProgress,
       sessionCount: sessions.size,
-      agentToolsEnabled: settings.agentToolsEnabled,
-      mcpRecommended: !settings.agentToolsEnabled,
       message: available
         ? 'Browser Use runtime is available.'
         : getSetupMessage(settings, readiness),
@@ -591,25 +559,27 @@ export const browserUseService = {
     };
   },
 
-  async listSessions(owner: BrowserUseOwner) {
-    const ownerId = getOwnerId(owner);
+  async listSessions() {
     await expireStaleSessions();
     return [...sessions.values()]
-      .filter((session) => canAccessSession(ownerId, session))
+      .filter((session) => session.ownerId === AGENT_OWNER_ID)
       .map(publicSession);
   },
 
-  async createSession(owner: BrowserUseOwner, options?: { createdBy?: 'user' | 'agent'; profileName?: string | null; agentAccessEnabled?: boolean }) {
-    const ownerId = getOwnerId(owner);
+  async createAgentSession(options?: { profileName?: string | null }) {
+    const settings = readSettings();
+    if (!settings.enabled) {
+      throw new Error('Browser Use agent tools are disabled.');
+    }
+
     await expireStaleSessions();
-    const createdBy = options?.createdBy ?? 'user';
     const profileName = normalizeProfileName(options?.profileName);
 
     const now = new Date().toISOString();
     const session: BrowserUseSession = {
       id: randomUUID(),
-      ownerId,
-      createdBy,
+      ownerId: AGENT_OWNER_ID,
+      createdBy: 'agent',
       runtime: getRuntime(),
       status: 'unavailable',
       url: null,
@@ -619,18 +589,16 @@ export const browserUseService = {
       updatedAt: now,
       lastAction: 'create',
       message: null,
-      agentAccessEnabled: options?.agentAccessEnabled ?? createdBy === 'agent',
       profileName,
       viewport: { width: 1440, height: 900 },
       cursor: null,
     };
 
-    const activeOwnerSessions = ownerSessions(ownerId).filter((item) => item.status === 'ready');
+    const activeOwnerSessions = ownerSessions(AGENT_OWNER_ID).filter((item) => item.status === 'ready');
     if (activeOwnerSessions.length >= MAX_SESSIONS_PER_OWNER) {
-      throw new Error(`Browser Use is limited to ${MAX_SESSIONS_PER_OWNER} active sessions per user.`);
+      throw new Error(`Browser Use is limited to ${MAX_SESSIONS_PER_OWNER} active agent sessions.`);
     }
 
-    const settings = readSettings();
     const readiness = getRuntimeReadiness();
     if (!settings.enabled || !readiness.playwrightInstalled || !readiness.chromiumInstalled || !readiness.playwright) {
       session.message = getSetupMessage(settings, readiness);
@@ -671,70 +639,35 @@ export const browserUseService = {
     return publicSession(session);
   },
 
-  async grantAgentAccess(owner: BrowserUseOwner, sessionId: string) {
-    const ownerId = getOwnerId(owner);
-    const session = sessions.get(sessionId);
-    if (!session || (session.ownerId !== ownerId && session.ownerId !== AGENT_OWNER_ID)) {
-      throw new Error('Browser session not found.');
-    }
-    session.agentAccessEnabled = true;
-    session.updatedAt = new Date().toISOString();
-    session.lastAction = 'agent_access:grant';
-    return publicSession(session);
-  },
-
-  async revokeAgentAccess(owner: BrowserUseOwner, sessionId: string) {
-    const ownerId = getOwnerId(owner);
-    const session = sessions.get(sessionId);
-    if (!session || (session.ownerId !== ownerId && session.ownerId !== AGENT_OWNER_ID)) {
-      throw new Error('Browser session not found.');
-    }
-    session.agentAccessEnabled = false;
-    session.updatedAt = new Date().toISOString();
-    session.lastAction = 'agent_access:revoke';
-    return publicSession(session);
-  },
-
   async listAgentSessions() {
     const settings = readSettings();
-    if (!settings.enabled || !settings.agentToolsEnabled) {
+    if (!settings.enabled) {
       return [];
     }
     await expireStaleSessions();
     return [...sessions.values()]
-      .filter((session) => session.agentAccessEnabled || session.ownerId === AGENT_OWNER_ID)
+      .filter((session) => session.ownerId === AGENT_OWNER_ID)
       .map(publicSession);
-  },
-
-  async createAgentSession(options?: { profileName?: string | null }) {
-    const settings = readSettings();
-    if (!settings.enabled || !settings.agentToolsEnabled) {
-      throw new Error('Browser Use agent tools are disabled.');
-    }
-    return this.createSession(
-      { id: AGENT_OWNER_ID },
-      { createdBy: 'agent', profileName: options?.profileName, agentAccessEnabled: true },
-    );
   },
 
   async getAgentSession(sessionId: string) {
     const settings = readSettings();
-    if (!settings.enabled || !settings.agentToolsEnabled) {
+    if (!settings.enabled) {
       throw new Error('Browser Use agent tools are disabled.');
     }
     const session = sessions.get(sessionId);
-    if (!session || (!session.agentAccessEnabled && session.ownerId !== AGENT_OWNER_ID)) {
-      throw new Error('Browser session is not shared with agents.');
+    if (!session || session.ownerId !== AGENT_OWNER_ID) {
+      throw new Error('Browser session not found.');
     }
     return session;
   },
 
-  async navigate(owner: BrowserUseOwner, sessionId: string, rawUrl: string) {
-    const ownerId = getOwnerId(owner);
+  async agentNavigate(sessionId: string, rawUrl: string) {
+    await this.getAgentSession(sessionId);
     await expireStaleSessions();
 
     const session = sessions.get(sessionId);
-    if (!session || !canAccessSession(ownerId, session)) {
+    if (!session || session.ownerId !== AGENT_OWNER_ID) {
       throw new Error('Browser session not found.');
     }
 
@@ -753,25 +686,6 @@ export const browserUseService = {
     session.cursor = null;
     await captureSession(session, handle.page);
     return publicSession(session);
-  },
-
-  async agentNavigate(sessionId: string, rawUrl: string) {
-    await this.getAgentSession(sessionId);
-    return this.navigate({ id: AGENT_OWNER_ID }, sessionId, rawUrl).catch(async (error) => {
-      const session = await this.getAgentSession(sessionId);
-      if (session.ownerId !== AGENT_OWNER_ID) {
-        const url = await normalizeUrl(rawUrl);
-        const handle = handles.get(sessionId);
-        if (!handle?.page) {
-          throw new Error('Browser runtime handle is not available.');
-        }
-        await handle.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
-        session.lastAction = `navigate:${url}`;
-        await captureSession(session, handle.page);
-        return publicSession(session);
-      }
-      throw error;
-    });
   },
 
   async agentSnapshot(sessionId: string) {
@@ -911,7 +825,6 @@ export const browserUseService = {
     if (action === 'new') {
       const page = await handle.context.newPage();
       handles.set(sessionId, { ...handle, page });
-      // Request guard is attached at the context level, so new pages are already covered.
       if (input.url) {
         await this.agentNavigate(sessionId, input.url);
       }
@@ -942,10 +855,9 @@ export const browserUseService = {
     };
   },
 
-  async stopSession(owner: BrowserUseOwner, sessionId: string) {
-    const ownerId = getOwnerId(owner);
+  async stopSession(sessionId: string) {
     const session = sessions.get(sessionId);
-    if (!session || !canAccessSession(ownerId, session)) {
+    if (!session || session.ownerId !== AGENT_OWNER_ID) {
       return { stopped: false };
     }
 
@@ -958,10 +870,9 @@ export const browserUseService = {
     return { stopped: true, session: publicSession(session) };
   },
 
-  async deleteSession(owner: BrowserUseOwner, sessionId: string) {
-    const ownerId = getOwnerId(owner);
+  async deleteSession(sessionId: string) {
     const session = sessions.get(sessionId);
-    if (!session || !canAccessSession(ownerId, session)) {
+    if (!session || session.ownerId !== AGENT_OWNER_ID) {
       return { deleted: false };
     }
 
@@ -970,52 +881,9 @@ export const browserUseService = {
     return { deleted: true, sessionId };
   },
 
-  async userClick(owner: BrowserUseOwner, sessionId: string, input: { x: number; y: number }) {
-    const ownerId = getOwnerId(owner);
-    const session = sessions.get(sessionId);
-    if (!session || !canAccessSession(ownerId, session)) {
-      throw new Error('Browser session not found.');
-    }
-    if (session.status !== 'ready') {
-      throw new Error(session.message || 'Browser session is not available.');
-    }
-
-    const handle = handles.get(sessionId);
-    if (!handle?.page) {
-      throw new Error('Browser runtime handle is not available.');
-    }
-
-    await handle.page.mouse.click(input.x, input.y);
-    session.lastAction = 'click';
-    session.cursor = { x: input.x, y: input.y, actor: 'user' };
-    await captureSession(session, handle.page);
-    return publicSession(session);
-  },
-
-  async userPressKey(owner: BrowserUseOwner, sessionId: string, key: string) {
-    const ownerId = getOwnerId(owner);
-    const session = sessions.get(sessionId);
-    if (!session || !canAccessSession(ownerId, session)) {
-      throw new Error('Browser session not found.');
-    }
-    if (session.status !== 'ready') {
-      throw new Error(session.message || 'Browser session is not available.');
-    }
-
-    const handle = handles.get(sessionId);
-    if (!handle?.page) {
-      throw new Error('Browser runtime handle is not available.');
-    }
-
-    await handle.page.keyboard.press(key);
-    session.lastAction = `press_key:${key}`;
-    await captureSession(session, handle.page);
-    return publicSession(session);
-  },
-
   async agentStopSession(sessionId: string) {
     await this.getAgentSession(sessionId);
-    return this.stopSession({ id: AGENT_OWNER_ID }, sessionId);
+    return this.stopSession(sessionId);
   },
 
   async stopAllSessions() {
