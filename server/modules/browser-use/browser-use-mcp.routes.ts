@@ -16,7 +16,7 @@ router.use((req, res, next) => {
   const expected = browserUseService.getMcpToken();
   const token = readBearerToken(req.headers.authorization) || String(req.headers['x-browser-use-mcp-token'] || '');
   if (!token || token !== expected) {
-    res.status(401).json({ success: false, error: 'Invalid Browser Use MCP token.' });
+    res.status(401).json({ success: false, error: 'Invalid Browser MCP token.' });
     return;
   }
   next();
@@ -104,7 +104,7 @@ router.post('/tools/:toolName', async (req, res) => {
         result = await browserUseService.agentStopSession(sessionId);
         break;
       default:
-        res.status(404).json({ success: false, error: `Unknown Browser Use MCP tool "${toolName}".` });
+        res.status(404).json({ success: false, error: `Unknown Browser MCP tool "${toolName}".` });
         return;
     }
 
@@ -112,7 +112,7 @@ router.post('/tools/:toolName', async (req, res) => {
   } catch (error) {
     res.status(400).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Browser Use MCP tool failed.',
+      error: error instanceof Error ? error.message : 'Browser MCP tool failed.',
     });
   }
 });

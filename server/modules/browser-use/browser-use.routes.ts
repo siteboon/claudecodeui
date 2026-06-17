@@ -14,7 +14,7 @@ router.get('/status', async (_req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to load Browser Use status.',
+      error: error instanceof Error ? error.message : 'Failed to load Browser status.',
     });
   }
 });
@@ -25,7 +25,7 @@ router.get('/settings', async (_req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to load Browser Use settings.',
+      error: error instanceof Error ? error.message : 'Failed to load Browser settings.',
     });
   }
 });
@@ -37,7 +37,7 @@ router.put('/settings', async (req, res) => {
   } catch (error) {
     res.status(400).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to save Browser Use settings.',
+      error: error instanceof Error ? error.message : 'Failed to save Browser settings.',
     });
   }
 });
@@ -53,7 +53,7 @@ router.post('/runtime/install', async (_req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to install Browser Use runtime.',
+      error: error instanceof Error ? error.message : 'Failed to install Browser runtime.',
     });
   }
 });

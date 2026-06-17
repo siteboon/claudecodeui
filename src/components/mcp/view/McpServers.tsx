@@ -52,6 +52,11 @@ const getServerKey = (server: ProviderMcpServer): string => (
   `${server.provider}:${server.scope}:${server.workspacePath || 'global'}:${server.name}`
 );
 
+// Servers prefixed with `cloudcli-` are written and removed automatically by a
+// CloudCLI feature toggle (e.g. the Browser tab), not added by the user. They are
+// shown read-only so users don't edit/delete them out of sync with the feature.
+const isManagedServer = (server: ProviderMcpServer): boolean => server.name.startsWith('cloudcli-');
+
 function ConfigLine({ label, children }: { label: string; children: string }) {
   if (!children) {
     return null;
@@ -195,6 +200,12 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
                       {server.projectDisplayName}
                     </Badge>
                   )}
+                  {isManagedServer(server) && (
+                    <Badge variant="outline" className="gap-1 text-xs text-muted-foreground">
+                      <Lock className="h-3 w-3" />
+                      {t('mcpServers.managed.badge', { defaultValue: 'Managed' })}
+                    </Badge>
+                  )}
                 </div>
 
                 <div className="space-y-1 text-sm text-muted-foreground">
@@ -210,29 +221,38 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
                   {server.envVars && server.envVars.length > 0 && (
                     <ConfigLine label="Env Vars">{server.envVars.join(', ')}</ConfigLine>
                   )}
+                  {isManagedServer(server) && (
+                    <div className="pt-1 text-xs italic text-muted-foreground">
+                      {t('mcpServers.managed.hint', {
+                        defaultValue: 'Managed by CloudCLI — control it from the feature\'s settings toggle.',
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
 
-              <div className="ml-4 flex items-center gap-2">
-                <Button
-                  onClick={() => openForm(server)}
-                  variant="ghost"
-                  size="sm"
-                  className="text-muted-foreground hover:text-foreground"
-                  title={t('mcpServers.actions.edit')}
-                >
-                  <Edit3 className="h-4 w-4" />
-                </Button>
-                <Button
-                  onClick={() => deleteServer(server)}
-                  variant="ghost"
-                  size="sm"
-                  className="text-red-600 hover:text-red-700"
-                  title={t('mcpServers.actions.delete')}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
+              {!isManagedServer(server) && (
+                <div className="ml-4 flex items-center gap-2">
+                  <Button
+                    onClick={() => openForm(server)}
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground hover:text-foreground"
+                    title={t('mcpServers.actions.edit')}
+                  >
+                    <Edit3 className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    onClick={() => deleteServer(server)}
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-600 hover:text-red-700"
+                    title={t('mcpServers.actions.delete')}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         ))}

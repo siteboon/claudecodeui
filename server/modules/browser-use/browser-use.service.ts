@@ -76,8 +76,8 @@ const DEFAULT_SETTINGS: BrowserUseSettings = {
 };
 const AGENT_OWNER_ID = 'agent';
 const PROFILE_ROOT = path.join(os.homedir(), '.cloudcli', 'browser-use', 'profiles');
-const MCP_SERVER_NAME = 'cloudcli-browser-use';
-const MCP_PROVIDERS = ['claude', 'codex', 'cursor', 'gemini', 'opencode'];
+const MCP_SERVER_NAME = 'cloudcli-browser';
+const LEGACY_MCP_SERVER_NAMES = ['cloudcli-browser-use'];
 
 function getRuntime(): BrowserUseRuntime {
   return IS_PLATFORM ? 'cloud' : 'local';
@@ -95,7 +95,7 @@ function readSettings(): BrowserUseSettings {
       enabled: parsed.enabled === true,
     };
   } catch (error: any) {
-    console.warn('[Browser Use] Failed to read settings:', error?.message || error);
+    console.warn('[Browser] Failed to read settings:', error?.message || error);
     return DEFAULT_SETTINGS;
   }
 }
@@ -121,7 +121,7 @@ function getOrCreateMcpToken(): string {
 
 function getSetupMessage(settings: BrowserUseSettings, readiness: RuntimeReadiness): string {
   if (!settings.enabled) {
-    return 'Browser Use is disabled in settings.';
+    return 'Browser is disabled in settings.';
   }
 
   if (!readiness.playwrightInstalled) {
@@ -132,7 +132,7 @@ function getSetupMessage(settings: BrowserUseSettings, readiness: RuntimeReadine
     return 'Playwright is installed, but Chromium is missing. Install the Chromium runtime to continue.';
   }
 
-  return readiness.installMessage || 'Browser Use runtime is not ready.';
+  return readiness.installMessage || 'Browser runtime is not ready.';
 }
 
 function getPlaywright(): any | null {
@@ -162,6 +162,14 @@ function getMcpCommand(): { command: string; args: string[] } {
 function getMcpApiUrl(): string {
   const port = process.env.SERVER_PORT || process.env.PORT || '3001';
   return `http://127.0.0.1:${port}/api/browser-use-mcp`;
+}
+
+async function removeMcpServerFromAllProviders(name: string) {
+  const results = await providerMcpService.removeMcpServerFromAllProviders({
+    name,
+    scope: 'user',
+  });
+  return results.map((result) => ({ ...result, name }));
 }
 
 function normalizeProfileName(profileName?: string | null): string | null {
@@ -259,7 +267,7 @@ function formatInstallError(error: unknown): string {
   if (message.includes('sudo') && message.includes('password')) {
     return 'Installing Chromium system dependencies requires administrator privileges. Run `npx playwright install-deps chromium` on the machine where CloudCLI runs, then try again.';
   }
-  return message || 'Failed to install Browser Use runtime.';
+  return message || 'Failed to install Browser runtime.';
 }
 
 async function installRuntime(): Promise<{ success: boolean; message: string }> {
@@ -281,7 +289,7 @@ async function installRuntime(): Promise<{ success: boolean; message: string }> 
       lastInstallMessage = 'Installing Chromium runtime...';
       await runCommand(npmCommand, ['exec', '--', 'playwright', 'install', 'chromium']);
 
-      lastInstallMessage = 'Browser Use runtime installed.';
+      lastInstallMessage = 'Browser runtime installed.';
       return { success: true, message: lastInstallMessage };
     } catch (error) {
       lastInstallMessage = formatInstallError(error);
@@ -418,13 +426,14 @@ export const browserUseService = {
       installInProgress: readiness.installInProgress,
       sessionCount: sessions.size,
       message: available
-        ? 'Browser Use runtime is available.'
+        ? 'Browser runtime is available.'
         : getSetupMessage(settings, readiness),
     };
   },
 
   async registerAgentMcp() {
     const { command, args } = getMcpCommand();
+    await Promise.all(LEGACY_MCP_SERVER_NAMES.map((name) => removeMcpServerFromAllProviders(name)));
     const results = await providerMcpService.addMcpServerToAllProviders({
       name: MCP_SERVER_NAME,
       scope: 'user',
@@ -444,21 +453,9 @@ export const browserUseService = {
   },
 
   async unregisterAgentMcp() {
-    const results = await Promise.all(MCP_PROVIDERS.map(async (provider) => {
-      try {
-        const result = await providerMcpService.removeProviderMcpServer(provider, {
-          name: MCP_SERVER_NAME,
-          scope: 'user',
-        });
-        return { provider, removed: result.removed };
-      } catch (error) {
-        return {
-          provider,
-          removed: false,
-          error: error instanceof Error ? error.message : 'Unknown error',
-        };
-      }
-    }));
+    const results = (await Promise.all(
+      [MCP_SERVER_NAME, ...LEGACY_MCP_SERVER_NAMES].map((name) => removeMcpServerFromAllProviders(name)),
+    )).flat();
     return { name: MCP_SERVER_NAME, results };
   },
 
@@ -480,7 +477,7 @@ export const browserUseService = {
   async createAgentSession(options?: { profileName?: string | null }) {
     const settings = readSettings();
     if (!settings.enabled) {
-      throw new Error('Browser Use agent tools are disabled.');
+      throw new Error('Browser agent tools are disabled.');
     }
 
     await expireStaleSessions();
@@ -507,7 +504,7 @@ export const browserUseService = {
 
     const activeOwnerSessions = ownerSessions(AGENT_OWNER_ID).filter((item) => item.status === 'ready');
     if (activeOwnerSessions.length >= MAX_SESSIONS_PER_OWNER) {
-      throw new Error(`Browser Use is limited to ${MAX_SESSIONS_PER_OWNER} active agent sessions.`);
+      throw new Error(`Browser is limited to ${MAX_SESSIONS_PER_OWNER} active agent sessions.`);
     }
 
     const readiness = getRuntimeReadiness();
@@ -563,7 +560,7 @@ export const browserUseService = {
   async getAgentSession(sessionId: string) {
     const settings = readSettings();
     if (!settings.enabled) {
-      throw new Error('Browser Use agent tools are disabled.');
+      throw new Error('Browser agent tools are disabled.');
     }
     const session = sessions.get(sessionId);
     if (!session || session.ownerId !== AGENT_OWNER_ID) {

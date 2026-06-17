@@ -17,6 +17,7 @@ import {
 import { cn } from '../../../lib/utils';
 import { Badge, Button } from '../../../shared/view/ui';
 import { authenticatedFetch } from '../../../utils/api';
+import type { SettingsMainTab } from '../../settings/types/types';
 
 type BrowserUseStatus = {
   enabled: boolean;
@@ -53,7 +54,7 @@ type BrowserUseSession = {
 
 type BrowserUsePanelProps = {
   isVisible: boolean;
-  onShowSettings?: () => void;
+  onShowSettings?: (tab?: SettingsMainTab) => void;
 };
 
 async function readJson<T>(response: Response): Promise<T> {
@@ -119,8 +120,8 @@ function getStatusDot(status: BrowserUseSession['status']): string {
 }
 
 const PROMPTS = [
-  'Use Browser Use to inspect the checkout flow and report any broken UI states.',
-  'Open <url> with Browser Use, interact with the page, and summarize what changed after each step.',
+  'Use Browser to inspect the checkout flow and report any broken UI states.',
+  'Open <url> with Browser, interact with the page, and summarize what changed after each step.',
 ];
 
 export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUsePanelProps) {
@@ -174,7 +175,7 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
       ));
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load Browser Use');
+      setError(err instanceof Error ? err.message : 'Failed to load Browser');
     } finally {
       setIsRefreshing(false);
     }
@@ -192,7 +193,7 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
       await action();
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Browser Use action failed');
+      setError(err instanceof Error ? err.message : 'Browser action failed');
     } finally {
       setIsBusy(false);
     }
@@ -265,12 +266,12 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
           </div>
           <div className="min-w-0">
             <div className="text-sm font-semibold text-foreground">
-              {status?.enabled ? 'No browser sessions yet' : 'Browser Use is disabled'}
+              {status?.enabled ? 'No browser sessions yet' : 'Browser is disabled'}
             </div>
             <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
               {status?.enabled
-                ? 'Agent browser sessions appear here while an AI task is using Browser Use.'
-                : 'Enable Browser Use in settings to let agents open monitored browser sessions.'}
+                ? 'Agent browser sessions appear here while an AI task is using Browser.'
+                : 'Enable Browser in settings to let agents open monitored browser sessions.'}
             </p>
           </div>
         </div>
@@ -345,7 +346,7 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <MonitorPlay className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-semibold text-foreground">Browser Use</h3>
+            <h3 className="text-sm font-semibold text-foreground">Browser</h3>
             <Badge variant="outline" className={cn('text-[10px]', getRuntimeTone(status, isInstalling))}>
               {runtimeLabel}
             </Badge>
@@ -358,9 +359,9 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
               variant="ghost"
               size="sm"
               className="h-7 w-7 p-0"
-              onClick={onShowSettings}
-              title="Open Browser Use settings"
-              aria-label="Open Browser Use settings"
+              onClick={() => onShowSettings('browser')}
+              title="Open Browser settings"
+              aria-label="Open Browser settings"
             >
               <Settings className="h-3.5 w-3.5" />
             </Button>

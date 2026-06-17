@@ -52,7 +52,7 @@ export default function BrowserUseSettingsTab() {
   useEffect(() => {
     setIsLoading(true);
     void loadState()
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load Browser Use settings'))
+      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load Browser settings'))
       .finally(() => setIsLoading(false));
   }, [loadState]);
 
@@ -69,7 +69,7 @@ export default function BrowserUseSettingsTab() {
       window.dispatchEvent(new Event('browserUseSettingsChanged'));
       await loadState();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save Browser Use settings');
+      setError(err instanceof Error ? err.message : 'Failed to save Browser settings');
     } finally {
       setIsSaving(false);
     }
@@ -94,18 +94,18 @@ export default function BrowserUseSettingsTab() {
   return (
     <div className="space-y-8">
       <SettingsSection
-        title="Browser Use"
-        description="Allow agents to create guarded Playwright browser sessions that you can monitor from the Browser Use tab."
+        title="Browser"
+        description="Allow agents to create guarded Playwright browser sessions that you can monitor from the Browser tab."
       >
         <SettingsCard divided>
           <SettingsRow
-            label="Enable Browser Use"
-            description="Registers Browser Use for supported agents. Agents can create browser sessions; you can watch, stop, and delete them."
+            label="Enable Browser"
+            description="Registers Browser for supported agents. Agents can create browser sessions; you can watch, stop, and delete them."
           >
             <SettingsToggle
               checked={settings.enabled}
               onChange={(value) => void updateSettings({ enabled: value })}
-              ariaLabel="Enable Browser Use"
+              ariaLabel="Enable Browser"
               disabled={isLoading || isSaving}
             />
           </SettingsRow>
@@ -128,7 +128,7 @@ export default function BrowserUseSettingsTab() {
                 <div className="min-w-0 space-y-1">
                   <div className="text-sm font-medium text-foreground">Browser runtime required</div>
                   <p className="text-sm text-muted-foreground">
-                    {status?.message || 'Install the browser runtime before agents can create Browser Use sessions.'}
+                    {status?.message || 'Install the browser runtime before agents can create Browser sessions.'}
                   </p>
                 </div>
 
