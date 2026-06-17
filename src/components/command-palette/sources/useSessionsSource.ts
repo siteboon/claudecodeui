@@ -11,11 +11,6 @@ export type SessionResult = {
 
 interface SessionsResponse {
   sessions?: ProjectSession[];
-  cursorSessions?: ProjectSession[];
-  codexSessions?: ProjectSession[];
-  geminiSessions?: ProjectSession[];
-  opencodeSessions?: ProjectSession[];
-  kiroSessions?: ProjectSession[];
 }
 
 export function useSessionsSource(projectId: string | undefined, enabled: boolean) {
@@ -30,18 +25,10 @@ export function useSessionsSource(projectId: string | undefined, enabled: boolea
       );
     },
     parse: (data) => {
-      const all: ProjectSession[] = [
-        ...(data.sessions ?? []),
-        ...(data.cursorSessions ?? []),
-        ...(data.codexSessions ?? []),
-        ...(data.geminiSessions ?? []),
-        ...(data.opencodeSessions ?? []),
-        ...(data.kiroSessions ?? []),
-      ];
-      return all.map<SessionResult>((s) => ({
+      return (data.sessions ?? []).map<SessionResult>((s) => ({
         id: s.id,
         label: (s.title || s.summary || s.name || s.id) as string,
-        provider: s.__provider,
+        provider: (s.__provider || s.provider) as LLMProvider | undefined,
       }));
     },
   });

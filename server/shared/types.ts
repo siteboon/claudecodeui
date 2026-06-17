@@ -176,6 +176,30 @@ export type MessageKind =
   | 'task_notification';
 
 /**
+ * Event kinds added by the chat gateway layer on top of provider message kinds.
+ *
+ * These are app-level realtime events (subscription acks, sidebar deltas,
+ * project loading progress, protocol failures) that are not produced by any
+ * provider adapter. Together with `MessageKind` they form the complete set of
+ * `kind` values a websocket client can receive, so the frontend only ever
+ * needs one kind-based switch.
+ */
+export type GatewayEventKind =
+  | 'chat_subscribed'
+  | 'session_upserted'
+  | 'loading_progress'
+  | 'protocol_error';
+
+/**
+ * Complete set of `kind` values emitted to websocket clients.
+ *
+ * Every server-to-client websocket frame carries a `kind` from this union.
+ * Provider runtimes emit `MessageKind` values; gateway services emit
+ * `GatewayEventKind` values.
+ */
+export type ServerEventKind = MessageKind | GatewayEventKind;
+
+/**
  * Provider-neutral message envelope used in REST responses and realtime channels.
  *
  * Every provider-specific message must be converted into this shape before being
@@ -187,6 +211,13 @@ export type NormalizedMessage = {
   timestamp: string;
   provider: LLMProvider;
   kind: MessageKind;
+  /**
+   * Monotonic per-run sequence number assigned by the chat run registry when a
+   * live event is forwarded to the websocket. History messages loaded over
+   * REST do not carry it. Clients use it with `chat.subscribe` to replay only
+   * the live events they missed across websocket reconnects.
+   */
+  seq?: number;
   role?: 'user' | 'assistant';
   content?: string;
   /**
@@ -237,11 +268,18 @@ export type NormalizedMessage = {
  *
  * Consumers should pass provider-specific lookup hints (`projectPath`) only
  * when the selected provider requires them.
+ *
+ * `providerSessionId` is the provider-native session id from the sessions
+ * index (transcript file name / provider database key). Provider adapters
+ * must use it — never the app-facing session id they were called with — when
+ * matching transcript rows on disk, because app-created sessions use an
+ * app-allocated id that the provider has never seen.
  */
 export type FetchHistoryOptions = {
   projectPath?: string;
   limit?: number | null;
   offset?: number;
+  providerSessionId?: string;
 };
 
 /**

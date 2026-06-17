@@ -9,12 +9,11 @@ import { AppError } from '@/shared/utils.js';
 
 type SessionSummary = {
   id: string;
+  provider: string;
   summary: string;
   messageCount: number;
   lastActivity: string;
 };
-
-type SessionsByProvider = Record<'claude' | 'cursor' | 'codex' | 'gemini' | 'opencode' | 'kiro', SessionSummary[]>;
 
 type SessionRepositoryRow = {
   provider: string;
@@ -31,11 +30,6 @@ export type ProjectListItem = {
   fullPath: string;
   isStarred: boolean;
   sessions: SessionSummary[];
-  cursorSessions: SessionSummary[];
-  codexSessions: SessionSummary[];
-  geminiSessions: SessionSummary[];
-  opencodeSessions: SessionSummary[];
-  kiroSessions: SessionSummary[];
   sessionMeta: {
     hasMore: boolean;
     total: number;
@@ -65,7 +59,7 @@ type SessionPaginationOptions = {
 };
 
 type ProjectSessionsPageResult = {
-  sessionsByProvider: SessionsByProvider;
+  sessions: SessionSummary[];
   total: number;
   hasMore: boolean;
 };
@@ -73,11 +67,6 @@ type ProjectSessionsPageResult = {
 export type ProjectSessionsPageApiView = {
   projectId: string;
   sessions: SessionSummary[];
-  cursorSessions: SessionSummary[];
-  codexSessions: SessionSummary[];
-  geminiSessions: SessionSummary[];
-  opencodeSessions: SessionSummary[];
-  kiroSessions: SessionSummary[];
   sessionMeta: {
     hasMore: boolean;
     total: number;
@@ -131,40 +120,18 @@ function normalizeSessionPagination(options: SessionPaginationOptions = {}): { l
 function mapSessionRowToSummary(row: SessionRepositoryRow): SessionSummary {
   return {
     id: row.session_id,
+    provider: row.provider,
     summary: row.custom_name || '',
     messageCount: 0,
     lastActivity: row.updated_at ?? row.created_at ?? new Date().toISOString(),
   };
 }
 
-function bucketSessionRowsByProvider(rows: SessionRepositoryRow[]): SessionsByProvider {
-  const byProvider: SessionsByProvider = {
-    claude: [],
-    cursor: [],
-    codex: [],
-    gemini: [],
-    opencode: [],
-    kiro: [],
-  };
-
-  for (const row of rows) {
-    const provider = row.provider as keyof SessionsByProvider;
-    const bucket = byProvider[provider];
-    if (!bucket) {
-      continue;
-    }
-
-    bucket.push(mapSessionRowToSummary(row));
-  }
-
-  return byProvider;
-}
-
 function readProjectSessionsIncludingArchived(projectPath: string): ProjectSessionsPageResult {
   const rows = sessionsDb.getSessionsByProjectPathIncludingArchived(projectPath) as SessionRepositoryRow[];
 
   return {
-    sessionsByProvider: bucketSessionRowsByProvider(rows),
+    sessions: rows.map(mapSessionRowToSummary),
     total: rows.length,
     hasMore: false,
   };
@@ -186,16 +153,17 @@ function readProjectSessionsPageByPath(
   const total = sessionsDb.countSessionsByProjectPath(projectPath);
 
   return {
-    sessionsByProvider: bucketSessionRowsByProvider(rows),
+    sessions: rows.map(mapSessionRowToSummary),
     total,
     hasMore: pagination.offset + rows.length < total,
   };
 }
 
-// Broadcast progress to all connected WebSocket clients
+// Broadcast progress to all connected WebSocket clients.
+// Uses the unified `kind` envelope like every other websocket frame.
 function broadcastProgress(progress: ProgressUpdate) {
   const message = JSON.stringify({
-    type: 'loading_progress',
+    kind: 'loading_progress',
     ...progress,
   });
 
@@ -207,7 +175,7 @@ function broadcastProgress(progress: ProgressUpdate) {
 }
 
 /**
- * Reads all projects from DB and returns provider-bucketed session summaries.
+ * Reads all projects from DB and returns normalized session summaries.
  */
 export async function getProjectsWithSessions(
   options: GetProjectsWithSessionsOptions = {}
@@ -255,12 +223,7 @@ export async function getProjectsWithSessions(
       displayName,
       fullPath: projectPath,
       isStarred: Boolean(row.isStarred),
-      sessions: sessionsPage.sessionsByProvider.claude,
-      cursorSessions: sessionsPage.sessionsByProvider.cursor,
-      codexSessions: sessionsPage.sessionsByProvider.codex,
-      geminiSessions: sessionsPage.sessionsByProvider.gemini,
-      opencodeSessions: sessionsPage.sessionsByProvider.opencode,
-      kiroSessions: sessionsPage.sessionsByProvider.kiro,
+      sessions: sessionsPage.sessions,
       sessionMeta: {
         hasMore: sessionsPage.hasMore,
         total: sessionsPage.total,
@@ -313,12 +276,7 @@ export async function getArchivedProjectsWithSessions(
       fullPath: row.project_path,
       isStarred: Boolean(row.isStarred),
       isArchived: true,
-      sessions: sessionsPage.sessionsByProvider.claude,
-      cursorSessions: sessionsPage.sessionsByProvider.cursor,
-      codexSessions: sessionsPage.sessionsByProvider.codex,
-      geminiSessions: sessionsPage.sessionsByProvider.gemini,
-      opencodeSessions: sessionsPage.sessionsByProvider.opencode,
-      kiroSessions: sessionsPage.sessionsByProvider.kiro,
+      sessions: sessionsPage.sessions,
       sessionMeta: {
         hasMore: sessionsPage.hasMore,
         total: sessionsPage.total,
@@ -347,12 +305,7 @@ export async function getProjectSessionsPage(
   const sessionsPage = readProjectSessionsPageByPath(projectRow.project_path, options);
   return {
     projectId: projectRow.project_id,
-    sessions: sessionsPage.sessionsByProvider.claude,
-    cursorSessions: sessionsPage.sessionsByProvider.cursor,
-    codexSessions: sessionsPage.sessionsByProvider.codex,
-    geminiSessions: sessionsPage.sessionsByProvider.gemini,
-    opencodeSessions: sessionsPage.sessionsByProvider.opencode,
-    kiroSessions: sessionsPage.sessionsByProvider.kiro,
+    sessions: sessionsPage.sessions,
     sessionMeta: {
       hasMore: sessionsPage.hasMore,
       total: sessionsPage.total,

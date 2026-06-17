@@ -19,6 +19,8 @@ interface ChatMessagesPaneProps {
   onWheel: () => void;
   onTouchMove: () => void;
   isLoadingSessionMessages: boolean;
+  /** True while the viewed session has an active provider run in flight. */
+  isProcessing?: boolean;
   chatMessages: ChatMessage[];
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
@@ -70,6 +72,7 @@ export default function ChatMessagesPane({
   onWheel,
   onTouchMove,
   isLoadingSessionMessages,
+  isProcessing = false,
   chatMessages,
   selectedSession,
   currentSessionId,
@@ -151,7 +154,7 @@ export default function ChatMessagesPane({
       onTouchMove={onTouchMove}
       className="relative flex-1 space-y-3 overflow-y-auto overflow-x-hidden px-0 py-3 sm:space-y-4 sm:p-4"
     >
-      {isLoadingSessionMessages && chatMessages.length === 0 ? (
+      {(isLoadingSessionMessages || isProcessing) && chatMessages.length === 0 ? (
         <div className="mt-8 text-center text-gray-500 dark:text-gray-400">
           <div className="flex items-center justify-center space-x-2">
             <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-gray-400" />

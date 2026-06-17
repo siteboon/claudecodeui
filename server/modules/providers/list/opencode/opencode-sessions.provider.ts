@@ -12,6 +12,7 @@ import {
   readObjectRecord,
   readJsonRecord,
   readOptionalString,
+  sliceTailPage,
 } from '@/shared/utils.js';
 
 const PROVIDER = 'opencode';
@@ -325,6 +326,9 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
     options: FetchHistoryOptions = {},
   ): Promise<FetchHistoryResult> {
     const { limit = null, offset = 0 } = options;
+    // OpenCode's shared sqlite database keys messages by the provider-native
+    // session id, not the app-facing id this method is addressed with.
+    const providerSessionId = options.providerSessionId ?? sessionId;
     const db = openOpenCodeDatabase();
     if (!db) {
       return { messages: [], total: 0, hasMore: false, offset: 0, limit: null };
@@ -349,27 +353,20 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
           m.id,
           COALESCE(p.time_created, 0),
           p.id
-      `).all(sessionId) as OpenCodeHistoryRow[];
+      `).all(providerSessionId) as OpenCodeHistoryRow[];
 
       const normalized = this.normalizeHistoryRows(rows, sessionId);
-      const tokenUsage = aggregateOpenCodeSessionTokenUsage(db, sessionId);
+      const tokenUsage = aggregateOpenCodeSessionTokenUsage(db, providerSessionId);
 
       const normalizedOffset = Math.max(0, offset);
       const normalizedLimit = limit === null ? null : Math.max(0, limit);
       const total = normalized.length;
-      const messages = normalizedLimit === null
-        ? normalized
-        : normalized.slice(
-            Math.max(0, total - normalizedOffset - normalizedLimit),
-            Math.max(0, total - normalizedOffset),
-          );
+      const { page, hasMore } = sliceTailPage(normalized, normalizedLimit, normalizedOffset);
 
       return {
-        messages,
+        messages: page,
         total,
-        hasMore: normalizedLimit === null
-          ? false
-          : Math.max(0, total - normalizedOffset - normalizedLimit) > 0,
+        hasMore,
         offset: normalizedOffset,
         limit: normalizedLimit,
         tokenUsage,

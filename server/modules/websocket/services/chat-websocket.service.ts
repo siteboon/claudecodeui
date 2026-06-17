@@ -1,42 +1,35 @@
 import type { WebSocket } from 'ws';
 
-import { connectedClients } from '@/modules/websocket/services/websocket-state.service.js';
-import { WebSocketWriter } from '@/modules/websocket/services/websocket-writer.service.js';
+import { sessionsDb } from '@/modules/database/index.js';
+import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
+import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
 import type {
   AnyRecord,
   AuthenticatedWebSocketRequest,
   LLMProvider,
 } from '@/shared/types.js';
-import { createNormalizedMessage, parseIncomingJsonObject } from '@/shared/utils.js';
+import { parseIncomingJsonObject } from '@/shared/utils.js';
 
-type ChatIncomingMessage = AnyRecord & {
-  type?: string;
-  command?: string;
-  options?: AnyRecord;
-  provider?: string;
-  sessionId?: string;
-  requestId?: string;
-  allow?: unknown;
-  updatedInput?: unknown;
-  message?: unknown;
-  rememberEntry?: unknown;
-};
-
-const DEFAULT_PROVIDER: LLMProvider = 'claude';
+/**
+ * One provider runtime entry point. All five runtimes share this signature,
+ * which lets the chat handler dispatch through a provider-keyed map instead
+ * of provider-specific branches.
+ */
+type ProviderSpawnFn = (
+  command: string,
+  options: AnyRecord,
+  writer: unknown
+) => Promise<unknown>;
 
 type ChatWebSocketDependencies = {
-  queryClaudeSDK: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
-  spawnCursor: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
-  queryCodex: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
-  spawnGemini: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
-  spawnOpenCode: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
-  spawnKiro: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
-  abortClaudeSDKSession: (sessionId: string) => Promise<boolean>;
-  abortCursorSession: (sessionId: string) => boolean;
-  abortCodexSession: (sessionId: string) => boolean;
-  abortGeminiSession: (sessionId: string) => boolean;
-  abortOpenCodeSession: (sessionId: string) => boolean;
-  abortKiroSession: (sessionId: string) => boolean;
+  /** Provider runtimes keyed by provider id. */
+  spawnFns: Record<LLMProvider, ProviderSpawnFn>;
+  /**
+   * Abort functions keyed by provider id. They are addressed with the
+   * provider-native session id (that is how runtimes key their process maps).
+   * The Claude abort is async; the rest are sync — both shapes are accepted.
+   */
+  abortFns: Record<LLMProvider, (providerSessionId: string) => boolean | Promise<boolean>>;
   resolveToolApproval: (
     requestId: string,
     payload: {
@@ -46,39 +39,9 @@ type ChatWebSocketDependencies = {
       rememberEntry?: unknown;
     }
   ) => void;
-  isClaudeSDKSessionActive: (sessionId: string) => boolean;
-  isCursorSessionActive: (sessionId: string) => boolean;
-  isCodexSessionActive: (sessionId: string) => boolean;
-  isGeminiSessionActive: (sessionId: string) => boolean;
-  isOpenCodeSessionActive: (sessionId: string) => boolean;
-  isKiroSessionActive: (sessionId: string) => boolean;
-  reconnectSessionWriter: (sessionId: string, ws: WebSocket) => boolean;
-  getPendingApprovalsForSession: (sessionId: string) => unknown[];
-  getActiveClaudeSDKSessions: () => unknown;
-  getActiveCursorSessions: () => unknown;
-  getActiveCodexSessions: () => unknown;
-  getActiveGeminiSessions: () => unknown;
-  getActiveOpenCodeSessions: () => unknown;
-  getActiveKiroSessions: () => unknown;
+  /** Claude-only today: pending tool approvals included in `chat_subscribed`. */
+  getPendingApprovalsForSession: (providerSessionId: string) => unknown[];
 };
-
-/**
- * Normalizes potentially invalid provider names coming from websocket payloads.
- */
-function readProvider(value: unknown): LLMProvider {
-  if (
-    value === 'claude'
-    || value === 'cursor'
-    || value === 'codex'
-    || value === 'gemini'
-    || value === 'opencode'
-    || value === 'kiro'
-  ) {
-    return value;
-  }
-
-  return DEFAULT_PROVIDER;
-}
 
 /**
  * Extracts the authenticated request user id in the formats currently produced
@@ -103,8 +66,258 @@ function readRequestUserId(
   return null;
 }
 
+function sendJson(ws: WebSocket, payload: unknown): void {
+  if (ws.readyState === WS_OPEN_STATE) {
+    ws.send(JSON.stringify(payload));
+  }
+}
+
+/**
+ * Reports a protocol-level failure to the requesting client.
+ *
+ * Protocol errors deliberately use their own `kind` (instead of the provider
+ * `error` message kind) so the frontend can distinguish "your request was
+ * invalid" from "the model run produced an error" without inspecting text.
+ */
+function sendProtocolError(
+  ws: WebSocket,
+  code: string,
+  error: string,
+  sessionId?: string
+): void {
+  sendJson(ws, {
+    kind: 'protocol_error',
+    code,
+    error,
+    sessionId: sessionId ?? null,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+function readRequiredSessionId(data: AnyRecord): string | null {
+  const sessionId = typeof data.sessionId === 'string' ? data.sessionId.trim() : '';
+  return sessionId.length > 0 ? sessionId : null;
+}
+
+/**
+ * Handles `chat.send`: resolves the session row (provider, project path, and
+ * provider-native id all come from the database — never from the client),
+ * registers the run, and dispatches to the provider runtime.
+ */
+async function handleChatSend(
+  ws: WebSocket,
+  userId: string | number | null,
+  data: AnyRecord,
+  dependencies: ChatWebSocketDependencies
+): Promise<void> {
+  const sessionId = readRequiredSessionId(data);
+  if (!sessionId) {
+    sendProtocolError(ws, 'SESSION_ID_REQUIRED', 'chat.send requires a sessionId.');
+    return;
+  }
+
+  const session = sessionsDb.getSessionById(sessionId);
+  if (!session) {
+    sendProtocolError(
+      ws,
+      'SESSION_NOT_FOUND',
+      `Session "${sessionId}" was not found. Create it via POST /api/providers/sessions first.`,
+      sessionId
+    );
+    return;
+  }
+
+  const provider = session.provider as LLMProvider;
+  const spawnFn = dependencies.spawnFns[provider];
+  if (!spawnFn) {
+    sendProtocolError(ws, 'UNSUPPORTED_PROVIDER', `Provider "${provider}" is not available.`, sessionId);
+    return;
+  }
+
+  const run = chatRunRegistry.startRun({
+    appSessionId: sessionId,
+    provider,
+    providerSessionId: session.provider_session_id,
+    connection: ws,
+    userId,
+  });
+
+  if (!run) {
+    sendProtocolError(
+      ws,
+      'RUN_IN_PROGRESS',
+      `Session "${sessionId}" already has a run in progress.`,
+      sessionId
+    );
+    return;
+  }
+
+  const clientOptions = (data.options ?? {}) as AnyRecord;
+  const command = typeof data.content === 'string' ? data.content : '';
+
+  // The provider runtimes receive the provider-native session id (that is the
+  // id their CLI/SDK understands for resume). Brand-new sessions have no
+  // provider id yet, so the runtime starts fresh and announces one, which the
+  // gateway writer captures and maps back to the app session id.
+  const runtimeOptions: AnyRecord = {
+    ...clientOptions,
+    sessionId: session.provider_session_id ?? undefined,
+    resume: Boolean(session.provider_session_id),
+    cwd: clientOptions.cwd ?? session.project_path ?? undefined,
+    projectPath: session.project_path ?? clientOptions.projectPath,
+  };
+
+  try {
+    await spawnFn(command, runtimeOptions, run.writer);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[Chat] Provider runtime "${provider}" failed`, { sessionId, error: message });
+  } finally {
+    // Safety net: a runtime that crashed (or resolved) without emitting its
+    // terminal `complete` would otherwise leave the session stuck in
+    // "processing" forever on every connected client.
+    chatRunRegistry.completeRun(sessionId, { exitCode: 1 });
+  }
+}
+
+/**
+ * Handles `chat.abort`: cancels the run for one app session and emits the
+ * terminal `complete` on its behalf (runtimes skip their own complete for
+ * aborted runs, and the registry drops any duplicate).
+ */
+async function handleChatAbort(
+  ws: WebSocket,
+  data: AnyRecord,
+  dependencies: ChatWebSocketDependencies
+): Promise<void> {
+  const sessionId = readRequiredSessionId(data);
+  if (!sessionId) {
+    sendProtocolError(ws, 'SESSION_ID_REQUIRED', 'chat.abort requires a sessionId.');
+    return;
+  }
+
+  const run = chatRunRegistry.getRun(sessionId);
+  if (!run || run.status !== 'running') {
+    sendProtocolError(ws, 'NO_ACTIVE_RUN', `Session "${sessionId}" has no active run.`, sessionId);
+    return;
+  }
+
+  const abortFn = dependencies.abortFns[run.provider];
+  let success = false;
+  if (abortFn && run.providerSessionId) {
+    success = Boolean(await abortFn(run.providerSessionId));
+  }
+
+  chatRunRegistry.completeRun(sessionId, {
+    exitCode: success ? 0 : 1,
+    aborted: true,
+  });
+}
+
+/**
+ * Handles `chat.subscribe`: for each requested session, reports whether a run
+ * is processing, re-attaches the live stream to this socket, replays missed
+ * events (seq > lastSeq), and includes pending permission requests.
+ *
+ * This single message replaces the old `check-session-status`,
+ * `get-pending-permissions`, and Claude-only writer reconnect flows.
+ */
+function handleChatSubscribe(
+  ws: WebSocket,
+  data: AnyRecord,
+  dependencies: ChatWebSocketDependencies
+): void {
+  const targets = Array.isArray(data.sessions) ? data.sessions : [];
+
+  for (const target of targets) {
+    if (!target || typeof target !== 'object') {
+      continue;
+    }
+
+    const sessionId = typeof (target as AnyRecord).sessionId === 'string'
+      ? ((target as AnyRecord).sessionId as string).trim()
+      : '';
+    if (!sessionId) {
+      continue;
+    }
+
+    const lastSeqRaw = (target as AnyRecord).lastSeq;
+    const lastSeq = typeof lastSeqRaw === 'number' && Number.isFinite(lastSeqRaw)
+      ? Math.max(0, Math.floor(lastSeqRaw))
+      : 0;
+
+    const run = chatRunRegistry.getRun(sessionId);
+    const isProcessing = chatRunRegistry.isProcessing(sessionId);
+
+    // Future live events for this run should land on the socket that asked —
+    // this is what makes mid-stream page refreshes work for all providers.
+    if (isProcessing) {
+      chatRunRegistry.attachConnection(sessionId, ws);
+    }
+
+    // Pending approvals are tracked under the provider-native id inside the
+    // Claude runtime; remap their sessionId so the client only sees app ids.
+    const pendingPermissions = (run?.providerSessionId
+      ? dependencies.getPendingApprovalsForSession(run.providerSessionId)
+      : []
+    ).map((approval) =>
+      approval && typeof approval === 'object'
+        ? { ...(approval as AnyRecord), sessionId }
+        : approval,
+    );
+
+    sendJson(ws, {
+      kind: 'chat_subscribed',
+      sessionId,
+      isProcessing,
+      lastSeq: run?.lastSeq ?? 0,
+      pendingPermissions,
+      timestamp: new Date().toISOString(),
+    });
+
+    // Replay only for RUNNING runs, strictly after the ack. Completed runs
+    // are fully persisted to the provider transcript and served over REST —
+    // replaying them (e.g. after a page reload where the client's lastSeq is
+    // 0) would duplicate messages the history fetch already returned.
+    if (isProcessing) {
+      for (const event of chatRunRegistry.replayEvents(sessionId, lastSeq)) {
+        sendJson(ws, event);
+      }
+    }
+  }
+}
+
+/**
+ * Handles `chat.permission-response`: forwards a tool-approval decision to the
+ * pending approval resolver (Claude is the only provider with interactive
+ * approvals today, but the message is intentionally provider-neutral).
+ */
+function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDependencies): void {
+  if (typeof data.requestId !== 'string' || data.requestId.length === 0) {
+    return;
+  }
+
+  dependencies.resolveToolApproval(data.requestId, {
+    allow: Boolean(data.allow),
+    updatedInput: data.updatedInput,
+    message: typeof data.message === 'string' ? data.message : undefined,
+    rememberEntry: data.rememberEntry,
+  });
+}
+
 /**
  * Handles authenticated chat websocket messages used by the main chat panel.
+ *
+ * Inbound protocol (client to server):
+ * - `chat.send`                { sessionId, content, options? }
+ * - `chat.abort`               { sessionId }
+ * - `chat.subscribe`           { sessions: [{ sessionId, lastSeq? }] }
+ * - `chat.permission-response` { requestId, allow, updatedInput?, message?, rememberEntry? }
+ *
+ * Outbound protocol (server to client): every frame is `kind`-based — either
+ * a provider `NormalizedMessage` (with `seq`) or a gateway event
+ * (`chat_subscribed`, `session_upserted`, `loading_progress`,
+ * `protocol_error`).
  */
 export function handleChatConnection(
   ws: WebSocket,
@@ -114,7 +327,7 @@ export function handleChatConnection(
   console.log('[INFO] Chat WebSocket connected');
   connectedClients.add(ws);
 
-  const writer = new WebSocketWriter(ws, readRequestUserId(request));
+  const userId = readRequestUserId(request);
 
   ws.on('message', async (rawMessage) => {
     try {
@@ -123,179 +336,30 @@ export function handleChatConnection(
         throw new Error('Invalid websocket payload');
       }
 
-      const data = parsed as ChatIncomingMessage;
-      const messageType = data.type;
-      if (!messageType) {
-        throw new Error('Message type is required');
-      }
+      const data = parsed as AnyRecord;
+      const messageType = typeof data.type === 'string' ? data.type : '';
 
-      if (messageType === 'claude-command') {
-        await dependencies.queryClaudeSDK(data.command ?? '', data.options, writer);
-        return;
-      }
-
-      if (messageType === 'cursor-command') {
-        await dependencies.spawnCursor(data.command ?? '', data.options, writer);
-        return;
-      }
-
-      if (messageType === 'codex-command') {
-        await dependencies.queryCodex(data.command ?? '', data.options, writer);
-        return;
-      }
-
-      if (messageType === 'gemini-command') {
-        await dependencies.spawnGemini(data.command ?? '', data.options, writer);
-        return;
-      }
-
-      if (messageType === 'opencode-command') {
-        await dependencies.spawnOpenCode(data.command ?? '', data.options, writer);
-        return;
-      }
-
-      if (messageType === 'kiro-command') {
-        await dependencies.spawnKiro(data.command ?? '', data.options, writer);
-        return;
-      }
-
-      if (messageType === 'cursor-resume') {
-        await dependencies.spawnCursor(
-          '',
-          {
-            sessionId: data.sessionId,
-            resume: true,
-            cwd: data.options?.cwd,
-          },
-          writer
-        );
-        return;
-      }
-
-      if (messageType === 'abort-session') {
-        const provider = readProvider(data.provider);
-        const sessionId = typeof data.sessionId === 'string' ? data.sessionId : '';
-        let success = false;
-
-        if (provider === 'cursor') {
-          success = dependencies.abortCursorSession(sessionId);
-        } else if (provider === 'codex') {
-          success = dependencies.abortCodexSession(sessionId);
-        } else if (provider === 'gemini') {
-          success = dependencies.abortGeminiSession(sessionId);
-        } else if (provider === 'opencode') {
-          success = dependencies.abortOpenCodeSession(sessionId);
-        } else if (provider === 'kiro') {
-          success = dependencies.abortKiroSession(sessionId);
-        } else {
-          success = await dependencies.abortClaudeSDKSession(sessionId);
-        }
-
-        writer.send(
-          createNormalizedMessage({
-            kind: 'complete',
-            exitCode: success ? 0 : 1,
-            aborted: true,
-            success,
-            sessionId,
-            provider,
-          })
-        );
-        return;
-      }
-
-      if (messageType === 'claude-permission-response') {
-        if (typeof data.requestId === 'string' && data.requestId.length > 0) {
-          dependencies.resolveToolApproval(data.requestId, {
-            allow: Boolean(data.allow),
-            updatedInput: data.updatedInput,
-            message: typeof data.message === 'string' ? data.message : undefined,
-            rememberEntry: data.rememberEntry,
-          });
-        }
-        return;
-      }
-
-      if (messageType === 'cursor-abort') {
-        const sessionId = typeof data.sessionId === 'string' ? data.sessionId : '';
-        const success = dependencies.abortCursorSession(sessionId);
-        writer.send(
-          createNormalizedMessage({
-            kind: 'complete',
-            exitCode: success ? 0 : 1,
-            aborted: true,
-            success,
-            sessionId,
-            provider: 'cursor',
-          })
-        );
-        return;
-      }
-
-      if (messageType === 'check-session-status') {
-        const provider = readProvider(data.provider);
-        const sessionId = typeof data.sessionId === 'string' ? data.sessionId : '';
-        let isActive = false;
-
-        if (provider === 'cursor') {
-          isActive = dependencies.isCursorSessionActive(sessionId);
-        } else if (provider === 'codex') {
-          isActive = dependencies.isCodexSessionActive(sessionId);
-        } else if (provider === 'gemini') {
-          isActive = dependencies.isGeminiSessionActive(sessionId);
-        } else if (provider === 'opencode') {
-          isActive = dependencies.isOpenCodeSessionActive(sessionId);
-        } else if (provider === 'kiro') {
-          isActive = dependencies.isKiroSessionActive(sessionId);
-        } else {
-          isActive = dependencies.isClaudeSDKSessionActive(sessionId);
-          if (isActive) {
-            dependencies.reconnectSessionWriter(sessionId, ws);
-          }
-        }
-
-        writer.send({
-          type: 'session-status',
-          sessionId,
-          provider,
-          isProcessing: isActive,
-        });
-        return;
-      }
-
-      if (messageType === 'get-pending-permissions') {
-        const sessionId = typeof data.sessionId === 'string' ? data.sessionId : '';
-        if (sessionId && dependencies.isClaudeSDKSessionActive(sessionId)) {
-          const pending = dependencies.getPendingApprovalsForSession(sessionId);
-          writer.send({
-            type: 'pending-permissions-response',
-            sessionId,
-            data: pending,
-          });
-        }
-        return;
-      }
-
-      if (messageType === 'get-active-sessions') {
-        writer.send({
-          type: 'active-sessions',
-          sessions: {
-            claude: dependencies.getActiveClaudeSDKSessions(),
-            cursor: dependencies.getActiveCursorSessions(),
-            codex: dependencies.getActiveCodexSessions(),
-            gemini: dependencies.getActiveGeminiSessions(),
-            opencode: dependencies.getActiveOpenCodeSessions(),
-            kiro: dependencies.getActiveKiroSessions(),
-          },
-        });
+      switch (messageType) {
+        case 'chat.send':
+          await handleChatSend(ws, userId, data, dependencies);
+          return;
+        case 'chat.abort':
+          await handleChatAbort(ws, data, dependencies);
+          return;
+        case 'chat.subscribe':
+          handleChatSubscribe(ws, data, dependencies);
+          return;
+        case 'chat.permission-response':
+          handlePermissionResponse(data, dependencies);
+          return;
+        default:
+          sendProtocolError(ws, 'UNKNOWN_MESSAGE_TYPE', `Unknown message type "${messageType}".`);
+          return;
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error('[ERROR] Chat WebSocket error:', message);
-      writer.send({
-        type: 'error',
-        error: message,
-      });
+      sendProtocolError(ws, 'INTERNAL_ERROR', message);
     }
   });
 

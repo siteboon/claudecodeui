@@ -1,6 +1,6 @@
 import type { TFunction } from 'i18next';
 
-import type { Project } from '../../../types/app';
+import type { LLMProvider, Project, ProjectSession } from '../../../types/app';
 import type { ProjectSortOrder, SettingsProject, SessionViewModel, SessionWithProvider } from '../types/types';
 
 export const readProjectSortOrder = (): ProjectSortOrder => {
@@ -61,6 +61,13 @@ const getUpdatedTimestamp = (session: SessionWithProvider): string => {
   return String(session.lastActivity || '');
 };
 
+const getSessionProvider = (session: ProjectSession): LLMProvider => {
+  const provider = session.__provider ?? session.provider;
+  return typeof provider === 'string' && provider.trim()
+    ? provider as LLMProvider
+    : 'claude';
+};
+
 export const getSessionDate = (session: SessionWithProvider): Date => {
   return new Date(getUpdatedTimestamp(session) || getCreatedTimestamp(session) || 0);
 };
@@ -82,10 +89,6 @@ export const createSessionViewModel = (
   const diffInMinutes = Math.floor((currentTime.getTime() - sessionDate.getTime()) / (1000 * 60));
 
   return {
-    isCursorSession: session.__provider === 'cursor',
-    isCodexSession: session.__provider === 'codex',
-    isGeminiSession: session.__provider === 'gemini',
-    isOpenCodeSession: session.__provider === 'opencode',
     isActive: diffInMinutes < 10,
     sessionName: getSessionName(session, t),
     sessionTime: getSessionTime(session),
@@ -94,37 +97,10 @@ export const createSessionViewModel = (
 };
 
 export const getAllSessions = (project: Project): SessionWithProvider[] => {
-  const claudeSessions = [...(project.sessions || [])].map((session) => ({
+  return (project.sessions || []).map((session) => ({
     ...session,
-    __provider: 'claude' as const,
-  }));
-
-  const cursorSessions = (project.cursorSessions || []).map((session) => ({
-    ...session,
-    __provider: 'cursor' as const,
-  }));
-
-  const codexSessions = (project.codexSessions || []).map((session) => ({
-    ...session,
-    __provider: 'codex' as const,
-  }));
-
-  const geminiSessions = (project.geminiSessions || []).map((session) => ({
-    ...session,
-    __provider: 'gemini' as const,
-  }));
-
-  const opencodeSessions = (project.opencodeSessions || []).map((session) => ({
-    ...session,
-    __provider: 'opencode' as const,
-  }));
-
-  const kiroSessions = (project.kiroSessions || []).map((session) => ({
-    ...session,
-    __provider: 'kiro' as const,
-  }));
-
-  return [...claudeSessions, ...cursorSessions, ...codexSessions, ...geminiSessions, ...opencodeSessions, ...kiroSessions].sort(
+    __provider: getSessionProvider(session),
+  })).sort(
     (a, b) => getSessionDate(b).getTime() - getSessionDate(a).getTime(),
   );
 };

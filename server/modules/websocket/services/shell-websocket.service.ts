@@ -35,7 +35,10 @@ const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
 const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
 
 type ShellWebSocketDependencies = {
-  getSessionById: (sessionId: string) => { cliSessionId?: string } | null | undefined;
+  resolveProviderSessionId: (
+    sessionId: string,
+    provider: string,
+  ) => string | null | undefined;
   stripAnsiSequences: (content: string) => string;
   normalizeDetectedUrl: (url: string) => string | null;
   extractUrlsFromText: (content: string) => string[];
@@ -76,6 +79,36 @@ function parseShellMessage(rawMessage: RawData): ShellIncomingMessage | null {
   return payload as ShellIncomingMessage;
 }
 
+const SAFE_SESSION_ID_PATTERN = /^[a-zA-Z0-9_.\-:]+$/;
+
+function resolveResumeSessionId(
+  message: ShellIncomingMessage,
+  dependencies: ShellWebSocketDependencies
+): string {
+  const hasSession = readBoolean(message.hasSession);
+  const sessionId = readString(message.sessionId);
+  const provider = readString(message.provider, 'claude');
+
+  if (!hasSession || !sessionId) {
+    return '';
+  }
+
+  let resumeSessionId: string | null | undefined;
+  try {
+    resumeSessionId = dependencies.resolveProviderSessionId(sessionId, provider);
+  } catch (error) {
+    console.error('Failed to resolve provider session ID:', error);
+    resumeSessionId = undefined;
+  }
+
+  const resolvedSessionId = resumeSessionId === undefined ? sessionId : resumeSessionId;
+  if (!resolvedSessionId || !SAFE_SESSION_ID_PATTERN.test(resolvedSessionId)) {
+    return '';
+  }
+
+  return resolvedSessionId;
+}
+
 /**
  * Resolves provider command line for plain shell and agent-backed shell modes.
  */
@@ -84,10 +117,9 @@ function buildShellCommand(
   dependencies: ShellWebSocketDependencies
 ): string {
   const hasSession = readBoolean(message.hasSession);
-  const sessionId = readString(message.sessionId);
   const initialCommand = readString(message.initialCommand);
   const provider = readString(message.provider, 'claude');
-  const safeSessionIdPattern = /^[a-zA-Z0-9_.\-:]+$/;
+  const resumeSessionId = resolveResumeSessionId(message, dependencies);
   const isPlainShell =
     readBoolean(message.isPlainShell) ||
     (!!initialCommand && !hasSession) ||
@@ -98,58 +130,53 @@ function buildShellCommand(
   }
 
   if (provider === 'cursor') {
-    if (hasSession && sessionId) {
-      return `cursor-agent --resume="${sessionId}"`;
+    if (resumeSessionId) {
+      return `cursor-agent --resume="${resumeSessionId}"`;
     }
     return 'cursor-agent';
   }
 
   if (provider === 'codex') {
-    if (hasSession && sessionId) {
+    if (resumeSessionId) {
       if (os.platform() === 'win32') {
-        return `codex resume "${sessionId}"; if ($LASTEXITCODE -ne 0) { codex }`;
+        return `codex resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { codex }`;
       }
-      return `codex resume "${sessionId}" || codex`;
+      return `codex resume "${resumeSessionId}" || codex`;
     }
     return 'codex';
   }
 
   if (provider === 'gemini') {
     const command = initialCommand || 'gemini';
-    let resumeId = sessionId;
-    if (hasSession && sessionId) {
-      try {
-        const existingSession = dependencies.getSessionById(sessionId);
-        if (existingSession && existingSession.cliSessionId) {
-          resumeId = existingSession.cliSessionId;
-          if (!safeSessionIdPattern.test(resumeId)) {
-            resumeId = '';
-          }
-        }
-      } catch (error) {
-        console.error('Failed to get Gemini CLI session ID:', error);
-      }
-    }
-
-    if (hasSession && resumeId) {
-      return `${command} --resume "${resumeId}"`;
+    if (resumeSessionId) {
+      return `${command} --resume "${resumeSessionId}"`;
     }
     return command;
   }
 
   if (provider === 'opencode') {
-    if (hasSession && sessionId) {
-      return `opencode --session "${sessionId}"`;
+    if (resumeSessionId) {
+      return `opencode --session "${resumeSessionId}"`;
     }
     return initialCommand || 'opencode';
   }
 
-  const command = initialCommand || 'claude';
-  if (hasSession && sessionId) {
-    if (os.platform() === 'win32') {
-      return `claude --resume "${sessionId}"; if ($LASTEXITCODE -ne 0) { claude }`;
+  if (provider === 'kiro') {
+    // The Shell tab drives the interactive `kiro-cli chat` REPL (the binary is
+    // `kiro-cli`, not `kiro`); the ACP/`--trust-all-tools` invocation is for
+    // the headless chat gateway only. Resume targets a specific conversation.
+    if (resumeSessionId) {
+      return `kiro-cli chat --resume-id "${resumeSessionId}"`;
     }
-    return `claude --resume "${sessionId}" || claude`;
+    return initialCommand || 'kiro-cli chat';
+  }
+
+  const command = initialCommand || 'claude';
+  if (resumeSessionId) {
+    if (os.platform() === 'win32') {
+      return `claude --resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { claude }`;
+    }
+    return `claude --resume "${resumeSessionId}" || claude`;
   }
   return command;
 }
@@ -261,6 +288,7 @@ export function handleShellConnection(
         }
 
         const shellCommand = buildShellCommand(data, dependencies);
+        const resumeSessionId = resolveResumeSessionId(data, dependencies);
         const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
         const shellArgs =
           os.platform() === 'win32' ? ['-Command', shellCommand] : ['-c', shellCommand];
@@ -405,9 +433,11 @@ export function handleShellConnection(
                   ? 'Gemini'
                   : provider === 'opencode'
                     ? 'OpenCode'
+                    : provider === 'kiro'
+                      ? 'Kiro'
                   : 'Claude';
-          welcomeMsg = hasSession
-            ? `\x1b[36mResuming ${providerName} session ${sessionId} in: ${projectPath}\x1b[0m\r\n`
+          welcomeMsg = hasSession && resumeSessionId
+            ? `\x1b[36mResuming ${providerName} session ${resumeSessionId} in: ${projectPath}\x1b[0m\r\n`
             : `\x1b[36mStarting new ${providerName} session in: ${projectPath}\x1b[0m\r\n`;
         }
 

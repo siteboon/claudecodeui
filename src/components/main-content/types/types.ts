@@ -1,9 +1,12 @@
 import type { Dispatch, SetStateAction } from 'react';
 
 import type { AppTab, Project, ProjectSession } from '../../../types/app';
-import type { SessionNavigationOptions } from '../../chat/types/types';
-
-export type SessionLifecycleHandler = (sessionId?: string | null) => void;
+import type {
+  MarkSessionIdle,
+  MarkSessionProcessing,
+  SessionActivityMap,
+} from '../../../hooks/useSessionProtection';
+import type { SessionEstablishedContext, SessionNavigationOptions } from '../../chat/types/types';
 
 export type TaskMasterTask = {
   id: string | number;
@@ -41,17 +44,15 @@ export type MainContentProps = {
   setActiveTab: Dispatch<SetStateAction<AppTab>>;
   ws: WebSocket | null;
   sendMessage: (message: unknown) => void;
-  latestMessage: unknown;
   isMobile: boolean;
   onMenuClick: () => void;
   isLoading: boolean;
   onInputFocusChange: (focused: boolean) => void;
-  onSessionActive: SessionLifecycleHandler;
-  onSessionInactive: SessionLifecycleHandler;
-  onSessionProcessing: SessionLifecycleHandler;
-  onSessionNotProcessing: SessionLifecycleHandler;
-  processingSessions: Set<string>;
+  onSessionProcessing: MarkSessionProcessing;
+  onSessionIdle: MarkSessionIdle;
+  processingSessions: SessionActivityMap;
   onNavigateToSession: (targetSessionId: string, options?: SessionNavigationOptions) => void;
+  onSessionEstablished: (sessionId: string, context: SessionEstablishedContext) => void;
   onShowSettings: () => void;
   externalMessageUpdate: number;
   newSessionTrigger: number;

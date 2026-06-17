@@ -12,22 +12,20 @@ import type {
 import { useDropzone } from 'react-dropzone';
 
 import { authenticatedFetch } from '../../../utils/api';
+import type { MarkSessionProcessing } from '../../../hooks/useSessionProtection';
 import { grantClaudeToolPermission } from '../utils/chatPermissions';
 import { safeLocalStorage } from '../utils/chatStorage';
 import type {
   ChatMessage,
   PendingPermissionRequest,
   PermissionMode,
+  SessionEstablishedContext,
 } from '../types/types';
 import type { Project, ProjectSession, LLMProvider, ProviderModelsCacheInfo } from '../../../types/app';
 import { escapeRegExp } from '../utils/chatFormatting';
 
 import { useFileMentions } from './useFileMentions';
 import { type SlashCommand, useSlashCommands } from './useSlashCommands';
-
-type PendingViewSession = {
-  startedAt: number;
-};
 
 interface UseChatComposerStateArgs {
   selectedProject: Project | null;
@@ -47,17 +45,20 @@ interface UseChatComposerStateArgs {
   tokenBudget: Record<string, unknown> | null;
   sendMessage: (message: unknown) => void;
   sendByCtrlEnter?: boolean;
-  onSessionActive?: (sessionId?: string | null) => void;
-  onSessionProcessing?: (sessionId?: string | null) => void;
+  onSessionProcessing?: MarkSessionProcessing;
+  /**
+   * Invoked with the freshly allocated session id when the user sends the
+   * first message of a brand-new conversation. The backend allocates the id
+   * via POST /api/providers/sessions BEFORE the websocket send, so the id is
+   * stable for the conversation's whole lifetime — the consumer navigates to
+   * /session/:id and records it as the current session.
+   */
+  onSessionEstablished?: (sessionId: string, context: SessionEstablishedContext) => void;
   onInputFocusChange?: (focused: boolean) => void;
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
-  pendingViewSessionRef: { current: PendingViewSession | null };
   scrollToBottom: () => void;
   addMessage: (msg: ChatMessage) => void;
-  setIsLoading: (loading: boolean) => void;
-  setCanAbortSession: (canAbort: boolean) => void;
-  setClaudeStatus: (status: { text: string; tokens: number; can_interrupt: boolean } | null) => void;
   setIsUserScrolledUp: (isScrolledUp: boolean) => void;
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
 }
@@ -179,17 +180,13 @@ export function useChatComposerState({
   tokenBudget,
   sendMessage,
   sendByCtrlEnter,
-  onSessionActive,
   onSessionProcessing,
+  onSessionEstablished,
   onInputFocusChange,
   onFileOpen,
   onShowSettings,
-  pendingViewSessionRef,
   scrollToBottom,
   addMessage,
-  setIsLoading,
-  setCanAbortSession,
-  setClaudeStatus,
   setIsUserScrolledUp,
   setPendingPermissionRequests,
 }: UseChatComposerStateArgs) {
@@ -614,8 +611,54 @@ export function useChatComposerState({
         }
       }
 
-      const effectiveSessionId =
-        currentSessionId || selectedSession?.id || sessionStorage.getItem('cursorSessionId');
+      const resolvedProjectPath = selectedProject.fullPath || selectedProject.path || '';
+      const sessionSummary = getNotificationSessionSummary(selectedSession, currentInput);
+
+      // The conversation always has a stable backend-allocated session id
+      // BEFORE the first websocket send: brand-new chats allocate one here
+      // via the session gateway. There is no client-visible session-id
+      // handoff later — this id stays valid for the conversation's lifetime.
+      let targetSessionId = selectedSession?.id || currentSessionId || null;
+      if (!targetSessionId) {
+        try {
+          const response = await authenticatedFetch('/api/providers/sessions', {
+            method: 'POST',
+            body: JSON.stringify({
+              provider,
+              projectPath: resolvedProjectPath,
+            }),
+          });
+          if (!response.ok) {
+            throw new Error(`Failed to create session (${response.status})`);
+          }
+          const body = await response.json();
+          targetSessionId = body?.data?.sessionId || null;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unknown error';
+          console.error('Session creation failed:', error);
+          addMessage({
+            type: 'error',
+            content: `Failed to start a new session: ${message}`,
+            timestamp: new Date(),
+          });
+          return;
+        }
+
+        if (!targetSessionId) {
+          addMessage({
+            type: 'error',
+            content: 'Failed to start a new session: no session id returned.',
+            timestamp: new Date(),
+          });
+          return;
+        }
+
+        onSessionEstablished?.(targetSessionId, {
+          provider,
+          project: selectedProject,
+          summary: sessionSummary,
+        });
+      }
 
       const userMessage: ChatMessage = {
         type: 'user',
@@ -625,26 +668,16 @@ export function useChatComposerState({
       };
 
       addMessage(userMessage);
-      setIsLoading(true); // Processing banner starts
-      setCanAbortSession(true);
-      setClaudeStatus({
-        text: 'Processing',
-        tokens: 0,
-        can_interrupt: true,
+      // Mark this request as processing in the per-session activity map (the
+      // single source of truth the indicator derives from). The id is always
+      // concrete at this point — no pending placeholder exists anymore.
+      onSessionProcessing?.(targetSessionId, {
+        statusText: null,
+        canInterrupt: true,
       });
 
       setIsUserScrolledUp(false);
       setTimeout(() => scrollToBottom(), 100);
-
-      if (!effectiveSessionId && !selectedSession?.id) {
-        // This tracks only that a request is in flight before the provider has
-        // emitted its real session id; routing still waits for session_created.
-        pendingViewSessionRef.current = { startedAt: Date.now() };
-      }
-      if (effectiveSessionId) {
-        onSessionActive?.(effectiveSessionId);
-        onSessionProcessing?.(effectiveSessionId);
-      }
 
       const getToolsSettings = () => {
         try {
@@ -676,101 +709,37 @@ export function useChatComposerState({
       };
 
       const toolsSettings = getToolsSettings();
-      const resolvedProjectPath = selectedProject.fullPath || selectedProject.path || '';
-      const sessionSummary = getNotificationSessionSummary(selectedSession, currentInput);
+      const model =
+        provider === 'cursor'
+          ? cursorModel
+          : provider === 'codex'
+            ? codexModel
+            : provider === 'gemini'
+              ? geminiModel
+              : provider === 'opencode'
+                ? opencodeModel
+                : provider === 'kiro'
+                  ? kiroModel
+                  : claudeModel;
 
-      if (provider === 'cursor') {
-        sendMessage({
-          type: 'cursor-command',
-          command: messageContent,
-          sessionId: effectiveSessionId,
-          options: {
-            cwd: resolvedProjectPath,
-            projectPath: resolvedProjectPath,
-            sessionId: effectiveSessionId,
-            resume: Boolean(effectiveSessionId),
-            model: cursorModel,
-            skipPermissions: toolsSettings?.skipPermissions || false,
-            sessionSummary,
-            toolsSettings,
-          },
-        });
-      } else if (provider === 'codex') {
-        sendMessage({
-          type: 'codex-command',
-          command: messageContent,
-          sessionId: effectiveSessionId,
-          options: {
-            cwd: resolvedProjectPath,
-            projectPath: resolvedProjectPath,
-            sessionId: effectiveSessionId,
-            resume: Boolean(effectiveSessionId),
-            model: codexModel,
-            sessionSummary,
-            permissionMode: permissionMode === 'plan' ? 'default' : permissionMode,
-          },
-        });
-      } else if (provider === 'gemini') {
-        sendMessage({
-          type: 'gemini-command',
-          command: messageContent,
-          sessionId: effectiveSessionId,
-          options: {
-            cwd: resolvedProjectPath,
-            projectPath: resolvedProjectPath,
-            sessionId: effectiveSessionId,
-            resume: Boolean(effectiveSessionId),
-            model: geminiModel,
-            sessionSummary,
-            permissionMode,
-            toolsSettings,
-          },
-        });
-      } else if (provider === 'opencode') {
-        sendMessage({
-          type: 'opencode-command',
-          command: messageContent,
-          sessionId: effectiveSessionId,
-          options: {
-            cwd: resolvedProjectPath,
-            projectPath: resolvedProjectPath,
-            sessionId: effectiveSessionId,
-            resume: Boolean(effectiveSessionId),
-            model: opencodeModel,
-            sessionSummary,
-          },
-        });
-      } else if (provider === 'kiro') {
-        sendMessage({
-          type: 'kiro-command',
-          command: messageContent,
-          sessionId: effectiveSessionId,
-          options: {
-            cwd: resolvedProjectPath,
-            projectPath: resolvedProjectPath,
-            sessionId: effectiveSessionId,
-            resume: Boolean(effectiveSessionId),
-            model: kiroModel,
-            sessionSummary,
-          },
-        });
-      } else {
-        sendMessage({
-          type: 'claude-command',
-          command: messageContent,
-          options: {
-            projectPath: resolvedProjectPath,
-            cwd: resolvedProjectPath,
-            sessionId: effectiveSessionId,
-            resume: Boolean(effectiveSessionId),
-            toolsSettings,
-            permissionMode,
-            model: claudeModel,
-            sessionSummary,
-            images: uploadedImages,
-          },
-        });
-      }
+      // One message shape for every provider. The backend resolves the
+      // provider, project path, and provider-native resume id from the
+      // session row; `options` only carries composer-level preferences.
+      sendMessage({
+        type: 'chat.send',
+        sessionId: targetSessionId,
+        content: messageContent,
+        options: {
+          model,
+          // Codex has no plan mode; downgrade rather than sending an
+          // unsupported value to its runtime.
+          permissionMode: provider === 'codex' && permissionMode === 'plan' ? 'default' : permissionMode,
+          toolsSettings,
+          skipPermissions: toolsSettings?.skipPermissions || false,
+          sessionSummary,
+          images: uploadedImages,
+        },
+      });
 
       setInput('');
       inputValueRef.current = '';
@@ -798,19 +767,15 @@ export function useChatComposerState({
       opencodeModel,
       kiroModel,
       isLoading,
-      onSessionActive,
       onSessionProcessing,
-      pendingViewSessionRef,
+      onSessionEstablished,
       permissionMode,
       provider,
       resetCommandMenuState,
       scrollToBottom,
       selectedProject,
       sendMessage,
-      setCanAbortSession,
       addMessage,
-      setClaudeStatus,
-      setIsLoading,
       setIsUserScrolledUp,
       slashCommands,
     ],
@@ -966,29 +931,19 @@ export function useChatComposerState({
       return;
     }
 
-    const cursorSessionId =
-      typeof window !== 'undefined' ? sessionStorage.getItem('cursorSessionId') : null;
-
-    const candidateSessionIds = [
-      currentSessionId,
-      provider === 'cursor' ? cursorSessionId : null,
-      selectedSession?.id || null,
-    ];
-
-    const targetSessionId =
-      candidateSessionIds.find((sessionId) => Boolean(sessionId)) || null;
-
+    const targetSessionId = selectedSession?.id || currentSessionId || null;
     if (!targetSessionId) {
-      console.warn('Abort requested but no concrete session ID is available yet.');
+      console.warn('Abort requested but no session ID is available.');
       return;
     }
 
+    // The backend resolves the provider from the session row, so no provider
+    // field is needed here.
     sendMessage({
-      type: 'abort-session',
+      type: 'chat.abort',
       sessionId: targetSessionId,
-      provider,
     });
-  }, [canAbortSession, currentSessionId, provider, selectedSession?.id, sendMessage]);
+  }, [canAbortSession, currentSessionId, selectedSession?.id, sendMessage]);
 
   const handleGrantToolPermission = useCallback(
     (suggestion: { entry: string; toolName: string }) => {
@@ -1013,7 +968,7 @@ export function useChatComposerState({
 
       validIds.forEach((requestId) => {
         sendMessage({
-          type: 'claude-permission-response',
+          type: 'chat.permission-response',
           requestId,
           allow: Boolean(decision?.allow),
           updatedInput: decision?.updatedInput,
@@ -1022,15 +977,11 @@ export function useChatComposerState({
         });
       });
 
-      setPendingPermissionRequests((previous) => {
-        const next = previous.filter((request) => !validIds.includes(request.requestId));
-        if (next.length === 0) {
-          setClaudeStatus(null);
-        }
-        return next;
-      });
+      setPendingPermissionRequests((previous) =>
+        previous.filter((request) => !validIds.includes(request.requestId)),
+      );
     },
-    [sendMessage, setClaudeStatus, setPendingPermissionRequests],
+    [sendMessage, setPendingPermissionRequests],
   );
 
   const [isInputFocused, setIsInputFocused] = useState(false);

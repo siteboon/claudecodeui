@@ -98,6 +98,44 @@ function normalizeSessionName(sessionName) {
   return normalized.length > 80 ? `${normalized.slice(0, 77)}...` : normalized;
 }
 
+function rowMatchesProvider(row, provider) {
+  return row && (!provider || row.provider === provider);
+}
+
+function resolveSessionRow(sessionId, provider) {
+  if (!sessionId) {
+    return null;
+  }
+
+  const appSessionRow = sessionsDb.getSessionById(sessionId);
+  if (rowMatchesProvider(appSessionRow, provider)) {
+    return appSessionRow;
+  }
+
+  const providerSessionRow = sessionsDb.getSessionByProviderSessionId(sessionId);
+  if (rowMatchesProvider(providerSessionRow, provider)) {
+    return providerSessionRow;
+  }
+
+  return null;
+}
+
+function normalizeNotificationSession(event) {
+  if (!event?.sessionId || !event.provider || event.provider === 'system') {
+    return event;
+  }
+
+  const row = resolveSessionRow(event.sessionId, event.provider);
+  if (!row || row.session_id === event.sessionId) {
+    return event;
+  }
+
+  return {
+    ...event,
+    sessionId: row.session_id
+  };
+}
+
 function resolveSessionName(event) {
   const explicitSessionName = normalizeSessionName(event.meta?.sessionName);
   if (explicitSessionName) {
@@ -112,28 +150,29 @@ function resolveSessionName(event) {
 }
 
 function buildPushBody(event) {
+  const normalizedEvent = normalizeNotificationSession(event);
   const CODE_MAP = {
-    'permission.required': event.meta?.toolName
-      ? `Action Required: Tool "${event.meta.toolName}" needs approval`
+    'permission.required': normalizedEvent.meta?.toolName
+      ? `Action Required: Tool "${normalizedEvent.meta.toolName}" needs approval`
       : 'Action Required: A tool needs your approval',
-    'run.stopped': event.meta?.stopReason || 'Run Stopped: The run has stopped',
-    'run.failed': event.meta?.error ? `Run Failed: ${event.meta.error}` : 'Run Failed: The run encountered an error',
-    'agent.notification': event.meta?.message ? String(event.meta.message) : 'You have a new notification',
+    'run.stopped': normalizedEvent.meta?.stopReason || 'Run Stopped: The run has stopped',
+    'run.failed': normalizedEvent.meta?.error ? `Run Failed: ${normalizedEvent.meta.error}` : 'Run Failed: The run encountered an error',
+    'agent.notification': normalizedEvent.meta?.message ? String(normalizedEvent.meta.message) : 'You have a new notification',
     'push.enabled': 'Push notifications are now enabled!'
   };
-  const providerLabel = PROVIDER_LABELS[event.provider] || 'Assistant';
-  const sessionName = resolveSessionName(event);
-  const message = CODE_MAP[event.code] || 'You have a new notification';
+  const providerLabel = PROVIDER_LABELS[normalizedEvent.provider] || 'Assistant';
+  const sessionName = resolveSessionName(normalizedEvent);
+  const message = CODE_MAP[normalizedEvent.code] || 'You have a new notification';
 
   return {
     title: sessionName || 'CloudCLI',
     body: `${providerLabel}: ${message}`,
     data: {
-      sessionId: event.sessionId || null,
-      code: event.code,
-      provider: event.provider || null,
+      sessionId: normalizedEvent.sessionId || null,
+      code: normalizedEvent.code,
+      provider: normalizedEvent.provider || null,
       sessionName,
-      tag: `${event.provider || 'assistant'}:${event.sessionId || 'none'}:${event.code}`
+      tag: `${normalizedEvent.provider || 'assistant'}:${normalizedEvent.sessionId || 'none'}:${normalizedEvent.code}`
     }
   };
 }
@@ -175,15 +214,16 @@ function notifyUserIfEnabled({ userId, event }) {
     return;
   }
 
+  const normalizedEvent = normalizeNotificationSession(event);
   const preferences = notificationPreferencesDb.getPreferences(userId);
-  if (!shouldSendPush(preferences, event)) {
+  if (!shouldSendPush(preferences, normalizedEvent)) {
     return;
   }
-  if (isDuplicate(event)) {
+  if (isDuplicate(normalizedEvent)) {
     return;
   }
 
-  sendWebPush(userId, event).catch((err) => {
+  sendWebPush(userId, normalizedEvent).catch((err) => {
     console.error('Web push send error:', err);
   });
 }
