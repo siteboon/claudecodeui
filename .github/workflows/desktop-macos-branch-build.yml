@@ -26,6 +26,8 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Typecheck
         run: npm run typecheck
