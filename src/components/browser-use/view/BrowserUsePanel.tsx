@@ -1,6 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Bot, Clock3, Download, Expand, ExternalLink, Loader2, MonitorPlay, RefreshCw, Settings, Square, Trash2, X } from 'lucide-react';
+import {
+  Activity,
+  Bot,
+  Clock3,
+  Download,
+  Expand,
+  ExternalLink,
+  Globe2,
+  Loader2,
+  MonitorPlay,
+  RefreshCw,
+  Settings,
+  Square,
+  Trash2,
+  X,
+} from 'lucide-react';
 
+import { cn } from '../../../lib/utils';
 import { Badge, Button } from '../../../shared/view/ui';
 import { authenticatedFetch } from '../../../utils/api';
 
@@ -51,14 +67,10 @@ async function readJson<T>(response: Response): Promise<T> {
 }
 
 function formatRelativeTime(value: string | null): string {
-  if (!value) {
-    return 'Never';
-  }
+  if (!value) return 'Never';
 
   const timestamp = Date.parse(value);
-  if (!Number.isFinite(timestamp)) {
-    return 'Unknown';
-  }
+  if (!Number.isFinite(timestamp)) return 'Unknown';
 
   const elapsedSeconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
   if (elapsedSeconds < 10) return 'Just now';
@@ -71,9 +83,7 @@ function formatRelativeTime(value: string | null): string {
 }
 
 function getDomain(url: string | null): string {
-  if (!url) {
-    return 'No page loaded';
-  }
+  if (!url) return 'No page loaded';
 
   try {
     return new URL(url).hostname;
@@ -83,9 +93,7 @@ function getDomain(url: string | null): string {
 }
 
 function formatAction(action: string | null): string {
-  if (!action) {
-    return 'Waiting';
-  }
+  if (!action) return 'Waiting';
   return action.replace(/_/g, ' ').replace(/:/g, ': ');
 }
 
@@ -99,9 +107,16 @@ function getStatusTone(status: BrowserUseSession['status']): string {
   return 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300';
 }
 
+function getRuntimeTone(status: BrowserUseStatus | null, installing: boolean): string {
+  if (!status?.enabled) return 'border-border bg-muted text-muted-foreground';
+  if (status.available) return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300';
+  if (status.installInProgress || installing) return 'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300';
+  return 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300';
+}
+
 const PROMPTS = [
-  'Use Browser Use to open the staging checkout flow, try the main path, and summarize anything that looks broken.',
-  'Use Browser Use to inspect the page at <url>, capture what changed after each click, and report UI issues with screenshots.',
+  'Use Browser Use to inspect the checkout flow and report any broken UI states.',
+  'Open <url> with Browser Use, interact with the page, and summarize what changed after each step.',
 ];
 
 export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUsePanelProps) {
@@ -118,6 +133,23 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
     () => sessions.find((session) => session.id === selectedSessionId) || sessions[0] || null,
     [selectedSessionId, sessions],
   );
+
+  const activeSessions = sessions.filter((session) => session.status === 'ready');
+  const needsBrowserBinaries = Boolean(status?.enabled && (!status.playwrightInstalled || !status.chromiumInstalled));
+  const runtimeLabel = !status?.enabled
+    ? 'Disabled'
+    : status.available
+      ? 'Ready'
+      : status.installInProgress || isInstalling
+        ? 'Installing'
+        : 'Setup required';
+
+  const cursorStyle = selectedSession?.cursor && selectedSession.viewport
+    ? {
+      left: `${(selectedSession.cursor.x / selectedSession.viewport.width) * 100}%`,
+      top: `${(selectedSession.cursor.y / selectedSession.viewport.height) * 100}%`,
+    }
+    : null;
 
   const refresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -185,59 +217,105 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
     }
   });
 
-  const needsBrowserBinaries = Boolean(status?.enabled && (!status.playwrightInstalled || !status.chromiumInstalled));
-  const activeSessions = sessions.filter((session) => session.status === 'ready');
-  const inactiveSessions = sessions.filter((session) => session.status !== 'ready');
-  const statusLabel = !status?.enabled
-    ? 'Disabled'
-    : status.available
-      ? 'Ready'
-      : status.installInProgress || isInstalling
-        ? 'Installing'
-        : 'Setup required';
+  const renderSessionItem = (session: BrowserUseSession) => {
+    const isSelected = selectedSession?.id === session.id;
+    return (
+      <button
+        key={session.id}
+        type="button"
+        onClick={() => setSelectedSessionId(session.id)}
+        className={cn(
+          'group w-full rounded-md border px-3 py-2.5 text-left transition-colors',
+          isSelected
+            ? 'border-primary/50 bg-primary/10 text-foreground'
+            : 'border-border/60 bg-card/30 text-muted-foreground hover:bg-muted/50',
+        )}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="truncate text-sm font-medium">{session.title || getDomain(session.url)}</div>
+            <div className="mt-1 truncate text-xs text-muted-foreground">{getDomain(session.url)}</div>
+          </div>
+          <Badge variant="outline" className={cn('shrink-0 text-[10px]', getStatusTone(session.status))}>
+            {session.status}
+          </Badge>
+        </div>
+        <div className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <Clock3 className="h-3 w-3" />
+          <span>{formatRelativeTime(session.updatedAt)}</span>
+          <span className="truncate">- {formatAction(session.lastAction)}</span>
+        </div>
+      </button>
+    );
+  };
 
-  const cursorStyle = selectedSession?.cursor && selectedSession.viewport
-    ? {
-      left: `${(selectedSession.cursor.x / selectedSession.viewport.width) * 100}%`,
-      top: `${(selectedSession.cursor.y / selectedSession.viewport.height) * 100}%`,
-    }
-    : null;
+  const renderEmptyState = () => (
+    <div className="flex min-h-0 flex-1 items-center justify-center p-6">
+      <div className="w-full max-w-2xl rounded-md border border-border bg-card/40 p-5 shadow-sm">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-background">
+            <MonitorPlay className="h-5 w-5 text-primary" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-foreground">
+              {status?.enabled ? 'No browser sessions yet' : 'Browser Use is disabled'}
+            </div>
+            <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
+              {status?.enabled
+                ? 'Agent browser sessions appear here while an AI task is using Browser Use.'
+                : 'Enable Browser Use in settings to let agents open monitored browser sessions.'}
+            </p>
+          </div>
+        </div>
 
-  const renderSessionItem = (session: BrowserUseSession) => (
-    <button
-      key={session.id}
-      type="button"
-      onClick={() => setSelectedSessionId(session.id)}
-      className={`w-full rounded-md border px-3 py-2 text-left text-sm transition-colors ${selectedSession?.id === session.id
-        ? 'border-primary/50 bg-primary/10 text-foreground'
-        : 'border-border/60 bg-card/30 text-muted-foreground hover:bg-muted/50'
-      }`}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span className="truncate font-medium">{session.title || getDomain(session.url)}</span>
-        <Badge variant="outline" className={`text-[10px] ${getStatusTone(session.status)}`}>{session.status}</Badge>
+        {needsBrowserBinaries && (
+          <div className="mt-4 rounded-md border border-amber-500/30 bg-amber-500/10 p-3">
+            <div className="text-sm font-medium text-foreground">Runtime setup required</div>
+            <p className="mt-1 text-sm text-muted-foreground">{status?.message}</p>
+            <Button
+              type="button"
+              size="sm"
+              className="mt-3"
+              onClick={installBrowserBinaries}
+              disabled={isBusy || isInstalling || status?.installInProgress}
+            >
+              {isInstalling || status?.installInProgress ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              {isInstalling || status?.installInProgress ? 'Installing...' : 'Install Runtime'}
+            </Button>
+          </div>
+        )}
+
+        <div className="mt-5 grid gap-2 sm:grid-cols-2">
+          {PROMPTS.map((prompt) => (
+            <div key={prompt} className="rounded-md border border-border/70 bg-background/70 p-3">
+              <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <Bot className="h-3.5 w-3.5" />
+                Prompt
+              </div>
+              <p className="text-sm leading-6 text-foreground">{prompt}</p>
+            </div>
+          ))}
+        </div>
       </div>
-      <div className="mt-1 truncate text-xs">{session.url || session.message || session.id}</div>
-      <div className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-        <Clock3 className="h-3 w-3" />
-        <span>{formatRelativeTime(session.updatedAt)}</span>
-        {session.lastAction && <span className="truncate">- {formatAction(session.lastAction)}</span>}
-      </div>
-    </button>
+    </div>
   );
 
   const renderBrowserSurface = (fullscreen = false) => (
-    <div className={`flex min-h-[360px] flex-1 items-center justify-center bg-neutral-950 ${fullscreen ? 'min-h-[80vh]' : ''}`}>
+    <div className={cn('flex flex-1 items-center justify-center bg-neutral-950', fullscreen ? 'min-h-[80vh]' : 'min-h-[420px]')}>
       {selectedSession?.screenshotDataUrl ? (
         <div className="relative inline-block max-h-full">
           <img
             src={selectedSession.screenshotDataUrl}
             alt="Browser session screenshot"
-            className={fullscreen ? 'block max-h-[80vh] w-auto max-w-full object-contain' : 'block max-h-[70vh] w-auto max-w-full object-contain'}
+            className={fullscreen ? 'block max-h-[80vh] w-auto max-w-full object-contain' : 'block max-h-[72vh] w-auto max-w-full object-contain'}
           />
           {cursorStyle && (
             <div
-              className="pointer-events-none absolute h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/90 bg-sky-500/80 shadow-[0_0_0_6px_rgba(14,165,233,0.18)]"
+              className="pointer-events-none absolute h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/90 bg-primary/80 shadow-[0_0_0_6px_hsl(var(--primary)/0.18)]"
               style={cursorStyle}
             >
               <div className="absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white" />
@@ -245,14 +323,10 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
           )}
         </div>
       ) : (
-        <div className="max-w-md px-6 text-center">
-          <MonitorPlay className="mx-auto h-10 w-10 text-neutral-500" />
-          <div className="mt-3 text-sm font-medium text-neutral-100">
-            {selectedSession?.message || 'No browser screenshot yet.'}
-          </div>
-          <p className="mt-2 text-xs leading-relaxed text-neutral-400">
-            Agent-created browser sessions appear here after the agent starts using Browser Use.
-          </p>
+        <div className="px-6 text-center">
+          <MonitorPlay className="mx-auto h-9 w-9 text-neutral-500" />
+          <div className="mt-3 text-sm font-medium text-neutral-100">{selectedSession?.message || 'Waiting for screenshot'}</div>
+          <p className="mt-1 text-xs text-neutral-400">The next agent browser snapshot will render here.</p>
         </div>
       )}
     </div>
@@ -260,16 +334,16 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
+      <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <MonitorPlay className="h-4 w-4 text-primary" />
             <h3 className="text-sm font-semibold text-foreground">Browser Use</h3>
-            <Badge variant="outline" className="text-[10px]">{statusLabel}</Badge>
+            <Badge variant="outline" className={cn('text-[10px]', getRuntimeTone(status, isInstalling))}>
+              {runtimeLabel}
+            </Badge>
           </div>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Watch browser sessions created by AI agents and stop them when needed.
-          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">Monitor browser sessions opened by AI agents.</p>
         </div>
         <div className="flex items-center gap-1.5">
           {onShowSettings && (
@@ -293,124 +367,129 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
             title="Refresh browser sessions"
             aria-label="Refresh browser sessions"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={cn('h-3.5 w-3.5', isRefreshing && 'animate-spin')} />
           </Button>
         </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)]">
-        <aside className="min-h-0 overflow-y-auto border-b border-border/60 p-3 lg:border-b-0 lg:border-r">
-          {needsBrowserBinaries && (
-            <div className="mb-3 rounded-md border border-border/70 bg-card/40 p-3">
-              <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Runtime required</div>
-              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                {status?.message || 'Install the browser runtime before agents can create sessions.'}
-              </p>
-              <Button
-                type="button"
-                size="sm"
-                className="mt-3 w-full"
-                onClick={installBrowserBinaries}
-                disabled={isBusy || isInstalling || status?.installInProgress}
-              >
-                {isInstalling || status?.installInProgress ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Download className="h-4 w-4" />
-                )}
-                {isInstalling || status?.installInProgress ? 'Installing...' : 'Install Runtime'}
-              </Button>
-            </div>
-          )}
+      {error && (
+        <div className="border-b border-destructive/20 bg-destructive/10 px-4 py-2 text-sm text-destructive">
+          {error}
+        </div>
+      )}
 
-          <div className="rounded-md border border-border/70 bg-muted/30 p-3">
-            <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              <Bot className="h-3.5 w-3.5" />
-              Prompt ideas
+      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <main className="flex min-h-0 flex-col overflow-hidden">
+          <div className="grid grid-cols-3 border-b border-border/60 bg-muted/20">
+            <div className="border-r border-border/60 px-4 py-3">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Activity className="h-3.5 w-3.5" />
+                Active
+              </div>
+              <div className="mt-1 text-xl font-semibold text-foreground">{activeSessions.length}</div>
             </div>
-            <div className="mt-2 space-y-2">
-              {PROMPTS.map((prompt) => (
-                <div key={prompt} className="rounded-md border border-border/60 bg-background/70 px-2.5 py-2 text-xs leading-relaxed text-muted-foreground">
-                  {prompt}
-                </div>
-              ))}
+            <div className="border-r border-border/60 px-4 py-3">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Globe2 className="h-3.5 w-3.5" />
+                Current
+              </div>
+              <div className="mt-1 truncate text-sm font-medium text-foreground">{getDomain(selectedSession?.url || null)}</div>
+            </div>
+            <div className="px-4 py-3">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Clock3 className="h-3.5 w-3.5" />
+                Updated
+              </div>
+              <div className="mt-1 text-sm font-medium text-foreground">{formatRelativeTime(selectedSession?.updatedAt || null)}</div>
             </div>
           </div>
 
-          <div className="mt-3 space-y-3">
-            <section>
-              <div className="mb-2 flex items-center justify-between px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                <span>Active</span>
-                <span>{activeSessions.length}</span>
-              </div>
-              <div className="space-y-2">
-                {activeSessions.map(renderSessionItem)}
-                {activeSessions.length === 0 && (
-                  <div className="rounded-md border border-dashed border-border/70 px-3 py-6 text-center text-xs text-muted-foreground">
-                    No active agent sessions.
+          {sessions.length === 0 ? (
+            renderEmptyState()
+          ) : (
+            <div className="min-h-0 flex-1 overflow-auto bg-muted/20 p-4">
+              <div className="mx-auto flex min-h-[500px] max-w-7xl flex-col overflow-hidden rounded-md border border-border bg-background shadow-sm">
+                <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-3 py-2">
+                  <Badge variant="outline" className={selectedSession ? cn('text-[10px]', getStatusTone(selectedSession.status)) : 'text-[10px]'}>
+                    {selectedSession?.status || 'empty'}
+                  </Badge>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium text-foreground">
+                      {selectedSession?.title || getDomain(selectedSession?.url || null)}
+                    </div>
+                    <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                      <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{selectedSession?.url || 'No page loaded'}</span>
+                    </div>
                   </div>
-                )}
+                  <div className="hidden text-xs text-muted-foreground md:block">
+                    {formatAction(selectedSession?.lastAction || null)}
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => setIsFullscreen(true)} disabled={!selectedSession?.screenshotDataUrl}>
+                    <Expand className="h-4 w-4" />
+                    Full Screen
+                  </Button>
+                </div>
+                {renderBrowserSurface()}
               </div>
-            </section>
+            </div>
+          )}
+        </main>
 
-            {inactiveSessions.length > 0 && (
-              <section>
-                <div className="mb-2 flex items-center justify-between px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  <span>Inactive</span>
-                  <span>{inactiveSessions.length}</span>
-                </div>
-                <div className="space-y-2">
-                  {inactiveSessions.map(renderSessionItem)}
-                </div>
-              </section>
+        <aside className="flex min-h-0 flex-col border-t border-border/60 bg-background lg:border-l lg:border-t-0">
+          <div className="border-b border-border/60 px-4 py-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <div className="text-sm font-semibold text-foreground">Sessions</div>
+                <div className="mt-0.5 text-xs text-muted-foreground">{sessions.length} total</div>
+              </div>
+              <Badge variant="outline" className="text-[10px]">{activeSessions.length} active</Badge>
+            </div>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            {sessions.length > 0 ? (
+              <div className="space-y-2">{sessions.map(renderSessionItem)}</div>
+            ) : (
+              <div className="rounded-md border border-dashed border-border/70 px-3 py-8 text-center text-xs text-muted-foreground">
+                No agent browser sessions.
+              </div>
             )}
           </div>
+
+          <div className="border-t border-border/60 p-3">
+            <div className="rounded-md border border-border/70 bg-muted/30 p-3">
+              <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <Bot className="h-3.5 w-3.5" />
+                Selected
+              </div>
+              <div className="mt-3 space-y-2 text-xs text-muted-foreground">
+                <div className="flex items-center justify-between gap-3">
+                  <span>Status</span>
+                  <span className="font-medium text-foreground">{selectedSession?.status || 'None'}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>Last action</span>
+                  <span className="truncate font-medium text-foreground">{formatAction(selectedSession?.lastAction || null)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>Profile</span>
+                  <span className="truncate font-medium text-foreground">{selectedSession?.profileName || 'Temporary'}</span>
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <Button variant="outline" size="sm" onClick={stopSession} disabled={isBusy || !selectedSession || selectedSession.status !== 'ready'}>
+                  <Square className="h-4 w-4" />
+                  Stop
+                </Button>
+                <Button variant="outline" size="sm" onClick={deleteSession} disabled={isBusy || !selectedSession}>
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </Button>
+              </div>
+            </div>
+          </div>
         </aside>
-
-        <main className="flex min-h-0 flex-col">
-          {error && (
-            <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">
-              {error}
-            </div>
-          )}
-
-          <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-3 py-2">
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium text-foreground">
-                {selectedSession?.title || getDomain(selectedSession?.url || null)}
-              </div>
-              <div className="mt-0.5 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-                <ExternalLink className="h-3.5 w-3.5 flex-shrink-0" />
-                <span className="truncate">{selectedSession?.url || 'No page loaded'}</span>
-              </div>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => setIsFullscreen(true)} disabled={!selectedSession?.screenshotDataUrl}>
-              <Expand className="h-4 w-4" />
-              Full Screen
-            </Button>
-            <Button variant="outline" size="sm" onClick={stopSession} disabled={isBusy || !selectedSession || selectedSession.status !== 'ready'}>
-              <Square className="h-4 w-4" />
-              Stop
-            </Button>
-            <Button variant="outline" size="sm" onClick={deleteSession} disabled={isBusy || !selectedSession}>
-              <Trash2 className="h-4 w-4" />
-              Delete
-            </Button>
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-auto bg-muted/20 p-4">
-            <div className="mx-auto flex min-h-[420px] max-w-6xl flex-col overflow-hidden rounded-md border border-border bg-background shadow-sm">
-              <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-3 py-2 text-xs text-muted-foreground">
-                <Badge variant="outline" className={selectedSession ? `text-[10px] ${getStatusTone(selectedSession.status)}` : 'text-[10px]'}>
-                  {selectedSession?.status || 'empty'}
-                </Badge>
-                <span className="truncate">Last action: {formatAction(selectedSession?.lastAction || null)}</span>
-                <span className="ml-auto whitespace-nowrap">Updated {formatRelativeTime(selectedSession?.updatedAt || null)}</span>
-              </div>
-              {renderBrowserSurface()}
-            </div>
-          </div>
-        </main>
       </div>
 
       {isFullscreen && selectedSession && (
