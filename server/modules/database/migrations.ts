@@ -382,6 +382,25 @@ const rebuildSessionsTableWithProjectSchema = (db: Database): void => {
   }
 };
 
+/**
+ * Adds the `provider_session_id` mapping column used by the session gateway.
+ *
+ * Rows that existed before this migration were always keyed directly by the
+ * provider-native session id, so backfilling `provider_session_id` with
+ * `session_id` keeps every legacy row resolvable through the new mapping.
+ */
+const addProviderSessionIdMapping = (db: Database): void => {
+  const sessionsTableInfo = getTableInfo(db, 'sessions');
+  const columnNames = sessionsTableInfo.map((column) => column.name);
+
+  addColumnToTableIfNotExists(db, 'sessions', columnNames, 'provider_session_id', 'TEXT');
+  db.exec(`
+    UPDATE sessions
+    SET provider_session_id = session_id
+    WHERE provider_session_id IS NULL
+  `);
+};
+
 const ensureProjectsForSessionPaths = (db: Database): void => {
   if (!tableExists(db, 'sessions')) {
     return;
@@ -428,9 +447,11 @@ export const runMigrations = (db: Database) => {
     migrateLegacyWorkspaceTableIntoProjects(db);
     rebuildSessionsTableWithProjectSchema(db);
     migrateLegacySessionNames(db);
+    addProviderSessionIdMapping(db);
     ensureProjectsForSessionPaths(db);
 
     db.exec('CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_provider_session_id ON sessions(provider_session_id)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_project_path ON sessions(project_path)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_is_archived ON sessions(isArchived)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_projects_is_starred ON projects(isStarred)');

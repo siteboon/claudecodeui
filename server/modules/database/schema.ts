@@ -83,6 +83,12 @@ export const SESSIONS_TABLE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS sessions (
     session_id TEXT NOT NULL,
     provider TEXT NOT NULL DEFAULT 'claude',
+    -- The session id used by the provider CLI/SDK on disk (JSONL file name,
+    -- store.db folder, sqlite row id, ...). \`session_id\` is the stable
+    -- app-facing id that the frontend uses for the whole session lifetime;
+    -- \`provider_session_id\` is filled in once the provider announces its own
+    -- id mid-run, or equals \`session_id\` for sessions discovered on disk.
+    provider_session_id TEXT,
     custom_name TEXT,
     project_path TEXT,
     jsonl_path TEXT,
