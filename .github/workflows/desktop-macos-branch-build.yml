@@ -2,6 +2,9 @@ name: Desktop macOS Branch Build
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - electron-app
 
 jobs:
   build-macos:
