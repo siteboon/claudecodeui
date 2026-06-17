@@ -1,10 +1,8 @@
 import { createRequire } from 'node:module';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import dns from 'node:dns/promises';
 import fs from 'node:fs';
 import os from 'node:os';
-import net from 'node:net';
 import path from 'node:path';
 
 import { appConfigDb } from '@/modules/database/index.js';
@@ -16,7 +14,6 @@ const __dirname = getModuleDir(import.meta.url);
 const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
 const MAX_SESSIONS_PER_OWNER = Number.parseInt(process.env.CLOUDCLI_BROWSER_USE_MAX_SESSIONS_PER_OWNER || '3', 10);
 const SESSION_TTL_MS = Number.parseInt(process.env.CLOUDCLI_BROWSER_USE_SESSION_TTL_MS || String(30 * 60 * 1000), 10);
-const ALLOW_PRIVATE_NETWORKS = process.env.CLOUDCLI_BROWSER_USE_ALLOW_PRIVATE_NETWORKS === '1';
 const BROWSER_USE_SETTINGS_KEY = 'browser_use_settings';
 const BROWSER_USE_MCP_TOKEN_KEY = 'browser_use_mcp_token';
 
@@ -299,71 +296,7 @@ async function installRuntime(): Promise<{ success: boolean; message: string }> 
   }
 }
 
-function isPrivateIpv4(address: string): boolean {
-  const parts = address.split('.').map((part) => Number.parseInt(part, 10));
-  if (parts.length !== 4 || parts.some((part) => Number.isNaN(part) || part < 0 || part > 255)) {
-    return true;
-  }
-
-  const [first, second] = parts;
-  return first === 0
-    || first === 10
-    || first === 127
-    || (first === 169 && second === 254)
-    || (first === 172 && second >= 16 && second <= 31)
-    || (first === 192 && second === 168)
-    || first >= 224;
-}
-
-function isPrivateIpv6(address: string): boolean {
-  const normalized = address.toLowerCase();
-  return normalized === '::1'
-    || normalized === '::'
-    || normalized.startsWith('fc')
-    || normalized.startsWith('fd')
-    || normalized.startsWith('fe80:')
-    || normalized.startsWith('::ffff:127.')
-    || normalized.startsWith('::ffff:10.')
-    || normalized.startsWith('::ffff:192.168.')
-    || /^::ffff:172\.(1[6-9]|2\d|3[0-1])\./.test(normalized)
-    || /^::ffff:169\.254\./.test(normalized);
-}
-
-export function isBlockedBrowserUseAddress(address: string): boolean {
-  const version = net.isIP(address);
-  if (version === 4) {
-    return isPrivateIpv4(address);
-  }
-  if (version === 6) {
-    return isPrivateIpv6(address);
-  }
-  return true;
-}
-
-async function assertPublicHttpTarget(parsedUrl: URL): Promise<void> {
-  if (ALLOW_PRIVATE_NETWORKS) {
-    return;
-  }
-
-  const hostname = parsedUrl.hostname;
-  if (!hostname) {
-    throw new Error('URL hostname is required.');
-  }
-
-  if (net.isIP(hostname)) {
-    if (isBlockedBrowserUseAddress(hostname)) {
-      throw new Error('Browser Use cannot navigate to private or local network addresses.');
-    }
-    return;
-  }
-
-  const addresses = await dns.lookup(hostname, { all: true, verbatim: true });
-  if (addresses.length === 0 || addresses.some((entry) => isBlockedBrowserUseAddress(entry.address))) {
-    throw new Error('Browser Use cannot navigate to private or local network addresses.');
-  }
-}
-
-async function normalizeUrl(rawUrl: string): Promise<string> {
+function normalizeUrl(rawUrl: string): string {
   const trimmed = rawUrl.trim();
   if (!trimmed) {
     throw new Error('URL is required.');
@@ -377,29 +310,7 @@ async function normalizeUrl(rawUrl: string): Promise<string> {
     throw new Error('Only http and https URLs are supported.');
   }
 
-  await assertPublicHttpTarget(parsed);
-
   return parsed.toString();
-}
-
-async function assertAllowedBrowserRequest(rawUrl: string): Promise<void> {
-  const parsed = new URL(rawUrl);
-  if (!['http:', 'https:'].includes(parsed.protocol)) {
-    return;
-  }
-
-  await assertPublicHttpTarget(parsed);
-}
-
-async function attachRequestGuard(context: any): Promise<void> {
-  await context.route('**/*', async (route: any) => {
-    try {
-      await assertAllowedBrowserRequest(route.request().url());
-      await route.continue();
-    } catch {
-      await route.abort('blockedbyclient');
-    }
-  });
 }
 
 function publicSession(session: BrowserUseSession): PublicBrowserUseSession {
@@ -630,7 +541,6 @@ export const browserUseService = {
       context = await browser.newContext(contextOptions);
       page = await context.newPage();
     }
-    await attachRequestGuard(context);
     session.status = 'ready';
     session.message = 'Browser session is ready.';
     sessions.set(session.id, session);
@@ -680,7 +590,7 @@ export const browserUseService = {
       throw new Error('Browser runtime handle is not available.');
     }
 
-    const url = await normalizeUrl(rawUrl);
+    const url = normalizeUrl(rawUrl);
     await handle.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
     session.lastAction = `navigate:${url}`;
     session.cursor = null;

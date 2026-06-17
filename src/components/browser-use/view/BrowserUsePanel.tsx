@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Activity,
   Bot,
   Clock3,
   Download,
   Expand,
   ExternalLink,
-  Globe2,
   Loader2,
   MonitorPlay,
   RefreshCw,
@@ -99,19 +97,25 @@ function formatAction(action: string | null): string {
 
 function getStatusTone(status: BrowserUseSession['status']): string {
   if (status === 'ready') {
-    return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300';
+    return 'border-primary/30 bg-primary/5 text-foreground';
   }
   if (status === 'stopped') {
     return 'border-border bg-muted text-muted-foreground';
   }
-  return 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300';
+  return 'border-border bg-background text-muted-foreground';
 }
 
 function getRuntimeTone(status: BrowserUseStatus | null, installing: boolean): string {
   if (!status?.enabled) return 'border-border bg-muted text-muted-foreground';
-  if (status.available) return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300';
-  if (status.installInProgress || installing) return 'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300';
-  return 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300';
+  if (status.available) return 'border-primary/30 bg-primary/5 text-foreground';
+  if (status.installInProgress || installing) return 'border-primary/30 bg-primary/5 text-foreground';
+  return 'border-border bg-background text-muted-foreground';
+}
+
+function getStatusDot(status: BrowserUseSession['status']): string {
+  if (status === 'ready') return 'bg-primary';
+  if (status === 'stopped') return 'bg-muted-foreground/50';
+  return 'bg-border';
 }
 
 const PROMPTS = [
@@ -233,10 +237,13 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
       >
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="truncate text-sm font-medium">{session.title || getDomain(session.url)}</div>
-            <div className="mt-1 truncate text-xs text-muted-foreground">{getDomain(session.url)}</div>
+            <div className="flex min-w-0 items-center gap-2">
+              <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', getStatusDot(session.status))} />
+              <div className="truncate text-sm font-medium">{session.title || getDomain(session.url)}</div>
+            </div>
+            <div className="mt-1 truncate pl-3.5 text-xs text-muted-foreground">{getDomain(session.url)}</div>
           </div>
-          <Badge variant="outline" className={cn('shrink-0 text-[10px]', getStatusTone(session.status))}>
+          <Badge variant="outline" className="shrink-0 border-border bg-background text-[10px] text-muted-foreground">
             {session.status}
           </Badge>
         </div>
@@ -269,7 +276,7 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
         </div>
 
         {needsBrowserBinaries && (
-          <div className="mt-4 rounded-md border border-amber-500/30 bg-amber-500/10 p-3">
+          <div className="mt-4 rounded-md border border-border bg-muted/30 p-3">
             <div className="text-sm font-medium text-foreground">Runtime setup required</div>
             <p className="mt-1 text-sm text-muted-foreground">{status?.message}</p>
             <Button
@@ -378,29 +385,41 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
         </div>
       )}
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px]">
+      {sessions.length > 0 && (
+        <div className="border-b border-border/60 bg-muted/20 px-3 py-2 lg:hidden">
+          <div className="flex gap-2 overflow-x-auto">
+            {sessions.map((session) => (
+              <button
+                key={session.id}
+                type="button"
+                onClick={() => setSelectedSessionId(session.id)}
+                className={cn(
+                  'flex min-w-[180px] items-center gap-2 rounded-md border px-2.5 py-2 text-left',
+                  selectedSession?.id === session.id
+                    ? 'border-primary/40 bg-primary/5'
+                    : 'border-border bg-background',
+                )}
+              >
+                <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', getStatusDot(session.status))} />
+                <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
+                  {session.title || getDomain(session.url)}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px]">
         <main className="flex min-h-0 flex-col overflow-hidden">
-          <div className="grid grid-cols-3 border-b border-border/60 bg-muted/20">
-            <div className="border-r border-border/60 px-4 py-3">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Activity className="h-3.5 w-3.5" />
-                Active
-              </div>
-              <div className="mt-1 text-xl font-semibold text-foreground">{activeSessions.length}</div>
+          <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-muted/20 px-4 py-2.5 text-xs text-muted-foreground">
+            <div className="min-w-0 truncate">
+              {activeSessions.length} active
+              <span className="px-1.5">/</span>
+              {sessions.length} total
             </div>
-            <div className="border-r border-border/60 px-4 py-3">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Globe2 className="h-3.5 w-3.5" />
-                Current
-              </div>
-              <div className="mt-1 truncate text-sm font-medium text-foreground">{getDomain(selectedSession?.url || null)}</div>
-            </div>
-            <div className="px-4 py-3">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Clock3 className="h-3.5 w-3.5" />
-                Updated
-              </div>
-              <div className="mt-1 text-sm font-medium text-foreground">{formatRelativeTime(selectedSession?.updatedAt || null)}</div>
+            <div className="min-w-0 truncate">
+              Updated {formatRelativeTime(selectedSession?.updatedAt || null)}
             </div>
           </div>
 
@@ -425,9 +444,14 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
                   <div className="hidden text-xs text-muted-foreground md:block">
                     {formatAction(selectedSession?.lastAction || null)}
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => setIsFullscreen(true)} disabled={!selectedSession?.screenshotDataUrl}>
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setIsFullscreen(true)} disabled={!selectedSession?.screenshotDataUrl} title="Full screen" aria-label="Full screen">
                     <Expand className="h-4 w-4" />
-                    Full Screen
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 lg:hidden" onClick={stopSession} disabled={isBusy || !selectedSession || selectedSession.status !== 'ready'} title="Stop session" aria-label="Stop session">
+                    <Square className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 lg:hidden" onClick={deleteSession} disabled={isBusy || !selectedSession} title="Delete session" aria-label="Delete session">
+                    <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
                 {renderBrowserSurface()}
@@ -436,7 +460,7 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
           )}
         </main>
 
-        <aside className="flex min-h-0 flex-col border-t border-border/60 bg-background lg:border-l lg:border-t-0">
+        <aside className="hidden min-h-0 flex-col border-l border-border/60 bg-background lg:flex">
           <div className="border-b border-border/60 px-4 py-3">
             <div className="flex items-center justify-between gap-2">
               <div>
