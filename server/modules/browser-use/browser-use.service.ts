@@ -66,10 +66,13 @@ type RuntimeReadiness = {
   installMessage: string | null;
 };
 
+type RuntimeProbe = Omit<RuntimeReadiness, 'installInProgress' | 'installMessage'>;
+
 const sessions = new Map<string, BrowserUseSession>();
 const handles = new Map<string, RuntimeHandle>();
 let installPromise: Promise<{ success: boolean; message: string }> | null = null;
 let lastInstallMessage: string | null = null;
+let runtimeProbeCache: { value: RuntimeProbe; updatedAt: number } | null = null;
 
 const DEFAULT_SETTINGS: BrowserUseSettings = {
   enabled: false,
@@ -78,6 +81,7 @@ const AGENT_OWNER_ID = 'agent';
 const PROFILE_ROOT = path.join(os.homedir(), '.cloudcli', 'browser-use', 'profiles');
 const MCP_SERVER_NAME = 'cloudcli-browser';
 const LEGACY_MCP_SERVER_NAMES = ['cloudcli-browser-use'];
+const RUNTIME_READINESS_CACHE_TTL_MS = 30_000;
 
 function getRuntime(): BrowserUseRuntime {
   return IS_PLATFORM ? 'cloud' : 'local';
@@ -190,15 +194,13 @@ function getProfilePath(profileName: string): string {
   return path.join(PROFILE_ROOT, safeName);
 }
 
-function getRuntimeReadiness(): RuntimeReadiness {
+function probeRuntime(): RuntimeProbe {
   const playwright = getPlaywright();
-  const readiness: RuntimeReadiness = {
+  const readiness: RuntimeProbe = {
     playwright,
     playwrightInstalled: Boolean(playwright),
     chromiumInstalled: false,
     chromiumExecutablePath: null,
-    installInProgress: Boolean(installPromise),
-    installMessage: lastInstallMessage,
   };
 
   if (!playwright) {
@@ -214,6 +216,26 @@ function getRuntimeReadiness(): RuntimeReadiness {
   }
 
   return readiness;
+}
+
+function getRuntimeReadiness(options: { force?: boolean } = {}): RuntimeReadiness {
+  const now = Date.now();
+  const cachedProbe = runtimeProbeCache;
+  const canUseCache = !options.force
+    && !installPromise
+    && cachedProbe
+    && now - cachedProbe.updatedAt < RUNTIME_READINESS_CACHE_TTL_MS;
+  const probe = canUseCache ? cachedProbe.value : probeRuntime();
+
+  if (!canUseCache && !installPromise) {
+    runtimeProbeCache = { value: probe, updatedAt: now };
+  }
+
+  return {
+    ...probe,
+    installInProgress: Boolean(installPromise),
+    installMessage: lastInstallMessage,
+  };
 }
 
 const INSTALL_COMMAND_TIMEOUT_MS = Number.parseInt(
@@ -276,6 +298,7 @@ async function installRuntime(): Promise<{ success: boolean; message: string }> 
   }
 
   const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  runtimeProbeCache = null;
   installPromise = (async () => {
     try {
       lastInstallMessage = 'Installing Playwright package...';
@@ -301,6 +324,7 @@ async function installRuntime(): Promise<{ success: boolean; message: string }> 
     return await installPromise;
   } finally {
     installPromise = null;
+    runtimeProbeCache = null;
   }
 }
 

@@ -182,80 +182,92 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
           <div className="py-8 text-center text-muted-foreground">Loading MCP servers...</div>
         )}
 
-        {servers.map((server) => (
-          <div key={getServerKey(server)} className="rounded-lg border border-border bg-card/50 p-4">
-            <div className="flex items-start justify-between">
-              <div className="min-w-0 flex-1">
-                <div className="mb-2 flex flex-wrap items-center gap-2">
-                  {getTransportIcon(server.transport)}
-                  <span className="font-medium text-foreground">{server.name}</span>
-                  <Badge variant="outline" className="text-xs">
-                    {server.transport || 'stdio'}
-                  </Badge>
-                  <Badge variant="outline" className="text-xs">
-                    {getScopeLabel(server.scope)}
-                  </Badge>
-                  {server.projectDisplayName && (
-                    <Badge variant="outline" className="max-w-full truncate text-xs">
-                      {server.projectDisplayName}
-                    </Badge>
-                  )}
-                  {isManagedServer(server) && (
-                    <Badge variant="outline" className="gap-1 text-xs text-muted-foreground">
-                      <Lock className="h-3 w-3" />
-                      {t('mcpServers.managed.badge', { defaultValue: 'Managed' })}
-                    </Badge>
-                  )}
+        {servers.map((server) => {
+          const managed = isManagedServer(server);
+
+          return (
+            <div key={getServerKey(server)} className="rounded-lg border border-border bg-card/50 p-4">
+              <div className="flex items-start justify-between">
+                <div className="min-w-0 flex-1">
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    {!managed && getTransportIcon(server.transport)}
+                    <span className="font-medium text-foreground">{server.name}</span>
+                    {!managed && (
+                      <>
+                        <Badge variant="outline" className="text-xs">
+                          {server.transport || 'stdio'}
+                        </Badge>
+                        <Badge variant="outline" className="text-xs">
+                          {getScopeLabel(server.scope)}
+                        </Badge>
+                        {server.projectDisplayName && (
+                          <Badge variant="outline" className="max-w-full truncate text-xs">
+                            {server.projectDisplayName}
+                          </Badge>
+                        )}
+                      </>
+                    )}
+                    {managed && (
+                      <Badge variant="outline" className="gap-1 text-xs text-muted-foreground">
+                        <Lock className="h-3 w-3" />
+                        {t('mcpServers.managed.badge', { defaultValue: 'Managed' })}
+                      </Badge>
+                    )}
+                  </div>
+
+                  <div className="space-y-1 text-sm text-muted-foreground">
+                    {!managed && (
+                      <>
+                        <ConfigLine label={t('mcpServers.config.command')}>{server.command || ''}</ConfigLine>
+                        <ConfigLine label={t('mcpServers.config.url')}>{server.url || ''}</ConfigLine>
+                        <ConfigLine label={t('mcpServers.config.args')}>{(server.args || []).join(' ')}</ConfigLine>
+                        <ConfigLine label="Cwd">{server.cwd || ''}</ConfigLine>
+                        {server.env && Object.keys(server.env).length > 0 && (
+                          <ConfigLine label={t('mcpServers.config.environment')}>
+                            {Object.entries(server.env).map(([key, value]) => `${key}=${maskSecret(value)}`).join(', ')}
+                          </ConfigLine>
+                        )}
+                        {server.envVars && server.envVars.length > 0 && (
+                          <ConfigLine label="Env Vars">{server.envVars.join(', ')}</ConfigLine>
+                        )}
+                      </>
+                    )}
+                    {managed && (
+                      <div className="text-xs text-muted-foreground">
+                        {t('mcpServers.managed.hint', {
+                          defaultValue: 'Managed by CloudCLI.',
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                <div className="space-y-1 text-sm text-muted-foreground">
-                  <ConfigLine label={t('mcpServers.config.command')}>{server.command || ''}</ConfigLine>
-                  <ConfigLine label={t('mcpServers.config.url')}>{server.url || ''}</ConfigLine>
-                  <ConfigLine label={t('mcpServers.config.args')}>{(server.args || []).join(' ')}</ConfigLine>
-                  <ConfigLine label="Cwd">{server.cwd || ''}</ConfigLine>
-                  {server.env && Object.keys(server.env).length > 0 && (
-                    <ConfigLine label={t('mcpServers.config.environment')}>
-                      {Object.entries(server.env).map(([key, value]) => `${key}=${maskSecret(value)}`).join(', ')}
-                    </ConfigLine>
-                  )}
-                  {server.envVars && server.envVars.length > 0 && (
-                    <ConfigLine label="Env Vars">{server.envVars.join(', ')}</ConfigLine>
-                  )}
-                  {isManagedServer(server) && (
-                    <div className="pt-1 text-xs italic text-muted-foreground">
-                      {t('mcpServers.managed.hint', {
-                        defaultValue: 'Managed by CloudCLI — control it from the feature\'s settings toggle.',
-                      })}
-                    </div>
-                  )}
-                </div>
+                {!managed && (
+                  <div className="ml-4 flex items-center gap-2">
+                    <Button
+                      onClick={() => openForm(server)}
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground hover:text-foreground"
+                      title={t('mcpServers.actions.edit')}
+                    >
+                      <Edit3 className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      onClick={() => deleteServer(server)}
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-600 hover:text-red-700"
+                      title={t('mcpServers.actions.delete')}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
               </div>
-
-              {!isManagedServer(server) && (
-                <div className="ml-4 flex items-center gap-2">
-                  <Button
-                    onClick={() => openForm(server)}
-                    variant="ghost"
-                    size="sm"
-                    className="text-muted-foreground hover:text-foreground"
-                    title={t('mcpServers.actions.edit')}
-                  >
-                    <Edit3 className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    onClick={() => deleteServer(server)}
-                    variant="ghost"
-                    size="sm"
-                    className="text-red-600 hover:text-red-700"
-                    title={t('mcpServers.actions.delete')}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {!isLoading && !isLoadingProjectScopes && servers.length === 0 && (
           <div className="py-8 text-center text-muted-foreground">{t('mcpServers.empty')}</div>

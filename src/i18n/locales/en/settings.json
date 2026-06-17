@@ -453,7 +453,7 @@
     },
     "managed": {
       "badge": "Managed",
-      "hint": "Managed by CloudCLI — control it from the feature's settings toggle."
+      "hint": "Managed by CloudCLI."
     },
     "help": {
       "title": "About Codex MCP",

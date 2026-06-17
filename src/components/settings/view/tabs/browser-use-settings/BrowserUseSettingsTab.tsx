@@ -30,31 +30,39 @@ async function readJson<T>(response: Response): Promise<T> {
 }
 
 export default function BrowserUseSettingsTab() {
-  const [settings, setSettings] = useState<BrowserUseSettings>({ enabled: false });
+  const [settings, setSettings] = useState<BrowserUseSettings | null>(null);
   const [status, setStatus] = useState<BrowserUseStatus | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isSettingsLoading, setIsSettingsLoading] = useState(true);
+  const [isStatusLoading, setIsStatusLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadState = useCallback(async () => {
-    setError(null);
-    const [settingsResponse, statusResponse] = await Promise.all([
-      authenticatedFetch('/api/browser-use/settings'),
-      authenticatedFetch('/api/browser-use/status'),
-    ]);
+  const loadSettings = useCallback(async () => {
+    const settingsResponse = await authenticatedFetch('/api/browser-use/settings');
     const settingsData = await readJson<{ data: { settings: BrowserUseSettings } }>(settingsResponse);
-    const statusData = await readJson<{ data: BrowserUseStatus }>(statusResponse);
     setSettings(settingsData.data.settings);
+  }, []);
+
+  const loadStatus = useCallback(async () => {
+    const statusResponse = await authenticatedFetch('/api/browser-use/status');
+    const statusData = await readJson<{ data: BrowserUseStatus }>(statusResponse);
     setStatus(statusData.data);
   }, []);
 
   useEffect(() => {
-    setIsLoading(true);
-    void loadState()
+    setError(null);
+    setIsSettingsLoading(true);
+    setIsStatusLoading(true);
+
+    void loadSettings()
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load Browser settings'))
-      .finally(() => setIsLoading(false));
-  }, [loadState]);
+      .finally(() => setIsSettingsLoading(false));
+
+    void loadStatus()
+      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load Browser status'))
+      .finally(() => setIsStatusLoading(false));
+  }, [loadSettings, loadStatus]);
 
   const updateSettings = async (nextSettings: Partial<BrowserUseSettings>) => {
     setIsSaving(true);
@@ -67,10 +75,12 @@ export default function BrowserUseSettingsTab() {
       const data = await readJson<{ data: { settings: BrowserUseSettings } }>(response);
       setSettings(data.data.settings);
       window.dispatchEvent(new Event('browserUseSettingsChanged'));
-      await loadState();
+      setIsStatusLoading(true);
+      await loadStatus();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save Browser settings');
     } finally {
+      setIsStatusLoading(false);
       setIsSaving(false);
     }
   };
@@ -81,15 +91,24 @@ export default function BrowserUseSettingsTab() {
     try {
       const response = await authenticatedFetch('/api/browser-use/runtime/install', { method: 'POST' });
       await readJson(response);
-      await loadState();
+      setIsStatusLoading(true);
+      await loadStatus();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to install browser runtime');
     } finally {
+      setIsStatusLoading(false);
       setIsInstalling(false);
     }
   };
 
-  const needsBrowserBinaries = Boolean(settings.enabled && status && (!status.playwrightInstalled || !status.chromiumInstalled));
+  const browserEnabled = settings?.enabled === true;
+  const needsBrowserBinaries = Boolean(browserEnabled && status && (!status.playwrightInstalled || !status.chromiumInstalled));
+  const runtimeLabel = (installed?: boolean) => {
+    if (isStatusLoading && !status) {
+      return 'checking...';
+    }
+    return installed ? 'installed' : 'missing';
+  };
 
   return (
     <div className="space-y-8">
@@ -102,24 +121,28 @@ export default function BrowserUseSettingsTab() {
             label="Enable Browser"
             description="Registers Browser for supported agents. Agents can create browser sessions; you can watch, stop, and delete them."
           >
-            <SettingsToggle
-              checked={settings.enabled}
-              onChange={(value) => void updateSettings({ enabled: value })}
-              ariaLabel="Enable Browser"
-              disabled={isLoading || isSaving}
-            />
+            {isSettingsLoading && !settings ? (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            ) : (
+              <SettingsToggle
+                checked={browserEnabled}
+                onChange={(value) => void updateSettings({ enabled: value })}
+                ariaLabel="Enable Browser"
+                disabled={isSaving}
+              />
+            )}
           </SettingsRow>
 
           <div className="space-y-4 px-4 py-4">
             <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
               <span className="rounded-md border border-border px-2 py-1">
-                Playwright: {status?.playwrightInstalled ? 'installed' : 'missing'}
+                Playwright: {runtimeLabel(status?.playwrightInstalled)}
               </span>
               <span className="rounded-md border border-border px-2 py-1">
-                Chromium: {status?.chromiumInstalled ? 'installed' : 'missing'}
+                Chromium: {runtimeLabel(status?.chromiumInstalled)}
               </span>
               <span className="rounded-md border border-border px-2 py-1">
-                Status: {status?.available ? 'ready' : settings.enabled ? 'setup required' : 'disabled'}
+                Status: {isStatusLoading && !status ? 'checking...' : status?.available ? 'ready' : browserEnabled ? 'setup required' : 'disabled'}
               </span>
             </div>
 
