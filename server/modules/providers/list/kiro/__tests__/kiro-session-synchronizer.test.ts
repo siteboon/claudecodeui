@@ -17,6 +17,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 const ORIGINAL_HOME = process.env.HOME;
+const ORIGINAL_USERPROFILE = process.env.USERPROFILE;
 const ORIGINAL_DB = process.env.DATABASE_PATH;
 
 let tempHome: string;
@@ -34,12 +35,16 @@ before(async () => {
 });
 
 after(async () => {
-  // Best-effort restore + cleanup
+  // Best-effort restore + cleanup. HOME and USERPROFILE are restored
+  // independently — they are not guaranteed to match (e.g. on Windows).
   if (ORIGINAL_HOME !== undefined) {
     process.env.HOME = ORIGINAL_HOME;
-    process.env.USERPROFILE = ORIGINAL_HOME;
   } else {
     delete process.env.HOME;
+  }
+  if (ORIGINAL_USERPROFILE !== undefined) {
+    process.env.USERPROFILE = ORIGINAL_USERPROFILE;
+  } else {
     delete process.env.USERPROFILE;
   }
   if (ORIGINAL_DB !== undefined) {

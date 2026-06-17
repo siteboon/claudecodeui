@@ -15,7 +15,10 @@ import os from 'node:os';
 import path from 'node:path';
 
 // We intercept HOME to point at a fresh tmp dir so the provider writes there.
-const ORIGINAL_HOME = os.homedir();
+// Capture the original env vars (not os.homedir()) so teardown restores HOME
+// and USERPROFILE independently — they are not guaranteed to match.
+const ORIGINAL_HOME = process.env.HOME;
+const ORIGINAL_USERPROFILE = process.env.USERPROFILE;
 const TMP_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'kiro-mcp-test-'));
 
 // homedir() reads from the env on Linux, so override it before importing the
@@ -42,8 +45,16 @@ describe('KiroMcpProvider', () => {
   });
 
   after(() => {
-    process.env.HOME = ORIGINAL_HOME;
-    process.env.USERPROFILE = ORIGINAL_HOME;
+    if (ORIGINAL_HOME !== undefined) {
+      process.env.HOME = ORIGINAL_HOME;
+    } else {
+      delete process.env.HOME;
+    }
+    if (ORIGINAL_USERPROFILE !== undefined) {
+      process.env.USERPROFILE = ORIGINAL_USERPROFILE;
+    } else {
+      delete process.env.USERPROFILE;
+    }
     fs.rmSync(TMP_HOME, { recursive: true, force: true });
   });
 
