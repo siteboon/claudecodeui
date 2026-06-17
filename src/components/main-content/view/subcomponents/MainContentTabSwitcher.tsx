@@ -12,6 +12,7 @@ type MainContentTabSwitcherProps = {
   setActiveTab: Dispatch<SetStateAction<AppTab>>;
   shouldShowTasksTab: boolean;
   shouldShowBrowserTab: boolean;
+  shouldShowComputerTab: boolean;
 };
 
 type BuiltInTab = {
@@ -36,7 +37,6 @@ const BASE_TABS: BuiltInTab[] = [
   { kind: 'builtin', id: 'shell', labelKey: 'tabs.shell', icon: Terminal },
   { kind: 'builtin', id: 'files', labelKey: 'tabs.files', icon: Folder },
   { kind: 'builtin', id: 'git',   labelKey: 'tabs.git',   icon: GitBranch },
-  { kind: 'builtin', id: 'computer', labelKey: 'tabs.computer', icon: MonitorCog },
 ];
 
 const BROWSER_TAB: BuiltInTab = {
@@ -44,6 +44,13 @@ const BROWSER_TAB: BuiltInTab = {
   id: 'browser',
   labelKey: 'tabs.browser',
   icon: MonitorPlay,
+};
+
+const COMPUTER_TAB: BuiltInTab = {
+  kind: 'builtin',
+  id: 'computer',
+  labelKey: 'tabs.computer',
+  icon: MonitorCog,
 };
 
 const TASKS_TAB: BuiltInTab = {
@@ -58,6 +65,7 @@ export default function MainContentTabSwitcher({
   setActiveTab,
   shouldShowTasksTab,
   shouldShowBrowserTab,
+  shouldShowComputerTab,
 }: MainContentTabSwitcherProps) {
   const { t } = useTranslation();
   const { plugins } = usePlugins();
@@ -65,6 +73,7 @@ export default function MainContentTabSwitcher({
   const builtInTabs: BuiltInTab[] = [
     ...BASE_TABS,
     ...(shouldShowBrowserTab ? [BROWSER_TAB] : []),
+    ...(shouldShowComputerTab ? [COMPUTER_TAB] : []),
     ...(shouldShowTasksTab ? [TASKS_TAB] : []),
   ];
 

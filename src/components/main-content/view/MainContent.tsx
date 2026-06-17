@@ -59,9 +59,11 @@ function MainContent({
   const { currentProject, setCurrentProject } = useTaskMaster() as TaskMasterContextValue;
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings() as TasksSettingsContextValue;
   const [browserUseEnabled, setBrowserUseEnabled] = useState(false);
+  const [computerUseEnabled, setComputerUseEnabled] = useState(false);
 
   const shouldShowTasksTab = Boolean(tasksEnabled && isTaskMasterInstalled);
   const shouldShowBrowserTab = browserUseEnabled;
+  const shouldShowComputerTab = computerUseEnabled;
 
   const {
     editingFile,
@@ -117,6 +119,28 @@ function MainContent({
     }
   }, [shouldShowBrowserTab, activeTab, setActiveTab]);
 
+  const loadComputerUseSettings = useCallback(async () => {
+    try {
+      const response = await authenticatedFetch('/api/computer-use/settings');
+      const data = await response.json();
+      setComputerUseEnabled(Boolean(response.ok && data?.success !== false && data?.data?.settings?.enabled));
+    } catch {
+      setComputerUseEnabled(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadComputerUseSettings();
+    window.addEventListener('computerUseSettingsChanged', loadComputerUseSettings);
+    return () => window.removeEventListener('computerUseSettingsChanged', loadComputerUseSettings);
+  }, [loadComputerUseSettings]);
+
+  useEffect(() => {
+    if (!shouldShowComputerTab && activeTab === 'computer') {
+      setActiveTab('chat');
+    }
+  }, [shouldShowComputerTab, activeTab, setActiveTab]);
+
   usePaletteOpsRegister({
     openFile: (filePath: string) => {
       setActiveTab('files');
@@ -141,6 +165,7 @@ function MainContent({
         selectedSession={selectedSession}
         shouldShowTasksTab={shouldShowTasksTab}
         shouldShowBrowserTab={shouldShowBrowserTab}
+        shouldShowComputerTab={shouldShowComputerTab}
         isMobile={isMobile}
         onMenuClick={onMenuClick}
       />
@@ -205,7 +230,7 @@ function MainContent({
             </div>
           )}
 
-          {activeTab === 'computer' && (
+          {shouldShowComputerTab && activeTab === 'computer' && (
             <div className="h-full overflow-hidden">
               <ComputerUsePanel isVisible={activeTab === 'computer'} />
             </div>

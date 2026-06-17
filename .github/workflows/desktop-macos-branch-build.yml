@@ -1,28 +1,14 @@
-name: Desktop macOS Release
+name: Desktop macOS Branch Build
 
 on:
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Release tag to create or update (defaults to v<package version>)'
-        required: false
-        type: string
-      release_name:
-        description: 'Release name (defaults to "CloudCLI Desktop macOS <tag>")'
-        required: false
-        type: string
-      prerelease:
-        description: 'Mark the GitHub release as a prerelease'
-        required: true
-        default: false
-        type: boolean
 
 jobs:
   build-macos:
-    name: Build signed macOS desktop app
+    name: Build macOS desktop artifact
     runs-on: macos-latest
     permissions:
-      contents: write
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -41,22 +27,11 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Resolve release metadata
-        id: release
+      - name: Resolve artifact metadata
+        id: artifact
         run: |
-          VERSION="$(node -p "require('./package.json').version")"
-          TAG="${{ inputs.tag }}"
-          if [ -z "$TAG" ]; then
-            TAG="v${VERSION}"
-          fi
-
-          RELEASE_NAME="${{ inputs.release_name }}"
-          if [ -z "$RELEASE_NAME" ]; then
-            RELEASE_NAME="CloudCLI Desktop macOS ${TAG}"
-          fi
-
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "release_name=$RELEASE_NAME" >> "$GITHUB_OUTPUT"
+          SAFE_REF="$(printf '%s' "${GITHUB_REF_NAME}" | tr -c 'A-Za-z0-9._-' '-')"
+          echo "name=CloudCLI-macOS-${SAFE_REF}-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
 
       - name: Verify signing secrets are configured
         run: |
@@ -88,17 +63,15 @@ jobs:
           shasum -a 256 release/*.{dmg,zip} > release/SHASUMS256.txt
           cat release/SHASUMS256.txt
 
-      - name: Publish GitHub release assets
-        uses: softprops/action-gh-release@v2
+      - name: Upload branch build artifacts
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ steps.release.outputs.tag }}
-          target_commitish: ${{ github.sha }}
-          name: ${{ steps.release.outputs.release_name }}
-          prerelease: ${{ inputs.prerelease }}
-          fail_on_unmatched_files: false
-          files: |
+          name: ${{ steps.artifact.outputs.name }}
+          path: |
             release/*.dmg
             release/*.zip
             release/*.yml
             release/*.blockmap
             release/SHASUMS256.txt
+          if-no-files-found: error
+          retention-days: 14

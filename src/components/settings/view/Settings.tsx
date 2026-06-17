@@ -8,6 +8,7 @@ import AppearanceSettingsTab from '../view/tabs/AppearanceSettingsTab';
 import CredentialsSettingsTab from '../view/tabs/api-settings/CredentialsSettingsTab';
 import GitSettingsTab from '../view/tabs/git-settings/GitSettingsTab';
 import BrowserUseSettingsTab from '../view/tabs/browser-use-settings/BrowserUseSettingsTab';
+import ComputerUseSettingsTab from '../view/tabs/computer-use-settings/ComputerUseSettingsTab';
 import NotificationsSettingsTab from '../view/tabs/NotificationsSettingsTab';
 import TasksSettingsTab from '../view/tabs/tasks-settings/TasksSettingsTab';
 import PluginSettingsTab from '../../plugins/view/PluginSettingsTab';
@@ -141,6 +142,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
               {activeTab === 'tasks' && <TasksSettingsTab />}
 
               {activeTab === 'browser' && <BrowserUseSettingsTab />}
+
+              {activeTab === 'computer' && <ComputerUseSettingsTab />}
 
               {activeTab === 'notifications' && (
                 <NotificationsSettingsTab

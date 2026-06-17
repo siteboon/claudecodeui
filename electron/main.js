@@ -1,9 +1,10 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, shell, systemPreferences } from 'electron';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { CloudController } from './cloud.js';
+import { ComputerAgentController } from './computerAgent.js';
 import { DesktopWindowManager } from './desktopWindow.js';
 import { LocalServerController } from './localServer.js';
 import { TabsController } from './tabs.js';
@@ -22,6 +23,7 @@ let activeTarget = { kind: 'launcher', name: APP_NAME, url: null };
 let desktopWindow = null;
 let localServer = null;
 let cloud = null;
+let computerAgent = null;
 let isQuitting = false;
 let isRefreshingCloud = false;
 
@@ -50,6 +52,34 @@ function getStorePath() {
 
 function getSettingsPath() {
   return path.join(app.getPath('userData'), 'desktop-settings.json');
+}
+
+function getComputerUseSettingsPath() {
+  return path.join(app.getPath('userData'), 'computer-use-settings.json');
+}
+
+function getRunningEnvironmentUrls() {
+  return cloud.getEnvironments()
+    .filter((environment) => environment.status === 'running')
+    .map((environment) => cloud.getEnvironmentUrl(environment))
+    .filter(Boolean);
+}
+
+async function promptComputerUseConsent(sessionId) {
+  const { response } = await dialog.showMessageBox(desktopWindow?.getMainWindow() || undefined, {
+    type: 'warning',
+    buttons: ['Allow this session', 'Deny'],
+    defaultId: 0,
+    cancelId: 1,
+    title: 'Computer Use request',
+    message: 'An agent wants to control this computer',
+    detail: [
+      'A cloud agent is requesting control of your mouse, keyboard, and screen for this session.',
+      'Approval lasts for this session only. You can stop it any time from the Computer panel.',
+      sessionId ? `\nSession: ${sessionId}` : '',
+    ].join('\n'),
+  });
+  return response === 0;
 }
 
 function getDisplayTargetName() {
@@ -108,6 +138,7 @@ function getDesktopState() {
     tabs: tabs.getSerializableTabs(),
     activeTabId: tabs.activeTabId,
     environments: cloud.getEnvironments().map(serializeEnvironment),
+    computerUse: computerAgent?.getState() || { enabled: false, consentMode: 'ask', running: false, connectedCount: 0, targetCount: 0 },
   };
 }
 
@@ -217,18 +248,87 @@ async function copyDiagnostics() {
   });
 }
 
-async function showComputerUsePreview() {
-  await dialog.showMessageBox(desktopWindow?.getMainWindow() || undefined, {
+async function showMacComputerUsePermissions() {
+  if (process.platform !== 'darwin') return;
+  const screenStatus = systemPreferences.getMediaAccessStatus('screen');
+  const accessibilityTrusted = systemPreferences.isTrustedAccessibilityClient(false);
+  const detail = [
+    `Screen Recording: ${screenStatus === 'granted' ? 'granted' : 'not granted'}`,
+    `Accessibility: ${accessibilityTrusted ? 'granted' : 'not granted'}`,
+    '',
+    'Computer Use needs both permissions to capture the screen and control the mouse and keyboard.',
+    'After granting a permission, fully quit and reopen CloudCLI so the change takes effect.',
+  ].join('\n');
+
+  const { response } = await dialog.showMessageBox(desktopWindow?.getMainWindow() || undefined, {
     type: 'info',
-    buttons: ['OK'],
-    title: 'Computer Use Preview',
-    message: 'Computer use needs an explicit safety gate before it can run.',
+    buttons: ['Open Screen Recording', 'Open Accessibility', 'Close'],
+    defaultId: 0,
+    cancelId: 2,
+    title: 'Computer Use Permissions',
+    message: 'Grant macOS permissions for Computer Use',
+    detail,
+  });
+
+  if (response === 0) {
+    await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
+  } else if (response === 1) {
+    await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility');
+  }
+}
+
+// Desktop control for cloud Computer Use: the desktop acts as a TeamViewer-style
+// agent for hosted environments. Enabling here lets cloud agents drive THIS
+// machine; the user picks whether to auto-connect or be asked per session.
+async function showComputerUsePreview() {
+  const state = computerAgent?.getState() || { enabled: false, consentMode: 'ask' };
+  const buttons = [];
+  const actions = [];
+
+  if (!state.enabled) {
+    buttons.push('Enable — ask each session'); actions.push({ kind: 'enable', consentMode: 'ask' });
+    buttons.push('Enable — auto-connect'); actions.push({ kind: 'enable', consentMode: 'auto' });
+  } else {
+    buttons.push('Disable Computer Use'); actions.push({ kind: 'disable' });
+    const otherMode = state.consentMode === 'auto' ? 'ask' : 'auto';
+    buttons.push(`Switch to ${otherMode === 'auto' ? 'auto-connect' : 'ask each session'}`);
+    actions.push({ kind: 'enable', consentMode: otherMode });
+  }
+  if (process.platform === 'darwin') {
+    buttons.push('macOS Permissions…'); actions.push({ kind: 'permissions' });
+  }
+  buttons.push('Close'); actions.push({ kind: 'close' });
+
+  const statusLine = state.enabled
+    ? `Enabled — ${state.consentMode === 'auto' ? 'auto-connect' : 'ask each session'} · ${state.connectedCount || 0} environment(s) linked`
+    : 'Disabled';
+
+  const { response } = await dialog.showMessageBox(desktopWindow?.getMainWindow() || undefined, {
+    type: 'question',
+    buttons,
+    defaultId: 0,
+    cancelId: buttons.length - 1,
+    title: 'Computer Use (Desktop Agent)',
+    message: 'Let cloud agents control this computer',
     detail: [
-      'The desktop shell is ready for controlled automation hooks, but full computer use is not enabled yet.',
+      `Status: ${statusLine}`,
       '',
-      'Before this is exposed, CloudCLI needs per-session consent, a stop control, screen-capture permission checks, app/window scoping, and a provider-specific action loop.',
+      'When enabled, agents running in your CloudCLI cloud environments can see this screen and drive its mouse and keyboard.',
+      '• Ask each session: you approve a prompt the first time each session wants control.',
+      '• Auto-connect: sessions can act without a prompt.',
+      process.platform === 'linux' ? '\nLinux needs X utilities (libxtst, imagemagick) installed to capture the screen and drive input.' : '',
     ].join('\n'),
   });
+
+  const action = actions[response];
+  if (!action) return;
+  if (action.kind === 'enable') {
+    await computerAgent?.saveSettings({ enabled: true, consentMode: action.consentMode });
+  } else if (action.kind === 'disable') {
+    await computerAgent?.saveSettings({ enabled: false, consentMode: state.consentMode });
+  } else if (action.kind === 'permissions') {
+    await showMacComputerUsePermissions();
+  }
 }
 
 async function refreshCloudEnvironments({ showErrors = false } = {}) {
@@ -253,6 +353,8 @@ async function refreshCloudEnvironments({ showErrors = false } = {}) {
     throw error;
   } finally {
     isRefreshingCloud = false;
+    // Reconcile the Computer Use desktop agent with the latest running environments.
+    void computerAgent?.sync().catch((error) => console.error('[ComputerAgent] sync failed:', error?.message || error));
     syncDesktopState();
   }
 }
@@ -658,6 +760,10 @@ function registerAppEvents() {
     }
   });
 
+  app.on('before-quit', () => {
+    computerAgent?.stop();
+  });
+
   app.on('before-quit', (event) => {
     if (isQuitting || !localServer?.hasOwnedServer()) return;
     if (localServer.getSettings().keepLocalServerRunning) {
@@ -770,9 +876,18 @@ async function bootstrap() {
     callbackUrl: CALLBACK_URL,
     onChange: syncDesktopState,
   });
+  computerAgent = new ComputerAgentController({
+    appRoot: getAppRoot(),
+    settingsPath: getComputerUseSettingsPath(),
+    isPackaged: app.isPackaged,
+    getRunningEnvironmentUrls,
+    promptConsent: promptComputerUseConsent,
+    onChange: syncDesktopState,
+  });
 
   await localServer.loadDesktopSettings();
   await cloud.loadCloudAccount();
+  await computerAgent.loadSettings();
 
   registerProtocolHandler();
   registerIpcHandlers();
