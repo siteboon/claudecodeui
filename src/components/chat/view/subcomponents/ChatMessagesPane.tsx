@@ -39,6 +39,8 @@ interface ChatMessagesPaneProps {
   setOpenCodeModel: (model: string) => void;
   providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
   providerModelsLoading: boolean;
+  kiroModel: string;
+  setKiroModel: (model: string) => void;
   tasksEnabled: boolean;
   isTaskMasterInstalled: boolean | null;
   onShowAllTasks?: (() => void) | null;
@@ -89,6 +91,8 @@ export default function ChatMessagesPane({
   setOpenCodeModel,
   providerModelCatalog,
   providerModelsLoading,
+  kiroModel,
+  setKiroModel,
   tasksEnabled,
   isTaskMasterInstalled,
   onShowAllTasks,
@@ -176,6 +180,8 @@ export default function ChatMessagesPane({
           setOpenCodeModel={setOpenCodeModel}
           providerModelCatalog={providerModelCatalog}
           providerModelsLoading={providerModelsLoading}
+          kiroModel={kiroModel}
+          setKiroModel={setKiroModel}
           tasksEnabled={tasksEnabled}
           isTaskMasterInstalled={isTaskMasterInstalled}
           onShowAllTasks={onShowAllTasks}

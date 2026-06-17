@@ -75,6 +75,18 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsPermissionRequests: false,
     supportsTokenUsage: true,
   },
+  kiro: {
+    provider: 'kiro',
+    // Kiro runs ACP with `--trust-all-tools`, so it has no interactive
+    // permission ladder and no tool-approval prompts. Token/credit usage is
+    // not yet surfaced by the runtime (see kiro-cli.js), so it stays off.
+    permissionModes: ['default'],
+    defaultPermissionMode: 'default',
+    supportsImages: false,
+    supportsAbort: true,
+    supportsPermissionRequests: false,
+    supportsTokenUsage: false,
+  },
 };
 
 /**

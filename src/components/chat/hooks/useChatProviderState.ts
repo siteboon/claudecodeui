@@ -15,6 +15,7 @@ const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   codex: 'gpt-5.4',
   gemini: 'gemini-3.1-pro-preview',
   opencode: 'anthropic/claude-sonnet-4-5',
+  kiro: 'auto',
 };
 
 /**
@@ -29,6 +30,7 @@ const FALLBACK_PERMISSION_MODES: Record<LLMProvider, PermissionMode[]> = {
   codex: ['default', 'acceptEdits', 'bypassPermissions'],
   gemini: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
   opencode: ['default'],
+  kiro: ['default'],
 };
 
 type ProviderCapabilities = {
@@ -93,6 +95,9 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
   const [opencodeModel, setOpenCodeModel] = useState<string>(() => {
     return localStorage.getItem('opencode-model') || FALLBACK_DEFAULT_MODEL.opencode;
   });
+  const [kiroModel, setKiroModel] = useState<string>(() => {
+    return localStorage.getItem('kiro-model') || FALLBACK_DEFAULT_MODEL.kiro;
+  });
 
   /**
    * Backend-owned capability matrix keyed by provider. Drives the permission
@@ -142,12 +147,18 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
       return;
     }
 
+    if (targetProvider === 'kiro') {
+      setKiroModel(model);
+      localStorage.setItem('kiro-model', model);
+      return;
+    }
+
     setOpenCodeModel(model);
     localStorage.setItem('opencode-model', model);
   }, []);
 
   const loadProviderModels = useCallback(async (options: { bypassCache?: boolean } = {}) => {
-    const providers: LLMProvider[] = ['claude', 'cursor', 'codex', 'gemini', 'opencode'];
+    const providers: LLMProvider[] = ['claude', 'cursor', 'codex', 'gemini', 'opencode', 'kiro'];
     const requestId = providerModelsRequestIdRef.current + 1;
     providerModelsRequestIdRef.current = requestId;
     const isHardRefresh = options.bypassCache === true;
@@ -326,6 +337,19 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
   }, [providerModelCatalog.opencode, opencodeModel]);
 
   useEffect(() => {
+    const kiro = providerModelCatalog.kiro;
+    if (kiro) {
+      const next = pickStoredOrCurrent('kiro-model', kiroModel, kiro);
+      if (next !== kiroModel) {
+        setKiroModel(next);
+      }
+      if (localStorage.getItem('kiro-model') !== next) {
+        localStorage.setItem('kiro-model', next);
+      }
+    }
+  }, [providerModelCatalog.kiro, kiroModel]);
+
+  useEffect(() => {
     if (!selectedSession?.id) {
       return;
     }
@@ -441,6 +465,8 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
     setGeminiModel,
     opencodeModel,
     setOpenCodeModel,
+    kiroModel,
+    setKiroModel,
     permissionMode,
     setPermissionMode,
     pendingPermissionRequests,

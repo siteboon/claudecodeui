@@ -39,6 +39,10 @@ const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> =
     provider: 'opencode',
     rootPath: path.join(os.homedir(), '.local', 'share', 'opencode'),
   },
+  {
+    provider: 'kiro',
+    rootPath: path.join(os.homedir(), '.kiro', 'sessions', 'cli'),
+  },
 ];
 
 const WATCHER_IGNORED_PATTERNS = [

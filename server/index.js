@@ -41,6 +41,10 @@ import {
     spawnOpenCode,
     abortOpenCodeSession,
 } from './opencode-cli.js';
+import {
+    spawnKiro,
+    abortKiroSession,
+} from './kiro-cli.js';
 import sessionManager from './sessionManager.js';
 import {
     stripAnsiSequences,
@@ -100,6 +104,7 @@ const wss = createWebSocketServer(server, {
             codex: queryCodex,
             gemini: spawnGemini,
             opencode: spawnOpenCode,
+            kiro: spawnKiro,
         },
         abortFns: {
             claude: abortClaudeSDKSession,
@@ -107,6 +112,7 @@ const wss = createWebSocketServer(server, {
             codex: abortCodexSession,
             gemini: abortGeminiSession,
             opencode: abortOpenCodeSession,
+            kiro: abortKiroSession,
         },
         resolveToolApproval,
         getPendingApprovalsForSession,
@@ -1221,6 +1227,20 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
                     input: inputTokens,
                     output: outputTokens
                 }
+            });
+        }
+
+        // Kiro sessions report `context_usage_percentage` per turn but not a
+        // running total/used pair compatible with this endpoint. Defer accurate
+        // accounting to a follow-up; the UI will treat Kiro as "no budget" for
+        // now (parity with Cursor/Gemini).
+        if (provider === 'kiro') {
+            return res.json({
+                used: 0,
+                total: 0,
+                breakdown: { input: 0, cacheCreation: 0, cacheRead: 0 },
+                unsupported: true,
+                message: 'Token usage tracking not available for Kiro sessions'
             });
         }
 

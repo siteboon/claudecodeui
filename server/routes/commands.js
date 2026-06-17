@@ -15,7 +15,7 @@ const APP_ROOT = findAppRoot(__dirname);
 
 const router = express.Router();
 
-const MODEL_PROVIDERS = ["claude", "cursor", "codex", "gemini", "opencode"];
+const MODEL_PROVIDERS = ["claude", "cursor", "codex", "gemini", "opencode", "kiro"];
 
 const MODEL_PROVIDER_LABELS = {
   claude: "Claude",
@@ -23,6 +23,7 @@ const MODEL_PROVIDER_LABELS = {
   codex: "Codex",
   gemini: "Gemini",
   opencode: "OpenCode",
+  kiro: "Kiro",
 };
 
 const readModelProvider = (value) => {
@@ -531,16 +532,31 @@ router.post("/execute", async (req, res) => {
     }
 
     // Load command content
-    // Security: validate commandPath is within allowed directories
+    // Security: validate commandPath is within allowed directories.
+    // Resolve to canonical paths (realpath) first so a symlink inside
+    // .claude/commands cannot point at a file outside the allowed roots and
+    // still pass the containment check. realpath throws if the target does not
+    // exist, which we treat as access denied.
     {
-      const resolvedPath = path.resolve(commandPath);
-      const userBase = path.resolve(
+      const canonicalize = async (target) => {
+        try {
+          return await fs.realpath(target);
+        } catch {
+          return null;
+        }
+      };
+
+      const resolvedPath = await canonicalize(commandPath);
+      const userBase = await canonicalize(
         path.join(os.homedir(), ".claude", "commands"),
       );
       const projectBase = context?.projectPath
-        ? path.resolve(path.join(context.projectPath, ".claude", "commands"))
+        ? await canonicalize(path.join(context.projectPath, ".claude", "commands"))
         : null;
       const isUnder = (base) => {
+        if (!base || !resolvedPath) {
+          return false;
+        }
         const rel = path.relative(base, resolvedPath);
         return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
       };

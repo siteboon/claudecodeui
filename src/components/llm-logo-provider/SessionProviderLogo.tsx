@@ -4,6 +4,7 @@ import CodexLogo from './CodexLogo';
 import CursorLogo from './CursorLogo';
 import GeminiLogo from './GeminiLogo';
 import OpenCodeLogo from './OpenCodeLogo';
+import KiroLogo from './KiroLogo';
 
 type SessionProviderLogoProps = {
   provider?: LLMProvider | string | null;
@@ -28,6 +29,10 @@ export default function SessionProviderLogo({
 
   if (provider === 'opencode') {
     return <OpenCodeLogo className={className} />;
+  }
+
+  if (provider === 'kiro') {
+    return <KiroLogo className={className} />;
   }
 
   return <ClaudeLogo className={className} />;

@@ -161,6 +161,16 @@ function buildShellCommand(
     return initialCommand || 'opencode';
   }
 
+  if (provider === 'kiro') {
+    // The Shell tab drives the interactive `kiro-cli chat` REPL (the binary is
+    // `kiro-cli`, not `kiro`); the ACP/`--trust-all-tools` invocation is for
+    // the headless chat gateway only. Resume targets a specific conversation.
+    if (resumeSessionId) {
+      return `kiro-cli chat --resume-id "${resumeSessionId}"`;
+    }
+    return initialCommand || 'kiro-cli chat';
+  }
+
   const command = initialCommand || 'claude';
   if (resumeSessionId) {
     if (os.platform() === 'win32') {
@@ -423,6 +433,8 @@ export function handleShellConnection(
                   ? 'Gemini'
                   : provider === 'opencode'
                     ? 'OpenCode'
+                    : provider === 'kiro'
+                      ? 'Kiro'
                   : 'Claude';
           welcomeMsg = hasSession && resumeSessionId
             ? `\x1b[36mResuming ${providerName} session ${resumeSessionId} in: ${projectPath}\x1b[0m\r\n`

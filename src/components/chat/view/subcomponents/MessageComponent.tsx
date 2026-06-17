@@ -182,7 +182,9 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, a
                             ? t('messageTypes.gemini')
                             : provider === 'opencode'
                               ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
-                              : t('messageTypes.claude'))}
+                              : provider === 'kiro'
+                                ? t('messageTypes.kiro', { defaultValue: 'Kiro' })
+                                : t('messageTypes.claude'))}
               </div>
             </div>
           )}
