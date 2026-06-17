@@ -7,7 +7,7 @@ import os from 'node:os';
 import net from 'node:net';
 import path from 'node:path';
 
-import { appConfigDb } from '@/modules/database/repositories/app-config.js';
+import { appConfigDb } from '@/modules/database/index.js';
 import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
 import { getModuleDir } from '@/utils/runtime-paths.js';
 
@@ -220,6 +220,11 @@ function getRuntimeReadiness(): RuntimeReadiness {
   return readiness;
 }
 
+const INSTALL_COMMAND_TIMEOUT_MS = Number.parseInt(
+  process.env.CLOUDCLI_BROWSER_USE_INSTALL_TIMEOUT_MS || String(10 * 60 * 1000),
+  10,
+);
+
 function runCommand(command: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -229,18 +234,36 @@ function runCommand(command: string, args: string[]): Promise<void> {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     const output: string[] = [];
+    let settled = false;
+    const finish = (fn: () => void) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      fn();
+    };
+
+    // Guard against a stuck npm/playwright process hanging the install request forever.
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      finish(() => reject(new Error(
+        `${command} ${args.join(' ')} timed out after ${INSTALL_COMMAND_TIMEOUT_MS}ms.`,
+      )));
+    }, INSTALL_COMMAND_TIMEOUT_MS);
+    timer.unref?.();
 
     child.stdout.on('data', (chunk) => output.push(String(chunk)));
     child.stderr.on('data', (chunk) => output.push(String(chunk)));
-    child.on('error', reject);
-    child.on('close', (code) => {
+    child.on('error', (error) => finish(() => reject(error)));
+    child.on('close', (code) => finish(() => {
       if (code === 0) {
         resolve();
         return;
       }
 
       reject(new Error(output.join('').trim() || `${command} ${args.join(' ')} exited with code ${code}`));
-    });
+    }));
   });
 }
 
@@ -386,8 +409,10 @@ async function assertAllowedBrowserRequest(rawUrl: string): Promise<void> {
   await assertPublicHttpTarget(parsed);
 }
 
-async function attachRequestGuard(page: any): Promise<void> {
-  await page.route('**/*', async (route: any) => {
+async function attachRequestGuard(context: any): Promise<void> {
+  // Attach at the context level so the guard also covers popups, window.open targets,
+  // and any replacement pages created during the session lifecycle.
+  await context.route('**/*', async (route: any) => {
     try {
       await assertAllowedBrowserRequest(route.request().url());
       await route.continue();
@@ -637,7 +662,7 @@ export const browserUseService = {
       context = await browser.newContext(contextOptions);
       page = await context.newPage();
     }
-    await attachRequestGuard(page);
+    await attachRequestGuard(context);
     session.status = 'ready';
     session.message = 'Browser session is ready.';
     sessions.set(session.id, session);
@@ -886,7 +911,7 @@ export const browserUseService = {
     if (action === 'new') {
       const page = await handle.context.newPage();
       handles.set(sessionId, { ...handle, page });
-      await attachRequestGuard(page);
+      // Request guard is attached at the context level, so new pages are already covered.
       if (input.url) {
         await this.agentNavigate(sessionId, input.url);
       }

@@ -1755,9 +1755,21 @@ async function startServer() {
         await closeSessionsWatcher();
         // Clean up plugin processes on shutdown
         const shutdownRuntimeServices = async () => {
-            await browserUseService.stopAllSessions();
-            await stopAllPlugins();
-            await removeLocalServerMarker();
+            try {
+                await browserUseService.stopAllSessions();
+            } catch (err) {
+                console.error('[Browser Use] Error stopping sessions during shutdown:', err?.message || err);
+            }
+            try {
+                await stopAllPlugins();
+            } catch (err) {
+                console.error('[Plugins] Error stopping plugins during shutdown:', err?.message || err);
+            }
+            try {
+                await removeLocalServerMarker();
+            } catch (err) {
+                console.error('[Local Server] Error removing server marker during shutdown:', err?.message || err);
+            }
             process.exit(0);
         };
         process.on('SIGTERM', () => void shutdownRuntimeServices());

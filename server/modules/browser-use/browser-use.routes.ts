@@ -121,10 +121,12 @@ router.post('/sessions/:sessionId/navigate', async (req: AuthenticatedRequest, r
 
 router.post('/sessions/:sessionId/click', async (req: AuthenticatedRequest, res) => {
   try {
-    const session = await browserUseService.userClick(requireUser(req), readParam(req.params.sessionId), {
-      x: Number(req.body?.x),
-      y: Number(req.body?.y),
-    });
+    const x = Number(req.body?.x);
+    const y = Number(req.body?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      throw new Error('Click requires numeric x and y coordinates.');
+    }
+    const session = await browserUseService.userClick(requireUser(req), readParam(req.params.sessionId), { x, y });
     res.json({ success: true, data: { session } });
   } catch (error) {
     res.status(400).json({
@@ -136,7 +138,11 @@ router.post('/sessions/:sessionId/click', async (req: AuthenticatedRequest, res)
 
 router.post('/sessions/:sessionId/press-key', async (req: AuthenticatedRequest, res) => {
   try {
-    const session = await browserUseService.userPressKey(requireUser(req), readParam(req.params.sessionId), String(req.body?.key || ''));
+    const key = String(req.body?.key || '').trim();
+    if (!key) {
+      throw new Error('A key is required.');
+    }
+    const session = await browserUseService.userPressKey(requireUser(req), readParam(req.params.sessionId), key);
     res.json({ success: true, data: { session } });
   } catch (error) {
     res.status(400).json({

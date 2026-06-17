@@ -6,7 +6,7 @@ export interface SessionActivity {
   canInterrupt: boolean;
   /**
    * When this request was first marked as processing (client clock). Drives
-   * the elapsed-time display and the stale `session-status` reply guard.
+   * the elapsed-time display and the stale `chat_subscribed` idle-ack guard.
    */
   startedAt: number;
 }
