@@ -60,6 +60,7 @@ export class DesktopWindowManager {
     this.tabs = tabs;
 
     this.mainWindow = null;
+    this.settingsWindow = null;
     this.tray = null;
     this.launcherLoaded = false;
     this.activeContentView = null;
@@ -205,13 +206,76 @@ export class DesktopWindowManager {
   }
 
   emitDesktopState() {
-    if (!this.mainWindow || this.mainWindow.webContents.isDestroyed()) return;
-    this.mainWindow.webContents.send('cloudcli-desktop:state-updated', this.getDesktopState());
+    const state = this.getDesktopState();
+    if (this.mainWindow && !this.mainWindow.webContents.isDestroyed()) {
+      this.mainWindow.webContents.send('cloudcli-desktop:state-updated', state);
+    }
+    if (this.settingsWindow && !this.settingsWindow.webContents.isDestroyed()) {
+      this.settingsWindow.webContents.send('cloudcli-desktop:state-updated', state);
+    }
   }
 
   emitLauncherCommand(command) {
     if (!this.mainWindow || this.mainWindow.webContents.isDestroyed()) return;
     this.mainWindow.webContents.send('cloudcli-desktop:launcher-command', command);
+  }
+
+  emitSettingsCommand(command) {
+    if (!this.settingsWindow || this.settingsWindow.webContents.isDestroyed()) return;
+    this.settingsWindow.webContents.send('cloudcli-desktop:launcher-command', command);
+  }
+
+  syncSettingsWindowBounds() {
+    if (!this.mainWindow || !this.settingsWindow || this.settingsWindow.isDestroyed()) return;
+    this.settingsWindow.setBounds(this.mainWindow.getBounds());
+  }
+
+  async ensureSettingsWindow(sheet = 'desktop-settings') {
+    if (!this.mainWindow) return null;
+
+    if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
+      this.syncSettingsWindowBounds();
+      this.emitSettingsCommand({ type: 'open-sheet', sheet });
+      this.settingsWindow.focus();
+      return this.settingsWindow;
+    }
+
+    this.settingsWindow = new BrowserWindow({
+      parent: this.mainWindow,
+      modal: true,
+      show: false,
+      frame: false,
+      transparent: true,
+      hasShadow: false,
+      resizable: false,
+      minimizable: false,
+      maximizable: false,
+      fullscreenable: false,
+      movable: false,
+      skipTaskbar: true,
+      backgroundColor: '#00000000',
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+        preload: this.getPreloadPath(),
+      },
+    });
+    this.syncSettingsWindowBounds();
+    this.configureChildWebContents(this.settingsWindow.webContents);
+    this.settingsWindow.once('ready-to-show', () => this.settingsWindow?.show());
+    this.settingsWindow.on('closed', () => {
+      this.settingsWindow = null;
+    });
+    await this.settingsWindow.loadFile(this.getLauncherPath(), {
+      query: { modal: '1', sheet },
+    });
+    return this.settingsWindow;
+  }
+
+  closeSettingsWindow() {
+    if (!this.settingsWindow || this.settingsWindow.isDestroyed()) return;
+    this.settingsWindow.close();
   }
 
   async showTarget(target, { trackTab = true } = {}) {
@@ -372,8 +436,8 @@ export class DesktopWindowManager {
             label: 'Services',
             submenu: [
               {
-                label: 'Computer Access',
-                click: () => void this.actions.showComputerAccess(),
+                label: 'Computer Use',
+                click: () => void this.showDesktopSettings(),
               },
             ],
           },
@@ -572,8 +636,13 @@ export class DesktopWindowManager {
 
   async showDesktopSettings() {
     if (!this.mainWindow) return this.getDesktopState();
-    await this.showLauncher();
-    this.emitLauncherCommand({ type: 'open-sheet', sheet: 'app-settings' });
+    await this.ensureSettingsWindow('desktop-settings');
+    return this.getDesktopState();
+  }
+
+  async showLocalSettings() {
+    if (!this.mainWindow) return this.getDesktopState();
+    await this.ensureSettingsWindow('local-settings');
     return this.getDesktopState();
   }
 
@@ -666,11 +735,17 @@ export class DesktopWindowManager {
       if (this.activeContentView) {
         this.activeContentView.setBounds(this.getContentViewBounds());
       }
+      this.syncSettingsWindowBounds();
+    });
+
+    this.mainWindow.on('move', () => {
+      this.syncSettingsWindowBounds();
     });
 
     this.mainWindow.on('closed', () => {
       this.tabViews.clear();
       this.activeContentView = null;
+      this.settingsWindow = null;
       this.mainWindow = null;
       this.launcherLoaded = false;
     });

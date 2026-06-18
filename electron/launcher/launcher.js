@@ -21,6 +21,7 @@ window.__MOCK_STATE__ = {
   var MOCK = window.__MOCK_STATE__ || {};
   var VERSION = window.__APP_VERSION__ || '';
   var LOGO_URL = new URL('../../public/logo-32.png', window.location.href).toString();
+  var SEARCH = new URLSearchParams(window.location.search || '');
 
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
@@ -48,7 +49,9 @@ window.__MOCK_STATE__ = {
     showComputerAccess: function () { return Promise.resolve(clone(mockState)); },
     showEnvironmentPicker: function () { return Promise.resolve(clone(mockState)); },
     showLauncher: function () { return Promise.resolve(clone(mockState)); },
+    showLocalSettings: function () { return Promise.resolve(clone(mockState)); },
     showDesktopSettings: function () { return Promise.resolve(clone(mockState)); },
+    closeSettingsWindow: function () { return Promise.resolve(clone(mockState)); },
     showActiveEnvironmentActionsMenu: function () { return Promise.resolve(clone(mockState)); },
     openCloudDashboard: function () { return Promise.resolve(clone(mockState)); },
     runActiveEnvironmentAction: function () { return Promise.resolve(clone(mockState)); },
@@ -68,9 +71,6 @@ window.__MOCK_STATE__ = {
       if (typeof settings.enabled === 'boolean') mockState.computerUse.enabled = settings.enabled;
       if (settings.consentMode === 'auto' || settings.consentMode === 'ask') mockState.computerUse.consentMode = settings.consentMode;
       mockState.computerUse.running = mockState.computerUse.enabled;
-      return Promise.resolve(clone(mockState));
-    },
-    showComputerAccessPermissions: function () {
       return Promise.resolve(clone(mockState));
     },
     openEnvironment: function (id) {
@@ -171,12 +171,12 @@ window.__MOCK_STATE__ = {
   function computerUseStatus(state) {
     var computerUse = state && state.computerUse ? state.computerUse : {};
     if (!computerUse.enabled) {
-      return { label: 'Off', tone: 'idle', detail: 'CloudCLI cannot use this computer.' };
+      return { label: 'Disabled', tone: 'idle', detail: 'CloudCLI cannot use this computer.' };
     }
     if (computerUse.consentMode === 'auto') {
-      return { label: 'Ready · Unattended', tone: 'warn', detail: 'Trusted agents can use this computer without a local approval prompt.' };
+      return { label: 'Unattended access', tone: 'warn', detail: 'Trusted agents can use this computer without a local approval prompt.' };
     }
-    return { label: 'Ready · Ask first', tone: 'ok', detail: 'CloudCLI can use this computer. Agents need approval before control starts.' };
+    return { label: 'Ask before each session', tone: 'ok', detail: 'Agents need approval before control starts.' };
   }
 
   var CC = {
@@ -198,6 +198,7 @@ window.__MOCK_STATE__ = {
     _reg: {},
     _wired: false,
     _poll: null,
+    modalMode: SEARCH.get('modal') === '1',
   };
 
   window.CC = CC;
@@ -206,11 +207,14 @@ window.__MOCK_STATE__ = {
   var overlay;
 
   CC.setState = function (state) {
+    var currentSheet = CC.ui.openSheet || (CC.modalMode ? (CC.ui.initialSheet || 'desktop-settings') : null);
+    var sheetBody = overlay ? overlay.querySelector('.cc-sheet-body') : null;
+    var scrollTop = sheetBody ? sheetBody.scrollTop : 0;
     if (state && typeof state === 'object') CC.state = state;
     CC.applyTheme(CC.state);
     CC.render(CC.state);
-    if (CC.ui.openSheet) {
-      CC.openSheet(CC.ui.openSheet);
+    if (currentSheet) {
+      CC.openSheet(currentSheet, { scrollTop: scrollTop });
     }
   };
 
@@ -334,11 +338,16 @@ window.__MOCK_STATE__ = {
             consentMode: current.consentMode === 'auto' ? 'auto' : 'ask',
           });
         });
-      case 'computer-permissions':
-        return CC.run('Opening system permissions...', function () { return bridge.showComputerAccessPermissions(); });
       case 'settings-toggle':
-        CC.openSheet('app-settings');
-        return;
+        return CC.run('Opening desktop settings...', function () { return bridge.showDesktopSettings(); });
+      case 'desktop-settings-toggle':
+        return CC.run('Opening desktop settings...', function () { return bridge.showDesktopSettings(); });
+      case 'local-settings-toggle':
+        return CC.run('Opening local settings...', function () { return bridge.showLocalSettings(); });
+      case 'computer-settings-toggle':
+        return CC.run('Opening desktop settings...', function () { return bridge.showDesktopSettings(); });
+      case 'settings-close':
+        return CC.closeSheet();
       case 'dashboard':
         return CC.run('Opening CloudCLI dashboard...', function () { return bridge.openCloudDashboard(); });
       case 'env-action':
@@ -347,15 +356,6 @@ window.__MOCK_STATE__ = {
         return CC.run('Opening environment actions...', function () { return bridge.showActiveEnvironmentActionsMenu(); });
       case 'env-row-menu':
         return CC.run('Opening environment actions...', function () { return bridge.showEnvironmentActionsMenu(node.getAttribute('data-cc-environment-id')); });
-      case 'local-settings-toggle':
-        CC.openSheet('local-settings');
-        return;
-      case 'computer-settings-toggle':
-        CC.openSheet('computer-access');
-        return;
-      case 'settings-close':
-        CC.closeSheet();
-        return;
       default:
         return;
     }
@@ -430,19 +430,26 @@ window.__MOCK_STATE__ = {
       '</label>';
   };
 
-  CC.openSheet = function (sheet) {
-    if (sheet === 'app-settings') {
-      CC.renderAppSettings();
-    } else if (sheet === 'computer-access') {
-      CC.renderComputerAccess();
+  CC.openSheet = function (sheet, options) {
+    options = options || {};
+    if (sheet === 'desktop-settings') {
+      CC.renderDesktopSettings();
     } else {
       CC.renderLocalSettings();
     }
     CC.ui.openSheet = sheet;
     overlay.classList.add('open');
+    if (typeof options.scrollTop === 'number') {
+      var body = overlay.querySelector('.cc-sheet-body');
+      if (body) body.scrollTop = options.scrollTop;
+    }
   };
 
   CC.closeSheet = function () {
+    if (CC.modalMode && bridge.closeSettingsWindow) {
+      CC.ui.openSheet = null;
+      return bridge.closeSettingsWindow();
+    }
     CC.ui.openSheet = null;
     overlay.classList.remove('open');
   };
@@ -478,46 +485,19 @@ window.__MOCK_STATE__ = {
     );
   };
 
-  CC.buildComputerAccessSections = function (state, options) {
-    options = options || {};
+  CC.buildComputerUseSection = function (state) {
     var computerUse = state.computerUse || {};
-    var status = computerUseStatus(state);
-    var sections = [];
-
-    if (options.includeStatus !== false) {
-      sections.push(CC.renderSection(options.statusEyebrow || 'STATUS', status.label, '' +
-        '<div class="cc-surface">' +
-        '<div class="cc-status-badge ' + esc(status.tone) + '">' + esc(status.label) + '</div>' +
-        '<div class="cc-meta">' + esc(status.detail) + '</div>' +
-        '</div>'
-      ));
-    }
-
-    sections.push(CC.renderSection(options.accessEyebrow || 'ACCESS', 'Allow desktop access', '' +
+    var body =
       '<div class="cc-surface">' +
-      '<label class="cc-toggle"><input type="checkbox" data-cc-computer-enabled="true"' + (computerUse.enabled ? ' checked' : '') + '><span><b>Allow desktop access</b><br>Let CloudCLI use the computer. Agents cannot act until you approve a session.</span></label>' +
-      '</div>'
-    ));
-
-    sections.push(CC.renderSection(options.modeEyebrow || 'ACCESS MODE', 'Choose how agent approval works', '' +
-      '<div class="cc-surface cc-choice-group">' +
-      CC.renderRadioOption('computer-access-mode', 'ask', computerUse.consentMode !== 'auto', 'Ask before each session', 'Agents can request control, but you approve every session.') +
-      CC.renderRadioOption('computer-access-mode', 'auto', computerUse.consentMode === 'auto', 'Unattended access', 'Trusted agents can use this computer without a local approval prompt.') +
-      '</div>'
-    ));
-
-    var setupBody = '<div class="cc-surface">' +
-      '<div class="cc-kv"><span>Linked environments</span><span>' + esc(String(computerUse.connectedCount || 0)) + '</span></div>' +
-      '<div class="cc-kv"><span>Target environments</span><span>' + esc(String(computerUse.targetCount || 0)) + '</span></div>';
-    if (options.includeTheme) {
-      setupBody += '<div class="cc-kv"><span>Theme</span><span>' + esc(themeLabel((state.desktopSettings && state.desktopSettings.themeMode) || 'system')) + '</span></div>';
+      '<label class="cc-toggle"><input type="checkbox" data-cc-computer-enabled="true"' + (computerUse.enabled ? ' checked' : '') + '><span><b>Enable Computer Use</b><br>Let CloudCLI use the computer. Agents cannot act until you approve a session.</span></label>';
+    if (computerUse.enabled) {
+      body += '<div class="cc-choice-group">' +
+        CC.renderRadioOption('computer-access-mode', 'ask', computerUse.consentMode !== 'auto', 'Ask before each session', 'Agents can request control, but you approve every session.') +
+        CC.renderRadioOption('computer-access-mode', 'auto', computerUse.consentMode === 'auto', 'Unattended access', 'Trusted agents can use this computer without a local approval prompt.') +
+        '</div>';
     }
-    if (CC.platform === 'mac') {
-      setupBody += '<div class="cc-actions-inline"><button class="btn sm" data-cc-action="computer-permissions">Open macOS permissions</button></div>';
-    }
-    setupBody += '</div>';
-    sections.push(CC.renderSection(options.setupEyebrow || 'SETUP', 'System permissions and environment links', setupBody));
-    return sections;
+    body += '</div>';
+    return CC.renderSection('COMPUTER USE', 'Control how agents can use this computer', body);
   };
 
   CC.renderLocalSettings = function () {
@@ -530,33 +510,17 @@ window.__MOCK_STATE__ = {
         '<label class="cc-toggle"><input type="checkbox" data-cc-setting="exposeLocalServerOnNetwork"' + ((state.desktopSettings || {}).exposeLocalServerOnNetwork ? ' checked' : '') + '><span><b>Allow LAN access</b><br>Use the copied URL from another device on this network.</span></label>' +
         '</div>'
       ),
-      CC.buildThemeSection(state),
     ];
-    CC.renderSheet('Local Settings', 'Manage how Local CloudCLI runs and appears on this computer.', sections);
+    CC.renderSheet('Local Settings', 'Manage how Local CloudCLI runs on this computer.', sections);
   };
 
-  CC.renderAppSettings = function () {
+  CC.renderDesktopSettings = function () {
     var state = CC.state || {};
     var sections = [
-      CC.buildLocalServerSection(state, {
-        eyebrow: 'GENERAL',
-        title: 'Local CloudCLI',
-        includePreferences: true,
-      }),
       CC.buildThemeSection(state),
+      CC.buildComputerUseSection(state),
     ];
-    sections.push.apply(sections, CC.buildComputerAccessSections(state, {
-      statusEyebrow: 'COMPUTER ACCESS',
-      modeEyebrow: 'APPROVAL MODE',
-      includeTheme: false,
-    }));
-    CC.renderSheet('Settings', 'Manage local behavior, appearance, and desktop access for this computer.', sections);
-  };
-
-  CC.renderComputerAccess = function () {
-    var state = CC.state || {};
-    var sections = CC.buildComputerAccessSections(state, { includeTheme: true });
-    CC.renderSheet('Computer Access', 'Let cloud agents use this computer with explicit approval or unattended access.', sections);
+    CC.renderSheet('Desktop Settings', 'Manage the desktop app appearance and Computer Use behavior.', sections);
   };
 
   CC.render = function (state) {
@@ -564,7 +528,11 @@ window.__MOCK_STATE__ = {
     var titlebar = (CC._reg.titlebar || CC.titlebar)(state);
     var statusbar = (CC._reg.statusbar || CC.statusbar)(state);
     var body = CC._reg.renderBody ? CC._reg.renderBody(state) : '';
-    app.innerHTML = titlebar + '<div class="cc-body ' + (CC._reg.bodyClass || '') + '">' + body + '</div>' + statusbar;
+    if (CC.modalMode) {
+      app.innerHTML = '';
+    } else {
+      app.innerHTML = titlebar + '<div class="cc-body ' + (CC._reg.bodyClass || '') + '">' + body + '</div>' + statusbar;
+    }
     if (CC._reg.afterRender) CC._reg.afterRender(state);
   };
 
@@ -651,6 +619,11 @@ window.__MOCK_STATE__ = {
     var isWin = /Win/i.test(navigator.platform);
     CC.platform = isMac ? 'mac' : (isWin ? 'win' : 'linux');
     document.body.classList.add(CC.platform);
+    CC.ui.initialSheet = SEARCH.get('sheet') || 'desktop-settings';
+    if (CC.modalMode) {
+      document.documentElement.classList.add('cc-modal-window');
+      document.body.classList.add('cc-modal-window');
+    }
 
     wireEvents();
     if (window.matchMedia) {
@@ -664,6 +637,7 @@ window.__MOCK_STATE__ = {
     if (bridge.onLauncherCommand) {
       bridge.onLauncherCommand(function (command) {
         if (command && command.type === 'open-sheet') {
+          CC.ui.initialSheet = command.sheet || CC.ui.initialSheet || 'desktop-settings';
           CC.openSheet(command.sheet);
         }
       });
@@ -699,8 +673,8 @@ window.__MOCK_STATE__ = {
     return '<div class="pane-h"><div><h2 class="pane-title">Local CloudCLI</h2><p class="pane-sub">Run the open-source app on this machine. No account required.</p></div></div>' +
       '<div class="card"><div class="card-head"><div><div class="card-t">Local server</div><div class="card-sub mono">' + CC.esc(CC.localUrl(state) || 'Starts on demand') + '</div></div><div class="card-tools"><span class="dot" style="background:' + (state.localServerRunning ? 'var(--ok)' : 'var(--tx3)') + '"></span><button class="icon-btn" data-cc-action="local-settings-toggle" title="Local settings">' + CC.icon('gear', 16) + '</button></div></div>' +
       '<div class="card-actions"><button class="btn pri" data-cc-action="local">' + CC.icon('play', 15) + 'Open Local CloudCLI</button><button class="btn" data-cc-action="open-web">' + CC.icon('arrow', 14) + 'Open in browser</button><button class="btn" data-cc-action="copy-web">' + CC.icon('copy', 14) + 'Copy URL</button></div></div>' +
-      '<div class="card"><div class="card-head"><div><div class="card-t">Computer Access</div><div class="card-sub">' + CC.esc(computerUseStatus(state).detail) + '</div></div><div class="card-tools"><span class="badge ' + CC.esc(computerUseStatus(state).tone) + '">' + CC.esc(computerUseStatus(state).label) + '</span><button class="icon-btn" data-cc-action="computer-settings-toggle" title="Computer access">' + CC.icon('monitor', 16) + '</button></div></div>' +
-      '<div class="card-actions"><button class="btn" data-cc-action="computer-settings-toggle">' + CC.icon('settings', 14) + 'Manage access</button></div></div>';
+      '<div class="card"><div class="card-head"><div><div class="card-t">Computer Use</div><div class="card-sub">' + CC.esc(computerUseStatus(state).detail) + '</div></div><div class="card-tools"><span class="badge ' + CC.esc(computerUseStatus(state).tone) + '">' + CC.esc(computerUseStatus(state).label) + '</span><button class="icon-btn" data-cc-action="computer-settings-toggle" title="Computer Use settings">' + CC.icon('monitor', 16) + '</button></div></div>' +
+      '<div class="card-actions"><button class="btn" data-cc-action="computer-settings-toggle">' + CC.icon('settings', 14) + 'Open settings</button></div></div>';
   }
 
   function envRow(environment) {

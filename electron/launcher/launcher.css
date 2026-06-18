@@ -8,6 +8,11 @@ body {
   height: 100%;
 }
 
+html.cc-modal-window,
+body.cc-modal-window {
+  background: transparent;
+}
+
 :root {
   --bg: #111315;
   --s1: #171a1d;

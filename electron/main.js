@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, shell, systemPreferences } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -71,7 +71,7 @@ async function promptComputerUseConsent(sessionId) {
     buttons: ['Allow this session', 'Deny'],
     defaultId: 0,
     cancelId: 1,
-    title: 'Computer Access request',
+    title: 'Computer Use request',
     message: 'An agent wants to control this computer',
     detail: [
       'A cloud agent is requesting control of your mouse, keyboard, and screen for this session.',
@@ -248,38 +248,8 @@ async function copyDiagnostics() {
   });
 }
 
-async function showMacComputerAccessPermissions() {
-  if (process.platform !== 'darwin') return;
-  const screenStatus = systemPreferences.getMediaAccessStatus('screen');
-  const accessibilityTrusted = systemPreferences.isTrustedAccessibilityClient(false);
-  const detail = [
-    `Screen Recording: ${screenStatus === 'granted' ? 'granted' : 'not granted'}`,
-    `Accessibility: ${accessibilityTrusted ? 'granted' : 'not granted'}`,
-    '',
-    'Computer Access needs both permissions to capture the screen and control the mouse and keyboard.',
-    'After granting a permission, fully quit and reopen CloudCLI so the change takes effect.',
-  ].join('\n');
-
-  const { response } = await dialog.showMessageBox(desktopWindow?.getMainWindow() || undefined, {
-    type: 'info',
-    buttons: ['Open Screen Recording', 'Open Accessibility', 'Close'],
-    defaultId: 0,
-    cancelId: 2,
-    title: 'Computer Access Permissions',
-    message: 'Grant macOS permissions for Computer Access',
-    detail,
-  });
-
-  if (response === 0) {
-    await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
-  } else if (response === 1) {
-    await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility');
-  }
-}
-
 async function showComputerAccess() {
-  await desktopWindow?.showLauncher();
-  desktopWindow?.emitLauncherCommand({ type: 'open-sheet', sheet: 'computer-access' });
+  await desktopWindow?.showDesktopSettings();
   return getDesktopState();
 }
 
@@ -693,11 +663,12 @@ function registerIpcHandlers() {
     return getDesktopState();
   });
   ipcMain.handle('cloudcli-desktop:update-computer-use', async (_event, settings) => updateComputerUse(settings));
-  ipcMain.handle('cloudcli-desktop:show-computer-use-permissions', async () => {
-    await showMacComputerAccessPermissions();
+  ipcMain.handle('cloudcli-desktop:show-desktop-settings', async () => desktopWindow.showDesktopSettings());
+  ipcMain.handle('cloudcli-desktop:show-local-settings', async () => desktopWindow.showLocalSettings());
+  ipcMain.handle('cloudcli-desktop:close-settings-window', async () => {
+    desktopWindow.closeSettingsWindow();
     return getDesktopState();
   });
-  ipcMain.handle('cloudcli-desktop:show-desktop-settings', async () => desktopWindow.showDesktopSettings());
   ipcMain.handle('cloudcli-desktop:show-active-environment-actions-menu', async () => desktopWindow.showActiveEnvironmentActionsMenu());
   ipcMain.handle('cloudcli-desktop:show-environment-actions-menu', async (_event, environmentId) => desktopWindow.showEnvironmentActionsMenu(environmentId));
   ipcMain.handle('cloudcli-desktop:switch-tab', async (_event, tabId) => desktopWindow.switchDesktopTab(tabId));
