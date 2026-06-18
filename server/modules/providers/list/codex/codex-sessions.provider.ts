@@ -4,7 +4,7 @@ import readline from 'node:readline';
 import { sessionsDb } from '@/modules/database/index.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
-import { createNormalizedMessage, generateMessageId, readObjectRecord } from '@/shared/utils.js';
+import { createNormalizedMessage, generateMessageId, readObjectRecord, sliceTailPage } from '@/shared/utils.js';
 
 const PROVIDER = 'codex';
 
@@ -552,7 +552,6 @@ export class CodexSessionsProvider implements IProviderSessions {
       }
     }
 
-    const totalNormalized = normalized.length;
     let total = 0;
     for (const msg of normalized) {
       if (msg.kind !== 'tool_result') {
@@ -561,18 +560,10 @@ export class CodexSessionsProvider implements IProviderSessions {
     }
     const normalizedOffset = Math.max(0, offset);
     const normalizedLimit = limit === null ? null : Math.max(0, limit);
-    const messages = normalizedLimit === null
-      ? normalized
-      : normalized.slice(
-          Math.max(0, totalNormalized - normalizedOffset - normalizedLimit),
-          Math.max(0, totalNormalized - normalizedOffset),
-        );
-    const hasMore = normalizedLimit === null
-      ? false
-      : Math.max(0, totalNormalized - normalizedOffset - normalizedLimit) > 0;
+    const { page, hasMore } = sliceTailPage(normalized, normalizedLimit, normalizedOffset);
 
     return {
-      messages,
+      messages: page,
       total,
       hasMore,
       offset: normalizedOffset,

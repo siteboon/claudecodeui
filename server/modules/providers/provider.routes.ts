@@ -1,6 +1,7 @@
 import express, { type Request, type Response } from 'express';
 
 import { providerAuthService } from '@/modules/providers/services/provider-auth.service.js';
+import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
 import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
 import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
 import { providerSkillsService } from '@/modules/providers/services/skills.service.js';
@@ -382,7 +383,51 @@ router.post(
   }),
 );
 
+router.get(
+  '/capabilities',
+  asyncHandler(async (_req: Request, res: Response) => {
+    res.json(createApiSuccessResponse({
+      providers: providerCapabilitiesService.listAllProviderCapabilities(),
+    }));
+  }),
+);
+
+router.get(
+  '/:provider/capabilities',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    res.json(createApiSuccessResponse(
+      providerCapabilitiesService.getProviderCapabilities(provider),
+    ));
+  }),
+);
+
 // ----------------- Session routes -----------------
+/**
+ * Session gateway entry point: allocates the stable app-facing session id for
+ * a brand-new chat. The frontend must call this before the first `chat.send`
+ * so the session id in the URL, the store, and the websocket all agree from
+ * the very first message — there is no client-visible session-id handoff.
+ */
+router.post(
+  '/sessions',
+  asyncHandler(async (req: Request, res: Response) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const provider = parseProvider(body.provider);
+    const projectPath = typeof body.projectPath === 'string' ? body.projectPath : '';
+    const result = sessionsService.createAppSession(provider, projectPath);
+    res.status(201).json(createApiSuccessResponse(result));
+  }),
+);
+
+router.get(
+  '/sessions/running',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const sessions = sessionsService.listRunningSessions();
+    res.json(createApiSuccessResponse({ sessions }));
+  }),
+);
+
 router.get(
   '/sessions/archived',
   asyncHandler(async (_req: Request, res: Response) => {
@@ -459,7 +504,7 @@ router.get(
       limit,
       offset,
     });
-    res.json(result);
+    res.json(createApiSuccessResponse(result));
   }),
 );
 
