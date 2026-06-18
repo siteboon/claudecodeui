@@ -155,12 +155,6 @@ window.__MOCK_STATE__ = {
     return error && error.message ? error.message : String(error);
   }
 
-  function themeLabel(mode) {
-    if (mode === 'light') return 'Light';
-    if (mode === 'dark') return 'Dark';
-    return 'System';
-  }
-
   function resolveTheme(state) {
     var settings = state && state.desktopSettings ? state.desktopSettings : {};
     var mode = settings.themeMode || 'system';
@@ -188,6 +182,7 @@ window.__MOCK_STATE__ = {
     accountLabel: accountLabel,
     localUrl: localUrl,
     envCount: envCount,
+    computerUseStatus: computerUseStatus,
     version: VERSION,
     logoUrl: LOGO_URL,
     platform: 'win',
