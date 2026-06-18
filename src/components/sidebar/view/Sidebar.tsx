@@ -8,6 +8,8 @@ import { useSidebarController } from '../hooks/useSidebarController';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
+import { useBookmarks } from '../../../stores/useBookmarkStore';
+import type { BookmarkedSession } from '../../../stores/useBookmarkStore';
 import type { Project, LLMProvider } from '../../../types/app';
 import type { MCPServerStatus, SidebarProps } from '../types/types';
 
@@ -52,6 +54,7 @@ function Sidebar({
   const { setCurrentProject, mcpServerStatus } = useTaskMaster() as TaskMasterSidebarContext;
   const { tasksEnabled } = useTasksSettings();
   const paletteOps = usePaletteOps();
+  const { bookmarks, isBookmarked, toggleBookmark, removeBookmark } = useBookmarks();
 
   const {
     isSidebarCollapsed,
@@ -191,6 +194,8 @@ function Sidebar({
     onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => {
       void updateSessionSummary(projectName, sessionId, summary, provider);
     },
+    isBookmarked,
+    onToggleBookmark: toggleBookmark,
     t,
   };
 
@@ -301,6 +306,41 @@ function Sidebar({
             currentVersion={currentVersion}
             onShowVersionModal={() => setShowVersionModal(true)}
             onShowSettings={onShowSettings}
+            bookmarks={bookmarks}
+            selectedSessionId={selectedSession?.id ?? null}
+            isBookmarked={isBookmarked}
+            onToggleBookmark={toggleBookmark}
+            onRemoveBookmark={removeBookmark}
+            onSelectBookmarkedSession={(projectId, sessionId) => {
+              const project = projects.find(p => p.projectId === projectId);
+              if (project) {
+                handleProjectSelect(project);
+                const sessions = getProjectSessions(project);
+                const existing = sessions.find(s => s.id === sessionId);
+                if (existing) {
+                  handleSessionClick(existing, project.projectId);
+                } else {
+                  handleSessionClick({ id: sessionId, __provider: 'claude' }, project.projectId);
+                }
+              }
+            }}
+            onDeleteSession={(projectId, sessionId, sessionTitle, provider) => {
+              showDeleteSessionConfirmation(projectId, sessionId, sessionTitle, provider as LLMProvider);
+            }}
+            editingSession={editingSession}
+            editingSessionName={editingSessionName}
+            onStartEditingSession={(sessionId, initialName) => {
+              setEditingSession(sessionId);
+              setEditingSessionName(initialName);
+            }}
+            onCancelEditingSession={() => {
+              setEditingSession(null);
+              setEditingSessionName('');
+            }}
+            onEditingSessionNameChange={setEditingSessionName}
+            onSaveEditingSession={(projectId, sessionId, summary, provider) => {
+              void updateSessionSummary(projectId, sessionId, summary, provider as LLMProvider);
+            }}
             projectListProps={projectListProps}
             t={t}
           />

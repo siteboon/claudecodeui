@@ -3,6 +3,7 @@ import type { TFunction } from 'i18next';
 
 import type { LoadingProgress, Project, ProjectSession, LLMProvider } from '../../../../types/app';
 import type { SessionActivityMap } from '../../../../hooks/useSessionProtection';
+import type { BookmarkedSession } from '../../../../stores/useBookmarkStore';
 import type { MCPServerStatus, SessionWithProvider } from '../../types/types';
 
 import SidebarProjectItem from './SidebarProjectItem';
@@ -51,6 +52,8 @@ export type SidebarProjectListProps = {
   onStartEditingSession: (sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
   onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => void;
+  isBookmarked: (sessionId: string) => boolean;
+  onToggleBookmark: (bookmark: BookmarkedSession) => void;
   t: TFunction;
 };
 
@@ -92,6 +95,8 @@ export default function SidebarProjectList({
   onStartEditingSession,
   onCancelEditingSession,
   onSaveEditingSession,
+  isBookmarked,
+  onToggleBookmark,
   t,
 }: SidebarProjectListProps) {
   const state = (
@@ -157,6 +162,8 @@ export default function SidebarProjectList({
               onStartEditingSession={onStartEditingSession}
               onCancelEditingSession={onCancelEditingSession}
               onSaveEditingSession={onSaveEditingSession}
+              isBookmarked={isBookmarked}
+              onToggleBookmark={onToggleBookmark}
               t={t}
             />
           ))}

@@ -133,5 +133,10 @@
     "deleteAllData": "永久删除所有数据",
     "allConversationsDeleted": "项目将从侧边栏中移除。您的文件、记忆和会话数据将会保留。",
     "cannotUndo": "您可以稍后重新添加此项目。"
+  },
+  "bookmarks": {
+    "title": "已置顶",
+    "pin": "置顶会话",
+    "unpin": "取消置顶"
   }
 }
