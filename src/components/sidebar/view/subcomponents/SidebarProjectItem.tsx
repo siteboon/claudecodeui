@@ -2,6 +2,7 @@ import { Check, ChevronDown, ChevronRight, Edit3, Star, Trash2, X } from 'lucide
 import type { TFunction } from 'i18next';
 
 import { Button } from '../../../../shared/view/ui';
+import type { BookmarkedSession } from '../../../../stores/useBookmarkStore';
 import { cn } from '../../../../lib/utils';
 import type { Project, ProjectSession, LLMProvider } from '../../../../types/app';
 import type { SessionActivityMap } from '../../../../hooks/useSessionProtection';
@@ -50,6 +51,8 @@ type SidebarProjectItemProps = {
   onStartEditingSession: (sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
   onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => void;
+  isBookmarked: (sessionId: string) => boolean;
+  onToggleBookmark: (bookmark: BookmarkedSession) => void;
   t: TFunction;
 };
 
@@ -92,6 +95,8 @@ export default function SidebarProjectItem({
   onStartEditingSession,
   onCancelEditingSession,
   onSaveEditingSession,
+  isBookmarked,
+  onToggleBookmark,
   t,
 }: SidebarProjectItemProps) {
   // Project identity is tracked by the DB-assigned `projectId` everywhere
@@ -411,6 +416,8 @@ export default function SidebarProjectItem({
         onDeleteSession={onDeleteSession}
         onLoadMoreSessions={onLoadMoreSessions}
         onNewSession={onNewSession}
+        isBookmarked={isBookmarked}
+        onToggleBookmark={onToggleBookmark}
         t={t}
       />
     </div>

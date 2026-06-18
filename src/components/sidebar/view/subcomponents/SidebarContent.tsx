@@ -1,15 +1,16 @@
-import { type ReactNode } from 'react';
+import { type ReactNode, useRef } from 'react';
 import { Activity, Archive, Folder, MessageSquare, RotateCcw, Search, Trash2 } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { ScrollArea } from '../../../../shared/view/ui';
+import type { BookmarkedSession } from '../../../../stores/useBookmarkStore';
 import type { Project } from '../../../../types/app';
 import type { ReleaseInfo } from '../../../../types/sharedTypes';
 import type { ConversationSearchResults, SearchProgress } from '../../hooks/useSidebarController';
 import type { ArchivedProjectListItem, ArchivedSessionListItem, SidebarSearchMode } from '../../types/types';
 import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
 import { getAllSessions } from '../../utils/utils';
-
+import SidebarBookmarks, { type SidebarBookmarksRef } from './SidebarBookmarks';
 import SidebarFooter from './SidebarFooter';
 import SidebarHeader from './SidebarHeader';
 import SidebarProjectList, { type SidebarProjectListProps } from './SidebarProjectList';
@@ -147,6 +148,20 @@ type SidebarContentProps = {
   currentVersion: string;
   onShowVersionModal: () => void;
   onShowSettings: () => void;
+  // Bookmark props
+  bookmarks: BookmarkedSession[];
+  selectedSessionId: string | null;
+  isBookmarked: (sessionId: string) => boolean;
+  onToggleBookmark: (bookmark: BookmarkedSession) => void;
+  onRemoveBookmark: (sessionId: string) => void;
+  onSelectBookmarkedSession: (projectId: string, sessionId: string) => void;
+  onDeleteSession: (projectId: string, sessionId: string, sessionTitle: string, provider: string) => void;
+  editingSession: string | null;
+  editingSessionName: string;
+  onStartEditingSession: (sessionId: string, initialName: string) => void;
+  onCancelEditingSession: () => void;
+  onEditingSessionNameChange: (value: string) => void;
+  onSaveEditingSession: (projectId: string, sessionId: string, summary: string, provider: string) => void;
   projectListProps: SidebarProjectListProps;
   t: TFunction;
 };
@@ -185,12 +200,41 @@ export default function SidebarContent({
   currentVersion,
   onShowVersionModal,
   onShowSettings,
+  // Bookmark props
+  bookmarks,
+  selectedSessionId,
+  isBookmarked,
+  onToggleBookmark,
+  onRemoveBookmark,
+  onSelectBookmarkedSession,
+  onDeleteSession,
+  editingSession,
+  editingSessionName,
+  onStartEditingSession,
+  onCancelEditingSession,
+  onEditingSessionNameChange,
+  onSaveEditingSession,
   projectListProps,
   t,
 }: SidebarContentProps) {
   const showConversationSearch = searchMode === 'conversations' && searchFilter.trim().length >= 2;
   const hasPartialResults = conversationResults && conversationResults.results.length > 0;
   const groupedArchivedSessions = groupArchivedSessionsByProject(archivedSessions);
+  const bookmarksRef = useRef<SidebarBookmarksRef>(null);
+
+  // When a project expands, collapse pinned section
+  const handleProjectToggle = (projectName: string) => {
+    const willExpand = !projectListProps.expandedProjects.has(projectName);
+    if (willExpand) {
+      bookmarksRef.current?.collapse();
+    }
+    projectListProps.onToggleProject(projectName);
+  };
+
+  const projectListWithToggle = {
+    ...projectListProps,
+    onToggleProject: handleProjectToggle,
+  };
 
   return (
     <div
@@ -218,6 +262,28 @@ export default function SidebarContent({
       />
 
       <ScrollArea className="flex-1 overflow-y-auto overscroll-contain md:px-1.5 md:py-2">
+        {/* Bookmarks — inside ScrollArea to share md:px-1.5 container with projects */}
+        <SidebarBookmarks
+          ref={bookmarksRef}
+          bookmarks={bookmarks}
+          selectedSessionId={selectedSessionId}
+          onSelectSession={onSelectBookmarkedSession}
+          onRemoveBookmark={onRemoveBookmark}
+          onDeleteSession={onDeleteSession}
+          editingSession={editingSession}
+          editingSessionName={editingSessionName}
+          onStartEditingSession={onStartEditingSession}
+          onCancelEditingSession={onCancelEditingSession}
+          onEditingSessionNameChange={onEditingSessionNameChange}
+          onSaveEditingSession={onSaveEditingSession}
+          expandedProjects={projectListWithToggle.expandedProjects}
+          onCollapseAllProjects={() => {
+            projectListWithToggle.expandedProjects.forEach((id) => {
+              projectListWithToggle.onToggleProject(id);
+            });
+          }}
+          t={t}
+        />
         {showConversationSearch ? (
           isSearching && !hasPartialResults ? (
             <div className="px-4 py-12 text-center md:py-8">
@@ -549,7 +615,7 @@ export default function SidebarContent({
             </div>
           )
         ) : (
-          <SidebarProjectList {...projectListProps} />
+          <SidebarProjectList {...projectListWithToggle} />
         )}
       </ScrollArea>
 

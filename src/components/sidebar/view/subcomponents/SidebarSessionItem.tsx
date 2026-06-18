@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react';
-import { Check, Edit2, Loader2, Trash2, X } from 'lucide-react';
+import { Check, Edit2, Loader2, Pin, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
-import { Badge, Tooltip, buttonVariants } from '../../../../shared/view/ui';
+import { Badge, Button, Tooltip } from '../../../../shared/view/ui';
+import type { BookmarkedSession } from '../../../../stores/useBookmarkStore';
 import { cn } from '../../../../lib/utils';
 import type { Project, ProjectSession, LLMProvider } from '../../../../types/app';
 import type { SessionWithProvider } from '../../types/types';
@@ -29,6 +30,8 @@ type SidebarSessionItemProps = {
     sessionTitle: string,
     provider: LLMProvider,
   ) => void;
+  isBookmarked: boolean;
+  onToggleBookmark: (bookmark: BookmarkedSession) => void;
   t: TFunction;
 };
 
@@ -75,6 +78,8 @@ export default function SidebarSessionItem({
   onProjectSelect,
   onSessionSelect,
   onDeleteSession,
+  isBookmarked,
+  onToggleBookmark,
   t,
 }: SidebarSessionItemProps) {
   const sessionView = createSessionViewModel(session, currentTime, t);
@@ -116,6 +121,17 @@ export default function SidebarSessionItem({
 
   const requestDeleteSession = () => {
     onDeleteSession(project.projectId, session.id, sessionView.sessionName, session.__provider);
+  };
+
+  const requestToggleBookmark = () => {
+    onToggleBookmark({
+      sessionId: session.id,
+      projectId: project.projectId,
+      projectDisplayName: project.displayName,
+      sessionSummary: sessionView.sessionName,
+      provider: session.__provider,
+      bookmarkedAt: new Date().toISOString(),
+    });
   };
 
   return (
@@ -307,18 +323,33 @@ export default function SidebarSessionItem({
             ) : (
               <>
                 <button
-                  className="flex h-6 w-6 items-center justify-center rounded bg-gray-50 hover:bg-gray-100 dark:bg-gray-900/20 dark:hover:bg-gray-900/40"
+                  className={cn(
+                    'flex h-6 w-6 items-center justify-center rounded transition-colors',
+                    isBookmarked
+                      ? 'bg-red-100 text-red-500 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50'
+                      : 'bg-blue-100 text-blue-500 hover:bg-blue-200 dark:bg-blue-900/30 dark:hover:bg-blue-900/50',
+                  )}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    requestToggleBookmark();
+                  }}
+                  title={isBookmarked ? t('bookmarks.unpin', 'Unpin session') : t('bookmarks.pin', 'Pin session')}
+                >
+                  <Pin className={cn('h-3 w-3', isBookmarked && 'fill-red-500 text-red-500 rotate-45')} />
+                </button>
+                <button
+                  className="flex h-6 w-6 items-center justify-center rounded bg-blue-100 text-blue-500 hover:bg-blue-200 dark:bg-blue-900/30 dark:hover:bg-blue-900/50"
                   onClick={(event) => {
                     event.stopPropagation();
                     onStartEditingSession(session.id, sessionView.sessionName);
                   }}
                   title={t('tooltips.editSessionName')}
                 >
-                  <Edit2 className="h-3 w-3 text-gray-600 dark:text-gray-400" />
+                  <Edit2 className="h-3 w-3" />
                 </button>
                 {!isProcessing && (
                   <button
-                    className="flex h-6 w-6 items-center justify-center rounded bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40"
+                    className="flex h-6 w-6 items-center justify-center rounded bg-red-100 text-red-500 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50"
                     onClick={(event) => {
                       event.stopPropagation();
                       requestDeleteSession();
