@@ -22,7 +22,6 @@ function getNodeRuntime(isPackaged) {
   return { command: 'node', env: {} };
 }
 
-/** Converts an environment access URL (https://x) to its desktop-agent ws URL. */
 function toAgentWsUrl(httpUrl) {
   try {
     const parsed = new URL(httpUrl);
@@ -37,10 +36,8 @@ function toAgentWsUrl(httpUrl) {
 }
 
 /**
- * Manages the standalone Computer Use desktop agent process. While the user has
- * Computer Use enabled, this keeps an agent connected to every running cloud
- * environment so hosted sessions can drive this machine. The local CloudCLI
- * server is not involved.
+ * Keeps a Computer Use desktop agent connected to running cloud environments
+ * while desktop access is enabled.
  */
 export class ComputerAgentController {
   constructor({ appRoot, settingsPath, isPackaged = false, getRunningEnvironmentUrls, promptConsent, onChange }) {
@@ -97,7 +94,6 @@ export class ComputerAgentController {
     return this.settings;
   }
 
-  /** Reconciles the agent process with the current settings + environments. */
   async sync() {
     const targets = this.settings.enabled ? (this.getRunningEnvironmentUrls?.() || []) : [];
     const wsTargets = targets.map(toAgentWsUrl).filter(Boolean);
@@ -113,7 +109,7 @@ export class ComputerAgentController {
     }
 
     if (this.child && sameTargets) {
-      return; // already running with the right targets
+      return;
     }
 
     this.currentTargets = wsTargets;

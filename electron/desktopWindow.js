@@ -31,6 +31,31 @@ function buildPlaceholderHtml(title, message, logs = []) {
   ].join('');
 }
 
+function isHttpUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function isAllowedPermissionOrigin(sourceUrl, controlPlaneUrl) {
+  try {
+    const source = new URL(sourceUrl);
+    if ((source.hostname === '127.0.0.1' || source.hostname === 'localhost') && source.protocol === 'http:') {
+      return true;
+    }
+    if (source.protocol !== 'https:') {
+      return false;
+    }
+    const controlPlane = new URL(controlPlaneUrl);
+    return source.origin === controlPlane.origin || source.hostname.endsWith('.cloudcli.ai');
+  } catch {
+    return false;
+  }
+}
+
 export class DesktopWindowManager {
   constructor({
     appName,
@@ -163,6 +188,9 @@ export class DesktopWindowManager {
   }
 
   async showContentTarget(target) {
+    if (!isHttpUrl(target.url)) {
+      throw new Error(`Refusing to load unsupported app URL: ${target.url}`);
+    }
     const tabId = this.tabs.getTabIdForTarget(target);
     const view = this.getOrCreateTabView(tabId);
     this.attachContentView(view);
@@ -672,11 +700,8 @@ export class DesktopWindowManager {
   configurePermissions() {
     session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
       const sourceUrl = webContents.getURL();
-      const isCloudCliOrigin = sourceUrl.startsWith('http://127.0.0.1:')
-        || sourceUrl.startsWith(this.getCloudState().controlPlaneUrl)
-        || /^https:\/\/[a-z0-9-]+\.cloudcli\.ai/i.test(sourceUrl);
       const allowedPermissions = new Set(['clipboard-read', 'media']);
-      callback(isCloudCliOrigin && allowedPermissions.has(permission));
+      callback(isAllowedPermissionOrigin(sourceUrl, this.getCloudState().controlPlaneUrl) && allowedPermissions.has(permission));
     });
   }
 

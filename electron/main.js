@@ -16,6 +16,7 @@ const CALLBACK_PROTOCOL = 'cloudcli';
 const CALLBACK_URL = `${CALLBACK_PROTOCOL}://auth/callback`;
 const CLOUDCLI_CONTROL_PLANE_URL = process.env.CLOUDCLI_CONTROL_PLANE_URL || 'https://cloudcli.ai';
 const REMOTE_START_TIMEOUT_MS = 30000;
+const AUTH_CALLBACK_TTL_MS = 10 * 60 * 1000;
 
 const tabs = new TabsController();
 
@@ -26,6 +27,7 @@ let cloud = null;
 let computerAgent = null;
 let isQuitting = false;
 let isRefreshingCloud = false;
+let pendingCloudConnectStartedAt = 0;
 
 function getAppRoot() {
   return app.isPackaged ? app.getAppPath() : path.resolve(__dirname, '..');
@@ -142,22 +144,8 @@ function getDesktopState() {
   };
 }
 
-function isSafeExternalUrl(url) {
-  try {
-    const parsed = new URL(url);
-    return ['https:', 'http:', 'mailto:'].includes(parsed.protocol)
-      || (parsed.protocol === `${CALLBACK_PROTOCOL}:` && parsed.hostname === 'auth');
-  } catch {
-    return false;
-  }
-}
-
 async function openExternalUrl(url) {
-  if (!isSafeExternalUrl(url)) {
-    throw new Error(`Refusing to open unsupported external URL: ${url}`);
-  }
-
-  if (url.startsWith(`${CALLBACK_PROTOCOL}://`)) {
+  if (String(url).startsWith(`${CALLBACK_PROTOCOL}://`)) {
     await handleDeepLink(url);
     return;
   }
@@ -286,7 +274,6 @@ async function refreshCloudEnvironments({ showErrors = false } = {}) {
     throw error;
   } finally {
     isRefreshingCloud = false;
-    // Reconcile the Computer Use desktop agent with the latest running environments.
     void computerAgent?.sync().catch((error) => console.error('[ComputerAgent] sync failed:', error?.message || error));
     syncDesktopState();
   }
@@ -294,6 +281,7 @@ async function refreshCloudEnvironments({ showErrors = false } = {}) {
 
 async function connectCloudAccount() {
   const connectUrl = cloud.buildConnectUrl();
+  pendingCloudConnectStartedAt = Date.now();
   clipboard.writeText(connectUrl);
   await openExternalUrl(connectUrl);
   return connectUrl;
@@ -311,6 +299,11 @@ async function handleDeepLink(url) {
     return;
   }
 
+  if (!pendingCloudConnectStartedAt || Date.now() - pendingCloudConnectStartedAt > AUTH_CALLBACK_TTL_MS) {
+    await showError('CloudCLI account connection failed', new Error('No recent CloudCLI account connection was started from this app.'));
+    return;
+  }
+
   const apiKey = parsed.searchParams.get('api_key');
   if (!apiKey) {
     await showError('CloudCLI account connection failed', new Error('The callback did not include an API key.'));
@@ -321,6 +314,7 @@ async function handleDeepLink(url) {
     apiKey,
     email: parsed.searchParams.get('email'),
   });
+  pendingCloudConnectStartedAt = 0;
   await refreshCloudEnvironments({ showErrors: true });
 
   dialog.showMessageBox(desktopWindow?.getMainWindow() || undefined, {
@@ -360,7 +354,7 @@ async function openLocalWebUi() {
     throw new Error('Local CloudCLI URL is not available yet.');
   }
 
-  await shell.openExternal(url);
+  await openExternalUrl(url);
   return getDesktopState();
 }
 
@@ -414,7 +408,7 @@ async function stopEnvironment(environment) {
 }
 
 async function openEnvironmentInBrowser(environment) {
-  await shell.openExternal(await cloud.getEnvironmentLaunchUrl(environment));
+  await openExternalUrl(await cloud.getEnvironmentLaunchUrl(environment));
   return getDesktopState();
 }
 
@@ -436,6 +430,26 @@ function getSshHost(credentials) {
   return atIndex >= 0 ? target.slice(atIndex + 1) : 'ssh.cloudcli.ai';
 }
 
+function getSafeSshUsername(credentials) {
+  const username = String(credentials.username || '');
+  if (!/^[a-zA-Z0-9._-]+$/.test(username)) {
+    throw new Error('Cloud environment returned an invalid SSH username.');
+  }
+  return username;
+}
+
+function getSafeSshHost(credentials) {
+  const host = getSshHost(credentials);
+  if (!/^[a-zA-Z0-9.-]+$/.test(host)) {
+    throw new Error('Cloud environment returned an invalid SSH host.');
+  }
+  return host;
+}
+
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
 async function getEnvironmentCredentials(environment) {
   const credentials = await cloud.getEnvironmentCredentials(environment);
   if (credentials.password) {
@@ -447,14 +461,15 @@ async function getEnvironmentCredentials(environment) {
 async function openEnvironmentInIde(environment, ide) {
   const credentials = await getEnvironmentCredentials(environment);
   const scheme = ide === 'cursor' ? 'cursor' : 'vscode';
-  const remoteUri = `${scheme}://vscode-remote/ssh-remote+${credentials.username}@${getSshHost(credentials)}/workspace/${getProjectFolder(environment)}?windowId=_blank`;
+  const remoteUri = `${scheme}://vscode-remote/ssh-remote+${getSafeSshUsername(credentials)}@${getSafeSshHost(credentials)}/workspace/${getProjectFolder(environment)}?windowId=_blank`;
   await shell.openExternal(remoteUri);
   return getDesktopState();
 }
 
 async function openEnvironmentInSsh(environment) {
   const credentials = await getEnvironmentCredentials(environment);
-  const sshCommand = `ssh -t ${getSshTarget(credentials)} "cd /workspace/${getProjectFolder(environment)} && exec $SHELL -l"`;
+  const remoteCommand = `cd /workspace/${getProjectFolder(environment)} && exec $SHELL -l`;
+  const sshCommand = `ssh -t ${shellQuote(getSshTarget(credentials))} ${shellQuote(remoteCommand)}`;
 
   if (process.platform === 'darwin') {
     const escaped = sshCommand.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -488,7 +503,7 @@ async function copyEnvironmentMobileUrl(environment) {
 }
 
 async function openCloudDashboard() {
-  await shell.openExternal(CLOUDCLI_CONTROL_PLANE_URL);
+  await openExternalUrl(CLOUDCLI_CONTROL_PLANE_URL);
   return getDesktopState();
 }
 
@@ -807,6 +822,7 @@ async function bootstrap() {
     appRoot: getAppRoot(),
     settingsPath: getSettingsPath(),
     isPackaged: app.isPackaged,
+    appVersion: app.getVersion(),
     onChange: syncDesktopState,
   });
   cloud = new CloudController({

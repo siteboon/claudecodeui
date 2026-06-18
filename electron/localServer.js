@@ -5,6 +5,8 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 
+import { ServerInstaller } from './serverInstaller.js';
+
 const DEFAULT_PORT = 3001;
 const HOST = '127.0.0.1';
 const DISPLAY_HOST = 'localhost';
@@ -169,6 +171,26 @@ function getDisplayUrl(baseUrl) {
   }
 }
 
+async function pathExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getServerCwd(appRoot, serverEntry) {
+  const normalizedEntry = path.resolve(serverEntry);
+  const bundledEntry = path.resolve(appRoot, 'dist-server', 'server', 'index.js');
+  if (normalizedEntry === bundledEntry) {
+    return appRoot;
+  }
+
+  // Installed server entries are laid out as <root>/dist-server/server/index.js.
+  return path.resolve(path.dirname(normalizedEntry), '..', '..');
+}
+
 async function readServerMarkerUrl() {
   try {
     const raw = await fs.readFile(SERVER_MARKER_PATH, 'utf8');
@@ -210,10 +232,11 @@ async function waitForCloudCliServer(baseUrl, timeoutMs) {
 }
 
 export class LocalServerController {
-  constructor({ appRoot, settingsPath, isPackaged = false, onChange }) {
+  constructor({ appRoot, settingsPath, isPackaged = false, appVersion, onChange }) {
     this.appRoot = appRoot;
     this.settingsPath = settingsPath;
     this.isPackaged = isPackaged;
+    this.appVersion = appVersion;
     this.onChange = onChange;
     this.localServerUrl = null;
     this.localServerPort = null;
@@ -334,20 +357,40 @@ export class LocalServerController {
     };
   }
 
-  startBundledServer(port) {
-    const serverEntry = process.env.ELECTRON_SERVER_ENTRY
-      || path.join(this.appRoot, 'dist-server', 'server', 'index.js');
+  /** Resolves the local server entry, installing the matching runtime if needed. */
+  async resolveServerEntry() {
+    if (process.env.ELECTRON_SERVER_ENTRY) {
+      return process.env.ELECTRON_SERVER_ENTRY;
+    }
+
+    const bundledEntry = path.join(this.appRoot, 'dist-server', 'server', 'index.js');
+    if (process.env.CLOUDCLI_USE_INSTALLED_SERVER !== '1' && await pathExists(bundledEntry)) {
+      return bundledEntry;
+    }
+
+    if (!this.appVersion) {
+      throw new Error('Cannot install local server: app version is unknown.');
+    }
+    const installer = new ServerInstaller({
+      version: this.appVersion,
+      onLog: (line) => this.appendStartupLog(line),
+    });
+    return installer.ensureInstalled();
+  }
+
+  startBundledServer(port, serverEntry) {
     const bindHost = this.getServerBindHost();
     const runtime = getNodeRuntime(this.isPackaged);
+    const serverCwd = getServerCwd(this.appRoot, serverEntry);
 
     const command = `${runtime.command} ${serverEntry}`;
     this.appendStartupLog(`$ ${command}`);
     this.appendStartupLog(`runtime: ${runtime.label}`);
-    this.appendStartupLog(`cwd: ${this.appRoot}`);
+    this.appendStartupLog(`cwd: ${serverCwd}`);
     this.appendStartupLog(`HOST=${bindHost} SERVER_PORT=${port} NODE_ENV=production`);
 
     this.ownedServerProcess = spawn(runtime.command, [serverEntry], {
-      cwd: this.appRoot,
+      cwd: serverCwd,
       detached: true,
       env: {
         ...process.env,
@@ -414,11 +457,13 @@ export class LocalServerController {
       }
     }
 
+    const serverEntry = await this.resolveServerEntry();
+
     const port = await chooseServerPort(this.getServerBindHost());
     const serverUrl = `http://${HOST}:${port}`;
     const displayUrl = `http://${DISPLAY_HOST}:${port}`;
     this.localServerPort = port;
-    this.startBundledServer(port);
+    this.startBundledServer(port, serverEntry);
 
     const ready = await waitForCloudCliServer(serverUrl, SERVER_START_TIMEOUT_MS);
     if (!ready) {

@@ -34,9 +34,11 @@
     "client": "vite",
     "desktop": "electron electron/main.js",
     "desktop:dev": "cross-env ELECTRON_DEV_URL=http://127.0.0.1:5173 electron electron/main.js",
-    "desktop:pack": "npm run build && electron-builder --dir",
-    "desktop:dist:mac": "npm run build && electron-builder --mac dmg zip",
-    "desktop:dist:win": "npm run build && electron-builder --win nsis zip",
+    "desktop:stage": "node scripts/release/prepare-desktop-app.js",
+    "desktop:pack": "npm run build && npm run desktop:stage && electron-builder --projectDir .desktop-build/desktop-app --dir",
+    "desktop:dist:mac": "npm run build && npm run desktop:stage && electron-builder --projectDir .desktop-build/desktop-app --mac dmg zip",
+    "desktop:dist:win": "npm run build && npm run desktop:stage && electron-builder --projectDir .desktop-build/desktop-app --win nsis zip",
+    "server:bundle": "npm run build && node scripts/release/build-server-bundle.js",
     "desktop:icon:mac": "node electron/scripts/generate-macos-icon.js",
     "build": "npm run build:client && npm run build:server",
     "build:client": "vite build",
@@ -71,7 +73,8 @@
       "dist-server/",
       "shared/",
       "server/",
-      "package.json"
+      "package.json",
+      "!**/node_modules/@anthropic-ai/claude-agent-sdk-{darwin,linux,win32}-*/**"
     ],
     "protocols": [
       {
