@@ -200,12 +200,19 @@ app.use('/api/providers', authenticateToken, providerRoutes);
 app.use('/api/agent', agentRoutes);
 
 // Serve public files (like api-docs.html)
-app.use(express.static(path.join(APP_ROOT, 'public')));
+app.use(express.static(path.join(APP_ROOT, 'public'), {
+    setHeaders: (res) => {
+        // Force connection close to work around ws library interfering with HTTP keep-alive
+        res.setHeader('Connection', 'close');
+    }
+}));
 
 // Static files served after API routes
 // Add cache control: HTML files should not be cached, but assets can be cached
 app.use(express.static(path.join(APP_ROOT, 'dist'), {
     setHeaders: (res, filePath) => {
+        // Force connection close to work around ws library interfering with HTTP keep-alive
+        res.setHeader('Connection', 'close');
         if (filePath.endsWith('.html')) {
             // Prevent HTML caching to avoid service worker issues after builds
             res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
