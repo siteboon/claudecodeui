@@ -1507,6 +1507,30 @@ app.use((err, req, res, next) => {
     });
   }
 
+  // Surface "missing schema" failures explicitly instead of as a generic 500.
+  // A "no such table/column" SQLite error almost always means the on-disk
+  // package was updated (new schema/migrations) but the running server process
+  // was not restarted, so initializeDatabase() never ran for the new schema.
+  // Without this, DB-backed actions (delete/archive/rename a session or
+  // project) fail silently and look like nothing happened.
+  const isMissingSchemaError =
+    err &&
+    typeof err.message === 'string' &&
+    (err.code === 'SQLITE_ERROR' || err.name === 'SqliteError') &&
+    /no such (table|column)/i.test(err.message);
+
+  if (isMissingSchemaError) {
+    console.error('Database schema missing or outdated (restart required):', err.message);
+    return res.status(503).json({
+      success: false,
+      error: {
+        code: 'SCHEMA_NOT_INITIALIZED',
+        message:
+          'The database schema is missing or out of date. This usually means CloudCLI was updated but the server was not restarted. Please restart the server to apply the latest schema.',
+      },
+    });
+  }
+
   console.error(err);
 
   return res.status(500).json({
