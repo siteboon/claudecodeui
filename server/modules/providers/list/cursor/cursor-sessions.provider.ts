@@ -9,6 +9,7 @@ import {
   generateMessageId,
   readObjectRecord,
   sanitizeLeafDirectoryName,
+  sliceTailPage,
 } from '@/shared/utils.js';
 
 const PROVIDER = 'cursor';
@@ -363,42 +364,32 @@ export class CursorSessionsProvider implements IProviderSessions {
 
   /**
    * Fetches and paginates Cursor session history from its project-scoped store.db.
+   *
+   * Pagination follows the shared tail contract (`sliceTailPage`): offset 0 is
+   * the most recent page, matching every other provider.
    */
   async fetchHistory(
     sessionId: string,
     options: FetchHistoryOptions = {},
   ): Promise<FetchHistoryResult> {
     const { projectPath = '', limit = null, offset = 0 } = options;
+    // The store.db folder on disk is named after the provider-native id, not
+    // the app-facing session id this method is addressed with.
+    const providerSessionId = options.providerSessionId ?? sessionId;
 
     try {
-      const blobs = await this.loadCursorBlobs(sessionId, projectPath);
+      const blobs = await this.loadCursorBlobs(providerSessionId, projectPath);
       const allNormalized = this.normalizeCursorBlobs(blobs, sessionId);
       const renderableMessages = allNormalized.filter((msg) => msg.kind !== 'tool_result');
       const total = renderableMessages.length;
-
-      if (limit !== null) {
-        const start = offset;
-        const page = limit === 0
-          ? []
-          : renderableMessages.slice(start, start + limit);
-        const hasMore = limit === 0
-          ? start < total
-          : start + limit < total;
-        return {
-          messages: page,
-          total,
-          hasMore,
-          offset,
-          limit,
-        };
-      }
+      const { page, hasMore } = sliceTailPage(renderableMessages, limit, offset);
 
       return {
-        messages: renderableMessages,
+        messages: page,
         total,
-        hasMore: false,
-        offset: 0,
-        limit: null,
+        hasMore,
+        offset,
+        limit,
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

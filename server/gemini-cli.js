@@ -10,7 +10,7 @@ import GeminiResponseHandler from './gemini-response-handler.js';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
 import { providerModelsService } from './modules/providers/services/provider-models.service.js';
-import { createNormalizedMessage } from './shared/utils.js';
+import { createCompleteMessage, createNormalizedMessage } from './shared/utils.js';
 
 // Use cross-spawn on Windows for correct .cmd resolution (same pattern as cursor-cli.js)
 const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
@@ -129,6 +129,9 @@ async function spawnGemini(command, options = {}, ws) {
     let capturedSessionId = sessionId; // Track session ID throughout the process
     let sessionCreatedSent = false; // Track if we've already sent session-created event
     let assistantBlocks = []; // Accumulate the full response blocks including tools
+    // Unified lifecycle contract: exactly one terminal `complete` per run
+    // (close and error handlers can both fire for spawn failures).
+    let completeSent = false;
 
     // Use tools settings passed from frontend, or defaults
     const settings = toolsSettings || {
@@ -486,7 +489,12 @@ async function spawnGemini(command, options = {}, ws) {
                 sessionManager.addMessage(finalSessionId, 'assistant', assistantBlocks);
             }
 
-            ws.send(createNormalizedMessage({ kind: 'complete', exitCode: code, isNewSession: !sessionId && !!command, sessionId: finalSessionId, provider: 'gemini' }));
+            // Terminal complete — skipped for aborted runs (abort-session
+            // already sent the aborted complete on this run's behalf).
+            if (!completeSent && !geminiProcess.aborted) {
+                completeSent = true;
+                ws.send(createCompleteMessage({ provider: 'gemini', sessionId: finalSessionId, exitCode: code }));
+            }
 
             // Clean up temporary image files if any
             if (geminiProcess.tempImagePaths && geminiProcess.tempImagePaths.length > 0) {
@@ -566,6 +574,10 @@ async function spawnGemini(command, options = {}, ws) {
 
             const errorSessionId = typeof ws.getSessionId === 'function' ? ws.getSessionId() : finalSessionId;
             ws.send(createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: errorSessionId, provider: 'gemini' }));
+            if (!completeSent && !geminiProcess.aborted) {
+                completeSent = true;
+                ws.send(createCompleteMessage({ provider: 'gemini', sessionId: errorSessionId, exitCode: 1 }));
+            }
             notifyTerminalState({ error });
 
             reject(error);
@@ -590,6 +602,9 @@ function abortGeminiSession(sessionId) {
 
     if (geminiProc) {
         try {
+            // The abort handler sends the terminal complete (aborted: true);
+            // flag the process so its close handler does not emit a second one.
+            geminiProc.aborted = true;
             geminiProc.kill('SIGTERM');
             setTimeout(() => {
                 if (activeGeminiProcesses.has(processKey)) {

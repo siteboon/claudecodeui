@@ -22,7 +22,8 @@
     "shell": "Terminale",
     "files": "File",
     "git": "Controllo Versione",
-    "tasks": "Attività"
+    "tasks": "Attività",
+    "browser": "Browser"
   },
   "status": {
     "loading": "Caricamento...",
