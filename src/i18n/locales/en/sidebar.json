@@ -109,7 +109,8 @@
     "createProjectError": "Error creating project. Please try again."
   },
   "version": {
-    "updateAvailable": "Update available"
+    "updateAvailable": "Update available",
+    "restartRequired": "Update installed — restart the server to apply"
   },
   "search": {
     "modeProjects": "Projects",

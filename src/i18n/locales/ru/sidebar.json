@@ -109,7 +109,8 @@
     "createProjectError": "Ошибка при создании проекта. Попробуйте снова."
   },
   "version": {
-    "updateAvailable": "Доступно обновление"
+    "updateAvailable": "Доступно обновление",
+    "restartRequired": "Обновление установлено — перезапустите сервер для применения"
   },
   "search": {
     "modeProjects": "Проекты",

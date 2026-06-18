@@ -109,7 +109,8 @@
     "createProjectError": "Fehler beim Erstellen des Projekts. Bitte erneut versuchen."
   },
   "version": {
-    "updateAvailable": "Update verfügbar"
+    "updateAvailable": "Update verfügbar",
+    "restartRequired": "Update installiert – zum Anwenden Server neu starten"
   },
   "search": {
     "modeProjects": "Projekte",
