@@ -86,6 +86,7 @@ async function writeServerPackageJson(stageDir) {
   // The bundle stage is not a git checkout with dev dependencies, so lifecycle
   // scripts such as Husky prepare must not run there. Dependency install scripts
   // still run; native modules need them before the Electron ABI rebuild below.
+  delete stagedPackageJson.scripts.postinstall;
   delete stagedPackageJson.scripts.prepare;
   delete stagedPackageJson.scripts.prepublishOnly;
   await fs.writeFile(

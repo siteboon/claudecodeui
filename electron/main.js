@@ -156,8 +156,8 @@ function getComputerUsePermissions() {
     };
   }
 
-  let accessibility = 'unknown';
-  let screenRecording = 'unknown';
+  let accessibility;
+  let screenRecording;
   try {
     accessibility = systemPreferences.isTrustedAccessibilityClient(false) ? 'granted' : 'not_granted';
   } catch {
