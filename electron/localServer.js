@@ -180,6 +180,20 @@ async function pathExists(filePath) {
   }
 }
 
+async function readServerBundleConfig(appRoot) {
+  try {
+    const raw = await fs.readFile(path.join(appRoot, 'electron', 'server-bundle-config.json'), 'utf8');
+    const config = JSON.parse(raw);
+    return {
+      releaseTag: typeof config.releaseTag === 'string' && config.releaseTag.trim()
+        ? config.releaseTag.trim()
+        : '',
+    };
+  } catch {
+    return { releaseTag: '' };
+  }
+}
+
 function getServerCwd(appRoot, serverEntry) {
   const normalizedEntry = path.resolve(serverEntry);
   const bundledEntry = path.resolve(appRoot, 'dist-server', 'server', 'index.js');
@@ -371,8 +385,10 @@ export class LocalServerController {
     if (!this.appVersion) {
       throw new Error('Cannot install local server: app version is unknown.');
     }
+    const bundleConfig = await readServerBundleConfig(this.appRoot);
     const installer = new ServerInstaller({
       version: this.appVersion,
+      bundleReleaseTag: bundleConfig.releaseTag,
       onLog: (line) => this.appendStartupLog(line),
     });
     return installer.ensureInstalled();

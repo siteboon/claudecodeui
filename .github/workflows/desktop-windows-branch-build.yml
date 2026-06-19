@@ -11,7 +11,7 @@ jobs:
     name: Build unsigned Windows desktop artifact
     runs-on: windows-latest
     permissions:
-      contents: read
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -39,11 +39,30 @@ jobs:
         run: |
           SAFE_REF="$(printf '%s' "${GITHUB_REF_NAME}" | tr -c 'A-Za-z0-9._-' '-')"
           echo "name=CloudCLI-windows-${SAFE_REF}-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "server_bundle_tag=desktop-server-${SAFE_REF}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure branch server bundle source
+        shell: bash
+        run: printf '{"releaseTag":"%s"}\n' "${{ steps.artifact.outputs.server_bundle_tag }}" > electron/server-bundle-config.json
 
       - name: Build unsigned Windows artifacts
         run: npm run desktop:dist:win -- --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Build branch server bundle
+        run: node scripts/release/build-server-bundle.js
+
+      - name: Publish branch server bundle
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          tag_name: ${{ steps.artifact.outputs.server_bundle_tag }}
+          name: CloudCLI Desktop Server Bundle (${{ github.ref_name }})
+          prerelease: true
+          fail_on_unmatched_files: false
+          overwrite_files: true
+          files: |
+            release/server-bundles/*
 
       - name: Verify Windows artifacts
         shell: bash

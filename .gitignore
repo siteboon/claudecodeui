@@ -147,6 +147,7 @@ tasks/
 # Local desktop packaging artifacts
 /.desktop-build/
 /release/
+/electron/server-bundle-config.json
 cloudcli-sidebar-app-source.tar.gz
 cloudcli-sidebar.html
 electron/*.tar.gz

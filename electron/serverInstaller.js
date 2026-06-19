@@ -35,6 +35,7 @@ export class ServerInstaller {
     arch = process.arch,
     installRoot = process.env.CLOUDCLI_SERVER_DIR || DEFAULT_INSTALL_ROOT,
     bundleBaseUrl = process.env.CLOUDCLI_SERVER_BUNDLE_URL || DEFAULT_BUNDLE_BASE_URL,
+    bundleReleaseTag = process.env.CLOUDCLI_SERVER_BUNDLE_RELEASE_TAG || '',
     onLog,
   } = {}) {
     if (!version) throw new Error('ServerInstaller requires the app version');
@@ -43,6 +44,7 @@ export class ServerInstaller {
     this.arch = mapArch(arch);
     this.installRoot = installRoot;
     this.bundleBaseUrl = bundleBaseUrl.replace(/\/+$/, '');
+    this.bundleReleaseTag = bundleReleaseTag || `v${this.version}`;
     this.onLog = typeof onLog === 'function' ? onLog : () => {};
   }
 
@@ -61,7 +63,7 @@ export class ServerInstaller {
   }
 
   getBundleUrl() {
-    const url = new URL(`${this.bundleBaseUrl}/v${this.version}/${this.getBundleName()}`);
+    const url = new URL(`${this.bundleBaseUrl}/${this.bundleReleaseTag}/${this.getBundleName()}`);
     if (url.protocol !== 'https:' && !(url.protocol === 'http:' && LOCAL_DOWNLOAD_HOSTS.has(url.hostname))) {
       throw new Error(`Refusing unsupported server bundle URL: ${url.toString()}`);
     }
