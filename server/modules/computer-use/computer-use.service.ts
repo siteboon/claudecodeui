@@ -465,6 +465,7 @@ export const computerUseService = {
       await this.registerAgentMcp();
     } else {
       await this.unregisterAgentMcp();
+      desktopAgentRelay.disconnectAll('Computer Use was disabled in this environment.');
       stopSessions('settings:disabled', 'Computer Use was disabled in settings.');
     }
     return next;
@@ -909,6 +910,7 @@ export const computerUseService = {
 
 // Drive cloud MCP exposure + session teardown off desktop-agent connectivity.
 desktopAgentRelay.setHooks({
+  canAcceptConnection: () => getRuntime() === 'cloud' && readSettings().enabled,
   onFirstConnect: () => computerUseService.onDesktopAgentConnected(),
   onLastDisconnect: () => computerUseService.onDesktopAgentDisconnected(),
 });

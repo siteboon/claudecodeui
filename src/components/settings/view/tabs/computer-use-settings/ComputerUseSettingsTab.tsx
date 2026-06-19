@@ -102,6 +102,7 @@ export default function ComputerUseSettingsTab() {
 
   const isCloud = status?.runtime === 'cloud';
   const effectiveEnabled = isCloud ? status?.enabled === true : settings.enabled;
+  const showCloudDesktopAccess = Boolean(isCloud && effectiveEnabled);
   const needsRuntime = Boolean(effectiveEnabled && !isCloud && status && (!status.nutInstalled || !status.screenshotInstalled));
   const desktopAgentCount = status?.desktopAgentCount ?? (status?.desktopAgentConnected ? 1 : 0);
   const modeDescription = isCloud
@@ -144,7 +145,7 @@ export default function ComputerUseSettingsTab() {
             />
           </SettingsRow>
 
-          {isCloud && (
+          {showCloudDesktopAccess && (
             <SettingsRow
               label="Cloud desktop access"
               description={status?.desktopAgentConnected
@@ -176,9 +177,9 @@ export default function ComputerUseSettingsTab() {
             </SettingsRow>
           )}
 
-          {(needsRuntime || isCloud || error) && (
+          {(needsRuntime || showCloudDesktopAccess || error) && (
             <div className="space-y-4 px-4 py-4">
-              {isCloud && !status?.desktopAgentConnected && (
+              {showCloudDesktopAccess && !status?.desktopAgentConnected && (
                 <div className="rounded-md border border-border bg-muted/40 px-3 py-3 text-sm text-muted-foreground">
                   <div className="font-medium text-foreground">To link this computer</div>
                   <ol className="mt-2 list-decimal space-y-1 pl-5">
@@ -190,7 +191,7 @@ export default function ComputerUseSettingsTab() {
                 </div>
               )}
 
-              {isCloud && status?.desktopAgentConnected && (
+              {showCloudDesktopAccess && status?.desktopAgentConnected && (
                 <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
                   {desktopAgentCount > 1
                     ? `${desktopAgentCount} desktops are linked. Agents will use one available desktop; stop Computer Use on any desktop you do not want agents to control.`

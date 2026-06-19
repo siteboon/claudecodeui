@@ -470,19 +470,25 @@ async function handleMessage(message: JsonRpcRequest) {
   throw new Error(`Unsupported method: ${message.method}`);
 }
 
-function writeMessage(message: Record<string, unknown>) {
+type MessageFraming = 'content-length' | 'line';
+
+function writeMessage(message: Record<string, unknown>, framing: MessageFraming) {
   const payload = JSON.stringify(message);
+  if (framing === 'line') {
+    process.stdout.write(`${payload}\n`);
+    return;
+  }
   process.stdout.write(`Content-Length: ${Buffer.byteLength(payload, 'utf8')}\r\n\r\n${payload}`);
 }
 
-function sendResult(id: string | number | null | undefined, result: unknown) {
+function sendResult(id: string | number | null | undefined, result: unknown, framing: MessageFraming) {
   if (id === undefined) {
     return;
   }
-  writeMessage({ jsonrpc: '2.0', id, result });
+  writeMessage({ jsonrpc: '2.0', id, result }, framing);
 }
 
-function sendError(id: string | number | null | undefined, error: unknown) {
+function sendError(id: string | number | null | undefined, error: unknown, framing: MessageFraming) {
   if (id === undefined) {
     return;
   }
@@ -493,28 +499,69 @@ function sendError(id: string | number | null | undefined, error: unknown) {
       code: -32000,
       message: error instanceof Error ? error.message : String(error),
     },
-  });
+  }, framing);
 }
 
 let buffer = Buffer.alloc(0);
 
+function handleRawMessage(rawMessage: string, framing: MessageFraming) {
+  void (async () => {
+    let request: JsonRpcRequest | null = null;
+    try {
+      request = JSON.parse(rawMessage) as JsonRpcRequest;
+      const result = await handleMessage(request);
+      sendResult(request.id, result, framing);
+    } catch (error) {
+      sendError(request?.id ?? null, error, framing);
+    }
+  })();
+}
+
+function findHeaderEnd(input: Buffer): { index: number; length: number } | null {
+  const crlf = input.indexOf('\r\n\r\n');
+  if (crlf !== -1) {
+    return { index: crlf, length: 4 };
+  }
+  const lf = input.indexOf('\n\n');
+  if (lf !== -1) {
+    return { index: lf, length: 2 };
+  }
+  return null;
+}
+
 process.stdin.on('data', (chunk) => {
   buffer = Buffer.concat([buffer, chunk]);
   while (true) {
-    const headerEnd = buffer.indexOf('\r\n\r\n');
-    if (headerEnd === -1) {
-      return;
+    const headerEnd = findHeaderEnd(buffer);
+    if (!headerEnd) {
+      if (/^Content-Length:/i.test(buffer.toString('utf8', 0, Math.min(buffer.length, 32)))) {
+        return;
+      }
+
+      const newline = buffer.indexOf('\n');
+      if (newline === -1) {
+        return;
+      }
+
+      const rawLine = buffer.slice(0, newline).toString('utf8').trim();
+      buffer = buffer.slice(newline + 1);
+      if (!rawLine) {
+        continue;
+      }
+
+      handleRawMessage(rawLine, 'line');
+      continue;
     }
 
-    const header = buffer.slice(0, headerEnd).toString('utf8');
+    const header = buffer.slice(0, headerEnd.index).toString('utf8');
     const lengthMatch = /Content-Length:\s*(\d+)/i.exec(header);
     if (!lengthMatch) {
-      buffer = buffer.slice(headerEnd + 4);
+      buffer = buffer.slice(headerEnd.index + headerEnd.length);
       continue;
     }
 
     const length = Number.parseInt(lengthMatch[1], 10);
-    const messageStart = headerEnd + 4;
+    const messageStart = headerEnd.index + headerEnd.length;
     const messageEnd = messageStart + length;
     if (buffer.length < messageEnd) {
       return;
@@ -522,16 +569,6 @@ process.stdin.on('data', (chunk) => {
 
     const rawMessage = buffer.slice(messageStart, messageEnd).toString('utf8');
     buffer = buffer.slice(messageEnd);
-
-    void (async () => {
-      let request: JsonRpcRequest | null = null;
-      try {
-        request = JSON.parse(rawMessage) as JsonRpcRequest;
-        const result = await handleMessage(request);
-        sendResult(request.id, result);
-      } catch (error) {
-        sendError(request?.id ?? null, error);
-      }
-    })();
+    handleRawMessage(rawMessage, 'content-length');
   }
 });

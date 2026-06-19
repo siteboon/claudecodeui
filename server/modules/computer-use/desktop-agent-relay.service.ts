@@ -18,6 +18,7 @@ type ConnectedAgent = {
 };
 
 type RelayLifecycleHooks = {
+  canAcceptConnection?: () => boolean;
   onFirstConnect?: () => void | Promise<void>;
   onLastDisconnect?: () => void | Promise<void>;
 };
@@ -54,15 +55,25 @@ export const desktopAgentRelay = {
     hooks = next;
   },
 
-  register(ws: WebSocket, label = 'desktop-agent'): void {
+  register(ws: WebSocket, label = 'desktop-agent'): boolean {
+    if (hooks.canAcceptConnection && !hooks.canAcceptConnection()) {
+      console.log(`[DesktopAgent] Rejected (${label}); Computer Use is disabled.`);
+      try {
+        ws.close(1008, 'Computer Use is disabled in this environment.');
+      } catch {
+        // ignore close failures
+      }
+      return false;
+    }
+
     const wasEmpty = pickAgent() === undefined;
     agents.set(ws, { ws, label, registeredAt: new Date().toISOString() });
     console.log(`[DesktopAgent] Registered (${label}); ${agents.size} connected.`);
 
     ws.on('close', () => {
-      agents.delete(ws);
+      const wasRegistered = agents.delete(ws);
       console.log(`[DesktopAgent] Disconnected (${label}); ${agents.size} remain.`);
-      if (pickAgent() === undefined) {
+      if (wasRegistered && pickAgent() === undefined) {
         rejectAllPending('Desktop agent disconnected.');
         void hooks.onLastDisconnect?.();
       }
@@ -70,6 +81,24 @@ export const desktopAgentRelay = {
 
     if (wasEmpty) {
       void hooks.onFirstConnect?.();
+    }
+    return true;
+  },
+
+  disconnectAll(reason = 'Desktop agent disconnected.'): void {
+    const hadAgent = pickAgent() !== undefined;
+    const sockets = [...agents.keys()];
+    agents.clear();
+    for (const ws of sockets) {
+      try {
+        ws.close(1008, reason);
+      } catch {
+        // ignore close failures
+      }
+    }
+    rejectAllPending(reason);
+    if (hadAgent) {
+      void hooks.onLastDisconnect?.();
     }
   },
 

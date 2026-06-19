@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 const IPC_PREFIX = '@@CUAGENT@@';
+const TARGET_STATUS_TIMEOUT_MS = 5000;
 
 function getDesktopPath() {
   const currentPath = process.env.PATH || '';
@@ -33,6 +34,38 @@ function toAgentWsUrl(httpUrl) {
   } catch {
     return null;
   }
+}
+
+async function isComputerUseEnabledTarget(httpUrl, apiKey) {
+  let statusUrl;
+  try {
+    statusUrl = new URL('/api/computer-use/status', httpUrl).toString();
+  } catch {
+    return false;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TARGET_STATUS_TIMEOUT_MS);
+  try {
+    const response = await fetch(statusUrl, {
+      signal: controller.signal,
+      headers: apiKey ? { 'X-API-Key': apiKey } : undefined,
+    });
+    const body = await response.json().catch(() => null);
+    return response.ok && body?.success !== false && body?.data?.enabled === true;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function filterEnabledComputerUseTargets(targets, apiKey) {
+  const checks = await Promise.all(targets.map(async (target) => ({
+    target,
+    enabled: await isComputerUseEnabledTarget(target, apiKey),
+  })));
+  return checks.filter((item) => item.enabled).map((item) => item.target);
 }
 
 /**
@@ -102,7 +135,8 @@ export class ComputerAgentController {
 
   async sync() {
     const targets = this.settings.enabled ? (this.getRunningEnvironmentUrls?.() || []) : [];
-    const wsTargets = targets.map(toAgentWsUrl).filter(Boolean);
+    const enabledTargets = this.settings.enabled ? await filterEnabledComputerUseTargets(targets, this.getApiKey?.() || '') : [];
+    const wsTargets = enabledTargets.map(toAgentWsUrl).filter(Boolean);
 
     const sameTargets =
       wsTargets.length === this.currentTargets.length &&
@@ -209,6 +243,12 @@ export class ComputerAgentController {
         this.connectedUrls.delete(payload.url);
         this.lastEvent = 'disconnected';
         this.onChange?.();
+        if (payload.reason && /computer use.*disabled/i.test(payload.reason)) {
+          void this.sync().catch((error) => {
+            this.lastError = error instanceof Error ? error.message : 'Failed to sync Computer Use targets.';
+            this.onChange?.();
+          });
+        }
         break;
       case 'starting':
         this.lastEvent = 'starting';

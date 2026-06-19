@@ -245,8 +245,12 @@ function connect(url: string): void {
       }
     });
 
-    const scheduleReconnect = () => {
-      emitToParent({ type: 'disconnected', url });
+    const scheduleReconnect = (code?: number, reason?: Buffer) => {
+      const reasonText = reason?.toString() || '';
+      emitToParent({ type: 'disconnected', url, code, reason: reasonText });
+      if (code === 1008 && /computer use.*disabled/i.test(reasonText)) {
+        return;
+      }
       setTimeout(open, reconnectMs);
       reconnectMs = Math.min(reconnectMs * 2, RECONNECT_MAX_MS);
     };
