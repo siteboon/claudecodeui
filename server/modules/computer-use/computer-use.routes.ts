@@ -125,9 +125,19 @@ router.post('/sessions/:sessionId/screenshot', async (req: AuthenticatedRequest,
 
 router.post('/sessions/:sessionId/click', async (req: AuthenticatedRequest, res) => {
   try {
+    const x = Number(req.body?.x);
+    const y = Number(req.body?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      res.status(400).json({
+        success: false,
+        error: 'Valid numeric coordinates are required.',
+      });
+      return;
+    }
+
     const session = await computerUseService.userClick(requireUser(req), readParam(req.params.sessionId), {
-      x: Number(req.body?.x),
-      y: Number(req.body?.y),
+      x,
+      y,
       button: toButton(req.body?.button),
       double: req.body?.double === true,
     });

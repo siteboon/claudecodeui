@@ -67,6 +67,7 @@ export default function ComputerUsePanel({ isVisible }: ComputerUsePanelProps) {
   );
 
   const refresh = useCallback(async () => {
+    setError(null);
     const [statusResponse, sessionsResponse] = await Promise.all([
       authenticatedFetch('/api/computer-use/status'),
       authenticatedFetch('/api/computer-use/sessions'),
@@ -86,6 +87,10 @@ export default function ComputerUsePanel({ isVisible }: ComputerUsePanelProps) {
     if (!isVisible) return;
     void refresh().catch((err) => setError(err instanceof Error ? err.message : 'Failed to load Computer Use'));
   }, [isVisible, refresh]);
+
+  const handleRefresh = useCallback(() => {
+    void refresh().catch((err) => setError(err instanceof Error ? err.message : 'Failed to refresh Computer Use'));
+  }, [refresh]);
 
   // Poll while an active session exists so agent-driven changes show up live.
   useEffect(() => {
@@ -273,7 +278,12 @@ export default function ComputerUsePanel({ isVisible }: ComputerUsePanelProps) {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={isBusy}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={isBusy}
+          >
             <RefreshCw className="h-4 w-4" />
             Refresh
           </Button>

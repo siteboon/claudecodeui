@@ -59,11 +59,11 @@ function MainContent({
   const { currentProject, setCurrentProject } = useTaskMaster() as TaskMasterContextValue;
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings() as TasksSettingsContextValue;
   const [browserUseEnabled, setBrowserUseEnabled] = useState(false);
-  const [computerUseEnabled, setComputerUseEnabled] = useState(false);
+  const [computerUseEnabled, setComputerUseEnabled] = useState<boolean | undefined>(undefined);
 
   const shouldShowTasksTab = Boolean(tasksEnabled && isTaskMasterInstalled);
   const shouldShowBrowserTab = browserUseEnabled;
-  const shouldShowComputerTab = computerUseEnabled;
+  const shouldShowComputerTab = computerUseEnabled === true;
 
   const {
     editingFile,
@@ -136,10 +136,10 @@ function MainContent({
   }, [loadComputerUseSettings]);
 
   useEffect(() => {
-    if (!shouldShowComputerTab && activeTab === 'computer') {
+    if (computerUseEnabled === false && activeTab === 'computer') {
       setActiveTab('chat');
     }
-  }, [shouldShowComputerTab, activeTab, setActiveTab]);
+  }, [computerUseEnabled, activeTab, setActiveTab]);
 
   usePaletteOpsRegister({
     openFile: (filePath: string) => {

@@ -25,12 +25,13 @@ jobs:
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 22
           cache: npm
@@ -43,14 +44,17 @@ jobs:
 
       - name: Resolve release metadata
         id: release
+        env:
+          TAG_INPUT: ${{ inputs.tag }}
+          RELEASE_NAME_INPUT: ${{ inputs.release_name }}
         run: |
           VERSION="$(node -p "require('./package.json').version")"
-          TAG="${{ inputs.tag }}"
+          TAG="$TAG_INPUT"
           if [ -z "$TAG" ]; then
             TAG="v${VERSION}"
           fi
 
-          RELEASE_NAME="${{ inputs.release_name }}"
+          RELEASE_NAME="$RELEASE_NAME_INPUT"
           if [ -z "$RELEASE_NAME" ]; then
             RELEASE_NAME="CloudCLI Desktop macOS ${TAG}"
           fi
@@ -93,7 +97,7 @@ jobs:
           cat release/SHASUMS256.txt
 
       - name: Publish GitHub release assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ steps.release.outputs.tag }}
           target_commitish: ${{ github.sha }}

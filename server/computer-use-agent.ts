@@ -141,14 +141,23 @@ async function runAction(type: string, params: Record<string, unknown>): Promise
       return { ...(await snapshot(target)), position, cursor: position };
     }
     case 'mouse_move':
-      await executor.moveTo(target, point as Point);
+      if (!point) {
+        throw new Error('mouse_move requires a valid point.');
+      }
+      await executor.moveTo(target, point);
       return { ...(await snapshot(target)), cursor: point };
     case 'click':
       await executor.click(target, (params.button as ClickButton) || 'left', point, params.double === true);
       return { ...(await snapshot(target)), cursor: point ?? null };
-    case 'drag':
-      await executor.drag(target, asPoint(params.from) as Point, asPoint(params.to) as Point, (params.button as ClickButton) || 'left');
-      return { ...(await snapshot(target)), cursor: asPoint(params.to) ?? null };
+    case 'drag': {
+      const from = asPoint(params.from);
+      const to = asPoint(params.to);
+      if (!from || !to) {
+        throw new Error('drag requires valid from and to points.');
+      }
+      await executor.drag(target, from, to, (params.button as ClickButton) || 'left');
+      return { ...(await snapshot(target)), cursor: to };
+    }
     case 'type':
       await executor.type(String(params.text ?? ''));
       return snapshot(target);

@@ -133,6 +133,18 @@ for (const [name, version] of Object.entries(packageJson.optionalDependencies ||
   }
 }
 
+for (const name of [
+  '@nut-tree-fork/default-clipboard-provider',
+  '@nut-tree-fork/libnut',
+  '@nut-tree-fork/provider-interfaces',
+  '@nut-tree-fork/shared',
+  'jimp',
+  'node-abort-controller',
+  'temp',
+]) {
+  await copyNodeModule(name);
+}
+
 await fs.writeFile(
   path.join(stageDir, 'package.json'),
   `${JSON.stringify(buildDesktopPackageJson(copiedOptionalDependencies), null, 2)}\n`,

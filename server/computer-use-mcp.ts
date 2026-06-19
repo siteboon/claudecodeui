@@ -376,12 +376,13 @@ process.stdin.on('data', (chunk) => {
     buffer = buffer.slice(messageEnd);
 
     void (async () => {
-      const request = JSON.parse(rawMessage) as JsonRpcRequest;
+      let request: JsonRpcRequest | null = null;
       try {
+        request = JSON.parse(rawMessage) as JsonRpcRequest;
         const result = await handleMessage(request);
         sendResult(request.id, result);
       } catch (error) {
-        sendError(request.id, error);
+        sendError(request?.id ?? null, error);
       }
     })();
   }

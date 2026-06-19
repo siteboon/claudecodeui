@@ -1,4 +1,3 @@
-import { createRequire } from 'node:module';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
