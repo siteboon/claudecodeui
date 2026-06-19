@@ -53,18 +53,30 @@ jobs:
           if [ -z "$TAG" ]; then
             TAG="v${VERSION}"
           fi
+          TAG="$(printf '%s' "$TAG" | tr -d '\r\n' | sed 's/[^A-Za-z0-9._-]/-/g')"
+          if [ -z "$TAG" ]; then
+            echo "Resolved release tag is empty after normalization." >&2
+            exit 1
+          fi
 
           RELEASE_NAME="$RELEASE_NAME_INPUT"
           if [ -z "$RELEASE_NAME" ]; then
             RELEASE_NAME="CloudCLI Desktop macOS ${TAG}"
           fi
+          RELEASE_NAME_DELIMITER="release_name_$(uuidgen)"
 
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "release_name=$RELEASE_NAME" >> "$GITHUB_OUTPUT"
-          echo "server_bundle_tag=cloudcli-local-server-${TAG}" >> "$GITHUB_OUTPUT"
+          {
+            echo "tag=$TAG"
+            echo "release_name<<$RELEASE_NAME_DELIMITER"
+            printf '%s\n' "$RELEASE_NAME"
+            echo "$RELEASE_NAME_DELIMITER"
+            echo "server_bundle_tag=cloudcli-local-server-${TAG}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Configure release server bundle source
-        run: printf '{"releaseTag":"%s"}\n' "${{ steps.release.outputs.server_bundle_tag }}" > electron/server-bundle-config.json
+        env:
+          SERVER_BUNDLE_TAG: ${{ steps.release.outputs.server_bundle_tag }}
+        run: printf '{"releaseTag":"%s"}\n' "$SERVER_BUNDLE_TAG" > electron/server-bundle-config.json
 
       - name: Verify signing secrets are configured
         run: |
