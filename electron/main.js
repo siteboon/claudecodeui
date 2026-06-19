@@ -278,6 +278,11 @@ function getDiagnosticsText() {
     cloudConnected: Boolean(cloudAccount?.apiKey),
     cloudEmail: cloudAccount?.email || null,
     cloudEnvironmentCount: cloud.getEnvironments().length,
+    cloudRunningEnvironmentCount: getRunningEnvironmentUrls().length,
+    cloudAuthState: cloud.getAuthState(),
+    computerUse: computerAgent?.getState() || null,
+    computerUseSettingsPath: getComputerUseSettingsPath(),
+    cloudAccountPath: getStorePath(),
     controlPlaneUrl: CLOUDCLI_CONTROL_PLANE_URL,
   }, null, 2);
 }

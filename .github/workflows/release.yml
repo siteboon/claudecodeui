@@ -16,6 +16,9 @@ on:
 permissions:
   contents: read
 
+# This workflow publishes releases with write credentials, so actions are pinned
+# to immutable commit SHAs. The trailing comments keep the original major tag
+# visible for maintenance context.
 jobs:
   build-macos-semantic-helper:
     strategy:
@@ -28,8 +31,10 @@ jobs:
             target_dir: darwin-x64
     runs-on: ${{ matrix.runs_on }}
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 22
       - name: Build macOS semantic helper
@@ -42,7 +47,7 @@ jobs:
         run: |
           mkdir -p "semantic-helper-artifact/${{ matrix.target_dir }}"
           cp "server/modules/computer-use/semantics/bin/${{ matrix.target_dir }}/CloudCLISemantics" "semantic-helper-artifact/${{ matrix.target_dir }}/"
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: semantic-helper-${{ matrix.target_dir }}
           path: semantic-helper-artifact/*
@@ -59,8 +64,10 @@ jobs:
             target_dir: win32-arm64
     runs-on: ${{ matrix.runs_on }}
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 22
       - name: Build Windows semantic helper
@@ -75,7 +82,7 @@ jobs:
         run: |
           mkdir -p "semantic-helper-artifact/${{ matrix.target_dir }}"
           cp "server/modules/computer-use/semantics/bin/${{ matrix.target_dir }}/CloudCLISemantics.exe" "semantic-helper-artifact/${{ matrix.target_dir }}/"
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: semantic-helper-${{ matrix.target_dir }}
           path: semantic-helper-artifact/*
@@ -90,12 +97,12 @@ jobs:
       contents: write
       id-token: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 0
           token: ${{ secrets.RELEASE_PAT }}
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
@@ -107,7 +114,7 @@ jobs:
 
       - run: npm ci
 
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
           pattern: semantic-helper-*
           path: server/modules/computer-use/semantics/bin

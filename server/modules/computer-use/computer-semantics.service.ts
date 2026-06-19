@@ -24,6 +24,14 @@ function readString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function requireApp(input: Record<string, unknown>): string {
+  const app = readString(input.app);
+  if (!app) {
+    throw new Error('app is required.');
+  }
+  return app;
+}
+
 function readNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
@@ -102,7 +110,7 @@ function getHelperAdapter(): SemanticAdapter | null {
 
 function shouldFallbackFromHelper(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return /not implemented|unavailable|not found|does not exist/i.test(message);
+  return /not implemented|unavailable|not found|does not exist|timed out|not running|exited with code|failed to start/i.test(message);
 }
 
 async function withHelperState(
@@ -347,7 +355,7 @@ export const computerSemanticsService = {
         return getAppState(sessionId, readString(input.app));
       case 'click':
       case 'click_element': {
-        const app = readString(input.app);
+        const app = requireApp(input);
         const helperState = await withHelperState(sessionId, (adapter) => adapter.clickElement({ ...input, sessionId, app }));
         if (helperState) {
           return helperState;
@@ -366,7 +374,7 @@ export const computerSemanticsService = {
         return getAppState(sessionId, app);
       }
       case 'drag': {
-        const app = readString(input.app);
+        const app = requireApp(input);
         const helperState = await withHelperState(sessionId, (adapter) => adapter.drag({ ...input, sessionId, app }));
         if (helperState) {
           return helperState;
@@ -384,7 +392,7 @@ export const computerSemanticsService = {
       }
       case 'scroll':
       case 'scroll_element': {
-        const app = readString(input.app);
+        const app = requireApp(input);
         const helperState = await withHelperState(sessionId, (adapter) => adapter.scrollElement({ ...input, sessionId, app }));
         if (helperState) {
           return helperState;
@@ -398,7 +406,7 @@ export const computerSemanticsService = {
         return getAppState(sessionId, app);
       }
       case 'type_text': {
-        const app = readString(input.app);
+        const app = requireApp(input);
         const helperState = await withHelperState(sessionId, (adapter) => adapter.typeText({ ...input, sessionId, app }));
         if (helperState) {
           return helperState;
@@ -407,7 +415,7 @@ export const computerSemanticsService = {
         return getAppState(sessionId, app);
       }
       case 'press_key': {
-        const app = readString(input.app);
+        const app = requireApp(input);
         const helperState = await withHelperState(sessionId, (adapter) => adapter.pressKey({ ...input, sessionId, app }));
         if (helperState) {
           return helperState;
@@ -416,7 +424,7 @@ export const computerSemanticsService = {
         return getAppState(sessionId, app);
       }
       case 'set_value': {
-        const app = readString(input.app);
+        const app = requireApp(input);
         const helperState = await withHelperState(sessionId, (adapter) => adapter.setValue({ ...input, sessionId, app }));
         if (helperState) {
           return helperState;
@@ -432,7 +440,7 @@ export const computerSemanticsService = {
         return getAppState(sessionId, app);
       }
       case 'perform_secondary_action': {
-        const app = readString(input.app);
+        const app = requireApp(input);
         const helperState = await withHelperState(sessionId, (adapter) => adapter.performSecondaryAction({ ...input, sessionId, app }));
         if (helperState) {
           return helperState;

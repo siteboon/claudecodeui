@@ -181,19 +181,18 @@ window.__MOCK_STATE__ = {
 
   function computerUseStatus(state) {
     var computerUse = state && state.computerUse ? state.computerUse : {};
+    var connectedCount = computerUse.connectedCount || 0;
+    var environmentLabel = connectedCount + ' environment' + (connectedCount === 1 ? '' : 's');
     if (!computerUse.enabled) {
       return { label: 'Disabled', tone: 'idle', detail: 'CloudCLI cannot use this computer.' };
     }
-    if (!computerUse.targetCount) {
-      return { label: 'Not linked', tone: 'warn', detail: 'No running cloud environment found for this account.' };
-    }
-    if (!computerUse.connectedCount) {
-      return { label: 'Connecting', tone: 'warn', detail: 'Trying to link to ' + computerUse.targetCount + ' running cloud environment' + (computerUse.targetCount === 1 ? '' : 's') + '.' };
+    if (!connectedCount) {
+      return { label: 'Not connected', tone: 'warn', detail: 'No environment connected.' };
     }
     if (computerUse.consentMode === 'auto') {
-      return { label: 'Linked', tone: 'warn', detail: 'Unattended access is on for ' + computerUse.connectedCount + ' cloud environment' + (computerUse.connectedCount === 1 ? '' : 's') + '.' };
+      return { label: 'Connected', tone: 'warn', detail: environmentLabel + ' connected. Unattended access is on.' };
     }
-    return { label: 'Linked', tone: 'ok', detail: 'Approval prompts are ready for ' + computerUse.connectedCount + ' cloud environment' + (computerUse.connectedCount === 1 ? '' : 's') + '.' };
+    return { label: 'Connected', tone: 'ok', detail: environmentLabel + ' connected.' };
   }
 
   var CC = {
@@ -342,6 +341,11 @@ window.__MOCK_STATE__ = {
       case 'set-theme-mode':
         return CC.run('Saved', function () { return bridge.updateSetting('themeMode', node.value); });
       case 'set-computer-mode':
+        CC.state.computerUse = {
+          ...((CC.state && CC.state.computerUse) || {}),
+          enabled: true,
+          consentMode: node.value === 'auto' ? 'auto' : 'ask',
+        };
         return CC.run('Saved', function () {
           return bridge.updateComputerUse({
             enabled: true,
@@ -349,6 +353,10 @@ window.__MOCK_STATE__ = {
           });
         });
       case 'set-computer-enabled':
+        CC.state.computerUse = {
+          ...((CC.state && CC.state.computerUse) || {}),
+          enabled: !!node.value,
+        };
         return CC.run('Saved', function () {
           var current = (CC.state && CC.state.computerUse) || { consentMode: 'ask' };
           return bridge.updateComputerUse({
@@ -731,10 +739,11 @@ window.__MOCK_STATE__ = {
   }
 
   function localPane(state) {
+    var computerStatus = CC.computerUseStatus(state);
     return '<div class="pane-h"><div><h2 class="pane-title">Local servers</h2><p class="pane-sub">Manage Local CloudCLI on this machine. No account required.</p></div></div>' +
       '<div class="card"><div class="card-head"><div><div class="card-t">Local server</div><div class="card-sub mono">' + CC.esc(CC.localUrl(state) || 'Starts on demand') + '</div></div><div class="card-tools"><span class="dot" style="background:' + (state.localServerRunning ? 'var(--ok)' : 'var(--tx3)') + '"></span><button class="icon-btn" data-cc-action="local-settings-toggle" title="Local settings">' + CC.icon('gear', 16) + '</button></div></div>' +
       '<div class="card-actions"><button class="btn pri" data-cc-action="local">' + CC.icon('play', 15) + 'Open Local CloudCLI</button><button class="btn" data-cc-action="open-web">' + CC.icon('arrow', 14) + 'Open in browser</button><button class="btn" data-cc-action="copy-web">' + CC.icon('copy', 14) + 'Copy URL</button></div></div>' +
-      '<div class="card"><div class="card-head"><div><div class="card-t">Computer Use</div><div class="card-sub">' + CC.esc(computerUseStatus(state).detail) + '</div></div><div class="card-tools"><span class="badge ' + CC.esc(computerUseStatus(state).tone) + '">' + CC.esc(computerUseStatus(state).label) + '</span><button class="icon-btn" data-cc-action="computer-settings-toggle" title="Computer Use settings">' + CC.icon('monitor', 16) + '</button></div></div>' +
+      '<div class="card"><div class="card-head"><div><div class="card-t">Computer Use</div><div class="card-sub">' + CC.esc(computerStatus.detail) + '</div></div><div class="card-tools"><span class="badge ' + CC.esc(computerStatus.tone) + '">' + CC.esc(computerStatus.label) + '</span><button class="icon-btn" data-cc-action="computer-settings-toggle" title="Computer Use settings">' + CC.icon('monitor', 16) + '</button></div></div>' +
       '<div class="card-actions"><button class="btn" data-cc-action="refresh-environments">' + CC.icon('refresh', 14) + 'Refresh / relink</button><button class="btn" data-cc-action="computer-settings-toggle">' + CC.icon('settings', 14) + 'Open settings</button></div></div>';
   }
 

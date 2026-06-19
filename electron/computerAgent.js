@@ -52,6 +52,8 @@ export class ComputerAgentController {
     this.connectedUrls = new Set();
     this.currentTargets = [];
     this.stdoutBuffer = '';
+    this.lastEvent = null;
+    this.lastError = null;
   }
 
   getSettings() {
@@ -65,6 +67,9 @@ export class ComputerAgentController {
       running: Boolean(this.child),
       connectedCount: this.connectedUrls.size,
       targetCount: this.currentTargets.length,
+      targetUrls: [...this.currentTargets],
+      lastEvent: this.lastEvent,
+      lastError: this.lastError,
     };
   }
 
@@ -105,6 +110,7 @@ export class ComputerAgentController {
     if (!this.settings.enabled || wsTargets.length === 0) {
       this.stop();
       this.currentTargets = [];
+      this.lastEvent = this.settings.enabled ? 'no-targets' : 'disabled';
       return;
     }
 
@@ -113,6 +119,8 @@ export class ComputerAgentController {
     }
 
     this.currentTargets = wsTargets;
+    this.lastEvent = 'restarting';
+    this.lastError = null;
     this.restart(wsTargets);
   }
 
@@ -140,6 +148,8 @@ export class ComputerAgentController {
 
     this.child.once('error', (error) => {
       console.error('[ComputerAgent] failed to start:', error.message);
+      this.lastEvent = 'start-error';
+      this.lastError = error.message;
       this.child = null;
       this.onChange?.();
     });
@@ -147,12 +157,16 @@ export class ComputerAgentController {
     this.child.stdout?.on('data', (chunk) => this.handleStdout(String(chunk)));
     this.child.stderr?.on('data', (chunk) => {
       for (const line of String(chunk).split(/\r?\n/)) {
-        if (line.trim()) console.error('[ComputerAgent]', line);
+        if (line.trim()) {
+          this.lastError = line.trim();
+          console.error('[ComputerAgent]', line);
+        }
       }
     });
 
     this.child.once('exit', (code) => {
       console.log(`[ComputerAgent] exited (code ${code ?? 'null'})`);
+      this.lastEvent = `exit:${code ?? 'null'}`;
       this.child = null;
       this.connectedUrls = new Set();
       this.onChange?.();
@@ -185,10 +199,23 @@ export class ComputerAgentController {
     switch (payload.type) {
       case 'connected':
         this.connectedUrls.add(payload.url);
+        this.lastEvent = 'connected';
+        this.lastError = null;
         this.onChange?.();
         break;
       case 'disconnected':
         this.connectedUrls.delete(payload.url);
+        this.lastEvent = 'disconnected';
+        this.onChange?.();
+        break;
+      case 'starting':
+        this.lastEvent = 'starting';
+        this.lastError = null;
+        this.onChange?.();
+        break;
+      case 'error':
+        this.lastEvent = 'error';
+        this.lastError = payload.message || 'Computer agent error.';
         this.onChange?.();
         break;
       case 'consent-request': {
