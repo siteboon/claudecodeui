@@ -484,6 +484,7 @@ export class LocalServerController {
     const ready = await waitForCloudCliServer(serverUrl, SERVER_START_TIMEOUT_MS);
     if (!ready) {
       const recentLogs = this.getStartupLogs().slice(-20).join('\n');
+      await this.shutdownOwnedServer();
       this.localServerPort = null;
       throw new Error([
         `Bundled backend did not become ready at ${displayUrl}.`,

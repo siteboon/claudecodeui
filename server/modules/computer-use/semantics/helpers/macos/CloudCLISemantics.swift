@@ -15,6 +15,8 @@ struct ElementRecord {
 
 var stateElements: [String: [ElementRecord]] = [:]
 var stateAxElements: [String: [String: AXUIElement]] = [:]
+var stateOrder: [String] = []
+let maxStoredStates = 100
 
 func jsonLine(_ object: Any) {
     guard JSONSerialization.isValidJSONObject(object),
@@ -116,6 +118,14 @@ func dictionary(_ record: ElementRecord) -> JSON {
     return output
 }
 
+func pruneStoredStates() {
+    while stateOrder.count > maxStoredStates {
+        let evicted = stateOrder.removeFirst()
+        stateElements.removeValue(forKey: evicted)
+        stateAxElements.removeValue(forKey: evicted)
+    }
+}
+
 func resolveApp(_ query: String) throws -> NSRunningApplication {
     let normalized = query.lowercased()
     let apps = NSWorkspace.shared.runningApplications.filter { app in
@@ -189,6 +199,8 @@ func getAppState(_ params: JSON) throws -> JSON {
     let stateId = "state_\(UUID().uuidString)"
     stateElements[stateId] = records
     stateAxElements[stateId] = axRecords
+    stateOrder.append(stateId)
+    pruneStoredStates()
 
     let elements = records.map(dictionary)
     return [

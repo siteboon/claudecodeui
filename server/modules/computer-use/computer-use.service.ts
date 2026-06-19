@@ -22,6 +22,8 @@ const __dirname = getModuleDir(import.meta.url);
 const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
 const MAX_SESSIONS_PER_OWNER = Number.parseInt(process.env.CLOUDCLI_COMPUTER_USE_MAX_SESSIONS_PER_OWNER || '1', 10);
 const SESSION_TTL_MS = Number.parseInt(process.env.CLOUDCLI_COMPUTER_USE_SESSION_TTL_MS || String(30 * 60 * 1000), 10);
+const STOPPED_SESSION_RETENTION_MS = Number.parseInt(process.env.CLOUDCLI_COMPUTER_USE_STOPPED_SESSION_RETENTION_MS || String(30 * 60 * 1000), 10);
+const MAX_STORED_SESSIONS = Number.parseInt(process.env.CLOUDCLI_COMPUTER_USE_MAX_STORED_SESSIONS || '100', 10);
 const COMPUTER_USE_SETTINGS_KEY = 'computer_use_settings';
 const COMPUTER_USE_MCP_TOKEN_KEY = 'computer_use_mcp_token';
 type ComputerUseRuntime = 'cloud' | 'local';
@@ -283,22 +285,52 @@ function findActiveAgentSession(): ComputerUseSession | null {
     .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0] || null;
 }
 
+function positiveDuration(value: number, fallback: number): number {
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
 async function expireStaleSessions(now = Date.now()): Promise<void> {
-  for (const session of sessions.values()) {
-    if (session.status !== 'ready') {
-      continue;
-    }
+  const sessionTtl = positiveDuration(SESSION_TTL_MS, 30 * 60 * 1000);
+  const stoppedRetention = positiveDuration(STOPPED_SESSION_RETENTION_MS, sessionTtl);
 
+  for (const [sessionId, session] of sessions.entries()) {
     const updatedAt = Date.parse(session.updatedAt);
-    if (!Number.isFinite(updatedAt) || now - updatedAt <= SESSION_TTL_MS) {
+    if (!Number.isFinite(updatedAt)) {
       continue;
     }
 
-    session.status = 'stopped';
-    session.agentAccessEnabled = false;
-    session.updatedAt = new Date(now).toISOString();
-    session.lastAction = 'expire';
-    session.message = 'Computer Use session expired after inactivity.';
+    if (session.status === 'ready') {
+      if (now - updatedAt <= sessionTtl) {
+        continue;
+      }
+      session.status = 'stopped';
+      session.agentAccessEnabled = false;
+      session.updatedAt = new Date(now).toISOString();
+      session.lastAction = 'expire';
+      session.message = 'Computer Use session expired after inactivity.';
+      continue;
+    }
+
+    if (now - updatedAt > stoppedRetention) {
+      sessions.delete(sessionId);
+    }
+  }
+
+  const maxStoredSessions = Number.isFinite(MAX_STORED_SESSIONS) && MAX_STORED_SESSIONS > 0
+    ? MAX_STORED_SESSIONS
+    : 100;
+  if (sessions.size <= maxStoredSessions) {
+    return;
+  }
+
+  const removable = [...sessions.values()]
+    .filter((session) => session.status !== 'ready')
+    .sort((a, b) => Date.parse(a.updatedAt) - Date.parse(b.updatedAt));
+  for (const session of removable) {
+    if (sessions.size <= maxStoredSessions) {
+      break;
+    }
+    sessions.delete(session.id);
   }
 }
 
