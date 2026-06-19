@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
-import { Bot, Camera, Download, Expand, Loader2, MonitorCog, RefreshCw, ShieldCheck, Square, Trash2, X } from 'lucide-react';
+import { Bot, Camera, Download, Expand, Loader2, MonitorCog, RefreshCw, Settings, ShieldCheck, Square, Trash2, X } from 'lucide-react';
 
+import { cn } from '../../../lib/utils';
 import { Badge, Button } from '../../../shared/view/ui';
 import { authenticatedFetch } from '../../../utils/api';
+import type { SettingsMainTab } from '../../settings/types/types';
 
 type ComputerUseStatus = {
   enabled: boolean;
   runtime: 'cloud' | 'local';
   available: boolean;
+  desktopAgentConnected?: boolean;
+  desktopAgentCount?: number;
   nutInstalled: boolean;
   screenshotInstalled: boolean;
   installInProgress: boolean;
@@ -38,6 +42,7 @@ type ComputerUseSession = {
 
 type ComputerUsePanelProps = {
   isVisible: boolean;
+  onShowSettings?: (tab?: SettingsMainTab) => void;
 };
 
 async function readJson<T>(response: Response): Promise<T> {
@@ -48,10 +53,36 @@ async function readJson<T>(response: Response): Promise<T> {
   return data as T;
 }
 
-export default function ComputerUsePanel({ isVisible }: ComputerUsePanelProps) {
+function getRuntimeTone(status: ComputerUseStatus | null, installing: boolean): string {
+  if (!status?.enabled) return 'border-border bg-muted text-muted-foreground';
+  if (status.runtime === 'cloud') {
+    return status.desktopAgentConnected
+      ? 'border-primary/30 bg-primary/5 text-foreground'
+      : 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300';
+  }
+  if (status.available) return 'border-primary/30 bg-primary/5 text-foreground';
+  if (status.installInProgress || installing) return 'border-primary/30 bg-primary/5 text-foreground';
+  return 'border-border bg-background text-muted-foreground';
+}
+
+function getRuntimeLabel(status: ComputerUseStatus | null, installing: boolean): string {
+  if (!status?.enabled) return 'Disabled';
+  if (status.runtime === 'cloud') {
+    const count = status.desktopAgentCount ?? (status.desktopAgentConnected ? 1 : 0);
+    if (count > 1) return `${count} desktops linked`;
+    if (count === 1) return 'Desktop linked';
+    return 'Desktop not linked';
+  }
+  if (status.available) return 'Ready';
+  if (status.installInProgress || installing) return 'Installing';
+  return 'Setup required';
+}
+
+export default function ComputerUsePanel({ isVisible, onShowSettings }: ComputerUsePanelProps) {
   const [status, setStatus] = useState<ComputerUseStatus | null>(null);
   const [sessions, setSessions] = useState<ComputerUseSession[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -64,20 +95,25 @@ export default function ComputerUsePanel({ isVisible }: ComputerUsePanelProps) {
   );
 
   const refresh = useCallback(async () => {
-    setError(null);
-    const [statusResponse, sessionsResponse] = await Promise.all([
-      authenticatedFetch('/api/computer-use/status'),
-      authenticatedFetch('/api/computer-use/sessions'),
-    ]);
-    const statusData = await readJson<{ data: ComputerUseStatus }>(statusResponse);
-    const sessionsData = await readJson<{ data: { sessions: ComputerUseSession[] } }>(sessionsResponse);
-    setStatus(statusData.data);
-    setSessions(sessionsData.data.sessions);
-    setSelectedSessionId((current) => (
-      current && sessionsData.data.sessions.some((session) => session.id === current)
-        ? current
-        : sessionsData.data.sessions[0]?.id || null
-    ));
+    setIsRefreshing(true);
+    try {
+      const [statusResponse, sessionsResponse] = await Promise.all([
+        authenticatedFetch('/api/computer-use/status'),
+        authenticatedFetch('/api/computer-use/sessions'),
+      ]);
+      const statusData = await readJson<{ data: ComputerUseStatus }>(statusResponse);
+      const sessionsData = await readJson<{ data: { sessions: ComputerUseSession[] } }>(sessionsResponse);
+      setStatus(statusData.data);
+      setSessions(sessionsData.data.sessions);
+      setSelectedSessionId((current) => (
+        current && sessionsData.data.sessions.some((session) => session.id === current)
+          ? current
+          : sessionsData.data.sessions[0]?.id || null
+      ));
+      setError(null);
+    } finally {
+      setIsRefreshing(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -207,6 +243,8 @@ export default function ComputerUsePanel({ isVisible }: ComputerUsePanelProps) {
 
   const needsRuntime = Boolean(status?.enabled && status.runtime === 'local' && (!status.nutInstalled || !status.screenshotInstalled));
   const isCloud = status?.runtime === 'cloud';
+  const desktopAgentCount = status?.desktopAgentCount ?? (status?.desktopAgentConnected ? 1 : 0);
+  const runtimeLabel = getRuntimeLabel(status, isInstalling);
 
   const cursorStyle = selectedSession?.cursor && selectedSession.displaySize
     ? {
@@ -262,31 +300,68 @@ export default function ComputerUsePanel({ isVisible }: ComputerUsePanelProps) {
           <div className="flex items-center gap-2">
             <MonitorCog className="h-4 w-4 text-primary" />
             <h3 className="text-sm font-semibold text-foreground">Computer Use</h3>
-            {status && <Badge variant="outline" className="text-[11px]">{status.runtime}</Badge>}
+            <Badge variant="outline" className={cn('text-[10px]', getRuntimeTone(status, isInstalling))}>
+              {runtimeLabel}
+            </Badge>
           </div>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {isCloud
-              ? 'Monitor cloud agent desktop sessions and stop access when needed.'
+              ? 'Monitor cloud agent desktop sessions and linked desktops.'
               : 'Monitor local desktop sessions and grant control only when an agent needs it.'}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          {onShowSettings && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => onShowSettings('computer')}
+              title="Open Computer Use settings"
+              aria-label="Open Computer Use settings"
+            >
+              <Settings className="h-3.5 w-3.5" />
+            </Button>
+          )}
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
+            className="h-7 w-7 p-0"
             onClick={handleRefresh}
-            disabled={isBusy}
+            disabled={isRefreshing || isBusy}
+            title="Refresh Computer Use"
+            aria-label="Refresh Computer Use"
           >
-            <RefreshCw className="h-4 w-4" />
-            Refresh
+            <RefreshCw className={cn('h-3.5 w-3.5', isRefreshing && 'animate-spin')} />
           </Button>
         </div>
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)]">
         <aside className="border-b border-border/60 p-3 lg:border-b-0 lg:border-r">
-          {needsRuntime && (
+          {isCloud && (
             <div className="rounded-lg border border-border/70 bg-card/40 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Cloud desktop access</div>
+                  <div className="mt-1 text-sm font-medium text-foreground">{runtimeLabel}</div>
+                </div>
+                <Badge variant="outline" className={cn('shrink-0 text-[10px]', getRuntimeTone(status, isInstalling))}>
+                  {desktopAgentCount > 0 ? `${desktopAgentCount} linked` : 'Not linked'}
+                </Badge>
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                {desktopAgentCount > 1
+                  ? 'More than one CloudCLI Desktop app is linked. Agents will use one available desktop.'
+                  : desktopAgentCount === 1
+                    ? 'CloudCLI Desktop is connected. Approval prompts appear on that computer.'
+                    : 'Open CloudCLI Desktop on the computer you want agents to use, connect the same account, and enable Computer Use.'}
+              </p>
+            </div>
+          )}
+
+          {needsRuntime && (
+            <div className={cn('rounded-lg border border-border/70 bg-card/40 p-3', isCloud && 'mt-3')}>
               <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Desktop runtime required</div>
               <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
                 {status?.message || 'Install the desktop control runtime to enable Computer Use.'}

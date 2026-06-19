@@ -105,9 +105,11 @@ jobs:
           target_commitish: ${{ github.sha }}
           name: CloudCLI Local Server Runtime (${{ steps.release.outputs.tag }})
           body: |
-            Internal runtime assets for CloudCLI Desktop local mode.
+            This prerelease contains the Local mode runtime for CloudCLI Desktop.
 
-            Users should download CloudCLI Desktop from the main ${{ steps.release.outputs.tag }} release. The desktop app downloads these runtime bundles automatically when local mode is enabled.
+            Download CloudCLI Desktop from the main ${{ steps.release.outputs.tag }} release. When you open Local CloudCLI, the desktop app automatically downloads the matching runtime from this prerelease.
+
+            You do not need to download these runtime files manually.
           prerelease: true
           fail_on_unmatched_files: false
           overwrite_files: true

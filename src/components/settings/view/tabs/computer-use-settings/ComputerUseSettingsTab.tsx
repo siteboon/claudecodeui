@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Download, Loader2 } from 'lucide-react';
+import { Download, Loader2, RefreshCw } from 'lucide-react';
 
 import { Button } from '../../../../../shared/view/ui';
 import { authenticatedFetch } from '../../../../../utils/api';
@@ -17,6 +17,7 @@ type ComputerUseStatus = {
   runtime: 'cloud' | 'local';
   available: boolean;
   desktopAgentConnected?: boolean;
+  desktopAgentCount?: number;
   nutInstalled: boolean;
   screenshotInstalled: boolean;
   installInProgress: boolean;
@@ -51,12 +52,20 @@ export default function ComputerUseSettingsTab() {
     setStatus(statusData.data);
   }, []);
 
-  useEffect(() => {
+  const refreshState = useCallback(async () => {
     setIsLoading(true);
-    void loadState()
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load Computer Use settings'))
-      .finally(() => setIsLoading(false));
+    try {
+      await loadState();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load Computer Use settings');
+    } finally {
+      setIsLoading(false);
+    }
   }, [loadState]);
+
+  useEffect(() => {
+    void refreshState();
+  }, [refreshState]);
 
   const updateSettings = async (nextSettings: Partial<ComputerUseSettings>) => {
     setIsSaving(true);
@@ -94,9 +103,10 @@ export default function ComputerUseSettingsTab() {
   const isCloud = status?.runtime === 'cloud';
   const effectiveEnabled = isCloud ? status?.enabled === true : settings.enabled;
   const needsRuntime = Boolean(effectiveEnabled && !isCloud && status && (!status.nutInstalled || !status.screenshotInstalled));
+  const desktopAgentCount = status?.desktopAgentCount ?? (status?.desktopAgentConnected ? 1 : 0);
   const modeDescription = isCloud
-    ? 'Cloud Computer Use connects a hosted agent to the CloudCLI desktop app on your machine. Agents create sessions automatically through MCP, and approval happens in the desktop app.'
-    : 'Local Computer Use runs on this machine. Agents create sessions automatically through MCP, but input actions require you to grant control from the Computer tab.';
+    ? 'Let cloud agents request access to your own computer through CloudCLI Desktop.'
+    : 'Let local agents request access to this computer.';
 
   return (
     <div className="space-y-8">
@@ -108,14 +118,14 @@ export default function ComputerUseSettingsTab() {
           <div className="flex flex-col gap-3 px-4 py-4">
             <div className="rounded-md border border-amber-300/50 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
               {isCloud
-                ? 'Computer Use can control your entire desktop after you approve the request in the CloudCLI desktop app. Use Stop in the Computer tab to end the active session.'
-                : 'Computer Use can control your entire desktop. Agents act only while you grant control from the Computer tab, and any action stops the moment you press Stop.'}
+                ? 'A cloud agent can use your desktop only after you approve the request in CloudCLI Desktop. Stop ends access immediately.'
+                : 'Agents can use your desktop only while you grant control from the Computer tab. Stop ends access immediately.'}
             </div>
             {effectiveEnabled && (
               <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
                 {isCloud
-                  ? 'When a cloud agent needs desktop access, it will create a session automatically. Keep CloudCLI Desktop running and connected to this environment to receive approval prompts.'
-                  : 'When a local agent needs desktop access, it will create a session automatically. Open the Computer tab to review the session, grant control, or stop it. On macOS, grant Accessibility and Screen Recording to CloudCLI Desktop if prompted.'}
+                  ? 'Keep CloudCLI Desktop open on the computer you want agents to use.'
+                  : 'Open the Computer tab to review requests, grant control, or stop a session.'}
               </div>
             )}
           </div>
@@ -123,15 +133,31 @@ export default function ComputerUseSettingsTab() {
           {isCloud ? (
             <SettingsRow
               label="Cloud desktop access"
-              description="Managed by the CloudCLI desktop app. Agents can use computer tools when a desktop agent is linked to this cloud environment."
+              description={status?.desktopAgentConnected
+                ? `${desktopAgentCount} ${desktopAgentCount === 1 ? 'desktop app is' : 'desktop apps are'} connected to this environment.`
+                : 'Not connected yet. Link happens from CloudCLI Desktop on your computer.'}
             >
-              <div className={`rounded-md border px-2.5 py-1 text-xs font-medium ${
-                status?.desktopAgentConnected
-                  ? 'border-emerald-500/30 text-emerald-600 dark:text-emerald-300'
-                  : 'border-amber-500/30 text-amber-600 dark:text-amber-300'
-              }`}
-              >
-                {status?.desktopAgentConnected ? 'Desktop linked' : 'Desktop not linked'}
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => void refreshState()}
+                  disabled={isLoading}
+                  className="h-8"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+                <div className={`rounded-md border px-2.5 py-1 text-xs font-medium ${
+                  status?.desktopAgentConnected
+                    ? 'border-emerald-500/30 text-emerald-600 dark:text-emerald-300'
+                    : 'border-amber-500/30 text-amber-600 dark:text-amber-300'
+                }`}
+                >
+                  {status?.desktopAgentConnected
+                    ? `${desktopAgentCount} linked`
+                    : 'Not linked'}
+                </div>
               </div>
             </SettingsRow>
           ) : (
@@ -150,9 +176,23 @@ export default function ComputerUseSettingsTab() {
 
           {(needsRuntime || isCloud || error) && (
             <div className="space-y-4 px-4 py-4">
-              {isCloud && (
+              {isCloud && !status?.desktopAgentConnected && (
+                <div className="rounded-md border border-border bg-muted/40 px-3 py-3 text-sm text-muted-foreground">
+                  <div className="font-medium text-foreground">To link this computer</div>
+                  <ol className="mt-2 list-decimal space-y-1 pl-5">
+                    <li>Open CloudCLI Desktop on the computer you want agents to use.</li>
+                    <li>Connect the same CloudCLI account used for this cloud environment.</li>
+                    <li>Open Desktop Settings and turn on Computer Use.</li>
+                    <li>Keep the desktop app running. This status changes to Desktop linked automatically.</li>
+                  </ol>
+                </div>
+              )}
+
+              {isCloud && status?.desktopAgentConnected && (
                 <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                  {status?.message || 'Cloud Computer Use requires a linked CloudCLI Desktop Agent on the user machine.'}
+                  {desktopAgentCount > 1
+                    ? `${desktopAgentCount} desktops are linked. Agents will use one available desktop; stop Computer Use on any desktop you do not want agents to control.`
+                    : 'CloudCLI Desktop is linked. Approval prompts will appear there when an agent requests desktop access.'}
                 </div>
               )}
 

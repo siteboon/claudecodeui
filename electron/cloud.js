@@ -3,6 +3,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { safeStorage } from 'electron';
 
+const CLOUD_API_TIMEOUT_MS = 15000;
+
 function encryptSecret(secret) {
   if (!safeStorage.isEncryptionAvailable()) {
     return { encrypted: false, value: secret };
@@ -151,14 +153,28 @@ export class CloudController {
       throw new Error('Connect your CloudCLI account first.');
     }
 
-    const response = await fetch(`${this.controlPlaneUrl}${pathname}`, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': this.cloudAccount.apiKey,
-        ...(options.headers || {}),
-      },
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), CLOUD_API_TIMEOUT_MS);
+    let response;
+
+    try {
+      response = await fetch(`${this.controlPlaneUrl}${pathname}`, {
+        ...options,
+        signal: options.signal || controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': this.cloudAccount.apiKey,
+          ...(options.headers || {}),
+        },
+      });
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        throw new Error(`CloudCLI API request timed out after ${Math.round(CLOUD_API_TIMEOUT_MS / 1000)} seconds.`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
 
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {

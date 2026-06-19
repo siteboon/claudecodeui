@@ -4,7 +4,7 @@ export class TabsController {
     this.tabs = [
       {
         id: 'home',
-        title: 'Home',
+        title: 'Launcher',
         kind: 'launcher',
         closable: false,
       },
@@ -22,7 +22,7 @@ export class TabsController {
     const existingTab = this.tabs.find((tab) => tab.id === tabId);
     const nextTab = {
       id: tabId,
-      title: target.kind === 'launcher' ? 'Home' : target.name,
+      title: target.kind === 'launcher' ? 'Launcher' : target.name,
       kind: target.kind,
       target,
       closable: tabId !== 'home',

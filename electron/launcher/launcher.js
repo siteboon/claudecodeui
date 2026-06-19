@@ -184,10 +184,16 @@ window.__MOCK_STATE__ = {
     if (!computerUse.enabled) {
       return { label: 'Disabled', tone: 'idle', detail: 'CloudCLI cannot use this computer.' };
     }
-    if (computerUse.consentMode === 'auto') {
-      return { label: 'Unattended access', tone: 'warn', detail: 'Trusted agents can use this computer without a local approval prompt.' };
+    if (!computerUse.targetCount) {
+      return { label: 'Not linked', tone: 'warn', detail: 'No running cloud environment found for this account.' };
     }
-    return { label: 'Ask before each session', tone: 'ok', detail: 'Agents need approval before control starts.' };
+    if (!computerUse.connectedCount) {
+      return { label: 'Connecting', tone: 'warn', detail: 'Trying to link to ' + computerUse.targetCount + ' running cloud environment' + (computerUse.targetCount === 1 ? '' : 's') + '.' };
+    }
+    if (computerUse.consentMode === 'auto') {
+      return { label: 'Linked', tone: 'warn', detail: 'Unattended access is on for ' + computerUse.connectedCount + ' cloud environment' + (computerUse.connectedCount === 1 ? '' : 's') + '.' };
+    }
+    return { label: 'Linked', tone: 'ok', detail: 'Approval prompts are ready for ' + computerUse.connectedCount + ' cloud environment' + (computerUse.connectedCount === 1 ? '' : 's') + '.' };
   }
 
   var CC = {
@@ -291,7 +297,7 @@ window.__MOCK_STATE__ = {
     CC._status = { msg: (meta.verb || 'Opening') + ' ' + ((env && (env.name || env.subdomain)) || 'environment') + '...', tone: 'progress' };
     if (env) {
       var tabId = 'remote:' + env.id;
-      var tabs = CC.state.tabs && CC.state.tabs.length ? CC.state.tabs : [{ id: 'home', title: 'Home', kind: 'launcher', closable: false }];
+      var tabs = CC.state.tabs && CC.state.tabs.length ? CC.state.tabs : [{ id: 'home', title: 'Launcher', kind: 'launcher', closable: false }];
       tabs = tabs.map(function (tab) {
         tab.active = false;
         return tab;
@@ -366,6 +372,8 @@ window.__MOCK_STATE__ = {
         return CC.closeSheet();
       case 'dashboard':
         return CC.run('Opening CloudCLI dashboard...', function () { return bridge.openCloudDashboard(); });
+      case 'refresh-environments':
+        return CC.run('Refreshing cloud environments...', function () { return bridge.refreshEnvironments(); });
       case 'env-action':
         return CC.run('Opening environment...', function () { return bridge.runActiveEnvironmentAction(node.getAttribute('data-cc-env-action')); });
       case 'env-menu':
@@ -537,9 +545,11 @@ window.__MOCK_STATE__ = {
 
   CC.buildComputerUseSection = function (state) {
     var computerUse = state.computerUse || {};
+    var status = computerUseStatus(state);
     var body =
       '<div class="cc-surface">' +
-      '<label class="cc-toggle"><input type="checkbox" data-cc-computer-enabled="true"' + (computerUse.enabled ? ' checked' : '') + '><span><b>Enable Computer Use</b><br>Let CloudCLI use the computer. Agents cannot act until you approve a session.</span></label>';
+      '<label class="cc-toggle"><input type="checkbox" data-cc-computer-enabled="true"' + (computerUse.enabled ? ' checked' : '') + '><span><b>Enable Computer Use</b><br>Let CloudCLI use the computer. Agents cannot act until you approve a session.</span></label>' +
+      '<div class="cc-row2"><span class="badge ' + CC.esc(status.tone) + '">' + CC.esc(status.label) + '</span><span class="cc-meta">' + CC.esc(status.detail) + '</span><button class="btn sm" data-cc-action="refresh-environments">' + CC.icon('refresh', 14) + 'Refresh / relink</button></div>';
     if (computerUse.enabled) {
       body += '<div class="cc-permissions">' + renderComputerPermissions(state) + '</div>';
       body += '<div class="cc-choice-group">' +
@@ -721,11 +731,11 @@ window.__MOCK_STATE__ = {
   }
 
   function localPane(state) {
-    return '<div class="pane-h"><div><h2 class="pane-title">Local CloudCLI</h2><p class="pane-sub">Run the open-source app on this machine. No account required.</p></div></div>' +
+    return '<div class="pane-h"><div><h2 class="pane-title">Local servers</h2><p class="pane-sub">Manage Local CloudCLI on this machine. No account required.</p></div></div>' +
       '<div class="card"><div class="card-head"><div><div class="card-t">Local server</div><div class="card-sub mono">' + CC.esc(CC.localUrl(state) || 'Starts on demand') + '</div></div><div class="card-tools"><span class="dot" style="background:' + (state.localServerRunning ? 'var(--ok)' : 'var(--tx3)') + '"></span><button class="icon-btn" data-cc-action="local-settings-toggle" title="Local settings">' + CC.icon('gear', 16) + '</button></div></div>' +
       '<div class="card-actions"><button class="btn pri" data-cc-action="local">' + CC.icon('play', 15) + 'Open Local CloudCLI</button><button class="btn" data-cc-action="open-web">' + CC.icon('arrow', 14) + 'Open in browser</button><button class="btn" data-cc-action="copy-web">' + CC.icon('copy', 14) + 'Copy URL</button></div></div>' +
       '<div class="card"><div class="card-head"><div><div class="card-t">Computer Use</div><div class="card-sub">' + CC.esc(computerUseStatus(state).detail) + '</div></div><div class="card-tools"><span class="badge ' + CC.esc(computerUseStatus(state).tone) + '">' + CC.esc(computerUseStatus(state).label) + '</span><button class="icon-btn" data-cc-action="computer-settings-toggle" title="Computer Use settings">' + CC.icon('monitor', 16) + '</button></div></div>' +
-      '<div class="card-actions"><button class="btn" data-cc-action="computer-settings-toggle">' + CC.icon('settings', 14) + 'Open settings</button></div></div>';
+      '<div class="card-actions"><button class="btn" data-cc-action="refresh-environments">' + CC.icon('refresh', 14) + 'Refresh / relink</button><button class="btn" data-cc-action="computer-settings-toggle">' + CC.icon('settings', 14) + 'Open settings</button></div></div>';
   }
 
   function envRow(environment) {
@@ -759,9 +769,9 @@ window.__MOCK_STATE__ = {
   function renderBody(state) {
     var section = CC.ui.section || ((CC.connected(state) || CC.authState(state) === 'expired') ? 'cloud' : 'local');
     CC.ui.section = section;
-    var nav = '<div class="sb"><div class="sb-grp"><div class="lbl">Workspace</div>' +
-      navItem('local', 'terminal', 'Local', state.localServerRunning ? 'on' : 'idle', section) +
-      navItem('cloud', 'cloud', 'Cloud', (state.environments || []).length, section) +
+    var nav = '<div class="sb"><div class="sb-grp"><div class="lbl">Launcher</div>' +
+      navItem('local', 'terminal', 'Local servers', state.localServerRunning ? 'on' : 'idle', section) +
+      navItem('cloud', 'cloud', 'Cloud environments', (state.environments || []).length, section) +
       '</div></div>';
     return nav + '<div class="sb-main">' + (section === 'local' ? localPane(state) : cloudPane(state)) + '</div>';
   }

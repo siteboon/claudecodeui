@@ -106,7 +106,7 @@ export const desktopAgentRelay = {
     const agent = pickAgent();
     if (!agent) {
       throw new Error(
-        'No desktop agent connected. Open the CloudCLI desktop app with Computer Use enabled to control this machine.'
+        'No desktop is linked. Open CloudCLI Desktop on this computer, connect the same account, and enable Computer Use.'
       );
     }
 

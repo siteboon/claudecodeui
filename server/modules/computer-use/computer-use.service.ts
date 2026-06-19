@@ -3,8 +3,8 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { appConfigDb } from '@/modules/database/repositories/app-config.js';
-import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
+import { appConfigDb } from '@/modules/database/index.js';
+import { providerMcpService } from '@/modules/providers/index.js';
 import { getModuleDir } from '@/utils/runtime-paths.js';
 import {
   getRuntimeReadiness as getExecutorReadiness,
@@ -126,7 +126,7 @@ function getOrCreateMcpToken(): string {
 
 function getSetupMessage(settings: ComputerUseSettings, readiness: RuntimeReadiness): string {
   if (getRuntime() === 'cloud') {
-    return 'Cloud Computer Use requires a linked CloudCLI Desktop Agent on the user machine.';
+    return 'Open CloudCLI Desktop on this computer, connect the same account, and enable Computer Use.';
   }
   if (!settings.enabled) {
     return 'Computer Use is disabled in settings.';
@@ -434,7 +434,7 @@ function assertAgentToolsAvailable(): void {
   }
   throw new Error(
     getRuntime() === 'cloud'
-      ? 'No desktop agent is connected. Open the CloudCLI desktop app with Computer Use enabled.'
+      ? 'No desktop is linked. Open CloudCLI Desktop on this computer, connect the same account, and enable Computer Use.'
       : 'Computer Use agent tools are disabled.'
   );
 }
@@ -474,6 +474,7 @@ export const computerUseService = {
       runtime: getRuntime(),
       available,
       desktopAgentConnected,
+      desktopAgentCount: desktopAgentRelay.connectedCount(),
       nutInstalled: readiness.nutInstalled,
       screenshotInstalled: readiness.screenshotInstalled,
       installInProgress: readiness.installInProgress,

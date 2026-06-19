@@ -264,7 +264,7 @@ function MainContent({
 
           {shouldShowComputerTab && activeTab === 'computer' && (
             <div className="h-full overflow-hidden">
-              <ComputerUsePanel isVisible={activeTab === 'computer'} />
+              <ComputerUsePanel isVisible={activeTab === 'computer'} onShowSettings={onShowSettings} />
             </div>
           )}
 

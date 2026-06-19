@@ -64,11 +64,13 @@ jobs:
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
           tag_name: ${{ steps.artifact.outputs.server_bundle_tag }}
-          name: CloudCLI Internal Local Runtime (${{ github.ref_name }})
+          name: CloudCLI Desktop Local Runtime (${{ github.ref_name }})
           body: |
-            Internal runtime assets for CloudCLI Desktop branch builds.
+            This prerelease is used by CloudCLI Desktop branch builds to run Local mode.
 
-            Users should download the desktop app from the workflow artifact. The desktop app downloads these runtime bundles automatically when local mode is enabled.
+            To test this branch, download the desktop app from this workflow run's artifacts. When you open Local CloudCLI, the desktop app automatically downloads the matching runtime from this prerelease.
+
+            You do not need to download these runtime files manually.
           prerelease: true
           fail_on_unmatched_files: false
           overwrite_files: true

@@ -430,7 +430,18 @@ async function updateDesktopSetting(key, value) {
 }
 
 async function showEnvironmentPicker() {
-  const environments = await refreshCloudEnvironments({ showErrors: true });
+  let environments = cloud.getEnvironments();
+  let refreshError = null;
+
+  if (cloud.getAccount()?.apiKey) {
+    try {
+      environments = await refreshCloudEnvironments({ showErrors: false });
+    } catch (error) {
+      refreshError = error;
+      console.warn('[Cloud] Could not refresh environments before showing picker:', error?.message || error);
+    }
+  }
+
   const choices = ['Local CloudCLI', ...environments.map((environment) => {
     const status = environment.status === 'running' ? '' : ` (${environment.status})`;
     return `${environment.name || environment.subdomain}${status}`;
@@ -443,6 +454,7 @@ async function showEnvironmentPicker() {
     cancelId: choices.length,
     title: 'Switch CloudCLI Environment',
     message: 'Choose where this desktop window should connect.',
+    detail: refreshError ? `Cloud environments could not be refreshed. Showing cached environments.\n\n${refreshError.message || refreshError}` : undefined,
   });
 
   if (response.response === choices.length) return getDesktopState();
