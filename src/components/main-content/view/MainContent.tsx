@@ -121,27 +121,43 @@ function MainContent({
 
   const loadComputerUseSettings = useCallback(async () => {
     try {
-      const [settingsResponse, statusResponse] = await Promise.all([
+      const [settingsResponse, statusResponse] = await Promise.allSettled([
         authenticatedFetch('/api/computer-use/settings'),
         authenticatedFetch('/api/computer-use/status'),
       ]);
-      const settingsData = await settingsResponse.json();
-      const statusData = await statusResponse.json();
+      const settingsRes = settingsResponse.status === 'fulfilled' ? settingsResponse.value : null;
+      const statusRes = statusResponse.status === 'fulfilled' ? statusResponse.value : null;
+      const readJson = async (response: Response | null) => {
+        if (!response) return null;
+        try {
+          return await response.json();
+        } catch {
+          return null;
+        }
+      };
+      const settingsData = await readJson(settingsRes);
+      const statusData = await readJson(statusRes);
       const runtime = statusData?.data?.runtime;
+      const settingsUsable = Boolean(settingsRes?.ok && settingsData?.success !== false);
+      const statusUsable = Boolean(statusRes?.ok && statusData?.success !== false);
       const settingsEnabled = Boolean(
-        settingsResponse.ok &&
-        settingsData?.success !== false &&
+        settingsUsable &&
         settingsData?.data?.settings?.enabled
       );
       const cloudEnabled = Boolean(
-        statusResponse.ok &&
-        statusData?.success !== false &&
+        statusUsable &&
         runtime === 'cloud' &&
         statusData?.data?.enabled
       );
-      setComputerUseEnabled(runtime === 'cloud' ? cloudEnabled : settingsEnabled);
+      if (runtime === 'cloud') {
+        setComputerUseEnabled(cloudEnabled);
+      } else if (settingsUsable) {
+        setComputerUseEnabled(settingsEnabled);
+      } else if (statusUsable) {
+        setComputerUseEnabled(Boolean(statusData?.data?.enabled));
+      }
     } catch {
-      setComputerUseEnabled(false);
+      // Keep the current tab availability on transient status/settings failures.
     }
   }, []);
 

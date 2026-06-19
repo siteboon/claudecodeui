@@ -8,8 +8,10 @@ using System.Windows.Automation;
 
 static class Program
 {
+    private const int MaxStoredStates = 100;
     private static readonly Dictionary<string, List<ElementRecord>> StateElements = new();
     private static readonly Dictionary<string, Dictionary<string, AutomationElement>> StateAutomationElements = new();
+    private static readonly Queue<string> StateOrder = new();
 
     public static void Main()
     {
@@ -121,6 +123,8 @@ static class Program
         var stateId = $"state_{Guid.NewGuid()}";
         StateElements[stateId] = records;
         StateAutomationElements[stateId] = automationElements;
+        StateOrder.Enqueue(stateId);
+        PruneStoredStates();
 
         var elements = records.Select(record => record.ToDictionary()).ToList();
         var bounds = root.Current.BoundingRectangle;
@@ -258,9 +262,19 @@ static class Program
         }
         SetCursorPos(point.Value.X, point.Value.Y);
         var wheel = (int)Math.Round(Math.Max(1, pages) * 120);
-        if (direction == "up") wheel = -wheel;
+        if (direction == "down") wheel = -wheel;
         mouse_event(0x0800, 0, 0, unchecked((uint)wheel), UIntPtr.Zero);
         return GetAppState(parameters);
+    }
+
+    private static void PruneStoredStates()
+    {
+        while (StateOrder.Count > MaxStoredStates)
+        {
+            var evicted = StateOrder.Dequeue();
+            StateElements.Remove(evicted);
+            StateAutomationElements.Remove(evicted);
+        }
     }
 
     private static Dictionary<string, object?> Drag(JsonElement parameters)

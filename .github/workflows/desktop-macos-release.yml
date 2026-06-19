@@ -99,7 +99,7 @@ jobs:
           test -n "$(find release/local-server -maxdepth 1 -name 'cloudcli-local-server-*.tar.gz.sha256' -print -quit)"
 
       - name: Publish local server runtime assets
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
           tag_name: ${{ steps.release.outputs.server_bundle_tag }}
           target_commitish: ${{ github.sha }}
@@ -122,7 +122,7 @@ jobs:
           cat release/SHASUMS256.txt
 
       - name: Publish GitHub release assets
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
           tag_name: ${{ steps.release.outputs.tag }}
           target_commitish: ${{ github.sha }}

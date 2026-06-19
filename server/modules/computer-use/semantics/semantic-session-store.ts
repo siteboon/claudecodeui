@@ -43,7 +43,8 @@ export class SemanticSessionStore {
     this.expire();
     if (stateId) {
       const entry = this.states.get(stateId);
-      return entry && entry.sessionId === sessionId ? entry.state : null;
+      const appKey = normalizeAppKey(app);
+      return entry && entry.sessionId === sessionId && entry.appKey === appKey ? entry.state : null;
     }
     const latestStateId = this.latestBySessionApp.get(this.latestKey(sessionId, normalizeAppKey(app)));
     return latestStateId ? this.states.get(latestStateId)?.state || null : null;
@@ -70,7 +71,10 @@ export class SemanticSessionStore {
     for (const [stateId, entry] of this.states.entries()) {
       if (now - entry.updatedAt > ttl) {
         this.states.delete(stateId);
-        this.latestBySessionApp.delete(this.latestKey(entry.sessionId, entry.appKey));
+        const key = this.latestKey(entry.sessionId, entry.appKey);
+        if (this.latestBySessionApp.get(key) === stateId) {
+          this.latestBySessionApp.delete(key);
+        }
       }
     }
   }

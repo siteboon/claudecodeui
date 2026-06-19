@@ -345,7 +345,8 @@ export const computerSemanticsService = {
       }
       case 'get_app_state':
         return getAppState(sessionId, readString(input.app));
-      case 'click': {
+      case 'click':
+      case 'click_element': {
         const app = readString(input.app);
         const helperState = await withHelperState(sessionId, (adapter) => adapter.clickElement({ ...input, sessionId, app }));
         if (helperState) {
@@ -381,7 +382,8 @@ export const computerSemanticsService = {
         await executor.drag(await targetFor(sessionId, app, stateId), { x: fromX, y: fromY }, { x: toX, y: toY }, readButton(input.mouse_button ?? input.mouseButton));
         return getAppState(sessionId, app);
       }
-      case 'scroll': {
+      case 'scroll':
+      case 'scroll_element': {
         const app = readString(input.app);
         const helperState = await withHelperState(sessionId, (adapter) => adapter.scrollElement({ ...input, sessionId, app }));
         if (helperState) {
