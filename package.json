@@ -39,8 +39,8 @@
     "desktop:dev": "cross-env ELECTRON_DEV_URL=http://127.0.0.1:5173 electron electron/main.js",
     "desktop:stage": "node scripts/release/prepare-desktop-app.js",
     "desktop:pack": "npm run build && npm run desktop:stage && electron-builder --projectDir .desktop-build/desktop-app --dir",
-    "desktop:dist:mac": "npm run build && npm run desktop:stage && electron-builder --projectDir .desktop-build/desktop-app --mac dmg zip",
-    "desktop:dist:win": "npm run build && npm run desktop:stage && electron-builder --projectDir .desktop-build/desktop-app --win nsis zip",
+    "desktop:dist:mac": "npm run build && npm run desktop:stage && electron-builder --projectDir .desktop-build/desktop-app --mac dmg",
+    "desktop:dist:win": "npm run build && npm run desktop:stage && electron-builder --projectDir .desktop-build/desktop-app --win nsis",
     "server:bundle": "npm run build && node scripts/release/build-server-bundle.js",
     "desktop:icon:mac": "node electron/scripts/generate-macos-icon.js",
     "build": "npm run build:semantics && npm run build:client && npm run build:server",
@@ -94,8 +94,7 @@
       "icon": "electron/assets/logo-macos.icns",
       "notarize": true,
       "target": [
-        "dmg",
-        "zip"
+        "dmg"
       ],
       "extendInfo": {
         "CFBundleName": "CloudCLI",
@@ -112,8 +111,7 @@
     },
     "win": {
       "target": [
-        "nsis",
-        "zip"
+        "nsis"
       ]
     }
   },

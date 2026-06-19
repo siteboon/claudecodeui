@@ -93,8 +93,7 @@ jobs:
       - name: Verify macOS artifacts
         run: |
           test -n "$(find release/desktop -maxdepth 1 -name '*.dmg' -print -quit)"
-          test -n "$(find release/desktop -maxdepth 1 -name '*.zip' -print -quit)"
-          shasum -a 256 release/desktop/*.{dmg,zip} > release/SHASUMS256.txt
+          shasum -a 256 release/desktop/*.dmg > release/SHASUMS256.txt
           cat release/SHASUMS256.txt
 
       - name: Upload branch build artifacts
@@ -103,9 +102,6 @@ jobs:
           name: ${{ steps.artifact.outputs.name }}
           path: |
             release/desktop/*.dmg
-            release/desktop/*.zip
-            release/desktop/*.yml
-            release/desktop/*.blockmap
             release/SHASUMS256.txt
           if-no-files-found: error
           retention-days: 14
