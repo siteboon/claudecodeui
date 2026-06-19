@@ -62,15 +62,11 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
-      - name: Build local server bundle
-        run: node scripts/release/build-server-bundle.js
-
       - name: Verify macOS artifacts
         run: |
           test -n "$(find release -maxdepth 1 -name '*.dmg' -print -quit)"
           test -n "$(find release -maxdepth 1 -name '*.zip' -print -quit)"
-          test -n "$(find release/server-bundles -maxdepth 1 -name 'cloudcli-server-*.tar.gz' -print -quit)"
-          shasum -a 256 release/*.{dmg,zip} release/server-bundles/* > release/SHASUMS256.txt
+          shasum -a 256 release/*.{dmg,zip} > release/SHASUMS256.txt
           cat release/SHASUMS256.txt
 
       - name: Upload branch build artifacts
@@ -82,7 +78,6 @@ jobs:
             release/*.zip
             release/*.yml
             release/*.blockmap
-            release/server-bundles/*
             release/SHASUMS256.txt
           if-no-files-found: error
           retention-days: 14

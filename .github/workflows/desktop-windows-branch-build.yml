@@ -45,16 +45,12 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
-      - name: Build local server bundle
-        run: node scripts/release/build-server-bundle.js
-
       - name: Verify Windows artifacts
         shell: bash
         run: |
           test -n "$(find release -maxdepth 1 -name '*.exe' -print -quit)"
           test -n "$(find release -maxdepth 1 -name '*.zip' -print -quit)"
-          test -n "$(find release/server-bundles -maxdepth 1 -name 'cloudcli-server-*.tar.gz' -print -quit)"
-          sha256sum release/*.{exe,zip} release/server-bundles/* > release/SHASUMS256.txt
+          sha256sum release/*.{exe,zip} > release/SHASUMS256.txt
           cat release/SHASUMS256.txt
 
       - name: Upload branch build artifacts
@@ -66,7 +62,6 @@ jobs:
             release/*.zip
             release/*.yml
             release/*.blockmap
-            release/server-bundles/*
             release/SHASUMS256.txt
           if-no-files-found: error
           retention-days: 14
