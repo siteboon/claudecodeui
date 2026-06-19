@@ -739,12 +739,9 @@ window.__MOCK_STATE__ = {
   }
 
   function localPane(state) {
-    var computerStatus = CC.computerUseStatus(state);
     return '<div class="pane-h"><div><h2 class="pane-title">Local servers</h2><p class="pane-sub">Manage Local CloudCLI on this machine. No account required.</p></div></div>' +
       '<div class="card"><div class="card-head"><div><div class="card-t">Local server</div><div class="card-sub mono">' + CC.esc(CC.localUrl(state) || 'Starts on demand') + '</div></div><div class="card-tools"><span class="dot" style="background:' + (state.localServerRunning ? 'var(--ok)' : 'var(--tx3)') + '"></span><button class="icon-btn" data-cc-action="local-settings-toggle" title="Local settings">' + CC.icon('gear', 16) + '</button></div></div>' +
-      '<div class="card-actions"><button class="btn pri" data-cc-action="local">' + CC.icon('play', 15) + 'Open Local CloudCLI</button><button class="btn" data-cc-action="open-web">' + CC.icon('arrow', 14) + 'Open in browser</button><button class="btn" data-cc-action="copy-web">' + CC.icon('copy', 14) + 'Copy URL</button></div></div>' +
-      '<div class="card"><div class="card-head"><div><div class="card-t">Computer Use</div><div class="card-sub">' + CC.esc(computerStatus.detail) + '</div></div><div class="card-tools"><span class="badge ' + CC.esc(computerStatus.tone) + '">' + CC.esc(computerStatus.label) + '</span><button class="icon-btn" data-cc-action="computer-settings-toggle" title="Computer Use settings">' + CC.icon('monitor', 16) + '</button></div></div>' +
-      '<div class="card-actions"><button class="btn" data-cc-action="refresh-environments">' + CC.icon('refresh', 14) + 'Refresh / relink</button><button class="btn" data-cc-action="computer-settings-toggle">' + CC.icon('settings', 14) + 'Open settings</button></div></div>';
+      '<div class="card-actions"><button class="btn pri" data-cc-action="local">' + CC.icon('play', 15) + 'Open Local CloudCLI</button><button class="btn" data-cc-action="open-web">' + CC.icon('arrow', 14) + 'Open in browser</button><button class="btn" data-cc-action="copy-web">' + CC.icon('copy', 14) + 'Copy URL</button></div></div>';
   }
 
   function envRow(environment) {

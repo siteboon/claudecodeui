@@ -130,7 +130,21 @@ export default function ComputerUseSettingsTab() {
             )}
           </div>
 
-          {isCloud ? (
+          <SettingsRow
+            label="Enable Computer Use"
+            description={isCloud
+              ? 'Registers Computer Use MCP servers for supported agents and allows cloud agents to request guarded access to a linked desktop.'
+              : 'Registers Computer Use for supported agents and allows CloudCLI to create guarded desktop control sessions on this machine.'}
+          >
+            <SettingsToggle
+              checked={settings.enabled}
+              onChange={(value) => void updateSettings({ enabled: value })}
+              ariaLabel="Enable Computer Use"
+              disabled={isLoading || isSaving}
+            />
+          </SettingsRow>
+
+          {isCloud && (
             <SettingsRow
               label="Cloud desktop access"
               description={status?.desktopAgentConnected
@@ -159,18 +173,6 @@ export default function ComputerUseSettingsTab() {
                     : 'Not linked'}
                 </div>
               </div>
-            </SettingsRow>
-          ) : (
-            <SettingsRow
-              label="Enable Computer Use"
-              description="Registers Computer Use for supported agents and allows CloudCLI to create guarded desktop control sessions on this machine."
-            >
-              <SettingsToggle
-                checked={settings.enabled}
-                onChange={(value) => void updateSettings({ enabled: value })}
-                ariaLabel="Enable Computer Use"
-                disabled={isLoading || isSaving}
-              />
             </SettingsRow>
           )}
 

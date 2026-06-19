@@ -125,11 +125,11 @@ function getOrCreateMcpToken(): string {
 }
 
 function getSetupMessage(settings: ComputerUseSettings, readiness: RuntimeReadiness): string {
-  if (getRuntime() === 'cloud') {
-    return 'Open CloudCLI Desktop on this computer, connect the same account, and enable Computer Use.';
-  }
   if (!settings.enabled) {
     return 'Computer Use is disabled in settings.';
+  }
+  if (getRuntime() === 'cloud') {
+    return 'Open CloudCLI Desktop on this computer, connect the same account, and enable Computer Use.';
   }
   if (!readiness.nutInstalled || !readiness.screenshotInstalled) {
     return 'Install the desktop control runtime to capture the screen and drive the mouse and keyboard.';
@@ -416,27 +416,40 @@ function assertReady(session: ComputerUseSession): void {
   }
 }
 
-/**
- * Whether agent tools may operate right now. Cloud mode depends purely on a
- * connected desktop agent; local mode depends on the single feature setting.
- */
 function agentToolsAvailable(): boolean {
+  const settings = readSettings();
+  if (!settings.enabled) {
+    return false;
+  }
   if (getRuntime() === 'cloud') {
     return desktopAgentRelay.isConnected();
   }
-  const settings = readSettings();
-  return settings.enabled;
+  return true;
 }
 
 function assertAgentToolsAvailable(): void {
   if (agentToolsAvailable()) {
     return;
   }
+  const settings = readSettings();
+  if (!settings.enabled) {
+    throw new Error('Computer Use agent tools are disabled.');
+  }
   throw new Error(
     getRuntime() === 'cloud'
       ? 'No desktop is linked. Open CloudCLI Desktop on this computer, connect the same account, and enable Computer Use.'
       : 'Computer Use agent tools are disabled.'
   );
+}
+
+function stopSessions(lastAction: string, message: string): void {
+  for (const session of sessions.values()) {
+    session.status = 'stopped';
+    session.agentAccessEnabled = false;
+    session.updatedAt = new Date().toISOString();
+    session.lastAction = lastAction;
+    session.message = message;
+  }
 }
 
 export const computerUseService = {
@@ -450,8 +463,9 @@ export const computerUseService = {
     const next = writeSettings({ enabled });
     if (next.enabled) {
       await this.registerAgentMcp();
-    } else if (current.enabled) {
+    } else {
       await this.unregisterAgentMcp();
+      stopSessions('settings:disabled', 'Computer Use was disabled in settings.');
     }
     return next;
   },
@@ -461,16 +475,16 @@ export const computerUseService = {
     const readiness = getRuntimeReadiness();
     const isCloud = getRuntime() === 'cloud';
     const runtimeReady = readiness.nutInstalled && readiness.screenshotInstalled;
-    // Cloud availability is purely a function of a connected desktop agent; the
-    // hosted server has no screen of its own. Local availability needs the
-    // in-process nut-js runtime installed and the feature enabled.
+    // Cloud mode still respects the saved feature setting. When enabled, cloud
+    // availability comes from a linked desktop agent because the hosted server
+    // has no screen of its own.
     const desktopAgentConnected = desktopAgentRelay.isConnected();
-    const available = isCloud
+    const available = settings.enabled && (isCloud
       ? desktopAgentConnected
-      : settings.enabled && runtimeReady;
+      : runtimeReady);
 
     return {
-      enabled: isCloud ? true : settings.enabled,
+      enabled: settings.enabled,
       runtime: getRuntime(),
       available,
       desktopAgentConnected,
@@ -571,9 +585,9 @@ export const computerUseService = {
     const readiness = getRuntimeReadiness();
     const isCloud = getRuntime() === 'cloud';
     const runtimeReady = readiness.nutInstalled && readiness.screenshotInstalled;
-    const ready = isCloud
+    const ready = settings.enabled && (isCloud
       ? desktopAgentRelay.isConnected()
-      : settings.enabled && runtimeReady;
+      : runtimeReady);
 
     if (!ready) {
       session.message = getSetupMessage(settings, readiness);
@@ -856,12 +870,13 @@ export const computerUseService = {
 
   /**
    * Cloud only: when a desktop agent links to this hosted environment, expose
-   * the computer_* MCP tools to every provider so the running agent can use
-   * them. Mirrors `registerAgentMcp` but is driven by relay connectivity rather
-   * than a settings toggle.
+   * the computer_* MCP tools only if the user enabled Computer Use in settings.
    */
   async onDesktopAgentConnected() {
     if (getRuntime() !== 'cloud') {
+      return;
+    }
+    if (!readSettings().enabled) {
       return;
     }
     try {
@@ -888,13 +903,7 @@ export const computerUseService = {
   },
 
   async stopAllSessions() {
-    for (const session of sessions.values()) {
-      session.status = 'stopped';
-      session.agentAccessEnabled = false;
-      session.updatedAt = new Date().toISOString();
-      session.lastAction = 'shutdown';
-      session.message = 'Computer Use session stopped during server shutdown.';
-    }
+    stopSessions('shutdown', 'Computer Use session stopped during server shutdown.');
   },
 };
 
