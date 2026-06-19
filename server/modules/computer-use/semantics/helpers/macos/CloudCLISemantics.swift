@@ -159,10 +159,22 @@ func walk(_ element: AXUIElement, depth: Int, maxDepth: Int, records: inout [Ele
 }
 
 func pngDataUrlForMainDisplay() -> String? {
-    guard let image = CGDisplayCreateImage(CGMainDisplayID()) else { return nil }
-    let bitmap = NSBitmapImageRep(cgImage: image)
-    guard let png = bitmap.representation(using: .png, properties: [:]) else { return nil }
-    return "data:image/png;base64,\(png.base64EncodedString())"
+    let fileURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("cloudcli-semantics-\(UUID().uuidString).png")
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+    process.arguments = ["-x", "-t", "png", fileURL.path]
+
+    do {
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return nil }
+        let png = try Data(contentsOf: fileURL)
+        try? FileManager.default.removeItem(at: fileURL)
+        return png.isEmpty ? nil : "data:image/png;base64,\(png.base64EncodedString())"
+    } catch {
+        try? FileManager.default.removeItem(at: fileURL)
+        return nil
+    }
 }
 
 func getAppState(_ params: JSON) throws -> JSON {
@@ -376,7 +388,7 @@ func scrollElement(_ params: JSON) throws -> JSON {
     let amount = Int32(max(1.0, abs(pages) * 8.0))
     let vertical = direction == "up" ? amount : direction == "down" ? -amount : 0
     let horizontal = direction == "left" ? amount : direction == "right" ? -amount : 0
-    CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 2, wheel1: vertical, wheel2: horizontal)?.post(tap: .cghidEventTap)
+    CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 2, wheel1: vertical, wheel2: horizontal, wheel3: 0)?.post(tap: .cghidEventTap)
     return try getAppState(params)
 }
 
