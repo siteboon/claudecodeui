@@ -606,9 +606,6 @@ export function useChatComposerState({
         }
       }
 
-      const resolvedProjectPath = selectedProject.fullPath || selectedProject.path || '';
-      const sessionSummary = getNotificationSessionSummary(selectedSession, currentInput);
-
       // The conversation always has a stable backend-allocated session id
       // BEFORE the first websocket send: brand-new chats allocate one here
       // via the session gateway. There is no client-visible session-id
