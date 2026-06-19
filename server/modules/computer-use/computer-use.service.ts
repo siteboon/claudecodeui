@@ -22,6 +22,8 @@ const MAX_SESSIONS_PER_OWNER = Number.parseInt(process.env.CLOUDCLI_COMPUTER_USE
 const SESSION_TTL_MS = Number.parseInt(process.env.CLOUDCLI_COMPUTER_USE_SESSION_TTL_MS || String(30 * 60 * 1000), 10);
 const COMPUTER_USE_SETTINGS_KEY = 'computer_use_settings';
 const COMPUTER_USE_MCP_TOKEN_KEY = 'computer_use_mcp_token';
+const DEFAULT_AGENT_WAIT_MS = 1000;
+const MAX_AGENT_WAIT_MS = 10_000;
 
 type ComputerUseRuntime = 'cloud' | 'local';
 type ComputerUseSessionStatus = 'ready' | 'stopped' | 'unavailable';
@@ -331,6 +333,16 @@ function applyRelayResult(session: ComputerUseSession, result: RelayResult): voi
   session.updatedAt = new Date().toISOString();
 }
 
+function normalizeAgentWaitMs(ms: number | undefined): number {
+  if (ms === undefined) {
+    return DEFAULT_AGENT_WAIT_MS;
+  }
+  if (!Number.isFinite(ms)) {
+    throw new Error('Computer Use wait duration must be a finite number.');
+  }
+  return Math.trunc(Math.max(0, Math.min(ms, MAX_AGENT_WAIT_MS)));
+}
+
 async function refreshScreenshot(session: ComputerUseSession): Promise<void> {
   if (getRuntime() === 'cloud') {
     const result = (await desktopAgentRelay.relay('screenshot', { sessionId: session.id })) as RelayResult;
@@ -379,7 +391,7 @@ async function performAction(session: ComputerUseSession, action: ComputerAction
       await executor.scroll(session, action.direction, action.amount ?? 3, action.point);
       break;
     case 'wait':
-      await new Promise((resolve) => setTimeout(resolve, Math.max(0, Math.min(action.ms ?? 1000, 10_000))));
+      await new Promise((resolve) => setTimeout(resolve, normalizeAgentWaitMs(action.ms)));
       break;
   }
   await refreshScreenshot(session);
@@ -437,12 +449,13 @@ export const computerUseService = {
 
   async updateSettings(settings: Partial<ComputerUseSettings>) {
     const current = readSettings();
+    const enabled = typeof settings.enabled === 'boolean' ? settings.enabled : current.enabled;
     const nextSettings = {
       ...current,
-      enabled: typeof settings.enabled === 'boolean' ? settings.enabled : current.enabled,
+      enabled,
       agentToolsEnabled: typeof settings.agentToolsEnabled === 'boolean'
         ? settings.agentToolsEnabled
-        : current.agentToolsEnabled,
+        : enabled,
     };
     if (!nextSettings.enabled) {
       nextSettings.agentToolsEnabled = false;

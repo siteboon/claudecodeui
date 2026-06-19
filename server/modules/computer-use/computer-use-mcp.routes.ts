@@ -8,8 +8,18 @@ function readBearerToken(header: unknown): string | null {
   if (typeof header !== 'string') {
     return null;
   }
-  const match = /^Bearer\s+(.+)$/i.exec(header.trim());
-  return match?.[1] || null;
+  const trimmed = header.trim();
+  const scheme = 'Bearer';
+  if (trimmed.slice(0, scheme.length).toLowerCase() !== scheme.toLowerCase()) {
+    return null;
+  }
+
+  const separator = trimmed[scheme.length];
+  if (separator !== ' ' && separator !== '\t') {
+    return null;
+  }
+
+  return trimmed.slice(scheme.length + 1).trimStart() || null;
 }
 
 function toButton(value: unknown): 'left' | 'right' | 'middle' {

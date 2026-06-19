@@ -279,8 +279,7 @@ svg {
 .cc-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(6, 8, 11, 0.46);
-  backdrop-filter: blur(16px);
+  background: rgba(6, 8, 11, 0.28);
   display: none;
   z-index: 50;
   align-items: center;
@@ -295,14 +294,14 @@ svg {
 .cc-sheet {
   width: 620px;
   max-width: min(92vw, 620px);
-  max-height: 86vh;
+  max-height: min(720px, 82vh);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  border-radius: 18px;
+  border-radius: 14px;
   border: 1px solid var(--b);
-  background: color-mix(in srgb, var(--s1) 94%, transparent);
-  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.32);
+  background: color-mix(in srgb, var(--s1) 98%, transparent);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.34);
 }
 
 .cc-sheet-header {

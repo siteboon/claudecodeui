@@ -111,25 +111,13 @@ export default function ComputerUseSettingsTab() {
 
           <SettingsRow
             label="Enable Computer Use"
-            description="Allow CloudCLI to capture the screen and create desktop control sessions on this machine."
+            description="Registers Computer Use for supported agents and allows CloudCLI to create guarded desktop control sessions on this machine."
           >
             <SettingsToggle
               checked={settings.enabled}
-              onChange={(value) => void updateSettings({ enabled: value })}
+              onChange={(value) => void updateSettings({ enabled: value, agentToolsEnabled: value })}
               ariaLabel="Enable Computer Use"
               disabled={isLoading || isSaving}
-            />
-          </SettingsRow>
-
-          <SettingsRow
-            label="Enable Computer Tools for Agents"
-            description="Register the Computer Use MCP server for all agent providers. Agents can request desktop control, but actions require your explicit per-session consent."
-          >
-            <SettingsToggle
-              checked={settings.agentToolsEnabled}
-              onChange={(value) => void updateSettings({ agentToolsEnabled: value })}
-              ariaLabel="Enable Computer Tools for Agents"
-              disabled={isLoading || isSaving || !settings.enabled}
             />
           </SettingsRow>
 
