@@ -74,9 +74,13 @@ func bounds(_ element: AXUIElement) -> [String: Double]? {
 
     var point = CGPoint.zero
     var size = CGSize.zero
-    guard let positionAxValue = positionValue as? AXValue,
-          let sizeAxValue = sizeValue as? AXValue,
-          AXValueGetValue(positionAxValue, .cgPoint, &point),
+    guard CFGetTypeID(positionValue) == AXValueGetTypeID(),
+          CFGetTypeID(sizeValue) == AXValueGetTypeID()
+    else { return nil }
+
+    let positionAxValue = positionValue as! AXValue
+    let sizeAxValue = sizeValue as! AXValue
+    guard AXValueGetValue(positionAxValue, .cgPoint, &point),
           AXValueGetValue(sizeAxValue, .cgSize, &size)
     else { return nil }
 
