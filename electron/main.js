@@ -909,6 +909,7 @@ async function bootstrap() {
     settingsPath: getComputerUseSettingsPath(),
     isPackaged: app.isPackaged,
     getRunningEnvironmentUrls,
+    getApiKey: () => cloud.getAccount()?.apiKey || '',
     promptConsent: promptComputerUseConsent,
     onChange: syncDesktopState,
   });

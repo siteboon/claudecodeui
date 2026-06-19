@@ -40,11 +40,12 @@ function toAgentWsUrl(httpUrl) {
  * while desktop access is enabled.
  */
 export class ComputerAgentController {
-  constructor({ appRoot, settingsPath, isPackaged = false, getRunningEnvironmentUrls, promptConsent, onChange }) {
+  constructor({ appRoot, settingsPath, isPackaged = false, getRunningEnvironmentUrls, getApiKey, promptConsent, onChange }) {
     this.appRoot = appRoot;
     this.settingsPath = settingsPath;
     this.isPackaged = isPackaged;
     this.getRunningEnvironmentUrls = getRunningEnvironmentUrls;
+    this.getApiKey = getApiKey;
     this.promptConsent = promptConsent;
     this.onChange = onChange;
     this.settings = { enabled: false, consentMode: 'ask' };
@@ -138,6 +139,7 @@ export class ComputerAgentController {
         ...runtime.env,
         PATH: getDesktopPath(),
         CLOUDCLI_DESKTOP_AGENT_URLS: wsTargets.join(','),
+        CLOUDCLI_DESKTOP_AGENT_API_KEY: this.getApiKey?.() || '',
         CLOUDCLI_COMPUTER_USE_CONSENT_MODE: this.settings.consentMode,
       },
       stdio: ['pipe', 'pipe', 'pipe'],

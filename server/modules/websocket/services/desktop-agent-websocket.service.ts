@@ -15,9 +15,7 @@ export function handleDesktopAgentConnection(
   ws: WebSocket,
   request: AuthenticatedWebSocketRequest
 ): void {
-  const label = request.user?.username ? `desktop:${request.user.username}` : 'desktop-agent';
-  console.log('[INFO] Desktop agent websocket connected:', label);
-  desktopAgentRelay.register(ws, label);
+  let registered = false;
 
   ws.on('message', (rawMessage) => {
     const data = parseIncomingJsonObject(rawMessage);
@@ -25,6 +23,17 @@ export function handleDesktopAgentConnection(
       return;
     }
     const kind = typeof data.kind === 'string' ? data.kind : typeof data.type === 'string' ? data.type : '';
+    if (kind === 'register' && !registered) {
+      const label = typeof data.label === 'string' && data.label.trim()
+        ? data.label.trim()
+        : request.user?.username
+          ? `desktop:${request.user.username}`
+          : 'desktop-agent';
+      registered = true;
+      console.log('[INFO] Desktop agent websocket registered:', label);
+      desktopAgentRelay.register(ws, label);
+      return;
+    }
     if (kind === 'computer_relay_result' && typeof data.id === 'string') {
       desktopAgentRelay.handleResult(
         data.id,
@@ -37,6 +46,6 @@ export function handleDesktopAgentConnection(
   });
 
   ws.on('close', () => {
-    console.log('[INFO] Desktop agent websocket disconnected:', label);
+    console.log('[INFO] Desktop agent websocket disconnected');
   });
 }

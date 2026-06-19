@@ -42,6 +42,7 @@ const RECONNECT_MAX_MS = 30_000;
 
 const consentMode: ConsentMode = process.env.CLOUDCLI_COMPUTER_USE_CONSENT_MODE === 'auto' ? 'auto' : 'ask';
 const agentLabel = process.env.CLOUDCLI_DESKTOP_AGENT_LABEL || 'cloudcli-desktop';
+const desktopAgentApiKey = process.env.CLOUDCLI_DESKTOP_AGENT_API_KEY || '';
 
 function parseTargets(): string[] {
   const raw =
@@ -195,9 +196,7 @@ function connect(url: string): void {
 
   const open = () => {
     socket = new WebSocket(url, {
-      headers: process.env.CLOUDCLI_DESKTOP_AGENT_TOKEN
-        ? { 'x-cloudcli-agent-token': process.env.CLOUDCLI_DESKTOP_AGENT_TOKEN }
-        : undefined,
+      headers: desktopAgentApiKey ? { 'X-API-Key': desktopAgentApiKey } : undefined,
     });
 
     socket.on('open', () => {
