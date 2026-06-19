@@ -10,17 +10,16 @@ import SettingsToggle from '../../SettingsToggle';
 
 type ComputerUseSettings = {
   enabled: boolean;
-  agentToolsEnabled: boolean;
 };
 
 type ComputerUseStatus = {
   enabled: boolean;
   runtime: 'cloud' | 'local';
   available: boolean;
+  desktopAgentConnected?: boolean;
   nutInstalled: boolean;
   screenshotInstalled: boolean;
   installInProgress: boolean;
-  agentToolsEnabled: boolean;
   message: string;
 };
 
@@ -33,7 +32,7 @@ async function readJson<T>(response: Response): Promise<T> {
 }
 
 export default function ComputerUseSettingsTab() {
-  const [settings, setSettings] = useState<ComputerUseSettings>({ enabled: false, agentToolsEnabled: false });
+  const [settings, setSettings] = useState<ComputerUseSettings>({ enabled: false });
   const [status, setStatus] = useState<ComputerUseStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -93,33 +92,61 @@ export default function ComputerUseSettingsTab() {
   };
 
   const isCloud = status?.runtime === 'cloud';
-  const needsRuntime = Boolean(settings.enabled && !isCloud && status && (!status.nutInstalled || !status.screenshotInstalled));
+  const effectiveEnabled = isCloud ? status?.enabled === true : settings.enabled;
+  const needsRuntime = Boolean(effectiveEnabled && !isCloud && status && (!status.nutInstalled || !status.screenshotInstalled));
+  const modeDescription = isCloud
+    ? 'Cloud Computer Use connects a hosted agent to the CloudCLI desktop app on your machine. Agents create sessions automatically through MCP, and approval happens in the desktop app.'
+    : 'Local Computer Use runs on this machine. Agents create sessions automatically through MCP, but input actions require you to grant control from the Computer tab.';
 
   return (
     <div className="space-y-8">
       <SettingsSection
         title="Computer Use"
-        description="Let agents see your desktop and drive the mouse and keyboard through a guarded, consent-gated control loop."
+        description={modeDescription}
       >
         <SettingsCard divided>
           <div className="flex flex-col gap-3 px-4 py-4">
             <div className="rounded-md border border-amber-300/50 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
-              Computer Use can control your entire desktop. Agents act only while you grant control from the
-              Computer panel, and any action stops the moment you press Stop.
+              {isCloud
+                ? 'Computer Use can control your entire desktop after you approve the request in the CloudCLI desktop app. Use Stop in the Computer tab to end the active session.'
+                : 'Computer Use can control your entire desktop. Agents act only while you grant control from the Computer tab, and any action stops the moment you press Stop.'}
             </div>
+            {effectiveEnabled && (
+              <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                {isCloud
+                  ? 'When a cloud agent needs desktop access, it will create a session automatically. Keep CloudCLI Desktop running and connected to this environment to receive approval prompts.'
+                  : 'When a local agent needs desktop access, it will create a session automatically. Open the Computer tab to review the session, grant control, or stop it. On macOS, grant Accessibility and Screen Recording to CloudCLI Desktop if prompted.'}
+              </div>
+            )}
           </div>
 
-          <SettingsRow
-            label="Enable Computer Use"
-            description="Registers Computer Use for supported agents and allows CloudCLI to create guarded desktop control sessions on this machine."
-          >
-            <SettingsToggle
-              checked={settings.enabled}
-              onChange={(value) => void updateSettings({ enabled: value, agentToolsEnabled: value })}
-              ariaLabel="Enable Computer Use"
-              disabled={isLoading || isSaving}
-            />
-          </SettingsRow>
+          {isCloud ? (
+            <SettingsRow
+              label="Cloud desktop access"
+              description="Managed by the CloudCLI desktop app. Agents can use computer tools when a desktop agent is linked to this cloud environment."
+            >
+              <div className={`rounded-md border px-2.5 py-1 text-xs font-medium ${
+                status?.desktopAgentConnected
+                  ? 'border-emerald-500/30 text-emerald-600 dark:text-emerald-300'
+                  : 'border-amber-500/30 text-amber-600 dark:text-amber-300'
+              }`}
+              >
+                {status?.desktopAgentConnected ? 'Desktop linked' : 'Desktop not linked'}
+              </div>
+            </SettingsRow>
+          ) : (
+            <SettingsRow
+              label="Enable Computer Use"
+              description="Registers Computer Use for supported agents and allows CloudCLI to create guarded desktop control sessions on this machine."
+            >
+              <SettingsToggle
+                checked={settings.enabled}
+                onChange={(value) => void updateSettings({ enabled: value })}
+                ariaLabel="Enable Computer Use"
+                disabled={isLoading || isSaving}
+              />
+            </SettingsRow>
+          )}
 
           {(needsRuntime || isCloud || error) && (
             <div className="space-y-4 px-4 py-4">

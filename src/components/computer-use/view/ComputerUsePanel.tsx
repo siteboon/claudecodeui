@@ -8,13 +8,10 @@ type ComputerUseStatus = {
   enabled: boolean;
   runtime: 'cloud' | 'local';
   available: boolean;
-  requiresDesktopBridge: boolean;
   nutInstalled: boolean;
   screenshotInstalled: boolean;
   installInProgress: boolean;
   sessionCount: number;
-  agentToolsEnabled: boolean;
-  mcpRecommended: boolean;
   message: string;
 };
 
@@ -113,12 +110,6 @@ export default function ComputerUsePanel({ isVisible }: ComputerUsePanelProps) {
       setIsBusy(false);
     }
   }, [refresh]);
-
-  const createSession = () => runAction(async () => {
-    const response = await authenticatedFetch('/api/computer-use/sessions', { method: 'POST' });
-    const data = await readJson<{ data: { session: ComputerUseSession } }>(response);
-    setSelectedSessionId(data.data.session.id);
-  });
 
   const captureScreenshot = () => runAction(async () => {
     if (!selectedSession) return;
@@ -252,12 +243,12 @@ export default function ComputerUsePanel({ isVisible }: ComputerUsePanelProps) {
         <div className="max-w-md px-6 text-center">
           <MonitorCog className="mx-auto h-10 w-10 text-neutral-500" />
           <div className="mt-3 text-sm font-medium text-neutral-100">
-            {selectedSession?.message || 'Start a Computer Use session to capture your desktop.'}
+            {selectedSession?.message || 'No active Computer Use session.'}
           </div>
           <p className="mt-2 text-xs leading-relaxed text-neutral-400">
             {isCloud
-              ? 'Cloud Computer Use requires a linked local CloudCLI Desktop Agent.'
-              : 'Install the desktop control runtime from this panel or enable Computer Use from Settings.'}
+              ? 'Agents create sessions automatically. Keep the CloudCLI desktop app connected to approve control requests.'
+              : 'Agents create sessions automatically. Enable Computer Use and install the local runtime if needed.'}
           </p>
         </div>
       )}
@@ -274,7 +265,9 @@ export default function ComputerUsePanel({ isVisible }: ComputerUsePanelProps) {
             {status && <Badge variant="outline" className="text-[11px]">{status.runtime}</Badge>}
           </div>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Capture your desktop and let agents drive the mouse and keyboard — only while you grant control.
+            {isCloud
+              ? 'Monitor cloud agent desktop sessions and stop access when needed.'
+              : 'Monitor local desktop sessions and grant control only when an agent needs it.'}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -286,10 +279,6 @@ export default function ComputerUsePanel({ isVisible }: ComputerUsePanelProps) {
           >
             <RefreshCw className="h-4 w-4" />
             Refresh
-          </Button>
-          <Button size="sm" onClick={createSession} disabled={isBusy || !status?.available}>
-            <MonitorCog className="h-4 w-4" />
-            New Session
           </Button>
         </div>
       </div>
@@ -333,13 +322,20 @@ export default function ComputerUsePanel({ isVisible }: ComputerUsePanelProps) {
                 <ShieldCheck className="h-3.5 w-3.5" />
                 Safety
               </div>
-              <p className="mt-1.5">
-                Agents can act on a session only while you have granted control. Use
-                <span className="font-medium text-foreground"> Grant Control </span>
-                to allow agent actions, and
-                <span className="font-medium text-foreground"> Stop </span>
-                to revoke instantly.
-              </p>
+              {isCloud ? (
+                <p className="mt-1.5">
+                  Agents create sessions automatically through MCP. The CloudCLI desktop app asks for approval on this
+                  computer, and <span className="font-medium text-foreground">Stop</span> ends the session and clears access.
+                </p>
+              ) : (
+                <p className="mt-1.5">
+                  Agents create sessions automatically through MCP but cannot act until you grant control here. Use
+                  <span className="font-medium text-foreground"> Grant Control </span>
+                  to allow agent actions, and
+                  <span className="font-medium text-foreground"> Stop </span>
+                  to revoke instantly.
+                </p>
+              )}
             </div>
             {sessions.map((session) => (
               <button
@@ -373,7 +369,7 @@ export default function ComputerUsePanel({ isVisible }: ComputerUsePanelProps) {
             ))}
             {sessions.length === 0 && (
               <div className="rounded-lg border border-dashed border-border/70 px-3 py-8 text-center text-xs text-muted-foreground">
-                No Computer Use sessions yet.
+                Agents will create sessions automatically when they need desktop access.
               </div>
             )}
           </div>
@@ -385,22 +381,22 @@ export default function ComputerUsePanel({ isVisible }: ComputerUsePanelProps) {
               <Camera className="h-4 w-4" />
               Screenshot
             </Button>
-            {selectedSession?.agentAccessEnabled ? (
+            {!isCloud && selectedSession?.agentAccessEnabled ? (
               <Button variant="outline" size="sm" onClick={revokeControl} disabled={isBusy || !selectedSession}>
                 <X className="h-4 w-4" />
                 Revoke Control
               </Button>
-            ) : (
+            ) : !isCloud ? (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={grantControl}
-                disabled={isBusy || !selectedSession || selectedSession.status !== 'ready' || !status?.agentToolsEnabled}
+                disabled={isBusy || !selectedSession || selectedSession.status !== 'ready' || !status?.enabled}
               >
                 <Bot className="h-4 w-4" />
                 Grant Control
               </Button>
-            )}
+            ) : null}
             <Button variant="outline" size="sm" onClick={() => setIsFullscreen(true)} disabled={!selectedSession?.screenshotDataUrl}>
               <Expand className="h-4 w-4" />
               Full Screen
@@ -433,14 +429,16 @@ export default function ComputerUsePanel({ isVisible }: ComputerUsePanelProps) {
                 {selectedSession?.agentAccessEnabled && (
                   <span className="ml-auto inline-flex items-center gap-1 rounded border border-emerald-500/30 px-2 py-0.5 text-emerald-600 dark:text-emerald-300">
                     <Bot className="h-3.5 w-3.5" />
-                    Agent control active
+                    {isCloud ? 'Desktop-approved session' : 'Agent control active'}
                   </span>
                 )}
               </div>
               {renderSurface()}
             </div>
             <p className="mx-auto mt-2 max-w-6xl text-center text-xs text-muted-foreground">
-              Click the screenshot to click the real desktop. Focus the view and type to send keystrokes.
+              {selectedSession
+                ? 'Click the screenshot to click the real desktop. Focus the view and type to send keystrokes.'
+                : 'Computer Use sessions appear here after an agent requests desktop access.'}
             </p>
           </div>
         </main>

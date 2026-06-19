@@ -421,6 +421,50 @@ svg {
   gap: 12px;
 }
 
+.cc-permissions {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--b-subtle);
+  border-radius: 12px;
+  background: var(--s1);
+}
+
+.cc-note {
+  color: var(--tx2);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.cc-permission-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding-top: 10px;
+  border-top: 1px solid var(--b-subtle);
+}
+
+.cc-permission-title {
+  color: var(--tx);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cc-permission-detail {
+  margin-top: 2px;
+  color: var(--tx2);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.cc-permission-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .cc-kv {
   display: flex;
   align-items: center;

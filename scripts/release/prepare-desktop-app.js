@@ -85,7 +85,7 @@ function buildDesktopPackageJson(copiedOptionalDependencies) {
       artifactName: packageJson.build.artifactName,
       electronVersion: getElectronVersion(),
       directories: {
-        output: '../../release',
+        output: '../../release/desktop',
       },
       extraMetadata: {
         main: 'electron/main.js',
@@ -116,8 +116,7 @@ await copyRequired('public');
 // not the full local server. Local CloudCLI is downloaded on demand.
 await copyRequired('dist-server/server/computer-use-agent.js');
 await copyIfExists('dist-server/server/computer-use-agent.js.map');
-await copyRequired('dist-server/server/modules/computer-use/computer-executor.js');
-await copyIfExists('dist-server/server/modules/computer-use/computer-executor.js.map');
+await copyRequired('dist-server/server/modules/computer-use');
 
 const copiedRuntimeDependencies = [];
 if (await copyNodeModule('ws')) {

@@ -61,6 +61,10 @@ jobs:
 
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "release_name=$RELEASE_NAME" >> "$GITHUB_OUTPUT"
+          echo "server_bundle_tag=cloudcli-local-server-${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure release server bundle source
+        run: printf '{"releaseTag":"%s"}\n' "${{ steps.release.outputs.server_bundle_tag }}" > electron/server-bundle-config.json
 
       - name: Verify signing secrets are configured
         run: |
@@ -79,6 +83,7 @@ jobs:
       - name: Build signed and notarized macOS artifacts
         run: npm run desktop:dist:mac -- --publish never
         env:
+          CLOUDCLI_SEMANTICS_BUILD_REQUIRED: "1"
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -88,12 +93,32 @@ jobs:
       - name: Build local server bundle
         run: node scripts/release/build-server-bundle.js
 
+      - name: Verify local server runtime artifacts
+        run: |
+          test -n "$(find release/local-server -maxdepth 1 -name 'cloudcli-local-server-*.tar.gz' -print -quit)"
+          test -n "$(find release/local-server -maxdepth 1 -name 'cloudcli-local-server-*.tar.gz.sha256' -print -quit)"
+
+      - name: Publish local server runtime assets
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          tag_name: ${{ steps.release.outputs.server_bundle_tag }}
+          target_commitish: ${{ github.sha }}
+          name: CloudCLI Local Server Runtime (${{ steps.release.outputs.tag }})
+          body: |
+            Internal runtime assets for CloudCLI Desktop local mode.
+
+            Users should download CloudCLI Desktop from the main ${{ steps.release.outputs.tag }} release. The desktop app downloads these runtime bundles automatically when local mode is enabled.
+          prerelease: true
+          fail_on_unmatched_files: false
+          overwrite_files: true
+          files: |
+            release/local-server/*
+
       - name: Verify macOS artifacts
         run: |
-          test -n "$(find release -maxdepth 1 -name '*.dmg' -print -quit)"
-          test -n "$(find release -maxdepth 1 -name '*.zip' -print -quit)"
-          test -n "$(find release/server-bundles -maxdepth 1 -name 'cloudcli-server-*.tar.gz' -print -quit)"
-          shasum -a 256 release/*.{dmg,zip} release/server-bundles/* > release/SHASUMS256.txt
+          test -n "$(find release/desktop -maxdepth 1 -name '*.dmg' -print -quit)"
+          test -n "$(find release/desktop -maxdepth 1 -name '*.zip' -print -quit)"
+          shasum -a 256 release/desktop/*.{dmg,zip} > release/SHASUMS256.txt
           cat release/SHASUMS256.txt
 
       - name: Publish GitHub release assets
@@ -102,12 +127,15 @@ jobs:
           tag_name: ${{ steps.release.outputs.tag }}
           target_commitish: ${{ github.sha }}
           name: ${{ steps.release.outputs.release_name }}
+          body: |
+            Download the CloudCLI Desktop installer for your Mac.
+
+            The local server runtime used by local mode is installed automatically by the desktop app. You do not need to download any server bundle manually.
           prerelease: ${{ inputs.prerelease }}
           fail_on_unmatched_files: false
           files: |
-            release/*.dmg
-            release/*.zip
-            release/*.yml
-            release/*.blockmap
-            release/server-bundles/*
+            release/desktop/*.dmg
+            release/desktop/*.zip
+            release/desktop/*.yml
+            release/desktop/*.blockmap
             release/SHASUMS256.txt

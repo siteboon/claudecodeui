@@ -9,6 +9,13 @@ window.__MOCK_STATE__ = {
   localServerRunning: false,
   localStartupLogs: [],
   computerUse: { enabled: false, consentMode: 'ask', running: false, connectedCount: 0, targetCount: 0 },
+  computerUsePermissions: {
+    platform: 'darwin',
+    supported: true,
+    accessibility: 'not_granted',
+    screenRecording: 'not_determined',
+    message: 'macOS requires Accessibility and Screen Recording for Computer Use.',
+  },
   environments: [
     { id: 'env-api', name: 'api-gateway', subdomain: 'api-gateway', access_url: 'https://api-gateway.cloudcli.ai', status: 'running', region: 'fra1', agent: 'Claude Code' },
     { id: 'env-web', name: 'web-frontend', subdomain: 'web-frontend', access_url: 'https://web-frontend.cloudcli.ai', status: 'stopped', region: 'sfo1', agent: 'Codex' },
@@ -71,6 +78,16 @@ window.__MOCK_STATE__ = {
       if (typeof settings.enabled === 'boolean') mockState.computerUse.enabled = settings.enabled;
       if (settings.consentMode === 'auto' || settings.consentMode === 'ask') mockState.computerUse.consentMode = settings.consentMode;
       mockState.computerUse.running = mockState.computerUse.enabled;
+      return Promise.resolve(clone(mockState));
+    },
+    requestComputerUsePermission: function (permission) {
+      mockState.computerUsePermissions = mockState.computerUsePermissions || {};
+      if (permission === 'accessibility') mockState.computerUsePermissions.accessibility = 'granted';
+      if (permission === 'screen') mockState.computerUsePermissions.screenRecording = 'granted';
+      if (permission === 'all') {
+        mockState.computerUsePermissions.accessibility = 'granted';
+        mockState.computerUsePermissions.screenRecording = 'granted';
+      }
       return Promise.resolve(clone(mockState));
     },
     openEnvironment: function (id) {
@@ -333,6 +350,10 @@ window.__MOCK_STATE__ = {
             consentMode: current.consentMode === 'auto' ? 'auto' : 'ask',
           });
         });
+      case 'computer-permission':
+        return CC.run('Opening permission settings...', function () {
+          return bridge.requestComputerUsePermission(node.getAttribute('data-cc-computer-permission'));
+        });
       case 'settings-toggle':
         return CC.run('Opening desktop settings...', function () { return bridge.showDesktopSettings(); });
       case 'desktop-settings-toggle':
@@ -480,12 +501,47 @@ window.__MOCK_STATE__ = {
     );
   };
 
+  function permissionLabel(value) {
+    if (value === 'granted') return 'Granted';
+    if (value === 'denied' || value === 'restricted') return 'Needs attention';
+    if (value === 'not_applicable') return 'Not required';
+    return 'Not granted';
+  }
+
+  function permissionTone(value) {
+    if (value === 'granted' || value === 'not_applicable') return 'ok';
+    if (value === 'denied' || value === 'restricted') return 'warn';
+    return 'idle';
+  }
+
+  function renderComputerPermissionRow(key, label, detail, status) {
+    return '<div class="cc-permission-row">' +
+      '<div><div class="cc-permission-title">' + CC.esc(label) + '</div><div class="cc-permission-detail">' + CC.esc(detail) + '</div></div>' +
+      '<div class="cc-permission-actions"><span class="badge ' + permissionTone(status) + '">' + CC.esc(permissionLabel(status)) + '</span>' +
+      (status === 'granted' || status === 'not_applicable'
+        ? ''
+        : '<button class="btn sm" data-cc-action="computer-permission" data-cc-computer-permission="' + CC.esc(key) + '">Open settings</button>') +
+      '</div>' +
+      '</div>';
+  }
+
+  function renderComputerPermissions(state) {
+    var permissions = state.computerUsePermissions || {};
+    if (!permissions.supported) {
+      return '<div class="cc-note">' + CC.esc(permissions.message || 'No additional OS permission setup is required from CloudCLI on this platform.') + '</div>';
+    }
+    return '<div class="cc-note">' + CC.esc(permissions.message || 'Grant the required OS permissions before approving agent control.') + '</div>' +
+      renderComputerPermissionRow('accessibility', 'Accessibility', 'Allows CloudCLI to click, type, and use accessibility actions.', permissions.accessibility) +
+      renderComputerPermissionRow('screen', 'Screen Recording', 'Allows CloudCLI to capture screenshots for agent observation.', permissions.screenRecording);
+  }
+
   CC.buildComputerUseSection = function (state) {
     var computerUse = state.computerUse || {};
     var body =
       '<div class="cc-surface">' +
       '<label class="cc-toggle"><input type="checkbox" data-cc-computer-enabled="true"' + (computerUse.enabled ? ' checked' : '') + '><span><b>Enable Computer Use</b><br>Let CloudCLI use the computer. Agents cannot act until you approve a session.</span></label>';
     if (computerUse.enabled) {
+      body += '<div class="cc-permissions">' + renderComputerPermissions(state) + '</div>';
       body += '<div class="cc-choice-group">' +
         CC.renderRadioOption('computer-access-mode', 'ask', computerUse.consentMode !== 'auto', 'Ask before each session', 'Agents can request control, but you approve every session.') +
         CC.renderRadioOption('computer-access-mode', 'auto', computerUse.consentMode === 'auto', 'Unattended access', 'Trusted agents can use this computer without a local approval prompt.') +

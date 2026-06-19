@@ -18,14 +18,14 @@ import readline from 'node:readline';
 import { WebSocket } from 'ws';
 
 import {
-  executor,
-  captureScreenshot,
   getRuntimeReadiness,
-  type ExecutorTarget,
   type Point,
   type ClickButton,
   type ScrollDirection,
 } from './modules/computer-use/computer-executor.js';
+import { runRawComputerAction } from './modules/computer-use/actions/raw-action-dispatcher.js';
+import type { RawActionTarget, RawComputerAction } from './modules/computer-use/actions/raw-action-types.js';
+import { computerSemanticsService } from './modules/computer-use/computer-semantics.service.js';
 
 type ConsentMode = 'ask' | 'auto';
 
@@ -117,67 +117,74 @@ function asPoint(value: unknown): Point | undefined {
   return undefined;
 }
 
-async function snapshot(target: ExecutorTarget) {
-  const { dataUrl, size } = await captureScreenshot();
-  return { screenshotDataUrl: dataUrl, displaySize: size || target.displaySize };
-}
-
-async function runAction(type: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const readiness = getRuntimeReadiness();
-  if (!readiness.nutInstalled || !readiness.screenshotInstalled) {
-    throw new Error('Computer Use runtime is not installed on the desktop agent.');
-  }
-
-  const target: ExecutorTarget = {
-    displaySize: (params.displaySize as ExecutorTarget['displaySize']) ?? null,
-  };
+function rawActionFromRelay(type: string, params: Record<string, unknown>): RawComputerAction {
   const point = asPoint(params.point);
 
   switch (type) {
     case 'screenshot':
-      return snapshot(target);
-    case 'cursor_position': {
-      const position = await executor.cursorPosition(target);
-      return { ...(await snapshot(target)), position, cursor: position };
-    }
+      return { type: 'screenshot' };
+    case 'cursor_position':
+      return { type: 'cursor_position' };
     case 'mouse_move':
       if (!point) {
         throw new Error('mouse_move requires a valid point.');
       }
-      await executor.moveTo(target, point);
-      return { ...(await snapshot(target)), cursor: point };
+      return { type: 'mouse_move', point };
     case 'click':
-      await executor.click(target, (params.button as ClickButton) || 'left', point, params.double === true);
-      return { ...(await snapshot(target)), cursor: point ?? null };
+      return {
+        type: 'click',
+        button: (params.button as ClickButton) || 'left',
+        point,
+        double: params.double === true,
+      };
     case 'drag': {
       const from = asPoint(params.from);
       const to = asPoint(params.to);
       if (!from || !to) {
         throw new Error('drag requires valid from and to points.');
       }
-      await executor.drag(target, from, to, (params.button as ClickButton) || 'left');
-      return { ...(await snapshot(target)), cursor: to };
+      return { type: 'drag', from, to, button: (params.button as ClickButton) || 'left' };
     }
     case 'type':
-      await executor.type(String(params.text ?? ''));
-      return snapshot(target);
+      return { type: 'type', text: String(params.text ?? '') };
     case 'key':
-      await executor.pressChord(String(params.key ?? ''));
-      return snapshot(target);
+      return { type: 'key', key: String(params.key ?? '') };
     case 'scroll':
-      await executor.scroll(
-        target,
-        (params.direction as ScrollDirection) || 'down',
-        typeof params.amount === 'number' ? params.amount : 3,
+      return {
+        type: 'scroll',
+        direction: (params.direction as ScrollDirection) || 'down',
+        amount: typeof params.amount === 'number' ? params.amount : 3,
         point,
-      );
-      return { ...(await snapshot(target)), cursor: point ?? null };
+      };
     case 'wait':
-      await new Promise((resolve) => setTimeout(resolve, Math.max(0, Math.min(Number(params.ms) || 1000, 10_000))));
-      return snapshot(target);
+      return { type: 'wait', ms: typeof params.ms === 'number' ? params.ms : undefined };
     default:
       throw new Error(`Unsupported computer action: ${type}`);
   }
+}
+
+async function runAction(type: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
+  if (type === 'semantic_tool') {
+    const toolName = typeof params.toolName === 'string' ? params.toolName : '';
+    const args = params.arguments && typeof params.arguments === 'object'
+      ? params.arguments as Record<string, unknown>
+      : {};
+    const sessionId = typeof params.sessionId === 'string' ? params.sessionId : 'default';
+    if (!toolName) {
+      throw new Error('semantic_tool requires toolName.');
+    }
+    return await computerSemanticsService.callTool(toolName, { ...args, sessionId }) as Record<string, unknown>;
+  }
+
+  const readiness = getRuntimeReadiness();
+  if (!readiness.nutInstalled || !readiness.screenshotInstalled) {
+    throw new Error('Computer Use runtime is not installed on the desktop agent.');
+  }
+
+  const target: RawActionTarget = {
+    displaySize: (params.displaySize as RawActionTarget['displaySize']) ?? null,
+  };
+  return await runRawComputerAction(rawActionFromRelay(type, params), target) as Record<string, unknown>;
 }
 
 // --- Relay connection ------------------------------------------------------

@@ -59,7 +59,7 @@ export class ServerInstaller {
   }
 
   getBundleName() {
-    return `cloudcli-server-${this.version}-${this.platform}-${this.arch}.tar.gz`;
+    return `cloudcli-local-server-${this.version}-${this.platform}-${this.arch}.tar.gz`;
   }
 
   getBundleUrl() {

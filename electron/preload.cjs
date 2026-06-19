@@ -17,6 +17,7 @@ if (window.location.protocol === 'file:') {
     showComputerAccess: () => ipcRenderer.invoke('cloudcli-desktop:show-computer-access'),
     showLocalSettings: () => ipcRenderer.invoke('cloudcli-desktop:show-local-settings'),
     updateComputerUse: (settings) => ipcRenderer.invoke('cloudcli-desktop:update-computer-use', settings),
+    requestComputerUsePermission: (permission) => ipcRenderer.invoke('cloudcli-desktop:request-computer-use-permission', permission),
     showDesktopSettings: () => ipcRenderer.invoke('cloudcli-desktop:show-desktop-settings'),
     closeSettingsWindow: () => ipcRenderer.invoke('cloudcli-desktop:close-settings-window'),
     showActiveEnvironmentActionsMenu: () => ipcRenderer.invoke('cloudcli-desktop:show-active-environment-actions-menu'),

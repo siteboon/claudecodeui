@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, shell, systemPreferences } from 'electron';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -141,7 +141,62 @@ function getDesktopState() {
     activeTabId: tabs.activeTabId,
     environments: cloud.getEnvironments().map(serializeEnvironment),
     computerUse: computerAgent?.getState() || { enabled: false, consentMode: 'ask', running: false, connectedCount: 0, targetCount: 0 },
+    computerUsePermissions: getComputerUsePermissions(),
   };
+}
+
+function getComputerUsePermissions() {
+  if (process.platform !== 'darwin') {
+    return {
+      platform: process.platform,
+      supported: false,
+      accessibility: 'not_applicable',
+      screenRecording: 'not_applicable',
+      message: 'No OS permission onboarding is required from CloudCLI on this platform.',
+    };
+  }
+
+  let accessibility = 'unknown';
+  let screenRecording = 'unknown';
+  try {
+    accessibility = systemPreferences.isTrustedAccessibilityClient(false) ? 'granted' : 'not_granted';
+  } catch {
+    accessibility = 'unknown';
+  }
+  try {
+    screenRecording = systemPreferences.getMediaAccessStatus('screen');
+  } catch {
+    screenRecording = 'unknown';
+  }
+
+  return {
+    platform: 'darwin',
+    supported: true,
+    accessibility,
+    screenRecording,
+    message: accessibility === 'granted' && screenRecording === 'granted'
+      ? 'macOS permissions are granted.'
+      : 'macOS requires Accessibility and Screen Recording for Computer Use.',
+  };
+}
+
+async function requestComputerUsePermission(permission) {
+  if (process.platform !== 'darwin') {
+    return getDesktopState();
+  }
+
+  if (permission === 'accessibility') {
+    systemPreferences.isTrustedAccessibilityClient(true);
+  } else if (permission === 'screen') {
+    await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
+  } else if (permission === 'all') {
+    systemPreferences.isTrustedAccessibilityClient(true);
+    await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
+  } else {
+    throw new Error(`Unknown Computer Use permission: ${permission}`);
+  }
+
+  return getDesktopState();
 }
 
 async function openExternalUrl(url) {
@@ -678,6 +733,7 @@ function registerIpcHandlers() {
     return getDesktopState();
   });
   ipcMain.handle('cloudcli-desktop:update-computer-use', async (_event, settings) => updateComputerUse(settings));
+  ipcMain.handle('cloudcli-desktop:request-computer-use-permission', async (_event, permission) => requestComputerUsePermission(permission));
   ipcMain.handle('cloudcli-desktop:show-desktop-settings', async () => desktopWindow.showDesktopSettings());
   ipcMain.handle('cloudcli-desktop:show-local-settings', async () => desktopWindow.showLocalSettings());
   ipcMain.handle('cloudcli-desktop:close-settings-window', async () => {

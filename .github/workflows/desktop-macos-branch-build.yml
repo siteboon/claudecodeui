@@ -38,7 +38,7 @@ jobs:
         run: |
           SAFE_REF="$(printf '%s' "${GITHUB_REF_NAME}" | tr -c 'A-Za-z0-9._-' '-')"
           echo "name=CloudCLI-macOS-${SAFE_REF}-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
-          echo "server_bundle_tag=desktop-server-${SAFE_REF}" >> "$GITHUB_OUTPUT"
+          echo "server_bundle_tag=cloudcli-local-server-${SAFE_REF}" >> "$GITHUB_OUTPUT"
 
       - name: Configure branch server bundle source
         run: printf '{"releaseTag":"%s"}\n' "${{ steps.artifact.outputs.server_bundle_tag }}" > electron/server-bundle-config.json
@@ -60,6 +60,7 @@ jobs:
       - name: Build signed and notarized macOS artifacts
         run: npm run desktop:dist:mac -- --publish never
         env:
+          CLOUDCLI_SEMANTICS_BUILD_REQUIRED: "1"
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -69,22 +70,31 @@ jobs:
       - name: Build branch server bundle
         run: node scripts/release/build-server-bundle.js
 
+      - name: Verify branch server runtime artifacts
+        run: |
+          test -n "$(find release/local-server -maxdepth 1 -name 'cloudcli-local-server-*.tar.gz' -print -quit)"
+          test -n "$(find release/local-server -maxdepth 1 -name 'cloudcli-local-server-*.tar.gz.sha256' -print -quit)"
+
       - name: Publish branch server bundle
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ steps.artifact.outputs.server_bundle_tag }}
-          name: CloudCLI Desktop Server Bundle (${{ github.ref_name }})
+          name: CloudCLI Internal Local Runtime (${{ github.ref_name }})
+          body: |
+            Internal runtime assets for CloudCLI Desktop branch builds.
+
+            Users should download the desktop app from the workflow artifact. The desktop app downloads these runtime bundles automatically when local mode is enabled.
           prerelease: true
           fail_on_unmatched_files: false
           overwrite_files: true
           files: |
-            release/server-bundles/*
+            release/local-server/*
 
       - name: Verify macOS artifacts
         run: |
-          test -n "$(find release -maxdepth 1 -name '*.dmg' -print -quit)"
-          test -n "$(find release -maxdepth 1 -name '*.zip' -print -quit)"
-          shasum -a 256 release/*.{dmg,zip} > release/SHASUMS256.txt
+          test -n "$(find release/desktop -maxdepth 1 -name '*.dmg' -print -quit)"
+          test -n "$(find release/desktop -maxdepth 1 -name '*.zip' -print -quit)"
+          shasum -a 256 release/desktop/*.{dmg,zip} > release/SHASUMS256.txt
           cat release/SHASUMS256.txt
 
       - name: Upload branch build artifacts
@@ -92,10 +102,10 @@ jobs:
         with:
           name: ${{ steps.artifact.outputs.name }}
           path: |
-            release/*.dmg
-            release/*.zip
-            release/*.yml
-            release/*.blockmap
+            release/desktop/*.dmg
+            release/desktop/*.zip
+            release/desktop/*.yml
+            release/desktop/*.blockmap
             release/SHASUMS256.txt
           if-no-files-found: error
           retention-days: 14

@@ -121,9 +121,25 @@ function MainContent({
 
   const loadComputerUseSettings = useCallback(async () => {
     try {
-      const response = await authenticatedFetch('/api/computer-use/settings');
-      const data = await response.json();
-      setComputerUseEnabled(Boolean(response.ok && data?.success !== false && data?.data?.settings?.enabled));
+      const [settingsResponse, statusResponse] = await Promise.all([
+        authenticatedFetch('/api/computer-use/settings'),
+        authenticatedFetch('/api/computer-use/status'),
+      ]);
+      const settingsData = await settingsResponse.json();
+      const statusData = await statusResponse.json();
+      const runtime = statusData?.data?.runtime;
+      const settingsEnabled = Boolean(
+        settingsResponse.ok &&
+        settingsData?.success !== false &&
+        settingsData?.data?.settings?.enabled
+      );
+      const cloudEnabled = Boolean(
+        statusResponse.ok &&
+        statusData?.success !== false &&
+        runtime === 'cloud' &&
+        statusData?.data?.enabled
+      );
+      setComputerUseEnabled(runtime === 'cloud' ? cloudEnabled : settingsEnabled);
     } catch {
       setComputerUseEnabled(false);
     }

@@ -1,6 +1,7 @@
 import express from 'express';
 
 import { computerUseService } from '@/modules/computer-use/computer-use.service.js';
+import { semanticOperationForMcpTool } from '@/modules/computer-use/semantics/semantic-tool-dispatcher.js';
 
 const router = express.Router();
 
@@ -36,6 +37,22 @@ function point(input: Record<string, unknown>): { x: number; y: number } | undef
     : undefined;
 }
 
+function requireNumber(input: Record<string, unknown>, name: string): number {
+  const value = input[name];
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`${name} is required and must be a finite number.`);
+  }
+  return value;
+}
+
+function requirePoint(input: Record<string, unknown>): { x: number; y: number } {
+  return { x: requireNumber(input, 'x'), y: requireNumber(input, 'y') };
+}
+
+function requireNamedPoint(input: Record<string, unknown>, xName: string, yName: string): { x: number; y: number } {
+  return { x: requireNumber(input, xName), y: requireNumber(input, yName) };
+}
+
 router.use((req, res, next) => {
   const expected = computerUseService.getMcpToken();
   const token = readBearerToken(req.headers.authorization) || String(req.headers['x-computer-use-mcp-token'] || '');
@@ -49,17 +66,18 @@ router.use((req, res, next) => {
 router.post('/tools/:toolName', async (req, res) => {
   try {
     const input = (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown>;
-    const sessionId = typeof input.sessionId === 'string' ? input.sessionId : '';
+    const sessionId = typeof input.sessionId === 'string' ? input.sessionId : undefined;
     const toolName = req.params.toolName;
+    const semanticOperation = semanticOperationForMcpTool(toolName);
     let result: unknown;
 
+    if (semanticOperation) {
+      result = await computerUseService.callSemanticTool(semanticOperation, input);
+      res.json({ success: true, data: result });
+      return;
+    }
+
     switch (toolName) {
-      case 'computer_create_session':
-        result = await computerUseService.createAgentSession();
-        break;
-      case 'computer_list_sessions':
-        result = await computerUseService.listAgentSessions();
-        break;
       case 'computer_screenshot':
         result = await computerUseService.agentScreenshot(sessionId);
         break;
@@ -67,28 +85,23 @@ router.post('/tools/:toolName', async (req, res) => {
         result = await computerUseService.agentCursorPosition(sessionId);
         break;
       case 'computer_mouse_move':
-        result = await computerUseService.agentMouseMove(sessionId, point(input) || { x: 0, y: 0 });
+        result = await computerUseService.agentMouseMove(sessionId, requirePoint(input));
         break;
-      case 'computer_left_click':
-        result = await computerUseService.agentClick(sessionId, 'left', point(input));
+      case 'computer_click':
+        result = await computerUseService.agentUnifiedClick(sessionId, {
+          button: toButton(input.mouseButton ?? input.mouse_button ?? input.button),
+          point: point(input),
+          clickCount: typeof input.clickCount === 'number'
+            ? input.clickCount
+            : typeof input.click_count === 'number'
+              ? input.click_count
+              : 1,
+        });
         break;
-      case 'computer_right_click':
-        result = await computerUseService.agentClick(sessionId, 'right', point(input));
-        break;
-      case 'computer_middle_click':
-        result = await computerUseService.agentClick(sessionId, 'middle', point(input));
-        break;
-      case 'computer_double_click':
-        result = await computerUseService.agentClick(sessionId, toButton(input.button), point(input), true);
-        break;
-      case 'computer_left_click_drag': {
-        const from = typeof input.startX === 'number' && typeof input.startY === 'number'
-          ? { x: input.startX, y: input.startY }
-          : { x: 0, y: 0 };
-        const to = typeof input.endX === 'number' && typeof input.endY === 'number'
-          ? { x: input.endX, y: input.endY }
-          : { x: 0, y: 0 };
-        result = await computerUseService.agentDrag(sessionId, from, to, 'left');
+      case 'computer_drag': {
+        const from = requireNamedPoint(input, 'startX', 'startY');
+        const to = requireNamedPoint(input, 'endX', 'endY');
+        result = await computerUseService.agentDrag(sessionId, from, to, toButton(input.mouseButton ?? input.mouse_button ?? input.button));
         break;
       }
       case 'computer_type':

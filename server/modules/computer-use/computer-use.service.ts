@@ -7,14 +7,16 @@ import { appConfigDb } from '@/modules/database/repositories/app-config.js';
 import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
 import { getModuleDir } from '@/utils/runtime-paths.js';
 import {
-  executor,
-  captureScreenshot as captureScreenshotRuntime,
   getRuntimeReadiness as getExecutorReadiness,
   type Point,
   type ClickButton,
   type ScrollDirection,
 } from '@/modules/computer-use/computer-executor.js';
+import { runRawComputerAction } from '@/modules/computer-use/actions/raw-action-dispatcher.js';
+import type { RawComputerAction } from '@/modules/computer-use/actions/raw-action-types.js';
 import { desktopAgentRelay } from '@/modules/computer-use/desktop-agent-relay.service.js';
+import { computerSemanticsService } from '@/modules/computer-use/computer-semantics.service.js';
+import { semanticOperationNames } from '@/modules/computer-use/semantics/semantic-tool-dispatcher.js';
 
 const __dirname = getModuleDir(import.meta.url);
 const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
@@ -22,9 +24,6 @@ const MAX_SESSIONS_PER_OWNER = Number.parseInt(process.env.CLOUDCLI_COMPUTER_USE
 const SESSION_TTL_MS = Number.parseInt(process.env.CLOUDCLI_COMPUTER_USE_SESSION_TTL_MS || String(30 * 60 * 1000), 10);
 const COMPUTER_USE_SETTINGS_KEY = 'computer_use_settings';
 const COMPUTER_USE_MCP_TOKEN_KEY = 'computer_use_mcp_token';
-const DEFAULT_AGENT_WAIT_MS = 1000;
-const MAX_AGENT_WAIT_MS = 10_000;
-
 type ComputerUseRuntime = 'cloud' | 'local';
 type ComputerUseSessionStatus = 'ready' | 'stopped' | 'unavailable';
 
@@ -61,7 +60,6 @@ type ComputerUseOwner = {
 
 type ComputerUseSettings = {
   enabled: boolean;
-  agentToolsEnabled: boolean;
 };
 
 type RuntimeReadiness = {
@@ -79,7 +77,6 @@ let lastInstallMessage: string | null = null;
 
 const DEFAULT_SETTINGS: ComputerUseSettings = {
   enabled: false,
-  agentToolsEnabled: false,
 };
 const AGENT_OWNER_ID = 'agent';
 const MCP_SERVER_NAME = 'cloudcli-computer-use';
@@ -99,7 +96,6 @@ function readSettings(): ComputerUseSettings {
     const parsed = JSON.parse(raw) as Partial<ComputerUseSettings>;
     return {
       enabled: parsed.enabled === true,
-      agentToolsEnabled: parsed.agentToolsEnabled === true,
     };
   } catch (error: any) {
     console.warn('[Computer Use] Failed to read settings:', error?.message || error);
@@ -110,7 +106,6 @@ function readSettings(): ComputerUseSettings {
 function writeSettings(settings: ComputerUseSettings): ComputerUseSettings {
   const normalized = {
     enabled: settings.enabled === true,
-    agentToolsEnabled: settings.agentToolsEnabled === true,
   };
 
   appConfigDb.set(COMPUTER_USE_SETTINGS_KEY, JSON.stringify(normalized));
@@ -274,6 +269,20 @@ function canAccessSession(ownerId: string, session: ComputerUseSession): boolean
   return session.ownerId === ownerId || session.ownerId === AGENT_OWNER_ID;
 }
 
+function normalizeSessionId(sessionId?: string | null): string | null {
+  if (typeof sessionId !== 'string') {
+    return null;
+  }
+  const trimmed = sessionId.trim();
+  return trimmed ? trimmed : null;
+}
+
+function findActiveAgentSession(): ComputerUseSession | null {
+  return ownerSessions(AGENT_OWNER_ID)
+    .filter((session) => session.status === 'ready')
+    .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0] || null;
+}
+
 async function expireStaleSessions(now = Date.now()): Promise<void> {
   for (const session of sessions.values()) {
     if (session.status !== 'ready') {
@@ -301,17 +310,6 @@ async function expireStaleSessions(now = Date.now()): Promise<void> {
 // `desktopAgentRelay` and applies the returned screenshot. The local server
 // itself never touches the OS in cloud mode.
 
-/** One desktop interaction expressed in screenshot-pixel coordinate space. */
-export type ComputerAction =
-  | { type: 'screenshot' }
-  | { type: 'mouse_move'; point: Point }
-  | { type: 'click'; button: ClickButton; point?: Point; double?: boolean }
-  | { type: 'drag'; from: Point; to: Point; button?: ClickButton }
-  | { type: 'type'; text: string }
-  | { type: 'key'; key: string }
-  | { type: 'scroll'; direction: ScrollDirection; amount?: number; point?: Point }
-  | { type: 'wait'; ms?: number };
-
 /** Shape the desktop agent returns for any relayed action. */
 type RelayResult = {
   screenshotDataUrl?: string | null;
@@ -333,14 +331,9 @@ function applyRelayResult(session: ComputerUseSession, result: RelayResult): voi
   session.updatedAt = new Date().toISOString();
 }
 
-function normalizeAgentWaitMs(ms: number | undefined): number {
-  if (ms === undefined) {
-    return DEFAULT_AGENT_WAIT_MS;
-  }
-  if (!Number.isFinite(ms)) {
-    throw new Error('Computer Use wait duration must be a finite number.');
-  }
-  return Math.trunc(Math.max(0, Math.min(ms, MAX_AGENT_WAIT_MS)));
+function stripSessionArgs(args: Record<string, unknown>): Record<string, unknown> {
+  const { sessionId: _sessionId, ...toolArgs } = args;
+  return toolArgs;
 }
 
 async function refreshScreenshot(session: ComputerUseSession): Promise<void> {
@@ -349,16 +342,11 @@ async function refreshScreenshot(session: ComputerUseSession): Promise<void> {
     applyRelayResult(session, result);
     return;
   }
-  const { dataUrl, size } = await captureScreenshotRuntime();
-  session.screenshotDataUrl = dataUrl;
-  if (size) {
-    session.displaySize = size;
-  }
-  session.updatedAt = new Date().toISOString();
+  applyRelayResult(session, await runRawComputerAction({ type: 'screenshot' }, session));
 }
 
 /** Runs one action and refreshes the session screenshot afterwards. */
-async function performAction(session: ComputerUseSession, action: ComputerAction): Promise<void> {
+async function performAction(session: ComputerUseSession, action: RawComputerAction): Promise<void> {
   if (getRuntime() === 'cloud') {
     const result = (await desktopAgentRelay.relay(action.type, {
       ...action,
@@ -369,32 +357,7 @@ async function performAction(session: ComputerUseSession, action: ComputerAction
     return;
   }
 
-  switch (action.type) {
-    case 'screenshot':
-      break;
-    case 'mouse_move':
-      await executor.moveTo(session, action.point);
-      break;
-    case 'click':
-      await executor.click(session, action.button, action.point, action.double === true);
-      break;
-    case 'drag':
-      await executor.drag(session, action.from, action.to, action.button ?? 'left');
-      break;
-    case 'type':
-      await executor.type(action.text);
-      break;
-    case 'key':
-      await executor.pressChord(action.key);
-      break;
-    case 'scroll':
-      await executor.scroll(session, action.direction, action.amount ?? 3, action.point);
-      break;
-    case 'wait':
-      await new Promise((resolve) => setTimeout(resolve, normalizeAgentWaitMs(action.ms)));
-      break;
-  }
-  await refreshScreenshot(session);
+  applyRelayResult(session, await runRawComputerAction(action, session));
 }
 
 /** Reads the current cursor position in screenshot-pixel space. */
@@ -410,7 +373,9 @@ async function getCursorPosition(session: ComputerUseSession): Promise<Point> {
     }
     return session.cursor ? { x: session.cursor.x, y: session.cursor.y } : { x: 0, y: 0 };
   }
-  return executor.cursorPosition(session);
+  const result = await runRawComputerAction({ type: 'cursor_position' }, session);
+  applyRelayResult(session, result);
+  return result.position || session.cursor || { x: 0, y: 0 };
 }
 
 function assertReady(session: ComputerUseSession): void {
@@ -421,14 +386,14 @@ function assertReady(session: ComputerUseSession): void {
 
 /**
  * Whether agent tools may operate right now. Cloud mode depends purely on a
- * connected desktop agent; local mode depends on the two opt-in settings.
+ * connected desktop agent; local mode depends on the single feature setting.
  */
 function agentToolsAvailable(): boolean {
   if (getRuntime() === 'cloud') {
     return desktopAgentRelay.isConnected();
   }
   const settings = readSettings();
-  return settings.enabled && settings.agentToolsEnabled;
+  return settings.enabled;
 }
 
 function assertAgentToolsAvailable(): void {
@@ -450,21 +415,10 @@ export const computerUseService = {
   async updateSettings(settings: Partial<ComputerUseSettings>) {
     const current = readSettings();
     const enabled = typeof settings.enabled === 'boolean' ? settings.enabled : current.enabled;
-    const nextSettings = {
-      ...current,
-      enabled,
-      agentToolsEnabled: typeof settings.agentToolsEnabled === 'boolean'
-        ? settings.agentToolsEnabled
-        : enabled,
-    };
-    if (!nextSettings.enabled) {
-      nextSettings.agentToolsEnabled = false;
-    }
-
-    const next = writeSettings(nextSettings);
-    if (next.agentToolsEnabled) {
+    const next = writeSettings({ enabled });
+    if (next.enabled) {
       await this.registerAgentMcp();
-    } else if (current.agentToolsEnabled) {
+    } else if (current.enabled) {
       await this.unregisterAgentMcp();
     }
     return next;
@@ -487,14 +441,11 @@ export const computerUseService = {
       enabled: isCloud ? true : settings.enabled,
       runtime: getRuntime(),
       available,
-      requiresDesktopBridge: isCloud,
       desktopAgentConnected,
       nutInstalled: readiness.nutInstalled,
       screenshotInstalled: readiness.screenshotInstalled,
       installInProgress: readiness.installInProgress,
       sessionCount: sessions.size,
-      agentToolsEnabled: isCloud ? desktopAgentConnected : settings.agentToolsEnabled,
-      mcpRecommended: !settings.agentToolsEnabled,
       message: available ? 'Computer Use runtime is available.' : getSetupMessage(settings, readiness),
     };
   },
@@ -704,18 +655,6 @@ export const computerUseService = {
     return publicSession(session);
   },
 
-  async userType(owner: ComputerUseOwner, sessionId: string, text: string) {
-    const ownerId = getOwnerId(owner);
-    const session = sessions.get(sessionId);
-    if (!session || !canAccessSession(ownerId, session)) {
-      throw new Error('Computer Use session not found.');
-    }
-    assertReady(session);
-    await performAction(session, { type: 'type', text });
-    session.lastAction = 'type';
-    return publicSession(session);
-  },
-
   async userPressKey(owner: ComputerUseOwner, sessionId: string, key: string) {
     const ownerId = getOwnerId(owner);
     const session = sessions.get(sessionId);
@@ -730,46 +669,52 @@ export const computerUseService = {
 
   // --- Agent-initiated actions (via MCP) ------------------------------------
 
-  async createAgentSession() {
-    assertAgentToolsAvailable();
-    return this.createSession({ id: AGENT_OWNER_ID }, { createdBy: 'agent' });
-  },
-
-  async listAgentSessions() {
-    if (!agentToolsAvailable()) {
-      return [];
-    }
-    await expireStaleSessions();
-    return [...sessions.values()].map(publicSession);
-  },
-
   /**
    * Resolves a session the agent is allowed to act on. In local mode this
    * enforces the in-process per-session consent flag. In cloud mode the linked
    * desktop agent is the consent authority (it prompts the user per its own
    * consent mode), so this only requires the relay to be connected.
    */
-  async getConsentedSession(sessionId: string): Promise<ComputerUseSession> {
+  async getOrCreateAgentSession(): Promise<ComputerUseSession> {
     assertAgentToolsAvailable();
-    const session = sessions.get(sessionId);
+    await expireStaleSessions();
+    const existing = findActiveAgentSession();
+    if (existing) {
+      return existing;
+    }
+
+    const created = await this.createSession({ id: AGENT_OWNER_ID }, { createdBy: 'agent' });
+    const session = sessions.get(created.id);
+    if (!session) {
+      throw new Error('Computer Use session could not be created.');
+    }
+    return session;
+  },
+
+  async getConsentedSession(sessionId?: string): Promise<ComputerUseSession> {
+    assertAgentToolsAvailable();
+    const normalizedSessionId = normalizeSessionId(sessionId);
+    const session = normalizedSessionId
+      ? sessions.get(normalizedSessionId)
+      : await this.getOrCreateAgentSession();
     if (!session) {
       throw new Error('Computer Use session not found.');
     }
     if (getRuntime() !== 'cloud' && !session.agentAccessEnabled) {
-      throw new Error('Computer Use session is awaiting user consent. Ask the user to grant control in the Computer panel.');
+      throw new Error(`Computer Use session ${session.id} is awaiting user consent. Ask the user to grant control in the Computer panel.`);
     }
     assertReady(session);
     return session;
   },
 
-  async agentScreenshot(sessionId: string) {
+  async agentScreenshot(sessionId?: string) {
     const session = await this.getConsentedSession(sessionId);
     await refreshScreenshot(session);
     session.lastAction = 'screenshot';
     return publicSession(session);
   },
 
-  async agentCursorPosition(sessionId: string) {
+  async agentCursorPosition(sessionId?: string) {
     const session = await this.getConsentedSession(sessionId);
     const point = await getCursorPosition(session);
     session.cursor = { ...point, actor: 'agent' };
@@ -777,7 +722,7 @@ export const computerUseService = {
     return { session: publicSession(session), position: point };
   },
 
-  async agentMouseMove(sessionId: string, point: Point) {
+  async agentMouseMove(sessionId: string | undefined, point: Point) {
     const session = await this.getConsentedSession(sessionId);
     await performAction(session, { type: 'mouse_move', point });
     session.cursor = { ...point, actor: 'agent' };
@@ -785,39 +730,43 @@ export const computerUseService = {
     return publicSession(session);
   },
 
-  async agentClick(sessionId: string, button: ClickButton, point?: Point, doubleClick = false) {
+  async agentUnifiedClick(sessionId: string | undefined, input: { button?: ClickButton; point?: Point; clickCount?: number }) {
     const session = await this.getConsentedSession(sessionId);
-    await performAction(session, { type: 'click', button, point, double: doubleClick });
-    if (point) {
-      session.cursor = { ...point, actor: 'agent' };
+    const button = input.button || 'left';
+    const clickCount = Math.max(1, Math.min(Math.trunc(input.clickCount || 1), 5));
+    for (let index = 0; index < clickCount; index += 1) {
+      await performAction(session, { type: 'click', button, point: input.point, double: false });
     }
-    session.lastAction = doubleClick ? 'double_click' : `${button}_click`;
+    if (input.point) {
+      session.cursor = { ...input.point, actor: 'agent' };
+    }
+    session.lastAction = clickCount > 1 ? `${button}_click:${clickCount}` : `${button}_click`;
     return publicSession(session);
   },
 
-  async agentDrag(sessionId: string, from: Point, to: Point, button: ClickButton = 'left') {
+  async agentDrag(sessionId: string | undefined, from: Point, to: Point, button: ClickButton = 'left') {
     const session = await this.getConsentedSession(sessionId);
     await performAction(session, { type: 'drag', from, to, button });
     session.cursor = { ...to, actor: 'agent' };
-    session.lastAction = 'left_click_drag';
+    session.lastAction = `${button}_drag`;
     return publicSession(session);
   },
 
-  async agentType(sessionId: string, text: string) {
+  async agentType(sessionId: string | undefined, text: string) {
     const session = await this.getConsentedSession(sessionId);
     await performAction(session, { type: 'type', text });
     session.lastAction = 'type';
     return publicSession(session);
   },
 
-  async agentKey(sessionId: string, key: string) {
+  async agentKey(sessionId: string | undefined, key: string) {
     const session = await this.getConsentedSession(sessionId);
     await performAction(session, { type: 'key', key });
     session.lastAction = `key:${key}`;
     return publicSession(session);
   },
 
-  async agentScroll(sessionId: string, input: { direction: ScrollDirection; amount?: number; x?: number; y?: number }) {
+  async agentScroll(sessionId: string | undefined, input: { direction: ScrollDirection; amount?: number; x?: number; y?: number }) {
     const session = await this.getConsentedSession(sessionId);
     const point = typeof input.x === 'number' && typeof input.y === 'number' ? { x: input.x, y: input.y } : undefined;
     await performAction(session, { type: 'scroll', direction: input.direction, amount: input.amount, point });
@@ -828,16 +777,48 @@ export const computerUseService = {
     return publicSession(session);
   },
 
-  async agentWait(sessionId: string, timeoutMs?: number) {
+  async agentWait(sessionId?: string, timeoutMs?: number) {
     const session = await this.getConsentedSession(sessionId);
     await performAction(session, { type: 'wait', ms: timeoutMs });
     session.lastAction = 'wait';
     return publicSession(session);
   },
 
-  async agentStopSession(sessionId: string) {
+  async agentStopSession(sessionId?: string) {
     assertAgentToolsAvailable();
-    return this.stopSession({ id: AGENT_OWNER_ID }, sessionId);
+    const normalizedSessionId = normalizeSessionId(sessionId);
+    if (normalizedSessionId) {
+      return this.stopSession({ id: AGENT_OWNER_ID }, normalizedSessionId);
+    }
+
+    await expireStaleSessions();
+    const existing = findActiveAgentSession();
+    if (!existing) {
+      return { stopped: false };
+    }
+    return this.stopSession({ id: AGENT_OWNER_ID }, existing.id);
+  },
+
+  async callSemanticTool(toolName: string, args: Record<string, unknown>) {
+    if (!semanticOperationNames.has(toolName)) {
+      throw new Error(`Unsupported semantic Computer Use tool: ${toolName}`);
+    }
+
+    const sessionId = typeof args.sessionId === 'string' ? args.sessionId : undefined;
+    const session = await this.getConsentedSession(normalizeSessionId(sessionId) ?? undefined);
+    const toolArgs = { ...stripSessionArgs(args), sessionId: session.id };
+    const semanticResult = getRuntime() === 'cloud'
+      ? await desktopAgentRelay.relay('semantic_tool', {
+        sessionId: session.id,
+        displaySize: session.displaySize,
+        toolName,
+        arguments: toolArgs,
+      })
+      : await computerSemanticsService.callTool(toolName, toolArgs);
+
+    applyRelayResult(session, semanticResult as RelayResult);
+    session.lastAction = `semantic:${toolName}`;
+    return { session: publicSession(session), result: semanticResult };
   },
 
   /**

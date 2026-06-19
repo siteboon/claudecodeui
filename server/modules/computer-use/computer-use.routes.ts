@@ -56,43 +56,34 @@ router.get('/status', async (_req, res) => {
   }
 });
 
-router.get('/settings', async (_req, res) => {
+router.get('/settings', async (req: AuthenticatedRequest, res) => {
   try {
+    requireUser(req);
     res.json({ success: true, data: { settings: await computerUseService.getSettings() } });
   } catch (error) {
-    res.status(500).json({
+    res.status(getErrorStatusCode(error, 500)).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to load Computer Use settings.',
     });
   }
 });
 
-router.put('/settings', async (req, res) => {
+router.put('/settings', async (req: AuthenticatedRequest, res) => {
   try {
+    requireUser(req);
     const settings = await computerUseService.updateSettings(req.body || {});
     res.json({ success: true, data: { settings } });
   } catch (error) {
-    res.status(400).json({
+    res.status(getErrorStatusCode(error, 400)).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to save Computer Use settings.',
     });
   }
 });
 
-router.post('/agent-tools/register', async (_req, res) => {
+router.post('/runtime/install', async (req: AuthenticatedRequest, res) => {
   try {
-    const result = await computerUseService.registerAgentMcp();
-    res.status(201).json({ success: true, data: result });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to register Computer Use MCP.',
-    });
-  }
-});
-
-router.post('/runtime/install', async (_req, res) => {
-  try {
+    requireUser(req);
     const result = await computerUseService.installRuntime();
     res.status(result.success ? 200 : 500).json({
       success: result.success,
@@ -100,7 +91,7 @@ router.post('/runtime/install', async (_req, res) => {
       error: result.success ? undefined : result.message,
     });
   } catch (error) {
-    res.status(500).json({
+    res.status(getErrorStatusCode(error, 500)).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to install Computer Use runtime.',
     });
@@ -114,18 +105,6 @@ router.get('/sessions', async (req: AuthenticatedRequest, res) => {
     res.status(getErrorStatusCode(error, 500)).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to list Computer Use sessions.',
-    });
-  }
-});
-
-router.post('/sessions', async (req: AuthenticatedRequest, res) => {
-  try {
-    const session = await computerUseService.createSession(requireUser(req));
-    res.status(session.status === 'unavailable' ? 202 : 201).json({ success: true, data: { session } });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to create Computer Use session.',
     });
   }
 });
@@ -165,18 +144,6 @@ router.post('/sessions/:sessionId/click', async (req: AuthenticatedRequest, res)
     res.status(400).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to click.',
-    });
-  }
-});
-
-router.post('/sessions/:sessionId/type', async (req: AuthenticatedRequest, res) => {
-  try {
-    const session = await computerUseService.userType(requireUser(req), readParam(req.params.sessionId), String(req.body?.text || ''));
-    res.json({ success: true, data: { session } });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to type text.',
     });
   }
 });
