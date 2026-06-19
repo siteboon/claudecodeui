@@ -1,6 +1,7 @@
 import express from 'express';
 
 import { computerUseService } from '@/modules/computer-use/computer-use.service.js';
+import { AppError } from '@/shared/utils.js';
 
 const router = express.Router();
 
@@ -12,10 +13,28 @@ type AuthenticatedRequest = express.Request & {
 
 function requireUser(req: AuthenticatedRequest): { id: string | number } {
   const userId = req.user?.id;
-  if (userId === undefined || userId === null) {
-    throw new Error('Authenticated user is required.');
+  if (userId === undefined || userId === null || String(userId).trim() === '') {
+    throw new AppError('Authenticated user is required.', {
+      code: 'AUTHENTICATED_USER_REQUIRED',
+      statusCode: 401,
+    });
   }
   return { id: userId };
+}
+
+function getErrorStatusCode(error: unknown, fallbackStatusCode: number): number {
+  if (error instanceof AppError) {
+    return error.statusCode;
+  }
+
+  if (error && typeof error === 'object') {
+    const statusCode = 'statusCode' in error ? error.statusCode : 'status' in error ? error.status : undefined;
+    if (typeof statusCode === 'number' && Number.isInteger(statusCode) && statusCode >= 400 && statusCode <= 599) {
+      return statusCode;
+    }
+  }
+
+  return fallbackStatusCode;
 }
 
 function readParam(value: string | string[] | undefined): string {
@@ -92,7 +111,7 @@ router.get('/sessions', async (req: AuthenticatedRequest, res) => {
   try {
     res.json({ success: true, data: { sessions: await computerUseService.listSessions(requireUser(req)) } });
   } catch (error) {
-    res.status(401).json({
+    res.status(getErrorStatusCode(error, 500)).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to list Computer Use sessions.',
     });

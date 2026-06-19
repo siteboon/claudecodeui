@@ -17,7 +17,11 @@ function encryptSecret(secret) {
 function decryptSecret(record) {
   if (!record?.value) return null;
   if (!record.encrypted) return record.value;
-  return safeStorage.decryptString(Buffer.from(record.value, 'base64'));
+  try {
+    return safeStorage.decryptString(Buffer.from(record.value, 'base64'));
+  } catch {
+    return null;
+  }
 }
 
 export class CloudController {
