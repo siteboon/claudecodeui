@@ -110,8 +110,17 @@ const formatFileSize = (size: number): string => {
 };
 
 const getBrowserRelativePath = (file: File): string => {
-  const fileWithRelativePath = file as File & { webkitRelativePath?: string };
-  return (fileWithRelativePath.webkitRelativePath || file.name).replace(/\\/g, '/');
+  const fileWithRelativePath = file as File & {
+    path?: string;
+    webkitRelativePath?: string;
+  };
+  return (
+    fileWithRelativePath.webkitRelativePath
+    || fileWithRelativePath.path
+    || file.name
+  )
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '');
 };
 
 const getParentPath = (filePath: string): string => {
@@ -242,10 +251,35 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
 
   const groupedSkills = useMemo(() => groupSkillsByScope(filteredSkills), [filteredSkills]);
 
+  const queueSkillFolders = useCallback((selectedFiles: File[]) => {
+    const queuedFolders = buildQueuedSkillFolders(selectedFiles);
+    setQueuedFiles((previous) => {
+      const nextMap = new Map(previous.map((file) => [file.id, file]));
+      queuedFolders.forEach((folder) => nextMap.set(folder.id, folder));
+      return [...nextMap.values()].slice(0, 20);
+    });
+  }, []);
+
   const handleDrop = useCallback((files: File[]) => {
+    const includesDirectory = files.some((file) => getBrowserRelativePath(file).includes('/'));
+    if (includesDirectory) {
+      try {
+        queueSkillFolders(files);
+        setSubmitError(null);
+      } catch (error) {
+        setSubmitError(error instanceof Error ? error.message : 'Failed to read skill folder');
+      }
+      return;
+    }
+
     const acceptedFiles = files
       .filter((file) => file.name.toLowerCase().endsWith('.md'))
       .slice(0, 20);
+
+    if (acceptedFiles.length === 0) {
+      setSubmitError('Drop one or more markdown files or a folder containing SKILL.md.');
+      return;
+    }
 
     setQueuedFiles((previous) => {
       const nextMap = new Map(previous.map((file) => [file.id, file]));
@@ -264,28 +298,19 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
       return [...nextMap.values()].slice(0, 20);
     });
     setSubmitError(null);
-  }, []);
+  }, [queueSkillFolders]);
 
   const handleFolderSelection = useCallback((selectedFiles: File[]) => {
     try {
-      const queuedFolders = buildQueuedSkillFolders(selectedFiles);
-      setQueuedFiles((previous) => {
-        const nextMap = new Map(previous.map((file) => [file.id, file]));
-        queuedFolders.forEach((folder) => nextMap.set(folder.id, folder));
-        return [...nextMap.values()].slice(0, 20);
-      });
+      queueSkillFolders(selectedFiles);
       setSubmitError(null);
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'Failed to read skill folder');
     }
-  }, []);
+  }, [queueSkillFolders]);
 
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
-    accept: {
-      'text/markdown': ['.md'],
-      'text/plain': ['.md'],
-    },
-    maxFiles: 20,
+    maxFiles: MAX_SKILL_FOLDER_FILES,
     noClick: true,
     noKeyboard: true,
     onDrop: handleDrop,
@@ -303,6 +328,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
     try {
       const entries = await Promise.all<ProviderSkillCreateEntryPayload>(queuedFiles.map(async (queuedFile) => ({
         fileName: queuedFile.kind === 'folder' ? `${queuedFile.name}.md` : queuedFile.name,
+        directoryName: queuedFile.kind === 'folder' ? queuedFile.name : undefined,
         content: await queuedFile.skillFile.text(),
         files: queuedFile.kind === 'folder'
           ? await Promise.all(
@@ -388,7 +414,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
               <div className="flex flex-col items-center justify-center gap-3 py-4 text-center sm:py-6">
                 <FileUp className="h-7 w-7 text-muted-foreground" strokeWidth={1.5} />
                 <div className="space-y-1">
-                  <div className="text-sm font-medium text-foreground">Drop `.md` files here</div>
+                  <div className="text-sm font-medium text-foreground">Drop `.md` files or skill folders here</div>
                   <div className="text-sm text-muted-foreground">
                     Upload standalone definitions or choose a full folder to include its scripts, references, and assets.
                   </div>
@@ -459,7 +485,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
                 Install {queuedFiles.length > 0 ? `${queuedFiles.length} Skill${queuedFiles.length === 1 ? '' : 's'}` : 'Skills'}
               </Button>
               <span className="text-xs text-muted-foreground">
-                The skill folder name is taken from the `name` field in `SKILL.md`.
+                Folder uploads keep the selected folder name; standalone files use the `name` in `SKILL.md`.
               </span>
             </div>
           </div>

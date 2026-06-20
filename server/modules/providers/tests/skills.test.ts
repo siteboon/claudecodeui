@@ -543,6 +543,7 @@ test('providerSkillsService adds global skills for claude, codex, gemini, and cu
     const createdCodexSkills = await providerSkillsService.addProviderSkills('codex', {
       entries: [
         {
+          directoryName: 'uploaded-codex-folder',
           fileName: 'SKILL.md',
           content: '---\nname: codex-global\ndescription: Codex global skill\n---\n\nCodex body.\n',
           files: [
@@ -559,7 +560,7 @@ test('providerSkillsService adds global skills for claude, codex, gemini, and cu
     assert.ok(createdCodexSkill);
     assert.equal(createdCodexSkill.command, '$codex-global');
     assert.equal(
-      createdCodexSkill.sourcePath.endsWith(path.join('.agents', 'skills', 'codex-global', 'SKILL.md')),
+      createdCodexSkill.sourcePath.endsWith(path.join('.agents', 'skills', 'uploaded-codex-folder', 'SKILL.md')),
       true,
     );
     assert.equal(
