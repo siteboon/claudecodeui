@@ -12,6 +12,7 @@ import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { usePaletteOpsRegister } from '../../../contexts/PaletteOpsContext';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useUiPreferences } from '../../../hooks/useUiPreferences';
+import { COMPUTER_USE_MENUS_ENABLED } from '../../../constants/featureFlags';
 import { authenticatedFetch } from '../../../utils/api';
 import { useEditorSidebar } from '../../code-editor/hooks/useEditorSidebar';
 import EditorSidebar from '../../code-editor/view/EditorSidebar';
@@ -63,7 +64,7 @@ function MainContent({
 
   const shouldShowTasksTab = Boolean(tasksEnabled && isTaskMasterInstalled);
   const shouldShowBrowserTab = browserUseEnabled;
-  const shouldShowComputerTab = computerUseEnabled === true;
+  const shouldShowComputerTab = COMPUTER_USE_MENUS_ENABLED && computerUseEnabled === true;
 
   const {
     editingFile,
@@ -168,10 +169,10 @@ function MainContent({
   }, [loadComputerUseSettings]);
 
   useEffect(() => {
-    if (computerUseEnabled === false && activeTab === 'computer') {
+    if (!shouldShowComputerTab && activeTab === 'computer') {
       setActiveTab('chat');
     }
-  }, [computerUseEnabled, activeTab, setActiveTab]);
+  }, [shouldShowComputerTab, activeTab, setActiveTab]);
 
   usePaletteOpsRegister({
     openFile: (filePath: string) => {

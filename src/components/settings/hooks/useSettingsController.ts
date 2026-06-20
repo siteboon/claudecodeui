@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useTheme } from '../../../contexts/ThemeContext';
+import { COMPUTER_USE_MENUS_ENABLED } from '../../../constants/featureFlags';
 import { authenticatedFetch } from '../../../utils/api';
 import { setNotificationSoundEnabled } from '../../../utils/notificationSound';
 import { useProviderAuthStatus } from '../../provider-auth/hooks/useProviderAuthStatus';
@@ -58,7 +59,7 @@ const KNOWN_MAIN_TABS: SettingsMainTab[] = ['agents', 'appearance', 'git', 'api'
 
 const normalizeMainTab = (tab: string): SettingsMainTab => {
   // Keep backwards compatibility with older callers that still pass "tools".
-  if (tab === 'tools') {
+  if (tab === 'tools' || (tab === 'computer' && !COMPUTER_USE_MENUS_ENABLED)) {
     return 'agents';
   }
 

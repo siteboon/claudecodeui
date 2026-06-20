@@ -3,6 +3,9 @@ import { BrowserWindow, Menu, Tray, nativeImage, nativeTheme, session } from 'el
 import { ViewHost } from './viewHost.js';
 
 const TITLEBAR_HEIGHT = 44;
+// TODO: Re-enable Computer Use menus after fixing the MCP server connection
+// between the desktop app and the web UI.
+const COMPUTER_USE_MENUS_ENABLED = false;
 
 function isAllowedPermissionOrigin(sourceUrl, controlPlaneUrl) {
   try {
@@ -334,6 +337,7 @@ export class DesktopWindowManager {
           { type: 'separator' },
           {
             label: 'Services',
+            visible: COMPUTER_USE_MENUS_ENABLED,
             submenu: [
               {
                 label: 'Computer Use',

@@ -530,6 +530,10 @@ window.__MOCK_STATE__ = {
     return 'idle';
   }
 
+  // TODO: Re-enable Computer Use menus after fixing the MCP server connection
+  // between the desktop app and the web UI.
+  var COMPUTER_USE_MENUS_ENABLED = false;
+
   function renderComputerPermissionRow(key, label, detail, status) {
     return '<div class="cc-permission-row">' +
       '<div><div class="cc-permission-title">' + CC.esc(label) + '</div><div class="cc-permission-detail">' + CC.esc(detail) + '</div></div>' +
@@ -587,9 +591,11 @@ window.__MOCK_STATE__ = {
     var state = CC.state || {};
     var sections = [
       CC.buildThemeSection(state),
-      CC.buildComputerUseSection(state),
     ];
-    CC.renderSheet('Desktop Settings', 'Manage the desktop app appearance and Computer Use behavior.', sections);
+    if (COMPUTER_USE_MENUS_ENABLED) {
+      sections.push(CC.buildComputerUseSection(state));
+    }
+    CC.renderSheet('Desktop Settings', 'Manage the desktop app appearance.', sections);
   };
 
   CC.render = function (state) {
