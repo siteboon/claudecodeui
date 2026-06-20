@@ -110,6 +110,7 @@
     "apiTokens": "API & Tokens",
     "voice": "Voice",
     "tasks": "Tasks",
+    "browser": "Browser",
     "notifications": "Notifications",
     "plugins": "Plugins",
     "about": "About"
@@ -465,6 +466,10 @@
     "actions": {
       "edit": "Edit server",
       "delete": "Delete server"
+    },
+    "managed": {
+      "badge": "Managed",
+      "hint": "Managed by CloudCLI."
     },
     "help": {
       "title": "About Codex MCP",

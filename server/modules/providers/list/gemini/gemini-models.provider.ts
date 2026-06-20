@@ -12,17 +12,14 @@ import {
 
 export const GEMINI_FALLBACK_MODELS: ProviderModelsDefinition = {
   OPTIONS: [
-    { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview' },
-    { value: 'gemini-3-pro-preview', label: 'Gemini 3 Pro Preview' },
     { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' },
+    { value: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash Lite Preview' },
     { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-    { value: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite' },
-    { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
-    { value: 'gemini-2.0-pro-exp', label: 'Gemini 2.0 Pro Experimental' },
-    { value: 'gemini-2.0-flash-thinking-exp', label: 'Gemini 2.0 Flash Thinking' },
+    { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
+    { value: 'gemma-4-31b-it', label: 'Gemma 4 31B IT' },
+    { value: 'gemma-4-26b-a4b-it', label: 'Gemma 4 26B A4B IT' },
   ],
-  DEFAULT: 'gemini-3.1-pro-preview',
+  DEFAULT: 'gemini-3-flash-preview',
 };
 
 export class GeminiProviderModels implements IProviderModels {

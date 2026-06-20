@@ -14,7 +14,8 @@ import { ImageIcon, MessageSquareIcon, XIcon, ArrowDownIcon, Loader2 } from 'luc
 
 import { useVoiceInput } from '../../hooks/useVoiceInput';
 import { useVoiceAvailable } from '../../hooks/useVoiceAvailable';
-import type { PendingPermissionRequest, PermissionMode, Provider } from '../../types/types';
+import type { SessionActivity } from '../../../../hooks/useSessionProtection';
+import type { PendingPermissionRequest, PermissionMode } from '../../types/types';
 import {
   PromptInput,
   PromptInputHeader,
@@ -27,7 +28,7 @@ import {
 } from '../../../../shared/view/ui';
 
 import CommandMenu from './CommandMenu';
-import ClaudeStatus from './ClaudeStatus';
+import ActivityIndicator from './ActivityIndicator';
 import ImageAttachment from './ImageAttachment';
 import VoiceInputButton from './VoiceInputButton';
 import PermissionRequestsBanner from './PermissionRequestsBanner';
@@ -55,10 +56,9 @@ interface ChatComposerProps {
     decision: { allow?: boolean; message?: string; rememberEntry?: string | null; updatedInput?: unknown },
   ) => void;
   handleGrantToolPermission: (suggestion: { entry: string; toolName: string }) => { success: boolean };
-  claudeStatus: { text: string; tokens: number; can_interrupt: boolean } | null;
+  activity: SessionActivity | null;
   isLoading: boolean;
   onAbortSession: () => void;
-  provider: Provider | string;
   permissionMode: PermissionMode | string;
   onModeSwitch: () => void;
   tokenBudget: Record<string, unknown> | null;
@@ -110,10 +110,9 @@ export default function ChatComposer({
   pendingPermissionRequests,
   handlePermissionDecision,
   handleGrantToolPermission,
-  claudeStatus,
+  activity,
   isLoading,
   onAbortSession,
-  provider,
   permissionMode,
   onModeSwitch,
   tokenBudget,
@@ -201,12 +200,7 @@ export default function ChatComposer({
   return (
     <div className="flex-shrink-0 p-2 pb-2 sm:p-4 sm:pb-4 md:p-4 md:pb-6">
       {!hasPendingPermissions && (
-        <ClaudeStatus
-          status={claudeStatus}
-          isLoading={isLoading}
-          onAbort={onAbortSession}
-          provider={provider}
-        />
+        <ActivityIndicator activity={activity} onAbort={onAbortSession} />
       )}
 
       {pendingPermissionRequests.length > 0 && (

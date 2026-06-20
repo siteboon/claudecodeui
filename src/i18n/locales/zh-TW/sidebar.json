@@ -105,7 +105,13 @@
     "deleteProjectFailed": "移除專案失敗，請重試。",
     "deleteProjectError": "移除專案時出錯，請重試。",
     "createProjectFailed": "建立專案失敗，請重試。",
-    "createProjectError": "建立專案時出錯，請重試。"
+    "createProjectError": "建立專案時出錯，請重試。",
+    "updateProjectError": "更新專案時出錯，請重試。",
+    "refreshError": "重新整理失敗，請重試。",
+    "restoreProjectFailed": "還原專案失敗，請重試。",
+    "restoreProjectError": "還原專案時出錯，請重試。",
+    "restoreSessionFailed": "還原工作階段失敗，請重試。",
+    "restoreSessionError": "還原工作階段時出錯，請重試。"
   },
   "version": {
     "updateAvailable": "有可用更新"
