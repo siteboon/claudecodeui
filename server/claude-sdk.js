@@ -807,8 +807,11 @@ async function abortClaudeSDKSession(sessionId) {
     // terminal complete (the abort handler sends the aborted one).
     abortedSessionIds.add(sessionId);
 
-    // Call interrupt() on the query instance
-    await session.instance.interrupt();
+    // Use close() instead of interrupt() to forcefully terminate the
+    // underlying Claude Code child process. interrupt() only stops the
+    // current model turn — the child process may keep running and
+    // streaming output, making the UI stop button appear broken.
+    session.instance.close();
 
     // Update session status
     session.status = 'aborted';
