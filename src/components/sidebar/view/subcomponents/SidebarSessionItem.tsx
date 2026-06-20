@@ -208,16 +208,6 @@ export default function SidebarSessionItem({
                   <Pin className={cn('h-2.5 w-2.5', isBookmarked && 'fill-red-500 text-red-500 rotate-45', !isBookmarked && 'text-blue-600 dark:text-blue-400')} />
                 </button>
                 <button
-                  className="ml-1 flex h-5 w-5 items-center justify-center rounded-md opacity-70 transition-transform active:scale-95 bg-blue-50 dark:bg-blue-900/20"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onStartEditingSession(session.id, sessionView.sessionName);
-                  }}
-                  title={t('tooltips.editSessionName')}
-                >
-                  <Edit2 className="h-2.5 w-2.5 text-blue-600 dark:text-blue-400" />
-                </button>
-                <button
                   className="ml-1 flex h-5 w-5 items-center justify-center rounded-md bg-red-50 opacity-70 transition-transform active:scale-95 dark:bg-red-900/20"
                   onClick={(event) => {
                     event.stopPropagation();
