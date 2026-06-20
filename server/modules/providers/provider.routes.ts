@@ -12,6 +12,8 @@ import type {
   McpScope,
   McpTransport,
   ProviderChangeActiveModelInput,
+  ProviderSkillCreateFile,
+  ProviderSkillCreateInput,
   UpsertProviderMcpServerInput,
 } from '@/shared/types.js';
 import { AppError, asyncHandler, createApiSuccessResponse } from '@/shared/utils.js';
@@ -179,6 +181,103 @@ const parseMcpUpsertPayload = (payload: unknown): UpsertProviderMcpServerInput =
   };
 };
 
+const parseProviderSkillCreatePayload = (payload: unknown): ProviderSkillCreateInput => {
+  if (!payload || typeof payload !== 'object') {
+    throw new AppError('Request body must be an object.', {
+      code: 'INVALID_REQUEST_BODY',
+      statusCode: 400,
+    });
+  }
+
+  const body = payload as Record<string, unknown>;
+  const rawEntries = Array.isArray(body.entries)
+    ? body.entries
+    : typeof body.content === 'string'
+      ? [{
+          content: body.content,
+          directoryName: body.directoryName,
+          fileName: body.fileName,
+        }]
+      : null;
+
+  if (!rawEntries || rawEntries.length === 0) {
+    throw new AppError('At least one skill entry is required.', {
+      code: 'PROVIDER_SKILLS_REQUIRED',
+      statusCode: 400,
+    });
+  }
+
+  const entries = rawEntries.map((entry, index) => {
+    if (!entry || typeof entry !== 'object') {
+      throw new AppError(`Skill entry ${index + 1} must be an object.`, {
+        code: 'INVALID_REQUEST_BODY',
+        statusCode: 400,
+      });
+    }
+
+    const record = entry as Record<string, unknown>;
+    const content = typeof record.content === 'string' ? record.content : '';
+    const directoryName = readOptionalQueryString(record.directoryName);
+    const fileName = readOptionalQueryString(record.fileName);
+    const rawFiles = record.files;
+
+    if (!content.trim()) {
+      throw new AppError(`Skill entry ${index + 1} must include markdown content.`, {
+        code: 'PROVIDER_SKILL_CONTENT_REQUIRED',
+        statusCode: 400,
+      });
+    }
+
+    if (rawFiles !== undefined && !Array.isArray(rawFiles)) {
+      throw new AppError(`Skill entry ${index + 1} files must be an array.`, {
+        code: 'INVALID_REQUEST_BODY',
+        statusCode: 400,
+      });
+    }
+
+    const files: ProviderSkillCreateFile[] | undefined = rawFiles?.map((file, fileIndex) => {
+      if (!file || typeof file !== 'object') {
+        throw new AppError(`Skill entry ${index + 1} file ${fileIndex + 1} must be an object.`, {
+          code: 'INVALID_REQUEST_BODY',
+          statusCode: 400,
+        });
+      }
+
+      const fileRecord = file as Record<string, unknown>;
+      const relativePath = readOptionalQueryString(fileRecord.relativePath);
+      const fileContent = typeof fileRecord.content === 'string' ? fileRecord.content : null;
+      const encoding = fileRecord.encoding === 'utf8' || fileRecord.encoding === 'base64'
+        ? fileRecord.encoding
+        : null;
+
+      if (!relativePath || fileContent === null || !encoding) {
+        throw new AppError(
+          `Skill entry ${index + 1} file ${fileIndex + 1} requires relativePath, content, and encoding.`,
+          {
+            code: 'INVALID_REQUEST_BODY',
+            statusCode: 400,
+          },
+        );
+      }
+
+      return {
+        relativePath,
+        content: fileContent,
+        encoding,
+      };
+    });
+
+    return {
+      content,
+      directoryName,
+      fileName,
+      files,
+    };
+  });
+
+  return { entries };
+};
+
 const parseProvider = (value: unknown): LLMProvider => {
   const normalized = normalizeProviderParam(value);
   if (
@@ -316,6 +415,16 @@ router.get(
     const provider = parseProvider(req.params.provider);
     const workspacePath = readOptionalQueryString(req.query.workspacePath);
     const skills = await providerSkillsService.listProviderSkills(provider, { workspacePath });
+    res.json(createApiSuccessResponse({ provider, skills }));
+  }),
+);
+
+router.post(
+  '/:provider/skills',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const input = parseProviderSkillCreatePayload(req.body);
+    const skills = await providerSkillsService.addProviderSkills(provider, input);
     res.json(createApiSuccessResponse({ provider, skills }));
   }),
 );

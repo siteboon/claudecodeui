@@ -510,3 +510,144 @@ test('providerSkillsService lists gemini and cursor skills from their configured
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
 });
+
+/**
+ * This test covers managed global skill creation for providers that own a
+ * writable user skill directory.
+ */
+test('providerSkillsService adds global skills for claude, codex, gemini, and cursor', { concurrency: false }, async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-skills-create-'));
+  const restoreHomeDir = patchHomeDir(tempRoot);
+
+  try {
+    const createdClaudeSkills = await providerSkillsService.addProviderSkills('claude', {
+      entries: [
+        {
+          directoryName: 'claude-global-dir',
+          content: '---\nname: claude-global\ndescription: Claude global skill\n---\n\nClaude body.\n',
+        },
+      ],
+    });
+    const createdClaudeSkill = createdClaudeSkills[0];
+    assert.ok(createdClaudeSkill);
+    assert.equal(createdClaudeSkill.command, '/claude-global');
+    assert.equal(
+      createdClaudeSkill.sourcePath.endsWith(path.join('.claude', 'skills', 'claude-global-dir', 'SKILL.md')),
+      true,
+    );
+    assert.match(
+      await fs.readFile(createdClaudeSkill.sourcePath, 'utf8'),
+      /Claude body\./,
+    );
+
+    const createdCodexSkills = await providerSkillsService.addProviderSkills('codex', {
+      entries: [
+        {
+          fileName: 'SKILL.md',
+          content: '---\nname: codex-global\ndescription: Codex global skill\n---\n\nCodex body.\n',
+          files: [
+            {
+              relativePath: 'scripts/run.js',
+              content: Buffer.from('console.log("codex skill");\n').toString('base64'),
+              encoding: 'base64',
+            },
+          ],
+        },
+      ],
+    });
+    const createdCodexSkill = createdCodexSkills[0];
+    assert.ok(createdCodexSkill);
+    assert.equal(createdCodexSkill.command, '$codex-global');
+    assert.equal(
+      createdCodexSkill.sourcePath.endsWith(path.join('.agents', 'skills', 'codex-global', 'SKILL.md')),
+      true,
+    );
+    assert.equal(
+      await fs.readFile(path.join(path.dirname(createdCodexSkill.sourcePath), 'scripts', 'run.js'), 'utf8'),
+      'console.log("codex skill");\n',
+    );
+
+    const createdGeminiSkills = await providerSkillsService.addProviderSkills('gemini', {
+      entries: [
+        {
+          directoryName: 'gemini-global-dir',
+          content: '---\nname: gemini-global\ndescription: Gemini global skill\n---\n\nGemini body.\n',
+        },
+      ],
+    });
+    const createdGeminiSkill = createdGeminiSkills[0];
+    assert.ok(createdGeminiSkill);
+    assert.equal(createdGeminiSkill.command, '/gemini-global');
+    assert.equal(
+      createdGeminiSkill.sourcePath.endsWith(path.join('.gemini', 'skills', 'gemini-global-dir', 'SKILL.md')),
+      true,
+    );
+
+    const createdCursorSkills = await providerSkillsService.addProviderSkills('cursor', {
+      entries: [
+        {
+          directoryName: 'cursor-global-dir',
+          content: '---\nname: cursor-global\ndescription: Cursor global skill\n---\n\nCursor body.\n',
+        },
+      ],
+    });
+    const createdCursorSkill = createdCursorSkills[0];
+    assert.ok(createdCursorSkill);
+    assert.equal(createdCursorSkill.command, '/cursor-global');
+    assert.equal(
+      createdCursorSkill.sourcePath.endsWith(path.join('.cursor', 'skills', 'cursor-global-dir', 'SKILL.md')),
+      true,
+    );
+
+    const listedClaudeSkills = await providerSkillsService.listProviderSkills('claude');
+    assert.equal(listedClaudeSkills.some((skill) => skill.name === 'claude-global'), true);
+
+    const listedCodexSkills = await providerSkillsService.listProviderSkills('codex');
+    assert.equal(listedCodexSkills.some((skill) => skill.name === 'codex-global'), true);
+
+    const listedGeminiSkills = await providerSkillsService.listProviderSkills('gemini');
+    assert.equal(listedGeminiSkills.some((skill) => skill.name === 'gemini-global'), true);
+
+    const listedCursorSkills = await providerSkillsService.listProviderSkills('cursor');
+    assert.equal(listedCursorSkills.some((skill) => skill.name === 'cursor-global'), true);
+
+    await assert.rejects(
+      providerSkillsService.addProviderSkills('codex', {
+        entries: [
+          {
+            content: '---\nname: unsafe-skill\n---\n',
+            files: [
+              {
+                relativePath: '../outside.js',
+                content: '',
+                encoding: 'utf8',
+              },
+            ],
+          },
+        ],
+      }),
+      /invalid supporting file path/i,
+    );
+  } finally {
+    restoreHomeDir();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+/**
+ * OpenCode reuses other providers' skill folders, so it should not accept
+ * direct skill writes through the managed provider endpoint.
+ */
+test('providerSkillsService rejects managed skill creation for opencode', { concurrency: false }, async () => {
+  await assert.rejects(
+    providerSkillsService.addProviderSkills('opencode', {
+      entries: [
+        {
+          directoryName: 'opencode-global-dir',
+          content: '---\nname: opencode-global\ndescription: Unsupported skill\n---\n\nOpenCode body.\n',
+        },
+      ],
+    }),
+    /does not support managed global skills/i,
+  );
+});
