@@ -172,9 +172,6 @@ function PinnedSessionRow({
                 <button type="button" className="ml-1 flex h-5 w-5 items-center justify-center rounded-md opacity-70 transition-transform active:scale-95 bg-red-50 dark:bg-red-900/20" onClick={(e) => { e.stopPropagation(); onUnpin(); }} title={t('bookmarks.unpin', 'Unpin session')}>
                   <Pin className="h-2.5 w-2.5 fill-red-500 text-red-500 rotate-45" />
                 </button>
-                <button type="button" className="ml-1 flex h-5 w-5 items-center justify-center rounded-md opacity-70 transition-transform active:scale-95 bg-blue-50 dark:bg-blue-900/20" onClick={(e) => { e.stopPropagation(); onStartEditing(); }} title={t('tooltips.editSessionName')}>
-                  <Edit2 className="h-2.5 w-2.5 text-blue-600 dark:text-blue-400" />
-                </button>
                 <button type="button" className="ml-1 flex h-5 w-5 items-center justify-center rounded-md opacity-70 transition-transform active:scale-95 bg-red-50 dark:bg-red-900/20" onClick={(e) => { e.stopPropagation(); onDelete(); }} title={t('tooltips.deleteSessionOptions')}>
                   <Trash2 className="h-2.5 w-2.5 text-red-600 dark:text-red-400" />
                 </button>
