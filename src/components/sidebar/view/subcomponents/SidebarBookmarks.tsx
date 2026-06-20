@@ -132,10 +132,10 @@ function PinnedSessionRow({
         </div>
       </div>
 
-      {/* Mobile */}
+      {/* Mobile — matches SidebarSessionItem mobile layout */}
       <div className="md:hidden">
         <div
-          className={cn('p-2 mx-2 my-0.5 rounded-md bg-card border active:scale-[0.98] transition-all duration-150 relative', isSelected ? 'bg-primary/5 border-primary/20' : 'border-border/30')}
+          className={cn('p-2 mx-3 my-0.5 rounded-md bg-card border active:scale-[0.98] transition-all duration-150 relative', isSelected ? 'bg-primary/5 border-primary/20' : 'border-border/30')}
           onClick={onSelect}
         >
           <div className="flex items-center gap-2">
@@ -148,44 +148,39 @@ function PinnedSessionRow({
                 {compactAge && <span className="ml-auto flex-shrink-0 text-[11px] text-muted-foreground">{compactAge}</span>}
               </div>
             </div>
-          </div>
-        </div>
 
-        {/* Mobile actions row — matches desktop unpinned/edit/delete */}
-        <div className={cn(
-          'mx-2 mb-0.5 flex items-center gap-1 px-2 transition-all duration-200',
-          isEditing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
-        )}>
-          {isEditing ? (
-            <>
-              <input
-                type="text" value={editingName}
-                onChange={(e) => onEditingChange(e.target.value)}
-                onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') onSaveEditing(); else if (e.key === 'Escape') onCancelEditing(); }}
-                onClick={(e) => e.stopPropagation()}
-                className="w-32 rounded border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                autoFocus
-              />
-              <button type="button" className="flex h-6 w-6 items-center justify-center rounded bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:hover:bg-green-900/40" onClick={(e) => { e.stopPropagation(); onSaveEditing(); }} title={t('tooltips.save')}>
-                <Check className="h-3 w-3 text-green-600 dark:text-green-400" />
-              </button>
-              <button type="button" className="flex h-6 w-6 items-center justify-center rounded bg-gray-50 hover:bg-gray-100 dark:bg-gray-900/20 dark:hover:bg-gray-900/40" onClick={(e) => { e.stopPropagation(); onCancelEditing(); }} title={t('tooltips.cancel')}>
-                <X className="h-3 w-3 text-gray-600 dark:text-gray-400" />
-              </button>
-            </>
-          ) : (
-            <>
-              <button type="button" className="flex h-6 w-6 items-center justify-center rounded bg-red-100 text-red-500 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50" onClick={(e) => { e.stopPropagation(); onUnpin(); }} title={t('bookmarks.unpin', 'Unpin session')}>
-                <Pin className="h-3 w-3 rotate-45" />
-              </button>
-              <button type="button" className="flex h-6 w-6 items-center justify-center rounded bg-blue-100 text-blue-500 hover:bg-blue-200 dark:bg-blue-900/30 dark:hover:bg-blue-900/50" onClick={(e) => { e.stopPropagation(); onStartEditing(); }} title={t('tooltips.editSessionName')}>
-                <Edit2 className="h-3 w-3" />
-              </button>
-              <button type="button" className="flex h-6 w-6 items-center justify-center rounded bg-red-100 text-red-500 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50" onClick={(e) => { e.stopPropagation(); onDelete(); }} title={t('tooltips.deleteSessionOptions')}>
-                <Trash2 className="h-3 w-3 text-red-600 dark:text-red-400" />
-              </button>
-            </>
-          )}
+            {/* Actions inline on the right — always visible like normal sessions */}
+            {isEditing ? (
+              <>
+                <input
+                  type="text" value={editingName}
+                  onChange={(e) => onEditingChange(e.target.value)}
+                  onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') onSaveEditing(); else if (e.key === 'Escape') onCancelEditing(); }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-32 rounded border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                  autoFocus
+                />
+                <button type="button" className="flex h-5 w-5 items-center justify-center rounded-md bg-green-50 dark:bg-green-900/20" onClick={(e) => { e.stopPropagation(); onSaveEditing(); }} title={t('tooltips.save')}>
+                  <Check className="h-2.5 w-2.5 text-green-600 dark:text-green-400" />
+                </button>
+                <button type="button" className="ml-1 flex h-5 w-5 items-center justify-center rounded-md bg-gray-50 dark:bg-gray-900/20" onClick={(e) => { e.stopPropagation(); onCancelEditing(); }} title={t('tooltips.cancel')}>
+                  <X className="h-2.5 w-2.5 text-gray-600 dark:text-gray-400" />
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="ml-1 flex h-5 w-5 items-center justify-center rounded-md opacity-70 transition-transform active:scale-95 bg-red-50 dark:bg-red-900/20" onClick={(e) => { e.stopPropagation(); onUnpin(); }} title={t('bookmarks.unpin', 'Unpin session')}>
+                  <Pin className="h-2.5 w-2.5 fill-red-500 text-red-500 rotate-45" />
+                </button>
+                <button type="button" className="ml-1 flex h-5 w-5 items-center justify-center rounded-md opacity-70 transition-transform active:scale-95 bg-blue-50 dark:bg-blue-900/20" onClick={(e) => { e.stopPropagation(); onStartEditing(); }} title={t('tooltips.editSessionName')}>
+                  <Edit2 className="h-2.5 w-2.5 text-blue-600 dark:text-blue-400" />
+                </button>
+                <button type="button" className="ml-1 flex h-5 w-5 items-center justify-center rounded-md opacity-70 transition-transform active:scale-95 bg-red-50 dark:bg-red-900/20" onClick={(e) => { e.stopPropagation(); onDelete(); }} title={t('tooltips.deleteSessionOptions')}>
+                  <Trash2 className="h-2.5 w-2.5 text-red-600 dark:text-red-400" />
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>
