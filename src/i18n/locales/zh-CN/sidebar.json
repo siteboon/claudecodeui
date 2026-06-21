@@ -106,7 +106,13 @@
     "deleteProjectFailed": "移除项目失败，请重试。",
     "deleteProjectError": "移除项目时出错，请重试。",
     "createProjectFailed": "创建项目失败，请重试。",
-    "createProjectError": "创建项目时出错，请重试。"
+    "createProjectError": "创建项目时出错，请重试。",
+    "updateProjectError": "更新项目时出错，请重试。",
+    "refreshError": "刷新失败，请重试。",
+    "restoreProjectFailed": "恢复项目失败，请重试。",
+    "restoreProjectError": "恢复项目时出错，请重试。",
+    "restoreSessionFailed": "恢复会话失败，请重试。",
+    "restoreSessionError": "恢复会话时出错，请重试。"
   },
   "version": {
     "updateAvailable": "有可用更新"

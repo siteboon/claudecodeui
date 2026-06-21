@@ -26,6 +26,21 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
   private readonly claudeHome = path.join(os.homedir(), '.claude');
 
   /**
+   * Returns true when a JSONL file is a subagent transcript rather than a
+   * top-level session.
+   *
+   * Claude stores subagent transcripts under a `subagents/` directory, e.g.
+   * `~/.claude/projects/<encoded-cwd>/<session-id>/subagents/agent-<id>.jsonl`.
+   * Those files repeat the parent session's `sessionId`, so indexing them as
+   * standalone sessions overwrites the parent row's `jsonl_path` and corrupts
+   * the main session record. The recursive scan in `synchronize()` reaches
+   * them, so both entry points must skip them.
+   */
+  private isSubagentTranscript(filePath: string): boolean {
+    return path.normalize(filePath).split(path.sep).includes('subagents');
+  }
+
+  /**
    * Scans ~/.claude/projects and upserts discovered sessions into DB.
    */
   async synchronize(since?: Date): Promise<number> {
@@ -38,6 +53,10 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
 
     let processed = 0;
     for (const filePath of files) {
+      if (this.isSubagentTranscript(filePath)) {
+        continue;
+      }
+
       const parsed = await this.processSessionFile(filePath, nameMap);
       if (!parsed) {
         continue;
@@ -64,6 +83,9 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
    */
   async synchronizeFile(filePath: string): Promise<string | null> {
     if (!filePath.endsWith('.jsonl')) {
+      return null;
+    }
+    if (this.isSubagentTranscript(filePath)) {
       return null;
     }
 

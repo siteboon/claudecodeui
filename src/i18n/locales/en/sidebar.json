@@ -106,7 +106,13 @@
     "deleteProjectFailed": "Failed to remove project. Please try again.",
     "deleteProjectError": "Error removing project. Please try again.",
     "createProjectFailed": "Failed to create project. Please try again.",
-    "createProjectError": "Error creating project. Please try again."
+    "createProjectError": "Error creating project. Please try again.",
+    "updateProjectError": "Error updating project. Please try again.",
+    "refreshError": "Failed to refresh. Please try again.",
+    "restoreProjectFailed": "Failed to restore project. Please try again.",
+    "restoreProjectError": "Error restoring project. Please try again.",
+    "restoreSessionFailed": "Failed to restore session. Please try again.",
+    "restoreSessionError": "Error restoring session. Please try again."
   },
   "version": {
     "updateAvailable": "Update available"
