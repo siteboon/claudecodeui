@@ -120,6 +120,7 @@ const getBrowserRelativePath = (file: File): string => {
     || file.name
   )
     .replace(/\\/g, '/')
+    .replace(/^\.\/+/, '')
     .replace(/^\/+/, '');
 };
 
@@ -211,6 +212,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
   const providerName = PROVIDER_NAMES[selectedProvider];
@@ -309,7 +311,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
     }
   }, [queueSkillFolders]);
 
-  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
+  const { getRootProps, isDragActive } = useDropzone({
     maxFiles: MAX_SKILL_FOLDER_FILES,
     noClick: true,
     noKeyboard: true,
@@ -400,7 +402,17 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
                   : 'border-border/70 bg-muted/15 hover:border-foreground/25 hover:bg-muted/25',
               )}
             >
-              <input {...getInputProps()} />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".md,text/markdown"
+                multiple
+                className="hidden"
+                onChange={(event) => {
+                  handleDrop(Array.from(event.target.files ?? []));
+                  event.target.value = '';
+                }}
+              />
               <input
                 ref={folderInputRef}
                 type="file"
@@ -420,7 +432,13 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
                   </div>
                 </div>
                 <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                  <Button type="button" variant="outline" size="sm" onClick={open} className="w-full sm:w-auto">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full sm:w-auto"
+                  >
                     <FileUp className="h-4 w-4" />
                     Choose Files
                   </Button>
