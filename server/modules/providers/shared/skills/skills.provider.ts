@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { mkdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 
 import type { IProviderSkills } from '@/shared/interfaces.js';
 import type {
@@ -42,19 +42,6 @@ type PendingSkillInstall = {
     content: string | Buffer;
   }>;
   skill: ProviderSkill;
-};
-
-const pathExists = async (targetPath: string): Promise<boolean> => {
-  try {
-    await stat(targetPath);
-    return true;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return false;
-    }
-
-    throw error;
-  }
 };
 
 const resolveSkillSupportingFilePath = (
@@ -196,13 +183,6 @@ export abstract class SkillsProvider implements IProviderSkills {
       }
 
       seenSkillPaths.add(normalizedSkillPath);
-      if (await pathExists(skillDirectoryPath)) {
-        throw new AppError(`Skill target "${resolvedDirectoryName}" already exists.`, {
-          code: 'PROVIDER_SKILL_ALREADY_EXISTS',
-          statusCode: 409,
-        });
-      }
-
       const supportingFiles = (entry.files ?? []).map((file) => ({
         targetPath: resolveSkillSupportingFilePath(skillDirectoryPath, file.relativePath, index),
         content: file.encoding === 'base64'
@@ -243,6 +223,8 @@ export abstract class SkillsProvider implements IProviderSkills {
     }
 
     for (const install of pendingInstalls) {
+      // Replace the complete skill directory so removed scripts or assets do not remain stale.
+      await rm(install.skillDirectoryPath, { recursive: true, force: true });
       await mkdir(install.skillDirectoryPath, { recursive: true });
       await writeFile(install.skillPath, `${install.content}\n`, 'utf8');
       for (const file of install.supportingFiles) {

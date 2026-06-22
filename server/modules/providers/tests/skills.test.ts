@@ -585,18 +585,20 @@ test('providerSkillsService adds global skills for claude, codex, gemini, and cu
       true,
     );
 
+    const replacedCodexSkills = await providerSkillsService.addProviderSkills('codex', {
+      entries: [
+        {
+          directoryName: 'uploaded-codex-folder',
+          content: '---\nname: replacement\ndescription: Replacement skill\n---\n\nReplacement body.\n',
+        },
+      ],
+    });
+    assert.equal(replacedCodexSkills[0]?.command, '$replacement');
+    assert.match(await fs.readFile(createdCodexSkill.sourcePath, 'utf8'), /Replacement body\./);
     await assert.rejects(
-      providerSkillsService.addProviderSkills('codex', {
-        entries: [
-          {
-            directoryName: 'uploaded-codex-folder',
-            content: '---\nname: replacement\n---\n\nReplacement body.\n',
-          },
-        ],
-      }),
-      /already exists/i,
+      fs.stat(path.join(path.dirname(createdCodexSkill.sourcePath), 'scripts', 'run.js')),
+      { code: 'ENOENT' },
     );
-    assert.match(await fs.readFile(createdCodexSkill.sourcePath, 'utf8'), /Codex body\./);
 
     const pendingBatchSkillPath = path.join(tempRoot, '.agents', 'skills', 'pending-batch', 'SKILL.md');
     await assert.rejects(
@@ -652,7 +654,7 @@ test('providerSkillsService adds global skills for claude, codex, gemini, and cu
     assert.equal(listedClaudeSkills.some((skill) => skill.name === 'claude-global'), true);
 
     const listedCodexSkills = await providerSkillsService.listProviderSkills('codex');
-    assert.equal(listedCodexSkills.some((skill) => skill.name === 'codex-global'), true);
+    assert.equal(listedCodexSkills.some((skill) => skill.name === 'replacement'), true);
 
     const listedGeminiSkills = await providerSkillsService.listProviderSkills('gemini');
     assert.equal(listedGeminiSkills.some((skill) => skill.name === 'gemini-global'), true);
