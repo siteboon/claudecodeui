@@ -15,13 +15,19 @@ export const authenticatedFetch = (url, options = {}) => {
     defaultHeaders['Authorization'] = `Bearer ${token}`;
   }
 
+  // Abort after 30 seconds to prevent hanging on blocked server responses
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30_000);
+
   return fetch(url, {
     ...options,
     headers: {
       ...defaultHeaders,
       ...options.headers,
     },
+    signal: options.signal ?? controller.signal,
   }).then((response) => {
+    clearTimeout(timeoutId);
     const refreshedToken = response.headers.get('X-Refreshed-Token');
     if (refreshedToken) {
       localStorage.setItem('auth-token', refreshedToken);

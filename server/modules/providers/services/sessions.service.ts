@@ -173,6 +173,10 @@ export const sessionsService = {
     }
 
     const provider = session.provider as LLMProvider;
+    // Yield the event loop before loading potentially large JSONL files
+    // to prevent blocking HTTP request handling during session message fetch.
+    await new Promise((resolve) => setImmediate(resolve));
+
     const result = await providerRegistry.resolveProvider(provider).sessions.fetchHistory(sessionId, {
       limit: options.limit ?? null,
       offset: options.offset ?? 0,
