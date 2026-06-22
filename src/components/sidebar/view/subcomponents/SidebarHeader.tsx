@@ -1,4 +1,4 @@
-import { Activity, Archive, Folder, FolderPlus, MessageSquare, Plus, RefreshCw, Search, X, PanelLeftClose } from 'lucide-react';
+import { Activity, Archive, ChevronsDownUp, ChevronsUpDown, Folder, FolderPlus, MessageSquare, Plus, RefreshCw, Search, X, PanelLeftClose } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { Button, Input, Tooltip } from '../../../../shared/view/ui';
@@ -28,6 +28,9 @@ type SidebarHeaderProps = {
   isRefreshing: boolean;
   onCreateProject: () => void;
   onCollapseSidebar: () => void;
+  isAllExpanded: boolean;
+  onExpandAll: () => void;
+  onCollapseAll: () => void;
   t: TFunction;
 };
 
@@ -48,8 +51,14 @@ export default function SidebarHeader({
   isRefreshing,
   onCreateProject,
   onCollapseSidebar,
+  isAllExpanded,
+  onExpandAll,
+  onCollapseAll,
   t,
 }: SidebarHeaderProps) {
+  const expandToggleLabel = isAllExpanded ? t('actions.collapseAll') : t('actions.expandAll');
+  const expandToggleHandler = isAllExpanded ? onCollapseAll : onExpandAll;
+  const showExpandToggle = projectsCount > 0;
   const showSearchTools = (projectsCount > 0 || runningSessionsCount > 0 || archivedSessionsCount > 0 || isArchivedSessionsLoading) && !isLoading;
   const searchPlaceholder = searchMode === 'conversations'
     ? t('search.conversationsPlaceholder')
@@ -106,6 +115,22 @@ export default function SidebarHeader({
                 }`}
               />
             </Button>
+            {showExpandToggle && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 rounded-lg p-0 text-muted-foreground hover:bg-accent/80 hover:text-foreground"
+                onClick={expandToggleHandler}
+                title={expandToggleLabel}
+                aria-label={expandToggleLabel}
+              >
+                {isAllExpanded ? (
+                  <ChevronsDownUp className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronsUpDown className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"
@@ -261,6 +286,20 @@ export default function SidebarHeader({
             >
               <RefreshCw className={`h-4 w-4 text-muted-foreground ${isRefreshing ? 'animate-spin' : ''}`} />
             </button>
+            {showExpandToggle && (
+              <button
+                className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted/50 transition-all active:scale-95"
+                onClick={expandToggleHandler}
+                aria-label={expandToggleLabel}
+                title={expandToggleLabel}
+              >
+                {isAllExpanded ? (
+                  <ChevronsDownUp className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
+                )}
+              </button>
+            )}
             <button
               className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/90 text-primary-foreground transition-all active:scale-95"
               onClick={onCreateProject}

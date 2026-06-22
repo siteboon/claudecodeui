@@ -140,6 +140,9 @@ type SidebarContentProps = {
   isRefreshing: boolean;
   onCreateProject: () => void;
   onCollapseSidebar: () => void;
+  isAllExpanded: boolean;
+  onExpandAll: () => void;
+  onCollapseAll: () => void;
   updateAvailable: boolean;
   releaseInfo: ReleaseInfo | null;
   latestVersion: string | null;
@@ -177,6 +180,9 @@ export default function SidebarContent({
   isRefreshing,
   onCreateProject,
   onCollapseSidebar,
+  isAllExpanded,
+  onExpandAll,
+  onCollapseAll,
   updateAvailable,
   releaseInfo,
   latestVersion,
@@ -212,6 +218,9 @@ export default function SidebarContent({
         isRefreshing={isRefreshing}
         onCreateProject={onCreateProject}
         onCollapseSidebar={onCollapseSidebar}
+        isAllExpanded={isAllExpanded}
+        onExpandAll={onExpandAll}
+        onCollapseAll={onCollapseAll}
         t={t}
       />
 

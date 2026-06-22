@@ -82,6 +82,9 @@ function Sidebar({
     archivedSessionsCount,
     isArchivedSessionsLoading,
     toggleProject,
+    expandAllProjects,
+    collapseAllProjects,
+    isAllExpanded,
     handleSessionClick,
     toggleStarProject,
     isProjectStarred,
@@ -295,6 +298,9 @@ function Sidebar({
             isRefreshing={isRefreshing}
             onCreateProject={() => setShowNewProject(true)}
             onCollapseSidebar={handleCollapseSidebar}
+            isAllExpanded={isAllExpanded}
+            onExpandAll={expandAllProjects}
+            onCollapseAll={collapseAllProjects}
             updateAvailable={updateAvailable}
             releaseInfo={releaseInfo}
             latestVersion={latestVersion}
