@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, stat, writeFile } from 'node:fs/promises';
 
 import type { IProviderSkills } from '@/shared/interfaces.js';
 import type {
@@ -32,6 +32,30 @@ const normalizeSkillDirectoryName = (value: string): string => (
     .replace(/^\.+|\.+$/g, '')
     .replace(/^-+|-+$/g, '')
 );
+
+type PendingSkillInstall = {
+  skillDirectoryPath: string;
+  skillPath: string;
+  content: string;
+  supportingFiles: Array<{
+    targetPath: string;
+    content: string | Buffer;
+  }>;
+  skill: ProviderSkill;
+};
+
+const pathExists = async (targetPath: string): Promise<boolean> => {
+  try {
+    await stat(targetPath);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return false;
+    }
+
+    throw error;
+  }
+};
 
 const resolveSkillSupportingFilePath = (
   skillDirectoryPath: string,
@@ -131,10 +155,8 @@ export abstract class SkillsProvider implements IProviderSkills {
       });
     }
 
-    await mkdir(globalSkillSource.rootDir, { recursive: true });
-
-    const createdSkills: ProviderSkill[] = [];
     const seenSkillPaths = new Set<string>();
+    const pendingInstalls: PendingSkillInstall[] = [];
 
     for (const [index, entry] of input.entries.entries()) {
       const content = typeof entry.content === 'string' ? entry.content.trim() : '';
@@ -147,8 +169,10 @@ export abstract class SkillsProvider implements IProviderSkills {
 
       const fileNameFallback = readOptionalString(entry.fileName);
       const requestedDirectoryName = readOptionalString(entry.directoryName);
-      const fallbackSkillName = requestedDirectoryName
-        ?? (fileNameFallback ? stripMarkdownExtension(fileNameFallback) : `skill-${index + 1}`);
+      const fallbackSkillName = normalizeSkillDirectoryName(
+        requestedDirectoryName
+          ?? (fileNameFallback ? stripMarkdownExtension(fileNameFallback) : `skill-${index + 1}`),
+      );
       const definition = readProviderSkillMarkdownDefinitionFromContent(content, fallbackSkillName);
       const resolvedDirectoryName = normalizeSkillDirectoryName(
         requestedDirectoryName ?? definition.name,
@@ -172,6 +196,13 @@ export abstract class SkillsProvider implements IProviderSkills {
       }
 
       seenSkillPaths.add(normalizedSkillPath);
+      if (await pathExists(skillDirectoryPath)) {
+        throw new AppError(`Skill target "${resolvedDirectoryName}" already exists.`, {
+          code: 'PROVIDER_SKILL_ALREADY_EXISTS',
+          statusCode: 409,
+        });
+      }
+
       const supportingFiles = (entry.files ?? []).map((file) => ({
         targetPath: resolveSkillSupportingFilePath(skillDirectoryPath, file.relativePath, index),
         content: file.encoding === 'base64'
@@ -189,30 +220,38 @@ export abstract class SkillsProvider implements IProviderSkills {
         seenSupportingPaths.add(file.targetPath);
       }
 
-      await mkdir(skillDirectoryPath, { recursive: true });
-      await writeFile(skillPath, `${content}\n`, 'utf8');
-      for (const file of supportingFiles) {
-        await mkdir(path.dirname(file.targetPath), { recursive: true });
-        await writeFile(file.targetPath, file.content);
-      }
-
       const command = globalSkillSource.commandForSkill
         ? globalSkillSource.commandForSkill(definition.name)
         : `${globalSkillSource.commandPrefix ?? '/'}${definition.name}`;
 
-      createdSkills.push({
-        provider: this.provider,
-        name: definition.name,
-        description: definition.description,
-        command,
-        scope: globalSkillSource.scope,
-        sourcePath: skillPath,
-        pluginName: globalSkillSource.pluginName,
-        pluginId: globalSkillSource.pluginId,
+      pendingInstalls.push({
+        skillDirectoryPath,
+        skillPath,
+        content,
+        supportingFiles,
+        skill: {
+          provider: this.provider,
+          name: definition.name,
+          description: definition.description,
+          command,
+          scope: globalSkillSource.scope,
+          sourcePath: skillPath,
+          pluginName: globalSkillSource.pluginName,
+          pluginId: globalSkillSource.pluginId,
+        },
       });
     }
 
-    return createdSkills;
+    for (const install of pendingInstalls) {
+      await mkdir(install.skillDirectoryPath, { recursive: true });
+      await writeFile(install.skillPath, `${install.content}\n`, 'utf8');
+      for (const file of install.supportingFiles) {
+        await mkdir(path.dirname(file.targetPath), { recursive: true });
+        await writeFile(file.targetPath, file.content);
+      }
+    }
+
+    return pendingInstalls.map((install) => install.skill);
   }
 
   protected abstract getSkillSources(workspacePath: string): Promise<ProviderSkillSource[]>;

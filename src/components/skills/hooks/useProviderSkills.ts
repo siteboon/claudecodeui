@@ -111,8 +111,12 @@ const normalizeSkill = (
     sourcePath: String(skill.sourcePath ?? ''),
     pluginName: typeof skill.pluginName === 'string' ? skill.pluginName : undefined,
     pluginId: typeof skill.pluginId === 'string' ? skill.pluginId : undefined,
-    projectDisplayName: shouldAttachProject ? project?.displayName : undefined,
-    projectPath: shouldAttachProject ? project?.path : undefined,
+    projectDisplayName: shouldAttachProject
+      ? project?.displayName ?? skill.projectDisplayName
+      : skill.projectDisplayName,
+    projectPath: shouldAttachProject
+      ? project?.path ?? skill.projectPath
+      : skill.projectPath,
   };
 };
 

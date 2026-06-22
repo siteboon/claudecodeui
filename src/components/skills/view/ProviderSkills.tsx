@@ -170,14 +170,18 @@ const buildQueuedSkillFolders = (selectedFiles: File[]): QueuedSkillFile[] => {
 
   return skillRoots.map((skillRoot) => {
     const skillFiles = files.filter(({ relativePath }) => {
-      const owningRoot = skillRoots.find((candidateRoot) => (
-        relativePath === `${candidateRoot}/SKILL.md`
-        || relativePath.startsWith(`${candidateRoot}/`)
-      ));
+      const owningRoot = skillRoots.find((candidateRoot) => {
+        const normalizedRelativePath = relativePath.toLowerCase();
+        const normalizedSkillPath = `${candidateRoot}/skill.md`.toLowerCase();
+        return normalizedRelativePath === normalizedSkillPath
+          || relativePath.startsWith(`${candidateRoot}/`);
+      });
       return owningRoot === skillRoot;
     });
     const skillSourceFile = skillFiles.find(
-      ({ relativePath }) => relativePath === `${skillRoot}/SKILL.md`,
+      ({ relativePath }) => (
+        relativePath.toLowerCase() === `${skillRoot}/skill.md`.toLowerCase()
+      ),
     );
     if (!skillSourceFile) {
       throw new Error(`Could not read SKILL.md from ${getBaseName(skillRoot)}.`);
@@ -303,6 +307,10 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
   }, [queueSkillFolders]);
 
   const handleFolderSelection = useCallback((selectedFiles: File[]) => {
+    if (selectedFiles.length === 0) {
+      return;
+    }
+
     try {
       queueSkillFolders(selectedFiles);
       setSubmitError(null);

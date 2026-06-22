@@ -197,6 +197,7 @@ const parseProviderSkillCreatePayload = (payload: unknown): ProviderSkillCreateI
           content: body.content,
           directoryName: body.directoryName,
           fileName: body.fileName,
+          files: body.files,
         }]
       : null;
 

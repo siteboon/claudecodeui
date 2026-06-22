@@ -568,6 +568,54 @@ test('providerSkillsService adds global skills for claude, codex, gemini, and cu
       'console.log("codex skill");\n',
     );
 
+    const fallbackNamedSkills = await providerSkillsService.addProviderSkills('codex', {
+      entries: [
+        {
+          fileName: 'fallback / skill.md',
+          content: '---\ndescription: Normalized fallback skill\n---\n\nFallback body.\n',
+        },
+      ],
+    });
+    const fallbackNamedSkill = fallbackNamedSkills[0];
+    assert.ok(fallbackNamedSkill);
+    assert.equal(fallbackNamedSkill.name, 'fallback-skill');
+    assert.equal(fallbackNamedSkill.command, '$fallback-skill');
+    assert.equal(
+      fallbackNamedSkill.sourcePath.endsWith(path.join('.agents', 'skills', 'fallback-skill', 'SKILL.md')),
+      true,
+    );
+
+    await assert.rejects(
+      providerSkillsService.addProviderSkills('codex', {
+        entries: [
+          {
+            directoryName: 'uploaded-codex-folder',
+            content: '---\nname: replacement\n---\n\nReplacement body.\n',
+          },
+        ],
+      }),
+      /already exists/i,
+    );
+    assert.match(await fs.readFile(createdCodexSkill.sourcePath, 'utf8'), /Codex body\./);
+
+    const pendingBatchSkillPath = path.join(tempRoot, '.agents', 'skills', 'pending-batch', 'SKILL.md');
+    await assert.rejects(
+      providerSkillsService.addProviderSkills('codex', {
+        entries: [
+          {
+            directoryName: 'pending-batch',
+            content: '---\nname: pending-batch\n---\n\nPending body.\n',
+          },
+          {
+            directoryName: 'pending-batch',
+            content: '---\nname: duplicate-batch\n---\n\nDuplicate body.\n',
+          },
+        ],
+      }),
+      /duplicate skill target/i,
+    );
+    await assert.rejects(fs.stat(pendingBatchSkillPath), { code: 'ENOENT' });
+
     const createdGeminiSkills = await providerSkillsService.addProviderSkills('gemini', {
       entries: [
         {
