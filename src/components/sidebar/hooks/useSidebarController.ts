@@ -147,6 +147,7 @@ export function useSidebarController({
   const starToggleSequenceByProjectRef = useRef<Map<string, number>>(new Map());
   const migrationStartedRef = useRef(false);
   const onRefreshRef = useRef(onRefresh);
+  const hasInitializedExpansionRef = useRef(false);
 
   const isSidebarCollapsed = !isMobile && !sidebarVisible;
   const activeSessionIds = useMemo(() => new Set(activeSessions.keys()), [activeSessions]);
@@ -182,6 +183,17 @@ export function useSidebarController({
       return next;
     });
   }, [selectedProject?.projectId]);
+
+  useEffect(() => {
+    if (hasInitializedExpansionRef.current) {
+      return;
+    }
+    if (isLoading || projects.length === 0) {
+      return;
+    }
+    hasInitializedExpansionRef.current = true;
+    setExpandedProjects(new Set(projects.map((project) => project.projectId)));
+  }, [projects, isLoading]);
 
   useEffect(() => {
     if (projects.length > 0 && !isLoading) {
@@ -432,12 +444,22 @@ export function useSidebarController({
   // `projectId` as their identifier after the migration.
   const toggleProject = useCallback((projectId: string) => {
     setExpandedProjects((prev) => {
-      const next = new Set<string>();
-      if (!prev.has(projectId)) {
+      const next = new Set(prev);
+      if (next.has(projectId)) {
+        next.delete(projectId);
+      } else {
         next.add(projectId);
       }
       return next;
     });
+  }, []);
+
+  const expandAllProjects = useCallback(() => {
+    setExpandedProjects(new Set(projects.map((project) => project.projectId)));
+  }, [projects]);
+
+  const collapseAllProjects = useCallback(() => {
+    setExpandedProjects(new Set());
   }, []);
 
   const handleSessionClick = useCallback(
@@ -616,6 +638,11 @@ export function useSidebarController({
   const filteredProjects = useMemo(
     () => filterProjects(searchMode === 'running' ? runningProjects : sortedProjects, debouncedSearchQuery),
     [debouncedSearchQuery, runningProjects, searchMode, sortedProjects],
+  );
+
+  const isAllExpanded = useMemo(
+    () => projects.length > 0 && projects.every((project) => expandedProjects.has(project.projectId)),
+    [projects, expandedProjects],
   );
 
   const filteredArchivedSessions = useMemo(() => {
@@ -951,6 +978,9 @@ export function useSidebarController({
     archivedSessionsCount: archivedProjects.length + archivedSessions.length,
     isArchivedSessionsLoading,
     toggleProject,
+    expandAllProjects,
+    collapseAllProjects,
+    isAllExpanded,
     handleSessionClick,
     toggleStarProject,
     isProjectStarred,
