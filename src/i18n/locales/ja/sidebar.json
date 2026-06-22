@@ -105,7 +105,13 @@
     "deleteProjectFailed": "プロジェクトの除去に失敗しました。もう一度お試しください。",
     "deleteProjectError": "プロジェクトの除去でエラーが発生しました。もう一度お試しください。",
     "createProjectFailed": "プロジェクトの作成に失敗しました。もう一度お試しください。",
-    "createProjectError": "プロジェクトの作成でエラーが発生しました。もう一度お試しください。"
+    "createProjectError": "プロジェクトの作成でエラーが発生しました。もう一度お試しください。",
+    "updateProjectError": "プロジェクトの更新でエラーが発生しました。もう一度お試しください。",
+    "refreshError": "更新に失敗しました。もう一度お試しください。",
+    "restoreProjectFailed": "プロジェクトの復元に失敗しました。もう一度お試しください。",
+    "restoreProjectError": "プロジェクトの復元でエラーが発生しました。もう一度お試しください。",
+    "restoreSessionFailed": "セッションの復元に失敗しました。もう一度お試しください。",
+    "restoreSessionError": "セッションの復元でエラーが発生しました。もう一度お試しください。"
   },
   "version": {
     "updateAvailable": "アップデートあり",

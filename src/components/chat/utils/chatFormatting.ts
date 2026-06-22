@@ -11,7 +11,7 @@ export function decodeHtmlEntities(text: string) {
 export function normalizeInlineCodeFences(text: string) {
   if (!text || typeof text !== 'string') return text;
   try {
-    return text.replace(/```\s*([^\n\r]+?)\s*```/g, '`$1`');
+    return text.replace(/```[ \t]*([^\n\r]+?)[ \t]*```/g, '`$1`');
   } catch {
     return text;
   }

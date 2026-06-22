@@ -106,7 +106,13 @@
     "deleteProjectFailed": "Échec de la suppression du projet. Veuillez réessayer.",
     "deleteProjectError": "Erreur lors de la suppression du projet. Veuillez réessayer.",
     "createProjectFailed": "Échec de la création du projet. Veuillez réessayer.",
-    "createProjectError": "Erreur lors de la création du projet. Veuillez réessayer."
+    "createProjectError": "Erreur lors de la création du projet. Veuillez réessayer.",
+    "updateProjectError": "Erreur lors de la mise à jour du projet. Veuillez réessayer.",
+    "refreshError": "Échec de l'actualisation. Veuillez réessayer.",
+    "restoreProjectFailed": "Échec de la restauration du projet. Veuillez réessayer.",
+    "restoreProjectError": "Erreur lors de la restauration du projet. Veuillez réessayer.",
+    "restoreSessionFailed": "Échec de la restauration de la session. Veuillez réessayer.",
+    "restoreSessionError": "Erreur lors de la restauration de la session. Veuillez réessayer."
   },
   "version": {
     "updateAvailable": "Mise à jour disponible",

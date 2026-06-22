@@ -106,7 +106,13 @@
     "deleteProjectFailed": "Projekt konnte nicht entfernt werden. Bitte erneut versuchen.",
     "deleteProjectError": "Fehler beim Entfernen des Projekts. Bitte erneut versuchen.",
     "createProjectFailed": "Projekt konnte nicht erstellt werden. Bitte erneut versuchen.",
-    "createProjectError": "Fehler beim Erstellen des Projekts. Bitte erneut versuchen."
+    "createProjectError": "Fehler beim Erstellen des Projekts. Bitte erneut versuchen.",
+    "updateProjectError": "Fehler beim Aktualisieren des Projekts. Bitte erneut versuchen.",
+    "refreshError": "Aktualisierung fehlgeschlagen. Bitte erneut versuchen.",
+    "restoreProjectFailed": "Projekt konnte nicht wiederhergestellt werden. Bitte erneut versuchen.",
+    "restoreProjectError": "Fehler beim Wiederherstellen des Projekts. Bitte erneut versuchen.",
+    "restoreSessionFailed": "Sitzung konnte nicht wiederhergestellt werden. Bitte erneut versuchen.",
+    "restoreSessionError": "Fehler beim Wiederherstellen der Sitzung. Bitte erneut versuchen."
   },
   "version": {
     "updateAvailable": "Update verfügbar",
