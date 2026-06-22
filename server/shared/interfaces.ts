@@ -12,6 +12,7 @@ import type {
   ProviderModelsDefinition,
   ProviderMcpServer,
   ProviderSessionActiveModelChange,
+  ProviderSkillCreateInput,
   UpsertProviderMcpServerInput,
 } from '@/shared/types.js';
 
@@ -101,6 +102,15 @@ export interface IProviderSkills {
    * Lists all skills visible to this provider for the optional workspace.
    */
   listSkills(options?: ProviderSkillListOptions): Promise<ProviderSkill[]>;
+
+  /**
+   * Writes one or more global user-scoped skills for this provider.
+   *
+   * Implementations should install the supplied markdown entries into the
+   * provider's writable user skill folder and return the normalized skill
+   * records that were written.
+   */
+  addSkills(input: ProviderSkillCreateInput): Promise<ProviderSkill[]>;
 }
 
 // ---------------------------
