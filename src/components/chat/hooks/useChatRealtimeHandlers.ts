@@ -1,13 +1,21 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 
 import type { ServerEvent } from '../../../contexts/WebSocketContext';
 import { showCompletionTitleIndicator } from '../../../utils/pageTitleNotification';
-import { playChatCompletionSound } from '../../../utils/notificationSound';
+import { playChatCompletionSound, playNotificationSound } from '../../../utils/notificationSound';
 import type { MarkSessionIdle, MarkSessionProcessing } from '../../../hooks/useSessionProtection';
 import type { PendingPermissionRequest } from '../types/types';
 import type { ProjectSession, LLMProvider } from '../../../types/app';
 import type { SessionStore, NormalizedMessage } from '../../../stores/useSessionStore';
+
+const isActionablePermissionRequest = (request: { toolName?: unknown } | null | undefined): boolean => {
+  return request?.toolName !== 'ExitPlanMode' && request?.toolName !== 'exit_plan_mode';
+};
+
+const hasActionablePermissionRequests = (requests: Array<{ toolName?: unknown }> | null | undefined): boolean => {
+  return Array.isArray(requests) && requests.some((request) => isActionablePermissionRequest(request));
+};
 
 interface UseChatRealtimeHandlersArgs {
   subscribe: (listener: (event: ServerEvent) => void) => () => void;
@@ -15,6 +23,7 @@ interface UseChatRealtimeHandlersArgs {
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
   setTokenBudget: (budget: Record<string, unknown> | null) => void;
+  pendingPermissionRequests: PendingPermissionRequest[];
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
   streamTimerRef: MutableRefObject<number | null>;
   accumulatedStreamRef: MutableRefObject<string>;
@@ -52,6 +61,7 @@ export function useChatRealtimeHandlers({
   selectedSession,
   currentSessionId,
   setTokenBudget,
+  pendingPermissionRequests,
   setPendingPermissionRequests,
   streamTimerRef,
   accumulatedStreamRef,
@@ -62,6 +72,15 @@ export function useChatRealtimeHandlers({
   onWebSocketReconnect,
   sessionStore,
 }: UseChatRealtimeHandlersArgs) {
+  // Keep the latest pending-permission snapshot available to the websocket
+  // listener so back-to-back permission events can dedupe and re-arm the
+  // notification sound before React finishes a rerender.
+  const pendingPermissionRequestsRef = useRef(pendingPermissionRequests);
+
+  useEffect(() => {
+    pendingPermissionRequestsRef.current = pendingPermissionRequests;
+  }, [pendingPermissionRequests]);
+
   useEffect(() => {
     const handleEvent = (msg: ServerEvent) => {
       if (!msg.kind) {
@@ -101,7 +120,16 @@ export function useChatRealtimeHandlers({
 
           const isViewedSession = sid === activeViewSessionId;
           if (isViewedSession && Array.isArray(msg.pendingPermissions)) {
-            setPendingPermissionRequests(msg.pendingPermissions as PendingPermissionRequest[]);
+            const nextPendingPermissionRequests = msg.pendingPermissions as PendingPermissionRequest[];
+            const hadActionablePermissionRequests = hasActionablePermissionRequests(pendingPermissionRequestsRef.current);
+            const hasPendingActionablePermissionRequests = hasActionablePermissionRequests(nextPendingPermissionRequests);
+
+            pendingPermissionRequestsRef.current = nextPendingPermissionRequests;
+            setPendingPermissionRequests(nextPendingPermissionRequests);
+
+            if (hasPendingActionablePermissionRequests && !hadActionablePermissionRequests) {
+              void playNotificationSound();
+            }
           }
           return;
         }
@@ -203,6 +231,7 @@ export function useChatRealtimeHandlers({
           // hides it immediately and atomically.
           onSessionIdle?.(sid);
           if (sid === activeViewSessionId) {
+            pendingPermissionRequestsRef.current = [];
             setPendingPermissionRequests([]);
           }
 
@@ -235,9 +264,9 @@ export function useChatRealtimeHandlers({
         case 'permission_request': {
           if (!msg.requestId) break;
           if (sid === activeViewSessionId) {
-            setPendingPermissionRequests((prev) => {
-              if (prev.some((r: PendingPermissionRequest) => r.requestId === msg.requestId)) return prev;
-              return [...prev, {
+            const previousPendingPermissionRequests = pendingPermissionRequestsRef.current;
+            if (!previousPendingPermissionRequests.some((request) => request.requestId === msg.requestId)) {
+              const nextPendingPermissionRequests = [...previousPendingPermissionRequests, {
                 requestId: msg.requestId as string,
                 toolName: (msg.toolName as string) || 'UnknownTool',
                 input: msg.input,
@@ -245,7 +274,17 @@ export function useChatRealtimeHandlers({
                 sessionId: sid || null,
                 receivedAt: new Date(),
               }];
-            });
+
+              pendingPermissionRequestsRef.current = nextPendingPermissionRequests;
+              setPendingPermissionRequests(nextPendingPermissionRequests);
+
+              if (
+                isActionablePermissionRequest({ toolName: msg.toolName })
+                && !hasActionablePermissionRequests(previousPendingPermissionRequests)
+              ) {
+                void playNotificationSound();
+              }
+            }
           }
           if (sid) {
             onSessionProcessing?.(sid);
@@ -255,7 +294,12 @@ export function useChatRealtimeHandlers({
 
         case 'permission_cancelled': {
           if (msg.requestId && sid === activeViewSessionId) {
-            setPendingPermissionRequests((prev) => prev.filter((r: PendingPermissionRequest) => r.requestId !== msg.requestId));
+            const nextPendingPermissionRequests = pendingPermissionRequestsRef.current.filter(
+              (request: PendingPermissionRequest) => request.requestId !== msg.requestId,
+            );
+
+            pendingPermissionRequestsRef.current = nextPendingPermissionRequests;
+            setPendingPermissionRequests(nextPendingPermissionRequests);
           }
           break;
         }
@@ -286,6 +330,7 @@ export function useChatRealtimeHandlers({
     selectedSession,
     currentSessionId,
     setTokenBudget,
+    pendingPermissionRequests,
     setPendingPermissionRequests,
     streamTimerRef,
     accumulatedStreamRef,
