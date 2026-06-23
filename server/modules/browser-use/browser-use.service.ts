@@ -79,6 +79,12 @@ const DEFAULT_SETTINGS: BrowserUseSettings = {
 };
 const AGENT_OWNER_ID = 'agent';
 const PROFILE_ROOT = path.join(os.homedir(), '.cloudcli', 'browser-use', 'profiles');
+// Playwright is installed into an isolated dir with its own package.json rather
+// than the project root. Installing into the project tree forces npm to
+// reconcile every dependency (re-fetching unrelated tarballs, racing the
+// running dev server for locked node_modules dirs on Windows). An isolated
+// dir keeps the install to just playwright + playwright-core.
+const RUNTIME_ROOT = path.join(os.homedir(), '.cloudcli', 'browser-use', 'runtime');
 const MCP_SERVER_NAME = 'cloudcli-browser';
 const LEGACY_MCP_SERVER_NAMES = ['cloudcli-browser-use'];
 const RUNTIME_READINESS_CACHE_TTL_MS = 30_000;
@@ -140,6 +146,14 @@ function getSetupMessage(settings: BrowserUseSettings, readiness: RuntimeReadine
 }
 
 function getPlaywright(): any | null {
+  // Prefer the isolated runtime install; fall back to a project-level install
+  // (e.g. when playwright is a dev dependency during local development).
+  try {
+    const runtimeRequire = createRequire(path.join(RUNTIME_ROOT, 'package.json'));
+    return runtimeRequire('playwright');
+  } catch {
+    // fall through to project resolution
+  }
   try {
     return require('playwright');
   } catch {
@@ -243,14 +257,25 @@ const INSTALL_COMMAND_TIMEOUT_MS = Number.parseInt(
   10,
 );
 
-function runCommand(command: string, args: string[]): Promise<void> {
+function ensureRuntimeDir(): void {
+  fs.mkdirSync(RUNTIME_ROOT, { recursive: true });
+  const pkgPath = path.join(RUNTIME_ROOT, 'package.json');
+  if (!fs.existsSync(pkgPath)) {
+    fs.writeFileSync(
+      pkgPath,
+      `${JSON.stringify({ name: 'cloudcli-browser-runtime', private: true, version: '1.0.0' }, null, 2)}\n`,
+    );
+  }
+}
+
+function runCommand(command: string, args: string[], cwd: string): Promise<void> {
   return new Promise((resolve, reject) => {
     // On Windows, npm is `npm.cmd`. Since Node's fix for CVE-2024-27980
     // (v18.20.2 / v20.12.2+), spawning a .cmd/.bat without a shell throws
     // `spawn EINVAL`. Use a shell on Windows. Args here are static literals,
     // so there is no command-injection surface.
     const child = spawn(command, args, {
-      cwd: process.cwd(),
+      cwd,
       env: process.env,
       shell: process.platform === 'win32',
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -305,16 +330,18 @@ async function installRuntime(): Promise<{ success: boolean; message: string }> 
   runtimeProbeCache = null;
   installPromise = (async () => {
     try {
+      ensureRuntimeDir();
+
       lastInstallMessage = 'Installing Playwright package...';
-      await runCommand(npmCommand, ['install', '--no-save', '--no-package-lock', 'playwright']);
+      await runCommand(npmCommand, ['install', 'playwright'], RUNTIME_ROOT);
 
       if (process.platform === 'linux') {
         lastInstallMessage = 'Installing Chromium system dependencies...';
-        await runCommand(npmCommand, ['exec', '--', 'playwright', 'install-deps', 'chromium']);
+        await runCommand(npmCommand, ['exec', '--', 'playwright', 'install-deps', 'chromium'], RUNTIME_ROOT);
       }
 
       lastInstallMessage = 'Installing Chromium runtime...';
-      await runCommand(npmCommand, ['exec', '--', 'playwright', 'install', 'chromium']);
+      await runCommand(npmCommand, ['exec', '--', 'playwright', 'install', 'chromium'], RUNTIME_ROOT);
 
       lastInstallMessage = 'Browser runtime installed.';
       return { success: true, message: lastInstallMessage };
