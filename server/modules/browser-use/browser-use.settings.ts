@@ -19,7 +19,8 @@ export const DEFAULT_BROWSER_USE_SETTINGS: BrowserUseSettings = {
   browserBackend: IS_PLATFORM ? 'camoufox-vnc' : 'playwright',
 };
 
-export const PROFILE_ROOT = path.join(os.homedir(), '.cloudcli', 'browser-use', 'profiles');
+export const PROFILE_ROOT = process.env.CLOUDCLI_BROWSER_USE_PROFILE_ROOT
+  || path.join(os.homedir(), '.cloudcli', 'browser-use', 'profiles');
 
 export function normalizeBrowserBackend(value: unknown): BrowserUseBackend {
   return value === 'playwright' || value === 'camoufox-vnc'
@@ -27,12 +28,24 @@ export function normalizeBrowserBackend(value: unknown): BrowserUseBackend {
     : DEFAULT_BROWSER_USE_SETTINGS.browserBackend;
 }
 
+function trimEdgeDashes(value: string): string {
+  let start = 0;
+  let end = value.length;
+  while (start < end && value[start] === '-') {
+    start += 1;
+  }
+  while (end > start && value[end - 1] === '-') {
+    end -= 1;
+  }
+  return value.slice(start, end);
+}
+
 export function normalizeProfileName(profileName?: string | null): string | null {
-  const normalized = String(profileName || '')
+  const sanitized = trimEdgeDashes(String(profileName || '')
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
+    .replace(/[^a-z0-9._-]+/g, '-'));
+  const normalized = sanitized
     .slice(0, MAX_PROFILE_NAME_LENGTH)
     .replace(/^-+|-+$/g, '');
   if (!normalized) {

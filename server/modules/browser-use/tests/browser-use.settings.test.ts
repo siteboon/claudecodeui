@@ -1,17 +1,33 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 
-import {
+const originalProfileRoot = process.env.CLOUDCLI_BROWSER_USE_PROFILE_ROOT;
+const testProfileRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-use-profiles-'));
+process.env.CLOUDCLI_BROWSER_USE_PROFILE_ROOT = testProfileRoot;
+
+const {
   getProfilePath,
   normalizeDefaultProfileName,
   normalizeProfileName,
   PROFILE_ROOT,
   resolveSessionProfileName,
-} from '@/modules/browser-use/browser-use.settings.js';
+} = await import('@/modules/browser-use/browser-use.settings.js');
+
+test.after(() => {
+  if (originalProfileRoot === undefined) {
+    delete process.env.CLOUDCLI_BROWSER_USE_PROFILE_ROOT;
+  } else {
+    process.env.CLOUDCLI_BROWSER_USE_PROFILE_ROOT = originalProfileRoot;
+  }
+  fs.rmSync(testProfileRoot, { recursive: true, force: true });
+});
 
 test('browser profile names are canonicalized before storage and path resolution', () => {
   assert.equal(normalizeProfileName(' Work Profile!! '), 'work-profile');
+  assert.equal(normalizeProfileName(`${'-'.repeat(100)}Work Profile`), 'work-profile');
   assert.equal(normalizeDefaultProfileName(' Work Profile!! '), 'work-profile');
   assert.equal(
     getProfilePath(' Work Profile!! '),
