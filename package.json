@@ -43,7 +43,6 @@
     "desktop:dist:win": "npm run build && npm run desktop:stage && electron-builder --projectDir .desktop-build/desktop-app --win nsis",
     "server:bundle": "npm run build && node scripts/release/build-server-bundle.js",
     "desktop:icon:mac": "node electron/scripts/generate-macos-icon.js",
-    "desktop:icon:win": "node electron/scripts/generate-windows-icon.js",
     "build": "npm run build:semantics && npm run build:client && npm run build:server",
     "build:client": "vite build",
     "build:semantics": "node scripts/build-computer-semantics.mjs",
