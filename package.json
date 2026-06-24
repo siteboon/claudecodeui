@@ -113,9 +113,7 @@
       "icon": "electron/assets/logo-windows.ico",
       "target": [
         "nsis"
-      ],
-      "publisherName": "CloudCLI",
-      "verifyUpdateCodeSignature": false
+      ]
     },
     "nsis": {
       "installerIcon": "electron/assets/logo-windows.ico",
