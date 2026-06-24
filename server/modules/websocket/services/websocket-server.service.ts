@@ -48,9 +48,7 @@ export function createWebSocketServer(
         && requestUrl.pathname.endsWith('/viewer/websockify')
       ) {
         const token = getBrowserUseViewerToken(requestUrl, info.req.headers as Record<string, unknown>);
-        if (dependencies.authenticateBrowserUseViewer?.(requestUrl.pathname, token)) {
-          return true;
-        }
+        return Boolean(dependencies.authenticateBrowserUseViewer?.(requestUrl.pathname, token));
       }
       return verifyWebSocketClient(info, dependencies.verifyClient);
     }),

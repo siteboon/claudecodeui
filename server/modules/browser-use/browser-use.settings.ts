@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -9,6 +10,7 @@ import type { BrowserUseBackend, BrowserUseSettings } from './browser-use.types.
 const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
 const BROWSER_USE_SETTINGS_KEY = 'browser_use_settings';
 const BROWSER_USE_MCP_TOKEN_KEY = 'browser_use_mcp_token';
+const MAX_PROFILE_NAME_LENGTH = 80;
 
 export const DEFAULT_BROWSER_USE_SETTINGS: BrowserUseSettings = {
   enabled: false,
@@ -26,12 +28,18 @@ export function normalizeBrowserBackend(value: unknown): BrowserUseBackend {
 }
 
 export function normalizeProfileName(profileName?: string | null): string | null {
-  const normalized = String(profileName || '').trim();
+  const normalized = String(profileName || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, MAX_PROFILE_NAME_LENGTH)
+    .replace(/^-+|-+$/g, '');
   if (!normalized) {
     return null;
   }
 
-  return normalized.slice(0, 80);
+  return /[a-z0-9]/.test(normalized) ? normalized : null;
 }
 
 export function normalizeDefaultProfileName(profileName?: string | null): string {
@@ -40,19 +48,43 @@ export function normalizeDefaultProfileName(profileName?: string | null): string
 
 export function resolveSessionProfileName(settings: BrowserUseSettings, profileName?: string | null): string | null {
   const requestedProfileName = normalizeProfileName(profileName);
+  if (String(profileName || '').trim() && !requestedProfileName) {
+    throw new Error('Browser profile name must include at least one letter or number.');
+  }
   if (requestedProfileName) {
+    validateRequestedProfileName(profileName, requestedProfileName);
     return requestedProfileName;
   }
   return settings.persistSessions ? normalizeDefaultProfileName(settings.defaultProfileName) : null;
 }
 
 export function getProfilePath(profileName: string): string {
-  const safeName = profileName
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80) || 'default';
-  return path.join(PROFILE_ROOT, safeName);
+  return path.join(PROFILE_ROOT, normalizeDefaultProfileName(profileName));
+}
+
+function validateRequestedProfileName(profileName: string | null | undefined, normalizedProfileName: string): void {
+  const requestedProfileName = String(profileName || '').trim();
+  const existingProfileName = findExistingProfileName(normalizedProfileName);
+  if (
+    existingProfileName
+    && (requestedProfileName !== normalizedProfileName || existingProfileName !== normalizedProfileName)
+  ) {
+    throw new Error(`Browser profile "${requestedProfileName}" resolves to existing profile "${existingProfileName}". Use "${normalizedProfileName}" instead.`);
+  }
+}
+
+function findExistingProfileName(normalizedProfileName: string): string | null {
+  try {
+    if (!fs.existsSync(PROFILE_ROOT)) {
+      return null;
+    }
+
+    const entries = fs.readdirSync(PROFILE_ROOT, { withFileTypes: true });
+    const match = entries.find((entry) => entry.isDirectory() && normalizeProfileName(entry.name) === normalizedProfileName);
+    return match?.name || null;
+  } catch {
+    return null;
+  }
 }
 
 export function useVisibleCamoufoxBackend(settings: BrowserUseSettings): boolean {

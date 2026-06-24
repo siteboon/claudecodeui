@@ -42,6 +42,7 @@ async function readJson<T>(response: Response): Promise<T> {
 export default function BrowserUseSettingsTab() {
   const [settings, setSettings] = useState<BrowserUseSettings | null>(null);
   const [status, setStatus] = useState<BrowserUseStatus | null>(null);
+  const [hasLoadedSettings, setHasLoadedSettings] = useState(false);
   const [isSettingsLoading, setIsSettingsLoading] = useState(true);
   const [isStatusLoading, setIsStatusLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -53,6 +54,7 @@ export default function BrowserUseSettingsTab() {
     const settingsResponse = await authenticatedFetch('/api/browser-use/settings');
     const settingsData = await readJson<{ data: { settings: BrowserUseSettings } }>(settingsResponse);
     setSettings(settingsData.data.settings);
+    setHasLoadedSettings(true);
     setProfileNameDraft(settingsData.data.settings.defaultProfileName || 'default');
   }, []);
 
@@ -64,6 +66,7 @@ export default function BrowserUseSettingsTab() {
 
   useEffect(() => {
     setError(null);
+    setHasLoadedSettings(false);
     setIsSettingsLoading(true);
     setIsStatusLoading(true);
 
@@ -86,6 +89,7 @@ export default function BrowserUseSettingsTab() {
       });
       const data = await readJson<{ data: { settings: BrowserUseSettings } }>(response);
       setSettings(data.data.settings);
+      setHasLoadedSettings(true);
       window.dispatchEvent(new Event('browserUseSettingsChanged'));
       setIsStatusLoading(true);
       await loadStatus();
@@ -123,6 +127,7 @@ export default function BrowserUseSettingsTab() {
   };
 
   const browserEnabled = settings?.enabled === true;
+  const browserDisabled = hasLoadedSettings && settings?.enabled === false;
   const persistSessions = settings?.persistSessions === true;
   const selectedBackend = settings?.browserBackend || 'playwright';
   const effectiveBackend = status?.backend || 'playwright';
@@ -145,19 +150,21 @@ export default function BrowserUseSettingsTab() {
             label="Give Agents Browser Access"
             description="Let agents use a browser during coding tasks while you can watch live sessions, open them in a tab, and stop them at any time."
           >
-            {isSettingsLoading && !settings ? (
+            {isSettingsLoading && !hasLoadedSettings ? (
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-            ) : (
+            ) : hasLoadedSettings ? (
               <SettingsToggle
                 checked={browserEnabled}
                 onChange={(value) => void updateSettings({ enabled: value })}
                 ariaLabel="Give Agents Browser Access"
                 disabled={isSaving}
               />
+            ) : (
+              <span className="text-sm text-muted-foreground">Unavailable</span>
             )}
           </SettingsRow>
 
-          {!browserEnabled && (
+          {browserDisabled && (
             <div className="px-4 py-4">
               <a
                 href={BROWSER_USE_GUIDE_URL}
@@ -168,6 +175,14 @@ export default function BrowserUseSettingsTab() {
                 Read the Browser guide
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>
+            </div>
+          )}
+
+          {error && (
+            <div className="px-4 py-4">
+              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">
+                {error}
+              </div>
             </div>
           )}
 
@@ -327,12 +342,6 @@ export default function BrowserUseSettingsTab() {
               Read the Browser guide
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
-
-            {error && (
-              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">
-                {error}
-              </div>
-            )}
           </div>
           )}
         </SettingsCard>

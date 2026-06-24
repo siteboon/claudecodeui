@@ -5,10 +5,15 @@ import type { RuntimeHandle } from './browser-use.types.js';
 type BrowserUseViewer = NonNullable<RuntimeHandle['viewer']>;
 
 export const VIEWER_COOKIE_NAME = 'browser_use_viewer_token';
-export const VIEWER_TOKEN_TTL_MS = Number.parseInt(
-  process.env.CLOUDCLI_BROWSER_USE_VIEWER_TOKEN_TTL_MS || String(30 * 60 * 1000),
+const DEFAULT_VIEWER_TOKEN_TTL_MS = 30 * 60 * 1000;
+const parsedViewerTokenTtlMs = Number.parseInt(
+  process.env.CLOUDCLI_BROWSER_USE_VIEWER_TOKEN_TTL_MS || String(DEFAULT_VIEWER_TOKEN_TTL_MS),
   10,
 );
+export const VIEWER_TOKEN_TTL_MS =
+  Number.isFinite(parsedViewerTokenTtlMs) && parsedViewerTokenTtlMs > 0
+    ? parsedViewerTokenTtlMs
+    : DEFAULT_VIEWER_TOKEN_TTL_MS;
 
 export function getViewerUrl(sessionId: string, viewerToken?: string): string {
   const basePath = `/api/browser-use/sessions/${encodeURIComponent(sessionId)}/viewer`;

@@ -219,6 +219,54 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function isRuntimeProcessAlive(child: ReturnType<typeof spawn>): boolean {
+  return child.exitCode === null && child.signalCode === null && !child.killed;
+}
+
+function assertRuntimeProcessesAlive(processes: Array<ReturnType<typeof spawn>>, label: string) {
+  const exited = processes.find((child) => !isRuntimeProcessAlive(child));
+  if (exited) {
+    throw new Error(`${label} exited before the Browser viewer runtime was ready.`);
+  }
+}
+
+async function isPortListening(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = net.createConnection({ host: '127.0.0.1', port });
+    let settled = false;
+    const finish = (listening: boolean) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      socket.destroy();
+      resolve(listening);
+    };
+    socket.setTimeout(250);
+    socket.once('connect', () => finish(true));
+    socket.once('timeout', () => finish(false));
+    socket.once('error', () => finish(false));
+  });
+}
+
+async function waitForRuntimePort(
+  port: number,
+  label: string,
+  processes: Array<ReturnType<typeof spawn>>,
+  timeoutMs = 5_000,
+) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    assertRuntimeProcessesAlive(processes, label);
+    if (await isPortListening(port)) {
+      return;
+    }
+    await delay(100);
+  }
+  assertRuntimeProcessesAlive(processes, label);
+  throw new Error(`${label} did not start listening on 127.0.0.1:${port}.`);
+}
+
 function killRuntimeProcesses(processes?: Array<ReturnType<typeof spawn>>) {
   processes?.forEach((child) => child.kill('SIGTERM'));
 }
@@ -272,6 +320,7 @@ async function startVisibleRuntime(): Promise<NonNullable<RuntimeHandle['viewer'
       'tcp',
     ]));
     await delay(700);
+    assertRuntimeProcessesAlive(processes, 'Xvfb');
 
     if (!fs.existsSync(X11VNC_BIN)) {
       throw new Error(`x11vnc is missing at ${X11VNC_BIN}.`);
@@ -291,7 +340,7 @@ async function startVisibleRuntime(): Promise<NonNullable<RuntimeHandle['viewer'
         LD_LIBRARY_PATH: `${X11VNC_LIB_DIR}:${X11VNC_EXTRA_LIB_DIR}:${process.env.LD_LIBRARY_PATH || ''}`,
       },
     }));
-    await delay(500);
+    await waitForRuntimePort(vncPort, 'x11vnc', processes);
 
     if (!fs.existsSync(path.join(NOVNC_ROOT, 'vnc.html'))) {
       throw new Error(`noVNC is missing at ${NOVNC_ROOT}.`);
@@ -302,7 +351,7 @@ async function startVisibleRuntime(): Promise<NonNullable<RuntimeHandle['viewer'
       `127.0.0.1:${websockifyPort}`,
       `127.0.0.1:${vncPort}`,
     ]));
-    await delay(500);
+    await waitForRuntimePort(websockifyPort, 'websockify', processes);
 
     return {
       display,
@@ -455,7 +504,10 @@ function validateViewerTokenForSession(sessionId: string, token: string | null |
   if (!token) {
     return false;
   }
-  const viewer = getSessionViewer(sessionId);
+  const session = sessions.get(sessionId);
+  const viewer = session?.ownerId === AGENT_OWNER_ID && session.status === 'ready'
+    ? handles.get(sessionId)?.viewer || null
+    : null;
   const stored = viewerTokens.get(sessionId);
   if (!viewer || !stored || stored.token !== token || stored.expiresAt < Date.now()) {
     if (stored?.expiresAt && stored.expiresAt < Date.now()) {

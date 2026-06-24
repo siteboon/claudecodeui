@@ -238,6 +238,7 @@ function authenticateBrowserUse(req, res, next) {
         if (browserUseService.validateViewerToken(sessionId, token)) {
             return next();
         }
+        return res.status(401).json({ error: 'Browser viewer access requires a valid session token.' });
     }
     return authenticateToken(req, res, next);
 }

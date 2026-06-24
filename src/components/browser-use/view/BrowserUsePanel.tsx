@@ -277,7 +277,6 @@ export default function BrowserUsePanel({ isVisible, projectId, onShowSettings }
     browserUsePanelCache.set(cacheKey, {
       ...cachedEntry,
       selectedSessionId,
-      updatedAt: Date.now(),
     });
   }, [cacheKey, selectedSessionId]);
 
