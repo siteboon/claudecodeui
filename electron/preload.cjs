@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 if (window.location.protocol === 'file:') {
   contextBridge.exposeInMainWorld('cloudcliDesktop', {
     connectCloud: () => ipcRenderer.invoke('cloudcli-desktop:connect-cloud'),
+    disconnectCloud: () => ipcRenderer.invoke('cloudcli-desktop:disconnect-cloud'),
     copyDiagnostics: () => ipcRenderer.invoke('cloudcli-desktop:copy-diagnostics'),
     copyLocalWebUrl: () => ipcRenderer.invoke('cloudcli-desktop:copy-local-web-url'),
     getState: () => ipcRenderer.invoke('cloudcli-desktop:get-state'),
@@ -12,6 +13,7 @@ if (window.location.protocol === 'file:') {
     openLocal: () => ipcRenderer.invoke('cloudcli-desktop:open-local'),
     openLocalWebUi: () => ipcRenderer.invoke('cloudcli-desktop:open-local-web-ui'),
     refreshEnvironments: () => ipcRenderer.invoke('cloudcli-desktop:refresh-environments'),
+    refreshActiveTab: () => ipcRenderer.invoke('cloudcli-desktop:reload-active-tab'),
     showEnvironmentPicker: () => ipcRenderer.invoke('cloudcli-desktop:show-environment-picker'),
     showLauncher: () => ipcRenderer.invoke('cloudcli-desktop:show-launcher'),
     showComputerAccess: () => ipcRenderer.invoke('cloudcli-desktop:show-computer-access'),

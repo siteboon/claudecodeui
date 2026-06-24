@@ -1,4 +1,4 @@
-import { BrowserWindow, Menu, Tray, nativeImage, nativeTheme, session } from 'electron';
+import { BrowserWindow, Menu, Tray, clipboard, nativeImage, nativeTheme, session, webContents as electronWebContents } from 'electron';
 
 import { ViewHost } from './viewHost.js';
 
@@ -21,6 +21,13 @@ function isAllowedPermissionOrigin(sourceUrl, controlPlaneUrl) {
   } catch {
     return false;
   }
+}
+
+function getWebContentsProcessId(contents) {
+  return {
+    osProcessId: typeof contents.getOSProcessId === 'function' ? contents.getOSProcessId() : null,
+    processId: typeof contents.getProcessId === 'function' ? contents.getProcessId() : null,
+  };
 }
 
 export class DesktopWindowManager {
@@ -226,6 +233,90 @@ export class DesktopWindowManager {
     return this.getDesktopState();
   }
 
+  async reloadActiveTab() {
+    const activeTab = this.tabs.getActiveTab();
+    if (!activeTab || activeTab.id === 'home' || activeTab.kind === 'launcher') {
+      this.emitDesktopState();
+      return this.getDesktopState();
+    }
+
+    const reloaded = this.viewHost.reloadTab(activeTab.id);
+    if (!reloaded && activeTab.target?.url) {
+      await this.showTarget(activeTab.target, { trackTab: false });
+    }
+    this.emitDesktopState();
+    return this.getDesktopState();
+  }
+
+  openActiveTabDevTools() {
+    if (this.viewHost.openActiveViewDevTools()) return;
+    void this.actions.showError('No active BrowserView', new Error('Switch to a non-launcher tab before opening active tab DevTools.'));
+  }
+
+  reloadActiveBrowserViewForDiagnostics() {
+    if (this.viewHost.reloadActiveView()) return;
+    void this.actions.showError('No active BrowserView', new Error('Switch to a non-launcher tab before reloading the active BrowserView.'));
+  }
+
+  detachActiveBrowserViewForDiagnostics() {
+    if (this.viewHost.detachActiveView()) return;
+    void this.actions.showError('No active BrowserView', new Error('Switch to a non-launcher tab before detaching the active BrowserView.'));
+  }
+
+  copyWebContentsDiagnostics() {
+    const tabViewDiagnostics = this.viewHost.getTabViewDiagnostics();
+    const tabViewByContentsId = new Map(
+      tabViewDiagnostics
+        .filter((item) => item.webContentsId != null)
+        .map((item) => [item.webContentsId, item])
+    );
+
+    const rows = electronWebContents.getAllWebContents().map((contents) => {
+      const destroyed = contents.isDestroyed();
+      const processIds = destroyed ? { osProcessId: null, processId: null } : getWebContentsProcessId(contents);
+      const tabView = tabViewByContentsId.get(contents.id);
+      let owner = 'unknown';
+      if (this.mainWindow?.webContents?.id === contents.id) {
+        owner = 'main-window';
+      } else if (this.settingsWindow?.webContents?.id === contents.id) {
+        owner = 'settings-window';
+      } else if (tabView) {
+        owner = `browser-view:${tabView.tabId}`;
+      }
+
+      return {
+        id: contents.id,
+        owner,
+        osProcessId: processIds.osProcessId,
+        processId: processIds.processId,
+        url: destroyed ? null : contents.getURL(),
+        title: destroyed ? null : contents.getTitle(),
+        destroyed,
+        focused: destroyed || typeof contents.isFocused !== 'function' ? false : contents.isFocused(),
+        attached: tabView ? tabView.attached : null,
+        active: tabView ? tabView.active : null,
+      };
+    });
+
+    const activeTab = this.tabs.getActiveTab();
+    const diagnostics = {
+      generatedAt: new Date().toISOString(),
+      activeTabId: this.tabs.activeTabId,
+      activeTab: activeTab
+        ? {
+            id: activeTab.id,
+            title: activeTab.title,
+            kind: activeTab.kind,
+            targetUrl: activeTab.target?.url || null,
+          }
+        : null,
+      tabViews: tabViewDiagnostics,
+      webContents: rows,
+    };
+
+    clipboard.writeText(JSON.stringify(diagnostics, null, 2));
+  }
+
   async closeDesktopTab(tabId) {
     const tab = this.tabs.remove(tabId);
     if (!tab) return this.getDesktopState();
@@ -426,8 +517,8 @@ export class DesktopWindowManager {
             enabled: Boolean(cloudState.account?.apiKey),
           },
           {
-            label: 'Disconnect Cloud Account',
-            click: () => void this.actions.clearCloudAccount().catch((error) => this.actions.showError('Could not disconnect cloud account', error)),
+            label: 'Logout CloudCLI Account',
+            click: () => void this.actions.clearCloudAccount().catch((error) => this.actions.showError('Could not logout', error)),
             enabled: Boolean(cloudState.account?.apiKey),
           },
           { type: 'separator' },
@@ -455,6 +546,22 @@ export class DesktopWindowManager {
           { role: 'reload' },
           { role: 'forceReload' },
           { role: 'toggleDevTools' },
+          {
+            label: 'Open Active Tab DevTools',
+            click: () => this.openActiveTabDevTools(),
+          },
+          {
+            label: 'Copy WebContents Diagnostics',
+            click: () => this.copyWebContentsDiagnostics(),
+          },
+          {
+            label: 'Reload Active BrowserView',
+            click: () => this.reloadActiveBrowserViewForDiagnostics(),
+          },
+          {
+            label: 'Detach Active BrowserView',
+            click: () => this.detachActiveBrowserViewForDiagnostics(),
+          },
           { type: 'separator' },
           { role: 'resetZoom' },
           { role: 'zoomIn' },
@@ -523,8 +630,8 @@ export class DesktopWindowManager {
         click: () => void this.actions.connectCloudAccount().catch((error) => this.actions.showError('Could not connect CloudCLI account', error)),
       },
       {
-        label: 'Disconnect Cloud Account',
-        click: () => void this.actions.clearCloudAccount().catch((error) => this.actions.showError('Could not disconnect cloud account', error)),
+        label: 'Logout CloudCLI Account',
+        click: () => void this.actions.clearCloudAccount().catch((error) => this.actions.showError('Could not logout', error)),
         enabled: Boolean(cloudState.account?.apiKey),
       },
       { type: 'separator' },

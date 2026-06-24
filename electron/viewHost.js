@@ -100,6 +100,71 @@ export class ViewHost {
     this.activeContentView = null;
   }
 
+  detachActiveView() {
+    const mainWindow = this.getMainWindow();
+    const view = this.activeContentView;
+    if (!mainWindow || mainWindow.isDestroyed() || !view) return false;
+    try {
+      if (mainWindow.getBrowserViews().includes(view)) {
+        mainWindow.removeBrowserView(view);
+      }
+    } catch {
+      return false;
+    }
+    this.activeContentView = null;
+    return true;
+  }
+
+  getActiveView() {
+    const view = this.activeContentView;
+    if (!view || view.webContents.isDestroyed()) return null;
+    return view;
+  }
+
+  openActiveViewDevTools() {
+    const view = this.getActiveView();
+    if (!view) return false;
+    view.webContents.openDevTools({ mode: 'detach' });
+    return true;
+  }
+
+  reloadActiveView() {
+    const view = this.getActiveView();
+    if (!view) return false;
+    view.webContents.reloadIgnoringCache();
+    return true;
+  }
+
+  getTabViewDiagnostics() {
+    const mainWindow = this.getMainWindow();
+    const attachedViews = new Set();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      try {
+        for (const view of mainWindow.getBrowserViews()) {
+          attachedViews.add(view);
+        }
+      } catch {
+        // Ignore teardown races while gathering best-effort diagnostics.
+      }
+    }
+
+    return Array.from(this.tabViews.entries()).map(([tabId, view]) => {
+      const { webContents } = view;
+      const destroyed = webContents.isDestroyed();
+      return {
+        tabId,
+        webContentsId: destroyed ? null : webContents.id,
+        url: destroyed ? null : webContents.getURL(),
+        title: destroyed ? null : webContents.getTitle(),
+        osProcessId: destroyed || typeof webContents.getOSProcessId !== 'function' ? null : webContents.getOSProcessId(),
+        processId: destroyed || typeof webContents.getProcessId !== 'function' ? null : webContents.getProcessId(),
+        attached: attachedViews.has(view),
+        active: this.activeContentView === view,
+        destroyed,
+      };
+    });
+  }
+
   getOrCreateTabView(tabId) {
     let view = this.tabViews.get(tabId);
     if (view) return view;
@@ -162,23 +227,32 @@ export class ViewHost {
   }
 
   async showContentTarget(tabId, target) {
-    if (!isHttpUrl(target.url)) {
-      throw new Error(`Refusing to load unsupported app URL: ${target.url}`);
+    const loadUrl = target.loadUrl || target.url;
+    if (!isHttpUrl(loadUrl)) {
+      throw new Error(`Refusing to load unsupported app URL: ${loadUrl}`);
     }
     const view = this.getOrCreateTabView(tabId);
     this.attach(view);
     if (view.__cloudcliLoadedUrl !== target.url) {
-      view.__cloudcliLoadingUrl = target.url;
+      view.__cloudcliLoadingUrl = loadUrl;
       try {
-        await loadUrlWithTimeout(view.webContents, target.url);
+        await loadUrlWithTimeout(view.webContents, loadUrl);
         view.__cloudcliLoadedUrl = target.url;
         view.__cloudcliStartupHtml = null;
+        delete target.loadUrl;
       } finally {
-        if (view.__cloudcliLoadingUrl === target.url) {
+        if (view.__cloudcliLoadingUrl === loadUrl) {
           view.__cloudcliLoadingUrl = null;
         }
       }
     }
+  }
+
+  reloadTab(tabId) {
+    const view = this.tabViews.get(tabId);
+    if (!view || view.webContents.isDestroyed()) return false;
+    view.webContents.reloadIgnoringCache();
+    return true;
   }
 
   destroyTabView(tabId) {

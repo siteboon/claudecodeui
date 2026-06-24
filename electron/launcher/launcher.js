@@ -51,7 +51,16 @@ window.__MOCK_STATE__ = {
       mockState.account = { connected: true, email: 'you@cloudcli.ai' };
       return Promise.resolve(clone(mockState));
     },
+    disconnectCloud: function () {
+      mockState.account = { connected: false, email: null };
+      mockState.environments = [];
+      mockState.tabs = (mockState.tabs || []).filter(function (tab) { return tab.kind !== 'remote'; });
+      mockState.activeTabId = 'home';
+      mockState.activeTarget = { kind: 'launcher', name: 'Launcher', url: null };
+      return Promise.resolve(clone(mockState));
+    },
     refreshEnvironments: function () { return Promise.resolve(clone(mockState)); },
+    refreshActiveTab: function () { return Promise.resolve(clone(mockState)); },
     copyDiagnostics: function () { return Promise.resolve(clone(mockState)); },
     showComputerAccess: function () { return Promise.resolve(clone(mockState)); },
     showEnvironmentPicker: function () { return Promise.resolve(clone(mockState)); },
@@ -118,6 +127,7 @@ window.__MOCK_STATE__ = {
     monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
     phone: '<rect x="7" y="2" width="10" height="20" rx="2"/><line x1="11" y1="18" x2="13" y2="18"/>',
     x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+    logOut: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
   };
   var FILLED = { play: true };
 
@@ -330,6 +340,8 @@ window.__MOCK_STATE__ = {
         return CC.run('Starting Local CloudCLI...', function () { return bridge.openLocal(); });
       case 'connect':
         return CC.run('Opening cloudcli.ai to connect your account...', function () { return bridge.connectCloud(); });
+      case 'logout':
+        return CC.run('Logging out...', function () { return bridge.disconnectCloud(); });
       case 'open-web':
         return CC.run('Opening local web UI in your browser...', function () { return bridge.openLocalWebUi(); });
       case 'copy-web':
@@ -382,6 +394,8 @@ window.__MOCK_STATE__ = {
         return CC.run('Opening CloudCLI dashboard...', function () { return bridge.openCloudDashboard(); });
       case 'refresh-environments':
         return CC.run('Refreshing cloud environments...', function () { return bridge.refreshEnvironments(); });
+      case 'refresh-tab':
+        return CC.run('Refreshing tab...', function () { return bridge.refreshActiveTab(); });
       case 'env-action':
         return CC.run('Opening environment...', function () { return bridge.runActiveEnvironmentAction(node.getAttribute('data-cc-env-action')); });
       case 'env-menu':
@@ -408,14 +422,24 @@ window.__MOCK_STATE__ = {
 
   CC.titlebar = function (state) {
     var conn = connected(state);
-    var activeRemote = state.activeTarget && state.activeTarget.kind === 'remote';
-    var envActions = activeRemote ? '<button class="btn sm tb-action no-drag" data-cc-action="env-menu" title="Open environment actions">Open environment in...</button>' : '';
+    var activeTab = (state.tabs || []).filter(function (tab) { return tab.active; })[0] || null;
+    var activeEnvironmentId = state.activeTarget && state.activeTarget.kind === 'remote' ? state.activeTarget.id : null;
+    if (!activeEnvironmentId && activeTab && /^remote:/.test(activeTab.id || '')) {
+      activeEnvironmentId = activeTab.id.replace(/^remote:/, '');
+    }
+    var activeRefreshable = (state.activeTarget && (state.activeTarget.kind === 'remote' || state.activeTarget.kind === 'local')) ||
+      (activeTab && activeTab.id !== 'home');
+    var envActions = activeEnvironmentId ? '<button class="btn sm tb-action no-drag" data-cc-action="env-row-menu" data-cc-environment-id="' + esc(activeEnvironmentId) + '" title="Open environment actions">Open environment in...</button>' : '';
+    var refreshAction = activeRefreshable ? '<button class="icon-btn tb-action no-drag" data-cc-action="refresh-tab" title="Refresh tab">' + icon('refresh', 16) + '</button>' : '';
+    var logoutAction = (conn || authState(state) === 'expired') ? '<button class="icon-btn tb-action no-drag" data-cc-action="logout" title="Logout">' + icon('logOut', 16) + '</button>' : '';
     return '<div class="titlebar">' +
       '<div class="brand"><img class="mk" src="' + esc(LOGO_URL) + '" alt=""><span>CloudCLI</span></div>' +
       '<div class="tb-tabs no-drag">' + renderTabs(state) + '</div>' +
       '<span style="flex:1"></span>' +
+      refreshAction +
       envActions +
       '<button class="btn sm tb-action no-drag" data-cc-action="connect" title="' + esc(authState(state) === 'expired' ? 'Reconnect your CloudCLI account' : accountLabel(state)) + '"><span class="dot" style="background:' + (conn ? 'var(--ok)' : (authState(state) === 'expired' ? 'var(--warn)' : 'var(--tx3)')) + '"></span>' + esc(accountLabel(state)) + '</button>' +
+      logoutAction +
       '<button class="icon-btn tb-action no-drag" data-cc-action="settings-toggle" title="Settings">' + icon('settings', 16) + '</button>' +
       '</div>';
   };

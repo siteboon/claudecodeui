@@ -55,6 +55,22 @@ export class TabsController {
     return tab;
   }
 
+  removeByKind(kind) {
+    const removed = this.tabs.filter((tab) => tab.kind === kind && tab.closable);
+    if (!removed.length) return [];
+
+    const removedIds = new Set(removed.map((tab) => tab.id));
+    this.tabs = this.tabs.filter((tab) => !removedIds.has(tab.id));
+    if (removedIds.has(this.activeTabId)) {
+      this.activeTabId = 'home';
+    }
+    return removed;
+  }
+
+  getActiveTab() {
+    return this.getTab(this.activeTabId);
+  }
+
   getTab(tabId) {
     return this.tabs.find((item) => item.id === tabId) || null;
   }

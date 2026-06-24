@@ -200,7 +200,7 @@ async function requestComputerUsePermission(permission) {
 }
 
 async function openExternalUrl(url) {
-  if (String(url).startsWith(`${CALLBACK_PROTOCOL}://`)) {
+  if (String(url).startsWith(CALLBACK_PROTOCOL + "://")) {
     await handleDeepLink(url);
     return;
   }
@@ -251,9 +251,11 @@ function getEnvironmentTarget(environment) {
 }
 
 async function getEnvironmentLaunchTarget(environment) {
+  const environmentUrl = cloud.getEnvironmentUrl(environment);
   return {
     ...getEnvironmentTarget(environment),
-    url: await cloud.getEnvironmentLaunchUrl(environment),
+    url: environmentUrl,
+    loadUrl: await cloud.getEnvironmentLaunchUrl(environment),
   };
 }
 
@@ -681,6 +683,15 @@ async function openEnvironmentInDesktop(environment) {
 
 async function clearCloudAccount() {
   await cloud.clearCloudAccount();
+  const removedTabs = tabs.removeByKind('remote');
+  for (const tab of removedTabs) {
+    desktopWindow?.destroyTabView(tab.id);
+  }
+  if (activeTarget?.kind === 'remote') {
+    await desktopWindow?.showLauncher();
+  } else {
+    syncDesktopState();
+  }
   return getDesktopState();
 }
 
@@ -740,6 +751,8 @@ function registerIpcHandlers() {
     await refreshCloudEnvironments({ showErrors: true });
     return getDesktopState();
   });
+  ipcMain.handle('cloudcli-desktop:disconnect-cloud', async () => clearCloudAccount());
+  ipcMain.handle('cloudcli-desktop:reload-active-tab', async () => desktopWindow.reloadActiveTab());
   ipcMain.handle('cloudcli-desktop:show-environment-picker', async () => showEnvironmentPicker());
   ipcMain.handle('cloudcli-desktop:show-launcher', async () => {
     await desktopWindow.showLauncher();
