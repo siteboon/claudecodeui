@@ -54,7 +54,7 @@ export default function VoiceSettingsTab() {
             value={config.apiKey}
             onChange={(e) => update({ apiKey: e.target.value })}
           />
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
             <Field
               label={t('voiceSettings.sttModel')}
               placeholder="whisper-1"
@@ -72,6 +72,12 @@ export default function VoiceSettingsTab() {
               placeholder="alloy"
               value={config.ttsVoice}
               onChange={(e) => update({ ttsVoice: e.target.value })}
+            />
+            <Field
+              label={t('voiceSettings.format')}
+              placeholder="mp3"
+              value={config.ttsFormat}
+              onChange={(e) => update({ ttsFormat: e.target.value })}
             />
           </div>
           <p className="text-xs text-muted-foreground">{t('voiceSettings.note')}</p>

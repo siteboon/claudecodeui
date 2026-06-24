@@ -16,14 +16,13 @@ const ENV = {
   sttModel: process.env.VOICE_STT_MODEL || 'whisper-1',
   ttsModel: process.env.VOICE_TTS_MODEL || 'tts-1',
   ttsVoice: process.env.VOICE_TTS_VOICE || 'alloy',
-  ttsFormat: process.env.VOICE_TTS_FORMAT || 'mp3',
 };
 
 /**
  * Resolve the voice backend config for a request. Client headers (set from the
  * user's in-app voice settings) take precedence over the server env defaults.
  * @param {import('express').Request} req
- * @returns {{baseUrl: string, apiKey: string, sttModel: string, ttsModel: string, ttsVoice: string}}
+ * @returns {{baseUrl: string, apiKey: string, sttModel: string, ttsModel: string, ttsVoice: string, ttsFormat: string}}
  */
 function resolveConfig(req) {
   const h = req.headers;
@@ -33,6 +32,7 @@ function resolveConfig(req) {
     sttModel: String(h['x-voice-stt-model'] || '') || ENV.sttModel,
     ttsModel: String(h['x-voice-tts-model'] || '') || ENV.ttsModel,
     ttsVoice: String(h['x-voice-tts-voice'] || '') || ENV.ttsVoice,
+    ttsFormat: String(h['x-voice-tts-format'] || ''),
   };
 }
 
@@ -197,7 +197,7 @@ router.post('/tts', async (req, res) => {
         model: cfg.ttsModel,
         voice: cfg.ttsVoice,
         input: text,
-        response_format: ENV.ttsFormat,
+        ...(cfg.ttsFormat ? { response_format: cfg.ttsFormat } : {}),
       }),
     });
     if (!r.ok) {

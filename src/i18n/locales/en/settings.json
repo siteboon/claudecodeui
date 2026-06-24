@@ -61,7 +61,8 @@
     "sttModel": "Speech-to-text model",
     "ttsModel": "Text-to-speech model",
     "voice": "Voice",
-    "note": "The shown defaults work with OpenAI once you add a key. For other providers, set the base URL and model names to match."
+    "format": "Audio format",
+    "note": "The shown defaults work with OpenAI once you add a key. For other providers, set the base URL, model names, and audio format to match."
   },
   "quickSettings": {
     "title": "Quick Settings",
