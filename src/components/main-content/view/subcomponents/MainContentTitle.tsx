@@ -73,7 +73,15 @@ export default function MainContentTitle({
             <h2 className="scrollbar-hide overflow-x-auto whitespace-nowrap text-sm font-semibold leading-tight text-foreground">
               {getSessionTitle(selectedSession)}
             </h2>
-            <div className="truncate text-[11px] leading-tight text-muted-foreground">{selectedProject.displayName}</div>
+            <div className="flex min-w-0 items-center gap-2 text-[11px] leading-tight text-muted-foreground">
+              <span className="min-w-0 truncate">{selectedProject.displayName}</span>
+              <span
+                className="hidden min-w-0 max-w-[45%] flex-shrink truncate border-l border-border/60 pl-2 font-mono text-[10px] sm:block"
+                title={selectedSession.id}
+              >
+                {selectedSession.id}
+              </span>
+            </div>
           </div>
         ) : showChatNewSession ? (
           <div className="min-w-0">
