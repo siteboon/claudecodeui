@@ -28,9 +28,16 @@ export const QuestionAnswerContent: React.FC<QuestionAnswerContentProps> = ({
 
   return (
     <div className={`space-y-2 ${className}`}>
-      {questions.map((q, idx) => {
+      {questions.map((rawQuestion, idx) => {
+        // Entries come from session transcripts and may be malformed; skip
+        // anything that isn't a proper question object with a string prompt.
+        if (!rawQuestion || typeof rawQuestion !== 'object' || typeof rawQuestion.question !== 'string') {
+          return null;
+        }
+        const q = rawQuestion;
         const answer = answers?.[q.question];
-        const answerLabels = answer ? answer.split(', ') : [];
+        // `answer` may be a non-string (or absent) in malformed payloads.
+        const answerLabels = typeof answer === 'string' ? answer.split(', ') : [];
         const skipped = !answer;
         const isExpanded = expandedIdx === idx;
         // `options` is typed as an array but comes from untrusted runtime data;

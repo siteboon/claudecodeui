@@ -32,6 +32,29 @@ test('renders without throwing when a question is missing options[]', () => {
   });
 });
 
+test('renders without throwing when a questions entry is null/non-object', () => {
+  assert.doesNotThrow(() => {
+    renderToStaticMarkup(
+      React.createElement(QuestionAnswerContent, {
+        questions: [null, 'oops', { question: 'Ok?', options: [{ label: 'A' }] }] as never,
+        answers: {},
+      }),
+    );
+  });
+});
+
+test('renders without throwing when an answer is a non-string value', () => {
+  assert.doesNotThrow(() => {
+    renderToStaticMarkup(
+      React.createElement(QuestionAnswerContent, {
+        questions: [{ question: 'Pick one?', options: [{ label: 'A' }] }],
+        // Malformed: answer is an object instead of the expected string
+        answers: { 'Pick one?': { unexpected: true } } as never,
+      }),
+    );
+  });
+});
+
 test('still renders a well-formed question + answer', () => {
   const html = renderToStaticMarkup(
     React.createElement(QuestionAnswerContent, {
