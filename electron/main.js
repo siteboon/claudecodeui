@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, shell, systemPreferences } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, session, shell, systemPreferences } from 'electron';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -257,6 +257,28 @@ async function getEnvironmentLaunchTarget(environment) {
     url: environmentUrl,
     loadUrl: await cloud.getEnvironmentLaunchUrl(environment),
   };
+}
+
+async function hasCloudWebSession() {
+  const cookies = await session.defaultSession.cookies.get({});
+  return cookies.some((cookie) => {
+    const cookieDomain = String(cookie.domain || '');
+    return cookieDomain.includes('cloudcli.ai')
+      && /-auth-token(?:\.\d+)?$/.test(cookie.name)
+      && Boolean(cookie.value);
+  });
+}
+
+function isCloudAuthRedirect(url) {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    const controlPlane = new URL(CLOUDCLI_CONTROL_PLANE_URL);
+    return parsed.origin === controlPlane.origin
+      && (parsed.pathname === '/login' || parsed.pathname.startsWith('/auth/'));
+  } catch {
+    return false;
+  }
 }
 
 function getDiagnosticsText() {
@@ -676,8 +698,18 @@ async function openEnvironmentInDesktop(environment) {
     nextEnvironment = await cloud.startEnvironmentAndWait(environment, REMOTE_START_TIMEOUT_MS);
   }
 
-  const target = await getEnvironmentLaunchTarget(nextEnvironment);
-  await desktopWindow.showTarget(target);
+  let target = getEnvironmentTarget(nextEnvironment);
+  if (!(await hasCloudWebSession())) {
+    target = await getEnvironmentLaunchTarget(nextEnvironment);
+  }
+
+  const usedBootstrap = Boolean(target.loadUrl);
+  const finalUrl = await desktopWindow.showTarget(target);
+  if (!usedBootstrap && isCloudAuthRedirect(finalUrl)) {
+    const bootstrapTarget = await getEnvironmentLaunchTarget(nextEnvironment);
+    bootstrapTarget.forceLoad = true;
+    await desktopWindow.showTarget(bootstrapTarget);
+  }
   return getDesktopState();
 }
 

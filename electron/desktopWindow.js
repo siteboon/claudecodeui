@@ -195,8 +195,9 @@ export class DesktopWindowManager {
     this.actions.setActiveTarget(target);
     this.buildAppMenu();
     this.mainWindow.setTitle(`${this.appName} - ${target.name}`);
-    await this.showContentTarget(target);
+    const finalUrl = await this.showContentTarget(target);
     this.emitDesktopState();
+    return finalUrl;
   }
 
   async showLauncher() {

@@ -233,19 +233,21 @@ export class ViewHost {
     }
     const view = this.getOrCreateTabView(tabId);
     this.attach(view);
-    if (view.__cloudcliLoadedUrl !== target.url) {
+    if (target.forceLoad || view.__cloudcliLoadedUrl !== target.url) {
       view.__cloudcliLoadingUrl = loadUrl;
       try {
         await loadUrlWithTimeout(view.webContents, loadUrl);
         view.__cloudcliLoadedUrl = target.url;
         view.__cloudcliStartupHtml = null;
         delete target.loadUrl;
+        delete target.forceLoad;
       } finally {
         if (view.__cloudcliLoadingUrl === loadUrl) {
           view.__cloudcliLoadingUrl = null;
         }
       }
     }
+    return view.webContents.getURL();
   }
 
   reloadTab(tabId) {

@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { useCallback, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 
 import type { ChatMessage } from '../../types/types';
@@ -10,9 +10,11 @@ import type {
   ProviderModelsDefinition,
 } from '../../../../types/app';
 import { getIntrinsicMessageKey } from '../../utils/messageKeys';
+import { groupConsecutiveTools, isToolGroupItem } from '../../utils/toolGrouping';
 
 import MessageComponent from './MessageComponent';
 import ProviderSelectionEmptyState from './ProviderSelectionEmptyState';
+import ToolGroupContainer from './ToolGroupContainer';
 
 interface ChatMessagesPaneProps {
   scrollContainerRef: RefObject<HTMLDivElement>;
@@ -118,6 +120,7 @@ export default function ChatMessagesPane({
   const messageKeyMapRef = useRef<WeakMap<ChatMessage, string>>(new WeakMap());
   const allocatedKeysRef = useRef<Set<string>>(new Set());
   const generatedMessageKeyCounterRef = useRef(0);
+  const groupedVisibleMessages = useMemo(() => groupConsecutiveTools(visibleMessages), [visibleMessages]);
 
   // Keep keys stable across prepends so existing MessageComponent instances retain local state.
   const getMessageKey = useCallback((message: ChatMessage) => {
@@ -252,28 +255,56 @@ export default function ChatMessagesPane({
             </div>
           )}
 
-          {visibleMessages.map((message, index) => {
-            const prevMessage = index > 0 ? visibleMessages[index - 1] : null;
-            return (
-              <MessageComponent
-                key={getMessageKey(message)}
-                message={message}
-                prevMessage={prevMessage}
-                createDiff={createDiff}
-                onFileOpen={onFileOpen}
-                onShowSettings={onShowSettings}
-                onGrantToolPermission={onGrantToolPermission}
-                autoExpandTools={autoExpandTools}
-                showRawParameters={showRawParameters}
-                showThinking={showThinking}
-                selectedProject={selectedProject}
-                provider={provider}
-              />
-            );
-          })}
+          {(() => {
+            let prevMessage: ChatMessage | null = null;
+
+            return groupedVisibleMessages.map((item) => {
+              if (isToolGroupItem(item)) {
+                const groupPrevMessage = prevMessage;
+                prevMessage = item.messages[item.messages.length - 1] || prevMessage;
+
+                return (
+                  <ToolGroupContainer
+                    key={`tool-group-${getMessageKey(item.messages[0])}`}
+                    group={item}
+                    prevMessage={groupPrevMessage}
+                    createDiff={createDiff}
+                    getMessageKey={getMessageKey}
+                    onFileOpen={onFileOpen}
+                    onShowSettings={onShowSettings}
+                    onGrantToolPermission={onGrantToolPermission}
+                    autoExpandTools={autoExpandTools}
+                    showRawParameters={showRawParameters}
+                    showThinking={showThinking}
+                    selectedProject={selectedProject}
+                    provider={provider}
+                  />
+                );
+              }
+
+              const messagePrevMessage = prevMessage;
+              prevMessage = item;
+
+              return (
+                <MessageComponent
+                  key={getMessageKey(item)}
+                  message={item}
+                  prevMessage={messagePrevMessage}
+                  createDiff={createDiff}
+                  onFileOpen={onFileOpen}
+                  onShowSettings={onShowSettings}
+                  onGrantToolPermission={onGrantToolPermission}
+                  autoExpandTools={autoExpandTools}
+                  showRawParameters={showRawParameters}
+                  showThinking={showThinking}
+                  selectedProject={selectedProject}
+                  provider={provider}
+                />
+              );
+            });
+          })()}
         </>
       )}
     </div>
   );
 }
-
