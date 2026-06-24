@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { useMemo } from 'react';
 import type {
   ChangeEvent,
   ClipboardEvent,
@@ -154,12 +155,17 @@ export default function ChatComposer({
   sendByCtrlEnter,
 }: ChatComposerProps) {
   const { t } = useTranslation('chat');
-  const textareaRect = textareaRef.current?.getBoundingClientRect();
-  const commandMenuPosition = {
-    top: textareaRect ? Math.max(16, textareaRect.top - 316) : 0,
-    left: textareaRect ? textareaRect.left : 16,
-    bottom: textareaRect ? window.innerHeight - textareaRect.top + 8 : 90,
-  };
+  const commandMenuPosition = useMemo(() => {
+    if (!isCommandMenuOpen) {
+      return { top: 0, left: 16, bottom: 90 };
+    }
+    const textareaRect = textareaRef.current?.getBoundingClientRect();
+    return {
+      top: textareaRect ? Math.max(16, textareaRect.top - 316) : 0,
+      left: textareaRect ? textareaRect.left : 16,
+      bottom: textareaRect ? window.innerHeight - textareaRect.top + 8 : 90,
+    };
+  }, [input, isCommandMenuOpen, textareaRef]);
 
   // Detect if the AskUserQuestion interactive panel is active
   const hasQuestionPanel = pendingPermissionRequests.some(
@@ -170,7 +176,7 @@ export default function ChatComposer({
   const hasPendingPermissions = pendingPermissionRequests.length > 0;
 
   return (
-    <div className="flex-shrink-0 p-2 pb-2 sm:p-4 sm:pb-4 md:p-4 md:pb-6">
+    <div className="chat-composer-shell flex-shrink-0 p-2 pb-2 sm:p-4 sm:pb-4 md:p-4 md:pb-6">
       {!hasPendingPermissions && (
         <ActivityIndicator activity={activity} onAbort={onAbortSession} />
       )}

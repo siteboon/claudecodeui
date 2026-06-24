@@ -12,6 +12,7 @@ import { TabsController } from './tabs.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const APP_NAME = 'CloudCLI';
+const APP_USER_MODEL_ID = 'ai.cloudcli.desktop';
 const CALLBACK_PROTOCOL = 'cloudcli';
 const CALLBACK_URL = `${CALLBACK_PROTOCOL}://auth/callback`;
 const CLOUDCLI_CONTROL_PLANE_URL = process.env.CLOUDCLI_CONTROL_PLANE_URL || 'https://cloudcli.ai';
@@ -19,6 +20,10 @@ const REMOTE_START_TIMEOUT_MS = 30000;
 const AUTH_CALLBACK_TTL_MS = 10 * 60 * 1000;
 
 const tabs = new TabsController();
+
+if (process.platform === 'win32') {
+  app.setAppUserModelId(APP_USER_MODEL_ID);
+}
 
 let activeTarget = { kind: 'launcher', name: APP_NAME, url: null };
 let desktopWindow = null;

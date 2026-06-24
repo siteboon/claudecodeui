@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { useCallback, useMemo, useRef } from 'react';
+import { memo, useCallback, useMemo, useRef } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 
 import type { ChatMessage } from '../../types/types';
@@ -67,7 +67,7 @@ interface ChatMessagesPaneProps {
   selectedProject: Project;
 }
 
-export default function ChatMessagesPane({
+function ChatMessagesPane({
   scrollContainerRef,
   onWheel,
   onTouchMove,
@@ -151,7 +151,7 @@ export default function ChatMessagesPane({
       ref={scrollContainerRef}
       onWheel={onWheel}
       onTouchMove={onTouchMove}
-      className="relative flex-1 space-y-3 overflow-y-auto overflow-x-hidden px-0 py-3 sm:space-y-4 sm:p-4"
+      className="chat-messages-pane relative min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden px-0 py-3 sm:space-y-4 sm:p-4"
     >
       {(isLoadingSessionMessages || isProcessing) && chatMessages.length === 0 ? (
         <div className="mt-8 text-center text-gray-500 dark:text-gray-400">
@@ -308,3 +308,5 @@ export default function ChatMessagesPane({
     </div>
   );
 }
+
+export default memo(ChatMessagesPane);

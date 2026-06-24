@@ -682,10 +682,18 @@ export class DesktopWindowManager {
   }
 
   configurePermissions() {
-    session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    const isAllowedPermission = (webContents, permission) => {
       const sourceUrl = webContents.getURL();
-      const allowedPermissions = new Set(['clipboard-read', 'media']);
-      callback(isAllowedPermissionOrigin(sourceUrl, this.getCloudState().controlPlaneUrl) && allowedPermissions.has(permission));
+      const allowedPermissions = new Set(['clipboard-read', 'media', 'notifications']);
+      return isAllowedPermissionOrigin(sourceUrl, this.getCloudState().controlPlaneUrl) && allowedPermissions.has(permission);
+    };
+
+    session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+      callback(isAllowedPermission(webContents, permission));
+    });
+    session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
+      if (!webContents) return false;
+      return isAllowedPermission(webContents, permission);
     });
   }
 

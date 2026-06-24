@@ -204,6 +204,8 @@ export function useChatComposerState({
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputHighlightRef = useRef<HTMLDivElement>(null);
+  const textareaLineHeightRef = useRef<number | null>(null);
+  const lastAutosizedInputRef = useRef<string | null>(null);
   const handleSubmitRef = useRef<
     ((event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>) => Promise<void>) | null
   >(null);
@@ -455,6 +457,22 @@ export function useChatComposerState({
     }
     inputHighlightRef.current.scrollTop = target.scrollTop;
     inputHighlightRef.current.scrollLeft = target.scrollLeft;
+  }, []);
+
+  const resizeTextarea = useCallback((target: HTMLTextAreaElement) => {
+    target.style.height = 'auto';
+    const nextHeight = Math.max(22, target.scrollHeight);
+    target.style.height = `${nextHeight}px`;
+
+    let lineHeight = textareaLineHeightRef.current;
+    if (!lineHeight) {
+      lineHeight = parseInt(window.getComputedStyle(target).lineHeight);
+      textareaLineHeightRef.current = Number.isFinite(lineHeight) ? lineHeight : 24;
+    }
+
+    const expanded = nextHeight > (textareaLineHeightRef.current || 24) * 2;
+    setIsTextareaExpanded((previous) => previous === expanded ? previous : expanded);
+    lastAutosizedInputRef.current = target.value;
   }, []);
 
   const handleImageFiles = useCallback((files: File[]) => {
@@ -806,13 +824,13 @@ export function useChatComposerState({
     if (!textareaRef.current) {
       return;
     }
-    // Re-run when input changes so restored drafts get the same autosize behavior as typed text.
-    textareaRef.current.style.height = 'auto';
-    textareaRef.current.style.height = `${Math.max(22, textareaRef.current.scrollHeight)}px`;
-    const lineHeight = parseInt(window.getComputedStyle(textareaRef.current).lineHeight);
-    const expanded = textareaRef.current.scrollHeight > lineHeight * 2;
-    setIsTextareaExpanded(expanded);
-  }, [input]);
+    if (lastAutosizedInputRef.current === input) {
+      return;
+    }
+    // Re-run for restored drafts and programmatic input changes. User typing is
+    // already resized in onInput, so this avoids doing the same forced layout twice.
+    resizeTextarea(textareaRef.current);
+  }, [input, resizeTextarea]);
 
   useEffect(() => {
     if (!textareaRef.current || input.trim()) {
@@ -894,15 +912,11 @@ export function useChatComposerState({
   const handleTextareaInput = useCallback(
     (event: FormEvent<HTMLTextAreaElement>) => {
       const target = event.currentTarget;
-      target.style.height = 'auto';
-      target.style.height = `${Math.max(22, target.scrollHeight)}px`;
+      resizeTextarea(target);
       setCursorPosition(target.selectionStart);
       syncInputOverlayScroll(target);
-
-      const lineHeight = parseInt(window.getComputedStyle(target).lineHeight);
-      setIsTextareaExpanded(target.scrollHeight > lineHeight * 2);
     },
-    [setCursorPosition, syncInputOverlayScroll],
+    [resizeTextarea, setCursorPosition, syncInputOverlayScroll],
   );
 
   const handleClearInput = useCallback(() => {
