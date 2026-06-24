@@ -72,6 +72,13 @@ export function useChatRealtimeHandlers({
   onWebSocketReconnect,
   sessionStore,
 }: UseChatRealtimeHandlersArgs) {
+  // Session switches can send `chat.subscribe` before this effect has a chance
+  // to rebind the websocket listener. Read the visible session id from a ref
+  // so a fast `chat_subscribed` ack is matched against the current view, not
+  // the previous render's closed-over selection.
+  const activeViewSessionIdRef = useRef<string | null>(selectedSession?.id || currentSessionId || null);
+  activeViewSessionIdRef.current = selectedSession?.id || currentSessionId || null;
+
   // Keep the latest pending-permission snapshot available to the websocket
   // listener so back-to-back permission events can dedupe and re-arm the
   // notification sound before React finishes a rerender.
@@ -87,7 +94,7 @@ export function useChatRealtimeHandlers({
         return;
       }
 
-      const activeViewSessionId = selectedSession?.id || currentSessionId || null;
+      const activeViewSessionId = activeViewSessionIdRef.current;
       const sid = (typeof msg.sessionId === 'string' && msg.sessionId) || activeViewSessionId;
 
       // Record replay progress for every sequenced live event.
