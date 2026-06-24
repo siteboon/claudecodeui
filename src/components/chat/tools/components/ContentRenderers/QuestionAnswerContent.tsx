@@ -15,7 +15,11 @@ export const QuestionAnswerContent: React.FC<QuestionAnswerContentProps> = ({
 }) => {
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
 
-  if (!questions || questions.length === 0) {
+  // Tool inputs are runtime data loaded from session transcripts and may be
+  // malformed (e.g. `questions` arriving as a non-array). Guard with
+  // Array.isArray so a single bad payload can't crash the whole chat view
+  // with "e.map is not a function".
+  if (!Array.isArray(questions) || questions.length === 0) {
     return null;
   }
 
@@ -29,6 +33,9 @@ export const QuestionAnswerContent: React.FC<QuestionAnswerContentProps> = ({
         const answerLabels = answer ? answer.split(', ') : [];
         const skipped = !answer;
         const isExpanded = expandedIdx === idx;
+        // `options` is typed as an array but comes from untrusted runtime data;
+        // fall back to an empty array so `.some`/`.map` below never throw.
+        const options = Array.isArray(q.options) ? q.options : [];
 
         return (
           <div
@@ -74,7 +81,7 @@ export const QuestionAnswerContent: React.FC<QuestionAnswerContentProps> = ({
                 {!isExpanded && answerLabels.length > 0 && (
                   <div className="mt-1.5 flex flex-wrap gap-1">
                     {answerLabels.map((lbl) => {
-                      const isCustom = !q.options.some(o => o.label === lbl);
+                      const isCustom = !options.some(o => o.label === lbl);
                       return (
                         <span
                           key={lbl}
@@ -110,7 +117,7 @@ export const QuestionAnswerContent: React.FC<QuestionAnswerContentProps> = ({
             {isExpanded && (
               <div className="border-t border-gray-100 px-3 pb-2.5 pt-0.5 dark:border-gray-700/40">
                 <div className="ml-6.5 space-y-1">
-                  {q.options.map((opt) => {
+                  {options.map((opt) => {
                     const wasSelected = answerLabels.includes(opt.label);
                     return (
                       <div
@@ -148,7 +155,7 @@ export const QuestionAnswerContent: React.FC<QuestionAnswerContentProps> = ({
                     );
                   })}
 
-                  {answerLabels.filter(lbl => !q.options.some(o => o.label === lbl)).map(lbl => (
+                  {answerLabels.filter(lbl => !options.some(o => o.label === lbl)).map(lbl => (
                     <div
                       key={lbl}
                       className="flex items-start gap-2 rounded-lg border border-blue-200/60 bg-blue-50/80 px-2.5 py-1.5 text-[12px] dark:border-blue-800/40 dark:bg-blue-900/20"
