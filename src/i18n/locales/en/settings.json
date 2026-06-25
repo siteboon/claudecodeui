@@ -131,7 +131,7 @@
     },
     "sound": {
       "title": "Sound",
-      "description": "Play a short tone when a chat run finishes.",
+      "description": "Play a short tone when a chat run finishes or needs tool approval.",
       "enabled": "Enabled",
       "test": "Test sound"
     },
