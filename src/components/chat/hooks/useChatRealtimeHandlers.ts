@@ -270,6 +270,10 @@ export function useChatRealtimeHandlers({
 
         case 'permission_request': {
           if (!msg.requestId) break;
+          if (isActionablePermissionRequest({ toolName: msg.toolName })) {
+            void playNotificationSound();
+          }
+
           if (sid === activeViewSessionId) {
             const previousPendingPermissionRequests = pendingPermissionRequestsRef.current;
             if (!previousPendingPermissionRequests.some((request) => request.requestId === msg.requestId)) {
@@ -284,13 +288,6 @@ export function useChatRealtimeHandlers({
 
               pendingPermissionRequestsRef.current = nextPendingPermissionRequests;
               setPendingPermissionRequests(nextPendingPermissionRequests);
-
-              if (
-                isActionablePermissionRequest({ toolName: msg.toolName })
-                && !hasActionablePermissionRequests(previousPendingPermissionRequests)
-              ) {
-                void playNotificationSound();
-              }
             }
           }
           if (sid) {
