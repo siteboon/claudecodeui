@@ -18,7 +18,12 @@ function read(): VoiceConfig {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULTS };
     const parsed = JSON.parse(raw);
-    return { ...DEFAULTS, ...(parsed && typeof parsed === 'object' ? parsed : {}) };
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { ...DEFAULTS };
+    const config = { ...DEFAULTS };
+    for (const key of Object.keys(DEFAULTS) as (keyof VoiceConfig)[]) {
+      if (typeof parsed[key] === 'string') config[key] = parsed[key];
+    }
+    return config;
   } catch {
     return { ...DEFAULTS };
   }

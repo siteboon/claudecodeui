@@ -56,10 +56,14 @@ const VOICE_TIMEOUT_MS = Number.isFinite(_parsedTimeout) && _parsedTimeout > 0
  * @returns {Promise<Response>}
  */
 async function fetchWithTimeout(url, options = {}) {
+  const parsed = new URL(url);
+  if (!['http:', 'https:'].includes(parsed.protocol) || !isAllowedBackendUrl(parsed.origin)) {
+    throw new Error('Blocked outbound voice backend URL');
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), VOICE_TIMEOUT_MS);
   try {
-    return await fetch(url, { redirect: 'manual', ...options, signal: controller.signal });
+    return await fetch(parsed.toString(), { redirect: 'manual', ...options, signal: controller.signal });
   } finally {
     clearTimeout(timer);
   }

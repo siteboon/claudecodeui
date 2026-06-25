@@ -63,7 +63,6 @@ export function useVoiceInput(
   const start = useCallback(async () => {
     if (startingRef.current || (recorderRef.current && recorderRef.current.state !== 'inactive')) return;
     startingRef.current = true;
-    let recordingCancelled = false;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true },
@@ -84,7 +83,7 @@ export function useVoiceInput(
 
       rec.onstop = async () => {
         stopTracks();
-        if (recordingCancelled || cancelledRef.current) return;
+        if (cancelledRef.current) return;
         // Capture and clear the send intent for this stop before any async work.
         const shouldSend = sendRef.current;
         sendRef.current = false;
@@ -107,23 +106,22 @@ export function useVoiceInput(
           });
           if (!res.ok) throw new Error(`transcribe ${res.status}`);
           const data = await res.json();
-          if (recordingCancelled || cancelledRef.current) return;
+          if (cancelledRef.current) return;
           const text = String(data?.text || '').trim();
           if (text) onTranscript(text, shouldSend);
           else onError?.('No speech detected');
         } catch (e) {
-          if (!recordingCancelled && !cancelledRef.current) {
+          if (!cancelledRef.current) {
             onError?.(`Transcription failed: ${e instanceof Error ? e.message : String(e)}`);
           }
         } finally {
-          if (!recordingCancelled && !cancelledRef.current) setState('idle');
+          if (!cancelledRef.current) setState('idle');
         }
       };
 
       rec.start();
       setState('recording');
     } catch (e) {
-      recordingCancelled = true;
       recorderRef.current = null;
       stopTracks();
       if (cancelledRef.current) return;

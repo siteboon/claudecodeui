@@ -7,13 +7,11 @@ import { VOICE_CONFIG_SYNC_EVENT, voiceConfigHeaders } from '../../../hooks/useV
 // the Settings modal) and a configured voice backend.
 const STORAGE_KEY = 'uiPreferences';
 const SYNC_EVENT = 'ui-preferences:sync';
-const healthCache = new Map<string, boolean>();
 const healthRequests = new Map<string, Promise<boolean>>();
 
 function checkVoiceHealth(): Promise<boolean> {
   const baseUrl = voiceConfigHeaders()['x-voice-base-url'];
   const signature = baseUrl || '';
-  if (healthCache.has(signature)) return Promise.resolve(healthCache.get(signature) ?? false);
   const pending = healthRequests.get(signature);
   if (pending) return pending;
   const request = authenticatedFetch('/api/voice/health', {
@@ -23,10 +21,6 @@ function checkVoiceHealth(): Promise<boolean> {
       if (!response.ok) throw new Error(`Voice health check failed (${response.status})`);
       const data = await response.json();
       return data?.configured === true;
-    })
-    .then((available) => {
-      healthCache.set(signature, available);
-      return available;
     })
     .finally(() => {
       healthRequests.delete(signature);
