@@ -77,6 +77,19 @@ const __dirname = getModuleDir(import.meta.url);
 // Resolving the app root once keeps every repo-level lookup below aligned across both layouts.
 const APP_ROOT = findAppRoot(__dirname);
 const installMode = fs.existsSync(path.join(APP_ROOT, '.git')) ? 'git' : 'npm';
+// Version of the code that is actually running, captured once at process
+// startup. This intentionally does NOT re-read package.json per request: after
+// an update replaces the files on disk, package.json reflects the NEW version
+// while this long-lived process still runs the OLD code. The frontend bundle is
+// rebuilt on update, so a mismatch between this value and the frontend's
+// build-time version means the server was updated but not restarted.
+const RUNNING_VERSION = (() => {
+    try {
+        return JSON.parse(fs.readFileSync(path.join(APP_ROOT, 'package.json'), 'utf8')).version || null;
+    } catch {
+        return null;
+    }
+})();
 const MAX_FILE_UPLOAD_SIZE_MB = 200;
 const MAX_FILE_UPLOAD_SIZE_BYTES = MAX_FILE_UPLOAD_SIZE_MB * 1024 * 1024;
 const MAX_FILE_UPLOAD_COUNT = 20;
@@ -157,7 +170,8 @@ app.get('/health', (req, res) => {
     res.json({
         status: 'ok',
         timestamp: new Date().toISOString(),
-        installMode
+        installMode,
+        version: RUNNING_VERSION
     });
 });
 

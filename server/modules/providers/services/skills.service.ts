@@ -1,5 +1,9 @@
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
-import type { ProviderSkill, ProviderSkillListOptions } from '@/shared/types.js';
+import type {
+  ProviderSkill,
+  ProviderSkillCreateInput,
+  ProviderSkillListOptions,
+} from '@/shared/types.js';
 
 export const providerSkillsService = {
   /**
@@ -11,5 +15,16 @@ export const providerSkillsService = {
   ): Promise<ProviderSkill[]> {
     const provider = providerRegistry.resolveProvider(providerName);
     return provider.skills.listSkills(options);
+  },
+
+  /**
+   * Writes one or more global skills for one provider.
+   */
+  async addProviderSkills(
+    providerName: string,
+    input: ProviderSkillCreateInput,
+  ): Promise<ProviderSkill[]> {
+    const provider = providerRegistry.resolveProvider(providerName);
+    return provider.skills.addSkills(input);
   },
 };
