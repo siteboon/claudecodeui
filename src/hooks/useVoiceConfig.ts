@@ -10,16 +10,15 @@ export type VoiceConfig = {
 };
 
 const STORAGE_KEY = 'voiceConfig';
-const DEFAULTS: VoiceConfig = { baseUrl: '', apiKey: '', sttModel: '', ttsModel: '', ttsVoice: '', ttsFormat: 'mp3' };
+export const VOICE_CONFIG_SYNC_EVENT = 'voice-config:sync';
+const DEFAULTS: VoiceConfig = { baseUrl: '', apiKey: '', sttModel: '', ttsModel: '', ttsVoice: '', ttsFormat: '' };
 
 function read(): VoiceConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULTS };
     const parsed = JSON.parse(raw);
-    const next = { ...DEFAULTS, ...(parsed && typeof parsed === 'object' ? parsed : {}) };
-    if (!next.ttsFormat) next.ttsFormat = DEFAULTS.ttsFormat;
-    return next;
+    return { ...DEFAULTS, ...(parsed && typeof parsed === 'object' ? parsed : {}) };
   } catch {
     return { ...DEFAULTS };
   }
@@ -36,7 +35,7 @@ export function voiceConfigHeaders(): Record<string, string> {
   if (c.sttModel) h['x-voice-stt-model'] = c.sttModel;
   if (c.ttsModel) h['x-voice-tts-model'] = c.ttsModel;
   if (c.ttsVoice) h['x-voice-tts-voice'] = c.ttsVoice;
-  if (c.ttsFormat) h['x-voice-tts-format'] = c.ttsFormat;
+  if (c.ttsFormat.trim()) h['x-voice-tts-format'] = c.ttsFormat.trim();
   return h;
 }
 
@@ -49,7 +48,11 @@ export function useVoiceConfig() {
     setConfig((prev) => {
       const next = { ...prev, ...patch };
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+        const stored: Partial<VoiceConfig> = { ...next };
+        if (next.ttsFormat.trim()) stored.ttsFormat = next.ttsFormat.trim();
+        else delete stored.ttsFormat;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+        window.dispatchEvent(new Event(VOICE_CONFIG_SYNC_EVENT));
       } catch {
         /* ignore persistence errors */
       }

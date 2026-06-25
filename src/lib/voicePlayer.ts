@@ -15,10 +15,11 @@ const IDLE: VoiceSnapshot = { state: 'idle', error: null };
 const CACHE_MAX = 24;
 const CLIENT_TIMEOUT_MS = 330000; // backstop; the server proxy already times out at 5 min
 
-// Stable id / cache key from a message's text (djb2).
-export function voiceId(content: string): string {
+// Stable id / cache key from the text and voice settings that affect its audio (djb2).
+export function voiceId(content: string, headers = voiceConfigHeaders()): string {
+  const input = JSON.stringify([content, Object.entries(headers).sort(([a], [b]) => a.localeCompare(b))]);
   let h = 5381;
-  for (let i = 0; i < content.length; i++) h = (((h << 5) + h) + content.charCodeAt(i)) | 0;
+  for (let i = 0; i < input.length; i++) h = (((h << 5) + h) + input.charCodeAt(i)) | 0;
   return (h >>> 0).toString(36);
 }
 
@@ -81,12 +82,13 @@ class VoicePlayer {
   }
 
   toggle(content: string) {
-    const id = voiceId(content);
+    const headers = voiceConfigHeaders();
+    const id = voiceId(content, headers);
     if (this.currentId === id && (this.state === 'playing' || this.state === 'loading')) {
       this.stop();
       return;
     }
-    void this.play(id, content);
+    void this.play(id, content, headers);
   }
 
   stop() {
@@ -129,7 +131,7 @@ class VoicePlayer {
     }, 6000);
   }
 
-  private async play(id: string, content: string) {
+  private async play(id: string, content: string, headers: Record<string, string>) {
     const audio = this.ensureAudio();
     audio.pause();
     this.currentId = id;
@@ -150,7 +152,7 @@ class VoicePlayer {
         const res = await authenticatedFetch('/api/voice/tts', {
           method: 'POST',
           body: JSON.stringify({ text: content }),
-          headers: voiceConfigHeaders(),
+          headers,
           signal: controller.signal,
         }).finally(() => {
           clearTimeout(timer);

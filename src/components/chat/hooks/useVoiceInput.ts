@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+
 import { authenticatedFetch } from '../../../utils/api';
 import { voiceConfigHeaders } from '../../../hooks/useVoiceConfig';
 
@@ -37,6 +38,8 @@ export function useVoiceInput(
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  const cancelledRef = useRef(false);
+  const startingRef = useRef(false);
   // Whether the in-progress stop should auto-send the transcript (vs just fill the box).
   const sendRef = useRef(false);
 
@@ -47,7 +50,10 @@ export function useVoiceInput(
 
   // Stop the mic if the component unmounts mid-recording.
   useEffect(() => {
+    cancelledRef.current = false;
     return () => {
+      cancelledRef.current = true;
+      startingRef.current = false;
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
       recorderRef.current = null;
@@ -55,10 +61,17 @@ export function useVoiceInput(
   }, []);
 
   const start = useCallback(async () => {
+    if (startingRef.current || (recorderRef.current && recorderRef.current.state !== 'inactive')) return;
+    startingRef.current = true;
+    let recordingCancelled = false;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true },
       });
+      if (cancelledRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
       streamRef.current = stream;
       const mimeType = pickMime();
       const rec = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
@@ -71,6 +84,7 @@ export function useVoiceInput(
 
       rec.onstop = async () => {
         stopTracks();
+        if (recordingCancelled || cancelledRef.current) return;
         // Capture and clear the send intent for this stop before any async work.
         const shouldSend = sendRef.current;
         sendRef.current = false;
@@ -93,25 +107,34 @@ export function useVoiceInput(
           });
           if (!res.ok) throw new Error(`transcribe ${res.status}`);
           const data = await res.json();
+          if (recordingCancelled || cancelledRef.current) return;
           const text = String(data?.text || '').trim();
           if (text) onTranscript(text, shouldSend);
           else onError?.('No speech detected');
         } catch (e) {
-          onError?.(`Transcription failed: ${e instanceof Error ? e.message : String(e)}`);
+          if (!recordingCancelled && !cancelledRef.current) {
+            onError?.(`Transcription failed: ${e instanceof Error ? e.message : String(e)}`);
+          }
         } finally {
-          setState('idle');
+          if (!recordingCancelled && !cancelledRef.current) setState('idle');
         }
       };
 
       rec.start();
       setState('recording');
     } catch (e) {
+      recordingCancelled = true;
+      recorderRef.current = null;
+      stopTracks();
+      if (cancelledRef.current) return;
       const err = e as { name?: string; message?: string };
       let msg = `Mic error: ${err?.message || e}`;
       if (err?.name === 'NotAllowedError') msg = 'Microphone access denied.';
       else if (err?.name === 'NotFoundError') msg = 'No microphone found.';
       onError?.(msg);
       setState('idle');
+    } finally {
+      startingRef.current = false;
     }
   }, [onTranscript, onError]);
 

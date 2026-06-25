@@ -8,6 +8,8 @@
 //
 // Config is resolved per-request from headers (set by the client's voice settings),
 // falling back to server env defaults. Mounted at /api/voice behind authenticateToken.
+import { Readable } from 'node:stream';
+
 import express from 'express';
 
 const ENV = {
@@ -32,7 +34,7 @@ function resolveConfig(req) {
     sttModel: String(h['x-voice-stt-model'] || '') || ENV.sttModel,
     ttsModel: String(h['x-voice-tts-model'] || '') || ENV.ttsModel,
     ttsVoice: String(h['x-voice-tts-voice'] || '') || ENV.ttsVoice,
-    ttsFormat: String(h['x-voice-tts-format'] || ''),
+    ttsFormat: String(h['x-voice-tts-format'] || '').trim(),
   };
 }
 
@@ -57,7 +59,7 @@ async function fetchWithTimeout(url, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), VOICE_TIMEOUT_MS);
   try {
-    return await fetch(url, { ...options, signal: controller.signal });
+    return await fetch(url, { redirect: 'manual', ...options, signal: controller.signal });
   } finally {
     clearTimeout(timer);
   }
@@ -206,7 +208,8 @@ router.post('/tts', async (req, res) => {
     }
     res.setHeader('Content-Type', r.headers.get('content-type') || 'audio/mpeg');
     res.setHeader('Cache-Control', 'no-store');
-    res.send(Buffer.from(await r.arrayBuffer()));
+    if (!r.body) return res.end();
+    Readable.fromWeb(r.body).on('error', (error) => res.destroy(error)).pipe(res);
   } catch (e) {
     backendError(res, e);
   }
