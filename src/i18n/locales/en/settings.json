@@ -63,7 +63,7 @@
     "ttsModel": "Text-to-speech model",
     "voice": "Voice",
     "format": "Audio format",
-    "note": "The shown defaults work with OpenAI once you add a key. For other providers, set the base URL, model names, and audio format to match."
+    "note": "A custom base URL is called directly by your browser and must allow browser CORS requests. Leave it blank to use the server-configured backend."
   },
   "quickSettings": {
     "title": "Quick Settings",

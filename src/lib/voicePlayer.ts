@@ -1,5 +1,4 @@
-import { authenticatedFetch } from '../utils/api';
-import { voiceConfigHeaders } from '../hooks/useVoiceConfig';
+import { synthesizeVoice, voiceConfigSignature } from './voiceApi';
 
 // A single app-level audio player for read-aloud. It owns one <audio> element, lives
 // outside the React tree, and caches generated audio by content. Because playback is not
@@ -16,8 +15,8 @@ const CACHE_MAX = 24;
 const CLIENT_TIMEOUT_MS = 330000; // backstop; the server proxy already times out at 5 min
 
 // Stable id / cache key from the text and voice settings that affect its audio (djb2).
-export function voiceId(content: string, headers = voiceConfigHeaders()): string {
-  const input = JSON.stringify([content, Object.entries(headers).sort(([a], [b]) => a.localeCompare(b))]);
+export function voiceId(content: string, signature = voiceConfigSignature()): string {
+  const input = JSON.stringify([content, signature]);
   let h = 5381;
   for (let i = 0; i < input.length; i++) h = (((h << 5) + h) + input.charCodeAt(i)) | 0;
   return (h >>> 0).toString(36);
@@ -82,13 +81,12 @@ class VoicePlayer {
   }
 
   toggle(content: string) {
-    const headers = voiceConfigHeaders();
-    const id = voiceId(content, headers);
+    const id = voiceId(content);
     if (this.currentId === id && (this.state === 'playing' || this.state === 'loading')) {
       this.stop();
       return;
     }
-    void this.play(id, content, headers);
+    void this.play(id, content);
   }
 
   stop() {
@@ -131,7 +129,7 @@ class VoicePlayer {
     }, 6000);
   }
 
-  private async play(id: string, content: string, headers: Record<string, string>) {
+  private async play(id: string, content: string) {
     const audio = this.ensureAudio();
     audio.pause();
     this.currentId = id;
@@ -149,12 +147,7 @@ class VoicePlayer {
         const controller = new AbortController();
         this.activeController = controller;
         const timer = setTimeout(() => controller.abort(), CLIENT_TIMEOUT_MS);
-        const res = await authenticatedFetch('/api/voice/tts', {
-          method: 'POST',
-          body: JSON.stringify({ text: content }),
-          headers,
-          signal: controller.signal,
-        }).finally(() => {
+        const res = await synthesizeVoice(content, controller.signal).finally(() => {
           clearTimeout(timer);
           if (this.activeController === controller) this.activeController = null;
         });

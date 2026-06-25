@@ -29,7 +29,9 @@ const ENV = {
 function resolveConfig(req) {
   const h = req.headers;
   return {
-    baseUrl: (String(h['x-voice-base-url'] || '') || ENV.baseUrl).replace(/\/$/, ''),
+    // Security: do not allow clients to control the outbound backend host.
+    // Always use the server-side configured base URL.
+    baseUrl: ENV.baseUrl,
     apiKey: String(h['x-voice-api-key'] || '') || ENV.apiKey,
     sttModel: String(h['x-voice-stt-model'] || '') || ENV.sttModel,
     ttsModel: String(h['x-voice-tts-model'] || '') || ENV.ttsModel,

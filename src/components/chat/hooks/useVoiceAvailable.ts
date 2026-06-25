@@ -1,31 +1,26 @@
 import { useEffect, useState } from 'react';
 
 import { authenticatedFetch } from '../../../utils/api';
-import { VOICE_CONFIG_SYNC_EVENT, voiceConfigHeaders } from '../../../hooks/useVoiceConfig';
+import { readVoiceConfig, VOICE_CONFIG_SYNC_EVENT } from '../../../hooks/useVoiceConfig';
 
 // Voice UI is gated on the `voiceEnabled` UI preference (toggled in Quick Settings /
 // the Settings modal) and a configured voice backend.
 const STORAGE_KEY = 'uiPreferences';
 const SYNC_EVENT = 'ui-preferences:sync';
-const healthRequests = new Map<string, Promise<boolean>>();
+let healthRequest: Promise<boolean> | null = null;
 
 function checkVoiceHealth(): Promise<boolean> {
-  const baseUrl = voiceConfigHeaders()['x-voice-base-url'];
-  const signature = baseUrl || '';
-  const pending = healthRequests.get(signature);
-  if (pending) return pending;
-  const request = authenticatedFetch('/api/voice/health', {
-    headers: baseUrl ? { 'x-voice-base-url': baseUrl } : {},
-  })
+  if (healthRequest) return healthRequest;
+  const request = authenticatedFetch('/api/voice/health')
     .then(async (response) => {
       if (!response.ok) throw new Error(`Voice health check failed (${response.status})`);
       const data = await response.json();
       return data?.configured === true;
     })
     .finally(() => {
-      healthRequests.delete(signature);
+      healthRequest = null;
     });
-  healthRequests.set(signature, request);
+  healthRequest = request;
   return request;
 }
 
@@ -63,6 +58,10 @@ export function useVoiceAvailable(): boolean {
     const check = async () => {
       if (!enabled) {
         setAvailable(false);
+        return;
+      }
+      if (readVoiceConfig().baseUrl.trim()) {
+        setAvailable(true);
         return;
       }
       const id = ++requestId;

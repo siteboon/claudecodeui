@@ -13,7 +13,7 @@ const STORAGE_KEY = 'voiceConfig';
 export const VOICE_CONFIG_SYNC_EVENT = 'voice-config:sync';
 const DEFAULTS: VoiceConfig = { baseUrl: '', apiKey: '', sttModel: '', ttsModel: '', ttsVoice: '', ttsFormat: '' };
 
-function read(): VoiceConfig {
+export function readVoiceConfig(): VoiceConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULTS };
@@ -33,9 +33,8 @@ function read(): VoiceConfig {
 // Empty fields are omitted so the server's env defaults apply.
 export function voiceConfigHeaders(): Record<string, string> {
   if (typeof window === 'undefined') return {};
-  const c = read();
+  const c = readVoiceConfig();
   const h: Record<string, string> = {};
-  if (c.baseUrl) h['x-voice-base-url'] = c.baseUrl;
   if (c.apiKey) h['x-voice-api-key'] = c.apiKey;
   if (c.sttModel) h['x-voice-stt-model'] = c.sttModel;
   if (c.ttsModel) h['x-voice-tts-model'] = c.ttsModel;
@@ -46,7 +45,7 @@ export function voiceConfigHeaders(): Record<string, string> {
 
 export function useVoiceConfig() {
   const [config, setConfig] = useState<VoiceConfig>(() =>
-    typeof window === 'undefined' ? { ...DEFAULTS } : read(),
+    typeof window === 'undefined' ? { ...DEFAULTS } : readVoiceConfig(),
   );
 
   const update = (patch: Partial<VoiceConfig>) => {

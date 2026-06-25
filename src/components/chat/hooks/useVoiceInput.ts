@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { authenticatedFetch } from '../../../utils/api';
-import { voiceConfigHeaders } from '../../../hooks/useVoiceConfig';
+import { transcribeVoice } from '../../../lib/voiceApi';
 
 // Mobile-safe recording: iOS Safari 18.4+ supports webm/opus; older iOS needs mp4.
 const MIME_CANDIDATES = [
@@ -97,13 +96,7 @@ export function useVoiceInput(
         setState('transcribing');
         try {
           const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm';
-          const fd = new FormData();
-          fd.append('audio', blob, `recording.${ext}`);
-          const res = await authenticatedFetch('/api/voice/transcribe', {
-            method: 'POST',
-            body: fd,
-            headers: voiceConfigHeaders(),
-          });
+          const res = await transcribeVoice(blob, `recording.${ext}`);
           if (!res.ok) throw new Error(`transcribe ${res.status}`);
           const data = await res.json();
           if (cancelledRef.current) return;
