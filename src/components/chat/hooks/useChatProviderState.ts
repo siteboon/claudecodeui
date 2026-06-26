@@ -114,7 +114,6 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
   const [providerModelsLoading, setProviderModelsLoading] = useState(true);
   const [providerModelsRefreshing, setProviderModelsRefreshing] = useState(false);
 
-  const lastProviderRef = useRef(provider);
   const providerModelsRequestIdRef = useRef(0);
 
   const setStoredProviderModel = useCallback((targetProvider: LLMProvider, model: string) => {
@@ -344,14 +343,8 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
     localStorage.setItem('selected-provider', selectedSession.__provider);
   }, [provider, selectedSession]);
 
-  useEffect(() => {
-    if (lastProviderRef.current === provider) {
-      return;
-    }
-    setPendingPermissionRequests([]);
-    lastProviderRef.current = provider;
-  }, [provider]);
-
+  // Permission prompts belong to a session, not to the transient provider
+  // selection that is synchronized after navigation.
   useEffect(() => {
     setPendingPermissionRequests((previous) =>
       previous.filter((request) => !request.sessionId || request.sessionId === selectedSession?.id),
