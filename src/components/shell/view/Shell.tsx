@@ -59,12 +59,8 @@ export default function Shell({
     isConnected,
     isInitialized,
     isConnecting,
-    authUrl,
-    authUrlVersion,
     connectToShell,
     disconnectFromShell,
-    openAuthUrlInBrowser,
-    copyAuthUrlToClipboard,
   } = useShellRuntime({
     selectedProject,
     selectedSession,
@@ -243,15 +239,7 @@ export default function Shell({
   if (minimal) {
     return (
       <>
-        <ShellMinimalView
-          terminalContainerRef={terminalContainerRef}
-          authUrl={authUrl}
-          authUrlVersion={authUrlVersion}
-          initialCommand={initialCommand}
-          isConnected={isConnected}
-          openAuthUrlInBrowser={openAuthUrlInBrowser}
-          copyAuthUrlToClipboard={copyAuthUrlToClipboard}
-        />
+        <ShellMinimalView terminalContainerRef={terminalContainerRef} />
         <TerminalShortcutsPanel
           wsRef={wsRef}
           terminalRef={terminalRef}

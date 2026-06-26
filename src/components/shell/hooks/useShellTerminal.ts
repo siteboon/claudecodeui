@@ -27,10 +27,6 @@ type UseShellTerminalOptions = {
   selectedProject: Project | null | undefined;
   minimal: boolean;
   isRestarting: boolean;
-  initialCommandRef: MutableRefObject<string | null | undefined>;
-  isPlainShellRef: MutableRefObject<boolean>;
-  authUrlRef: MutableRefObject<string>;
-  copyAuthUrlToClipboard: (url?: string) => Promise<boolean>;
   closeSocket: () => void;
 };
 
