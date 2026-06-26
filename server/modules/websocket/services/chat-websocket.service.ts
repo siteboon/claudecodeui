@@ -134,12 +134,15 @@ async function handleChatSend(
     return;
   }
 
+  const command = typeof data.content === 'string' ? data.content : '';
+
   const run = chatRunRegistry.startRun({
     appSessionId: sessionId,
     provider,
     providerSessionId: session.provider_session_id,
     connection: ws,
     userId,
+    userMessage: command || undefined,
   });
 
   if (!run) {
@@ -153,7 +156,6 @@ async function handleChatSend(
   }
 
   const clientOptions = (data.options ?? {}) as AnyRecord;
-  const command = typeof data.content === 'string' ? data.content : '';
 
   // The provider runtimes receive the provider-native session id (that is the
   // id their CLI/SDK understands for resume). Brand-new sessions have no
