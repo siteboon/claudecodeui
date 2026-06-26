@@ -21,6 +21,7 @@ export default function VoiceSettingsTab() {
   const { t } = useTranslation('settings');
   const { preferences, setPreference } = useUiPreferences();
   const { config, update } = useVoiceConfig();
+  const voiceEnabled = preferences.voiceEnabled;
 
   return (
     <div className="space-y-8">
@@ -31,58 +32,60 @@ export default function VoiceSettingsTab() {
             <div className="text-xs text-muted-foreground">{t('voiceSettings.enableDescription')}</div>
           </div>
           <SettingsToggle
-            checked={preferences.voiceEnabled}
+            checked={voiceEnabled}
             onChange={(v) => setPreference('voiceEnabled', v)}
             ariaLabel={t('voiceSettings.enable')}
           />
         </div>
       </SettingsSection>
 
-      <SettingsSection title={t('voiceSettings.backendTitle')} description={t('voiceSettings.backendDescription')}>
-        <div className="space-y-4">
-          <Field
-            label={t('voiceSettings.baseUrl')}
-            placeholder="https://api.openai.com/v1"
-            value={config.baseUrl}
-            onChange={(e) => update({ baseUrl: e.target.value })}
-          />
-          <Field
-            label={t('voiceSettings.apiKey')}
-            type="password"
-            autoComplete="off"
-            placeholder="sk-…"
-            value={config.apiKey}
-            onChange={(e) => update({ apiKey: e.target.value })}
-          />
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+      {voiceEnabled && (
+        <SettingsSection title={t('voiceSettings.backendTitle')} description={t('voiceSettings.backendDescription')}>
+          <div className="space-y-4">
             <Field
-              label={t('voiceSettings.sttModel')}
-              placeholder="whisper-1"
-              value={config.sttModel}
-              onChange={(e) => update({ sttModel: e.target.value })}
+              label={t('voiceSettings.baseUrl')}
+              placeholder="https://api.openai.com/v1"
+              value={config.baseUrl}
+              onChange={(e) => update({ baseUrl: e.target.value })}
             />
             <Field
-              label={t('voiceSettings.ttsModel')}
-              placeholder="tts-1"
-              value={config.ttsModel}
-              onChange={(e) => update({ ttsModel: e.target.value })}
+              label={t('voiceSettings.apiKey')}
+              type="password"
+              autoComplete="off"
+              placeholder="sk-…"
+              value={config.apiKey}
+              onChange={(e) => update({ apiKey: e.target.value })}
             />
-            <Field
-              label={t('voiceSettings.voice')}
-              placeholder="alloy"
-              value={config.ttsVoice}
-              onChange={(e) => update({ ttsVoice: e.target.value })}
-            />
-            <Field
-              label={t('voiceSettings.format')}
-              placeholder="mp3"
-              value={config.ttsFormat}
-              onChange={(e) => update({ ttsFormat: e.target.value })}
-            />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+              <Field
+                label={t('voiceSettings.sttModel')}
+                placeholder="whisper-1"
+                value={config.sttModel}
+                onChange={(e) => update({ sttModel: e.target.value })}
+              />
+              <Field
+                label={t('voiceSettings.ttsModel')}
+                placeholder="tts-1"
+                value={config.ttsModel}
+                onChange={(e) => update({ ttsModel: e.target.value })}
+              />
+              <Field
+                label={t('voiceSettings.voice')}
+                placeholder="alloy"
+                value={config.ttsVoice}
+                onChange={(e) => update({ ttsVoice: e.target.value })}
+              />
+              <Field
+                label={t('voiceSettings.format')}
+                placeholder="mp3"
+                value={config.ttsFormat}
+                onChange={(e) => update({ ttsFormat: e.target.value })}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">{t('voiceSettings.note')}</p>
           </div>
-          <p className="text-xs text-muted-foreground">{t('voiceSettings.note')}</p>
-        </div>
-      </SettingsSection>
+        </SettingsSection>
+      )}
     </div>
   );
 }
