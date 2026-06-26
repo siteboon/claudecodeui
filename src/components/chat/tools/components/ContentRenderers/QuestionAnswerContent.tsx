@@ -41,8 +41,10 @@ export const QuestionAnswerContent: React.FC<QuestionAnswerContentProps> = ({
         const skipped = !answer;
         const isExpanded = expandedIdx === idx;
         // `options` is typed as an array but comes from untrusted runtime data;
-        // fall back to an empty array so `.some`/`.map` below never throw.
-        const options = Array.isArray(q.options) ? q.options : [];
+        // keep only valid entries so `.some`/`.map` below never throw.
+        const options = Array.isArray(q.options)
+          ? q.options.filter((opt) => opt && typeof opt === 'object' && typeof opt.label === 'string')
+          : [];
 
         return (
           <div

@@ -32,6 +32,17 @@ test('renders without throwing when a question is missing options[]', () => {
   });
 });
 
+test('renders without throwing when options[] contains malformed entries', () => {
+  assert.doesNotThrow(() => {
+    renderToStaticMarkup(
+      React.createElement(QuestionAnswerContent, {
+        questions: [{ question: 'Pick one?', options: [null, 'oops', { label: 'A' }] } as never],
+        answers: { 'Pick one?': 'A, Custom' },
+      }),
+    );
+  });
+});
+
 test('renders without throwing when a questions entry is null/non-object', () => {
   assert.doesNotThrow(() => {
     renderToStaticMarkup(
