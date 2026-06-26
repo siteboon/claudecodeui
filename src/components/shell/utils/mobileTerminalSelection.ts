@@ -1,5 +1,7 @@
 import type { IDisposable, Terminal } from '@xterm/xterm';
 
+import { copyTextToClipboard } from '../../../utils/clipboard';
+
 type TerminalCoords = {
   col: number;
   row: number;
@@ -41,6 +43,22 @@ const LONG_PRESS_MS = 600;
 const MOVE_THRESHOLD_PX = 8;
 const HANDLE_SIZE_PX = 22;
 const FINGER_OFFSET_PX = 40;
+const CONTEXT_MENU_GAP_PX = 12;
+const CONTEXT_MENU_EDGE_PADDING_PX = 8;
+const ZOOM_THROTTLE_MS = 50;
+const DEFAULT_MIN_FONT_SIZE = 8;
+const DEFAULT_MAX_FONT_SIZE = 48;
+
+type ContextMenuItem = {
+  label: string;
+  action: () => void;
+};
+
+export type MobileTerminalSelectionOptions = {
+  minFontSize?: number;
+  maxFontSize?: number;
+  onFontSizeChange?: (fontSize: number) => void;
+};
 
 function isTouchSelectionEnvironment(): boolean {
   if (typeof window === 'undefined' || typeof navigator === 'undefined') {
@@ -68,6 +86,7 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
   private readonly overlay: HTMLDivElement;
   private readonly startHandle: HTMLDivElement;
   private readonly endHandle: HTMLDivElement;
+  private readonly contextMenu: HTMLDivElement;
   private readonly disposables: IDisposable[] = [];
   private readonly originalPosition: string;
 
@@ -82,11 +101,35 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
   private pendingClearTouch: { point: TouchCoords; moved: boolean } | null = null;
   private tapHoldTimeout: number | null = null;
   private cellDimensions: CellDimensions = { width: 0, height: 0 };
+  private isContextMenuVisible = false;
 
-  constructor(terminal: Terminal, terminalContent: HTMLElement) {
+  private readonly minFontSize: number;
+  private readonly maxFontSize: number;
+  private readonly onFontSizeChange: (fontSize: number) => void;
+  private isPinching = false;
+  private pinchStartDistance = 0;
+  private initialFontSize = 0;
+  private lastZoomTime = 0;
+
+  constructor(
+    terminal: Terminal,
+    terminalContent: HTMLElement,
+    options: MobileTerminalSelectionOptions = {},
+  ) {
     this.terminal = terminal;
     this.terminalContent = terminalContent;
     this.originalPosition = terminalContent.style.position;
+
+    const minFontSize = Number(options.minFontSize) || DEFAULT_MIN_FONT_SIZE;
+    const maxFontSize = Number(options.maxFontSize) || DEFAULT_MAX_FONT_SIZE;
+    this.minFontSize = Math.min(minFontSize, maxFontSize);
+    this.maxFontSize = Math.max(minFontSize, maxFontSize);
+    this.onFontSizeChange =
+      options.onFontSizeChange ??
+      ((fontSize) => {
+        this.terminal.options.fontSize = fontSize;
+        this.terminal.refresh(0, this.terminal.rows - 1);
+      });
 
     if (window.getComputedStyle(terminalContent).position === 'static') {
       terminalContent.style.position = 'relative';
@@ -96,7 +139,8 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     this.overlay = this.createSelectionOverlay();
     this.startHandle = this.createHandle('start');
     this.endHandle = this.createHandle('end');
-    this.overlay.append(this.startHandle, this.endHandle);
+    this.contextMenu = this.createContextMenu();
+    this.overlay.append(this.startHandle, this.endHandle, this.contextMenu);
     this.terminalContent.appendChild(this.overlay);
 
     this.attachEventListeners();
@@ -130,6 +174,82 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     handle.style.touchAction = 'none';
     handle.style.zIndex = '31';
     return handle;
+  }
+
+  private createContextMenu(): HTMLDivElement {
+    const menu = document.createElement('div');
+    menu.className = 'shell-mobile-selection-menu';
+    menu.style.position = 'absolute';
+    menu.style.display = 'none';
+    menu.style.alignItems = 'stretch';
+    menu.style.padding = '4px';
+    menu.style.gap = '2px';
+    menu.style.background = '#1f2937';
+    menu.style.border = '1px solid rgba(255,255,255,0.12)';
+    menu.style.borderRadius = '10px';
+    menu.style.boxShadow = '0 6px 20px rgba(0,0,0,0.4)';
+    menu.style.pointerEvents = 'auto';
+    menu.style.touchAction = 'none';
+    menu.style.zIndex = '32';
+    menu.style.whiteSpace = 'nowrap';
+    menu.style.userSelect = 'none';
+
+    const items: ContextMenuItem[] = [
+      { label: 'Copy', action: () => this.copySelection() },
+      { label: 'Select All', action: () => this.selectAllText() },
+    ];
+
+    for (const item of items) {
+      menu.appendChild(this.createContextMenuButton(item));
+    }
+
+    return menu;
+  }
+
+  private createContextMenuButton(item: ContextMenuItem): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = item.label;
+    button.style.appearance = 'none';
+    button.style.border = 'none';
+    button.style.margin = '0';
+    button.style.padding = '8px 14px';
+    button.style.background = 'transparent';
+    button.style.color = '#f9fafb';
+    button.style.fontSize = '14px';
+    button.style.fontFamily = 'inherit';
+    button.style.lineHeight = '1';
+    button.style.borderRadius = '6px';
+    button.style.cursor = 'pointer';
+    button.style.pointerEvents = 'auto';
+    button.style.touchAction = 'none';
+
+    let actionExecuted = false;
+    const arm = (event: Event): void => {
+      event.preventDefault();
+      event.stopPropagation();
+      actionExecuted = false;
+    };
+    const run = (event: Event): void => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (actionExecuted) {
+        return;
+      }
+      actionExecuted = true;
+      item.action();
+    };
+
+    button.addEventListener('touchstart', arm, { passive: false });
+    button.addEventListener('touchend', run, { passive: false });
+    button.addEventListener('mousedown', arm);
+    button.addEventListener('mouseup', run);
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+
+    return button;
   }
 
   private attachEventListeners(): void {
@@ -170,6 +290,12 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
   }
 
   private onTerminalTouchStart = (event: TouchEvent): void => {
+    if (event.touches.length === 2) {
+      event.preventDefault();
+      this.startPinchZoom(event);
+      return;
+    }
+
     if (event.touches.length !== 1) {
       this.clearTapHoldTimeout();
       return;
@@ -191,8 +317,18 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
   };
 
   private onTerminalTouchMove = (event: TouchEvent): void => {
+    if (event.touches.length === 2 && this.isPinching) {
+      event.preventDefault();
+      this.handlePinchZoom(event);
+      return;
+    }
+
     if (event.touches.length !== 1) {
       this.clearTapHoldTimeout();
+      return;
+    }
+
+    if (this.isPinching) {
       return;
     }
 
@@ -222,6 +358,11 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
   };
 
   private onTerminalTouchEnd = (): void => {
+    if (this.isPinching) {
+      this.endPinchZoom();
+      return;
+    }
+
     this.clearTapHoldTimeout();
     this.touchStart = null;
 
@@ -238,6 +379,10 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
   };
 
   private onTerminalTouchCancel = (): void => {
+    if (this.isPinching) {
+      this.endPinchZoom();
+    }
+
     this.clearTapHoldTimeout();
     this.touchStart = null;
     this.pendingClearTouch = null;
@@ -343,6 +488,7 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
 
     this.updateSelection();
     this.showHandles();
+    this.showContextMenu();
   }
 
   private extendSelection(touch: TouchCoords): void {
@@ -418,7 +564,147 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     this.endHandle.style.display = 'none';
   }
 
+  private showContextMenu(): void {
+    this.contextMenu.style.display = 'flex';
+    this.isContextMenuVisible = true;
+    this.positionContextMenu();
+  }
+
+  private hideContextMenu(): void {
+    this.contextMenu.style.display = 'none';
+    this.isContextMenuVisible = false;
+  }
+
+  private positionContextMenu(): void {
+    if (!this.isContextMenuVisible) {
+      return;
+    }
+
+    const containerRect = this.terminalContent.getBoundingClientRect();
+    const menuWidth = this.contextMenu.offsetWidth || 0;
+    const menuHeight = this.contextMenu.offsetHeight || 0;
+
+    const ordered =
+      this.selectionStart && this.selectionEnd ? this.getOrderedSelection() : null;
+    const startPosition = ordered ? this.terminalCoordsToPixels(ordered.start) : null;
+    const endPosition = ordered ? this.terminalCoordsToPixels(ordered.end) : null;
+
+    let menuX: number;
+    let menuY: number;
+
+    if (startPosition || endPosition) {
+      const topY = Math.min(
+        startPosition?.y ?? endPosition!.y,
+        endPosition?.y ?? startPosition!.y,
+      );
+      const centerX =
+        startPosition && endPosition
+          ? (startPosition.x + endPosition.x) / 2
+          : (startPosition ?? endPosition)!.x;
+
+      menuX = centerX - menuWidth / 2;
+      menuY = topY - menuHeight - CONTEXT_MENU_GAP_PX;
+
+      // Not enough room above the selection: drop below the handles instead.
+      if (menuY < CONTEXT_MENU_EDGE_PADDING_PX) {
+        const bottomY = Math.max(
+          startPosition?.y ?? endPosition!.y,
+          endPosition?.y ?? startPosition!.y,
+        );
+        menuY = bottomY + this.cellDimensions.height + HANDLE_SIZE_PX + CONTEXT_MENU_GAP_PX;
+      }
+    } else {
+      // Whole-buffer selection (Select All): pin to the bottom center.
+      menuX = (containerRect.width - menuWidth) / 2;
+      menuY = containerRect.height - menuHeight - CONTEXT_MENU_GAP_PX;
+    }
+
+    const maxX = containerRect.width - menuWidth - CONTEXT_MENU_EDGE_PADDING_PX;
+    const maxY = containerRect.height - menuHeight - CONTEXT_MENU_EDGE_PADDING_PX;
+    menuX = clamp(menuX, CONTEXT_MENU_EDGE_PADDING_PX, Math.max(CONTEXT_MENU_EDGE_PADDING_PX, maxX));
+    menuY = clamp(menuY, CONTEXT_MENU_EDGE_PADDING_PX, Math.max(CONTEXT_MENU_EDGE_PADDING_PX, maxY));
+
+    this.contextMenu.style.left = `${menuX}px`;
+    this.contextMenu.style.top = `${menuY}px`;
+  }
+
+  private copySelection(): void {
+    const selectionText = this.terminal.getSelection();
+    if (selectionText) {
+      void copyTextToClipboard(selectionText);
+    }
+    this.clearSelection();
+  }
+
+  private selectAllText(): void {
+    this.terminal.selectAll();
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.isSelecting = true;
+    this.hideHandles();
+
+    if (this.terminal.hasSelection()) {
+      this.showContextMenu();
+    } else {
+      this.clearSelection();
+    }
+  }
+
+  private startPinchZoom(event: TouchEvent): void {
+    if (event.touches.length !== 2) {
+      return;
+    }
+
+    this.clearTapHoldTimeout();
+    if (this.isSelecting) {
+      this.clearSelection();
+    }
+
+    this.isPinching = true;
+    this.initialFontSize = this.terminal.options.fontSize ?? DEFAULT_MIN_FONT_SIZE;
+    this.pinchStartDistance = this.getTouchDistance(event.touches[0], event.touches[1]);
+    this.lastZoomTime = 0;
+  }
+
+  private handlePinchZoom(event: TouchEvent): void {
+    if (!this.isPinching || event.touches.length !== 2 || this.pinchStartDistance <= 0) {
+      return;
+    }
+
+    const now = Date.now();
+    if (now - this.lastZoomTime < ZOOM_THROTTLE_MS) {
+      return;
+    }
+    this.lastZoomTime = now;
+
+    const currentDistance = this.getTouchDistance(event.touches[0], event.touches[1]);
+    const scale = currentDistance / this.pinchStartDistance;
+    const nextFontSize = clamp(
+      Math.round(this.initialFontSize * scale),
+      this.minFontSize,
+      this.maxFontSize,
+    );
+
+    if (nextFontSize !== this.terminal.options.fontSize) {
+      this.onFontSizeChange(nextFontSize);
+    }
+  }
+
+  private endPinchZoom(): void {
+    this.isPinching = false;
+    this.pinchStartDistance = 0;
+    this.initialFontSize = 0;
+  }
+
+  private getTouchDistance(first: Touch, second: Touch): number {
+    return Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
+  }
+
   updateHandles(): void {
+    if (this.isContextMenuVisible) {
+      this.positionContextMenu();
+    }
+
     if (!this.isSelecting || !this.selectionStart || !this.selectionEnd) {
       this.hideHandles();
       return;
@@ -459,6 +745,7 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     this.pendingClearTouch = null;
     this.touchStart = null;
     this.hideHandles();
+    this.hideContextMenu();
     this.clearTapHoldTimeout();
   }
 
@@ -628,10 +915,11 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
 export function installMobileTerminalSelection(
   terminal: Terminal,
   terminalContent: HTMLElement,
+  options: MobileTerminalSelectionOptions = {},
 ): MobileTerminalSelectionManager | null {
   if (!isTouchSelectionEnvironment() || !terminal.element) {
     return null;
   }
 
-  return new ShellMobileSelectionCore(terminal, terminalContent);
+  return new ShellMobileSelectionCore(terminal, terminalContent, options);
 }

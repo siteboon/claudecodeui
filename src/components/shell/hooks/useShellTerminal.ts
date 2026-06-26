@@ -108,6 +108,23 @@ export function useShellTerminal({
     mobileSelectionRef.current = installMobileTerminalSelection(
       nextTerminal,
       terminalContainer,
+      {
+        onFontSizeChange: (fontSize) => {
+          nextTerminal.options.fontSize = fontSize;
+
+          const currentFitAddon = fitAddonRef.current;
+          if (currentFitAddon) {
+            currentFitAddon.fit();
+            sendSocketMessage(wsRef.current, {
+              type: 'resize',
+              cols: nextTerminal.cols,
+              rows: nextTerminal.rows,
+            });
+          } else {
+            nextTerminal.refresh(0, nextTerminal.rows - 1);
+          }
+        },
+      },
     );
 
     const copyTerminalSelection = async () => {
