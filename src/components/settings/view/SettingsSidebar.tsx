@@ -1,4 +1,4 @@
-import { Bell, Bot, GitBranch, Info, Key, ListChecks, MonitorCog, MonitorPlay, Palette, Puzzle } from 'lucide-react';
+import { Bell, Bot, GitBranch, Info, Key, ListChecks,Mic, MonitorCog, MonitorPlay, Palette, Puzzle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { COMPUTER_USE_MENUS_ENABLED } from '../../../constants/featureFlags';
@@ -22,6 +22,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'appearance', labelKey: 'mainTabs.appearance', icon: Palette },
   { id: 'git', labelKey: 'mainTabs.git', icon: GitBranch },
   { id: 'api', labelKey: 'mainTabs.apiTokens', icon: Key },
+  { id: 'voice', labelKey: 'mainTabs.voice', icon: Mic },
   { id: 'tasks', labelKey: 'mainTabs.tasks', icon: ListChecks },
   { id: 'browser', labelKey: 'mainTabs.browser', icon: MonitorPlay },
   { id: 'computer', labelKey: 'mainTabs.computer', icon: MonitorCog },
