@@ -114,7 +114,8 @@
     "restoreSessionError": "セッションの復元でエラーが発生しました。もう一度お試しください。"
   },
   "version": {
-    "updateAvailable": "アップデートあり"
+    "updateAvailable": "アップデートあり",
+    "restartRequired": "更新が適用されていません。サーバーを再起動してください"
   },
   "deleteConfirmation": {
     "deleteProject": "プロジェクトを除去",

@@ -115,7 +115,8 @@
     "restoreSessionError": "Oturum geri yüklenirken hata oluştu. Lütfen tekrar dene."
   },
   "version": {
-    "updateAvailable": "Güncelleme mevcut"
+    "updateAvailable": "Güncelleme mevcut",
+    "restartRequired": "Güncelleme yüklendi — uygulamak için sunucuyu yeniden başlatın"
   },
   "search": {
     "modeProjects": "Projeler",

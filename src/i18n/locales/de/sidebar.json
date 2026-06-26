@@ -115,7 +115,8 @@
     "restoreSessionError": "Fehler beim Wiederherstellen der Sitzung. Bitte erneut versuchen."
   },
   "version": {
-    "updateAvailable": "Update verfügbar"
+    "updateAvailable": "Update verfügbar",
+    "restartRequired": "Update installiert – zum Anwenden Server neu starten"
   },
   "search": {
     "modeProjects": "Projekte",
