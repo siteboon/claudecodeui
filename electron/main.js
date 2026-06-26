@@ -771,7 +771,7 @@ async function openNotificationTarget({ environmentUrl, sessionId = null }) {
 }
 
 async function getEnvironmentAuthToken(environmentUrl) {
-  return desktopWindow?.readAuthTokenForTarget(environmentUrl) || null;
+  return (await desktopWindow?.readAuthTokenForTarget(environmentUrl)) || null;
 }
 
 async function clearCloudAccount() {
