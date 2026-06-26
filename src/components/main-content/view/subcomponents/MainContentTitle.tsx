@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+
 import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
 import type { AppTab, Project, ProjectSession } from '../../../../types/app';
 import { usePlugins } from '../../../../contexts/PluginsContext';
@@ -25,6 +26,10 @@ function getTabTitle(activeTab: AppTab, shouldShowTasksTab: boolean, t: (key: st
 
   if (activeTab === 'tasks' && shouldShowTasksTab) {
     return 'TaskMaster';
+  }
+
+  if (activeTab === 'browser') {
+    return 'Browser';
   }
 
   return 'Project';

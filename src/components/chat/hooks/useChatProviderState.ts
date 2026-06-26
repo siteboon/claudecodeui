@@ -17,17 +17,35 @@ const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   opencode: 'anthropic/claude-sonnet-4-5',
 };
 
-const getPermissionModesForProvider = (provider: LLMProvider): PermissionMode[] => {
-  if (provider === 'codex') {
-    return ['default', 'acceptEdits', 'bypassPermissions'];
-  }
-  if (provider === 'claude') {
-    return ['default', 'auto', 'acceptEdits', 'bypassPermissions', 'plan'];
-  }
-  if (provider === 'opencode') {
-    return ['default'];
-  }
-  return ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
+/**
+ * Fallback permission-mode matrix used only until the backend capability
+ * matrix (`GET /api/providers/capabilities`) has loaded. The backend is the
+ * source of truth; this mirror exists so the composer renders sensibly on
+ * first paint and when the capabilities request fails.
+ */
+const FALLBACK_PERMISSION_MODES: Record<LLMProvider, PermissionMode[]> = {
+  claude: ['default', 'auto', 'acceptEdits', 'bypassPermissions', 'plan'],
+  cursor: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
+  codex: ['default', 'acceptEdits', 'bypassPermissions'],
+  gemini: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
+  opencode: ['default'],
+};
+
+type ProviderCapabilities = {
+  provider: LLMProvider;
+  permissionModes: string[];
+  defaultPermissionMode: string;
+  supportsImages: boolean;
+  supportsAbort: boolean;
+  supportsPermissionRequests: boolean;
+  supportsTokenUsage: boolean;
+};
+
+type ProviderCapabilitiesApiResponse = {
+  success?: boolean;
+  data?: {
+    providers?: ProviderCapabilities[];
+  };
 };
 
 interface UseChatProviderStateArgs {
@@ -76,6 +94,17 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
     return localStorage.getItem('opencode-model') || FALLBACK_DEFAULT_MODEL.opencode;
   });
 
+  /**
+   * Backend-owned capability matrix keyed by provider. Drives the permission
+   * mode picker (and is the extension point for future per-provider UI
+   * differences) so the frontend stays free of hardcoded provider branching.
+   * Null until `/api/providers/capabilities` resolves; the static fallback
+   * map covers that window.
+   */
+  const [providerCapabilities, setProviderCapabilities] = useState<
+    Partial<Record<LLMProvider, ProviderCapabilities>> | null
+  >(null);
+
   const [providerModelCatalog, setProviderModelCatalog] = useState<
     Partial<Record<LLMProvider, ProviderModelsDefinition>>
   >({});
@@ -85,7 +114,6 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
   const [providerModelsLoading, setProviderModelsLoading] = useState(true);
   const [providerModelsRefreshing, setProviderModelsRefreshing] = useState(false);
 
-  const lastProviderRef = useRef(provider);
   const providerModelsRequestIdRef = useRef(0);
 
   const setStoredProviderModel = useCallback((targetProvider: LLMProvider, model: string) => {
@@ -181,6 +209,41 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
     void loadProviderModels();
   }, [loadProviderModels]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadCapabilities = async () => {
+      try {
+        const response = await authenticatedFetch('/api/providers/capabilities');
+        const body = (await response.json()) as ProviderCapabilitiesApiResponse;
+        if (cancelled || !body.success || !Array.isArray(body.data?.providers)) {
+          return;
+        }
+
+        const byProvider: Partial<Record<LLMProvider, ProviderCapabilities>> = {};
+        for (const capabilities of body.data.providers) {
+          byProvider[capabilities.provider] = capabilities;
+        }
+        setProviderCapabilities(byProvider);
+      } catch (error) {
+        console.error('Error loading provider capabilities:', error);
+      }
+    };
+
+    void loadCapabilities();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const getPermissionModesForProvider = useCallback((targetProvider: LLMProvider): PermissionMode[] => {
+    const capabilityModes = providerCapabilities?.[targetProvider]?.permissionModes;
+    if (capabilityModes && capabilityModes.length > 0) {
+      return capabilityModes as PermissionMode[];
+    }
+    return FALLBACK_PERMISSION_MODES[targetProvider] ?? ['default'];
+  }, [providerCapabilities]);
+
   const pickStoredOrCurrent = (
     storageKey: string,
     current: string,
@@ -269,7 +332,7 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
     const savedMode = localStorage.getItem(`permissionMode-${selectedSession.id}`) as PermissionMode | null;
     const validModes = getPermissionModesForProvider(provider);
     setPermissionMode(savedMode && validModes.includes(savedMode) ? savedMode : 'default');
-  }, [selectedSession?.id, provider]);
+  }, [selectedSession?.id, provider, getPermissionModesForProvider]);
 
   useEffect(() => {
     if (!selectedSession?.__provider || selectedSession.__provider === provider) {
@@ -280,14 +343,8 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
     localStorage.setItem('selected-provider', selectedSession.__provider);
   }, [provider, selectedSession]);
 
-  useEffect(() => {
-    if (lastProviderRef.current === provider) {
-      return;
-    }
-    setPendingPermissionRequests([]);
-    lastProviderRef.current = provider;
-  }, [provider]);
-
+  // Permission prompts belong to a session, not to the transient provider
+  // selection that is synchronized after navigation.
   useEffect(() => {
     setPendingPermissionRequests((previous) =>
       previous.filter((request) => !request.sessionId || request.sessionId === selectedSession?.id),
@@ -327,7 +384,7 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
     if (selectedSession?.id) {
       localStorage.setItem(`permissionMode-${selectedSession.id}`, nextMode);
     }
-  }, [permissionMode, provider, selectedSession?.id]);
+  }, [permissionMode, provider, selectedSession?.id, getPermissionModesForProvider]);
 
   const selectProviderModel = useCallback(async (
     targetProvider: LLMProvider,

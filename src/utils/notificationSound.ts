@@ -58,7 +58,7 @@ const playTone = (
   oscillator.stop(startsAt + duration + 0.02);
 };
 
-export const playChatCompletionSound = async ({ force = false } = {}): Promise<void> => {
+export const playNotificationSound = async ({ force = false } = {}): Promise<void> => {
   if (!force && !isNotificationSoundEnabled()) {
     return;
   }
@@ -81,3 +81,5 @@ export const playChatCompletionSound = async ({ force = false } = {}): Promise<v
     console.warn('Unable to play notification sound:', error);
   }
 };
+
+export const playChatCompletionSound = (options = {}): Promise<void> => playNotificationSound(options);

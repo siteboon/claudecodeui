@@ -25,6 +25,7 @@ function Sidebar({
   projects,
   selectedProject,
   selectedSession,
+  activeSessions,
   onProjectSelect,
   onSessionSelect,
   onNewSession,
@@ -42,7 +43,7 @@ function Sidebar({
 }: SidebarProps) {
   const { t } = useTranslation(['sidebar', 'common']);
   const { isPWA } = useDeviceSettings({ trackMobile: false });
-  const { updateAvailable, latestVersion, currentVersion, releaseInfo, installMode } = useVersionCheck(
+  const { updateAvailable, restartRequired, latestVersion, currentVersion, releaseInfo, installMode } = useVersionCheck(
     'siteboon',
     'claudecodeui',
   );
@@ -70,6 +71,7 @@ function Sidebar({
     isSearching,
     searchProgress,
     clearConversationResults,
+    runningSessionsCount,
     deletingProjects,
     deleteConfirmation,
     sessionDeleteConfirmation,
@@ -113,6 +115,7 @@ function Sidebar({
     projects,
     selectedProject,
     selectedSession,
+    activeSessions,
     isLoading,
     isMobile,
     t,
@@ -159,6 +162,8 @@ function Sidebar({
     mcpServerStatus,
     getProjectSessions,
     loadingMoreProjects,
+    activeSessions,
+    forceExpanded: searchMode === 'running',
     isProjectStarred,
     onEditingNameChange: setEditingName,
     onToggleProject: toggleProject,
@@ -219,6 +224,7 @@ function Sidebar({
           onExpand={handleExpandSidebar}
           onShowSettings={onShowSettings}
           updateAvailable={updateAvailable}
+          restartRequired={restartRequired}
           onShowVersionModal={() => setShowVersionModal(true)}
           t={t}
         />
@@ -229,6 +235,7 @@ function Sidebar({
             isMobile={isMobile}
             isLoading={isLoading}
             projects={projects}
+            runningSessionsCount={runningSessionsCount}
             archivedProjects={archivedProjects}
             archivedSessions={archivedSessions}
             archivedSessionsCount={archivedSessionsCount}
@@ -290,6 +297,7 @@ function Sidebar({
             onCreateProject={() => setShowNewProject(true)}
             onCollapseSidebar={handleCollapseSidebar}
             updateAvailable={updateAvailable}
+            restartRequired={restartRequired}
             releaseInfo={releaseInfo}
             latestVersion={latestVersion}
             currentVersion={currentVersion}

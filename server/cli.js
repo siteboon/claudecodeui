@@ -8,6 +8,7 @@
  *   (no args)     - Start the server (default)
  *   start         - Start the server
  *   sandbox       - Manage Docker sandbox environments
+ *   browser-use-mcp - Run Browser MCP stdio server
  *   status        - Show configuration and data locations
  *   help          - Show help information
  *   version       - Show version information
@@ -154,12 +155,13 @@ Usage:
   cloudcli [command] [options]
 
 Commands:
-  start          Start the CloudCLI server (default)
-  sandbox        Manage Docker sandbox environments
-  status         Show configuration and data locations
-  update         Update to the latest version
-  help           Show this help information
-  version        Show version information
+  start            Start the CloudCLI server (default)
+  sandbox          Manage Docker sandbox environments
+  browser-use-mcp  Run the Browser MCP stdio server
+  status           Show configuration and data locations
+  update           Update to the latest version
+  help             Show this help information
+  version          Show version information
 
 Options:
   -p, --port <port>           Set server port (default: 3001)
@@ -605,6 +607,10 @@ async function startServer() {
     await import('./index.js');
 }
 
+async function startBrowserUseMcp() {
+    await import('./browser-use-mcp.js');
+}
+
 // Parse CLI arguments
 function parseArgs(args) {
     const parsed = { command: 'start', options: {} };
@@ -657,6 +663,9 @@ async function main() {
             break;
         case 'sandbox':
             await sandboxCommand(remainingArgs || []);
+            break;
+        case 'browser-use-mcp':
+            await startBrowserUseMcp();
             break;
         case 'status':
         case 'info':

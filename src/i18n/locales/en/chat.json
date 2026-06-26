@@ -122,6 +122,14 @@
       }
     }
   },
+  "voice": {
+    "input": "Voice input",
+    "stopRecording": "Stop recording",
+    "transcribing": "Transcribing…",
+    "speak": "Read aloud",
+    "stopSpeaking": "Stop",
+    "loading": "Loading…"
+  },
   "input": {
     "placeholder": "Type / for commands, @ for files, or ask {{provider}} anything...",
     "placeholderDefault": "Type your message...",
@@ -224,6 +232,7 @@
       "label": "{{time}} elapsed",
       "startingNow": "Starting now"
     },
+    "stop": "Stop",
     "controls": {
       "stopGeneration": "Stop Generation",
       "pressEscToStop": "Press Esc anytime to stop"

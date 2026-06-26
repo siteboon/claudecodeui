@@ -1,4 +1,4 @@
-import { Settings, ArrowUpCircle, Bug } from 'lucide-react';
+import { Settings, ArrowUpCircle, Bug, AlertTriangle } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import { IS_PLATFORM } from '../../../../constants/config';
 import type { ReleaseInfo } from '../../../../types/sharedTypes';
@@ -18,6 +18,7 @@ function DiscordIcon({ className }: { className?: string }) {
 
 type SidebarFooterProps = {
   updateAvailable: boolean;
+  restartRequired: boolean;
   releaseInfo: ReleaseInfo | null;
   latestVersion: string | null;
   currentVersion: string;
@@ -28,6 +29,7 @@ type SidebarFooterProps = {
 
 export default function SidebarFooter({
   updateAvailable,
+  restartRequired,
   releaseInfo,
   latestVersion,
   currentVersion,
@@ -37,6 +39,22 @@ export default function SidebarFooter({
 }: SidebarFooterProps) {
   return (
     <div className="flex-shrink-0" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0)' }}>
+      {/* Restart-required banner: the running server version differs from the
+          installed/frontend version (updated but not restarted). */}
+      {restartRequired && (
+        <>
+          <div className="nav-divider" />
+          <div className="px-2 py-1.5 md:px-2 md:py-1.5">
+            <div className="flex items-center gap-2.5 rounded-lg border border-amber-300/60 bg-amber-50/80 px-2.5 py-2 dark:border-amber-700/40 dark:bg-amber-900/15">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0 text-amber-500 dark:text-amber-400" />
+              <span className="min-w-0 flex-1 text-xs font-medium text-amber-700 dark:text-amber-300">
+                {t('version.restartRequired')}
+              </span>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Update banner */}
       {updateAvailable && (
         <>
@@ -69,7 +87,7 @@ export default function SidebarFooter({
               onClick={onShowVersionModal}
             >
               <div className="relative flex-shrink-0">
-                <ArrowUpCircle className="w-4.5 h-4.5 text-blue-500 dark:text-blue-400" />
+                <ArrowUpCircle className="h-4 w-4 text-blue-500 dark:text-blue-400" />
                 <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500" />
               </div>
               <div className="min-w-0 flex-1 text-left">
@@ -145,12 +163,12 @@ export default function SidebarFooter({
           href={GITHUB_ISSUES_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex h-12 w-full items-center gap-3.5 rounded-xl bg-muted/40 px-4 transition-all hover:bg-muted/60 active:scale-[0.98]"
+          className="flex h-10 w-full items-center gap-3 rounded-xl bg-muted/40 px-3.5 transition-all hover:bg-muted/60 active:scale-[0.98]"
         >
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-background/80">
-            <Bug className="w-4.5 h-4.5 text-muted-foreground" />
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-background/80">
+            <Bug className="h-4 w-4 text-muted-foreground" />
           </div>
-          <span className="text-base font-medium text-foreground">{t('actions.reportIssue')}</span>
+          <span className="text-sm font-medium text-foreground">{t('actions.reportIssue')}</span>
         </a>
       </div>
 
@@ -160,25 +178,25 @@ export default function SidebarFooter({
           href={DISCORD_INVITE_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex h-12 w-full items-center gap-3.5 rounded-xl bg-muted/40 px-4 transition-all hover:bg-muted/60 active:scale-[0.98]"
+          className="flex h-10 w-full items-center gap-3 rounded-xl bg-muted/40 px-3.5 transition-all hover:bg-muted/60 active:scale-[0.98]"
         >
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-background/80">
-            <DiscordIcon className="w-4.5 h-4.5 text-muted-foreground" />
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-background/80">
+            <DiscordIcon className="h-4 w-4 text-muted-foreground" />
           </div>
-          <span className="text-base font-medium text-foreground">{t('actions.joinCommunity')}</span>
+          <span className="text-sm font-medium text-foreground">{t('actions.joinCommunity')}</span>
         </a>
       </div>
 
       {/* Mobile settings */}
       <div className="px-3 pb-3 pt-2 md:hidden">
         <button
-          className="flex h-12 w-full items-center gap-3.5 rounded-xl bg-muted/40 px-4 transition-all hover:bg-muted/60 active:scale-[0.98]"
+          className="flex h-10 w-full items-center gap-3 rounded-xl bg-muted/40 px-3.5 transition-all hover:bg-muted/60 active:scale-[0.98]"
           onClick={onShowSettings}
         >
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-background/80">
-            <Settings className="w-4.5 h-4.5 text-muted-foreground" />
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-background/80">
+            <Settings className="h-4 w-4 text-muted-foreground" />
           </div>
-          <span className="text-base font-medium text-foreground">{t('actions.settings')}</span>
+          <span className="text-sm font-medium text-foreground">{t('actions.settings')}</span>
         </button>
       </div>
     </div>

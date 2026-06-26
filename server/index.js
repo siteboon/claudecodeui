@@ -22,35 +22,24 @@ import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
 import {
     queryClaudeSDK,
     abortClaudeSDKSession,
-    isClaudeSDKSessionActive,
-    getActiveClaudeSDKSessions,
     resolveToolApproval,
     getPendingApprovalsForSession,
-    reconnectSessionWriter,
 } from './claude-sdk.js';
 import {
     spawnCursor,
     abortCursorSession,
-    isCursorSessionActive,
-    getActiveCursorSessions,
 } from './cursor-cli.js';
 import {
     queryCodex,
     abortCodexSession,
-    isCodexSessionActive,
-    getActiveCodexSessions,
 } from './openai-codex.js';
 import {
     spawnGemini,
     abortGeminiSession,
-    isGeminiSessionActive,
-    getActiveGeminiSessions,
 } from './gemini-cli.js';
 import {
     spawnOpenCode,
     abortOpenCodeSession,
-    isOpenCodeSessionActive,
-    getActiveOpenCodeSessions,
 } from './opencode-cli.js';
 import sessionManager from './sessionManager.js';
 import {
@@ -72,6 +61,10 @@ import userRoutes from './routes/user.js';
 import geminiRoutes from './routes/gemini.js';
 import pluginsRoutes from './routes/plugins.js';
 import providerRoutes from './modules/providers/provider.routes.js';
+import voiceRoutes from './voice-proxy.js';
+import browserUseRoutes from './modules/browser-use/browser-use.routes.js';
+import browserUseMcpRoutes from './modules/browser-use/browser-use-mcp.routes.js';
+import { browserUseService } from './modules/browser-use/browser-use.service.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
 import { initializeDatabase, projectsDb, sessionsDb } from './modules/database/index.js';
 import { configureWebPush } from './services/vapid-keys.js';
@@ -84,6 +77,19 @@ const __dirname = getModuleDir(import.meta.url);
 // Resolving the app root once keeps every repo-level lookup below aligned across both layouts.
 const APP_ROOT = findAppRoot(__dirname);
 const installMode = fs.existsSync(path.join(APP_ROOT, '.git')) ? 'git' : 'npm';
+// Version of the code that is actually running, captured once at process
+// startup. This intentionally does NOT re-read package.json per request: after
+// an update replaces the files on disk, package.json reflects the NEW version
+// while this long-lived process still runs the OLD code. The frontend bundle is
+// rebuilt on update, so a mismatch between this value and the frontend's
+// build-time version means the server was updated but not restarted.
+const RUNNING_VERSION = (() => {
+    try {
+        return JSON.parse(fs.readFileSync(path.join(APP_ROOT, 'package.json'), 'utf8')).version || null;
+    } catch {
+        return null;
+    }
+})();
 const MAX_FILE_UPLOAD_SIZE_MB = 200;
 const MAX_FILE_UPLOAD_SIZE_BYTES = MAX_FILE_UPLOAD_SIZE_MB * 1024 * 1024;
 const MAX_FILE_UPLOAD_COUNT = 20;
@@ -105,32 +111,35 @@ const wss = createWebSocketServer(server, {
         authenticateWebSocket,
     },
     chat: {
-        queryClaudeSDK,
-        spawnCursor,
-        queryCodex,
-        spawnGemini,
-        spawnOpenCode,
-        abortClaudeSDKSession,
-        abortCursorSession,
-        abortCodexSession,
-        abortGeminiSession,
-        abortOpenCodeSession,
+        spawnFns: {
+            claude: queryClaudeSDK,
+            cursor: spawnCursor,
+            codex: queryCodex,
+            gemini: spawnGemini,
+            opencode: spawnOpenCode,
+        },
+        abortFns: {
+            claude: abortClaudeSDKSession,
+            cursor: abortCursorSession,
+            codex: abortCodexSession,
+            gemini: abortGeminiSession,
+            opencode: abortOpenCodeSession,
+        },
         resolveToolApproval,
-        isClaudeSDKSessionActive,
-        isCursorSessionActive,
-        isCodexSessionActive,
-        isGeminiSessionActive,
-        isOpenCodeSessionActive,
-        reconnectSessionWriter,
         getPendingApprovalsForSession,
-        getActiveClaudeSDKSessions,
-        getActiveCursorSessions,
-        getActiveCodexSessions,
-        getActiveGeminiSessions,
-        getActiveOpenCodeSessions,
     },
     shell: {
-        getSessionById: (sessionId) => sessionManager.getSession(sessionId),
+        resolveProviderSessionId: (sessionId, provider) => {
+            const dbSession = sessionsDb.getSessionById(sessionId);
+            const legacyGeminiSession =
+                provider === 'gemini' ? sessionManager.getSession(sessionId) : null;
+
+            if (dbSession) {
+                return dbSession.provider_session_id ?? legacyGeminiSession?.cliSessionId ?? null;
+            }
+
+            return legacyGeminiSession?.cliSessionId;
+        },
         stripAnsiSequences,
         normalizeDetectedUrl,
         extractUrlsFromText,
@@ -161,7 +170,8 @@ app.get('/health', (req, res) => {
     res.json({
         status: 'ok',
         timestamp: new Date().toISOString(),
-        installMode
+        installMode,
+        version: RUNNING_VERSION
     });
 });
 
@@ -201,11 +211,19 @@ app.use('/api/gemini', authenticateToken, geminiRoutes);
 // Plugins API Routes (protected)
 app.use('/api/plugins', authenticateToken, pluginsRoutes);
 
+// Browser MCP bridge API (local token protected)
+app.use('/api/browser-use-mcp', browserUseMcpRoutes);
+
+// Browser API Routes (protected)
+app.use('/api/browser-use', authenticateToken, browserUseRoutes);
+
 // Unified provider MCP routes (protected)
 app.use('/api/providers', authenticateToken, providerRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
+
+app.use('/api/voice', authenticateToken, voiceRoutes);
 
 // Serve public files (like api-docs.html)
 app.use(express.static(path.join(APP_ROOT, 'public')));
@@ -1143,7 +1161,6 @@ app.post('/api/projects/:projectId/upload-images', authenticateToken, async (req
 app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticateToken, async (req, res) => {
     try {
         const { projectId, sessionId } = req.params;
-        const { provider = 'claude' } = req.query;
         const homeDir = os.homedir();
 
         // Allow only safe characters in sessionId
@@ -1151,6 +1168,18 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
         if (!safeSessionId || safeSessionId !== String(sessionId)) {
             return res.status(400).json({ error: 'Invalid sessionId' });
         }
+
+        // Provider artifacts on disk (JSONL file names, OpenCode sqlite rows)
+        // are keyed by the provider-native session id, while the caller sends
+        // the app-facing id. Resolve provider and id mapping from the indexed
+        // session row so the frontend does not choose provider-specific paths.
+        const sessionRow = sessionsDb.getSessionById(safeSessionId);
+        if (!sessionRow) {
+            return res.status(404).json({ error: 'Session not found', sessionId: safeSessionId });
+        }
+
+        const provider = sessionRow.provider || 'claude';
+        const providerNativeSessionId = sessionRow?.provider_session_id || safeSessionId;
 
         // Handle Cursor sessions - they use SQLite and don't have token usage info
         if (provider === 'cursor') {
@@ -1252,7 +1281,7 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
                         tokens_cache_write AS cacheWriteTokens
                     FROM session
                     WHERE id = ?
-                `).get(safeSessionId);
+                `).get(providerNativeSessionId);
 
                 if (!row) {
                     return res.status(404).json({ error: 'OpenCode session not found', sessionId: safeSessionId });
@@ -1293,7 +1322,7 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
                         if (entry.isDirectory()) {
                             const found = await findSessionFile(fullPath);
                             if (found) return found;
-                        } else if (entry.name.includes(safeSessionId) && entry.name.endsWith('.jsonl')) {
+                        } else if (entry.name.includes(providerNativeSessionId) && entry.name.endsWith('.jsonl')) {
                             return fullPath;
                         }
                     }
@@ -1377,12 +1406,19 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
         const encodedPath = projectPath.replace(/[^a-zA-Z0-9-]/g, '-');
         const projectDir = path.join(homeDir, '.claude', 'projects', encodedPath);
 
-        const jsonlPath = path.join(projectDir, `${safeSessionId}.jsonl`);
+        // Prefer the indexed transcript path (already produced by the trusted
+        // session synchronizer); fall back to the conventional location
+        // derived from the provider-native session id.
+        let jsonlPath = sessionRow?.jsonl_path;
+        if (!jsonlPath) {
+            jsonlPath = path.join(projectDir, `${providerNativeSessionId}.jsonl`);
 
-        // Constrain to projectDir
-        const rel = path.relative(path.resolve(projectDir), path.resolve(jsonlPath));
-        if (rel.startsWith('..') || path.isAbsolute(rel)) {
-            return res.status(400).json({ error: 'Invalid path' });
+            // Constrain the constructed path to projectDir (the id is
+            // caller-influenced in this fallback branch).
+            const rel = path.relative(path.resolve(projectDir), path.resolve(jsonlPath));
+            if (rel.startsWith('..') || path.isAbsolute(rel)) {
+                return res.status(400).json({ error: 'Invalid path' });
+            }
         }
 
         // Read and parse the JSONL file
@@ -1694,12 +1730,21 @@ async function startServer() {
 
         await closeSessionsWatcher();
         // Clean up plugin processes on shutdown
-        const shutdownPlugins = async () => {
-            await stopAllPlugins();
+        const shutdownRuntimeServices = async () => {
+            try {
+                await browserUseService.stopAllSessions();
+            } catch (err) {
+                console.error('[Browser] Error stopping sessions during shutdown:', err?.message || err);
+            }
+            try {
+                await stopAllPlugins();
+            } catch (err) {
+                console.error('[Plugins] Error stopping plugins during shutdown:', err?.message || err);
+            }
             process.exit(0);
         };
-        process.on('SIGTERM', () => void shutdownPlugins());
-        process.on('SIGINT', () => void shutdownPlugins());
+        process.on('SIGTERM', () => void shutdownRuntimeServices());
+        process.on('SIGINT', () => void shutdownRuntimeServices());
     } catch (error) {
         console.error('[ERROR] Failed to start server:', error);
         process.exit(1);
