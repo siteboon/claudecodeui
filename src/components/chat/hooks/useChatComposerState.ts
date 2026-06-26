@@ -775,6 +775,17 @@ export function useChatComposerState({
     handleSubmitRef.current = handleSubmit;
   }, [handleSubmit]);
 
+  // A voice transcript either fills the input (to edit before sending) or, when the
+  // user tapped "stop and send", is submitted straight away. Mirror the value into
+  // inputValueRef synchronously so handleSubmit reads the new text, not the stale state.
+  const handleVoiceTranscript = useCallback((text: string, send?: boolean) => {
+    const base = inputValueRef.current.trim();
+    const next = base ? `${base} ${text}` : text;
+    setInput(next);
+    inputValueRef.current = next;
+    if (send) handleSubmitRef.current?.(createFakeSubmitEvent());
+  }, [setInput]);
+
   useEffect(() => {
     inputValueRef.current = input;
   }, [input]);
@@ -1013,6 +1024,7 @@ export function useChatComposerState({
     isDragActive,
     openImagePicker: open,
     handleSubmit,
+    handleVoiceTranscript,
     handleInputChange,
     handleKeyDown,
     handlePaste,
