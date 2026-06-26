@@ -1,0 +1,53 @@
+{
+  "header": {
+    "fileNamePlaceholder": "PRDファイル名を入力",
+    "focusFileName": "ファイル名入力欄にフォーカス",
+    "badge": "PRD",
+    "newBadge": "新規",
+    "subtitle": "製品要件定義書",
+    "togglePreview": "Markdownをプレビュー",
+    "toggleEdit": "編集モードに切り替え",
+    "enableWrap": "自動改行を有効化",
+    "disableWrap": "自動改行を無効化",
+    "toggleTheme": "テーマ切替",
+    "download": "PRDをダウンロード",
+    "generateTasksTitle": "PRDの内容からタスクを生成",
+    "generateTasks": "タスク生成",
+    "saved": "保存完了！",
+    "saving": "保存中...",
+    "save": "PRDを保存",
+    "exitFullscreen": "フルスクリーンを終了",
+    "fullscreen": "フルスクリーン",
+    "close": "閉じる"
+  },
+  "footer": {
+    "lines": "行数",
+    "characters": "文字数",
+    "words": "語数",
+    "format": "形式",
+    "markdown": "Markdown",
+    "shortcutHint": "Ctrl+Sで保存、Escで閉じる"
+  },
+  "loading": {
+    "text": "PRDを読み込み中..."
+  },
+  "generateTasksModal": {
+    "title": "PRDからタスクを生成",
+    "askClaudeTitle": "Claude Codeに直接依頼",
+    "askClaudeDesc": "このPRDを保存し、チャットでClaude Codeにファイルを解析させて初期タスクを作成してください。",
+    "examplePrompt": "プロンプト例",
+    "examplePromptText": ".taskmaster/docs/{{fileName}}にPRDがあります。解析して初期タスクを作成してください。",
+    "viewDocs": "TaskMasterドキュメントを見る",
+    "gotIt": "了解"
+  },
+  "overwriteModal": {
+    "title": "ファイルは既に存在します",
+    "description": "「{{fileName}}」というPRDは既に存在します。上書きしますか？",
+    "cancel": "キャンセル",
+    "saving": "保存中...",
+    "overwrite": "上書き"
+  },
+  "alerts": {
+    "emptyContent": "タスクを生成する前に、PRDにコンテンツを追加してください。"
+  }
+}

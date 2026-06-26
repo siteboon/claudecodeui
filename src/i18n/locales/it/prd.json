@@ -1,0 +1,53 @@
+{
+  "header": {
+    "fileNamePlaceholder": "Inserisci il nome del file PRD",
+    "focusFileName": "Focalizza sul campo nome file",
+    "badge": "PRD",
+    "newBadge": "Nuovo",
+    "subtitle": "Documento dei requisiti del prodotto",
+    "togglePreview": "Anteprima Markdown",
+    "toggleEdit": "Passa alla modalità modifica",
+    "enableWrap": "Abilita a capo automatico",
+    "disableWrap": "Disabilita a capo automatico",
+    "toggleTheme": "Cambia tema",
+    "download": "Scarica PRD",
+    "generateTasksTitle": "Genera attività dal contenuto del PRD",
+    "generateTasks": "Genera attività",
+    "saved": "Salvato!",
+    "saving": "Salvataggio...",
+    "save": "Salva PRD",
+    "exitFullscreen": "Esci dalla modalità schermo intero",
+    "fullscreen": "Schermo intero",
+    "close": "Chiudi"
+  },
+  "footer": {
+    "lines": "Righe",
+    "characters": "Caratteri",
+    "words": "Parole",
+    "format": "Formato",
+    "markdown": "Markdown",
+    "shortcutHint": "Premi Ctrl+S per salvare e Esc per chiudere"
+  },
+  "loading": {
+    "text": "Caricamento PRD..."
+  },
+  "generateTasksModal": {
+    "title": "Genera attività dal PRD",
+    "askClaudeTitle": "Chiedi direttamente a Claude Code",
+    "askClaudeDesc": "Salva questo PRD, poi chiedi a Claude Code nella chat di analizzare il file e creare le attività iniziali.",
+    "examplePrompt": "Esempio di prompt",
+    "examplePromptText": "Ho un PRD in .taskmaster/docs/{{fileName}}. Analizzalo e crea le attività iniziali.",
+    "viewDocs": "Visualizza la documentazione di TaskMaster",
+    "gotIt": "Ho capito"
+  },
+  "overwriteModal": {
+    "title": "Il file esiste già",
+    "description": "Un PRD denominato \"{{fileName}}\" esiste già. Vuoi sovrascriverlo?",
+    "cancel": "Annulla",
+    "saving": "Salvataggio...",
+    "overwrite": "Sovrascrivi"
+  },
+  "alerts": {
+    "emptyContent": "Aggiungi contenuto al PRD prima di generare le attività."
+  }
+}

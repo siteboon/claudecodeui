@@ -1,0 +1,53 @@
+{
+  "header": {
+    "fileNamePlaceholder": "Введите имя файла PRD",
+    "focusFileName": "Фокус на поле имени файла",
+    "badge": "PRD",
+    "newBadge": "Новый",
+    "subtitle": "Документ технических требований",
+    "togglePreview": "Предпросмотр Markdown",
+    "toggleEdit": "Переключить в режим редактирования",
+    "enableWrap": "Включить перенос строк",
+    "disableWrap": "Отключить перенос строк",
+    "toggleTheme": "Переключить тему",
+    "download": "Скачать PRD",
+    "generateTasksTitle": "Создать задачи из содержимого PRD",
+    "generateTasks": "Создать задачи",
+    "saved": "Сохранено!",
+    "saving": "Сохранение...",
+    "save": "Сохранить PRD",
+    "exitFullscreen": "Выйти из полноэкранного режима",
+    "fullscreen": "Полноэкранный режим",
+    "close": "Закрыть"
+  },
+  "footer": {
+    "lines": "Строк",
+    "characters": "Символов",
+    "words": "Слов",
+    "format": "Формат",
+    "markdown": "Markdown",
+    "shortcutHint": "Ctrl+S для сохранения, Esc для закрытия"
+  },
+  "loading": {
+    "text": "Загрузка PRD..."
+  },
+  "generateTasksModal": {
+    "title": "Создать задачи из PRD",
+    "askClaudeTitle": "Спросите Claude Code напрямую",
+    "askClaudeDesc": "Сохраните этот PRD, затем попросите Claude Code в чате проанализировать файл и создать начальные задачи.",
+    "examplePrompt": "Пример запроса",
+    "examplePromptText": "У меня есть PRD по адресу .taskmaster/docs/{{fileName}}. Проанализируйте его и создайте начальные задачи.",
+    "viewDocs": "Просмотреть документацию TaskMaster",
+    "gotIt": "Понятно"
+  },
+  "overwriteModal": {
+    "title": "Файл уже существует",
+    "description": "PRD с именем \"{{fileName}}\" уже существует. Хотите перезаписать его?",
+    "cancel": "Отмена",
+    "saving": "Сохранение...",
+    "overwrite": "Перезаписать"
+  },
+  "alerts": {
+    "emptyContent": "Пожалуйста, добавьте содержимое в PRD перед генерацией задач."
+  }
+}
