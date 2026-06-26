@@ -1,5 +1,33 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+function isCloudCliAppOrigin(location) {
+  if (location.protocol === 'file:') return true;
+
+  if (location.protocol === 'http:') {
+    return location.hostname === '127.0.0.1' || location.hostname === 'localhost';
+  }
+
+  return location.protocol === 'https:' && (
+    location.hostname === 'cloudcli.ai' || location.hostname.endsWith('.cloudcli.ai')
+  );
+}
+
+function onDesktopStateUpdated(callback) {
+  const listener = (_event, state) => callback(state);
+  ipcRenderer.on('cloudcli-desktop:state-updated', listener);
+  return () => {
+    ipcRenderer.removeListener('cloudcli-desktop:state-updated', listener);
+  };
+}
+
+if (isCloudCliAppOrigin(window.location)) {
+  contextBridge.exposeInMainWorld('cloudcliDesktopNotifications', {
+    getState: () => ipcRenderer.invoke('cloudcli-desktop:get-state'),
+    update: (settings) => ipcRenderer.invoke('cloudcli-desktop:update-desktop-notifications', settings),
+    onStateUpdated: onDesktopStateUpdated,
+  });
+}
+
 if (window.location.protocol === 'file:') {
   contextBridge.exposeInMainWorld('cloudcliDesktop', {
     connectCloud: () => ipcRenderer.invoke('cloudcli-desktop:connect-cloud'),
@@ -27,9 +55,7 @@ if (window.location.protocol === 'file:') {
     switchTab: (tabId) => ipcRenderer.invoke('cloudcli-desktop:switch-tab', tabId),
     closeTab: (tabId) => ipcRenderer.invoke('cloudcli-desktop:close-tab', tabId),
     updateSetting: (key, value) => ipcRenderer.invoke('cloudcli-desktop:update-setting', key, value),
-    onStateUpdated: (callback) => {
-      ipcRenderer.on('cloudcli-desktop:state-updated', (_event, state) => callback(state));
-    },
+    onStateUpdated: onDesktopStateUpdated,
     onLauncherCommand: (callback) => {
       ipcRenderer.on('cloudcli-desktop:launcher-command', (_event, command) => callback(command));
     },

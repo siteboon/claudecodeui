@@ -3,6 +3,7 @@ import { BrowserWindow, Menu, Tray, clipboard, nativeImage, nativeTheme, session
 import { ViewHost } from './viewHost.js';
 
 const TITLEBAR_HEIGHT = 44;
+const AUTH_TOKEN_STORAGE_KEY = 'auth-token';
 // TODO: Re-enable Computer Use menus after fixing the MCP server connection
 // between the desktop app and the web UI.
 const COMPUTER_USE_MENUS_ENABLED = false;
@@ -247,6 +248,16 @@ export class DesktopWindowManager {
     }
     this.emitDesktopState();
     return this.getDesktopState();
+  }
+
+  async navigateActiveView(url) {
+    const navigated = await this.viewHost.navigateActiveView(url);
+    this.emitDesktopState();
+    return navigated;
+  }
+
+  async readAuthTokenForTarget(url) {
+    return this.viewHost.readLocalStorageValueForOrigin(url, AUTH_TOKEN_STORAGE_KEY);
   }
 
   openActiveTabDevTools() {

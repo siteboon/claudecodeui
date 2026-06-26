@@ -57,6 +57,7 @@ import commandsRoutes from './routes/commands.js';
 import settingsRoutes from './routes/settings.js';
 import agentRoutes from './routes/agent.js';
 import projectModuleRoutes from './modules/projects/projects.routes.js';
+import notificationRoutes from './modules/notifications/notifications.routes.js';
 import userRoutes from './routes/user.js';
 import geminiRoutes from './routes/gemini.js';
 import pluginsRoutes from './routes/plugins.js';
@@ -78,7 +79,6 @@ const __dirname = getModuleDir(import.meta.url);
 // The server source runs from /server, while the compiled output runs from /dist-server/server.
 // Resolving the app root once keeps every repo-level lookup below aligned across both layouts.
 const APP_ROOT = findAppRoot(__dirname);
-const packageJson = JSON.parse(fs.readFileSync(path.join(APP_ROOT, 'package.json'), 'utf8'));
 const installMode = fs.existsSync(path.join(APP_ROOT, '.git')) ? 'git' : 'npm';
 // Version of the code that is actually running, captured once at process
 // startup. This intentionally does NOT re-read package.json per request: after
@@ -172,7 +172,6 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.get('/health', (req, res) => {
     res.json({
         status: 'ok',
-        version: packageJson.version,
         timestamp: new Date().toISOString(),
         installMode,
         version: RUNNING_VERSION
@@ -205,6 +204,8 @@ app.use('/api/commands', authenticateToken, commandsRoutes);
 
 // Settings API Routes (protected)
 app.use('/api/settings', authenticateToken, settingsRoutes);
+
+app.use('/api/notifications', authenticateToken, notificationRoutes);
 
 // User API Routes (protected)
 app.use('/api/user', authenticateToken, userRoutes);

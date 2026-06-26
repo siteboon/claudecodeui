@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { CloudController } from './cloud.js';
 import { ComputerAgentController } from './computerAgent.js';
 import { DesktopWindowManager } from './desktopWindow.js';
+import { DesktopNotificationsController } from './desktopNotifications.js';
 import { LocalServerController } from './localServer.js';
 import { TabsController } from './tabs.js';
 
@@ -30,6 +31,7 @@ let desktopWindow = null;
 let localServer = null;
 let cloud = null;
 let computerAgent = null;
+let desktopNotifications = null;
 let isQuitting = false;
 let isRefreshingCloud = false;
 let pendingCloudConnectStartedAt = 0;
@@ -63,6 +65,10 @@ function getSettingsPath() {
 
 function getComputerUseSettingsPath() {
   return path.join(app.getPath('userData'), 'computer-use-settings.json');
+}
+
+function getDesktopNotificationsSettingsPath() {
+  return path.join(app.getPath('userData'), 'desktop-notifications-settings.json');
 }
 
 function getRunningEnvironmentUrls() {
@@ -146,6 +152,7 @@ function getDesktopState() {
     activeTabId: tabs.activeTabId,
     environments: cloud.getEnvironments().map(serializeEnvironment),
     computerUse: computerAgent?.getState() || { enabled: false, consentMode: 'ask', running: false, connectedCount: 0, targetCount: 0 },
+    desktopNotifications: desktopNotifications?.getState() || { enabled: false, supported: false, connectedCount: 0, targetCount: 0 },
     computerUsePermissions: getComputerUsePermissions(),
   };
 }
@@ -364,6 +371,7 @@ async function refreshCloudEnvironments({ showErrors = false } = {}) {
   } finally {
     isRefreshingCloud = false;
     void computerAgent?.sync().catch((error) => console.error('[ComputerAgent] sync failed:', error?.message || error));
+    void desktopNotifications?.sync().catch((error) => console.error('[DesktopNotifications] sync failed:', error?.message || error));
     syncDesktopState();
   }
 }
@@ -718,8 +726,57 @@ async function openEnvironmentInDesktop(environment) {
   return getDesktopState();
 }
 
+function findEnvironmentByUrl(environmentUrl) {
+  const targetOrigin = (() => {
+    try {
+      return new URL(environmentUrl).origin;
+    } catch {
+      return null;
+    }
+  })();
+  if (!targetOrigin) return null;
+
+  return cloud.getEnvironments().find((environment) => {
+    try {
+      return new URL(cloud.getEnvironmentUrl(environment)).origin === targetOrigin;
+    } catch {
+      return false;
+    }
+  }) || null;
+}
+
+async function openNotificationTarget({ environmentUrl, sessionId = null }) {
+  const window = desktopWindow?.getMainWindow();
+  if (window) {
+    if (window.isMinimized()) window.restore();
+    window.show();
+    window.focus();
+  }
+
+  const environment = findEnvironmentByUrl(environmentUrl);
+  if (environment) {
+    await openEnvironmentInDesktop(environment);
+  } else {
+    const parsed = new URL(environmentUrl);
+    await desktopWindow.showTarget({
+      kind: 'remote',
+      name: parsed.hostname,
+      url: parsed.origin,
+    });
+  }
+
+  const targetUrl = new URL(sessionId ? `/session/${encodeURIComponent(sessionId)}` : '/', environmentUrl).toString();
+  await desktopWindow.navigateActiveView(targetUrl);
+  return getDesktopState();
+}
+
+async function getEnvironmentAuthToken(environmentUrl) {
+  return desktopWindow?.readAuthTokenForTarget(environmentUrl) || null;
+}
+
 async function clearCloudAccount() {
   await cloud.clearCloudAccount();
+  desktopNotifications?.stop();
   const removedTabs = tabs.removeByKind('remote');
   for (const tab of removedTabs) {
     desktopWindow?.destroyTabView(tab.id);
@@ -800,6 +857,10 @@ function registerIpcHandlers() {
     return getDesktopState();
   });
   ipcMain.handle('cloudcli-desktop:update-computer-use', async (_event, settings) => updateComputerUse(settings));
+  ipcMain.handle('cloudcli-desktop:update-desktop-notifications', async (_event, settings) => {
+    await desktopNotifications?.saveSettings(settings);
+    return getDesktopState();
+  });
   ipcMain.handle('cloudcli-desktop:request-computer-use-permission', async (_event, permission) => requestComputerUsePermission(permission));
   ipcMain.handle('cloudcli-desktop:show-desktop-settings', async () => desktopWindow.showDesktopSettings());
   ipcMain.handle('cloudcli-desktop:show-local-settings', async () => desktopWindow.showLocalSettings());
@@ -839,6 +900,7 @@ function registerAppEvents() {
 
   app.on('before-quit', () => {
     computerAgent?.stop();
+    desktopNotifications?.stop();
   });
 
   app.on('before-quit', (event) => {
@@ -896,6 +958,7 @@ async function createDesktopWindow() {
       stopEnvironment,
       updateDesktopSetting,
       copyLocalWebUrl,
+      openNotificationTarget,
     },
   });
 
@@ -963,10 +1026,24 @@ async function bootstrap() {
     promptConsent: promptComputerUseConsent,
     onChange: syncDesktopState,
   });
+  desktopNotifications = new DesktopNotificationsController({
+    settingsPath: getDesktopNotificationsSettingsPath(),
+    appVersion: app.getVersion(),
+    appName: APP_NAME,
+    getDeviceId: () => cloud.getAccount()?.deviceId || '',
+    getAccountEmail: () => cloud.getAccount()?.email || null,
+    getRunningEnvironmentUrls,
+    getApiKey: () => cloud.getAccount()?.apiKey || '',
+    getAuthToken: getEnvironmentAuthToken,
+    getIconPath: getWindowIconPath,
+    openNotificationTarget,
+    onChange: syncDesktopState,
+  });
 
   await localServer.loadDesktopSettings();
   await cloud.loadCloudAccount();
   await computerAgent.loadSettings();
+  await desktopNotifications.loadSettings();
 
   registerProtocolHandler();
   registerIpcHandlers();

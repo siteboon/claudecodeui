@@ -135,6 +135,38 @@ export class ViewHost {
     return true;
   }
 
+  async readLocalStorageValueForOrigin(originUrl, key) {
+    let targetOrigin;
+    try {
+      targetOrigin = new URL(originUrl).origin;
+    } catch {
+      return null;
+    }
+
+    for (const view of this.tabViews.values()) {
+      if (!view || view.webContents.isDestroyed()) continue;
+      let viewOrigin;
+      try {
+        viewOrigin = new URL(view.webContents.getURL()).origin;
+      } catch {
+        continue;
+      }
+      if (viewOrigin !== targetOrigin) continue;
+
+      try {
+        const value = await view.webContents.executeJavaScript(
+          `window.localStorage.getItem(${JSON.stringify(key)})`,
+          true
+        );
+        return typeof value === 'string' && value ? value : null;
+      } catch {
+        return null;
+      }
+    }
+
+    return null;
+  }
+
   getTabViewDiagnostics() {
     const mainWindow = this.getMainWindow();
     const attachedViews = new Set();
@@ -254,6 +286,15 @@ export class ViewHost {
     const view = this.tabViews.get(tabId);
     if (!view || view.webContents.isDestroyed()) return false;
     view.webContents.reloadIgnoringCache();
+    return true;
+  }
+
+  async navigateActiveView(url) {
+    const view = this.getActiveView();
+    if (!view) return false;
+    await loadUrlWithTimeout(view.webContents, url);
+    view.__cloudcliLoadedUrl = url;
+    view.__cloudcliStartupHtml = null;
     return true;
   }
 
