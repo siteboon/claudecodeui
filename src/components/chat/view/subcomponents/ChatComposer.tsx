@@ -194,13 +194,6 @@ export default function ChatComposer({
   const isRecording = voiceState === 'recording';
   const isTranscribing = voiceState === 'transcribing';
 
-  const textareaRect = textareaRef.current?.getBoundingClientRect();
-  const commandMenuPosition = {
-    top: textareaRect ? Math.max(16, textareaRect.top - 316) : 0,
-    left: textareaRect ? textareaRect.left : 16,
-    bottom: textareaRect ? window.innerHeight - textareaRect.top + 8 : 90,
-  };
-
   // Detect if the AskUserQuestion interactive panel is active
   const hasQuestionPanel = pendingPermissionRequests.some(
     (r) => r.toolName === 'AskUserQuestion'
