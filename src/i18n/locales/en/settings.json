@@ -4,6 +4,7 @@
     "account": "Account",
     "permissions": "Permissions",
     "mcpServers": "MCP Servers",
+    "skills": "Skills",
     "appearance": "Appearance"
   },
   "account": {
@@ -94,6 +95,7 @@
     "git": "Git",
     "apiTokens": "API & Tokens",
     "tasks": "Tasks",
+    "browser": "Browser",
     "notifications": "Notifications",
     "plugins": "Plugins",
     "about": "About"
@@ -112,7 +114,7 @@
     },
     "sound": {
       "title": "Sound",
-      "description": "Play a short tone when a chat run finishes.",
+      "description": "Play a short tone when a chat run finishes or needs tool approval.",
       "enabled": "Enabled",
       "test": "Test sound"
     },
@@ -449,6 +451,10 @@
     "actions": {
       "edit": "Edit server",
       "delete": "Delete server"
+    },
+    "managed": {
+      "badge": "Managed",
+      "hint": "Managed by CloudCLI."
     },
     "help": {
       "title": "About Codex MCP",

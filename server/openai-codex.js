@@ -18,7 +18,7 @@ import { notifyRunFailed, notifyRunStopped } from './services/notification-orche
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
 import { providerModelsService } from './modules/providers/services/provider-models.service.js';
-import { createNormalizedMessage } from './shared/utils.js';
+import { createCompleteMessage, createNormalizedMessage } from './shared/utils.js';
 
 // Track active sessions
 const activeCodexSessions = new Map();
@@ -352,21 +352,26 @@ export async function queryCodex(command, options = {}, ws) {
       }
     }
 
-    // Send completion event
-    if (!terminalFailure) {
-      sendMessage(ws, createNormalizedMessage({
-        kind: 'complete',
-        actualSessionId: capturedSessionId || thread.id || sessionId || null,
-        sessionId: capturedSessionId || sessionId || null,
-        provider: 'codex'
-      }));
-      notifyRunStopped({
-        userId: ws?.userId || null,
+    // Send the terminal completion event — skipped for aborted runs, whose
+    // terminal `complete` (aborted: true) was already sent by abort-session.
+    const runSession = capturedSessionId ? activeCodexSessions.get(capturedSessionId) : null;
+    const runAborted = runSession?.status === 'aborted' || abortController.signal.aborted;
+    if (!runAborted) {
+      sendMessage(ws, createCompleteMessage({
         provider: 'codex',
         sessionId: capturedSessionId || sessionId || null,
-        sessionName: sessionSummary,
-        stopReason: 'completed'
-      });
+        actualSessionId: capturedSessionId || thread.id || sessionId || null,
+        exitCode: terminalFailure ? 1 : 0,
+      }));
+      if (!terminalFailure) {
+        notifyRunStopped({
+          userId: ws?.userId || null,
+          provider: 'codex',
+          sessionId: capturedSessionId || sessionId || null,
+          sessionName: sessionSummary,
+          stopReason: 'completed'
+        });
+      }
     }
 
   } catch (error) {
@@ -386,6 +391,11 @@ export async function queryCodex(command, options = {}, ws) {
         : error.message;
 
       sendMessage(ws, createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider: 'codex' }));
+      sendMessage(ws, createCompleteMessage({
+        provider: 'codex',
+        sessionId: capturedSessionId || sessionId || null,
+        exitCode: 1,
+      }));
       if (!terminalFailure) {
         notifyRunFailed({
           userId: ws?.userId || null,

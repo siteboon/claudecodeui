@@ -1,6 +1,7 @@
 import express, { type Request, type Response } from 'express';
 
 import { providerAuthService } from '@/modules/providers/services/provider-auth.service.js';
+import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
 import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
 import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
 import { providerSkillsService } from '@/modules/providers/services/skills.service.js';
@@ -11,6 +12,8 @@ import type {
   McpScope,
   McpTransport,
   ProviderChangeActiveModelInput,
+  ProviderSkillCreateFile,
+  ProviderSkillCreateInput,
   UpsertProviderMcpServerInput,
 } from '@/shared/types.js';
 import { AppError, asyncHandler, createApiSuccessResponse } from '@/shared/utils.js';
@@ -178,6 +181,104 @@ const parseMcpUpsertPayload = (payload: unknown): UpsertProviderMcpServerInput =
   };
 };
 
+const parseProviderSkillCreatePayload = (payload: unknown): ProviderSkillCreateInput => {
+  if (!payload || typeof payload !== 'object') {
+    throw new AppError('Request body must be an object.', {
+      code: 'INVALID_REQUEST_BODY',
+      statusCode: 400,
+    });
+  }
+
+  const body = payload as Record<string, unknown>;
+  const rawEntries = Array.isArray(body.entries)
+    ? body.entries
+    : typeof body.content === 'string'
+      ? [{
+          content: body.content,
+          directoryName: body.directoryName,
+          fileName: body.fileName,
+          files: body.files,
+        }]
+      : null;
+
+  if (!rawEntries || rawEntries.length === 0) {
+    throw new AppError('At least one skill entry is required.', {
+      code: 'PROVIDER_SKILLS_REQUIRED',
+      statusCode: 400,
+    });
+  }
+
+  const entries = rawEntries.map((entry, index) => {
+    if (!entry || typeof entry !== 'object') {
+      throw new AppError(`Skill entry ${index + 1} must be an object.`, {
+        code: 'INVALID_REQUEST_BODY',
+        statusCode: 400,
+      });
+    }
+
+    const record = entry as Record<string, unknown>;
+    const content = typeof record.content === 'string' ? record.content : '';
+    const directoryName = readOptionalQueryString(record.directoryName);
+    const fileName = readOptionalQueryString(record.fileName);
+    const rawFiles = record.files;
+
+    if (!content.trim()) {
+      throw new AppError(`Skill entry ${index + 1} must include markdown content.`, {
+        code: 'PROVIDER_SKILL_CONTENT_REQUIRED',
+        statusCode: 400,
+      });
+    }
+
+    if (rawFiles !== undefined && !Array.isArray(rawFiles)) {
+      throw new AppError(`Skill entry ${index + 1} files must be an array.`, {
+        code: 'INVALID_REQUEST_BODY',
+        statusCode: 400,
+      });
+    }
+
+    const files: ProviderSkillCreateFile[] | undefined = rawFiles?.map((file, fileIndex) => {
+      if (!file || typeof file !== 'object') {
+        throw new AppError(`Skill entry ${index + 1} file ${fileIndex + 1} must be an object.`, {
+          code: 'INVALID_REQUEST_BODY',
+          statusCode: 400,
+        });
+      }
+
+      const fileRecord = file as Record<string, unknown>;
+      const relativePath = readOptionalQueryString(fileRecord.relativePath);
+      const fileContent = typeof fileRecord.content === 'string' ? fileRecord.content : null;
+      const encoding = fileRecord.encoding === 'utf8' || fileRecord.encoding === 'base64'
+        ? fileRecord.encoding
+        : null;
+
+      if (!relativePath || fileContent === null || !encoding) {
+        throw new AppError(
+          `Skill entry ${index + 1} file ${fileIndex + 1} requires relativePath, content, and encoding.`,
+          {
+            code: 'INVALID_REQUEST_BODY',
+            statusCode: 400,
+          },
+        );
+      }
+
+      return {
+        relativePath,
+        content: fileContent,
+        encoding,
+      };
+    });
+
+    return {
+      content,
+      directoryName,
+      fileName,
+      files,
+    };
+  });
+
+  return { entries };
+};
+
 const parseProvider = (value: unknown): LLMProvider => {
   const normalized = normalizeProviderParam(value);
   if (
@@ -319,6 +420,16 @@ router.get(
   }),
 );
 
+router.post(
+  '/:provider/skills',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const input = parseProviderSkillCreatePayload(req.body);
+    const skills = await providerSkillsService.addProviderSkills(provider, input);
+    res.json(createApiSuccessResponse({ provider, skills }));
+  }),
+);
+
 // ----------------- MCP routes -----------------
 router.get(
   '/:provider/mcp/servers',
@@ -382,7 +493,51 @@ router.post(
   }),
 );
 
+router.get(
+  '/capabilities',
+  asyncHandler(async (_req: Request, res: Response) => {
+    res.json(createApiSuccessResponse({
+      providers: providerCapabilitiesService.listAllProviderCapabilities(),
+    }));
+  }),
+);
+
+router.get(
+  '/:provider/capabilities',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    res.json(createApiSuccessResponse(
+      providerCapabilitiesService.getProviderCapabilities(provider),
+    ));
+  }),
+);
+
 // ----------------- Session routes -----------------
+/**
+ * Session gateway entry point: allocates the stable app-facing session id for
+ * a brand-new chat. The frontend must call this before the first `chat.send`
+ * so the session id in the URL, the store, and the websocket all agree from
+ * the very first message — there is no client-visible session-id handoff.
+ */
+router.post(
+  '/sessions',
+  asyncHandler(async (req: Request, res: Response) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const provider = parseProvider(body.provider);
+    const projectPath = typeof body.projectPath === 'string' ? body.projectPath : '';
+    const result = sessionsService.createAppSession(provider, projectPath);
+    res.status(201).json(createApiSuccessResponse(result));
+  }),
+);
+
+router.get(
+  '/sessions/running',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const sessions = sessionsService.listRunningSessions();
+    res.json(createApiSuccessResponse({ sessions }));
+  }),
+);
+
 router.get(
   '/sessions/archived',
   asyncHandler(async (_req: Request, res: Response) => {
@@ -459,7 +614,7 @@ router.get(
       limit,
       offset,
     });
-    res.json(result);
+    res.json(createApiSuccessResponse(result));
   }),
 );
 

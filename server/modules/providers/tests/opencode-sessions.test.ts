@@ -272,6 +272,55 @@ test('OpenCode session synchronizer indexes sqlite sessions without deletable tr
   }
 });
 
+test('OpenCode session synchronizer returns the app session id once provider mapping exists', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'opencode-session-sync-mapped-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tempRoot);
+
+  try {
+    await createOpenCodeDatabase(tempRoot, workspacePath);
+    await withIsolatedDatabase(() => {
+      sessionsDb.createAppSession('app-session-1', 'opencode', workspacePath);
+      sessionsDb.assignProviderSessionId('app-session-1', 'open-session-1');
+
+      const synchronizer = new OpenCodeSessionSynchronizer();
+      return synchronizer.synchronizeFile(path.join(tempRoot, '.local', 'share', 'opencode', 'opencode.db')).then((sessionId) => {
+        assert.equal(sessionId, 'app-session-1');
+        assert.equal(sessionsDb.getAllSessions().length, 1);
+        assert.equal(sessionsDb.getSessionById('app-session-1')?.provider_session_id, 'open-session-1');
+      });
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('OpenCode session synchronizer adopts the pending app session before watcher sync creates a duplicate', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'opencode-session-sync-race-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tempRoot);
+
+  try {
+    await createOpenCodeDatabase(tempRoot, workspacePath);
+    await withIsolatedDatabase(() => {
+      sessionsDb.createAppSession('app-session-race', 'opencode', workspacePath);
+
+      const synchronizer = new OpenCodeSessionSynchronizer();
+      return synchronizer.synchronizeFile(path.join(tempRoot, '.local', 'share', 'opencode', 'opencode.db')).then((sessionId) => {
+        assert.equal(sessionId, 'app-session-race');
+        assert.equal(sessionsDb.getAllSessions().length, 1);
+        assert.equal(sessionsDb.getSessionById('app-session-race')?.provider_session_id, 'open-session-1');
+      });
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('OpenCode sessions provider normalizes quoted live text and skips user echoes', () => {
   const provider = new OpenCodeSessionsProvider();
   const normalized = provider.normalizeMessage({
