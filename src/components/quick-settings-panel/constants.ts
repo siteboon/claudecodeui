@@ -4,6 +4,7 @@ import {
   Eye,
   Languages,
   Maximize2,
+  Mic,
 } from 'lucide-react';
 import type { PreferenceToggleItem } from './types';
 
@@ -53,5 +54,10 @@ export const INPUT_SETTING_TOGGLES: PreferenceToggleItem[] = [
     key: 'sendByCtrlEnter',
     labelKey: 'quickSettings.sendByCtrlEnter',
     icon: Languages,
+  },
+  {
+    key: 'voiceEnabled',
+    labelKey: 'quickSettings.voiceEnabled',
+    icon: Mic,
   },
 ];
