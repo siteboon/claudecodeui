@@ -957,9 +957,25 @@ export async function readProviderSkillMarkdownDefinition(
   skillPath: string,
 ): Promise<{ name: string; description: string }> {
   const content = await readFile(skillPath, 'utf8');
+  return readProviderSkillMarkdownDefinitionFromContent(
+    content,
+    path.basename(path.dirname(skillPath)),
+  );
+}
+
+/**
+ * Reads the `name` and `description` fields from raw skill markdown content.
+ *
+ * This keeps filesystem discovery and newly uploaded skill creation aligned on
+ * the same front matter parsing rules. `fallbackName` is used when the markdown
+ * omits a `name` field so callers still get a stable, non-empty skill id.
+ */
+export function readProviderSkillMarkdownDefinitionFromContent(
+  content: string,
+  fallbackName: string,
+): { name: string; description: string } {
   const parsed = parseFrontMatter(content);
   const data = readObjectRecord(parsed.data) ?? {};
-  const fallbackName = path.basename(path.dirname(skillPath));
 
   return {
     name: readOptionalString(data.name) ?? fallbackName,

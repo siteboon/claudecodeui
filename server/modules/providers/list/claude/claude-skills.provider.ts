@@ -99,6 +99,14 @@ export class ClaudeSkillsProvider extends SkillsProvider {
     ];
   }
 
+  protected async getGlobalSkillSource(): Promise<ProviderSkillSource> {
+    return {
+      scope: 'user',
+      rootDir: path.join(getClaudeHomePath(), 'skills'),
+      commandPrefix: '/',
+    };
+  }
+
   private async listPluginSkills(claudeHomePath: string): Promise<ProviderSkill[]> {
     const settings = await readJsonConfig(path.join(claudeHomePath, 'settings.json'));
     const enabledPlugins = readObjectRecord(settings.enabledPlugins);

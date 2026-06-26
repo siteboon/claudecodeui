@@ -4,6 +4,7 @@
     "account": "Account",
     "permissions": "Permissions",
     "mcpServers": "MCP Servers",
+    "skills": "Skills",
     "appearance": "Appearance"
   },
   "account": {
@@ -114,7 +115,7 @@
     },
     "sound": {
       "title": "Sound",
-      "description": "Play a short tone when a chat run finishes.",
+      "description": "Play a short tone when a chat run finishes or needs tool approval.",
       "enabled": "Enabled",
       "test": "Test sound"
     },

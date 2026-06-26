@@ -141,6 +141,7 @@ type SidebarContentProps = {
   onCreateProject: () => void;
   onCollapseSidebar: () => void;
   updateAvailable: boolean;
+  restartRequired: boolean;
   releaseInfo: ReleaseInfo | null;
   latestVersion: string | null;
   currentVersion: string;
@@ -178,6 +179,7 @@ export default function SidebarContent({
   onCreateProject,
   onCollapseSidebar,
   updateAvailable,
+  restartRequired,
   releaseInfo,
   latestVersion,
   currentVersion,
@@ -553,6 +555,7 @@ export default function SidebarContent({
 
       <SidebarFooter
         updateAvailable={updateAvailable}
+        restartRequired={restartRequired}
         releaseInfo={releaseInfo}
         latestVersion={latestVersion}
         currentVersion={currentVersion}

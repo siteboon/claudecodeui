@@ -239,6 +239,7 @@ function ChatInterface({
     selectedSession,
     currentSessionId,
     setTokenBudget,
+    pendingPermissionRequests,
     setPendingPermissionRequests,
     streamTimerRef,
     accumulatedStreamRef,
