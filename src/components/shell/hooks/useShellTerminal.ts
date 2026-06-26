@@ -4,13 +4,18 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
+
 import type { Project } from '../../../types/app';
+import { copyTextToClipboard } from '../../../utils/clipboard';
 import {
   TERMINAL_INIT_DELAY_MS,
   TERMINAL_OPTIONS,
   TERMINAL_RESIZE_DELAY_MS,
 } from '../constants/constants';
-import { copyTextToClipboard } from '../../../utils/clipboard';
+import {
+  installMobileTerminalSelection,
+  type MobileTerminalSelectionManager,
+} from '../utils/mobileTerminalSelection';
 import { sendSocketMessage } from '../utils/socket';
 import { ensureXtermFocusStyles } from '../utils/terminalStyles';
 
@@ -47,6 +52,7 @@ export function useShellTerminal({
 }: UseShellTerminalOptions): UseShellTerminalResult {
   const [isInitialized, setIsInitialized] = useState(false);
   const resizeTimeoutRef = useRef<number | null>(null);
+  const mobileSelectionRef = useRef<MobileTerminalSelectionManager | null>(null);
   const selectedProjectKey = selectedProject?.fullPath || selectedProject?.path || '';
   const hasSelectedProject = Boolean(selectedProject);
 
@@ -64,6 +70,11 @@ export function useShellTerminal({
   }, [terminalRef]);
 
   const disposeTerminal = useCallback(() => {
+    if (mobileSelectionRef.current) {
+      mobileSelectionRef.current.dispose();
+      mobileSelectionRef.current = null;
+    }
+
     if (terminalRef.current) {
       terminalRef.current.dispose();
       terminalRef.current = null;
@@ -74,7 +85,8 @@ export function useShellTerminal({
   }, [fitAddonRef, terminalRef]);
 
   useEffect(() => {
-    if (!terminalContainerRef.current || !hasSelectedProject || isRestarting || terminalRef.current) {
+    const terminalContainer = terminalContainerRef.current;
+    if (!terminalContainer || !hasSelectedProject || isRestarting || terminalRef.current) {
       return;
     }
 
@@ -96,7 +108,11 @@ export function useShellTerminal({
       console.warn('[Shell] WebGL renderer unavailable, using Canvas fallback');
     }
 
-    nextTerminal.open(terminalContainerRef.current);
+    nextTerminal.open(terminalContainer);
+    mobileSelectionRef.current = installMobileTerminalSelection(
+      nextTerminal,
+      terminalContainer,
+    );
 
     const copyTerminalSelection = async () => {
       const selection = nextTerminal.getSelection();
@@ -127,7 +143,7 @@ export function useShellTerminal({
       void copyTextToClipboard(selection);
     };
 
-    terminalContainerRef.current.addEventListener('copy', handleTerminalCopy);
+    terminalContainer.addEventListener('copy', handleTerminalCopy);
 
     nextTerminal.attachCustomKeyEventHandler((event) => {
       if (
@@ -214,10 +230,10 @@ export function useShellTerminal({
       }, TERMINAL_RESIZE_DELAY_MS);
     });
 
-    resizeObserver.observe(terminalContainerRef.current);
+    resizeObserver.observe(terminalContainer);
 
     return () => {
-      terminalContainerRef.current?.removeEventListener('copy', handleTerminalCopy);
+      terminalContainer.removeEventListener('copy', handleTerminalCopy);
       resizeObserver.disconnect();
       if (resizeTimeoutRef.current !== null) {
         window.clearTimeout(resizeTimeoutRef.current);
@@ -233,6 +249,7 @@ export function useShellTerminal({
     fitAddonRef,
     isRestarting,
     hasSelectedProject,
+    minimal,
     selectedProjectKey,
     terminalContainerRef,
     terminalRef,
