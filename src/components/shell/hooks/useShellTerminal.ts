@@ -6,13 +6,11 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
 import type { Project } from '../../../types/app';
 import {
-  CODEX_DEVICE_AUTH_URL,
   TERMINAL_INIT_DELAY_MS,
   TERMINAL_OPTIONS,
   TERMINAL_RESIZE_DELAY_MS,
 } from '../constants/constants';
 import { copyTextToClipboard } from '../../../utils/clipboard';
-import { isCodexLoginCommand } from '../utils/auth';
 import { sendSocketMessage } from '../utils/socket';
 import { ensureXtermFocusStyles } from '../utils/terminalStyles';
 
@@ -45,10 +43,6 @@ export function useShellTerminal({
   selectedProject,
   minimal,
   isRestarting,
-  initialCommandRef,
-  isPlainShellRef,
-  authUrlRef,
-  copyAuthUrlToClipboard,
   closeSocket,
 }: UseShellTerminalOptions): UseShellTerminalResult {
   const [isInitialized, setIsInitialized] = useState(false);
@@ -136,26 +130,6 @@ export function useShellTerminal({
     terminalContainerRef.current.addEventListener('copy', handleTerminalCopy);
 
     nextTerminal.attachCustomKeyEventHandler((event) => {
-      const activeAuthUrl = isCodexLoginCommand(initialCommandRef.current)
-        ? CODEX_DEVICE_AUTH_URL
-        : authUrlRef.current;
-
-      if (
-        event.type === 'keydown' &&
-        minimal &&
-        isPlainShellRef.current &&
-        activeAuthUrl &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        event.key?.toLowerCase() === 'c'
-      ) {
-        event.preventDefault();
-        event.stopPropagation();
-        void copyAuthUrlToClipboard(activeAuthUrl);
-        return false;
-      }
-
       if (
         event.type === 'keydown' &&
         (event.ctrlKey || event.metaKey) &&
@@ -254,15 +228,10 @@ export function useShellTerminal({
       disposeTerminal();
     };
   }, [
-    authUrlRef,
     closeSocket,
-    copyAuthUrlToClipboard,
     disposeTerminal,
     fitAddonRef,
-    initialCommandRef,
-    isPlainShellRef,
     isRestarting,
-    minimal,
     hasSelectedProject,
     selectedProjectKey,
     terminalContainerRef,
