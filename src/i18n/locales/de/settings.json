@@ -96,7 +96,8 @@
     "tasks": "Aufgaben",
     "notifications": "Benachrichtigungen",
     "plugins": "Plugins",
-    "about": "Info"
+    "about": "Info",
+    "password": "Passwort"
   },
   "notifications": {
     "title": "Benachrichtigungen",
@@ -486,5 +487,27 @@
     "installAriaLabel": "Git-Repository-URL des Plugins",
     "tab": "Tab",
     "runningStatus": "läuft"
+  },
+  "password": {
+    "title": "Passwort",
+    "description": "Ändern Sie Ihr Kontopasswort",
+    "currentPassword": "Aktuelles Passwort",
+    "currentPasswordPlaceholder": "Aktuelles Passwort eingeben",
+    "newPassword": "Neues Passwort",
+    "newPasswordPlaceholder": "Neues Passwort eingeben",
+    "confirmPassword": "Neues Passwort bestätigen",
+    "confirmPasswordPlaceholder": "Neues Passwort wiederholen",
+    "minLengthHelp": "Passwort muss mindestens {{min}} Zeichen lang sein",
+    "saveChanges": "Änderungen speichern",
+    "saving": "Speichere...",
+    "success": "Passwort erfolgreich geändert",
+    "error": {
+      "fillAllFields": "Bitte füllen Sie alle Felder aus",
+      "minLength": "Passwort muss mindestens 6 Zeichen lang sein",
+      "notMatch": "Passwörter stimmen nicht überein",
+      "sameAsOld": "Neues Passwort muss sich vom aktuellen unterscheiden",
+      "incorrectOld": "Aktuelles Passwort ist falsch",
+      "failed": "Passwortänderung fehlgeschlagen"
+    }
   }
 }

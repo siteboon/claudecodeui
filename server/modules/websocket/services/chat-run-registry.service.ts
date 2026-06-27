@@ -1,5 +1,4 @@
 import path from 'node:path';
-import os from 'node:os';
 
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { generateDisplayName } from '@/modules/projects/index.js';
@@ -37,8 +36,6 @@ type ChatRun = {
   writer: ChatSessionWriter;
   startedAt: number;
   completedAt: number | null;
-  /** First user message for auto-title generation on completion. */
-  userMessage: string | null;
 };
 
 /**
@@ -64,133 +61,6 @@ const MAX_BUFFERED_EVENTS_PER_RUN = 5000;
  * path all consult it instead of asking each provider runtime individually.
  */
 const runs = new Map<string, ChatRun>();
-
-const MAX_TITLE_LENGTH = 60;
-const AI_TITLE_TIMEOUT_MS = 5000;
-
-/**
- * Resolve Anthropic API key using the same priority as Claude Code CLI:
- * process.env → ~/.claude/settings.json env → ~/.claude/.credentials.json oauth.
- */
-async function resolveAnthropicKey(): Promise<string | null> {
-  if (process.env.ANTHROPIC_API_KEY?.trim()) return process.env.ANTHROPIC_API_KEY.trim();
-  if (process.env.ANTHROPIC_AUTH_TOKEN?.trim()) return process.env.ANTHROPIC_AUTH_TOKEN.trim();
-
-  // Read from ~/.claude/settings.json env block
-  try {
-    const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
-    const content = await import('node:fs/promises').then(m => m.readFile(settingsPath, 'utf8'));
-    const settings: any = JSON.parse(content);
-    const env = settings?.env;
-    if (typeof env === 'object' && env) {
-      if (typeof env.ANTHROPIC_API_KEY === 'string' && env.ANTHROPIC_API_KEY.trim()) return env.ANTHROPIC_API_KEY.trim();
-      if (typeof env.ANTHROPIC_AUTH_TOKEN === 'string' && env.ANTHROPIC_AUTH_TOKEN.trim()) return env.ANTHROPIC_AUTH_TOKEN.trim();
-    }
-  } catch { /* no settings.json */ }
-
-  // Read OAuth access token from ~/.claude/.credentials.json
-  try {
-    const credPath = path.join(os.homedir(), '.claude', '.credentials.json');
-    const content = await import('node:fs/promises').then(m => m.readFile(credPath, 'utf8'));
-    const creds: any = JSON.parse(content);
-    const oauth = creds?.claudeAiOauth;
-    if (oauth && typeof oauth.accessToken === 'string') {
-      const expiresAt = typeof oauth.expiresAt === 'number' ? oauth.expiresAt : null;
-      if (!expiresAt || Date.now() < expiresAt) {
-        return oauth.accessToken;
-      }
-    }
-  } catch { /* no credentials.json */ }
-
-  return null;
-}
-
-/**
- * Try to get a title from Anthropic haiku. Returns null on any failure.
- */
-async function generateTitleWithAI(userMessage: string): Promise<string | null> {
-  const apiKey = await resolveAnthropicKey();
-  if (!apiKey) return null;
-
-  const baseUrl = process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com';
-  const url = `${baseUrl.replace(/\/+$/, '')}/v1/messages`;
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), AI_TITLE_TIMEOUT_MS);
-
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-20250915',
-        max_tokens: 30,
-        messages: [
-          {
-            role: 'user',
-            content: `Generate a short, descriptive title (max 50 chars) for a chat session. Just return the title, nothing else.\n\nUser's first message:\n${userMessage.slice(0, 500)}`,
-          },
-        ],
-      }),
-    });
-
-    if (!res.ok) return null;
-
-    const data: any = await res.json();
-    const title = data?.content?.[0]?.text?.trim();
-    if (typeof title === 'string' && title.length > 0 && title.length <= MAX_TITLE_LENGTH) {
-      return title;
-    }
-    return null;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-/**
- * Auto-generate a session title from the first user message and persist it.
- * Only runs once per session — if a custom name already exists, this is a no-op.
- *
- * Strategy: call Anthropic haiku with a title-generation prompt (5s timeout).
- * If AI fails, logs a warning and leaves the session untitled — better than
- * a truncated ugly fallback.
- */
-async function autoTitleSession(appSessionId: string, userMessage: string | null): Promise<void> {
-  if (!userMessage) return;
-
-  const session = sessionsDb.getSessionById(appSessionId);
-  if (!session) return;
-
-  // Skip if the session already has a custom name (user set it manually or it was auto-set)
-  if (session.custom_name) return;
-
-  let title: string | null = null;
-  try {
-    title = await generateTitleWithAI(userMessage);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn('[AutoTitle] AI generation failed', { appSessionId, error: msg });
-  }
-
-  if (!title) return;
-
-  try {
-    sessionsDb.updateSessionCustomName(appSessionId, title);
-    console.debug(`[AutoTitle] Session ${appSessionId}: "${title}"`);
-    // Broadcast so the sidebar updates with the new title
-    await broadcastCanonicalSessionUpsert(appSessionId);
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    console.error('[AutoTitle] Failed to set title', { appSessionId, error: msg });
-  }
-}
 
 async function broadcastCanonicalSessionUpsert(appSessionId: string): Promise<void> {
   const row = sessionsDb.getSessionById(appSessionId);
@@ -274,18 +144,10 @@ function decorateAndRecordEvent(run: ChatRun, message: NormalizedMessage): Norma
   };
 
   if (message.kind === 'complete') {
-    // The provider may report its own id here; the frontend only ever knows
-    // the app id, so the "actual" id is by definition the app id as well.
     outbound.actualSessionId = run.appSessionId;
     run.status = 'completed';
     run.completedAt = Date.now();
     evictRunLater(run.appSessionId);
-
-    // Auto-generate session title from the first user message if none exists.
-    void autoTitleSession(run.appSessionId, run.userMessage).catch((error) => {
-      const msg = error instanceof Error ? error.message : String(error);
-      console.error('[ChatRunRegistry] Auto-title failed', { appSessionId: run.appSessionId, error: msg });
-    });
   }
 
   run.events.push(outbound);
@@ -351,7 +213,6 @@ export const chatRunRegistry = {
     providerSessionId: string | null;
     connection: RealtimeClientConnection;
     userId: string | number | null;
-    userMessage?: string;
   }): ChatRun | null {
     const existing = runs.get(input.appSessionId);
     if (existing && existing.status === 'running') {
@@ -368,7 +229,6 @@ export const chatRunRegistry = {
       writer: null as unknown as ChatSessionWriter,
       startedAt: Date.now(),
       completedAt: null,
-      userMessage: input.userMessage || null,
     };
 
     run.writer = new ChatSessionWriter({

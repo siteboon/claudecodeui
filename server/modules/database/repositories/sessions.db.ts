@@ -125,7 +125,7 @@ export const sessionsDb = {
          provider = excluded.provider,
          provider_session_id = excluded.provider_session_id,
          updated_at = excluded.updated_at,
-         project_path = excluded.project_path,
+         project_path = COALESCE(NULLIF(excluded.project_path, ''), sessions.project_path),
          jsonl_path = excluded.jsonl_path,
          isArchived = 0,
          custom_name = COALESCE(excluded.custom_name, sessions.custom_name)`
@@ -425,5 +425,21 @@ export const sessionsDb = {
   deleteSessionById(sessionId: string): boolean {
     const db = getConnection();
     return db.prepare('DELETE FROM sessions WHERE session_id = ?').run(sessionId).changes > 0;
+  },
+
+  /**
+   * Returns all sessions that have a non-empty custom_name so the service layer
+   * can sync them to the provider's history file on startup.
+   */
+  getSessionsWithCustomName(): Array<{ session_id: string; custom_name: string; project_path: string | null; jsonl_path: string | null; created_at: string }> {
+    const db = getConnection();
+    return db
+      .prepare(
+        `SELECT session_id, custom_name, project_path, jsonl_path, created_at
+         FROM sessions
+         WHERE custom_name IS NOT NULL AND custom_name != ''
+         ORDER BY updated_at DESC`
+      )
+      .all() as Array<{ session_id: string; custom_name: string; project_path: string | null; jsonl_path: string | null; created_at: string }>;
   },
 };

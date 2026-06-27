@@ -142,7 +142,6 @@ async function handleChatSend(
     providerSessionId: session.provider_session_id,
     connection: ws,
     userId,
-    userMessage: command || undefined,
   });
 
   if (!run) {

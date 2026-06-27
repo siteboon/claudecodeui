@@ -96,7 +96,8 @@
     "tasks": "任务",
     "notifications": "通知",
     "plugins": "插件",
-    "about": "关于"
+    "about": "关于",
+    "password": "密码"
   },
   "notifications": {
     "title": "通知",
@@ -486,5 +487,27 @@
     "installAriaLabel": "插件 git 仓库 URL",
     "tab": "标签",
     "runningStatus": "运行中"
+  },
+  "password": {
+    "title": "密码",
+    "description": "修改您的账户密码",
+    "currentPassword": "当前密码",
+    "currentPasswordPlaceholder": "请输入当前密码",
+    "newPassword": "新密码",
+    "newPasswordPlaceholder": "请输入新密码",
+    "confirmPassword": "确认新密码",
+    "confirmPasswordPlaceholder": "请再次输入新密码",
+    "minLengthHelp": "密码至少需要 {{min}} 个字符",
+    "saveChanges": "保存更改",
+    "saving": "保存中...",
+    "success": "密码修改成功",
+    "error": {
+      "fillAllFields": "请填写所有字段",
+      "minLength": "密码至少需要 6 个字符",
+      "notMatch": "两次输入的密码不一致",
+      "sameAsOld": "新密码必须与当前密码不同",
+      "incorrectOld": "当前密码不正确",
+      "failed": "修改密码失败"
+    }
   }
 }

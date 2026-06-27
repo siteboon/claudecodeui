@@ -98,7 +98,8 @@
     "browser": "Browser",
     "notifications": "Notifications",
     "plugins": "Plugins",
-    "about": "About"
+    "about": "About",
+    "password": "Password"
   },
   "notifications": {
     "title": "Notifications",
@@ -550,5 +551,27 @@
     "installAriaLabel": "Plugin git repository URL",
     "tab": "tab",
     "runningStatus": "running"
+  },
+  "password": {
+    "title": "Password",
+    "description": "Change your account password",
+    "currentPassword": "Current Password",
+    "currentPasswordPlaceholder": "Enter your current password",
+    "newPassword": "New Password",
+    "newPasswordPlaceholder": "Enter your new password",
+    "confirmPassword": "Confirm New Password",
+    "confirmPasswordPlaceholder": "Re-enter your new password",
+    "minLengthHelp": "Password must be at least {{min}} characters",
+    "saveChanges": "Save Changes",
+    "saving": "Saving...",
+    "success": "Password changed successfully",
+    "error": {
+      "fillAllFields": "Please fill in all fields",
+      "minLength": "Password must be at least 6 characters",
+      "notMatch": "Passwords do not match",
+      "sameAsOld": "New password must be different from current password",
+      "incorrectOld": "Current password is incorrect",
+      "failed": "Failed to change password"
+    }
   }
 }
