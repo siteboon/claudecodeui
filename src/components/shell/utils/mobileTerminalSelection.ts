@@ -48,6 +48,13 @@ const CONTEXT_MENU_EDGE_PADDING_PX = 8;
 const ZOOM_THROTTLE_MS = 50;
 const DEFAULT_MIN_FONT_SIZE = 8;
 const DEFAULT_MAX_FONT_SIZE = 48;
+// xterm scrolls the viewport 1:1 with the finger and never coasts, so we add
+// our own inertial (fling) scrolling: track finger velocity during the drag and
+// keep scrolling with friction after release.
+const SCROLL_INERTIA_FRICTION = 0.95; // velocity multiplier per ~16ms frame
+const SCROLL_INERTIA_MIN_VELOCITY = 0.02; // px/ms below which coasting stops
+const SCROLL_INERTIA_MAX_VELOCITY = 5; // px/ms cap to avoid runaway flings
+const SCROLL_INERTIA_MAX_IDLE_MS = 90; // ignore a flick if the finger paused before lifting
 
 type ContextMenuItem = {
   label: string;
@@ -110,6 +117,12 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
   private pinchStartDistance = 0;
   private initialFontSize = 0;
   private lastZoomTime = 0;
+
+  private viewportElement: HTMLElement | null = null;
+  private lastScrollTouchY: number | null = null;
+  private lastScrollTouchTime = 0;
+  private scrollVelocity = 0;
+  private inertiaFrame: number | null = null;
 
   constructor(
     terminal: Terminal,
@@ -290,6 +303,9 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
   }
 
   private onTerminalTouchStart = (event: TouchEvent): void => {
+    this.cancelInertia();
+    this.resetScrollTracking();
+
     if (event.touches.length === 2) {
       event.preventDefault();
       this.startPinchZoom(event);
@@ -354,7 +370,12 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     if (this.isSelecting && !this.isHandleDragging) {
       event.preventDefault();
       this.extendSelection(touch);
+      return;
     }
+
+    // Plain one-finger scrolling: xterm moves the viewport itself; we only
+    // record the finger velocity so we can add inertia when the touch ends.
+    this.recordScrollSample(touch);
   };
 
   private onTerminalTouchEnd = (): void => {
@@ -367,6 +388,7 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     this.touchStart = null;
 
     if (!this.pendingClearTouch) {
+      this.maybeStartInertia();
       return;
     }
 
@@ -700,6 +722,102 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     return Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
   }
 
+  private getViewportElement(): HTMLElement | null {
+    if (this.viewportElement?.isConnected) {
+      return this.viewportElement;
+    }
+
+    this.viewportElement =
+      this.terminal.element?.querySelector<HTMLElement>('.xterm-viewport') ?? null;
+    return this.viewportElement;
+  }
+
+  private resetScrollTracking(): void {
+    this.lastScrollTouchY = null;
+    this.lastScrollTouchTime = 0;
+    this.scrollVelocity = 0;
+  }
+
+  private recordScrollSample(touch: TouchCoords): void {
+    const now = performance.now();
+
+    if (this.lastScrollTouchY !== null) {
+      const dt = now - this.lastScrollTouchTime;
+      if (dt > 0) {
+        // Positive when the finger moves up, matching how xterm increases
+        // scrollTop, so the inertia continues in the same direction.
+        const velocity = (this.lastScrollTouchY - touch.clientY) / dt;
+        this.scrollVelocity = this.scrollVelocity * 0.4 + velocity * 0.6;
+      }
+    }
+
+    this.lastScrollTouchY = touch.clientY;
+    this.lastScrollTouchTime = now;
+  }
+
+  private maybeStartInertia(): void {
+    if (this.isSelecting || this.isHandleDragging || this.isPinching) {
+      return;
+    }
+
+    const idle = performance.now() - this.lastScrollTouchTime;
+    if (idle > SCROLL_INERTIA_MAX_IDLE_MS) {
+      return;
+    }
+
+    if (Math.abs(this.scrollVelocity) < SCROLL_INERTIA_MIN_VELOCITY) {
+      return;
+    }
+
+    this.startInertia(this.scrollVelocity);
+  }
+
+  private startInertia(initialVelocity: number): void {
+    const viewport = this.getViewportElement();
+    if (!viewport) {
+      return;
+    }
+
+    this.cancelInertia();
+
+    let velocity = clamp(
+      initialVelocity,
+      -SCROLL_INERTIA_MAX_VELOCITY,
+      SCROLL_INERTIA_MAX_VELOCITY,
+    );
+    let lastFrame = performance.now();
+
+    const step = (now: number): void => {
+      const dt = Math.max(1, now - lastFrame);
+      lastFrame = now;
+      velocity *= Math.pow(SCROLL_INERTIA_FRICTION, dt / 16);
+
+      if (Math.abs(velocity) < SCROLL_INERTIA_MIN_VELOCITY) {
+        this.inertiaFrame = null;
+        return;
+      }
+
+      const before = viewport.scrollTop;
+      viewport.scrollTop = before + velocity * dt;
+      if (viewport.scrollTop === before) {
+        // Reached the top or bottom of the buffer.
+        this.inertiaFrame = null;
+        return;
+      }
+
+      this.inertiaFrame = window.requestAnimationFrame(step);
+    };
+
+    this.inertiaFrame = window.requestAnimationFrame(step);
+  }
+
+  private cancelInertia(): void {
+    if (this.inertiaFrame !== null) {
+      window.cancelAnimationFrame(this.inertiaFrame);
+      this.inertiaFrame = null;
+    }
+  }
+
   updateHandles(): void {
     if (this.isContextMenuVisible) {
       this.positionContextMenu();
@@ -884,6 +1002,7 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
 
     this.isDestroyed = true;
     this.clearTapHoldTimeout();
+    this.cancelInertia();
 
     this.terminal.element?.removeEventListener('touchstart', this.onTerminalTouchStart);
     this.terminal.element?.removeEventListener('touchmove', this.onTerminalTouchMove);
