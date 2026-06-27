@@ -47,6 +47,13 @@ export const api = {
     }),
     user: () => authenticatedFetch('/api/auth/user'),
     logout: () => authenticatedFetch('/api/auth/logout', { method: 'POST' }),
+    changePassword: async (oldPassword, newPassword) => {
+      const res = await authenticatedFetch('/api/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ oldPassword, newPassword }),
+      });
+      return res.json();
+    },
   },
 
   // Protected endpoints

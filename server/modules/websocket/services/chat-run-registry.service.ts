@@ -144,8 +144,6 @@ function decorateAndRecordEvent(run: ChatRun, message: NormalizedMessage): Norma
   };
 
   if (message.kind === 'complete') {
-    // The provider may report its own id here; the frontend only ever knows
-    // the app id, so the "actual" id is by definition the app id as well.
     outbound.actualSessionId = run.appSessionId;
     run.status = 'completed';
     run.completedAt = Date.now();

@@ -96,7 +96,8 @@
     "tasks": "Görevler",
     "notifications": "Bildirimler",
     "plugins": "Eklentiler",
-    "about": "Hakkında"
+    "about": "Hakkında",
+    "password": "Şifre"
   },
   "notifications": {
     "title": "Bildirimler",
@@ -492,5 +493,27 @@
     "installAriaLabel": "Eklenti git deposu URL'si",
     "tab": "sekme",
     "runningStatus": "çalışıyor"
+  },
+  "password": {
+    "title": "Şifre",
+    "description": "Hesap şifrenizi değiştirin",
+    "currentPassword": "Mevcut Şifre",
+    "currentPasswordPlaceholder": "Mevcut şifrenizi girin",
+    "newPassword": "Yeni Şifre",
+    "newPasswordPlaceholder": "Yeni şifrenizi girin",
+    "confirmPassword": "Yeni Şifreyi Onayla",
+    "confirmPasswordPlaceholder": "Yeni şifrenizi tekrar girin",
+    "minLengthHelp": "Şifre en az {{min}} karakter olmalıdır",
+    "saveChanges": "Değişiklikleri Kaydet",
+    "saving": "Kaydediliyor...",
+    "success": "Şifre başarıyla değiştirildi",
+    "error": {
+      "fillAllFields": "Lütfen tüm alanları doldurun",
+      "minLength": "Şifre en az 6 karakter olmalıdır",
+      "notMatch": "Şifreler uyuşmuyor",
+      "sameAsOld": "Yeni şifre mevcut şifreden farklı olmalıdır",
+      "incorrectOld": "Mevcut şifre yanlış",
+      "failed": "Şifre değiştirilemedi"
+    }
   }
 }

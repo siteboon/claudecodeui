@@ -71,6 +71,81 @@ function resolveProjectDisplayName(
 }
 
 /**
+ * Sets the custom title for a session by appending a custom-title entry
+ * to the session's JSONL file. This is what `claude -r` reads to display
+ * session names.
+ */
+async function setSessionTitle(sessionId: string, title: string): Promise<void> {
+  const session = sessionsDb.getSessionById(sessionId);
+  if (!session?.jsonl_path) return;
+
+  try {
+    const entry = JSON.stringify({
+      type: 'custom-title',
+      customTitle: title,
+      sessionId,
+    });
+    await fsp.appendFile(session.jsonl_path, '\n' + entry, 'utf8');
+  } catch {
+    // Session file may not exist or may be locked
+  }
+}
+
+/**
+ * Scans all sessions with custom_name and syncs them to their session JSONL files
+ * on startup so `claude -r` displays the CloudCLI session names.
+ */
+async function syncAllSessionNamesToHistory(): Promise<void> {
+  const sessions = sessionsDb.getSessionsWithCustomName();
+  if (sessions.length === 0) return;
+
+  let synced = 0;
+  for (const session of sessions) {
+    if (!session.jsonl_path) continue;
+    try {
+      const content = await fsp.readFile(session.jsonl_path, 'utf8');
+      const lines = content.split(/\r?\n/);
+      let hasCustomTitle = false;
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (
+            typeof parsed === 'object' &&
+            parsed !== null &&
+            (parsed as Record<string, unknown>).type === 'custom-title' &&
+            (parsed as Record<string, unknown>).sessionId === session.session_id
+          ) {
+            hasCustomTitle = true;
+            break;
+          }
+        } catch {
+          // skip non-JSON lines
+        }
+      }
+
+      if (!hasCustomTitle) {
+        const entry = JSON.stringify({
+          type: 'custom-title',
+          customTitle: session.custom_name,
+          sessionId: session.session_id,
+        });
+        await fsp.appendFile(session.jsonl_path, '\n' + entry, 'utf8');
+        synced++;
+      }
+    } catch {
+      // Session file may not exist
+    }
+  }
+
+  if (synced > 0) {
+    console.log(`[Sessions] Synced ${synced} session name(s) to session JSONL files`);
+  }
+}
+
+/**
  * Application service for provider-backed session message operations.
  *
  * Callers pass a provider id and this service resolves the concrete provider
@@ -107,8 +182,13 @@ export const sessionsService = {
     providerName: string,
     raw: unknown,
     sessionId: string | null,
+    subagentPrompts: Set<string> | null = null,
   ): NormalizedMessage[] {
-    return providerRegistry.resolveProvider(providerName).sessions.normalizeMessage(raw, sessionId);
+    return providerRegistry.resolveProvider(providerName).sessions.normalizeMessage(
+      raw,
+      sessionId,
+      subagentPrompts,
+    );
   },
 
   /**
@@ -291,9 +371,9 @@ export const sessionsService = {
   },
 
   /**
-   * Renames one session by id without requiring the caller to pass provider.
+   * Renames one session by id and syncs the name to the provider's history file.
    */
-  renameSessionById(sessionId: string, summary: string): { sessionId: string; summary: string } {
+  async renameSessionById(sessionId: string, summary: string): Promise<{ sessionId: string; summary: string }> {
     const session = sessionsDb.getSessionById(sessionId);
     if (!session) {
       throw new AppError(`Session "${sessionId}" was not found.`, {
@@ -303,6 +383,16 @@ export const sessionsService = {
     }
 
     sessionsDb.updateSessionCustomName(sessionId, summary);
+    void setSessionTitle(sessionId, summary);
     return { sessionId, summary };
+  },
+
+  /**
+   * Scans all indexed sessions with custom_name and syncs them to their
+   * session JSONL files so `claude -r` displays the CloudCLI session names.
+   * Runs once at startup to keep existing sessions in sync.
+   */
+  async syncSessionNames(): Promise<void> {
+    await syncAllSessionNamesToHistory();
   },
 };

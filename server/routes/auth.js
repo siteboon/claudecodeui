@@ -8,7 +8,49 @@ const router = express.Router();
 const db = getConnection();
 
 // Check auth status and setup requirements
-router.get('/status', async (req, res) => {
+router.post('/change-password', authenticateToken, async (req, res) => {
+  const userId = req.user && req.user.id;
+  if (!userId) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  try {
+    const { oldPassword, newPassword } = req.body;
+
+    // Validate input
+    if (!oldPassword || !newPassword) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    }
+
+    // Get user with password hash
+    const user = userDb.getFullUserById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Verify old password
+    const isMatch = await bcrypt.compare(oldPassword, user.password_hash);
+    if (!isMatch) {
+      return res.status(403).json({ error: 'Current password is incorrect' });
+    }
+
+    // Hash and update new password
+    const saltRounds = 10;
+    const passwordHash = await bcrypt.hash(newPassword, saltRounds);
+    userDb.updatePassword(user.id, passwordHash);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Change password error:', err);
+    res.status(500).json({ error: 'Failed to change password' });
+  }
+});
+
+router.get('/', async (req, res) => {
   try {
     const hasUsers = await userDb.hasUsers();
     res.json({ 

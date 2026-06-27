@@ -137,4 +137,18 @@ export const userDb = {
       .get(userId) as { has_completed_onboarding: number } | undefined;
     return row?.has_completed_onboarding === 1;
   },
+
+  /** Updates the user's password hash. */
+  updatePassword(userId: number, passwordHash: string): void {
+    const db = getConnection();
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, userId);
+  },
+
+  /** Returns the full user row (including password_hash) by ID. */
+  getFullUserById(userId: number): UserRow | undefined {
+    const db = getConnection();
+    return db
+      .prepare('SELECT * FROM users WHERE id = ? AND is_active = 1')
+      .get(userId) as UserRow | undefined;
+  },
 };
