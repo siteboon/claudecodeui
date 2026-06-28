@@ -180,7 +180,6 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         body: JSON.stringify({
           model: config.model,
           max_tokens: 512,
-          thinking: { type: 'disabled' },
           messages: [
             {
               role: 'user',
