@@ -253,7 +253,17 @@ export default function ChatMessagesPane({
           )}
 
           {visibleMessages.map((message, index) => {
-            const prevMessage = index > 0 ? visibleMessages[index - 1] : null;
+            // Walk back past messages that are not actually rendered (e.g. thinking
+            // messages hidden when showThinking is off). Otherwise a hidden thinking
+            // message would make the following message look "grouped" and suppress its
+            // provider header/icon — which is why Claude turns lost their icon.
+            let prevMessage: ChatMessage | null = null;
+            for (let i = index - 1; i >= 0; i--) {
+              const candidate = visibleMessages[i];
+              if (candidate.isThinking && !showThinking) continue;
+              prevMessage = candidate;
+              break;
+            }
             return (
               <MessageComponent
                 key={getMessageKey(message)}
