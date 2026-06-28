@@ -94,7 +94,8 @@
     "computer": "计算机使用",
     "notifications": "通知",
     "plugins": "插件",
-    "about": "关于"
+    "about": "关于",
+    "password": "密码"
   },
   "notifications": {
     "title": "通知",
@@ -484,5 +485,44 @@
     "installAriaLabel": "插件 git 仓库 URL",
     "tab": "标签",
     "runningStatus": "运行中"
+  },
+  "browserSettings": {
+    "title": "浏览器",
+    "description": "允许代理创建受控的 Playwright 浏览器会话，你可以在浏览器标签页中监控。",
+    "enableLabel": "启用浏览器",
+    "enableDescription": "为支持的代理注册浏览器功能。代理可以创建浏览器会话，你可以查看、停止和删除它们。",
+    "ariaLabel": "启用浏览器",
+    "runtimeRequired": "需要浏览器运行时",
+    "installPrompt": "安装 Playwright 和 Chromium 以使用浏览器会话。",
+    "checking": "检查中...",
+    "installed": "已安装",
+    "missing": "未安装",
+    "statusReady": "就绪",
+    "statusSetupRequired": "需要设置",
+    "statusDisabled": "已禁用",
+    "installButton": "安装运行时",
+    "installingButton": "安装中..."
+  },
+  "password": {
+    "title": "密码",
+    "description": "修改您的账户密码",
+    "currentPassword": "当前密码",
+    "currentPasswordPlaceholder": "请输入当前密码",
+    "newPassword": "新密码",
+    "newPasswordPlaceholder": "请输入新密码",
+    "confirmPassword": "确认新密码",
+    "confirmPasswordPlaceholder": "请再次输入新密码",
+    "minLengthHelp": "密码至少需要 {{min}} 个字符",
+    "saveChanges": "保存更改",
+    "saving": "保存中...",
+    "success": "密码修改成功",
+    "error": {
+      "fillAllFields": "请填写所有字段",
+      "minLength": "密码至少需要 6 个字符",
+      "notMatch": "两次输入的密码不一致",
+      "sameAsOld": "新密码必须与当前密码不同",
+      "incorrectOld": "当前密码不正确",
+      "failed": "修改密码失败"
+    }
   }
 }

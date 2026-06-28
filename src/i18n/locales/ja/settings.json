@@ -93,7 +93,8 @@
     "tasks": "タスク",
     "notifications": "通知",
     "plugins": "プラグイン",
-    "about": "概要"
+    "about": "概要",
+    "password": "パスワード"
   },
   "notifications": {
     "title": "通知",
@@ -483,5 +484,27 @@
     "installAriaLabel": "プラグインのgitリポジトリURL",
     "tab": "タブ",
     "runningStatus": "実行中"
+  },
+  "password": {
+    "title": "パスワード",
+    "description": "アカウントパスワードを変更します",
+    "currentPassword": "現在のパスワード",
+    "currentPasswordPlaceholder": "現在のパスワードを入力",
+    "newPassword": "新しいパスワード",
+    "newPasswordPlaceholder": "新しいパスワードを入力",
+    "confirmPassword": "新しいパスワード（確認）",
+    "confirmPasswordPlaceholder": "新しいパスワードを再入力",
+    "minLengthHelp": "パスワードは {{min}} 文字以上である必要があります",
+    "saveChanges": "変更を保存",
+    "saving": "保存中...",
+    "success": "パスワードが正常に変更されました",
+    "error": {
+      "fillAllFields": "すべてのフィールドを入力してください",
+      "minLength": "パスワードは6文字以上である必要があります",
+      "notMatch": "パスワードが一致しません",
+      "sameAsOld": "新しいパスワードは現在のパスワードとは異なる必要があります",
+      "incorrectOld": "現在のパスワードが正しくありません",
+      "failed": "パスワードの変更に失敗しました"
+    }
   }
 }
