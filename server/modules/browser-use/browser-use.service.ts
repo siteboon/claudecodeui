@@ -251,6 +251,7 @@ function runCommand(command: string, args: string[]): Promise<void> {
       shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
+    console.info('[Browser] Running:', command, args.join(' '), '| cwd:', cwd);
     const output: string[] = [];
     let settled = false;
     const finish = (fn: () => void) => {
@@ -279,7 +280,9 @@ function runCommand(command: string, args: string[]): Promise<void> {
         return;
       }
 
-      reject(new Error(output.join('').trim() || `${command} ${args.join(' ')} exited with code ${code}`));
+      const errorMsg = output.join('').trim() || `${command} ${args.join(' ')} exited with code ${code}`;
+      console.error('[Browser] Command failed:', errorMsg.slice(0, 500));
+      reject(new Error(errorMsg));
     }));
   });
 }
