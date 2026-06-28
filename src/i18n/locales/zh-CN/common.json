@@ -23,8 +23,7 @@
     "files": "文件",
     "git": "源代码管理",
     "tasks": "任务",
-    "browser": "浏览器",
-    "computer": "计算机"
+    "browser": "浏览器"
   },
   "status": {
     "loading": "加载中...",

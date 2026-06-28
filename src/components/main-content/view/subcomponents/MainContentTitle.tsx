@@ -32,7 +32,7 @@ function getTabTitle(activeTab: AppTab, shouldShowTasksTab: boolean, t: (key: st
     return t('tabs.browser');
   }
 
-  return 'Project';
+  return t('tabs.project', 'Project');
 }
 
 function getSessionTitle(session: ProjectSession): string {
