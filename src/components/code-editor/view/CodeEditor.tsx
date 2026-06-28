@@ -16,6 +16,7 @@ import CodeEditorHeader from './subcomponents/CodeEditorHeader';
 import CodeEditorLoadingState from './subcomponents/CodeEditorLoadingState';
 import CodeEditorSurface from './subcomponents/CodeEditorSurface';
 import CodeEditorBinaryFile from './subcomponents/CodeEditorBinaryFile';
+import CodeEditorMediaPreview from './subcomponents/CodeEditorMediaPreview';
 
 type CodeEditorProps = {
   file: CodeEditorFile;
@@ -58,6 +59,8 @@ export default function CodeEditor({
     saveSuccess,
     saveError,
     isBinary,
+    previewKind,
+    fileProjectId,
     handleSave,
     handleDownload,
   } = useCodeEditorDocument({
@@ -158,6 +161,30 @@ export default function CodeEditor({
         isDarkMode={isDarkMode}
         isSidebar={isSidebar}
         loadingText={t('loading', { fileName: file.name })}
+      />
+    );
+  }
+
+  // Natively previewable media (image/pdf/audio/video) is rendered inline
+  // instead of showing the generic "cannot be displayed" placeholder.
+  if (previewKind) {
+    return (
+      <CodeEditorMediaPreview
+        file={file}
+        kind={previewKind}
+        projectId={fileProjectId}
+        isSidebar={isSidebar}
+        isFullscreen={isFullscreen}
+        onClose={onClose}
+        onToggleFullscreen={() => setIsFullscreen((previous) => !previous)}
+        labels={{
+          loading: t('filePreview.loading', 'Loading preview...'),
+          error: t('filePreview.error', 'Unable to display this file.'),
+          openInNewTab: t('filePreview.openInNewTab', 'Open in new tab'),
+          fullscreen: t('actions.fullscreen', 'Fullscreen'),
+          exitFullscreen: t('actions.exitFullscreen', 'Exit fullscreen'),
+          close: t('actions.close', 'Close'),
+        }}
       />
     );
   }

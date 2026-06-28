@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../../utils/api';
 import type { CodeEditorFile } from '../types/types';
 import { isBinaryFile } from '../utils/binaryFile';
+import { getPreviewKind } from '../utils/previewableFile';
 
 type UseCodeEditorDocumentParams = {
   file: CodeEditorFile;
@@ -23,6 +24,9 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isBinary, setIsBinary] = useState(false);
+  // Some binaries (images, PDFs, audio, video) can be rendered natively, so the
+  // editor shows an inline preview instead of the generic binary placeholder.
+  const previewKind = getPreviewKind(file.name);
   // `fileProjectId` is the DB primary key passed down from the editor sidebar;
   // the fallback to `projectPath` preserves older callers that didn't yet
   // propagate the identifier.
@@ -37,6 +41,13 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
       try {
         setLoading(true);
         setIsBinary(false);
+
+        // Natively previewable media (image/pdf/audio/video) is rendered by
+        // CodeEditorMediaPreview, so there is nothing to read as text here.
+        if (getPreviewKind(file.name)) {
+          setLoading(false);
+          return;
+        }
 
         // Check if file is binary by extension
         if (isBinaryFile(file.name)) {
@@ -134,6 +145,8 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     saveSuccess,
     saveError,
     isBinary,
+    previewKind,
+    fileProjectId,
     handleSave,
     handleDownload,
   };
