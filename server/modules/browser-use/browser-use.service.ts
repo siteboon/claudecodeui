@@ -251,7 +251,7 @@ function runCommand(command: string, args: string[]): Promise<void> {
       shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    console.info('[Browser] Running:', command, args.join(' '), '| cwd:', cwd);
+    console.info('[Browser] Running:', command, args.join(' '), '| cwd:', process.cwd());
     const output: string[] = [];
     let settled = false;
     const finish = (fn: () => void) => {
