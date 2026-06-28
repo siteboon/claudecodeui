@@ -256,6 +256,9 @@ export default function ChatMessagesPane({
           {(() => {
             const isBashCommand = (m: ChatMessage | null | undefined) =>
               Boolean(m && m.isToolUse && m.toolName === 'Bash' && !m.isSubagentContainer);
+            // Messages that render nothing (e.g. thinking hidden when showThinking
+            // is off) shouldn't break a visual run of commands.
+            const isRendered = (m: ChatMessage) => !(m.isThinking && !showThinking);
 
             const items: ReactNode[] = [];
 
@@ -264,17 +267,32 @@ export default function ChatMessagesPane({
 
               // Collapse a run of 2+ consecutive shell commands under a single
               // header so long command runs stay tidy (Codex-in-VSCode style).
+              // Skip over non-rendered messages (e.g. hidden reasoning that Codex
+              // interleaves between commands) so they don't split the run.
               if (isBashCommand(message)) {
-                let end = index;
-                while (end + 1 < visibleMessages.length && isBashCommand(visibleMessages[end + 1])) {
-                  end++;
+                const runIndices = [index];
+                let cursor = index + 1;
+                while (cursor < visibleMessages.length) {
+                  const candidate = visibleMessages[cursor];
+                  if (!isRendered(candidate)) {
+                    cursor++;
+                    continue;
+                  }
+                  if (isBashCommand(candidate)) {
+                    runIndices.push(cursor);
+                    cursor++;
+                    continue;
+                  }
+                  break;
                 }
-                if (end > index) {
-                  const groupMessages = visibleMessages.slice(index, end + 1);
+                if (runIndices.length >= 2) {
+                  const groupMessages = runIndices.map((i) => visibleMessages[i]);
                   items.push(
                     <CommandRunGroup key={getMessageKey(groupMessages[0])} messages={groupMessages} />,
                   );
-                  index = end;
+                  // Consume everything up to the last command in the run (any
+                  // trailing skipped messages render nothing anyway).
+                  index = runIndices[runIndices.length - 1];
                   continue;
                 }
               }
