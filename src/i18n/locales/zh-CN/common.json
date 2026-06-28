@@ -312,5 +312,82 @@
     "unknown": "未知",
     "justNow": "刚刚",
     "waiting": "等待中"
+  },
+  "gitPanel": {
+    "tabs": {
+      "changes": "变更",
+      "commits": "提交记录",
+      "branches": "分支"
+    },
+    "header": {
+      "fetch": "拉取",
+      "fetching": "正在拉取…",
+      "pull": "更新",
+      "pulling": "正在更新…",
+      "push": "推送",
+      "pushing": "正在推送…",
+      "publish": "发布",
+      "publishing": "正在发布…",
+      "createNewBranch": "创建新分支",
+      "revertLatestCommit": "撤销最新提交",
+      "refreshStatus": "刷新状态",
+      "ahead": "领先",
+      "behind": "落后",
+      "upToDate": "已同步"
+    },
+    "changes": {
+      "noCommitsYet": "尚未提交",
+      "noCommitsDesc": "此仓库尚未有任何提交。创建第一次提交以开始跟踪变更。",
+      "createInitialCommit": "创建初始提交",
+      "creatingInitialCommit": "正在创建初始提交…",
+      "noChangesDetected": "未检测到变更",
+      "staged": "已暂存",
+      "unstageAll": "取消暂存全部",
+      "noStagedFiles": "暂无暂存文件",
+      "changes": "变更",
+      "stageAll": "暂存全部",
+      "allChangesStaged": "全部变更已暂存"
+    },
+    "legend": {
+      "title": "文件状态说明",
+      "modified": "已修改",
+      "added": "已添加",
+      "deleted": "已删除",
+      "untracked": "未跟踪"
+    },
+    "composer": {
+      "placeholder": "提交信息（Ctrl+Enter 提交）",
+      "filesSelected": "已选择 {{count}} 个文件",
+      "filesSelected_plural": "已选择 {{count}} 个文件",
+      "commit": "提交",
+      "committing": "提交中…",
+      "commitFile": "提交 {{count}} 个文件",
+      "commitFiles": "提交 {{count}} 个文件",
+      "commitChanges": "提交变更",
+      "generateMessage": "自动生成提交信息"
+    },
+    "branches": {
+      "local": "本地",
+      "remote": "远程",
+      "newBranch": "新分支",
+      "noBranchesFound": "未找到分支",
+      "current": "当前",
+      "switch": "切换",
+      "branchCount": "{{local}} 个本地{{remote}}",
+      "ahead": "领先",
+      "behind": "落后"
+    },
+    "history": {
+      "noCommitsFound": "未找到提交记录"
+    },
+    "newBranchModal": {
+      "title": "创建新分支",
+      "branchName": "分支名称",
+      "placeholder": "feature/new-feature",
+      "createFrom": "这将从当前分支（{{current}}）创建一个新分支",
+      "cancel": "取消",
+      "creating": "创建中…",
+      "createBranch": "创建分支"
+    }
   }
 }
