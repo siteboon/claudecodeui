@@ -314,10 +314,23 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     const existingSession = sessionsDb.getSessionByProviderSessionId(parsed.sessionId)
       ?? sessionsDb.getSessionById(parsed.sessionId);
     const existingSessionName = existingSession?.custom_name;
-    // Only skip title generation if the session already has a real custom name
-    // (not the default 'Untitled Claude Session' placeholder, and not an overly
-    // long truncated prompt >60 chars that looks like a raw user message).
+    // Only skip title generation if the session already has a real custom name.
+    // We must not skip when:
+    // 1. It is the default 'Untitled Claude Session' placeholder
+    // 2. It is a long truncated prompt (>60 chars)
+    // 3. It matches the first user prompt (meaning it was set from truncateToTitle, not AI)
+    let shouldSkip = false;
     if (existingSessionName && existingSessionName !== 'Untitled Claude Session' && existingSessionName.length <= 60) {
+      // Check if the existing name is just the raw prompt or a prefix of it
+      const lastPrompt = await this.extractLastPrompt(filePath);
+      if (lastPrompt && (existingSessionName === lastPrompt || lastPrompt.startsWith(existingSessionName))) {
+        // Existing name is derived from the prompt, not AI generated — regenerate
+        shouldSkip = false;
+      } else {
+        shouldSkip = true;
+      }
+    }
+    if (shouldSkip) {
       return {
         ...parsed,
         sessionName: normalizeSessionName(existingSessionName, 'Untitled Claude Session'),
