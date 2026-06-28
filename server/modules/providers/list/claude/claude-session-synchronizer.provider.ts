@@ -183,7 +183,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
           messages: [
             {
               role: 'user',
-              content: `Generate a short, descriptive title (max 50 chars) for a chat session. Just return the title, nothing else.\n\nUser's first message:\n${userPrompt.slice(0, 500)}`,
+              content: `Generate a short, descriptive title (max 50 chars) for a chat session. Use the same language as the user's message. Just return the title, nothing else.\n\nUser's first message:\n${userPrompt.slice(0, 500)}`,
             },
           ],
         }),
@@ -315,8 +315,9 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       ?? sessionsDb.getSessionById(parsed.sessionId);
     const existingSessionName = existingSession?.custom_name;
     // Only skip title generation if the session already has a real custom name
-    // (not the default 'Untitled Claude Session' placeholder).
-    if (existingSessionName && existingSessionName !== 'Untitled Claude Session') {
+    // (not the default 'Untitled Claude Session' placeholder, and not an overly
+    // long truncated prompt >60 chars that looks like a raw user message).
+    if (existingSessionName && existingSessionName !== 'Untitled Claude Session' && existingSessionName.length <= 60) {
       return {
         ...parsed,
         sessionName: normalizeSessionName(existingSessionName, 'Untitled Claude Session'),
