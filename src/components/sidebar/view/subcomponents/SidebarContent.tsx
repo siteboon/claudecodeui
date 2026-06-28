@@ -32,7 +32,7 @@ function HighlightedSnippet({ snippet, highlights }: { snippet: string; highligh
     parts.push(snippet.slice(cursor));
   }
   return (
-    <span className="text-xs leading-relaxed text-muted-foreground">
+    <span className="min-w-0 flex-1 break-words text-xs leading-relaxed text-muted-foreground">
       {parts}
     </span>
   );
