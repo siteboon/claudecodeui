@@ -155,7 +155,9 @@
       "gemini": "Bereit, Gemini mit {{model}} zu verwenden. Gib unten deine Nachricht ein.",
       "default": "Wähl oben einen Anbieter, um zu beginnen"
     },
-    "pressToSearch": "Drücke <kbd>{{shortcut}}</kbd>, um Sitzungen, Dateien und Commits zu durchsuchen"
+    "pressToSearch": "Drücke <kbd>{{shortcut}}</kbd>, um Sitzungen, Dateien und Commits zu durchsuchen",
+    "modelSelector": "Modellauswahl",
+    "chooseAmodel": "Modell auswählen"
   },
   "session": {
     "continue": {
