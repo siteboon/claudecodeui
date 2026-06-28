@@ -200,7 +200,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         }
       }
       // No text block — reasoning model only produced thinking. Extract title from thinking.
-      const titleFromThinking = this.extractTitleFromThinking(data);
+      const titleFromThinking = this.extractTitleFromThinking(data, userPrompt);
       return titleFromThinking ?? this.truncateToTitle(userPrompt);
     } catch {
       return this.truncateToTitle(userPrompt);
@@ -217,8 +217,11 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
    *   - "I'll use `TITLE`" / backtick-quoted candidates
    *   - Bullet list items with domain keywords
    * If none found, falls back to truncateToTitle.
+   *
+   * CRITICAL: userPrompt is passed so we can reject candidates that are
+   * literally the user's own message echoed back in the thinking block.
    */
-  private extractTitleFromThinking(data: any): string | undefined {
+  private extractTitleFromThinking(data: any, userPrompt: string): string | undefined {
     for (const block of data?.content || []) {
       if (block?.type === 'thinking' && typeof block.thinking === 'string') {
         const thinking = block.thinking;
@@ -240,22 +243,43 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
           if (match) return match[1].trim();
         }
         // 3. All backtick-quoted phrases (model's brainstormed candidates)
+        //    Filter out any that match the user's prompt — the model often
+        //    quotes the user message in its thinking, not the generated title.
         const allBackticks = [...thinking.matchAll(/`([^`]{5,60})`/g)];
-        if (allBackticks.length > 0) {
-          // Take the last backtick phrase — model's final pick
-          return allBackticks[allBackticks.length - 1][1].trim();
+        const validBackticks = allBackticks.filter((m) => !this.isPromptMatch(m[1], userPrompt));
+        if (validBackticks.length > 0) {
+          return validBackticks[validBackticks.length - 1][1].trim();
         }
         // 4. Bullet titles with domain keywords
         const bulletTitles = thinking.match(/[-*]\s+(.{5,60}(?:项目|配置|修复|分析|查看|环境|讨论|方案|优化|测试|部署|升级|迁移|排查|对比|总结|问题|报错|失败|检查|安装|设置))/);
         if (bulletTitles) return bulletTitles[1].trim();
-        // 5. All quoted phrases (double quotes)
+        // 5. All quoted phrases (double quotes) — same prompt guard as above
         const allQuotes = [...thinking.matchAll(/"([^"]{5,60})"/g)];
-        if (allQuotes.length > 0) {
-          return allQuotes[allQuotes.length - 1][1].trim();
+        const validQuotes = allQuotes.filter((m) => !this.isPromptMatch(m[1], userPrompt));
+        if (validQuotes.length > 0) {
+          return validQuotes[validQuotes.length - 1][1].trim();
         }
       }
     }
     return undefined;
+  }
+
+  /**
+   * Returns true if candidate is the user's prompt or a close variant of it.
+   * This prevents the model quoting the user message in thinking from being
+   * mistaken for a generated title.
+   */
+  private isPromptMatch(candidate: string, userPrompt: string): boolean {
+    const c = candidate.trim().toLowerCase();
+    const p = userPrompt.trim().toLowerCase();
+    if (c === p) return true;
+    if (c.length >= 5 && p.startsWith(c)) return true;
+    if (p.length >= 5 && c.startsWith(p)) return true;
+    // One is a substring of the other with high overlap
+    if (c.length + p.length > 0 && Math.min(c.length, p.length) / Math.max(c.length, p.length) > 0.7) {
+      if (c.includes(p.slice(0, 10)) || p.includes(c.slice(0, 10))) return true;
+    }
+    return false;
   }
 
   /**
