@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { useCallback, useRef } from 'react';
-import type { Dispatch, RefObject, SetStateAction } from 'react';
+import type { Dispatch, ReactNode, RefObject, SetStateAction } from 'react';
 
 import type { ChatMessage } from '../../types/types';
 import type {
@@ -13,6 +13,7 @@ import { getIntrinsicMessageKey } from '../../utils/messageKeys';
 
 import MessageComponent from './MessageComponent';
 import ProviderSelectionEmptyState from './ProviderSelectionEmptyState';
+import { CommandRunGroup } from '../../tools';
 
 interface ChatMessagesPaneProps {
   scrollContainerRef: RefObject<HTMLDivElement>;
@@ -252,35 +253,63 @@ export default function ChatMessagesPane({
             </div>
           )}
 
-          {visibleMessages.map((message, index) => {
-            // Walk back past messages that are not actually rendered (e.g. thinking
-            // messages hidden when showThinking is off). Otherwise a hidden thinking
-            // message would make the following message look "grouped" and suppress its
-            // provider header/icon — which is why Claude turns lost their icon.
-            let prevMessage: ChatMessage | null = null;
-            for (let i = index - 1; i >= 0; i--) {
-              const candidate = visibleMessages[i];
-              if (candidate.isThinking && !showThinking) continue;
-              prevMessage = candidate;
-              break;
+          {(() => {
+            const isBashCommand = (m: ChatMessage | null | undefined) =>
+              Boolean(m && m.isToolUse && m.toolName === 'Bash' && !m.isSubagentContainer);
+
+            const items: ReactNode[] = [];
+
+            for (let index = 0; index < visibleMessages.length; index++) {
+              const message = visibleMessages[index];
+
+              // Collapse a run of 2+ consecutive shell commands under a single
+              // header so long command runs stay tidy (Codex-in-VSCode style).
+              if (isBashCommand(message)) {
+                let end = index;
+                while (end + 1 < visibleMessages.length && isBashCommand(visibleMessages[end + 1])) {
+                  end++;
+                }
+                if (end > index) {
+                  const groupMessages = visibleMessages.slice(index, end + 1);
+                  items.push(
+                    <CommandRunGroup key={getMessageKey(groupMessages[0])} messages={groupMessages} />,
+                  );
+                  index = end;
+                  continue;
+                }
+              }
+
+              // Walk back past messages that are not actually rendered (e.g. thinking
+              // messages hidden when showThinking is off). Otherwise a hidden thinking
+              // message would make the following message look "grouped" and suppress its
+              // provider header/icon — which is why Claude turns lost their icon.
+              let prevMessage: ChatMessage | null = null;
+              for (let i = index - 1; i >= 0; i--) {
+                const candidate = visibleMessages[i];
+                if (candidate.isThinking && !showThinking) continue;
+                prevMessage = candidate;
+                break;
+              }
+              items.push(
+                <MessageComponent
+                  key={getMessageKey(message)}
+                  message={message}
+                  prevMessage={prevMessage}
+                  createDiff={createDiff}
+                  onFileOpen={onFileOpen}
+                  onShowSettings={onShowSettings}
+                  onGrantToolPermission={onGrantToolPermission}
+                  autoExpandTools={autoExpandTools}
+                  showRawParameters={showRawParameters}
+                  showThinking={showThinking}
+                  selectedProject={selectedProject}
+                  provider={provider}
+                />,
+              );
             }
-            return (
-              <MessageComponent
-                key={getMessageKey(message)}
-                message={message}
-                prevMessage={prevMessage}
-                createDiff={createDiff}
-                onFileOpen={onFileOpen}
-                onShowSettings={onShowSettings}
-                onGrantToolPermission={onGrantToolPermission}
-                autoExpandTools={autoExpandTools}
-                showRawParameters={showRawParameters}
-                showThinking={showThinking}
-                selectedProject={selectedProject}
-                provider={provider}
-              />
-            );
-          })}
+
+            return items;
+          })()}
         </>
       )}
     </div>
