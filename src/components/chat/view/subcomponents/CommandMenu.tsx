@@ -226,7 +226,7 @@ export default function CommandMenu({
     return renderInPortal(
       <div
         ref={menuRef}
-        className="command-menu command-menu-empty border border-gray-200 bg-white/95 text-sm text-gray-500 dark:border-gray-700/80 dark:bg-gray-900/95 dark:text-gray-400"
+        className="command-menu command-menu-empty border border-border bg-popover/95 text-sm text-muted-foreground"
         style={{
           ...menuBaseStyle,
           ...menuPosition,
@@ -247,15 +247,15 @@ export default function CommandMenu({
       ref={menuRef}
       role="listbox"
       aria-label="Available commands"
-      className="command-menu border border-gray-200/90 bg-white/95 text-gray-900 dark:border-slate-700/80 dark:bg-slate-950/95 dark:text-slate-100"
+      className="command-menu border border-border bg-popover/95 text-popover-foreground"
       style={{ ...menuBaseStyle, ...menuPosition, opacity: 1, transform: 'translateY(0)' }}
     >
       {orderedNamespaces.map((namespace) => (
         <div key={namespace} className="command-group">
           {orderedNamespaces.length > 1 && (
-            <div className="flex items-center justify-between px-2 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">
+            <div className="flex items-center justify-between px-2 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
               <span>{namespaceLabels[namespace] || namespace}</span>
-              <span className="rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[10px] text-gray-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+              <span className="rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
                 {(groupedCommands[namespace] || []).length}
               </span>
             </div>
@@ -273,15 +273,15 @@ export default function CommandMenu({
                 aria-selected={isSelected}
                 className={`command-item group relative mb-1 flex cursor-pointer items-start gap-2 rounded-md border px-2.5 py-2 transition-all ${
                   isSelected
-                    ? 'border-sky-200 bg-sky-50 shadow-sm dark:border-cyan-400/30 dark:bg-cyan-400/10'
-                    : 'border-transparent bg-transparent hover:border-gray-200 hover:bg-gray-50/90 dark:hover:border-slate-700 dark:hover:bg-slate-900/80'
+                    ? 'border-primary/30 bg-primary/10 shadow-sm'
+                    : 'border-transparent bg-transparent hover:border-border hover:bg-accent'
                 }`}
                 onMouseEnter={() => onSelect && commandIndex >= 0 && onSelect(command, commandIndex, true)}
                 onClick={() => onSelect && commandIndex >= 0 && onSelect(command, commandIndex, false)}
                 onMouseDown={(event) => event.preventDefault()}
               >
                 {isSelected && (
-                  <span className="absolute bottom-1.5 left-1.5 top-1.5 w-0.5 rounded-full bg-sky-500 dark:bg-cyan-300" />
+                  <span className="absolute bottom-1.5 left-1.5 top-1.5 w-0.5 rounded-full bg-primary" />
                 )}
                 <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border ${accentClass}`}>
                   <NamespaceIcon aria-hidden="true" size={14} strokeWidth={2.2} />
@@ -289,20 +289,20 @@ export default function CommandMenu({
                 <div className="min-w-0 flex-1 pr-1">
                   <div className={`flex min-w-0 items-center gap-2 ${command.description ? 'mb-1' : 'mb-0'}`}>
                     <span
-                      className="min-w-0 truncate font-mono text-[13px] font-semibold text-gray-950 dark:text-slate-50"
+                      className="min-w-0 truncate font-mono text-[13px] font-semibold text-foreground"
                       title={command.name}
                     >
                       {command.name}
                     </span>
                     {command.metadata?.type && (
-                      <span className="command-metadata-badge shrink-0 rounded border border-gray-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-gray-500 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                      <span className="command-metadata-badge shrink-0 rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground shadow-sm">
                         {command.metadata.type}
                       </span>
                     )}
                   </div>
                   {command.description && (
                     <div
-                      className="truncate whitespace-nowrap text-[12px] leading-4 text-gray-500 dark:text-slate-400"
+                      className="truncate whitespace-nowrap text-[12px] leading-4 text-muted-foreground"
                       title={command.description}
                     >
                       {command.description}
@@ -310,7 +310,7 @@ export default function CommandMenu({
                   )}
                 </div>
                 {isSelected && (
-                  <span className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded border border-sky-200 bg-white text-sky-600 shadow-sm dark:border-cyan-400/30 dark:bg-slate-950 dark:text-cyan-200">
+                  <span className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded border border-primary/30 bg-card text-primary shadow-sm">
                     <CornerDownLeft aria-hidden="true" size={13} strokeWidth={2.2} />
                   </span>
                 )}

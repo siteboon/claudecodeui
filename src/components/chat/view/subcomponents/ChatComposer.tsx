@@ -197,7 +197,7 @@ export default function ChatComposer({
   const hasPendingPermissions = pendingPermissionRequests.length > 0;
 
   return (
-    <div className="chat-composer-shell flex-shrink-0 p-2 pb-2 sm:p-4 sm:pb-4 md:p-4 md:pb-6">
+    <div className="chat-composer-shell flex-shrink-0 px-2 pb-2 pt-0 sm:px-4 sm:pb-4 md:px-4 md:pb-6">
       {!hasPendingPermissions && (
         <ActivityIndicator activity={activity} onAbort={onAbortSession} />
       )}

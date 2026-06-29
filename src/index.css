@@ -23,37 +23,37 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 44 22% 96%;
+    --foreground: 36 25% 4%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 36 25% 4%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 36 25% 4%;
     --primary: 221.2 83.2% 53.3%;
     --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --secondary: 44 15% 91%;
+    --secondary-foreground: 36 15% 18%;
+    --muted: 44 15% 91%;
+    --muted-foreground: 40 5% 44%;
+    --accent: 44 15% 91%;
+    --accent-foreground: 36 15% 18%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
+    --border: 44 14% 87%;
+    --input: 44 14% 87%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
 
     /* Nav design tokens */
-    --nav-glass-bg: 0 0% 100% / 0.7;
+    --nav-glass-bg: 44 22% 96% / 0.7;
     --nav-glass-blur: 20px;
     --nav-glass-saturate: 1.8;
     --nav-tab-glow: 221.2 83.2% 53.3% / 0.18;
     --nav-tab-ring: 221.2 83.2% 53.3% / 0.10;
     --nav-float-shadow: 0 0% 0% / 0.06;
-    --nav-float-ring: 214.3 31.8% 91.4% / 0.5;
-    --nav-divider-color: 214.3 31.8% 91.4% / 0.5;
-    --nav-input-bg: 210 40% 96.1% / 0.5;
+    --nav-float-ring: 44 14% 87% / 0.5;
+    --nav-divider-color: 44 14% 87% / 0.5;
+    --nav-input-bg: 44 15% 91% / 0.5;
     --nav-input-focus-ring: 221.2 83.2% 53.3% / 0.22;
 
     /* Safe area CSS variables */
@@ -85,36 +85,36 @@
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 217.2 91.2% 8%;
-    --card-foreground: 210 40% 98%;
-    --popover: 217.2 91.2% 8%;
-    --popover-foreground: 210 40% 98%;
+    --background: 0 0% 8%;
+    --foreground: 40 8% 93%;
+    --card: 0 0% 12%;
+    --card-foreground: 40 8% 93%;
+    --popover: 0 0% 12%;
+    --popover-foreground: 40 8% 93%;
     --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --primary-foreground: 0 0% 8%;
+    --secondary: 0 0% 17%;
+    --secondary-foreground: 40 8% 93%;
+    --muted: 0 0% 17%;
+    --muted-foreground: 0 0% 60%;
+    --accent: 0 0% 17%;
+    --accent-foreground: 40 8% 93%;
     --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 220 13% 46%;
+    --destructive-foreground: 40 8% 93%;
+    --border: 0 0% 17%;
+    --input: 0 0% 23%;
     --ring: 217.2 91.2% 59.8%;
 
     /* Nav design tokens — dark overrides */
-    --nav-glass-bg: 217.2 91.2% 8% / 0.55;
+    --nav-glass-bg: 0 0% 12% / 0.55;
     --nav-glass-blur: 24px;
     --nav-glass-saturate: 1.6;
     --nav-tab-glow: 217.2 91.2% 59.8% / 0.25;
     --nav-tab-ring: 217.2 91.2% 59.8% / 0.15;
     --nav-float-shadow: 0 0% 0% / 0.35;
-    --nav-float-ring: 217.2 32.6% 17.5% / 0.3;
-    --nav-divider-color: 217.2 32.6% 17.5% / 0.5;
-    --nav-input-bg: 217.2 32.6% 17.5% / 0.5;
+    --nav-float-ring: 0 0% 17% / 0.3;
+    --nav-divider-color: 0 0% 17% / 0.5;
+    --nav-input-bg: 0 0% 17% / 0.5;
     --nav-input-focus-ring: 217.2 91.2% 59.8% / 0.25;
   }
 }
@@ -350,7 +350,7 @@
   }
   
   .dark .scrollbar-thin::-webkit-scrollbar-track {
-    background: rgba(31, 41, 55, 0.3);
+    background: rgba(38, 38, 38, 0.3);
   }
   
   .dark .scrollbar-thin::-webkit-scrollbar-thumb {
@@ -369,7 +369,7 @@
   }
   
   .dark::-webkit-scrollbar-track {
-    background: rgba(31, 41, 55, 0.5);
+    background: rgba(38, 38, 38, 0.5);
   }
   
   .dark::-webkit-scrollbar-thumb {
@@ -384,7 +384,7 @@
   /* Firefox scrollbar styles */
   .dark {
     scrollbar-width: thin;
-    scrollbar-color: rgba(107, 114, 128, 0.5) rgba(31, 41, 55, 0.5);
+    scrollbar-color: rgba(115, 115, 115, 0.5) rgba(38, 38, 38, 0.5);
   }
   
   /* Ensure checkbox styling is preserved */
@@ -475,7 +475,7 @@
   
   /* Fix focus-within container issues in dark mode */
   .dark .focus-within\:ring-2:focus-within {
-    background-color: rgb(31 41 55) !important; /* gray-800 */
+    background-color: rgb(20 20 20) !important;
   }
   
   /* Ensure textarea remains transparent with visible text */
@@ -873,12 +873,12 @@
   
   /* Fix focus ring offset color in dark mode */
   .dark [class*="ring-offset"] {
-    --tw-ring-offset-color: rgb(31 41 55); /* gray-800 */
+    --tw-ring-offset-color: rgb(20 20 20);
   }
-  
+
   /* Ensure buttons don't show white backgrounds in dark mode */
   .dark button:focus {
-    --tw-ring-offset-color: rgb(31 41 55); /* gray-800 */
+    --tw-ring-offset-color: rgb(20 20 20);
   }
   
   /* Fix mobile select dropdown styling */
@@ -921,8 +921,8 @@
   }
   
   .dark select option {
-    background-color: rgb(31 41 55) !important;
-    color: rgb(243 244 246) !important;
+    background-color: rgb(31 31 31) !important;
+    color: rgb(237 235 230) !important;
   }
 
   /* Tool details chevron animation */
