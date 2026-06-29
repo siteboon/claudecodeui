@@ -397,11 +397,34 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       return [];
     }
 
+    // SDK 0.3.193+ wraps Anthropic SSE events inside type: 'stream_event' with
+    // an inner event object. Unwrap it so the handlers below work for both
+    // old (bare) and new (wrapped) transcript formats.
+    const innerEvent = raw.type === 'stream_event' ? raw.event : raw;
+
+    if (innerEvent.type === 'content_block_delta' && innerEvent.delta?.text) {
+      return [createNormalizedMessage({ kind: 'stream_delta', content: innerEvent.delta.text, sessionId, provider: PROVIDER })];
+    }
+    if (innerEvent.type === 'content_block_delta' && innerEvent.delta?.thinking) {
+      return [createNormalizedMessage({ kind: 'stream_delta', content: innerEvent.delta.thinking, sessionId, provider: PROVIDER })];
+    }
+    if (innerEvent.type === 'content_block_stop') {
+      return [createNormalizedMessage({ kind: 'stream_end', sessionId, provider: PROVIDER })];
+    }
+    // Also handle bare content_block_delta / content_block_stop from older SDK
     if (raw.type === 'content_block_delta' && raw.delta?.text) {
       return [createNormalizedMessage({ kind: 'stream_delta', content: raw.delta.text, sessionId, provider: PROVIDER })];
     }
     if (raw.type === 'content_block_stop') {
       return [createNormalizedMessage({ kind: 'stream_end', sessionId, provider: PROVIDER })];
+    }
+
+    // Discard remaining stream_event types (message_start, ping, content_block_start,
+    // message_delta, message_stop, etc.) — they carry no renderable content and
+    // would leak through to role-checking logic below with raw.message === undefined,
+    // causing assistant messages to be misclassified as user messages.
+    if (raw.type === 'stream_event') {
+      return [];
     }
 
     const messages: NormalizedMessage[] = [];
