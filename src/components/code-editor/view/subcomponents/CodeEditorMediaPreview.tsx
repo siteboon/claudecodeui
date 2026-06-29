@@ -103,6 +103,16 @@ export default function CodeEditorMediaPreview({
 
         const typed = outType && outType !== blob.type ? new Blob([blob], { type: outType }) : blob;
         objectUrl = URL.createObjectURL(typed);
+
+        // The cleanup may have already run (deps changed during an await), in
+        // which case it revoked nothing because objectUrl was still null. Don't
+        // publish a URL the cleanup will never revoke — drop it ourselves.
+        if (controller.signal.aborted) {
+          URL.revokeObjectURL(objectUrl);
+          objectUrl = null;
+          return;
+        }
+
         setUrl(objectUrl);
         setLoadedKey(sourceKey);
       } catch (loadError: unknown) {
