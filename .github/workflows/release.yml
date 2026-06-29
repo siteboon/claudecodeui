@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       increment:
-        description: 'Version bump: patch, minor, major, or explicit (e.g. 1.27.0)'
+        description: "Version bump: patch, minor, major, or explicit (e.g. 1.27.0)"
         required: true
-        default: 'patch'
+        default: "patch"
         type: string
       release_name:
         description: 'Custom release name (optional, defaults to "CloudCLI UI vX.Y.Z")'
@@ -123,6 +123,9 @@ jobs:
           pattern: semantic-helper-*
           path: server/modules/computer-use/semantics/bin
           merge-multiple: true
+
+      - name: Restore semantic helper permissions
+        run: find server/modules/computer-use/semantics/bin -path '*/darwin-*/CloudCLISemantics' -type f -exec chmod 755 {} +
 
       - name: Verify bundled semantic helpers
         run: |

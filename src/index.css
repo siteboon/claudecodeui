@@ -139,6 +139,12 @@
     height: 100%;
     margin: 0;
     padding: 0;
+    /* The app shell is a fixed inset-0 container (see AppContent), so the
+       document itself never needs to scroll. Clipping it removes the phantom
+       full-height page scrollbar and disables the browser pull-to-refresh
+       gesture that reloads the page when scrolling up on mobile. */
+    overflow: hidden;
+    overscroll-behavior-y: contain;
   }
   
   /* Root element with safe area padding for PWA */
