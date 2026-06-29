@@ -70,7 +70,7 @@ export default function SidebarFooter({
                 <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500" />
               </div>
               <div className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-blue-600 dark:text-blue-300">
+                <span className="block truncate text-sm font-normal text-blue-600 dark:text-blue-300">
                   {releaseInfo?.title || `v${latestVersion}`}
                 </span>
                 <span className="text-[10px] text-blue-500/70 dark:text-blue-400/60">
@@ -91,7 +91,7 @@ export default function SidebarFooter({
                 <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500" />
               </div>
               <div className="min-w-0 flex-1 text-left">
-                <span className="block truncate text-sm font-medium text-blue-600 dark:text-blue-300">
+                <span className="block truncate text-sm font-normal text-blue-600 dark:text-blue-300">
                   {releaseInfo?.title || `v${latestVersion}`}
                 </span>
                 <span className="text-xs text-blue-500/70 dark:text-blue-400/60">
@@ -168,7 +168,7 @@ export default function SidebarFooter({
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-background/80">
             <Bug className="h-4 w-4 text-muted-foreground" />
           </div>
-          <span className="text-sm font-medium text-foreground">{t('actions.reportIssue')}</span>
+          <span className="text-sm font-normal text-foreground">{t('actions.reportIssue')}</span>
         </a>
       </div>
 
@@ -183,7 +183,7 @@ export default function SidebarFooter({
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-background/80">
             <DiscordIcon className="h-4 w-4 text-muted-foreground" />
           </div>
-          <span className="text-sm font-medium text-foreground">{t('actions.joinCommunity')}</span>
+          <span className="text-sm font-normal text-foreground">{t('actions.joinCommunity')}</span>
         </a>
       </div>
 
@@ -196,7 +196,7 @@ export default function SidebarFooter({
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-background/80">
             <Settings className="h-4 w-4 text-muted-foreground" />
           </div>
-          <span className="text-sm font-medium text-foreground">{t('actions.settings')}</span>
+          <span className="text-sm font-normal text-foreground">{t('actions.settings')}</span>
         </button>
       </div>
     </div>

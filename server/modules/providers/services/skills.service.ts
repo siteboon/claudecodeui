@@ -3,6 +3,7 @@ import type {
   ProviderSkill,
   ProviderSkillCreateInput,
   ProviderSkillListOptions,
+  ProviderSkillRemoveInput,
 } from '@/shared/types.js';
 
 export const providerSkillsService = {
@@ -26,5 +27,13 @@ export const providerSkillsService = {
   ): Promise<ProviderSkill[]> {
     const provider = providerRegistry.resolveProvider(providerName);
     return provider.skills.addSkills(input);
+  },
+
+  async removeProviderSkill(
+    providerName: string,
+    input: ProviderSkillRemoveInput,
+  ): Promise<{ removed: boolean; provider: string; directoryName: string }> {
+    const provider = providerRegistry.resolveProvider(providerName);
+    return provider.skills.removeSkill(input);
   },
 };

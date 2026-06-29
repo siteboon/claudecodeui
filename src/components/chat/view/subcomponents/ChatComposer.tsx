@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { useMemo } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   ChangeEvent,
@@ -160,6 +161,17 @@ export default function ChatComposer({
   sendByCtrlEnter,
 }: ChatComposerProps) {
   const { t } = useTranslation('chat');
+  const commandMenuPosition = useMemo(() => {
+    if (!isCommandMenuOpen) {
+      return { top: 0, left: 16, bottom: 90 };
+    }
+    const textareaRect = textareaRef.current?.getBoundingClientRect();
+    return {
+      top: textareaRect ? Math.max(16, textareaRect.top - 316) : 0,
+      left: textareaRect ? textareaRect.left : 16,
+      bottom: textareaRect ? window.innerHeight - textareaRect.top + 8 : 90,
+    };
+  }, [input, isCommandMenuOpen, textareaRef]);
 
   // Voice state is hosted here (not in the mic button) so the main Send button can stop
   // recording and send the transcript in one tap, the way the mic button drops it in the box.
@@ -182,13 +194,6 @@ export default function ChatComposer({
   const isRecording = voiceState === 'recording';
   const isTranscribing = voiceState === 'transcribing';
 
-  const textareaRect = textareaRef.current?.getBoundingClientRect();
-  const commandMenuPosition = {
-    top: textareaRect ? Math.max(16, textareaRect.top - 316) : 0,
-    left: textareaRect ? textareaRect.left : 16,
-    bottom: textareaRect ? window.innerHeight - textareaRect.top + 8 : 90,
-  };
-
   // Detect if the AskUserQuestion interactive panel is active
   const hasQuestionPanel = pendingPermissionRequests.some(
     (r) => r.toolName === 'AskUserQuestion'
@@ -198,7 +203,7 @@ export default function ChatComposer({
   const hasPendingPermissions = pendingPermissionRequests.length > 0;
 
   return (
-    <div className="flex-shrink-0 p-2 pb-2 sm:p-4 sm:pb-4 md:p-4 md:pb-6">
+    <div className="chat-composer-shell flex-shrink-0 p-2 pb-2 sm:p-4 sm:pb-4 md:p-4 md:pb-6">
       {!hasPendingPermissions && (
         <ActivityIndicator activity={activity} onAbort={onAbortSession} />
       )}

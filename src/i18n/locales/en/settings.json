@@ -113,6 +113,7 @@
     "voice": "Voice",
     "tasks": "Tasks",
     "browser": "Browser",
+    "computer": "Computer Use",
     "notifications": "Notifications",
     "plugins": "Plugins",
     "about": "About"
@@ -121,13 +122,20 @@
     "title": "Notifications",
     "description": "Control which notification events you receive.",
     "webPush": {
-      "title": "Web Push Notifications",
-      "enable": "Enable Push Notifications",
-      "disable": "Disable Push Notifications",
-      "enabled": "Push notifications are enabled",
+      "title": "Notify this browser",
+      "enable": "Enable notifications",
+      "disable": "Disable notifications",
+      "enabled": "Notifications are enabled for this browser",
       "loading": "Updating...",
       "unsupported": "Push notifications are not supported in this browser.",
       "denied": "Push notifications are blocked. Please allow them in your browser settings."
+    },
+    "desktop": {
+      "title": "Notify this desktop app",
+      "enable": "Enable notifications",
+      "disable": "Disable notifications",
+      "enabled": "Notifications are enabled for this desktop app",
+      "unsupported": "Desktop notifications are not supported on this system."
     },
     "sound": {
       "title": "Sound",

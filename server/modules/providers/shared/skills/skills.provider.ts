@@ -1,10 +1,11 @@
 import path from 'node:path';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, rm, stat, writeFile } from 'node:fs/promises';
 
 import type { IProviderSkills } from '@/shared/interfaces.js';
 import type {
   LLMProvider,
   ProviderSkillCreateInput,
+  ProviderSkillRemoveInput,
   ProviderSkill,
   ProviderSkillListOptions,
   ProviderSkillSource,
@@ -234,6 +235,48 @@ export abstract class SkillsProvider implements IProviderSkills {
     }
 
     return pendingInstalls.map((install) => install.skill);
+  }
+
+  async removeSkill(
+    input: ProviderSkillRemoveInput,
+  ): Promise<{ removed: boolean; provider: LLMProvider; directoryName: string }> {
+    const globalSkillSource = await this.getGlobalSkillSource();
+    if (!globalSkillSource) {
+      throw new AppError(`${this.provider} does not support managed global skills.`, {
+        code: 'PROVIDER_SKILLS_WRITE_UNSUPPORTED',
+        statusCode: 400,
+      });
+    }
+
+    const directoryName = normalizeSkillDirectoryName(input.directoryName);
+    if (!directoryName) {
+      throw new AppError('Skill directoryName is required.', {
+        code: 'PROVIDER_SKILL_DIRECTORY_REQUIRED',
+        statusCode: 400,
+      });
+    }
+
+    const skillDirectoryPath = path.join(globalSkillSource.rootDir, directoryName);
+    const resolvedRoot = path.resolve(globalSkillSource.rootDir);
+    const resolvedSkillDirectoryPath = path.resolve(skillDirectoryPath);
+    if (
+      resolvedSkillDirectoryPath !== resolvedRoot
+      && !resolvedSkillDirectoryPath.startsWith(`${resolvedRoot}${path.sep}`)
+    ) {
+      throw new AppError('Skill directory must stay inside the managed skill root.', {
+        code: 'PROVIDER_SKILL_DIRECTORY_INVALID',
+        statusCode: 400,
+      });
+    }
+
+    const removed = await stat(resolvedSkillDirectoryPath)
+      .then((stats) => stats.isDirectory())
+      .catch(() => false);
+    if (removed) {
+      await rm(resolvedSkillDirectoryPath, { recursive: true, force: true });
+    }
+
+    return { removed, provider: this.provider, directoryName };
   }
 
   protected abstract getSkillSources(workspacePath: string): Promise<ProviderSkillSource[]>;
