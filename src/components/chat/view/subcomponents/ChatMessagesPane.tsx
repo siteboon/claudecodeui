@@ -163,8 +163,9 @@ function ChatMessagesPane({
       ref={scrollContainerRef}
       onWheel={onWheel}
       onTouchMove={onTouchMove}
-      className="chat-messages-pane relative min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden px-0 py-3 sm:space-y-4 sm:p-4"
+      className="chat-messages-pane relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-3 sm:py-4"
     >
+      <div className="mx-auto w-full max-w-3xl space-y-3 px-4 sm:space-y-4">
       {(isLoadingSessionMessages || isProcessing) && chatMessages.length === 0 ? (
         <div className="mt-8 text-center text-gray-500 dark:text-gray-400">
           <div className="flex items-center justify-center space-x-2">
@@ -295,6 +296,7 @@ function ChatMessagesPane({
           })()}
         </>
       )}
+      </div>
     </div>
   );
 }
