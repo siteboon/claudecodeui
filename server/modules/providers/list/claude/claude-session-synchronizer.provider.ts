@@ -270,14 +270,27 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
    * mistaken for a generated title.
    */
   private isPromptMatch(candidate: string, userPrompt: string): boolean {
-    const c = candidate.trim().toLowerCase();
+    // Strip leading markdown prefixes like "- **User's message:** ", "- **User:** ", etc.
+    // Also strip wrapper quotes and backticks that the model uses when quoting user text.
+    let c = candidate.trim();
+    c = c.replace(/^[-*]\s*\*\*[^*]*\*\*\s*:?[""]?\s*/, '');
+    c = c.replace(/^[-*]\s*["`]\s*/, '');
+    c = c.replace(/["`\s]+$/, '').trim();
+    c = c.toLowerCase();
+
     const p = userPrompt.trim().toLowerCase();
     if (c === p) return true;
-    if (c.length >= 5 && p.startsWith(c)) return true;
-    if (p.length >= 5 && c.startsWith(p)) return true;
-    // One is a substring of the other with high overlap
-    if (c.length + p.length > 0 && Math.min(c.length, p.length) / Math.max(c.length, p.length) > 0.7) {
-      if (c.includes(p.slice(0, 10)) || p.includes(c.slice(0, 10))) return true;
+    // Strip trailing punctuation for comparison
+    const pClean = p.replace(/[。!?.?!，,、；;:：]+$/, '');
+    if (c === pClean) return true;
+    // Direct substring check
+    if (c.length >= 4 && p.length >= 4 && (c.includes(p) || p.includes(c))) return true;
+    if (pClean.length >= 4 && (c.includes(pClean) || pClean.includes(c))) return true;
+    // One starts with the other
+    if (c.length >= 4 && p.length >= 4 && (c.startsWith(p) || p.startsWith(c))) return true;
+    // Shared prefix overlap
+    if (c.length + p.length > 0 && Math.min(c.length, p.length) / Math.max(c.length, p.length) > 0.5) {
+      if (c.includes(p.slice(0, 8)) || p.includes(c.slice(0, 8))) return true;
     }
     return false;
   }
