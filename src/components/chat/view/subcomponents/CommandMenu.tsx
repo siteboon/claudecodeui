@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import type { CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
+import type { CSSProperties, ReactElement } from 'react';
 import {
   CornerDownLeft,
   Folder,
@@ -77,6 +78,7 @@ const namespaceAccentClasses: Record<string, string> = {
 
 const MENU_EDGE_GAP = 16;
 const MENU_MAX_HEIGHT = 360;
+const MENU_MIN_HEIGHT = 160;
 
 const getCommandKey = (command: CommandMenuCommand) =>
   `${command.name}::${command.namespace || command.type || 'other'}::${command.path || ''}`;
@@ -92,8 +94,9 @@ const getMenuPosition = (position: { top: number; left: number; bottom?: number 
   if (typeof window === 'undefined') {
     return { position: 'fixed', top: '16px', left: '16px' };
   }
+  const maxAnchorBottom = Math.max(MENU_EDGE_GAP, window.innerHeight - MENU_EDGE_GAP - MENU_MIN_HEIGHT);
   if (window.innerWidth < 640) {
-    const anchorBottom = Math.max(MENU_EDGE_GAP, position.bottom ?? 90);
+    const anchorBottom = Math.min(Math.max(MENU_EDGE_GAP, position.bottom ?? 90), maxAnchorBottom);
     return {
       position: 'fixed',
       bottom: `${anchorBottom}px`,
@@ -104,7 +107,7 @@ const getMenuPosition = (position: { top: number; left: number; bottom?: number 
       maxHeight: `min(54vh, calc(100vh - ${anchorBottom}px - ${MENU_EDGE_GAP}px))`,
     };
   }
-  const anchorBottom = Math.max(MENU_EDGE_GAP, position.bottom ?? 90);
+  const anchorBottom = Math.min(Math.max(MENU_EDGE_GAP, position.bottom ?? 90), maxAnchorBottom);
   const clampedLeft = Math.max(
     MENU_EDGE_GAP,
     Math.min(position.left, window.innerWidth - 440 - MENU_EDGE_GAP),
@@ -216,9 +219,11 @@ export default function CommandMenu({
     : ['builtin', 'skill', 'project', 'user', 'other'];
   const extraNamespaces = Object.keys(groupedCommands).filter((namespace) => !preferredOrder.includes(namespace));
   const orderedNamespaces = [...preferredOrder, ...extraNamespaces].filter((namespace) => groupedCommands[namespace]);
+  const renderInPortal = (node: ReactElement) =>
+    typeof document === 'undefined' ? node : createPortal(node, document.body);
 
   if (commands.length === 0) {
-    return (
+    return renderInPortal(
       <div
         ref={menuRef}
         className="command-menu command-menu-empty border border-gray-200 bg-white/95 text-sm text-gray-500 dark:border-gray-700/80 dark:bg-gray-900/95 dark:text-gray-400"
@@ -237,7 +242,7 @@ export default function CommandMenu({
     );
   }
 
-  return (
+  return renderInPortal(
     <div
       ref={menuRef}
       role="listbox"
