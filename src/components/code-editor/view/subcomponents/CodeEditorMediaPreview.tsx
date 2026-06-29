@@ -46,9 +46,16 @@ export default function CodeEditorMediaPreview({
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // Identifies which file the current `url` was loaded for. Rendering is gated on
+  // this so a blob from a previously-opened file can never show under the new
+  // file (the editor reuses this component instance across files).
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const sourceKey = `${projectId ?? ''}:${file.path}:${kind}`;
 
   useEffect(() => {
     if (!projectId) {
+      setUrl(null);
+      setLoadedKey(null);
       setError(labels.error);
       setLoading(false);
       return;
@@ -97,6 +104,7 @@ export default function CodeEditorMediaPreview({
         const typed = outType && outType !== blob.type ? new Blob([blob], { type: outType }) : blob;
         objectUrl = URL.createObjectURL(typed);
         setUrl(objectUrl);
+        setLoadedKey(sourceKey);
       } catch (loadError: unknown) {
         if (loadError instanceof Error && loadError.name === 'AbortError') {
           return;
@@ -116,15 +124,19 @@ export default function CodeEditorMediaPreview({
         URL.revokeObjectURL(objectUrl);
       }
     };
-  }, [file.path, projectId, kind, labels.error]);
+  }, [file.path, file.name, projectId, kind, sourceKey, labels.error]);
+
+  // Only expose the blob once it matches the file currently being shown, so a
+  // stale URL from the previous file is never rendered during a switch.
+  const currentUrl = url && loadedKey === sourceKey ? url : null;
 
   const renderMedia = () => {
-    if (!url) return null;
+    if (!currentUrl) return null;
     switch (kind) {
       case 'image':
         return (
           <img
-            src={url}
+            src={currentUrl}
             alt={file.name}
             className="max-h-full max-w-full object-contain"
           />
@@ -134,10 +146,10 @@ export default function CodeEditorMediaPreview({
         // load inside a sandboxed frame (any `sandbox` value yields a broken
         // viewer). Script execution is instead prevented upstream by validating
         // the PDF magic bytes and pinning the blob's MIME type to application/pdf.
-        return <iframe src={url} title={file.name} className="h-full w-full border-0 bg-white" />;
+        return <iframe src={currentUrl} title={file.name} className="h-full w-full border-0 bg-white" />;
       case 'video':
         return (
-          <video src={url} controls className="max-h-full max-w-full" autoPlay={false}>
+          <video src={currentUrl} controls className="max-h-full max-w-full" autoPlay={false}>
             {labels.error}
           </video>
         );
@@ -145,7 +157,7 @@ export default function CodeEditorMediaPreview({
         return (
           <div className="flex w-full max-w-xl flex-col items-center gap-4 px-6">
             <p className="max-w-full truncate text-sm text-muted-foreground">{file.name}</p>
-            <audio src={url} controls className="w-full">
+            <audio src={currentUrl} controls className="w-full">
               {labels.error}
             </audio>
           </div>
@@ -161,9 +173,9 @@ export default function CodeEditorMediaPreview({
         <div className="text-sm text-muted-foreground">{labels.loading}</div>
       )}
 
-      {!loading && url && renderMedia()}
+      {!loading && currentUrl && renderMedia()}
 
-      {!loading && !url && (
+      {!loading && !currentUrl && (
         <div className="flex flex-col items-center gap-3 p-8 text-center text-muted-foreground">
           <p className="text-sm">{error || labels.error}</p>
           <p className="break-all text-xs">{file.path}</p>
@@ -174,9 +186,9 @@ export default function CodeEditorMediaPreview({
 
   const headerActions = (
     <div className="flex shrink-0 items-center gap-0.5">
-      {url && (
+      {currentUrl && (
         <a
-          href={url}
+          href={currentUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center justify-center rounded-md p-1.5 text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
