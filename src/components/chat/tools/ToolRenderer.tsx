@@ -129,8 +129,16 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
   // a chevron that expands to show the output inline. The combined view lives on
   // the input render; the separate result section is suppressed in MessageComponent.
   if (toolName === 'Bash' && mode === 'input') {
-    const command = parsedData?.command || '';
-    const description = parsedData?.description;
+    const command = typeof parsedData === 'object' && parsedData !== null && 'command' in parsedData
+      ? String(parsedData.command || '')
+      : typeof toolInput === 'string'
+        ? toolInput
+        : typeof rawToolInput === 'string'
+          ? rawToolInput
+          : '';
+    const description = typeof parsedData === 'object' && parsedData !== null && 'description' in parsedData
+      ? String(parsedData.description || '')
+      : undefined;
     const output = typeof toolResult?.content === 'string'
       ? toolResult.content
       : toolResult?.content != null

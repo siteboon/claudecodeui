@@ -2,7 +2,6 @@ export { CollapsibleSection } from './CollapsibleSection';
 export { ToolDiffViewer } from './ToolDiffViewer';
 export { OneLineDisplay } from './OneLineDisplay';
 export { BashCommandDisplay } from './BashCommandDisplay';
-export { CommandRunGroup } from './CommandRunGroup';
 export { CollapsibleDisplay } from './CollapsibleDisplay';
 export { SubagentContainer } from './SubagentContainer';
 export * from './ContentRenderers';

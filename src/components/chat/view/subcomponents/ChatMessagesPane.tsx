@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { useCallback, useRef } from 'react';
-import type { Dispatch, ReactNode, RefObject, SetStateAction } from 'react';
+import type { Dispatch, RefObject, SetStateAction } from 'react';
 
 import type { ChatMessage } from '../../types/types';
 import type {
@@ -13,7 +13,6 @@ import { getIntrinsicMessageKey } from '../../utils/messageKeys';
 
 import MessageComponent from './MessageComponent';
 import ProviderSelectionEmptyState from './ProviderSelectionEmptyState';
-import { CommandRunGroup } from '../../tools';
 
 interface ChatMessagesPaneProps {
   scrollContainerRef: RefObject<HTMLDivElement>;
@@ -253,81 +252,25 @@ export default function ChatMessagesPane({
             </div>
           )}
 
-          {(() => {
-            const isBashCommand = (m: ChatMessage | null | undefined) =>
-              Boolean(m && m.isToolUse && m.toolName === 'Bash' && !m.isSubagentContainer);
-            // Messages that render nothing (e.g. thinking hidden when showThinking
-            // is off) shouldn't break a visual run of commands.
-            const isRendered = (m: ChatMessage) => !(m.isThinking && !showThinking);
-
-            const items: ReactNode[] = [];
-
-            for (let index = 0; index < visibleMessages.length; index++) {
-              const message = visibleMessages[index];
-
-              // Collapse a run of 2+ consecutive shell commands under a single
-              // header so long command runs stay tidy (Codex-in-VSCode style).
-              // Skip over non-rendered messages (e.g. hidden reasoning that Codex
-              // interleaves between commands) so they don't split the run.
-              if (isBashCommand(message)) {
-                const runIndices = [index];
-                let cursor = index + 1;
-                while (cursor < visibleMessages.length) {
-                  const candidate = visibleMessages[cursor];
-                  if (!isRendered(candidate)) {
-                    cursor++;
-                    continue;
-                  }
-                  if (isBashCommand(candidate)) {
-                    runIndices.push(cursor);
-                    cursor++;
-                    continue;
-                  }
-                  break;
-                }
-                if (runIndices.length >= 2) {
-                  const groupMessages = runIndices.map((i) => visibleMessages[i]);
-                  items.push(
-                    <CommandRunGroup key={getMessageKey(groupMessages[0])} messages={groupMessages} />,
-                  );
-                  // Consume everything up to the last command in the run (any
-                  // trailing skipped messages render nothing anyway).
-                  index = runIndices[runIndices.length - 1];
-                  continue;
-                }
-              }
-
-              // Walk back past messages that are not actually rendered (e.g. thinking
-              // messages hidden when showThinking is off). Otherwise a hidden thinking
-              // message would make the following message look "grouped" and suppress its
-              // provider header/icon — which is why Claude turns lost their icon.
-              let prevMessage: ChatMessage | null = null;
-              for (let i = index - 1; i >= 0; i--) {
-                const candidate = visibleMessages[i];
-                if (candidate.isThinking && !showThinking) continue;
-                prevMessage = candidate;
-                break;
-              }
-              items.push(
-                <MessageComponent
-                  key={getMessageKey(message)}
-                  message={message}
-                  prevMessage={prevMessage}
-                  createDiff={createDiff}
-                  onFileOpen={onFileOpen}
-                  onShowSettings={onShowSettings}
-                  onGrantToolPermission={onGrantToolPermission}
-                  autoExpandTools={autoExpandTools}
-                  showRawParameters={showRawParameters}
-                  showThinking={showThinking}
-                  selectedProject={selectedProject}
-                  provider={provider}
-                />,
-              );
-            }
-
-            return items;
-          })()}
+          {visibleMessages.map((message, index) => {
+            const prevMessage = index > 0 ? visibleMessages[index - 1] : null;
+            return (
+              <MessageComponent
+                key={getMessageKey(message)}
+                message={message}
+                prevMessage={prevMessage}
+                createDiff={createDiff}
+                onFileOpen={onFileOpen}
+                onShowSettings={onShowSettings}
+                onGrantToolPermission={onGrantToolPermission}
+                autoExpandTools={autoExpandTools}
+                showRawParameters={showRawParameters}
+                showThinking={showThinking}
+                selectedProject={selectedProject}
+                provider={provider}
+              />
+            );
+          })}
         </>
       )}
     </div>
