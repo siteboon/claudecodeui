@@ -378,7 +378,7 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     this.recordScrollSample(touch);
   };
 
-  private onTerminalTouchEnd = (): void => {
+  private onTerminalTouchEnd = (event: TouchEvent): void => {
     if (this.isPinching) {
       this.endPinchZoom();
       return;
@@ -386,6 +386,15 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
 
     this.clearTapHoldTimeout();
     this.touchStart = null;
+
+    // A long-press selection (or a tap dismissing one) must not let the browser
+    // synthesize the mouse click that refocuses xterm's hidden textarea — that
+    // is what pops up the mobile keyboard. A plain tap leaves isSelecting false
+    // and falls through, so it still focuses the terminal and shows the keyboard.
+    if (this.isSelecting || this.isHandleDragging) {
+      event.preventDefault();
+      this.blurTerminalInput();
+    }
 
     if (!this.pendingClearTouch) {
       this.maybeStartInertia();
@@ -507,6 +516,9 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     this.selectionStart = wordBounds?.start ?? coords;
     this.selectionEnd = wordBounds?.end ?? coords;
     this.isSelecting = true;
+
+    // Dismiss the mobile keyboard if it was open: selecting text is not typing.
+    this.blurTerminalInput();
 
     this.updateSelection();
     this.showHandles();
@@ -974,6 +986,13 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
       start: { row: coords.row, col: startCol },
       end: { row: coords.row, col: endCol },
     };
+  }
+
+  private blurTerminalInput(): void {
+    const textarea = this.terminal.element?.querySelector<HTMLTextAreaElement>(
+      '.xterm-helper-textarea',
+    );
+    textarea?.blur();
   }
 
   private getTerminalScreenElement(): HTMLElement | null {
