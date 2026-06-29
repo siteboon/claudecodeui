@@ -199,7 +199,9 @@ export default function ChatComposer({
   return (
     <div className="chat-composer-shell flex-shrink-0 px-2 pb-2 pt-0 sm:px-4 sm:pb-4 md:px-4 md:pb-6">
       {!hasPendingPermissions && (
-        <ActivityIndicator activity={activity} onAbort={onAbortSession} />
+        <div className="mx-auto max-w-3xl">
+          <ActivityIndicator activity={activity} onAbort={onAbortSession} />
+        </div>
       )}
 
       {pendingPermissionRequests.length > 0 && (

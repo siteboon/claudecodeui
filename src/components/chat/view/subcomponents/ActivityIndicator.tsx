@@ -52,8 +52,8 @@ export default function ActivityIndicator({ activity, onAbort }: ActivityIndicat
     : t('claudeStatus.elapsed.minutesSeconds', { minutes, seconds, defaultValue: '{{minutes}}m {{seconds}}s' });
 
   return (
-    <div className="animate-in fade-in mb-2 w-full duration-300">
-      <div className="mx-auto flex max-w-4xl items-center gap-2 px-1">
+    <div className="animate-in fade-in mb-2 duration-300">
+      <div className="flex items-center gap-2 px-1">
         <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-primary" aria-hidden />
         <Shimmer className="text-xs font-medium">{`${label}…`}</Shimmer>
         <span className="text-xs tabular-nums text-muted-foreground/60">{elapsedLabel}</span>
