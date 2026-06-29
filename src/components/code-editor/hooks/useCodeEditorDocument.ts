@@ -44,13 +44,17 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
 
         // Natively previewable media (image/pdf/audio/video) is rendered by
         // CodeEditorMediaPreview, so there is nothing to read as text here.
+        // Clear any buffer left over from a previously opened text file so a
+        // stray save can't write stale content over the binary file.
         if (getPreviewKind(file.name)) {
+          setContent('');
           setLoading(false);
           return;
         }
 
         // Check if file is binary by extension
         if (isBinaryFile(file.name)) {
+          setContent('');
           setIsBinary(true);
           setLoading(false);
           return;
@@ -87,6 +91,12 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
   }, [file.diffInfo, file.name, fileDiffNewString, fileDiffOldString, fileName, filePath, fileProjectId]);
 
   const handleSave = useCallback(async () => {
+    // Preview-only and binary files have no editable text buffer; never write
+    // them back (e.g. via Cmd/Ctrl+S) or we'd corrupt the file on disk.
+    if (previewKind || isBinaryFile(fileName)) {
+      return;
+    }
+
     setSaving(true);
     setSaveError(null);
 
@@ -120,7 +130,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     } finally {
       setSaving(false);
     }
-  }, [content, filePath, fileProjectId]);
+  }, [content, filePath, fileProjectId, previewKind, fileName]);
 
   const handleDownload = useCallback(() => {
     const blob = new Blob([content], { type: 'text/plain' });

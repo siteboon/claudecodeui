@@ -5,27 +5,59 @@
 
 export type PreviewKind = 'image' | 'pdf' | 'video' | 'audio';
 
-// Formats browsers can decode in <img>.
-const IMAGE_EXTENSIONS = new Set([
-  'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico', 'bmp', 'avif', 'apng',
-]);
+// Single source of truth: every extension the browser can preview, mapped to the
+// MIME type we apply when the server response has a missing/generic Content-Type.
+// The preview kind is derived from the MIME type so the two never drift apart.
+// Formats browsers generally can't play (avi, mkv, flv, wmv) are intentionally
+// absent and keep the binary fallback.
+const EXTENSION_MIME: Record<string, string> = {
+  // Images
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  svg: 'image/svg+xml',
+  webp: 'image/webp',
+  ico: 'image/x-icon',
+  bmp: 'image/bmp',
+  avif: 'image/avif',
+  apng: 'image/apng',
+  // PDF
+  pdf: 'application/pdf',
+  // Video
+  mp4: 'video/mp4',
+  webm: 'video/webm',
+  ogv: 'video/ogg',
+  mov: 'video/quicktime',
+  m4v: 'video/x-m4v',
+  // Audio
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  m4a: 'audio/mp4',
+  aac: 'audio/aac',
+  flac: 'audio/flac',
+  opus: 'audio/opus',
+  oga: 'audio/ogg',
+  ogg: 'audio/ogg',
+  weba: 'audio/webm',
+};
 
-const PDF_EXTENSIONS = new Set(['pdf']);
+const extensionOf = (filename: string): string => filename.split('.').pop()?.toLowerCase() ?? '';
 
-// Container/codec combos broadly playable in <video>. Intentionally excludes
-// formats browsers generally can't play (avi, mkv, flv, wmv).
-const VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'ogv', 'mov', 'm4v']);
-
-// Formats broadly playable in <audio>.
-const AUDIO_EXTENSIONS = new Set([
-  'mp3', 'wav', 'm4a', 'aac', 'flac', 'opus', 'oga', 'ogg', 'weba',
-]);
-
-export const getPreviewKind = (filename: string): PreviewKind | null => {
-  const ext = filename.split('.').pop()?.toLowerCase() ?? '';
-  if (IMAGE_EXTENSIONS.has(ext)) return 'image';
-  if (PDF_EXTENSIONS.has(ext)) return 'pdf';
-  if (VIDEO_EXTENSIONS.has(ext)) return 'video';
-  if (AUDIO_EXTENSIONS.has(ext)) return 'audio';
+const kindForMime = (mime: string): PreviewKind | null => {
+  if (mime === 'application/pdf') return 'pdf';
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('video/')) return 'video';
+  if (mime.startsWith('audio/')) return 'audio';
   return null;
 };
+
+export const getPreviewKind = (filename: string): PreviewKind | null => {
+  const mime = EXTENSION_MIME[extensionOf(filename)];
+  return mime ? kindForMime(mime) : null;
+};
+
+// MIME type to fall back to when the server returns no/generic Content-Type.
+// Returns undefined for non-previewable extensions.
+export const getPreviewMimeType = (filename: string): string | undefined =>
+  EXTENSION_MIME[extensionOf(filename)];

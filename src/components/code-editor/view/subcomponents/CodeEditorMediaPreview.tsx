@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { authenticatedFetch } from '../../../../utils/api';
 import type { CodeEditorFile } from '../../types/types';
-import type { PreviewKind } from '../../utils/previewableFile';
+import { getPreviewMimeType, type PreviewKind } from '../../utils/previewableFile';
 
 type CodeEditorMediaPreviewProps = {
   file: CodeEditorFile;
@@ -23,13 +23,14 @@ type CodeEditorMediaPreviewProps = {
   };
 };
 
-// MIME type forced onto the blob per kind so the browser picks the right viewer
-// even when the server response was generic (e.g. application/octet-stream).
-const FALLBACK_MIME: Record<PreviewKind, string> = {
-  image: 'application/octet-stream',
-  pdf: 'application/pdf',
-  video: 'video/mp4',
-  audio: 'audio/mpeg',
+// Reject a "PDF" whose bytes aren't actually a PDF before handing it to the
+// same-origin iframe, so a mislabeled HTML/SVG file can't run in the app origin.
+const PDF_HEADER_SCAN_BYTES = 1024;
+
+const looksLikePdf = async (blob: Blob): Promise<boolean> => {
+  const header = await blob.slice(0, PDF_HEADER_SCAN_BYTES).arrayBuffer();
+  // PDFs must contain the "%PDF-" marker at the very start of the file.
+  return new TextDecoder('latin1').decode(header).includes('%PDF-');
 };
 
 export default function CodeEditorMediaPreview({
@@ -73,7 +74,27 @@ export default function CodeEditorMediaPreview({
         }
 
         const blob = await response.blob();
-        const typed = blob.type ? blob : new Blob([blob], { type: FALLBACK_MIME[kind] });
+
+        // Pick the MIME type to expose to the browser. Preserve a valid
+        // Content-Type from the server, but supply an extension-specific
+        // default when it is missing or generic (application/octet-stream),
+        // otherwise formats like webm/ogg/flac/svg won't render.
+        const fallbackMime = getPreviewMimeType(file.name);
+        const isGenericType = !blob.type || blob.type === 'application/octet-stream';
+        let outType = isGenericType ? (fallbackMime ?? blob.type) : blob.type;
+
+        if (kind === 'pdf') {
+          // The PDF renders in a same-origin <iframe>, so verify the bytes are
+          // really a PDF and pin the type to application/pdf. That forces the
+          // browser's PDF handler and prevents a mislabeled HTML/SVG file from
+          // executing scripts in the app's origin.
+          if (!(await looksLikePdf(blob))) {
+            throw new Error('File is not a valid PDF');
+          }
+          outType = 'application/pdf';
+        }
+
+        const typed = outType && outType !== blob.type ? new Blob([blob], { type: outType }) : blob;
         objectUrl = URL.createObjectURL(typed);
         setUrl(objectUrl);
       } catch (loadError: unknown) {
@@ -109,6 +130,10 @@ export default function CodeEditorMediaPreview({
           />
         );
       case 'pdf':
+        // Not sandboxed on purpose: the browser's built-in PDF viewer refuses to
+        // load inside a sandboxed frame (any `sandbox` value yields a broken
+        // viewer). Script execution is instead prevented upstream by validating
+        // the PDF magic bytes and pinning the blob's MIME type to application/pdf.
         return <iframe src={url} title={file.name} className="h-full w-full border-0 bg-white" />;
       case 'video':
         return (
