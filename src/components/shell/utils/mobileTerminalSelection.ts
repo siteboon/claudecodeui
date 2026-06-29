@@ -832,9 +832,14 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     const startPosition = this.terminalCoordsToPixels(start);
     const endPosition = this.terminalCoordsToPixels(end);
 
+    // Keep the full handle inside the overlay (which clips via overflow:hidden)
+    // so a selection that begins at column 0 doesn't leave the handle clipped
+    // off the left edge where it can't be tapped.
+    const maxHandleLeft = Math.max(0, this.terminalContent.clientWidth - HANDLE_SIZE_PX);
+
     if (startPosition) {
       this.startHandle.style.display = 'block';
-      this.startHandle.style.left = `${startPosition.x - HANDLE_SIZE_PX / 2}px`;
+      this.startHandle.style.left = `${clamp(startPosition.x - HANDLE_SIZE_PX / 2, 0, maxHandleLeft)}px`;
       this.startHandle.style.top = `${startPosition.y + this.cellDimensions.height + 4}px`;
     } else {
       this.startHandle.style.display = 'none';
@@ -842,7 +847,7 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
 
     if (endPosition) {
       this.endHandle.style.display = 'block';
-      this.endHandle.style.left = `${endPosition.x + this.cellDimensions.width - HANDLE_SIZE_PX / 2}px`;
+      this.endHandle.style.left = `${clamp(endPosition.x + this.cellDimensions.width - HANDLE_SIZE_PX / 2, 0, maxHandleLeft)}px`;
       this.endHandle.style.top = `${endPosition.y + this.cellDimensions.height + 4}px`;
     } else {
       this.endHandle.style.display = 'none';
