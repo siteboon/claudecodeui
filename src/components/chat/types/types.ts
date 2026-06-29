@@ -129,7 +129,6 @@ export interface ChatInterfaceProps {
   autoExpandTools?: boolean;
   showRawParameters?: boolean;
   showThinking?: boolean;
-  autoScrollToBottom?: boolean;
   sendByCtrlEnter?: boolean;
   externalMessageUpdate?: number;
   newSessionTrigger?: number;

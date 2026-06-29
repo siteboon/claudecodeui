@@ -1,18 +1,19 @@
 import { Moon, Sun } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
 import { DarkModeToggle } from '../../../shared/view/ui';
 import LanguageSelector from '../../../shared/view/ui/LanguageSelector';
 import {
   INPUT_SETTING_TOGGLES,
   SETTING_ROW_CLASS,
   TOOL_DISPLAY_TOGGLES,
-  VIEW_OPTION_TOGGLES,
 } from '../constants';
 import type {
   PreferenceToggleItem,
   PreferenceToggleKey,
   QuickSettingsPreferences,
 } from '../types';
+
 import QuickSettingsSection from './QuickSettingsSection';
 import QuickSettingsToggleRow from './QuickSettingsToggleRow';
 
@@ -63,10 +64,6 @@ export default function QuickSettingsContent({
 
       <QuickSettingsSection title={t('quickSettings.sections.toolDisplay')}>
         {renderToggleRows(TOOL_DISPLAY_TOGGLES)}
-      </QuickSettingsSection>
-
-      <QuickSettingsSection title={t('quickSettings.sections.viewOptions')}>
-        {renderToggleRows(VIEW_OPTION_TOGGLES)}
       </QuickSettingsSection>
 
       <QuickSettingsSection title={t('quickSettings.sections.inputSettings')}>

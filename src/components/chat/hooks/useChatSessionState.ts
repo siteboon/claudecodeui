@@ -18,7 +18,6 @@ interface UseChatSessionStateArgs {
   selectedSession: ProjectSession | null;
   ws: WebSocket | null;
   sendMessage: (message: unknown) => void;
-  autoScrollToBottom?: boolean;
   externalMessageUpdate?: number;
   newSessionTrigger?: number;
   processingSessions?: SessionActivityMap;
@@ -96,7 +95,6 @@ export function useChatSessionState({
   selectedSession,
   ws,
   sendMessage,
-  autoScrollToBottom,
   externalMessageUpdate,
   newSessionTrigger,
   processingSessions,
@@ -589,7 +587,7 @@ export function useChatSessionState({
         if (!isProcessing) {
           await sessionStore.refreshFromServer(selectedSession.id);
 
-          if (Boolean(autoScrollToBottom) && isNearBottom()) {
+          if (isNearBottom()) {
             setTimeout(() => scrollToBottom(), 200);
           }
         }
@@ -600,7 +598,6 @@ export function useChatSessionState({
 
     reloadExternalMessages();
   }, [
-    autoScrollToBottom,
     externalMessageUpdate,
     isNearBottom,
     scrollToBottom,
@@ -732,10 +729,9 @@ export function useChatSessionState({
   }, [chatMessages, visibleMessageCount]);
 
   useEffect(() => {
-    if (!autoScrollToBottom && scrollContainerRef.current) {
-      const container = scrollContainerRef.current;
-      scrollPositionRef.current = { height: container.scrollHeight, top: container.scrollTop };
-    }
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    scrollPositionRef.current = { height: container.scrollHeight, top: container.scrollTop };
   });
 
   useEffect(() => {
@@ -743,8 +739,8 @@ export function useChatSessionState({
     if (isLoadingMoreRef.current || isLoadingMoreMessages || pendingScrollRestoreRef.current) return;
     if (searchScrollActiveRef.current) return;
 
-    if (autoScrollToBottom) {
-      if (!isUserScrolledUp) setTimeout(() => scrollToBottom(), 50);
+    if (!isUserScrolledUp) {
+      setTimeout(() => scrollToBottom(), 50);
       return;
     }
 
@@ -754,7 +750,7 @@ export function useChatSessionState({
     const newHeight = container.scrollHeight;
     const heightDiff = newHeight - prevHeight;
     if (heightDiff > 0 && prevTop > 0) container.scrollTop = prevTop + heightDiff;
-  }, [autoScrollToBottom, chatMessages.length, isLoadingMoreMessages, isUserScrolledUp, scrollToBottom]);
+  }, [chatMessages.length, isLoadingMoreMessages, isUserScrolledUp, scrollToBottom]);
 
   useEffect(() => {
     const container = scrollContainerRef.current;

@@ -4,7 +4,6 @@ type UiPreferences = {
   autoExpandTools: boolean;
   showRawParameters: boolean;
   showThinking: boolean;
-  autoScrollToBottom: boolean;
   sendByCtrlEnter: boolean;
   sidebarVisible: boolean;
   voiceEnabled: boolean;
@@ -37,7 +36,6 @@ const DEFAULTS: UiPreferences = {
   autoExpandTools: false,
   showRawParameters: false,
   showThinking: true,
-  autoScrollToBottom: true,
   sendByCtrlEnter: false,
   sidebarVisible: true,
   voiceEnabled: false,

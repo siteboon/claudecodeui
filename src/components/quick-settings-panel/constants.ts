@@ -1,11 +1,11 @@
 import {
-  ArrowDown,
   Brain,
   Eye,
   Languages,
   Maximize2,
   Mic,
 } from 'lucide-react';
+
 import type { PreferenceToggleItem } from './types';
 
 export const HANDLE_POSITION_STORAGE_KEY = 'quickSettingsHandlePosition';
@@ -38,14 +38,6 @@ export const TOOL_DISPLAY_TOGGLES: PreferenceToggleItem[] = [
     key: 'showThinking',
     labelKey: 'quickSettings.showThinking',
     icon: Brain,
-  },
-];
-
-export const VIEW_OPTION_TOGGLES: PreferenceToggleItem[] = [
-  {
-    key: 'autoScrollToBottom',
-    labelKey: 'quickSettings.autoScrollToBottom',
-    icon: ArrowDown,
   },
 ];
 

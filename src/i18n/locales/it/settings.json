@@ -54,14 +54,12 @@
     "sections": {
       "appearance": "Aspetto",
       "toolDisplay": "Visualizzazione strumenti",
-      "viewOptions": "Opzioni visualizzazione",
       "inputSettings": "Impostazioni input"
     },
     "darkMode": "Modalità scura",
     "autoExpandTools": "Espandi strumenti automaticamente",
     "showRawParameters": "Mostra parametri grezzi",
     "showThinking": "Mostra ragionamento",
-    "autoScrollToBottom": "Scorrimento automatico in basso",
     "sendByCtrlEnter": "Invia con Ctrl+Invio",
     "sendByCtrlEnterDescription": "Se abilitato, premere Ctrl+Invio invierà il messaggio invece di Invio. Utile per gli utenti IME per evitare invii accidentali.",
     "dragHandle": {

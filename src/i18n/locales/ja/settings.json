@@ -54,14 +54,12 @@
     "sections": {
       "appearance": "外観",
       "toolDisplay": "ツール表示",
-      "viewOptions": "表示オプション",
       "inputSettings": "入力設定"
     },
     "darkMode": "ダークモード",
     "autoExpandTools": "ツールを自動展開",
     "showRawParameters": "生パラメータを表示",
     "showThinking": "思考を表示",
-    "autoScrollToBottom": "自動スクロール",
     "sendByCtrlEnter": "Ctrl+Enterで送信",
     "sendByCtrlEnterDescription": "有効にすると、Enterではなく Ctrl+Enter でメッセージを送信します。IMEユーザーの誤送信防止に便利です。",
     "dragHandle": {

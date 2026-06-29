@@ -5,7 +5,6 @@ export type PreferenceToggleKey =
   | 'autoExpandTools'
   | 'showRawParameters'
   | 'showThinking'
-  | 'autoScrollToBottom'
   | 'sendByCtrlEnter'
   | 'voiceEnabled';
 
