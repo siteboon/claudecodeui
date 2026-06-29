@@ -361,6 +361,10 @@ export type ProviderSkillCreateInput = {
   entries: ProviderSkillCreateEntry[];
 };
 
+export type ProviderSkillRemoveInput = {
+  directoryName: string;
+};
+
 /**
  * Normalized skill record returned by provider skill adapters.
  *

@@ -1,0 +1,151 @@
+name: Desktop macOS Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to create or update (defaults to v<package version>)'
+        required: false
+        type: string
+      release_name:
+        description: 'Release name (defaults to "CloudCLI Desktop macOS <tag>")'
+        required: false
+        type: string
+      prerelease:
+        description: 'Mark the GitHub release as a prerelease'
+        required: true
+        default: false
+        type: boolean
+
+jobs:
+  build-macos:
+    name: Build signed macOS desktop app
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Resolve release metadata
+        id: release
+        env:
+          TAG_INPUT: ${{ inputs.tag }}
+          RELEASE_NAME_INPUT: ${{ inputs.release_name }}
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          TAG="$TAG_INPUT"
+          if [ -z "$TAG" ]; then
+            TAG="v${VERSION}"
+          fi
+          TAG="$(printf '%s' "$TAG" | tr -d '\r\n' | sed 's/[^A-Za-z0-9._-]/-/g')"
+          if [ -z "$TAG" ]; then
+            echo "Resolved release tag is empty after normalization." >&2
+            exit 1
+          fi
+
+          RELEASE_NAME="$RELEASE_NAME_INPUT"
+          if [ -z "$RELEASE_NAME" ]; then
+            RELEASE_NAME="CloudCLI Desktop macOS ${TAG}"
+          fi
+          RELEASE_NAME_DELIMITER="release_name_$(uuidgen)"
+
+          {
+            echo "tag=$TAG"
+            echo "release_name<<$RELEASE_NAME_DELIMITER"
+            printf '%s\n' "$RELEASE_NAME"
+            echo "$RELEASE_NAME_DELIMITER"
+            echo "server_bundle_tag=cloudcli-local-server-${TAG}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Configure release server bundle source
+        env:
+          SERVER_BUNDLE_TAG: ${{ steps.release.outputs.server_bundle_tag }}
+        run: printf '{"releaseTag":"%s"}\n' "$SERVER_BUNDLE_TAG" > electron/server-bundle-config.json
+
+      - name: Verify signing secrets are configured
+        run: |
+          test -n "$CSC_LINK"
+          test -n "$CSC_KEY_PASSWORD"
+          test -n "$APPLE_ID"
+          test -n "$APPLE_APP_SPECIFIC_PASSWORD"
+          test -n "$APPLE_TEAM_ID"
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Build signed and notarized macOS artifacts
+        run: npm run desktop:dist:mac -- --publish never
+        env:
+          CLOUDCLI_SEMANTICS_BUILD_REQUIRED: "1"
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Build local server bundle
+        run: node scripts/release/build-server-bundle.js
+
+      - name: Verify local server runtime artifacts
+        run: |
+          test -n "$(find release/local-server -maxdepth 1 -name 'cloudcli-local-server-*.tar.gz' -print -quit)"
+          test -n "$(find release/local-server -maxdepth 1 -name 'cloudcli-local-server-*.tar.gz.sha256' -print -quit)"
+
+      - name: Publish local server runtime assets
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
+        with:
+          tag_name: ${{ steps.release.outputs.server_bundle_tag }}
+          target_commitish: ${{ github.sha }}
+          name: CloudCLI Local Server Runtime (${{ steps.release.outputs.tag }})
+          body: |
+            This prerelease contains the Local mode runtime for CloudCLI Desktop.
+
+            Download CloudCLI Desktop from the main ${{ steps.release.outputs.tag }} release. When you open Local CloudCLI, the desktop app automatically downloads the matching runtime from this prerelease.
+
+            You do not need to download these runtime files manually.
+          prerelease: true
+          fail_on_unmatched_files: false
+          overwrite_files: true
+          files: |
+            release/local-server/*
+
+      - name: Verify macOS artifacts
+        run: |
+          test -n "$(find release/desktop -maxdepth 1 -name '*.dmg' -print -quit)"
+          shasum -a 256 release/desktop/*.dmg > release/SHASUMS256.txt
+          cat release/SHASUMS256.txt
+
+      - name: Publish GitHub release assets
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ steps.release.outputs.release_name }}
+          body: |
+            Download the CloudCLI Desktop installer for your Mac.
+
+            The local server runtime used by local mode is installed automatically by the desktop app. You do not need to download any server bundle manually.
+          prerelease: ${{ inputs.prerelease }}
+          fail_on_unmatched_files: false
+          files: |
+            release/desktop/*.dmg
+            release/SHASUMS256.txt

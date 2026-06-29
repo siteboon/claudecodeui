@@ -207,6 +207,15 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           break;
         }
 
+        // A result with a toolId but no matching tool_use in the loaded set is
+        // almost always a tool_use/tool_result pair split across a pagination
+        // boundary (older page not loaded yet). Rendering its raw content here
+        // produces an unstyled dump that "fixes itself" once the older page
+        // loads; skip it and let it attach to its tool_use when that arrives.
+        if (msg.toolId) {
+          break;
+        }
+
         const content = formatToolResultContent(msg.content || '');
         if (!content.trim()) {
           break;

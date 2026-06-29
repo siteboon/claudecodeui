@@ -22,7 +22,7 @@ try {
     }
   });
 } catch (e) {
-  console.log('No .env file found or error reading it:', e.message);
+  console.error('No .env file found or error reading it:', e.message);
 }
 
 // Keep the default database in a stable user-level location so rebuilding dist-server

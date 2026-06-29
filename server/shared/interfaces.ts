@@ -13,6 +13,7 @@ import type {
   ProviderMcpServer,
   ProviderSessionActiveModelChange,
   ProviderSkillCreateInput,
+  ProviderSkillRemoveInput,
   UpsertProviderMcpServerInput,
 } from '@/shared/types.js';
 
@@ -111,6 +112,10 @@ export interface IProviderSkills {
    * records that were written.
    */
   addSkills(input: ProviderSkillCreateInput): Promise<ProviderSkill[]>;
+
+  removeSkill(
+    input: ProviderSkillRemoveInput,
+  ): Promise<{ removed: boolean; provider: LLMProvider; directoryName: string }>;
 }
 
 // ---------------------------
