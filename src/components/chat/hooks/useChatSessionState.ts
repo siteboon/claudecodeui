@@ -338,12 +338,36 @@ export function useChatSessionState({
         const slot = await sessionStore.fetchMore(selectedSession.id, {
           limit: MESSAGES_PER_PAGE,
         });
-        if (!slot || slot.serverMessages.length === 0) return false;
+        if (!slot) return false;
+        if (slot.serverMessages.length === 0) {
+          if (!slot.hasMore) {
+            setHasMoreMessages(false);
+            allMessagesLoadedRef.current = true;
+            setAllMessagesLoaded(true);
+            if (!loadAllOverlayTimerRef.current) {
+              loadAllOverlayTimerRef.current = setTimeout(() => {
+                setShowLoadAllOverlay(false);
+                loadAllOverlayTimerRef.current = null;
+              }, 2500);
+            }
+          }
+          return false;
+        }
 
         pendingScrollRestoreRef.current = { height: previousScrollHeight, top: previousScrollTop };
         setHasMoreMessages(slot.hasMore);
         setTotalMessages(slot.total);
         setVisibleMessageCount((prev) => prev + MESSAGES_PER_PAGE);
+        if (!slot.hasMore) {
+          allMessagesLoadedRef.current = true;
+          setAllMessagesLoaded(true);
+          if (!loadAllOverlayTimerRef.current) {
+            loadAllOverlayTimerRef.current = setTimeout(() => {
+              setShowLoadAllOverlay(false);
+              loadAllOverlayTimerRef.current = null;
+            }, 2500);
+          }
+        }
         return true;
       } finally {
         isLoadingMoreRef.current = false;
@@ -371,7 +395,7 @@ export function useChatSessionState({
         loadAllOverlayTimerRef.current = setTimeout(() => {
           setShowLoadAllOverlay(false);
           loadAllOverlayTimerRef.current = null;
-        }, 5000);
+        }, 2500);
       }
     } else if (!scrolledNearTop) {
       wasNearTopRef.current = false;
@@ -786,7 +810,7 @@ export function useChatSessionState({
           setLoadAllJustFinished(false);
           setShowLoadAllOverlay(false);
           loadAllFinishedTimerRef.current = null;
-        }, 1000);
+        }, 2500);
       } else {
         allMessagesLoadedRef.current = false;
         setShowLoadAllOverlay(false);
