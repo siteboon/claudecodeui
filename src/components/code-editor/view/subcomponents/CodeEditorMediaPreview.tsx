@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+
 import { authenticatedFetch } from '../../../../utils/api';
 import type { CodeEditorFile } from '../../types/types';
 import { getPreviewMimeType, type PreviewKind } from '../../utils/previewableFile';
@@ -88,7 +89,8 @@ export default function CodeEditorMediaPreview({
         // otherwise formats like webm/ogg/flac/svg won't render.
         const fallbackMime = getPreviewMimeType(file.name);
         const isGenericType = !blob.type || blob.type === 'application/octet-stream';
-        let outType = isGenericType ? (fallbackMime ?? blob.type) : blob.type;
+        const isMislabeledVideo = kind === 'video' && Boolean(fallbackMime) && !blob.type.startsWith('video/');
+        let outType = isGenericType || isMislabeledVideo ? (fallbackMime ?? blob.type) : blob.type;
 
         if (kind === 'pdf') {
           // The PDF renders in a same-origin <iframe>, so verify the bytes are
