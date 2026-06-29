@@ -344,12 +344,11 @@ export function useChatSessionState({
             setHasMoreMessages(false);
             allMessagesLoadedRef.current = true;
             setAllMessagesLoaded(true);
-            if (!loadAllOverlayTimerRef.current) {
-              loadAllOverlayTimerRef.current = setTimeout(() => {
-                setShowLoadAllOverlay(false);
-                loadAllOverlayTimerRef.current = null;
-              }, 2500);
+            if (loadAllOverlayTimerRef.current) {
+              clearTimeout(loadAllOverlayTimerRef.current);
+              loadAllOverlayTimerRef.current = null;
             }
+            setShowLoadAllOverlay(false);
           }
           return false;
         }
@@ -361,12 +360,11 @@ export function useChatSessionState({
         if (!slot.hasMore) {
           allMessagesLoadedRef.current = true;
           setAllMessagesLoaded(true);
-          if (!loadAllOverlayTimerRef.current) {
-            loadAllOverlayTimerRef.current = setTimeout(() => {
-              setShowLoadAllOverlay(false);
-              loadAllOverlayTimerRef.current = null;
-            }, 2500);
+          if (loadAllOverlayTimerRef.current) {
+            clearTimeout(loadAllOverlayTimerRef.current);
+            loadAllOverlayTimerRef.current = null;
           }
+          setShowLoadAllOverlay(false);
         }
         return true;
       } finally {
