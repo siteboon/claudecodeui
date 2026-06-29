@@ -23,7 +23,8 @@
     "files": "Files",
     "git": "Source Control",
     "tasks": "Tasks",
-    "browser": "Browser"
+    "browser": "Browser",
+    "computer": "Computer"
   },
   "status": {
     "loading": "Loading...",

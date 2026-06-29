@@ -11,6 +11,7 @@ export default function MainContentHeader({
   selectedSession,
   shouldShowTasksTab,
   shouldShowBrowserTab,
+  shouldShowComputerTab,
   isMobile,
   onMenuClick,
 }: MainContentHeaderProps) {
@@ -61,6 +62,7 @@ export default function MainContentHeader({
               setActiveTab={setActiveTab}
               shouldShowTasksTab={shouldShowTasksTab}
               shouldShowBrowserTab={shouldShowBrowserTab}
+              shouldShowComputerTab={shouldShowComputerTab}
             />
           </div>
           {canScrollRight && (

@@ -430,6 +430,17 @@ router.post(
   }),
 );
 
+router.delete(
+  '/:provider/skills/:directoryName',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const result = await providerSkillsService.removeProviderSkill(provider, {
+      directoryName: readPathParam(req.params.directoryName, 'directoryName'),
+    });
+    res.json(createApiSuccessResponse(result));
+  }),
+);
+
 // ----------------- MCP routes -----------------
 router.get(
   '/:provider/mcp/servers',

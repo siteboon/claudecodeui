@@ -23,7 +23,8 @@
     "files": "Dateien",
     "git": "Quellcodeverwaltung",
     "tasks": "Aufgaben",
-    "browser": "Browser"
+    "browser": "Browser",
+    "computer": "Computer"
   },
   "status": {
     "loading": "Lädt...",

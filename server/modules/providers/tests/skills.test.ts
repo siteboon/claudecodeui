@@ -662,6 +662,19 @@ test('providerSkillsService adds global skills for claude, codex, gemini, and cu
     const listedCursorSkills = await providerSkillsService.listProviderSkills('cursor');
     assert.equal(listedCursorSkills.some((skill) => skill.name === 'cursor-global'), true);
 
+    const removedCodexSkill = await providerSkillsService.removeProviderSkill('codex', {
+      directoryName: 'uploaded-codex-folder',
+    });
+    assert.equal(removedCodexSkill.removed, true);
+    assert.equal(removedCodexSkill.provider, 'codex');
+    assert.equal(removedCodexSkill.directoryName, 'uploaded-codex-folder');
+    await assert.rejects(fs.stat(path.dirname(createdCodexSkill.sourcePath)), { code: 'ENOENT' });
+
+    const removedMissingSkill = await providerSkillsService.removeProviderSkill('codex', {
+      directoryName: 'uploaded-codex-folder',
+    });
+    assert.equal(removedMissingSkill.removed, false);
+
     await assert.rejects(
       providerSkillsService.addProviderSkills('codex', {
         entries: [
@@ -698,6 +711,13 @@ test('providerSkillsService rejects managed skill creation for opencode', { conc
           content: '---\nname: opencode-global\ndescription: Unsupported skill\n---\n\nOpenCode body.\n',
         },
       ],
+    }),
+    /does not support managed global skills/i,
+  );
+
+  await assert.rejects(
+    providerSkillsService.removeProviderSkill('opencode', {
+      directoryName: 'opencode-global-dir',
     }),
     /does not support managed global skills/i,
   );
