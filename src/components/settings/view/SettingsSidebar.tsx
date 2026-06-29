@@ -1,7 +1,6 @@
-import { Bell, Bot, GitBranch, Info, Key, ListChecks,Mic, MonitorCog, MonitorPlay, Palette, Puzzle } from 'lucide-react';
+import { Bell, Bot, GitBranch, Info, Key, ListChecks, Mic, MonitorPlay, Palette, Puzzle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { COMPUTER_USE_MENUS_ENABLED } from '../../../constants/featureFlags';
 import { cn } from '../../../lib/utils';
 import { PillBar, Pill } from '../../../shared/view/ui';
 import type { SettingsMainTab } from '../types/types';
@@ -25,15 +24,10 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'voice', labelKey: 'mainTabs.voice', icon: Mic },
   { id: 'tasks', labelKey: 'mainTabs.tasks', icon: ListChecks },
   { id: 'browser', labelKey: 'mainTabs.browser', icon: MonitorPlay },
-  { id: 'computer', labelKey: 'mainTabs.computer', icon: MonitorCog },
   { id: 'plugins', labelKey: 'mainTabs.plugins', icon: Puzzle },
   { id: 'notifications', labelKey: 'mainTabs.notifications', icon: Bell },
   { id: 'about', labelKey: 'mainTabs.about', icon: Info },
 ];
-
-const VISIBLE_NAV_ITEMS = NAV_ITEMS.filter((item) => (
-  COMPUTER_USE_MENUS_ENABLED || item.id !== 'computer'
-));
 
 export default function SettingsSidebar({ activeTab, onChange }: SettingsSidebarProps) {
   const { t } = useTranslation('settings');
@@ -43,7 +37,7 @@ export default function SettingsSidebar({ activeTab, onChange }: SettingsSidebar
       {/* Desktop sidebar */}
       <aside className="hidden w-56 flex-shrink-0 border-r border-border bg-muted/30 md:flex md:flex-col">
         <nav className="flex flex-col gap-1 p-3">
-          {VISIBLE_NAV_ITEMS.map((item) => {
+          {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
 
@@ -69,7 +63,7 @@ export default function SettingsSidebar({ activeTab, onChange }: SettingsSidebar
       {/* Mobile horizontal nav — pill bar */}
       <div className="flex-shrink-0 border-b border-border px-3 py-2 md:hidden">
         <PillBar className="scrollbar-hide w-full overflow-x-auto">
-          {VISIBLE_NAV_ITEMS.map((item) => {
+          {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
 
             return (
