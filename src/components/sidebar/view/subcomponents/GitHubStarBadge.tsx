@@ -27,7 +27,7 @@ export default function GitHubStarBadge() {
       >
         <GitHubIcon className="h-3.5 w-3.5" />
         <Star className="h-3 w-3" />
-        <span className="font-medium">Star</span>
+        <span className="font-normal">Star</span>
         {formattedCount && (
           <span className="border-l border-border/50 pl-1.5 tabular-nums">{formattedCount}</span>
         )}

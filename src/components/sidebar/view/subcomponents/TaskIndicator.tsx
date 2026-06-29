@@ -102,7 +102,7 @@ export default function TaskIndicator({
         title={indicatorConfig.title}
       >
         <Icon className={sizeClassNames[size]} />
-        <span className="font-medium">{indicatorConfig.label}</span>
+        <span className="font-normal">{indicatorConfig.label}</span>
       </div>
     );
   }
