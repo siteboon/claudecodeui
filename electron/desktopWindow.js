@@ -4,6 +4,10 @@ import { ViewHost } from './viewHost.js';
 
 const TITLEBAR_HEIGHT = 44;
 const AUTH_TOKEN_STORAGE_KEY = 'auth-token';
+// TODO: Re-enable Computer Use menus after fixing the MCP server connection
+// between the desktop app and the web UI.
+const COMPUTER_USE_MENUS_ENABLED = false;
+
 function isAllowedPermissionOrigin(sourceUrl, controlPlaneUrl) {
   try {
     const source = new URL(sourceUrl);
@@ -432,6 +436,17 @@ export class DesktopWindowManager {
             label: 'Switch Environment',
             accelerator: 'CmdOrCtrl+Shift+E',
             click: () => void this.actions.showEnvironmentPicker().catch((error) => this.actions.showError('Could not switch environment', error)),
+          },
+          { type: 'separator' },
+          {
+            label: 'Services',
+            visible: COMPUTER_USE_MENUS_ENABLED,
+            submenu: [
+              {
+                label: 'Computer Use',
+                click: () => void this.showDesktopSettings(),
+              },
+            ],
           },
           {
             label: 'Diagnostics',

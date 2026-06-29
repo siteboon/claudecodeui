@@ -1,9 +1,10 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, session, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, session, shell, systemPreferences } from 'electron';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { CloudController } from './cloud.js';
+import { ComputerAgentController } from './computerAgent.js';
 import { DesktopWindowManager } from './desktopWindow.js';
 import { DesktopNotificationsController } from './desktopNotifications.js';
 import { LocalServerController } from './localServer.js';
@@ -29,6 +30,7 @@ let activeTarget = { kind: 'launcher', name: APP_NAME, url: null };
 let desktopWindow = null;
 let localServer = null;
 let cloud = null;
+let computerAgent = null;
 let desktopNotifications = null;
 let isQuitting = false;
 let isRefreshingCloud = false;
@@ -61,6 +63,10 @@ function getSettingsPath() {
   return path.join(app.getPath('userData'), 'desktop-settings.json');
 }
 
+function getComputerUseSettingsPath() {
+  return path.join(app.getPath('userData'), 'computer-use-settings.json');
+}
+
 function getDesktopNotificationsSettingsPath() {
   return path.join(app.getPath('userData'), 'desktop-notifications-settings.json');
 }
@@ -70,6 +76,23 @@ function getRunningEnvironmentUrls() {
     .filter((environment) => environment.status === 'running')
     .map((environment) => cloud.getEnvironmentUrl(environment))
     .filter(Boolean);
+}
+
+async function promptComputerUseConsent(sessionId) {
+  const { response } = await dialog.showMessageBox(desktopWindow?.getMainWindow() || undefined, {
+    type: 'warning',
+    buttons: ['Allow this session', 'Deny'],
+    defaultId: 0,
+    cancelId: 1,
+    title: 'Computer Use request',
+    message: 'An agent wants to control this computer',
+    detail: [
+      'A cloud agent is requesting control of your mouse, keyboard, and screen for this session.',
+      'Approval lasts for this session only. You can stop it any time from the Computer panel.',
+      sessionId ? `\nSession: ${sessionId}` : '',
+    ].join('\n'),
+  });
+  return response === 0;
 }
 
 function getDisplayTargetName() {
@@ -128,8 +151,64 @@ function getDesktopState() {
     tabs: tabs.getSerializableTabs(),
     activeTabId: tabs.activeTabId,
     environments: cloud.getEnvironments().map(serializeEnvironment),
+    computerUse: computerAgent?.getState() || { enabled: false, consentMode: 'ask', running: false, connectedCount: 0, targetCount: 0 },
     desktopNotifications: desktopNotifications?.getState() || { enabled: false, supported: false, connectedCount: 0, targetCount: 0 },
+    computerUsePermissions: getComputerUsePermissions(),
   };
+}
+
+function getComputerUsePermissions() {
+  if (process.platform !== 'darwin') {
+    return {
+      platform: process.platform,
+      supported: false,
+      accessibility: 'not_applicable',
+      screenRecording: 'not_applicable',
+      message: 'No OS permission onboarding is required from CloudCLI on this platform.',
+    };
+  }
+
+  let accessibility;
+  let screenRecording;
+  try {
+    accessibility = systemPreferences.isTrustedAccessibilityClient(false) ? 'granted' : 'not_granted';
+  } catch {
+    accessibility = 'unknown';
+  }
+  try {
+    screenRecording = systemPreferences.getMediaAccessStatus('screen');
+  } catch {
+    screenRecording = 'unknown';
+  }
+
+  return {
+    platform: 'darwin',
+    supported: true,
+    accessibility,
+    screenRecording,
+    message: accessibility === 'granted' && screenRecording === 'granted'
+      ? 'macOS permissions are granted.'
+      : 'macOS requires Accessibility and Screen Recording for Computer Use.',
+  };
+}
+
+async function requestComputerUsePermission(permission) {
+  if (process.platform !== 'darwin') {
+    return getDesktopState();
+  }
+
+  if (permission === 'accessibility') {
+    systemPreferences.isTrustedAccessibilityClient(true);
+  } else if (permission === 'screen') {
+    await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
+  } else if (permission === 'all') {
+    systemPreferences.isTrustedAccessibilityClient(true);
+    await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
+  } else {
+    throw new Error(`Unknown Computer Use permission: ${permission}`);
+  }
+
+  return getDesktopState();
 }
 
 async function openExternalUrl(url) {
@@ -237,6 +316,8 @@ function getDiagnosticsText() {
     cloudEnvironmentCount: cloud.getEnvironments().length,
     cloudRunningEnvironmentCount: getRunningEnvironmentUrls().length,
     cloudAuthState: cloud.getAuthState(),
+    computerUse: computerAgent?.getState() || null,
+    computerUseSettingsPath: getComputerUseSettingsPath(),
     cloudAccountPath: getStorePath(),
     controlPlaneUrl: CLOUDCLI_CONTROL_PLANE_URL,
   }, null, 2);
@@ -249,6 +330,22 @@ async function copyDiagnostics() {
     title: 'Diagnostics copied',
     message: 'CloudCLI desktop diagnostics were copied to the clipboard.',
   });
+}
+
+async function showComputerAccess() {
+  await desktopWindow?.showDesktopSettings();
+  return getDesktopState();
+}
+
+async function updateComputerUse(settings) {
+  const current = computerAgent?.getSettings() || { enabled: false, consentMode: 'ask' };
+  const next = {
+    enabled: typeof settings?.enabled === 'boolean' ? settings.enabled : current.enabled,
+    consentMode: settings?.consentMode === 'auto' ? 'auto' : 'ask',
+  };
+  await computerAgent?.saveSettings(next);
+  syncDesktopState();
+  return getDesktopState();
 }
 
 async function refreshCloudEnvironments({ showErrors = false } = {}) {
@@ -273,6 +370,7 @@ async function refreshCloudEnvironments({ showErrors = false } = {}) {
     throw error;
   } finally {
     isRefreshingCloud = false;
+    void computerAgent?.sync().catch((error) => console.error('[ComputerAgent] sync failed:', error?.message || error));
     void desktopNotifications?.sync().catch((error) => console.error('[DesktopNotifications] sync failed:', error?.message || error));
     syncDesktopState();
   }
@@ -754,10 +852,16 @@ function registerIpcHandlers() {
     await desktopWindow.showLauncher();
     return getDesktopState();
   });
+  ipcMain.handle('cloudcli-desktop:show-computer-access', async () => {
+    await showComputerAccess();
+    return getDesktopState();
+  });
+  ipcMain.handle('cloudcli-desktop:update-computer-use', async (_event, settings) => updateComputerUse(settings));
   ipcMain.handle('cloudcli-desktop:update-desktop-notifications', async (_event, settings) => {
     await desktopNotifications?.saveSettings(settings);
     return getDesktopState();
   });
+  ipcMain.handle('cloudcli-desktop:request-computer-use-permission', async (_event, permission) => requestComputerUsePermission(permission));
   ipcMain.handle('cloudcli-desktop:show-desktop-settings', async () => desktopWindow.showDesktopSettings());
   ipcMain.handle('cloudcli-desktop:show-local-settings', async () => desktopWindow.showLocalSettings());
   ipcMain.handle('cloudcli-desktop:close-settings-window', async () => {
@@ -795,6 +899,7 @@ function registerAppEvents() {
   });
 
   app.on('before-quit', () => {
+    computerAgent?.stop();
     desktopNotifications?.stop();
   });
 
@@ -846,6 +951,7 @@ async function createDesktopWindow() {
       openCloudDashboard,
       refreshCloudEnvironments: () => refreshCloudEnvironments({ showErrors: true }),
       setActiveTarget,
+      showComputerAccess,
       showEnvironmentPicker,
       showError,
       startEnvironment,
@@ -911,6 +1017,15 @@ async function bootstrap() {
     callbackUrl: CALLBACK_URL,
     onChange: syncDesktopState,
   });
+  computerAgent = new ComputerAgentController({
+    appRoot: getAppRoot(),
+    settingsPath: getComputerUseSettingsPath(),
+    isPackaged: app.isPackaged,
+    getRunningEnvironmentUrls,
+    getApiKey: () => cloud.getAccount()?.apiKey || '',
+    promptConsent: promptComputerUseConsent,
+    onChange: syncDesktopState,
+  });
   desktopNotifications = new DesktopNotificationsController({
     settingsPath: getDesktopNotificationsSettingsPath(),
     appVersion: app.getVersion(),
@@ -927,6 +1042,7 @@ async function bootstrap() {
 
   await localServer.loadDesktopSettings();
   await cloud.loadCloudAccount();
+  await computerAgent.loadSettings();
   await desktopNotifications.loadSettings();
 
   registerProtocolHandler();

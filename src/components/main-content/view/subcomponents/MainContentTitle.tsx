@@ -32,6 +32,10 @@ function getTabTitle(activeTab: AppTab, shouldShowTasksTab: boolean, t: (key: st
     return t('tabs.browser');
   }
 
+  if (activeTab === 'computer') {
+    return t('tabs.computer');
+  }
+
   return 'Project';
 }
 
