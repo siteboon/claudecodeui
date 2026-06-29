@@ -86,7 +86,6 @@ const toCodexPermissionMode = (value: unknown): CodexPermissionMode => {
 };
 
 const readCodeEditorSettings = (): CodeEditorSettingsState => ({
-  theme: localStorage.getItem('codeEditorTheme') === 'light' ? 'light' : 'dark',
   wordWrap: localStorage.getItem('codeEditorWordWrap') === 'true',
   showMinimap: localStorage.getItem('codeEditorShowMinimap') !== 'false',
   lineNumbers: localStorage.getItem('codeEditorLineNumbers') !== 'false',
@@ -330,7 +329,6 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
   }, [notificationPreferences.channels.sound]);
 
   useEffect(() => {
-    localStorage.setItem('codeEditorTheme', codeEditorSettings.theme);
     localStorage.setItem('codeEditorWordWrap', String(codeEditorSettings.wordWrap));
     localStorage.setItem('codeEditorShowMinimap', String(codeEditorSettings.showMinimap));
     localStorage.setItem('codeEditorLineNumbers', String(codeEditorSettings.lineNumbers));
