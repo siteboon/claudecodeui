@@ -1,8 +1,9 @@
 import { EditorView } from '@codemirror/view';
 import { unifiedMergeView } from '@codemirror/merge';
 import type { Extension } from '@codemirror/state';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+
 import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
 import { useCodeEditorDocument } from '../hooks/useCodeEditorDocument';
 import { useCodeEditorSettings } from '../hooks/useCodeEditorSettings';
@@ -11,6 +12,7 @@ import type { CodeEditorFile } from '../types/types';
 import { createMinimapExtension, createScrollToFirstChunkExtension, getLanguageExtensions } from '../utils/editorExtensions';
 import { getEditorStyles } from '../utils/editorStyles';
 import { createEditorToolbarPanelExtension } from '../utils/editorToolbarPanel';
+
 import CodeEditorFooter from './subcomponents/CodeEditorFooter';
 import CodeEditorHeader from './subcomponents/CodeEditorHeader';
 import CodeEditorLoadingState from './subcomponents/CodeEditorLoadingState';
@@ -72,6 +74,29 @@ export default function CodeEditor({
     const extension = file.name.split('.').pop()?.toLowerCase();
     return extension === 'md' || extension === 'markdown';
   }, [file.name]);
+
+  const isHtmlPreviewFile = useMemo(() => {
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    return extension === 'html' || extension === 'htm';
+  }, [file.name]);
+
+  const openHtmlPreview = useCallback(() => {
+    const previewWindow = window.open('', '_blank');
+    if (!previewWindow) return;
+
+    previewWindow.opener = null;
+    previewWindow.document.title = file.name;
+    previewWindow.document.body.style.margin = '0';
+
+    const iframe = previewWindow.document.createElement('iframe');
+    iframe.title = file.name;
+    iframe.sandbox.add('allow-forms', 'allow-modals', 'allow-popups', 'allow-scripts');
+    iframe.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:0;background:white';
+
+    iframe.srcdoc = content;
+
+    previewWindow.document.body.appendChild(iframe);
+  }, [content, file.name]);
 
   const minimapExtension = useMemo(
     () => (
@@ -224,10 +249,12 @@ export default function CodeEditor({
             isSidebar={isSidebar}
             isFullscreen={isFullscreen}
             isMarkdownFile={isMarkdownFile}
+            isHtmlPreviewFile={isHtmlPreviewFile}
             markdownPreview={markdownPreview}
             saving={saving}
             saveSuccess={saveSuccess}
             onToggleMarkdownPreview={() => setMarkdownPreview((previous) => !previous)}
+            onOpenHtmlPreview={openHtmlPreview}
             onOpenSettings={() => paletteOps.openSettings('appearance')}
             onDownload={handleDownload}
             onSave={handleSave}
@@ -237,6 +264,7 @@ export default function CodeEditor({
               showingChanges: t('header.showingChanges'),
               editMarkdown: t('actions.editMarkdown'),
               previewMarkdown: t('actions.previewMarkdown'),
+              previewHtml: t('actions.previewHtml', 'Open HTML preview in new tab'),
               settings: t('toolbar.settings'),
               download: t('actions.download'),
               save: t('actions.save'),
