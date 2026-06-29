@@ -166,7 +166,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, a
                   🔧
                 </div>
               ) : (
-                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full p-1 text-sm text-white">
+                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full p-1 text-sm text-foreground">
                   <SessionProviderLogo provider={provider} className="h-full w-full" />
                 </div>
               )}
