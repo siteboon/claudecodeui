@@ -24,7 +24,6 @@ type UseShellConnectionOptions = {
   autoConnect: boolean;
   closeSocket: () => void;
   clearTerminalScreen: () => void;
-  setAuthUrl: (nextAuthUrl: string) => void;
   onOutputRef?: MutableRefObject<(() => void) | null>;
 };
 
@@ -49,7 +48,6 @@ export function useShellConnection({
   autoConnect,
   closeSocket,
   clearTerminalScreen,
-  setAuthUrl,
   onOutputRef,
 }: UseShellConnectionOptions): UseShellConnectionResult {
   const [isConnected, setIsConnected] = useState(false);
@@ -100,14 +98,8 @@ export function useShellConnection({
         return;
       }
 
-      if (message.type === 'auth_url' || message.type === 'url_open') {
-        const nextAuthUrl = typeof message.url === 'string' ? message.url : '';
-        if (nextAuthUrl) {
-          setAuthUrl(nextAuthUrl);
-        }
-      }
     },
-    [handleProcessCompletion, onOutputRef, setAuthUrl, terminalRef],
+    [handleProcessCompletion, onOutputRef, terminalRef],
   );
 
   const connectWebSocket = useCallback(
@@ -133,7 +125,6 @@ export function useShellConnection({
           setIsConnected(true);
           setIsConnecting(false);
           connectingRef.current = false;
-          setAuthUrl('');
 
           window.setTimeout(() => {
             const currentTerminal = terminalRef.current;
@@ -196,7 +187,6 @@ export function useShellConnection({
       isPlainShellRef,
       selectedProjectRef,
       selectedSessionRef,
-      setAuthUrl,
       terminalRef,
       wsRef,
     ],
@@ -225,8 +215,7 @@ export function useShellConnection({
     setIsConnecting(false);
     connectingRef.current = false;
     forceRestartOnInitRef.current = false;
-    setAuthUrl('');
-  }, [clearTerminalScreen, closeSocket, setAuthUrl]);
+  }, [clearTerminalScreen, closeSocket]);
 
   useEffect(() => {
     if (
