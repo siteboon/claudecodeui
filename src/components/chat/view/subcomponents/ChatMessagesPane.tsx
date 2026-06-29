@@ -120,7 +120,10 @@ function ChatMessagesPane({
   const messageKeyMapRef = useRef<WeakMap<ChatMessage, string>>(new WeakMap());
   const allocatedKeysRef = useRef<Set<string>>(new Set());
   const generatedMessageKeyCounterRef = useRef(0);
-  const groupedVisibleMessages = useMemo(() => groupConsecutiveTools(visibleMessages), [visibleMessages]);
+  const groupedVisibleMessages = useMemo(
+    () => groupConsecutiveTools(visibleMessages, Boolean(showThinking)),
+    [visibleMessages, showThinking],
+  );
 
   // Keep keys stable across prepends so existing MessageComponent instances retain local state.
   const getMessageKey = useCallback((message: ChatMessage) => {
