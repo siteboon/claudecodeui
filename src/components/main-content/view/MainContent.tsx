@@ -12,6 +12,7 @@ import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { usePaletteOpsRegister } from '../../../contexts/PaletteOpsContext';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useUiPreferences } from '../../../hooks/useUiPreferences';
+import { useFileOpenResolver } from '../../../hooks/useFileOpenResolver';
 import { COMPUTER_USE_MENUS_ENABLED } from '../../../constants/featureFlags';
 import { authenticatedFetch } from '../../../utils/api';
 import { useEditorSidebar } from '../../code-editor/hooks/useEditorSidebar';
@@ -80,6 +81,10 @@ function MainContent({
     selectedProject,
     isMobile,
   });
+
+  // Resolves bare/partial file references (e.g. links inside chat messages) to
+  // real project files before opening them in the in-app editor.
+  const resolvedFileOpen = useFileOpenResolver(selectedProject, handleFileOpen);
 
   useEffect(() => {
     // Identify projects by DB `projectId`; the TaskMaster context uses the
@@ -178,6 +183,10 @@ function MainContent({
     openFile: (filePath: string) => {
       setActiveTab('files');
       handleFileOpen(filePath);
+    },
+    // Opens the editor side panel in place, keeping the current tab (e.g. chat).
+    openFileInEditor: (filePath: string) => {
+      resolvedFileOpen(filePath);
     },
   });
 
