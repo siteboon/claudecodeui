@@ -11,7 +11,7 @@ import type {
   RefObject,
   TouchEvent,
 } from 'react';
-import { ImageIcon, MessageSquareIcon, XIcon, ArrowDownIcon, Loader2 } from 'lucide-react';
+import { ImageIcon, MessageSquareIcon, XIcon, Loader2 } from 'lucide-react';
 
 import { useVoiceInput } from '../../hooks/useVoiceInput';
 import { useVoiceAvailable } from '../../hooks/useVoiceAvailable';
@@ -68,9 +68,6 @@ interface ChatComposerProps {
   onToggleCommandMenu: () => void;
   hasInput: boolean;
   onClearInput: () => void;
-  isUserScrolledUp: boolean;
-  hasMessages: boolean;
-  onScrollToBottom: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement> | MouseEvent<HTMLButtonElement> | TouchEvent<HTMLButtonElement>) => void;
   isDragActive: boolean;
   attachedImages: File[];
@@ -122,9 +119,6 @@ export default function ChatComposer({
   onToggleCommandMenu,
   hasInput,
   onClearInput,
-  isUserScrolledUp,
-  hasMessages,
-  onScrollToBottom,
   onSubmit,
   isDragActive,
   attachedImages,
@@ -219,18 +213,6 @@ export default function ChatComposer({
       )}
 
       {!hasQuestionPanel && <div className="relative mx-auto max-w-4xl">
-        {isUserScrolledUp && hasMessages && (
-          <div className="absolute -top-10 left-0 right-0 z-10 flex justify-center">
-            <button
-              type="button"
-              onClick={onScrollToBottom}
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-border/50 bg-card text-muted-foreground shadow-sm transition-all duration-200 hover:bg-accent hover:text-foreground"
-              title={t('input.scrollToBottom', { defaultValue: 'Scroll to bottom' })}
-            >
-              <ArrowDownIcon className="h-4 w-4" />
-            </button>
-          </div>
-        )}
         {showFileDropdown && filteredFiles.length > 0 && (
           <div className="absolute bottom-full left-0 right-0 z-50 mb-2 max-h-48 overflow-y-auto rounded-xl border border-border/50 bg-card/95 shadow-lg backdrop-blur-md">
             {filteredFiles.map((file, index) => (

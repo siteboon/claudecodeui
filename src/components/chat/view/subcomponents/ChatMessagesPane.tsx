@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { memo, useCallback, useMemo, useRef } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 
 import type { ChatMessage } from '../../types/types';
@@ -117,37 +117,45 @@ function ChatMessagesPane({
   selectedProject,
 }: ChatMessagesPaneProps) {
   const { t } = useTranslation('chat');
-  const messageKeyMapRef = useRef<WeakMap<ChatMessage, string>>(new WeakMap());
-  const allocatedKeysRef = useRef<Set<string>>(new Set());
-  const generatedMessageKeyCounterRef = useRef(0);
   const groupedVisibleMessages = useMemo(
     () => groupConsecutiveTools(visibleMessages, Boolean(showThinking)),
     [visibleMessages, showThinking],
   );
 
-  // Keep keys stable across prepends so existing MessageComponent instances retain local state.
-  const getMessageKey = useCallback((message: ChatMessage) => {
-    const existingKey = messageKeyMapRef.current.get(message);
-    if (existingKey) {
-      return existingKey;
+  // Stable, deterministic keys for the messages rendered this pass.
+  //
+  // `normalizedToChatMessages` rebuilds fresh ChatMessage objects on every store
+  // update, so caching keys by object identity (or via a cross-render allocation
+  // Set) minted a brand-new key for the *same* logical message on each prepend —
+  // remounting the whole list, which disconnects the scroll-restore anchor and
+  // reflows heights, jumping the viewport to the bottom. Deriving keys purely
+  // from this render's ordered messages (intrinsic key, disambiguated by
+  // occurrence index on collision) yields the same key for the same message
+  // order, so React preserves existing DOM nodes and component state on prepend.
+  const messageKeyMap = useMemo(() => {
+    const keys = new WeakMap<ChatMessage, string>();
+    const occurrences = new Map<string, number>();
+    const assign = (message: ChatMessage) => {
+      const intrinsicKey = getIntrinsicMessageKey(message) ?? 'message-generated';
+      const seen = occurrences.get(intrinsicKey) ?? 0;
+      occurrences.set(intrinsicKey, seen + 1);
+      keys.set(message, seen === 0 ? intrinsicKey : `${intrinsicKey}__${seen}`);
+    };
+    for (const item of groupedVisibleMessages) {
+      if (isToolGroupItem(item)) {
+        item.messages.forEach(assign);
+      } else {
+        assign(item);
+      }
     }
+    return keys;
+  }, [groupedVisibleMessages]);
 
-    const intrinsicKey = getIntrinsicMessageKey(message);
-    let candidateKey = intrinsicKey;
-
-    if (!candidateKey || allocatedKeysRef.current.has(candidateKey)) {
-      do {
-        generatedMessageKeyCounterRef.current += 1;
-        candidateKey = intrinsicKey
-          ? `${intrinsicKey}-${generatedMessageKeyCounterRef.current}`
-          : `message-generated-${generatedMessageKeyCounterRef.current}`;
-      } while (allocatedKeysRef.current.has(candidateKey));
-    }
-
-    allocatedKeysRef.current.add(candidateKey);
-    messageKeyMapRef.current.set(message, candidateKey);
-    return candidateKey;
-  }, []);
+  const getMessageKey = useCallback(
+    (message: ChatMessage) =>
+      messageKeyMap.get(message) ?? getIntrinsicMessageKey(message) ?? 'message-generated',
+    [messageKeyMap],
+  );
 
   return (
     <div

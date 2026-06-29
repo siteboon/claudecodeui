@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ArrowDownIcon } from 'lucide-react';
 
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useWebSocket } from '../../../contexts/WebSocketContext';
@@ -362,7 +363,21 @@ function ChatInterface({
           selectedProject={selectedProject}
         />
 
-        <ChatComposer
+        <div className="relative flex-shrink-0">
+          {isUserScrolledUp && chatMessages.length > 0 && (
+            <div className="pointer-events-none absolute -top-11 left-0 right-0 z-20 flex justify-center">
+              <button
+                type="button"
+                onClick={scrollToBottomAndReset}
+                className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-full border border-border/50 bg-card text-muted-foreground shadow-sm transition-all duration-200 hover:bg-accent hover:text-foreground"
+                title={t('input.scrollToBottom', { defaultValue: 'Scroll to bottom' })}
+              >
+                <ArrowDownIcon className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+
+          <ChatComposer
           pendingPermissionRequests={pendingPermissionRequests}
           handlePermissionDecision={handlePermissionDecision}
           handleGrantToolPermission={handleGrantToolPermission}
@@ -377,9 +392,6 @@ function ChatInterface({
           onToggleCommandMenu={handleToggleCommandMenu}
           hasInput={Boolean(input.trim())}
           onClearInput={handleClearInput}
-          isUserScrolledUp={isUserScrolledUp}
-          hasMessages={chatMessages.length > 0}
-          onScrollToBottom={scrollToBottomAndReset}
           onSubmit={handleSubmit}
           isDragActive={isDragActive}
           attachedImages={attachedImages}
@@ -430,6 +442,7 @@ function ChatInterface({
           isTextareaExpanded={isTextareaExpanded}
           sendByCtrlEnter={sendByCtrlEnter}
         />
+        </div>
       </div>
 
       <QuickSettingsPanel />
