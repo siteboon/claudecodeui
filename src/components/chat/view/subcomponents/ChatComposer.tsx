@@ -1,6 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { useMemo } from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ChangeEvent,
   ClipboardEvent,
@@ -178,7 +177,7 @@ export default function ChatComposer({
       left: textareaRect ? textareaRect.left : 16,
       bottom: textareaRect ? window.innerHeight - textareaRect.top + 8 : 90,
     };
-  }, [input, isCommandMenuOpen, textareaRef]);
+  }, [isCommandMenuOpen, textareaRef]);
 
   // Voice state is hosted here (not in the mic button) so the main Send button can stop
   // recording and send the transcript in one tap, the way the mic button drops it in the box.
@@ -219,16 +218,18 @@ export default function ChatComposer({
 
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
         setIsEffortDropdownOpen(false);
       }
     };
 
     document.addEventListener('pointerdown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
 
     return () => {
       document.removeEventListener('pointerdown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keydown', handleKeyDown, { capture: true });
     };
   }, [isEffortDropdownOpen]);
 

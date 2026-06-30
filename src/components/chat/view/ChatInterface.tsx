@@ -16,11 +16,6 @@ import ChatMessagesPane from './subcomponents/ChatMessagesPane';
 import ChatComposer from './subcomponents/ChatComposer';
 import CommandResultModal from './subcomponents/CommandResultModal';
 
-const FALLBACK_COMPOSER_EFFORT_OPTIONS = {
-  claude: ['low', 'medium', 'high', 'xhigh', 'max'].map((value) => ({ value })),
-  codex: ['low', 'medium', 'high', 'xhigh'].map((value) => ({ value })),
-} as const;
-
 function ChatInterface({
   selectedProject,
   selectedSession,
@@ -75,10 +70,8 @@ function ChatInterface({
     setClaudeModel,
     codexModel,
     setCodexModel,
-    claudeEffort,
-    setClaudeEffort,
-    codexEffort,
-    setCodexEffort,
+    currentProviderEffort,
+    currentProviderEffortOptions,
     geminiModel,
     setGeminiModel,
     opencodeModel,
@@ -94,6 +87,7 @@ function ChatInterface({
     hardRefreshProviderModels,
     selectProviderModel,
     setStoredProviderEffort,
+    resolvePermissionModeForProvider,
   } = useChatProviderState({
     selectedSession,
     selectedProject,
@@ -208,8 +202,7 @@ function ChatInterface({
     cursorModel,
     claudeModel,
     codexModel,
-    claudeEffort,
-    codexEffort,
+    currentProviderEffort,
     geminiModel,
     opencodeModel,
     isLoading: isProcessing,
@@ -226,38 +219,8 @@ function ChatInterface({
     addMessage,
     setIsUserScrolledUp,
     setPendingPermissionRequests,
+    resolvePermissionModeForProvider,
   });
-
-  const currentComposerModel = useMemo(() => {
-    if (provider === 'claude') return claudeModel;
-    if (provider === 'codex') return codexModel;
-    if (provider === 'gemini') return geminiModel;
-    if (provider === 'opencode') return opencodeModel;
-    return cursorModel;
-  }, [provider, claudeModel, codexModel, geminiModel, opencodeModel, cursorModel]);
-
-  const composerEffort = useMemo(() => {
-    if (provider === 'claude') return claudeEffort;
-    if (provider === 'codex') return codexEffort;
-    return 'default';
-  }, [provider, claudeEffort, codexEffort]);
-
-  const composerEffortOptions = useMemo(() => {
-    const modelOption = providerModelCatalog[provider]?.OPTIONS.find((option) => option.value === currentComposerModel);
-    if (modelOption?.effort?.values?.length) {
-      return modelOption.effort.values;
-    }
-
-    if (provider === 'claude') {
-      return FALLBACK_COMPOSER_EFFORT_OPTIONS.claude;
-    }
-
-    if (provider === 'codex') {
-      return FALLBACK_COMPOSER_EFFORT_OPTIONS.codex;
-    }
-
-    return [];
-  }, [providerModelCatalog, provider, currentComposerModel]);
 
   // On WebSocket reconnect, re-fetch the current session's messages from the
   // server so missed streaming events are shown, then re-subscribe — the
@@ -413,8 +376,8 @@ function ChatInterface({
           onAbortSession={handleAbortSession}
           permissionMode={permissionMode}
           onModeSwitch={cyclePermissionMode}
-          effort={composerEffort}
-          availableEffortOptions={composerEffortOptions}
+          effort={currentProviderEffort}
+          availableEffortOptions={currentProviderEffortOptions}
           onSelectEffort={(nextEffort) => setStoredProviderEffort(provider, nextEffort)}
           tokenBudget={tokenBudget}
           onShowTokenUsage={showCostModal}

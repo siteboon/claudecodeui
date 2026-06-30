@@ -34,11 +34,11 @@ interface UseChatComposerStateArgs {
   provider: LLMProvider;
   permissionMode: PermissionMode | string;
   cyclePermissionMode: () => void;
+  resolvePermissionModeForProvider: (provider: LLMProvider, requestedMode: PermissionMode | string) => PermissionMode;
   cursorModel: string;
   claudeModel: string;
   codexModel: string;
-  claudeEffort: string;
-  codexEffort: string;
+  currentProviderEffort: string;
   geminiModel: string;
   opencodeModel: string;
   isLoading: boolean;
@@ -163,17 +163,6 @@ const getNotificationSessionSummary = (
   return normalizedFallback.length > 80 ? `${normalizedFallback.slice(0, 77)}...` : normalizedFallback;
 };
 
-const getLatestProviderEffort = (
-  provider: LLMProvider,
-  fallbackEffort: string,
-): string => {
-  if (provider !== 'claude' && provider !== 'codex') {
-    return 'default';
-  }
-
-  return safeLocalStorage.getItem(`${provider}-effort`) || fallbackEffort;
-};
-
 export function useChatComposerState({
   selectedProject,
   selectedSession,
@@ -181,11 +170,11 @@ export function useChatComposerState({
   provider,
   permissionMode,
   cyclePermissionMode,
+  resolvePermissionModeForProvider,
   cursorModel,
   claudeModel,
   codexModel,
-  claudeEffort,
-  codexEffort,
+  currentProviderEffort,
   geminiModel,
   opencodeModel,
   isLoading,
@@ -743,14 +732,9 @@ export function useChatComposerState({
             : provider === 'gemini'
               ? geminiModel
               : provider === 'opencode'
-                ? opencodeModel
-                : claudeModel;
-      const effort =
-        provider === 'claude'
-          ? getLatestProviderEffort(provider, claudeEffort)
-          : provider === 'codex'
-            ? getLatestProviderEffort(provider, codexEffort)
-            : 'default';
+              ? opencodeModel
+              : claudeModel;
+      const effort = currentProviderEffort;
 
       // One message shape for every provider. The backend resolves the
       // provider, project path, and provider-native resume id from the
@@ -762,9 +746,7 @@ export function useChatComposerState({
         options: {
           model,
           effort,
-          // Codex has no plan mode; downgrade rather than sending an
-          // unsupported value to its runtime.
-          permissionMode: provider === 'codex' && permissionMode === 'plan' ? 'default' : permissionMode,
+          permissionMode: resolvePermissionModeForProvider(provider, permissionMode),
           toolsSettings,
           skipPermissions: toolsSettings?.skipPermissions || false,
           sessionSummary,
@@ -790,9 +772,8 @@ export function useChatComposerState({
       selectedSession,
       attachedImages,
       claudeModel,
-      claudeEffort,
       codexModel,
-      codexEffort,
+      currentProviderEffort,
       currentSessionId,
       cursorModel,
       executeCommand,
@@ -803,6 +784,7 @@ export function useChatComposerState({
       onSessionEstablished,
       permissionMode,
       provider,
+      resolvePermissionModeForProvider,
       resetCommandMenuState,
       scrollToBottom,
       selectedProject,

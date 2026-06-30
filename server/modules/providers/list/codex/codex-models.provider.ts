@@ -91,29 +91,35 @@ const readCodexPriority = (value: unknown): number => (
   typeof value === 'number' && Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER
 );
 
-const mapCodexModel = (model: CodexCachedModel): ProviderModelOption => ({
-  value: model.slug as string,
-  label: readOptionalString(model.display_name) ?? (model.slug as string),
-  description: readOptionalString(model.description),
-  effort: Array.isArray(model.supported_reasoning_levels) && model.supported_reasoning_levels.length > 0
-    ? {
-        default: readOptionalString(model.default_reasoning_level) ?? undefined,
-        values: model.supported_reasoning_levels
-          .map((level) => {
-            const value = readOptionalString(level?.effort);
-            if (!value) {
-              return null;
-            }
+const mapCodexModel = (model: CodexCachedModel): ProviderModelOption => {
+  const effortValues = Array.isArray(model.supported_reasoning_levels)
+    ? model.supported_reasoning_levels
+      .map((level) => {
+        const value = readOptionalString(level?.effort);
+        if (!value) {
+          return null;
+        }
 
-            return {
-              value,
-              description: readOptionalString(level?.description),
-            };
-          })
-          .filter((level): level is NonNullable<typeof level> => Boolean(level)),
-      }
-    : undefined,
-});
+        return {
+          value,
+          description: readOptionalString(level?.description),
+        };
+      })
+      .filter((level): level is NonNullable<typeof level> => Boolean(level))
+    : [];
+
+  return {
+    value: model.slug as string,
+    label: readOptionalString(model.display_name) ?? (model.slug as string),
+    description: readOptionalString(model.description),
+    effort: effortValues.length > 0
+      ? {
+          default: readOptionalString(model.default_reasoning_level) ?? undefined,
+          values: effortValues,
+        }
+      : undefined,
+  };
+};
 
 const buildCodexModelsDefinition = (models: CodexCachedModel[]): ProviderModelsDefinition => {
   const sortedModels = [...models]
