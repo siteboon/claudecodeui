@@ -2,6 +2,7 @@ import {
   KeyRound,
   Layers3,
   LogIn,
+  type LucideIcon,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -81,22 +82,25 @@ const agentConfig: Record<AgentProvider, AgentVisualConfig> = {
 
 type HermesAction = {
   label: string;
+  buttonLabel: string;
   description: string;
   command: string;
   title: string;
-  icon: typeof Layers3;
+  icon: LucideIcon;
 };
 
 const hermesActions: HermesAction[] = [
   {
-    label: 'Configure model',
+    label: 'Model',
+    buttonLabel: 'Configure',
     description: 'Choose the provider and model Hermes should use.',
     command: 'hermes model',
     title: 'Configure Hermes Model',
     icon: Layers3,
   },
   {
-    label: 'Manage credentials',
+    label: 'Credentials',
+    buttonLabel: 'Manage',
     description: 'Update credential pools and API keys.',
     command: 'hermes auth',
     title: 'Hermes Credentials',
@@ -136,32 +140,35 @@ export default function AccountContent({ agent, authStatus, onLogin }: AccountCo
                 })}
               </div>
             </div>
-            <div className="grid gap-2 md:grid-cols-2">
+            <div className="overflow-hidden rounded-lg border border-border/60 bg-background/70">
               {hermesActions.map((action, index) => {
                 const Icon = action.icon;
-                const isPrimary = index === 0;
                 return (
-                  <Button
+                  <div
                     key={action.command}
-                    type="button"
-                    variant={isPrimary ? 'default' : 'outline'}
-                    className={
-                      isPrimary
-                        ? `${config.buttonClass} h-auto justify-start gap-3 px-3 py-2 text-left text-white`
-                        : 'h-auto justify-start gap-3 border-border/70 bg-background/70 px-3 py-2 text-left'
-                    }
-                    onClick={() => onLogin(action.command, action.title)}
+                    className={`flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between ${
+                      index > 0 ? 'border-t border-border/60' : ''
+                    }`}
                   >
-                    <Icon className="h-4 w-4 flex-shrink-0" />
-                    <span className="min-w-0">
-                      <span className={isPrimary ? 'block text-sm font-medium text-white' : 'block text-sm font-medium text-foreground'}>
-                        {action.label}
-                      </span>
-                      <span className={isPrimary ? 'block text-xs text-white/80' : 'block text-xs text-muted-foreground'}>
-                        {action.description}
-                      </span>
-                    </span>
-                  </Button>
+                    <div className="flex min-w-0 items-start gap-3">
+                      <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-muted/60 text-muted-foreground">
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-foreground">{action.label}</div>
+                        <div className="mt-0.5 text-sm text-muted-foreground">{action.description}</div>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant={index === 0 ? 'default' : 'outline'}
+                      size="sm"
+                      className={index === 0 ? `${config.buttonClass} w-full text-white sm:w-auto` : 'w-full sm:w-auto'}
+                      onClick={() => onLogin(action.command, action.title)}
+                    >
+                      {action.buttonLabel}
+                    </Button>
+                  </div>
                 );
               })}
             </div>
