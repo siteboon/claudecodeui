@@ -19,6 +19,7 @@ import { useTranslation } from 'react-i18next';
 
 import { cn } from '../../../lib/utils';
 import {
+  ActionMenu,
   Badge,
   Button,
   Card,
@@ -529,7 +530,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
 
   const hermesHubPanel = selectedProvider === 'hermes' ? (
     <div className="flex min-h-full flex-col gap-4">
-      <div className="flex flex-col gap-2 sm:flex-row">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -557,6 +558,21 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
           {registryBusyKey === 'search' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
           Search
         </Button>
+        <ActionMenu
+          label="Maintenance"
+          icon={Wrench}
+          className="w-full sm:w-auto"
+          triggerClassName="w-full sm:w-auto"
+          items={HERMES_SKILL_ACTIONS.map((action) => ({
+            key: action.action,
+            label: action.label,
+            description: action.description,
+            icon: action.icon,
+            loading: registryBusyKey === action.action,
+            disabled: Boolean(registryBusyKey && registryBusyKey !== action.action),
+            onSelect: () => void runRegistryMaintenance(action.action),
+          }))}
+        />
       </div>
 
       {registryResults.length > 0 && (
@@ -610,34 +626,6 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
         </div>
       )}
 
-      <div className="rounded-lg border border-border/60 bg-muted/15 p-3">
-        <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-          <Wrench className="h-3.5 w-3.5" />
-          Hub Maintenance
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {HERMES_SKILL_ACTIONS.map((action) => {
-            const Icon = action.icon;
-            return (
-              <Button
-                key={action.action}
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 px-2 text-muted-foreground hover:text-foreground"
-                title={action.description}
-                disabled={registryBusyKey === action.action}
-                onClick={() => void runRegistryMaintenance(action.action)}
-              >
-                {registryBusyKey === action.action
-                  ? <Loader2 className="h-4 w-4 animate-spin" />
-                  : <Icon className="h-4 w-4" />}
-                {action.label}
-              </Button>
-            );
-          })}
-        </div>
-      </div>
     </div>
   ) : null;
 
