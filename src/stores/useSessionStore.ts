@@ -166,6 +166,14 @@ function hasServerEchoForLocalUser(
   });
 }
 
+function assistantEchoFingerprint(message: NormalizedMessage): string | null {
+  const content = (message.content || '').trim();
+  if (!content) {
+    return null;
+  }
+  return content.replace(/\s+/g, '');
+}
+
 function compareMessagesChronologically(a: NormalizedMessage, b: NormalizedMessage): number {
   const timeA = readMessageTime(a) ?? 0;
   const timeB = readMessageTime(b) ?? 0;
@@ -248,7 +256,7 @@ function isAssistantTextEchoedInSameTurnOnServer(
   serverMessages: NormalizedMessage[],
   realtimeMessages: NormalizedMessage[],
 ): boolean {
-  const assistantText = (message.content || '').trim();
+  const assistantText = assistantEchoFingerprint(message);
   if (!assistantText) {
     return false;
   }
@@ -264,7 +272,7 @@ function isAssistantTextEchoedInSameTurnOnServer(
     .some((serverMessage) =>
       serverMessage.kind === 'text'
       && serverMessage.role === 'assistant'
-      && (serverMessage.content || '').trim() === assistantText,
+      && assistantEchoFingerprint(serverMessage) === assistantText,
     );
 }
 
@@ -281,9 +289,9 @@ function dedupeAdjacentAssistantEchoes(merged: NormalizedMessage[]): NormalizedM
     const prev = out[out.length - 1];
     if (prev) {
       if (prev.kind === 'stream_delta' && m.kind === 'text' && m.role === 'assistant') {
-        const ps = (prev.content || '').trim();
-        const ms = (m.content || '').trim();
-        if (ps.length > 0 && ps === ms) {
+        const ps = assistantEchoFingerprint(prev);
+        const ms = assistantEchoFingerprint(m);
+        if (ps && ps === ms) {
           out[out.length - 1] = m;
           continue;
         }
@@ -294,8 +302,12 @@ function dedupeAdjacentAssistantEchoes(merged: NormalizedMessage[]): NormalizedM
         && prev.role === 'assistant'
         && m.role === 'assistant'
       ) {
-        const ms = (m.content || '').trim();
-        if (ms.length > 0 && ms === (prev.content || '').trim()) {
+        const ps = assistantEchoFingerprint(prev);
+        const ms = assistantEchoFingerprint(m);
+        if (ms && ms === ps) {
+          if ((m.content || '').length > (prev.content || '').length) {
+            out[out.length - 1] = m;
+          }
           continue;
         }
       }

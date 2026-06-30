@@ -29,7 +29,7 @@ export class HermesProviderAuth implements IProviderAuth {
         authenticated: false,
         email: null,
         method: null,
-        error: 'Hermes ACP is not installed',
+        error: 'Hermes is not installed',
       };
     }
 
@@ -39,8 +39,8 @@ export class HermesProviderAuth implements IProviderAuth {
       installed,
       authenticated: credentials.authenticated,
       email: credentials.email,
-      method: credentials.method,
-      error: credentials.authenticated ? undefined : 'Hermes credentials were not found',
+      method: credentials.method ?? 'managed_by_hermes',
+      error: undefined,
     };
   }
 

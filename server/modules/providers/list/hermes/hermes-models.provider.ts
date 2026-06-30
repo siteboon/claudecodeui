@@ -17,8 +17,8 @@ export const HERMES_FALLBACK_MODELS: ProviderModelsDefinition = {
   OPTIONS: [
     {
       value: HERMES_CONFIGURED_MODEL,
-      label: 'Configured in Hermes',
-      description: 'Uses the provider and model selected with `hermes model`.',
+      label: 'Use Hermes default',
+      description: 'Uses the provider and model selected in Hermes.',
     },
   ],
   DEFAULT: HERMES_CONFIGURED_MODEL,
@@ -105,8 +105,8 @@ export class HermesProviderModels implements IProviderModels {
       OPTIONS: [
         {
           value: HERMES_CONFIGURED_MODEL,
-          label: 'Configured in Hermes',
-          description: `Current Hermes model: ${activeModel}`,
+          label: 'Use Hermes default',
+          description: `Uses the provider and model selected in Hermes. Current config: ${activeModel}`,
         },
       ],
       DEFAULT: HERMES_CONFIGURED_MODEL,

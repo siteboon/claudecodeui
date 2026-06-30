@@ -72,7 +72,7 @@ export default function AgentListItem({
 }: AgentListItemProps) {
   const config = agentConfig[agentId];
   const colors = colorClasses[config.color];
-  const isReady = agentId === 'hermes' ? authStatus.installed : authStatus.authenticated;
+  const isReady = agentId !== 'hermes' && authStatus.authenticated;
 
   if (isMobile) {
     return (
