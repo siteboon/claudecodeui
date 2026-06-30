@@ -568,7 +568,23 @@
   }
 
   .chat-composer-shell {
-    contain: layout style paint;
+    contain: layout style;
+  }
+
+  .chat-activity-enter {
+    animation: chat-activity-enter 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    transform-origin: bottom center;
+    will-change: transform, opacity, filter;
+  }
+
+  .chat-activity-exit {
+    animation: chat-activity-exit 220ms cubic-bezier(0.4, 0, 1, 1) both;
+    transform-origin: bottom center;
+    will-change: transform, opacity, filter;
+  }
+
+  .chat-activity-tab {
+    clip-path: inset(-8px -8px 0 -8px);
   }
 
   .chat-message {
@@ -945,6 +961,37 @@
 
   .settings-content-enter {
     animation: settings-fade-in 150ms ease-out;
+  }
+
+  @keyframes chat-activity-enter {
+    from {
+      opacity: 0;
+      filter: blur(3px);
+      transform: translateY(18px) scaleY(0.92);
+    }
+    65% {
+      opacity: 1;
+      filter: blur(0);
+      transform: translateY(-2px) scaleY(1.01);
+    }
+    to {
+      opacity: 1;
+      filter: blur(0);
+      transform: translateY(0) scaleY(1);
+    }
+  }
+
+  @keyframes chat-activity-exit {
+    from {
+      opacity: 1;
+      filter: blur(0);
+      transform: translateY(0) scaleY(1);
+    }
+    to {
+      opacity: 0;
+      filter: blur(2px);
+      transform: translateY(14px) scaleY(0.96);
+    }
   }
 
   /* Search result highlight flash */
