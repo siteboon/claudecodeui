@@ -254,7 +254,17 @@ const upsertSessionIntoProject = (project: Project, event: SessionUpsertedEvent)
 
     for (const [index, session] of sessions.entries()) {
       if (index === existingIndex) {
-        const updated = { ...session, ...normalizedSession };
+        // Prevent title downgrade: if the incoming summary is empty or the
+        // default "Untitled Claude Session" placeholder, preserve the
+        // existing (likely user-set) summary instead of overwriting it.
+        const incomingSummary = normalizedSession.summary || normalizedSession.name;
+        const existingSummary = session.summary || session.name;
+        const isDegradedSummary =
+          !incomingSummary ||
+          incomingSummary === 'Untitled Claude Session';
+        const updated = isDegradedSummary && existingSummary
+          ? { ...session, ...normalizedSession, summary: existingSummary }
+          : { ...session, ...normalizedSession };
         if (serialize(session) !== serialize(updated)) {
           changed = true;
         }
