@@ -2,7 +2,6 @@ import {
   Brain,
   Eye,
   Languages,
-  Maximize2,
   Mic,
 } from 'lucide-react';
 
@@ -24,11 +23,6 @@ export const CHECKBOX_CLASS =
   'h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 focus:ring-2 dark:focus:ring-blue-400 bg-gray-100 dark:bg-gray-800 checked:bg-blue-600 dark:checked:bg-blue-600';
 
 export const TOOL_DISPLAY_TOGGLES: PreferenceToggleItem[] = [
-  {
-    key: 'autoExpandTools',
-    labelKey: 'quickSettings.autoExpandTools',
-    icon: Maximize2,
-  },
   {
     key: 'showRawParameters',
     labelKey: 'quickSettings.showRawParameters',

@@ -31,7 +31,6 @@ function ChatInterface({
   onNavigateToSession,
   onSessionEstablished,
   onShowSettings,
-  autoExpandTools,
   showRawParameters,
   showThinking,
   sendByCtrlEnter,
@@ -355,7 +354,6 @@ function ChatInterface({
           onFileOpen={onFileOpen}
           onShowSettings={onShowSettings}
           onGrantToolPermission={handleGrantToolPermission}
-          autoExpandTools={autoExpandTools}
           showRawParameters={showRawParameters}
           showThinking={showThinking}
           selectedProject={selectedProject}

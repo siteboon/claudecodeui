@@ -1,7 +1,6 @@
 import { useEffect, useReducer, useRef } from 'react';
 
 type UiPreferences = {
-  autoExpandTools: boolean;
   showRawParameters: boolean;
   showThinking: boolean;
   sendByCtrlEnter: boolean;
@@ -33,7 +32,6 @@ type UiPreferencesAction =
   | ResetPreferencesAction;
 
 const DEFAULTS: UiPreferences = {
-  autoExpandTools: false,
   showRawParameters: false,
   showThinking: true,
   sendByCtrlEnter: false,
