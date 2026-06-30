@@ -572,7 +572,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
       <Dialog open={isAddDialogOpen} onOpenChange={handleAddDialogOpenChange}>
         <DialogContent
           wrapperClassName="z-[10000]"
-          className="flex h-[calc(100vh-2rem)] max-h-[720px] w-[calc(100vw-2rem)] max-w-3xl flex-col overflow-hidden p-0 sm:h-auto"
+          className="flex h-[calc(100vh-2rem)] max-h-[760px] w-[calc(100vw-2rem)] max-w-4xl flex-col overflow-hidden p-0 sm:h-[720px]"
         >
           <DialogTitle>Add {providerName} Skill</DialogTitle>
           <div className="flex-shrink-0 border-b border-border/60 px-4 py-4">
