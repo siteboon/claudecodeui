@@ -72,6 +72,7 @@ export default function AgentListItem({
 }: AgentListItemProps) {
   const config = agentConfig[agentId];
   const colors = colorClasses[config.color];
+  const isReady = agentId === 'hermes' ? authStatus.installed : authStatus.authenticated;
 
   if (isMobile) {
     return (
@@ -87,7 +88,7 @@ export default function AgentListItem({
         <div className="flex items-center justify-center gap-1.5">
           <SessionProviderLogo provider={agentId} className="h-4 w-4 flex-shrink-0" />
           <span className="truncate text-xs font-medium">{config.name}</span>
-          {authStatus.authenticated && (
+          {isReady && (
             <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${colors.dot}`} />
           )}
         </div>
@@ -107,10 +108,10 @@ export default function AgentListItem({
     >
       <SessionProviderLogo provider={agentId} className="h-4 w-4 flex-shrink-0" />
       <span>{config.name}</span>
-      {authStatus.authenticated ? (
+      {isReady ? (
         <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${colors.dot}`} />
       ) : authStatus.loading ? (
-        <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-muted-foreground/30 animate-pulse" />
+        <span className="h-1.5 w-1.5 flex-shrink-0 animate-pulse rounded-full bg-muted-foreground/30" />
       ) : null}
     </button>
   );

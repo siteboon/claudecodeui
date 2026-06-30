@@ -9,11 +9,7 @@ import type {
   ProviderModelsDefinition,
   ProviderSessionActiveModelChange,
 } from '@/shared/types.js';
-import {
-  buildDefaultProviderCurrentActiveModel,
-  readOptionalString,
-  writeProviderSessionActiveModelChange,
-} from '@/shared/utils.js';
+import { readOptionalString } from '@/shared/utils.js';
 
 export const HERMES_CONFIGURED_MODEL = '__hermes_configured_model__';
 
@@ -105,24 +101,21 @@ export class HermesProviderModels implements IProviderModels {
       return HERMES_FALLBACK_MODELS;
     }
 
-    const options = [
-      { value: activeModel, label: activeModel },
-      ...HERMES_FALLBACK_MODELS.OPTIONS,
-    ];
-
     return {
-      OPTIONS: options,
-      DEFAULT: activeModel,
+      OPTIONS: [
+        {
+          value: HERMES_CONFIGURED_MODEL,
+          label: 'Configured in Hermes',
+          description: `Current Hermes model: ${activeModel}`,
+        },
+      ],
+      DEFAULT: HERMES_CONFIGURED_MODEL,
     };
   }
 
   async getCurrentActiveModel(): Promise<ProviderCurrentActiveModel> {
     const configured = await this.readConfiguredModel();
-    if (configured) {
-      return { model: configured };
-    }
-
-    return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());
+    return { model: configured ?? HERMES_CONFIGURED_MODEL };
   }
 
   async changeActiveModel(input: ProviderChangeActiveModelInput): Promise<ProviderSessionActiveModelChange> {
@@ -136,7 +129,13 @@ export class HermesProviderModels implements IProviderModels {
       };
     }
 
-    return writeProviderSessionActiveModelChange('hermes', input);
+    return {
+      provider: 'hermes',
+      sessionId: input.sessionId,
+      supported: false,
+      changed: false,
+      model: null,
+    };
   }
 
   private async readConfiguredModel(): Promise<string | null> {

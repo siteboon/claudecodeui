@@ -125,6 +125,8 @@ const hermesActionGroups: HermesActionGroup[] = [
 export default function AccountContent({ agent, authStatus, onLogin }: AccountContentProps) {
   const { t } = useTranslation('settings');
   const config = agentConfig[agent];
+  const isHermes = agent === 'hermes';
+  const hermesReady = authStatus.installed;
 
   return (
     <div className="space-y-6">
@@ -145,11 +147,17 @@ export default function AccountContent({ agent, authStatus, onLogin }: AccountCo
           <div className="flex items-center gap-3">
             <div className="flex-1">
               <div className={`font-medium ${config.textClass}`}>
-                {t('agents.connectionStatus')}
+                {isHermes
+                  ? t('agents.hermes.setupStatus.title', { defaultValue: 'Setup status' })
+                  : t('agents.connectionStatus')}
               </div>
               <div className={`text-sm ${config.subtextClass}`}>
                 {authStatus.loading ? (
                   t('agents.authStatus.checkingAuth')
+                ) : isHermes ? (
+                  hermesReady
+                    ? t('agents.hermes.setupStatus.readyDescription', { defaultValue: 'Hermes ACP is installed. Credentials and models are managed by Hermes.' })
+                    : t('agents.hermes.setupStatus.needsSetupDescription', { defaultValue: 'Install Hermes or run the ACP check to validate the adapter.' })
                 ) : authStatus.authenticated ? (
                   t('agents.authStatus.loggedInAs', {
                     email: authStatus.email || t('agents.authStatus.authenticatedUser'),
@@ -164,6 +172,19 @@ export default function AccountContent({ agent, authStatus, onLogin }: AccountCo
                 <Badge variant="secondary" className="bg-muted">
                   {t('agents.authStatus.checking')}
                 </Badge>
+              ) : isHermes ? (
+                <Badge
+                  variant="secondary"
+                  className={
+                    hermesReady
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300'
+                      : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
+                  }
+                >
+                  {hermesReady
+                    ? t('agents.hermes.setupStatus.ready', { defaultValue: 'ACP ready' })
+                    : t('agents.hermes.setupStatus.needsSetup', { defaultValue: 'Needs setup' })}
+                </Badge>
               ) : authStatus.authenticated ? (
                 <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
                   {t('agents.authStatus.connected')}
@@ -176,7 +197,7 @@ export default function AccountContent({ agent, authStatus, onLogin }: AccountCo
             </div>
           </div>
 
-          {authStatus.method !== 'api_key' && (
+          {!isHermes && authStatus.method !== 'api_key' && (
             <div className="border-t border-border/50 pt-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -201,7 +222,7 @@ export default function AccountContent({ agent, authStatus, onLogin }: AccountCo
             </div>
           )}
 
-          {agent === 'hermes' && (
+          {isHermes && (
             <div className="border-t border-border/50 pt-4">
               <div className={`mb-3 font-medium ${config.textClass}`}>
                 {t('agents.hermes.actions.title', { defaultValue: 'Hermes tools' })}

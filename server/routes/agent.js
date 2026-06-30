@@ -946,7 +946,6 @@ router.post('/', validateExternalApiKey, async (req, res) => {
     const codexModels = (await providerModelsService.getProviderModels('codex')).models;
     const geminiModels = (await providerModelsService.getProviderModels('gemini')).models;
     const opencodeModels = (await providerModelsService.getProviderModels('opencode')).models;
-    const hermesModels = (await providerModelsService.getProviderModels('hermes')).models;
 
     // Start the appropriate session
     if (provider === 'claude') {
@@ -1006,7 +1005,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         projectPath: finalProjectPath,
         cwd: finalProjectPath,
         sessionId: sessionId || null,
-        model: model || (hermesModels.DEFAULT === HERMES_CONFIGURED_MODEL ? undefined : hermesModels.DEFAULT)
+        model: model === HERMES_CONFIGURED_MODEL ? undefined : model
       }, writer);
     }
 

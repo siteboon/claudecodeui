@@ -1,6 +1,7 @@
 import type { LLMProvider } from '../../types/app';
 
 export type ProviderAuthStatus = {
+  installed: boolean;
   authenticated: boolean;
   email: string | null;
   method: string | null;
@@ -22,10 +23,10 @@ export const PROVIDER_AUTH_STATUS_ENDPOINTS: Record<LLMProvider, string> = {
 };
 
 export const createInitialProviderAuthStatusMap = (loading = true): ProviderAuthStatusMap => ({
-  claude: { authenticated: false, email: null, method: null, error: null, loading },
-  cursor: { authenticated: false, email: null, method: null, error: null, loading },
-  codex: { authenticated: false, email: null, method: null, error: null, loading },
-  gemini: { authenticated: false, email: null, method: null, error: null, loading },
-  opencode: { authenticated: false, email: null, method: null, error: null, loading },
-  hermes: { authenticated: false, email: null, method: null, error: null, loading },
+  claude: { installed: false, authenticated: false, email: null, method: null, error: null, loading },
+  cursor: { installed: false, authenticated: false, email: null, method: null, error: null, loading },
+  codex: { installed: false, authenticated: false, email: null, method: null, error: null, loading },
+  gemini: { installed: false, authenticated: false, email: null, method: null, error: null, loading },
+  opencode: { installed: false, authenticated: false, email: null, method: null, error: null, loading },
+  hermes: { installed: false, authenticated: false, email: null, method: null, error: null, loading },
 });

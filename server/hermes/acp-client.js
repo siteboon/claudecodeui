@@ -19,6 +19,7 @@ class AcpClient extends EventEmitter {
     this.buffer = '';
     this.requestHandlers = new Map();
     this.initialized = false;
+    this.initializeResult = null;
   }
 
   start() {
@@ -54,18 +55,19 @@ class AcpClient extends EventEmitter {
     }
 
     this.start();
-    await this.request('initialize', {
+    this.initializeResult = await this.request('initialize', {
       protocolVersion: 1,
+      clientCapabilities: {
+        fs: {
+          readTextFile: false,
+          writeTextFile: false,
+        },
+        terminal: false,
+      },
       clientInfo: {
         name: 'CloudCLI',
+        title: 'CloudCLI',
         version: '1.0.0',
-      },
-      capabilities: {
-        fs: false,
-        terminal: false,
-        session: {
-          requestPermission: true,
-        },
       },
     });
     this.initialized = true;
@@ -95,7 +97,7 @@ class AcpClient extends EventEmitter {
 
     const payload = { jsonrpc: '2.0', id, method, params };
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+      this.pending.set(id, { resolve, reject, method, params });
       this.writeMessage(payload);
     });
   }
@@ -171,7 +173,13 @@ class AcpClient extends EventEmitter {
       }
       this.pending.delete(message.id);
       if (message.error) {
-        pending.reject(new Error(message.error.message || JSON.stringify(message.error)));
+        const messageText = message.error.message || JSON.stringify(message.error);
+        const error = new Error(`ACP ${pending.method} failed: ${messageText}`);
+        error.code = message.error.code;
+        error.data = message.error.data;
+        error.method = pending.method;
+        error.params = pending.params;
+        pending.reject(error);
       } else {
         pending.resolve(message.result);
       }

@@ -417,6 +417,15 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
     model: string,
     sessionId?: string | null,
   ) => {
+    if (targetProvider === 'hermes') {
+      setStoredProviderModel(targetProvider, model);
+      return {
+        scope: 'default' as const,
+        changed: false,
+        model,
+      };
+    }
+
     const normalizedSessionId = typeof sessionId === 'string' ? sessionId.trim() : '';
     if (!normalizedSessionId) {
       setStoredProviderModel(targetProvider, model);

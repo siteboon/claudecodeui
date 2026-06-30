@@ -60,6 +60,44 @@ function readEventSessionId(raw: AnyRecord, sessionId: string | null): string | 
   return readOptionalString(raw.sessionId) ?? readOptionalString(raw.session_id) ?? sessionId;
 }
 
+function readTextContent(value: unknown): string | null {
+  const direct = readOptionalString(value);
+  if (direct !== undefined) {
+    return direct;
+  }
+
+  if (Array.isArray(value)) {
+    const parts = value
+      .map((entry) => readTextContent(entry))
+      .filter((entry): entry is string => Boolean(entry?.trim()));
+    return parts.length > 0 ? parts.join('') : null;
+  }
+
+  const record = readObjectRecord(value);
+  if (!record) {
+    return null;
+  }
+
+  const nestedContent = record.content;
+  const nestedText = nestedContent === value ? null : readTextContent(nestedContent);
+
+  return readOptionalString(record.text)
+    ?? readOptionalString(record.content)
+    ?? nestedText
+    ?? readOptionalString(record.delta)
+    ?? readOptionalString(record.rawOutput)
+    ?? readOptionalString(record.raw_output)
+    ?? readOptionalString(record.output)
+    ?? null;
+}
+
+function readToolPayload(raw: AnyRecord): AnyRecord {
+  return readObjectRecord(raw.toolCall)
+    ?? readObjectRecord(raw.tool_call)
+    ?? readObjectRecord(raw.tool)
+    ?? raw;
+}
+
 function normalizeHermesEvent(rawMessage: unknown, sessionId: string | null, history = false): NormalizedMessage[] {
   const envelope = readObjectRecord(rawMessage);
   if (!envelope) {
@@ -75,10 +113,10 @@ function normalizeHermesEvent(rawMessage: unknown, sessionId: string | null, his
   const baseId = readOptionalString(raw.id) ?? readOptionalString(raw.messageId) ?? readOptionalString(raw.message_id) ?? generateMessageId(PROVIDER);
 
   if (['agent_message_chunk', 'assistant_message_chunk', 'message_delta', 'text_delta', 'text'].includes(type)) {
-    const content = readOptionalString(raw.content)
+    const content = readTextContent(raw.content)
       ?? readOptionalString(raw.text)
       ?? readOptionalString(raw.delta)
-      ?? readOptionalString(readObjectRecord(raw.message)?.content)
+      ?? readTextContent(readObjectRecord(raw.message)?.content)
       ?? '';
     if (!content.trim()) {
       return [];
@@ -96,9 +134,9 @@ function normalizeHermesEvent(rawMessage: unknown, sessionId: string | null, his
 
   if (['agent_message', 'assistant_message', 'message'].includes(type)) {
     const role = readOptionalString(raw.role) === 'user' ? 'user' : 'assistant';
-    const content = readOptionalString(raw.content)
+    const content = readTextContent(raw.content)
       ?? readOptionalString(raw.text)
-      ?? readOptionalString(readObjectRecord(raw.message)?.content)
+      ?? readTextContent(readObjectRecord(raw.message)?.content)
       ?? '';
     if (!content.trim()) {
       return [];
@@ -115,7 +153,7 @@ function normalizeHermesEvent(rawMessage: unknown, sessionId: string | null, his
   }
 
   if (['agent_thought_chunk', 'thought_delta', 'thinking', 'reasoning'].includes(type)) {
-    const content = readOptionalString(raw.content) ?? readOptionalString(raw.text) ?? readOptionalString(raw.delta) ?? '';
+    const content = readTextContent(raw.content) ?? readOptionalString(raw.text) ?? readOptionalString(raw.delta) ?? '';
     if (!content.trim()) {
       return [];
     }
@@ -130,8 +168,15 @@ function normalizeHermesEvent(rawMessage: unknown, sessionId: string | null, his
   }
 
   if (['tool_call', 'tool_use', 'tool_call_start'].includes(type)) {
-    const tool = readObjectRecord(raw.tool);
-    const toolId = readOptionalString(raw.toolCallId) ?? readOptionalString(raw.tool_call_id) ?? readOptionalString(raw.toolId) ?? baseId;
+    const tool = readToolPayload(raw);
+    const toolId = readOptionalString(raw.toolCallId)
+      ?? readOptionalString(raw.tool_call_id)
+      ?? readOptionalString(raw.toolId)
+      ?? readOptionalString(tool.toolCallId)
+      ?? readOptionalString(tool.tool_call_id)
+      ?? readOptionalString(tool.toolId)
+      ?? readOptionalString(tool.id)
+      ?? baseId;
     return [createNormalizedMessage({
       id: baseId,
       sessionId: eventSessionId,
@@ -143,22 +188,51 @@ function normalizeHermesEvent(rawMessage: unknown, sessionId: string | null, his
         ?? readOptionalString(raw.title)
         ?? readOptionalString(raw.name)
         ?? readOptionalString(tool?.name)
+        ?? readOptionalString(tool?.title)
         ?? 'Tool',
-      toolInput: raw.rawInput ?? raw.raw_input ?? raw.input ?? raw.arguments ?? raw.params ?? tool?.input ?? {},
+      toolInput: raw.rawInput
+        ?? raw.raw_input
+        ?? raw.input
+        ?? raw.arguments
+        ?? raw.params
+        ?? tool?.rawInput
+        ?? tool?.raw_input
+        ?? tool?.input
+        ?? tool?.arguments
+        ?? {},
       toolId,
     })];
   }
 
   if (['tool_call_update', 'tool_result', 'tool_call_result', 'tool_call_done'].includes(type)) {
+    const tool = readToolPayload(raw);
+    const content = readTextContent(raw.content)
+      ?? readTextContent(raw.rawOutput)
+      ?? readTextContent(raw.raw_output)
+      ?? readTextContent(raw.output)
+      ?? readTextContent(raw.result)
+      ?? readTextContent(tool.rawOutput)
+      ?? readTextContent(tool.raw_output)
+      ?? readTextContent(tool.output)
+      ?? readTextContent(tool.result)
+      ?? '';
     return [createNormalizedMessage({
       id: baseId,
       sessionId: eventSessionId,
       timestamp,
       provider: PROVIDER,
       kind: 'tool_result',
-      toolId: readOptionalString(raw.toolCallId) ?? readOptionalString(raw.tool_call_id) ?? readOptionalString(raw.toolId) ?? '',
-      content: formatContent(raw.output ?? raw.result ?? raw.content ?? raw.delta ?? ''),
-      isError: Boolean(raw.error) || raw.status === 'error',
+      toolId: readOptionalString(raw.toolCallId)
+        ?? readOptionalString(raw.tool_call_id)
+        ?? readOptionalString(raw.toolId)
+        ?? readOptionalString(tool.toolCallId)
+        ?? readOptionalString(tool.tool_call_id)
+        ?? readOptionalString(tool.toolId)
+        ?? readOptionalString(tool.id)
+        ?? '',
+      content: content || formatContent(raw.delta ?? ''),
+      isError: Boolean(raw.error) || raw.status === 'error' || raw.status === 'failed',
+      toolUseResult: raw.result ?? raw.output ?? raw.rawOutput ?? raw.raw_output ?? tool.result ?? tool.output ?? tool.rawOutput ?? tool.raw_output,
     })];
   }
 

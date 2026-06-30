@@ -174,7 +174,6 @@ export function useChatComposerState({
   codexModel,
   geminiModel,
   opencodeModel,
-  hermesModel,
   isLoading,
   canAbortSession,
   tokenBudget,
@@ -339,7 +338,7 @@ export function useChatComposerState({
                 : provider === 'opencode'
                   ? opencodeModel
                   : provider === 'hermes'
-                    ? (hermesModel === '__hermes_configured_model__' ? undefined : hermesModel)
+                    ? undefined
                   : claudeModel,
           tokenUsage: tokenBudget,
         };
@@ -395,7 +394,6 @@ export function useChatComposerState({
       cursorModel,
       geminiModel,
       opencodeModel,
-      hermesModel,
       handleBuiltInCommand,
       handleCustomCommand,
       input,
@@ -737,7 +735,7 @@ export function useChatComposerState({
               : provider === 'opencode'
                 ? opencodeModel
                 : provider === 'hermes'
-                  ? (hermesModel === '__hermes_configured_model__' ? undefined : hermesModel)
+                  ? undefined
                 : claudeModel;
 
       // One message shape for every provider. The backend resolves the
@@ -783,7 +781,6 @@ export function useChatComposerState({
       executeCommand,
       geminiModel,
       opencodeModel,
-      hermesModel,
       isLoading,
       onSessionProcessing,
       onSessionEstablished,

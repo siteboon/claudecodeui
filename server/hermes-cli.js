@@ -48,15 +48,23 @@ function readStopReason(result) {
   return result.stopReason || result.stop_reason || result.reason || null;
 }
 
-function buildPromptParams(sessionId, command, model) {
-  const params = {
+function buildPromptParams(sessionId, command) {
+  return {
     sessionId,
     prompt: [{ type: 'text', text: command }],
   };
-  if (model) {
-    params.modelId = model;
-  }
-  return params;
+}
+
+function buildSessionSetupParams(sessionId, workingDir) {
+  return {
+    ...(sessionId ? { sessionId } : {}),
+    cwd: workingDir,
+    mcpServers: [],
+  };
+}
+
+function canLoadSession(connection) {
+  return connection?.initializeResult?.agentCapabilities?.loadSession === true;
 }
 
 function findPermissionOption(options, kinds, fallbackOptionIds = []) {
@@ -233,7 +241,7 @@ async function spawnHermes(command, options = {}, ws) {
   };
 
   try {
-    const resolvedModel = await providerModelsService.resolveResumeModel(PROVIDER, sessionId, requestedModel);
+    await providerModelsService.resolveResumeModel(PROVIDER, sessionId, requestedModel);
     const connection = await hermesConnectionManager.getConnection(workingDir);
     activeHermesSessions.set(activeKey, {
       connection,
@@ -278,20 +286,21 @@ async function spawnHermes(command, options = {}, ws) {
 
     try {
       let sessionResult;
-      if (sessionId) {
+      if (sessionId && canLoadSession(connection)) {
         try {
-          sessionResult = await connection.request('session/load', { sessionId, cwd: workingDir });
+          sessionResult = await connection.request('session/load', buildSessionSetupParams(sessionId, workingDir));
         } catch {
           sessionResult = { sessionId };
         }
       } else {
-        sessionResult = await connection.request('session/new', {
-          cwd: workingDir,
-        });
+        sessionResult = await connection.request('session/new', buildSessionSetupParams(null, workingDir));
       }
 
       registerSession(readSessionId(sessionResult) || sessionId, connection);
-      const promptResult = await connection.request('session/prompt', buildPromptParams(capturedSessionId, command, resolvedModel));
+      if (!capturedSessionId) {
+        throw new Error('Hermes ACP did not return a session id.');
+      }
+      const promptResult = await connection.request('session/prompt', buildPromptParams(capturedSessionId, command));
       const finalSessionId = capturedSessionId || readSessionId(promptResult) || sessionId || activeKey;
       const stopReason = readStopReason(promptResult) || 'completed';
       const active = activeHermesSessions.get(finalSessionId) || activeHermesSessions.get(activeKey);

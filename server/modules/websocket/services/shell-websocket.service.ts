@@ -109,6 +109,12 @@ function resolveResumeSessionId(
   return resolvedSessionId;
 }
 
+function getHermesShellCommand(): string {
+  return (process.env.HERMES_COMMAND_PATH || process.env.HERMES_CLI_PATH || 'hermes')
+    .trim()
+    .split(/\s+/)[0] || 'hermes';
+}
+
 /**
  * Resolves provider command line for plain shell and agent-backed shell modes.
  */
@@ -159,6 +165,14 @@ function buildShellCommand(
       return `opencode --session "${resumeSessionId}"`;
     }
     return initialCommand || 'opencode';
+  }
+
+  if (provider === 'hermes') {
+    const command = initialCommand || getHermesShellCommand();
+    if (resumeSessionId) {
+      return `${command} --resume "${resumeSessionId}"`;
+    }
+    return command;
   }
 
   const command = initialCommand || 'claude';
@@ -481,6 +495,8 @@ export function handleShellConnection(
                   ? 'Gemini'
                   : provider === 'opencode'
                     ? 'OpenCode'
+                    : provider === 'hermes'
+                      ? 'Hermes'
                   : 'Claude';
           welcomeMsg = hasSession && resumeSessionId
             ? `\x1b[36mResuming ${providerName} session ${resumeSessionId} in: ${projectPath}\x1b[0m\r\n`
