@@ -19,6 +19,9 @@ import { cn } from '../../../lib/utils';
 import {
   Badge,
   Button,
+  Dialog,
+  DialogContent,
+  DialogTitle,
   Input,
 } from '../../../shared/view/ui';
 import { useProviderSkills } from '../hooks/useProviderSkills';
@@ -212,7 +215,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [isAddPanelOpen, setIsAddPanelOpen] = useState(false);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [showInstallPath, setShowInstallPath] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -225,7 +228,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
     setSubmitError(null);
     setIsSubmitting(false);
     setSearchQuery('');
-    setIsAddPanelOpen(false);
+    setIsAddDialogOpen(false);
     setShowInstallPath(false);
   }, [selectedProvider]);
 
@@ -354,7 +357,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
       })));
       await addSkills({ entries });
       setQueuedFiles([]);
-      setIsAddPanelOpen(false);
+      setIsAddDialogOpen(false);
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'Failed to import skills');
     } finally {
@@ -362,8 +365,22 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
     }
   }, [addSkills, queuedFiles]);
 
+  const handleAddDialogOpenChange = useCallback((open: boolean) => {
+    if (open) {
+      setSubmitError(null);
+      setShowInstallPath(false);
+      setIsAddDialogOpen(true);
+      return;
+    }
+
+    setQueuedFiles([]);
+    setSubmitError(null);
+    setShowInstallPath(false);
+    setIsAddDialogOpen(false);
+  }, []);
+
   const uploadPanel = (
-    <div className="space-y-4 rounded-lg border border-border/70 bg-background/80 p-4">
+    <div className="space-y-4">
       <div
         {...getRootProps()}
         className={cn(
@@ -484,36 +501,6 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
         </div>
       )}
 
-      <div className="flex flex-col gap-3 border-t border-border/60 pt-3 sm:flex-row sm:items-center sm:justify-between">
-        <span className="text-xs text-muted-foreground">
-          Folder uploads keep the selected folder name; standalone files use the `name` in `SKILL.md`.
-        </span>
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="w-full sm:w-auto"
-            onClick={() => {
-              setQueuedFiles([]);
-              setSubmitError(null);
-              setIsAddPanelOpen(false);
-            }}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            className="w-full sm:w-auto"
-            onClick={() => void handleUploadInstall()}
-            disabled={isSubmitting || queuedFiles.length === 0}
-          >
-            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            Install {queuedFiles.length > 0 ? `${queuedFiles.length} Skill${queuedFiles.length === 1 ? '' : 's'}` : 'Skill'}
-          </Button>
-        </div>
-      </div>
     </div>
   );
 
@@ -558,11 +545,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
             type="button"
             size="sm"
             className="w-full sm:w-auto"
-            onClick={() => {
-              setSubmitError(null);
-              setShowInstallPath(false);
-              setIsAddPanelOpen((current) => !current);
-            }}
+            onClick={() => handleAddDialogOpenChange(true)}
           >
             <Plus className="h-4 w-4" />
             Add Skill
@@ -586,15 +569,89 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
         )}
       </div>
 
-      {isAddPanelOpen && uploadPanel}
+      <Dialog open={isAddDialogOpen} onOpenChange={handleAddDialogOpenChange}>
+        <DialogContent
+          wrapperClassName="z-[10000]"
+          className="flex h-[calc(100vh-2rem)] max-h-[720px] w-[calc(100vw-2rem)] max-w-3xl flex-col overflow-hidden p-0 sm:h-auto"
+        >
+          <DialogTitle>Add {providerName} Skill</DialogTitle>
+          <div className="flex-shrink-0 border-b border-border/60 px-4 py-4">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/70 bg-muted/20 text-muted-foreground">
+                <FileUp className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-base font-medium text-foreground">Add {providerName} Skill</div>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  Upload a SKILL.md file or a complete skill folder.
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                aria-label="Close add skill dialog"
+                onClick={() => handleAddDialogOpenChange(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
 
-      {(submitError || loadError) && (
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            {uploadPanel}
+          </div>
+
+          <div className="flex flex-shrink-0 flex-col gap-3 border-t border-border/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 flex-1">
+              {(submitError || loadError || saveStatus === 'success') ? (
+                <div className={cn(
+                  'max-h-24 overflow-y-auto whitespace-pre-wrap rounded-lg border px-3 py-2 text-sm',
+                  submitError || loadError
+                    ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-200'
+                    : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+                )}>
+                  {submitError || loadError || 'Skills saved successfully.'}
+                </div>
+              ) : (
+                <span className="text-xs text-muted-foreground">
+                  Folder uploads keep the selected folder name; standalone files use the `name` in `SKILL.md`.
+                </span>
+              )}
+            </div>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full sm:w-auto"
+                onClick={() => handleAddDialogOpenChange(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="w-full sm:w-auto"
+                onClick={() => void handleUploadInstall()}
+                disabled={isSubmitting || queuedFiles.length === 0}
+              >
+                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                Install {queuedFiles.length > 0 ? `${queuedFiles.length} Skill${queuedFiles.length === 1 ? '' : 's'}` : 'Skill'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {!isAddDialogOpen && (submitError || loadError) && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-200">
           {submitError || loadError}
         </div>
       )}
 
-      {saveStatus === 'success' && !isAddPanelOpen && (
+      {saveStatus === 'success' && !isAddDialogOpen && (
         <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
           <CheckCircle2 className="h-4 w-4" />
           Skills saved successfully.
