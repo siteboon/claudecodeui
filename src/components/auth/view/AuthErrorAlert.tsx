@@ -1,3 +1,5 @@
+import { AlertCircle } from 'lucide-react';
+
 type AuthErrorAlertProps = {
   errorMessage: string;
 };
@@ -8,8 +10,9 @@ export default function AuthErrorAlert({ errorMessage }: AuthErrorAlertProps) {
   }
 
   return (
-    <div className="rounded-md border border-red-300 bg-red-100 p-3 dark:border-red-800 dark:bg-red-900/20">
-      <p className="text-sm text-red-700 dark:text-red-400">{errorMessage}</p>
+    <div className="flex items-start gap-2.5 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-destructive">
+      <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+      <p className="text-sm leading-relaxed">{errorMessage}</p>
     </div>
   );
 }

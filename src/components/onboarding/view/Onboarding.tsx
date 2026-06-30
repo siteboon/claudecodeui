@@ -148,11 +148,18 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
 
   return (
     <>
-      <div className="flex min-h-screen items-center justify-center bg-background p-4">
-        <div className="w-full max-w-2xl">
+      <div className="relative h-screen overflow-y-auto bg-background">
+        <div aria-hidden className="pointer-events-none fixed inset-0">
+          <div className="absolute -top-40 left-1/2 h-[36rem] w-[36rem] -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
+          <div className="absolute -bottom-32 -left-24 h-[26rem] w-[26rem] rounded-full bg-primary/5 blur-3xl" />
+          <div className="absolute inset-0 bg-[radial-gradient(hsl(var(--foreground)/0.04)_1px,transparent_1px)] [background-size:22px_22px] opacity-60" />
+        </div>
+
+        <div className="relative mx-auto flex min-h-full w-full max-w-2xl items-center justify-center p-4">
+          <div className="w-full py-6">
           <OnboardingStepProgress currentStep={currentStep} />
 
-          <div className="rounded-lg border border-border bg-card p-8 shadow-lg">
+          <div className="rounded-2xl border border-border/70 bg-card/90 p-6 shadow-[0_24px_60px_-20px_hsl(var(--foreground)/0.18)] ring-1 ring-foreground/5 backdrop-blur-xl">
             {currentStep === 0 ? (
               <GitConfigurationStep
                 gitName={gitName}
@@ -169,12 +176,12 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
             )}
 
             {errorMessage && (
-              <div className="mt-6 rounded-lg border border-red-300 bg-red-100 p-4 dark:border-red-800 dark:bg-red-900/20">
-                <p className="text-sm text-red-700 dark:text-red-400">{errorMessage}</p>
+              <div className="mt-5 rounded-xl border border-destructive/30 bg-destructive/10 p-3.5">
+                <p className="text-sm text-destructive">{errorMessage}</p>
               </div>
             )}
 
-            <div className="mt-8 flex items-center justify-between border-t border-border pt-6">
+            <div className="mt-6 flex items-center justify-between border-t border-border pt-5">
               <button
                 onClick={handlePreviousStep}
                 disabled={currentStep === 0 || isSubmitting}
@@ -189,7 +196,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                   <button
                     onClick={handleNextStep}
                     disabled={!isCurrentStepValid || isSubmitting}
-                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 font-medium text-white transition-colors duration-200 hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
+                    className="flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 font-medium text-primary-foreground shadow-lg shadow-primary/25 transition-all duration-200 hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none"
                   >
                     {isSubmitting ? (
                       <>
@@ -207,7 +214,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                   <button
                     onClick={handleFinish}
                     disabled={isSubmitting}
-                    className="flex items-center gap-2 rounded-lg bg-green-600 px-6 py-3 font-medium text-white transition-colors duration-200 hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-green-400"
+                    className="flex items-center gap-2 rounded-xl bg-emerald-600 px-6 py-2.5 font-medium text-white shadow-lg shadow-emerald-600/25 transition-all duration-200 hover:bg-emerald-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none"
                   >
                     {isSubmitting ? (
                       <>
@@ -224,6 +231,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 )}
               </div>
             </div>
+          </div>
           </div>
         </div>
       </div>
