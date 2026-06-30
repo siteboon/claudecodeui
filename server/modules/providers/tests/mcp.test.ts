@@ -341,7 +341,7 @@ test('providerMcpService global adder writes to all providers and rejects unsupp
       workspacePath,
     });
 
-    assert.equal(globalResult.length, 5);
+    assert.equal(globalResult.length, 6);
     assert.ok(globalResult.every((entry) => entry.created === true));
 
     const claudeProject = await readJson(path.join(workspacePath, '.mcp.json'));
@@ -355,6 +355,11 @@ test('providerMcpService global adder writes to all providers and rejects unsupp
 
     const opencodeProject = await readJson(path.join(workspacePath, 'opencode.json'));
     assert.ok((opencodeProject.mcp as Record<string, unknown>)['global-http']);
+
+    const hermesProject = await fs.readFile(path.join(workspacePath, '.hermes', 'config.yaml'), 'utf8');
+    assert.match(hermesProject, /^mcp_servers:\n/m);
+    assert.match(hermesProject, /^\s+global-http:\n/m);
+    assert.match(hermesProject, /^\s+url: "https:\/\/global\.example\.com\/mcp"\n/m);
 
     const cursorProject = await readJson(path.join(workspacePath, '.cursor', 'mcp.json'));
     assert.ok((cursorProject.mcpServers as Record<string, unknown>)['global-http']);
@@ -377,4 +382,3 @@ test('providerMcpService global adder writes to all providers and rejects unsupp
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
 });
-

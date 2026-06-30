@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import {
   CheckCircle2,
+  Compass,
   FileCode2,
   FileText,
   FileUp,
@@ -62,6 +63,7 @@ const PROVIDER_NAMES: Record<SkillsProvider, string> = {
   cursor: 'Cursor',
   gemini: 'Gemini',
   opencode: 'OpenCode',
+  hermes: 'Hermes',
 };
 
 const PROVIDER_SKILL_PATHS: Record<Exclude<SkillsProvider, 'opencode'>, string> = {
@@ -69,7 +71,29 @@ const PROVIDER_SKILL_PATHS: Record<Exclude<SkillsProvider, 'opencode'>, string> 
   codex: '~/.agents/skills/<skill-name>/SKILL.md',
   cursor: '~/.cursor/skills/<skill-name>/SKILL.md',
   gemini: '~/.gemini/skills/<skill-name>/SKILL.md',
+  hermes: '~/.hermes/skills/<skill-name>/SKILL.md',
 };
+
+const HERMES_SKILL_ACTIONS = [
+  {
+    label: 'Check Updates',
+    description: 'Check installed hub skills.',
+    action: 'check' as const,
+    icon: RefreshCw,
+  },
+  {
+    label: 'Update Hub Skills',
+    description: 'Apply available hub updates.',
+    action: 'update' as const,
+    icon: Upload,
+  },
+  {
+    label: 'Audit Installed',
+    description: 'Re-scan installed hub skills.',
+    action: 'audit' as const,
+    icon: CheckCircle2,
+  },
+];
 
 const SCOPE_LABELS: Record<SkillsScope, string> = {
   user: 'User',
@@ -209,13 +233,21 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
     isLoadingProjectScopes,
     loadError,
     saveStatus,
+    registryResults,
+    registryError,
+    registryStatus,
+    registryBusyKey,
     addSkills,
     refreshSkills,
+    searchRegistry,
+    installRegistrySkill,
+    runRegistryMaintenance,
   } = useProviderSkills({ selectedProvider, currentProjects });
   const [queuedFiles, setQueuedFiles] = useState<QueuedSkillFile[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [registryQuery, setRegistryQuery] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
@@ -387,6 +419,125 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
           Refresh
         </Button>
       </div>
+
+      {selectedProvider === 'hermes' && (
+        <div className="rounded-lg border border-border/70 bg-muted/15 p-3">
+          <div className="mb-3 flex min-w-0 flex-col gap-1">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <Compass className="h-4 w-4" />
+                Hermes Skills Hub
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Search the Hermes registry, install skills, and keep installed hub skills current.
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="text"
+                value={registryQuery}
+                onChange={(event) => setRegistryQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    void searchRegistry(registryQuery);
+                  }
+                }}
+                placeholder="Search Hermes skills..."
+                aria-label="Search Hermes skills registry"
+                className="h-9 w-full pl-9"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full sm:w-auto"
+              disabled={!registryQuery.trim() || registryBusyKey === 'search'}
+              onClick={() => void searchRegistry(registryQuery)}
+            >
+              {registryBusyKey === 'search' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+              Search
+            </Button>
+          </div>
+
+          <div className="mt-3 grid gap-2 md:grid-cols-3">
+            {HERMES_SKILL_ACTIONS.map((action) => {
+              const Icon = action.icon;
+              return (
+                <Button
+                  key={action.action}
+                  type="button"
+                  variant="outline"
+                  className="h-auto justify-start gap-3 border-border/70 bg-background/70 px-3 py-2 text-left"
+                  disabled={registryBusyKey === action.action}
+                  onClick={() => void runRegistryMaintenance(action.action)}
+                >
+                  {registryBusyKey === action.action
+                    ? <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin" />
+                    : <Icon className="h-4 w-4 flex-shrink-0" />}
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-foreground">{action.label}</span>
+                    <span className="block text-xs text-muted-foreground">{action.description}</span>
+                  </span>
+                </Button>
+              );
+            })}
+          </div>
+
+          {(registryError || registryStatus) && (
+            <div className={cn(
+              'mt-3 rounded-lg border px-3 py-2 text-xs',
+              registryError
+                ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-200'
+                : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+            )}>
+              {registryError || registryStatus}
+            </div>
+          )}
+
+          {registryResults.length > 0 && (
+            <div className="mt-3 grid gap-2">
+              {registryResults.map((result) => (
+                <div
+                  key={result.identifier}
+                  className="flex flex-col gap-3 rounded-lg border border-border/70 bg-background/70 p-3 sm:flex-row sm:items-start sm:justify-between"
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-medium text-foreground">{result.name}</span>
+                      {result.source && (
+                        <Badge variant="outline" className="rounded-full text-[10px]">{result.source}</Badge>
+                      )}
+                      {result.trustLevel && (
+                        <Badge variant="secondary" className="rounded-full text-[10px]">{result.trustLevel}</Badge>
+                      )}
+                    </div>
+                    <div className="mt-1 break-all font-mono text-xs text-muted-foreground">{result.identifier}</div>
+                    {result.description && (
+                      <div className="mt-1 line-clamp-2 text-sm text-muted-foreground">{result.description}</div>
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="w-full sm:w-auto"
+                    disabled={registryBusyKey === `install:${result.identifier}`}
+                    onClick={() => void installRegistrySkill(result.identifier)}
+                  >
+                    {registryBusyKey === `install:${result.identifier}`
+                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : <Upload className="h-4 w-4" />}
+                    Install
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <Card className="min-w-0 overflow-hidden border-border/70 bg-background shadow-sm">
         <CardHeader className="space-y-3 border-b border-border/60 bg-muted/20">

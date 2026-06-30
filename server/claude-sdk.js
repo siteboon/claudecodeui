@@ -29,9 +29,14 @@ import {
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
 import { createCompleteMessage, createNormalizedMessage } from './shared/utils.js';
+import {
+  getPendingApprovalsForSession,
+  registerApproval,
+  resolveToolApproval,
+  unregisterApproval,
+} from './shared/tool-approval-registry.js';
 
 const activeSessions = new Map();
-const pendingToolApprovals = new Map();
 // Sessions cancelled via abort-session. The abort handler already sent the
 // terminal `complete` (aborted: true) to the client, so the run loop must not
 // emit a second one when its generator winds down.
@@ -64,7 +69,7 @@ function waitForToolApproval(requestId, options = {}) {
     let timeout;
 
     const cleanup = () => {
-      pendingToolApprovals.delete(requestId);
+      unregisterApproval(requestId);
       if (timeout) clearTimeout(timeout);
       if (signal && abortHandler) {
         signal.removeEventListener('abort', abortHandler);
@@ -96,19 +101,13 @@ function waitForToolApproval(requestId, options = {}) {
     const resolver = (decision) => {
       finalize(decision);
     };
-    // Attach metadata for getPendingApprovalsForSession lookup
-    if (metadata) {
-      Object.assign(resolver, metadata);
-    }
-    pendingToolApprovals.set(requestId, resolver);
+    registerApproval(requestId, {
+      resolver,
+      sessionId: metadata?._sessionId ?? null,
+      provider: 'claude',
+      meta: metadata ?? {},
+    });
   });
-}
-
-function resolveToolApproval(requestId, decision) {
-  const resolver = pendingToolApprovals.get(requestId);
-  if (resolver) {
-    resolver(decision);
-  }
 }
 
 // Match stored permission entries against a tool + input combo.
@@ -844,28 +843,6 @@ function isClaudeSDKSessionActive(sessionId) {
  */
 function getActiveClaudeSDKSessions() {
   return getAllSessions();
-}
-
-/**
- * Get pending tool approvals for a specific session.
- * @param {string} sessionId - The session ID
- * @returns {Array} Array of pending permission request objects
- */
-function getPendingApprovalsForSession(sessionId) {
-  const pending = [];
-  for (const [requestId, resolver] of pendingToolApprovals.entries()) {
-    if (resolver._sessionId === sessionId) {
-      pending.push({
-        requestId,
-        toolName: resolver._toolName || 'UnknownTool',
-        input: resolver._input,
-        context: resolver._context,
-        sessionId,
-        receivedAt: resolver._receivedAt || new Date(),
-      });
-    }
-  }
-  return pending;
 }
 
 /**

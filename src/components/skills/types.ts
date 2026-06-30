@@ -43,6 +43,28 @@ export type ProviderSkillsResponse = {
   skills: Array<Partial<ProviderSkill>>;
 };
 
+export type ProviderSkillRegistryResult = {
+  name: string;
+  identifier: string;
+  source?: string;
+  trustLevel?: string;
+  description?: string;
+};
+
+export type ProviderSkillRegistrySearchResponse = {
+  provider: SkillsProvider;
+  results: ProviderSkillRegistryResult[];
+};
+
+export type ProviderSkillRegistryActionResponse = {
+  provider: SkillsProvider;
+  result: {
+    ok: boolean;
+    stdout: string;
+    stderr: string;
+  };
+};
+
 export type ApiSuccessResponse<T> = {
   success: true;
   data: T;

@@ -9,6 +9,7 @@ type ProviderLoginModalProps = {
   provider?: LLMProvider;
   onComplete?: (exitCode: number) => void;
   customCommand?: string;
+  customTitle?: string;
   isAuthenticated?: boolean;
 };
 
@@ -41,6 +42,10 @@ const getProviderCommand = ({
     return 'opencode auth login';
   }
 
+  if (provider === 'hermes') {
+    return 'hermes model';
+  }
+
   return 'gemini status';
 };
 
@@ -49,6 +54,7 @@ const getProviderTitle = (provider: LLMProvider) => {
   if (provider === 'cursor') return 'Cursor CLI Login';
   if (provider === 'codex') return 'Codex CLI Login';
   if (provider === 'opencode') return 'OpenCode CLI Login';
+  if (provider === 'hermes') return 'Hermes Agent Setup';
   return 'Gemini CLI Configuration';
 };
 
@@ -58,6 +64,7 @@ export default function ProviderLoginModal({
   provider = 'claude',
   onComplete,
   customCommand,
+  customTitle,
   isAuthenticated = false,
 }: ProviderLoginModalProps) {
   if (!isOpen) {
@@ -65,7 +72,7 @@ export default function ProviderLoginModal({
   }
 
   const command = getProviderCommand({ provider, customCommand, isAuthenticated });
-  const title = getProviderTitle(provider);
+  const title = customTitle || getProviderTitle(provider);
 
   const handleComplete = (exitCode: number) => {
     onComplete?.(exitCode);

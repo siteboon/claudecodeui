@@ -75,6 +75,8 @@ function ChatInterface({
     setGeminiModel,
     opencodeModel,
     setOpenCodeModel,
+    hermesModel,
+    setHermesModel,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
@@ -201,6 +203,7 @@ function ChatInterface({
     codexModel,
     geminiModel,
     opencodeModel,
+    hermesModel,
     isLoading: isProcessing,
     canAbortSession,
     tokenBudget,
@@ -293,7 +296,9 @@ function ChatInterface({
             ? t('messageTypes.gemini')
             : provider === 'opencode'
               ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
-            : t('messageTypes.claude');
+              : provider === 'hermes'
+                ? t('messageTypes.hermes', { defaultValue: 'Hermes' })
+                : t('messageTypes.claude');
 
     return (
       <div className="flex h-full items-center justify-center">
@@ -334,6 +339,8 @@ function ChatInterface({
           setGeminiModel={setGeminiModel}
           opencodeModel={opencodeModel}
           setOpenCodeModel={setOpenCodeModel}
+          hermesModel={hermesModel}
+          setHermesModel={setHermesModel}
           providerModelCatalog={providerModelCatalog}
           providerModelsLoading={providerModelsLoading}
           tasksEnabled={tasksEnabled}
@@ -425,7 +432,9 @@ function ChatInterface({
                     ? t('messageTypes.gemini')
                     : provider === 'opencode'
                       ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
-                    : t('messageTypes.claude'),
+                      : provider === 'hermes'
+                        ? t('messageTypes.hermes', { defaultValue: 'Hermes' })
+                        : t('messageTypes.claude'),
           })}
           isTextareaExpanded={isTextareaExpanded}
           sendByCtrlEnter={sendByCtrlEnter}

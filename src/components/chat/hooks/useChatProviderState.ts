@@ -15,6 +15,7 @@ const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   codex: 'gpt-5.4',
   gemini: 'gemini-3.1-pro-preview',
   opencode: 'anthropic/claude-sonnet-4-5',
+  hermes: '__hermes_configured_model__',
 };
 
 /**
@@ -29,6 +30,7 @@ const FALLBACK_PERMISSION_MODES: Record<LLMProvider, PermissionMode[]> = {
   codex: ['default', 'acceptEdits', 'bypassPermissions'],
   gemini: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
   opencode: ['default'],
+  hermes: ['default'],
 };
 
 type ProviderCapabilities = {
@@ -93,6 +95,9 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
   const [opencodeModel, setOpenCodeModel] = useState<string>(() => {
     return localStorage.getItem('opencode-model') || FALLBACK_DEFAULT_MODEL.opencode;
   });
+  const [hermesModel, setHermesModel] = useState<string>(() => {
+    return localStorage.getItem('hermes-model') || FALLBACK_DEFAULT_MODEL.hermes;
+  });
 
   /**
    * Backend-owned capability matrix keyed by provider. Drives the permission
@@ -141,12 +146,20 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
       return;
     }
 
-    setOpenCodeModel(model);
-    localStorage.setItem('opencode-model', model);
+    if (targetProvider === 'opencode') {
+      setOpenCodeModel(model);
+      localStorage.setItem('opencode-model', model);
+      return;
+    }
+
+    if (targetProvider === 'hermes') {
+      setHermesModel(model);
+      localStorage.setItem('hermes-model', model);
+    }
   }, []);
 
   const loadProviderModels = useCallback(async (options: { bypassCache?: boolean } = {}) => {
-    const providers: LLMProvider[] = ['claude', 'cursor', 'codex', 'gemini', 'opencode'];
+    const providers: LLMProvider[] = ['claude', 'cursor', 'codex', 'gemini', 'opencode', 'hermes'];
     const requestId = providerModelsRequestIdRef.current + 1;
     providerModelsRequestIdRef.current = requestId;
     const isHardRefresh = options.bypassCache === true;
@@ -325,6 +338,19 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
   }, [providerModelCatalog.opencode, opencodeModel]);
 
   useEffect(() => {
+    const hermes = providerModelCatalog.hermes;
+    if (hermes) {
+      const next = pickStoredOrCurrent('hermes-model', hermesModel, hermes);
+      if (next !== hermesModel) {
+        setHermesModel(next);
+      }
+      if (localStorage.getItem('hermes-model') !== next) {
+        localStorage.setItem('hermes-model', next);
+      }
+    }
+  }, [providerModelCatalog.hermes, hermesModel]);
+
+  useEffect(() => {
     if (!selectedSession?.id) {
       return;
     }
@@ -434,6 +460,8 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
     setGeminiModel,
     opencodeModel,
     setOpenCodeModel,
+    hermesModel,
+    setHermesModel,
     permissionMode,
     setPermissionMode,
     pendingPermissionRequests,

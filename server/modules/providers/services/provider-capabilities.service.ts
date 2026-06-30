@@ -75,6 +75,15 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsPermissionRequests: false,
     supportsTokenUsage: true,
   },
+  hermes: {
+    provider: 'hermes',
+    permissionModes: ['default'],
+    defaultPermissionMode: 'default',
+    supportsImages: false,
+    supportsAbort: true,
+    supportsPermissionRequests: true,
+    supportsTokenUsage: false,
+  },
 };
 
 /**

@@ -65,7 +65,7 @@ export type AuthenticatedWebSocketRequest = IncomingMessage & {
  * Use this as the source of truth whenever a function or payload needs to identify
  * a specific LLM integration.
  */
-export type LLMProvider = 'claude' | 'codex' | 'gemini' | 'cursor' | 'opencode';
+export type LLMProvider = 'claude' | 'codex' | 'gemini' | 'cursor' | 'opencode' | 'hermes';
 
 /**
  * One selectable model row in a provider model catalog.
@@ -363,6 +363,32 @@ export type ProviderSkillCreateInput = {
 
 export type ProviderSkillRemoveInput = {
   directoryName: string;
+};
+
+export type ProviderSkillRegistrySearchOptions = {
+  source?: string;
+  limit?: number;
+};
+
+export type ProviderSkillRegistrySearchResult = {
+  name: string;
+  identifier: string;
+  source?: string;
+  trustLevel?: string;
+  description?: string;
+};
+
+export type ProviderSkillRegistryInstallInput = {
+  identifier: string;
+  category?: string;
+  name?: string;
+  force?: boolean;
+};
+
+export type ProviderSkillRegistryActionResult = {
+  ok: boolean;
+  stdout: string;
+  stderr: string;
 };
 
 /**

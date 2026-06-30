@@ -1,5 +1,11 @@
-import { LogIn } from 'lucide-react';
+import {
+  CheckCircle2,
+  KeyRound,
+  Layers3,
+  LogIn,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
 import { Badge, Button } from '../../../../../../../shared/view/ui';
 import SessionProviderLogo from '../../../../../../llm-logo-provider/SessionProviderLogo';
 import type { AgentProvider, AuthStatus } from '../../../../../types/types';
@@ -7,7 +13,7 @@ import type { AgentProvider, AuthStatus } from '../../../../../types/types';
 type AccountContentProps = {
   agent: AgentProvider;
   authStatus: AuthStatus;
-  onLogin: () => void;
+  onLogin: (customCommand?: string, customTitle?: string) => void;
 };
 
 type AgentVisualConfig = {
@@ -63,7 +69,58 @@ const agentConfig: Record<AgentProvider, AgentVisualConfig> = {
     subtextClass: 'text-zinc-700 dark:text-zinc-300',
     buttonClass: 'bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-950 dark:bg-zinc-700 dark:hover:bg-zinc-600',
   },
+  hermes: {
+    name: 'Hermes',
+    description: 'Nous Research Hermes Agent',
+    bgClass: 'bg-emerald-50 dark:bg-emerald-900/20',
+    borderClass: 'border-emerald-200 dark:border-emerald-800',
+    textClass: 'text-emerald-950 dark:text-emerald-100',
+    subtextClass: 'text-emerald-700 dark:text-emerald-300',
+    buttonClass: 'bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900',
+  },
 };
+
+type HermesAction = {
+  label: string;
+  description: string;
+  command: string;
+  title: string;
+  icon: typeof Layers3;
+};
+
+type HermesActionGroup = {
+  title: string;
+  actions: HermesAction[];
+};
+
+const hermesActionGroups: HermesActionGroup[] = [
+  {
+    title: 'Setup',
+    actions: [
+      {
+        label: 'Provider setup',
+        description: 'Configure provider credentials and the active model.',
+        command: 'hermes model',
+        title: 'Hermes Provider Setup',
+        icon: Layers3,
+      },
+      {
+        label: 'Credential pools',
+        description: 'Manage API keys and OAuth credentials.',
+        command: 'hermes auth',
+        title: 'Hermes Credential Pools',
+        icon: KeyRound,
+      },
+      {
+        label: 'ACP check',
+        description: 'Validate the Hermes ACP adapter.',
+        command: 'hermes acp --check',
+        title: 'Hermes ACP Check',
+        icon: CheckCircle2,
+      },
+    ],
+  },
+];
 
 export default function AccountContent({ agent, authStatus, onLogin }: AccountContentProps) {
   const { t } = useTranslation('settings');
@@ -133,13 +190,50 @@ export default function AccountContent({ agent, authStatus, onLogin }: AccountCo
                   </div>
                 </div>
                 <Button
-                  onClick={onLogin}
+                  onClick={() => onLogin()}
                   className={`${config.buttonClass} text-white`}
                   size="sm"
                 >
                   <LogIn className="mr-2 h-4 w-4" />
                   {authStatus.authenticated ? t('agents.login.reLoginButton') : t('agents.login.button')}
                 </Button>
+              </div>
+            </div>
+          )}
+
+          {agent === 'hermes' && (
+            <div className="border-t border-border/50 pt-4">
+              <div className={`mb-3 font-medium ${config.textClass}`}>
+                {t('agents.hermes.actions.title', { defaultValue: 'Hermes tools' })}
+              </div>
+              <div className="space-y-4">
+                {hermesActionGroups.map((group) => (
+                  <div key={group.title}>
+                    <div className={`mb-2 text-xs font-semibold uppercase ${config.subtextClass}`}>
+                      {group.title}
+                    </div>
+                    <div className="grid gap-2 md:grid-cols-2">
+                      {group.actions.map((action) => {
+                        const Icon = action.icon;
+                        return (
+                          <Button
+                            key={action.command}
+                            type="button"
+                            variant="outline"
+                            className="h-auto justify-start gap-3 border-border/70 bg-background/70 px-3 py-2 text-left"
+                            onClick={() => onLogin(action.command, action.title)}
+                          >
+                            <Icon className="h-4 w-4 flex-shrink-0" />
+                            <span className="min-w-0">
+                              <span className="block text-sm font-medium text-foreground">{action.label}</span>
+                              <span className="block text-xs text-muted-foreground">{action.description}</span>
+                            </span>
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}

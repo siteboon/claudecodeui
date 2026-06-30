@@ -29,29 +29,33 @@ export default function AgentsSettingsTab({
   ), [selectedAgent]);
 
   const visibleAgents = useMemo<AgentProvider[]>(() => {
-    return ['claude', 'cursor', 'codex', 'gemini', 'opencode'];
+    return ['claude', 'cursor', 'codex', 'gemini', 'opencode', 'hermes'];
   }, []);
 
   const agentContextById = useMemo<Record<AgentProvider, AgentContext>>(() => ({
     claude: {
       authStatus: providerAuthStatus.claude,
-      onLogin: () => onProviderLogin('claude'),
+      onLogin: (customCommand, customTitle) => onProviderLogin('claude', customCommand, customTitle),
     },
     cursor: {
       authStatus: providerAuthStatus.cursor,
-      onLogin: () => onProviderLogin('cursor'),
+      onLogin: (customCommand, customTitle) => onProviderLogin('cursor', customCommand, customTitle),
     },
     codex: {
       authStatus: providerAuthStatus.codex,
-      onLogin: () => onProviderLogin('codex'),
+      onLogin: (customCommand, customTitle) => onProviderLogin('codex', customCommand, customTitle),
     },
     gemini: {
       authStatus: providerAuthStatus.gemini,
-      onLogin: () => onProviderLogin('gemini'),
+      onLogin: (customCommand, customTitle) => onProviderLogin('gemini', customCommand, customTitle),
     },
     opencode: {
       authStatus: providerAuthStatus.opencode,
-      onLogin: () => onProviderLogin('opencode'),
+      onLogin: (customCommand, customTitle) => onProviderLogin('opencode', customCommand, customTitle),
+    },
+    hermes: {
+      authStatus: providerAuthStatus.hermes,
+      onLogin: (customCommand, customTitle) => onProviderLogin('hermes', customCommand, customTitle),
     },
   }), [
     onProviderLogin,
@@ -60,6 +64,7 @@ export default function AgentsSettingsTab({
     providerAuthStatus.cursor,
     providerAuthStatus.gemini,
     providerAuthStatus.opencode,
+    providerAuthStatus.hermes,
   ]);
 
   useEffect(() => {

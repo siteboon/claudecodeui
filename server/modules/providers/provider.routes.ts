@@ -279,6 +279,48 @@ const parseProviderSkillCreatePayload = (payload: unknown): ProviderSkillCreateI
   return { entries };
 };
 
+const parseSkillRegistryLimit = (value: unknown): number => {
+  const raw = readOptionalQueryString(value);
+  if (!raw) {
+    return 10;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  if (Number.isNaN(parsed)) {
+    throw new AppError('limit must be a valid integer.', {
+      code: 'INVALID_QUERY_PARAMETER',
+      statusCode: 400,
+    });
+  }
+
+  return Math.max(1, Math.min(parsed, 50));
+};
+
+const parseSkillRegistryInstallPayload = (payload: unknown) => {
+  if (!payload || typeof payload !== 'object') {
+    throw new AppError('Request body must be an object.', {
+      code: 'INVALID_REQUEST_BODY',
+      statusCode: 400,
+    });
+  }
+
+  const body = payload as Record<string, unknown>;
+  const identifier = readOptionalQueryString(body.identifier);
+  if (!identifier) {
+    throw new AppError('identifier is required.', {
+      code: 'SKILL_IDENTIFIER_REQUIRED',
+      statusCode: 400,
+    });
+  }
+
+  return {
+    identifier,
+    category: readOptionalQueryString(body.category),
+    name: readOptionalQueryString(body.name),
+    force: body.force === true,
+  };
+};
+
 const parseProvider = (value: unknown): LLMProvider => {
   const normalized = normalizeProviderParam(value);
   if (
@@ -287,6 +329,7 @@ const parseProvider = (value: unknown): LLMProvider => {
     || normalized === 'cursor'
     || normalized === 'gemini'
     || normalized === 'opencode'
+    || normalized === 'hermes'
   ) {
     return normalized;
   }
@@ -438,6 +481,77 @@ router.delete(
       directoryName: readPathParam(req.params.directoryName, 'directoryName'),
     });
     res.json(createApiSuccessResponse(result));
+  }),
+);
+
+router.get(
+  '/:provider/skills/registry/search',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const query = readOptionalQueryString(req.query.query);
+    if (!query) {
+      throw new AppError('query is required.', {
+        code: 'SKILL_SEARCH_QUERY_REQUIRED',
+        statusCode: 400,
+      });
+    }
+
+    const results = await providerSkillsService.searchSkillRegistry(provider, query, {
+      source: readOptionalQueryString(req.query.source),
+      limit: parseSkillRegistryLimit(req.query.limit),
+    });
+    res.json(createApiSuccessResponse({ provider, results }));
+  }),
+);
+
+router.post(
+  '/:provider/skills/registry/install',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const result = await providerSkillsService.installRegistrySkill(
+      provider,
+      parseSkillRegistryInstallPayload(req.body),
+    );
+    res.status(201).json(createApiSuccessResponse({ provider, result }));
+  }),
+);
+
+router.post(
+  '/:provider/skills/registry/check',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const result = await providerSkillsService.checkRegistryUpdates(provider);
+    res.json(createApiSuccessResponse({ provider, result }));
+  }),
+);
+
+router.post(
+  '/:provider/skills/registry/update',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const result = await providerSkillsService.updateRegistrySkills(provider);
+    res.json(createApiSuccessResponse({ provider, result }));
+  }),
+);
+
+router.post(
+  '/:provider/skills/registry/audit',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const result = await providerSkillsService.auditRegistrySkills(provider);
+    res.json(createApiSuccessResponse({ provider, result }));
+  }),
+);
+
+router.delete(
+  '/:provider/skills/registry/:name',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const result = await providerSkillsService.uninstallRegistrySkill(
+      provider,
+      readPathParam(req.params.name, 'name'),
+    );
+    res.json(createApiSuccessResponse({ provider, result }));
   }),
 );
 

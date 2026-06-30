@@ -39,6 +39,10 @@ const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> =
     provider: 'opencode',
     rootPath: path.join(os.homedir(), '.local', 'share', 'opencode'),
   },
+  {
+    provider: 'hermes',
+    rootPath: path.join(os.homedir(), '.hermes'),
+  },
 ];
 
 const WATCHER_IGNORED_PATTERNS = [
@@ -79,6 +83,10 @@ let watcherRescheduleAfterRefresh = false;
 function isWatcherTargetFile(provider: LLMProvider, filePath: string): boolean {
   if (provider === 'opencode') {
     return path.basename(filePath) === 'opencode.db';
+  }
+
+  if (provider === 'hermes') {
+    return path.basename(filePath) === 'state.db';
   }
 
   if (provider === 'gemini') {

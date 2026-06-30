@@ -39,6 +39,8 @@ interface ChatMessagesPaneProps {
   setGeminiModel: (model: string) => void;
   opencodeModel: string;
   setOpenCodeModel: (model: string) => void;
+  hermesModel: string;
+  setHermesModel: (model: string) => void;
   providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
   providerModelsLoading: boolean;
   tasksEnabled: boolean;
@@ -89,6 +91,8 @@ function ChatMessagesPane({
   setGeminiModel,
   opencodeModel,
   setOpenCodeModel,
+  hermesModel,
+  setHermesModel,
   providerModelCatalog,
   providerModelsLoading,
   tasksEnabled,
@@ -177,6 +181,8 @@ function ChatMessagesPane({
           setGeminiModel={setGeminiModel}
           opencodeModel={opencodeModel}
           setOpenCodeModel={setOpenCodeModel}
+          hermesModel={hermesModel}
+          setHermesModel={setHermesModel}
           providerModelCatalog={providerModelCatalog}
           providerModelsLoading={providerModelsLoading}
           tasksEnabled={tasksEnabled}

@@ -39,6 +39,7 @@ interface UseChatComposerStateArgs {
   codexModel: string;
   geminiModel: string;
   opencodeModel: string;
+  hermesModel: string;
   isLoading: boolean;
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
@@ -173,6 +174,7 @@ export function useChatComposerState({
   codexModel,
   geminiModel,
   opencodeModel,
+  hermesModel,
   isLoading,
   canAbortSession,
   tokenBudget,
@@ -336,6 +338,8 @@ export function useChatComposerState({
                 ? geminiModel
                 : provider === 'opencode'
                   ? opencodeModel
+                  : provider === 'hermes'
+                    ? (hermesModel === '__hermes_configured_model__' ? undefined : hermesModel)
                   : claudeModel,
           tokenUsage: tokenBudget,
         };
@@ -391,6 +395,7 @@ export function useChatComposerState({
       cursorModel,
       geminiModel,
       opencodeModel,
+      hermesModel,
       handleBuiltInCommand,
       handleCustomCommand,
       input,
@@ -703,6 +708,8 @@ export function useChatComposerState({
                   ? 'gemini-settings'
                   : provider === 'opencode'
                     ? 'opencode-settings'
+                    : provider === 'hermes'
+                      ? 'hermes-settings'
                   : 'claude-settings';
           const savedSettings = safeLocalStorage.getItem(settingsKey);
           if (savedSettings) {
@@ -729,6 +736,8 @@ export function useChatComposerState({
               ? geminiModel
               : provider === 'opencode'
                 ? opencodeModel
+                : provider === 'hermes'
+                  ? (hermesModel === '__hermes_configured_model__' ? undefined : hermesModel)
                 : claudeModel;
 
       // One message shape for every provider. The backend resolves the
@@ -774,6 +783,7 @@ export function useChatComposerState({
       executeCommand,
       geminiModel,
       opencodeModel,
+      hermesModel,
       isLoading,
       onSessionProcessing,
       onSessionEstablished,

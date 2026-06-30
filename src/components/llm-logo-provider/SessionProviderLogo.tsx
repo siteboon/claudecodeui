@@ -3,6 +3,7 @@ import ClaudeLogo from './ClaudeLogo';
 import CodexLogo from './CodexLogo';
 import CursorLogo from './CursorLogo';
 import GeminiLogo from './GeminiLogo';
+import HermesLogo from './HermesLogo';
 import OpenCodeLogo from './OpenCodeLogo';
 
 type SessionProviderLogoProps = {
@@ -28,6 +29,10 @@ export default function SessionProviderLogo({
 
   if (provider === 'opencode') {
     return <OpenCodeLogo className={className} />;
+  }
+
+  if (provider === 'hermes') {
+    return <HermesLogo className={className} />;
   }
 
   return <ClaudeLogo className={className} />;
