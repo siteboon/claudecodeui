@@ -8,9 +8,11 @@ import {
   FileUp,
   FolderUp,
   Loader2,
+  Plus,
   RefreshCw,
   Search,
   Upload,
+  Wrench,
   X,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -24,6 +26,9 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  Dialog,
+  DialogContent,
+  DialogTitle,
   Input,
 } from '../../../shared/view/ui';
 import { useProviderSkills } from '../hooks/useProviderSkills';
@@ -248,6 +253,8 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [registryQuery, setRegistryQuery] = useState('');
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [addMode, setAddMode] = useState<'upload' | 'hub'>('upload');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
@@ -259,6 +266,9 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
     setSubmitError(null);
     setIsSubmitting(false);
     setSearchQuery('');
+    setRegistryQuery('');
+    setIsAddDialogOpen(false);
+    setAddMode('upload');
   }, [selectedProvider]);
 
   useEffect(() => {
@@ -386,12 +396,238 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
       })));
       await addSkills({ entries });
       setQueuedFiles([]);
+      setIsAddDialogOpen(false);
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'Failed to import skills');
     } finally {
       setIsSubmitting(false);
     }
   }, [addSkills, queuedFiles]);
+
+  const uploadPanel = (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-border/60 bg-muted/15 p-3">
+        <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Install Path</div>
+        <code className="mt-1 block whitespace-normal break-all text-xs text-foreground">{providerPath}</code>
+      </div>
+
+      <div
+        {...getRootProps()}
+        className={cn(
+          'rounded-xl border border-dashed p-4 transition-colors sm:p-5',
+          isDragActive
+            ? 'border-foreground/40 bg-muted/35'
+            : 'border-border/70 bg-muted/15 hover:border-foreground/25 hover:bg-muted/25',
+        )}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".md,text/markdown"
+          multiple
+          className="hidden"
+          onChange={(event) => {
+            handleDrop(Array.from(event.target.files ?? []));
+            event.target.value = '';
+          }}
+        />
+        <input
+          ref={folderInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(event) => {
+            handleFolderSelection(Array.from(event.target.files ?? []));
+            event.target.value = '';
+          }}
+        />
+        <div className="flex flex-col items-center justify-center gap-3 py-4 text-center">
+          <FileUp className="h-7 w-7 text-muted-foreground" strokeWidth={1.5} />
+          <div className="space-y-1">
+            <div className="text-sm font-medium text-foreground">Drop `.md` files or skill folders here</div>
+            <div className="text-sm text-muted-foreground">
+              Upload standalone definitions or choose a full folder to include scripts, references, and assets.
+            </div>
+          </div>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full sm:w-auto"
+            >
+              <FileUp className="h-4 w-4" />
+              Choose Files
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => folderInputRef.current?.click()}
+              className="w-full sm:w-auto"
+            >
+              <FolderUp className="h-4 w-4" />
+              Choose Folder
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {queuedFiles.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-sm font-medium text-foreground">Queued Files</div>
+          <div className="grid gap-2">
+            {queuedFiles.map((queuedFile) => (
+              <div
+                key={queuedFile.id}
+                className="flex flex-col gap-3 rounded-lg border border-border/70 bg-background/70 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:py-2"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium text-foreground">{queuedFile.name}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {queuedFile.kind === 'folder'
+                      ? `${queuedFile.files.length} files`
+                      : 'Markdown file'}
+                    {' · '}
+                    {formatFileSize(queuedFile.size)}
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full sm:w-auto"
+                  onClick={() => {
+                    setQueuedFiles((previous) => previous.filter((file) => file.id !== queuedFile.id));
+                  }}
+                >
+                  Remove
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+        <Button
+          type="button"
+          onClick={() => void handleUploadInstall()}
+          disabled={isSubmitting}
+          className="w-full sm:w-auto"
+        >
+          {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+          Install {queuedFiles.length > 0 ? `${queuedFiles.length} Skill${queuedFiles.length === 1 ? '' : 's'}` : 'Skills'}
+        </Button>
+        <span className="text-xs text-muted-foreground">
+          Folder uploads keep the selected folder name; standalone files use the `name` in `SKILL.md`.
+        </span>
+      </div>
+    </div>
+  );
+
+  const hermesHubPanel = selectedProvider === 'hermes' ? (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="relative min-w-0 flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="text"
+            value={registryQuery}
+            onChange={(event) => setRegistryQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                void searchRegistry(registryQuery);
+              }
+            }}
+            placeholder="Search Hermes skills..."
+            aria-label="Search Hermes skills registry"
+            className="h-9 w-full pl-9"
+          />
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-full sm:w-auto"
+          disabled={!registryQuery.trim() || registryBusyKey === 'search'}
+          onClick={() => void searchRegistry(registryQuery)}
+        >
+          {registryBusyKey === 'search' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+          Search
+        </Button>
+      </div>
+
+      <div className="rounded-lg border border-border/60 bg-muted/15 p-3">
+        <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+          <Wrench className="h-3.5 w-3.5" />
+          Hub Maintenance
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {HERMES_SKILL_ACTIONS.map((action) => {
+            const Icon = action.icon;
+            return (
+              <Button
+                key={action.action}
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-muted-foreground hover:text-foreground"
+                title={action.description}
+                disabled={registryBusyKey === action.action}
+                onClick={() => void runRegistryMaintenance(action.action)}
+              >
+                {registryBusyKey === action.action
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Icon className="h-4 w-4" />}
+                {action.label}
+              </Button>
+            );
+          })}
+        </div>
+      </div>
+
+      {registryResults.length > 0 && (
+        <div className="grid max-h-[320px] gap-2 overflow-y-auto pr-1">
+          {registryResults.map((result) => (
+            <div
+              key={result.identifier}
+              className="flex flex-col gap-3 rounded-lg border border-border/70 bg-background/70 p-3 sm:flex-row sm:items-start sm:justify-between"
+            >
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium text-foreground">{result.name}</span>
+                  {result.source && (
+                    <Badge variant="outline" className="rounded-full text-[10px]">{result.source}</Badge>
+                  )}
+                  {result.trustLevel && (
+                    <Badge variant="secondary" className="rounded-full text-[10px]">{result.trustLevel}</Badge>
+                  )}
+                </div>
+                <div className="mt-1 break-all font-mono text-xs text-muted-foreground">{result.identifier}</div>
+                {result.description && (
+                  <div className="mt-1 line-clamp-2 text-sm text-muted-foreground">{result.description}</div>
+                )}
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                className="w-full sm:w-auto"
+                disabled={registryBusyKey === `install:${result.identifier}`}
+                onClick={() => void installRegistrySkill(result.identifier)}
+              >
+                {registryBusyKey === `install:${result.identifier}`
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Upload className="h-4 w-4" />}
+                Install
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  ) : null;
 
   return (
     <div className="min-w-0 space-y-4 overflow-x-hidden">
@@ -408,279 +644,105 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
           </div>
         </div>
 
-        <Button
-          onClick={() => void refreshSkills({ force: true })}
-          variant="outline"
-          size="sm"
-          className="w-full sm:w-auto"
-          disabled={isLoading || isLoadingProjectScopes}
-        >
-          <RefreshCw className={cn('h-4 w-4', (isLoading || isLoadingProjectScopes) && 'animate-spin')} />
-          Refresh
-        </Button>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <Button
+            type="button"
+            size="sm"
+            className="w-full sm:w-auto"
+            onClick={() => {
+              setAddMode('upload');
+              setIsAddDialogOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4" />
+            Add Skill
+          </Button>
+          <Button
+            onClick={() => void refreshSkills({ force: true })}
+            variant="outline"
+            size="sm"
+            className="w-full sm:w-auto"
+            disabled={isLoading || isLoadingProjectScopes}
+          >
+            <RefreshCw className={cn('h-4 w-4', (isLoading || isLoadingProjectScopes) && 'animate-spin')} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
-      {selectedProvider === 'hermes' && (
-        <div className="rounded-lg border border-border/70 bg-muted/15 p-3">
-          <div className="mb-3 flex min-w-0 flex-col gap-1">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                <Compass className="h-4 w-4" />
-                Hermes Skills Hub
+      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto p-0">
+          <DialogTitle>Add Skill</DialogTitle>
+          <div className="border-b border-border/60 px-4 py-4">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/70 bg-muted/20 text-muted-foreground">
+                {addMode === 'hub' ? <Compass className="h-4 w-4" /> : <FileUp className="h-4 w-4" />}
               </div>
-              <div className="text-xs text-muted-foreground">
-                Search the Hermes registry, install skills, and keep installed hub skills current.
+              <div className="min-w-0 flex-1">
+                <div className="text-base font-medium text-foreground">Add {providerName} Skill</div>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  {selectedProvider === 'hermes'
+                    ? 'Upload a local skill or install one from the Hermes Skills Hub.'
+                    : 'Upload a markdown skill file or a complete skill folder.'}
+                </div>
               </div>
             </div>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <div className="relative min-w-0 flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="text"
-                value={registryQuery}
-                onChange={(event) => setRegistryQuery(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    void searchRegistry(registryQuery);
-                  }
-                }}
-                placeholder="Search Hermes skills..."
-                aria-label="Search Hermes skills registry"
-                className="h-9 w-full pl-9"
-              />
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="w-full sm:w-auto"
-              disabled={!registryQuery.trim() || registryBusyKey === 'search'}
-              onClick={() => void searchRegistry(registryQuery)}
-            >
-              {registryBusyKey === 'search' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-              Search
-            </Button>
-          </div>
 
-          <div className="mt-3 grid gap-2 md:grid-cols-3">
-            {HERMES_SKILL_ACTIONS.map((action) => {
-              const Icon = action.icon;
-              return (
-                <Button
-                  key={action.action}
+            {selectedProvider === 'hermes' && (
+              <div className="mt-4 inline-flex rounded-lg border border-border/70 bg-muted/20 p-1">
+                <button
                   type="button"
-                  variant="outline"
-                  className="h-auto justify-start gap-3 border-border/70 bg-background/70 px-3 py-2 text-left"
-                  disabled={registryBusyKey === action.action}
-                  onClick={() => void runRegistryMaintenance(action.action)}
+                  className={cn(
+                    'inline-flex h-8 items-center gap-2 rounded-md px-3 text-sm transition-colors',
+                    addMode === 'upload'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                  onClick={() => setAddMode('upload')}
                 >
-                  {registryBusyKey === action.action
-                    ? <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin" />
-                    : <Icon className="h-4 w-4 flex-shrink-0" />}
-                  <span className="min-w-0">
-                    <span className="block text-sm font-medium text-foreground">{action.label}</span>
-                    <span className="block text-xs text-muted-foreground">{action.description}</span>
-                  </span>
-                </Button>
-              );
-            })}
-          </div>
-
-          {(registryError || registryStatus) && (
-            <div className={cn(
-              'mt-3 rounded-lg border px-3 py-2 text-xs',
-              registryError
-                ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-200'
-                : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-            )}>
-              {registryError || registryStatus}
-            </div>
-          )}
-
-          {registryResults.length > 0 && (
-            <div className="mt-3 grid gap-2">
-              {registryResults.map((result) => (
-                <div
-                  key={result.identifier}
-                  className="flex flex-col gap-3 rounded-lg border border-border/70 bg-background/70 p-3 sm:flex-row sm:items-start sm:justify-between"
+                  <FileUp className="h-4 w-4" />
+                  Upload
+                </button>
+                <button
+                  type="button"
+                  className={cn(
+                    'inline-flex h-8 items-center gap-2 rounded-md px-3 text-sm transition-colors',
+                    addMode === 'hub'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                  onClick={() => setAddMode('hub')}
                 >
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-medium text-foreground">{result.name}</span>
-                      {result.source && (
-                        <Badge variant="outline" className="rounded-full text-[10px]">{result.source}</Badge>
-                      )}
-                      {result.trustLevel && (
-                        <Badge variant="secondary" className="rounded-full text-[10px]">{result.trustLevel}</Badge>
-                      )}
-                    </div>
-                    <div className="mt-1 break-all font-mono text-xs text-muted-foreground">{result.identifier}</div>
-                    {result.description && (
-                      <div className="mt-1 line-clamp-2 text-sm text-muted-foreground">{result.description}</div>
-                    )}
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="w-full sm:w-auto"
-                    disabled={registryBusyKey === `install:${result.identifier}`}
-                    onClick={() => void installRegistrySkill(result.identifier)}
-                  >
-                    {registryBusyKey === `install:${result.identifier}`
-                      ? <Loader2 className="h-4 w-4 animate-spin" />
-                      : <Upload className="h-4 w-4" />}
-                    Install
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      <Card className="min-w-0 overflow-hidden border-border/70 bg-background shadow-sm">
-        <CardHeader className="space-y-3 border-b border-border/60 bg-muted/20">
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-            <div className="text-sm font-medium text-foreground">Upload Skills</div>
-            <div className="min-w-0 rounded-2xl border border-border/60 bg-background/70 p-3">
-              <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Install Path</div>
-              <code className="mt-1 block whitespace-normal break-all text-xs text-foreground">{providerPath}</code>
-            </div>
-          </div>
-        </CardHeader>
-
-        <CardContent className="space-y-4 p-4">
-          <div className="space-y-4">
-            <div
-              {...getRootProps()}
-              className={cn(
-                'rounded-3xl border border-dashed p-4 transition-colors sm:p-5',
-                isDragActive
-                  ? 'border-foreground/40 bg-muted/35'
-                  : 'border-border/70 bg-muted/15 hover:border-foreground/25 hover:bg-muted/25',
-              )}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".md,text/markdown"
-                multiple
-                className="hidden"
-                onChange={(event) => {
-                  handleDrop(Array.from(event.target.files ?? []));
-                  event.target.value = '';
-                }}
-              />
-              <input
-                ref={folderInputRef}
-                type="file"
-                multiple
-                className="hidden"
-                onChange={(event) => {
-                  handleFolderSelection(Array.from(event.target.files ?? []));
-                  event.target.value = '';
-                }}
-              />
-              <div className="flex flex-col items-center justify-center gap-3 py-4 text-center sm:py-6">
-                <FileUp className="h-7 w-7 text-muted-foreground" strokeWidth={1.5} />
-                <div className="space-y-1">
-                  <div className="text-sm font-medium text-foreground">Drop `.md` files or skill folders here</div>
-                  <div className="text-sm text-muted-foreground">
-                    Upload standalone definitions or choose a full folder to include its scripts, references, and assets.
-                  </div>
-                </div>
-                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-full sm:w-auto"
-                  >
-                    <FileUp className="h-4 w-4" />
-                    Choose Files
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => folderInputRef.current?.click()}
-                    className="w-full sm:w-auto"
-                  >
-                    <FolderUp className="h-4 w-4" />
-                    Choose Folder
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            {queuedFiles.length > 0 && (
-              <div className="space-y-2">
-                <div className="text-sm font-medium text-foreground">Queued Files</div>
-                <div className="grid gap-2">
-                  {queuedFiles.map((queuedFile) => (
-                    <div
-                      key={queuedFile.id}
-                      className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-background/70 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:py-2"
-                    >
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-medium text-foreground">{queuedFile.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {queuedFile.kind === 'folder'
-                            ? `${queuedFile.files.length} files`
-                            : 'Markdown file'}
-                          {' · '}
-                          {formatFileSize(queuedFile.size)}
-                        </div>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="w-full sm:w-auto"
-                        onClick={() => {
-                          setQueuedFiles((previous) => previous.filter((file) => file.id !== queuedFile.id));
-                        }}
-                      >
-                        Remove
-                      </Button>
-                    </div>
-                  ))}
-                </div>
+                  <Compass className="h-4 w-4" />
+                  Skills Hub
+                </button>
               </div>
             )}
-
-            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-              <Button
-                type="button"
-                onClick={() => void handleUploadInstall()}
-                disabled={isSubmitting}
-                className="w-full sm:w-auto"
-              >
-                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                Install {queuedFiles.length > 0 ? `${queuedFiles.length} Skill${queuedFiles.length === 1 ? '' : 's'}` : 'Skills'}
-              </Button>
-              <span className="text-xs text-muted-foreground">
-                Folder uploads keep the selected folder name; standalone files use the `name` in `SKILL.md`.
-              </span>
-            </div>
           </div>
 
-          {(submitError || loadError) && (
-            <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-200">
-              {submitError || loadError}
-            </div>
-          )}
+          <div className="space-y-4 p-4">
+            {addMode === 'hub' && hermesHubPanel ? hermesHubPanel : uploadPanel}
 
-          {saveStatus === 'success' && (
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-              <CheckCircle2 className="h-4 w-4" />
-              Skills saved successfully.
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            {(submitError || loadError || registryError || registryStatus || saveStatus === 'success') && (
+              <div className={cn(
+                'rounded-lg border px-3 py-2 text-sm',
+                submitError || loadError || registryError
+                  ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-200'
+                  : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+              )}>
+                {submitError || loadError || registryError || registryStatus || 'Skills saved successfully.'}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {saveStatus === 'success' && !isAddDialogOpen && (
+        <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+          <CheckCircle2 className="h-4 w-4" />
+          Skills saved successfully.
+        </div>
+      )}
 
       <Card className="min-w-0 border-border/70 bg-background/80 shadow-sm">
         <CardHeader className="border-b border-border/60">
