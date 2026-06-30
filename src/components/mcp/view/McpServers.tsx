@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { McpProject, McpProvider, McpScope, ProviderMcpServer } from '../types';
 import { IS_PLATFORM } from '../../../constants/config';
-import { Badge, Button } from '../../../shared/view/ui';
+import { ActionMenu, Badge, Button } from '../../../shared/view/ui';
 import {
   MCP_GLOBAL_SUPPORTED_SCOPES,
   MCP_GLOBAL_SUPPORTED_TRANSPORTS,
@@ -134,33 +134,39 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <Server className="h-5 w-5 text-purple-500" />
-        <h3 className="text-lg font-medium text-foreground">{t('mcpServers.title')}</h3>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <Server className="mt-0.5 h-5 w-5 flex-shrink-0 text-purple-500" />
+          <div className="min-w-0 space-y-1">
+            <h3 className="text-lg font-medium text-foreground">{t('mcpServers.title')}</h3>
+            <p className="text-sm text-muted-foreground">{description}</p>
+          </div>
+        </div>
+        <ActionMenu
+          label="Add MCP Server"
+          icon={Plus}
+          className="w-full sm:w-auto"
+          triggerClassName={`w-full sm:w-auto ${MCP_PROVIDER_BUTTON_CLASSES[selectedProvider]}`}
+          items={[
+            {
+              key: 'global',
+              label: globalButtonLabel,
+              description: globalAddDescription,
+              icon: Globe,
+              onSelect: openGlobalForm,
+            },
+            {
+              key: 'provider',
+              label: providerButtonLabel,
+              description: providerAddDescription,
+              icon: Server,
+              onSelect: () => openForm(),
+            },
+          ]}
+        />
       </div>
-      <p className="text-sm text-muted-foreground">{description}</p>
 
       <div className="space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            onClick={openGlobalForm}
-            className={MCP_PROVIDER_BUTTON_CLASSES[selectedProvider]}
-            size="sm"
-            title={globalAddDescription}
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            {globalButtonLabel}
-          </Button>
-          <Button
-            onClick={() => openForm()}
-            variant="outline"
-            size="sm"
-            title={providerAddDescription}
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            {providerButtonLabel}
-          </Button>
-        </div>
         <div className="min-h-4">
           {saveStatus === 'success' && (
             <span className="animate-in fade-in text-xs text-muted-foreground">{t('saveStatus.success')}</span>
