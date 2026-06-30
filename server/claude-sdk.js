@@ -41,6 +41,16 @@ const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEO
 
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
+function resolveClaudeEffort(model, effort, modelsDefinition = CLAUDE_FALLBACK_MODELS) {
+  const selectedModel = modelsDefinition.OPTIONS
+    .find((option) => option.value === model) || null;
+  const allowedEfforts = selectedModel?.effort?.values
+    ?.map((value) => value.value) || [];
+  return typeof effort === 'string' && effort !== 'default' && allowedEfforts.includes(effort)
+    ? effort
+    : undefined;
+}
+
 function createRequestId() {
   if (typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -145,13 +155,8 @@ function matchesToolPermission(entry, toolName, input) {
   return false;
 }
 
-/**
- * Maps CLI options to SDK-compatible options format
- * @param {Object} options - CLI options
- * @returns {Object} SDK-compatible options
- */
 function mapCliOptionsToSDK(options = {}) {
-  const { sessionId, cwd, toolsSettings, permissionMode } = options;
+  const { sessionId, cwd, toolsSettings, permissionMode, effort } = options;
 
   const sdkOptions = {};
 
@@ -163,32 +168,26 @@ function mapCliOptionsToSDK(options = {}) {
   // which does not reliably follow npm's shell wrappers like cross-spawn does.
   sdkOptions.pathToClaudeCodeExecutable = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH);
 
-  // Map working directory
   if (cwd) {
     sdkOptions.cwd = cwd;
   }
 
-  // Map permission mode
   if (permissionMode && permissionMode !== 'default') {
     sdkOptions.permissionMode = permissionMode;
   }
 
-  // Map tool settings
   const settings = toolsSettings || {
     allowedTools: [],
     disallowedTools: [],
     skipPermissions: false
   };
 
-  // Handle tool permissions
   if (settings.skipPermissions && permissionMode !== 'plan') {
-    // When skipping permissions, use bypassPermissions mode
     sdkOptions.permissionMode = 'bypassPermissions';
   }
 
   let allowedTools = [...(settings.allowedTools || [])];
 
-  // Add plan mode default tools
   if (permissionMode === 'plan') {
     const planModeTools = ['Read', 'Task', 'exit_plan_mode', 'TodoRead', 'TodoWrite', 'WebFetch', 'WebSearch'];
     for (const tool of planModeTools) {
@@ -207,22 +206,24 @@ function mapCliOptionsToSDK(options = {}) {
 
   sdkOptions.disallowedTools = settings.disallowedTools || [];
 
-  // Map model (default to sonnet)
-  // Valid models: sonnet, opus, haiku, opusplan, sonnet[1m], fable
   sdkOptions.model = options.model || CLAUDE_FALLBACK_MODELS.DEFAULT;
-  // Model logged at query start below
 
-  // Map system prompt configuration
+  const resolvedEffort = resolveClaudeEffort(
+    sdkOptions.model,
+    effort,
+    options.effortModels || CLAUDE_FALLBACK_MODELS,
+  );
+  if (resolvedEffort) {
+    sdkOptions.effort = resolvedEffort;
+  }
+
   sdkOptions.systemPrompt = {
     type: 'preset',
-    preset: 'claude_code'  // Required to use CLAUDE.md
+    preset: 'claude_code'
   };
 
-  // Map setting sources for CLAUDE.md loading
-  // This loads CLAUDE.md from project, user (~/.config/claude/CLAUDE.md), and local directories
   sdkOptions.settingSources = ['project', 'user', 'local'];
 
-  // Map resume session
   if (sessionId) {
     sdkOptions.resume = sessionId;
   }
@@ -533,20 +534,24 @@ async function queryClaudeSDK(command, options = {}, ws) {
       sessionId,
       options.model,
     );
+    let effortModels = CLAUDE_FALLBACK_MODELS;
+    try {
+      effortModels = (await providerModelsService.getProviderModels('claude')).models;
+    } catch (error) {
+      console.warn('[Claude SDK] Unable to load provider models for effort validation:', error);
+    }
 
-    // Map CLI options to SDK format
     const sdkOptions = mapCliOptionsToSDK({
       ...options,
       model: resolvedModel || options.model,
+      effortModels,
     });
 
-    // Load MCP configuration
     const mcpServers = await loadMcpConfig(options.cwd);
     if (mcpServers) {
       sdkOptions.mcpServers = mcpServers;
     }
 
-    // Handle images - save to temp files and modify prompt
     const imageResult = await handleImages(command, options.images, options.cwd);
     const finalCommand = imageResult.modifiedCommand;
     tempImagePaths = imageResult.tempImagePaths;
@@ -650,7 +655,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
       return { behavior: 'deny', message: decision.message ?? 'User denied tool use' };
     };
 
-    // Set stream-close timeout for interactive tools (Query constructor reads it synchronously). Claude Agent SDK has a default of 5s and this overrides it
+    // Query constructor reads this synchronously.
     const prevStreamTimeout = process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT;
     process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT = '300000';
 

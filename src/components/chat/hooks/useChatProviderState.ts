@@ -5,16 +5,24 @@ import type {
   ProjectSession,
   LLMProvider,
   Project,
+  ProviderModelOption,
   ProviderModelsCacheInfo,
   ProviderModelsDefinition,
 } from '../../../types/app';
 
 const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
-  claude: 'opus',
+  claude: 'default',
   cursor: 'gpt-5.3-codex',
   codex: 'gpt-5.4',
   gemini: 'gemini-3.1-pro-preview',
   opencode: 'anthropic/claude-sonnet-4-5',
+};
+
+const DEFAULT_EFFORT_VALUE = 'default';
+
+const FALLBACK_EFFORT_VALUES: Partial<Record<LLMProvider, string[]>> = {
+  claude: ['low', 'medium', 'high', 'xhigh', 'max'],
+  codex: ['low', 'medium', 'high', 'xhigh'],
 };
 
 /**
@@ -87,6 +95,12 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
   const [codexModel, setCodexModel] = useState<string>(() => {
     return localStorage.getItem('codex-model') || FALLBACK_DEFAULT_MODEL.codex;
   });
+  const [claudeEffort, setClaudeEffort] = useState<string>(() => {
+    return localStorage.getItem('claude-effort') || DEFAULT_EFFORT_VALUE;
+  });
+  const [codexEffort, setCodexEffort] = useState<string>(() => {
+    return localStorage.getItem('codex-effort') || DEFAULT_EFFORT_VALUE;
+  });
   const [geminiModel, setGeminiModel] = useState<string>(() => {
     return localStorage.getItem('gemini-model') || FALLBACK_DEFAULT_MODEL.gemini;
   });
@@ -143,6 +157,19 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
 
     setOpenCodeModel(model);
     localStorage.setItem('opencode-model', model);
+  }, []);
+
+  const setStoredProviderEffort = useCallback((targetProvider: LLMProvider, effort: string) => {
+    if (targetProvider === 'claude') {
+      setClaudeEffort(effort);
+      localStorage.setItem('claude-effort', effort);
+      return;
+    }
+
+    if (targetProvider === 'codex') {
+      setCodexEffort(effort);
+      localStorage.setItem('codex-effort', effort);
+    }
   }, []);
 
   const loadProviderModels = useCallback(async (options: { bypassCache?: boolean } = {}) => {
@@ -259,6 +286,53 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
     return def.DEFAULT;
   };
 
+  const getModelOption = useCallback((
+    targetProvider: LLMProvider,
+    model: string,
+  ): ProviderModelOption | null => {
+    const definition = providerModelCatalog[targetProvider];
+    if (!definition) {
+      return null;
+    }
+
+    return definition.OPTIONS.find((option) => option.value === model) ?? null;
+  }, [providerModelCatalog]);
+
+  const getAllowedEffortValues = useCallback((
+    targetProvider: LLMProvider,
+    model: string,
+  ): string[] => {
+    const option = getModelOption(targetProvider, model);
+    return option?.effort?.values.map((value) => value.value) ?? FALLBACK_EFFORT_VALUES[targetProvider] ?? [];
+  }, [getModelOption]);
+
+  const reconcileStoredEffort = useCallback((
+    targetProvider: LLMProvider,
+    model: string,
+    currentEffort: string,
+  ): string => {
+    const allowedValues = getAllowedEffortValues(targetProvider, model);
+    if (allowedValues.length === 0) {
+      return DEFAULT_EFFORT_VALUE;
+    }
+
+    const storageKey = `${targetProvider}-effort`;
+    const storedEffort = localStorage.getItem(storageKey);
+    if (storedEffort === DEFAULT_EFFORT_VALUE || storedEffort === null) {
+      return DEFAULT_EFFORT_VALUE;
+    }
+
+    if (allowedValues.includes(storedEffort)) {
+      return storedEffort;
+    }
+
+    if (allowedValues.includes(currentEffort)) {
+      return currentEffort;
+    }
+
+    return DEFAULT_EFFORT_VALUE;
+  }, [getAllowedEffortValues]);
+
   useEffect(() => {
     const claude = providerModelCatalog.claude;
     if (claude) {
@@ -271,6 +345,16 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
       }
     }
   }, [providerModelCatalog.claude, claudeModel]);
+
+  useEffect(() => {
+    const next = reconcileStoredEffort('claude', claudeModel, claudeEffort);
+    if (next !== claudeEffort) {
+      setClaudeEffort(next);
+    }
+    if ((localStorage.getItem('claude-effort') || DEFAULT_EFFORT_VALUE) !== next) {
+      localStorage.setItem('claude-effort', next);
+    }
+  }, [claudeEffort, claudeModel, reconcileStoredEffort]);
 
   useEffect(() => {
     const cursor = providerModelCatalog.cursor;
@@ -297,6 +381,16 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
       }
     }
   }, [providerModelCatalog.codex, codexModel]);
+
+  useEffect(() => {
+    const next = reconcileStoredEffort('codex', codexModel, codexEffort);
+    if (next !== codexEffort) {
+      setCodexEffort(next);
+    }
+    if ((localStorage.getItem('codex-effort') || DEFAULT_EFFORT_VALUE) !== next) {
+      localStorage.setItem('codex-effort', next);
+    }
+  }, [codexEffort, codexModel, reconcileStoredEffort]);
 
   useEffect(() => {
     const gemini = providerModelCatalog.gemini;
@@ -430,6 +524,10 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
     setClaudeModel,
     codexModel,
     setCodexModel,
+    claudeEffort,
+    setClaudeEffort,
+    codexEffort,
+    setCodexEffort,
     geminiModel,
     setGeminiModel,
     opencodeModel,
@@ -445,5 +543,6 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
     providerModelsRefreshing,
     hardRefreshProviderModels: () => loadProviderModels({ bypassCache: true }),
     selectProviderModel,
+    setStoredProviderEffort,
   };
 }

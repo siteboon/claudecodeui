@@ -37,6 +37,8 @@ interface UseChatComposerStateArgs {
   cursorModel: string;
   claudeModel: string;
   codexModel: string;
+  claudeEffort: string;
+  codexEffort: string;
   geminiModel: string;
   opencodeModel: string;
   isLoading: boolean;
@@ -161,6 +163,17 @@ const getNotificationSessionSummary = (
   return normalizedFallback.length > 80 ? `${normalizedFallback.slice(0, 77)}...` : normalizedFallback;
 };
 
+const getLatestProviderEffort = (
+  provider: LLMProvider,
+  fallbackEffort: string,
+): string => {
+  if (provider !== 'claude' && provider !== 'codex') {
+    return 'default';
+  }
+
+  return safeLocalStorage.getItem(`${provider}-effort`) || fallbackEffort;
+};
+
 export function useChatComposerState({
   selectedProject,
   selectedSession,
@@ -171,6 +184,8 @@ export function useChatComposerState({
   cursorModel,
   claudeModel,
   codexModel,
+  claudeEffort,
+  codexEffort,
   geminiModel,
   opencodeModel,
   isLoading,
@@ -730,6 +745,12 @@ export function useChatComposerState({
               : provider === 'opencode'
                 ? opencodeModel
                 : claudeModel;
+      const effort =
+        provider === 'claude'
+          ? getLatestProviderEffort(provider, claudeEffort)
+          : provider === 'codex'
+            ? getLatestProviderEffort(provider, codexEffort)
+            : 'default';
 
       // One message shape for every provider. The backend resolves the
       // provider, project path, and provider-native resume id from the
@@ -740,6 +761,7 @@ export function useChatComposerState({
         content: messageContent,
         options: {
           model,
+          effort,
           // Codex has no plan mode; downgrade rather than sending an
           // unsupported value to its runtime.
           permissionMode: provider === 'codex' && permissionMode === 'plan' ? 'default' : permissionMode,
@@ -768,7 +790,9 @@ export function useChatComposerState({
       selectedSession,
       attachedImages,
       claudeModel,
+      claudeEffort,
       codexModel,
+      codexEffort,
       currentSessionId,
       cursorModel,
       executeCommand,
