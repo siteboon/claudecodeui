@@ -568,7 +568,7 @@
   }
 
   .chat-composer-shell {
-    contain: layout style paint;
+    contain: layout style;
   }
 
   .chat-message {
