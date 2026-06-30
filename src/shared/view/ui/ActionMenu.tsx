@@ -47,6 +47,13 @@ export default function ActionMenu({
 }: ActionMenuProps) {
   const [isOpen, setIsOpen] = React.useState(false);
   const rootRef = React.useRef<HTMLDivElement | null>(null);
+  const triggerRef = React.useRef<HTMLButtonElement | null>(null);
+  const menuRef = React.useRef<HTMLDivElement | null>(null);
+  // Whether closing should move focus back to the trigger. Set for keyboard
+  // (Escape) and item selection, but left false for outside pointer clicks so
+  // focus is not stolen from wherever the user clicked.
+  const restoreFocusRef = React.useRef(false);
+  const wasOpenRef = React.useRef(false);
   const menuId = React.useId();
 
   React.useEffect(() => {
@@ -63,6 +70,7 @@ export default function ActionMenu({
 
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        restoreFocusRef.current = true;
         setIsOpen(false);
       }
     };
@@ -75,11 +83,32 @@ export default function ActionMenu({
     };
   }, [isOpen]);
 
+  // Move focus into the menu on open and back to the trigger on a keyboard or
+  // selection close, so keyboard and screen-reader navigation match the menu role.
+  React.useEffect(() => {
+    if (isOpen) {
+      wasOpenRef.current = true;
+      const menu = menuRef.current;
+      const firstItem = menu?.querySelector<HTMLButtonElement>('[role="menuitem"]:not([disabled])');
+      (firstItem ?? menu)?.focus();
+      return;
+    }
+
+    if (wasOpenRef.current) {
+      wasOpenRef.current = false;
+      if (restoreFocusRef.current) {
+        triggerRef.current?.focus();
+      }
+      restoreFocusRef.current = false;
+    }
+  }, [isOpen]);
+
   const runItem = (item: ActionMenuItem) => {
     if (item.disabled || item.loading) {
       return;
     }
 
+    restoreFocusRef.current = true;
     setIsOpen(false);
     item.onSelect();
   };
@@ -87,6 +116,7 @@ export default function ActionMenu({
   return (
     <div ref={rootRef} className={cn('relative inline-flex', className)}>
       <Button
+        ref={triggerRef}
         type="button"
         variant={variant}
         size={size}
@@ -105,8 +135,10 @@ export default function ActionMenu({
 
       {isOpen && (
         <div
+          ref={menuRef}
           id={menuId}
           role="menu"
+          tabIndex={-1}
           className={cn(
             'absolute top-full z-50 mt-2 min-w-[220px] rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg',
             'animate-in fade-in-0 zoom-in-95',

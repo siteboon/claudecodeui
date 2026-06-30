@@ -214,6 +214,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
   const [queuedFiles, setQueuedFiles] = useState<QueuedSkillFile[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [justInstalled, setJustInstalled] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [showInstallPath, setShowInstallPath] = useState(false);
@@ -230,6 +231,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
     setSearchQuery('');
     setIsAddDialogOpen(false);
     setShowInstallPath(false);
+    setJustInstalled(false);
   }, [selectedProvider]);
 
   useEffect(() => {
@@ -357,6 +359,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
       })));
       await addSkills({ entries });
       setQueuedFiles([]);
+      setJustInstalled(true);
       setIsAddDialogOpen(false);
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'Failed to import skills');
@@ -369,6 +372,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
     if (open) {
       setSubmitError(null);
       setShowInstallPath(false);
+      setJustInstalled(false);
       setIsAddDialogOpen(true);
       return;
     }
@@ -376,6 +380,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
     setQueuedFiles([]);
     setSubmitError(null);
     setShowInstallPath(false);
+    setJustInstalled(false);
     setIsAddDialogOpen(false);
   }, []);
 
@@ -592,6 +597,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
                 size="sm"
                 className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
                 aria-label="Close add skill dialog"
+                disabled={isSubmitting}
                 onClick={() => handleAddDialogOpenChange(false)}
               >
                 <X className="h-4 w-4" />
@@ -605,7 +611,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
 
           <div className="flex flex-shrink-0 flex-col gap-3 border-t border-border/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0 flex-1">
-              {(submitError || loadError || saveStatus === 'success') ? (
+              {(submitError || loadError || (justInstalled && saveStatus === 'success')) ? (
                 <div className={cn(
                   'max-h-24 overflow-y-auto whitespace-pre-wrap rounded-lg border px-3 py-2 text-sm',
                   submitError || loadError
@@ -626,6 +632,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
                 variant="outline"
                 size="sm"
                 className="w-full sm:w-auto"
+                disabled={isSubmitting}
                 onClick={() => handleAddDialogOpenChange(false)}
               >
                 Cancel
@@ -651,7 +658,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
         </div>
       )}
 
-      {saveStatus === 'success' && !isAddDialogOpen && (
+      {justInstalled && saveStatus === 'success' && !isAddDialogOpen && (
         <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
           <CheckCircle2 className="h-4 w-4" />
           Skills saved successfully.
