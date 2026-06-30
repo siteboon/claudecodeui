@@ -26,6 +26,9 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  Dialog,
+  DialogContent,
+  DialogTitle,
   Input,
 } from '../../../shared/view/ui';
 import { useProviderSkills } from '../hooks/useProviderSkills';
@@ -525,7 +528,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
   );
 
   const hermesHubPanel = selectedProvider === 'hermes' ? (
-    <div className="space-y-4">
+    <div className="flex min-h-full flex-col gap-4">
       <div className="flex flex-col gap-2 sm:flex-row">
         <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -556,37 +559,8 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
         </Button>
       </div>
 
-      <div className="rounded-lg border border-border/60 bg-muted/15 p-3">
-        <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-          <Wrench className="h-3.5 w-3.5" />
-          Hub Maintenance
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {HERMES_SKILL_ACTIONS.map((action) => {
-            const Icon = action.icon;
-            return (
-              <Button
-                key={action.action}
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 px-2 text-muted-foreground hover:text-foreground"
-                title={action.description}
-                disabled={registryBusyKey === action.action}
-                onClick={() => void runRegistryMaintenance(action.action)}
-              >
-                {registryBusyKey === action.action
-                  ? <Loader2 className="h-4 w-4 animate-spin" />
-                  : <Icon className="h-4 w-4" />}
-                {action.label}
-              </Button>
-            );
-          })}
-        </div>
-      </div>
-
       {registryResults.length > 0 && (
-        <div className="grid max-h-[320px] gap-2 overflow-y-auto pr-1">
+        <div className="grid gap-2">
           {registryResults.map((result) => (
             <div
               key={result.identifier}
@@ -623,6 +597,47 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
           ))}
         </div>
       )}
+
+      {registryResults.length === 0 && (
+        <div className="flex min-h-[220px] flex-1 items-center justify-center rounded-lg border border-dashed border-border/70 bg-muted/15 px-4 py-8 text-center">
+          <div className="max-w-sm space-y-2">
+            <Compass className="mx-auto h-6 w-6 text-muted-foreground" />
+            <div className="text-sm font-medium text-foreground">Search the Hermes Skills Hub</div>
+            <div className="text-sm text-muted-foreground">
+              Find installable Hermes skills by name, provider, source, or task.
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-lg border border-border/60 bg-muted/15 p-3">
+        <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+          <Wrench className="h-3.5 w-3.5" />
+          Hub Maintenance
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {HERMES_SKILL_ACTIONS.map((action) => {
+            const Icon = action.icon;
+            return (
+              <Button
+                key={action.action}
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-muted-foreground hover:text-foreground"
+                title={action.description}
+                disabled={registryBusyKey === action.action}
+                onClick={() => void runRegistryMaintenance(action.action)}
+              >
+                {registryBusyKey === action.action
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Icon className="h-4 w-4" />}
+                {action.label}
+              </Button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   ) : null;
 
@@ -667,94 +682,81 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
         </div>
       </div>
 
-      {isAddDialogOpen && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
-          <button
-            type="button"
-            aria-label="Close add skill dialog"
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => setIsAddDialogOpen(false)}
-          />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="add-skill-title"
-            className="relative z-[10001] max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl border bg-popover text-popover-foreground shadow-lg"
-          >
-            <div className="border-b border-border/60 px-4 py-4">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/70 bg-muted/20 text-muted-foreground">
-                  {addMode === 'hub' ? <Compass className="h-4 w-4" /> : <FileUp className="h-4 w-4" />}
+      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        <DialogContent
+          wrapperClassName="z-[10000]"
+          className="flex h-[calc(100vh-2rem)] max-h-[760px] w-[calc(100vw-2rem)] max-w-4xl flex-col overflow-hidden p-0 sm:h-[720px]"
+        >
+          <DialogTitle>Add {providerName} Skill</DialogTitle>
+          <div className="flex-shrink-0 border-b border-border/60 px-4 py-4">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/70 bg-muted/20 text-muted-foreground">
+                {addMode === 'hub' ? <Compass className="h-4 w-4" /> : <FileUp className="h-4 w-4" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-base font-medium text-foreground">Add {providerName} Skill</div>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  {selectedProvider === 'hermes'
+                    ? 'Upload a local skill or install one from the Hermes Skills Hub.'
+                    : 'Upload a markdown skill file or a complete skill folder.'}
                 </div>
-                <div className="min-w-0 flex-1">
-                  <div id="add-skill-title" className="text-base font-medium text-foreground">Add {providerName} Skill</div>
-                  <div className="mt-1 text-sm text-muted-foreground">
-                    {selectedProvider === 'hermes'
-                      ? 'Upload a local skill or install one from the Hermes Skills Hub.'
-                      : 'Upload a markdown skill file or a complete skill folder.'}
-                  </div>
-                </div>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                aria-label="Close add skill dialog"
+                onClick={() => setIsAddDialogOpen(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {selectedProvider === 'hermes' && (
+              <div className="mt-4 inline-flex rounded-lg border border-border/70 bg-muted/20 p-1">
                 <Button
                   type="button"
-                  variant="ghost"
+                  variant={addMode === 'upload' ? 'secondary' : 'ghost'}
                   size="sm"
-                  className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-                  aria-label="Close add skill dialog"
-                  onClick={() => setIsAddDialogOpen(false)}
+                  className="h-8 shadow-none"
+                  onClick={() => setAddMode('upload')}
                 >
-                  <X className="h-4 w-4" />
+                  <FileUp className="h-4 w-4" />
+                  Upload
+                </Button>
+                <Button
+                  type="button"
+                  variant={addMode === 'hub' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="h-8 shadow-none"
+                  onClick={() => setAddMode('hub')}
+                >
+                  <Compass className="h-4 w-4" />
+                  Skills Hub
                 </Button>
               </div>
-
-              {selectedProvider === 'hermes' && (
-                <div className="mt-4 inline-flex rounded-lg border border-border/70 bg-muted/20 p-1">
-                  <button
-                    type="button"
-                    className={cn(
-                      'inline-flex h-8 items-center gap-2 rounded-md px-3 text-sm transition-colors',
-                      addMode === 'upload'
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground',
-                    )}
-                    onClick={() => setAddMode('upload')}
-                  >
-                    <FileUp className="h-4 w-4" />
-                    Upload
-                  </button>
-                  <button
-                    type="button"
-                    className={cn(
-                      'inline-flex h-8 items-center gap-2 rounded-md px-3 text-sm transition-colors',
-                      addMode === 'hub'
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground',
-                    )}
-                    onClick={() => setAddMode('hub')}
-                  >
-                    <Compass className="h-4 w-4" />
-                    Skills Hub
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-4 p-4">
-              {addMode === 'hub' && hermesHubPanel ? hermesHubPanel : uploadPanel}
-
-              {(submitError || loadError || registryError || registryStatus || saveStatus === 'success') && (
-                <div className={cn(
-                  'rounded-lg border px-3 py-2 text-sm',
-                  submitError || loadError || registryError
-                    ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-200'
-                    : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-                )}>
-                  {submitError || loadError || registryError || registryStatus || 'Skills saved successfully.'}
-                </div>
-              )}
-            </div>
+            )}
           </div>
-        </div>
-      )}
+
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            {addMode === 'hub' && hermesHubPanel ? hermesHubPanel : uploadPanel}
+          </div>
+
+          <div className="min-h-14 flex-shrink-0 border-t border-border/60 px-4 py-3">
+            {(submitError || loadError || registryError || registryStatus || saveStatus === 'success') && (
+              <div className={cn(
+                'rounded-lg border px-3 py-2 text-sm',
+                submitError || loadError || registryError
+                  ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-200'
+                  : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+              )}>
+                {submitError || loadError || registryError || registryStatus || 'Skills saved successfully.'}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {saveStatus === 'success' && !isAddDialogOpen && (
         <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">

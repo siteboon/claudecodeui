@@ -92,12 +92,22 @@ DialogTrigger.displayName = 'DialogTrigger';
 interface DialogContentProps extends React.HTMLAttributes<HTMLDivElement> {
   onEscapeKeyDown?: () => void;
   onPointerDownOutside?: () => void;
+  overlayClassName?: string;
+  wrapperClassName?: string;
 }
 
 const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
-  ({ className, children, onEscapeKeyDown, onPointerDownOutside, ...props }, ref) => {
+  ({
+    className,
+    children,
+    onEscapeKeyDown,
+    onPointerDownOutside,
+    overlayClassName,
+    wrapperClassName,
+    ...props
+  }, ref) => {
     const { open, onOpenChange, triggerRef } = useDialog();
     const contentRef = React.useRef<HTMLDivElement | null>(null);
     const previousFocusRef = React.useRef<HTMLElement | null>(null);
@@ -171,10 +181,10 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
     if (!open) return null;
 
     return createPortal(
-      <div className="fixed inset-0 z-50">
+      <div className={cn('fixed inset-0 z-50', wrapperClassName)}>
         {/* Overlay */}
         <div
-          className="fixed inset-0 animate-dialog-overlay-show bg-black/50 backdrop-blur-sm"
+          className={cn('fixed inset-0 animate-dialog-overlay-show bg-black/50 backdrop-blur-sm', overlayClassName)}
           onClick={() => {
             onPointerDownOutside?.();
             onOpenChange(false);
