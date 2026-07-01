@@ -1,3 +1,5 @@
+import { CLOUDCLI_WORDMARK_FONT_FAMILY } from '../../../constants/branding';
+
 const loadingDotAnimationDelays = ['0s', '0.15s', '0.3s'];
 
 export default function AuthLoadingScreen() {
@@ -14,7 +16,12 @@ export default function AuthLoadingScreen() {
           </div>
         </div>
 
-        <h1 className="mb-4 font-serif text-2xl font-bold tracking-tight text-foreground">CloudCLI</h1>
+        <h1
+          className="mb-4 text-2xl font-bold tracking-tight text-foreground"
+          style={{ fontFamily: CLOUDCLI_WORDMARK_FONT_FAMILY }}
+        >
+          CloudCLI
+        </h1>
         <p className="sr-only">Loading authentication state…</p>
         <div aria-hidden className="flex items-center justify-center gap-2">
           {loadingDotAnimationDelays.map((delay) => (
