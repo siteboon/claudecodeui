@@ -20,6 +20,9 @@ export default function PasswordSettingsTab() {
   const handleChangePassword = useCallback(async () => {
     setErrorMessage('');
 
+    // Prevent duplicate requests while one is in flight
+    if (status === 'saving') return;
+
     if (!oldPassword || !newPassword || !confirmPassword) {
       setStatus('error');
       setErrorMessage(t('password.error.fillAllFields'));
