@@ -2,6 +2,7 @@ import express, { type Request, type Response } from 'express';
 
 import { providerAuthService } from '@/modules/providers/services/provider-auth.service.js';
 import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
+import { hermesGatewayService } from '@/modules/providers/services/hermes-gateway.service.js';
 import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
 import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
 import { providerSkillsService } from '@/modules/providers/services/skills.service.js';
@@ -340,6 +341,18 @@ const parseProvider = (value: unknown): LLMProvider => {
   });
 };
 
+const parseHermesProvider = (value: unknown): 'hermes' => {
+  const provider = parseProvider(value);
+  if (provider !== 'hermes') {
+    throw new AppError('Gateway controls are only available for Hermes.', {
+      code: 'HERMES_GATEWAY_UNSUPPORTED_PROVIDER',
+      statusCode: 404,
+    });
+  }
+
+  return provider;
+};
+
 const parseSessionRenameSummary = (payload: unknown): string => {
   if (!payload || typeof payload !== 'object') {
     throw new AppError('Request body must be an object.', {
@@ -634,6 +647,51 @@ router.get(
     res.json(createApiSuccessResponse(
       providerCapabilitiesService.getProviderCapabilities(provider),
     ));
+  }),
+);
+
+// ----------------- Hermes gateway routes -----------------
+router.get(
+  '/:provider/gateway/status',
+  asyncHandler(async (req: Request, res: Response) => {
+    parseHermesProvider(req.params.provider);
+    const status = await hermesGatewayService.getStatus();
+    res.json(createApiSuccessResponse(status));
+  }),
+);
+
+router.get(
+  '/:provider/gateway/logs',
+  asyncHandler(async (req: Request, res: Response) => {
+    parseHermesProvider(req.params.provider);
+    res.json(createApiSuccessResponse({ logs: hermesGatewayService.getLogs() }));
+  }),
+);
+
+router.post(
+  '/:provider/gateway/start',
+  asyncHandler(async (req: Request, res: Response) => {
+    parseHermesProvider(req.params.provider);
+    const status = await hermesGatewayService.start();
+    res.json(createApiSuccessResponse(status));
+  }),
+);
+
+router.post(
+  '/:provider/gateway/stop',
+  asyncHandler(async (req: Request, res: Response) => {
+    parseHermesProvider(req.params.provider);
+    const status = await hermesGatewayService.stop();
+    res.json(createApiSuccessResponse(status));
+  }),
+);
+
+router.post(
+  '/:provider/gateway/restart',
+  asyncHandler(async (req: Request, res: Response) => {
+    parseHermesProvider(req.params.provider);
+    const status = await hermesGatewayService.restart();
+    res.json(createApiSuccessResponse(status));
   }),
 );
 

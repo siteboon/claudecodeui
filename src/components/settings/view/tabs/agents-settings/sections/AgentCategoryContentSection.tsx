@@ -5,6 +5,7 @@ import type { SkillsProject } from '../../../../../skills/types';
 import { ProviderSkills } from '../../../../../skills';
 
 import AccountContent from './content/AccountContent';
+import GatewayContent from './content/GatewayContent';
 import PermissionsContent from './content/PermissionsContent';
 
 export default function AgentCategoryContentSection({
@@ -26,6 +27,12 @@ export default function AgentCategoryContentSection({
           agent={selectedAgent}
           authStatus={agentContextById[selectedAgent].authStatus}
           onLogin={agentContextById[selectedAgent].onLogin}
+        />
+      )}
+
+      {selectedCategory === 'gateway' && selectedAgent === 'hermes' && (
+        <GatewayContent
+          onOpenSetup={agentContextById.hermes.onLogin}
         />
       )}
 

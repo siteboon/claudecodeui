@@ -3,6 +3,7 @@
   "tabs": {
     "account": "Account",
     "permissions": "Permissions",
+    "gateway": "Gateway",
     "mcpServers": "MCP Servers",
     "skills": "Skills",
     "appearance": "Appearance"
