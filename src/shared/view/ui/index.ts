@@ -1,4 +1,6 @@
 export { Alert, AlertTitle, AlertDescription, alertVariants } from './Alert';
+export { default as ActionMenu } from './ActionMenu';
+export type { ActionMenuItem } from './ActionMenu';
 export { Badge, badgeVariants } from './Badge';
 export { Button, buttonVariants } from './Button';
 export { Confirmation, ConfirmationTitle, ConfirmationRequest, ConfirmationAccepted, ConfirmationRejected, ConfirmationActions, ConfirmationAction } from './Confirmation';
