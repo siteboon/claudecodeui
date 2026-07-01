@@ -24,7 +24,6 @@ interface ToolRendererProps {
   onFileOpen?: (filePath: string, diffInfo?: any) => void;
   createDiff?: (oldStr: string, newStr: string) => DiffLine[];
   selectedProject?: Project | null;
-  autoExpandTools?: boolean;
   showRawParameters?: boolean;
   rawToolInput?: string;
   isSubagentContainer?: boolean;
@@ -80,7 +79,6 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
   onFileOpen,
   createDiff,
   selectedProject,
-  autoExpandTools = false,
   showRawParameters = false,
   rawToolInput,
   isSubagentContainer,
@@ -151,8 +149,8 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
         output={output}
         isError={Boolean(toolResult?.isError)}
         status={toolStatus !== 'completed' ? toolStatus : undefined}
-        // Commands stay collapsed by default (even consecutive ones); only
-        // failures auto-expand so they remain visible.
+        // Commands stay collapsed by default; only failures auto-expand so they
+        // remain visible.
         defaultOpen={false}
       />
     );
@@ -199,7 +197,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
       <PlanDisplay
         title={title}
         content={contentProps.content || ''}
-        defaultOpen={displayConfig.defaultOpen ?? autoExpandTools}
+        defaultOpen={displayConfig.defaultOpen ?? false}
         isStreaming={isStreaming}
         showRawParameters={mode === 'input' && showRawParameters}
         rawContent={rawToolInput}
@@ -216,7 +214,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
 
     const defaultOpen = displayConfig.defaultOpen !== undefined
       ? displayConfig.defaultOpen
-      : autoExpandTools;
+      : false;
 
     const contentProps = displayConfig.getContentProps?.(parsedData, {
       selectedProject,

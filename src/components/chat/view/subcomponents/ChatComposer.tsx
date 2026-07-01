@@ -71,9 +71,6 @@ interface ChatComposerProps {
   onToggleCommandMenu: () => void;
   hasInput: boolean;
   onClearInput: () => void;
-  isUserScrolledUp: boolean;
-  hasMessages: boolean;
-  onScrollToBottom: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement> | MouseEvent<HTMLButtonElement> | TouchEvent<HTMLButtonElement>) => void;
   isDragActive: boolean;
   attachedImages: File[];
@@ -104,6 +101,7 @@ interface ChatComposerProps {
   onTextareaPaste: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
   onTextareaScrollSync: (target: HTMLTextAreaElement) => void;
   onTextareaInput: (event: FormEvent<HTMLTextAreaElement>) => void;
+  isInputFocused?: boolean;
   onInputFocusChange?: (focused: boolean) => void;
   placeholder: string;
   isTextareaExpanded: boolean;
@@ -128,9 +126,6 @@ export default function ChatComposer({
   onToggleCommandMenu,
   hasInput,
   onClearInput,
-  isUserScrolledUp,
-  hasMessages,
-  onScrollToBottom,
   onSubmit,
   isDragActive,
   attachedImages,
@@ -161,6 +156,7 @@ export default function ChatComposer({
   onTextareaPaste,
   onTextareaScrollSync,
   onTextareaInput,
+  isInputFocused = false,
   onInputFocusChange,
   placeholder,
   isTextareaExpanded,
@@ -240,15 +236,18 @@ export default function ChatComposer({
 
   // Hide the thinking/status bar while any permission request is pending
   const hasPendingPermissions = pendingPermissionRequests.length > 0;
+  const hasActivityIndicator = Boolean(activity && !hasPendingPermissions);
 
   return (
-    <div className="chat-composer-shell flex-shrink-0 p-2 pb-2 sm:p-4 sm:pb-4 md:p-4 md:pb-6">
+    <div className="chat-composer-shell relative flex-shrink-0 px-2 pb-2 pt-0 sm:px-4 sm:pb-4 md:px-4 md:pb-6">
       {!hasPendingPermissions && (
-        <ActivityIndicator activity={activity} onAbort={onAbortSession} />
+        <div className="pointer-events-none absolute bottom-full left-1/2 z-10 w-[calc(100%-1rem)] max-w-[54.25rem] -translate-x-1/2 translate-y-px bg-transparent sm:w-[calc(100%-2rem)]">
+          <ActivityIndicator activity={activity} onAbort={onAbortSession} isInputFocused={isInputFocused} />
+        </div>
       )}
 
       {pendingPermissionRequests.length > 0 && (
-        <div className="mx-auto mb-3 max-w-4xl">
+        <div className="mx-auto mb-3 max-w-[54.25rem]">
           <PermissionRequestsBanner
             pendingPermissionRequests={pendingPermissionRequests}
             handlePermissionDecision={handlePermissionDecision}
@@ -257,19 +256,7 @@ export default function ChatComposer({
         </div>
       )}
 
-      {!hasQuestionPanel && <div className="relative mx-auto max-w-4xl">
-        {isUserScrolledUp && hasMessages && (
-          <div className="absolute -top-10 left-0 right-0 z-10 flex justify-center">
-            <button
-              type="button"
-              onClick={onScrollToBottom}
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-border/50 bg-card text-muted-foreground shadow-sm transition-all duration-200 hover:bg-accent hover:text-foreground"
-              title={t('input.scrollToBottom', { defaultValue: 'Scroll to bottom' })}
-            >
-              <ArrowDownIcon className="h-4 w-4" />
-            </button>
-          </div>
-        )}
+      {!hasQuestionPanel && <div className="relative mx-auto max-w-[54.25rem]">
         {showFileDropdown && filteredFiles.length > 0 && (
           <div className="absolute bottom-full left-0 right-0 z-50 mb-2 max-h-48 overflow-y-auto rounded-xl border border-border/50 bg-card/95 shadow-lg backdrop-blur-md">
             {filteredFiles.map((file, index) => (
@@ -310,7 +297,10 @@ export default function ChatComposer({
         <PromptInput
           onSubmit={onSubmit as (event: FormEvent<HTMLFormElement>) => void}
           status={isLoading ? 'streaming' : 'ready'}
-          className={isTextareaExpanded ? 'chat-input-expanded' : ''}
+          className={[
+            isTextareaExpanded ? 'chat-input-expanded' : '',
+            hasActivityIndicator ? 'rounded-t-none' : '',
+          ].filter(Boolean).join(' ')}
           {...getRootProps()}
         >
           {isDragActive && (
@@ -388,7 +378,7 @@ export default function ChatComposer({
             <button
               type="button"
               onClick={onModeSwitch}
-              className={`rounded-lg border p-2 text-xs font-medium transition-all duration-200 sm:px-2.5 sm:py-1 ${
+              className={`inline-flex h-8 items-center rounded-lg border px-2 text-xs font-medium transition-all duration-200 sm:px-2.5 ${
                 permissionMode === 'default'
                   ? 'border-border/60 bg-muted/50 text-muted-foreground hover:bg-muted'
                   : permissionMode === 'acceptEdits'
