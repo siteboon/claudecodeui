@@ -76,7 +76,11 @@ The fastest way to get started — no local setup required. Get a fully managed,
 
 ### Desktop App
 
-Download the latest macOS or Windows desktop app from the **[GitHub Releases](https://github.com/siteboon/claudecodeui/releases)** page.
+Download the latest desktop app:
+
+- **[macOS](https://cloudcli.ai/download/macos)**
+- **[Windows](https://cloudcli.ai/download/windows)**
+- **[Download page](https://cloudcli.ai/download)** · **[GitHub Releases and checksums](https://github.com/siteboon/claudecodeui/releases)**
 
 Use the desktop app to open CloudCLI Cloud environments, switch between local and remote workspaces, copy mobile/browser URLs, and keep Local CloudCLI available from your menu bar or tray. To work locally, choose **Local CloudCLI** in the desktop app; it will use your running local server or start one for you.
 
