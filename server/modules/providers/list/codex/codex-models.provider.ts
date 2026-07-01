@@ -45,22 +45,6 @@ export const CODEX_FALLBACK_MODELS: ProviderModelsDefinition = {
         values: [{ value: 'low' }, { value: 'medium' }, { value: 'high' }, { value: 'xhigh' }],
       },
     },
-    {
-      value: 'gpt-5.3-codex',
-      label: 'gpt-5.3-codex',
-      effort: {
-        default: 'medium',
-        values: [{ value: 'low' }, { value: 'medium' }, { value: 'high' }, { value: 'xhigh' }],
-      },
-    },
-    {
-      value: 'gpt-5.2',
-      label: 'gpt-5.2',
-      effort: {
-        default: 'medium',
-        values: [{ value: 'low' }, { value: 'medium' }, { value: 'high' }, { value: 'xhigh' }],
-      },
-    },
   ],
   DEFAULT: 'gpt-5.4',
 };

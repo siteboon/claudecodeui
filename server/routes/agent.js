@@ -651,7 +651,7 @@ class ResponseCollector {
  *                                       'gemini-3-pro', 'composer-1', 'auto', 'gpt-5.1', 'gpt-5.1-high',
  *                                       'gpt-5.1-codex', 'gpt-5.1-codex-high', 'gpt-5.1-codex-max',
  *                                       'gpt-5.1-codex-max-high', 'opus-4.1', 'grok', and thinking variants
- *                        Codex models: 'gpt-5.4' (default), 'gpt-5.5', 'gpt-5.4-mini', 'gpt-5.3-codex', 'gpt-5.2'
+ *                        Codex models: 'gpt-5.4' (default), 'gpt-5.5', 'gpt-5.4-mini'
  *
  * @param {string} effort - (Optional) Reasoning effort for providers/models that support it.
  *                          Claude supports: 'low', 'medium', 'high', 'xhigh', 'max' depending on model.
