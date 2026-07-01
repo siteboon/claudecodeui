@@ -155,7 +155,9 @@
       "gemini": "Готов использовать Gemini с {{model}}. Начните вводить сообщение ниже.",
       "default": "Выберите провайдера выше для начала"
     },
-    "pressToSearch": "Нажмите <kbd>{{shortcut}}</kbd>, чтобы искать сессии, файлы и коммиты"
+    "pressToSearch": "Нажмите <kbd>{{shortcut}}</kbd>, чтобы искать сессии, файлы и коммиты",
+    "modelSelector": "Выбор модели",
+    "chooseAmodel": "Выберите модель"
   },
   "session": {
     "continue": {

@@ -487,5 +487,22 @@
     "installAriaLabel": "插件 git 仓库 URL",
     "tab": "标签",
     "runningStatus": "运行中"
+  },
+  "browserSettings": {
+    "title": "浏览器",
+    "description": "允许代理创建受控的 Playwright 浏览器会话，你可以在浏览器标签页中监控。",
+    "enableLabel": "启用浏览器",
+    "enableDescription": "为支持的代理注册浏览器功能。代理可以创建浏览器会话，你可以查看、停止和删除它们。",
+    "ariaLabel": "启用浏览器",
+    "runtimeRequired": "需要浏览器运行时",
+    "installPrompt": "安装 Playwright 和 Chromium 以使用浏览器会话。",
+    "checking": "检查中...",
+    "installed": "已安装",
+    "missing": "未安装",
+    "statusReady": "就绪",
+    "statusSetupRequired": "需要设置",
+    "statusDisabled": "已禁用",
+    "installButton": "安装运行时",
+    "installingButton": "安装中..."
   }
 }

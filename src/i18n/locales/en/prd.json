@@ -1,0 +1,53 @@
+{
+  "header": {
+    "fileNamePlaceholder": "Enter PRD filename",
+    "focusFileName": "Focus filename input",
+    "badge": "PRD",
+    "newBadge": "New",
+    "subtitle": "Product Requirements Document",
+    "togglePreview": "Preview markdown",
+    "toggleEdit": "Switch to edit mode",
+    "enableWrap": "Enable word wrap",
+    "disableWrap": "Disable word wrap",
+    "toggleTheme": "Toggle theme",
+    "download": "Download PRD",
+    "generateTasksTitle": "Generate tasks from PRD content",
+    "generateTasks": "Generate Tasks",
+    "saved": "Saved!",
+    "saving": "Saving...",
+    "save": "Save PRD",
+    "exitFullscreen": "Exit fullscreen",
+    "fullscreen": "Fullscreen",
+    "close": "Close"
+  },
+  "footer": {
+    "lines": "Lines",
+    "characters": "Characters",
+    "words": "Words",
+    "format": "Format",
+    "markdown": "Markdown",
+    "shortcutHint": "Press Ctrl+S to save and Esc to close"
+  },
+  "loading": {
+    "text": "Loading PRD..."
+  },
+  "generateTasksModal": {
+    "title": "Generate Tasks from PRD",
+    "askClaudeTitle": "Ask Claude Code directly",
+    "askClaudeDesc": "Save this PRD, then ask Claude Code in chat to parse the file and create your initial tasks.",
+    "examplePrompt": "Example prompt",
+    "examplePromptText": "I have a PRD at .taskmaster/docs/{{fileName}}. Parse it and create the initial tasks.",
+    "viewDocs": "View TaskMaster documentation",
+    "gotIt": "Got it"
+  },
+  "overwriteModal": {
+    "title": "File Already Exists",
+    "description": "A PRD named \"{{fileName}}\" already exists. Do you want to overwrite it?",
+    "cancel": "Cancel",
+    "saving": "Saving...",
+    "overwrite": "Overwrite"
+  },
+  "alerts": {
+    "emptyContent": "Please add content to the PRD before generating tasks."
+  }
+}

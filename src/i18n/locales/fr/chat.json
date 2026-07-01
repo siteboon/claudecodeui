@@ -157,7 +157,9 @@
       "opencode": "Prêt à utiliser OpenCode avec {{model}}. Commencez à taper votre message ci-dessous.",
       "default": "Sélectionnez un fournisseur ci-dessus pour commencer"
     },
-    "pressToSearch": "Appuyez sur <kbd>{{shortcut}}</kbd> pour rechercher sessions, fichiers et commits"
+    "pressToSearch": "Appuyez sur <kbd>{{shortcut}}</kbd> pour rechercher sessions, fichiers et commits",
+    "modelSelector": "Sélecteur de modèle",
+    "chooseAmodel": "Choisir un modèle"
   },
   "session": {
     "continue": {

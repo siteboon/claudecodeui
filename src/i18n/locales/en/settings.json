@@ -574,5 +574,22 @@
     "installAriaLabel": "Plugin git repository URL",
     "tab": "tab",
     "runningStatus": "running"
+  },
+  "browserSettings": {
+    "title": "Browser",
+    "description": "Allow agents to create guarded Playwright browser sessions that you can monitor from the Browser tab.",
+    "enableLabel": "Enable Browser",
+    "enableDescription": "Registers Browser for supported agents. Agents can create browser sessions; you can watch, stop, and delete them.",
+    "ariaLabel": "Enable Browser",
+    "runtimeRequired": "Browser runtime required",
+    "installPrompt": "Install Playwright and Chromium to use browser sessions.",
+    "checking": "checking...",
+    "installed": "installed",
+    "missing": "missing",
+    "statusReady": "ready",
+    "statusSetupRequired": "setup required",
+    "statusDisabled": "disabled",
+    "installButton": "Install Runtime",
+    "installingButton": "Installing..."
   }
 }

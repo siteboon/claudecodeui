@@ -173,7 +173,9 @@
       "gemini": "準備好使用 {{model}} 的 Gemini。請在下方開始輸入您的訊息。",
       "default": "請在上方選擇一個提供者以開始"
     },
-    "pressToSearch": "按 <kbd>{{shortcut}}</kbd> 搜尋工作階段、檔案和提交"
+    "pressToSearch": "按 <kbd>{{shortcut}}</kbd> 搜尋工作階段、檔案和提交",
+    "modelSelector": "模型選擇器",
+    "chooseAmodel": "選擇模型"
   },
   "session": {
     "continue": {

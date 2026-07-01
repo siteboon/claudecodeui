@@ -1,0 +1,53 @@
+{
+  "header": {
+    "fileNamePlaceholder": "PRD-Dateinamen eingeben",
+    "focusFileName": "Dateinamenfeld fokussieren",
+    "badge": "PRD",
+    "newBadge": "Neu",
+    "subtitle": "Produktanforderungsdokument",
+    "togglePreview": "Markdown-Vorschau",
+    "toggleEdit": "Zum Bearbeitungsmodus wechseln",
+    "enableWrap": "Zeilenumbruch aktivieren",
+    "disableWrap": "Zeilenumbruch deaktivieren",
+    "toggleTheme": "Thema wechseln",
+    "download": "PRD herunterladen",
+    "generateTasksTitle": "Aufgaben aus PRD-Inhalt generieren",
+    "generateTasks": "Aufgaben generieren",
+    "saved": "Gespeichert!",
+    "saving": "Wird gespeichert...",
+    "save": "PRD speichern",
+    "exitFullscreen": "Vollbild beenden",
+    "fullscreen": "Vollbild",
+    "close": "Schließen"
+  },
+  "footer": {
+    "lines": "Zeilen",
+    "characters": "Zeichen",
+    "words": "Wörter",
+    "format": "Format",
+    "markdown": "Markdown",
+    "shortcutHint": "Strg+S zum Speichern, Esc zum Schließen"
+  },
+  "loading": {
+    "text": "PRD wird geladen..."
+  },
+  "generateTasksModal": {
+    "title": "Aufgaben aus PRD generieren",
+    "askClaudeTitle": "Claude Code direkt fragen",
+    "askClaudeDesc": "Speichern Sie dieses PRD und fragen Sie Claude Code im Chat, die Datei zu analysieren und erste Aufgaben zu erstellen.",
+    "examplePrompt": "Beispielanweisung",
+    "examplePromptText": "Ich habe ein PRD unter .taskmaster/docs/{{fileName}}. Analysieren Sie es und erstellen Sie die ersten Aufgaben.",
+    "viewDocs": "TaskMaster-Dokumentation anzeigen",
+    "gotIt": "Verstanden"
+  },
+  "overwriteModal": {
+    "title": "Datei existiert bereits",
+    "description": "Ein PRD mit dem Namen \"{{fileName}}\" existiert bereits. Möchten Sie es überschreiben?",
+    "cancel": "Abbrechen",
+    "saving": "Wird gespeichert...",
+    "overwrite": "Überschreiben"
+  },
+  "alerts": {
+    "emptyContent": "Bitte fügen Sie dem PRD Inhalte hinzu, bevor Sie Aufgaben generieren."
+  }
+}

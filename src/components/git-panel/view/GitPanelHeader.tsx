@@ -1,4 +1,5 @@
 import { AlertCircle, Check, ChevronDown, Download, GitBranch, Plus, RefreshCw, RotateCcw, Upload, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useEffect, useRef, useState } from 'react';
 import type { ConfirmationRequest, GitRemoteStatus } from '../types/types';
 import NewBranchModal from './modals/NewBranchModal';
@@ -52,6 +53,7 @@ export default function GitPanelHeader({
   onClearError,
   onRequestConfirmation,
 }: GitPanelHeaderProps) {
+  const { t } = useTranslation('common');
   const [showBranchDropdown, setShowBranchDropdown] = useState(false);
   const [showNewBranchModal, setShowNewBranchModal] = useState(false);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
@@ -129,17 +131,17 @@ export default function GitPanelHeader({
               {remoteStatus?.hasRemote && (
                 <span className="flex items-center gap-0.5 text-xs">
                   {aheadCount > 0 && (
-                    <span className="text-green-600 dark:text-green-400" title={`${aheadCount} ahead`}>
+                    <span className="text-green-600 dark:text-green-400" title={`${aheadCount} ${t('gitPanel.header.ahead')}`}>
                       ↑{aheadCount}
                     </span>
                   )}
                   {behindCount > 0 && (
-                    <span className="text-primary" title={`${behindCount} behind`}>
+                    <span className="text-primary" title={`${behindCount} ${t('gitPanel.header.behind')}`}>
                       ↓{behindCount}
                     </span>
                   )}
                   {remoteStatus.isUpToDate && (
-                    <span className="text-muted-foreground" title="Up to date">✓</span>
+                    <span className="text-muted-foreground" title={t('gitPanel.header.upToDate')}>✓</span>
                   )}
                 </span>
               )}
@@ -174,7 +176,7 @@ export default function GitPanelHeader({
                   className="flex w-full items-center space-x-2 px-4 py-2 text-left text-sm transition-colors hover:bg-accent"
                 >
                   <Plus className="h-3 w-3" />
-                  <span>Create new branch</span>
+                  <span>{t('gitPanel.header.createNewBranch')}</span>
                 </button>
               </div>
             </div>
@@ -193,7 +195,7 @@ export default function GitPanelHeader({
                   title={`Publish "${currentBranch}" to ${remoteName}`}
                 >
                   <Upload className={`h-3 w-3 ${isPublishing ? 'animate-pulse' : ''}`} />
-                  {!isMobile && <span>{isPublishing ? 'Publishing…' : 'Publish'}</span>}
+                  {!isMobile && <span>{isPublishing ? t('gitPanel.header.publishing') : t('gitPanel.header.publish')}</span>}
                 </button>
               ) : (
                 <>
@@ -205,7 +207,7 @@ export default function GitPanelHeader({
                     title={`Fetch from ${remoteName}`}
                   >
                     <RefreshCw className={`h-3 w-3 ${isFetching ? 'animate-spin' : ''}`} />
-                    {!isMobile && <span>{isFetching ? 'Fetching…' : 'Fetch'}</span>}
+                    {!isMobile && <span>{isFetching ? t('gitPanel.header.fetching') : t('gitPanel.header.fetch')}</span>}
                   </button>
 
                   {behindCount > 0 && (
@@ -216,7 +218,7 @@ export default function GitPanelHeader({
                       title={`Pull ${behindCount} from ${remoteName}`}
                     >
                       <Download className={`h-3 w-3 ${isPulling ? 'animate-pulse' : ''}`} />
-                      {!isMobile && <span>{isPulling ? 'Pulling…' : `Pull ${behindCount}`}</span>}
+                      {!isMobile && <span>{isPulling ? t('gitPanel.header.pulling') : `${t('gitPanel.header.pull')} ${behindCount}`}</span>}
                     </button>
                   )}
 
@@ -228,7 +230,7 @@ export default function GitPanelHeader({
                       title={`Push ${aheadCount} to ${remoteName}`}
                     >
                       <Upload className={`h-3 w-3 ${isPushing ? 'animate-pulse' : ''}`} />
-                      {!isMobile && <span>{isPushing ? 'Pushing…' : `Push ${aheadCount}`}</span>}
+                      {!isMobile && <span>{isPushing ? t('gitPanel.header.pushing') : `${t('gitPanel.header.push')} ${aheadCount}`}</span>}
                     </button>
                   )}
                 </>
@@ -240,7 +242,7 @@ export default function GitPanelHeader({
             onClick={requestRevertLocalCommitConfirmation}
             disabled={isRevertingLocalCommit}
             className={`rounded-lg transition-colors hover:bg-accent disabled:opacity-50 ${isMobile ? 'p-1' : 'p-1.5'}`}
-            title="Revert latest local commit"
+            title={t('gitPanel.header.revertLatestCommit')}
           >
             <RotateCcw
               className={`text-muted-foreground ${isRevertingLocalCommit ? 'animate-pulse' : ''} ${isMobile ? 'h-3 w-3' : 'h-4 w-4'}`}
@@ -251,7 +253,7 @@ export default function GitPanelHeader({
             onClick={onRefresh}
             disabled={isLoading}
             className={`rounded-lg transition-colors hover:bg-accent ${isMobile ? 'p-1' : 'p-1.5'}`}
-            title="Refresh git status"
+            title={t('gitPanel.header.refreshStatus')}
           >
             <RefreshCw className={`text-muted-foreground ${isLoading ? 'animate-spin' : ''} ${isMobile ? 'h-3 w-3' : 'h-4 w-4'}`} />
           </button>

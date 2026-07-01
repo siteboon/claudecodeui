@@ -1,0 +1,142 @@
+{
+  "notConfigured": {
+    "title": "TaskMaster AI 尚未配置",
+    "description": "TaskMaster 帮助将复杂项目拆分为可管理的任务，搭配 AI 驱动的辅助功能",
+    "whatIsTitle": "🎯 什么是 TaskMaster？",
+    "features": {
+      "aiPowered": "AI 驱动的任务管理：将复杂项目拆分为可管理的子任务",
+      "prdTemplates": "PRD 模板：从产品需求文档生成任务",
+      "dependencyTracking": "依赖追踪：了解任务关系和执行顺序",
+      "progressVisualization": "进度可视化：看板和详细的任务分析",
+      "cliIntegration": "CLI 集成：使用 taskmaster 命令进行高级工作流"
+    },
+    "initializeButton": "初始化 TaskMaster AI"
+  },
+  "gettingStarted": {
+    "title": "开始使用 TaskMaster",
+    "subtitle": "TaskMaster 已初始化！接下来要做的事：",
+    "steps": {
+      "createPRD": {
+        "title": "创建产品需求文档（PRD）",
+        "description": "讨论你的项目构想并创建描述你想构建什么的 PRD。",
+        "addButton": "添加 PRD",
+        "existingPRDs": "现有的 PRD："
+      },
+      "generateTasks": {
+        "title": "从 PRD 生成任务",
+        "description": "有了 PRD 后，让 AI 助手解析它，TaskMaster 将自动将其拆分为可管理的任务，包含实现细节。"
+      },
+      "analyzeTasks": {
+        "title": "分析并展开任务",
+        "description": "让 AI 助手分析任务复杂度，并将其展开为详细的子任务以便于实现。"
+      },
+      "startBuilding": {
+        "title": "开始构建",
+        "description": "让 AI 助手开始处理任务、更新状态，并在项目演进时添加新任务。"
+      }
+    },
+    "tip": "💡 提示：从 PRD 开始可以充分发挥 TaskMaster 的 AI 驱动任务生成功能"
+  },
+  "setupModal": {
+    "title": "TaskMaster 配置",
+    "subtitle": "{{projectName}} 的交互式 CLI",
+    "willStart": "TaskMaster 初始化将自动开始",
+    "completed": "TaskMaster 配置完成！你现在可以关闭此窗口。",
+    "closeButton": "关闭",
+    "closeContinueButton": "关闭并继续"
+  },
+  "helpGuide": {
+    "title": "开始使用 TaskMaster",
+    "subtitle": "你的高效任务管理指南",
+    "examples": {
+      "parsePRD": "💬 示例：\n「我刚用 Claude Task Master 初始化了一个新项目。我有一个 PRD 在 .taskmaster/docs/prd.txt。你能帮我解析它并设置初始任务吗？」",
+      "expandTask": "💬 示例：\n「任务 5 看起来很复杂。你能把它拆分成子任务吗？」",
+      "addTask": "💬 示例：\n「请添加一个新任务来实现使用 Cloudinary 的用户个人头像上传功能，研究最佳方法。」"
+    },
+    "moreExamples": "查看更多示例和使用模式 →",
+    "proTips": {
+      "title": "💡 专业提示",
+      "search": "使用搜索栏快速找到特定任务",
+      "views": "使用视图切换在看板、列表和网格视图之间切换",
+      "filters": "使用筛选器聚焦特定任务状态或优先级",
+      "details": "点击任何任务以查看详细信息和管理子任务"
+    },
+    "learnMore": {
+      "title": "📚 了解更多",
+      "description": "TaskMaster AI 是为开发者打造的高级任务管理系统。获取文档、示例并为项目做出贡献。",
+      "githubButton": "在 GitHub 上查看"
+    }
+  },
+  "search": {
+    "placeholder": "搜索任务..."
+  },
+  "filters": {
+    "button": "筛选",
+    "status": "状态",
+    "priority": "优先级",
+    "sortBy": "排序方式",
+    "allStatuses": "所有状态",
+    "allPriorities": "所有优先级",
+    "showing": "显示 {{filtered}} / {{total}} 个任务",
+    "clearFilters": "清除筛选"
+  },
+  "sort": {
+    "id": "ID",
+    "status": "状态",
+    "priority": "优先级",
+    "idAsc": "ID（升序）",
+    "idDesc": "ID（降序）",
+    "titleAsc": "标题（A-Z）",
+    "titleDesc": "标题（Z-A）",
+    "statusAsc": "状态（待处理优先）",
+    "statusDesc": "状态（已完成优先）",
+    "priorityAsc": "优先级（高优先）",
+    "priorityDesc": "优先级（低优先）"
+  },
+  "views": {
+    "kanban": "看板视图",
+    "list": "列表视图",
+    "grid": "网格视图"
+  },
+  "kanban": {
+    "pending": "📋 待办",
+    "inProgress": "🚀 进行中",
+    "done": "✅ 已完成",
+    "blocked": "🚫 已阻塞",
+    "deferred": "⏳ 已延后",
+    "cancelled": "❌ 已取消",
+    "noTasksYet": "暂无任务",
+    "tasksWillAppear": "任务将显示在这里",
+    "moveTasksHere": "开始后在这里移动任务",
+    "completedTasksHere": "已完成的任务显示在这里",
+    "statusTasksHere": "此状态的任务将显示在这里"
+  },
+  "buttons": {
+    "help": "TaskMaster 入门指南",
+    "prds": "PRD",
+    "addPRD": "添加 PRD",
+    "addTask": "添加任务",
+    "createNewPRD": "创建新 PRD",
+    "prdsAvailable": "{{count}} 个 PRD 可用"
+  },
+  "prd": {
+    "modified": "修改时间：{{date}}"
+  },
+  "statuses": {
+    "pending": "待处理",
+    "in-progress": "进行中",
+    "done": "已完成",
+    "blocked": "已阻塞",
+    "deferred": "已延后",
+    "cancelled": "已取消"
+  },
+  "priorities": {
+    "high": "高",
+    "medium": "中",
+    "low": "低"
+  },
+  "noMatchingTasks": {
+    "title": "没有符合筛选条件的任务",
+    "description": "尝试调整你的搜索或筛选条件。"
+  }
+}

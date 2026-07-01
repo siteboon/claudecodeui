@@ -1,4 +1,5 @@
 import { Plus, RefreshCw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useEffect, useState } from 'react';
 
 type NewBranchModalProps = {
@@ -16,6 +17,7 @@ export default function NewBranchModal({
   onClose,
   onCreateBranch,
 }: NewBranchModalProps) {
+  const { t } = useTranslation('common');
   const [newBranchName, setNewBranchName] = useState('');
 
   useEffect(() => {
@@ -57,11 +59,11 @@ export default function NewBranchModal({
         aria-labelledby="new-branch-title"
       >
         <div className="p-6">
-          <h3 className="mb-4 text-lg font-semibold text-foreground">Create New Branch</h3>
+          <h3 className="mb-4 text-lg font-semibold text-foreground">{t('gitPanel.newBranchModal.title')}</h3>
 
           <div className="mb-4">
             <label htmlFor="git-new-branch-name" className="mb-2 block text-sm font-medium text-foreground/80">
-              Branch Name
+              {t('gitPanel.newBranchModal.branchName')}
             </label>
             <input
               id="git-new-branch-name"
@@ -82,14 +84,14 @@ export default function NewBranchModal({
                   onClose();
                 }
               }}
-              placeholder="feature/new-feature"
+              placeholder={t('gitPanel.newBranchModal.placeholder')}
               className="w-full rounded-xl border border-border bg-background px-3 py-2 text-foreground placeholder:text-muted-foreground focus:border-primary/30 focus:outline-none focus:ring-2 focus:ring-primary/20"
               autoFocus
             />
           </div>
 
           <p className="mb-4 text-sm text-muted-foreground">
-            This will create a new branch from the current branch ({currentBranch})
+            {t('gitPanel.newBranchModal.createFrom', { current: currentBranch })}
           </p>
 
           <div className="flex justify-end space-x-3">
@@ -97,7 +99,7 @@ export default function NewBranchModal({
               onClick={onClose}
               className="rounded-lg px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
-              Cancel
+              {t('gitPanel.newBranchModal.cancel')}
             </button>
             <button
               onClick={() => void handleCreateBranch()}
@@ -107,12 +109,12 @@ export default function NewBranchModal({
               {isCreatingBranch ? (
                 <>
                   <RefreshCw className="h-3 w-3 animate-spin" />
-                  <span>Creating...</span>
+                  <span>{t('gitPanel.newBranchModal.creating')}</span>
                 </>
               ) : (
                 <>
                   <Plus className="h-3 w-3" />
-                  <span>Create Branch</span>
+                  <span>{t('gitPanel.newBranchModal.createBranch')}</span>
                 </>
               )}
             </button>
