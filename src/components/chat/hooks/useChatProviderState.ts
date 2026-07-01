@@ -312,21 +312,28 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     return definition.OPTIONS.find((option) => option.value === model) ?? null;
   }, [providerModelCatalog]);
 
-  const getAllowedEffortValues = useCallback((
+  const getEffortOptionsForModel = useCallback((
     targetProvider: LLMProvider,
     model: string,
-  ): string[] => {
+  ): NonNullable<ProviderModelOption['effort']>['values'] => {
     if (!getSupportsEffortForProvider(targetProvider)) {
       return [];
     }
 
     const option = getModelOption(targetProvider, model);
     if (option) {
-      return option.effort?.values.map((value) => value.value) ?? [];
+      return option.effort?.values ?? [];
     }
 
-    return [...(FALLBACK_PROVIDER_EFFORT_VALUES[targetProvider] ?? [])];
+    return toProviderEffortOptions(FALLBACK_PROVIDER_EFFORT_VALUES[targetProvider] ?? []);
   }, [getModelOption, getSupportsEffortForProvider]);
+
+  const getAllowedEffortValues = useCallback((
+    targetProvider: LLMProvider,
+    model: string,
+  ): string[] => (
+    getEffortOptionsForModel(targetProvider, model).map((value) => value.value)
+  ), [getEffortOptionsForModel]);
 
   const reconcileStoredEffort = useCallback((
     targetProvider: LLMProvider,
@@ -554,19 +561,16 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     };
   }, [setStoredProviderModel]);
 
-  const currentProviderEffort = providerEfforts[provider] ?? DEFAULT_EFFORT_VALUE;
   const currentProviderEffortOptions = useMemo(() => {
-    if (!getSupportsEffortForProvider(provider)) {
-      return [];
-    }
-
-    const option = getModelOption(provider, providerModels[provider]);
-    if (option) {
-      return option.effort?.values ?? [];
-    }
-
-    return toProviderEffortOptions(FALLBACK_PROVIDER_EFFORT_VALUES[provider] ?? []);
-  }, [getModelOption, getSupportsEffortForProvider, provider, providerModels]);
+    return getEffortOptionsForModel(provider, providerModels[provider]);
+  }, [getEffortOptionsForModel, provider, providerModels]);
+  const currentProviderEffort = useMemo(() => {
+    return reconcileStoredEffort(
+      provider,
+      providerModels[provider],
+      providerEfforts[provider] ?? DEFAULT_EFFORT_VALUE,
+    );
+  }, [provider, providerEfforts, providerModels, reconcileStoredEffort]);
 
   return {
     provider,
