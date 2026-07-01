@@ -189,7 +189,7 @@ export default function GitPanelHeader({
                 <button
                   onClick={requestPublishConfirmation}
                   disabled={anyPending}
-                  className="flex items-center gap-1 rounded-lg bg-purple-600 px-2.5 py-1 text-sm text-white transition-colors hover:bg-purple-700 disabled:opacity-50"
+                  className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1 text-sm text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
                   title={`Publish "${currentBranch}" to ${remoteName}`}
                 >
                   <Upload className={`h-3 w-3 ${isPublishing ? 'animate-pulse' : ''}`} />

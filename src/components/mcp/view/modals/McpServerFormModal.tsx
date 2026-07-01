@@ -1,4 +1,5 @@
 import { FolderOpen, Globe, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 
 import { Button, Input } from '../../../../shared/view/ui';
@@ -119,8 +120,8 @@ export default function McpServerFormModal({
   const supportsWorkingDirectory = !isGlobalMode && MCP_SUPPORTS_WORKING_DIRECTORY[provider];
   const showCodexOnlyFields = provider === 'codex' && !isGlobalMode;
 
-  return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4">
+  return createPortal(
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 p-4">
       <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-border bg-background">
         <div className="flex items-center justify-between border-b border-border p-4">
           <h3 className="text-lg font-medium text-foreground">{modalTitle}</h3>
@@ -418,7 +419,7 @@ export default function McpServerFormModal({
             <Button
               type="submit"
               disabled={isSubmitting || !canSubmit}
-              className="bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             >
               {isSubmitting
                 ? t('mcpForm.actions.saving')
@@ -429,6 +430,7 @@ export default function McpServerFormModal({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

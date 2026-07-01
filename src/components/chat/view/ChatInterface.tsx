@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ArrowDownIcon } from 'lucide-react';
 
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useWebSocket } from '../../../contexts/WebSocketContext';
@@ -30,10 +31,8 @@ function ChatInterface({
   onNavigateToSession,
   onSessionEstablished,
   onShowSettings,
-  autoExpandTools,
   showRawParameters,
   showThinking,
-  autoScrollToBottom,
   sendByCtrlEnter,
   externalMessageUpdate,
   newSessionTrigger,
@@ -124,7 +123,6 @@ function ChatInterface({
     selectedSession,
     ws,
     sendMessage,
-    autoScrollToBottom,
     externalMessageUpdate,
     newSessionTrigger,
     processingSessions,
@@ -185,7 +183,7 @@ function ChatInterface({
     handlePermissionDecision,
     handleGrantToolPermission,
     handleInputFocusChange,
-    isInputFocused: _isInputFocused,
+    isInputFocused,
     commandModalPayload,
     closeCommandModal,
     showCostModal,
@@ -356,13 +354,27 @@ function ChatInterface({
           onFileOpen={onFileOpen}
           onShowSettings={onShowSettings}
           onGrantToolPermission={handleGrantToolPermission}
-          autoExpandTools={autoExpandTools}
           showRawParameters={showRawParameters}
           showThinking={showThinking}
           selectedProject={selectedProject}
         />
 
-        <ChatComposer
+        <div className="relative flex-shrink-0">
+          {isUserScrolledUp && chatMessages.length > 0 && (
+            <div className="pointer-events-none absolute -top-11 left-0 right-0 z-20 flex justify-center">
+              <button
+                type="button"
+                onClick={scrollToBottomAndReset}
+                aria-label={t('input.scrollToBottom', { defaultValue: 'Scroll to bottom' })}
+                className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-full border border-border/50 bg-card text-muted-foreground shadow-sm transition-all duration-200 hover:bg-accent hover:text-foreground"
+                title={t('input.scrollToBottom', { defaultValue: 'Scroll to bottom' })}
+              >
+                <ArrowDownIcon className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
+          )}
+
+          <ChatComposer
           pendingPermissionRequests={pendingPermissionRequests}
           handlePermissionDecision={handlePermissionDecision}
           handleGrantToolPermission={handleGrantToolPermission}
@@ -377,9 +389,6 @@ function ChatInterface({
           onToggleCommandMenu={handleToggleCommandMenu}
           hasInput={Boolean(input.trim())}
           onClearInput={handleClearInput}
-          isUserScrolledUp={isUserScrolledUp}
-          hasMessages={chatMessages.length > 0}
-          onScrollToBottom={scrollToBottomAndReset}
           onSubmit={handleSubmit}
           isDragActive={isDragActive}
           attachedImages={attachedImages}
@@ -414,6 +423,7 @@ function ChatInterface({
           onTextareaPaste={handlePaste}
           onTextareaScrollSync={syncInputOverlayScroll}
           onTextareaInput={handleTextareaInput}
+          isInputFocused={isInputFocused}
           onInputFocusChange={handleInputFocusChange}
           placeholder={t('input.placeholder', {
             provider:
@@ -430,6 +440,7 @@ function ChatInterface({
           isTextareaExpanded={isTextareaExpanded}
           sendByCtrlEnter={sendByCtrlEnter}
         />
+        </div>
       </div>
 
       <QuickSettingsPanel />

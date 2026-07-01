@@ -135,7 +135,7 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <Server className="h-5 w-5 text-purple-500" />
+        <Server className="h-5 w-5 text-primary" />
         <h3 className="text-lg font-medium text-foreground">{t('mcpServers.title')}</h3>
       </div>
       <p className="text-sm text-muted-foreground">{description}</p>

@@ -47,7 +47,6 @@ export type CursorPermissionsState = {
 };
 
 export type CodeEditorSettingsState = {
-  theme: 'dark' | 'light';
   wordWrap: boolean;
   showMinimap: boolean;
   lineNumbers: boolean;

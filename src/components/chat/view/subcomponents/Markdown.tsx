@@ -4,11 +4,12 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useTranslation } from 'react-i18next';
 import { normalizeInlineCodeFences } from '../../utils/chatFormatting';
 import { copyTextToClipboard } from '../../../../utils/clipboard';
 import { usePaletteOps } from '../../../../contexts/PaletteOpsContext';
+import { useTheme } from '../../../../contexts/ThemeContext';
 
 type MarkdownProps = {
   children: React.ReactNode;
@@ -59,6 +60,7 @@ type CodeBlockProps = {
 
 const CodeBlock = ({ node, inline, className, children, ...props }: CodeBlockProps) => {
   const { t } = useTranslation('chat');
+  const { isDarkMode } = useTheme();
   const [copied, setCopied] = useState(false);
   const raw = Array.isArray(children) ? children.join('') : String(children ?? '');
   const looksMultiline = /[\r\n]/.test(raw);
@@ -96,7 +98,7 @@ const CodeBlock = ({ node, inline, className, children, ...props }: CodeBlockPro
             }
           })
         }
-        className="absolute right-2 top-2 z-10 rounded-md border border-gray-600 bg-gray-700/80 px-2 py-1 text-xs text-white opacity-0 transition-opacity hover:bg-gray-700 focus:opacity-100 active:opacity-100 group-hover:opacity-100"
+        className="absolute right-2 top-2 z-10 rounded-md border border-border bg-card/90 px-2 py-1 text-xs text-foreground/80 opacity-0 transition-opacity hover:bg-muted focus:opacity-100 active:opacity-100 group-hover:opacity-100"
         title={copied ? t('codeBlock.copied') : t('codeBlock.copyCode')}
         aria-label={copied ? t('codeBlock.copied') : t('codeBlock.copyCode')}
       >
@@ -132,17 +134,20 @@ const CodeBlock = ({ node, inline, className, children, ...props }: CodeBlockPro
 
       <SyntaxHighlighter
         language={language}
-        style={oneDark}
+        style={isDarkMode ? oneDark : oneLight}
         customStyle={{
           margin: 0,
-          borderRadius: '0.5rem',
+          borderRadius: '0.75rem',
           fontSize: '0.875rem',
           padding: language && language !== 'text' ? '2rem 1rem 1rem 1rem' : '1rem',
+          // ChatGPT-style soft grey block in light mode; keep oneDark's own bg in dark.
+          ...(isDarkMode ? {} : { background: 'hsl(var(--muted))' }),
         }}
         codeTagProps={{
           style: {
             fontFamily:
               'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+            ...(isDarkMode ? {} : { background: 'transparent' }),
           },
         }}
       >
@@ -154,6 +159,10 @@ const CodeBlock = ({ node, inline, className, children, ...props }: CodeBlockPro
 
 const markdownComponents = {
   code: CodeBlock,
+  // CodeBlock renders its own syntax-highlighted <pre>; this passthrough stops
+  // react-markdown (and Tailwind Typography) from wrapping it in a second,
+  // dark-themed <pre> shell that would frame the block.
+  pre: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
   blockquote: ({ children }: { children?: React.ReactNode }) => (
     <blockquote className="my-2 border-l-4 border-gray-300 pl-4 italic text-gray-600 dark:border-gray-600 dark:text-gray-400">
       {children}
