@@ -4,6 +4,13 @@ export type ProviderModelOption = {
   value: string;
   label: string;
   description?: string;
+  effort?: {
+    default?: string;
+    values: {
+      value: string;
+      description?: string;
+    }[];
+  };
 };
 
 export type ProviderModelsDefinition = {

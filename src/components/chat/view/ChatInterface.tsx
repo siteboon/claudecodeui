@@ -17,7 +17,6 @@ import ChatMessagesPane from './subcomponents/ChatMessagesPane';
 import ChatComposer from './subcomponents/ChatComposer';
 import CommandResultModal from './subcomponents/CommandResultModal';
 
-
 function ChatInterface({
   selectedProject,
   selectedSession,
@@ -70,6 +69,8 @@ function ChatInterface({
     setClaudeModel,
     codexModel,
     setCodexModel,
+    currentProviderEffort,
+    currentProviderEffortOptions,
     geminiModel,
     setGeminiModel,
     opencodeModel,
@@ -84,6 +85,8 @@ function ChatInterface({
     providerModelsRefreshing,
     hardRefreshProviderModels,
     selectProviderModel,
+    setStoredProviderEffort,
+    resolvePermissionModeForProvider,
   } = useChatProviderState({
     selectedSession,
     selectedProject,
@@ -197,6 +200,7 @@ function ChatInterface({
     cursorModel,
     claudeModel,
     codexModel,
+    currentProviderEffort,
     geminiModel,
     opencodeModel,
     isLoading: isProcessing,
@@ -213,6 +217,7 @@ function ChatInterface({
     addMessage,
     setIsUserScrolledUp,
     setPendingPermissionRequests,
+    resolvePermissionModeForProvider,
   });
 
   // On WebSocket reconnect, re-fetch the current session's messages from the
@@ -383,6 +388,9 @@ function ChatInterface({
           onAbortSession={handleAbortSession}
           permissionMode={permissionMode}
           onModeSwitch={cyclePermissionMode}
+          effort={currentProviderEffort}
+          availableEffortOptions={currentProviderEffortOptions}
+          onSelectEffort={(nextEffort) => setStoredProviderEffort(provider, nextEffort)}
           tokenBudget={tokenBudget}
           onShowTokenUsage={showCostModal}
           slashCommandsCount={slashCommandsCount}

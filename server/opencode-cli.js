@@ -14,6 +14,14 @@ const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
 
 const activeOpenCodeProcesses = new Map();
 
+function resolveOpenCodeEffort(model, effort, modelsDefinition) {
+  const selectedModel = modelsDefinition?.OPTIONS?.find((option) => option.value === model);
+  const allowedEfforts = selectedModel?.effort?.values?.map((value) => value.value) || [];
+  return typeof effort === 'string' && effort !== 'default' && allowedEfforts.includes(effort)
+    ? effort
+    : undefined;
+}
+
 function readOpenCodeSessionId(event) {
   if (!event || typeof event !== 'object') {
     return null;
@@ -84,7 +92,7 @@ function readOpenCodeTokenUsage(sessionId) {
 
 async function spawnOpenCode(command, options = {}, ws) {
   return new Promise((resolve, reject) => {
-    const { sessionId, projectPath, cwd, model, sessionSummary } = options;
+    const { sessionId, projectPath, cwd, model, effort, sessionSummary } = options;
     const workingDir = cwd || projectPath || process.cwd();
     const processKey = sessionId || Date.now().toString();
     let capturedSessionId = sessionId || null;
@@ -192,7 +200,15 @@ async function spawnOpenCode(command, options = {}, ws) {
       }
     };
 
-    void providerModelsService.resolveResumeModel('opencode', sessionId, model).then((resolvedModel) => {
+    void providerModelsService.resolveResumeModel('opencode', sessionId, model).then(async (resolvedModel) => {
+      let effortModels = null;
+      try {
+        effortModels = (await providerModelsService.getProviderModels('opencode')).models;
+      } catch (error) {
+        console.warn('[OpenCode] Unable to load provider models for effort validation:', error);
+      }
+
+      const resolvedEffort = resolveOpenCodeEffort(resolvedModel, effort, effortModels);
       const args = ['run', '--format', 'json'];
       // OpenCode's `run` command owns workspace selection through `--dir`.
       // Relying on the child-process cwd alone is not enough on Linux, where
@@ -203,6 +219,9 @@ async function spawnOpenCode(command, options = {}, ws) {
       }
       if (resolvedModel) {
         args.push('--model', resolvedModel);
+      }
+      if (resolvedEffort) {
+        args.push('--variant', resolvedEffort);
       }
       if (command && command.trim()) {
         args.push(command.trim());

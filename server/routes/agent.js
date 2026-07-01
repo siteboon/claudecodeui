@@ -646,12 +646,17 @@ class ResponseCollector {
  *
  * @param {string} model - (Optional) Model identifier for providers.
  *
- *                        Claude models: 'sonnet' (default), 'opus', 'haiku', 'opusplan', 'sonnet[1m]', 'fable'
+ *                        Claude models: 'default', 'sonnet', 'opus', 'haiku', 'sonnet[1m]', 'opus[1m]', 'fable'
  *                        Cursor models: 'gpt-5' (default), 'gpt-5.2', 'gpt-5.2-high', 'sonnet-4.5', 'opus-4.5',
  *                                       'gemini-3-pro', 'composer-1', 'auto', 'gpt-5.1', 'gpt-5.1-high',
  *                                       'gpt-5.1-codex', 'gpt-5.1-codex-high', 'gpt-5.1-codex-max',
  *                                       'gpt-5.1-codex-max-high', 'opus-4.1', 'grok', and thinking variants
- *                        Codex models: 'gpt-5.2' (default), 'gpt-5.1-codex-max', 'o3', 'o4-mini'
+ *                        Codex models: 'gpt-5.4' (default), 'gpt-5.5', 'gpt-5.4-mini'
+ *
+ * @param {string} effort - (Optional) Reasoning effort for providers/models that support it.
+ *                          Claude supports: 'low', 'medium', 'high', 'xhigh', 'max' depending on model.
+ *                          Codex supports: 'low', 'medium', 'high', 'xhigh'.
+ *                          'default' or omission lets the provider decide.
  *
  * @param {boolean} cleanup - (Optional) Auto-cleanup project directory after completion.
  *                           Default: true
@@ -844,6 +849,9 @@ class ResponseCollector {
  */
 router.post('/', validateExternalApiKey, async (req, res) => {
   const { githubUrl, projectPath, message, provider = 'claude', model, githubToken, branchName, sessionId } = req.body;
+  const effort = typeof req.body.effort === 'string' && req.body.effort.trim()
+    ? req.body.effort.trim()
+    : undefined;
 
   // Parse stream and cleanup as booleans (handle string "true"/"false" from curl)
   const stream = req.body.stream === undefined ? true : (req.body.stream === true || req.body.stream === 'true');
@@ -954,6 +962,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         cwd: finalProjectPath,
         sessionId: sessionId || null,
         model: model,
+        effort,
         permissionMode: 'bypassPermissions' // Bypass all permissions for API calls
       }, writer);
 
@@ -975,6 +984,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         cwd: finalProjectPath,
         sessionId: sessionId || null,
         model: model || codexModels.DEFAULT,
+        effort,
         permissionMode: 'bypassPermissions'
       }, writer);
     } else if (provider === 'gemini') {
@@ -994,7 +1004,8 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         projectPath: finalProjectPath,
         cwd: finalProjectPath,
         sessionId: sessionId || null,
-        model: model || opencodeModels.DEFAULT
+        model: model || opencodeModels.DEFAULT,
+        effort
       }, writer);
     }
 
