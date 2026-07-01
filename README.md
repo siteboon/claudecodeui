@@ -74,16 +74,6 @@ The fastest way to get started — no local setup required. Get a fully managed,
 
 **[Get started with CloudCLI Cloud](https://cloudcli.ai)**
 
-### Desktop App
-
-Download the latest desktop app:
-
-- **[macOS](https://cloudcli.ai/download/macos)**
-- **[Windows](https://cloudcli.ai/download/windows)**
-- **[Download page](https://cloudcli.ai/download)** · **[GitHub Releases and checksums](https://github.com/siteboon/claudecodeui/releases)**
-
-Use the desktop app to open CloudCLI Cloud environments, switch between local and remote workspaces, copy mobile/browser URLs, and keep Local CloudCLI available from your menu bar or tray. To work locally, choose **Local CloudCLI** in the desktop app; it will use your running local server or start one for you.
-
 ### Self-Hosted (Open source)
 
 #### npm
@@ -115,6 +105,16 @@ npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
 
 Supports Claude Code, Codex, and Gemini CLI. See the [sandbox docs](docker/) for setup and advanced options.
 
+### Desktop Companion App
+
+CloudCLI Desktop is an optional native companion for CloudCLI Cloud and Local CloudCLI. It ships from this repository's GitHub Releases and keeps CloudCLI available from your menu bar or tray.
+
+- **[macOS](https://cloudcli.ai/download/macos)**
+- **[Windows](https://cloudcli.ai/download/windows)**
+- **[Download page](https://cloudcli.ai/download)** · **[GitHub Releases and checksums](https://github.com/siteboon/claudecodeui/releases)**
+
+Use it to open CloudCLI Cloud environments, switch between local and remote workspaces, and copy mobile/browser URLs. To work locally, choose **Local CloudCLI** in the desktop app; it will use your running local server or start one for you.
+
 
 ---
 
@@ -129,7 +129,8 @@ CloudCLI UI is the open source UI layer that powers CloudCLI Cloud. You can self
 | **Setup** | `npx @cloudcli-ai/cloudcli` | `npx @cloudcli-ai/cloudcli@latest sandbox ~/project` | No setup required |
 | **Isolation** | Runs on your host | Hypervisor-level sandbox (microVM) | Full cloud isolation |
 | **Machine needs to stay on** | Yes | Yes | No |
-| **Mobile access** | Any browser on your network | Any browser on your network | Any device, native app coming |
+| **Mobile access** | Any browser on your network | Any browser on your network | Any device |
+| **Desktop companion** | Optional. Choose Local CloudCLI | Optional. Choose Local CloudCLI | Optional. Opens cloud environments |
 | **Agents supported** | Claude Code, Cursor CLI, Codex, Gemini CLI | Claude Code, Codex, Gemini CLI | Claude Code, Cursor CLI, Codex, Gemini CLI |
 | **File explorer and Git** | Yes | Yes | Yes |
 | **MCP configuration** | Synced with `~/.claude` | Managed via UI | Managed via UI |
