@@ -11,7 +11,6 @@ type AppearanceSettingsTabProps = {
   projectSortOrder: ProjectSortOrder;
   onProjectSortOrderChange: (value: ProjectSortOrder) => void;
   codeEditorSettings: CodeEditorSettingsState;
-  onCodeEditorThemeChange: (value: 'dark' | 'light') => void;
   onCodeEditorWordWrapChange: (value: boolean) => void;
   onCodeEditorShowMinimapChange: (value: boolean) => void;
   onCodeEditorLineNumbersChange: (value: boolean) => void;
@@ -22,7 +21,6 @@ export default function AppearanceSettingsTab({
   projectSortOrder,
   onProjectSortOrderChange,
   codeEditorSettings,
-  onCodeEditorThemeChange,
   onCodeEditorWordWrapChange,
   onCodeEditorShowMinimapChange,
   onCodeEditorLineNumbersChange,
@@ -69,17 +67,6 @@ export default function AppearanceSettingsTab({
 
       <SettingsSection title={t('appearanceSettings.codeEditor.title')}>
         <SettingsCard divided>
-          <SettingsRow
-            label={t('appearanceSettings.codeEditor.theme.label')}
-            description={t('appearanceSettings.codeEditor.theme.description')}
-          >
-            <DarkModeToggle
-              checked={codeEditorSettings.theme === 'dark'}
-              onToggle={(enabled) => onCodeEditorThemeChange(enabled ? 'dark' : 'light')}
-              ariaLabel={t('appearanceSettings.codeEditor.theme.label')}
-            />
-          </SettingsRow>
-
           <SettingsRow
             label={t('appearanceSettings.codeEditor.wordWrap.label')}
             description={t('appearanceSettings.codeEditor.wordWrap.description')}

@@ -54,14 +54,11 @@
     "sections": {
       "appearance": "Darstellung",
       "toolDisplay": "Werkzeuganzeige",
-      "viewOptions": "Anzeigeoptionen",
       "inputSettings": "Eingabeeinstellungen"
     },
     "darkMode": "Darkmode",
-    "autoExpandTools": "Werkzeuge automatisch erweitern",
     "showRawParameters": "Rohe Parameter anzeigen",
     "showThinking": "Denken anzeigen",
-    "autoScrollToBottom": "Automatisch nach unten scrollen",
     "sendByCtrlEnter": "Mit Strg+Enter senden",
     "sendByCtrlEnterDescription": "Wenn aktiviert, sendet Strg+Enter die Nachricht anstelle von Enter. Dies ist nützlich für IME-Benutzer:innen, um versehentliches Senden zu vermeiden.",
     "dragHandle": {

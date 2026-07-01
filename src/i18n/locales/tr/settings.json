@@ -54,14 +54,11 @@
     "sections": {
       "appearance": "Görünüm",
       "toolDisplay": "Araç Gösterimi",
-      "viewOptions": "Görünüm Seçenekleri",
       "inputSettings": "Girdi Ayarları"
     },
     "darkMode": "Koyu Mod",
-    "autoExpandTools": "Araçları otomatik genişlet",
     "showRawParameters": "Ham parametreleri göster",
     "showThinking": "Düşünmeyi göster",
-    "autoScrollToBottom": "Otomatik en alta kaydır",
     "sendByCtrlEnter": "Ctrl+Enter ile gönder",
     "sendByCtrlEnterDescription": "Etkinleştirildiğinde, Ctrl+Enter'a basmak yalnız Enter yerine mesajı gönderir. IME (girdi metot düzenleyici) kullananlar için yanlışlıkla göndermeyi önler.",
     "dragHandle": {

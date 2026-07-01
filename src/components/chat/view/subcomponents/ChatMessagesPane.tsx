@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { memo, useCallback, useMemo, useRef } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 
 import type { ChatMessage } from '../../types/types';
@@ -15,6 +15,7 @@ import { groupConsecutiveTools, isToolGroupItem } from '../../utils/toolGrouping
 import MessageComponent from './MessageComponent';
 import ProviderSelectionEmptyState from './ProviderSelectionEmptyState';
 import ToolGroupContainer from './ToolGroupContainer';
+import LoadAllMessagesOverlay from './LoadAllMessagesOverlay';
 
 interface ChatMessagesPaneProps {
   scrollContainerRef: RefObject<HTMLDivElement>;
@@ -61,7 +62,6 @@ interface ChatMessagesPaneProps {
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
   onGrantToolPermission: (suggestion: { entry: string; toolName: string }) => { success: boolean };
-  autoExpandTools?: boolean;
   showRawParameters?: boolean;
   showThinking?: boolean;
   selectedProject: Project;
@@ -111,48 +111,59 @@ function ChatMessagesPane({
   onFileOpen,
   onShowSettings,
   onGrantToolPermission,
-  autoExpandTools,
   showRawParameters,
   showThinking,
   selectedProject,
 }: ChatMessagesPaneProps) {
   const { t } = useTranslation('chat');
-  const messageKeyMapRef = useRef<WeakMap<ChatMessage, string>>(new WeakMap());
-  const allocatedKeysRef = useRef<Set<string>>(new Set());
-  const generatedMessageKeyCounterRef = useRef(0);
-  const groupedVisibleMessages = useMemo(() => groupConsecutiveTools(visibleMessages), [visibleMessages]);
+  const groupedVisibleMessages = useMemo(
+    () => groupConsecutiveTools(visibleMessages, Boolean(showThinking)),
+    [visibleMessages, showThinking],
+  );
 
-  // Keep keys stable across prepends so existing MessageComponent instances retain local state.
-  const getMessageKey = useCallback((message: ChatMessage) => {
-    const existingKey = messageKeyMapRef.current.get(message);
-    if (existingKey) {
-      return existingKey;
+  // Stable, deterministic keys for the messages rendered this pass.
+  //
+  // `normalizedToChatMessages` rebuilds fresh ChatMessage objects on every store
+  // update, so caching keys by object identity (or via a cross-render allocation
+  // Set) minted a brand-new key for the *same* logical message on each prepend —
+  // remounting the whole list, which disconnects the scroll-restore anchor and
+  // reflows heights, jumping the viewport to the bottom. Deriving keys purely
+  // from this render's ordered messages (intrinsic key, disambiguated by
+  // occurrence index on collision) yields the same key for the same message
+  // order, so React preserves existing DOM nodes and component state on prepend.
+  const messageKeyMap = useMemo(() => {
+    const keys = new WeakMap<ChatMessage, string>();
+    const occurrences = new Map<string, number>();
+    const assign = (message: ChatMessage) => {
+      const intrinsicKey = getIntrinsicMessageKey(message) ?? 'message-generated';
+      const seen = occurrences.get(intrinsicKey) ?? 0;
+      occurrences.set(intrinsicKey, seen + 1);
+      keys.set(message, seen === 0 ? intrinsicKey : `${intrinsicKey}__${seen}`);
+    };
+    for (const item of groupedVisibleMessages) {
+      if (isToolGroupItem(item)) {
+        item.messages.forEach(assign);
+      } else {
+        assign(item);
+      }
     }
+    return keys;
+  }, [groupedVisibleMessages]);
 
-    const intrinsicKey = getIntrinsicMessageKey(message);
-    let candidateKey = intrinsicKey;
-
-    if (!candidateKey || allocatedKeysRef.current.has(candidateKey)) {
-      do {
-        generatedMessageKeyCounterRef.current += 1;
-        candidateKey = intrinsicKey
-          ? `${intrinsicKey}-${generatedMessageKeyCounterRef.current}`
-          : `message-generated-${generatedMessageKeyCounterRef.current}`;
-      } while (allocatedKeysRef.current.has(candidateKey));
-    }
-
-    allocatedKeysRef.current.add(candidateKey);
-    messageKeyMapRef.current.set(message, candidateKey);
-    return candidateKey;
-  }, []);
+  const getMessageKey = useCallback(
+    (message: ChatMessage) =>
+      messageKeyMap.get(message) ?? getIntrinsicMessageKey(message) ?? 'message-generated',
+    [messageKeyMap],
+  );
 
   return (
     <div
       ref={scrollContainerRef}
       onWheel={onWheel}
       onTouchMove={onTouchMove}
-      className="chat-messages-pane relative min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden px-0 py-3 sm:space-y-4 sm:p-4"
+      className="chat-messages-pane relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-3 sm:py-4"
     >
+      <div className="mx-auto w-full max-w-[54.25rem] space-y-3 px-4 sm:space-y-4">
       {(isLoadingSessionMessages || isProcessing) && chatMessages.length === 0 ? (
         <div className="mt-8 text-center text-gray-500 dark:text-gray-400">
           <div className="flex items-center justify-center space-x-2">
@@ -208,35 +219,13 @@ function ChatMessagesPane({
             </div>
           )}
 
-          {/* Floating "Load all messages" overlay */}
-          {(showLoadAllOverlay || isLoadingAllMessages || loadAllJustFinished) && (
-            <div className="pointer-events-none sticky top-2 z-20 flex justify-center">
-              {loadAllJustFinished ? (
-                <div className="flex items-center space-x-2 rounded-full bg-green-600 px-4 py-1.5 text-xs font-medium text-white shadow-lg dark:bg-green-500">
-                  <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span>{t('session.messages.allLoaded')}</span>
-                </div>
-              ) : (
-                <button
-                  className="pointer-events-auto flex items-center space-x-2 rounded-full bg-blue-600 px-4 py-1.5 text-xs font-medium text-white shadow-lg transition-all duration-200 hover:scale-105 hover:bg-blue-700 disabled:cursor-wait disabled:opacity-75 dark:bg-blue-500 dark:hover:bg-blue-600"
-                  onClick={loadAllMessages}
-                  disabled={isLoadingAllMessages}
-                >
-                  {isLoadingAllMessages && (
-                    <div className="h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                  )}
-                  <span>
-                    {isLoadingAllMessages
-                      ? t('session.messages.loadingAll')
-                      : <>{t('session.messages.loadAll')} {totalMessages > 0 && `(${totalMessages})`}</>
-                    }
-                  </span>
-                </button>
-              )}
-            </div>
-          )}
+          <LoadAllMessagesOverlay
+            showLoadAllOverlay={showLoadAllOverlay}
+            isLoadingAllMessages={isLoadingAllMessages}
+            loadAllJustFinished={loadAllJustFinished}
+            totalMessages={totalMessages}
+            onLoadAllMessages={loadAllMessages}
+          />
 
           {/* Legacy message count indicator (for non-paginated view) */}
           {!hasMoreMessages && chatMessages.length > visibleMessageCount && (
@@ -273,7 +262,6 @@ function ChatMessagesPane({
                     onFileOpen={onFileOpen}
                     onShowSettings={onShowSettings}
                     onGrantToolPermission={onGrantToolPermission}
-                    autoExpandTools={autoExpandTools}
                     showRawParameters={showRawParameters}
                     showThinking={showThinking}
                     selectedProject={selectedProject}
@@ -294,7 +282,6 @@ function ChatMessagesPane({
                   onFileOpen={onFileOpen}
                   onShowSettings={onShowSettings}
                   onGrantToolPermission={onGrantToolPermission}
-                  autoExpandTools={autoExpandTools}
                   showRawParameters={showRawParameters}
                   showThinking={showThinking}
                   selectedProject={selectedProject}
@@ -305,6 +292,7 @@ function ChatMessagesPane({
           })()}
         </>
       )}
+      </div>
     </div>
   );
 }

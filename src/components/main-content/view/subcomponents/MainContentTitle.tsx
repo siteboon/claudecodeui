@@ -74,7 +74,7 @@ export default function MainContentTitle({
       <div className="min-w-0 flex-1">
         {activeTab === 'chat' && selectedSession ? (
           <div className="min-w-0">
-            <h2 className="scrollbar-hide overflow-x-auto whitespace-nowrap text-sm font-semibold leading-tight text-foreground">
+            <h2 title={getSessionTitle(selectedSession)} className="truncate text-sm font-semibold leading-tight text-foreground">
               {getSessionTitle(selectedSession)}
             </h2>
             <div className="flex min-w-0 items-center gap-2 text-[11px] leading-tight text-muted-foreground">

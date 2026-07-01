@@ -1,10 +1,8 @@
 import { useEffect, useReducer, useRef } from 'react';
 
 type UiPreferences = {
-  autoExpandTools: boolean;
   showRawParameters: boolean;
   showThinking: boolean;
-  autoScrollToBottom: boolean;
   sendByCtrlEnter: boolean;
   sidebarVisible: boolean;
   voiceEnabled: boolean;
@@ -34,10 +32,8 @@ type UiPreferencesAction =
   | ResetPreferencesAction;
 
 const DEFAULTS: UiPreferences = {
-  autoExpandTools: false,
   showRawParameters: false,
   showThinking: true,
-  autoScrollToBottom: true,
   sendByCtrlEnter: false,
   sidebarVisible: true,
   voiceEnabled: false,

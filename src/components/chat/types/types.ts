@@ -126,10 +126,8 @@ export interface ChatInterfaceProps {
   onNavigateToSession?: (targetSessionId: string, options?: SessionNavigationOptions) => void;
   onSessionEstablished?: (sessionId: string, context: SessionEstablishedContext) => void;
   onShowSettings?: () => void;
-  autoExpandTools?: boolean;
   showRawParameters?: boolean;
   showThinking?: boolean;
-  autoScrollToBottom?: boolean;
   sendByCtrlEnter?: boolean;
   externalMessageUpdate?: number;
   newSessionTrigger?: number;
