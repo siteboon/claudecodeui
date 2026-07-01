@@ -66,9 +66,6 @@ import voiceRoutes from './voice-proxy.js';
 import browserUseRoutes from './modules/browser-use/browser-use.routes.js';
 import browserUseMcpRoutes from './modules/browser-use/browser-use-mcp.routes.js';
 import { browserUseService, VIEWER_COOKIE_NAME } from './modules/browser-use/index.js';
-import computerUseRoutes from './modules/computer-use/computer-use.routes.js';
-import computerUseMcpRoutes from './modules/computer-use/computer-use-mcp.routes.js';
-import { computerUseService } from './modules/computer-use/computer-use.service.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
 import { initializeDatabase, projectsDb, sessionsDb } from './modules/database/index.js';
 import { configureWebPush } from './services/vapid-keys.js';
@@ -255,12 +252,6 @@ app.use('/api/browser-use-mcp', browserUseMcpRoutes);
 
 // Browser API Routes (protected)
 app.use('/api/browser-use', authenticateBrowserUse, browserUseRoutes);
-
-// Computer Use MCP bridge API (local token protected)
-app.use('/api/computer-use-mcp', computerUseMcpRoutes);
-
-// Computer Use API Routes (protected)
-app.use('/api/computer-use', authenticateToken, computerUseRoutes);
 
 // Unified provider MCP routes (protected)
 app.use('/api/providers', authenticateToken, providerRoutes);
@@ -1817,11 +1808,6 @@ async function startServer() {
                 await browserUseService.stopAllSessions();
             } catch (err) {
                 console.error('[Browser] Error stopping sessions during shutdown:', err?.message || err);
-            }
-            try {
-                await computerUseService.stopAllSessions();
-            } catch (err) {
-                console.error('[Computer Use] Error stopping sessions during shutdown:', err?.message || err);
             }
             try {
                 await stopAllPlugins();

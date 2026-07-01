@@ -113,12 +113,6 @@ await copyRequired('electron');
 await copyRequired('dist');
 await copyRequired('public');
 
-// The desktop app still ships the standalone Computer Use desktop agent, but
-// not the full local server. Local CloudCLI is downloaded on demand.
-await copyRequired('dist-server/server/computer-use-agent.js');
-await copyIfExists('dist-server/server/computer-use-agent.js.map');
-await copyRequired('dist-server/server/modules/computer-use');
-
 const copiedRuntimeDependencies = [];
 if (await copyNodeModule('ws')) {
   copiedRuntimeDependencies.push('ws');

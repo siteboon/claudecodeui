@@ -6,14 +6,12 @@ import StandaloneShell from '../../standalone-shell/view/StandaloneShell';
 import GitPanel from '../../git-panel/view/GitPanel';
 import PluginTabContent from '../../plugins/view/PluginTabContent';
 import { BrowserUsePanel } from '../../browser-use';
-import { ComputerUsePanel } from '../../computer-use';
 import type { MainContentProps } from '../types/types';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { usePaletteOpsRegister } from '../../../contexts/PaletteOpsContext';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useUiPreferences } from '../../../hooks/useUiPreferences';
 import { useFileOpenResolver } from '../../../hooks/useFileOpenResolver';
-import { COMPUTER_USE_MENUS_ENABLED } from '../../../constants/featureFlags';
 import { authenticatedFetch } from '../../../utils/api';
 import { useEditorSidebar } from '../../code-editor/hooks/useEditorSidebar';
 import EditorSidebar from '../../code-editor/view/EditorSidebar';
@@ -61,11 +59,9 @@ function MainContent({
   const { currentProject, setCurrentProject } = useTaskMaster() as TaskMasterContextValue;
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings() as TasksSettingsContextValue;
   const [browserUseEnabled, setBrowserUseEnabled] = useState(false);
-  const [computerUseEnabled, setComputerUseEnabled] = useState<boolean | undefined>(undefined);
 
   const shouldShowTasksTab = Boolean(tasksEnabled && isTaskMasterInstalled);
   const shouldShowBrowserTab = browserUseEnabled;
-  const shouldShowComputerTab = COMPUTER_USE_MENUS_ENABLED && computerUseEnabled === true;
 
   const {
     editingFile,
@@ -125,60 +121,6 @@ function MainContent({
     }
   }, [shouldShowBrowserTab, activeTab, setActiveTab]);
 
-  const loadComputerUseSettings = useCallback(async () => {
-    try {
-      const [settingsResponse, statusResponse] = await Promise.allSettled([
-        authenticatedFetch('/api/computer-use/settings'),
-        authenticatedFetch('/api/computer-use/status'),
-      ]);
-      const settingsRes = settingsResponse.status === 'fulfilled' ? settingsResponse.value : null;
-      const statusRes = statusResponse.status === 'fulfilled' ? statusResponse.value : null;
-      const readJson = async (response: Response | null) => {
-        if (!response) return null;
-        try {
-          return await response.json();
-        } catch {
-          return null;
-        }
-      };
-      const settingsData = await readJson(settingsRes);
-      const statusData = await readJson(statusRes);
-      const runtime = statusData?.data?.runtime;
-      const settingsUsable = Boolean(settingsRes?.ok && settingsData?.success !== false);
-      const statusUsable = Boolean(statusRes?.ok && statusData?.success !== false);
-      const settingsEnabled = Boolean(
-        settingsUsable &&
-        settingsData?.data?.settings?.enabled
-      );
-      const cloudEnabled = Boolean(
-        statusUsable &&
-        runtime === 'cloud' &&
-        statusData?.data?.enabled
-      );
-      if (runtime === 'cloud') {
-        setComputerUseEnabled(cloudEnabled);
-      } else if (settingsUsable) {
-        setComputerUseEnabled(settingsEnabled);
-      } else if (statusUsable) {
-        setComputerUseEnabled(Boolean(statusData?.data?.enabled));
-      }
-    } catch {
-      // Keep the current tab availability on transient status/settings failures.
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadComputerUseSettings();
-    window.addEventListener('computerUseSettingsChanged', loadComputerUseSettings);
-    return () => window.removeEventListener('computerUseSettingsChanged', loadComputerUseSettings);
-  }, [loadComputerUseSettings]);
-
-  useEffect(() => {
-    if (!shouldShowComputerTab && activeTab === 'computer') {
-      setActiveTab('chat');
-    }
-  }, [shouldShowComputerTab, activeTab, setActiveTab]);
-
   usePaletteOpsRegister({
     openFile: (filePath: string) => {
       setActiveTab('files');
@@ -207,7 +149,6 @@ function MainContent({
         selectedSession={selectedSession}
         shouldShowTasksTab={shouldShowTasksTab}
         shouldShowBrowserTab={shouldShowBrowserTab}
-        shouldShowComputerTab={shouldShowComputerTab}
         isMobile={isMobile}
         onMenuClick={onMenuClick}
       />
@@ -271,12 +212,6 @@ function MainContent({
                 projectId={selectedProject.projectId}
                 onShowSettings={onShowSettings}
               />
-            </div>
-          )}
-
-          {shouldShowComputerTab && activeTab === 'computer' && (
-            <div className="h-full overflow-hidden">
-              <ComputerUsePanel isVisible={activeTab === 'computer'} onShowSettings={onShowSettings} />
             </div>
           )}
 
