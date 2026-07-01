@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type {
   ChangeEvent,
   ClipboardEvent,
@@ -10,7 +11,7 @@ import type {
   RefObject,
   TouchEvent,
 } from 'react';
-import { ImageIcon, MessageSquareIcon, XIcon, ArrowDownIcon, Loader2, ChevronDown, Check } from 'lucide-react';
+import { ImageIcon, MessageSquareIcon, XIcon, Loader2, ChevronDown, Check } from 'lucide-react';
 
 import { useVoiceInput } from '../../hooks/useVoiceInput';
 import { useVoiceAvailable } from '../../hooks/useVoiceAvailable';
@@ -197,17 +198,40 @@ export default function ChatComposer({
   const isTranscribing = voiceState === 'transcribing';
   const [isEffortDropdownOpen, setIsEffortDropdownOpen] = useState(false);
   const effortDropdownRef = useRef<HTMLDivElement | null>(null);
+  const effortDropdownMenuRef = useRef<HTMLDivElement | null>(null);
+  const effortDropdownButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [effortDropdownPosition, setEffortDropdownPosition] = useState<{
+    left: number;
+    top: number;
+    maxHeight: number;
+  } | null>(null);
   const effortOptions = useMemo(
     () => [{ value: 'default' }, ...availableEffortOptions],
     [availableEffortOptions],
   );
   const selectedEffortLabel = effort === 'default' ? 'Default' : effort;
+  const updateEffortDropdownPosition = useCallback(() => {
+    const rect = effortDropdownButtonRef.current?.getBoundingClientRect();
+    if (!rect) {
+      return;
+    }
+
+    setEffortDropdownPosition({
+      left: rect.left,
+      top: rect.top - 8,
+      maxHeight: Math.max(96, rect.top - 16),
+    });
+  }, []);
 
   useEffect(() => {
     if (!isEffortDropdownOpen) return;
 
     const handlePointerDown = (event: PointerEvent) => {
-      if (!effortDropdownRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        !effortDropdownRef.current?.contains(target)
+        && !effortDropdownMenuRef.current?.contains(target)
+      ) {
         setIsEffortDropdownOpen(false);
       }
     };
@@ -221,13 +245,18 @@ export default function ChatComposer({
     };
 
     document.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('resize', updateEffortDropdownPosition);
+    window.addEventListener('scroll', updateEffortDropdownPosition, true);
     window.addEventListener('keydown', handleKeyDown, { capture: true });
+    updateEffortDropdownPosition();
 
     return () => {
       document.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('resize', updateEffortDropdownPosition);
+      window.removeEventListener('scroll', updateEffortDropdownPosition, true);
       window.removeEventListener('keydown', handleKeyDown, { capture: true });
     };
-  }, [isEffortDropdownOpen]);
+  }, [isEffortDropdownOpen, updateEffortDropdownPosition]);
 
   // Detect if the AskUserQuestion interactive panel is active
   const hasQuestionPanel = pendingPermissionRequests.some(
@@ -418,8 +447,12 @@ export default function ChatComposer({
             {availableEffortOptions.length > 0 && (
               <div ref={effortDropdownRef} className="relative">
                 <button
+                  ref={effortDropdownButtonRef}
                   type="button"
-                  onClick={() => setIsEffortDropdownOpen((current) => !current)}
+                  onClick={() => {
+                    updateEffortDropdownPosition();
+                    setIsEffortDropdownOpen((current) => !current);
+                  }}
                   className="flex h-8 items-center gap-1.5 rounded-lg border border-border/60 bg-muted/40 px-2 text-xs font-medium text-foreground transition-all duration-200 hover:bg-muted"
                   aria-haspopup="menu"
                   aria-expanded={isEffortDropdownOpen}
@@ -431,8 +464,18 @@ export default function ChatComposer({
                   <ChevronDown className={`h-3 w-3 text-muted-foreground transition-transform ${isEffortDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
 
-                {isEffortDropdownOpen && (
-                  <div className="absolute bottom-full left-0 z-50 mb-2 min-w-36 overflow-hidden rounded-lg border border-border bg-card p-1 shadow-lg">
+                {isEffortDropdownOpen && effortDropdownPosition && createPortal(
+                  <div
+                    ref={effortDropdownMenuRef}
+                    className="fixed z-[100] min-w-36 overflow-y-auto rounded-lg border border-border bg-card p-1 shadow-lg"
+                    style={{
+                      left: effortDropdownPosition.left,
+                      top: effortDropdownPosition.top,
+                      maxHeight: effortDropdownPosition.maxHeight,
+                      transform: 'translateY(-100%)',
+                    }}
+                    role="menu"
+                  >
                     {effortOptions.map((option) => {
                       const isSelected = option.value === effort;
                       const label = option.value === 'default' ? 'Default' : option.value;
@@ -459,7 +502,8 @@ export default function ChatComposer({
                         </button>
                       );
                     })}
-                  </div>
+                  </div>,
+                  document.body,
                 )}
               </div>
             )}
