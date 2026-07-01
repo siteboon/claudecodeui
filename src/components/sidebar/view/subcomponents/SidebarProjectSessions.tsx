@@ -35,7 +35,7 @@ type SidebarProjectSessionsProps = {
   ) => void;
   onLoadMoreSessions: (projectId: string) => void;
   onNewSession: (project: Project) => void;
-  isBookmarked: (sessionId: string) => boolean;
+  isBookmarked: (session: { sessionId: string; projectId: string; provider: string }) => boolean;
   onToggleBookmark: (bookmark: BookmarkedSession) => void;
   t: TFunction;
 };
@@ -139,7 +139,7 @@ export default function SidebarProjectSessions({
               onProjectSelect={onProjectSelect}
               onSessionSelect={onSessionSelect}
               onDeleteSession={onDeleteSession}
-              isBookmarked={isBookmarked(session.id)}
+              isBookmarked={isBookmarked({ sessionId: session.id, projectId: project.projectId, provider: session.__provider || 'claude' })}
               onToggleBookmark={onToggleBookmark}
               t={t}
             />

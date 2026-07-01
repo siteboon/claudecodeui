@@ -151,9 +151,9 @@ type SidebarContentProps = {
   // Bookmark props
   bookmarks: BookmarkedSession[];
   selectedSessionId: string | null;
-  isBookmarked: (sessionId: string) => boolean;
+  isBookmarked: (session: { sessionId: string; projectId: string; provider: string }) => boolean;
   onToggleBookmark: (bookmark: BookmarkedSession) => void;
-  onRemoveBookmark: (sessionId: string) => void;
+  onRemoveBookmark: (session: { sessionId: string; projectId: string; provider: string }) => void;
   onSelectBookmarkedSession: (projectId: string, sessionId: string) => void;
   onDeleteSession: (projectId: string, sessionId: string, sessionTitle: string, provider: string) => void;
   editingSession: string | null;

@@ -31,11 +31,15 @@ function save(bookmarks: BookmarkedSession[]) {
   }
 }
 
+function bookmarkKey(session: { projectId: string; sessionId: string; provider: string }): string {
+  return `${session.projectId}::${session.sessionId}::${session.provider}`;
+}
+
 export function useBookmarks(): {
   bookmarks: BookmarkedSession[];
-  isBookmarked: (sessionId: string) => boolean;
+  isBookmarked: (session: { sessionId: string; projectId: string; provider: string }) => boolean;
   bookmarkSession: (session: BookmarkedSession) => void;
-  removeBookmark: (sessionId: string) => void;
+  removeBookmark: (session: { sessionId: string; projectId: string; provider: string }) => void;
   toggleBookmark: (session: BookmarkedSession) => void;
 } {
   const [bookmarks, setBookmarks] = useState<BookmarkedSession[]>(load);
@@ -48,22 +52,23 @@ export function useBookmarks(): {
   }, []);
 
   const isBookmarked = useCallback(
-    (sessionId: string) => bookmarks.some(b => b.sessionId === sessionId),
+    (session: { sessionId: string; projectId: string; provider: string }) =>
+      bookmarks.some(b => bookmarkKey(b) === bookmarkKey(session)),
     [bookmarks],
   );
 
   const bookmarkSession = useCallback((session: BookmarkedSession) => {
     setBookmarks(prev => {
-      if (prev.some(b => b.sessionId === session.sessionId)) return prev;
+      if (prev.some(b => bookmarkKey(b) === bookmarkKey(session))) return prev;
       const next = [session, ...prev];
       save(next);
       return next;
     });
   }, []);
 
-  const removeBookmark = useCallback((sessionId: string) => {
+  const removeBookmark = useCallback((session: { sessionId: string; projectId: string; provider: string }) => {
     setBookmarks(prev => {
-      const next = prev.filter(b => b.sessionId !== sessionId);
+      const next = prev.filter(b => bookmarkKey(b) !== bookmarkKey(session));
       save(next);
       return next;
     });
@@ -71,10 +76,10 @@ export function useBookmarks(): {
 
   const toggleBookmark = useCallback((session: BookmarkedSession) => {
     setBookmarks(prev => {
-      const idx = prev.findIndex(b => b.sessionId === session.sessionId);
+      const idx = prev.findIndex(b => bookmarkKey(b) === bookmarkKey(session));
       let next: BookmarkedSession[];
       if (idx >= 0) {
-        next = prev.filter(b => b.sessionId !== session.sessionId);
+        next = prev.filter(b => bookmarkKey(b) !== bookmarkKey(session));
       } else {
         next = [session, ...prev];
       }

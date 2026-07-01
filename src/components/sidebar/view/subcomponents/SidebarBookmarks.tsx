@@ -13,7 +13,7 @@ type SidebarBookmarksProps = {
   bookmarks: BookmarkedSession[];
   selectedSessionId: string | null;
   onSelectSession: (projectId: string, sessionId: string, provider: string) => void;
-  onRemoveBookmark: (sessionId: string) => void;
+  onRemoveBookmark: (session: { sessionId: string; projectId: string; provider: string }) => void;
   onDeleteSession: (projectId: string, sessionId: string, sessionTitle: string, provider: string) => void;
   editingSession: string | null;
   editingSessionName: string;
@@ -284,7 +284,7 @@ export default forwardRef<SidebarBookmarksRef, SidebarBookmarksProps>(function S
                 isEditing={isEditing}
                 editingName={editingSessionName}
                 onSelect={() => onSelectSession(bm.projectId, bm.sessionId, bm.provider)}
-                onUnpin={() => onRemoveBookmark(bm.sessionId)}
+                onUnpin={() => onRemoveBookmark(bm)}
                 onDelete={() => onDeleteSession(bm.projectId, bm.sessionId, bm.sessionSummary, bm.provider)}
                 onStartEditing={() => onStartEditingSession(bm.sessionId, bm.sessionSummary)}
                 onCancelEditing={onCancelEditingSession}

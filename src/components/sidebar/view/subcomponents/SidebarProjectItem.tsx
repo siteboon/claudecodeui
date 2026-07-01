@@ -51,7 +51,7 @@ type SidebarProjectItemProps = {
   onStartEditingSession: (sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
   onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => void;
-  isBookmarked: (sessionId: string) => boolean;
+  isBookmarked: (session: { sessionId: string; projectId: string; provider: string }) => boolean;
   onToggleBookmark: (bookmark: BookmarkedSession) => void;
   t: TFunction;
 };
