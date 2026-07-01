@@ -311,14 +311,14 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     if (innerEvent.type === 'content_block_delta' && innerEvent.delta?.thinking) {
       return [createNormalizedMessage({ kind: 'stream_delta', content: innerEvent.delta.thinking, sessionId, provider: PROVIDER })];
     }
-    if (innerEvent.type === 'content_block_stop') {
+    if (innerEvent.type === 'message_stop') {
       return [createNormalizedMessage({ kind: 'stream_end', sessionId, provider: PROVIDER })];
     }
     // Also handle bare content_block_delta / content_block_stop from older SDK
     if (raw.type === 'content_block_delta' && raw.delta?.text) {
       return [createNormalizedMessage({ kind: 'stream_delta', content: raw.delta.text, sessionId, provider: PROVIDER })];
     }
-    if (raw.type === 'content_block_stop') {
+    if (raw.type === 'message_stop') {
       return [createNormalizedMessage({ kind: 'stream_end', sessionId, provider: PROVIDER })];
     }
 
