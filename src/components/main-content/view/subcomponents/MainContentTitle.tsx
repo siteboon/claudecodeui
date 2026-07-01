@@ -70,7 +70,7 @@ export default function MainContentTitle({
       <div className="min-w-0 flex-1">
         {activeTab === 'chat' && selectedSession ? (
           <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold leading-tight text-foreground">
+            <h2 title={getSessionTitle(selectedSession)} className="truncate text-sm font-semibold leading-tight text-foreground">
               {getSessionTitle(selectedSession)}
             </h2>
             <div className="truncate text-[11px] leading-tight text-muted-foreground">{selectedProject.displayName}</div>

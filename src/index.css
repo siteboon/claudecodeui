@@ -128,6 +128,7 @@
   
   body {
     @apply bg-background text-foreground;
+
     font-family: "Encode Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -964,7 +965,7 @@
   }
 
   @keyframes chat-activity-enter {
-    from {
+    0% {
       opacity: 0;
       filter: blur(3px);
       transform: translateY(18px) scaleY(0.92);
@@ -974,7 +975,7 @@
       filter: blur(0);
       transform: translateY(-2px) scaleY(1.01);
     }
-    to {
+    100% {
       opacity: 1;
       filter: blur(0);
       transform: translateY(0) scaleY(1);
@@ -982,12 +983,12 @@
   }
 
   @keyframes chat-activity-exit {
-    from {
+    0% {
       opacity: 1;
       filter: blur(0);
       transform: translateY(0) scaleY(1);
     }
-    to {
+    100% {
       opacity: 0;
       filter: blur(2px);
       transform: translateY(14px) scaleY(0.96);

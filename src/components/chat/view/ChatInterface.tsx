@@ -365,10 +365,11 @@ function ChatInterface({
               <button
                 type="button"
                 onClick={scrollToBottomAndReset}
+                aria-label={t('input.scrollToBottom', { defaultValue: 'Scroll to bottom' })}
                 className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-full border border-border/50 bg-card text-muted-foreground shadow-sm transition-all duration-200 hover:bg-accent hover:text-foreground"
                 title={t('input.scrollToBottom', { defaultValue: 'Scroll to bottom' })}
               >
-                <ArrowDownIcon className="h-4 w-4" />
+                <ArrowDownIcon className="h-4 w-4" aria-hidden />
               </button>
             </div>
           )}

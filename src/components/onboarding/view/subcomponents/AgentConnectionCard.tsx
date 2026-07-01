@@ -43,7 +43,7 @@ export default function AgentConnectionCard({
               {title}
               {status.authenticated && <Check className="h-3.5 w-3.5 flex-shrink-0 text-emerald-500" />}
             </div>
-            <div className="truncate text-xs text-muted-foreground">{statusText}</div>
+            <div className="truncate text-xs text-muted-foreground" title={statusText}>{statusText}</div>
           </div>
         </div>
 

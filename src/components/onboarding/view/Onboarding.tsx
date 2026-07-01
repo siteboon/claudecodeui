@@ -175,11 +175,14 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
               />
             )}
 
-            {errorMessage && (
-              <div className="mt-5 rounded-xl border border-destructive/30 bg-destructive/10 p-3.5">
-                <p className="text-sm text-destructive">{errorMessage}</p>
-              </div>
-            )}
+              {errorMessage && (
+                <div
+                  role="alert"
+                  className="mt-5 rounded-xl border border-destructive/30 bg-destructive/10 p-3.5"
+                >
+                  <p className="text-sm text-destructive">{errorMessage}</p>
+                </div>
+              )}
 
             <div className="mt-6 flex items-center justify-between border-t border-border pt-5">
               <button
