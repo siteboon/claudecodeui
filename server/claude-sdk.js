@@ -836,7 +836,7 @@ async function abortClaudeSDKSession(sessionId) {
   const session = getSession(sessionId);
 
   if (!session) {
-    console.log(`Session ${sessionId} not found`);
+    console.debug(`Session ${sessionId} not found`);
     return false;
   }
 
