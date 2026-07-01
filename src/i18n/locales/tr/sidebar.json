@@ -140,5 +140,10 @@
     "deleteAllData": "Tüm veriyi kalıcı olarak sil",
     "allConversationsDeleted": "Proje kenar çubuğundan kaldırılacak. Dosyaların, bellek verilerin ve oturum verilerin korunacak.",
     "cannotUndo": "Projeyi sonra tekrar ekleyebilirsin."
+  },
+  "bookmarks": {
+    "title": "Sabitlenenler",
+    "pin": "Sohbeti sabitle",
+    "unpin": "Sabitlemeyi kaldır"
   }
 }
