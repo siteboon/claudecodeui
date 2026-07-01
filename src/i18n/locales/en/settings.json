@@ -71,14 +71,11 @@
     "sections": {
       "appearance": "Appearance",
       "toolDisplay": "Tool Display",
-      "viewOptions": "View Options",
       "inputSettings": "Input Settings"
     },
     "darkMode": "Dark Mode",
-    "autoExpandTools": "Auto-expand tools",
     "showRawParameters": "Show raw parameters",
     "showThinking": "Show thinking",
-    "autoScrollToBottom": "Auto-scroll to bottom",
     "sendByCtrlEnter": "Send by Ctrl+Enter",
     "voiceEnabled": "Voice (mic + read aloud)",
     "sendByCtrlEnterDescription": "When enabled, pressing Ctrl+Enter will send the message instead of just Enter. This is useful for IME users to avoid accidental sends.",

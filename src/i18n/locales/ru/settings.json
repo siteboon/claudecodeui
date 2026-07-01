@@ -54,14 +54,11 @@
     "sections": {
       "appearance": "Внешний вид",
       "toolDisplay": "Отображение инструментов",
-      "viewOptions": "Параметры просмотра",
       "inputSettings": "Настройки ввода"
     },
     "darkMode": "Темная тема",
-    "autoExpandTools": "Автоматически разворачивать инструменты",
     "showRawParameters": "Показывать сырые параметры",
     "showThinking": "Показывать размышления",
-    "autoScrollToBottom": "Автопрокрутка вниз",
     "sendByCtrlEnter": "Отправка по Ctrl+Enter",
     "sendByCtrlEnterDescription": "Когда включено, нажатие Ctrl+Enter будет отправлять сообщение вместо просто Enter. Это полезно для пользователей IME, чтобы избежать случайной отправки.",
     "dragHandle": {

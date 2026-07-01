@@ -3,6 +3,18 @@
 All notable changes to CloudCLI UI will be documented in this file.
 
 
+## [1.35.1](https://github.com/siteboon/claudecodeui/compare/v1.35.0...v1.35.1) (2026-07-01)
+
+### Bug Fixes
+
+* preview video on new tab ([#933](https://github.com/siteboon/claudecodeui/issues/933)) ([2ebe64f](https://github.com/siteboon/claudecodeui/commit/2ebe64f21874f45f6c8747310be874ae7342c61c))
+* remove obsolete semantic helper release jobs ([1e16f1f](https://github.com/siteboon/claudecodeui/commit/1e16f1f0854e347aa333434638d64f2b167d9a9d))
+* resolve mobile shell issues ([#923](https://github.com/siteboon/claudecodeui/issues/923)) ([b6cf333](https://github.com/siteboon/claudecodeui/commit/b6cf33308da996f8169580a4b5b74e3c5f38e447))
+
+### Maintenance
+
+* remove computer use ([6761f31](https://github.com/siteboon/claudecodeui/commit/6761f31a56fe82d82c7e0c079b4891e7d5a81817))
+
 ## [1.35.0](https://github.com/siteboon/claudecodeui/compare/v1.34.0...v1.35.0) (2026-06-29)
 
 ### New Features

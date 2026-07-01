@@ -2,10 +2,8 @@ import type { CSSProperties } from 'react';
 import type { LucideIcon } from 'lucide-react';
 
 export type PreferenceToggleKey =
-  | 'autoExpandTools'
   | 'showRawParameters'
   | 'showThinking'
-  | 'autoScrollToBottom'
   | 'sendByCtrlEnter'
   | 'voiceEnabled';
 

@@ -31,26 +31,26 @@ export default function AgentConnectionCard({
       : status.error || 'Not connected';
 
   return (
-    <div className={`rounded-lg border p-4 transition-colors ${containerClassName}`}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className={`flex h-10 w-10 items-center justify-center rounded-full ${iconContainerClassName}`}>
+    <div className={`rounded-xl border px-3 py-2.5 transition-colors ${containerClassName}`}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full ${iconContainerClassName}`}>
             <SessionProviderLogo provider={provider} className="h-5 w-5" />
           </div>
 
-          <div>
-            <div className="flex items-center gap-2 font-medium text-foreground">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
               {title}
-              {status.authenticated && <Check className="h-4 w-4 text-green-500" />}
+              {status.authenticated && <Check className="h-3.5 w-3.5 flex-shrink-0 text-emerald-500" />}
             </div>
-            <div className="text-xs text-muted-foreground">{statusText}</div>
+            <div className="truncate text-xs text-muted-foreground" title={statusText}>{statusText}</div>
           </div>
         </div>
 
         {!status.authenticated && !status.loading && (
           <button
             onClick={onLogin}
-            className={`${loginButtonClassName} rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors`}
+            className={`${loginButtonClassName} flex-shrink-0 rounded-lg px-4 py-1.5 text-sm font-medium text-white transition-colors`}
           >
             Login
           </button>

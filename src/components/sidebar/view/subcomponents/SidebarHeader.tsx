@@ -2,6 +2,7 @@ import { Activity, Archive, Folder, FolderPlus, MessageSquare, Plus, RefreshCw, 
 import type { TFunction } from 'i18next';
 
 import { Button, Input, Tooltip } from '../../../../shared/view/ui';
+import { CLOUDCLI_WORDMARK_FONT_FAMILY } from '../../../../constants/branding';
 import { IS_PLATFORM } from '../../../../constants/config';
 import { cn } from '../../../../lib/utils';
 import type { SidebarSearchMode } from '../../types/types';
@@ -67,7 +68,12 @@ export default function SidebarHeader({
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
       </div>
-      <h1 className="truncate text-sm font-normal tracking-tight text-foreground">{t('app.title')}</h1>
+      <h1
+        className="truncate text-sm font-bold tracking-tight text-foreground"
+        style={{ fontFamily: CLOUDCLI_WORDMARK_FONT_FAMILY }}
+      >
+        {t('app.title')}
+      </h1>
     </div>
   );
 

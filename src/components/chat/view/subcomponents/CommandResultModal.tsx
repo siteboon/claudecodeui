@@ -566,46 +566,41 @@ export default function CommandResultModal({
         <DialogTitle>{activeMeta?.title || 'Command Result'}</DialogTitle>
 
         <div
-          className={`relative shrink-0 overflow-hidden border-b border-border/70 bg-gradient-to-br from-primary/15 via-background to-muted/40 ${
-            isModelsModal ? 'px-4 pb-3 pt-3 sm:px-5 sm:pb-4 sm:pt-4' : 'px-4 pb-4 pt-4 sm:px-6 sm:pb-5 sm:pt-5'
+          className={`flex shrink-0 items-start justify-between gap-3 border-b border-border bg-popover ${
+            isModelsModal ? 'px-4 py-3 sm:px-5 sm:py-4' : 'px-4 py-4 sm:px-6 sm:py-5'
           }`}
         >
-          <div className="pointer-events-none absolute -left-20 -top-24 h-56 w-56 rounded-full bg-primary/20 blur-3xl" />
-          <div className="pointer-events-none absolute right-0 top-0 h-full w-1/2 bg-[radial-gradient(circle_at_top_right,hsl(var(--primary)/0.16),transparent_58%)]" />
-
-          <div className="relative flex items-start justify-between gap-3">
-            <div className="flex min-w-0 items-start gap-3 sm:items-center">
-              <div
-                className={`rounded-2xl border border-primary/30 bg-primary/10 text-primary shadow-sm ${
-                  isModelsModal ? 'p-2.5' : 'p-3'
-                }`}
-              >
-                <HeaderIcon className={isModelsModal ? 'h-4 w-4' : 'h-5 w-5'} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[12px] font-bold uppercase tracking-[0.22em] text-primary">
-                  {activeMeta?.eyebrow}
-                </p>
-                <p className={`mt-1 font-semibold tracking-tight text-foreground ${isModelsModal ? 'text-xl sm:text-2xl' : 'text-xl sm:text-2xl'}`}>
-                  {activeMeta?.title}
-                </p>
-                <p className={`mt-1 max-w-2xl ${isModelsModal ? 'text-sm leading-5 text-foreground/75' : 'text-sm leading-5 text-muted-foreground'}`}>
-                  {activeMeta?.subtitle}
-                </p>
-              </div>
-            </div>
-
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              className="h-9 w-9 shrink-0 rounded-xl text-muted-foreground hover:bg-background/70 hover:text-foreground"
-              aria-label="Close command result modal"
+          <div className="flex min-w-0 items-center gap-3">
+            <div
+              className={`flex shrink-0 items-center justify-center rounded-xl border border-border bg-muted text-foreground ${
+                isModelsModal ? 'h-9 w-9' : 'h-10 w-10'
+              }`}
             >
-              <X className="h-4 w-4" />
-            </Button>
+              <HeaderIcon className={isModelsModal ? 'h-4 w-4' : 'h-5 w-5'} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                {activeMeta?.eyebrow}
+              </p>
+              <p className="mt-0.5 text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+                {activeMeta?.title}
+              </p>
+              <p className="mt-0.5 max-w-2xl text-sm leading-5 text-muted-foreground">
+                {activeMeta?.subtitle}
+              </p>
+            </div>
           </div>
+
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+            aria-label="Close command result modal"
+          >
+            <X className="h-4 w-4" />
+          </Button>
         </div>
 
         <div className="settings-content-enter min-h-0 flex-1 overflow-hidden px-4 py-4 sm:px-6 sm:py-5">

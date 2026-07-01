@@ -170,7 +170,6 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
                   projectSortOrder={projectSortOrder}
                   onProjectSortOrderChange={setProjectSortOrder}
                   codeEditorSettings={codeEditorSettings}
-                  onCodeEditorThemeChange={(value) => updateCodeEditorSetting('theme', value)}
                   onCodeEditorWordWrapChange={(value) => updateCodeEditorSetting('wordWrap', value)}
                   onCodeEditorShowMinimapChange={(value) => updateCodeEditorSetting('showMinimap', value)}
                   onCodeEditorLineNumbersChange={(value) => updateCodeEditorSetting('lineNumbers', value)}

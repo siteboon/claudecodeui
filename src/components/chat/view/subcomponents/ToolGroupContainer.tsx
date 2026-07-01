@@ -22,7 +22,6 @@ interface ToolGroupContainerProps {
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
   onGrantToolPermission?: (suggestion: ClaudePermissionSuggestion) => PermissionGrantResult | null | undefined;
-  autoExpandTools?: boolean;
   showRawParameters?: boolean;
   showThinking?: boolean;
   selectedProject?: Project | null;
@@ -66,7 +65,6 @@ export default function ToolGroupContainer({
   onFileOpen,
   onShowSettings,
   onGrantToolPermission,
-  autoExpandTools,
   showRawParameters,
   showThinking,
   selectedProject,
@@ -133,7 +131,6 @@ export default function ToolGroupContainer({
               onFileOpen={onFileOpen}
               onShowSettings={onShowSettings}
               onGrantToolPermission={onGrantToolPermission}
-              autoExpandTools={autoExpandTools}
               showRawParameters={showRawParameters}
               showThinking={showThinking}
               selectedProject={selectedProject}
