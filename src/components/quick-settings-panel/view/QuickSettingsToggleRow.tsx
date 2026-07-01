@@ -17,8 +17,8 @@ function QuickSettingsToggleRow({
 }: QuickSettingsToggleRowProps) {
   return (
     <label className={TOGGLE_ROW_CLASS}>
-      <span className="flex items-center gap-2 text-sm text-gray-900 dark:text-white">
-        <Icon className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+      <span className="flex items-center gap-2 text-sm text-foreground">
+        <Icon className="h-4 w-4 text-muted-foreground" />
         {label}
       </span>
       <input

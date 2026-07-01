@@ -164,6 +164,7 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
             },
           ]}
         />
+
       </div>
 
       <div className="space-y-2">

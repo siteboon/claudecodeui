@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
+import { useTheme } from '../../../contexts/ThemeContext';
 import { useCodeEditorDocument } from '../hooks/useCodeEditorDocument';
 import { useCodeEditorSettings } from '../hooks/useCodeEditorSettings';
 import { useEditorKeyboardShortcuts } from '../hooks/useEditorKeyboardShortcuts';
@@ -45,8 +46,10 @@ export default function CodeEditor({
   const [showDiff, setShowDiff] = useState(Boolean(file.diffInfo));
   const [markdownPreview, setMarkdownPreview] = useState(false);
 
+  // The code editor follows the app-wide theme; it has no theme of its own.
+  const { isDarkMode } = useTheme();
+
   const {
-    isDarkMode,
     wordWrap,
     minimapEnabled,
     showLineNumbers,

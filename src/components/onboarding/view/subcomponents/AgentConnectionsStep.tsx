@@ -51,15 +51,15 @@ export default function AgentConnectionsStep({
   onOpenProviderLogin,
 }: AgentConnectionsStepProps) {
   return (
-    <div className="space-y-6">
-      <div className="mb-6 text-center">
-        <h2 className="mb-2 text-2xl font-bold text-foreground">Connect Your AI Agents</h2>
-        <p className="text-muted-foreground">
+    <div className="space-y-4">
+      <div className="text-center">
+        <h2 className="font-serif text-xl font-bold tracking-tight text-foreground">Connect Your AI Agents</h2>
+        <p className="mx-auto mt-1 max-w-sm text-sm leading-relaxed text-muted-foreground">
           Login to one or more AI coding assistants. All are optional.
         </p>
       </div>
 
-      <div className="space-y-3">
+      <div className="-mr-1 max-h-[38vh] space-y-2 overflow-y-auto pr-1">
         {providerCards.map((providerCard) => (
           <AgentConnectionCard
             key={providerCard.provider}
@@ -74,9 +74,7 @@ export default function AgentConnectionsStep({
         ))}
       </div>
 
-      <div className="pt-2 text-center text-sm text-muted-foreground">
-        <p>You can configure these later in Settings.</p>
-      </div>
+      <p className="text-center text-xs text-muted-foreground">You can configure these later in Settings.</p>
     </div>
   );
 }
