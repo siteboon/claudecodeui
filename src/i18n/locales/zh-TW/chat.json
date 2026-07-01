@@ -254,5 +254,16 @@
   },
   "tasks": {
     "nextTaskPrompt": "開始下一個任務"
+  },
+  "scrollNav": {
+    "jumpTo": "跳轉到：{{snippet}}",
+    "jumpToMessage": "跳轉到訊息 {{index}}",
+    "fromYou": "您",
+    "aiReply": "AI 回覆",
+    "loadAll": "載入全部",
+    "first": "頂部",
+    "previous": "上一條",
+    "next": "下一條",
+    "last": "底部"
   }
 }
