@@ -1004,7 +1004,8 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         projectPath: finalProjectPath,
         cwd: finalProjectPath,
         sessionId: sessionId || null,
-        model: model || opencodeModels.DEFAULT
+        model: model || opencodeModels.DEFAULT,
+        effort
       }, writer);
     }
 
