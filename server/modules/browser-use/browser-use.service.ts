@@ -1,126 +1,84 @@
 import { createRequire } from 'node:module';
-import { randomBytes, randomUUID } from 'node:crypto';
-import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 
-import { appConfigDb } from '@/modules/database/index.js';
+import { WebSocket } from 'ws';
+
 import { providerMcpService } from '@/modules/providers/index.js';
 import { getModuleDir } from '@/utils/runtime-paths.js';
+
+import {
+  getOrCreateMcpToken,
+  getProfilePath,
+  normalizeBrowserBackend,
+  PROFILE_ROOT,
+  readSettings,
+  resolveSessionProfileName,
+  useVisibleCamoufoxBackend,
+  writeSettings,
+} from './browser-use.settings.js';
+import type {
+  BrowserUseSession,
+  BrowserUseSettings,
+  PublicBrowserUseSession,
+  RuntimeHandle,
+  RuntimeProbe,
+  RuntimeReadiness,
+} from './browser-use.types.js';
+import { getViewerUrl, handleViewerWebSocket, VIEWER_TOKEN_TTL_MS } from './browser-use.viewer.js';
 
 const require = createRequire(import.meta.url);
 const __dirname = getModuleDir(import.meta.url);
 const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
 const MAX_SESSIONS_PER_OWNER = Number.parseInt(process.env.CLOUDCLI_BROWSER_USE_MAX_SESSIONS_PER_OWNER || '3', 10);
 const SESSION_TTL_MS = Number.parseInt(process.env.CLOUDCLI_BROWSER_USE_SESSION_TTL_MS || String(30 * 60 * 1000), 10);
-const BROWSER_USE_SETTINGS_KEY = 'browser_use_settings';
-const BROWSER_USE_MCP_TOKEN_KEY = 'browser_use_mcp_token';
-
-type BrowserUseRuntime = 'cloud' | 'local';
-type BrowserUseSessionStatus = 'ready' | 'stopped' | 'unavailable';
-
-type BrowserUseSession = {
-  id: string;
-  ownerId: string;
-  createdBy: 'agent';
-  runtime: BrowserUseRuntime;
-  status: BrowserUseSessionStatus;
-  url: string | null;
-  title: string | null;
-  screenshotDataUrl: string | null;
-  createdAt: string;
-  updatedAt: string;
-  lastAction: string | null;
-  message: string | null;
-  profileName: string | null;
-  viewport: {
-    width: number;
-    height: number;
-  } | null;
-  cursor: {
-    x: number;
-    y: number;
-    actor: 'agent';
-  } | null;
-};
-
-type PublicBrowserUseSession = Omit<BrowserUseSession, 'ownerId'>;
-
-type RuntimeHandle = {
-  browser?: any;
-  context?: any;
-  page?: any;
-};
-
-type BrowserUseSettings = {
-  enabled: boolean;
-};
-
-type RuntimeReadiness = {
-  playwright: any | null;
-  playwrightInstalled: boolean;
-  chromiumInstalled: boolean;
-  chromiumExecutablePath: string | null;
-  installInProgress: boolean;
-  installMessage: string | null;
-};
-
-type RuntimeProbe = Omit<RuntimeReadiness, 'installInProgress' | 'installMessage'>;
 
 const sessions = new Map<string, BrowserUseSession>();
 const handles = new Map<string, RuntimeHandle>();
+const reservedDisplays = new Set<string>();
+const viewerTokens = new Map<string, { token: string; expiresAt: number }>();
 let installPromise: Promise<{ success: boolean; message: string }> | null = null;
 let lastInstallMessage: string | null = null;
 let runtimeProbeCache: { value: RuntimeProbe; updatedAt: number } | null = null;
 
-const DEFAULT_SETTINGS: BrowserUseSettings = {
-  enabled: false,
-};
 const AGENT_OWNER_ID = 'agent';
-const PROFILE_ROOT = path.join(os.homedir(), '.cloudcli', 'browser-use', 'profiles');
 const MCP_SERVER_NAME = 'cloudcli-browser';
 const LEGACY_MCP_SERVER_NAMES = ['cloudcli-browser-use'];
 const RUNTIME_READINESS_CACHE_TTL_MS = 30_000;
+const VISIBLE_BROWSER_ENABLED = process.env.CLOUDCLI_BROWSER_USE_VISIBLE !== 'false';
+const RUNTIME_ROOT = process.env.CLOUDCLI_BROWSER_USE_RUNTIME_ROOT || '/opt/claudecodeui/.runtime-browser';
+const NOVNC_ROOT = process.env.CLOUDCLI_BROWSER_USE_NOVNC_ROOT || path.join(RUNTIME_ROOT, 'novnc');
+const X11VNC_BIN = process.env.CLOUDCLI_BROWSER_USE_X11VNC_BIN || path.join(RUNTIME_ROOT, 'rootfs/usr/bin/x11vnc');
+const X11VNC_LIB_DIR = process.env.CLOUDCLI_BROWSER_USE_X11VNC_LIB_DIR || path.join(RUNTIME_ROOT, 'rootfs/usr/lib/x86_64-linux-gnu');
+const X11VNC_EXTRA_LIB_DIR = process.env.CLOUDCLI_BROWSER_USE_X11VNC_EXTRA_LIB_DIR || path.join(RUNTIME_ROOT, 'rootfs/lib/x86_64-linux-gnu');
+const LOG_RUNTIME_PROCESS_OUTPUT = process.env.CLOUDCLI_BROWSER_USE_RUNTIME_LOGS === 'true';
 
-function getRuntime(): BrowserUseRuntime {
+function getRuntime(): 'cloud' | 'local' {
   return IS_PLATFORM ? 'cloud' : 'local';
 }
 
-function readSettings(): BrowserUseSettings {
+function getCamoufoxExecutablePath(): string | null {
+  const configured = process.env.CLOUDCLI_BROWSER_USE_CAMOUFOX_EXECUTABLE;
+  if (configured && fs.existsSync(configured)) {
+    return configured;
+  }
+
   try {
-    const raw = appConfigDb.get(BROWSER_USE_SETTINGS_KEY);
-    if (!raw) {
-      return DEFAULT_SETTINGS;
-    }
-
-    const parsed = JSON.parse(raw) as Partial<BrowserUseSettings>;
-    return {
-      enabled: parsed.enabled === true,
-    };
-  } catch (error: any) {
-    console.warn('[Browser] Failed to read settings:', error?.message || error);
-    return DEFAULT_SETTINGS;
+    const output = execFileSync(path.join(os.homedir(), '.local/bin/camoufox'), ['path'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    const executablePath = fs.statSync(output).isDirectory()
+      ? path.join(output, 'camoufox')
+      : output;
+    return fs.existsSync(executablePath) ? executablePath : null;
+  } catch {
+    return null;
   }
-}
-
-function writeSettings(settings: BrowserUseSettings): BrowserUseSettings {
-  const normalized = {
-    enabled: settings.enabled === true,
-  };
-
-  appConfigDb.set(BROWSER_USE_SETTINGS_KEY, JSON.stringify(normalized));
-  return normalized;
-}
-
-function getOrCreateMcpToken(): string {
-  const existing = appConfigDb.get(BROWSER_USE_MCP_TOKEN_KEY);
-  if (existing) {
-    return existing;
-  }
-  const token = randomBytes(32).toString('hex');
-  appConfigDb.set(BROWSER_USE_MCP_TOKEN_KEY, token);
-  return token;
 }
 
 function getSetupMessage(settings: BrowserUseSettings, readiness: RuntimeReadiness): string {
@@ -130,6 +88,26 @@ function getSetupMessage(settings: BrowserUseSettings, readiness: RuntimeReadine
 
   if (!readiness.playwrightInstalled) {
     return 'Install Playwright and Chromium to use browser sessions.';
+  }
+
+  if (settings.browserBackend === 'camoufox-vnc' && !getCamoufoxExecutablePath()) {
+    return 'Camoufox is selected, but Camoufox is not installed.';
+  }
+
+  if (useVisibleCamoufoxBackend(settings)) {
+    if (!VISIBLE_BROWSER_ENABLED) {
+      return 'Camoufox is selected, but visible browser sessions are disabled.';
+    }
+    if (!getCamoufoxExecutablePath()) {
+      return 'Camoufox is selected, but Camoufox is not installed.';
+    }
+    if (!fs.existsSync(X11VNC_BIN)) {
+      return 'Camoufox is selected, but x11vnc is missing.';
+    }
+    if (!fs.existsSync(path.join(NOVNC_ROOT, 'vnc.html'))) {
+      return 'Camoufox is selected, but noVNC is missing.';
+    }
+    return readiness.installMessage || 'Camoufox runtime is not ready.';
   }
 
   if (!readiness.chromiumInstalled) {
@@ -176,24 +154,6 @@ async function removeMcpServerFromAllProviders(name: string) {
   return results.map((result) => ({ ...result, name }));
 }
 
-function normalizeProfileName(profileName?: string | null): string | null {
-  const normalized = String(profileName || '').trim();
-  if (!normalized) {
-    return null;
-  }
-
-  return normalized.slice(0, 80);
-}
-
-function getProfilePath(profileName: string): string {
-  const safeName = profileName
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80) || 'default';
-  return path.join(PROFILE_ROOT, safeName);
-}
-
 function probeRuntime(): RuntimeProbe {
   const playwright = getPlaywright();
   const readiness: RuntimeProbe = {
@@ -236,6 +196,175 @@ function getRuntimeReadiness(options: { force?: boolean } = {}): RuntimeReadines
     installInProgress: Boolean(installPromise),
     installMessage: lastInstallMessage,
   };
+}
+
+function findAvailablePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.on('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      server.close(() => {
+        if (typeof address === 'object' && address?.port) {
+          resolve(address.port);
+        } else {
+          reject(new Error('Failed to reserve a browser runtime port.'));
+        }
+      });
+    });
+  });
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRuntimeProcessAlive(child: ReturnType<typeof spawn>): boolean {
+  return child.exitCode === null && child.signalCode === null && !child.killed;
+}
+
+function assertRuntimeProcessesAlive(processes: Array<ReturnType<typeof spawn>>, label: string) {
+  const exited = processes.find((child) => !isRuntimeProcessAlive(child));
+  if (exited) {
+    throw new Error(`${label} exited before the Browser viewer runtime was ready.`);
+  }
+}
+
+async function isPortListening(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = net.createConnection({ host: '127.0.0.1', port });
+    let settled = false;
+    const finish = (listening: boolean) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      socket.destroy();
+      resolve(listening);
+    };
+    socket.setTimeout(250);
+    socket.once('connect', () => finish(true));
+    socket.once('timeout', () => finish(false));
+    socket.once('error', () => finish(false));
+  });
+}
+
+async function waitForRuntimePort(
+  port: number,
+  label: string,
+  processes: Array<ReturnType<typeof spawn>>,
+  timeoutMs = 5_000,
+) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    assertRuntimeProcessesAlive(processes, label);
+    if (await isPortListening(port)) {
+      return;
+    }
+    await delay(100);
+  }
+  assertRuntimeProcessesAlive(processes, label);
+  throw new Error(`${label} did not start listening on 127.0.0.1:${port}.`);
+}
+
+function killRuntimeProcesses(processes?: Array<ReturnType<typeof spawn>>) {
+  processes?.forEach((child) => child.kill('SIGTERM'));
+}
+
+function reserveDisplay(): string {
+  for (let index = 90; index < 140; index += 1) {
+    const display = `:${index}`;
+    if (!reservedDisplays.has(display)) {
+      reservedDisplays.add(display);
+      return display;
+    }
+  }
+
+  throw new Error('No browser display slots are available.');
+}
+
+function spawnRuntimeProcess(command: string, args: string[], options: { env?: NodeJS.ProcessEnv } = {}) {
+  const child = spawn(command, args, {
+    env: { ...process.env, ...options.env },
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
+  child.stderr?.on('data', (chunk) => {
+    if (!LOG_RUNTIME_PROCESS_OUTPUT) {
+      return;
+    }
+    const text = String(chunk).trim();
+    if (text) {
+      console.warn(`[Browser runtime] ${path.basename(command)}: ${text}`);
+    }
+  });
+  child.on('error', (error) => {
+    console.warn(`[Browser runtime] ${path.basename(command)} failed:`, error.message);
+  });
+  return child;
+}
+
+async function startVisibleRuntime(): Promise<NonNullable<RuntimeHandle['viewer']> & { processes: Array<ReturnType<typeof spawn>> }> {
+  const display = reserveDisplay();
+  const vncPort = await findAvailablePort();
+  const websockifyPort = await findAvailablePort();
+  const processes: Array<ReturnType<typeof spawn>> = [];
+
+  try {
+    processes.push(spawnRuntimeProcess('Xvfb', [
+      display,
+      '-screen',
+      '0',
+      '1440x900x24',
+      '-ac',
+      '-nolisten',
+      'tcp',
+    ]));
+    await delay(700);
+    assertRuntimeProcessesAlive(processes, 'Xvfb');
+
+    if (!fs.existsSync(X11VNC_BIN)) {
+      throw new Error(`x11vnc is missing at ${X11VNC_BIN}.`);
+    }
+    processes.push(spawnRuntimeProcess(X11VNC_BIN, [
+      '-display',
+      display,
+      '-localhost',
+      '-forever',
+      '-shared',
+      '-rfbport',
+      String(vncPort),
+      '-nopw',
+      '-quiet',
+    ], {
+      env: {
+        LD_LIBRARY_PATH: `${X11VNC_LIB_DIR}:${X11VNC_EXTRA_LIB_DIR}:${process.env.LD_LIBRARY_PATH || ''}`,
+      },
+    }));
+    await waitForRuntimePort(vncPort, 'x11vnc', processes);
+
+    if (!fs.existsSync(path.join(NOVNC_ROOT, 'vnc.html'))) {
+      throw new Error(`noVNC is missing at ${NOVNC_ROOT}.`);
+    }
+    processes.push(spawnRuntimeProcess(path.join(os.homedir(), '.local/bin/websockify'), [
+      '--web',
+      NOVNC_ROOT,
+      `127.0.0.1:${websockifyPort}`,
+      `127.0.0.1:${vncPort}`,
+    ]));
+    await waitForRuntimePort(websockifyPort, 'websockify', processes);
+
+    return {
+      display,
+      vncPort,
+      websockifyPort,
+      noVncRoot: NOVNC_ROOT,
+      processes,
+    };
+  } catch (error) {
+    killRuntimeProcesses(processes);
+    reservedDisplays.delete(display);
+    throw error;
+  }
 }
 
 const INSTALL_COMMAND_TIMEOUT_MS = Number.parseInt(
@@ -350,6 +479,45 @@ function publicSession(session: BrowserUseSession): PublicBrowserUseSession {
   return publicFields;
 }
 
+function getSessionViewer(sessionId: string): RuntimeHandle['viewer'] | null {
+  const session = sessions.get(sessionId);
+  if (!session || session.ownerId !== AGENT_OWNER_ID || session.status !== 'ready') {
+    return null;
+  }
+  return handles.get(sessionId)?.viewer || null;
+}
+
+function createViewerToken(sessionId: string): string {
+  const token = randomUUID();
+  viewerTokens.set(sessionId, {
+    token,
+    expiresAt: Date.now() + VIEWER_TOKEN_TTL_MS,
+  });
+  return token;
+}
+
+function deleteViewerToken(sessionId: string) {
+  viewerTokens.delete(sessionId);
+}
+
+function validateViewerTokenForSession(sessionId: string, token: string | null | undefined): boolean {
+  if (!token) {
+    return false;
+  }
+  const session = sessions.get(sessionId);
+  const viewer = session?.ownerId === AGENT_OWNER_ID && session.status === 'ready'
+    ? handles.get(sessionId)?.viewer || null
+    : null;
+  const stored = viewerTokens.get(sessionId);
+  if (!viewer || !stored || stored.token !== token || stored.expiresAt < Date.now()) {
+    if (stored?.expiresAt && stored.expiresAt < Date.now()) {
+      viewerTokens.delete(sessionId);
+    }
+    return false;
+  }
+  return true;
+}
+
 function ownerSessions(ownerId: string): BrowserUseSession[] {
   return [...sessions.values()].filter((session) => session.ownerId === ownerId);
 }
@@ -357,8 +525,13 @@ function ownerSessions(ownerId: string): BrowserUseSession[] {
 async function closeHandle(sessionId: string): Promise<void> {
   const handle = handles.get(sessionId);
   handles.delete(sessionId);
+  deleteViewerToken(sessionId);
   await handle?.context?.close?.().catch(() => undefined);
   await handle?.browser?.close().catch(() => undefined);
+  killRuntimeProcesses(handle?.processes);
+  if (handle?.viewer?.display) {
+    reservedDisplays.delete(handle.viewer.display);
+  }
 }
 
 async function expireStaleSessions(now = Date.now()): Promise<void> {
@@ -424,6 +597,11 @@ export const browserUseService = {
     const current = readSettings();
     const nextSettings = {
       enabled: typeof settings.enabled === 'boolean' ? settings.enabled : current.enabled,
+      persistSessions: typeof settings.persistSessions === 'boolean' ? settings.persistSessions : current.persistSessions,
+      defaultProfileName: typeof settings.defaultProfileName === 'string'
+        ? settings.defaultProfileName
+        : current.defaultProfileName,
+      browserBackend: settings.browserBackend ? normalizeBrowserBackend(settings.browserBackend) : current.browserBackend,
     };
 
     const next = writeSettings(nextSettings);
@@ -439,14 +617,28 @@ export const browserUseService = {
   async getStatus() {
     const settings = readSettings();
     const readiness = getRuntimeReadiness();
-    const available = settings.enabled && readiness.playwrightInstalled && readiness.chromiumInstalled;
+    const useVisibleBackend = useVisibleCamoufoxBackend(settings);
+    const visibleCamoufoxReady = useVisibleBackend
+      && VISIBLE_BROWSER_ENABLED
+      && readiness.playwrightInstalled
+      && Boolean(getCamoufoxExecutablePath())
+      && fs.existsSync(X11VNC_BIN)
+      && fs.existsSync(path.join(NOVNC_ROOT, 'vnc.html'));
+    const available = settings.enabled
+      && readiness.playwrightInstalled
+      && (useVisibleBackend ? visibleCamoufoxReady : readiness.chromiumInstalled);
 
     return {
       enabled: settings.enabled,
       runtime: getRuntime(),
+      backend: useVisibleBackend ? 'camoufox-vnc' : 'playwright',
+      browserBackend: settings.browserBackend,
       available,
       playwrightInstalled: readiness.playwrightInstalled,
       chromiumInstalled: readiness.chromiumInstalled,
+      camoufoxInstalled: Boolean(getCamoufoxExecutablePath()),
+      noVncInstalled: fs.existsSync(path.join(NOVNC_ROOT, 'vnc.html')),
+      x11vncInstalled: fs.existsSync(X11VNC_BIN),
       installInProgress: readiness.installInProgress,
       sessionCount: sessions.size,
       message: available
@@ -505,7 +697,7 @@ export const browserUseService = {
     }
 
     await expireStaleSessions();
-    const profileName = normalizeProfileName(options?.profileName);
+    const profileName = resolveSessionProfileName(settings, options?.profileName);
 
     const now = new Date().toISOString();
     const session: BrowserUseSession = {
@@ -521,6 +713,9 @@ export const browserUseService = {
       updatedAt: now,
       lastAction: 'create',
       message: null,
+      backend: useVisibleCamoufoxBackend(settings) ? 'camoufox-vnc' : 'playwright',
+      viewerUrl: null,
+      viewerEmbedUrl: null,
       profileName,
       viewport: { width: 1440, height: 900 },
       cursor: null,
@@ -532,7 +727,13 @@ export const browserUseService = {
     }
 
     const readiness = getRuntimeReadiness();
-    if (!settings.enabled || !readiness.playwrightInstalled || !readiness.chromiumInstalled || !readiness.playwright) {
+    const useVisibleBackend = useVisibleCamoufoxBackend(settings);
+    const visibleCamoufoxReady = useVisibleBackend
+      && VISIBLE_BROWSER_ENABLED
+      && Boolean(getCamoufoxExecutablePath())
+      && fs.existsSync(X11VNC_BIN)
+      && fs.existsSync(path.join(NOVNC_ROOT, 'vnc.html'));
+    if (!settings.enabled || !readiness.playwrightInstalled || !readiness.playwright || (useVisibleBackend ? !visibleCamoufoxReady : !readiness.chromiumInstalled)) {
       session.message = getSetupMessage(settings, readiness);
       sessions.set(session.id, session);
       return publicSession(session);
@@ -541,31 +742,73 @@ export const browserUseService = {
     let browser: any | undefined;
     let context: any | undefined;
     let page: any;
-    const launchOptions = {
-      headless: true,
+    let viewer: RuntimeHandle['viewer'];
+    let processes: RuntimeHandle['processes'];
+    const launchOptions: Record<string, unknown> = {
+      headless: !useVisibleBackend,
       args: ['--disable-dev-shm-usage'],
     };
-    const contextOptions = {
-      viewport: { width: 1440, height: 900 },
-      serviceWorkers: 'block',
-    };
+    const contextOptions = useVisibleBackend
+      ? { viewport: null }
+      : {
+        viewport: { width: 1440, height: 900 },
+        serviceWorkers: 'block',
+      };
 
-    if (profileName) {
-      fs.mkdirSync(PROFILE_ROOT, { recursive: true });
-      context = await readiness.playwright.chromium.launchPersistentContext(getProfilePath(profileName), {
-        ...launchOptions,
-        ...contextOptions,
-      });
-      page = context.pages()[0] || await context.newPage();
-    } else {
-      browser = await readiness.playwright.chromium.launch(launchOptions);
-      context = await browser.newContext(contextOptions);
-      page = await context.newPage();
+    try {
+      if (useVisibleBackend) {
+        const camoufoxExecutable = getCamoufoxExecutablePath();
+        if (!camoufoxExecutable) {
+          throw new Error('Camoufox is not installed.');
+        }
+        const runtime = await startVisibleRuntime();
+        viewer = {
+          display: runtime.display,
+          vncPort: runtime.vncPort,
+          websockifyPort: runtime.websockifyPort,
+          noVncRoot: runtime.noVncRoot,
+        };
+        processes = runtime.processes;
+        launchOptions.executablePath = camoufoxExecutable;
+        launchOptions.env = {
+          ...process.env,
+          DISPLAY: runtime.display,
+          LD_LIBRARY_PATH: `${X11VNC_LIB_DIR}:${X11VNC_EXTRA_LIB_DIR}:${process.env.LD_LIBRARY_PATH || ''}`,
+        };
+        launchOptions.args = [];
+        session.backend = 'camoufox-vnc';
+        const viewerToken = createViewerToken(session.id);
+        session.viewerUrl = getViewerUrl(session.id, viewerToken);
+        session.viewerEmbedUrl = session.viewerUrl;
+      }
+
+      if (profileName) {
+        fs.mkdirSync(PROFILE_ROOT, { recursive: true });
+        const browserType = useVisibleBackend ? readiness.playwright.firefox : readiness.playwright.chromium;
+        context = await browserType.launchPersistentContext(getProfilePath(profileName), {
+          ...launchOptions,
+          ...contextOptions,
+        });
+        page = context.pages()[0] || await context.newPage();
+      } else {
+        const browserType = useVisibleBackend ? readiness.playwright.firefox : readiness.playwright.chromium;
+        browser = await browserType.launch(launchOptions);
+        context = await browser.newContext(contextOptions);
+        page = await context.newPage();
+      }
+    } catch (error) {
+      await context?.close?.().catch(() => undefined);
+      await browser?.close?.().catch(() => undefined);
+      killRuntimeProcesses(processes);
+      if (viewer?.display) {
+        reservedDisplays.delete(viewer.display);
+      }
+      throw error;
     }
     session.status = 'ready';
     session.message = 'Browser session is ready.';
     sessions.set(session.id, session);
-    handles.set(session.id, { browser, context, page });
+    handles.set(session.id, { browser, context, page, processes, viewer });
     await captureSession(session, page);
     return publicSession(session);
   },
@@ -810,6 +1053,25 @@ export const browserUseService = {
     await closeHandle(sessionId);
     sessions.delete(sessionId);
     return { deleted: true, sessionId };
+  },
+
+  getViewerProxyTarget(sessionId: string) {
+    const viewer = getSessionViewer(sessionId);
+    if (!viewer) {
+      throw new Error('Browser viewer is not available for this session.');
+    }
+    return {
+      websockifyPort: viewer.websockifyPort,
+      noVncRoot: viewer.noVncRoot,
+    };
+  },
+
+  validateViewerToken(sessionId: string, token: string | null | undefined) {
+    return validateViewerTokenForSession(sessionId, token);
+  },
+
+  handleViewerWebSocket(clientWs: WebSocket, pathname: string) {
+    handleViewerWebSocket(clientWs, pathname, getSessionViewer);
   },
 
   async agentStopSession(sessionId: string) {

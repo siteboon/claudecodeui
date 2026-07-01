@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bot,
   Clock3,
@@ -7,6 +7,7 @@ import {
   ExternalLink,
   Loader2,
   MonitorPlay,
+  MousePointer2,
   RefreshCw,
   Settings,
   Square,
@@ -19,9 +20,14 @@ import { Badge, Button } from '../../../shared/view/ui';
 import { authenticatedFetch } from '../../../utils/api';
 import type { SettingsMainTab } from '../../settings/types/types';
 
+const BROWSER_USE_GUIDE_URL = 'https://cloudcli.ai/docs/browser-use';
+const BROWSER_USE_CACHE_TTL_MS = 30_000;
+
 type BrowserUseStatus = {
   enabled: boolean;
   available: boolean;
+  backend: 'playwright' | 'camoufox-vnc';
+  browserBackend: 'playwright' | 'camoufox-vnc';
   playwrightInstalled: boolean;
   chromiumInstalled: boolean;
   installInProgress: boolean;
@@ -39,6 +45,9 @@ type BrowserUseSession = {
   updatedAt: string;
   lastAction: string | null;
   message: string | null;
+  backend?: 'playwright' | 'camoufox-vnc';
+  viewerUrl?: string | null;
+  viewerEmbedUrl?: string | null;
   createdBy: 'agent';
   profileName: string | null;
   viewport: {
@@ -54,15 +63,46 @@ type BrowserUseSession = {
 
 type BrowserUsePanelProps = {
   isVisible: boolean;
+  projectId?: string | null;
   onShowSettings?: (tab?: SettingsMainTab) => void;
 };
 
+type BrowserUsePanelCacheEntry = {
+  status: BrowserUseStatus | null;
+  sessions: BrowserUseSession[];
+  selectedSessionId: string | null;
+  updatedAt: number;
+};
+
+const browserUsePanelCache = new Map<string, BrowserUsePanelCacheEntry>();
+
 async function readJson<T>(response: Response): Promise<T> {
-  const data = await response.json();
+  const text = await response.text();
+  let data: any = {};
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(response.ok ? 'Received an invalid Browser response.' : `Browser request failed (${response.status}).`);
+    }
+  }
   if (!response.ok || data.success === false) {
     throw new Error(data.error || data.details || `Request failed (${response.status})`);
   }
   return data as T;
+}
+
+async function fetchBrowserPanelData() {
+  const [statusResponse, sessionsResponse] = await Promise.all([
+    authenticatedFetch('/api/browser-use/status'),
+    authenticatedFetch('/api/browser-use/sessions'),
+  ]);
+  const statusData = await readJson<{ data: BrowserUseStatus }>(statusResponse);
+  const sessionsData = await readJson<{ data: { sessions: BrowserUseSession[] } }>(sessionsResponse);
+  return {
+    status: statusData.data,
+    sessions: [...sessionsData.data.sessions].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
+  };
 }
 
 function formatRelativeTime(value: string | null): string {
@@ -119,20 +159,42 @@ function getStatusDot(status: BrowserUseSession['status']): string {
   return 'bg-border';
 }
 
+function getEngineLabel(backend?: BrowserUseStatus['backend'] | BrowserUseSession['backend']): string {
+  return backend === 'camoufox-vnc' ? 'Visible browser' : 'Playwright';
+}
+
 const PROMPTS = [
   'Use Browser to inspect the checkout flow and report any broken UI states.',
   'Open <url> with Browser, interact with the page, and summarize what changed after each step.',
 ];
 
-export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUsePanelProps) {
-  const [status, setStatus] = useState<BrowserUseStatus | null>(null);
-  const [sessions, setSessions] = useState<BrowserUseSession[]>([]);
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+function getBrowserUseCacheKey(projectId?: string | null): string {
+  return projectId ? `browser-use:project:${projectId}` : 'browser-use:global';
+}
+
+function getFreshCacheEntry(cacheKey: string): BrowserUsePanelCacheEntry | null {
+  const entry = browserUsePanelCache.get(cacheKey);
+  if (!entry || Date.now() - entry.updatedAt > BROWSER_USE_CACHE_TTL_MS) {
+    return null;
+  }
+  return entry;
+}
+
+export default function BrowserUsePanel({ isVisible, projectId, onShowSettings }: BrowserUsePanelProps) {
+  const cacheKey = getBrowserUseCacheKey(projectId);
+  const initialCacheEntry = getFreshCacheEntry(cacheKey);
+  const [status, setStatus] = useState<BrowserUseStatus | null>(() => initialCacheEntry?.status ?? null);
+  const [sessions, setSessions] = useState<BrowserUseSession[]>(() => initialCacheEntry?.sessions ?? []);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(() => (
+    initialCacheEntry?.selectedSessionId || initialCacheEntry?.sessions[0]?.id || null
+  ));
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(Boolean(initialCacheEntry));
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const activeLoadIdRef = useRef(0);
 
   const selectedSession = useMemo(
     () => sessions.find((session) => session.id === selectedSessionId) || sessions[0] || null,
@@ -140,8 +202,12 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
   );
 
   const activeSessions = sessions.filter((session) => session.status === 'ready');
-  const needsBrowserBinaries = Boolean(status?.enabled && (!status.playwrightInstalled || !status.chromiumInstalled));
-  const runtimeLabel = !status?.enabled
+  const isInitialLoading = isRefreshing && !hasLoadedOnce && sessions.length === 0;
+  const isBackgroundRefreshing = isRefreshing && !isInitialLoading;
+  const needsBrowserBinaries = Boolean(status?.enabled && !status.available);
+  const runtimeLabel = isInitialLoading
+    ? 'Loading'
+    : !status?.enabled
     ? 'Disabled'
     : status.available
       ? 'Ready'
@@ -157,29 +223,72 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
     : null;
 
   const refresh = useCallback(async () => {
+    const loadId = activeLoadIdRef.current + 1;
+    activeLoadIdRef.current = loadId;
     setIsRefreshing(true);
     try {
-      const [statusResponse, sessionsResponse] = await Promise.all([
-        authenticatedFetch('/api/browser-use/status'),
-        authenticatedFetch('/api/browser-use/sessions'),
-      ]);
-      const statusData = await readJson<{ data: BrowserUseStatus }>(statusResponse);
-      const sessionsData = await readJson<{ data: { sessions: BrowserUseSession[] } }>(sessionsResponse);
-      const nextSessions = sessionsData.data.sessions;
-      setStatus(statusData.data);
+      let nextData: Awaited<ReturnType<typeof fetchBrowserPanelData>>;
+      try {
+        nextData = await fetchBrowserPanelData();
+      } catch (error) {
+        if (loadId !== activeLoadIdRef.current) {
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        nextData = await fetchBrowserPanelData();
+      }
+      if (activeLoadIdRef.current !== loadId) {
+        return;
+      }
+      const nextSessions = nextData.sessions;
+      setStatus(nextData.status);
       setSessions(nextSessions);
-      setSelectedSessionId((current) => (
-        current && nextSessions.some((session) => session.id === current)
+      setHasLoadedOnce(true);
+      let nextSelectedSessionId: string | null = null;
+      setSelectedSessionId((current) => {
+        nextSelectedSessionId = current && nextSessions.some((session) => session.id === current)
           ? current
-          : nextSessions[0]?.id || null
-      ));
+          : nextSessions[0]?.id || null;
+        return nextSelectedSessionId;
+      });
+      browserUsePanelCache.set(cacheKey, {
+        status: nextData.status,
+        sessions: nextSessions,
+        selectedSessionId: nextSelectedSessionId,
+        updatedAt: Date.now(),
+      });
       setError(null);
     } catch (err) {
+      if (activeLoadIdRef.current !== loadId) {
+        return;
+      }
+      setHasLoadedOnce(true);
       setError(err instanceof Error ? err.message : 'Failed to load Browser');
     } finally {
-      setIsRefreshing(false);
+      if (activeLoadIdRef.current === loadId) {
+        setIsRefreshing(false);
+      }
     }
-  }, []);
+  }, [cacheKey]);
+
+  useEffect(() => {
+    const cachedEntry = browserUsePanelCache.get(cacheKey);
+    if (!cachedEntry) return;
+    browserUsePanelCache.set(cacheKey, {
+      ...cachedEntry,
+      selectedSessionId,
+    });
+  }, [cacheKey, selectedSessionId]);
+
+  useEffect(() => {
+    const cachedEntry = getFreshCacheEntry(cacheKey);
+    setStatus(cachedEntry?.status ?? null);
+    setSessions(cachedEntry?.sessions ?? []);
+    setSelectedSessionId(cachedEntry?.selectedSessionId || cachedEntry?.sessions[0]?.id || null);
+    setHasLoadedOnce(Boolean(cachedEntry));
+    setError(null);
+    activeLoadIdRef.current += 1;
+  }, [cacheKey]);
 
   useEffect(() => {
     if (!isVisible) return;
@@ -253,6 +362,10 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
           <span>{formatRelativeTime(session.updatedAt)}</span>
           <span className="truncate">- {formatAction(session.lastAction)}</span>
         </div>
+        <div className="mt-2 flex flex-wrap gap-1.5 pl-3.5 text-[10px] text-muted-foreground">
+          <span className="rounded border border-border/70 bg-background/70 px-1.5 py-0.5">{getEngineLabel(session.backend)}</span>
+          <span className="rounded border border-border/70 bg-background/70 px-1.5 py-0.5">{session.profileName || 'Temporary'}</span>
+        </div>
       </button>
     );
   };
@@ -270,9 +383,18 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
             </div>
             <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
               {status?.enabled
-                ? 'Agent browser sessions appear here while an AI task is using Browser.'
-                : 'Enable Browser in settings to let agents open monitored browser sessions.'}
+                ? 'When an agent opens a browser, you can watch the latest screenshot, take control in a new tab, or end the running session.'
+                : 'Enable Browser to let agents open websites, test flows, capture screenshots, and debug UI from a real page.'}
             </p>
+            <a
+              href={BROWSER_USE_GUIDE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+            >
+              Read the Browser guide
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
           </div>
         </div>
 
@@ -312,10 +434,19 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
     </div>
   );
 
+  const renderLoadingState = () => (
+    <div className="flex min-h-0 flex-1 items-center justify-center p-6">
+      <div className="flex items-center gap-3 rounded-md border border-border bg-card/40 px-4 py-3 text-sm text-muted-foreground shadow-sm">
+        <Loader2 className="h-4 w-4 animate-spin text-primary" />
+        Loading browser sessions...
+      </div>
+    </div>
+  );
+
   const renderBrowserSurface = (fullscreen = false) => (
     <div className={cn('flex flex-1 items-center justify-center bg-neutral-950', fullscreen ? 'min-h-[80vh]' : 'min-h-[420px]')}>
       {selectedSession?.screenshotDataUrl ? (
-        <div className="relative inline-block max-h-full">
+        <div className="group relative inline-block max-h-full">
           <img
             src={selectedSession.screenshotDataUrl}
             alt="Browser session screenshot"
@@ -328,6 +459,18 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
             >
               <div className="absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white" />
             </div>
+          )}
+          {selectedSession?.viewerEmbedUrl && selectedSession.status === 'ready' && (
+            <button
+              type="button"
+              onClick={() => window.open(selectedSession.viewerUrl || selectedSession.viewerEmbedUrl || '', '_blank', 'noopener,noreferrer')}
+              className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition focus-visible:bg-black/30 focus-visible:opacity-100 focus-visible:outline-none group-hover:bg-black/30 group-hover:opacity-100"
+            >
+              <span className="inline-flex items-center gap-2 rounded-md border border-white/20 bg-black/80 px-3 py-2 text-sm font-medium text-white shadow-lg">
+                <MousePointer2 className="h-4 w-4" />
+                Take control
+              </span>
+            </button>
           )}
         </div>
       ) : (
@@ -350,10 +493,29 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
             <Badge variant="outline" className={cn('text-[10px]', getRuntimeTone(status, isInstalling))}>
               {runtimeLabel}
             </Badge>
+            <Badge variant="outline" className="border-border bg-background text-[10px] text-muted-foreground">
+              {getEngineLabel(status?.backend)}
+            </Badge>
           </div>
-          <p className="mt-0.5 text-xs text-muted-foreground">Monitor browser sessions opened by AI agents.</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">Watch and manage browser sessions agents use to test real websites.</p>
+          {isBackgroundRefreshing && (
+            <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <RefreshCw className="h-3 w-3 animate-spin" />
+              Refreshing sessions...
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-1.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0"
+            onClick={() => window.open(BROWSER_USE_GUIDE_URL, '_blank', 'noopener,noreferrer')}
+            title="Open Browser guide"
+            aria-label="Open Browser guide"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+          </Button>
           {onShowSettings && (
             <Button
               variant="ghost"
@@ -425,7 +587,7 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
           </div>
 
           {sessions.length === 0 ? (
-            renderEmptyState()
+            isInitialLoading ? renderLoadingState() : renderEmptyState()
           ) : (
             <div className="min-h-0 flex-1 overflow-auto bg-muted/20 p-4">
               <div className="mx-auto flex min-h-[500px] max-w-7xl flex-col overflow-hidden rounded-md border border-border bg-background shadow-sm">
@@ -441,14 +603,32 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
                       <ExternalLink className="h-3.5 w-3.5 shrink-0" />
                       <span className="truncate">{selectedSession?.url || 'No page loaded'}</span>
                     </div>
+                    <div className="mt-1 flex flex-wrap gap-1.5 text-[10px] text-muted-foreground">
+                      <span className="rounded border border-border/70 bg-muted/30 px-1.5 py-0.5">{getEngineLabel(selectedSession?.backend || status?.backend)}</span>
+                      <span className="rounded border border-border/70 bg-muted/30 px-1.5 py-0.5">Profile: {selectedSession?.profileName || 'Temporary'}</span>
+                      <span className="rounded border border-border/70 bg-muted/30 px-1.5 py-0.5">Updated {formatRelativeTime(selectedSession?.updatedAt || null)}</span>
+                    </div>
                   </div>
                   <div className="hidden text-xs text-muted-foreground md:block">
                     {formatAction(selectedSession?.lastAction || null)}
                   </div>
+                  {selectedSession?.viewerUrl && selectedSession.status === 'ready' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8"
+                      onClick={() => window.open(selectedSession.viewerUrl || '', '_blank', 'noopener,noreferrer')}
+                      title="Open live browser control in a new tab"
+                      aria-label="Open live browser control in a new tab"
+                    >
+                      <MousePointer2 className="h-4 w-4" />
+                      Take control
+                    </Button>
+                  )}
                   <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setIsFullscreen(true)} disabled={!selectedSession?.screenshotDataUrl} title="Full screen" aria-label="Full screen">
                     <Expand className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 lg:hidden" onClick={stopSession} disabled={isBusy || !selectedSession || selectedSession.status !== 'ready'} title="Stop session" aria-label="Stop session">
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 lg:hidden" onClick={stopSession} disabled={isBusy || !selectedSession || selectedSession.status !== 'ready'} title="End session" aria-label="End session">
                     <Square className="h-4 w-4" />
                   </Button>
                   <Button variant="ghost" size="sm" className="h-8 w-8 p-0 lg:hidden" onClick={deleteSession} disabled={isBusy || !selectedSession} title="Delete session" aria-label="Delete session">
@@ -475,6 +655,11 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
             {sessions.length > 0 ? (
               <div className="space-y-2">{sessions.map(renderSessionItem)}</div>
+            ) : isInitialLoading ? (
+              <div className="flex items-center justify-center gap-2 rounded-md border border-dashed border-border/70 px-3 py-8 text-center text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Loading sessions...
+              </div>
             ) : (
               <div className="rounded-md border border-dashed border-border/70 px-3 py-8 text-center text-xs text-muted-foreground">
                 No agent browser sessions.
@@ -505,7 +690,7 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <Button variant="outline" size="sm" onClick={stopSession} disabled={isBusy || !selectedSession || selectedSession.status !== 'ready'}>
                   <Square className="h-4 w-4" />
-                  Stop
+                  End
                 </Button>
                 <Button variant="outline" size="sm" onClick={deleteSession} disabled={isBusy || !selectedSession}>
                   <Trash2 className="h-4 w-4" />

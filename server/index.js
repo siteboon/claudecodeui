@@ -65,7 +65,7 @@ import providerRoutes from './modules/providers/provider.routes.js';
 import voiceRoutes from './voice-proxy.js';
 import browserUseRoutes from './modules/browser-use/browser-use.routes.js';
 import browserUseMcpRoutes from './modules/browser-use/browser-use-mcp.routes.js';
-import { browserUseService } from './modules/browser-use/browser-use.service.js';
+import { browserUseService, VIEWER_COOKIE_NAME } from './modules/browser-use/index.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
 import { initializeDatabase, projectsDb, sessionsDb } from './modules/database/index.js';
 import { configureWebPush } from './services/vapid-keys.js';
@@ -147,6 +147,8 @@ const wss = createWebSocketServer(server, {
         shouldAutoOpenUrlFromOutput,
     },
     getPluginPort,
+    browserUseViewer: (ws, pathname) => browserUseService.handleViewerWebSocket(ws, pathname),
+    authenticateBrowserUseViewer: authenticateBrowserUseViewerPath,
 });
 
 // Make WebSocket server available to routes
@@ -214,11 +216,42 @@ app.use('/api/gemini', authenticateToken, geminiRoutes);
 // Plugins API Routes (protected)
 app.use('/api/plugins', authenticateToken, pluginsRoutes);
 
+function readCookieValue(header, name) {
+    if (!header) return null;
+    const prefix = `${name}=`;
+    const cookie = String(header).split(';').map((part) => part.trim()).find((part) => part.startsWith(prefix));
+    return cookie ? decodeURIComponent(cookie.slice(prefix.length)) : null;
+}
+
+function authenticateBrowserUseViewerPath(pathname, token) {
+    const parts = String(pathname || '').split('/');
+    const sessionId = parts[4];
+    if (parts[1] !== 'api' || parts[2] !== 'browser-use' || parts[3] !== 'sessions' || parts[5] !== 'viewer' || parts[6] !== 'websockify') {
+        return false;
+    }
+    return browserUseService.validateViewerToken(decodeURIComponent(sessionId), token);
+}
+
+function authenticateBrowserUse(req, res, next) {
+    const match = /^\/sessions\/([^/]+)\/viewer(?:\/|$)/.exec(req.path || '');
+    if (match) {
+        const sessionId = decodeURIComponent(match[1]);
+        const token = typeof req.query.viewerToken === 'string'
+            ? req.query.viewerToken
+            : readCookieValue(req.headers.cookie, VIEWER_COOKIE_NAME);
+        if (browserUseService.validateViewerToken(sessionId, token)) {
+            return next();
+        }
+        return res.status(401).json({ error: 'Browser viewer access requires a valid session token.' });
+    }
+    return authenticateToken(req, res, next);
+}
+
 // Browser MCP bridge API (local token protected)
 app.use('/api/browser-use-mcp', browserUseMcpRoutes);
 
 // Browser API Routes (protected)
-app.use('/api/browser-use', authenticateToken, browserUseRoutes);
+app.use('/api/browser-use', authenticateBrowserUse, browserUseRoutes);
 
 // Unified provider MCP routes (protected)
 app.use('/api/providers', authenticateToken, providerRoutes);
