@@ -263,7 +263,14 @@ const upsertSessionIntoProject = (project: Project, event: SessionUpsertedEvent)
           !incomingSummary ||
           incomingSummary === 'Untitled Claude Session';
         const updated = isDegradedSummary && existingSummary
-          ? { ...session, ...normalizedSession, summary: existingSummary }
+          ? {
+              ...session,
+              ...normalizedSession,
+              summary: existingSummary,
+              name: normalizedSession.name && normalizedSession.name !== 'Untitled Claude Session'
+                ? normalizedSession.name
+                : session.name || existingSummary,
+            }
           : { ...session, ...normalizedSession };
         if (serialize(session) !== serialize(updated)) {
           changed = true;

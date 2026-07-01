@@ -235,7 +235,8 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         ];
         for (const pattern of decisionPatterns) {
           const match = thinking.match(pattern);
-          if (match) return match[1].trim();
+          const candidate = match?.[1]?.trim();
+          if (candidate && !this.isPromptMatch(candidate, userPrompt)) return candidate;
         }
         // 2. Decision pattern with backticks: `Let's go with \`TITLE\``
         const backtickPatterns = [
@@ -243,7 +244,8 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         ];
         for (const pattern of backtickPatterns) {
           const match = thinking.match(pattern);
-          if (match) return match[1].trim();
+          const candidate = match?.[1]?.trim();
+          if (candidate && !this.isPromptMatch(candidate, userPrompt)) return candidate;
         }
         // 3. All backtick-quoted phrases (model's brainstormed candidates)
         //    Filter out any that match the user's prompt — the model often
@@ -286,9 +288,15 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     // Strip trailing punctuation for comparison
     const pClean = p.replace(/[。!?.?!，,、；;:：]+$/, '');
     if (c === pClean) return true;
-    // Direct substring check
-    if (c.length >= 4 && p.length >= 4 && (c.includes(p) || p.includes(c))) return true;
-    if (pClean.length >= 4 && (c.includes(pClean) || pClean.includes(c))) return true;
+    // Direct substring check — but don't reject valid titles just because they're
+    // contained in the prompt (e.g., short title like "修复bug" appears in "帮我修复bug")
+    const isNearFullOverlap = (left: string, right: string): boolean => {
+      const shorter = Math.min(left.length, right.length);
+      const longer = Math.max(left.length, right.length);
+      return shorter >= 4 && longer > 0 && shorter / longer >= 0.8 && (left.includes(right) || right.includes(left));
+    };
+    if (isNearFullOverlap(c, p)) return true;
+    if (isNearFullOverlap(c, pClean)) return true;
     // One starts with the other
     if (c.length >= 4 && p.length >= 4 && (c.startsWith(p) || p.startsWith(c))) return true;
     // Shared prefix overlap
@@ -360,10 +368,18 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     // 2. It is a long truncated prompt (>60 chars)
     // 3. It matches the first user prompt (meaning it was set from truncateToTitle, not AI)
     let shouldSkip = false;
-    if (existingSessionName && existingSessionName !== 'Untitled Claude Session' && existingSessionName.length <= 60) {
+    if (existingSessionName && existingSessionName !== 'Untitled Claude Session') {
       // Check if the existing name is just the raw prompt or a prefix of it
       const lastPrompt = await this.extractLastPrompt(filePath);
-      if (lastPrompt && (existingSessionName === lastPrompt || lastPrompt.startsWith(existingSessionName))) {
+      const trimmedPrompt = lastPrompt?.trim();
+      const trimmedExistingName = existingSessionName.trim();
+      if (
+        trimmedPrompt
+        && (
+          trimmedExistingName === trimmedPrompt
+          || (trimmedExistingName.length >= 60 && trimmedPrompt.startsWith(trimmedExistingName))
+        )
+      ) {
         // Existing name is derived from the prompt, not AI generated — regenerate
         shouldSkip = false;
       } else {
@@ -393,9 +409,9 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     if (!sessionName) {
       const lastPrompt = await this.extractLastPrompt(filePath);
       if (lastPrompt) {
-        console.info(`[AutoTitle] Generating AI title for session ${parsed.sessionId}`, { prompt: lastPrompt.slice(0, 80) });
+        console.debug(`[AutoTitle] Generating AI title for session ${parsed.sessionId}`);
         sessionName = await this.generateAiTitle(lastPrompt);
-        console.info(`[AutoTitle] Result:`, { title: sessionName, sessionId: parsed.sessionId });
+        console.debug(`[AutoTitle] Generated AI title`, { sessionId: parsed.sessionId, hasTitle: Boolean(sessionName) });
       }
     }
 
@@ -458,9 +474,11 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         if (eventType === 'custom-title' && claudeRenamedTitle?.trim()) {
           // Ignore the default "Untitled Claude Session" placeholder — treat it
           // as if there was no title at all so AI generation kicks in.
-          if (claudeRenamedTitle.trim() !== 'Untitled Claude Session') {
-            return { title: claudeRenamedTitle.trim(), kind: 'custom-title' };
+          const trimmedTitle = claudeRenamedTitle.trim();
+          if (trimmedTitle === 'Untitled Claude Session') {
+            return undefined;
           }
+          return { title: trimmedTitle, kind: 'custom-title' };
         }
         if (eventType === 'ai-title' && aiTitle?.trim()) {
           return { title: aiTitle.trim(), kind: 'ai-title' };

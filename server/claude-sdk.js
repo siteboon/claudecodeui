@@ -56,7 +56,7 @@ function extractSubagentPrompt(toolInput) {
       return null;
     }
   }
-  if (typeof parsed !== 'object') return null;
+  if (typeof parsed !== 'object' || parsed === null) return null;
   const prompt = typeof parsed.prompt === 'string' ? parsed.prompt : null;
   if (!prompt) return null;
   return prompt.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
