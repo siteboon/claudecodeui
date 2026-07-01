@@ -14,7 +14,7 @@ import cors from 'cors';
 import mime from 'mime-types';
 import Database from 'better-sqlite3';
 
-import { AppError, WORKSPACES_ROOT, getOpenCodeDatabasePath, validateWorkspacePath } from '@/shared/utils.js';
+import { AppError, FORBIDDEN_WORKSPACE_PATHS, WORKSPACES_ROOT, getOpenCodeDatabasePath, normalizeProjectPath, validateWorkspacePath } from '@/shared/utils.js';
 import { closeSessionsWatcher, initializeSessionsWatcher } from '@/modules/providers/index.js';
 import { createWebSocketServer } from '@/modules/websocket/index.js';
 
@@ -1512,7 +1512,13 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
             item.permissionsRwx = '---------';
         }
 
-        if (entry.isDirectory() && currentDepth < maxDepth) {
+        // Skip recursing into pseudo-filesystems and other system-critical
+        // directories (e.g. /proc, /sys) — they're never valid project roots,
+        // and /proc in particular can contain thousands of virtual entries
+        // that make traversal from a broad root (e.g. "/") pathologically slow.
+        const isForbiddenSystemDir = FORBIDDEN_WORKSPACE_PATHS.includes(normalizeProjectPath(itemPath));
+
+        if (entry.isDirectory() && currentDepth < maxDepth && !isForbiddenSystemDir) {
             // Recurse. Let readdir's own EACCES bubble up through the catch in
             // the recursive call rather than doing a separate access() probe
             // (which doubled the round-trip count on SMB without adding info).
