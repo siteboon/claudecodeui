@@ -325,6 +325,59 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
     }
 });
 
+// Restart the running server so an already-installed update (or a stale long-running
+// process) is picked up. Complements /api/system/update, which asks the user to restart.
+app.post('/api/system/restart', authenticateToken, (req, res) => {
+    console.log('Server restart requested via API');
+    res.json({ success: true, message: 'Server is restarting…' });
+
+    // A process supervisor (launchd/systemd/pm2/docker --restart) relaunches the updated
+    // on-disk code when we exit; re-spawning ourselves under one would double-bind the port.
+    // Only self-respawn when we are NOT supervised (e.g. a plain `npx`/global-bin launch).
+    const isSupervised =
+        process.ppid === 1 ||
+        Boolean(process.env.pm_id) ||
+        Boolean(process.env.INVOCATION_ID);
+
+    // Runs after the HTTP response has flushed, i.e. OUTSIDE the request's try/catch scope,
+    // so it must guard itself: an unguarded throw here would be an unhandled exception, and a
+    // failed self-respawn would leave no server running at all.
+    setTimeout(() => {
+        try {
+            if (isSupervised) {
+                console.log('Exiting for supervisor-managed restart');
+                process.exit(0);
+                return;
+            }
+
+            console.log('Re-spawning a detached replacement process');
+            let spawnFailed = false;
+            const child = spawn(process.argv[0], process.argv.slice(1), {
+                cwd: process.cwd(),
+                env: process.env,
+                detached: true,
+                stdio: 'inherit',
+            });
+            child.on('error', (error) => {
+                spawnFailed = true;
+                console.error('Failed to spawn replacement process; keeping current server alive:', error);
+            });
+            child.unref();
+
+            // Give a possible synchronous-ish spawn error time to surface before we exit, so a
+            // failed respawn does not take the server down with no replacement.
+            setTimeout(() => {
+                if (spawnFailed) {
+                    return;
+                }
+                process.exit(0);
+            }, 500);
+        } catch (error) {
+            console.error('System restart failed; keeping current server alive:', error);
+        }
+    }, 250);
+});
+
 const expandWorkspacePath = (inputPath) => {
     if (!inputPath) return inputPath;
     if (inputPath === '~') {
