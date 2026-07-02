@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 
 import { getConnection } from '@/modules/database/connection.js';
-import type { CreateProjectPathResult, ProjectRepositoryRow } from '@/shared/types.js';
+import type { CreateProjectPathOptions, CreateProjectPathResult, ProjectRepositoryRow } from '@/shared/types.js';
 import { normalizeProjectPath } from '@/shared/utils.js';
 
 function normalizeProjectDisplayName(projectPath: string, customProjectName: string | null): string {
@@ -27,7 +27,7 @@ export const projectsDb = {
     createProjectPath(
         projectPath: string,
         customProjectName: string | null = null,
-        options: { reactivateArchived?: boolean } = {},
+        options: CreateProjectPathOptions = {},
     ): CreateProjectPathResult {
         const { reactivateArchived = true } = options;
         const db = getConnection();
@@ -53,7 +53,7 @@ export const projectsDb = {
 
         const existingProject = projectsDb.getProjectPath(normalizedProjectPath);
         return {
-            outcome: 'active_conflict',
+            outcome: existingProject?.isArchived ? 'archived_conflict' : 'active_conflict',
             project: existingProject,
         };
     },

@@ -83,19 +83,20 @@ function resolveClaudeProjectDir(projectPath: string): string | null {
  * leave their transcript on disk. The next `synchronizeSessions()` re-discovers that file and
  * recreates the project, so a "delete all data" request appears to do nothing after a reload.
  * Removing the directory fulfils the documented behaviour and stops the resurrection.
+ *
+ * Errors are intentionally NOT swallowed: `fs.rm` with `force: true` already ignores a missing
+ * directory, so anything it still throws (e.g. a permission error) means transcripts survived on
+ * disk. Propagating it aborts `deleteOrArchiveProject` before the DB rows are removed, so the
+ * caller sees a failure instead of a "deleted" project that resurrects on the next reload.
  */
 async function deleteClaudeProjectDir(projectPath: string): Promise<void> {
   const projectDir = resolveClaudeProjectDir(projectPath);
   if (!projectDir) {
-    console.warn(`[project-delete] Refusing to remove out-of-root Claude dir for path: ${projectPath}`);
+    console.warn('[project-delete] Refusing to remove out-of-root Claude dir');
     return;
   }
 
-  try {
-    await fs.rm(projectDir, { recursive: true, force: true });
-  } catch (error) {
-    console.warn(`[project-delete] Failed to remove ${projectDir}:`, (error as Error).message);
-  }
+  await fs.rm(projectDir, { recursive: true, force: true });
 }
 
 /**
