@@ -1,5 +1,5 @@
 import { Cloud, ExternalLink, MessageSquare, RotateCw, Star, Users } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { CLOUDCLI_WORDMARK_FONT_FAMILY } from '../../../../constants/branding';
@@ -34,6 +34,19 @@ export default function AboutTab() {
   const { updateAvailable, latestVersion, currentVersion, releaseInfo } = useVersionCheck('siteboon', 'claudecodeui');
   const releasesUrl = releaseInfo?.htmlUrl || `${GITHUB_REPO_URL}/releases`;
   const [restarting, setRestarting] = useState(false);
+  // Track the reconnect-polling timer so it is cancelled if the component unmounts
+  // (leaving Settings mid-restart must not trigger a surprise reload up to 60s later).
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelledRef = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      cancelledRef.current = true;
+      if (pollTimerRef.current) {
+        clearTimeout(pollTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleRestartServer = async () => {
     if (restarting) return;
@@ -42,6 +55,7 @@ export default function AboutTab() {
     );
     if (!confirmed) return;
 
+    cancelledRef.current = false;
     setRestarting(true);
     try {
       // The connection typically drops before the response arrives — that is expected.
@@ -53,8 +67,10 @@ export default function AboutTab() {
     // Poll until the server accepts requests again, then reload the app.
     const deadline = Date.now() + 60_000;
     const poll = async () => {
+      if (cancelledRef.current) return;
       try {
         const response = await api.auth.user();
+        if (cancelledRef.current) return;
         // 200 (still authed) or 401 (session expired) both mean the server is back up.
         if (response.ok || response.status === 401) {
           window.location.reload();
@@ -63,13 +79,14 @@ export default function AboutTab() {
       } catch {
         /* still restarting */
       }
+      if (cancelledRef.current) return;
       if (Date.now() < deadline) {
-        setTimeout(poll, 1500);
+        pollTimerRef.current = setTimeout(poll, 1500);
       } else {
         window.location.reload();
       }
     };
-    setTimeout(poll, 2500);
+    pollTimerRef.current = setTimeout(poll, 2500);
   };
 
   return (
