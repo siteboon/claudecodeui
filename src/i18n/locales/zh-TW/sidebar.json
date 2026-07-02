@@ -43,8 +43,11 @@
     "deleteProject": "從側邊欄移除專案 (Delete)",
     "addToFavorites": "加入收藏",
     "removeFromFavorites": "從收藏移除",
+    "activeSessionIndicator": "最近活躍的工作階段（最近 10 分鐘）",
     "editSessionName": "手動編輯工作階段名稱",
     "deleteSession": "永久刪除此工作階段",
+    "processingSessionIndicator": "工作階段處理中",
+    "deleteSessionOptions": "封存或永久刪除此工作階段",
     "save": "儲存",
     "cancel": "取消",
     "clearSearch": "清除搜尋",
@@ -65,10 +68,7 @@
     "cancel": "取消",
     "save": "儲存",
     "delete": "刪除",
-    "rename": "重新命名",
-    "joinCommunity": "加入社群",
-    "reportIssue": "回報問題",
-    "starOnGithub": "在 GitHub 上加星"
+    "rename": "重新命名"
   },
   "branding": {
     "openSource": "開源"
@@ -113,14 +113,15 @@
     "restoreSessionFailed": "還原工作階段失敗，請重試。",
     "restoreSessionError": "還原工作階段時出錯，請重試。"
   },
-  "version": {
-    "updateAvailable": "有可用更新",
-    "restartRequired": "已安裝更新 — 請重新啟動伺服器以套用"
-  },
   "search": {
     "modeProjects": "專案",
     "modeConversations": "對話",
     "conversationsPlaceholder": "搜尋對話內容...",
+    "archivedPlaceholder": "搜尋已封存工作階段...",
+    "runningPlaceholder": "搜尋執行中的工作階段...",
+    "runningTooltip": "執行中的工作階段",
+    "archiveOnlyTooltip": "僅查看封存",
+    "modeRunning": "執行中",
     "searching": "搜尋中...",
     "noResults": "找不到結果",
     "tryDifferentQuery": "嘗試不同的搜尋詞",
@@ -138,6 +139,31 @@
     "removeFromSidebar": "僅從側邊欄移除",
     "deleteAllData": "永久刪除所有資料",
     "allConversationsDeleted": "專案將從側邊欄中移除。您的檔案、記憶和工作階段資料將會保留。",
-    "cannotUndo": "您可以稍後重新新增此專案。"
+    "cannotUndo": "您可以稍後重新新增此專案。",
+    "archiveProject": "封存專案",
+    "archivedSessionNotice": "此工作階段已封存。您可以繼續隱藏它，或將其永久刪除。",
+    "archiveSessionNotice": "封存會將工作階段從作用中列表隱藏，同時保留其歷史記錄。",
+    "archiveSession": "封存工作階段",
+    "deleteSessionPermanently": "永久刪除"
+  },
+  "running": {
+    "emptyTitle": "沒有正在執行的工作階段",
+    "noMatchingSessions": "沒有符合此搜尋的執行中工作階段。",
+    "emptyDescription": "提供者處理任務時，作用中的工作會顯示在這裡。",
+    "title": "正在執行"
+  },
+  "archived": {
+    "loadingTitle": "正在載入封存...",
+    "loadingDescription": "正在取得已隱藏且稍後可還原的工作區和工作階段。",
+    "noMatchingSessions": "沒有符合的封存項目",
+    "emptyTitle": "沒有封存項目",
+    "tryDifferentSearch": "請嘗試不同的搜尋詞。",
+    "emptyDescription": "從作用中列表隱藏工作區和工作階段後，它們會顯示在這裡。",
+    "sessionCountOne": "個封存項目",
+    "sessionCountOther": "個封存項目",
+    "projectArchived": "專案已封存",
+    "restoreProject": "還原工作區",
+    "restore": "還原工作階段",
+    "deletePermanently": "永久刪除"
   }
 }

@@ -15,7 +15,6 @@ import { Reasoning, ReasoningTrigger, ReasoningContent } from '../../../../share
 
 import { Markdown } from './Markdown';
 import MessageCopyControl from './MessageCopyControl';
-import MessageSpeakControl from './MessageSpeakControl';
 
 type DiffLine = {
   type: string;
@@ -147,15 +146,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                   ? t('messageTypes.error')
                   : message.type === 'tool'
                     ? t('messageTypes.tool')
-                    : (provider === 'cursor'
-                        ? t('messageTypes.cursor')
-                        : provider === 'codex'
-                          ? t('messageTypes.codex')
-                          : provider === 'gemini'
-                            ? t('messageTypes.gemini')
-                            : provider === 'opencode'
-                              ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
-                              : t('messageTypes.claude'))}
+                    : (provider === 'codex' ? t('messageTypes.codex') : t('messageTypes.claude'))}
               </div>
             </div>
           )}
@@ -385,9 +376,6 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
               <div className="mt-1 flex w-full items-center gap-2 text-[11px] text-gray-400 dark:text-gray-500">
                 {shouldShowAssistantCopyControl && (
                   <MessageCopyControl content={assistantCopyContent} messageType="assistant" />
-                )}
-                {shouldShowAssistantCopyControl && (
-                  <MessageSpeakControl content={assistantCopyContent} />
                 )}
                 {!isGrouped && <span>{formattedTime}</span>}
               </div>

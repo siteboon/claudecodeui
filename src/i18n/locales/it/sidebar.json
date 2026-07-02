@@ -66,10 +66,7 @@
     "cancel": "Annulla",
     "save": "Salva",
     "delete": "Elimina",
-    "rename": "Rinomina",
-    "joinCommunity": "Unisciti alla community",
-    "reportIssue": "Segnala problema",
-    "starOnGithub": "Metti stella su GitHub"
+    "rename": "Rinomina"
   },
   "branding": {
     "openSource": "Open Source"
@@ -113,10 +110,6 @@
     "restoreProjectError": "Errore durante il ripristino del progetto. Riprova.",
     "restoreSessionFailed": "Impossibile ripristinare la sessione. Riprova.",
     "restoreSessionError": "Errore durante il ripristino della sessione. Riprova."
-  },
-  "version": {
-    "updateAvailable": "Aggiornamento disponibile",
-    "restartRequired": "Aggiornamento installato — riavvia il server per applicarlo"
   },
   "search": {
     "modeProjects": "Progetti",

@@ -12,24 +12,16 @@ export default function AgentsSettingsTab({
   onProviderLogin,
   claudePermissions,
   onClaudePermissionsChange,
-  cursorPermissions,
-  onCursorPermissionsChange,
   codexPermissionMode,
   onCodexPermissionModeChange,
-  geminiPermissionMode,
-  onGeminiPermissionModeChange,
   projects,
 }: AgentsSettingsTabProps) {
   const [selectedAgent, setSelectedAgent] = useState<AgentProvider>('claude');
   const [selectedCategory, setSelectedCategory] = useState<AgentCategory>('account');
-  const visibleCategories = useMemo<AgentCategory[]>(() => (
-    selectedAgent === 'opencode'
-      ? ['account', 'permissions', 'mcp']
-      : ['account', 'permissions', 'mcp', 'skills']
-  ), [selectedAgent]);
+  const visibleCategories = useMemo<AgentCategory[]>(() => ['account', 'permissions', 'mcp', 'skills'], []);
 
   const visibleAgents = useMemo<AgentProvider[]>(() => {
-    return ['claude', 'cursor', 'codex', 'gemini', 'opencode'];
+    return ['claude', 'codex'];
   }, []);
 
   const agentContextById = useMemo<Record<AgentProvider, AgentContext>>(() => ({
@@ -37,29 +29,14 @@ export default function AgentsSettingsTab({
       authStatus: providerAuthStatus.claude,
       onLogin: () => onProviderLogin('claude'),
     },
-    cursor: {
-      authStatus: providerAuthStatus.cursor,
-      onLogin: () => onProviderLogin('cursor'),
-    },
     codex: {
       authStatus: providerAuthStatus.codex,
       onLogin: () => onProviderLogin('codex'),
-    },
-    gemini: {
-      authStatus: providerAuthStatus.gemini,
-      onLogin: () => onProviderLogin('gemini'),
-    },
-    opencode: {
-      authStatus: providerAuthStatus.opencode,
-      onLogin: () => onProviderLogin('opencode'),
     },
   }), [
     onProviderLogin,
     providerAuthStatus.claude,
     providerAuthStatus.codex,
-    providerAuthStatus.cursor,
-    providerAuthStatus.gemini,
-    providerAuthStatus.opencode,
   ]);
 
   useEffect(() => {
@@ -80,7 +57,6 @@ export default function AgentsSettingsTab({
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <AgentCategoryTabsSection
           categories={visibleCategories}
-          selectedAgent={selectedAgent}
           selectedCategory={selectedCategory}
           onSelectCategory={setSelectedCategory}
         />
@@ -91,12 +67,8 @@ export default function AgentsSettingsTab({
           agentContextById={agentContextById}
           claudePermissions={claudePermissions}
           onClaudePermissionsChange={onClaudePermissionsChange}
-          cursorPermissions={cursorPermissions}
-          onCursorPermissionsChange={onCursorPermissionsChange}
           codexPermissionMode={codexPermissionMode}
           onCodexPermissionModeChange={onCodexPermissionModeChange}
-          geminiPermissionMode={geminiPermissionMode}
-          onGeminiPermissionModeChange={onGeminiPermissionModeChange}
           projects={projects}
         />
       </div>

@@ -68,10 +68,10 @@ test('provider models service delegates to the resolved provider model adapter',
 test('provider models service returns each provider adapter result without rewriting it', async () => {
   const expectedModels: ProviderModelsDefinition = {
     OPTIONS: [
-      { value: 'cursor-a', label: 'Cursor A' },
-      { value: 'cursor-b', label: 'Cursor B' },
+      { value: 'codex-a', label: 'Codex A' },
+      { value: 'codex-b', label: 'Codex B' },
     ],
-    DEFAULT: 'cursor-b',
+    DEFAULT: 'codex-b',
   };
 
   const service = createProviderModelsService({
@@ -79,13 +79,13 @@ test('provider models service returns each provider adapter result without rewri
     resolveProvider: () => ({
       models: {
         getSupportedModels: async () => expectedModels,
-        getCurrentActiveModel: async () => createCurrentActiveModel('cursor-active'),
-        changeActiveModel: async (input) => createSessionActiveModelChange('cursor', input),
+        getCurrentActiveModel: async () => createCurrentActiveModel('codex-active'),
+        changeActiveModel: async (input) => createSessionActiveModelChange('codex', input),
       },
     }),
   });
 
-  const models = await service.getProviderModels('cursor', { bypassCache: true });
+  const models = await service.getProviderModels('codex', { bypassCache: true });
 
   assert.deepEqual(models.models, expectedModels);
 });
@@ -170,13 +170,13 @@ test('provider model cache is persisted across service instances', async () => {
       cachePath,
       resolveProvider: () => ({
         models: {
-          getSupportedModels: async () => createModels('gemini-cached'),
-          getCurrentActiveModel: async () => createCurrentActiveModel('gemini-active'),
-          changeActiveModel: async (input) => createSessionActiveModelChange('gemini', input),
+          getSupportedModels: async () => createModels('codex-cached'),
+          getCurrentActiveModel: async () => createCurrentActiveModel('codex-active'),
+          changeActiveModel: async (input) => createSessionActiveModelChange('codex', input),
         },
       }),
     });
-    await writer.getProviderModels('gemini');
+    await writer.getProviderModels('codex');
 
     const reader = createProviderModelsService({
       cachePath,
@@ -185,13 +185,13 @@ test('provider model cache is persisted across service instances', async () => {
           getSupportedModels: async () => {
             throw new Error('loader should not be called for persisted cache hits');
           },
-          getCurrentActiveModel: async () => createCurrentActiveModel('gemini-active'),
-          changeActiveModel: async (input) => createSessionActiveModelChange('gemini', input),
+          getCurrentActiveModel: async () => createCurrentActiveModel('codex-active'),
+          changeActiveModel: async (input) => createSessionActiveModelChange('codex', input),
         },
       }),
     });
-    const models = await reader.getProviderModels('gemini');
-    assert.equal(models.models.DEFAULT, 'gemini-cached');
+    const models = await reader.getProviderModels('codex');
+    assert.equal(models.models.DEFAULT, 'codex-cached');
     assert.equal(models.cache.source, 'disk');
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
@@ -281,10 +281,10 @@ test('provider models service delegates current active model lookups to the prov
     }),
   });
 
-  const activeModel = await service.getCurrentActiveModel('opencode', 'session-123');
+  const activeModel = await service.getCurrentActiveModel('codex', 'session-123');
 
-  assert.deepEqual(calls, [{ provider: 'opencode', sessionId: 'session-123' }]);
-  assert.equal(activeModel.model, 'opencode-session-123');
+  assert.deepEqual(calls, [{ provider: 'codex', sessionId: 'session-123' }]);
+  assert.equal(activeModel.model, 'codex-session-123');
 });
 
 test('provider models service delegates active model change requests to the provider adapter', async () => {
@@ -334,14 +334,14 @@ test('resolveResumeModel prefers a stored changed model over the requested one',
       }),
     });
 
-    await writeProviderSessionActiveModelChange('cursor', {
+    await writeProviderSessionActiveModelChange('codex', {
       sessionId: 'session-456',
       model: 'composer-2',
     }, {
       filePath: activeModelChangesPath,
     });
 
-    const model = await service.resolveResumeModel('cursor', 'session-456', 'composer-2-fast');
+    const model = await service.resolveResumeModel('codex', 'session-456', 'composer-2-fast');
     assert.equal(model, 'composer-2');
   } finally {
     await rm(tempRoot, { recursive: true, force: true });

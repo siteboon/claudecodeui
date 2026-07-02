@@ -20,7 +20,10 @@
     "saved": "已儲存！",
     "exitFullscreen": "離開全螢幕",
     "fullscreen": "全螢幕",
-    "close": "關閉"
+    "close": "關閉",
+    "previewMarkdown": "預覽 Markdown",
+    "editMarkdown": "編輯 Markdown",
+    "previewHtml": "在新分頁中開啟 HTML 預覽"
   },
   "footer": {
     "lines": "行數：",
@@ -30,5 +33,10 @@
   "binaryFile": {
     "title": "二進位檔案",
     "message": "檔案「{{fileName}}」無法在文字編輯器中顯示，因為它是二進位檔案。"
+  },
+  "filePreview": {
+    "loading": "正在載入預覽...",
+    "error": "無法顯示此檔案。",
+    "openInNewTab": "在新分頁中開啟"
   }
 }

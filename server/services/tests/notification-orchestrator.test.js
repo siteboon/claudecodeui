@@ -14,7 +14,6 @@ import {
   sessionsDb,
   userDb,
 } from '../../modules/database/index.js';
-
 import { notifyRunStopped } from '../notification-orchestrator.js';
 
 async function withIsolatedDatabase(runTest) {

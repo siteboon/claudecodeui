@@ -187,9 +187,9 @@
       "usingProvidedToken": "Angegebener Token wird verwendet",
       "noAuthentication": "Keine Authentifizierung",
       "sshKey": "SSH-Schlüssel",
-      "existingInfo": "Der Arbeitsbereich wird zur Projektliste hinzugefügt und steht für Claude/Cursor-Sitzungen zur Verfügung.",
+      "existingInfo": "Der Arbeitsbereich wird zur Projektliste hinzugefügt und steht für Claude/Codex-Sitzungen zur Verfügung.",
       "newWithClone": "Das Repository wird aus diesem Ordner geklont.",
-      "newEmpty": "Der Arbeitsbereich wird zur Projektliste hinzugefügt und steht für Claude/Cursor-Sitzungen zur Verfügung.",
+      "newEmpty": "Der Arbeitsbereich wird zur Projektliste hinzugefügt und steht für Claude/Codex-Sitzungen zur Verfügung.",
       "cloningRepository": "Repository wird geklont..."
     },
     "buttons": {
@@ -205,35 +205,6 @@
       "providePath": "Bitte gib einen Arbeitsbereichspfad an",
       "failedToCreate": "Arbeitsbereich konnte nicht erstellt werden",
       "failedToCreateFolder": "Ordner konnte nicht erstellt werden"
-    }
-  },
-  "versionUpdate": {
-    "title": "Update verfügbar",
-    "newVersionReady": "Eine neue Version ist verfügbar",
-    "currentVersion": "Aktuelle Version",
-    "latestVersion": "Neueste Version",
-    "whatsNew": "Neuigkeiten:",
-    "viewFullRelease": "Vollständige Version anzeigen",
-    "updateProgress": "Update-Fortschritt:",
-    "manualUpgrade": "Manuelles Upgrade:",
-    "npmUpgradeCommand": "npm install -g @cloudcli-ai/cloudcli@latest",
-    "manualUpgradeHint": "Oder klick auf \"Jetzt aktualisieren\", um das Update automatisch durchzuführen.",
-    "updateCompleted": "Update erfolgreich abgeschlossen!",
-    "restartServer": "Bitte starte den Server neu, um die Änderungen anzuwenden.",
-    "updateFailed": "Update fehlgeschlagen",
-    "buttons": {
-      "close": "Schließen",
-      "later": "Später",
-      "copyCommand": "Befehl kopieren",
-      "updateNow": "Jetzt aktualisieren",
-      "updating": "Wird aktualisiert..."
-    },
-    "ariaLabels": {
-      "closeModal": "Versions-Update-Modal schließen",
-      "showSidebar": "Seitenleiste anzeigen",
-      "settings": "Einstellungen",
-      "updateAvailable": "Update verfügbar",
-      "closeSidebar": "Seitenleiste schließen"
     }
   }
 }

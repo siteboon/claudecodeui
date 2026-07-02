@@ -17,32 +17,11 @@ const providerCards = [
     loginButtonClassName: 'bg-blue-600 hover:bg-blue-700',
   },
   {
-    provider: 'cursor' as const,
-    title: 'Cursor',
-    connectedClassName: 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800',
-    iconContainerClassName: 'bg-purple-100 dark:bg-purple-900/30',
-    loginButtonClassName: 'bg-purple-600 hover:bg-purple-700',
-  },
-  {
     provider: 'codex' as const,
     title: 'OpenAI Codex',
     connectedClassName: 'bg-gray-100 dark:bg-gray-800/50 border-gray-300 dark:border-gray-600',
     iconContainerClassName: 'bg-gray-100 dark:bg-gray-800',
     loginButtonClassName: 'bg-gray-800 hover:bg-gray-900 dark:bg-gray-700 dark:hover:bg-gray-600',
-  },
-  {
-    provider: 'gemini' as const,
-    title: 'Gemini',
-    connectedClassName: 'bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800',
-    iconContainerClassName: 'bg-teal-100 dark:bg-teal-900/30',
-    loginButtonClassName: 'bg-teal-600 hover:bg-teal-700',
-  },
-  {
-    provider: 'opencode' as const,
-    title: 'OpenCode',
-    connectedClassName: 'bg-zinc-100 dark:bg-zinc-800/50 border-zinc-300 dark:border-zinc-600',
-    iconContainerClassName: 'bg-zinc-100 dark:bg-zinc-800',
-    loginButtonClassName: 'bg-zinc-800 hover:bg-zinc-900 dark:bg-zinc-700 dark:hover:bg-zinc-600',
   },
 ];
 

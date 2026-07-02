@@ -50,21 +50,6 @@
     "resetToDefaults": "Reset to Defaults",
     "cancelChanges": "Cancel Changes"
   },
-  "voiceSettings": {
-    "title": "Voice",
-    "description": "Speech-to-text input and read-aloud, via an OpenAI-compatible audio backend.",
-    "enable": "Enable voice",
-    "enableDescription": "Show the mic button and the read-aloud button on messages.",
-    "backendTitle": "Backend",
-    "backendDescription": "Point at OpenAI, Groq, or a local server (LocalAI, Speaches, Kokoro-FastAPI). Leave blank to use the server default.",
-    "baseUrl": "Base URL",
-    "apiKey": "API key",
-    "sttModel": "Speech-to-text model",
-    "ttsModel": "Text-to-speech model",
-    "voice": "Voice",
-    "format": "Audio format",
-    "note": "A custom base URL is called directly by your browser and must allow browser CORS requests. Leave it blank to use the server-configured backend."
-  },
   "quickSettings": {
     "title": "Quick Settings",
     "sections": {
@@ -76,7 +61,6 @@
     "showRawParameters": "Show raw parameters",
     "showThinking": "Show thinking",
     "sendByCtrlEnter": "Send by Ctrl+Enter",
-    "voiceEnabled": "Voice (mic + read aloud)",
     "sendByCtrlEnterDescription": "When enabled, pressing Ctrl+Enter will send the message instead of just Enter. This is useful for IME users to avoid accidental sends.",
     "dragHandle": {
       "dragging": "Dragging handle",
@@ -95,6 +79,7 @@
     "shiftTab": "Shift+Tab",
     "arrowUp": "Arrow Up",
     "arrowDown": "Arrow Down",
+    "paste": "Paste",
     "scrollDown": "Scroll Down",
     "handle": {
       "closePanel": "Close shortcuts panel",
@@ -107,8 +92,6 @@
     "appearance": "Appearance",
     "git": "Git",
     "apiTokens": "API & Tokens",
-    "voice": "Voice",
-    "tasks": "Tasks",
     "browser": "Browser",
     "notifications": "Notifications",
     "plugins": "Plugins",
@@ -302,32 +285,10 @@
     "apiDocsLink": "API Documentation",
     "documentation": {
       "title": "External API Documentation",
-      "description": "Learn how to use the external API to trigger Claude/Cursor sessions from your applications.",
+      "description": "Learn how to use the external API to trigger Claude/Codex sessions from your applications.",
       "viewLink": "View API Documentation →"
     },
-    "loading": "Loading...",
-    "version": {
-      "updateAvailable": "Update available: v{{version}}"
-    }
-  },
-  "tasks": {
-    "checking": "Checking TaskMaster installation...",
-    "notInstalled": {
-      "title": "TaskMaster AI CLI Not Installed",
-      "description": "TaskMaster CLI is required to use task management features. Install it to get started:",
-      "installCommand": "npm install -g task-master-ai",
-      "viewOnGitHub": "View on GitHub",
-      "afterInstallation": "After installation:",
-      "steps": {
-        "restart": "Restart this application",
-        "autoAvailable": "TaskMaster features will automatically become available",
-        "initCommand": "Use task-master init in your project directory"
-      }
-    },
-    "settings": {
-      "enableLabel": "Enable TaskMaster Integration",
-      "enableDescription": "Show TaskMaster tasks, banners, and sidebar indicators across the interface"
-    }
+    "loading": "Loading..."
   },
   "agents": {
     "authStatus": {
@@ -343,17 +304,8 @@
       "claude": {
         "description": "Anthropic Claude AI assistant"
       },
-      "cursor": {
-        "description": "Cursor AI-powered code editor"
-      },
       "codex": {
         "description": "OpenAI Codex AI assistant"
-      },
-      "gemini": {
-        "description": "Google Gemini AI assistant"
-      },
-      "opencode": {
-        "description": "OpenCode CLI assistant"
       }
     },
     "connectionStatus": "Connection Status",
@@ -371,8 +323,7 @@
     "title": "Permission Settings",
     "skipPermissions": {
       "label": "Skip permission prompts (use with caution)",
-      "claudeDescription": "Equivalent to --dangerously-skip-permissions flag",
-      "cursorDescription": "Equivalent to -f flag in Cursor CLI"
+      "claudeDescription": "Equivalent to --dangerously-skip-permissions flag"
     },
     "allowedTools": {
       "title": "Allowed Tools",
@@ -447,9 +398,7 @@
     "title": "MCP Servers",
     "description": {
       "claude": "Model Context Protocol servers provide additional tools and data sources to Claude",
-      "cursor": "Model Context Protocol servers provide additional tools and data sources to Cursor",
-      "codex": "Model Context Protocol servers provide additional tools and data sources to Codex",
-      "opencode": "Model Context Protocol servers provide additional tools and data sources to OpenCode"
+      "codex": "Model Context Protocol servers provide additional tools and data sources to Codex"
     },
     "addButton": "Add MCP Server",
     "empty": "No MCP servers configured",
@@ -482,6 +431,38 @@
       "description": "Codex supports stdio-based MCP servers. You can add servers that extend Codex's capabilities with additional tools and resources."
     }
   },
+  "browserUse": {
+    "title": "Browser",
+    "description": "Allow agents to create guarded Playwright browser sessions that you can monitor from the Browser tab.",
+    "enable": {
+      "label": "Enable Browser",
+      "description": "Registers Browser for supported agents. Agents can create browser sessions; you can watch, stop, and delete them.",
+      "ariaLabel": "Enable Browser"
+    },
+    "errors": {
+      "loadSettings": "Failed to load Browser settings",
+      "loadStatus": "Failed to load Browser status",
+      "saveSettings": "Failed to save Browser settings",
+      "installRuntime": "Failed to install browser runtime"
+    },
+    "runtime": {
+      "checking": "checking...",
+      "installed": "installed",
+      "missing": "missing",
+      "status": "Status",
+      "ready": "ready",
+      "setupRequired": "setup required",
+      "disabled": "disabled"
+    },
+    "runtimeRequired": {
+      "title": "Browser runtime required",
+      "description": "Install the browser runtime before agents can create Browser sessions."
+    },
+    "actions": {
+      "installing": "Installing...",
+      "installRuntime": "Install Runtime"
+    }
+  },
   "pluginSettings": {
     "title": "Plugins",
     "description": "Extend the interface with custom plugins. Install from git or drop a folder in ~/.claude-code-ui/plugins/",
@@ -507,9 +488,7 @@
     "docs": "Docs",
     "sections": {
       "officialTitle": "Official Plugins",
-      "officialDescription": "Maintained by the CloudCLI team and ready for direct install.",
-      "unofficialTitle": "Other Plugins",
-      "unofficialDescription": "Unofficial plugins and integrations from other users. Review the source before installing."
+      "officialDescription": "Maintained by the CloudCLI team and ready for direct install."
     },
     "starterPlugin": {
       "name": "Project Stats",
@@ -521,48 +500,6 @@
       "name": "Terminal",
       "badge": "official",
       "description": "Integrated terminal with full shell access directly within the interface.",
-      "install": "Install"
-    },
-    "scheduledPromptPlugin": {
-      "name": "Scheduled Prompts",
-      "badge": "unofficial",
-      "description": "Schedule workspace prompts, review run history, and manage recurring local tasks.",
-      "install": "Install"
-    },
-    "claudeWatchPlugin": {
-      "name": "Claude Watch",
-      "badge": "unofficial",
-      "description": "Watch long-running Claude Code sessions for hangs and expose process controls.",
-      "install": "Install"
-    },
-    "prismCloudCLI": {
-      "name": "PRISM CloudCLI",
-      "badge": "unofficial",
-      "description": "Session intelligence for Claude Code, inside CloudCLI. See why your sessions are burning tokens without leaving the browser.",
-      "install": "Install"
-    },
-    "sessionManagerPlugin": {
-      "name": "Sessions",
-      "badge": "unofficial",
-      "description": "View, manage, and kill active Claude Code sessions.",
-      "install": "Install"
-    },
-    "tokenCostCalculatorPlugin": {
-      "name": "Token Cost Calculator",
-      "badge": "unofficial",
-      "description": "Calculate API costs from model prices and token usage, with preset model pricing support.",
-      "install": "Install"
-    },
-    "taskQueuePlugin": {
-      "name": "Task Queue",
-      "badge": "unofficial",
-      "description": "Task queue dashboard to view, filter, and launch agent tasks.",
-      "install": "Install"
-    },
-    "githubIssuesBoardPlugin": {
-      "name": "GitHub Issues Board",
-      "badge": "unofficial",
-      "description": "Kanban board for GitHub Issues with bidirectional TaskMaster sync and /github-task CLI skill auto-install",
       "install": "Install"
     },
     "morePlugins": "More",

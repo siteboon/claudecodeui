@@ -489,7 +489,7 @@
                                 <span class="endpoint-path"><span class="api-url">http://localhost:3001</span>/api/agent</span>
                             </div>
 
-                            <p>Trigger an AI agent (Claude, Cursor, or Codex) to work on a project.</p>
+                            <p>Trigger an AI agent (Claude or Codex) to work on a project.</p>
 
                             <h4>Request Body Parameters</h4>
                             <table>
@@ -831,9 +831,6 @@ data: {"type":"done"}</code></pre>
         const PROVIDER_ORDER = [
             { id: 'claude',   name: 'Anthropic' },
             { id: 'codex',    name: 'OpenAI' },
-            { id: 'gemini',   name: 'Google' },
-            { id: 'cursor',   name: 'Cursor' },
-            { id: 'opencode', name: 'OpenCode' },
         ];
 
         async function populateModels() {

@@ -4,17 +4,12 @@ import { useTheme } from '../../../contexts/ThemeContext';
 import { authenticatedFetch } from '../../../utils/api';
 import { setNotificationSoundEnabled } from '../../../utils/notificationSound';
 import { useProviderAuthStatus } from '../../provider-auth/hooks/useProviderAuthStatus';
-import {
-  DEFAULT_CODE_EDITOR_SETTINGS,
-  DEFAULT_CURSOR_PERMISSIONS,
-} from '../constants/constants';
+import { DEFAULT_CODE_EDITOR_SETTINGS } from '../constants/constants';
 import type {
   AgentProvider,
   ClaudePermissionsState,
   CodeEditorSettingsState,
   CodexPermissionMode,
-  CursorPermissionsState,
-  GeminiPermissionMode,
   NotificationPreferencesState,
   ProjectSortOrder,
   SettingsMainTab,
@@ -37,12 +32,6 @@ type ClaudeSettingsStorage = {
   projectSortOrder?: ProjectSortOrder;
 };
 
-type CursorSettingsStorage = {
-  allowedCommands?: string[];
-  disallowedCommands?: string[];
-  skipPermissions?: boolean;
-};
-
 type CodexSettingsStorage = {
   permissionMode?: CodexPermissionMode;
 };
@@ -54,7 +43,7 @@ type NotificationPreferencesResponse = {
 
 type ActiveLoginProvider = AgentProvider | '';
 
-const KNOWN_MAIN_TABS: SettingsMainTab[] = ['agents', 'appearance', 'git', 'api', 'tasks', 'browser', 'notifications', 'plugins', 'about'];
+const KNOWN_MAIN_TABS: SettingsMainTab[] = ['agents', 'appearance', 'git', 'api', 'browser', 'notifications', 'plugins', 'about'];
 
 const normalizeMainTab = (tab: string): SettingsMainTab => {
   // Keep backwards compatibility with older callers that still pass "tools".
@@ -98,10 +87,6 @@ const createEmptyClaudePermissions = (): ClaudePermissionsState => ({
   allowedTools: [],
   disallowedTools: [],
   skipPermissions: false,
-});
-
-const createEmptyCursorPermissions = (): CursorPermissionsState => ({
-  ...DEFAULT_CURSOR_PERMISSIONS,
 });
 
 const createDefaultNotificationPreferences = (): NotificationPreferencesState => ({
@@ -152,14 +137,10 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
   const [claudePermissions, setClaudePermissions] = useState<ClaudePermissionsState>(() => (
     createEmptyClaudePermissions()
   ));
-  const [cursorPermissions, setCursorPermissions] = useState<CursorPermissionsState>(() => (
-    createEmptyCursorPermissions()
-  ));
   const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferencesState>(() => (
     createDefaultNotificationPreferences()
   ));
   const [codexPermissionMode, setCodexPermissionMode] = useState<CodexPermissionMode>('default');
-  const [geminiPermissionMode, setGeminiPermissionMode] = useState<GeminiPermissionMode>('default');
 
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginProvider, setLoginProvider] = useState<ActiveLoginProvider>('');
@@ -182,27 +163,11 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
       });
       setProjectSortOrder(savedClaudeSettings.projectSortOrder === 'date' ? 'date' : 'name');
 
-      const savedCursorSettings = parseJson<CursorSettingsStorage>(
-        localStorage.getItem('cursor-tools-settings'),
-        {},
-      );
-      setCursorPermissions({
-        allowedCommands: savedCursorSettings.allowedCommands || [],
-        disallowedCommands: savedCursorSettings.disallowedCommands || [],
-        skipPermissions: Boolean(savedCursorSettings.skipPermissions),
-      });
-
       const savedCodexSettings = parseJson<CodexSettingsStorage>(
         localStorage.getItem('codex-settings'),
         {},
       );
       setCodexPermissionMode(toCodexPermissionMode(savedCodexSettings.permissionMode));
-
-      const savedGeminiSettings = parseJson<{ permissionMode?: GeminiPermissionMode }>(
-        localStorage.getItem('gemini-settings'),
-        {},
-      );
-      setGeminiPermissionMode(savedGeminiSettings.permissionMode || 'default');
 
       try {
         const notificationResponse = await authenticatedFetch('/api/settings/notification-preferences');
@@ -223,7 +188,6 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     } catch (error) {
       console.error('Error loading settings:', error);
       setClaudePermissions(createEmptyClaudePermissions());
-      setCursorPermissions(createEmptyCursorPermissions());
       setNotificationPreferences(createDefaultNotificationPreferences());
       setCodexPermissionMode('default');
       setProjectSortOrder('name');
@@ -264,20 +228,8 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
         lastUpdated: now,
       }));
 
-      localStorage.setItem('cursor-tools-settings', JSON.stringify({
-        allowedCommands: cursorPermissions.allowedCommands,
-        disallowedCommands: cursorPermissions.disallowedCommands,
-        skipPermissions: cursorPermissions.skipPermissions,
-        lastUpdated: now,
-      }));
-
       localStorage.setItem('codex-settings', JSON.stringify({
         permissionMode: codexPermissionMode,
-        lastUpdated: now,
-      }));
-
-      localStorage.setItem('gemini-settings', JSON.stringify({
-        permissionMode: geminiPermissionMode,
         lastUpdated: now,
       }));
 
@@ -299,11 +251,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     claudePermissions.disallowedTools,
     claudePermissions.skipPermissions,
     codexPermissionMode,
-    cursorPermissions.allowedCommands,
-    cursorPermissions.disallowedCommands,
-    cursorPermissions.skipPermissions,
     notificationPreferences,
-    geminiPermissionMode,
     projectSortOrder,
   ]);
 
@@ -402,15 +350,11 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     updateCodeEditorSetting,
     claudePermissions,
     setClaudePermissions,
-    cursorPermissions,
-    setCursorPermissions,
     notificationPreferences,
     setNotificationPreferences,
     codexPermissionMode,
     setCodexPermissionMode,
     providerAuthStatus,
-    geminiPermissionMode,
-    setGeminiPermissionMode,
     openLoginForProvider,
     showLoginModal,
     setShowLoginModal,

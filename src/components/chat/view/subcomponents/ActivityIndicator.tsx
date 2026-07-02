@@ -23,7 +23,7 @@ const EXIT_ANIMATION_MS = 220;
 
 /**
  * Minimal response-in-progress indicator, in the spirit of the inline status
- * lines in Claude Code / Codex / OpenCode: a shimmering activity label, the
+ * lines in Claude Code / Codex: a shimmering activity label, the
  * elapsed time, and an interrupt affordance. Rendered only while the viewed
  * session has an entry in the processing map; it disappears the instant that
  * entry is removed.

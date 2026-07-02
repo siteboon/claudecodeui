@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+
 import { collectExpandedDirectoryPaths, filterFileTree } from '../utils/fileTreeUtils';
 import type { FileTreeNode } from '../types/types';
 

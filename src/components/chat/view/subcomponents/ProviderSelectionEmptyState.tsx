@@ -8,7 +8,6 @@ import type {
   ProviderModelsDefinition,
 } from "../../../../types/app";
 import SessionProviderLogo from "../../../llm-logo-provider/SessionProviderLogo";
-import { NextTaskBanner } from "../../../task-master";
 import {
   Dialog,
   DialogTrigger,
@@ -26,9 +25,6 @@ import {
 const PROVIDER_META: { id: LLMProvider; name: string }[] = [
   { id: "claude", name: "Anthropic" },
   { id: "codex", name: "OpenAI" },
-  { id: "gemini", name: "Google" },
-  { id: "cursor", name: "Cursor" },
-  { id: "opencode", name: "OpenCode" },
 ];
 
 const MOD_KEY =
@@ -42,20 +38,10 @@ type ProviderSelectionEmptyStateProps = {
   textareaRef: React.RefObject<HTMLTextAreaElement>;
   claudeModel: string;
   setClaudeModel: (model: string) => void;
-  cursorModel: string;
-  setCursorModel: (model: string) => void;
   codexModel: string;
   setCodexModel: (model: string) => void;
-  geminiModel: string;
-  setGeminiModel: (model: string) => void;
-  opencodeModel: string;
-  setOpenCodeModel: (model: string) => void;
   providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
   providerModelsLoading: boolean;
-  tasksEnabled: boolean;
-  isTaskMasterInstalled: boolean | null;
-  onShowAllTasks?: (() => void) | null;
-  setInput: React.Dispatch<React.SetStateAction<string>>;
 };
 
 type ProviderGroup = {
@@ -75,24 +61,16 @@ function getModelConfig(
 function getCurrentModel(
   p: LLMProvider,
   c: string,
-  cu: string,
   co: string,
-  g: string,
-  o: string,
 ) {
   if (p === "claude") return c;
   if (p === "codex") return co;
-  if (p === "gemini") return g;
-  if (p === "opencode") return o;
-  return cu;
+  return c;
 }
 
 function getProviderDisplayName(p: LLMProvider) {
   if (p === "claude") return "Claude";
-  if (p === "cursor") return "Cursor";
-  if (p === "codex") return "Codex";
-  if (p === "opencode") return "OpenCode";
-  return "Gemini";
+  return "Codex";
 }
 
 export default function ProviderSelectionEmptyState({
@@ -103,20 +81,10 @@ export default function ProviderSelectionEmptyState({
   textareaRef,
   claudeModel,
   setClaudeModel,
-  cursorModel,
-  setCursorModel,
   codexModel,
   setCodexModel,
-  geminiModel,
-  setGeminiModel,
-  opencodeModel,
-  setOpenCodeModel,
   providerModelCatalog,
   providerModelsLoading,
-  tasksEnabled,
-  isTaskMasterInstalled,
-  onShowAllTasks,
-  setInput,
 }: ProviderSelectionEmptyStateProps) {
   const { t } = useTranslation("chat");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -129,17 +97,10 @@ export default function ProviderSelectionEmptyState({
     }));
   }, [providerModelCatalog]);
 
-  const nextTaskPrompt = t("tasks.nextTaskPrompt", {
-    defaultValue: "Start the next task",
-  });
-
   const currentModel = getCurrentModel(
     provider,
     claudeModel,
-    cursorModel,
     codexModel,
-    geminiModel,
-    opencodeModel,
   );
 
   const currentModelLabel = useMemo(() => {
@@ -158,18 +119,9 @@ export default function ProviderSelectionEmptyState({
       } else if (providerId === "codex") {
         setCodexModel(modelValue);
         localStorage.setItem("codex-model", modelValue);
-      } else if (providerId === "gemini") {
-        setGeminiModel(modelValue);
-        localStorage.setItem("gemini-model", modelValue);
-      } else if (providerId === "opencode") {
-        setOpenCodeModel(modelValue);
-        localStorage.setItem("opencode-model", modelValue);
-      } else {
-        setCursorModel(modelValue);
-        localStorage.setItem("cursor-model", modelValue);
       }
     },
-    [setClaudeModel, setCursorModel, setCodexModel, setGeminiModel, setOpenCodeModel],
+    [setClaudeModel, setCodexModel],
   );
 
   const handleModelSelect = useCallback(
@@ -306,18 +258,8 @@ export default function ProviderSelectionEmptyState({
                 claude: t("providerSelection.readyPrompt.claude", {
                   model: claudeModel,
                 }),
-                cursor: t("providerSelection.readyPrompt.cursor", {
-                  model: cursorModel,
-                }),
                 codex: t("providerSelection.readyPrompt.codex", {
                   model: codexModel,
-                }),
-                gemini: t("providerSelection.readyPrompt.gemini", {
-                  model: geminiModel,
-                }),
-                opencode: t("providerSelection.readyPrompt.opencode", {
-                  model: opencodeModel,
-                  defaultValue: "Ready with OpenCode {{model}}",
                 }),
               }[provider]
             }
@@ -335,15 +277,6 @@ export default function ProviderSelectionEmptyState({
               }}
             />
           </p>
-
-          {provider && tasksEnabled && isTaskMasterInstalled && (
-            <div className="mt-5">
-              <NextTaskBanner
-                onStartTask={() => setInput(nextTaskPrompt)}
-                onShowAllTasks={onShowAllTasks}
-              />
-            </div>
-          )}
         </div>
       </div>
     );
@@ -360,14 +293,6 @@ export default function ProviderSelectionEmptyState({
             {t("session.continue.description")}
           </p>
 
-          {tasksEnabled && isTaskMasterInstalled && (
-            <div className="mt-5">
-              <NextTaskBanner
-                onStartTask={() => setInput(nextTaskPrompt)}
-                onShowAllTasks={onShowAllTasks}
-              />
-            </div>
-          )}
         </div>
       </div>
     );

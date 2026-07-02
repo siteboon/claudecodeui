@@ -1,6 +1,8 @@
 import { Folder } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
 import type { MainContentStateViewProps } from '../../types/types';
+
 import MobileMenuButton from './MobileMenuButton';
 
 export default function MainContentStateView({ mode, isMobile, onMenuClick }: MainContentStateViewProps) {

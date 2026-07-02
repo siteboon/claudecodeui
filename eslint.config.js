@@ -66,10 +66,7 @@ export default tseslint.config(
       "react-hooks/exhaustive-deps": "warn",
 
       // --- React Refresh (Vite HMR) ---
-      "react-refresh/only-export-components": [
-        "warn",
-        { allowConstantExport: true },
-      ],
+      "react-refresh/only-export-components": "off",
 
       // --- Import ordering & hygiene ---
       "import-x/no-duplicates": "warn",

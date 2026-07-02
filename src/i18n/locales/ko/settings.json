@@ -90,7 +90,6 @@
     "appearance": "외관",
     "git": "Git",
     "apiTokens": "API & 토큰",
-    "tasks": "작업",
     "notifications": "알림",
     "plugins": "플러그인",
     "about": "정보"
@@ -276,32 +275,10 @@
     "apiDocsLink": "API 문서",
     "documentation": {
       "title": "외부 API 문서",
-      "description": "외부 API를 사용하여 애플리케이션에서 Claude/Cursor 세션을 트리거하는 방법을 알아보세요.",
+      "description": "외부 API를 사용하여 애플리케이션에서 Claude/Codex 세션을 트리거하는 방법을 알아보세요.",
       "viewLink": "API 문서 보기 →"
     },
-    "loading": "로딩 중...",
-    "version": {
-      "updateAvailable": "업데이트 가능: v{{version}}"
-    }
-  },
-  "tasks": {
-    "checking": "TaskMaster 설치 확인 중...",
-    "notInstalled": {
-      "title": "TaskMaster AI CLI가 설치되지 않았습니다",
-      "description": "작업 관리 기능을 사용하려면 TaskMaster CLI가 필요합니다. 시작하려면 설치하세요:",
-      "installCommand": "npm install -g task-master-ai",
-      "viewOnGitHub": "GitHub에서 보기",
-      "afterInstallation": "설치 후:",
-      "steps": {
-        "restart": "이 애플리케이션을 재시작하세요",
-        "autoAvailable": "TaskMaster 기능이 자동으로 활성화됩니다",
-        "initCommand": "프로젝트 디렉토리에서 task-master init을 사용하세요"
-      }
-    },
-    "settings": {
-      "enableLabel": "TaskMaster 통합 활성화",
-      "enableDescription": "인터페이스 전체에 TaskMaster 작업, 배너 및 사이드바 표시"
-    }
+    "loading": "로딩 중..."
   },
   "agents": {
     "authStatus": {
@@ -317,14 +294,8 @@
       "claude": {
         "description": "Anthropic Claude AI 어시스턴트"
       },
-      "cursor": {
-        "description": "Cursor AI 기반 코드 에디터"
-      },
       "codex": {
         "description": "OpenAI Codex AI 어시스턴트"
-      },
-      "gemini": {
-        "description": "Google Gemini AI 어시스턴트"
       }
     },
     "connectionStatus": "연결 상태",
@@ -342,8 +313,7 @@
     "title": "권한 설정",
     "skipPermissions": {
       "label": "권한 확인 건너뛰기 (주의해서 사용)",
-      "claudeDescription": "--dangerously-skip-permissions 플래그와 동일",
-      "cursorDescription": "Cursor CLI의 -f 플래그와 동일"
+      "claudeDescription": "--dangerously-skip-permissions 플래그와 동일"
     },
     "allowedTools": {
       "title": "허용된 도구",
@@ -418,7 +388,6 @@
     "title": "MCP 서버",
     "description": {
       "claude": "Model Context Protocol 서버는 Claude에 추가 도구와 데이터 소스를 제공합니다",
-      "cursor": "Model Context Protocol 서버는 Cursor에 추가 도구와 데이터 소스를 제공합니다",
       "codex": "Model Context Protocol 서버는 Codex에 추가 도구와 데이터 소스를 제공합니다"
     },
     "addButton": "MCP 서버 추가",

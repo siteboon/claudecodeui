@@ -1,5 +1,6 @@
 import { LogIn } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
 import { Badge, Button } from '../../../../../../../shared/view/ui';
 import SessionProviderLogo from '../../../../../../llm-logo-provider/SessionProviderLogo';
 import type { AgentProvider, AuthStatus } from '../../../../../types/types';
@@ -29,14 +30,6 @@ const agentConfig: Record<AgentProvider, AgentVisualConfig> = {
     subtextClass: 'text-blue-700 dark:text-blue-300',
     buttonClass: 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800',
   },
-  cursor: {
-    name: 'Cursor',
-    bgClass: 'bg-purple-50 dark:bg-purple-900/20',
-    borderClass: 'border-purple-200 dark:border-purple-800',
-    textClass: 'text-purple-900 dark:text-purple-100',
-    subtextClass: 'text-purple-700 dark:text-purple-300',
-    buttonClass: 'bg-purple-600 hover:bg-purple-700 active:bg-purple-800',
-  },
   codex: {
     name: 'Codex',
     bgClass: 'bg-muted/50',
@@ -44,24 +37,6 @@ const agentConfig: Record<AgentProvider, AgentVisualConfig> = {
     textClass: 'text-gray-900 dark:text-gray-100',
     subtextClass: 'text-gray-700 dark:text-gray-300',
     buttonClass: 'bg-gray-800 hover:bg-gray-900 active:bg-gray-950 dark:bg-gray-700 dark:hover:bg-gray-600 dark:active:bg-gray-500',
-  },
-  gemini: {
-    name: 'Gemini',
-    description: 'Google Gemini AI assistant',
-    bgClass: 'bg-indigo-50 dark:bg-indigo-900/20',
-    borderClass: 'border-indigo-200 dark:border-indigo-800',
-    textClass: 'text-indigo-900 dark:text-indigo-100',
-    subtextClass: 'text-indigo-700 dark:text-indigo-300',
-    buttonClass: 'bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800',
-  },
-  opencode: {
-    name: 'OpenCode',
-    description: 'OpenCode CLI assistant',
-    bgClass: 'bg-zinc-50 dark:bg-zinc-900/20',
-    borderClass: 'border-zinc-200 dark:border-zinc-700',
-    textClass: 'text-zinc-900 dark:text-zinc-100',
-    subtextClass: 'text-zinc-700 dark:text-zinc-300',
-    buttonClass: 'bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-950 dark:bg-zinc-700 dark:hover:bg-zinc-600',
   },
 };
 

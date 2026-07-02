@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+
 import { QuestionAnswerContent } from './QuestionAnswerContent';
 
 // Regression coverage for the chat-interface crash where an AskUserQuestion

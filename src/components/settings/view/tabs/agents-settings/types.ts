@@ -3,9 +3,7 @@ import type {
   AuthStatus,
   AgentCategory,
   ClaudePermissionsState,
-  CursorPermissionsState,
   CodexPermissionMode,
-  GeminiPermissionMode,
   SettingsProject,
 } from '../../../types/types';
 
@@ -22,18 +20,13 @@ export type AgentsSettingsTabProps = {
   onProviderLogin: (provider: AgentProvider) => void;
   claudePermissions: ClaudePermissionsState;
   onClaudePermissionsChange: (value: ClaudePermissionsState) => void;
-  cursorPermissions: CursorPermissionsState;
-  onCursorPermissionsChange: (value: CursorPermissionsState) => void;
   codexPermissionMode: CodexPermissionMode;
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
-  geminiPermissionMode: GeminiPermissionMode;
-  onGeminiPermissionModeChange: (value: GeminiPermissionMode) => void;
   projects: SettingsProject[];
 };
 
 export type AgentCategoryTabsSectionProps = {
   categories: AgentCategory[];
-  selectedAgent: AgentProvider;
   selectedCategory: AgentCategory;
   onSelectCategory: (category: AgentCategory) => void;
 };
@@ -51,11 +44,7 @@ export type AgentCategoryContentSectionProps = {
   agentContextById: AgentContextByProvider;
   claudePermissions: ClaudePermissionsState;
   onClaudePermissionsChange: (value: ClaudePermissionsState) => void;
-  cursorPermissions: CursorPermissionsState;
-  onCursorPermissionsChange: (value: CursorPermissionsState) => void;
   codexPermissionMode: CodexPermissionMode;
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
-  geminiPermissionMode: GeminiPermissionMode;
-  onGeminiPermissionModeChange: (value: GeminiPermissionMode) => void;
   projects: SettingsProject[];
 };

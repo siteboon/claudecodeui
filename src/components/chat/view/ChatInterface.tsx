@@ -2,11 +2,10 @@ import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowDownIcon } from 'lucide-react';
 
-import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useWebSocket } from '../../../contexts/WebSocketContext';
 import PermissionContext from '../../../contexts/PermissionContext';
 import { QuickSettingsPanel } from '../../quick-settings-panel';
-import type { ChatInterfaceProps, Provider  } from '../types/types';
+import type { ChatInterfaceProps } from '../types/types';
 import { useChatProviderState } from '../hooks/useChatProviderState';
 import { useChatSessionState } from '../hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '../hooks/useChatRealtimeHandlers';
@@ -36,9 +35,7 @@ function ChatInterface({
   sendByCtrlEnter,
   externalMessageUpdate,
   newSessionTrigger,
-  onShowAllTasks,
 }: ChatInterfaceProps) {
-  const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
   const { subscribe } = useWebSocket();
   const { t } = useTranslation('chat');
 
@@ -64,16 +61,10 @@ function ChatInterface({
   const {
     provider,
     setProvider,
-    cursorModel,
-    setCursorModel,
     claudeModel,
     setClaudeModel,
     codexModel,
     setCodexModel,
-    geminiModel,
-    setGeminiModel,
-    opencodeModel,
-    setOpenCodeModel,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
@@ -86,7 +77,6 @@ function ChatInterface({
     selectProviderModel,
   } = useChatProviderState({
     selectedSession,
-    selectedProject,
   });
 
   const {
@@ -144,7 +134,6 @@ function ChatInterface({
 
   const {
     input,
-    setInput,
     textareaRef,
     inputHighlightRef,
     isTextareaExpanded,
@@ -171,7 +160,6 @@ function ChatInterface({
     isDragActive,
     openImagePicker,
     handleSubmit,
-    handleVoiceTranscript,
     handleInputChange,
     handleKeyDown,
     handlePaste,
@@ -194,11 +182,8 @@ function ChatInterface({
     provider,
     permissionMode,
     cyclePermissionMode,
-    cursorModel,
     claudeModel,
     codexModel,
-    geminiModel,
-    opencodeModel,
     isLoading: isProcessing,
     canAbortSession,
     tokenBudget,
@@ -283,15 +268,7 @@ function ChatInterface({
 
   if (!selectedProject) {
     const selectedProviderLabel =
-      provider === 'cursor'
-        ? t('messageTypes.cursor')
-        : provider === 'codex'
-          ? t('messageTypes.codex')
-          : provider === 'gemini'
-            ? t('messageTypes.gemini')
-            : provider === 'opencode'
-              ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
-            : t('messageTypes.claude');
+      provider === 'codex' ? t('messageTypes.codex') : t('messageTypes.claude');
 
     return (
       <div className="flex h-full items-center justify-center">
@@ -320,24 +297,14 @@ function ChatInterface({
           selectedSession={selectedSession}
           currentSessionId={currentSessionId}
           provider={provider}
-          setProvider={(nextProvider) => setProvider(nextProvider as Provider)}
+          setProvider={setProvider}
           textareaRef={textareaRef}
           claudeModel={claudeModel}
           setClaudeModel={setClaudeModel}
-          cursorModel={cursorModel}
-          setCursorModel={setCursorModel}
           codexModel={codexModel}
           setCodexModel={setCodexModel}
-          geminiModel={geminiModel}
-          setGeminiModel={setGeminiModel}
-          opencodeModel={opencodeModel}
-          setOpenCodeModel={setOpenCodeModel}
           providerModelCatalog={providerModelCatalog}
           providerModelsLoading={providerModelsLoading}
-          tasksEnabled={tasksEnabled}
-          isTaskMasterInstalled={isTaskMasterInstalled}
-          onShowAllTasks={onShowAllTasks}
-          setInput={setInput}
           isLoadingMoreMessages={isLoadingMoreMessages}
           hasMoreMessages={hasMoreMessages}
           totalMessages={totalMessages}
@@ -416,7 +383,6 @@ function ChatInterface({
           renderInputWithMentions={renderInputWithMentions}
           textareaRef={textareaRef}
           input={input}
-          onVoiceTranscript={handleVoiceTranscript}
           onInputChange={handleInputChange}
           onTextareaClick={handleTextareaClick}
           onTextareaKeyDown={handleKeyDown}
@@ -427,15 +393,7 @@ function ChatInterface({
           onInputFocusChange={handleInputFocusChange}
           placeholder={t('input.placeholder', {
             provider:
-              provider === 'cursor'
-                ? t('messageTypes.cursor')
-                : provider === 'codex'
-                  ? t('messageTypes.codex')
-                  : provider === 'gemini'
-                    ? t('messageTypes.gemini')
-                    : provider === 'opencode'
-                      ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
-                    : t('messageTypes.claude'),
+              provider === 'codex' ? t('messageTypes.codex') : t('messageTypes.claude'),
           })}
           isTextareaExpanded={isTextareaExpanded}
           sendByCtrlEnter={sendByCtrlEnter}

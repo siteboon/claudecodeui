@@ -1,7 +1,9 @@
 import React from 'react';
+
 import type { SubagentChildTool } from '../../types/types';
-import { CollapsibleSection } from './CollapsibleSection';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../../../../shared/view/ui';
+
+import { CollapsibleSection } from './CollapsibleSection';
 
 interface SubagentContainerProps {
   toolInput: unknown;

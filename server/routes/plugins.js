@@ -1,8 +1,10 @@
-import express from 'express';
 import path from 'path';
 import http from 'http';
-import mime from 'mime-types';
 import fs from 'fs';
+
+import mime from 'mime-types';
+import express from 'express';
+
 import {
   scanPlugins,
   getPluginsConfig,

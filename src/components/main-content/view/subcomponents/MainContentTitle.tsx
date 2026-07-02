@@ -3,15 +3,15 @@ import { useTranslation } from 'react-i18next';
 import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
 import type { AppTab, Project, ProjectSession } from '../../../../types/app';
 import { usePlugins } from '../../../../contexts/PluginsContext';
+import type { Plugin } from '../../../../contexts/PluginsContext';
 
 type MainContentTitleProps = {
   activeTab: AppTab;
   selectedProject: Project;
   selectedSession: ProjectSession | null;
-  shouldShowTasksTab: boolean;
 };
 
-function getTabTitle(activeTab: AppTab, shouldShowTasksTab: boolean, t: (key: string) => string, pluginDisplayName?: string) {
+function getTabTitle(activeTab: AppTab, t: (key: string) => string, pluginDisplayName?: string) {
   if (activeTab.startsWith('plugin:') && pluginDisplayName) {
     return pluginDisplayName;
   }
@@ -24,10 +24,6 @@ function getTabTitle(activeTab: AppTab, shouldShowTasksTab: boolean, t: (key: st
     return t('tabs.git');
   }
 
-  if (activeTab === 'tasks' && shouldShowTasksTab) {
-    return 'TaskMaster';
-  }
-
   if (activeTab === 'browser') {
     return t('tabs.browser');
   }
@@ -36,24 +32,33 @@ function getTabTitle(activeTab: AppTab, shouldShowTasksTab: boolean, t: (key: st
 }
 
 function getSessionTitle(session: ProjectSession): string {
-  if (session.__provider === 'cursor') {
-    return (session.name as string) || 'Untitled Session';
-  }
-
   return (session.summary as string) || 'New Session';
+}
+
+const OFFICIAL_PLUGIN_TITLE_KEYS: Record<string, string> = {
+  'project-stats': 'settings:pluginSettings.starterPlugin.name',
+  'web-terminal': 'settings:pluginSettings.terminalPlugin.name',
+};
+
+function getPluginTitle(plugin: Plugin, t: (key: string) => string) {
+  return OFFICIAL_PLUGIN_TITLE_KEYS[plugin.name]
+    ? t(OFFICIAL_PLUGIN_TITLE_KEYS[plugin.name])
+    : plugin.displayName;
 }
 
 export default function MainContentTitle({
   activeTab,
   selectedProject,
   selectedSession,
-  shouldShowTasksTab,
 }: MainContentTitleProps) {
   const { t } = useTranslation();
   const { plugins } = usePlugins();
 
   const pluginDisplayName = activeTab.startsWith('plugin:')
-    ? plugins.find((p) => p.name === activeTab.replace('plugin:', ''))?.displayName
+    ? (() => {
+        const plugin = plugins.find((p) => p.name === activeTab.replace('plugin:', ''));
+        return plugin ? getPluginTitle(plugin, t) : undefined;
+      })()
     : undefined;
 
   const showSessionIcon = activeTab === 'chat' && Boolean(selectedSession);
@@ -83,7 +88,7 @@ export default function MainContentTitle({
         ) : (
           <div className="min-w-0">
             <h2 className="text-sm font-semibold leading-tight text-foreground">
-              {getTabTitle(activeTab, shouldShowTasksTab, t, pluginDisplayName)}
+              {getTabTitle(activeTab, t, pluginDisplayName)}
             </h2>
             <div className="truncate text-[11px] leading-tight text-muted-foreground">{selectedProject.displayName}</div>
           </div>

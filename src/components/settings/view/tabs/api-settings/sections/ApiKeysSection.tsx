@@ -1,5 +1,6 @@
 import { ExternalLink, Key, Plus, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
 import { Button, Input } from '../../../../../../shared/view/ui';
 import type { ApiKeyItem } from '../types';
 

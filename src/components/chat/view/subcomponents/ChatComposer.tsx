@@ -1,6 +1,5 @@
 import { useTranslation } from 'react-i18next';
 import { useMemo } from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   ChangeEvent,
   ClipboardEvent,
@@ -11,10 +10,8 @@ import type {
   RefObject,
   TouchEvent,
 } from 'react';
-import { ImageIcon, MessageSquareIcon, XIcon, Loader2 } from 'lucide-react';
+import { ImageIcon, MessageSquareIcon, XIcon } from 'lucide-react';
 
-import { useVoiceInput } from '../../hooks/useVoiceInput';
-import { useVoiceAvailable } from '../../hooks/useVoiceAvailable';
 import type { SessionActivity } from '../../../../hooks/useSessionProtection';
 import type { PendingPermissionRequest, PermissionMode } from '../../types/types';
 import {
@@ -31,7 +28,6 @@ import {
 import CommandMenu from './CommandMenu';
 import ActivityIndicator from './ActivityIndicator';
 import ImageAttachment from './ImageAttachment';
-import VoiceInputButton from './VoiceInputButton';
 import PermissionRequestsBanner from './PermissionRequestsBanner';
 import TokenUsageSummary from './TokenUsageSummary';
 
@@ -91,7 +87,6 @@ interface ChatComposerProps {
   renderInputWithMentions: (text: string) => ReactNode;
   textareaRef: RefObject<HTMLTextAreaElement>;
   input: string;
-  onVoiceTranscript?: (text: string, send?: boolean) => void;
   onInputChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
   onTextareaClick: (event: MouseEvent<HTMLTextAreaElement>) => void;
   onTextareaKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
@@ -143,7 +138,6 @@ export default function ChatComposer({
   renderInputWithMentions,
   textareaRef,
   input,
-  onVoiceTranscript,
   onInputChange,
   onTextareaClick,
   onTextareaKeyDown,
@@ -167,28 +161,7 @@ export default function ChatComposer({
       left: textareaRect ? textareaRect.left : 16,
       bottom: textareaRect ? window.innerHeight - textareaRect.top + 8 : 90,
     };
-  }, [input, isCommandMenuOpen, textareaRef]);
-
-  // Voice state is hosted here (not in the mic button) so the main Send button can stop
-  // recording and send the transcript in one tap, the way the mic button drops it in the box.
-  const voiceAvailable = useVoiceAvailable();
-  const [voiceError, setVoiceError] = useState<string | null>(null);
-  const voiceErrorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const handleVoiceError = useCallback((msg: string) => {
-    setVoiceError(msg);
-    if (voiceErrorTimer.current) clearTimeout(voiceErrorTimer.current);
-    voiceErrorTimer.current = setTimeout(() => setVoiceError(null), 4000);
-  }, []);
-  useEffect(() => () => {
-    if (voiceErrorTimer.current) clearTimeout(voiceErrorTimer.current);
-  }, []);
-  const noopTranscript = useCallback(() => {}, []);
-  const { state: voiceState, toggle: voiceToggle, stop: voiceStop } = useVoiceInput(
-    onVoiceTranscript ?? noopTranscript,
-    handleVoiceError,
-  );
-  const isRecording = voiceState === 'recording';
-  const isTranscribing = voiceState === 'transcribing';
+  }, [isCommandMenuOpen, textareaRef]);
 
   // Detect if the AskUserQuestion interactive panel is active
   const hasQuestionPanel = pendingPermissionRequests.some(
@@ -332,10 +305,6 @@ export default function ChatComposer({
               <ImageIcon />
             </PromptInputButton>
 
-            {onVoiceTranscript && voiceAvailable && (
-              <VoiceInputButton state={voiceState} onToggle={voiceToggle} errorMsg={voiceError} />
-            )}
-
             <button
               type="button"
               onClick={onModeSwitch}
@@ -414,21 +383,10 @@ export default function ChatComposer({
               {sendByCtrlEnter ? t('input.hintText.ctrlEnter') : t('input.hintText.enter')}
             </div>
             <PromptInputSubmit
-              onClick={
-                isLoading
-                  ? onAbortSession
-                  : isRecording
-                    ? (e: MouseEvent<HTMLButtonElement>) => {
-                        e.preventDefault();
-                        voiceStop({ send: true });
-                      }
-                    : undefined
-              }
-              disabled={isLoading ? false : isRecording ? false : isTranscribing ? true : !input.trim()}
+              onClick={isLoading ? onAbortSession : undefined}
+              disabled={isLoading ? false : !input.trim()}
               className="h-10 w-10 sm:h-10 sm:w-10"
-            >
-              {isTranscribing ? <Loader2 className="h-4 w-4 animate-spin" /> : undefined}
-            </PromptInputSubmit>
+            />
           </div>
         </PromptInputFooter>
       </PromptInput>

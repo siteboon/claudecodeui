@@ -1,5 +1,6 @@
 import { Folder, Search } from 'lucide-react';
 import type { TFunction } from 'i18next';
+
 import type { LoadingProgress } from '../../../../types/app';
 
 type SidebarProjectsStateProps = {

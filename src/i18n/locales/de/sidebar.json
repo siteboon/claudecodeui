@@ -66,10 +66,7 @@
     "cancel": "Abbrechen",
     "save": "Speichern",
     "delete": "Löschen",
-    "rename": "Umbenennen",
-    "joinCommunity": "Community beitreten",
-    "reportIssue": "Problem melden",
-    "starOnGithub": "Stern auf GitHub"
+    "rename": "Umbenennen"
   },
   "branding": {
     "openSource": "Open Source"
@@ -113,10 +110,6 @@
     "restoreProjectError": "Fehler beim Wiederherstellen des Projekts. Bitte erneut versuchen.",
     "restoreSessionFailed": "Sitzung konnte nicht wiederhergestellt werden. Bitte erneut versuchen.",
     "restoreSessionError": "Fehler beim Wiederherstellen der Sitzung. Bitte erneut versuchen."
-  },
-  "version": {
-    "updateAvailable": "Update verfügbar",
-    "restartRequired": "Update installiert – zum Anwenden Server neu starten"
   },
   "search": {
     "modeProjects": "Projekte",

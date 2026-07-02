@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+
 import type { PermissionPanelProps } from '../../configs/permissionPanelRegistry';
 import type { Question } from '../../../types/types';
 
@@ -7,7 +8,7 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
   onDecision,
 }) => {
   const input = request.input as { questions?: Question[] } | undefined;
-  const questions: Question[] = input?.questions || [];
+  const questions: Question[] = useMemo(() => input?.questions ?? [], [input?.questions]);
 
   const [currentStep, setCurrentStep] = useState(0);
   const [selections, setSelections] = useState<Map<number, Set<string>>>(() => new Map());

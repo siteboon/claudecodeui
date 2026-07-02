@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import JSZip from 'jszip';
+
 import { api } from '../../../utils/api';
 import type { FileTreeNode } from '../types/types';
 import type { Project } from '../../../types/app';
@@ -262,26 +263,6 @@ export function useFileTreeOperations({
     URL.revokeObjectURL(url);
   }, []);
 
-  // Download file or folder
-  const handleDownload = useCallback(async (item: FileTreeNode) => {
-    if (!selectedProject) return;
-
-    setOperationLoading(true);
-    try {
-      if (item.type === 'directory') {
-        // Download folder as ZIP
-        await downloadFolderAsZip(item);
-      } else {
-        // Download single file
-        await downloadSingleFile(item);
-      }
-    } catch (err) {
-      showToast((err as Error).message, 'error');
-    } finally {
-      setOperationLoading(false);
-    }
-  }, [selectedProject, showToast]);
-
   // Download a single file
   const downloadSingleFile = useCallback(async (item: FileTreeNode) => {
     if (!selectedProject) return;
@@ -337,6 +318,26 @@ export function useFileTreeOperations({
 
     showToast(t('fileTree.toast.folderDownloaded', 'Folder downloaded as ZIP'), 'success');
   }, [selectedProject, showToast, t, triggerBrowserDownload]);
+
+  // Download file or folder
+  const handleDownload = useCallback(async (item: FileTreeNode) => {
+    if (!selectedProject) return;
+
+    setOperationLoading(true);
+    try {
+      if (item.type === 'directory') {
+        // Download folder as ZIP
+        await downloadFolderAsZip(item);
+      } else {
+        // Download single file
+        await downloadSingleFile(item);
+      }
+    } catch (err) {
+      showToast((err as Error).message, 'error');
+    } finally {
+      setOperationLoading(false);
+    }
+  }, [selectedProject, showToast, downloadFolderAsZip, downloadSingleFile]);
 
   return {
     // Rename operations

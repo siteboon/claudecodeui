@@ -1,5 +1,6 @@
 import { Check, GitBranch, Globe, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+
 import type { ConfirmationRequest, GitRemoteStatus } from '../../types/types';
 import NewBranchModal from '../modals/NewBranchModal';
 

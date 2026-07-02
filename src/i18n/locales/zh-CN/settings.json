@@ -4,6 +4,7 @@
     "account": "账户",
     "permissions": "权限",
     "mcpServers": "MCP 服务器",
+    "skills": "技能",
     "appearance": "外观"
   },
   "account": {
@@ -78,6 +79,7 @@
     "shiftTab": "Shift+Tab",
     "arrowUp": "上箭头",
     "arrowDown": "下箭头",
+    "paste": "粘贴",
     "scrollDown": "滚动到底部",
     "handle": {
       "closePanel": "关闭快捷键面板",
@@ -90,7 +92,7 @@
     "appearance": "外观",
     "git": "Git",
     "apiTokens": "API 和令牌",
-    "tasks": "任务",
+    "browser": "浏览器",
     "computer": "计算机使用",
     "notifications": "通知",
     "plugins": "插件",
@@ -108,9 +110,16 @@
       "unsupported": "此浏览器不支持推送通知。",
       "denied": "推送通知已被阻止，请在浏览器设置中允许。"
     },
+    "desktop": {
+      "title": "通知此桌面应用",
+      "enable": "启用桌面通知",
+      "disable": "关闭桌面通知",
+      "enabled": "桌面通知已启用",
+      "unsupported": "此系统不支持桌面通知。"
+    },
     "sound": {
       "title": "声音",
-      "description": "聊天运行完成时播放短提示音。",
+      "description": "聊天运行完成或需要工具批准时播放短提示音。",
       "enabled": "已启用",
       "test": "测试声音"
     },
@@ -277,32 +286,10 @@
     "apiDocsLink": "API 文档",
     "documentation": {
       "title": "外部 API 文档",
-      "description": "了解如何使用外部 API 从您的应用程序触发 Claude/Cursor 会话。",
+      "description": "了解如何使用外部 API 从您的应用程序触发 Claude/Codex 会话。",
       "viewLink": "查看 API 文档 →"
     },
-    "loading": "加载中...",
-    "version": {
-      "updateAvailable": "有可用更新：v{{version}}"
-    }
-  },
-  "tasks": {
-    "checking": "正在检查 TaskMaster 安装...",
-    "notInstalled": {
-      "title": "未安装 TaskMaster AI CLI",
-      "description": "需要 TaskMaster CLI 才能使用任务管理功能。安装它以开始使用：",
-      "installCommand": "npm install -g task-master-ai",
-      "viewOnGitHub": "在 GitHub 上查看",
-      "afterInstallation": "安装后：",
-      "steps": {
-        "restart": "重启此应用程序",
-        "autoAvailable": "TaskMaster 功能将自动可用",
-        "initCommand": "在项目目录中使用 task-master init"
-      }
-    },
-    "settings": {
-      "enableLabel": "启用 TaskMaster 集成",
-      "enableDescription": "在整个界面中显示 TaskMaster 任务、横幅和侧边栏指示器"
-    }
+    "loading": "加载中..."
   },
   "agents": {
     "authStatus": {
@@ -318,14 +305,8 @@
       "claude": {
         "description": "Anthropic Claude AI 助手"
       },
-      "cursor": {
-        "description": "Cursor AI 驱动的代码编辑器"
-      },
       "codex": {
         "description": "OpenAI Codex AI 助手"
-      },
-      "gemini": {
-        "description": "Google Gemini AI 助手"
       }
     },
     "connectionStatus": "连接状态",
@@ -343,8 +324,7 @@
     "title": "权限设置",
     "skipPermissions": {
       "label": "跳过权限提示（请谨慎使用）",
-      "claudeDescription": "等同于 --dangerously-skip-permissions 标志",
-      "cursorDescription": "等同于 Cursor CLI 中的 -f 标志"
+      "claudeDescription": "等同于 --dangerously-skip-permissions 标志"
     },
     "allowedTools": {
       "title": "允许的工具",
@@ -419,7 +399,6 @@
     "title": "MCP 服务器",
     "description": {
       "claude": "Model Context Protocol 服务器为 Claude 提供额外的工具和数据源",
-      "cursor": "Model Context Protocol 服务器为 Cursor 提供额外的工具和数据源",
       "codex": "Model Context Protocol 服务器为 Codex 提供额外的工具和数据源"
     },
     "addButton": "添加 MCP 服务器",
@@ -444,9 +423,45 @@
       "edit": "编辑服务器",
       "delete": "删除服务器"
     },
+    "managed": {
+      "badge": "托管",
+      "hint": "由 CloudCLI 管理。"
+    },
     "help": {
       "title": "关于 Codex MCP",
       "description": "Codex 支持基于 stdio 的 MCP 服务器。您可以添加服务器，通过额外的工具和资源来扩展 Codex 的功能。"
+    }
+  },
+  "browserUse": {
+    "title": "Browser",
+    "description": "允许智能体创建受保护的 Playwright 浏览器会话，并可在 Browser 页签中监控。",
+    "enable": {
+      "label": "启用 Browser",
+      "description": "为支持的智能体注册 Browser。智能体可以创建浏览器会话；您可以查看、停止和删除它们。",
+      "ariaLabel": "启用 Browser"
+    },
+    "errors": {
+      "loadSettings": "加载 Browser 设置失败",
+      "loadStatus": "加载 Browser 状态失败",
+      "saveSettings": "保存 Browser 设置失败",
+      "installRuntime": "安装浏览器运行时失败"
+    },
+    "runtime": {
+      "checking": "检查中...",
+      "installed": "已安装",
+      "missing": "缺失",
+      "status": "状态",
+      "ready": "就绪",
+      "setupRequired": "需要设置",
+      "disabled": "已禁用"
+    },
+    "runtimeRequired": {
+      "title": "需要 Browser 运行时",
+      "description": "请先安装浏览器运行时，智能体才能创建 Browser 会话。"
+    },
+    "actions": {
+      "installing": "安装中...",
+      "installRuntime": "安装运行时"
     }
   },
   "pluginSettings": {
@@ -470,12 +485,23 @@
     "uninstallFailed": "卸载失败",
     "toggleFailed": "切换失败",
     "buildYourOwn": "构建您自己的插件",
+    "starterPluginLabel": "入门插件",
     "starter": "入门模板",
     "docs": "文档",
+    "sections": {
+      "officialTitle": "官方插件",
+      "officialDescription": "由 CloudCLI 团队维护，可直接安装。"
+    },
     "starterPlugin": {
       "name": "项目统计",
       "badge": "入门",
       "description": "查看项目的文件数、代码行数、文件类型分布以及最近活动。",
+      "install": "安装"
+    },
+    "terminalPlugin": {
+      "name": "终端",
+      "badge": "官方",
+      "description": "内置终端，可在界面内直接获得完整 shell 访问权限。",
       "install": "安装"
     },
     "morePlugins": "更多",

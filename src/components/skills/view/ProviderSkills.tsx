@@ -59,16 +59,11 @@ const MAX_SKILL_FOLDER_BYTES = 30 * 1024 * 1024;
 const PROVIDER_NAMES: Record<SkillsProvider, string> = {
   claude: 'Claude',
   codex: 'Codex',
-  cursor: 'Cursor',
-  gemini: 'Gemini',
-  opencode: 'OpenCode',
 };
 
-const PROVIDER_SKILL_PATHS: Record<Exclude<SkillsProvider, 'opencode'>, string> = {
+const PROVIDER_SKILL_PATHS: Record<SkillsProvider, string> = {
   claude: '~/.claude/skills/<skill-name>/SKILL.md',
   codex: '~/.agents/skills/<skill-name>/SKILL.md',
-  cursor: '~/.cursor/skills/<skill-name>/SKILL.md',
-  gemini: '~/.gemini/skills/<skill-name>/SKILL.md',
 };
 
 const SCOPE_LABELS: Record<SkillsScope, string> = {
@@ -220,7 +215,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
   const folderInputRef = useRef<HTMLInputElement>(null);
 
   const providerName = PROVIDER_NAMES[selectedProvider];
-  const providerPath = selectedProvider === 'opencode' ? null : PROVIDER_SKILL_PATHS[selectedProvider];
+  const providerPath = PROVIDER_SKILL_PATHS[selectedProvider];
 
   useEffect(() => {
     setQueuedFiles([]);

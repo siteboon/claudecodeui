@@ -2,24 +2,16 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useDeviceSettings } from '../../../hooks/useDeviceSettings';
-import { useVersionCheck } from '../../../hooks/useVersionCheck';
 import { useUiPreferences } from '../../../hooks/useUiPreferences';
 import { useSidebarController } from '../hooks/useSidebarController';
-import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
-import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
-import type { Project, LLMProvider } from '../../../types/app';
-import type { MCPServerStatus, SidebarProps } from '../types/types';
+import type { LLMProvider } from '../../../types/app';
+import type { SidebarProps } from '../types/types';
 
 import SidebarCollapsed from './subcomponents/SidebarCollapsed';
 import SidebarContent from './subcomponents/SidebarContent';
 import SidebarModals from './subcomponents/SidebarModals';
 import type { SidebarProjectListProps } from './subcomponents/SidebarProjectList';
-
-type TaskMasterSidebarContext = {
-  setCurrentProject: (project: Project) => void;
-  mcpServerStatus: MCPServerStatus;
-};
 
 function Sidebar({
   projects,
@@ -43,14 +35,8 @@ function Sidebar({
 }: SidebarProps) {
   const { t } = useTranslation(['sidebar', 'common']);
   const { isPWA } = useDeviceSettings({ trackMobile: false });
-  const { updateAvailable, restartRequired, latestVersion, currentVersion, releaseInfo, installMode } = useVersionCheck(
-    'siteboon',
-    'claudecodeui',
-  );
   const { preferences, setPreference } = useUiPreferences();
   const { sidebarVisible } = preferences;
-  const { setCurrentProject, mcpServerStatus } = useTaskMaster() as TaskMasterSidebarContext;
-  const { tasksEnabled } = useTasksSettings();
   const paletteOps = usePaletteOps();
 
   const {
@@ -75,7 +61,6 @@ function Sidebar({
     deletingProjects,
     deleteConfirmation,
     sessionDeleteConfirmation,
-    showVersionModal,
     filteredProjects,
     archivedProjects,
     archivedSessions,
@@ -110,7 +95,6 @@ function Sidebar({
     setSearchFilter,
     setDeleteConfirmation,
     setSessionDeleteConfirmation,
-    setShowVersionModal,
   } = useSidebarController({
     projects,
     selectedProject,
@@ -125,7 +109,6 @@ function Sidebar({
     onSessionDelete,
     onLoadMoreSessions,
     onProjectDelete,
-    setCurrentProject,
     setSidebarVisible: (visible) => setPreference('sidebarVisible', visible),
     sidebarVisible,
   });
@@ -158,8 +141,6 @@ function Sidebar({
     editingSession,
     editingSessionName,
     deletingProjects,
-    tasksEnabled,
-    mcpServerStatus,
     getProjectSessions,
     loadingMoreProjects,
     activeSessions,
@@ -210,12 +191,6 @@ function Sidebar({
         sessionDeleteConfirmation={sessionDeleteConfirmation}
         onCancelDeleteSession={() => setSessionDeleteConfirmation(null)}
         onConfirmDeleteSession={confirmDeleteSession}
-        showVersionModal={showVersionModal}
-        onCloseVersionModal={() => setShowVersionModal(false)}
-        releaseInfo={releaseInfo}
-        currentVersion={currentVersion}
-        latestVersion={latestVersion}
-        installMode={installMode}
         t={t}
       />
 
@@ -223,9 +198,6 @@ function Sidebar({
         <SidebarCollapsed
           onExpand={handleExpandSidebar}
           onShowSettings={onShowSettings}
-          updateAvailable={updateAvailable}
-          restartRequired={restartRequired}
-          onShowVersionModal={() => setShowVersionModal(true)}
           t={t}
         />
       ) : (
@@ -296,12 +268,6 @@ function Sidebar({
             isRefreshing={isRefreshing}
             onCreateProject={() => setShowNewProject(true)}
             onCollapseSidebar={handleCollapseSidebar}
-            updateAvailable={updateAvailable}
-            restartRequired={restartRequired}
-            releaseInfo={releaseInfo}
-            latestVersion={latestVersion}
-            currentVersion={currentVersion}
-            onShowVersionModal={() => setShowVersionModal(true)}
             onShowSettings={onShowSettings}
             projectListProps={projectListProps}
             t={t}

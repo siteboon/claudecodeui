@@ -17,6 +17,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+
 import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
 
 const __dirname = getModuleDir(import.meta.url);
@@ -159,7 +160,6 @@ Commands:
   sandbox          Manage Docker sandbox environments
   browser-use-mcp  Run the Browser MCP stdio server
   status           Show configuration and data locations
-  update           Update to the latest version
   help             Show this help information
   version          Show version information
 
@@ -182,11 +182,6 @@ Environment Variables:
   CLAUDE_CLI_PATH     Set custom Claude CLI path
   CONTEXT_WINDOW      Set context window size (default: 160000)
 
-Documentation:
-  ${packageJson.homepage || 'https://github.com/siteboon/claudecodeui'}
-
-Report Issues:
-  ${packageJson.bugs?.url || 'https://github.com/siteboon/claudecodeui/issues'}
 `);
 }
 
@@ -195,74 +190,16 @@ function showVersion() {
     console.log(`${packageJson.version}`);
 }
 
-// Compare semver versions, returns true if v1 > v2
-function isNewerVersion(v1, v2) {
-    const parts1 = v1.split('.').map(Number);
-    const parts2 = v2.split('.').map(Number);
-    for (let i = 0; i < 3; i++) {
-        if (parts1[i] > parts2[i]) return true;
-        if (parts1[i] < parts2[i]) return false;
-    }
-    return false;
-}
-
-// Check for updates
-async function checkForUpdates(silent = false) {
-    try {
-        const { execSync } = await import('child_process');
-        const latestVersion = execSync('npm show @cloudcli-ai/cloudcli version', { encoding: 'utf8' }).trim();
-        const currentVersion = packageJson.version;
-
-        if (isNewerVersion(latestVersion, currentVersion)) {
-            console.log(`\n${c.warn('[UPDATE]')} New version available: ${c.bright(latestVersion)} (current: ${currentVersion})`);
-            console.log(`         Run ${c.bright('cloudcli update')} to update\n`);
-            return { hasUpdate: true, latestVersion, currentVersion };
-        } else if (!silent) {
-            console.log(`${c.ok('[OK]')} You are on the latest version (${currentVersion})`);
-        }
-        return { hasUpdate: false, latestVersion, currentVersion };
-    } catch (e) {
-        if (!silent) {
-            console.log(`${c.warn('[WARN]')} Could not check for updates`);
-        }
-        return { hasUpdate: false, error: e.message };
-    }
-}
-
-// Update the package
-async function updatePackage() {
-    try {
-        const { execSync } = await import('child_process');
-        console.log(`${c.info('[INFO]')} Checking for updates...`);
-
-        const { hasUpdate, latestVersion, currentVersion } = await checkForUpdates(true);
-
-        if (!hasUpdate) {
-            console.log(`${c.ok('[OK]')} Already on the latest version (${currentVersion})`);
-            return;
-        }
-
-        console.log(`${c.info('[INFO]')} Updating from ${currentVersion} to ${latestVersion}...`);
-        execSync('npm update -g @cloudcli-ai/cloudcli', { stdio: 'inherit' });
-        console.log(`${c.ok('[OK]')} Update complete! Restart cloudcli to use the new version.`);
-    } catch (e) {
-        console.error(`${c.error('[ERROR]')} Update failed: ${e.message}`);
-        console.log(`${c.tip('[TIP]')} Try running manually: npm update -g @cloudcli-ai/cloudcli`);
-    }
-}
-
 // ── Sandbox command ─────────────────────────────────────────
 
 const SANDBOX_TEMPLATES = {
     claude: 'docker.io/cloudcliai/sandbox:claude-code',
     codex: 'docker.io/cloudcliai/sandbox:codex',
-    gemini: 'docker.io/cloudcliai/sandbox:gemini',
 };
 
 const SANDBOX_SECRETS = {
     claude: 'anthropic',
     codex: 'openai',
-    gemini: 'google',
 };
 
 function parseSandboxArgs(args) {
@@ -338,7 +275,7 @@ Subcommands:
   ${c.bright('help')}         Show this help
 
 Options:
-  -a, --agent <agent>       Agent to use: claude, codex, gemini (default: claude)
+  -a, --agent <agent>       Agent to use: claude, codex (default: claude)
   -n, --name <name>         Sandbox name (default: derived from workspace folder)
   -t, --template <image>    Custom template image
   -e, --env <KEY=VALUE>     Set environment variable (repeatable)
@@ -359,7 +296,6 @@ Prerequisites:
        sbx login
        sbx secret set -g anthropic   # for Claude
        sbx secret set -g openai      # for Codex
-       sbx secret set -g google      # for Gemini
 
 Advanced usage:
   For branch mode, multiple workspaces, memory limits, network policies,
@@ -600,9 +536,6 @@ async function sandboxCommand(args) {
 
 // Start the server
 async function startServer() {
-    // Check for updates silently on startup
-    checkForUpdates(true);
-
     // Import and run the server
     await import('./index.js');
 }
@@ -680,9 +613,6 @@ async function main() {
         case '-v':
         case '--version':
             showVersion();
-            break;
-        case 'update':
-            await updatePackage();
             break;
         default:
             console.error(`\n❌ Unknown command: ${command}`);

@@ -29,10 +29,6 @@ export default function QuickSettingsContent({
   onPreferenceChange,
 }: QuickSettingsContentProps) {
   const { t } = useTranslation('settings');
-  const inputSettingToggles = preferences.voiceEnabled
-    ? INPUT_SETTING_TOGGLES
-    : INPUT_SETTING_TOGGLES.filter(({ key }) => key !== 'voiceEnabled');
-
   const renderToggleRows = (items: PreferenceToggleItem[]) => (
     items.map(({ key, labelKey, icon }) => (
       <QuickSettingsToggleRow
@@ -67,7 +63,7 @@ export default function QuickSettingsContent({
       </QuickSettingsSection>
 
       <QuickSettingsSection title={t('quickSettings.sections.inputSettings')}>
-        {renderToggleRows(inputSettingToggles)}
+        {renderToggleRows(INPUT_SETTING_TOGGLES)}
         <p className="ml-3 text-xs text-muted-foreground">
           {t('quickSettings.sendByCtrlEnterDescription')}
         </p>

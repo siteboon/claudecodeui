@@ -1,5 +1,7 @@
 import { useCallback, useRef, useState, useEffect } from 'react';
+
 import type { MainContentHeaderProps } from '../../types/types';
+
 import MobileMenuButton from './MobileMenuButton';
 import MainContentTabSwitcher from './MainContentTabSwitcher';
 import MainContentTitle from './MainContentTitle';
@@ -9,7 +11,6 @@ export default function MainContentHeader({
   setActiveTab,
   selectedProject,
   selectedSession,
-  shouldShowTasksTab,
   shouldShowBrowserTab,
   isMobile,
   onMenuClick,
@@ -43,7 +44,6 @@ export default function MainContentHeader({
             activeTab={activeTab}
             selectedProject={selectedProject}
             selectedSession={selectedSession}
-            shouldShowTasksTab={shouldShowTasksTab}
           />
         </div>
 
@@ -59,7 +59,6 @@ export default function MainContentHeader({
             <MainContentTabSwitcher
               activeTab={activeTab}
               setActiveTab={setActiveTab}
-              shouldShowTasksTab={shouldShowTasksTab}
               shouldShowBrowserTab={shouldShowBrowserTab}
             />
           </div>

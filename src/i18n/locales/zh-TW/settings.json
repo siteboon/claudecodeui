@@ -4,6 +4,7 @@
     "account": "帳戶",
     "permissions": "權限",
     "mcpServers": "MCP 伺服器",
+    "skills": "技能",
     "appearance": "外觀"
   },
   "account": {
@@ -78,6 +79,7 @@
     "shiftTab": "Shift+Tab",
     "arrowUp": "向上箭頭",
     "arrowDown": "向下箭頭",
+    "paste": "貼上",
     "scrollDown": "捲動到底部",
     "handle": {
       "closePanel": "關閉快速鍵面板",
@@ -90,7 +92,7 @@
     "appearance": "外觀",
     "git": "Git",
     "apiTokens": "API 和權杖",
-    "tasks": "任務",
+    "browser": "瀏覽器",
     "computer": "電腦使用",
     "notifications": "通知",
     "plugins": "外掛",
@@ -108,9 +110,16 @@
       "unsupported": "此瀏覽器不支援推播通知。",
       "denied": "推播通知已被封鎖，請在瀏覽器設定中允許。"
     },
+    "desktop": {
+      "title": "通知此桌面應用程式",
+      "enable": "啟用桌面通知",
+      "disable": "關閉桌面通知",
+      "enabled": "桌面通知已啟用",
+      "unsupported": "此系統不支援桌面通知。"
+    },
     "sound": {
       "title": "聲音",
-      "description": "聊天執行完成時播放短提示音。",
+      "description": "聊天執行完成或需要工具核准時播放短提示音。",
       "enabled": "已啟用",
       "test": "測試聲音"
     },
@@ -277,32 +286,10 @@
     "apiDocsLink": "API 文件",
     "documentation": {
       "title": "外部 API 文件",
-      "description": "了解如何使用外部 API 從您的應用程式觸發 Claude/Cursor 工作階段。",
+      "description": "了解如何使用外部 API 從您的應用程式觸發 Claude/Codex 工作階段。",
       "viewLink": "查看 API 文件 →"
     },
-    "loading": "載入中...",
-    "version": {
-      "updateAvailable": "有可用更新：v{{version}}"
-    }
-  },
-  "tasks": {
-    "checking": "正在檢查 TaskMaster 安裝...",
-    "notInstalled": {
-      "title": "未安裝 TaskMaster AI CLI",
-      "description": "需要 TaskMaster CLI 才能使用任務管理功能。安裝它以開始使用：",
-      "installCommand": "npm install -g task-master-ai",
-      "viewOnGitHub": "在 GitHub 上查看",
-      "afterInstallation": "安裝後：",
-      "steps": {
-        "restart": "重新啟動此應用程式",
-        "autoAvailable": "TaskMaster 功能將自動啟用",
-        "initCommand": "在專案目錄中使用 task-master init"
-      }
-    },
-    "settings": {
-      "enableLabel": "啟用 TaskMaster 整合",
-      "enableDescription": "在整個介面中顯示 TaskMaster 任務、橫幅和側邊欄指示器"
-    }
+    "loading": "載入中..."
   },
   "agents": {
     "authStatus": {
@@ -318,14 +305,8 @@
       "claude": {
         "description": "Anthropic Claude AI 助手"
       },
-      "cursor": {
-        "description": "Cursor AI 驅動的程式碼編輯器"
-      },
       "codex": {
         "description": "OpenAI Codex AI 助手"
-      },
-      "gemini": {
-        "description": "Google Gemini AI 助手"
       }
     },
     "connectionStatus": "連線狀態",
@@ -343,8 +324,7 @@
     "title": "權限設定",
     "skipPermissions": {
       "label": "略過權限提示（請謹慎使用）",
-      "claudeDescription": "等同於 --dangerously-skip-permissions 旗標",
-      "cursorDescription": "等同於 Cursor CLI 中的 -f 旗標"
+      "claudeDescription": "等同於 --dangerously-skip-permissions 旗標"
     },
     "allowedTools": {
       "title": "允許的工具",
@@ -419,7 +399,6 @@
     "title": "MCP 伺服器",
     "description": {
       "claude": "Model Context Protocol 伺服器為 Claude 提供額外的工具和資料來源",
-      "cursor": "Model Context Protocol 伺服器為 Cursor 提供額外的工具和資料來源",
       "codex": "Model Context Protocol 伺服器為 Codex 提供額外的工具和資料來源"
     },
     "addButton": "新增 MCP 伺服器",
@@ -444,9 +423,45 @@
       "edit": "編輯伺服器",
       "delete": "刪除伺服器"
     },
+    "managed": {
+      "badge": "受管理",
+      "hint": "由 CloudCLI 管理。"
+    },
     "help": {
       "title": "關於 Codex MCP",
       "description": "Codex 支援基於 stdio 的 MCP 伺服器。您可以新增伺服器，透過額外的工具和資源來擴充 Codex 的功能。"
+    }
+  },
+  "browserUse": {
+    "title": "Browser",
+    "description": "允許智慧代理建立受保護的 Playwright 瀏覽器工作階段，並可在 Browser 分頁中監控。",
+    "enable": {
+      "label": "啟用 Browser",
+      "description": "為支援的智慧代理註冊 Browser。智慧代理可以建立瀏覽器工作階段；您可以查看、停止和刪除它們。",
+      "ariaLabel": "啟用 Browser"
+    },
+    "errors": {
+      "loadSettings": "載入 Browser 設定失敗",
+      "loadStatus": "載入 Browser 狀態失敗",
+      "saveSettings": "儲存 Browser 設定失敗",
+      "installRuntime": "安裝瀏覽器執行階段失敗"
+    },
+    "runtime": {
+      "checking": "檢查中...",
+      "installed": "已安裝",
+      "missing": "缺失",
+      "status": "狀態",
+      "ready": "就緒",
+      "setupRequired": "需要設定",
+      "disabled": "已停用"
+    },
+    "runtimeRequired": {
+      "title": "需要 Browser 執行階段",
+      "description": "請先安裝瀏覽器執行階段，智慧代理才能建立 Browser 工作階段。"
+    },
+    "actions": {
+      "installing": "安裝中...",
+      "installRuntime": "安裝執行階段"
     }
   },
   "pluginSettings": {
@@ -470,12 +485,23 @@
     "uninstallFailed": "解除安裝失敗",
     "toggleFailed": "切換失敗",
     "buildYourOwn": "建立您自己的外掛",
+    "starterPluginLabel": "入門外掛",
     "starter": "入門範本",
     "docs": "文件",
+    "sections": {
+      "officialTitle": "官方外掛",
+      "officialDescription": "由 CloudCLI 團隊維護，可直接安裝。"
+    },
     "starterPlugin": {
       "name": "專案統計",
       "badge": "入門",
       "description": "查看專案的檔案數、程式碼行數、檔案類型分佈以及最近活動。",
+      "install": "安裝"
+    },
+    "terminalPlugin": {
+      "name": "終端機",
+      "badge": "官方",
+      "description": "內建終端機，可在介面內直接取得完整 shell 存取權限。",
       "install": "安裝"
     },
     "morePlugins": "更多",

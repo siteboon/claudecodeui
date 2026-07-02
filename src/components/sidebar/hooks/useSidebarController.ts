@@ -93,7 +93,6 @@ type UseSidebarControllerArgs = {
   onLoadMoreSessions?: (projectId: string) => Promise<void> | void;
   // `projectId` is the DB-assigned identifier; callbacks use that post-migration.
   onProjectDelete?: (projectId: string) => void;
-  setCurrentProject: (project: Project) => void;
   setSidebarVisible: (visible: boolean) => void;
   sidebarVisible: boolean;
 };
@@ -112,7 +111,6 @@ export function useSidebarController({
   onSessionDelete,
   onLoadMoreSessions,
   onProjectDelete,
-  setCurrentProject,
   setSidebarVisible,
   sidebarVisible,
 }: UseSidebarControllerArgs) {
@@ -131,7 +129,6 @@ export function useSidebarController({
   const [deletingProjects, setDeletingProjects] = useState<Set<string>>(new Set());
   const [deleteConfirmation, setDeleteConfirmation] = useState<DeleteProjectConfirmation | null>(null);
   const [sessionDeleteConfirmation, setSessionDeleteConfirmation] = useState<SessionDeleteConfirmation | null>(null);
-  const [showVersionModal, setShowVersionModal] = useState(false);
   const [searchMode, setSearchMode] = useState<SidebarSearchMode>('projects');
   const [conversationResults, setConversationResults] = useState<ConversationSearchResults | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -801,9 +798,8 @@ export function useSidebarController({
   const handleProjectSelect = useCallback(
     (project: Project) => {
       onProjectSelect(project);
-      setCurrentProject(project);
     },
-    [onProjectSelect, setCurrentProject],
+    [onProjectSelect],
   );
 
   const openArchivedSession = useCallback((session: ArchivedSessionListItem) => {
@@ -943,7 +939,6 @@ export function useSidebarController({
     loadingMoreProjects,
     deleteConfirmation,
     sessionDeleteConfirmation,
-    showVersionModal,
     filteredProjects,
     runningSessionsCount,
     archivedProjects: filteredArchivedProjects,
@@ -993,6 +988,5 @@ export function useSidebarController({
     setSearchFilter,
     setDeleteConfirmation,
     setSessionDeleteConfirmation,
-    setShowVersionModal,
   };
 }

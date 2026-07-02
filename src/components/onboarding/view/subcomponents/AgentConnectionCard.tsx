@@ -1,4 +1,5 @@
 import { Check } from 'lucide-react';
+
 import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
 import type { LLMProvider } from '../../../../types/app';
 import type { ProviderAuthStatus } from '../../../provider-auth/types';

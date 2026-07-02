@@ -19,13 +19,6 @@
     "README.md"
   ],
   "homepage": "https://cloudcli.ai",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/siteboon/claudecodeui.git"
-  },
-  "bugs": {
-    "url": "https://github.com/siteboon/claudecodeui/issues"
-  },
   "scripts": {
     "dev": "concurrently --kill-others \"npm run server:dev\" \"npm run client\"",
     "server": "node dist-server/server/index.js",
@@ -52,8 +45,7 @@
     "release": "./release.sh",
     "prepublishOnly": "npm run build",
     "postinstall": "node scripts/fix-node-pty.js",
-    "prepare": "husky",
-    "update:platform": "./update-platform.sh"
+    "prepare": "husky"
   },
   "build": {
     "appId": "ai.cloudcli.desktop",
@@ -121,13 +113,8 @@
     "claude-code-ui",
     "cloudcli",
     "codex",
-    "gemini",
-    "gemini-cli",
-    "cursor",
-    "cursor-cli",
     "anthropic",
     "openai",
-    "google",
     "coding-agent",
     "web-ui",
     "ui",

@@ -1,17 +1,12 @@
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Activity,
   BarChart3,
   BookOpen,
-  Calculator,
-  Clock,
   Download,
   ExternalLink,
-  Github,
   GitBranch,
   Loader2,
-  ListTodo,
   RefreshCw,
   ServerCrash,
   ShieldAlert,
@@ -27,13 +22,6 @@ import PluginIcon from './PluginIcon';
 
 const STARTER_PLUGIN_URL = 'https://github.com/cloudcli-ai/cloudcli-plugin-starter';
 const TERMINAL_PLUGIN_URL = 'https://github.com/cloudcli-ai/cloudcli-plugin-terminal';
-const SCHEDULED_PROMPT_PLUGIN_URL = 'https://github.com/grostim/cloudcli-cron';
-const CLAUDE_WATCH_PLUGIN_URL = 'https://github.com/satsuki19980613/cloudcli-claude-watch';
-const PRISM_CLOUDCLI_PLUGIN_URL = 'https://github.com/jakeefr/cloudcli-plugin-prism';
-const SESSION_MANAGER_PLUGIN_URL = 'https://github.com/strykereye2/cloudcli-plugin-session-manager';
-const TOKEN_COST_CALCULATOR_PLUGIN_URL = 'https://github.com/NightmareAway/cloudcli-plugin-token-cost-calculator';
-const TASK_QUEUE_PLUGIN_URL = 'https://github.com/TadMSTR/cloudcli-plugin-task-queue';
-const GITHUB_ISSUES_BOARD_PLUGIN_URL = 'https://github.com/szmidtpiotr/claude-github-issue';
 
 type PluginRecommendation = {
   id: string;
@@ -41,7 +29,6 @@ type PluginRecommendation = {
   repoUrl: string;
   installedNames: string[];
   icon: LucideIcon;
-  source: 'official' | 'unofficial';
 };
 
 const OFFICIAL_PLUGIN_RECOMMENDATIONS: PluginRecommendation[] = [
@@ -51,7 +38,6 @@ const OFFICIAL_PLUGIN_RECOMMENDATIONS: PluginRecommendation[] = [
     repoUrl: STARTER_PLUGIN_URL,
     installedNames: ['project-stats'],
     icon: BarChart3,
-    source: 'official',
   },
   {
     id: 'web-terminal',
@@ -59,66 +45,6 @@ const OFFICIAL_PLUGIN_RECOMMENDATIONS: PluginRecommendation[] = [
     repoUrl: TERMINAL_PLUGIN_URL,
     installedNames: ['web-terminal'],
     icon: Terminal,
-    source: 'official',
-  },
-];
-
-const UNOFFICIAL_PLUGIN_RECOMMENDATIONS: PluginRecommendation[] = [
-  {
-    id: 'cloudcli-claude-watch',
-    translationKey: 'claudeWatchPlugin',
-    repoUrl: CLAUDE_WATCH_PLUGIN_URL,
-    installedNames: ['cloudcli-claude-watch'],
-    icon: Activity,
-    source: 'unofficial',
-  },
-  {
-    id: 'workspace-scheduled-prompts',
-    translationKey: 'scheduledPromptPlugin',
-    repoUrl: SCHEDULED_PROMPT_PLUGIN_URL,
-    installedNames: ['workspace-scheduled-prompts'],
-    icon: Clock,
-    source: 'unofficial',
-  },
-  {
-    id: 'prism',
-    translationKey: 'prismCloudCLI',
-    repoUrl: PRISM_CLOUDCLI_PLUGIN_URL,
-    installedNames: ['prism'],
-    icon: Activity,
-    source: 'unofficial',
-  },
-  {
-    id: 'session-manager',
-    translationKey: 'sessionManagerPlugin',
-    repoUrl: SESSION_MANAGER_PLUGIN_URL,
-    installedNames: ['session-manager'],
-    icon: Activity,
-    source: 'unofficial',
-  },
-  {
-    id: 'token-cost-calculator',
-    translationKey: 'tokenCostCalculatorPlugin',
-    repoUrl: TOKEN_COST_CALCULATOR_PLUGIN_URL,
-    installedNames: ['token-cost-calculator'],
-    icon: Calculator,
-    source: 'unofficial',
-  },
-  {
-    id: 'task-queue',
-    translationKey: 'taskQueuePlugin',
-    repoUrl: TASK_QUEUE_PLUGIN_URL,
-    installedNames: ['task-queue'],
-    icon: ListTodo,
-    source: 'unofficial',
-  },
-  {
-    id: 'claude-github-issue',
-    translationKey: 'githubIssuesBoardPlugin',
-    repoUrl: GITHUB_ISSUES_BOARD_PLUGIN_URL,
-    installedNames: ['claude-github-issue'],
-    icon: Github,
-    source: 'unofficial',
   },
 ];
 
@@ -135,6 +61,26 @@ function pluginMatchesRecommendation(plugin: Plugin, recommendation: PluginRecom
     recommendation.installedNames.includes(plugin.name)
     || normalizeRepoUrl(plugin.repoUrl) === normalizeRepoUrl(recommendation.repoUrl)
   );
+}
+
+function getOfficialPluginRecommendation(plugin: Plugin) {
+  return OFFICIAL_PLUGIN_RECOMMENDATIONS.find((recommendation) => (
+    pluginMatchesRecommendation(plugin, recommendation)
+  ));
+}
+
+function getPluginDisplayName(plugin: Plugin, t: (key: string) => string) {
+  const recommendation = getOfficialPluginRecommendation(plugin);
+  return recommendation
+    ? t(`pluginSettings.${recommendation.translationKey}.name`)
+    : plugin.displayName;
+}
+
+function getPluginDescription(plugin: Plugin, t: (key: string) => string) {
+  const recommendation = getOfficialPluginRecommendation(plugin);
+  return recommendation
+    ? t(`pluginSettings.${recommendation.translationKey}.description`)
+    : plugin.description;
 }
 
 /* ─── Toggle Switch ─────────────────────────────────────────────────────── */
@@ -203,6 +149,8 @@ function PluginCard({
   updateError,
 }: PluginCardProps) {
   const { t } = useTranslation('settings');
+  const displayName = getPluginDisplayName(plugin, t);
+  const description = getPluginDescription(plugin, t);
   const accentColor = plugin.enabled
     ? 'bg-emerald-500'
     : 'bg-muted-foreground/20';
@@ -232,7 +180,7 @@ function PluginCard({
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-semibold leading-none text-foreground">
-                  {plugin.displayName}
+                  {displayName}
                 </span>
                 <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
                   v{plugin.version}
@@ -242,9 +190,9 @@ function PluginCard({
                 </span>
                 <ServerDot running={!!plugin.serverRunning} t={t} />
               </div>
-              {plugin.description && (
+              {description && (
                 <p className="mt-1 text-sm leading-snug text-muted-foreground">
-                  {plugin.description}
+                  {description}
                 </p>
               )}
               <div className="mt-1 flex items-center gap-3">
@@ -298,7 +246,7 @@ function PluginCard({
               <Trash2 className="h-3.5 w-3.5" />
             </button>
 
-            <ToggleSwitch checked={plugin.enabled} onChange={onToggle} ariaLabel={`${plugin.enabled ? t('pluginSettings.disable') : t('pluginSettings.enable')} ${plugin.displayName}`} />
+            <ToggleSwitch checked={plugin.enabled} onChange={onToggle} ariaLabel={`${plugin.enabled ? t('pluginSettings.disable') : t('pluginSettings.enable')} ${displayName}`} />
           </div>
         </div>
 
@@ -306,7 +254,7 @@ function PluginCard({
         {confirmingUninstall && (
           <div className="mt-3 flex items-center justify-between gap-3 rounded border border-red-200 bg-red-50 px-3 py-2 dark:border-red-800/50 dark:bg-red-950/30">
             <span className="text-sm text-red-600 dark:text-red-400">
-              {t('pluginSettings.confirmUninstallMessage', { name: plugin.displayName })}
+              {t('pluginSettings.confirmUninstallMessage', { name: displayName })}
             </span>
             <div className="flex gap-1.5">
               <button
@@ -378,18 +326,14 @@ function PluginRecommendationCard({
 }) {
   const { t } = useTranslation('settings');
   const Icon = recommendation.icon;
-  const isOfficial = recommendation.source === 'official';
-  const accentClass = isOfficial ? 'bg-blue-500/30' : 'bg-amber-500/40';
-  const hoverClass = isOfficial ? 'hover:border-blue-400 dark:hover:border-blue-500' : 'hover:border-amber-400 dark:hover:border-amber-500';
-  const iconClass = isOfficial ? 'text-blue-500' : 'text-amber-500';
 
   return (
-    <div className={`relative flex overflow-hidden rounded-lg border border-dashed border-border bg-card transition-all duration-200 ${hoverClass}`}>
-      <div className={`w-[3px] flex-shrink-0 ${accentClass}`} />
+    <div className="relative flex overflow-hidden rounded-lg border border-dashed border-border bg-card transition-all duration-200 hover:border-blue-400 dark:hover:border-blue-500">
+      <div className="w-[3px] flex-shrink-0 bg-blue-500/30" />
       <div className="min-w-0 flex-1 p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
-            <div className={`h-5 w-5 flex-shrink-0 ${iconClass}`}>
+            <div className="h-5 w-5 flex-shrink-0 text-blue-500">
               <Icon className="h-5 w-5" />
             </div>
             <div className="min-w-0">
@@ -509,15 +453,10 @@ export default function PluginSettingsTab() {
   };
 
   const officialPlugins = plugins.filter(isOfficialPlugin);
-  const otherPlugins = plugins.filter((plugin) => !isOfficialPlugin(plugin));
   const officialRecommendations = OFFICIAL_PLUGIN_RECOMMENDATIONS.filter(
     (recommendation) => !isRecommendationInstalled(recommendation),
   );
-  const unofficialRecommendations = UNOFFICIAL_PLUGIN_RECOMMENDATIONS.filter(
-    (recommendation) => !isRecommendationInstalled(recommendation),
-  );
   const hasOfficialSection = officialPlugins.length > 0 || officialRecommendations.length > 0;
-  const hasOtherSection = otherPlugins.length > 0 || unofficialRecommendations.length > 0;
 
   const renderPluginCard = (plugin: Plugin, index: number) => {
     const handleToggle = async (enabled: boolean) => {
@@ -624,23 +563,6 @@ export default function PluginSettingsTab() {
             </RecommendationSection>
           )}
 
-          {hasOtherSection && (
-            <RecommendationSection
-              title={t('pluginSettings.sections.unofficialTitle')}
-              description={t('pluginSettings.sections.unofficialDescription')}
-            >
-              {otherPlugins.map((plugin, index) => renderPluginCard(plugin, officialPlugins.length + index))}
-              {unofficialRecommendations.map((recommendation) => (
-                <PluginRecommendationCard
-                  key={recommendation.id}
-                  recommendation={recommendation}
-                  onInstall={() => void handleInstallRecommendation(recommendation)}
-                  disabled={!!installingRecommendation}
-                  installing={installingRecommendation === recommendation.id}
-                />
-              ))}
-            </RecommendationSection>
-          )}
         </div>
       )}
 

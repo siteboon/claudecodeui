@@ -1,7 +1,9 @@
 import { GitBranch, GitCommit, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+
 import type { ConfirmationRequest, FileStatusCode, GitDiffMap, GitStatusResponse } from '../../types/types';
 import { getAllChangedFiles, hasChangedFiles } from '../../utils/gitPanelUtils';
+
 import CommitComposer from './CommitComposer';
 import FileChangeList from './FileChangeList';
 import FileStatusLegend from './FileStatusLegend';
@@ -205,7 +207,7 @@ export default function ChangesView({
               )}
             </div>
             {selectedFiles.size === 0 ? (
-              <div className="px-3 py-2 text-xs text-muted-foreground italic">No staged files</div>
+              <div className="px-3 py-2 text-xs italic text-muted-foreground">No staged files</div>
             ) : (
               <FileChangeList
                 gitStatus={gitStatus}
@@ -238,7 +240,7 @@ export default function ChangesView({
               )}
             </div>
             {unstagedFiles.size === 0 ? (
-              <div className="px-3 py-2 text-xs text-muted-foreground italic">All changes staged</div>
+              <div className="px-3 py-2 text-xs italic text-muted-foreground">All changes staged</div>
             ) : (
               <FileChangeList
                 gitStatus={gitStatus}

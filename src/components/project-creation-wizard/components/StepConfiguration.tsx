@@ -1,7 +1,9 @@
 import { useTranslation } from 'react-i18next';
+
 import { Input } from '../../../shared/view/ui';
 import { shouldShowGithubAuthentication } from '../utils/pathUtils';
 import type { GithubTokenCredential, TokenMode } from '../types';
+
 import GithubAuthenticationCard from './GithubAuthenticationCard';
 import WorkspacePathField from './WorkspacePathField';
 

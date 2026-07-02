@@ -187,9 +187,9 @@
       "usingProvidedToken": "Usando token fornito",
       "noAuthentication": "Nessuna autenticazione",
       "sshKey": "Chiave SSH",
-      "existingInfo": "L'area di lavoro verrà aggiunta alla lista dei progetti e sarà disponibile per le sessioni Claude/Cursor.",
+      "existingInfo": "L'area di lavoro verrà aggiunta alla lista dei progetti e sarà disponibile per le sessioni Claude/Codex.",
       "newWithClone": "Il repository verrà clonato da questa cartella.",
-      "newEmpty": "L'area di lavoro verrà aggiunta alla lista dei progetti e sarà disponibile per le sessioni Claude/Cursor.",
+      "newEmpty": "L'area di lavoro verrà aggiunta alla lista dei progetti e sarà disponibile per le sessioni Claude/Codex.",
       "cloningRepository": "Clonazione repository..."
     },
     "buttons": {
@@ -235,35 +235,6 @@
           "title": "Notifica agente"
         }
       }
-    }
-  },
-  "versionUpdate": {
-    "title": "Aggiornamento disponibile",
-    "newVersionReady": "Una nuova versione è pronta",
-    "currentVersion": "Versione attuale",
-    "latestVersion": "Ultima versione",
-    "whatsNew": "Novità:",
-    "viewFullRelease": "Vedi release completa",
-    "updateProgress": "Progresso aggiornamento:",
-    "manualUpgrade": "Aggiornamento manuale:",
-    "npmUpgradeCommand": "npm install -g @cloudcli-ai/cloudcli@latest",
-    "manualUpgradeHint": "Oppure clicca \"Aggiorna ora\" per eseguire l'aggiornamento automaticamente.",
-    "updateCompleted": "Aggiornamento completato con successo!",
-    "restartServer": "Riavvia il server per applicare le modifiche.",
-    "updateFailed": "Aggiornamento fallito",
-    "buttons": {
-      "close": "Chiudi",
-      "later": "Più tardi",
-      "copyCommand": "Copia comando",
-      "updateNow": "Aggiorna ora",
-      "updating": "Aggiornamento..."
-    },
-    "ariaLabels": {
-      "closeModal": "Chiudi finestra aggiornamento versione",
-      "showSidebar": "Mostra barra laterale",
-      "settings": "Impostazioni",
-      "updateAvailable": "Aggiornamento disponibile",
-      "closeSidebar": "Chiudi barra laterale"
     }
   }
 }

@@ -238,7 +238,6 @@
   }
 }
 
-@layer utilities {
   /* Smooth hover transitions for interactive elements */
   button:hover,
   a:hover,
@@ -560,10 +559,8 @@
     color: rgb(75 85 99) !important; /* gray-600 - darker gray */
     opacity: 1 !important;
   }
-}
 
 /* Mobile optimizations and components */
-@layer components {
   .chat-messages-pane {
     contain: layout style paint;
   }
@@ -683,19 +680,6 @@
       opacity: 1 !important;
     }
     
-    @media (hover: none) and (pointer: coarse) {
-      .group-hover\:opacity-100 {
-        opacity: 1 !important;
-      }
-      
-      .hover\:bg-gray-50:hover,
-      .hover\:bg-gray-100:hover,
-      .hover\:bg-red-200:hover,
-      .dark\:hover\:bg-gray-700:hover,
-      .dark\:hover\:bg-red-900\/50:hover {
-        background-color: inherit;
-      }
-    }
   }
   
   /* Touch device optimizations for all screen sizes */
@@ -722,8 +706,11 @@
     a:hover,
     .hover\:bg-gray-50:hover,
     .hover\:bg-gray-100:hover,
+    .hover\:bg-red-200:hover,
     .hover\:text-gray-900:hover,
-    .hover\:opacity-100:hover {
+    .hover\:opacity-100:hover,
+    .dark\:hover\:bg-gray-700:hover,
+    .dark\:hover\:bg-red-900\/50:hover {
       background-color: inherit !important;
       color: inherit !important;
       opacity: inherit !important;
@@ -802,7 +789,6 @@
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
-}
 
 /* Hide markdown backticks in prose content */
 .prose code::before,
@@ -812,7 +798,6 @@
 }
 
 /* Custom spinner animation for mobile compatibility */
-@layer utilities {
   @keyframes spin {
     from {
       transform: rotate(0deg);
@@ -1013,4 +998,3 @@
       background-color: transparent;
     }
   }
-}

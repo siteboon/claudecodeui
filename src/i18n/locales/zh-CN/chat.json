@@ -9,16 +9,16 @@
     "copied": "消息已复制",
     "selectFormat": "选择复制格式",
     "copyAsMarkdown": "复制为 Markdown",
-    "copyAsText": "复制为纯文本"
+    "copyAsText": "复制为纯文本",
+    "markdownShort": "MD",
+    "textShort": "TXT"
   },
   "messageTypes": {
     "user": "U",
     "error": "错误",
     "tool": "工具",
     "claude": "Claude",
-    "cursor": "Cursor",
-    "codex": "Codex",
-    "gemini": "Gemini"
+    "codex": "Codex"
   },
   "tools": {
     "settings": "工具设置",
@@ -89,14 +89,14 @@
     "permissionMode": "权限模式",
     "modes": {
       "default": "默认模式",
-      "auto": "Auto Mode",
+      "auto": "自动模式",
       "acceptEdits": "编辑模式",
       "bypassPermissions": "无限制模式",
       "plan": "计划模式"
     },
     "descriptions": {
       "default": "只有受信任的命令（ls、cat、grep、git status 等）自动运行。其他命令将被跳过。可以写入工作区。",
-      "auto": "A model classifier decides per tool call whether to approve or deny. Hands-off, but safer than Bypass — denials still happen.",
+      "auto": "模型分类器会针对每次工具调用决定批准或拒绝。无需手动操作，但比 Bypass 更安全，仍可能被拒绝。",
       "acceptEdits": "工作区内的所有命令自动运行。完全自动模式，具有沙盒执行功能。",
       "bypassPermissions": "完全的系统访问，无限制。所有命令自动运行，具有完整的磁盘和网络访问权限。请谨慎使用。",
       "plan": "计划模式 - 不执行任何命令"
@@ -130,11 +130,13 @@
       "cursorEditor": "AI 代码编辑器",
       "google": "由 Google 提供"
     },
+    "clickToChange": "点击切换模型",
+    "searchModels": "搜索模型...",
+    "noModelsFound": "未找到模型。",
+    "loadingModels": "正在加载模型…",
     "readyPrompt": {
       "claude": "准备好使用带有 {{model}} 的 Claude。请在下方开始输入您的消息。",
-      "cursor": "准备好使用带有 {{model}} 的 Cursor。请在下方开始输入您的消息。",
       "codex": "准备好使用带有 {{model}} 的 Codex。请在下方开始输入您的消息。",
-      "gemini": "准备好使用带有 {{model}} 的 Gemini。请在下方开始输入您的消息。",
       "default": "请在上方选择一个提供者以开始"
     },
     "pressToSearch": "按 <kbd>{{shortcut}}</kbd> 搜索会话、文件和提交"
@@ -187,35 +189,33 @@
   },
   "claudeStatus": {
     "actions": {
-      "thinking": "Thinking",
-      "processing": "Processing",
-      "analyzing": "Analyzing",
-      "working": "Working",
-      "computing": "Computing",
-      "reasoning": "Reasoning"
+      "thinking": "思考中",
+      "processing": "处理中",
+      "analyzing": "分析中",
+      "working": "执行中",
+      "computing": "计算中",
+      "reasoning": "推理中"
     },
     "state": {
-      "live": "Live",
-      "paused": "Paused"
+      "live": "进行中",
+      "paused": "已暂停"
     },
     "elapsed": {
       "seconds": "{{count}}s",
       "minutesSeconds": "{{minutes}}m {{seconds}}s",
-      "label": "{{time}} elapsed",
-      "startingNow": "Starting now"
+      "label": "已用 {{time}}",
+      "startingNow": "刚刚开始"
     },
+    "stop": "停止",
     "controls": {
-      "stopGeneration": "Stop Generation",
-      "pressEscToStop": "Press Esc anytime to stop"
+      "stopGeneration": "停止生成",
+      "pressEscToStop": "随时按 Esc 停止"
     },
     "providers": {
-      "assistant": "Assistant"
+      "assistant": "助手"
     }
   },
   "projectSelection": {
     "startChatWithProvider": "选择一个项目以开始与 {{provider}} 聊天"
-  },
-  "tasks": {
-    "nextTaskPrompt": "开始下一个任务"
   }
 }

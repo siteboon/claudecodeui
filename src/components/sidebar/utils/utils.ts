@@ -161,28 +161,6 @@ export const filterProjects = (projects: Project[], searchFilter: string): Proje
   });
 };
 
-export const getTaskIndicatorStatus = (
-  project: Project,
-  mcpServerStatus: { hasMCPServer?: boolean; isConfigured?: boolean } | null,
-) => {
-  const projectConfigured = Boolean(project.taskmaster?.hasTaskmaster);
-  const mcpConfigured = Boolean(mcpServerStatus?.hasMCPServer && mcpServerStatus?.isConfigured);
-
-  if (projectConfigured && mcpConfigured) {
-    return 'fully-configured';
-  }
-
-  if (projectConfigured) {
-    return 'taskmaster-only';
-  }
-
-  if (mcpConfigured) {
-    return 'mcp-only';
-  }
-
-  return 'not-configured';
-};
-
 export const normalizeProjectForSettings = (project: Project): SettingsProject => {
   const fallbackPath =
     typeof project.fullPath === 'string' && project.fullPath.length > 0

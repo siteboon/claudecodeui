@@ -122,7 +122,6 @@ export function useChatSessionState({
   const wasNearTopRef = useRef(false);
   const [searchTarget, setSearchTarget] = useState<{ timestamp?: string; uuid?: string; snippet?: string } | null>(null);
   const searchScrollActiveRef = useRef(false);
-  const isLoadingSessionRef = useRef(false);
   const isLoadingMoreRef = useRef(false);
   const allMessagesLoadedRef = useRef(false);
   const topLoadLockRef = useRef(false);
@@ -257,7 +256,10 @@ export function useChatSessionState({
     setPendingUserMessage(null);
   }, [activeSessionId, pendingUserMessage, sessionStore]);
 
-  const storeMessages = activeSessionId ? sessionStore.getMessages(activeSessionId) : [];
+  const storeMessages = useMemo(
+    () => (activeSessionId ? sessionStore.getMessages(activeSessionId) : []),
+    [activeSessionId, sessionStore],
+  );
 
   // Reset viewHiddenCount when store messages change
   const prevStoreLenRef = useRef(0);
@@ -329,6 +331,7 @@ export function useChatSessionState({
       if (!hasMoreMessages || !selectedSession || !selectedProject) return false;
 
       isLoadingMoreRef.current = true;
+      setIsLoadingMoreMessages(true);
       const previousScrollHeight = container.scrollHeight;
       const previousScrollTop = container.scrollTop;
 
@@ -367,6 +370,7 @@ export function useChatSessionState({
         return true;
       } finally {
         isLoadingMoreRef.current = false;
+        setIsLoadingMoreMessages(false);
       }
     },
     [hasMoreMessages, isLoadingMoreMessages, selectedProject, selectedSession, sessionStore],
@@ -569,7 +573,8 @@ export function useChatSessionState({
   }, [
     resetStreamingState,
     selectedProject,
-    selectedSession?.id,
+    selectedSession,
+    currentSessionId,
     sendMessage,
     statusCheckSentAtRef,
     lastSeqRef,

@@ -1,6 +1,8 @@
 import { useCallback, useState } from 'react';
+
 import type { Project, ProjectSession } from '../../../types/app';
 import Shell from '../../shell/view/Shell';
+
 import StandaloneShellEmptyState from './subcomponents/StandaloneShellEmptyState';
 import StandaloneShellHeader from './subcomponents/StandaloneShellHeader';
 

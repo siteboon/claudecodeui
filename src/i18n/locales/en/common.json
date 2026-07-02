@@ -68,7 +68,10 @@
     "version": "Version",
     "select": "Select",
     "selectAll": "Select All",
-    "deselectAll": "Deselect All"
+    "deselectAll": "Deselect All",
+    "cancel": "Cancel",
+    "done": "Done",
+    "failed": "Failed"
   },
   "time": {
     "justNow": "Just now",
@@ -121,6 +124,34 @@
     "newFolder": "New Folder (Cmd+Shift+N)",
     "refresh": "Refresh",
     "collapseAll": "Collapse All",
+    "dropToUpload": "Drop files to upload",
+    "uploadFiles": "Upload files (max {{size}} each)",
+    "uploadingFiles": "Uploading files",
+    "uploadComplete": "Upload complete",
+    "uploadFailed": "Upload failed",
+    "uploadedCount": "Uploaded {{uploaded}} of {{total}} {{label}}",
+    "validation": {
+      "emptyName": "Filename cannot be empty",
+      "invalidChars": "Filename contains invalid characters",
+      "reserved": "Filename is a reserved name",
+      "dotsOnly": "Filename cannot be only dots"
+    },
+    "toast": {
+      "renamed": "Renamed successfully",
+      "folderDeleted": "Folder deleted",
+      "fileDeleted": "File deleted",
+      "fileCreated": "File created successfully",
+      "folderCreated": "Folder created successfully",
+      "copyFailed": "Failed to copy path",
+      "pathCopied": "Path copied to clipboard",
+      "folderDownloaded": "Folder downloaded as ZIP"
+    },
+    "delete": {
+      "title": "Delete {{type}}",
+      "folderWarning": "This folder and all its contents will be permanently deleted.",
+      "fileWarning": "This file will be permanently deleted.",
+      "confirm": "Delete"
+    },
     "context": {
       "rename": "Rename",
       "delete": "Delete",
@@ -187,9 +218,9 @@
       "usingProvidedToken": "Using provided token",
       "noAuthentication": "No authentication",
       "sshKey": "SSH Key",
-      "existingInfo": "The workspace will be added to your project list and will be available for Claude/Cursor sessions.",
+      "existingInfo": "The workspace will be added to your project list and will be available for Claude/Codex sessions.",
       "newWithClone": "The repository will be cloned from this folder.",
-      "newEmpty": "The workspace will be added to your project list and will be available for Claude/Cursor sessions.",
+      "newEmpty": "The workspace will be added to your project list and will be available for Claude/Codex sessions.",
       "cloningRepository": "Cloning repository..."
     },
     "buttons": {
@@ -237,33 +268,88 @@
       }
     }
   },
-  "versionUpdate": {
-    "title": "Update Available",
-    "newVersionReady": "A new version is ready",
-    "currentVersion": "Current Version",
-    "latestVersion": "Latest Version",
-    "whatsNew": "What's New:",
-    "viewFullRelease": "View full release",
-    "updateProgress": "Update Progress:",
-    "manualUpgrade": "Manual upgrade:",
-    "npmUpgradeCommand": "npm install -g @cloudcli-ai/cloudcli@latest",
-    "manualUpgradeHint": "Or click \"Update Now\" to run the update automatically.",
-    "updateCompleted": "Update completed successfully!",
-    "restartServer": "Please restart the server to apply changes.",
-    "updateFailed": "Update failed",
-    "buttons": {
-      "close": "Close",
-      "later": "Later",
-      "copyCommand": "Copy Command",
-      "updateNow": "Update Now",
-      "updating": "Updating..."
+  "browserUse": {
+    "time": {
+      "never": "Never",
+      "unknown": "Unknown",
+      "justNow": "Just now",
+      "secondsAgo": "{{count}}s ago",
+      "minutesAgo": "{{count}}m ago",
+      "hoursAgo": "{{count}}h ago",
+      "daysAgo": "{{count}}d ago"
     },
-    "ariaLabels": {
-      "closeModal": "Close version upgrade modal",
-      "showSidebar": "Show sidebar",
-      "settings": "Settings",
-      "updateAvailable": "Update available",
-      "closeSidebar": "Close sidebar"
+    "domain": {
+      "noPageLoaded": "No page loaded"
+    },
+    "action": {
+      "waiting": "Waiting"
+    },
+    "errors": {
+      "load": "Failed to load Browser",
+      "action": "Browser action failed"
+    },
+    "runtime": {
+      "disabled": "Disabled",
+      "ready": "Ready",
+      "installing": "Installing",
+      "setupRequired": "Setup required"
+    },
+    "status": {
+      "ready": "ready",
+      "stopped": "stopped",
+      "unavailable": "unavailable",
+      "empty": "empty"
+    },
+    "empty": {
+      "noSessions": "No browser sessions yet",
+      "disabled": "Browser is disabled",
+      "noSessionsDescription": "Agent browser sessions appear here while an AI task is using Browser.",
+      "disabledDescription": "Enable Browser in settings to let agents open monitored browser sessions.",
+      "runtimeSetupRequired": "Runtime setup required"
+    },
+    "buttons": {
+      "installing": "Installing...",
+      "installRuntime": "Install Runtime",
+      "openSettings": "Open Browser settings",
+      "refresh": "Refresh browser sessions",
+      "fullScreen": "Full screen",
+      "stopSession": "Stop session",
+      "deleteSession": "Delete session",
+      "stop": "Stop",
+      "delete": "Delete",
+      "close": "Close"
+    },
+    "prompts": {
+      "label": "Prompt",
+      "checkout": "Use Browser to inspect the checkout flow and report any broken UI states.",
+      "interact": "Open <url> with Browser, interact with the page, and summarize what changed after each step."
+    },
+    "screenshot": {
+      "alt": "Browser session screenshot",
+      "waiting": "Waiting for screenshot",
+      "nextSnapshot": "The next agent browser snapshot will render here."
+    },
+    "header": {
+      "title": "Browser",
+      "description": "Monitor browser sessions opened by AI agents."
+    },
+    "stats": {
+      "active": "active",
+      "total": "total",
+      "updated": "Updated {{time}}"
+    },
+    "sessions": {
+      "title": "Sessions",
+      "noSessions": "No agent browser sessions."
+    },
+    "selected": {
+      "title": "Selected",
+      "status": "Status",
+      "lastAction": "Last action",
+      "profile": "Profile",
+      "none": "None",
+      "temporary": "Temporary",
+      "browserSession": "Browser session"
     }
   }
 }

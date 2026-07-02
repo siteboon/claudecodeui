@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import path from 'path';
+
 import { scanPlugins, getPluginsConfig, getPluginDir } from './plugin-loader.js';
 
 // Map<pluginName, { process, port }>

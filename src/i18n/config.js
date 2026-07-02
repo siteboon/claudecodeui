@@ -11,7 +11,6 @@
 
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
-// eslint-disable-next-line import-x/order
 import LanguageDetector from 'i18next-browser-languagedetector';
 
 // Import translation resources
@@ -73,7 +72,6 @@ import trAuth from './locales/tr/auth.json';
 import trSidebar from './locales/tr/sidebar.json';
 import trChat from './locales/tr/chat.json';
 import trCodeEditor from './locales/tr/codeEditor.json';
-// eslint-disable-next-line import-x/order
 import trTasks from './locales/tr/tasks.json';
 import itCommon from './locales/it/common.json';
 import itSettings from './locales/it/settings.json';

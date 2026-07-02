@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+
 import { copyTextToClipboard } from '../../../../utils/clipboard';
 
 const COPY_SUCCESS_TIMEOUT_MS = 2000;

@@ -187,9 +187,9 @@
       "usingProvidedToken": "入力されたトークンを使用",
       "noAuthentication": "認証なし",
       "sshKey": "SSHキー",
-      "existingInfo": "ワークスペースがプロジェクト一覧に追加され、Claude/Cursorセッションで使用できるようになります。",
+      "existingInfo": "ワークスペースがプロジェクト一覧に追加され、Claude/Codexセッションで使用できるようになります。",
       "newWithClone": "このフォルダからリポジトリがクローンされます。",
-      "newEmpty": "ワークスペースがプロジェクト一覧に追加され、Claude/Cursorセッションで使用できるようになります。",
+      "newEmpty": "ワークスペースがプロジェクト一覧に追加され、Claude/Codexセッションで使用できるようになります。",
       "cloningRepository": "リポジトリをクローンしています..."
     },
     "buttons": {
@@ -235,35 +235,6 @@
           "title": "エージェント通知"
         }
       }
-    }
-  },
-  "versionUpdate": {
-    "title": "アップデートのお知らせ",
-    "newVersionReady": "新しいバージョンが利用可能です",
-    "currentVersion": "現在のバージョン",
-    "latestVersion": "最新バージョン",
-    "whatsNew": "変更点:",
-    "viewFullRelease": "リリース全文を見る",
-    "updateProgress": "アップデートの進捗:",
-    "manualUpgrade": "手動アップグレード:",
-    "npmUpgradeCommand": "npm install -g @cloudcli-ai/cloudcli@latest",
-    "manualUpgradeHint": "または「今すぐ更新」をクリックして自動的にアップデートを実行できます。",
-    "updateCompleted": "アップデートが完了しました！",
-    "restartServer": "変更を適用するにはサーバーを再起動してください。",
-    "updateFailed": "アップデートに失敗しました",
-    "buttons": {
-      "close": "閉じる",
-      "later": "後で",
-      "copyCommand": "コマンドをコピー",
-      "updateNow": "今すぐ更新",
-      "updating": "更新中..."
-    },
-    "ariaLabels": {
-      "closeModal": "バージョンアップグレードモーダルを閉じる",
-      "showSidebar": "サイドバーを表示",
-      "settings": "設定",
-      "updateAvailable": "アップデートあり",
-      "closeSidebar": "サイドバーを閉じる"
     }
   }
 }

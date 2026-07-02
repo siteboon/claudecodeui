@@ -2,6 +2,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+
 import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
 
 const __dirname = getModuleDir(import.meta.url);

@@ -66,10 +66,7 @@
     "cancel": "İptal",
     "save": "Kaydet",
     "delete": "Sil",
-    "rename": "Yeniden Adlandır",
-    "joinCommunity": "Topluluğa Katıl",
-    "reportIssue": "Sorun Bildir",
-    "starOnGithub": "GitHub'da Yıldızla"
+    "rename": "Yeniden Adlandır"
   },
   "branding": {
     "openSource": "Açık Kaynak"
@@ -113,10 +110,6 @@
     "restoreProjectError": "Proje geri yüklenirken hata oluştu. Lütfen tekrar dene.",
     "restoreSessionFailed": "Oturum geri yüklenemedi. Lütfen tekrar dene.",
     "restoreSessionError": "Oturum geri yüklenirken hata oluştu. Lütfen tekrar dene."
-  },
-  "version": {
-    "updateAvailable": "Güncelleme mevcut",
-    "restartRequired": "Güncelleme yüklendi — uygulamak için sunucuyu yeniden başlatın"
   },
   "search": {
     "modeProjects": "Projeler",

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+
 import { api } from '../../../utils/api';
 import type { CodeEditorFile } from '../types/types';
 import { isBinaryFile } from '../utils/binaryFile';

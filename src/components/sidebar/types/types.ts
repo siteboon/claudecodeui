@@ -67,11 +67,6 @@ export type SessionViewModel = {
   messageCount: number;
 };
 
-export type MCPServerStatus = {
-  hasMCPServer?: boolean;
-  isConfigured?: boolean;
-} | null;
-
 // Retained as `name` for backwards compatibility with existing settings
 // consumers; the value is populated from `projectId` by normalizeProjectForSettings.
 export type SettingsProject = {

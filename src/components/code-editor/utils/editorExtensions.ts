@@ -8,6 +8,7 @@ import { python } from '@codemirror/lang-python';
 import { getChunks } from '@codemirror/merge';
 import { EditorView, ViewPlugin } from '@codemirror/view';
 import { showMinimap } from '@replit/codemirror-minimap';
+
 import type { CodeEditorFile } from '../types/types';
 
 // Lightweight lexer for `.env` files (including `.env.*` variants).

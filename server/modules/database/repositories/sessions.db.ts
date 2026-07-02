@@ -261,8 +261,8 @@ export const sessionsDb = {
    * Finds the newest app-created session for a project that is still waiting
    * for its provider-native id to be recorded.
    *
-   * Primary intention: OpenCode can expose a new session in its shared
-   * `opencode.db` before the websocket runtime reports that same provider id
+   * Primary intention: a provider can expose a new session in its store before
+   * the websocket runtime reports that same provider id
    * back to our app. At that moment the sidebar already has an optimistic
    * app-owned session row, but the watcher only knows the provider-native id.
    *

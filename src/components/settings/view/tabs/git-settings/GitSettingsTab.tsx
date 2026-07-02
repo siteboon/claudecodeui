@@ -1,5 +1,6 @@
 import { Check } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
 import { useGitSettings } from '../../../hooks/useGitSettings';
 import { Button, Input } from '../../../../../shared/view/ui';
 import SettingsCard from '../../SettingsCard';

@@ -1,5 +1,6 @@
 import express from 'express';
 import bcrypt from 'bcrypt';
+
 import { userDb } from '../modules/database/index.js';
 import { getConnection } from '../modules/database/connection.js';
 import { generateToken, authenticateToken } from '../middleware/auth.js';

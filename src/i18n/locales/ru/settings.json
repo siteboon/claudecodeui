@@ -90,7 +90,6 @@
     "appearance": "Внешний вид",
     "git": "Git",
     "apiTokens": "API и токены",
-    "tasks": "Задачи",
     "notifications": "Уведомления",
     "plugins": "Плагины",
     "about": "О программе"
@@ -276,32 +275,10 @@
     "apiDocsLink": "Документация API",
     "documentation": {
       "title": "Документация внешнего API",
-      "description": "Узнайте, как использовать внешний API для запуска сеансов Claude/Cursor из ваших приложений.",
+      "description": "Узнайте, как использовать внешний API для запуска сеансов Claude/Codex из ваших приложений.",
       "viewLink": "Просмотр документации API →"
     },
-    "loading": "Загрузка...",
-    "version": {
-      "updateAvailable": "Доступно обновление: v{{version}}"
-    }
-  },
-  "tasks": {
-    "checking": "Проверка установки TaskMaster...",
-    "notInstalled": {
-      "title": "TaskMaster AI CLI не установлен",
-      "description": "TaskMaster CLI требуется для использования функций управления задачами. Установите его для начала работы:",
-      "installCommand": "npm install -g task-master-ai",
-      "viewOnGitHub": "Посмотреть на GitHub",
-      "afterInstallation": "После установки:",
-      "steps": {
-        "restart": "Перезапустите это приложение",
-        "autoAvailable": "Функции TaskMaster станут автоматически доступны",
-        "initCommand": "Используйте task-master init в каталоге вашего проекта"
-      }
-    },
-    "settings": {
-      "enableLabel": "Включить интеграцию TaskMaster",
-      "enableDescription": "Показывать задачи TaskMaster, баннеры и индикаторы боковой панели в интерфейсе"
-    }
+    "loading": "Загрузка..."
   },
   "agents": {
     "authStatus": {
@@ -317,14 +294,8 @@
       "claude": {
         "description": "AI-ассистент Anthropic Claude"
       },
-      "cursor": {
-        "description": "Редактор кода с AI Cursor"
-      },
       "codex": {
         "description": "AI-ассистент OpenAI Codex"
-      },
-      "gemini": {
-        "description": "AI-ассистент Google Gemini"
       }
     },
     "connectionStatus": "Статус подключения",
@@ -342,8 +313,7 @@
     "title": "Настройки разрешений",
     "skipPermissions": {
       "label": "Пропускать запросы разрешений (используйте с осторожностью)",
-      "claudeDescription": "Эквивалентно флагу --dangerously-skip-permissions",
-      "cursorDescription": "Эквивалентно флагу -f в Cursor CLI"
+      "claudeDescription": "Эквивалентно флагу --dangerously-skip-permissions"
     },
     "allowedTools": {
       "title": "Разрешенные инструменты",
@@ -418,7 +388,6 @@
     "title": "MCP серверы",
     "description": {
       "claude": "Серверы Model Context Protocol предоставляют дополнительные инструменты и источники данных для Claude",
-      "cursor": "Серверы Model Context Protocol предоставляют дополнительные инструменты и источники данных для Cursor",
       "codex": "Серверы Model Context Protocol предоставляют дополнительные инструменты и источники данных для Codex"
     },
     "addButton": "Добавить MCP сервер",

@@ -5,14 +5,12 @@ import fs, { promises as fsPromises } from 'fs';
 import path from 'path';
 import os from 'os';
 import http from 'http';
-import { spawn } from 'child_process';
 
 import express from 'express';
 import cors from 'cors';
 import mime from 'mime-types';
-import Database from 'better-sqlite3';
 
-import { AppError, WORKSPACES_ROOT, getOpenCodeDatabasePath, validateWorkspacePath } from '@/shared/utils.js';
+import { AppError, WORKSPACES_ROOT, validateWorkspacePath } from '@/shared/utils.js';
 import { closeSessionsWatcher, initializeSessionsWatcher } from '@/modules/providers/index.js';
 import { createWebSocketServer } from '@/modules/websocket/index.js';
 
@@ -26,22 +24,9 @@ import {
     getPendingApprovalsForSession,
 } from './claude-sdk.js';
 import {
-    spawnCursor,
-    abortCursorSession,
-} from './cursor-cli.js';
-import {
     queryCodex,
     abortCodexSession,
 } from './openai-codex.js';
-import {
-    spawnGemini,
-    abortGeminiSession,
-} from './gemini-cli.js';
-import {
-    spawnOpenCode,
-    abortOpenCodeSession,
-} from './opencode-cli.js';
-import sessionManager from './sessionManager.js';
 import {
     stripAnsiSequences,
     normalizeDetectedUrl,
@@ -50,19 +35,14 @@ import {
 } from './utils/url-detection.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
-import cursorRoutes from './routes/cursor.js';
-import taskmasterRoutes from './routes/taskmaster.js';
-import mcpUtilsRoutes from './routes/mcp-utils.js';
 import commandsRoutes from './routes/commands.js';
 import settingsRoutes from './routes/settings.js';
 import agentRoutes from './routes/agent.js';
 import projectModuleRoutes from './modules/projects/projects.routes.js';
 import notificationRoutes from './modules/notifications/notifications.routes.js';
 import userRoutes from './routes/user.js';
-import geminiRoutes from './routes/gemini.js';
 import pluginsRoutes from './routes/plugins.js';
 import providerRoutes from './modules/providers/provider.routes.js';
-import voiceRoutes from './voice-proxy.js';
 import browserUseRoutes from './modules/browser-use/browser-use.routes.js';
 import browserUseMcpRoutes from './modules/browser-use/browser-use-mcp.routes.js';
 import { browserUseService } from './modules/browser-use/browser-use.service.js';
@@ -78,12 +58,7 @@ const __dirname = getModuleDir(import.meta.url);
 // Resolving the app root once keeps every repo-level lookup below aligned across both layouts.
 const APP_ROOT = findAppRoot(__dirname);
 const installMode = fs.existsSync(path.join(APP_ROOT, '.git')) ? 'git' : 'npm';
-// Version of the code that is actually running, captured once at process
-// startup. This intentionally does NOT re-read package.json per request: after
-// an update replaces the files on disk, package.json reflects the NEW version
-// while this long-lived process still runs the OLD code. The frontend bundle is
-// rebuilt on update, so a mismatch between this value and the frontend's
-// build-time version means the server was updated but not restarted.
+// Version of the code that is actually running, captured once at process startup.
 const RUNNING_VERSION = (() => {
     try {
         return JSON.parse(fs.readFileSync(path.join(APP_ROOT, 'package.json'), 'utf8')).version || null;
@@ -114,17 +89,11 @@ const wss = createWebSocketServer(server, {
     chat: {
         spawnFns: {
             claude: queryClaudeSDK,
-            cursor: spawnCursor,
             codex: queryCodex,
-            gemini: spawnGemini,
-            opencode: spawnOpenCode,
         },
         abortFns: {
             claude: abortClaudeSDKSession,
-            cursor: abortCursorSession,
             codex: abortCodexSession,
-            gemini: abortGeminiSession,
-            opencode: abortOpenCodeSession,
         },
         resolveToolApproval,
         getPendingApprovalsForSession,
@@ -132,14 +101,7 @@ const wss = createWebSocketServer(server, {
     shell: {
         resolveProviderSessionId: (sessionId, provider) => {
             const dbSession = sessionsDb.getSessionById(sessionId);
-            const legacyGeminiSession =
-                provider === 'gemini' ? sessionManager.getSession(sessionId) : null;
-
-            if (dbSession) {
-                return dbSession.provider_session_id ?? legacyGeminiSession?.cliSessionId ?? null;
-            }
-
-            return legacyGeminiSession?.cliSessionId;
+            return dbSession?.provider_session_id ?? null;
         },
         stripAnsiSequences,
         normalizeDetectedUrl,
@@ -188,15 +150,6 @@ app.use('/api/projects', authenticateToken, projectModuleRoutes);
 // Git API Routes (protected)
 app.use('/api/git', authenticateToken, gitRoutes);
 
-// Cursor API Routes (protected)
-app.use('/api/cursor', authenticateToken, cursorRoutes);
-
-// TaskMaster API Routes (protected)
-app.use('/api/taskmaster', authenticateToken, taskmasterRoutes);
-
-// MCP utilities
-app.use('/api/mcp-utils', authenticateToken, mcpUtilsRoutes);
-
 // Commands API Routes (protected)
 app.use('/api/commands', authenticateToken, commandsRoutes);
 
@@ -207,9 +160,6 @@ app.use('/api/notifications', authenticateToken, notificationRoutes);
 
 // User API Routes (protected)
 app.use('/api/user', authenticateToken, userRoutes);
-
-// Gemini API Routes (protected)
-app.use('/api/gemini', authenticateToken, geminiRoutes);
 
 // Plugins API Routes (protected)
 app.use('/api/plugins', authenticateToken, pluginsRoutes);
@@ -225,8 +175,6 @@ app.use('/api/providers', authenticateToken, providerRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
-
-app.use('/api/voice', authenticateToken, voiceRoutes);
 
 // Serve public files (like api-docs.html)
 app.use(express.static(path.join(APP_ROOT, 'public')));
@@ -250,80 +198,6 @@ app.use(express.static(path.join(APP_ROOT, 'dist'), {
 // API Routes (protected)
 // /api/config endpoint removed - no longer needed
 // Frontend now uses window.location for WebSocket URLs
-
-// System update endpoint
-app.post('/api/system/update', authenticateToken, async (req, res) => {
-    try {
-        // Get the project root directory (parent of server directory)
-        const projectRoot = APP_ROOT;
-
-        console.log('Starting system update from directory:', projectRoot);
-
-        // Platform deployments use their own update workflow from the project root.
-        const updateCommand = IS_PLATFORM
-        // In platform, husky and dev dependencies are not needed
-            ? 'npm run update:platform'
-            : installMode === 'git'
-                ? 'git checkout main && git pull && npm install'
-                : 'npm install -g @cloudcli-ai/cloudcli@latest';
-
-        const updateCwd = IS_PLATFORM || installMode === 'git'
-            ? projectRoot
-            : os.homedir();
-
-        const child = spawn('sh', ['-c', updateCommand], {
-            cwd: updateCwd,
-            env: process.env
-        });
-
-        let output = '';
-        let errorOutput = '';
-
-        child.stdout.on('data', (data) => {
-            const text = data.toString();
-            output += text;
-            console.log('Update output:', text);
-        });
-
-        child.stderr.on('data', (data) => {
-            const text = data.toString();
-            errorOutput += text;
-            console.error('Update error:', text);
-        });
-
-        child.on('close', (code) => {
-            if (code === 0) {
-                res.json({
-                    success: true,
-                    output: output || 'Update completed successfully',
-                    message: 'Update completed. Please restart the server to apply changes.'
-                });
-            } else {
-                res.status(500).json({
-                    success: false,
-                    error: 'Update command failed',
-                    output: output,
-                    errorOutput: errorOutput
-                });
-            }
-        });
-
-        child.on('error', (error) => {
-            console.error('Update process error:', error);
-            res.status(500).json({
-                success: false,
-                error: error.message
-            });
-        });
-
-    } catch (error) {
-        console.error('System update error:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
 
 const expandWorkspacePath = (inputPath) => {
     if (!inputPath) return inputPath;
@@ -1172,7 +1046,7 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
             return res.status(400).json({ error: 'Invalid sessionId' });
         }
 
-        // Provider artifacts on disk (JSONL file names, OpenCode sqlite rows)
+        // Provider artifacts on disk (for example JSONL file names)
         // are keyed by the provider-native session id, while the caller sends
         // the app-facing id. Resolve provider and id mapping from the indexed
         // session row so the frontend does not choose provider-specific paths.
@@ -1183,134 +1057,6 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
 
         const provider = sessionRow.provider || 'claude';
         const providerNativeSessionId = sessionRow?.provider_session_id || safeSessionId;
-
-        // Handle Cursor sessions - they use SQLite and don't have token usage info
-        if (provider === 'cursor') {
-            return res.json({
-                used: 0,
-                total: 0,
-                inputTokens: 0,
-                outputTokens: 0,
-                breakdown: { input: 0, output: 0 },
-                unsupported: true,
-                message: 'Token usage tracking not available for Cursor sessions'
-            });
-        }
-
-        if (provider === 'gemini') {
-            const session = sessionsDb.getSessionById(safeSessionId);
-            const sessionFilePath = session?.jsonl_path;
-            if (!sessionFilePath) {
-                return res.json({
-                    used: 0,
-                    inputTokens: 0,
-                    outputTokens: 0,
-                    breakdown: { input: 0, output: 0 },
-                    unsupported: true,
-                    message: 'Token usage tracking not available for this Gemini session'
-                });
-            }
-
-            let fileContent;
-            try {
-                fileContent = await fsPromises.readFile(sessionFilePath, 'utf8');
-            } catch (error) {
-                if (error.code === 'ENOENT') {
-                    return res.status(404).json({ error: 'Session file not found', path: sessionFilePath });
-                }
-                throw error;
-            }
-
-            const lines = fileContent.trim().split('\n');
-            let inputTokens = 0;
-            let outputTokens = 0;
-            let totalTokens = 0;
-
-            for (let i = lines.length - 1; i >= 0; i--) {
-                try {
-                    const entry = JSON.parse(lines[i]);
-                    if (!entry.tokens || typeof entry.tokens !== 'object') {
-                        continue;
-                    }
-
-                    inputTokens = Number(entry.tokens.input || 0);
-                    outputTokens = Number(entry.tokens.output || 0);
-                    totalTokens = Number(entry.tokens.total || inputTokens + outputTokens || 0);
-                    break;
-                } catch {
-                    continue;
-                }
-            }
-
-            return res.json({
-                used: totalTokens,
-                inputTokens,
-                outputTokens,
-                breakdown: {
-                    input: inputTokens,
-                    output: outputTokens
-                }
-            });
-        }
-
-        if (provider === 'opencode') {
-            const dbPath = getOpenCodeDatabasePath();
-            if (!fs.existsSync(dbPath)) {
-                return res.status(404).json({ error: 'OpenCode database not found' });
-            }
-
-            const db = new Database(dbPath, { readonly: true, fileMustExist: true });
-            try {
-                const columns = db.prepare('PRAGMA table_info(session)').all();
-                const columnNames = new Set(columns.map((column) => column.name));
-                const requiredColumns = ['tokens_input', 'tokens_output', 'tokens_reasoning', 'tokens_cache_read', 'tokens_cache_write'];
-                if (!requiredColumns.every((column) => columnNames.has(column))) {
-                    return res.json({
-                        used: 0,
-                        inputTokens: 0,
-                        outputTokens: 0,
-                        breakdown: { input: 0, output: 0 },
-                        unsupported: true,
-                        message: 'Token usage tracking is not available in this OpenCode database schema'
-                    });
-                }
-
-                const row = db.prepare(`
-                    SELECT
-                        tokens_input AS inputTokens,
-                        tokens_output AS outputTokens,
-                        tokens_reasoning AS reasoningTokens,
-                        tokens_cache_read AS cacheReadTokens,
-                        tokens_cache_write AS cacheWriteTokens
-                    FROM session
-                    WHERE id = ?
-                `).get(providerNativeSessionId);
-
-                if (!row) {
-                    return res.status(404).json({ error: 'OpenCode session not found', sessionId: safeSessionId });
-                }
-
-                const inputTokens = Number(row.inputTokens || 0) + Number(row.cacheReadTokens || 0);
-                const outputTokens = Number(row.outputTokens || 0);
-                const totalUsed = Number(row.inputTokens || 0)
-                    + outputTokens
-                    + Number(row.reasoningTokens || 0)
-                    + Number(row.cacheReadTokens || 0)
-                    + Number(row.cacheWriteTokens || 0);
-
-                return res.json({
-                    used: totalUsed,
-                    inputTokens,
-                    outputTokens,
-                    breakdown: {
-                        input: inputTokens,
-                        output: outputTokens
-                    }
-                });
-            } finally {
-                db.close();
-            }
-        }
 
         // Handle Codex sessions
         if (provider === 'codex') {

@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react';
+
 import type { PendingPermissionRequest } from '../../types/types';
 
 export interface PermissionPanelProps {

@@ -3,13 +3,12 @@ import type { Dispatch, SetStateAction } from 'react';
 import type { LLMProvider } from '../../../types/app';
 import type { ProviderAuthStatus } from '../../provider-auth/types';
 
-export type SettingsMainTab = 'agents' | 'appearance' | 'git' | 'api' | 'voice' | 'tasks' | 'browser' | 'notifications' | 'plugins' | 'about';
+export type SettingsMainTab = 'agents' | 'appearance' | 'git' | 'api' | 'browser' | 'notifications' | 'plugins' | 'about';
 export type AgentProvider = LLMProvider;
 export type AgentCategory = 'account' | 'permissions' | 'mcp' | 'skills';
 export type ProjectSortOrder = 'name' | 'date';
 export type SaveStatus = 'success' | 'error' | null;
 export type CodexPermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions';
-export type GeminiPermissionMode = 'default' | 'auto_edit' | 'yolo';
 
 export type SettingsProject = {
   name: string;
@@ -40,12 +39,6 @@ export type NotificationPreferencesState = {
   };
 };
 
-export type CursorPermissionsState = {
-  allowedCommands: string[];
-  disallowedCommands: string[];
-  skipPermissions: boolean;
-};
-
 export type CodeEditorSettingsState = {
   wordWrap: boolean;
   showMinimap: boolean;
@@ -55,7 +48,6 @@ export type CodeEditorSettingsState = {
 
 export type SettingsStoragePayload = {
   claude: ClaudePermissionsState & { projectSortOrder: ProjectSortOrder; lastUpdated: string };
-  cursor: CursorPermissionsState & { lastUpdated: string };
   codex: { permissionMode: CodexPermissionMode; lastUpdated: string };
 };
 

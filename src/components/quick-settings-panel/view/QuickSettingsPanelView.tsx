@@ -27,12 +27,10 @@ export default function QuickSettingsPanelView() {
     showRawParameters: preferences.showRawParameters,
     showThinking: preferences.showThinking,
     sendByCtrlEnter: preferences.sendByCtrlEnter,
-    voiceEnabled: preferences.voiceEnabled,
   }), [
     preferences.sendByCtrlEnter,
     preferences.showRawParameters,
     preferences.showThinking,
-    preferences.voiceEnabled,
   ]);
 
   const handlePreferenceChange = useCallback(

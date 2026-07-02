@@ -1,5 +1,6 @@
 import { ChevronDown, ChevronRight, Info } from 'lucide-react';
 import { useState } from 'react';
+
 import { getStatusBadgeClass } from '../../utils/gitPanelUtils';
 
 type FileStatusLegendProps = {

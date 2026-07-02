@@ -1,5 +1,6 @@
 import { Check, ChevronDown, GitCommit, RefreshCw, Sparkles } from 'lucide-react';
 import { useState } from 'react';
+
 import type { ConfirmationRequest } from '../../types/types';
 
 // Persists commit messages across unmount/remount, keyed by project path

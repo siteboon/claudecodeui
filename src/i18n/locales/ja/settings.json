@@ -90,7 +90,6 @@
     "appearance": "外観",
     "git": "Git",
     "apiTokens": "API & トークン",
-    "tasks": "タスク",
     "notifications": "通知",
     "plugins": "プラグイン",
     "about": "概要"
@@ -276,32 +275,10 @@
     "apiDocsLink": "APIドキュメント",
     "documentation": {
       "title": "外部APIドキュメント",
-      "description": "外部APIを使用してアプリケーションからClaude/Cursorセッションを起動する方法を学びます。",
+      "description": "外部APIを使用してアプリケーションからClaude/Codexセッションを起動する方法を学びます。",
       "viewLink": "APIドキュメントを見る →"
     },
-    "loading": "読み込み中...",
-    "version": {
-      "updateAvailable": "アップデートあり: v{{version}}"
-    }
-  },
-  "tasks": {
-    "checking": "TaskMasterのインストールを確認しています...",
-    "notInstalled": {
-      "title": "TaskMaster AI CLIがインストールされていません",
-      "description": "タスク管理機能を使用するにはTaskMaster CLIが必要です。以下のコマンドでインストールしてください:",
-      "installCommand": "npm install -g task-master-ai",
-      "viewOnGitHub": "GitHubで見る",
-      "afterInstallation": "インストール後:",
-      "steps": {
-        "restart": "このアプリケーションを再起動してください",
-        "autoAvailable": "TaskMaster機能が自動的に利用可能になります",
-        "initCommand": "プロジェクトディレクトリで task-master init を実行してください"
-      }
-    },
-    "settings": {
-      "enableLabel": "TaskMaster統合を有効にする",
-      "enableDescription": "インターフェース全体でTaskMasterのタスク、バナー、サイドバーインジケータを表示します"
-    }
+    "loading": "読み込み中..."
   },
   "agents": {
     "authStatus": {
@@ -317,14 +294,8 @@
       "claude": {
         "description": "Anthropic Claude AIアシスタント"
       },
-      "cursor": {
-        "description": "Cursor AI搭載コードエディタ"
-      },
       "codex": {
         "description": "OpenAI Codex AIアシスタント"
-      },
-      "gemini": {
-        "description": "Google Gemini AIアシスタント"
       }
     },
     "connectionStatus": "接続状態",
@@ -342,8 +313,7 @@
     "title": "権限設定",
     "skipPermissions": {
       "label": "権限プロンプトをスキップ（注意して使用）",
-      "claudeDescription": "--dangerously-skip-permissions フラグに相当",
-      "cursorDescription": "Cursor CLIの -f フラグに相当"
+      "claudeDescription": "--dangerously-skip-permissions フラグに相当"
     },
     "allowedTools": {
       "title": "許可されたツール",
@@ -418,7 +388,6 @@
     "title": "MCPサーバー",
     "description": {
       "claude": "Model Context Protocolサーバーは、Claudeに追加のツールやデータソースを提供します",
-      "cursor": "Model Context Protocolサーバーは、Cursorに追加のツールやデータソースを提供します",
       "codex": "Model Context Protocolサーバーは、Codexに追加のツールやデータソースを提供します"
     },
     "addButton": "MCPサーバーを追加",

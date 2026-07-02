@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+
 import { useAuth } from '../components/auth/context/AuthContext';
 import { IS_PLATFORM } from '../constants/config';
 
@@ -33,7 +34,7 @@ type WebSocketContextType = {
   /**
    * Legacy state-based access to the most recent frame.
    *
-   * Kept only for low-frequency consumers (TaskMaster broadcasts). High-rate
+   * Kept only for low-frequency consumers. High-rate
    * chat streams must use `subscribe` — React may batch state updates, which
    * makes `latestMessage` lossy under load.
    */
@@ -84,24 +85,6 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     setLatestMessage(event);
   }, []);
 
-  useEffect(() => {
-    // The cleanup below sets unmountedRef = true. Without this reset, every
-    // re-run of the effect (e.g. on token refresh) would short-circuit connect()
-    // at its unmounted guard and leave the socket permanently disconnected.
-    unmountedRef.current = false;
-    connect();
-
-    return () => {
-      unmountedRef.current = true;
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-    };
-  }, [token]); // everytime token changes, we reconnect
-
   const connect = useCallback(() => {
     if (unmountedRef.current) return; // Prevent connection if unmounted
     try {
@@ -150,6 +133,24 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       console.error('Error creating WebSocket connection:', error);
     }
   }, [token, dispatch]); // everytime token changes, we reconnect
+
+  useEffect(() => {
+    // The cleanup below sets unmountedRef = true. Without this reset, every
+    // re-run of the effect (e.g. on token refresh) would short-circuit connect()
+    // at its unmounted guard and leave the socket permanently disconnected.
+    unmountedRef.current = false;
+    connect();
+
+    return () => {
+      unmountedRef.current = true;
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, [connect]); // everytime token changes, we reconnect
 
   const sendMessage = useCallback((message: unknown) => {
     const socket = wsRef.current;

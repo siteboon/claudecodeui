@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { memo, useCallback, useMemo } from 'react';
-import type { Dispatch, RefObject, SetStateAction } from 'react';
+import type { RefObject } from 'react';
 
 import type { ChatMessage } from '../../types/types';
 import type {
@@ -32,20 +32,10 @@ interface ChatMessagesPaneProps {
   textareaRef: RefObject<HTMLTextAreaElement>;
   claudeModel: string;
   setClaudeModel: (model: string) => void;
-  cursorModel: string;
-  setCursorModel: (model: string) => void;
   codexModel: string;
   setCodexModel: (model: string) => void;
-  geminiModel: string;
-  setGeminiModel: (model: string) => void;
-  opencodeModel: string;
-  setOpenCodeModel: (model: string) => void;
   providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
   providerModelsLoading: boolean;
-  tasksEnabled: boolean;
-  isTaskMasterInstalled: boolean | null;
-  onShowAllTasks?: (() => void) | null;
-  setInput: Dispatch<SetStateAction<string>>;
   isLoadingMoreMessages: boolean;
   hasMoreMessages: boolean;
   totalMessages: number;
@@ -81,20 +71,10 @@ function ChatMessagesPane({
   textareaRef,
   claudeModel,
   setClaudeModel,
-  cursorModel,
-  setCursorModel,
   codexModel,
   setCodexModel,
-  geminiModel,
-  setGeminiModel,
-  opencodeModel,
-  setOpenCodeModel,
   providerModelCatalog,
   providerModelsLoading,
-  tasksEnabled,
-  isTaskMasterInstalled,
-  onShowAllTasks,
-  setInput,
   isLoadingMoreMessages,
   hasMoreMessages,
   totalMessages,
@@ -180,20 +160,10 @@ function ChatMessagesPane({
           textareaRef={textareaRef}
           claudeModel={claudeModel}
           setClaudeModel={setClaudeModel}
-          cursorModel={cursorModel}
-          setCursorModel={setCursorModel}
           codexModel={codexModel}
           setCodexModel={setCodexModel}
-          geminiModel={geminiModel}
-          setGeminiModel={setGeminiModel}
-          opencodeModel={opencodeModel}
-          setOpenCodeModel={setOpenCodeModel}
           providerModelCatalog={providerModelCatalog}
           providerModelsLoading={providerModelsLoading}
-          tasksEnabled={tasksEnabled}
-          isTaskMasterInstalled={isTaskMasterInstalled}
-          onShowAllTasks={onShowAllTasks}
-          setInput={setInput}
         />
       ) : (
         <>

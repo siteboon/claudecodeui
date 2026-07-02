@@ -827,7 +827,7 @@ async function hasGitMarker(dirPath: string): Promise<boolean> {
 /**
  * Finds the highest git worktree root visible from a starting directory.
  *
- * Provider skill systems such as Codex and OpenCode walk upward through parent
+ * Provider skill systems such as Codex walk upward through parent
  * folders when resolving repository/project skills. Use this helper when a
  * provider needs the topmost `.git` marker instead of only the nearest one, so
  * monorepos and nested package folders discover shared root-level skills once.
@@ -1050,20 +1050,6 @@ export function readJsonRecord(value: unknown): AnyRecord | null {
   } catch {
     return null;
   }
-}
-
-// ---------------------------
-//----------------- OPENCODE SESSION STORAGE UTILITIES ------------
-/**
- * Resolves the OpenCode SQLite session database path.
- *
- * OpenCode stores session, message, part, and project metadata in one shared
- * `opencode.db` file under its XDG data directory. Provider readers and
- * synchronizers should use this path for read-only access and should never store
- * it as a deletable transcript path for an individual app session row.
- */
-export function getOpenCodeDatabasePath(): string {
-  return path.join(os.homedir(), '.local', 'share', 'opencode', 'opencode.db');
 }
 
 // ---------------------------

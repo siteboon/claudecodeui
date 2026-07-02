@@ -99,35 +99,8 @@ const projectsHaveChanges = (
       nextProject.fullPath !== prevProject.fullPath ||
       Boolean(nextProject.isStarred) !== Boolean(prevProject.isStarred) ||
       serialize(nextProject.sessionMeta) !== serialize(prevProject.sessionMeta) ||
-      serialize(nextProject.sessions) !== serialize(prevProject.sessions) ||
-      serialize(nextProject.taskmaster) !== serialize(prevProject.taskmaster)
+      serialize(nextProject.sessions) !== serialize(prevProject.sessions)
     );
-  });
-};
-
-const mergeTaskMasterCache = (nextProjects: Project[], previousProjects: Project[]): Project[] => {
-  if (previousProjects.length === 0) {
-    return nextProjects;
-  }
-
-  // Keyed by `projectId` (the DB primary key) so caches stay correct across
-  // renames and other mutations that might have changed the display name.
-  const previousTaskMasterByProject = new Map(
-    previousProjects
-      .filter((project) => Boolean(project.taskmaster))
-      .map((project) => [project.projectId, project.taskmaster]),
-  );
-
-  return nextProjects.map((project) => {
-    const cachedTaskMasterInfo = previousTaskMasterByProject.get(project.projectId);
-    if (!cachedTaskMasterInfo) {
-      return project;
-    }
-
-    return {
-      ...project,
-      taskmaster: cachedTaskMasterInfo,
-    };
   });
 };
 
@@ -299,7 +272,6 @@ const projectFromRegistration = (project: Project): Project => ({
   isStarred: project.isStarred,
   sessions: project.sessions ?? [],
   sessionMeta: project.sessionMeta ?? { hasMore: false, total: countLoadedProjectSessions(project) },
-  taskmaster: project.taskmaster,
 });
 
 const removeSessionFromProject = (project: Project, sessionIdToDelete: string): Project => {
@@ -324,7 +296,7 @@ const removeSessionFromProject = (project: Project, sessionIdToDelete: string): 
   return updatedProject;
 };
 
-const VALID_TABS: Set<string> = new Set(['chat', 'files', 'git', 'tasks', 'browser']);
+const VALID_TABS: Set<string> = new Set(['chat', 'files', 'git', 'browser']);
 
 const isValidTab = (tab: string): tab is AppTab => {
   return VALID_TABS.has(tab) || tab.startsWith('plugin:');
@@ -414,8 +386,7 @@ export function useProjectsState({
       const projectData = (await response.json()) as Project[];
 
       setProjects((prevProjects) => {
-        const projectsWithTaskMaster = mergeTaskMasterCache(projectData, prevProjects);
-        const mergedProjects = mergeExpandedSessionPages(prevProjects, projectsWithTaskMaster);
+        const mergedProjects = mergeExpandedSessionPages(prevProjects, projectData);
 
         if (prevProjects.length === 0) {
           return mergedProjects;
@@ -508,48 +479,6 @@ export function useProjectsState({
     ));
   }, []);
 
-  // Hydrates TaskMaster details for the given `projectId`. The project
-  // identifier comes directly from the DB-driven /api/projects response.
-  const hydrateProjectTaskMaster = useCallback(async (projectId: string) => {
-    if (!projectId) {
-      return;
-    }
-
-    try {
-      const response = await api.projectTaskmaster(projectId);
-      if (!response.ok) {
-        return;
-      }
-
-      const data = (await response.json()) as { taskmaster?: Project['taskmaster'] };
-      const taskMasterInfo = data.taskmaster;
-      if (!taskMasterInfo) {
-        return;
-      }
-
-      setProjects((previousProjects) =>
-        previousProjects.map((project) =>
-          project.projectId === projectId
-            ? { ...project, taskmaster: taskMasterInfo }
-            : project,
-        ),
-      );
-
-      setSelectedProject((previousProject) => {
-        if (!previousProject || previousProject.projectId !== projectId) {
-          return previousProject;
-        }
-
-        return {
-          ...previousProject,
-          taskmaster: taskMasterInfo,
-        };
-      });
-    } catch (error) {
-      console.error(`Error fetching TaskMaster info for project ${projectId}:`, error);
-    }
-  }, []);
-
   const openSettings = useCallback((tab = 'tools') => {
     setSettingsInitialTab(tab);
     setShowSettings(true);
@@ -558,14 +487,6 @@ export function useProjectsState({
   useEffect(() => {
     void fetchProjects();
   }, [fetchProjects]);
-
-  useEffect(() => {
-    if (!selectedProject?.projectId) {
-      return;
-    }
-
-    void hydrateProjectTaskMaster(selectedProject.projectId);
-  }, [hydrateProjectTaskMaster, selectedProject?.projectId]);
 
   // Auto-select the project when there is only one, so the user lands on the new session page
   useEffect(() => {
@@ -776,7 +697,7 @@ export function useProjectsState({
     (session: ProjectSession) => {
       setSelectedSession(session);
 
-      if (activeTab === 'tasks' || activeTab === 'browser') {
+      if (activeTab === 'browser') {
         setActiveTab('chat');
       }
 
@@ -831,8 +752,7 @@ export function useProjectsState({
     try {
       const response = await api.projects();
       const freshProjects = (await response.json()) as Project[];
-      const projectsWithTaskMaster = mergeTaskMasterCache(freshProjects, projects);
-      const mergedProjects = mergeExpandedSessionPages(projects, projectsWithTaskMaster);
+      const mergedProjects = mergeExpandedSessionPages(projects, freshProjects);
 
       setProjects((prevProjects) =>
         projectsHaveChanges(prevProjects, mergedProjects) ? mergedProjects : prevProjects,

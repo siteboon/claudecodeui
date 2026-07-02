@@ -68,7 +68,10 @@
     "version": "版本",
     "select": "選取",
     "selectAll": "全選",
-    "deselectAll": "取消全選"
+    "deselectAll": "取消全選",
+    "cancel": "取消",
+    "done": "完成",
+    "failed": "失敗"
   },
   "time": {
     "justNow": "剛剛",
@@ -121,6 +124,34 @@
     "newFolder": "新增資料夾 (Cmd+Shift+N)",
     "refresh": "重新整理",
     "collapseAll": "全部收合",
+    "dropToUpload": "拖放檔案以上傳",
+    "uploadFiles": "上傳檔案（每個最大 {{size}}）",
+    "uploadingFiles": "正在上傳檔案",
+    "uploadComplete": "上傳完成",
+    "uploadFailed": "上傳失敗",
+    "uploadedCount": "已上傳 {{uploaded}} / {{total}} 個{{label}}",
+    "validation": {
+      "emptyName": "檔名不能為空",
+      "invalidChars": "檔名包含無效字元",
+      "reserved": "檔名是保留名稱",
+      "dotsOnly": "檔名不能只包含點號"
+    },
+    "toast": {
+      "renamed": "重新命名成功",
+      "folderDeleted": "資料夾已刪除",
+      "fileDeleted": "檔案已刪除",
+      "fileCreated": "檔案建立成功",
+      "folderCreated": "資料夾建立成功",
+      "copyFailed": "複製路徑失敗",
+      "pathCopied": "路徑已複製到剪貼簿",
+      "folderDownloaded": "資料夾已下載為 ZIP"
+    },
+    "delete": {
+      "title": "刪除{{type}}",
+      "folderWarning": "此資料夾及其所有內容將被永久刪除。",
+      "fileWarning": "此檔案將被永久刪除。",
+      "confirm": "刪除"
+    },
     "context": {
       "rename": "重新命名",
       "delete": "刪除",
@@ -187,9 +218,9 @@
       "usingProvidedToken": "使用提供的權杖",
       "noAuthentication": "無身分驗證",
       "sshKey": "SSH 金鑰",
-      "existingInfo": "工作區將加入您的專案列表，並可用於 Claude/Cursor 工作階段。",
+      "existingInfo": "工作區將加入您的專案列表，並可用於 Claude/Codex 工作階段。",
       "newWithClone": "儲存庫將從此資料夾複製。",
-      "newEmpty": "工作區將加入您的專案列表，並可用於 Claude/Cursor 工作階段。",
+      "newEmpty": "工作區將加入您的專案列表，並可用於 Claude/Codex 工作階段。",
       "cloningRepository": "正在複製儲存庫..."
     },
     "buttons": {
@@ -237,33 +268,88 @@
       }
     }
   },
-  "versionUpdate": {
-    "title": "有可用更新",
-    "newVersionReady": "新版本已準備就緒",
-    "currentVersion": "目前版本",
-    "latestVersion": "最新版本",
-    "whatsNew": "新功能：",
-    "viewFullRelease": "查看完整發行說明",
-    "updateProgress": "更新進度：",
-    "manualUpgrade": "手動升級：",
-    "npmUpgradeCommand": "npm install -g @cloudcli-ai/cloudcli@latest",
-    "manualUpgradeHint": "或點擊「立即更新」以自動執行更新。",
-    "updateCompleted": "更新成功完成！",
-    "restartServer": "請重新啟動伺服器以套用變更。",
-    "updateFailed": "更新失敗",
-    "buttons": {
-      "close": "關閉",
-      "later": "稍後",
-      "copyCommand": "複製指令",
-      "updateNow": "立即更新",
-      "updating": "更新中..."
+  "browserUse": {
+    "time": {
+      "never": "從未",
+      "unknown": "未知",
+      "justNow": "剛剛",
+      "secondsAgo": "{{count}} 秒前",
+      "minutesAgo": "{{count}} 分鐘前",
+      "hoursAgo": "{{count}} 小時前",
+      "daysAgo": "{{count}} 天前"
     },
-    "ariaLabels": {
-      "closeModal": "關閉版本升級對話框",
-      "showSidebar": "顯示側邊欄",
-      "settings": "設定",
-      "updateAvailable": "有可用更新",
-      "closeSidebar": "關閉側邊欄"
+    "domain": {
+      "noPageLoaded": "未載入頁面"
+    },
+    "action": {
+      "waiting": "等待中"
+    },
+    "errors": {
+      "load": "載入 Browser 失敗",
+      "action": "Browser 操作失敗"
+    },
+    "runtime": {
+      "disabled": "已停用",
+      "ready": "就緒",
+      "installing": "安裝中",
+      "setupRequired": "需要設定"
+    },
+    "status": {
+      "ready": "就緒",
+      "stopped": "已停止",
+      "unavailable": "不可用",
+      "empty": "空"
+    },
+    "empty": {
+      "noSessions": "還沒有瀏覽器工作階段",
+      "disabled": "Browser 已停用",
+      "noSessionsDescription": "AI 任務使用 Browser 時，智慧代理瀏覽器工作階段會顯示在這裡。",
+      "disabledDescription": "在設定中啟用 Browser，讓智慧代理開啟可監控的瀏覽器工作階段。",
+      "runtimeSetupRequired": "需要執行階段設定"
+    },
+    "buttons": {
+      "installing": "安裝中...",
+      "installRuntime": "安裝執行階段",
+      "openSettings": "開啟 Browser 設定",
+      "refresh": "重新整理瀏覽器工作階段",
+      "fullScreen": "全螢幕",
+      "stopSession": "停止工作階段",
+      "deleteSession": "刪除工作階段",
+      "stop": "停止",
+      "delete": "刪除",
+      "close": "關閉"
+    },
+    "prompts": {
+      "label": "提示",
+      "checkout": "使用 Browser 檢查結帳流程，並回報任何異常的 UI 狀態。",
+      "interact": "用 Browser 開啟 <url>，與頁面互動，並在每一步後總結變化。"
+    },
+    "screenshot": {
+      "alt": "Browser 工作階段截圖",
+      "waiting": "等待截圖",
+      "nextSnapshot": "下一張智慧代理瀏覽器快照會顯示在這裡。"
+    },
+    "header": {
+      "title": "Browser",
+      "description": "監控 AI 智慧代理開啟的瀏覽器工作階段。"
+    },
+    "stats": {
+      "active": "個作用中",
+      "total": "個總計",
+      "updated": "更新於 {{time}}"
+    },
+    "sessions": {
+      "title": "工作階段",
+      "noSessions": "沒有智慧代理瀏覽器工作階段。"
+    },
+    "selected": {
+      "title": "已選取",
+      "status": "狀態",
+      "lastAction": "上次操作",
+      "profile": "設定檔",
+      "none": "無",
+      "temporary": "暫時",
+      "browserSession": "Browser 工作階段"
     }
   }
 }

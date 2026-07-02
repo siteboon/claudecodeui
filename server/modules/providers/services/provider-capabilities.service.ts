@@ -24,10 +24,9 @@ type ProviderCapabilities = {
 };
 
 /**
- * The capability matrix mirrors what each runtime actually implements today:
+ * The capability matrix mirrors the supported runtimes exposed by this app:
  * - permission modes match the option sets accepted by each CLI/SDK.
  * - only the Claude SDK integration surfaces interactive permission requests.
- * - Cursor has no token usage endpoint support (its store.db has no usage rows).
  */
 const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
   claude: {
@@ -39,36 +38,9 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsPermissionRequests: true,
     supportsTokenUsage: true,
   },
-  cursor: {
-    provider: 'cursor',
-    permissionModes: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
-    defaultPermissionMode: 'default',
-    supportsImages: false,
-    supportsAbort: true,
-    supportsPermissionRequests: false,
-    supportsTokenUsage: false,
-  },
   codex: {
     provider: 'codex',
     permissionModes: ['default', 'acceptEdits', 'bypassPermissions'],
-    defaultPermissionMode: 'default',
-    supportsImages: false,
-    supportsAbort: true,
-    supportsPermissionRequests: false,
-    supportsTokenUsage: true,
-  },
-  gemini: {
-    provider: 'gemini',
-    permissionModes: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
-    defaultPermissionMode: 'default',
-    supportsImages: false,
-    supportsAbort: true,
-    supportsPermissionRequests: false,
-    supportsTokenUsage: true,
-  },
-  opencode: {
-    provider: 'opencode',
-    permissionModes: ['default'],
     defaultPermissionMode: 'default',
     supportsImages: false,
     supportsAbort: true,

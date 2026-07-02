@@ -16,9 +16,7 @@
     "error": "Fehler",
     "tool": "Werkzeug",
     "claude": "Claude",
-    "cursor": "Cursor",
-    "codex": "Codex",
-    "gemini": "Gemini"
+    "codex": "Codex"
   },
   "tools": {
     "settings": "Werkzeugeinstellungen",
@@ -103,24 +101,6 @@
     },
     "technicalDetails": "Technische Details"
   },
-  "gemini": {
-    "permissionMode": "Gemini-Berechtigungsmodus",
-    "description": "Steuert, wie Gemini CLI Vorgangsgenehmigungen handhabt.",
-    "modes": {
-      "default": {
-        "title": "Standard (Genehmigung erforderlich)",
-        "description": "Gemini fordert vor der Ausführung von Befehlen, dem Schreiben von Dateien und dem Abrufen von Web-Ressourcen eine Genehmigung an."
-      },
-      "autoEdit": {
-        "title": "Auto-Bearbeitung (Dateigenehmigungen überspringen)",
-        "description": "Gemini genehmigt automatisch Dateibearbeitungen und Web-Abrufe, fragt aber weiterhin bei Shell-Befehlen nach."
-      },
-      "yolo": {
-        "title": "YOLO (Alle Berechtigungen umgehen)",
-        "description": "Gemini führt alle Vorgänge ohne Rückfrage aus. Vorsicht ist geboten."
-      }
-    }
-  },
   "input": {
     "placeholder": "/ für Befehle, @ für Dateien eingeben oder {{provider}} etwas fragen...",
     "placeholderDefault": "Nachricht eingeben...",
@@ -150,9 +130,7 @@
     },
     "readyPrompt": {
       "claude": "Bereit, Claude mit {{model}} zu verwenden. Gib unten deine Nachricht ein.",
-      "cursor": "Bereit, Cursor mit {{model}} zu verwenden. Gib unten deine Nachricht ein.",
       "codex": "Bereit, Codex mit {{model}} zu verwenden. Gib unten deine Nachricht ein.",
-      "gemini": "Bereit, Gemini mit {{model}} zu verwenden. Gib unten deine Nachricht ein.",
       "default": "Wähl oben einen Anbieter, um zu beginnen"
     },
     "pressToSearch": "Drücke <kbd>{{shortcut}}</kbd>, um Sitzungen, Dateien und Commits zu durchsuchen"
@@ -232,8 +210,5 @@
   },
   "projectSelection": {
     "startChatWithProvider": "Wähl ein Projekt, um mit {{provider}} zu chatten"
-  },
-  "tasks": {
-    "nextTaskPrompt": "Nächste Aufgabe starten"
   }
 }

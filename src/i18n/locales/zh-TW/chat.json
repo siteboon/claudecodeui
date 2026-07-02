@@ -9,16 +9,16 @@
     "copied": "訊息已複製",
     "selectFormat": "選擇複製格式",
     "copyAsMarkdown": "複製為 Markdown",
-    "copyAsText": "複製為純文字"
+    "copyAsText": "複製為純文字",
+    "markdownShort": "MD",
+    "textShort": "TXT"
   },
   "messageTypes": {
     "user": "U",
     "error": "錯誤",
     "tool": "工具",
     "claude": "Claude",
-    "cursor": "Cursor",
-    "codex": "Codex",
-    "gemini": "Gemini"
+    "codex": "Codex"
   },
   "tools": {
     "settings": "工具設定",
@@ -166,11 +166,13 @@
       "cursorEditor": "AI 程式碼編輯器",
       "google": "由 Google 提供"
     },
+    "clickToChange": "點擊切換模型",
+    "searchModels": "搜尋模型...",
+    "noModelsFound": "找不到模型。",
+    "loadingModels": "正在載入模型…",
     "readyPrompt": {
       "claude": "準備好使用 {{model}} 的 Claude。請在下方開始輸入您的訊息。",
-      "cursor": "準備好使用 {{model}} 的 Cursor。請在下方開始輸入您的訊息。",
       "codex": "準備好使用 {{model}} 的 Codex。請在下方開始輸入您的訊息。",
-      "gemini": "準備好使用 {{model}} 的 Gemini。請在下方開始輸入您的訊息。",
       "default": "請在上方選擇一個提供者以開始"
     },
     "pressToSearch": "按 <kbd>{{shortcut}}</kbd> 搜尋工作階段、檔案和提交"
@@ -240,6 +242,7 @@
       "label": "已過 {{time}}",
       "startingNow": "正要開始"
     },
+    "stop": "停止",
     "controls": {
       "stopGeneration": "停止生成",
       "pressEscToStop": "隨時按 Esc 即可停止"
@@ -250,8 +253,5 @@
   },
   "projectSelection": {
     "startChatWithProvider": "選擇一個專案以開始與 {{provider}} 聊天"
-  },
-  "tasks": {
-    "nextTaskPrompt": "開始下一個任務"
   }
 }

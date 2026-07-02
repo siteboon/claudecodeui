@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import type { LucideIcon } from 'lucide-react';
+
 import { CHECKBOX_CLASS, TOGGLE_ROW_CLASS } from '../constants';
 
 type QuickSettingsToggleRowProps = {

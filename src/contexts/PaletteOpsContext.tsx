@@ -46,16 +46,17 @@ export function usePaletteOpsRegister(partial: Partial<PaletteOps>) {
 
   useEffect(() => {
     if (!ref) return undefined;
-    const prev = { ...ref.current };
-    if (openFile) ref.current.openFile = openFile;
-    if (openFileInEditor) ref.current.openFileInEditor = openFileInEditor;
-    if (openSettings) ref.current.openSettings = openSettings;
-    if (refreshProjects) ref.current.refreshProjects = refreshProjects;
+    const registry = ref.current;
+    const prev = { ...registry };
+    if (openFile) registry.openFile = openFile;
+    if (openFileInEditor) registry.openFileInEditor = openFileInEditor;
+    if (openSettings) registry.openSettings = openSettings;
+    if (refreshProjects) registry.refreshProjects = refreshProjects;
     return () => {
-      if (openFile && ref.current.openFile === openFile) ref.current.openFile = prev.openFile;
-      if (openFileInEditor && ref.current.openFileInEditor === openFileInEditor) ref.current.openFileInEditor = prev.openFileInEditor;
-      if (openSettings && ref.current.openSettings === openSettings) ref.current.openSettings = prev.openSettings;
-      if (refreshProjects && ref.current.refreshProjects === refreshProjects) ref.current.refreshProjects = prev.refreshProjects;
+      if (openFile && registry.openFile === openFile) registry.openFile = prev.openFile;
+      if (openFileInEditor && registry.openFileInEditor === openFileInEditor) registry.openFileInEditor = prev.openFileInEditor;
+      if (openSettings && registry.openSettings === openSettings) registry.openSettings = prev.openSettings;
+      if (refreshProjects && registry.refreshProjects === refreshProjects) registry.refreshProjects = prev.refreshProjects;
     };
   }, [ref, openFile, openFileInEditor, openSettings, refreshProjects]);
 }

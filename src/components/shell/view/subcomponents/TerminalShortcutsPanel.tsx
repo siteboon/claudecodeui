@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Terminal } from '@xterm/xterm';
+
 import { sendSocketMessage } from '../../utils/socket';
 
 type Shortcut =

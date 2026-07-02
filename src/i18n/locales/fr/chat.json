@@ -16,10 +16,7 @@
     "error": "Erreur",
     "tool": "Outil",
     "claude": "Claude",
-    "cursor": "Cursor",
-    "codex": "Codex",
-    "gemini": "Gemini",
-    "opencode": "OpenCode"
+    "codex": "Codex"
   },
   "tools": {
     "settings": "Paramètres de l'outil",
@@ -104,24 +101,6 @@
     },
     "technicalDetails": "Détails techniques"
   },
-  "gemini": {
-    "permissionMode": "Mode de permission Gemini",
-    "description": "Contrôlez comment Gemini CLI gère les approbations d'opérations.",
-    "modes": {
-      "default": {
-        "title": "Standard (demander l'approbation)",
-        "description": "Gemini demandera une approbation avant d'exécuter des commandes, d'écrire des fichiers et de récupérer des ressources web."
-      },
-      "autoEdit": {
-        "title": "Modification automatique (ignorer les approbations de fichiers)",
-        "description": "Gemini approuvera automatiquement les modifications de fichiers et les récupérations web, mais demandera toujours pour les commandes shell."
-      },
-      "yolo": {
-        "title": "YOLO (contourner toutes les permissions)",
-        "description": "Gemini exécutera toutes les opérations sans demander d'approbation. Utilisez avec prudence."
-      }
-    }
-  },
   "input": {
     "placeholder": "Tapez / pour les commandes, @ pour les fichiers, ou posez une question à {{provider}}...",
     "placeholderDefault": "Tapez votre message...",
@@ -151,10 +130,7 @@
     },
     "readyPrompt": {
       "claude": "Prêt à utiliser Claude avec {{model}}. Commencez à taper votre message ci-dessous.",
-      "cursor": "Prêt à utiliser Cursor avec {{model}}. Commencez à taper votre message ci-dessous.",
       "codex": "Prêt à utiliser Codex avec {{model}}. Commencez à taper votre message ci-dessous.",
-      "gemini": "Prêt à utiliser Gemini avec {{model}}. Commencez à taper votre message ci-dessous.",
-      "opencode": "Prêt à utiliser OpenCode avec {{model}}. Commencez à taper votre message ci-dessous.",
       "default": "Sélectionnez un fournisseur ci-dessus pour commencer"
     },
     "pressToSearch": "Appuyez sur <kbd>{{shortcut}}</kbd> pour rechercher sessions, fichiers et commits"
@@ -234,8 +210,5 @@
   },
   "projectSelection": {
     "startChatWithProvider": "Sélectionnez un projet pour commencer à chatter avec {{provider}}"
-  },
-  "tasks": {
-    "nextTaskPrompt": "Commencer la prochaine tâche"
   }
 }

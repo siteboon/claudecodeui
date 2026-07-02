@@ -68,7 +68,10 @@
     "version": "版本",
     "select": "选择",
     "selectAll": "全选",
-    "deselectAll": "取消全选"
+    "deselectAll": "取消全选",
+    "cancel": "取消",
+    "done": "完成",
+    "failed": "失败"
   },
   "time": {
     "justNow": "刚刚",
@@ -121,6 +124,34 @@
     "newFolder": "新建文件夹 (Cmd+Shift+N)",
     "refresh": "刷新",
     "collapseAll": "全部折叠",
+    "dropToUpload": "拖放文件以上传",
+    "uploadFiles": "上传文件（每个最大 {{size}}）",
+    "uploadingFiles": "正在上传文件",
+    "uploadComplete": "上传完成",
+    "uploadFailed": "上传失败",
+    "uploadedCount": "已上传 {{uploaded}} / {{total}} 个{{label}}",
+    "validation": {
+      "emptyName": "文件名不能为空",
+      "invalidChars": "文件名包含无效字符",
+      "reserved": "文件名是保留名称",
+      "dotsOnly": "文件名不能只包含点号"
+    },
+    "toast": {
+      "renamed": "重命名成功",
+      "folderDeleted": "文件夹已删除",
+      "fileDeleted": "文件已删除",
+      "fileCreated": "文件创建成功",
+      "folderCreated": "文件夹创建成功",
+      "copyFailed": "复制路径失败",
+      "pathCopied": "路径已复制到剪贴板",
+      "folderDownloaded": "文件夹已下载为 ZIP"
+    },
+    "delete": {
+      "title": "删除{{type}}",
+      "folderWarning": "此文件夹及其所有内容将被永久删除。",
+      "fileWarning": "此文件将被永久删除。",
+      "confirm": "删除"
+    },
     "context": {
       "rename": "重命名",
       "delete": "删除",
@@ -187,9 +218,9 @@
       "usingProvidedToken": "使用提供的令牌",
       "noAuthentication": "无身份验证",
       "sshKey": "SSH 密钥",
-      "existingInfo": "工作区将被添加到您的项目列表中，并可用于 Claude/Cursor 会话。",
+      "existingInfo": "工作区将被添加到您的项目列表中，并可用于 Claude/Codex 会话。",
       "newWithClone": "仓库将从此文件夹克隆。",
-      "newEmpty": "工作区将被添加到您的项目列表中，并可用于 Claude/Cursor 会话。",
+      "newEmpty": "工作区将被添加到您的项目列表中，并可用于 Claude/Codex 会话。",
       "cloningRepository": "正在克隆仓库..."
     },
     "buttons": {
@@ -237,33 +268,88 @@
       }
     }
   },
-  "versionUpdate": {
-    "title": "有可用更新",
-    "newVersionReady": "新版本已准备就绪",
-    "currentVersion": "当前版本",
-    "latestVersion": "最新版本",
-    "whatsNew": "新内容：",
-    "viewFullRelease": "查看完整发布",
-    "updateProgress": "更新进度：",
-    "manualUpgrade": "手动升级：",
-    "npmUpgradeCommand": "npm install -g @cloudcli-ai/cloudcli@latest",
-    "manualUpgradeHint": "或点击'立即更新'以自动运行更新。",
-    "updateCompleted": "更新成功完成！",
-    "restartServer": "请重启服务器以应用更改。",
-    "updateFailed": "更新失败",
-    "buttons": {
-      "close": "关闭",
-      "later": "稍后",
-      "copyCommand": "复制命令",
-      "updateNow": "立即更新",
-      "updating": "更新中..."
+  "browserUse": {
+    "time": {
+      "never": "从未",
+      "unknown": "未知",
+      "justNow": "刚刚",
+      "secondsAgo": "{{count}} 秒前",
+      "minutesAgo": "{{count}} 分钟前",
+      "hoursAgo": "{{count}} 小时前",
+      "daysAgo": "{{count}} 天前"
     },
-    "ariaLabels": {
-      "closeModal": "关闭版本升级模态框",
-      "showSidebar": "显示侧边栏",
-      "settings": "设置",
-      "updateAvailable": "有可用更新",
-      "closeSidebar": "关闭侧边栏"
+    "domain": {
+      "noPageLoaded": "未加载页面"
+    },
+    "action": {
+      "waiting": "等待中"
+    },
+    "errors": {
+      "load": "加载 Browser 失败",
+      "action": "Browser 操作失败"
+    },
+    "runtime": {
+      "disabled": "已禁用",
+      "ready": "就绪",
+      "installing": "安装中",
+      "setupRequired": "需要设置"
+    },
+    "status": {
+      "ready": "就绪",
+      "stopped": "已停止",
+      "unavailable": "不可用",
+      "empty": "空"
+    },
+    "empty": {
+      "noSessions": "还没有浏览器会话",
+      "disabled": "Browser 已禁用",
+      "noSessionsDescription": "AI 任务使用 Browser 时，智能体浏览器会话会显示在这里。",
+      "disabledDescription": "在设置中启用 Browser，让智能体打开可监控的浏览器会话。",
+      "runtimeSetupRequired": "需要运行时设置"
+    },
+    "buttons": {
+      "installing": "安装中...",
+      "installRuntime": "安装运行时",
+      "openSettings": "打开 Browser 设置",
+      "refresh": "刷新浏览器会话",
+      "fullScreen": "全屏",
+      "stopSession": "停止会话",
+      "deleteSession": "删除会话",
+      "stop": "停止",
+      "delete": "删除",
+      "close": "关闭"
+    },
+    "prompts": {
+      "label": "提示",
+      "checkout": "使用 Browser 检查结账流程，并报告任何异常的 UI 状态。",
+      "interact": "用 Browser 打开 <url>，与页面交互，并在每一步后总结变化。"
+    },
+    "screenshot": {
+      "alt": "Browser 会话截图",
+      "waiting": "等待截图",
+      "nextSnapshot": "下一张智能体浏览器快照会显示在这里。"
+    },
+    "header": {
+      "title": "Browser",
+      "description": "监控 AI 智能体打开的浏览器会话。"
+    },
+    "stats": {
+      "active": "个活动",
+      "total": "个总计",
+      "updated": "更新于 {{time}}"
+    },
+    "sessions": {
+      "title": "会话",
+      "noSessions": "没有智能体浏览器会话。"
+    },
+    "selected": {
+      "title": "已选择",
+      "status": "状态",
+      "lastAction": "上次操作",
+      "profile": "配置文件",
+      "none": "无",
+      "temporary": "临时",
+      "browserSession": "Browser 会话"
     }
   }
 }

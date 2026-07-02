@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+
 import {
   CODE_EDITOR_DEFAULTS,
   CODE_EDITOR_SETTINGS_CHANGED_EVENT,

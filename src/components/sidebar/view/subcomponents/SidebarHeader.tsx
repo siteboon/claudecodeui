@@ -7,7 +7,6 @@ import { IS_PLATFORM } from '../../../../constants/config';
 import { cn } from '../../../../lib/utils';
 import type { SidebarSearchMode } from '../../types/types';
 
-import GitHubStarBadge from './GitHubStarBadge';
 
 const MOD_KEY =
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
@@ -132,8 +131,6 @@ export default function SidebarHeader({
             </Button>
           </div>
         </div>
-
-        <GitHubStarBadge />
 
         {/* Search bar */}
         {showSearchTools && (

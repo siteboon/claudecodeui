@@ -1,16 +1,16 @@
-import { MessageSquare, Folder, GitBranch, ClipboardCheck, MonitorPlay, type LucideIcon } from 'lucide-react';
+import { MessageSquare, Folder, GitBranch, MonitorPlay, type LucideIcon } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Tooltip, PillBar, Pill } from '../../../../shared/view/ui';
 import type { AppTab } from '../../../../types/app';
 import { usePlugins } from '../../../../contexts/PluginsContext';
+import type { Plugin } from '../../../../contexts/PluginsContext';
 import PluginIcon from '../../../plugins/view/PluginIcon';
 
 type MainContentTabSwitcherProps = {
   activeTab: AppTab;
   setActiveTab: Dispatch<SetStateAction<AppTab>>;
-  shouldShowTasksTab: boolean;
   shouldShowBrowserTab: boolean;
 };
 
@@ -44,17 +44,20 @@ const BROWSER_TAB: BuiltInTab = {
   icon: MonitorPlay,
 };
 
-const TASKS_TAB: BuiltInTab = {
-  kind: 'builtin',
-  id: 'tasks',
-  labelKey: 'tabs.tasks',
-  icon: ClipboardCheck,
+const OFFICIAL_PLUGIN_LABEL_KEYS: Record<string, string> = {
+  'project-stats': 'settings:pluginSettings.starterPlugin.name',
+  'web-terminal': 'settings:pluginSettings.terminalPlugin.name',
 };
+
+function getPluginDisplayLabel(plugin: Plugin, t: (key: string) => string) {
+  return OFFICIAL_PLUGIN_LABEL_KEYS[plugin.name]
+    ? t(OFFICIAL_PLUGIN_LABEL_KEYS[plugin.name])
+    : plugin.displayName;
+}
 
 export default function MainContentTabSwitcher({
   activeTab,
   setActiveTab,
-  shouldShowTasksTab,
   shouldShowBrowserTab,
 }: MainContentTabSwitcherProps) {
   const { t } = useTranslation();
@@ -63,7 +66,6 @@ export default function MainContentTabSwitcher({
   const builtInTabs: BuiltInTab[] = [
     ...BASE_TABS,
     ...(shouldShowBrowserTab ? [BROWSER_TAB] : []),
-    ...(shouldShowTasksTab ? [TASKS_TAB] : []),
   ];
 
   const pluginTabs: PluginTab[] = plugins
@@ -71,7 +73,7 @@ export default function MainContentTabSwitcher({
     .map((p) => ({
       kind: 'plugin',
       id: `plugin:${p.name}` as AppTab,
-      label: p.displayName,
+      label: getPluginDisplayLabel(p, t),
       pluginName: p.name,
       iconFile: p.icon,
     }));

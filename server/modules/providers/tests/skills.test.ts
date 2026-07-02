@@ -317,7 +317,6 @@ test('providerSkillsService lists claude user, project, and enabled plugin skill
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
 });
-
 /**
  * This test covers Codex repository/user/system skill folders and verifies that
  * repository lookup includes cwd, parent, and git root skill locations.
@@ -378,144 +377,10 @@ test('providerSkillsService lists codex repository, user, and system skills', { 
 });
 
 /**
- * This test covers OpenCode skill lookup across cwd-to-git-root project folders
- * plus the global OpenCode/Claude/Agents compatibility locations.
- */
-test('providerSkillsService lists opencode project and user compatibility skills', { concurrency: false }, async () => {
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-skills-opencode-'));
-  const repoRoot = path.join(tempRoot, 'repo');
-  const workspacePath = path.join(repoRoot, 'packages', 'app');
-  await fs.mkdir(path.join(repoRoot, '.git'), { recursive: true });
-  await fs.mkdir(workspacePath, { recursive: true });
-
-  const restoreHomeDir = patchHomeDir(tempRoot);
-  try {
-    await writeSkill(
-      path.join(workspacePath, '.opencode', 'skills'),
-      'opencode-cwd-dir',
-      'opencode-cwd',
-      'OpenCode cwd skill',
-    );
-    await writeSkill(
-      path.join(repoRoot, 'packages', '.claude', 'skills'),
-      'opencode-claude-parent-dir',
-      'opencode-claude-parent',
-      'OpenCode Claude parent skill',
-    );
-    await writeSkill(
-      path.join(repoRoot, '.agents', 'skills'),
-      'opencode-agents-root-dir',
-      'opencode-agents-root',
-      'OpenCode Agents root skill',
-    );
-    await writeSkill(
-      path.join(tempRoot, '.config', 'opencode', 'skills'),
-      'opencode-user-dir',
-      'opencode-user',
-      'OpenCode user skill',
-    );
-    await writeSkill(
-      path.join(tempRoot, '.claude', 'skills'),
-      'opencode-claude-user-dir',
-      'opencode-claude-user',
-      'OpenCode Claude user skill',
-    );
-    await writeSkill(
-      path.join(tempRoot, '.agents', 'skills'),
-      'opencode-agents-user-dir',
-      'opencode-agents-user',
-      'OpenCode Agents user skill',
-    );
-
-    const skills = await providerSkillsService.listProviderSkills('opencode', { workspacePath });
-    const byName = new Map(skills.map((skill) => [skill.name, skill]));
-
-    assert.equal(byName.get('opencode-cwd')?.scope, 'project');
-    assert.equal(byName.get('opencode-claude-parent')?.scope, 'project');
-    assert.equal(byName.get('opencode-agents-root')?.scope, 'project');
-    assert.equal(byName.get('opencode-user')?.scope, 'user');
-    assert.equal(byName.get('opencode-claude-user')?.scope, 'user');
-    assert.equal(byName.get('opencode-agents-user')?.scope, 'user');
-    assert.equal(byName.get('opencode-cwd')?.command, '/opencode-cwd');
-  } finally {
-    restoreHomeDir();
-    await fs.rm(tempRoot, { recursive: true, force: true });
-  }
-});
-
-/**
- * This test covers Gemini and Cursor skill directory rules, including shared
- * `.agents/skills` project support.
- */
-test('providerSkillsService lists gemini and cursor skills from their configured directories', { concurrency: false }, async () => {
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-skills-gc-'));
-  const workspacePath = path.join(tempRoot, 'workspace');
-  await fs.mkdir(workspacePath, { recursive: true });
-
-  const restoreHomeDir = patchHomeDir(tempRoot);
-  try {
-    await writeSkill(
-      path.join(tempRoot, '.gemini', 'skills'),
-      'gemini-user-dir',
-      'gemini-user',
-      'Gemini user skill',
-    );
-    await writeSkill(
-      path.join(tempRoot, '.agents', 'skills'),
-      'agents-user-dir',
-      'agents-user',
-      'Agents user skill',
-    );
-    await writeSkill(
-      path.join(workspacePath, '.gemini', 'skills'),
-      'gemini-project-dir',
-      'gemini-project',
-      'Gemini project skill',
-    );
-    await writeSkill(
-      path.join(workspacePath, '.agents', 'skills'),
-      'agents-project-dir',
-      'agents-project',
-      'Agents project skill',
-    );
-    await writeSkill(
-      path.join(workspacePath, '.cursor', 'skills'),
-      'cursor-project-dir',
-      'cursor-project',
-      'Cursor project skill',
-    );
-    await writeSkill(
-      path.join(tempRoot, '.cursor', 'skills'),
-      'cursor-user-dir',
-      'cursor-user',
-      'Cursor user skill',
-    );
-
-    const geminiSkills = await providerSkillsService.listProviderSkills('gemini', { workspacePath });
-    const geminiByName = new Map(geminiSkills.map((skill) => [skill.name, skill]));
-    assert.equal(geminiByName.get('gemini-user')?.scope, 'user');
-    assert.equal(geminiByName.get('agents-user')?.scope, 'user');
-    assert.equal(geminiByName.get('gemini-project')?.scope, 'project');
-    assert.equal(geminiByName.get('agents-project')?.scope, 'project');
-    assert.equal(geminiByName.get('gemini-project')?.command, '/gemini-project');
-
-    const cursorSkills = await providerSkillsService.listProviderSkills('cursor', { workspacePath });
-    const cursorByName = new Map(cursorSkills.map((skill) => [skill.name, skill]));
-    assert.equal(cursorByName.get('agents-project')?.scope, 'project');
-    assert.equal(cursorByName.get('cursor-project')?.scope, 'project');
-    assert.equal(cursorByName.get('cursor-user')?.scope, 'user');
-    assert.equal(cursorByName.get('cursor-user')?.command, '/cursor-user');
-  } finally {
-    restoreHomeDir();
-    await fs.rm(tempRoot, { recursive: true, force: true });
-  }
-});
-
-/**
  * This test covers managed global skill creation for providers that own a
  * writable user skill directory.
  */
-test('providerSkillsService adds global skills for claude, codex, gemini, and cursor', { concurrency: false }, async () => {
+test('providerSkillsService adds global skills for claude and codex', { concurrency: false }, async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-skills-create-'));
   const restoreHomeDir = patchHomeDir(tempRoot);
 
@@ -618,49 +483,11 @@ test('providerSkillsService adds global skills for claude, codex, gemini, and cu
     );
     await assert.rejects(fs.stat(pendingBatchSkillPath), { code: 'ENOENT' });
 
-    const createdGeminiSkills = await providerSkillsService.addProviderSkills('gemini', {
-      entries: [
-        {
-          directoryName: 'gemini-global-dir',
-          content: '---\nname: gemini-global\ndescription: Gemini global skill\n---\n\nGemini body.\n',
-        },
-      ],
-    });
-    const createdGeminiSkill = createdGeminiSkills[0];
-    assert.ok(createdGeminiSkill);
-    assert.equal(createdGeminiSkill.command, '/gemini-global');
-    assert.equal(
-      createdGeminiSkill.sourcePath.endsWith(path.join('.gemini', 'skills', 'gemini-global-dir', 'SKILL.md')),
-      true,
-    );
-
-    const createdCursorSkills = await providerSkillsService.addProviderSkills('cursor', {
-      entries: [
-        {
-          directoryName: 'cursor-global-dir',
-          content: '---\nname: cursor-global\ndescription: Cursor global skill\n---\n\nCursor body.\n',
-        },
-      ],
-    });
-    const createdCursorSkill = createdCursorSkills[0];
-    assert.ok(createdCursorSkill);
-    assert.equal(createdCursorSkill.command, '/cursor-global');
-    assert.equal(
-      createdCursorSkill.sourcePath.endsWith(path.join('.cursor', 'skills', 'cursor-global-dir', 'SKILL.md')),
-      true,
-    );
-
     const listedClaudeSkills = await providerSkillsService.listProviderSkills('claude');
     assert.equal(listedClaudeSkills.some((skill) => skill.name === 'claude-global'), true);
 
     const listedCodexSkills = await providerSkillsService.listProviderSkills('codex');
     assert.equal(listedCodexSkills.some((skill) => skill.name === 'replacement'), true);
-
-    const listedGeminiSkills = await providerSkillsService.listProviderSkills('gemini');
-    assert.equal(listedGeminiSkills.some((skill) => skill.name === 'gemini-global'), true);
-
-    const listedCursorSkills = await providerSkillsService.listProviderSkills('cursor');
-    assert.equal(listedCursorSkills.some((skill) => skill.name === 'cursor-global'), true);
 
     const removedCodexSkill = await providerSkillsService.removeProviderSkill('codex', {
       directoryName: 'uploaded-codex-folder',
@@ -696,29 +523,4 @@ test('providerSkillsService adds global skills for claude, codex, gemini, and cu
     restoreHomeDir();
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
-});
-
-/**
- * OpenCode reuses other providers' skill folders, so it should not accept
- * direct skill writes through the managed provider endpoint.
- */
-test('providerSkillsService rejects managed skill creation for opencode', { concurrency: false }, async () => {
-  await assert.rejects(
-    providerSkillsService.addProviderSkills('opencode', {
-      entries: [
-        {
-          directoryName: 'opencode-global-dir',
-          content: '---\nname: opencode-global\ndescription: Unsupported skill\n---\n\nOpenCode body.\n',
-        },
-      ],
-    }),
-    /does not support managed global skills/i,
-  );
-
-  await assert.rejects(
-    providerSkillsService.removeProviderSkill('opencode', {
-      directoryName: 'opencode-global-dir',
-    }),
-    /does not support managed global skills/i,
-  );
 });

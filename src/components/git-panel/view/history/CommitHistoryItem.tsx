@@ -1,5 +1,6 @@
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useMemo } from 'react';
+
 import type { GitCommitSummary } from '../../types/types';
 import { getStatusBadgeClass, parseCommitFiles } from '../../utils/gitPanelUtils';
 import GitDiffViewer from '../shared/GitDiffViewer';

@@ -8,11 +8,9 @@ import SettingsSidebar from '../view/SettingsSidebar';
 import AgentsSettingsTab from '../view/tabs/agents-settings/AgentsSettingsTab';
 import AppearanceSettingsTab from '../view/tabs/AppearanceSettingsTab';
 import CredentialsSettingsTab from '../view/tabs/api-settings/CredentialsSettingsTab';
-import VoiceSettingsTab from '../view/tabs/VoiceSettingsTab';
 import GitSettingsTab from '../view/tabs/git-settings/GitSettingsTab';
 import BrowserUseSettingsTab from '../view/tabs/browser-use-settings/BrowserUseSettingsTab';
 import NotificationsSettingsTab from '../view/tabs/NotificationsSettingsTab';
-import TasksSettingsTab from '../view/tabs/tasks-settings/TasksSettingsTab';
 import PluginSettingsTab from '../../plugins/view/PluginSettingsTab';
 import AboutTab from '../view/tabs/AboutTab';
 import { useSettingsController } from '../hooks/useSettingsController';
@@ -47,13 +45,9 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     setClaudePermissions,
     notificationPreferences,
     setNotificationPreferences,
-    cursorPermissions,
-    setCursorPermissions,
     codexPermissionMode,
     setCodexPermissionMode,
     providerAuthStatus,
-    geminiPermissionMode,
-    setGeminiPermissionMode,
     openLoginForProvider,
     showLoginModal,
     setShowLoginModal,
@@ -183,17 +177,11 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
                   onProviderLogin={openLoginForProvider}
                   claudePermissions={claudePermissions}
                   onClaudePermissionsChange={setClaudePermissions}
-                  cursorPermissions={cursorPermissions}
-                  onCursorPermissionsChange={setCursorPermissions}
                   codexPermissionMode={codexPermissionMode}
                   onCodexPermissionModeChange={setCodexPermissionMode}
-                  geminiPermissionMode={geminiPermissionMode}
-                  onGeminiPermissionModeChange={setGeminiPermissionMode}
                   projects={projects}
                 />
               )}
-
-              {activeTab === 'tasks' && <TasksSettingsTab />}
 
               {activeTab === 'browser' && <BrowserUseSettingsTab />}
 
@@ -214,8 +202,6 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
               )}
 
               {activeTab === 'api' && <CredentialsSettingsTab />}
-
-              {activeTab === 'voice' && <VoiceSettingsTab />}
 
               {activeTab === 'plugins' && <PluginSettingsTab />}
 

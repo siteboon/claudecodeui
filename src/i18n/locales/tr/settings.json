@@ -90,7 +90,6 @@
     "appearance": "Görünüm",
     "git": "Git",
     "apiTokens": "API ve Token'lar",
-    "tasks": "Görevler",
     "computer": "Bilgisayar Kullanımı",
     "notifications": "Bildirimler",
     "plugins": "Eklentiler",
@@ -277,32 +276,10 @@
     "apiDocsLink": "API Dokümantasyonu",
     "documentation": {
       "title": "Harici API Dokümantasyonu",
-      "description": "Uygulamalarından Claude/Cursor oturumları tetiklemek için harici API'nin nasıl kullanılacağını öğren.",
+      "description": "Uygulamalarından Claude/Codex oturumları tetiklemek için harici API'nin nasıl kullanılacağını öğren.",
       "viewLink": "API Dokümantasyonunu Görüntüle →"
     },
-    "loading": "Yükleniyor...",
-    "version": {
-      "updateAvailable": "Güncelleme mevcut: v{{version}}"
-    }
-  },
-  "tasks": {
-    "checking": "TaskMaster kurulumu kontrol ediliyor...",
-    "notInstalled": {
-      "title": "TaskMaster AI CLI Kurulu Değil",
-      "description": "Görev yönetim özelliklerini kullanmak için TaskMaster CLI gereklidir. Başlamak için kur:",
-      "installCommand": "npm install -g task-master-ai",
-      "viewOnGitHub": "GitHub'da Görüntüle",
-      "afterInstallation": "Kurulumdan sonra:",
-      "steps": {
-        "restart": "Bu uygulamayı yeniden başlat",
-        "autoAvailable": "TaskMaster özellikleri otomatik olarak kullanılabilir hale gelecek",
-        "initCommand": "Proje dizininde task-master init komutunu kullan"
-      }
-    },
-    "settings": {
-      "enableLabel": "TaskMaster Entegrasyonunu Etkinleştir",
-      "enableDescription": "TaskMaster görevlerini, banner'larını ve kenar çubuğu göstergelerini arayüz genelinde göster"
-    }
+    "loading": "Yükleniyor..."
   },
   "agents": {
     "authStatus": {
@@ -318,14 +295,8 @@
       "claude": {
         "description": "Anthropic Claude AI asistanı"
       },
-      "cursor": {
-        "description": "Cursor AI destekli kod editörü"
-      },
       "codex": {
         "description": "OpenAI Codex AI asistanı"
-      },
-      "gemini": {
-        "description": "Google Gemini AI asistanı"
       }
     },
     "connectionStatus": "Bağlantı Durumu",
@@ -343,8 +314,7 @@
     "title": "İzin Ayarları",
     "skipPermissions": {
       "label": "İzin istemlerini atla (dikkatli kullan)",
-      "claudeDescription": "--dangerously-skip-permissions bayrağının eşdeğeri",
-      "cursorDescription": "Cursor CLI'daki -f bayrağının eşdeğeri"
+      "claudeDescription": "--dangerously-skip-permissions bayrağının eşdeğeri"
     },
     "allowedTools": {
       "title": "İzin Verilen Araçlar",
@@ -419,7 +389,6 @@
     "title": "MCP Sunucuları",
     "description": {
       "claude": "Model Context Protocol sunucuları Claude'a ek araçlar ve veri kaynakları sağlar",
-      "cursor": "Model Context Protocol sunucuları Cursor'a ek araçlar ve veri kaynakları sağlar",
       "codex": "Model Context Protocol sunucuları Codex'e ek araçlar ve veri kaynakları sağlar"
     },
     "addButton": "MCP Sunucusu Ekle",

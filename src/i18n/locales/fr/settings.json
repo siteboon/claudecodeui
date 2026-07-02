@@ -90,7 +90,6 @@
     "appearance": "Apparence",
     "git": "Git",
     "apiTokens": "API & Tokens",
-    "tasks": "Tâches",
     "notifications": "Notifications",
     "plugins": "Plugins",
     "about": "À propos"
@@ -276,32 +275,10 @@
     "apiDocsLink": "Documentation API",
     "documentation": {
       "title": "Documentation de l'API externe",
-      "description": "Apprenez à utiliser l'API externe pour déclencher des sessions Claude/Cursor depuis vos applications.",
+      "description": "Apprenez à utiliser l'API externe pour déclencher des sessions Claude/Codex depuis vos applications.",
       "viewLink": "Voir la documentation API →"
     },
-    "loading": "Chargement...",
-    "version": {
-      "updateAvailable": "Mise à jour disponible : v{{version}}"
-    }
-  },
-  "tasks": {
-    "checking": "Vérification de l'installation TaskMaster...",
-    "notInstalled": {
-      "title": "CLI TaskMaster AI non installé",
-      "description": "Le CLI TaskMaster est requis pour utiliser les fonctionnalités de gestion des tâches. Installez-le pour commencer :",
-      "installCommand": "npm install -g task-master-ai",
-      "viewOnGitHub": "Voir sur GitHub",
-      "afterInstallation": "Après l'installation :",
-      "steps": {
-        "restart": "Redémarrez cette application",
-        "autoAvailable": "Les fonctionnalités TaskMaster deviendront automatiquement disponibles",
-        "initCommand": "Utilisez task-master init dans votre répertoire de projet"
-      }
-    },
-    "settings": {
-      "enableLabel": "Activer l'intégration TaskMaster",
-      "enableDescription": "Afficher les tâches TaskMaster, les bannières et les indicateurs dans la barre latérale"
-    }
+    "loading": "Chargement..."
   },
   "agents": {
     "authStatus": {
@@ -317,17 +294,8 @@
       "claude": {
         "description": "Assistant IA Claude d'Anthropic"
       },
-      "cursor": {
-        "description": "Éditeur de code IA Cursor"
-      },
       "codex": {
         "description": "Assistant IA Codex d'OpenAI"
-      },
-      "gemini": {
-        "description": "Assistant IA Gemini de Google"
-      },
-      "opencode": {
-        "description": "Assistant CLI OpenCode"
       }
     },
     "connectionStatus": "Statut de la connexion",
@@ -345,8 +313,7 @@
     "title": "Paramètres de permission",
     "skipPermissions": {
       "label": "Ignorer les invites de permission (à utiliser avec précaution)",
-      "claudeDescription": "Équivalent au flag --dangerously-skip-permissions",
-      "cursorDescription": "Équivalent au flag -f dans le CLI Cursor"
+      "claudeDescription": "Équivalent au flag --dangerously-skip-permissions"
     },
     "allowedTools": {
       "title": "Outils autorisés",
@@ -421,9 +388,7 @@
     "title": "Serveurs MCP",
     "description": {
       "claude": "Les serveurs Model Context Protocol fournissent des outils et sources de données supplémentaires à Claude",
-      "cursor": "Les serveurs Model Context Protocol fournissent des outils et sources de données supplémentaires à Cursor",
-      "codex": "Les serveurs Model Context Protocol fournissent des outils et sources de données supplémentaires à Codex",
-      "opencode": "Les serveurs Model Context Protocol fournissent des outils et sources de données supplémentaires à OpenCode"
+      "codex": "Les serveurs Model Context Protocol fournissent des outils et sources de données supplémentaires à Codex"
     },
     "addButton": "Ajouter un serveur MCP",
     "empty": "Aucun serveur MCP configuré",
@@ -477,9 +442,7 @@
     "docs": "Docs",
     "sections": {
       "officialTitle": "Plugins officiels",
-      "officialDescription": "Maintenus par l'équipe CloudCLI et prêts à être installés directement.",
-      "unofficialTitle": "Autres plugins",
-      "unofficialDescription": "Plugins non officiels et intégrations d'autres utilisateurs. Examinez le code source avant d'installer."
+      "officialDescription": "Maintenus par l'équipe CloudCLI et prêts à être installés directement."
     },
     "starterPlugin": {
       "name": "Statistiques du projet",
@@ -491,48 +454,6 @@
       "name": "Terminal",
       "badge": "officiel",
       "description": "Terminal intégré avec accès shell complet directement dans l'interface.",
-      "install": "Installer"
-    },
-    "scheduledPromptPlugin": {
-      "name": "Invites planifiées",
-      "badge": "non officiel",
-      "description": "Planifiez des invites d'espace de travail, consultez l'historique des exécutions et gérez les tâches locales récurrentes.",
-      "install": "Installer"
-    },
-    "claudeWatchPlugin": {
-      "name": "Claude Watch",
-      "badge": "non officiel",
-      "description": "Surveillez les sessions Claude Code longues pour détecter les blocages et exposez les contrôles de processus.",
-      "install": "Installer"
-    },
-    "prismCloudCLI": {
-      "name": "PRISM CloudCLI",
-      "badge": "non officiel",
-      "description": "Intelligence de session pour Claude Code, dans CloudCLI. Voyez pourquoi vos sessions consomment des tokens sans quitter le navigateur.",
-      "install": "Installer"
-    },
-    "sessionManagerPlugin": {
-      "name": "Sessions",
-      "badge": "non officiel",
-      "description": "Visualisez, gérez et terminez les sessions Claude Code actives.",
-      "install": "Installer"
-    },
-    "tokenCostCalculatorPlugin": {
-      "name": "Calculateur de coût en tokens",
-      "badge": "non officiel",
-      "description": "Calculez les coûts API à partir des prix des modèles et de l'utilisation des tokens, avec prise en charge des tarifs préréglés.",
-      "install": "Installer"
-    },
-    "taskQueuePlugin": {
-      "name": "File de tâches",
-      "badge": "non officiel",
-      "description": "Tableau de bord de file de tâches pour visualiser, filtrer et lancer des tâches d'agent.",
-      "install": "Installer"
-    },
-    "githubIssuesBoardPlugin": {
-      "name": "Tableau des issues GitHub",
-      "badge": "non officiel",
-      "description": "Tableau Kanban pour les issues GitHub avec synchronisation bidirectionnelle TaskMaster et installation automatique de la compétence CLI /github-task",
       "install": "Installer"
     },
     "morePlugins": "Plus",

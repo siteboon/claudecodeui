@@ -1,4 +1,5 @@
 import { FileText, GitBranch, History } from 'lucide-react';
+
 import type { GitPanelView } from '../types/types';
 
 type GitViewTabsProps = {

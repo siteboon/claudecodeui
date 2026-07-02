@@ -187,9 +187,9 @@
       "usingProvidedToken": "Utilisation du token fourni",
       "noAuthentication": "Sans authentification",
       "sshKey": "Clé SSH",
-      "existingInfo": "L'espace de travail sera ajouté à votre liste de projets et disponible pour les sessions Claude/Cursor.",
+      "existingInfo": "L'espace de travail sera ajouté à votre liste de projets et disponible pour les sessions Claude/Codex.",
       "newWithClone": "Le dépôt sera cloné depuis ce dossier.",
-      "newEmpty": "L'espace de travail sera ajouté à votre liste de projets et disponible pour les sessions Claude/Cursor.",
+      "newEmpty": "L'espace de travail sera ajouté à votre liste de projets et disponible pour les sessions Claude/Codex.",
       "cloningRepository": "Clonage du dépôt..."
     },
     "buttons": {
@@ -235,35 +235,6 @@
           "title": "Notification de l'agent"
         }
       }
-    }
-  },
-  "versionUpdate": {
-    "title": "Mise à jour disponible",
-    "newVersionReady": "Une nouvelle version est prête",
-    "currentVersion": "Version actuelle",
-    "latestVersion": "Dernière version",
-    "whatsNew": "Nouveautés :",
-    "viewFullRelease": "Voir les notes de version complètes",
-    "updateProgress": "Progression de la mise à jour :",
-    "manualUpgrade": "Mise à jour manuelle :",
-    "npmUpgradeCommand": "npm install -g @cloudcli-ai/cloudcli@latest",
-    "manualUpgradeHint": "Ou cliquez sur « Mettre à jour maintenant » pour lancer la mise à jour automatiquement.",
-    "updateCompleted": "Mise à jour effectuée avec succès !",
-    "restartServer": "Veuillez redémarrer le serveur pour appliquer les modifications.",
-    "updateFailed": "Échec de la mise à jour",
-    "buttons": {
-      "close": "Fermer",
-      "later": "Plus tard",
-      "copyCommand": "Copier la commande",
-      "updateNow": "Mettre à jour maintenant",
-      "updating": "Mise à jour..."
-    },
-    "ariaLabels": {
-      "closeModal": "Fermer la fenêtre de mise à jour",
-      "showSidebar": "Afficher la barre latérale",
-      "settings": "Paramètres",
-      "updateAvailable": "Mise à jour disponible",
-      "closeSidebar": "Masquer la barre latérale"
     }
   }
 }

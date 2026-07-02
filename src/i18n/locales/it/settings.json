@@ -90,7 +90,6 @@
     "appearance": "Aspetto",
     "git": "Git",
     "apiTokens": "API e Token",
-    "tasks": "Attività",
     "notifications": "Notifiche",
     "plugins": "Plugin",
     "about": "Informazioni"
@@ -276,32 +275,10 @@
     "apiDocsLink": "Documentazione API",
     "documentation": {
       "title": "Documentazione API esterna",
-      "description": "Scopri come usare l'API esterna per avviare sessioni Claude/Cursor dalle tue applicazioni.",
+      "description": "Scopri come usare l'API esterna per avviare sessioni Claude/Codex dalle tue applicazioni.",
       "viewLink": "Vedi documentazione API →"
     },
-    "loading": "Caricamento...",
-    "version": {
-      "updateAvailable": "Aggiornamento disponibile: v{{version}}"
-    }
-  },
-  "tasks": {
-    "checking": "Verifica installazione TaskMaster...",
-    "notInstalled": {
-      "title": "TaskMaster AI CLI non installato",
-      "description": "TaskMaster CLI è necessario per usare le funzionalità di gestione attività. Installalo per iniziare:",
-      "installCommand": "npm install -g task-master-ai",
-      "viewOnGitHub": "Vedi su GitHub",
-      "afterInstallation": "Dopo l'installazione:",
-      "steps": {
-        "restart": "Riavvia questa applicazione",
-        "autoAvailable": "Le funzionalità TaskMaster saranno automaticamente disponibili",
-        "initCommand": "Usa task-master init nella directory del tuo progetto"
-      }
-    },
-    "settings": {
-      "enableLabel": "Abilita integrazione TaskMaster",
-      "enableDescription": "Mostra attività TaskMaster, banner e indicatori nella barra laterale nell'interfaccia"
-    }
+    "loading": "Caricamento..."
   },
   "agents": {
     "authStatus": {
@@ -317,14 +294,8 @@
       "claude": {
         "description": "Assistente AI Anthropic Claude"
       },
-      "cursor": {
-        "description": "Editor di codice potenziato da AI Cursor"
-      },
       "codex": {
         "description": "Assistente AI OpenAI Codex"
-      },
-      "gemini": {
-        "description": "Assistente AI Google Gemini"
       }
     },
     "connectionStatus": "Stato connessione",
@@ -342,8 +313,7 @@
     "title": "Impostazioni permessi",
     "skipPermissions": {
       "label": "Salta richieste di permesso (usa con cautela)",
-      "claudeDescription": "Equivalente al flag --dangerously-skip-permissions",
-      "cursorDescription": "Equivalente al flag -f in Cursor CLI"
+      "claudeDescription": "Equivalente al flag --dangerously-skip-permissions"
     },
     "allowedTools": {
       "title": "Strumenti consentiti",
@@ -418,7 +388,6 @@
     "title": "Server MCP",
     "description": {
       "claude": "I server Model Context Protocol forniscono strumenti e fonti dati aggiuntive a Claude",
-      "cursor": "I server Model Context Protocol forniscono strumenti e fonti dati aggiuntive a Cursor",
       "codex": "I server Model Context Protocol forniscono strumenti e fonti dati aggiuntive a Codex"
     },
     "addButton": "Aggiungi server MCP",

@@ -61,7 +61,28 @@ export default defineConfig(({ mode }) => {
               '@codemirror/lang-python',
               '@codemirror/theme-one-dark'
             ],
-            'vendor-xterm': ['@xterm/xterm', '@xterm/addon-fit', '@xterm/addon-clipboard', '@xterm/addon-webgl']
+            'vendor-xterm': ['@xterm/xterm', '@xterm/addon-fit', '@xterm/addon-clipboard', '@xterm/addon-webgl'],
+            'vendor-markdown': [
+              'dompurify',
+              'react-markdown',
+              'rehype-katex',
+              'rehype-raw',
+              'remark-gfm',
+              'remark-math'
+            ],
+            'vendor-syntax': ['react-syntax-highlighter'],
+            'vendor-katex': ['katex'],
+            'vendor-ui': [
+              'class-variance-authority',
+              'clsx',
+              'cmdk',
+              'fuse.js',
+              'jszip',
+              'lucide-react',
+              'react-dropzone',
+              'tailwind-merge'
+            ],
+            'i18n': ['./src/i18n/config.js']
           }
         }
       }

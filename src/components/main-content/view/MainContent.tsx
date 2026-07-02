@@ -6,31 +6,16 @@ import GitPanel from '../../git-panel/view/GitPanel';
 import PluginTabContent from '../../plugins/view/PluginTabContent';
 import { BrowserUsePanel } from '../../browser-use';
 import type { MainContentProps } from '../types/types';
-import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { usePaletteOpsRegister } from '../../../contexts/PaletteOpsContext';
-import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useUiPreferences } from '../../../hooks/useUiPreferences';
 import { useFileOpenResolver } from '../../../hooks/useFileOpenResolver';
 import { authenticatedFetch } from '../../../utils/api';
 import { useEditorSidebar } from '../../code-editor/hooks/useEditorSidebar';
 import EditorSidebar from '../../code-editor/view/EditorSidebar';
-import type { Project } from '../../../types/app';
-import { TaskMasterPanel } from '../../task-master';
 
 import MainContentHeader from './subcomponents/MainContentHeader';
 import MainContentStateView from './subcomponents/MainContentStateView';
 import ErrorBoundary from './ErrorBoundary';
-
-type TaskMasterContextValue = {
-  currentProject?: Project | null;
-  setCurrentProject?: ((project: Project) => void) | null;
-};
-
-type TasksSettingsContextValue = {
-  tasksEnabled: boolean;
-  isTaskMasterInstalled: boolean | null;
-  isTaskMasterReady: boolean | null;
-};
 
 function MainContent({
   selectedProject,
@@ -55,11 +40,8 @@ function MainContent({
   const { preferences } = useUiPreferences();
   const { showRawParameters, showThinking, sendByCtrlEnter } = preferences;
 
-  const { currentProject, setCurrentProject } = useTaskMaster() as TaskMasterContextValue;
-  const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings() as TasksSettingsContextValue;
   const [browserUseEnabled, setBrowserUseEnabled] = useState(false);
 
-  const shouldShowTasksTab = Boolean(tasksEnabled && isTaskMasterInstalled);
   const shouldShowBrowserTab = browserUseEnabled;
 
   const {
@@ -80,23 +62,6 @@ function MainContent({
   // Resolves bare/partial file references (e.g. links inside chat messages) to
   // real project files before opening them in the in-app editor.
   const resolvedFileOpen = useFileOpenResolver(selectedProject, handleFileOpen);
-
-  useEffect(() => {
-    // Identify projects by DB `projectId`; the TaskMaster context uses the
-    // same identifier to key its internal maps.
-    const selectedProjectId = selectedProject?.projectId;
-    const currentProjectId = currentProject?.projectId;
-
-    if (selectedProject && selectedProjectId !== currentProjectId) {
-      setCurrentProject?.(selectedProject);
-    }
-  }, [selectedProject, currentProject?.projectId, setCurrentProject]);
-
-  useEffect(() => {
-    if (!shouldShowTasksTab && activeTab === 'tasks') {
-      setActiveTab('chat');
-    }
-  }, [shouldShowTasksTab, activeTab, setActiveTab]);
 
   const loadBrowserUseSettings = useCallback(async () => {
     try {
@@ -146,7 +111,6 @@ function MainContent({
         setActiveTab={setActiveTab}
         selectedProject={selectedProject}
         selectedSession={selectedSession}
-        shouldShowTasksTab={shouldShowTasksTab}
         shouldShowBrowserTab={shouldShowBrowserTab}
         isMobile={isMobile}
         onMenuClick={onMenuClick}
@@ -174,7 +138,6 @@ function MainContent({
                 sendByCtrlEnter={sendByCtrlEnter}
                 externalMessageUpdate={externalMessageUpdate}
                 newSessionTrigger={newSessionTrigger}
-                onShowAllTasks={tasksEnabled ? () => setActiveTab('tasks') : null}
               />
             </ErrorBoundary>
           </div>
@@ -190,8 +153,6 @@ function MainContent({
               <GitPanel selectedProject={selectedProject} isMobile={isMobile} onFileOpen={handleFileOpen} />
             </div>
           )}
-
-          {shouldShowTasksTab && <TaskMasterPanel isVisible={activeTab === 'tasks'} />}
 
           {shouldShowBrowserTab && activeTab === 'browser' && (
             <div className="h-full overflow-hidden">

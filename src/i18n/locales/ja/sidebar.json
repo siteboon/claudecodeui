@@ -65,10 +65,7 @@
     "cancel": "キャンセル",
     "save": "保存",
     "delete": "削除",
-    "rename": "名前の変更",
-    "joinCommunity": "コミュニティに参加",
-    "reportIssue": "問題を報告",
-    "starOnGithub": "GitHubでスター"
+    "rename": "名前の変更"
   },
   "branding": {
     "openSource": "オープンソース"
@@ -112,10 +109,6 @@
     "restoreProjectError": "プロジェクトの復元でエラーが発生しました。もう一度お試しください。",
     "restoreSessionFailed": "セッションの復元に失敗しました。もう一度お試しください。",
     "restoreSessionError": "セッションの復元でエラーが発生しました。もう一度お試しください。"
-  },
-  "version": {
-    "updateAvailable": "アップデートあり",
-    "restartRequired": "更新が適用されていません。サーバーを再起動してください"
   },
   "deleteConfirmation": {
     "deleteProject": "プロジェクトを除去",

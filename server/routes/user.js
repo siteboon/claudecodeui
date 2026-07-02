@@ -1,8 +1,10 @@
+import { spawn } from 'child_process';
+
 import express from 'express';
+
 import { userDb } from '../modules/database/index.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { getSystemGitConfig } from '../utils/gitConfig.js';
-import { spawn } from 'child_process';
 
 const router = express.Router();
 

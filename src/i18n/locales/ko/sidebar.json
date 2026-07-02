@@ -65,10 +65,7 @@
     "cancel": "취소",
     "save": "저장",
     "delete": "삭제",
-    "rename": "이름 변경",
-    "joinCommunity": "커뮤니티 참여",
-    "reportIssue": "문제 신고",
-    "starOnGithub": "GitHub에서 스타"
+    "rename": "이름 변경"
   },
   "branding": {
     "openSource": "오픈 소스"
@@ -112,10 +109,6 @@
     "restoreProjectError": "프로젝트 복원 오류. 다시 시도해주세요.",
     "restoreSessionFailed": "세션 복원 실패. 다시 시도해주세요.",
     "restoreSessionError": "세션 복원 오류. 다시 시도해주세요."
-  },
-  "version": {
-    "updateAvailable": "업데이트 가능",
-    "restartRequired": "업데이트가 설치됨 — 적용하려면 서버를 재시작하세요"
   },
   "deleteConfirmation": {
     "deleteProject": "프로젝트 제거",

@@ -1,17 +1,15 @@
 <div align="center">
   <img src="public/logo.svg" alt="CloudCLI UI" width="64" height="64">
   <h1>Cloud CLI (aka Claude Code UI)</h1>
-  <p>A desktop and mobile UI for <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>, <a href="https://docs.cursor.com/en/cli/overview">Cursor CLI</a>, <a href="https://developers.openai.com/codex">Codex</a>, and <a href="https://geminicli.com/">Gemini-CLI</a>.<br>Use it locally or remotely to view your active projects and sessions from everywhere.</p>
+  <p>A desktop and mobile UI for <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a> and <a href="https://developers.openai.com/codex">Codex</a>.<br>Use it locally or remotely to view your active projects and sessions from everywhere.</p>
 </div>
 
 <p align="center">
-  <a href="https://cloudcli.ai">CloudCLI Cloud</a> · <a href="https://cloudcli.ai/docs">Documentation</a> · <a href="https://discord.gg/buxwujPNRE">Discord</a> · <a href="https://github.com/siteboon/claudecodeui/issues">Bug Reports</a> · <a href="CONTRIBUTING.md">Contributing</a>
+  <a href="https://cloudcli.ai">CloudCLI Cloud</a> · <a href="https://cloudcli.ai/docs">Documentation</a> · <a href="CONTRIBUTING.md">Contributing</a>
 </p>
 
 <p align="center">
   <a href="https://cloudcli.ai"><img src="https://img.shields.io/badge/☁️_CloudCLI_Cloud-Try_Now-0066FF?style=for-the-badge" alt="CloudCLI Cloud"></a>
-  <a href="https://discord.gg/buxwujPNRE"><img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join our Discord"></a>
-  <br><br>
   <a href="https://trendshift.io/repositories/15586" target="_blank"><img src="https://trendshift.io/api/badge/repositories/15586" alt="siteboon%2Fclaudecodeui | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 </p>
 
@@ -43,7 +41,7 @@
 <h3>CLI Selection</h3>
 <img src="public/screenshots/cli-selection.png" alt="CLI Selection" width="400">
 <br>
-<em>Select between Claude Code, Gemini, Cursor CLI and Codex</em>
+<em>Select between Claude Code and Codex</em>
 </td>
 </tr>
 </table>
@@ -62,8 +60,7 @@
 - **Browser Use** - Open browser sessions for web research, testing, and agent-driven browser tasks
 - **Session Management** - Resume conversations, manage multiple sessions, and track history
 - **Plugin System** - Extend CloudCLI with custom plugins — add new tabs, backend services, and integrations. [Build your own →](https://github.com/cloudcli-ai/cloudcli-plugin-starter)
-- **TaskMaster AI Integration** *(Optional)* - Advanced project management with AI-powered task planning, PRD parsing, and workflow automation
-- **Model Compatibility** - Works with Claude, GPT, and Gemini model families (the full list of supported models is available at runtime via `GET /api/providers/:provider/models`)
+- **Model Compatibility** - Works with Claude and Codex model families (the full list of supported models is available at runtime via `GET /api/providers/:provider/models`)
 
 
 ## Quick Start
@@ -103,15 +100,15 @@ Run agents in isolated sandboxes with hypervisor-level isolation. Starts Claude 
 npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
 ```
 
-Supports Claude Code, Codex, and Gemini CLI. See the [sandbox docs](docker/) for setup and advanced options.
+Supports Claude Code and Codex. See the [sandbox docs](docker/) for setup and advanced options.
 
 ### Desktop Companion App
 
-CloudCLI Desktop is an optional native companion for CloudCLI Cloud and Local CloudCLI. It ships from this repository's GitHub Releases and keeps CloudCLI available from your menu bar or tray.
+CloudCLI Desktop is an optional native companion for CloudCLI Cloud and Local CloudCLI. It keeps CloudCLI available from your menu bar or tray.
 
 - **[macOS](https://cloudcli.ai/download/macos)**
 - **[Windows](https://cloudcli.ai/download/windows)**
-- **[Download page](https://cloudcli.ai/download)** · **[GitHub Releases and checksums](https://github.com/siteboon/claudecodeui/releases)**
+- **[Download page](https://cloudcli.ai/download)**
 
 Use it to open CloudCLI Cloud environments, switch between local and remote workspaces, and copy mobile/browser URLs. To work locally, choose **Local CloudCLI** in the desktop app; it will use your running local server or start one for you.
 
@@ -131,14 +128,14 @@ CloudCLI UI is the open source UI layer that powers CloudCLI Cloud. You can self
 | **Machine needs to stay on** | Yes | Yes | No |
 | **Mobile access** | Any browser on your network | Any browser on your network | Any device |
 | **Desktop companion** | Optional. Choose Local CloudCLI | Optional. Choose Local CloudCLI | Optional. Opens cloud environments |
-| **Agents supported** | Claude Code, Cursor CLI, Codex, Gemini CLI | Claude Code, Codex, Gemini CLI | Claude Code, Cursor CLI, Codex, Gemini CLI |
+| **Agents supported** | Claude Code, Codex | Claude Code, Codex | Claude Code, Codex |
 | **File explorer and Git** | Yes | Yes | Yes |
 | **MCP configuration** | Synced with `~/.claude` | Managed via UI | Managed via UI |
 | **REST API** | Yes | Yes | Yes |
 | **Team sharing** | No | No | Yes |
 | **Platform cost** | Free, open source | Free, open source | Starts at $7/month |
 
-> All options use your own AI subscriptions (Claude, Cursor, etc.) — CloudCLI provides the environment, not the AI.
+> All options use your own AI subscriptions (Claude, Codex, etc.) — CloudCLI provides the environment, not the AI.
 
 ---
 
@@ -169,19 +166,12 @@ To use Claude Code's full functionality, you'll need to manually enable tools:
 
 CloudCLI has a plugin system that lets you add custom tabs with their own frontend UI and optional Node.js backend. Install plugins from git repos directly in **Settings > Plugins**, or build your own.
 
-### Available Plugins
+### Official Plugins
 
 | Plugin | Description |
 |---|---|
 | **[Project Stats](https://github.com/cloudcli-ai/cloudcli-plugin-starter)** | Shows file counts, lines of code, file-type breakdown, largest files, and recently modified files for your current project |
 | **[Web Terminal](https://github.com/cloudcli-ai/cloudcli-plugin-terminal)** | Full xterm.js terminal with multi-tab support |
-| **[Claude Watch](https://github.com/satsuki19980613/cloudcli-claude-watch)** | Watches long-running Claude Code sessions for hangs and exposes process controls |
-| **[CloudCLI Scheduler](https://github.com/grostim/cloudcli-cron)** | Create workspace-scoped scheduled prompts and execute them through a local CLI such as Codex, Claude Code, or Gemini CLI |
-| **[PRISM CloudCLI](https://github.com/jakeefr/cloudcli-plugin-prism)** | Session intelligence for Claude Code inside CloudCLI, including token burn visibility |
-| **[Sessions](https://github.com/strykereye2/cloudcli-plugin-session-manager)** | View, manage, and kill active Claude Code sessions |
-| **[Token Cost Calculator](https://github.com/NightmareAway/cloudcli-plugin-token-cost-calculator)** | Calculate API costs from model prices and token usage, with preset model pricing support |
-| **[Task Queue](https://github.com/TadMSTR/cloudcli-plugin-task-queue)** | Task queue dashboard to view, filter, and launch agent tasks |
-| **[GitHub Issues Board](https://github.com/szmidtpiotr/claude-github-issue)** | Kanban board for GitHub Issues with bidirectional TaskMaster sync and /github-task CLI skill auto-install |
 
 ### Build Your Own
 
@@ -203,7 +193,7 @@ Here's what that means in practice:
 
 - **All your sessions, not just one** — CloudCLI UI auto-discovers every session from your `~/.claude` folder. Remote Control only exposes the single active session to make it available in the Claude mobile app.
 - **Your settings are your settings** — MCP servers, tool permissions, and project config you change in CloudCLI UI are written directly to your Claude Code config and take effect immediately, and vice versa.
-- **Works with more agents** — Claude Code, Cursor CLI, Codex, and Gemini CLI, not just Claude Code.
+- **Works with more agents** — Claude Code and Codex.
 - **Full UI, not just a chat window** — file explorer, Git integration, MCP management, and a shell terminal are all built in.
 - **CloudCLI Cloud runs in the cloud** — close your laptop, the agent keeps running. No terminal to babysit, no machine to keep awake.
 
@@ -212,7 +202,7 @@ Here's what that means in practice:
 <details>
 <summary>Do I need to pay for an AI subscription separately?</summary>
 
-Yes. CloudCLI provides the environment, not the AI. You bring your own Claude, Cursor, Codex, or Gemini subscription. CloudCLI Cloud starts at $7/month for the hosted environment on top of that.
+Yes. CloudCLI provides the environment, not the AI. You bring your own Claude or Codex subscription. CloudCLI Cloud starts at $7/month for the hosted environment on top of that.
 
 </details>
 
@@ -232,11 +222,9 @@ Yes, for self-hosted. CloudCLI UI reads from and writes to the same `~/.claude` 
 
 ---
 
-## Community & Support
+## Support
 
 - **[Documentation](https://cloudcli.ai/docs)** — installation, configuration, features, and troubleshooting
-- **[Discord](https://discord.gg/buxwujPNRE)** — get help and connect with other users
-- **[GitHub Issues](https://github.com/siteboon/claudecodeui/issues)** — bug reports and feature requests
 - **[Contributing Guide](CONTRIBUTING.md)** — how to contribute to the project
 
 ## License
@@ -251,14 +239,11 @@ CloudCLI UI  - (https://cloudcli.ai).
 
 ### Built With
 - **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** - Anthropic's official CLI
-- **[Cursor CLI](https://docs.cursor.com/en/cli/overview)** - Cursor's official CLI
 - **[Codex](https://developers.openai.com/codex)** - OpenAI Codex
-- **[Gemini-CLI](https://geminicli.com/)** - Google Gemini CLI
 - **[React](https://react.dev/)** - User interface library
 - **[Vite](https://vitejs.dev/)** - Fast build tool and dev server
 - **[Tailwind CSS](https://tailwindcss.com/)** - Utility-first CSS framework
 - **[CodeMirror](https://codemirror.net/)** - Advanced code editor
-- **[TaskMaster AI](https://github.com/eyaltoledano/claude-task-master)** *(Optional)* - AI-powered project management and task planning
 
 
 ### Sponsors
@@ -266,5 +251,5 @@ CloudCLI UI  - (https://cloudcli.ai).
 ---
 
 <div align="center">
-  <strong>Made with care for the Claude Code, Cursor and Codex community.</strong>
+  <strong>Made with care for Claude Code and Codex users.</strong>
 </div>

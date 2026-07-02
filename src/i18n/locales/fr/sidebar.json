@@ -66,10 +66,7 @@
     "cancel": "Annuler",
     "save": "Enregistrer",
     "delete": "Supprimer",
-    "rename": "Renommer",
-    "joinCommunity": "Rejoindre la communauté",
-    "reportIssue": "Signaler un problème",
-    "starOnGithub": "Étoile sur GitHub"
+    "rename": "Renommer"
   },
   "branding": {
     "openSource": "Open Source"
@@ -113,10 +110,6 @@
     "restoreProjectError": "Erreur lors de la restauration du projet. Veuillez réessayer.",
     "restoreSessionFailed": "Échec de la restauration de la session. Veuillez réessayer.",
     "restoreSessionError": "Erreur lors de la restauration de la session. Veuillez réessayer."
-  },
-  "version": {
-    "updateAvailable": "Mise à jour disponible",
-    "restartRequired": "Mise à jour installée — redémarrez le serveur pour l'appliquer"
   },
   "search": {
     "modeProjects": "Projets",

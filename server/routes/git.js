@@ -1,10 +1,11 @@
-import express from 'express';
-import { spawn } from 'child_process';
+﻿import { spawn } from 'child_process';
 import path from 'path';
 import { promises as fs } from 'fs';
+
+import express from 'express';
+
 import { projectsDb } from '../modules/database/index.js';
 import { queryClaudeSDK } from '../claude-sdk.js';
-import { spawnCursor } from '../cursor-cli.js';
 
 const router = express.Router();
 const COMMIT_DIFF_CHARACTER_LIMIT = 500_000;
@@ -104,7 +105,7 @@ function validateProjectPath(projectPath) {
 /**
  * Resolve the absolute project directory for a given DB `projectId`.
  *
- * After the projectName → projectId migration, every git endpoint receives
+ * After the projectName 鈫?projectId migration, every git endpoint receives
  * the DB primary key (`project` query/body param). The legacy filesystem
  * resolver that walked Claude's JSONL history is no longer used here; the
  * path comes straight from the `projects` table and is then sanity-checked
@@ -667,7 +668,7 @@ router.get('/branches', async (req, res) => {
       .filter(b => !b.startsWith('remotes/'))
       .map(b => (b.startsWith('* ') ? b.substring(2) : b));
 
-    // Remote branches — strip 'remotes/<remote>/' prefix
+    // Remote branches 鈥?strip 'remotes/<remote>/' prefix
     const remoteBranches = rawLines
       .filter(b => b.startsWith('remotes/'))
       .map(b => b.replace(/^remotes\/[^/]+\//, ''))
@@ -852,8 +853,8 @@ router.post('/generate-commit-message', async (req, res) => {
   }
 
   // Validate provider
-  if (!['claude', 'cursor'].includes(provider)) {
-    return res.status(400).json({ error: 'provider must be "claude" or "cursor"' });
+  if (provider !== 'claude') {
+    return res.status(400).json({ error: 'provider must be "claude"' });
   }
 
   try {
@@ -910,10 +911,10 @@ router.post('/generate-commit-message', async (req, res) => {
 });
 
 /**
- * Generates a commit message using AI (Claude SDK or Cursor CLI)
+ * Generates a commit message using AI (Claude SDK)
  * @param {Array<string>} files - List of changed files
  * @param {string} diffContext - Git diff content
- * @param {string} provider - 'claude' or 'cursor'
+ * @param {string} provider - 'claude'
  * @param {string} projectPath - Project directory path
  * @returns {Promise<string>} Generated commit message
  */
@@ -945,31 +946,26 @@ Generate the commit message:`;
       send: (data) => {
         try {
           const parsed = typeof data === 'string' ? JSON.parse(data) : data;
-          console.log('🔍 Writer received message type:', parsed.type);
+          console.log('馃攳 Writer received message type:', parsed.type);
 
-          // Handle different message formats from Claude SDK and Cursor CLI
+          // Handle Claude SDK message format
           // Claude SDK sends: {type: 'claude-response', data: {message: {content: [...]}}}
           if (parsed.type === 'claude-response' && parsed.data) {
             const message = parsed.data.message || parsed.data;
-            console.log('📦 Claude response message:', JSON.stringify(message, null, 2).substring(0, 500));
+            console.log('馃摝 Claude response message:', JSON.stringify(message, null, 2).substring(0, 500));
             if (message.content && Array.isArray(message.content)) {
               // Extract text from content array
               for (const item of message.content) {
                 if (item.type === 'text' && item.text) {
-                  console.log('✅ Extracted text chunk:', item.text.substring(0, 100));
+                  console.log('鉁?Extracted text chunk:', item.text.substring(0, 100));
                   responseText += item.text;
                 }
               }
             }
           }
-          // Cursor CLI sends: {type: 'cursor-output', output: '...'}
-          else if (parsed.type === 'cursor-output' && parsed.output) {
-            console.log('✅ Cursor output:', parsed.output.substring(0, 100));
-            responseText += parsed.output;
-          }
           // Also handle direct text messages
           else if (parsed.type === 'text' && parsed.text) {
-            console.log('✅ Direct text:', parsed.text.substring(0, 100));
+            console.log('鉁?Direct text:', parsed.text.substring(0, 100));
             responseText += parsed.text;
           }
         } catch (e) {
@@ -980,8 +976,8 @@ Generate the commit message:`;
       setSessionId: () => {}, // No-op for this use case
     };
 
-    console.log('🚀 Calling AI agent with provider:', provider);
-    console.log('📝 Prompt length:', prompt.length);
+    console.log('馃殌 Calling AI agent with provider:', provider);
+    console.log('馃摑 Prompt length:', prompt.length);
 
     // Call the appropriate agent
     if (provider === 'claude') {
@@ -990,19 +986,14 @@ Generate the commit message:`;
         permissionMode: 'bypassPermissions',
         model: 'sonnet'
       }, writer);
-    } else if (provider === 'cursor') {
-      await spawnCursor(prompt, {
-        cwd: projectPath,
-        skipPermissions: true
-      }, writer);
     }
 
-    console.log('📊 Total response text collected:', responseText.length, 'characters');
-    console.log('📄 Response preview:', responseText.substring(0, 200));
+    console.log('馃搳 Total response text collected:', responseText.length, 'characters');
+    console.log('馃搫 Response preview:', responseText.substring(0, 200));
 
     // Clean up the response
     const cleanedMessage = cleanCommitMessage(responseText);
-    console.log('🧹 Cleaned message:', cleanedMessage.substring(0, 200));
+    console.log('馃Ч Cleaned message:', cleanedMessage.substring(0, 200));
 
     return cleanedMessage || 'chore: update files';
   } catch (error) {

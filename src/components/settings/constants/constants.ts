@@ -5,7 +5,6 @@ import {
   GitBranch,
   Info,
   KeyRound,
-  ListChecks,
   MonitorPlay,
   Palette,
   Plug,
@@ -15,7 +14,6 @@ import type {
   AgentCategory,
   AgentProvider,
   CodeEditorSettingsState,
-  CursorPermissionsState,
   ProjectSortOrder,
   SettingsMainTab,
 } from '../types/types';
@@ -32,14 +30,13 @@ export const SETTINGS_MAIN_TABS: SettingsMainTabMeta[] = [
   { id: 'appearance', label: 'Appearance', keywords: 'appearance theme dark light language', icon: Palette },
   { id: 'git', label: 'Git', keywords: 'git github commits', icon: GitBranch },
   { id: 'api', label: 'API Tokens', keywords: 'api tokens auth keys', icon: KeyRound },
-  { id: 'tasks', label: 'Tasks', keywords: 'tasks taskmaster', icon: ListChecks },
   { id: 'browser', label: 'Browser', keywords: 'browser playwright chromium automation', icon: MonitorPlay },
   { id: 'notifications', label: 'Notifications', keywords: 'notifications alerts push', icon: Bell },
   { id: 'plugins', label: 'Plugins', keywords: 'plugins extensions integrations', icon: Plug },
   { id: 'about', label: 'About', keywords: 'about version info', icon: Info },
 ];
 
-export const AGENT_PROVIDERS: AgentProvider[] = ['claude', 'cursor', 'codex', 'gemini', 'opencode'];
+export const AGENT_PROVIDERS: AgentProvider[] = ['claude', 'codex'];
 export const AGENT_CATEGORIES: AgentCategory[] = ['account', 'permissions', 'mcp'];
 
 export const DEFAULT_PROJECT_SORT_ORDER: ProjectSortOrder = 'name';
@@ -49,10 +46,4 @@ export const DEFAULT_CODE_EDITOR_SETTINGS: CodeEditorSettingsState = {
   showMinimap: true,
   lineNumbers: true,
   fontSize: '14',
-};
-
-export const DEFAULT_CURSOR_PERMISSIONS: CursorPermissionsState = {
-  allowedCommands: [],
-  disallowedCommands: [],
-  skipPermissions: false,
 };

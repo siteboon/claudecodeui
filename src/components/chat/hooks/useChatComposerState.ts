@@ -34,11 +34,8 @@ interface UseChatComposerStateArgs {
   provider: LLMProvider;
   permissionMode: PermissionMode | string;
   cyclePermissionMode: () => void;
-  cursorModel: string;
   claudeModel: string;
   codexModel: string;
-  geminiModel: string;
-  opencodeModel: string;
   isLoading: boolean;
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
@@ -168,11 +165,8 @@ export function useChatComposerState({
   provider,
   permissionMode,
   cyclePermissionMode,
-  cursorModel,
   claudeModel,
   codexModel,
-  geminiModel,
-  opencodeModel,
   isLoading,
   canAbortSession,
   tokenBudget,
@@ -328,15 +322,7 @@ export function useChatComposerState({
           projectId: selectedProject.projectId,
           sessionId: currentSessionId,
           provider,
-          model: provider === 'cursor'
-            ? cursorModel
-            : provider === 'codex'
-              ? codexModel
-              : provider === 'gemini'
-                ? geminiModel
-                : provider === 'opencode'
-                  ? opencodeModel
-                  : claudeModel,
+          model: provider === 'codex' ? codexModel : claudeModel,
           tokenUsage: tokenBudget,
         };
 
@@ -388,9 +374,6 @@ export function useChatComposerState({
       claudeModel,
       codexModel,
       currentSessionId,
-      cursorModel,
-      geminiModel,
-      opencodeModel,
       handleBuiltInCommand,
       handleCustomCommand,
       input,
@@ -695,15 +678,7 @@ export function useChatComposerState({
       const getToolsSettings = () => {
         try {
           const settingsKey =
-            provider === 'cursor'
-              ? 'cursor-tools-settings'
-              : provider === 'codex'
-                ? 'codex-settings'
-                : provider === 'gemini'
-                  ? 'gemini-settings'
-                  : provider === 'opencode'
-                    ? 'opencode-settings'
-                  : 'claude-settings';
+            provider === 'codex' ? 'codex-settings' : 'claude-settings';
           const savedSettings = safeLocalStorage.getItem(settingsKey);
           if (savedSettings) {
             return JSON.parse(savedSettings);
@@ -720,16 +695,7 @@ export function useChatComposerState({
       };
 
       const toolsSettings = getToolsSettings();
-      const model =
-        provider === 'cursor'
-          ? cursorModel
-          : provider === 'codex'
-            ? codexModel
-            : provider === 'gemini'
-              ? geminiModel
-              : provider === 'opencode'
-                ? opencodeModel
-                : claudeModel;
+      const model = provider === 'codex' ? codexModel : claudeModel;
 
       // One message shape for every provider. The backend resolves the
       // provider, project path, and provider-native resume id from the
@@ -770,10 +736,7 @@ export function useChatComposerState({
       claudeModel,
       codexModel,
       currentSessionId,
-      cursorModel,
       executeCommand,
-      geminiModel,
-      opencodeModel,
       isLoading,
       onSessionProcessing,
       onSessionEstablished,
@@ -792,17 +755,6 @@ export function useChatComposerState({
   useEffect(() => {
     handleSubmitRef.current = handleSubmit;
   }, [handleSubmit]);
-
-  // A voice transcript either fills the input (to edit before sending) or, when the
-  // user tapped "stop and send", is submitted straight away. Mirror the value into
-  // inputValueRef synchronously so handleSubmit reads the new text, not the stale state.
-  const handleVoiceTranscript = useCallback((text: string, send?: boolean) => {
-    const base = inputValueRef.current.trim();
-    const next = base ? `${base} ${text}` : text;
-    setInput(next);
-    inputValueRef.current = next;
-    if (send) handleSubmitRef.current?.(createFakeSubmitEvent());
-  }, [setInput]);
 
   useEffect(() => {
     inputValueRef.current = input;
@@ -1038,7 +990,6 @@ export function useChatComposerState({
     isDragActive,
     openImagePicker: open,
     handleSubmit,
-    handleVoiceTranscript,
     handleInputChange,
     handleKeyDown,
     handlePaste,

@@ -46,6 +46,8 @@
     "editSessionName": "Manually edit session name",
     "deleteSession": "Delete this session permanently",
     "activeSessionIndicator": "Recently active session (last 10 minutes)",
+    "processingSessionIndicator": "Processing session",
+    "deleteSessionOptions": "Archive or permanently delete this session",
     "save": "Save",
     "cancel": "Cancel",
     "clearSearch": "Clear search",
@@ -66,10 +68,7 @@
     "cancel": "Cancel",
     "save": "Save",
     "delete": "Delete",
-    "rename": "Rename",
-    "joinCommunity": "Join Community",
-    "reportIssue": "Report Issue",
-    "starOnGithub": "Star on GitHub"
+    "rename": "Rename"
   },
   "branding": {
     "openSource": "Open Source"
@@ -114,14 +113,15 @@
     "restoreSessionFailed": "Failed to restore session. Please try again.",
     "restoreSessionError": "Error restoring session. Please try again."
   },
-  "version": {
-    "updateAvailable": "Update available",
-    "restartRequired": "Update installed — restart the server to apply"
-  },
   "search": {
     "modeProjects": "Projects",
     "modeConversations": "Conversations",
     "conversationsPlaceholder": "Search in conversations...",
+    "archivedPlaceholder": "Search archived sessions...",
+    "runningPlaceholder": "Search running sessions...",
+    "runningTooltip": "Running sessions",
+    "archiveOnlyTooltip": "Archive only",
+    "modeRunning": "Running",
     "searching": "Searching...",
     "noResults": "No results found",
     "tryDifferentQuery": "Try a different search query",
@@ -139,6 +139,31 @@
     "removeFromSidebar": "Remove from sidebar only",
     "deleteAllData": "Delete all data permanently",
     "allConversationsDeleted": "The project will be removed from the sidebar. Your files, memories, and session data will be preserved.",
-    "cannotUndo": "You can re-add the project later."
+    "cannotUndo": "You can re-add the project later.",
+    "archiveProject": "Archive project",
+    "archivedSessionNotice": "This session is already archived. You can keep it hidden or delete it permanently.",
+    "archiveSessionNotice": "Archive keeps the session out of the active list while preserving its history.",
+    "archiveSession": "Archive session",
+    "deleteSessionPermanently": "Delete permanently"
+  },
+  "running": {
+    "emptyTitle": "No sessions running",
+    "noMatchingSessions": "No running sessions match this search.",
+    "emptyDescription": "Active work will appear here while a provider is processing.",
+    "title": "Running now"
+  },
+  "archived": {
+    "loadingTitle": "Loading archive...",
+    "loadingDescription": "Fetching hidden workspaces and sessions you can restore later.",
+    "noMatchingSessions": "No matching archived items",
+    "emptyTitle": "No archived items",
+    "tryDifferentSearch": "Try a different search term.",
+    "emptyDescription": "Archived workspaces and sessions will appear here when you hide them from the active list.",
+    "sessionCountOne": "archived item",
+    "sessionCountOther": "archived items",
+    "projectArchived": "Project archived",
+    "restoreProject": "Restore workspace",
+    "restore": "Restore session",
+    "deletePermanently": "Delete permanently"
   }
 }
