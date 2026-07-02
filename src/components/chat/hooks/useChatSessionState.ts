@@ -384,7 +384,7 @@ export function useChatSessionState({
     [hasMoreMessages, isLoadingMoreMessages, selectedProject, selectedSession, sessionStore],
   );
 
-  const handleScroll = useCallback(() => {
+  const handleScroll = useCallback(async () => {
     const container = scrollContainerRef.current;
     if (!container) return;
 

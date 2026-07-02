@@ -293,11 +293,6 @@ export function useChatRealtimeHandlers({
           if (sid) {
             onSessionProcessing?.(sid);
           }
-
-          // Refresh from server using the resolved session ID so we fetch the
-          // correct canonical JSONL history, replacing any client-side streaming
-          // echoes with committed messages.
-          void sessionStore.refreshFromServer(actualSessionId);
           break;
         }
 
@@ -310,33 +305,7 @@ export function useChatRealtimeHandlers({
             pendingPermissionRequestsRef.current = nextPendingPermissionRequests;
             setPendingPermissionRequests(nextPendingPermissionRequests);
           }
-        }
-        break;
-        // Clear pending session
-        if (pendingSessionId && !currentSessionId && completedSuccessfully) {
-          const resolvedSessionId = actualSessionId || pendingSessionId;
-          setCurrentSessionId(resolvedSessionId);
-          if (actualSessionId) {
-            onNavigateToSession?.(resolvedSessionId, { replace: true });
-          }
-          sessionStorage.removeItem('pendingSessionId');
-          setTimeout(() => { void paletteOps.refreshProjects(); }, 500);
-        }
-
-        // Refresh from server so the canonical JSONL history replaces any
-        // client-side streaming echoes with committed messages.
-        if (sid) {
-          void sessionStore.refreshFromServer(sid);
-        }
-        break;
-      }
-
-      case 'permission_cancelled': {
-        if (msg.requestId && sid === activeViewSessionId) {
-          setPendingPermissionRequests((prev) => prev.filter((r: PendingPermissionRequest) => r.requestId !== msg.requestId));
-        }
-        break;
-      }
+          break;
         }
 
         case 'status': {
