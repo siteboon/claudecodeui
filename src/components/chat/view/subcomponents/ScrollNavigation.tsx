@@ -180,29 +180,34 @@ export default function ScrollNavigation({
 }: ScrollNavigationProps) {
   const { t } = useTranslation('chat');
   const [activeDotIndex, setActiveDotIndex] = useState(-1);
+  const activeDotIndexRef = useRef(-1);
+  // Keep ref in sync for use inside useCallback without stale closure
+  useEffect(() => { activeDotIndexRef.current = activeDotIndex; }, [activeDotIndex]);
   const [isStripHovered, setIsStripHovered] = useState(false);
   const [focusedDotIndex, setFocusedDotIndex] = useState(-1);
   const [bookmarks, setBookmarks] = useState<Set<string>>(() => new Set());
   const rafIdRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
-  const skipUpdateRef = useRef(false);
+  // Number of rAF frames to skip scroll tracking after programmatic scroll
+  const skipFramesRef = useRef(0);
 
   const shouldShow = chatMessages.length >= 1;
   const hasMore = hasMoreMessages;
 
-  // Build timeline nodes from the visible messages (same as DOM renders).
-  // Each node's domIndex matches querySelectorAll('.chat-message') position.
+  // Build timeline nodes from the visible messages.
+  // Each node's timestamp is used to find the matching DOM element via data-message-timestamp.
   const timelineNodes = useMemo(() => {
-    const nodes: { domIndex: number; dotType: MessageDotType; snippet: string; time: string; bookmarkId: string }[] = [];
-    chatMessages.forEach((m, domIndex) => {
+    const nodes: { timestampStr: string; dotType: MessageDotType; snippet: string; time: string; bookmarkId: string }[] = [];
+    chatMessages.forEach((m) => {
       if (m.isStreaming) return;
       if (m.type !== 'user') return;
+      const ts = String(m.timestamp);
       nodes.push({
-        domIndex,
+        timestampStr: ts,
         dotType: 'user',
         snippet: truncateSnippet(m.content || m.displayText || ''),
-        time: formatMessageTime(m.timestamp),
-        bookmarkId: `bm-${String(m.timestamp).slice(0, 13)}-${(m.content || '').slice(0, 20).replace(/\s+/g, '_')}`,
+        time: formatMessageTime(ts),
+        bookmarkId: `bm-${ts.slice(0, 13)}-${(m.content || '').slice(0, 20).replace(/\s+/g, '_')}`,
       });
     });
     return nodes;
@@ -230,8 +235,8 @@ export default function ScrollNavigation({
     if (!force) {
       rafIdRef.current = requestAnimationFrame(() => {
         rafIdRef.current = null;
-        if (skipUpdateRef.current) {
-          skipUpdateRef.current = false;
+        if (skipFramesRef.current > 0) {
+          skipFramesRef.current--;
           return;
         }
         performUpdate();
@@ -258,23 +263,25 @@ export default function ScrollNavigation({
       return;
     }
 
-    // Find the DOM element at viewport center, then map to timeline node index
+    // Build a map: timestampStr -> element for quick lookup
     const elements = container.querySelectorAll<HTMLDivElement>('.chat-message');
+    const tsToEl = new Map<string, HTMLDivElement>();
+    elements.forEach(el => {
+      const ts = el.getAttribute('data-message-timestamp');
+      if (ts) tsToEl.set(ts, el);
+    });
+
     const viewportCenter = scrollTop + clientHeight / 2;
-    let activeDomIdx = elements.length - 1;
-    for (let i = 0; i < elements.length; i++) {
-      const top = elements[i].getBoundingClientRect().top - container.getBoundingClientRect().top + scrollTop;
+    let activeNodeIdx = -1;
+    for (let i = 0; i < nodes.length; i++) {
+      const el = tsToEl.get(nodes[i].timestampStr);
+      if (!el) continue;
+      const top = el.getBoundingClientRect().top - container.getBoundingClientRect().top + scrollTop;
       if (top <= viewportCenter) {
-        activeDomIdx = i;
+        activeNodeIdx = i;
       } else {
         break;
       }
-    }
-    // If viewport center is on a filtered-out message (e.g. streaming),
-    // fall back to the last visible node before that position.
-    let activeNodeIdx = nodes.findIndex((n) => n.domIndex === activeDomIdx);
-    if (activeNodeIdx < 0) {
-      activeNodeIdx = nodes.reduce((best, n, idx) => n.domIndex <= activeDomIdx ? idx : best, -1);
     }
     if (mountedRef.current) setActiveDotIndex(activeNodeIdx >= 0 ? activeNodeIdx : -1);
   }, [scrollContainerRef]);
@@ -282,8 +289,9 @@ export default function ScrollNavigation({
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
-    container.addEventListener('scroll', scheduleUpdate, { passive: true });
-    return () => container.removeEventListener('scroll', scheduleUpdate);
+    const onScroll = () => scheduleUpdate();
+    container.addEventListener('scroll', onScroll, { passive: true });
+    return () => container.removeEventListener('scroll', onScroll);
   }, [scrollContainerRef, scheduleUpdate]);
 
   // Show active dot immediately when messages are first available
@@ -314,22 +322,34 @@ export default function ScrollNavigation({
       const node = timelineNodes[nodeIndex];
       if (!node) return;
       setActiveDotIndex(nodeIndex);
-      skipUpdateRef.current = true;
       const container = scrollContainerRef.current;
       if (!container) return;
 
-      const elements = container.querySelectorAll<HTMLDivElement>('.chat-message');
-      if (elements.length > node.domIndex) {
-        elements[node.domIndex].scrollIntoView({ block: 'center', behavior: 'instant' });
+      // Find the DOM element by data-message-timestamp
+      const selector = `[data-message-timestamp="${node.timestampStr}"]`;
+      const target = container.querySelector<HTMLDivElement>(selector);
+      if (target) {
+        const containerRect = container.getBoundingClientRect();
+        const targetRect = target.getBoundingClientRect();
+        const offset = targetRect.top - containerRect.top;
+        // Always position bubble near top with padding
+        const delta = offset - 40;
+        const newScrollTop = container.scrollTop + delta;
+        container.scrollTop = Math.max(0, newScrollTop);
       }
+
+      // Skip scroll tracking for next 3 frames to avoid race condition
+      skipFramesRef.current = 3;
     },
     [scrollContainerRef, timelineNodes],
   );
 
   const scrollToTop = useCallback(() => {
-    const container = scrollContainerRef.current;
-    if (container) container.scrollTop = 0;
-  }, [scrollContainerRef]);
+    const nodes = timelineNodesRef.current;
+    if (nodes.length > 0) {
+      scrollToNode(0);
+    }
+  }, [scrollToNode]);
 
   const scrollToBottom = useCallback(() => {
     const container = scrollContainerRef.current;
@@ -339,46 +359,16 @@ export default function ScrollNavigation({
   const scrollPrev = useCallback(() => {
     const nodes = timelineNodesRef.current;
     if (nodes.length === 0) return;
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    const elements = container.querySelectorAll<HTMLDivElement>('.chat-message');
-
-    const { scrollTop, clientHeight } = container;
-    const viewportCenter = scrollTop + clientHeight / 2;
-
-    let currentNodeIdx = -1;
-    for (let i = 0; i < elements.length; i++) {
-      const top = elements[i].getBoundingClientRect().top - container.getBoundingClientRect().top + scrollTop;
-      if (top > viewportCenter) break;
-      const nodeIdx = nodes.findIndex(n => n.domIndex === i);
-      if (nodeIdx >= 0) currentNodeIdx = nodeIdx;
-    }
-
-    const targetNodeIdx = Math.max(0, currentNodeIdx - 1);
+    const targetNodeIdx = Math.max(0, activeDotIndexRef.current - 1);
     scrollToNode(targetNodeIdx);
-  }, [scrollContainerRef, scrollToNode]);
+  }, [scrollToNode]);
 
   const scrollNext = useCallback(() => {
     const nodes = timelineNodesRef.current;
     if (nodes.length === 0) return;
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    const elements = container.querySelectorAll<HTMLDivElement>('.chat-message');
-
-    const { scrollTop, clientHeight } = container;
-    const viewportCenter = scrollTop + clientHeight / 2;
-
-    let currentNodeIdx = -1;
-    for (let i = 0; i < elements.length; i++) {
-      const top = elements[i].getBoundingClientRect().top - container.getBoundingClientRect().top + scrollTop;
-      if (top > viewportCenter) break;
-      const nodeIdx = nodes.findIndex(n => n.domIndex === i);
-      if (nodeIdx >= 0) currentNodeIdx = nodeIdx;
-    }
-
-    const targetNodeIdx = Math.min(nodes.length - 1, currentNodeIdx + 1);
+    const targetNodeIdx = Math.min(nodes.length - 1, activeDotIndexRef.current + 1);
     scrollToNode(targetNodeIdx);
-  }, [scrollContainerRef, scrollToNode]);
+  }, [scrollToNode]);
 
   // ── Bookmark ──
 
@@ -506,7 +496,7 @@ export default function ScrollNavigation({
           const isFocused = i === focusedDotIndex;
           const isBookmarked = bookmarks.has(node.bookmarkId);
 
-          const dotSizeClass = isFocused ? 'lg' : isActive ? 'md' : dotSize;
+          const dotSizeClass = isActive ? 'lg' : isFocused ? 'md' : dotSize;
 
           return (
             <Tooltip
