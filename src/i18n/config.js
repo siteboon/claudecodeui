@@ -96,6 +96,8 @@ import zhTWTasks from './locales/zh-TW/tasks.json';
 // Import supported languages configuration
 import { languages } from './languages.js';
 
+const DEFAULT_LANGUAGE = 'zh-CN';
+
 // Get saved language preference from localStorage
 const getSavedLanguage = () => {
   try {
@@ -104,9 +106,9 @@ const getSavedLanguage = () => {
     if (saved && languages.some(lang => lang.value === saved)) {
       return saved;
     }
-    return 'en';
+    return DEFAULT_LANGUAGE;
   } catch {
-    return 'en';
+    return DEFAULT_LANGUAGE;
   }
 };
 
