@@ -174,7 +174,8 @@
       "loadAll": "Tüm mesajları yükle",
       "loadingAll": "Tüm mesajlar yükleniyor...",
       "allLoaded": "Tüm mesajlar yüklendi",
-      "perfWarning": "Tüm mesajlar yüklendi — kaydırma yavaşlayabilir. Performansı geri getirmek için \"En alta git\"e tıkla."
+      "perfWarning": "Tüm mesajlar yüklendi — kaydırma yavaşlayabilir. Performansı geri getirmek için \"En alta git\"e tıkla.",
+      "loadMore": "Daha {{count}} tane yükle"
     }
   },
   "shell": {
@@ -235,5 +236,14 @@
   },
   "tasks": {
     "nextTaskPrompt": "Sonraki görevi başlat"
+  },
+  "scrollNav": {
+    "jumpTo": "Git: {{snippet}}",
+    "jumpToMessage": "{{index}}. mesaja git",
+    "loadAll": "Tümünü yükle",
+    "first": "İlk",
+    "previous": "Önceki",
+    "next": "Sonraki",
+    "last": "Son"
   }
 }

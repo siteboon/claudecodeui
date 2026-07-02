@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowDownIcon } from 'lucide-react';
 
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useWebSocket } from '../../../contexts/WebSocketContext';
@@ -16,6 +15,8 @@ import { useSessionStore } from '../../../stores/useSessionStore';
 import ChatMessagesPane from './subcomponents/ChatMessagesPane';
 import ChatComposer from './subcomponents/ChatComposer';
 import CommandResultModal from './subcomponents/CommandResultModal';
+import ScrollNavigation from './subcomponents/ScrollNavigation';
+import { exportSessionAsMarkdown } from '../utils/exportSession';
 
 
 function ChatInterface({
@@ -31,8 +32,10 @@ function ChatInterface({
   onNavigateToSession,
   onSessionEstablished,
   onShowSettings,
+  autoExpandTools,
   showRawParameters,
   showThinking,
+  autoScrollToBottom,
   sendByCtrlEnter,
   externalMessageUpdate,
   newSessionTrigger,
@@ -109,10 +112,13 @@ function ChatInterface({
     visibleMessages,
     loadEarlierMessages,
     loadAllMessages,
+    loadMoreMessages,
     allMessagesLoaded,
     isLoadingAllMessages,
     loadAllJustFinished,
     showLoadAllOverlay,
+    claudeStatus,
+    setClaudeStatus,
     createDiff,
     scrollContainerRef,
     scrollToBottom,
@@ -123,6 +129,7 @@ function ChatInterface({
     selectedSession,
     ws,
     sendMessage,
+    autoScrollToBottom,
     externalMessageUpdate,
     newSessionTrigger,
     processingSessions,
@@ -171,7 +178,6 @@ function ChatInterface({
     isDragActive,
     openImagePicker,
     handleSubmit,
-    handleVoiceTranscript,
     handleInputChange,
     handleKeyDown,
     handlePaste,
@@ -183,7 +189,7 @@ function ChatInterface({
     handlePermissionDecision,
     handleGrantToolPermission,
     handleInputFocusChange,
-    isInputFocused,
+    isInputFocused: _isInputFocused,
     commandModalPayload,
     closeCommandModal,
     showCostModal,
@@ -238,7 +244,6 @@ function ChatInterface({
     selectedSession,
     currentSessionId,
     setTokenBudget,
-    pendingPermissionRequests,
     setPendingPermissionRequests,
     streamTimerRef,
     accumulatedStreamRef,
@@ -309,72 +314,79 @@ function ChatInterface({
 
   return (
     <PermissionContext.Provider value={permissionContextValue}>
-      <div className="flex h-full min-h-0 flex-col">
-        <ChatMessagesPane
-          scrollContainerRef={scrollContainerRef}
-          onWheel={handleScroll}
-          onTouchMove={handleScroll}
-          isLoadingSessionMessages={isLoadingSessionMessages}
-          isProcessing={isProcessing}
-          chatMessages={chatMessages}
-          selectedSession={selectedSession}
-          currentSessionId={currentSessionId}
-          provider={provider}
-          setProvider={(nextProvider) => setProvider(nextProvider as Provider)}
-          textareaRef={textareaRef}
-          claudeModel={claudeModel}
-          setClaudeModel={setClaudeModel}
-          cursorModel={cursorModel}
-          setCursorModel={setCursorModel}
-          codexModel={codexModel}
-          setCodexModel={setCodexModel}
-          geminiModel={geminiModel}
-          setGeminiModel={setGeminiModel}
-          opencodeModel={opencodeModel}
-          setOpenCodeModel={setOpenCodeModel}
-          providerModelCatalog={providerModelCatalog}
-          providerModelsLoading={providerModelsLoading}
-          tasksEnabled={tasksEnabled}
-          isTaskMasterInstalled={isTaskMasterInstalled}
-          onShowAllTasks={onShowAllTasks}
-          setInput={setInput}
-          isLoadingMoreMessages={isLoadingMoreMessages}
-          hasMoreMessages={hasMoreMessages}
-          totalMessages={totalMessages}
-          sessionMessagesCount={chatMessages.length}
-          visibleMessageCount={visibleMessageCount}
-          visibleMessages={visibleMessages}
-          loadEarlierMessages={loadEarlierMessages}
-          loadAllMessages={loadAllMessages}
-          allMessagesLoaded={allMessagesLoaded}
-          isLoadingAllMessages={isLoadingAllMessages}
-          loadAllJustFinished={loadAllJustFinished}
-          showLoadAllOverlay={showLoadAllOverlay}
-          createDiff={createDiff}
-          onFileOpen={onFileOpen}
-          onShowSettings={onShowSettings}
-          onGrantToolPermission={handleGrantToolPermission}
-          showRawParameters={showRawParameters}
-          showThinking={showThinking}
-          selectedProject={selectedProject}
-        />
+      <div className="flex h-full flex-col">
+        <div className="relative flex flex-1 overflow-hidden">
+          <div className="flex-1 h-full overflow-hidden">
+          <ChatMessagesPane
+            scrollContainerRef={scrollContainerRef}
+            onWheel={handleScroll}
+            onTouchMove={handleScroll}
+            isLoadingSessionMessages={isLoadingSessionMessages}
+            chatMessages={chatMessages}
+            selectedSession={selectedSession}
+            currentSessionId={currentSessionId}
+            provider={provider}
+            setProvider={(nextProvider) => setProvider(nextProvider as Provider)}
+            textareaRef={textareaRef}
+            claudeModel={claudeModel}
+            setClaudeModel={setClaudeModel}
+            cursorModel={cursorModel}
+            setCursorModel={setCursorModel}
+            codexModel={codexModel}
+            setCodexModel={setCodexModel}
+            geminiModel={geminiModel}
+            setGeminiModel={setGeminiModel}
+            opencodeModel={opencodeModel}
+            setOpenCodeModel={setOpenCodeModel}
+            providerModelCatalog={providerModelCatalog}
+            providerModelsLoading={providerModelsLoading}
+            tasksEnabled={tasksEnabled}
+            isTaskMasterInstalled={isTaskMasterInstalled}
+            onShowAllTasks={onShowAllTasks}
+            setInput={setInput}
+            isLoadingMoreMessages={isLoadingMoreMessages}
+            hasMoreMessages={hasMoreMessages}
+            totalMessages={totalMessages}
+            sessionMessagesCount={chatMessages.length}
+            visibleMessageCount={visibleMessageCount}
+            visibleMessages={visibleMessages}
+            loadEarlierMessages={loadEarlierMessages}
+            loadAllMessages={loadAllMessages}
+            loadMoreMessages={loadMoreMessages}
+            allMessagesLoaded={allMessagesLoaded}
+            isLoadingAllMessages={isLoadingAllMessages}
+            loadAllJustFinished={loadAllJustFinished}
+            createDiff={createDiff}
+            onFileOpen={onFileOpen}
+            onShowSettings={onShowSettings}
+            onGrantToolPermission={handleGrantToolPermission}
+            autoExpandTools={autoExpandTools}
+            showRawParameters={showRawParameters}
+            showThinking={showThinking}
+            selectedProject={selectedProject}
+          />
+          </div>
+        </div>
 
-        <div className="relative flex-shrink-0">
-          {isUserScrolledUp && chatMessages.length > 0 && (
-            <div className="pointer-events-none absolute -top-11 left-0 right-0 z-20 flex justify-center">
-              <button
-                type="button"
-                onClick={scrollToBottomAndReset}
-                aria-label={t('input.scrollToBottom', { defaultValue: 'Scroll to bottom' })}
-                className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-full border border-border/50 bg-card text-muted-foreground shadow-sm transition-all duration-200 hover:bg-accent hover:text-foreground"
-                title={t('input.scrollToBottom', { defaultValue: 'Scroll to bottom' })}
-              >
-                <ArrowDownIcon className="h-4 w-4" aria-hidden />
-              </button>
-            </div>
-          )}
+        {/* ScrollNavigation - absolutely positioned on the right edge, not in flex flow */}
+        <div className="pointer-events-none absolute inset-y-0 right-0 z-30 flex items-start justify-end pr-[16px]">
+          <div className="pointer-events-auto h-full min-h-0">
+            <ScrollNavigation
+              scrollContainerRef={scrollContainerRef}
+              chatMessages={visibleMessages}
+              loadAllMessages={loadAllMessages}
+              hasMoreMessages={hasMoreMessages}
+              sessionId={currentSessionId || undefined}
+              onExportSession={() => {
+                if (currentSessionId) {
+                  exportSessionAsMarkdown(chatMessages, currentSessionId);
+                }
+              }}
+            />
+          </div>
+        </div>
 
-          <ChatComposer
+        <ChatComposer
           pendingPermissionRequests={pendingPermissionRequests}
           handlePermissionDecision={handlePermissionDecision}
           handleGrantToolPermission={handleGrantToolPermission}
@@ -389,6 +401,9 @@ function ChatInterface({
           onToggleCommandMenu={handleToggleCommandMenu}
           hasInput={Boolean(input.trim())}
           onClearInput={handleClearInput}
+          isUserScrolledUp={isUserScrolledUp}
+          hasMessages={chatMessages.length > 0}
+          onScrollToBottom={scrollToBottomAndReset}
           onSubmit={handleSubmit}
           isDragActive={isDragActive}
           attachedImages={attachedImages}
@@ -416,14 +431,12 @@ function ChatInterface({
           renderInputWithMentions={renderInputWithMentions}
           textareaRef={textareaRef}
           input={input}
-          onVoiceTranscript={handleVoiceTranscript}
           onInputChange={handleInputChange}
           onTextareaClick={handleTextareaClick}
           onTextareaKeyDown={handleKeyDown}
           onTextareaPaste={handlePaste}
           onTextareaScrollSync={syncInputOverlayScroll}
           onTextareaInput={handleTextareaInput}
-          isInputFocused={isInputFocused}
           onInputFocusChange={handleInputFocusChange}
           placeholder={t('input.placeholder', {
             provider:
@@ -440,7 +453,6 @@ function ChatInterface({
           isTextareaExpanded={isTextareaExpanded}
           sendByCtrlEnter={sendByCtrlEnter}
         />
-        </div>
       </div>
 
       <QuickSettingsPanel />

@@ -18,6 +18,7 @@ interface UseChatSessionStateArgs {
   selectedSession: ProjectSession | null;
   ws: WebSocket | null;
   sendMessage: (message: unknown) => void;
+  autoScrollToBottom?: boolean;
   externalMessageUpdate?: number;
   newSessionTrigger?: number;
   processingSessions?: SessionActivityMap;
@@ -95,6 +96,7 @@ export function useChatSessionState({
   selectedSession,
   ws,
   sendMessage,
+  autoScrollToBottom,
   externalMessageUpdate,
   newSessionTrigger,
   processingSessions,
@@ -119,7 +121,6 @@ export function useChatSessionState({
   const [viewHiddenCount, setViewHiddenCount] = useState(0);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const wasNearTopRef = useRef(false);
   const [searchTarget, setSearchTarget] = useState<{ timestamp?: string; uuid?: string; snippet?: string } | null>(null);
   const searchScrollActiveRef = useRef(false);
   const isLoadingSessionRef = useRef(false);
@@ -184,7 +185,6 @@ export function useChatSessionState({
     setShowLoadAllOverlay(false);
     setViewHiddenCount(0);
     setSearchTarget(null);
-    wasNearTopRef.current = false;
     searchScrollActiveRef.current = false;
     topLoadLockRef.current = false;
     pendingScrollRestoreRef.current = null;
@@ -268,9 +268,14 @@ export function useChatSessionState({
 
   const chatMessages = useMemo(() => {
     const all = normalizedToChatMessages(storeMessages);
-    // Show pending user message when no session data exists yet (new session, pre-backend-response)
-    if (pendingUserMessage && all.length === 0) {
-      return [pendingUserMessage];
+    // Show pending user message until a user message actually appears in the store.
+    // This covers both the "no messages yet" case and the race condition where
+    // `stream_delta` (AI content) arrives in realtime before the echoed user
+    // message — without this check the pending message would disappear and the
+    // AI response would briefly appear as the first visible message.
+    const hasUserMessage = all.some((m) => m.type === 'user');
+    if (pendingUserMessage && !hasUserMessage) {
+      return [...all, pendingUserMessage];
     }
     if (viewHiddenCount > 0 && viewHiddenCount < all.length) return all.slice(0, -viewHiddenCount);
     return all;
@@ -336,34 +341,12 @@ export function useChatSessionState({
         const slot = await sessionStore.fetchMore(selectedSession.id, {
           limit: MESSAGES_PER_PAGE,
         });
-        if (!slot) return false;
-        if (slot.serverMessages.length === 0) {
-          if (!slot.hasMore) {
-            setHasMoreMessages(false);
-            allMessagesLoadedRef.current = true;
-            setAllMessagesLoaded(true);
-            if (loadAllOverlayTimerRef.current) {
-              clearTimeout(loadAllOverlayTimerRef.current);
-              loadAllOverlayTimerRef.current = null;
-            }
-            setShowLoadAllOverlay(false);
-          }
-          return false;
-        }
+        if (!slot || slot.serverMessages.length === 0) return false;
 
         pendingScrollRestoreRef.current = { height: previousScrollHeight, top: previousScrollTop };
         setHasMoreMessages(slot.hasMore);
         setTotalMessages(slot.total);
         setVisibleMessageCount((prev) => prev + MESSAGES_PER_PAGE);
-        if (!slot.hasMore) {
-          allMessagesLoadedRef.current = true;
-          setAllMessagesLoaded(true);
-          if (loadAllOverlayTimerRef.current) {
-            clearTimeout(loadAllOverlayTimerRef.current);
-            loadAllOverlayTimerRef.current = null;
-          }
-          setShowLoadAllOverlay(false);
-        }
         return true;
       } finally {
         isLoadingMoreRef.current = false;
@@ -372,41 +355,13 @@ export function useChatSessionState({
     [hasMoreMessages, isLoadingMoreMessages, selectedProject, selectedSession, sessionStore],
   );
 
-  const handleScroll = useCallback(async () => {
+  const handleScroll = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
 
     const nearBottom = isNearBottom();
     setIsUserScrolledUp(!nearBottom);
-
-    const scrolledNearTop = container.scrollTop < 100;
-
-    // "Load all" prompt: appear (with fade-in) when the user reaches the top
-    if (scrolledNearTop && hasMoreMessages && !allMessagesLoadedRef.current) {
-      if (!wasNearTopRef.current) {
-        wasNearTopRef.current = true;
-        if (loadAllOverlayTimerRef.current) clearTimeout(loadAllOverlayTimerRef.current);
-
-        setShowLoadAllOverlay(true);
-        loadAllOverlayTimerRef.current = setTimeout(() => {
-          setShowLoadAllOverlay(false);
-          loadAllOverlayTimerRef.current = null;
-        }, 2500);
-      }
-    } else if (!scrolledNearTop) {
-      wasNearTopRef.current = false;
-    }
-
-    if (!allMessagesLoadedRef.current) {
-      if (!scrolledNearTop) { topLoadLockRef.current = false; return; }
-      if (topLoadLockRef.current) {
-        if (container.scrollTop > 20) topLoadLockRef.current = false;
-        return;
-      }
-      const didLoad = await loadOlderMessages(container);
-      if (didLoad) topLoadLockRef.current = true;
-    }
-  }, [hasMoreMessages, isNearBottom, loadOlderMessages]);
+  }, [isNearBottom]);
 
   useLayoutEffect(() => {
     if (!pendingScrollRestoreRef.current || !scrollContainerRef.current) return;
@@ -425,7 +380,6 @@ export function useChatSessionState({
     }
     topLoadLockRef.current = false;
     pendingScrollRestoreRef.current = null;
-    wasNearTopRef.current = false;
     setIsUserScrolledUp(false);
   }, [selectedProject?.projectId, selectedSession?.id]);
 
@@ -532,7 +486,6 @@ export function useChatSessionState({
     setLoadAllJustFinished(false);
     setShowLoadAllOverlay(false);
     setViewHiddenCount(0);
-    wasNearTopRef.current = false;
     if (loadAllOverlayTimerRef.current) clearTimeout(loadAllOverlayTimerRef.current);
     if (loadAllFinishedTimerRef.current) clearTimeout(loadAllFinishedTimerRef.current);
 
@@ -587,7 +540,7 @@ export function useChatSessionState({
         if (!isProcessing) {
           await sessionStore.refreshFromServer(selectedSession.id);
 
-          if (isNearBottom()) {
+          if (Boolean(autoScrollToBottom) && isNearBottom()) {
             setTimeout(() => scrollToBottom(), 200);
           }
         }
@@ -598,6 +551,7 @@ export function useChatSessionState({
 
     reloadExternalMessages();
   }, [
+    autoScrollToBottom,
     externalMessageUpdate,
     isNearBottom,
     scrollToBottom,
@@ -729,9 +683,10 @@ export function useChatSessionState({
   }, [chatMessages, visibleMessageCount]);
 
   useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    scrollPositionRef.current = { height: container.scrollHeight, top: container.scrollTop };
+    if (!autoScrollToBottom && scrollContainerRef.current) {
+      const container = scrollContainerRef.current;
+      scrollPositionRef.current = { height: container.scrollHeight, top: container.scrollTop };
+    }
   });
 
   useEffect(() => {
@@ -739,8 +694,8 @@ export function useChatSessionState({
     if (isLoadingMoreRef.current || isLoadingMoreMessages || pendingScrollRestoreRef.current) return;
     if (searchScrollActiveRef.current) return;
 
-    if (!isUserScrolledUp) {
-      setTimeout(() => scrollToBottom(), 50);
+    if (autoScrollToBottom) {
+      if (!isUserScrolledUp) setTimeout(() => scrollToBottom(), 50);
       return;
     }
 
@@ -750,7 +705,7 @@ export function useChatSessionState({
     const newHeight = container.scrollHeight;
     const heightDiff = newHeight - prevHeight;
     if (heightDiff > 0 && prevTop > 0) container.scrollTop = prevTop + heightDiff;
-  }, [chatMessages.length, isLoadingMoreMessages, isUserScrolledUp, scrollToBottom]);
+  }, [autoScrollToBottom, chatMessages.length, isLoadingMoreMessages, isUserScrolledUp, scrollToBottom]);
 
   useEffect(() => {
     const container = scrollContainerRef.current;
@@ -759,8 +714,12 @@ export function useChatSessionState({
     return () => container.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
 
-  // "Load all" overlay visibility is driven by scroll-to-top in handleScroll;
-  // timers are cleared on session change via the reset effect above.
+  // "Load all" overlay
+  const prevLoadingRef = useRef(false);
+  // "Load more" buttons — show whenever there are more messages
+  useEffect(() => {
+    setShowLoadAllOverlay(hasMoreMessages && !allMessagesLoaded);
+  }, [hasMoreMessages, allMessagesLoaded]);
 
   const loadAllMessages = useCallback(async () => {
     if (!selectedSession || !selectedProject) return;
@@ -770,10 +729,6 @@ export function useChatSessionState({
     isLoadingMoreRef.current = true;
     setIsLoadingAllMessages(true);
     setShowLoadAllOverlay(true);
-    if (loadAllOverlayTimerRef.current) {
-      clearTimeout(loadAllOverlayTimerRef.current);
-      loadAllOverlayTimerRef.current = null;
-    }
 
     const container = scrollContainerRef.current;
     const previousScrollHeight = container ? container.scrollHeight : 0;
@@ -800,11 +755,7 @@ export function useChatSessionState({
 
         setLoadAllJustFinished(true);
         if (loadAllFinishedTimerRef.current) clearTimeout(loadAllFinishedTimerRef.current);
-        loadAllFinishedTimerRef.current = setTimeout(() => {
-          setLoadAllJustFinished(false);
-          setShowLoadAllOverlay(false);
-          loadAllFinishedTimerRef.current = null;
-        }, 2500);
+        loadAllFinishedTimerRef.current = setTimeout(() => { setLoadAllJustFinished(false); setShowLoadAllOverlay(false); }, 1000);
       } else {
         allMessagesLoadedRef.current = false;
         setShowLoadAllOverlay(false);
@@ -822,6 +773,20 @@ export function useChatSessionState({
   const loadEarlierMessages = useCallback(() => {
     setVisibleMessageCount((prev) => prev + 100);
   }, []);
+
+  const loadMoreMessages = useCallback(async () => {
+    topLoadLockRef.current = false;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    setIsLoadingMoreMessages(true);
+    try {
+      await loadOlderMessages(container);
+    } catch (error) {
+      console.error('[useChatSessionState] loadMoreMessages failed:', error);
+    } finally {
+      setIsLoadingMoreMessages(false);
+    }
+  }, [loadOlderMessages]);
 
   return {
     chatMessages,
@@ -845,6 +810,7 @@ export function useChatSessionState({
     visibleMessages,
     loadEarlierMessages,
     loadAllMessages,
+    loadMoreMessages,
     allMessagesLoaded,
     isLoadingAllMessages,
     loadAllJustFinished,
