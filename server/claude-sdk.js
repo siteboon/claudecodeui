@@ -227,6 +227,11 @@ function mapCliOptionsToSDK(options = {}) {
     sdkOptions.resume = sessionId;
   }
 
+  // Enable partial messages so SDK yields content_block_delta events for streaming.
+  // Without this, SDK only emits complete assistant messages at the end of each turn,
+  // which means the frontend never receives stream_delta frames.
+  sdkOptions.includePartialMessages = true;
+
   return sdkOptions;
 }
 
