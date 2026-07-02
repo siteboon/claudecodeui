@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
 import { Activity, Archive, Folder, MessageSquare, RotateCcw, Search, Trash2 } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
@@ -113,6 +113,10 @@ function formatCompactArchivedAge(dateString: string | null): string {
 type SidebarContentProps = {
   isPWA: boolean;
   isMobile: boolean;
+  width: number;
+  minWidth: number;
+  maxWidth: number;
+  onWidthChange: (width: number) => void;
   isLoading: boolean;
   projects: Project[];
   runningSessionsCount: number;
@@ -147,6 +151,10 @@ type SidebarContentProps = {
 export default function SidebarContent({
   isPWA,
   isMobile,
+  width,
+  minWidth,
+  maxWidth,
+  onWidthChange,
   isLoading,
   projects,
   runningSessionsCount,
@@ -179,11 +187,78 @@ export default function SidebarContent({
   const hasPartialResults = conversationResults && conversationResults.results.length > 0;
   const groupedArchivedSessions = groupArchivedSessionsByProject(archivedSessions);
 
+  const clampWidth = (nextWidth: number) => Math.min(maxWidth, Math.max(minWidth, Math.round(nextWidth)));
+
+  const handleResizePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (isMobile) {
+      return;
+    }
+
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = width;
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const handlePointerMove = (moveEvent: globalThis.PointerEvent) => {
+      onWidthChange(clampWidth(startWidth + moveEvent.clientX - startX));
+    };
+
+    const handlePointerUp = () => {
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+  };
+
+  const handleResizeKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (isMobile) {
+      return;
+    }
+
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      onWidthChange(clampWidth(width - 16));
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      onWidthChange(clampWidth(width + 16));
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      onWidthChange(minWidth);
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      onWidthChange(maxWidth);
+    }
+  };
+
   return (
     <div
-      className="flex h-full flex-col bg-background/80 backdrop-blur-sm md:w-72 md:select-none"
-      style={{}}
+      className="relative flex h-full flex-col bg-background/80 backdrop-blur-sm md:select-none"
+      style={isMobile ? undefined : { width }}
     >
+      {!isMobile && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-valuemin={minWidth}
+          aria-valuemax={maxWidth}
+          aria-valuenow={width}
+          tabIndex={0}
+          className="group absolute -right-1 top-0 z-30 hidden h-full w-2 cursor-col-resize touch-none items-center justify-center outline-none md:flex"
+          onPointerDown={handleResizePointerDown}
+          onKeyDown={handleResizeKeyDown}
+        >
+          <div className="h-full w-px bg-transparent transition-colors group-hover:bg-primary/50 group-focus-visible:bg-primary/70" />
+        </div>
+      )}
+
       <SidebarHeader
         isPWA={isPWA}
         isMobile={isMobile}

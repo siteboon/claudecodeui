@@ -5,6 +5,7 @@ type UiPreferences = {
   showThinking: boolean;
   sendByCtrlEnter: boolean;
   sidebarVisible: boolean;
+  sidebarWidth: number;
 };
 
 type UiPreferenceKey = keyof UiPreferences;
@@ -35,6 +36,7 @@ const DEFAULTS: UiPreferences = {
   showThinking: true,
   sendByCtrlEnter: false,
   sidebarVisible: true,
+  sidebarWidth: 288,
 };
 
 const PREFERENCE_KEYS = Object.keys(DEFAULTS) as UiPreferenceKey[];
@@ -60,18 +62,59 @@ const parseBoolean = (value: unknown, fallback: boolean): boolean => {
   return fallback;
 };
 
-const readLegacyPreference = (key: UiPreferenceKey, fallback: boolean): boolean => {
+const parseNumber = (value: unknown, fallback: number): number => {
+  const numericValue = typeof value === 'number'
+    ? value
+    : typeof value === 'string'
+      ? Number(value)
+      : Number.NaN;
+
+  return Number.isFinite(numericValue) ? numericValue : fallback;
+};
+
+const parsePreference = <K extends UiPreferenceKey>(key: K, value: unknown, fallback: UiPreferences[K]): UiPreferences[K] => {
+  if (typeof fallback === 'boolean') {
+    return parseBoolean(value, fallback) as UiPreferences[K];
+  }
+
+  if (typeof fallback === 'number') {
+    return parseNumber(value, fallback) as UiPreferences[K];
+  }
+
+  return fallback;
+};
+
+const readLegacyPreference = <K extends UiPreferenceKey>(key: K, fallback: UiPreferences[K]): UiPreferences[K] => {
   try {
     const raw = localStorage.getItem(key);
     if (raw === null) return fallback;
 
     // Supports values written by both JSON.stringify and plain strings.
     const parsed = JSON.parse(raw);
-    return parseBoolean(parsed, fallback);
+    return parsePreference(key, parsed, fallback);
   } catch {
     return fallback;
   }
 };
+
+const parsePreferencesRecord = (
+  record: Partial<Record<UiPreferenceKey, unknown>>,
+  fallback: UiPreferences,
+): UiPreferences => ({
+  showRawParameters: parseBoolean(record.showRawParameters, fallback.showRawParameters),
+  showThinking: parseBoolean(record.showThinking, fallback.showThinking),
+  sendByCtrlEnter: parseBoolean(record.sendByCtrlEnter, fallback.sendByCtrlEnter),
+  sidebarVisible: parseBoolean(record.sidebarVisible, fallback.sidebarVisible),
+  sidebarWidth: parseNumber(record.sidebarWidth, fallback.sidebarWidth),
+});
+
+const readLegacyPreferences = (): UiPreferences => ({
+  showRawParameters: readLegacyPreference('showRawParameters', DEFAULTS.showRawParameters),
+  showThinking: readLegacyPreference('showThinking', DEFAULTS.showThinking),
+  sendByCtrlEnter: readLegacyPreference('sendByCtrlEnter', DEFAULTS.sendByCtrlEnter),
+  sidebarVisible: readLegacyPreference('sidebarVisible', DEFAULTS.sidebarVisible),
+  sidebarWidth: readLegacyPreference('sidebarWidth', DEFAULTS.sidebarWidth),
+});
 
 const readInitialPreferences = (storageKey: string): UiPreferences => {
   if (typeof window === 'undefined') {
@@ -85,21 +128,14 @@ const readInitialPreferences = (storageKey: string): UiPreferences => {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
         const parsedRecord = parsed as Record<string, unknown>;
-
-        return PREFERENCE_KEYS.reduce((acc, key) => {
-          acc[key] = parseBoolean(parsedRecord[key], DEFAULTS[key]);
-          return acc;
-        }, { ...DEFAULTS });
+        return parsePreferencesRecord(parsedRecord, DEFAULTS);
       }
     }
   } catch {
     // Fall back to legacy keys when unified key is missing or invalid.
   }
 
-  return PREFERENCE_KEYS.reduce((acc, key) => {
-    acc[key] = readLegacyPreference(key, DEFAULTS[key]);
-    return acc;
-  }, { ...DEFAULTS });
+  return readLegacyPreferences();
 };
 
 function reducer(state: UiPreferences, action: UiPreferencesAction): UiPreferences {
@@ -110,7 +146,7 @@ function reducer(state: UiPreferences, action: UiPreferencesAction): UiPreferenc
         return state;
       }
 
-      const nextValue = parseBoolean(value, state[key]);
+      const nextValue = parsePreference(key, value, state[key]);
       if (state[key] === nextValue) {
         return state;
       }
@@ -119,19 +155,8 @@ function reducer(state: UiPreferences, action: UiPreferencesAction): UiPreferenc
     }
     case 'set_many': {
       const updates = action.value || {};
-      let changed = false;
-      const nextState = { ...state };
-
-      for (const key of PREFERENCE_KEYS) {
-        if (!(key in updates)) continue;
-
-        const value = updates[key];
-        const nextValue = parseBoolean(value, state[key]);
-        if (nextState[key] !== nextValue) {
-          nextState[key] = nextValue;
-          changed = true;
-        }
-      }
+      const nextState = parsePreferencesRecord(updates, state);
+      const changed = PREFERENCE_KEYS.some((key) => nextState[key] !== state[key]);
 
       return changed ? nextState : state;
     }

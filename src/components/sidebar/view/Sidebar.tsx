@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useDeviceSettings } from '../../../hooks/useDeviceSettings';
@@ -12,6 +12,13 @@ import SidebarCollapsed from './subcomponents/SidebarCollapsed';
 import SidebarContent from './subcomponents/SidebarContent';
 import SidebarModals from './subcomponents/SidebarModals';
 import type { SidebarProjectListProps } from './subcomponents/SidebarProjectList';
+
+const SIDEBAR_MIN_WIDTH = 240;
+const SIDEBAR_MAX_WIDTH = 520;
+
+const clampSidebarWidth = (value: number): number => {
+  return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, Math.round(value)));
+};
 
 function Sidebar({
   projects,
@@ -37,6 +44,7 @@ function Sidebar({
   const { isPWA } = useDeviceSettings({ trackMobile: false });
   const { preferences, setPreference } = useUiPreferences();
   const { sidebarVisible } = preferences;
+  const sidebarWidth = clampSidebarWidth(preferences.sidebarWidth);
   const paletteOps = usePaletteOps();
 
   const {
@@ -122,6 +130,16 @@ function Sidebar({
     document.body.classList.toggle('pwa-mode', isPWA);
   }, [isPWA]);
 
+  useEffect(() => {
+    if (preferences.sidebarWidth !== sidebarWidth) {
+      setPreference('sidebarWidth', sidebarWidth);
+    }
+  }, [preferences.sidebarWidth, setPreference, sidebarWidth]);
+
+  const handleSidebarWidthChange = useCallback((width: number) => {
+    setPreference('sidebarWidth', clampSidebarWidth(width));
+  }, [setPreference]);
+
   const handleProjectCreated = () => {
     void paletteOps.refreshProjects();
   };
@@ -205,6 +223,10 @@ function Sidebar({
         <SidebarContent
             isPWA={isPWA}
             isMobile={isMobile}
+            width={sidebarWidth}
+            minWidth={SIDEBAR_MIN_WIDTH}
+            maxWidth={SIDEBAR_MAX_WIDTH}
+            onWidthChange={handleSidebarWidthChange}
             isLoading={isLoading}
             projects={projects}
             runningSessionsCount={runningSessionsCount}
