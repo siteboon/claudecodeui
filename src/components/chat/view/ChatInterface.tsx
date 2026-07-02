@@ -366,7 +366,11 @@ function ChatInterface({
             selectedProject={selectedProject}
           />
           </div>
-          <div className="flex-shrink-0 w-[28px]">
+        </div>
+
+        {/* ScrollNavigation - absolutely positioned on the right edge, not in flex flow */}
+        <div className="pointer-events-none absolute inset-y-0 right-0 z-30 flex items-start justify-end pr-[16px]">
+          <div className="pointer-events-auto h-full min-h-0">
             <ScrollNavigation
               scrollContainerRef={scrollContainerRef}
               chatMessages={visibleMessages}
