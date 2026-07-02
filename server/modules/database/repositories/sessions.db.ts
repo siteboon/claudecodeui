@@ -82,8 +82,10 @@ export const sessionsDb = {
     const normalizedProjectPath = normalizeProjectPathForProvider(provider, projectPath);
 
     // First, ensure the project path is recorded in the projects table,
-    // since it's a foreign key in the sessions table.
-    projectsDb.createProjectPath(normalizedProjectPath);
+    // since it's a foreign key in the sessions table. This runs from the
+    // background synchronizer/watcher, so it must NOT reactivate a project the
+    // user archived — only explicit user actions (createAppSession/createProject) do.
+    projectsDb.createProjectPath(normalizedProjectPath, null, { reactivateArchived: false });
 
     const existing = db
       .prepare(

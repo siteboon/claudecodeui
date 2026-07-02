@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 
 import { getConnection } from '@/modules/database/connection.js';
-import type { CreateProjectPathResult, ProjectRepositoryRow } from '@/shared/types.js';
+import type { CreateProjectPathOptions, CreateProjectPathResult, ProjectRepositoryRow } from '@/shared/types.js';
 import { normalizeProjectPath } from '@/shared/utils.js';
 
 function normalizeProjectDisplayName(projectPath: string, customProjectName: string | null): string {
@@ -16,17 +16,31 @@ function normalizeProjectDisplayName(projectPath: string, customProjectName: str
 }
 
 export const projectsDb = {
-    createProjectPath(projectPath: string, customProjectName: string | null = null): CreateProjectPathResult {
+    /**
+     * Ensures a `projects` row exists for `projectPath` and returns the outcome.
+     *
+     * `reactivateArchived` (default `true`) controls what happens when the path already exists
+     * but is archived: explicit user actions (creating a project, starting a session) reactivate it,
+     * but the background session synchronizer must pass `false`. Otherwise any passive re-scan that
+     * re-touches a transcript would silently un-archive a project the user deliberately hid.
+     */
+    createProjectPath(
+        projectPath: string,
+        customProjectName: string | null = null,
+        options: CreateProjectPathOptions = {},
+    ): CreateProjectPathResult {
+        const { reactivateArchived = true } = options;
         const db = getConnection();
         const normalizedProjectPath = normalizeProjectPath(projectPath);
         const normalizedProjectName = normalizeProjectDisplayName(normalizedProjectPath, customProjectName);
         const attemptedId = randomUUID();
+        const conflictClause = reactivateArchived
+            ? 'DO UPDATE SET isArchived = 0 WHERE projects.isArchived = 1'
+            : 'DO NOTHING';
         const row = db.prepare(`
         INSERT INTO projects (project_id, project_path, custom_project_name, isArchived)
             VALUES (?, ?, ?, 0)
-            ON CONFLICT(project_path) DO UPDATE SET
-            isArchived = 0
-            WHERE projects.isArchived = 1
+            ON CONFLICT(project_path) ${conflictClause}
             RETURNING project_id, project_path, custom_project_name, isStarred, isArchived
         `).get(attemptedId, normalizedProjectPath, normalizedProjectName) as ProjectRepositoryRow | undefined;
 
@@ -39,7 +53,7 @@ export const projectsDb = {
 
         const existingProject = projectsDb.getProjectPath(normalizedProjectPath);
         return {
-            outcome: 'active_conflict',
+            outcome: existingProject?.isArchived ? 'archived_conflict' : 'active_conflict',
             project: existingProject,
         };
     },

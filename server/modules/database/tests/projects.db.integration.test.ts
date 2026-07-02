@@ -70,3 +70,21 @@ test('projectsDb.createProjectPath returns active_conflict for active duplicates
     assert.equal(conflict.project?.isArchived, 0);
   });
 });
+
+test('projectsDb.createProjectPath returns archived_conflict and stays archived when reactivateArchived is false', async () => {
+  await withIsolatedDatabase(() => {
+    const initial = projectsDb.createProjectPath('/workspace/archived-project');
+    assert.equal(initial.outcome, 'created');
+    assert.ok(initial.project);
+
+    projectsDb.updateProjectIsArchived('/workspace/archived-project', true);
+
+    const conflict = projectsDb.createProjectPath('/workspace/archived-project', null, {
+      reactivateArchived: false,
+    });
+    assert.equal(conflict.outcome, 'archived_conflict');
+    assert.ok(conflict.project);
+    assert.equal(conflict.project?.project_id, initial.project?.project_id);
+    assert.equal(conflict.project?.isArchived, 1);
+  });
+});
