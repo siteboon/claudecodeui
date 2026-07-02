@@ -1,9 +1,11 @@
-import { Cloud, ExternalLink, MessageSquare, Star, Users } from 'lucide-react';
+import { Cloud, ExternalLink, MessageSquare, RotateCw, Star, Users } from 'lucide-react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { CLOUDCLI_WORDMARK_FONT_FAMILY } from '../../../../constants/branding';
 import { IS_PLATFORM } from '../../../../constants/config';
 import { useVersionCheck } from '../../../../hooks/useVersionCheck';
+import { api } from '../../../../utils/api';
 import PremiumFeatureCard from '../PremiumFeatureCard';
 
 const GITHUB_REPO_URL = 'https://github.com/siteboon/claudecodeui';
@@ -31,6 +33,44 @@ export default function AboutTab() {
   const { t } = useTranslation('settings');
   const { updateAvailable, latestVersion, currentVersion, releaseInfo } = useVersionCheck('siteboon', 'claudecodeui');
   const releasesUrl = releaseInfo?.htmlUrl || `${GITHUB_REPO_URL}/releases`;
+  const [restarting, setRestarting] = useState(false);
+
+  const handleRestartServer = async () => {
+    if (restarting) return;
+    const confirmed = window.confirm(
+      t('about.restartConfirm', 'Restart the server now? The app will reconnect automatically once it is back.'),
+    );
+    if (!confirmed) return;
+
+    setRestarting(true);
+    try {
+      // The connection typically drops before the response arrives — that is expected.
+      await api.restartServer();
+    } catch {
+      /* server is going down */
+    }
+
+    // Poll until the server accepts requests again, then reload the app.
+    const deadline = Date.now() + 60_000;
+    const poll = async () => {
+      try {
+        const response = await api.auth.user();
+        // 200 (still authed) or 401 (session expired) both mean the server is back up.
+        if (response.ok || response.status === 401) {
+          window.location.reload();
+          return;
+        }
+      } catch {
+        /* still restarting */
+      }
+      if (Date.now() < deadline) {
+        setTimeout(poll, 1500);
+      } else {
+        window.location.reload();
+      }
+    };
+    setTimeout(poll, 2500);
+  };
 
   return (
     <div className="space-y-6">
@@ -84,6 +124,32 @@ export default function AboutTab() {
         <Star className="h-3.5 w-3.5" />
         <span>Star on GitHub</span>
       </a>
+
+      {/* Restart server */}
+      <div className="rounded-xl border border-border/50 p-4">
+        <h4 className="text-sm font-medium text-foreground">
+          {t('about.restartTitle', 'Server')}
+        </h4>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {t(
+            'about.restartHint',
+            'Restart the running server to apply an installed update or refresh a long-running process.',
+          )}
+        </p>
+        <button
+          type="button"
+          onClick={handleRestartServer}
+          disabled={restarting}
+          className="mt-3 inline-flex items-center gap-2 rounded-lg border border-border/60 bg-background px-3.5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <RotateCw className={`h-4 w-4 ${restarting ? 'animate-spin' : ''}`} />
+          <span>
+            {restarting
+              ? t('about.restarting', 'Restarting…')
+              : t('about.restartButton', 'Restart server')}
+          </span>
+        </button>
+      </div>
 
       {/* Links */}
       <div className="flex flex-wrap gap-4 text-sm">
