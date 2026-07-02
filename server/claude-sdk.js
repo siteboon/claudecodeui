@@ -41,6 +41,27 @@ const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEO
 
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
+/**
+ * Extracts the prompt text from a Task subagent tool_use input.
+ * Mirrors the logic in claude-sessions.provider.ts extractSubagentPrompt().
+ * Handles both parsed objects and JSON-stringified input.
+ */
+function extractSubagentPrompt(toolInput) {
+  if (!toolInput) return null;
+  let parsed = toolInput;
+  if (typeof toolInput === 'string') {
+    try {
+      parsed = JSON.parse(toolInput);
+    } catch {
+      return null;
+    }
+  }
+  if (typeof parsed !== 'object' || parsed === null) return null;
+  const prompt = typeof parsed.prompt === 'string' ? parsed.prompt : null;
+  if (!prompt) return null;
+  return prompt.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+}
+
 function createRequestId() {
   if (typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -226,6 +247,11 @@ function mapCliOptionsToSDK(options = {}) {
   if (sessionId) {
     sdkOptions.resume = sessionId;
   }
+
+  // Enable partial messages so SDK yields content_block_delta events for streaming.
+  // Without this, SDK only emits complete assistant messages at the end of each turn,
+  // which means the frontend never receives stream_delta frames.
+  sdkOptions.includePartialMessages = true;
 
   return sdkOptions;
 }
@@ -518,6 +544,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
   let sessionCreatedSent = false;
   let tempImagePaths = [];
   let tempDir = null;
+  const streamingSubagentPrompts = new Set();
 
   const emitNotification = (event) => {
     notifyUserIfEnabled({
@@ -684,7 +711,6 @@ async function queryClaudeSDK(command, options = {}, ws) {
     }
 
     // Process streaming messages
-    console.log('Starting async generator loop for session:', capturedSessionId || 'NEW');
     for await (const message of queryInstance) {
       // Capture session ID from first message
       if (message.session_id && !capturedSessionId) {
@@ -710,8 +736,27 @@ async function queryClaudeSDK(command, options = {}, ws) {
       const transformedMessage = transformMessage(message);
       const sid = capturedSessionId || sessionId || null;
 
+      // Collect Task subagent prompts so they can be filtered during normalization
+      if (message.type === 'assistant' || transformedMessage.message?.role === 'assistant') {
+        if (Array.isArray(transformedMessage.message?.content)) {
+          for (const part of transformedMessage.message.content) {
+            if (part.type === 'tool_use' && part.name === 'Task') {
+              const prompt = extractSubagentPrompt(part.input);
+              if (prompt) {
+                streamingSubagentPrompts.add(prompt);
+              }
+            }
+          }
+        }
+      }
+
       // Use adapter to normalize SDK events into NormalizedMessage[]
-      const normalized = sessionsService.normalizeMessage('claude', transformedMessage, sid);
+      const normalized = sessionsService.normalizeMessage(
+        'claude',
+        transformedMessage,
+        sid,
+        streamingSubagentPrompts.size > 0 ? streamingSubagentPrompts : null,
+      );
       for (const msg of normalized) {
         // Preserve parentToolUseId from SDK wrapper for subagent tool grouping
         if (transformedMessage.parentToolUseId && !msg.parentToolUseId) {
@@ -801,7 +846,7 @@ async function abortClaudeSDKSession(sessionId) {
   }
 
   try {
-    console.log(`Aborting SDK session: ${sessionId}`);
+    // Call interrupt() on the query instance
 
     // Mark before interrupting so the run loop knows not to emit its own
     // terminal complete (the abort handler sends the aborted one).
@@ -879,7 +924,6 @@ function reconnectSessionWriter(sessionId, newRawWs) {
   const session = getSession(sessionId);
   if (!session?.writer?.updateWebSocket) return false;
   session.writer.updateWebSocket(newRawWs);
-  console.log(`[RECONNECT] Writer swapped for session ${sessionId}`);
   return true;
 }
 
