@@ -35,6 +35,7 @@ type ClaudeHistoryMessagesResult =
     limit?: number | null;
   };
 
+/** Parse agent JSONL files to extract tool use/result pairs for injection into main messages. */
 async function parseAgentTools(filePath: string): Promise<AnyRecord[]> {
   const tools: AnyRecord[] = [];
 
@@ -53,7 +54,8 @@ async function parseAgentTools(filePath: string): Promise<AnyRecord[]> {
       try {
         const entry = JSON.parse(line) as AnyRecord;
 
-        if (entry.message?.role === 'assistant' && Array.isArray(entry.message?.content)) {
+        const isAssistantEntry = entry.message?.role === 'assistant' || entry.type === 'assistant';
+        if (isAssistantEntry && Array.isArray(entry.message?.content)) {
           for (const part of entry.message.content as AnyRecord[]) {
             if (part.type === 'tool_use') {
               tools.push({
@@ -101,6 +103,7 @@ async function parseAgentTools(filePath: string): Promise<AnyRecord[]> {
   return tools;
 }
 
+/** Read the main JSONL transcript and merge in subagent tool messages from agent-*.jsonl files. */
 async function getSessionMessages(
   sessionId: string,
   providerSessionId: string,
@@ -218,8 +221,37 @@ const INTERNAL_CONTENT_PREFIXES = [
   '[Request interrupted',
 ] as const;
 
+/** Check if content is an internal Claude CLI artifact that should not be shown to the user. */
 function isInternalContent(content: string): boolean {
   return INTERNAL_CONTENT_PREFIXES.some((prefix) => content.startsWith(prefix));
+}
+
+/** Check if text content is an image (base64 or data URI) that should not render as a user chat bubble. */
+function isImageContent(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed.startsWith('data:image/')) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Strips the image annotation that claude-sdk.js appends to user commands
+ * before sending to Claude. Without this, the echoed user message content
+ * differs from the frontend pending message content, causing duplicate
+ * user bubbles during streaming.
+ */
+function stripImageAnnotation(text: string): string {
+  return text.replace(/\n\n\[Images provided at the following paths:\][\s\S]*$/g, '').trim();
+}
+
+/**
+ * Detects task-notification XML blocks that appear as user-role messages
+ * during streaming. These are internal SDK events, not human input.
+ */
+function isTaskNotification(text: string): boolean {
+  const trimmed = text.trim();
+  return trimmed.startsWith('<task-notification>') && trimmed.endsWith('</task-notification>');
 }
 
 /**
@@ -238,6 +270,24 @@ type ClaudeLocalCommandPayload = {
   commandMessage: string;
   commandArgs: string;
 };
+
+/**
+ * Detects SDK-generated context resumption summaries that appear as user-role
+ * messages with no isSynthetic or origin markers. These are injected by the
+ * Claude Code SDK when a conversation runs out of context and needs to resume.
+ */
+function isContextResumptionSummary(raw: AnyRecord): boolean {
+  const content = raw.message?.content;
+  if (!content) return false;
+
+  const text = typeof content === 'string'
+    ? content
+    : Array.isArray(content)
+      ? content.filter((p: AnyRecord) => p.type === 'text').map((p: AnyRecord) => p.text).join('\n')
+      : '';
+
+  return text.trim().startsWith('This session is being continued from a previous conversation');
+}
 
 /**
  * Converts Claude's hidden local command wrapper into structured metadata.
@@ -286,20 +336,82 @@ function buildLocalCommandDisplayText(payload: ClaudeLocalCommandPayload): strin
  * captured from the terminal. The web chat should receive readable plain text.
  */
 function stripAnsiFormatting(text: string): string {
-  return text.replace(/\u001B\[[0-9;?]*[ -/]*[@-~]/g, '');
+  return text
+    .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '')  // CSI sequences
+    .replace(/\x1b\][^\x07]*(?:\x07)?/g, '')    // OSC sequences
+    .replace(/\x1b[^\x1b[\x07-\r\n]/g, '')      // control sequences
+    .replace(/\r/g, '');
+}
+
+
+/**
+ * Extracts the prompt text from a Task tool input for subagent echo-filtering.
+ */
+function extractSubagentPrompt(toolInput: unknown): string | null {
+  if (!toolInput) return null;
+  let parsed: AnyRecord = toolInput;
+  if (typeof toolInput === 'string') {
+    try {
+      parsed = JSON.parse(toolInput);
+    } catch {
+      return null;
+    }
+  }
+  return typeof parsed.prompt === 'string' ? parsed.prompt : null;
+}
+
+/** Collapse all whitespace runs (including newlines) into single spaces and trim. */
+function normalizeWhitespace(s: string): string {
+  return s.replace(/\s+/g, ' ').trim();
+}
+
+function isSubagentPromptEcho(text: string, subagentPrompts: Set<string> | null): boolean {
+  if (!subagentPrompts) return false;
+  const normalized = normalizeWhitespace(text);
+  for (const prompt of subagentPrompts) {
+    const np = normalizeWhitespace(prompt);
+    if (normalized === np || normalized.startsWith(np)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export class ClaudeSessionsProvider implements IProviderSessions {
   /**
    * Normalizes one Claude JSONL entry or live SDK stream event into the shared
    * message shape consumed by REST and WebSocket clients.
+   *
+   * @param subagentPrompts - Set of subagent task prompts to filter out.
+   *   These are "Task" tool prompts that also appear as separate user-role
+   *   messages in the JSONL — normalizing them would render them as user
+   *   chat bubbles which is incorrect.
    */
-  normalizeMessage(rawMessage: unknown, sessionId: string | null): NormalizedMessage[] {
+  normalizeMessage(
+    rawMessage: unknown,
+    sessionId: string | null,
+    subagentPrompts: Set<string> | null = null,
+  ): NormalizedMessage[] {
     const raw = readObjectRecord(rawMessage);
     if (!raw) {
       return [];
     }
 
+    // SDK 0.3.193+ wraps Anthropic SSE events inside type: 'stream_event' with
+    // an inner event object. Unwrap it so the handlers below work for both
+    // old (bare) and new (wrapped) transcript formats.
+    const innerEvent = raw.type === 'stream_event' ? raw.event : raw;
+
+    if (innerEvent.type === 'content_block_delta' && innerEvent.delta?.text) {
+      return [createNormalizedMessage({ kind: 'stream_delta', content: innerEvent.delta.text, sessionId, provider: PROVIDER })];
+    }
+    if (innerEvent.type === 'content_block_delta' && innerEvent.delta?.thinking) {
+      return [createNormalizedMessage({ kind: 'stream_delta', content: innerEvent.delta.thinking, sessionId, provider: PROVIDER })];
+    }
+    if (innerEvent.type === 'content_block_stop') {
+      return [createNormalizedMessage({ kind: 'stream_end', sessionId, provider: PROVIDER })];
+    }
+    // Also handle bare content_block_delta / content_block_stop from older SDK
     if (raw.type === 'content_block_delta' && raw.delta?.text) {
       return [createNormalizedMessage({ kind: 'stream_delta', content: raw.delta.text, sessionId, provider: PROVIDER })];
     }
@@ -307,11 +419,36 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       return [createNormalizedMessage({ kind: 'stream_end', sessionId, provider: PROVIDER })];
     }
 
+    // Discard remaining stream_event types (message_start, ping, content_block_start,
+    // message_delta, message_stop, etc.) — they carry no renderable content and
+    // would leak through to role-checking logic below with raw.message === undefined,
+    // causing assistant messages to be misclassified as user messages.
+    if (raw.type === 'stream_event') {
+      return [];
+    }
+
     const messages: NormalizedMessage[] = [];
     const ts = raw.timestamp || new Date().toISOString();
     const baseId = raw.uuid || generateMessageId('claude');
 
+    /*
+     * Filter out non-human user-role messages during streaming.
+     * SDK emits synthetic user messages (subagent prompts, internal
+     * bookkeeping) that have message.role === 'user' but should NOT be
+     * rendered as user chat bubbles. The `isSynthetic` flag or a non-`human`
+     * origin indicate these are system-generated, not keyboard input.
+     * This check is a no-op for pure tool_result containers — they have no
+     * text parts and are handled by the tool_result branch below.
+     */
+    const isHumanOrigin =
+      !raw.isSynthetic
+      && (raw.origin?.kind === undefined || raw.origin?.kind === 'human');
+
     if (raw.message?.role === 'user' && raw.message?.content && raw.isMeta !== true) {
+      if (isContextResumptionSummary(raw)) {
+        return messages;
+      }
+
       if (Array.isArray(raw.message.content)) {
         for (let partIndex = 0; partIndex < raw.message.content.length; partIndex++) {
           const part = raw.message.content[partIndex];
@@ -330,16 +467,26 @@ export class ClaudeSessionsProvider implements IProviderSessions {
             }));
           } else if (part.type === 'text') {
             const text = part.text || '';
-            if (text && !isInternalContent(text)) {
-              messages.push(createNormalizedMessage({
-                id: `${baseId}_text_${partIndex}`,
-                sessionId,
-                timestamp: ts,
-                provider: PROVIDER,
-                kind: 'text',
-                role: 'user',
-                content: text,
-              }));
+            if (text && !isInternalContent(text) && isHumanOrigin) {
+              if (isImageContent(text)) {
+                continue;
+              }
+              if (isTaskNotification(text)) {
+                continue;
+              }
+              const cleanText = stripImageAnnotation(text);
+              const isEcho = isSubagentPromptEcho(cleanText, subagentPrompts);
+              if (!isEcho) {
+                messages.push(createNormalizedMessage({
+                  id: `${baseId}_text_${partIndex}`,
+                  sessionId,
+                  timestamp: ts,
+                  provider: PROVIDER,
+                  kind: 'text',
+                  role: 'user',
+                  content: text,
+                }));
+              }
             }
           }
         }
@@ -351,15 +498,18 @@ export class ClaudeSessionsProvider implements IProviderSessions {
             .filter(Boolean)
             .join('\n');
           if (textParts && !isInternalContent(textParts)) {
-            messages.push(createNormalizedMessage({
-              id: `${baseId}_text`,
-              sessionId,
-              timestamp: ts,
-              provider: PROVIDER,
-              kind: 'text',
-              role: 'user',
-              content: textParts,
-            }));
+            const isEcho = isSubagentPromptEcho(textParts, subagentPrompts);
+            if (!isEcho) {
+              messages.push(createNormalizedMessage({
+                id: `${baseId}_text`,
+                sessionId,
+                timestamp: ts,
+                provider: PROVIDER,
+                kind: 'text',
+                role: 'user',
+                content: textParts,
+              }));
+            }
           }
         }
       } else if (typeof raw.message.content === 'string') {
@@ -438,16 +588,18 @@ export class ClaudeSessionsProvider implements IProviderSessions {
           return messages;
         }
 
-        if (text && !isInternalContent(text)) {
-          messages.push(createNormalizedMessage({
-            id: baseId,
-            sessionId,
-            timestamp: ts,
-            provider: PROVIDER,
-            kind: 'text',
-            role: 'user',
-            content: text,
-          }));
+        if (text && !isInternalContent(text) && isHumanOrigin) {
+          if (!isSubagentPromptEcho(text, subagentPrompts)) {
+            messages.push(createNormalizedMessage({
+              id: baseId,
+              sessionId,
+              timestamp: ts,
+              provider: PROVIDER,
+              kind: 'text',
+              role: 'user',
+              content: text,
+            }));
+          }
         }
       }
       return messages;
@@ -493,7 +645,10 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       return messages;
     }
 
-    if (raw.message?.role === 'assistant' && raw.message?.content) {
+    // Claude Desktop uses top-level `type: 'assistant'` instead of `message.role`,
+    // so check both to support CLI and Desktop transcript formats.
+    const isAssistant = raw.message?.role === 'assistant' || raw.type === 'assistant';
+    if (isAssistant && raw.message?.content) {
       if (Array.isArray(raw.message.content)) {
         let partIndex = 0;
         for (const part of raw.message.content) {
@@ -571,6 +726,30 @@ export class ClaudeSessionsProvider implements IProviderSessions {
 
     const rawMessages = Array.isArray(result) ? result : (result.messages || []);
 
+    /*
+     * Collect Task subagent prompts from raw messages so duplicate user-role
+     * echo messages can be filtered out during normalization.
+     */
+    const subagentPrompts = new Set<string>();
+    for (const raw of rawMessages) {
+      const isAssistant = raw.message?.role === 'assistant' || raw.type === 'assistant';
+      if (isAssistant && Array.isArray(raw.message?.content)) {
+        for (const part of raw.message.content) {
+          if (part.type === 'tool_use' && part.name === 'Task') {
+            const prompt = extractSubagentPrompt(part.input);
+            if (prompt) {
+              subagentPrompts.add(prompt);
+            }
+          }
+        }
+      }
+    }
+
+    const normalized: NormalizedMessage[] = [];
+    for (const raw of rawMessages) {
+      normalized.push(...this.normalizeMessage(raw, sessionId, subagentPrompts.size > 0 ? subagentPrompts : null));
+    }
+
     const toolResultMap = new Map<string, ClaudeToolResult>();
     for (const raw of rawMessages) {
       if (raw.message?.role === 'user' && Array.isArray(raw.message?.content)) {
@@ -585,11 +764,6 @@ export class ClaudeSessionsProvider implements IProviderSessions {
           }
         }
       }
-    }
-
-    const normalized: NormalizedMessage[] = [];
-    for (const raw of rawMessages) {
-      normalized.push(...this.normalizeMessage(raw, sessionId));
     }
 
     for (const msg of normalized) {
