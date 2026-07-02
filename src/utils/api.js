@@ -50,6 +50,11 @@ export const api = {
     logout: () => authenticatedFetch('/api/auth/logout', { method: 'POST' }),
   },
 
+  // Restarts the running server process (picks up an already-installed update or
+  // clears a stale long-running process). The server relaunches under its supervisor
+  // or re-spawns itself, so the connection drops briefly.
+  restartServer: () => authenticatedFetch('/api/system/restart', { method: 'POST' }),
+
   // Protected endpoints
   // config endpoint removed - no longer needed (frontend uses window.location)
   // After the projectName → projectId migration the path/query identifier is

@@ -325,6 +325,47 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
     }
 });
 
+// Restart the running server so an already-installed update (or a stale long-running
+// process) is picked up. Complements /api/system/update, which asks the user to restart.
+app.post('/api/system/restart', authenticateToken, (req, res) => {
+    try {
+        console.log('Server restart requested via API');
+        res.json({ success: true, message: 'Server is restarting…' });
+
+        // A process supervisor (launchd/systemd/pm2/docker --restart) relaunches the updated
+        // on-disk code when we exit; re-spawning ourselves under one would double-bind the port.
+        // Only self-respawn when we are NOT supervised (e.g. a plain `npx`/global-bin launch).
+        const isSupervised =
+            process.ppid === 1 ||
+            Boolean(process.env.pm_id) ||
+            Boolean(process.env.INVOCATION_ID);
+
+        // Delay so the HTTP response flushes before the process goes away.
+        setTimeout(() => {
+            if (isSupervised) {
+                console.log('Exiting for supervisor-managed restart');
+                process.exit(0);
+                return;
+            }
+
+            console.log('Re-spawning a detached replacement process');
+            const child = spawn(process.argv[0], process.argv.slice(1), {
+                cwd: process.cwd(),
+                env: process.env,
+                detached: true,
+                stdio: 'inherit',
+            });
+            child.unref();
+            process.exit(0);
+        }, 250);
+    } catch (error) {
+        console.error('System restart error:', error);
+        if (!res.headersSent) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    }
+});
+
 const expandWorkspacePath = (inputPath) => {
     if (!inputPath) return inputPath;
     if (inputPath === '~') {
