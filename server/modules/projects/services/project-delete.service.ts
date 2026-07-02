@@ -102,9 +102,15 @@ async function deleteClaudeProjectDir(projectPath: string): Promise<void> {
 /**
  * - **Soft delete** (`force` false): set `isArchived` on the `projects` row (hide from the active list; DB only).
  * - **Force** (`force` true): delete each session row's `jsonl_path` file (when set), remove the whole Claude
- *   transcript directory for the path (covers app-created sessions whose `jsonl_path` is still `NULL`), then
- *   remove the session rows and the `projects` row. Removing the on-disk transcripts is what stops the
- *   synchronizer from recreating ("resurrecting") the project on the next project-list load.
+ *   transcript directory for the path, remove the session rows, and **tombstone** the `projects` row
+ *   (`isDeleted = 1`) instead of hard-deleting it.
+ *
+ * Why a tombstone rather than a row delete: only Claude stores transcripts in a per-cwd directory we can
+ * remove. Cursor/Codex/Gemini/OpenCode keep them in flat/hashed/shared-DB layouts keyed by the cwd inside
+ * each file, so an app-created session whose `jsonl_path` was still `NULL` can leave a transcript we cannot
+ * locate. The tombstone makes `sessionsDb.createSession` skip re-creating the project from such a stale
+ * leftover on the next scan (for every provider), while genuinely new activity or an explicit re-create
+ * lifts it. This is what stops the project from "resurrecting" on the next project-list load.
  */
 export async function deleteOrArchiveProject(projectId: string, force: boolean): Promise<void> {
   const row = projectsDb.getProjectById(projectId);
@@ -123,7 +129,7 @@ export async function deleteOrArchiveProject(projectId: string, force: boolean):
   await deleteSessionJsonlFilesForProjectPath(row.project_path);
   await deleteClaudeProjectDir(row.project_path);
   sessionsDb.deleteSessionsByProjectPath(row.project_path);
-  projectsDb.deleteProjectById(projectId);
+  projectsDb.markProjectDeletedById(projectId);
 }
 
 /**

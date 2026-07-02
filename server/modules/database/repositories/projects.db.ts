@@ -34,8 +34,11 @@ export const projectsDb = {
         const normalizedProjectPath = normalizeProjectPath(projectPath);
         const normalizedProjectName = normalizeProjectDisplayName(normalizedProjectPath, customProjectName);
         const attemptedId = randomUUID();
+        // Explicit user actions (reactivateArchived) revive an archived OR force-deleted
+        // (tombstoned) row. The background synchronizer passes false and instead relies on the
+        // tombstone guard in `sessionsDb.createSession`, so it must not revive here.
         const conflictClause = reactivateArchived
-            ? 'DO UPDATE SET isArchived = 0 WHERE projects.isArchived = 1'
+            ? 'DO UPDATE SET isArchived = 0, isDeleted = 0, deleted_at = NULL WHERE projects.isArchived = 1 OR projects.isDeleted = 1'
             : 'DO NOTHING';
         const row = db.prepare(`
         INSERT INTO projects (project_id, project_path, custom_project_name, isArchived)
@@ -105,21 +108,65 @@ export const projectsDb = {
         return db.prepare(`
             SELECT project_id, project_path, custom_project_name, isStarred, isArchived
             FROM projects
-            WHERE isArchived = 0
+            WHERE isArchived = 0 AND isDeleted = 0
         `).all() as ProjectRepositoryRow[];
     },
 
     /**
      * Archived rows are queried separately so archive-focused UIs can present
      * hidden workspaces without reintroducing them into the active sidebar list.
+     * Force-deleted (tombstoned) rows are excluded from both lists.
      */
     getArchivedProjectPaths(): ProjectRepositoryRow[] {
         const db = getConnection();
         return db.prepare(`
             SELECT project_id, project_path, custom_project_name, isStarred, isArchived
             FROM projects
-            WHERE isArchived = 1
+            WHERE isArchived = 1 AND isDeleted = 0
         `).all() as ProjectRepositoryRow[];
+    },
+
+    /**
+     * Force-delete tombstone: keep the `projects` row but hide it and record when it was
+     * deleted. The synchronizer consults this (via `getDeletedAtByPath`) so a stale transcript
+     * left on disk by ANY provider cannot recreate the project on the next scan. A genuinely new
+     * session (activity after `deleted_at`) or an explicit user re-create clears the tombstone.
+     */
+    markProjectDeletedById(projectId: string): void {
+        const db = getConnection();
+        db.prepare(`
+            UPDATE projects
+            SET isDeleted = 1, deleted_at = CURRENT_TIMESTAMP
+            WHERE project_id = ?
+        `).run(projectId);
+    },
+
+    /**
+     * Returns the tombstone `deleted_at` for a path when the row is force-deleted, else null.
+     */
+    getDeletedAtByPath(projectPath: string): string | null {
+        const db = getConnection();
+        const normalizedProjectPath = normalizeProjectPath(projectPath);
+        const row = db.prepare(`
+            SELECT deleted_at
+            FROM projects
+            WHERE project_path = ? AND isDeleted = 1
+        `).get(normalizedProjectPath) as { deleted_at: string | null } | undefined;
+
+        return row?.deleted_at ?? null;
+    },
+
+    /**
+     * Clears the force-delete tombstone for a path (row becomes active again).
+     */
+    clearProjectDeletedByPath(projectPath: string): void {
+        const db = getConnection();
+        const normalizedProjectPath = normalizeProjectPath(projectPath);
+        db.prepare(`
+            UPDATE projects
+            SET isDeleted = 0, deleted_at = NULL
+            WHERE project_path = ?
+        `).run(normalizedProjectPath);
     },
 
     getCustomProjectName(projectPath: string): string | null {

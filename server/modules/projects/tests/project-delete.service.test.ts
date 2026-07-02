@@ -96,6 +96,51 @@ test('force delete never removes files outside the Claude projects root', async 
   });
 });
 
+const OLD_ACTIVITY = '2020-01-01T00:00:00.000Z';
+const FUTURE_ACTIVITY = '2999-01-01T00:00:00.000Z';
+
+test('force delete tombstones the project so a STALE non-claude transcript cannot resurrect it', async () => {
+  await withEnv(async () => {
+    // A Codex session: its transcript lives outside ~/.claude, so directory removal can't reach it.
+    sessionsDb.createSession('codex-1', 'codex', PROJECT_CWD, undefined, OLD_ACTIVITY, OLD_ACTIVITY, '/elsewhere/codex-1.jsonl');
+    const projectId = projectsDb.getProjectPaths()[0].project_id;
+
+    await deleteOrArchiveProject(projectId, true);
+    assert.equal(projectsDb.getProjectPaths().length, 0, 'gone right after delete');
+
+    // The next scan re-discovers the same stale transcript (activity predates the deletion).
+    const sid = sessionsDb.createSession('codex-1', 'codex', PROJECT_CWD, undefined, OLD_ACTIVITY, OLD_ACTIVITY, '/elsewhere/codex-1.jsonl');
+    assert.equal(sid, '', 'stale leftover of a deleted project must not be indexed');
+    assert.equal(projectsDb.getProjectPaths().length, 0, 'BUG: non-claude project resurrected from stale transcript');
+  });
+});
+
+test('genuinely NEW activity after a force delete revives the project (tombstone lifted)', async () => {
+  await withEnv(async () => {
+    sessionsDb.createSession('codex-1', 'codex', PROJECT_CWD, undefined, OLD_ACTIVITY, OLD_ACTIVITY, '/elsewhere/codex-1.jsonl');
+    const projectId = projectsDb.getProjectPaths()[0].project_id;
+    await deleteOrArchiveProject(projectId, true);
+    assert.equal(projectsDb.getProjectPaths().length, 0);
+
+    // A session whose activity is AFTER the deletion means the user is using the path again.
+    const sid = sessionsDb.createSession('codex-2', 'codex', PROJECT_CWD, undefined, FUTURE_ACTIVITY, FUTURE_ACTIVITY, '/elsewhere/codex-2.jsonl');
+    assert.notEqual(sid, '', 'new session is indexed');
+    assert.equal(projectsDb.getProjectPaths().length, 1, 'project revived by genuinely new activity');
+  });
+});
+
+test('explicit createAppSession on a force-deleted path revives it', async () => {
+  await withEnv(async () => {
+    sessionsDb.createSession('codex-1', 'codex', PROJECT_CWD, undefined, OLD_ACTIVITY, OLD_ACTIVITY, '/elsewhere/codex-1.jsonl');
+    const projectId = projectsDb.getProjectPaths()[0].project_id;
+    await deleteOrArchiveProject(projectId, true);
+    assert.equal(projectsDb.getProjectPaths().length, 0);
+
+    sessionsDb.createAppSession('app-1', 'codex', PROJECT_CWD);
+    assert.equal(projectsDb.getProjectPaths().length, 1, 'explicit user action lifts the tombstone');
+  });
+});
+
 test('re-indexing a transcript does NOT un-archive a project the user archived', async () => {
   await withEnv(async (home) => {
     const jsonlPath = await writeTranscript(home);
