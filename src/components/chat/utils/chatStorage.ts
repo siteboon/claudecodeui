@@ -11,7 +11,7 @@ export const safeLocalStorage = {
         console.warn('localStorage quota exceeded, clearing old data');
 
         const keys = Object.keys(localStorage);
-        const draftKeys = keys.filter((k) => k.startsWith('draft_input_'));
+        const draftKeys = keys.filter((k) => k.startsWith('draft_input_') || k.startsWith('queued_message_'));
         draftKeys.forEach((k) => {
           localStorage.removeItem(k);
         });

@@ -352,6 +352,7 @@ export function useProjectsState({
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [selectedSession, setSelectedSession] = useState<ProjectSession | null>(null);
+  const [attentionSessionIds, setAttentionSessionIds] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<AppTab>(readPersistedTab);
 
   useEffect(() => {
@@ -404,6 +405,43 @@ export function useProjectsState({
   selectedSessionRef.current = selectedSession;
   const activeSessionsRef = useRef(activeSessions);
   activeSessionsRef.current = activeSessions;
+
+  const markSessionAttention = useCallback((targetSessionId?: string | null) => {
+    if (!targetSessionId) {
+      return;
+    }
+
+    const viewedSessionId = selectedSessionRef.current?.id ?? sessionId ?? null;
+    if (targetSessionId === viewedSessionId) {
+      return;
+    }
+
+    setAttentionSessionIds((previous) => {
+      if (previous.has(targetSessionId)) {
+        return previous;
+      }
+
+      const next = new Set(previous);
+      next.add(targetSessionId);
+      return next;
+    });
+  }, [sessionId]);
+
+  const clearSessionAttention = useCallback((targetSessionId?: string | null) => {
+    if (!targetSessionId) {
+      return;
+    }
+
+    setAttentionSessionIds((previous) => {
+      if (!previous.has(targetSessionId)) {
+        return previous;
+      }
+
+      const next = new Set(previous);
+      next.delete(targetSessionId);
+      return next;
+    });
+  }, []);
 
   const fetchProjects = useCallback(async ({ showLoadingState = true }: FetchProjectsOptions = {}) => {
     try {
@@ -598,6 +636,25 @@ export function useProjectsState({
         return;
       }
 
+      const eventSessionId = typeof event.sessionId === 'string' && event.sessionId
+        ? event.sessionId
+        : null;
+      const viewedSessionId = selectedSessionRef.current?.id ?? sessionId ?? null;
+
+      if (
+        eventSessionId
+        && eventSessionId !== viewedSessionId
+        && event.kind !== 'chat_subscribed'
+        && event.kind !== 'loading_progress'
+        && event.kind !== 'session_upserted'
+        && event.kind !== 'status'
+        && event.kind !== 'stream_end'
+        && event.kind !== 'permission_cancelled'
+        && event.kind !== 'websocket_reconnected'
+      ) {
+        markSessionAttention(eventSessionId);
+      }
+
       if (event.kind !== 'session_upserted') {
         return;
       }
@@ -617,6 +674,8 @@ export function useProjectsState({
         && !activeSessionsRef.current.has(upsert.sessionId)
       ) {
         setExternalMessageUpdate((prev) => prev + 1);
+      } else {
+        markSessionAttention(upsert.sessionId);
       }
 
       setProjects((previousProjects) => {
@@ -702,7 +761,7 @@ export function useProjectsState({
     };
 
     return subscribe(handleEvent);
-  }, [navigate, sessionId, subscribe]);
+  }, [markSessionAttention, navigate, sessionId, subscribe]);
 
   useEffect(() => {
     return () => {
@@ -712,6 +771,10 @@ export function useProjectsState({
       }
     };
   }, []);
+
+  useEffect(() => {
+    clearSessionAttention(selectedSession?.id ?? sessionId ?? null);
+  }, [clearSessionAttention, selectedSession?.id, sessionId]);
 
   useEffect(() => {
     if (!sessionId || projects.length === 0) {
@@ -774,6 +837,7 @@ export function useProjectsState({
 
   const handleSessionSelect = useCallback(
     (session: ProjectSession) => {
+      clearSessionAttention(session.id);
       setSelectedSession(session);
 
       if (activeTab === 'tasks' || activeTab === 'browser') {
@@ -795,7 +859,7 @@ export function useProjectsState({
 
       navigate(`/session/${session.id}`);
     },
-    [activeTab, isMobile, navigate, selectedProject?.projectId],
+    [activeTab, clearSessionAttention, isMobile, navigate, selectedProject?.projectId],
   );
 
   const handleNewSession = useCallback(
@@ -815,6 +879,8 @@ export function useProjectsState({
 
   const handleSessionDelete = useCallback(
     (sessionIdToDelete: string) => {
+      clearSessionAttention(sessionIdToDelete);
+
       if (selectedSession?.id === sessionIdToDelete) {
         setSelectedSession(null);
         navigate('/');
@@ -824,7 +890,7 @@ export function useProjectsState({
         prevProjects.map((project) => removeSessionFromProject(project, sessionIdToDelete)),
       );
     },
-    [navigate, selectedSession?.id],
+    [clearSessionAttention, navigate, selectedSession?.id],
   );
 
   const handleSidebarRefresh = useCallback(async () => {
@@ -945,6 +1011,7 @@ export function useProjectsState({
       selectedProject,
       selectedSession,
       activeSessions,
+      attentionSessionIds,
       onProjectSelect: handleProjectSelect,
       onSessionSelect: handleSessionSelect,
       onNewSession: handleNewSession,
@@ -961,6 +1028,7 @@ export function useProjectsState({
       isMobile,
     }),
     [
+      attentionSessionIds,
       handleNewSession,
       handleProjectDelete,
       handleProjectSelect,

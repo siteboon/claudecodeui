@@ -14,6 +14,7 @@ type SidebarSessionItemProps = {
   session: SessionWithProvider;
   selectedSession: ProjectSession | null;
   isProcessing: boolean;
+  needsAttention: boolean;
   currentTime: Date;
   editingSession: string | null;
   editingSessionName: string;
@@ -65,6 +66,7 @@ export default function SidebarSessionItem({
   session,
   selectedSession,
   isProcessing,
+  needsAttention,
   currentTime,
   editingSession,
   editingSessionName,
@@ -82,7 +84,8 @@ export default function SidebarSessionItem({
   const isEditing = editingSession === session.id;
   const compactSessionAge = formatCompactSessionAge(sessionView.sessionTime, currentTime);
   const editingContainerRef = useRef<HTMLDivElement>(null);
-  const showRecentIndicator = !isProcessing && sessionView.isActive;
+  const showAttentionIndicator = needsAttention && !isSelected;
+  const showRecentIndicator = !showAttentionIndicator && !isProcessing && sessionView.isActive;
 
   // The rename panel sits inside a group-hover opacity wrapper, so leaving the row
   // would visually hide it. While editing, dismiss only when the user clicks outside
@@ -120,13 +123,23 @@ export default function SidebarSessionItem({
 
   return (
     <div className="group relative">
-      {showRecentIndicator && (
+      {(showAttentionIndicator || showRecentIndicator) && (
         <div className="absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2 transform">
-          <Tooltip content={t('tooltips.activeSessionIndicator')} position="right">
+          <Tooltip
+            content={showAttentionIndicator
+              ? t('tooltips.attentionRequiredIndicator', { defaultValue: 'Session needs attention' })
+              : t('tooltips.activeSessionIndicator')}
+            position="right"
+          >
             <div
               role="status"
-              aria-label={t('tooltips.activeSessionIndicator')}
-              className="h-2 w-2 animate-pulse rounded-full bg-green-500"
+              aria-label={showAttentionIndicator
+                ? t('tooltips.attentionRequiredIndicator', { defaultValue: 'Session needs attention' })
+                : t('tooltips.activeSessionIndicator')}
+              className={cn(
+                'h-2 w-2 animate-pulse rounded-full',
+                showAttentionIndicator ? 'bg-amber-500' : 'bg-green-500',
+              )}
             />
           </Tooltip>
         </div>

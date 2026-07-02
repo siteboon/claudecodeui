@@ -140,12 +140,22 @@
     "stop": "Stop",
     "hintText": {
       "ctrlEnter": "Ctrl+Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands",
-      "enter": "Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands"
+      "enter": "Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands",
+      "queue": "Enter to queue your next message",
+      "updateQueued": "Enter to update queued message"
     },
     "clickToChangeMode": "Click to change permission mode (or press Tab in input)",
     "showAllCommands": "Show all commands",
     "clearInput": "Clear input",
-    "scrollToBottom": "Scroll to bottom"
+    "scrollToBottom": "Scroll to bottom",
+    "queue": {
+      "sendNext": "Queue next message",
+      "update": "Update queued message",
+      "label": "Queued",
+      "willSend": "Will send when this finishes",
+      "edit": "Edit queued message",
+      "delete": "Delete queued message"
+    }
   },
   "providerSelection": {
     "title": "Choose Your AI Assistant",

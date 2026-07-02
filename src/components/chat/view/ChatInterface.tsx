@@ -174,6 +174,9 @@ function ChatInterface({
     isDragActive,
     openImagePicker,
     handleSubmit,
+    queuedDraft,
+    editQueuedDraft,
+    deleteQueuedDraft,
     handleVoiceTranscript,
     handleInputChange,
     handleKeyDown,
@@ -405,6 +408,9 @@ function ChatInterface({
           onClearInput={handleClearInput}
           onSubmit={handleSubmit}
           isDragActive={isDragActive}
+          queuedDraft={queuedDraft}
+          onEditQueuedDraft={editQueuedDraft}
+          onDeleteQueuedDraft={deleteQueuedDraft}
           attachedImages={attachedImages}
           onRemoveImage={(index) =>
             setAttachedImages((previous) =>
