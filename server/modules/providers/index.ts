@@ -4,3 +4,5 @@ export { providerMcpService } from './services/mcp.service.js';
 
 export { initializeSessionsWatcher } from './services/sessions-watcher.service.js';
 export { closeSessionsWatcher } from './services/sessions-watcher.service.js';
+
+export { ClaudeSessionSynchronizer } from './list/claude/claude-session-synchronizer.provider.js';

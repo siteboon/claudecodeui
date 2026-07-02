@@ -16,17 +16,31 @@ function normalizeProjectDisplayName(projectPath: string, customProjectName: str
 }
 
 export const projectsDb = {
-    createProjectPath(projectPath: string, customProjectName: string | null = null): CreateProjectPathResult {
+    /**
+     * Ensures a `projects` row exists for `projectPath` and returns the outcome.
+     *
+     * `reactivateArchived` (default `true`) controls what happens when the path already exists
+     * but is archived: explicit user actions (creating a project, starting a session) reactivate it,
+     * but the background session synchronizer must pass `false`. Otherwise any passive re-scan that
+     * re-touches a transcript would silently un-archive a project the user deliberately hid.
+     */
+    createProjectPath(
+        projectPath: string,
+        customProjectName: string | null = null,
+        options: { reactivateArchived?: boolean } = {},
+    ): CreateProjectPathResult {
+        const { reactivateArchived = true } = options;
         const db = getConnection();
         const normalizedProjectPath = normalizeProjectPath(projectPath);
         const normalizedProjectName = normalizeProjectDisplayName(normalizedProjectPath, customProjectName);
         const attemptedId = randomUUID();
+        const conflictClause = reactivateArchived
+            ? 'DO UPDATE SET isArchived = 0 WHERE projects.isArchived = 1'
+            : 'DO NOTHING';
         const row = db.prepare(`
         INSERT INTO projects (project_id, project_path, custom_project_name, isArchived)
             VALUES (?, ?, ?, 0)
-            ON CONFLICT(project_path) DO UPDATE SET
-            isArchived = 0
-            WHERE projects.isArchived = 1
+            ON CONFLICT(project_path) ${conflictClause}
             RETURNING project_id, project_path, custom_project_name, isStarred, isArchived
         `).get(attemptedId, normalizedProjectPath, normalizedProjectName) as ProjectRepositoryRow | undefined;
 
