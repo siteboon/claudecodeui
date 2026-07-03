@@ -313,6 +313,18 @@ export class ClaudeSessionsProvider implements IProviderSessions {
 
     if (raw.message?.role === 'user' && raw.message?.content && raw.isMeta !== true) {
       if (Array.isArray(raw.message.content)) {
+        // Image attachments sent through the SDK are persisted as base64
+        // `image` blocks next to the prompt text. Collect them so the UI can
+        // render them on the user bubble.
+        const imageAttachments: Array<{ data: string }> = [];
+        for (const part of raw.message.content) {
+          if (part?.type === 'image' && part.source?.type === 'base64' && typeof part.source.data === 'string') {
+            const mediaType = typeof part.source.media_type === 'string' ? part.source.media_type : 'image/png';
+            imageAttachments.push({ data: `data:${mediaType};base64,${part.source.data}` });
+          }
+        }
+        let imagesAttached = false;
+
         for (let partIndex = 0; partIndex < raw.message.content.length; partIndex++) {
           const part = raw.message.content[partIndex];
           if (part.type === 'tool_result') {
@@ -339,7 +351,9 @@ export class ClaudeSessionsProvider implements IProviderSessions {
                 kind: 'text',
                 role: 'user',
                 content: text,
+                images: !imagesAttached && imageAttachments.length > 0 ? imageAttachments : undefined,
               }));
+              imagesAttached = true;
             }
           }
         }
@@ -359,8 +373,24 @@ export class ClaudeSessionsProvider implements IProviderSessions {
               kind: 'text',
               role: 'user',
               content: textParts,
+              images: imageAttachments.length > 0 ? imageAttachments : undefined,
             }));
+            imagesAttached = true;
           }
+        }
+
+        // Image-only turns still deserve a user bubble even without text.
+        if (!imagesAttached && imageAttachments.length > 0) {
+          messages.push(createNormalizedMessage({
+            id: `${baseId}_images`,
+            sessionId,
+            timestamp: ts,
+            provider: PROVIDER,
+            kind: 'text',
+            role: 'user',
+            content: '',
+            images: imageAttachments,
+          }));
         }
       } else if (typeof raw.message.content === 'string') {
         const text = raw.message.content;

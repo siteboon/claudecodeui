@@ -4,11 +4,12 @@ import fsSync from 'node:fs';
 import crossSpawn from 'cross-spawn';
 import Database from 'better-sqlite3';
 
+import { appendImagesInputTag } from './shared/image-attachments.js';
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
 import { providerModelsService } from './modules/providers/services/provider-models.service.js';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
-import { createCompleteMessage, createNormalizedMessage, getOpenCodeDatabasePath } from './shared/utils.js';
+import { createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell, getOpenCodeDatabasePath } from './shared/utils.js';
 
 const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
 
@@ -92,7 +93,7 @@ function readOpenCodeTokenUsage(sessionId) {
 
 async function spawnOpenCode(command, options = {}, ws) {
   return new Promise((resolve, reject) => {
-    const { sessionId, projectPath, cwd, model, effort, sessionSummary } = options;
+    const { sessionId, projectPath, cwd, model, effort, sessionSummary, images } = options;
     const workingDir = cwd || projectPath || process.cwd();
     const processKey = sessionId || Date.now().toString();
     let capturedSessionId = sessionId || null;
@@ -224,7 +225,11 @@ async function spawnOpenCode(command, options = {}, ws) {
         args.push('--variant', resolvedEffort);
       }
       if (command && command.trim()) {
-        args.push(command.trim());
+        // Image attachments ride along as an <images_input> path list appended
+        // to the prompt; the session history reader strips the tag back out.
+        // opencode is a .cmd shim on Windows, so the whole argument must be
+        // newline-free or cmd.exe silently truncates it at the first newline.
+        args.push(flattenPromptForWindowsShell(appendImagesInputTag(command.trim(), images)));
       }
 
       opencodeProcess = spawnFunction('opencode', args, {

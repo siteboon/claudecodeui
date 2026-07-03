@@ -642,7 +642,7 @@ export function useChatComposerState({
         });
 
         try {
-          const response = await authenticatedFetch(`/api/projects/${selectedProject.projectId}/upload-images`, {
+          const response = await authenticatedFetch('/api/assets/images', {
             method: 'POST',
             headers: {},
             body: formData,

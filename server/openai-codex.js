@@ -14,6 +14,8 @@
  */
 
 import { Codex } from '@openai/codex-sdk';
+
+import { buildCodexInputItems, normalizeImageDescriptors } from './shared/image-attachments.js';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
@@ -228,6 +230,7 @@ export async function queryCodex(command, options = {}, ws) {
     projectPath,
     model,
     effort,
+    images,
     permissionMode = 'default'
   } = options;
 
@@ -288,7 +291,12 @@ export async function queryCodex(command, options = {}, ws) {
       registerSession(capturedSessionId);
     }
 
-    const streamedTurn = await thread.runStreamed(command, {
+    // Execute with streaming. Turns with image attachments send structured
+    // input items so Codex reads the images from their local asset paths.
+    const turnInput = normalizeImageDescriptors(images).length > 0
+      ? buildCodexInputItems(command, images, workingDirectory)
+      : command;
+    const streamedTurn = await thread.runStreamed(turnInput, {
       signal: abortController.signal
     });
 

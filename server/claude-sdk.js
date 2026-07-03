@@ -19,6 +19,7 @@ import path from 'path';
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
 
+import { buildClaudeUserContent, normalizeImageDescriptors } from './shared/image-attachments.js';
 import { CLAUDE_FALLBACK_MODELS } from './modules/providers/list/claude/claude-models.provider.js';
 import { providerModelsService } from './modules/providers/services/provider-models.service.js';
 import { resolveClaudeCodeExecutablePath } from './shared/claude-cli-path.js';
@@ -236,16 +237,13 @@ function mapCliOptionsToSDK(options = {}) {
  * Adds a session to the active sessions map
  * @param {string} sessionId - Session identifier
  * @param {Object} queryInstance - SDK query instance
- * @param {Array<string>} tempImagePaths - Temp image file paths for cleanup
- * @param {string} tempDir - Temp directory for cleanup
+ * @param {Object} writer - WebSocket writer for reconnect support
  */
-function addSession(sessionId, queryInstance, tempImagePaths = [], tempDir = null, writer = null) {
+function addSession(sessionId, queryInstance, writer = null) {
   activeSessions.set(sessionId, {
     instance: queryInstance,
     startTime: Date.now(),
     status: 'active',
-    tempImagePaths,
-    tempDir,
     writer
   });
 }
@@ -364,90 +362,35 @@ function extractTokenBudget(sdkMessage) {
 }
 
 /**
- * Handles image processing for SDK queries
- * Saves base64 images to temporary files and returns modified prompt with file paths
- * @param {string} command - Original user prompt
- * @param {Array} images - Array of image objects with base64 data
- * @param {string} cwd - Working directory for temp file creation
- * @returns {Promise<Object>} {modifiedCommand, tempImagePaths, tempDir}
+ * Builds the SDK `prompt` payload for one turn.
+ *
+ * Plain text turns pass the string through unchanged. Turns with image
+ * attachments use the SDK's streaming-input mode: a single SDKUserMessage
+ * whose content carries the prompt text plus one base64 `image` block per
+ * attachment (read from the global `~/.cloudcli/assets` folder).
+ *
+ * @param {string} command - User prompt
+ * @param {Array} images - Image descriptors ({ path, name?, mimeType? })
+ * @param {string} cwd - Project working directory image paths resolve against
+ * @returns {Promise<string|AsyncIterable>} SDK prompt payload
  */
-async function handleImages(command, images, cwd) {
-  const tempImagePaths = [];
-  let tempDir = null;
-
-  if (!images || images.length === 0) {
-    return { modifiedCommand: command, tempImagePaths, tempDir };
+async function buildPromptPayload(command, images, cwd) {
+  if (normalizeImageDescriptors(images).length === 0) {
+    return command;
   }
 
-  try {
-    // Create temp directory in the project directory
-    const workingDir = cwd || process.cwd();
-    tempDir = path.join(workingDir, '.tmp', 'images', Date.now().toString());
-    await fs.mkdir(tempDir, { recursive: true });
-
-    // Save each image to a temp file
-    for (const [index, image] of images.entries()) {
-      // Extract base64 data and mime type
-      const matches = image.data.match(/^data:([^;]+);base64,(.+)$/);
-      if (!matches) {
-        console.error('Invalid image data format');
-        continue;
-      }
-
-      const [, mimeType, base64Data] = matches;
-      const extension = mimeType.split('/')[1] || 'png';
-      const filename = `image_${index}.${extension}`;
-      const filepath = path.join(tempDir, filename);
-
-      // Write base64 data to file
-      await fs.writeFile(filepath, Buffer.from(base64Data, 'base64'));
-      tempImagePaths.push(filepath);
-    }
-
-    // Include the full image paths in the prompt
-    let modifiedCommand = command;
-    if (tempImagePaths.length > 0 && command && command.trim()) {
-      const imageNote = `\n\n[Images provided at the following paths:]\n${tempImagePaths.map((p, i) => `${i + 1}. ${p}`).join('\n')}`;
-      modifiedCommand = command + imageNote;
-    }
-
-    // Images processed
-    return { modifiedCommand, tempImagePaths, tempDir };
-  } catch (error) {
-    console.error('Error processing images for SDK:', error);
-    return { modifiedCommand: command, tempImagePaths, tempDir };
-  }
-}
-
-/**
- * Cleans up temporary image files
- * @param {Array<string>} tempImagePaths - Array of temp file paths to delete
- * @param {string} tempDir - Temp directory to remove
- */
-async function cleanupTempFiles(tempImagePaths, tempDir) {
-  if (!tempImagePaths || tempImagePaths.length === 0) {
-    return;
-  }
-
-  try {
-    // Delete individual temp files
-    for (const imagePath of tempImagePaths) {
-      await fs.unlink(imagePath).catch(err =>
-        console.error(`Failed to delete temp image ${imagePath}:`, err)
-      );
-    }
-
-    // Delete temp directory
-    if (tempDir) {
-      await fs.rm(tempDir, { recursive: true, force: true }).catch(err =>
-        console.error(`Failed to delete temp directory ${tempDir}:`, err)
-      );
-    }
-
-    // Temp files cleaned
-  } catch (error) {
-    console.error('Error during temp file cleanup:', error);
-  }
+  const content = await buildClaudeUserContent(command, images, cwd);
+  return (async function* () {
+    yield {
+      type: 'user',
+      message: {
+        role: 'user',
+        content
+      },
+      parent_tool_use_id: null,
+      timestamp: new Date().toISOString()
+    };
+  })();
 }
 
 /**
@@ -518,8 +461,6 @@ async function queryClaudeSDK(command, options = {}, ws) {
   const { sessionId, sessionSummary } = options;
   let capturedSessionId = sessionId;
   let sessionCreatedSent = false;
-  let tempImagePaths = [];
-  let tempDir = null;
 
   const emitNotification = (event) => {
     notifyUserIfEnabled({
@@ -553,10 +494,10 @@ async function queryClaudeSDK(command, options = {}, ws) {
       sdkOptions.mcpServers = mcpServers;
     }
 
-    const imageResult = await handleImages(command, options.images, options.cwd);
-    const finalCommand = imageResult.modifiedCommand;
-    tempImagePaths = imageResult.tempImagePaths;
-    tempDir = imageResult.tempDir;
+    // Turns with image attachments switch to streaming input so the images
+    // ride along as real content blocks. Built per query attempt because an
+    // async generator cannot be replayed once consumed.
+    const createPrompt = () => buildPromptPayload(command, options.images, options.cwd);
 
     sdkOptions.hooks = {
       Notification: [{
@@ -663,7 +604,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
     let queryInstance;
     try {
       queryInstance = query({
-        prompt: finalCommand,
+        prompt: await createPrompt(),
         options: sdkOptions
       });
     } catch (hookError) {
@@ -672,7 +613,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
       console.warn('Failed to initialize Claude query with hooks, retrying without hooks:', hookError?.message || hookError);
       delete sdkOptions.hooks;
       queryInstance = query({
-        prompt: finalCommand,
+        prompt: await createPrompt(),
         options: sdkOptions
       });
     }
@@ -686,7 +627,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
     // Track the query instance for abort capability
     if (capturedSessionId) {
-      addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir, ws);
+      addSession(capturedSessionId, queryInstance, ws);
     }
 
     // Process streaming messages
@@ -696,7 +637,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
       if (message.session_id && !capturedSessionId) {
 
         capturedSessionId = message.session_id;
-        addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir, ws);
+        addSession(capturedSessionId, queryInstance, ws);
 
         // Set session ID on writer
         if (ws.setSessionId && typeof ws.setSessionId === 'function') {
@@ -738,9 +679,6 @@ async function queryClaudeSDK(command, options = {}, ws) {
       removeSession(capturedSessionId);
     }
 
-    // Clean up temporary image files
-    await cleanupTempFiles(tempImagePaths, tempDir);
-
     // Send the terminal completion event — skipped for aborted runs, whose
     // terminal `complete` (aborted: true) was already sent by abort-session.
     const wasAborted = capturedSessionId ? abortedSessionIds.delete(capturedSessionId) : false;
@@ -763,9 +701,6 @@ async function queryClaudeSDK(command, options = {}, ws) {
     if (capturedSessionId) {
       removeSession(capturedSessionId);
     }
-
-    // Clean up temporary image files on error
-    await cleanupTempFiles(tempImagePaths, tempDir);
 
     const wasAborted = capturedSessionId ? abortedSessionIds.delete(capturedSessionId) : false;
     if (wasAborted) {
@@ -818,9 +753,6 @@ async function abortClaudeSDKSession(sessionId) {
 
     // Update session status
     session.status = 'aborted';
-
-    // Clean up temporary image files
-    await cleanupTempFiles(session.tempImagePaths, session.tempDir);
 
     // Clean up session
     removeSession(sessionId);

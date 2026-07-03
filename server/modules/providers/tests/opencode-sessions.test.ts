@@ -9,6 +9,7 @@ import Database from 'better-sqlite3';
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import { OpenCodeSessionSynchronizer } from '@/modules/providers/list/opencode/opencode-session-synchronizer.provider.js';
 import { OpenCodeSessionsProvider } from '@/modules/providers/list/opencode/opencode-sessions.provider.js';
+import { appendImagesInputTag } from '@/shared/image-attachments.js';
 
 const patchHomeDir = (nextHomeDir: string) => {
   const original = os.homedir;
@@ -315,6 +316,41 @@ test('OpenCode session synchronizer adopts the pending app session before watche
         assert.equal(sessionsDb.getSessionById('app-session-race')?.provider_session_id, 'open-session-1');
       });
     });
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('OpenCode sessions provider strips <images_input> from user turns and exposes attachments', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'opencode-session-images-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tempRoot);
+
+  try {
+    await createOpenCodeDatabase(tempRoot, workspacePath);
+
+    // Rewrite the user text part with the tagged prompt the runtime sends.
+    const taggedPrompt = appendImagesInputTag('Look at this screenshot.', [
+      { path: 'C:/Users/x/.cloudcli/assets/shot.png' },
+    ]);
+    const db = new Database(path.join(tempRoot, '.local', 'share', 'opencode', 'opencode.db'));
+    try {
+      db.prepare('UPDATE part SET data = ? WHERE id = ?').run(
+        JSON.stringify({ type: 'text', text: taggedPrompt }),
+        'part-user-text',
+      );
+    } finally {
+      db.close();
+    }
+
+    const provider = new OpenCodeSessionsProvider();
+    const history = await provider.fetchHistory('open-session-1');
+    const userMessage = history.messages.find((message) => message.kind === 'text' && message.role === 'user');
+
+    assert.equal(userMessage?.content, 'Look at this screenshot.');
+    assert.deepEqual(userMessage?.images, [{ path: 'C:/Users/x/.cloudcli/assets/shot.png' }]);
   } finally {
     restoreHomeDir();
     await rm(tempRoot, { recursive: true, force: true });

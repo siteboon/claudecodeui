@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import readline from 'node:readline';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import { parseImagesInputTag } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
 import { createNormalizedMessage, generateMessageId, readObjectRecord, sliceTailPage } from '@/shared/utils.js';
@@ -128,7 +129,8 @@ async function getGeminiLegacySessionMessages(sessionFilePath: string): Promise<
   }
 }
 
-async function getGeminiJsonlSessionMessages(sessionFilePath: string): Promise<GeminiHistoryResult> {
+// Exported for tests: parses one Gemini CLI JSONL transcript from disk.
+export async function getGeminiJsonlSessionMessages(sessionFilePath: string): Promise<GeminiHistoryResult> {
   const messages: AnyRecord[] = [];
   let tokenUsage: AnyRecord | undefined;
 
@@ -159,12 +161,18 @@ async function getGeminiJsonlSessionMessages(sessionFilePath: string): Promise<G
 
       const role = mapGeminiRole(entry.type);
       if (role) {
-        const textContent = extractGeminiTextContent(entry.content);
-        if (textContent.trim()) {
+        const rawTextContent = extractGeminiTextContent(entry.content);
+        // User prompts sent with attachments carry an <images_input> path
+        // list; strip it for display and surface the paths as images.
+        const { text: textContent, attachments } = role === 'user'
+          ? parseImagesInputTag(rawTextContent)
+          : { text: rawTextContent, attachments: [] };
+        if (textContent.trim() || attachments.length > 0) {
           messages.push({
             type: 'message',
             uuid: typeof entry.id === 'string' ? entry.id : undefined,
             message: { role, content: textContent },
+            images: attachments.length > 0 ? attachments : undefined,
             timestamp: entry.timestamp || null,
           });
         }
@@ -413,8 +421,9 @@ export class GeminiSessionsProvider implements IProviderSessions {
       }
 
       const role = raw.message?.role || raw.role;
-      const content = raw.message?.content || raw.content;
-      if (!role || !content) {
+      const content = raw.message?.content ?? raw.content ?? '';
+      const rawImages = Array.isArray(raw.images) && raw.images.length > 0 ? raw.images : undefined;
+      if (!role || (!content && !rawImages)) {
         continue;
       }
 
@@ -475,7 +484,12 @@ export class GeminiSessionsProvider implements IProviderSessions {
             }));
           }
         }
-      } else if (typeof content === 'string' && content.trim()) {
+      } else if (typeof content === 'string' && (content.trim() || rawImages)) {
+        // Legacy (non-JSONL) session files reach this branch with the raw
+        // prompt text, so strip any <images_input> block here as well.
+        const { text: cleanContent, attachments } = normalizedRole === 'user'
+          ? parseImagesInputTag(content)
+          : { text: content, attachments: [] };
         normalized.push(createNormalizedMessage({
           id: baseId,
           sessionId,
@@ -483,7 +497,8 @@ export class GeminiSessionsProvider implements IProviderSessions {
           provider: PROVIDER,
           kind: 'text',
           role: normalizedRole,
-          content,
+          content: cleanContent,
+          images: rawImages ?? (attachments.length > 0 ? attachments : undefined),
         }));
       } else {
         const textContent = extractGeminiTextContent(content);

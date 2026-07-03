@@ -2,6 +2,7 @@ import fsSync from 'node:fs';
 import readline from 'node:readline';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import { toImageAttachments } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
 import { createNormalizedMessage, generateMessageId, readObjectRecord, sliceTailPage } from '@/shared/utils.js';
@@ -29,6 +30,42 @@ function isVisibleCodexUserMessage(payload: AnyRecord | null | undefined): boole
   }
 
   return typeof payload.message === 'string' && payload.message.trim().length > 0;
+}
+
+/**
+ * Reads the image attachments Codex records on `user_message` events.
+ * Turns sent with `local_image` input items land in `local_images` as file
+ * paths (verified against real rollout JSONL); the `images` array can carry
+ * base64 data URLs, which are passed through as inline `data` attachments so
+ * the UI can preview them without a file lookup.
+ *
+ * Exported for tests.
+ */
+export function extractCodexUserImages(
+  payload: AnyRecord | null | undefined,
+): Array<{ path?: string; data?: string }> | undefined {
+  if (!payload) {
+    return undefined;
+  }
+
+  const candidates = [
+    ...(Array.isArray(payload.local_images) ? payload.local_images : []),
+    ...(Array.isArray(payload.images) ? payload.images : []),
+  ];
+
+  const attachments: Array<{ path?: string; data?: string }> = [];
+  for (const entry of candidates) {
+    if (typeof entry !== 'string' || !entry.trim()) {
+      continue;
+    }
+    if (entry.startsWith('data:')) {
+      attachments.push({ data: entry });
+    } else {
+      attachments.push(...toImageAttachments([entry]));
+    }
+  }
+
+  return attachments.length > 0 ? attachments : undefined;
 }
 
 function extractCodexTextContent(content: unknown): string {
@@ -104,6 +141,7 @@ async function getCodexSessionMessages(
               role: 'user',
               content: entry.payload.message,
             },
+            images: extractCodexUserImages(entry.payload as AnyRecord),
           });
         }
 
@@ -296,7 +334,8 @@ export class CodexSessionsProvider implements IProviderSessions {
               .filter(Boolean)
               .join('\n')
           : String(raw.message.content || '');
-      if (!content.trim()) {
+      const rawImages = Array.isArray(raw.images) && raw.images.length > 0 ? raw.images : undefined;
+      if (!content.trim() && !rawImages) {
         return [];
       }
       return [createNormalizedMessage({
@@ -307,6 +346,7 @@ export class CodexSessionsProvider implements IProviderSessions {
         kind: 'text',
         role: 'user',
         content,
+        images: rawImages,
       })];
     }
 
