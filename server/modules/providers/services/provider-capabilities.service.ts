@@ -21,6 +21,8 @@ type ProviderCapabilities = {
   supportsPermissionRequests: boolean;
   /** Whether the token-usage endpoint has data for this provider. */
   supportsTokenUsage: boolean;
+  /** Whether the provider runtime can accept model-level reasoning effort. */
+  supportsEffort: boolean;
 };
 
 /**
@@ -38,6 +40,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsAbort: true,
     supportsPermissionRequests: true,
     supportsTokenUsage: true,
+    supportsEffort: true,
   },
   cursor: {
     provider: 'cursor',
@@ -47,6 +50,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsAbort: true,
     supportsPermissionRequests: false,
     supportsTokenUsage: false,
+    supportsEffort: false,
   },
   codex: {
     provider: 'codex',
@@ -56,6 +60,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsAbort: true,
     supportsPermissionRequests: false,
     supportsTokenUsage: true,
+    supportsEffort: true,
   },
   gemini: {
     provider: 'gemini',
@@ -65,6 +70,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsAbort: true,
     supportsPermissionRequests: false,
     supportsTokenUsage: true,
+    supportsEffort: false,
   },
   opencode: {
     provider: 'opencode',
@@ -74,6 +80,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsAbort: true,
     supportsPermissionRequests: false,
     supportsTokenUsage: true,
+    supportsEffort: true,
   },
 };
 
