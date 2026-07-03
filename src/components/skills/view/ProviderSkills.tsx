@@ -219,7 +219,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [showInstallPath, setShowInstallPath] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const folderInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
 
   const providerName = PROVIDER_NAMES[selectedProvider];
   const providerPath = selectedProvider === 'opencode' ? null : PROVIDER_SKILL_PATHS[selectedProvider];
@@ -234,9 +234,14 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
     setJustInstalled(false);
   }, [selectedProvider]);
 
-  useEffect(() => {
-    folderInputRef.current?.setAttribute('webkitdirectory', '');
-    folderInputRef.current?.setAttribute('directory', '');
+  const setFolderInputRef = useCallback((node: HTMLInputElement | null) => {
+    folderInputRef.current = node;
+    if (!node) {
+      return;
+    }
+
+    node.setAttribute('webkitdirectory', '');
+    node.setAttribute('directory', '');
   }, []);
 
   const filteredSkills = useMemo(() => {
@@ -407,7 +412,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
           }}
         />
         <input
-          ref={folderInputRef}
+          ref={setFolderInputRef}
           type="file"
           multiple
           className="hidden"
