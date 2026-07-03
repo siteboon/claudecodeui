@@ -122,7 +122,7 @@ CloudCLI UI 是 CloudCLI Cloud 的开源 UI 层。你可以在本地机器上自
 | **REST API** | 是 | 是 |
 | **n8n 节点** | 否 | 是 |
 | **团队共享** | 否 | 是 |
-| **平台费用** | 免费开源 | 起价 $7/月 |
+| **平台费用** | 免费开源 | 起价 €7/月 |
 
 > 两种方式都使用你自己的 AI 订阅（Claude、Cursor 等）— CloudCLI 提供环境，而非 AI。
 
@@ -195,7 +195,7 @@ CloudCLI UI 与 CloudCLI Cloud 是对 Claude Code 的扩展，而非旁观 — M
 <details>
 <summary>需要额外购买 AI 订阅吗？</summary>
 
-需要。CloudCLI 只提供环境。你仍需自行获取 Claude、Cursor、Codex 或 Gemini 订阅。CloudCLI Cloud 从 $7/月起提供托管环境。
+需要。CloudCLI 只提供环境。你仍需自行获取 Claude、Cursor、Codex 或 Gemini 订阅。CloudCLI Cloud 从 €7/月起提供托管环境。
 
 </details>
 

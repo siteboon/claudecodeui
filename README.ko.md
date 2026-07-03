@@ -122,7 +122,7 @@ CloudCLI UI는 CloudCLI Cloud를 구동하는 오픈 소스 UI 계층입니다. 
 | **REST API** | 예 | 예 |
 | **n8n 노드** | 아니오 | 예 |
 | **팀 공유** | 아니오 | 예 |
-| **플랫폼 비용** | 무료, 오픈 소스 | 월 $7부터 |
+| **플랫폼 비용** | 무료, 오픈 소스 | 월 €7부터 |
 
 > 둘 다 자체 AI 구독(Claude, Cursor 등)을 그대로 사용합니다 — CloudCLI는 환경만 제공합니다.
 
@@ -195,7 +195,7 @@ CloudCLI UI와 CloudCLI Cloud는 Claude Code를 확장하며 별도로 존재하
 <details>
 <summary>AI 구독을 별도로 결제해야 하나요?</summary>
 
-네. CloudCLI는 환경만 제공합니다. Claude, Cursor, Codex, Gemini 구독 비용은 별도로 부과됩니다. CloudCLI Cloud는 관리형 환경을 월 $7부터 제공합니다.
+네. CloudCLI는 환경만 제공합니다. Claude, Cursor, Codex, Gemini 구독 비용은 별도로 부과됩니다. CloudCLI Cloud는 관리형 환경을 월 €7부터 제공합니다.
 
 </details>
 

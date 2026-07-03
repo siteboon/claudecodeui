@@ -126,7 +126,7 @@ CloudCLI UI ist die Open-Source-UI-Schicht, die CloudCLI Cloud antreibt. Du kann
 | **REST API** | Ja | Ja |
 | **n8n-Node** | Nein | Ja |
 | **Team-Sharing** | Nein | Ja |
-| **Plattformkosten** | Kostenlos, Open Source | Ab $7/Monat |
+| **Plattformkosten** | Kostenlos, Open Source | Ab €7/Monat |
 
 > Beide Optionen verwenden deine eigenen KI-Abonnements (Claude, Cursor usw.) – CloudCLI stellt die Umgebung bereit, nicht die KI.
 
@@ -202,7 +202,7 @@ Das bedeutet in der Praxis:
 <details>
 <summary>Muss ich ein KI-Abonnement separat bezahlen?</summary>
 
-Ja. CloudCLI stellt die Umgebung bereit, nicht die KI. Du bringst dein eigenes Claude-, Cursor-, Codex- oder Gemini-Abonnement mit. CloudCLI Cloud beginnt bei $7/Monat für die gehostete Umgebung zusätzlich dazu.
+Ja. CloudCLI stellt die Umgebung bereit, nicht die KI. Du bringst dein eigenes Claude-, Cursor-, Codex- oder Gemini-Abonnement mit. CloudCLI Cloud beginnt bei €7/Monat für die gehostete Umgebung zusätzlich dazu.
 
 </details>
 

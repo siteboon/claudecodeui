@@ -125,7 +125,7 @@ CloudCLI UI, CloudCLI Cloud'u güçlendiren açık kaynak arayüz katmanıdır. 
 | **MCP yapılandırması** | `~/.claude` ile senkron | UI üzerinden yönetilir | UI üzerinden yönetilir |
 | **REST API** | Evet | Evet | Evet |
 | **Ekip paylaşımı** | Hayır | Hayır | Evet |
-| **Platform maliyeti** | Ücretsiz, açık kaynak | Ücretsiz, açık kaynak | Aylık 7 $'dan başlar |
+| **Platform maliyeti** | Ücretsiz, açık kaynak | Ücretsiz, açık kaynak | Aylık 7 €'dan başlar |
 
 > Tüm seçenekler kendi AI aboneliklerini (Claude, Cursor, vb.) kullanır — CloudCLI AI'ı değil, ortamı sağlar.
 
@@ -201,7 +201,7 @@ Pratikte bu ne demek:
 <details>
 <summary>AI aboneliği için ayrıca ödeme yapmam gerekiyor mu?</summary>
 
-Evet. CloudCLI AI'yi değil, ortamı sağlar. Kendi Claude, Cursor, Codex veya Gemini aboneliğini getirirsin. CloudCLI Cloud, barındırılan ortam için aylık 7 $'dan başlar — bunun üzerine eklenir.
+Evet. CloudCLI AI'yi değil, ortamı sağlar. Kendi Claude, Cursor, Codex veya Gemini aboneliğini getirirsin. CloudCLI Cloud, barındırılan ortam için aylık 7 €'dan başlar — bunun üzerine eklenir.
 
 </details>
 
