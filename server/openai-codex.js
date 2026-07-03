@@ -20,7 +20,6 @@ import { providerAuthService } from './modules/providers/services/provider-auth.
 import { providerModelsService } from './modules/providers/services/provider-models.service.js';
 import { createCompleteMessage, createNormalizedMessage } from './shared/utils.js';
 
-// Track active sessions
 const activeCodexSessions = new Map();
 
 function readUsageNumber(value) {
@@ -228,6 +227,7 @@ export async function queryCodex(command, options = {}, ws) {
     cwd,
     projectPath,
     model,
+    effort,
     permissionMode = 'default'
   } = options;
 
@@ -239,6 +239,12 @@ export async function queryCodex(command, options = {}, ws) {
 
   const workingDirectory = cwd || projectPath || process.cwd();
   const { sandboxMode, approvalPolicy } = mapPermissionModeToCodexOptions(permissionMode);
+  const catalog = (await providerModelsService.getProviderModels('codex')).models;
+  const selectedModel = catalog.OPTIONS.find((option) => option.value === resolvedModel) || null;
+  const allowedEfforts = selectedModel?.effort?.values?.map((value) => value.value) || [];
+  const resolvedEffort = typeof effort === 'string' && effort !== 'default' && allowedEfforts.includes(effort)
+    ? effort
+    : undefined;
 
   let codex;
   let thread;
@@ -248,19 +254,17 @@ export async function queryCodex(command, options = {}, ws) {
   const abortController = new AbortController();
 
   try {
-    // Initialize Codex SDK
     codex = new Codex();
 
-    // Thread options with sandbox and approval settings
     const threadOptions = {
       workingDirectory,
       skipGitRepoCheck: true,
       sandboxMode,
       approvalPolicy,
-      model: resolvedModel
+      model: resolvedModel,
+      modelReasoningEffort: resolvedEffort,
     };
 
-    // Start or resume thread
     if (sessionId) {
       thread = codex.resumeThread(sessionId, threadOptions);
     } else {
@@ -280,12 +284,10 @@ export async function queryCodex(command, options = {}, ws) {
       });
     };
 
-    // Existing sessions can be tracked immediately; new sessions are tracked after thread.started.
     if (capturedSessionId) {
       registerSession(capturedSessionId);
     }
 
-    // Execute with streaming
     const streamedTurn = await thread.runStreamed(command, {
       signal: abortController.signal
     });

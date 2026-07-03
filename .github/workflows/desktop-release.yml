@@ -4,18 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to create or update (defaults to v<package version>)"
+        description: "Existing release tag to upload desktop assets to (defaults to v<package version>)"
         required: false
         type: string
-      release_name:
-        description: 'Release name (defaults to "CloudCLI Desktop <tag>")'
-        required: false
-        type: string
-      prerelease:
-        description: "Mark the GitHub release as a prerelease"
-        required: true
-        default: false
-        type: boolean
 
 jobs:
   resolve-release:
@@ -25,7 +16,6 @@ jobs:
       contents: read
     outputs:
       tag: ${{ steps.release.outputs.tag }}
-      release_name: ${{ steps.release.outputs.release_name }}
       server_bundle_tag: ${{ steps.release.outputs.server_bundle_tag }}
     steps:
       - name: Checkout
@@ -37,7 +27,6 @@ jobs:
         id: release
         env:
           TAG_INPUT: ${{ inputs.tag }}
-          RELEASE_NAME_INPUT: ${{ inputs.release_name }}
         run: |
           VERSION="$(node -p "require('./package.json').version")"
           TAG="$TAG_INPUT"
@@ -50,17 +39,8 @@ jobs:
             exit 1
           fi
 
-          RELEASE_NAME="$RELEASE_NAME_INPUT"
-          if [ -z "$RELEASE_NAME" ]; then
-            RELEASE_NAME="CloudCLI Desktop ${TAG}"
-          fi
-          RELEASE_NAME_DELIMITER="release_name_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
-
           {
             echo "tag=$TAG"
-            echo "release_name<<$RELEASE_NAME_DELIMITER"
-            printf '%s\n' "$RELEASE_NAME"
-            echo "$RELEASE_NAME_DELIMITER"
             echo "server_bundle_tag=cloudcli-local-server-${TAG}"
           } >> "$GITHUB_OUTPUT"
 
@@ -270,6 +250,17 @@ jobs:
           test -n "$(find release/local-server -maxdepth 1 -name 'cloudcli-local-server-*.tar.gz.sha256' -print -quit)"
           find release -maxdepth 2 -type f -print | sort
 
+      - name: Verify target GitHub release exists
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.resolve-release.outputs.tag }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" >/dev/null; then
+            echo "GitHub release $RELEASE_TAG does not exist. Run the normal Release workflow first, then rerun Desktop Release." >&2
+            exit 1
+          fi
+
       - name: Publish local server runtime assets
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
@@ -288,18 +279,11 @@ jobs:
           files: |
             release/local-server/*
 
-      - name: Publish GitHub release assets
-        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
-        with:
-          tag_name: ${{ needs.resolve-release.outputs.tag }}
-          target_commitish: ${{ github.sha }}
-          name: ${{ needs.resolve-release.outputs.release_name }}
-          body: |
-            Download the CloudCLI Desktop installer for your platform.
-
-            The local server runtime used by local mode is installed automatically by the desktop app. You do not need to download any server bundle manually.
-          prerelease: ${{ inputs.prerelease }}
-          fail_on_unmatched_files: false
-          overwrite_files: true
-          files: |
-            release/desktop/*
+      - name: Upload desktop assets to existing GitHub release
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.resolve-release.outputs.tag }}
+        run: |
+          mapfile -d '' DESKTOP_ASSETS < <(find release/desktop -maxdepth 1 -type f -print0 | sort -z)
+          gh release upload "$RELEASE_TAG" "${DESKTOP_ASSETS[@]}" --clobber
