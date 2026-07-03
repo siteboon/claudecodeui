@@ -34,9 +34,11 @@ interface UseChatComposerStateArgs {
   provider: LLMProvider;
   permissionMode: PermissionMode | string;
   cyclePermissionMode: () => void;
+  resolvePermissionModeForProvider: (provider: LLMProvider, requestedMode: PermissionMode | string) => PermissionMode;
   cursorModel: string;
   claudeModel: string;
   codexModel: string;
+  currentProviderEffort: string;
   geminiModel: string;
   opencodeModel: string;
   isLoading: boolean;
@@ -168,9 +170,11 @@ export function useChatComposerState({
   provider,
   permissionMode,
   cyclePermissionMode,
+  resolvePermissionModeForProvider,
   cursorModel,
   claudeModel,
   codexModel,
+  currentProviderEffort,
   geminiModel,
   opencodeModel,
   isLoading,
@@ -728,8 +732,9 @@ export function useChatComposerState({
             : provider === 'gemini'
               ? geminiModel
               : provider === 'opencode'
-                ? opencodeModel
-                : claudeModel;
+              ? opencodeModel
+              : claudeModel;
+      const effort = currentProviderEffort;
 
       // One message shape for every provider. The backend resolves the
       // provider, project path, and provider-native resume id from the
@@ -740,9 +745,8 @@ export function useChatComposerState({
         content: messageContent,
         options: {
           model,
-          // Codex has no plan mode; downgrade rather than sending an
-          // unsupported value to its runtime.
-          permissionMode: provider === 'codex' && permissionMode === 'plan' ? 'default' : permissionMode,
+          effort,
+          permissionMode: resolvePermissionModeForProvider(provider, permissionMode),
           toolsSettings,
           skipPermissions: toolsSettings?.skipPermissions || false,
           sessionSummary,
@@ -769,6 +773,7 @@ export function useChatComposerState({
       attachedImages,
       claudeModel,
       codexModel,
+      currentProviderEffort,
       currentSessionId,
       cursorModel,
       executeCommand,
@@ -779,6 +784,7 @@ export function useChatComposerState({
       onSessionEstablished,
       permissionMode,
       provider,
+      resolvePermissionModeForProvider,
       resetCommandMenuState,
       scrollToBottom,
       selectedProject,

@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import { useMemo } from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type {
   ChangeEvent,
   ClipboardEvent,
@@ -11,12 +11,13 @@ import type {
   RefObject,
   TouchEvent,
 } from 'react';
-import { ImageIcon, MessageSquareIcon, XIcon, Loader2 } from 'lucide-react';
+import { ImageIcon, MessageSquareIcon, XIcon, Loader2, ChevronDown, Check } from 'lucide-react';
 
 import { useVoiceInput } from '../../hooks/useVoiceInput';
 import { useVoiceAvailable } from '../../hooks/useVoiceAvailable';
 import type { SessionActivity } from '../../../../hooks/useSessionProtection';
 import type { PendingPermissionRequest, PermissionMode } from '../../types/types';
+import type { ProviderModelOption } from '../../../../types/app';
 import {
   PromptInput,
   PromptInputHeader,
@@ -62,6 +63,9 @@ interface ChatComposerProps {
   onAbortSession: () => void;
   permissionMode: PermissionMode | string;
   onModeSwitch: () => void;
+  effort: string;
+  availableEffortOptions: NonNullable<ProviderModelOption['effort']>['values'];
+  onSelectEffort: (effort: string) => void;
   tokenBudget: Record<string, unknown> | null;
   onShowTokenUsage: () => void;
   slashCommandsCount: number;
@@ -114,6 +118,9 @@ export default function ChatComposer({
   onAbortSession,
   permissionMode,
   onModeSwitch,
+  effort,
+  availableEffortOptions,
+  onSelectEffort,
   tokenBudget,
   onShowTokenUsage,
   slashCommandsCount,
@@ -167,7 +174,7 @@ export default function ChatComposer({
       left: textareaRect ? textareaRect.left : 16,
       bottom: textareaRect ? window.innerHeight - textareaRect.top + 8 : 90,
     };
-  }, [input, isCommandMenuOpen, textareaRef]);
+  }, [isCommandMenuOpen, textareaRef]);
 
   // Voice state is hosted here (not in the mic button) so the main Send button can stop
   // recording and send the transcript in one tap, the way the mic button drops it in the box.
@@ -189,6 +196,67 @@ export default function ChatComposer({
   );
   const isRecording = voiceState === 'recording';
   const isTranscribing = voiceState === 'transcribing';
+  const [isEffortDropdownOpen, setIsEffortDropdownOpen] = useState(false);
+  const effortDropdownRef = useRef<HTMLDivElement | null>(null);
+  const effortDropdownMenuRef = useRef<HTMLDivElement | null>(null);
+  const effortDropdownButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [effortDropdownPosition, setEffortDropdownPosition] = useState<{
+    left: number;
+    top: number;
+    maxHeight: number;
+  } | null>(null);
+  const effortOptions = useMemo(
+    () => [{ value: 'default' }, ...availableEffortOptions],
+    [availableEffortOptions],
+  );
+  const selectedEffortLabel = effort === 'default' ? 'Default' : effort;
+  const updateEffortDropdownPosition = useCallback(() => {
+    const rect = effortDropdownButtonRef.current?.getBoundingClientRect();
+    if (!rect) {
+      return;
+    }
+
+    setEffortDropdownPosition({
+      left: rect.left,
+      top: rect.top - 8,
+      maxHeight: Math.max(96, rect.top - 16),
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isEffortDropdownOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (
+        !effortDropdownRef.current?.contains(target)
+        && !effortDropdownMenuRef.current?.contains(target)
+      ) {
+        setIsEffortDropdownOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        setIsEffortDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('resize', updateEffortDropdownPosition);
+    window.addEventListener('scroll', updateEffortDropdownPosition, true);
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    updateEffortDropdownPosition();
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('resize', updateEffortDropdownPosition);
+      window.removeEventListener('scroll', updateEffortDropdownPosition, true);
+      window.removeEventListener('keydown', handleKeyDown, { capture: true });
+    };
+  }, [isEffortDropdownOpen, updateEffortDropdownPosition]);
 
   // Detect if the AskUserQuestion interactive panel is active
   const hasQuestionPanel = pendingPermissionRequests.some(
@@ -375,6 +443,70 @@ export default function ChatComposer({
                 </span>
               </div>
             </button>
+
+            {availableEffortOptions.length > 0 && (
+              <div ref={effortDropdownRef} className="relative">
+                <button
+                  ref={effortDropdownButtonRef}
+                  type="button"
+                  onClick={() => {
+                    updateEffortDropdownPosition();
+                    setIsEffortDropdownOpen((current) => !current);
+                  }}
+                  className="flex h-8 items-center gap-1.5 rounded-lg border border-border/60 bg-muted/40 px-2 text-xs font-medium text-foreground transition-all duration-200 hover:bg-muted"
+                  aria-haspopup="menu"
+                  aria-expanded={isEffortDropdownOpen}
+                  aria-label="Select reasoning effort"
+                  title="Select reasoning effort"
+                >
+                  <span className="hidden text-[11px] text-muted-foreground sm:inline">Effort</span>
+                  <span className="max-w-16 truncate capitalize sm:max-w-20">{selectedEffortLabel}</span>
+                  <ChevronDown className={`h-3 w-3 text-muted-foreground transition-transform ${isEffortDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {isEffortDropdownOpen && effortDropdownPosition && createPortal(
+                  <div
+                    ref={effortDropdownMenuRef}
+                    className="fixed z-[100] min-w-36 overflow-y-auto rounded-lg border border-border bg-card p-1 shadow-lg"
+                    style={{
+                      left: effortDropdownPosition.left,
+                      top: effortDropdownPosition.top,
+                      maxHeight: effortDropdownPosition.maxHeight,
+                      transform: 'translateY(-100%)',
+                    }}
+                    role="menu"
+                  >
+                    {effortOptions.map((option) => {
+                      const isSelected = option.value === effort;
+                      const label = option.value === 'default' ? 'Default' : option.value;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={isSelected}
+                          onClick={() => {
+                            onSelectEffort(option.value);
+                            setIsEffortDropdownOpen(false);
+                          }}
+                          className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs capitalize transition-colors ${
+                            isSelected
+                              ? 'bg-accent text-foreground'
+                              : 'text-muted-foreground hover:bg-accent/70 hover:text-foreground'
+                          }`}
+                        >
+                          <span className="flex h-3 w-3 items-center justify-center">
+                            {isSelected && <Check className="h-3 w-3 text-primary" />}
+                          </span>
+                          <span>{label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>,
+                  document.body,
+                )}
+              </div>
+            )}
 
             <TokenUsageSummary usage={tokenBudget} onClick={onShowTokenUsage} />
 

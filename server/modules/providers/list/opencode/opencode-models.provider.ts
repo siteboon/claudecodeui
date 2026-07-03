@@ -74,6 +74,13 @@ const VERSION_TOKEN = /^[a-z]\d+$/i;
 const NUMERIC_TOKEN = /^\d+(?:\.\d+)*$/;
 const SHORT_ACRONYM_TOKEN = /^[a-z]{2,3}$/;
 
+type OpenCodeVerboseModel = {
+  id?: string;
+  name?: string;
+  providerID?: string;
+  variants?: Record<string, unknown>;
+};
+
 export const parseOpenCodeModelsStdout = (stdout: string): string[] => {
   const ids: string[] = [];
 
@@ -89,6 +96,83 @@ export const parseOpenCodeModelsStdout = (stdout: string): string[] => {
   }
 
   return [...new Set(ids)];
+};
+
+const countJsonBraceDelta = (value: string): number => {
+  let delta = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (const character of value) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (character === '\\') {
+      escaped = inString;
+      continue;
+    }
+
+    if (character === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) {
+      continue;
+    }
+
+    if (character === '{') {
+      delta += 1;
+    } else if (character === '}') {
+      delta -= 1;
+    }
+  }
+
+  return delta;
+};
+
+const isOpenCodeVerboseModel = (value: unknown): value is OpenCodeVerboseModel => {
+  const record = readObjectRecord(value);
+  return Boolean(record && readOptionalString(record.id));
+};
+
+export const parseOpenCodeVerboseModelsStdout = (stdout: string): OpenCodeVerboseModel[] => {
+  const models: OpenCodeVerboseModel[] = [];
+  let buffer: string[] = [];
+  let depth = 0;
+
+  for (const rawLine of stdout.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (buffer.length === 0) {
+      if (line === '{') {
+        buffer = [rawLine];
+        depth = 1;
+      }
+      continue;
+    }
+
+    buffer.push(rawLine);
+    depth += countJsonBraceDelta(rawLine);
+
+    if (depth !== 0) {
+      continue;
+    }
+
+    try {
+      const parsed = JSON.parse(buffer.join('\n'));
+      if (isOpenCodeVerboseModel(parsed)) {
+        models.push(parsed);
+      }
+    } catch {
+      // Ignore malformed verbose blocks and fall back to the plain id parser.
+    }
+
+    buffer = [];
+  }
+
+  return models;
 };
 
 const formatDateToken = (token: string): string => (
@@ -155,6 +239,20 @@ const readOpenCodeModelParts = (id: string): { upstreamProvider: string; slug: s
   };
 };
 
+const readOpenCodeVerboseModelId = (model: OpenCodeVerboseModel): string | null => {
+  const id = readOptionalString(model.id);
+  if (!id) {
+    return null;
+  }
+
+  if (id.includes('/')) {
+    return id;
+  }
+
+  const upstreamProvider = readOptionalString(model.providerID);
+  return upstreamProvider ? `${upstreamProvider}/${id}` : id;
+};
+
 const labelForOpenCodeModelId = (id: string): string => {
   const fallbackLabel = OPENCODE_FALLBACK_MODELS.OPTIONS.find((option) => option.value === id)?.label;
   if (fallbackLabel) {
@@ -170,12 +268,88 @@ const descriptionForOpenCodeModelId = (id: string): string => {
   return upstreamProvider ? `${upstreamProvider} - ${id}` : id;
 };
 
+const readOpenCodeVariantEffort = (key: string, value: unknown): string | null => {
+  const variant = readObjectRecord(value);
+  return readOptionalString(variant?.reasoningEffort)
+    ?? readOptionalString(variant?.effort)
+    ?? key;
+};
+
+const readOpenCodeEffortValues = (
+  variants: OpenCodeVerboseModel['variants'],
+): NonNullable<ProviderModelOption['effort']>['values'] => {
+  const effortValues: NonNullable<ProviderModelOption['effort']>['values'] = [];
+  const seenValues = new Set<string>();
+
+  for (const [key, value] of Object.entries(variants ?? {})) {
+    const effort = readOpenCodeVariantEffort(key, value);
+    if (!effort || seenValues.has(effort)) {
+      continue;
+    }
+
+    seenValues.add(effort);
+    effortValues.push({ value: effort });
+  }
+
+  return effortValues;
+};
+
+const mapOpenCodeVerboseModel = (model: OpenCodeVerboseModel): ProviderModelOption | null => {
+  const value = readOpenCodeVerboseModelId(model);
+  if (!value) {
+    return null;
+  }
+
+  const effortValues = readOpenCodeEffortValues(model.variants);
+
+  return {
+    value,
+    label: readOptionalString(model.name) ?? labelForOpenCodeModelId(value),
+    description: descriptionForOpenCodeModelId(value),
+    effort: effortValues.length > 0
+      ? {
+          values: effortValues,
+        }
+      : undefined,
+  };
+};
+
 export const buildOpenCodeDefinitionFromIds = (ids: string[]): ProviderModelsDefinition => {
   const options: ProviderModelOption[] = ids.map((value) => ({
     value,
     label: labelForOpenCodeModelId(value),
     description: descriptionForOpenCodeModelId(value),
   }));
+
+  const defaultValue = options.find((option) => option.value === OPENCODE_FALLBACK_MODELS.DEFAULT)?.value
+    ?? options[0]?.value
+    ?? OPENCODE_FALLBACK_MODELS.DEFAULT;
+
+  return {
+    OPTIONS: options,
+    DEFAULT: defaultValue,
+  };
+};
+
+export const buildOpenCodeDefinitionFromVerboseModels = (
+  models: OpenCodeVerboseModel[],
+): ProviderModelsDefinition => {
+  const options: ProviderModelOption[] = [];
+  const seenValues = new Set<string>();
+
+  for (const model of models) {
+    const mappedModel = mapOpenCodeVerboseModel(model);
+    if (!mappedModel || seenValues.has(mappedModel.value)) {
+      continue;
+    }
+
+    seenValues.add(mappedModel.value);
+    options.push(mappedModel);
+  }
+
+  if (options.length === 0) {
+    return OPENCODE_FALLBACK_MODELS;
+  }
 
   const defaultValue = options.find((option) => option.value === OPENCODE_FALLBACK_MODELS.DEFAULT)?.value
     ?? options[0]?.value
@@ -214,7 +388,7 @@ const parseOpenCodeSessionModelValue = (rawModel: unknown): string | null => {
 };
 
 const runOpenCodeModelsCommand = (): Promise<string> => new Promise((resolve, reject) => {
-  const openCodeProcess = spawnFunction('opencode', ['models'], {
+  const openCodeProcess = spawnFunction('opencode', ['models', '--verbose'], {
     cwd: process.cwd(),
     env: { ...process.env },
   });
@@ -273,6 +447,11 @@ export class OpenCodeProviderModels implements IProviderModels {
   async getSupportedModels(): Promise<ProviderModelsDefinition> {
     try {
       const stdout = await runOpenCodeModelsCommand();
+      const verboseModels = parseOpenCodeVerboseModelsStdout(stdout);
+      if (verboseModels.length > 0) {
+        return buildOpenCodeDefinitionFromVerboseModels(verboseModels);
+      }
+
       const ids = parseOpenCodeModelsStdout(stdout);
       if (ids.length === 0) {
         return OPENCODE_FALLBACK_MODELS;
