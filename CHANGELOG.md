@@ -3,6 +3,12 @@
 All notable changes to CloudCLI UI will be documented in this file.
 
 
+## [](https://github.com/siteboon/claudecodeui/compare/v1.35.1...vnull) (2026-07-03)
+
+### New Features
+
+* add Claude and Codex effort controls ([#943](https://github.com/siteboon/claudecodeui/issues/943)) ([d272922](https://github.com/siteboon/claudecodeui/commit/d272922d87e4ee74bf8b0fdeac83b2c1e77973f3))
+
 ## [1.35.1](https://github.com/siteboon/claudecodeui/compare/v1.35.0...v1.35.1) (2026-07-01)
 
 ### Bug Fixes
