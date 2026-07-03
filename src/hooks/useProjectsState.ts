@@ -810,14 +810,19 @@ export function useProjectsState({
       return;
     }
 
-    if (!selectedProject) {
+    const projectForSession = selectedProject || projects.find((p) => (p.sessions?.length ?? 0) > 0);
+    if (!projectForSession) {
       return;
+    }
+
+    if (selectedProject?.projectId !== projectForSession.projectId) {
+      setSelectedProject(projectForSession);
     }
 
     setSelectedSession({
       id: sessionId,
       __provider: readSelectedProvider(),
-      __projectId: selectedProject.projectId,
+      __projectId: projectForSession.projectId,
       summary: '',
     });
   }, [sessionId, projects, selectedProject, selectedSession?.id, selectedSession?.__provider]);
