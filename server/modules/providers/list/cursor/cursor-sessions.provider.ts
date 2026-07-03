@@ -59,17 +59,21 @@ function unwrapUserQueryText(value: string, role: 'user' | 'assistant'): string 
     return value;
   }
 
-  const normalized = value.trimStart();
+  // Cursor wraps user turns as `<timestamp>…</timestamp>\n<user_query>…</user_query>`.
+  // Show only the `<user_query>` content, trimmed so there are no blank lines
+  // at the top/bottom and the `<timestamp>` prefix is dropped entirely.
   const openTag = '<user_query>';
   const closeTag = '</user_query>';
-  if (!normalized.startsWith(openTag)) {
-    return value;
+  const openIndex = value.indexOf(openTag);
+  if (openIndex >= 0) {
+    const afterOpen = value.slice(openIndex + openTag.length);
+    const closeIndex = afterOpen.lastIndexOf(closeTag);
+    const inner = closeIndex >= 0 ? afterOpen.slice(0, closeIndex) : afterOpen;
+    return inner.trim();
   }
 
-  const afterOpen = normalized.slice(openTag.length);
-  const closeIndex = afterOpen.lastIndexOf(closeTag);
-  const inner = closeIndex >= 0 ? afterOpen.slice(0, closeIndex) : afterOpen;
-  return inner.trim();
+  // No `<user_query>` wrapper: still strip a leading `<timestamp>…</timestamp>`.
+  return value.replace(/^\s*<timestamp>[\s\S]*?<\/timestamp>\s*/, '').trim();
 }
 
 function normalizeToolId(value: unknown): string | null {
