@@ -3,6 +3,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { authenticatedFetch } from '../../../utils/api';
 import { setNotificationSoundEnabled } from '../../../utils/notificationSound';
+import {
+  loadProviderPermissionSettings,
+  normalizeProviderPermissionSettings,
+  saveProviderPermissionSettings,
+  type ProviderPermissionSettings,
+} from '../../../utils/providerPermissionSettings';
 import { useProviderAuthStatus } from '../../provider-auth/hooks/useProviderAuthStatus';
 import {
   DEFAULT_CODE_EDITOR_SETTINGS,
@@ -30,23 +36,6 @@ type UseSettingsControllerArgs = {
   initialTab: string;
 };
 
-type ClaudeSettingsStorage = {
-  allowedTools?: string[];
-  disallowedTools?: string[];
-  skipPermissions?: boolean;
-  projectSortOrder?: ProjectSortOrder;
-};
-
-type CursorSettingsStorage = {
-  allowedCommands?: string[];
-  disallowedCommands?: string[];
-  skipPermissions?: boolean;
-};
-
-type CodexSettingsStorage = {
-  permissionMode?: CodexPermissionMode;
-};
-
 type NotificationPreferencesResponse = {
   success?: boolean;
   preferences?: NotificationPreferencesState;
@@ -63,26 +52,6 @@ const normalizeMainTab = (tab: string): SettingsMainTab => {
   }
 
   return KNOWN_MAIN_TABS.includes(tab as SettingsMainTab) ? (tab as SettingsMainTab) : 'agents';
-};
-
-const parseJson = <T>(value: string | null, fallback: T): T => {
-  if (!value) {
-    return fallback;
-  }
-
-  try {
-    return JSON.parse(value) as T;
-  } catch {
-    return fallback;
-  }
-};
-
-const toCodexPermissionMode = (value: unknown): CodexPermissionMode => {
-  if (value === 'acceptEdits' || value === 'bypassPermissions') {
-    return value;
-  }
-
-  return 'default';
 };
 
 const readCodeEditorSettings = (): CodeEditorSettingsState => ({
@@ -115,6 +84,26 @@ const createDefaultNotificationPreferences = (): NotificationPreferencesState =>
     actionRequired: true,
     stop: true,
     error: true,
+  },
+});
+
+const createProviderPermissionSettingsPayload = (
+  claudePermissions: ClaudePermissionsState,
+  cursorPermissions: CursorPermissionsState,
+  codexPermissionMode: CodexPermissionMode,
+  geminiPermissionMode: GeminiPermissionMode,
+  projectSortOrder: ProjectSortOrder,
+): ProviderPermissionSettings => normalizeProviderPermissionSettings({
+  claude: {
+    ...claudePermissions,
+    projectSortOrder,
+  },
+  cursor: cursorPermissions,
+  codex: {
+    permissionMode: codexPermissionMode,
+  },
+  gemini: {
+    permissionMode: geminiPermissionMode,
   },
 });
 
@@ -171,38 +160,24 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
 
   const loadSettings = useCallback(async () => {
     try {
-      const savedClaudeSettings = parseJson<ClaudeSettingsStorage>(
-        localStorage.getItem('claude-settings'),
-        {},
-      );
+      const providerPermissionSettings = await loadProviderPermissionSettings(authenticatedFetch);
+      const savedClaudeSettings = providerPermissionSettings.claude;
       setClaudePermissions({
-        allowedTools: savedClaudeSettings.allowedTools || [],
-        disallowedTools: savedClaudeSettings.disallowedTools || [],
-        skipPermissions: Boolean(savedClaudeSettings.skipPermissions),
+        allowedTools: savedClaudeSettings.allowedTools,
+        disallowedTools: savedClaudeSettings.disallowedTools,
+        skipPermissions: savedClaudeSettings.skipPermissions,
       });
-      setProjectSortOrder(savedClaudeSettings.projectSortOrder === 'date' ? 'date' : 'name');
+      setProjectSortOrder(savedClaudeSettings.projectSortOrder);
 
-      const savedCursorSettings = parseJson<CursorSettingsStorage>(
-        localStorage.getItem('cursor-tools-settings'),
-        {},
-      );
+      const savedCursorSettings = providerPermissionSettings.cursor;
       setCursorPermissions({
-        allowedCommands: savedCursorSettings.allowedCommands || [],
-        disallowedCommands: savedCursorSettings.disallowedCommands || [],
-        skipPermissions: Boolean(savedCursorSettings.skipPermissions),
+        allowedCommands: savedCursorSettings.allowedCommands,
+        disallowedCommands: savedCursorSettings.disallowedCommands,
+        skipPermissions: savedCursorSettings.skipPermissions,
       });
 
-      const savedCodexSettings = parseJson<CodexSettingsStorage>(
-        localStorage.getItem('codex-settings'),
-        {},
-      );
-      setCodexPermissionMode(toCodexPermissionMode(savedCodexSettings.permissionMode));
-
-      const savedGeminiSettings = parseJson<{ permissionMode?: GeminiPermissionMode }>(
-        localStorage.getItem('gemini-settings'),
-        {},
-      );
-      setGeminiPermissionMode(savedGeminiSettings.permissionMode || 'default');
+      setCodexPermissionMode(providerPermissionSettings.codex.permissionMode);
+      setGeminiPermissionMode(providerPermissionSettings.gemini.permissionMode);
 
       try {
         const notificationResponse = await authenticatedFetch('/api/settings/notification-preferences');
@@ -226,6 +201,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
       setCursorPermissions(createEmptyCursorPermissions());
       setNotificationPreferences(createDefaultNotificationPreferences());
       setCodexPermissionMode('default');
+      setGeminiPermissionMode('default');
       setProjectSortOrder('name');
     }
   }, []);
@@ -255,31 +231,14 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     setSaveStatus(null);
 
     try {
-      const now = new Date().toISOString();
-      localStorage.setItem('claude-settings', JSON.stringify({
-        allowedTools: claudePermissions.allowedTools,
-        disallowedTools: claudePermissions.disallowedTools,
-        skipPermissions: claudePermissions.skipPermissions,
+      const providerPermissionSettings = createProviderPermissionSettingsPayload(
+        claudePermissions,
+        cursorPermissions,
+        codexPermissionMode,
+        geminiPermissionMode,
         projectSortOrder,
-        lastUpdated: now,
-      }));
-
-      localStorage.setItem('cursor-tools-settings', JSON.stringify({
-        allowedCommands: cursorPermissions.allowedCommands,
-        disallowedCommands: cursorPermissions.disallowedCommands,
-        skipPermissions: cursorPermissions.skipPermissions,
-        lastUpdated: now,
-      }));
-
-      localStorage.setItem('codex-settings', JSON.stringify({
-        permissionMode: codexPermissionMode,
-        lastUpdated: now,
-      }));
-
-      localStorage.setItem('gemini-settings', JSON.stringify({
-        permissionMode: geminiPermissionMode,
-        lastUpdated: now,
-      }));
+      );
+      await saveProviderPermissionSettings(providerPermissionSettings, authenticatedFetch);
 
       const notificationResponse = await authenticatedFetch('/api/settings/notification-preferences', {
         method: 'PUT',
@@ -295,13 +254,9 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
       setSaveStatus('error');
     }
   }, [
-    claudePermissions.allowedTools,
-    claudePermissions.disallowedTools,
-    claudePermissions.skipPermissions,
+    claudePermissions,
     codexPermissionMode,
-    cursorPermissions.allowedCommands,
-    cursorPermissions.disallowedCommands,
-    cursorPermissions.skipPermissions,
+    cursorPermissions,
     notificationPreferences,
     geminiPermissionMode,
     projectSortOrder,

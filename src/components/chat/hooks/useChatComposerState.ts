@@ -12,9 +12,20 @@ import type {
 import { useDropzone } from 'react-dropzone';
 
 import { authenticatedFetch } from '../../../utils/api';
+import {
+  getProviderToolsSettings,
+  loadProviderPermissionSettings,
+} from '../../../utils/providerPermissionSettings';
 import type { MarkSessionProcessing } from '../../../hooks/useSessionProtection';
 import { grantClaudeToolPermission } from '../utils/chatPermissions';
 import { safeLocalStorage } from '../utils/chatStorage';
+import {
+  dequeuePrompt,
+  enqueuePrompt,
+  isQueueablePrompt,
+  queuedPromptMatchesContext,
+  type QueuedPrompt,
+} from '../utils/promptQueue';
 import type {
   ChatMessage,
   PendingPermissionRequest,
@@ -205,6 +216,7 @@ export function useChatComposerState({
   const [imageErrors, setImageErrors] = useState<Map<string, string>>(new Map());
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
   const [commandModalPayload, setCommandModalPayload] = useState<CommandModalPayload | null>(null);
+  const [queuedPrompts, setQueuedPrompts] = useState<QueuedPrompt[]>([]);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputHighlightRef = useRef<HTMLDivElement>(null);
@@ -214,7 +226,15 @@ export function useChatComposerState({
     ((event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>) => Promise<void>) | null
   >(null);
   const inputValueRef = useRef(input);
+  const queuedPromptsRef = useRef<QueuedPrompt[]>([]);
+  const queuedPromptSendInFlightRef = useRef(false);
+  const isLoadingRef = useRef(isLoading);
   const selectedProjectId = selectedProject?.projectId;
+
+  const setPromptQueue = useCallback((nextQueue: QueuedPrompt[]) => {
+    queuedPromptsRef.current = nextQueue;
+    setQueuedPrompts(nextQueue);
+  }, []);
 
   const handleBuiltInCommand = useCallback(
     (result: CommandExecutionResult) => {
@@ -555,7 +575,36 @@ export function useChatComposerState({
     ) => {
       event.preventDefault();
       const currentInput = inputValueRef.current;
-      if (!currentInput.trim() || isLoading || !selectedProject) {
+      if (!currentInput.trim() || !selectedProject) {
+        return;
+      }
+
+      if (isLoading) {
+        if (!isQueueablePrompt(currentInput, { hasAttachments: attachedImages.length > 0 })) {
+          return;
+        }
+
+        const queuedSessionId = selectedSession?.id || currentSessionId || null;
+        if (!queuedSessionId) {
+          return;
+        }
+
+        const nextQueue = enqueuePrompt(queuedPromptsRef.current, currentInput, Date.now(), {
+          sessionId: queuedSessionId,
+          projectId: selectedProject.projectId,
+          provider,
+        });
+        setPromptQueue(nextQueue);
+        setInput('');
+        inputValueRef.current = '';
+        resetCommandMenuState();
+        setIsTextareaExpanded(false);
+
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+        }
+
+        safeLocalStorage.removeItem(`draft_input_${selectedProject.projectId}`);
         return;
       }
 
@@ -696,34 +745,8 @@ export function useChatComposerState({
       setIsUserScrolledUp(false);
       setTimeout(() => scrollToBottom(), 100);
 
-      const getToolsSettings = () => {
-        try {
-          const settingsKey =
-            provider === 'cursor'
-              ? 'cursor-tools-settings'
-              : provider === 'codex'
-                ? 'codex-settings'
-                : provider === 'gemini'
-                  ? 'gemini-settings'
-                  : provider === 'opencode'
-                    ? 'opencode-settings'
-                  : 'claude-settings';
-          const savedSettings = safeLocalStorage.getItem(settingsKey);
-          if (savedSettings) {
-            return JSON.parse(savedSettings);
-          }
-        } catch (error) {
-          console.error('Error loading tools settings:', error);
-        }
-
-        return {
-          allowedTools: [],
-          disallowedTools: [],
-          skipPermissions: false,
-        };
-      };
-
-      const toolsSettings = getToolsSettings();
+      const providerPermissionSettings = await loadProviderPermissionSettings(authenticatedFetch);
+      const toolsSettings = getProviderToolsSettings(provider, providerPermissionSettings);
       const model =
         provider === 'cursor'
           ? cursorModel
@@ -748,7 +771,7 @@ export function useChatComposerState({
           effort,
           permissionMode: resolvePermissionModeForProvider(provider, permissionMode),
           toolsSettings,
-          skipPermissions: toolsSettings?.skipPermissions || false,
+          skipPermissions: toolsSettings.skipPermissions === true,
           sessionSummary,
           images: uploadedImages,
         },
@@ -792,12 +815,64 @@ export function useChatComposerState({
       addMessage,
       setIsUserScrolledUp,
       slashCommands,
+      setPromptQueue,
     ],
   );
 
   useEffect(() => {
     handleSubmitRef.current = handleSubmit;
   }, [handleSubmit]);
+
+  useEffect(() => {
+    isLoadingRef.current = isLoading;
+    if (isLoading) {
+      queuedPromptSendInFlightRef.current = false;
+    }
+  }, [isLoading]);
+
+  useEffect(() => {
+    if (isLoading || queuedPromptSendInFlightRef.current || queuedPrompts.length === 0 || !selectedProject) {
+      return;
+    }
+
+    const { next, rest } = dequeuePrompt(queuedPromptsRef.current);
+    if (!next) {
+      return;
+    }
+
+    const activeSessionId = selectedSession?.id || currentSessionId || null;
+    if (!queuedPromptMatchesContext(next, {
+      sessionId: activeSessionId,
+      projectId: selectedProject.projectId,
+      provider,
+    })) {
+      return;
+    }
+
+    queuedPromptSendInFlightRef.current = true;
+    setPromptQueue(rest);
+    setInput(next.content);
+    inputValueRef.current = next.content;
+    resetCommandMenuState();
+
+    window.setTimeout(() => {
+      const submitPromise = handleSubmitRef.current?.(createFakeSubmitEvent());
+      void submitPromise?.finally(() => {
+        if (!isLoadingRef.current) {
+          queuedPromptSendInFlightRef.current = false;
+        }
+      });
+    }, 0);
+  }, [
+    currentSessionId,
+    isLoading,
+    provider,
+    queuedPrompts,
+    resetCommandMenuState,
+    selectedProject,
+    selectedSession?.id,
+    setPromptQueue,
+  ]);
 
   // A voice transcript either fills the input (to edit before sending) or, when the
   // user tapped "stop and send", is submitted straight away. Mirror the value into
@@ -1060,5 +1135,6 @@ export function useChatComposerState({
     commandModalPayload,
     closeCommandModal,
     showCostModal,
+    queuedPromptCount: queuedPrompts.length,
   };
 }

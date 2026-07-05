@@ -190,6 +190,7 @@ function ChatInterface({
     commandModalPayload,
     closeCommandModal,
     showCostModal,
+    queuedPromptCount,
   } = useChatComposerState({
     selectedProject,
     selectedSession,
@@ -394,6 +395,7 @@ function ChatInterface({
           tokenBudget={tokenBudget}
           onShowTokenUsage={showCostModal}
           slashCommandsCount={slashCommandsCount}
+          queuedPromptCount={queuedPromptCount}
           onToggleCommandMenu={handleToggleCommandMenu}
           hasInput={Boolean(input.trim())}
           onClearInput={handleClearInput}

@@ -224,6 +224,7 @@ function mapPermissionModeToCodexOptions(permissionMode) {
  */
 export async function queryCodex(command, options = {}, ws) {
   const {
+    appSessionId,
     sessionId,
     sessionSummary,
     cwd,
@@ -235,7 +236,7 @@ export async function queryCodex(command, options = {}, ws) {
 
   const resolvedModel = await providerModelsService.resolveResumeModel(
     'codex',
-    sessionId,
+    appSessionId || sessionId,
     model,
   );
 

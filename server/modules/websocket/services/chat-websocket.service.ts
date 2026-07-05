@@ -161,6 +161,7 @@ async function handleChatSend(
   // gateway writer captures and maps back to the app session id.
   const runtimeOptions: AnyRecord = {
     ...clientOptions,
+    appSessionId: sessionId,
     sessionId: session.provider_session_id ?? undefined,
     resume: Boolean(session.provider_session_id),
     cwd: clientOptions.cwd ?? session.project_path ?? undefined,

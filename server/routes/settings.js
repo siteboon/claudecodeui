@@ -6,6 +6,10 @@ import {
   notificationPreferencesDb,
   pushSubscriptionsDb,
 } from '../modules/database/index.js';
+import {
+  getProviderPermissionSettingsRecord,
+  updateProviderPermissionSettings,
+} from '../modules/settings/provider-permission-settings.service.js';
 import { getPublicKey } from '../services/vapid-keys.js';
 import { createNotificationEvent, notifyUserIfEnabled } from '../services/notification-orchestrator.js';
 
@@ -180,6 +184,30 @@ router.patch('/credentials/:credentialId/toggle', async (req, res) => {
   } catch (error) {
     console.error('Error toggling credential:', error);
     res.status(500).json({ error: 'Failed to toggle credential' });
+  }
+});
+
+// ===============================
+// Provider Permission Settings
+// ===============================
+
+router.get('/provider-permissions', async (_req, res) => {
+  try {
+    const record = getProviderPermissionSettingsRecord(_req.user?.id);
+    res.json({ success: true, ...record });
+  } catch (error) {
+    console.error('Error fetching provider permission settings:', error);
+    res.status(500).json({ error: 'Failed to fetch provider permission settings' });
+  }
+});
+
+router.put('/provider-permissions', async (req, res) => {
+  try {
+    const settings = updateProviderPermissionSettings(req.body?.settings || req.body || {}, req.user?.id);
+    res.json({ success: true, stored: true, settings });
+  } catch (error) {
+    console.error('Error saving provider permission settings:', error);
+    res.status(500).json({ error: 'Failed to save provider permission settings' });
   }
 });
 

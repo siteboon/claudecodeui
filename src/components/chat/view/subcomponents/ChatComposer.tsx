@@ -69,6 +69,7 @@ interface ChatComposerProps {
   tokenBudget: Record<string, unknown> | null;
   onShowTokenUsage: () => void;
   slashCommandsCount: number;
+  queuedPromptCount: number;
   onToggleCommandMenu: () => void;
   hasInput: boolean;
   onClearInput: () => void;
@@ -124,6 +125,7 @@ export default function ChatComposer({
   tokenBudget,
   onShowTokenUsage,
   slashCommandsCount,
+  queuedPromptCount,
   onToggleCommandMenu,
   hasInput,
   onClearInput,
@@ -538,6 +540,11 @@ export default function ChatComposer({
           </PromptInputTools>
 
           <div className="flex items-center gap-2">
+            {queuedPromptCount > 0 && (
+              <div className="hidden rounded-md border border-border/50 bg-muted/40 px-2 py-1 text-xs text-muted-foreground sm:block">
+                {queuedPromptCount} queued
+              </div>
+            )}
             <div
               className={`hidden text-xs text-muted-foreground/50 transition-opacity duration-200 lg:block ${
                 input.trim() ? 'opacity-0' : 'opacity-100'
