@@ -14,10 +14,12 @@
  */
 
 import { Codex } from '@openai/codex-sdk';
-import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
+
+import { sessionsDb } from './modules/database/repositories/sessions.db.js';
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
 import { providerModelsService } from './modules/providers/services/provider-models.service.js';
+import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
 import { createCompleteMessage, createNormalizedMessage } from './shared/utils.js';
 
 const activeCodexSessions = new Map();
@@ -214,6 +216,24 @@ function mapPermissionModeToCodexOptions(permissionMode) {
   }
 }
 
+export function resolveCodexModelSessionId(sessionId) {
+  if (!sessionId?.trim()) {
+    return sessionId;
+  }
+
+  const appSession = sessionsDb.getSessionById(sessionId);
+  if (appSession?.provider === 'codex') {
+    return appSession.session_id;
+  }
+
+  const providerSession = sessionsDb.getSessionByProviderSessionId(sessionId);
+  if (providerSession?.provider === 'codex') {
+    return providerSession.session_id;
+  }
+
+  return sessionId;
+}
+
 /**
  * Execute a Codex query with streaming
  * @param {string} command - The prompt to send
@@ -231,9 +251,10 @@ export async function queryCodex(command, options = {}, ws) {
     permissionMode = 'default'
   } = options;
 
+  const modelSessionId = resolveCodexModelSessionId(sessionId);
   const resolvedModel = await providerModelsService.resolveResumeModel(
     'codex',
-    sessionId,
+    modelSessionId,
     model,
   );
 
