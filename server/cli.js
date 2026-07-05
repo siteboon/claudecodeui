@@ -265,7 +265,7 @@ async function updatePackage() {
 
         console.log(`${c.info('[INFO]')} Updating from ${currentVersion} to ${latestVersion}...`);
         if (isGitInstall()) {
-            execSync('git checkout main && git pull --ff-only && npm install && npm run build', {
+            execSync('git checkout main && git pull --ff-only && npm ci && npm run build', {
                 cwd: APP_ROOT,
                 stdio: 'inherit'
             });
@@ -276,7 +276,7 @@ async function updatePackage() {
     } catch (e) {
         console.error(`${c.error('[ERROR]')} Update failed: ${e.message}`);
         const manualCommand = isGitInstall()
-            ? 'git checkout main && git pull --ff-only && npm install && npm run build'
+            ? 'git checkout main && git pull --ff-only && npm ci && npm run build'
             : `npm update -g ${UPDATE_NPM_PACKAGE}`;
         console.log(`${c.tip('[TIP]')} Try running manually: ${manualCommand}`);
     }
