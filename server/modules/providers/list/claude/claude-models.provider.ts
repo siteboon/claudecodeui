@@ -120,6 +120,76 @@ export const findClaudeModelOption = (model: string | undefined | null): Provide
 
   return CLAUDE_FALLBACK_MODELS.OPTIONS.find((option) => option.value === normalizedModel) ?? null;
 };
+
+function normalizeCustomClaudeModel(value: unknown): ProviderModelOption | null {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed ? { value: trimmed, label: trimmed } : null;
+  }
+
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const modelValue = typeof record.value === 'string'
+    ? record.value.trim()
+    : typeof record.model === 'string'
+      ? record.model.trim()
+      : '';
+  if (!modelValue) {
+    return null;
+  }
+
+  return {
+    value: modelValue,
+    label: typeof record.label === 'string' && record.label.trim() ? record.label.trim() : modelValue,
+    description: typeof record.description === 'string' ? record.description : undefined,
+  };
+}
+
+function readCustomClaudeModels(): ProviderModelOption[] {
+  const raw = process.env.CLOUDCLI_CLAUDE_MODELS?.trim();
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    const values = Array.isArray(parsed) ? parsed : [parsed];
+    return values
+      .map(normalizeCustomClaudeModel)
+      .filter((model): model is ProviderModelOption => Boolean(model));
+  } catch {
+    return raw
+      .split(',')
+      .map(normalizeCustomClaudeModel)
+      .filter((model): model is ProviderModelOption => Boolean(model));
+  }
+}
+
+function buildClaudeModelsDefinition(): ProviderModelsDefinition {
+  const options: ProviderModelOption[] = [];
+  const seen = new Set<string>();
+
+  for (const option of [...CLAUDE_FALLBACK_MODELS.OPTIONS, ...readCustomClaudeModels()]) {
+    if (seen.has(option.value)) {
+      continue;
+    }
+    seen.add(option.value);
+    options.push(option);
+  }
+
+  const requestedDefault = process.env.CLOUDCLI_CLAUDE_DEFAULT_MODEL?.trim();
+  const defaultModel = requestedDefault && seen.has(requestedDefault)
+    ? requestedDefault
+    : CLAUDE_FALLBACK_MODELS.DEFAULT;
+
+  return {
+    OPTIONS: options,
+    DEFAULT: defaultModel,
+  };
+}
 type ClaudeInitEvent = {
   sessionId?: string;
   session_id?: string;
@@ -242,7 +312,7 @@ export class ClaudeProviderModels implements IProviderModels {
     // const supportedModels = await queryInstance.supportedModels();
     // queryInstance.close();
     // return buildClaudeModelsDefinition(supportedModels);
-    return CLAUDE_FALLBACK_MODELS;
+    return buildClaudeModelsDefinition();
   }
 
   async getCurrentActiveModel(sessionId?: string): Promise<ProviderCurrentActiveModel> {

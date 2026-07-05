@@ -51,10 +51,12 @@ export const CODEX_FALLBACK_MODELS: ProviderModelsDefinition = {
 
 type CodexCachedModel = {
   slug?: string;
+  displayName?: string;
   display_name?: string;
   description?: string;
   priority?: number;
   visibility?: string;
+  hidden?: boolean;
   supported_in_api?: boolean;
   default_reasoning_level?: string;
   supported_reasoning_levels?: Array<{
@@ -94,7 +96,9 @@ const mapCodexModel = (model: CodexCachedModel): ProviderModelOption => {
 
   return {
     value: model.slug as string,
-    label: readOptionalString(model.display_name) ?? (model.slug as string),
+    label: readOptionalString(model.displayName)
+      ?? readOptionalString(model.display_name)
+      ?? (model.slug as string),
     description: readOptionalString(model.description),
     effort: effortValues.length > 0
       ? {
@@ -107,7 +111,8 @@ const mapCodexModel = (model: CodexCachedModel): ProviderModelOption => {
 
 const buildCodexModelsDefinition = (models: CodexCachedModel[]): ProviderModelsDefinition => {
   const sortedModels = [...models]
-    .filter((model) => model.visibility === 'list' && model.supported_in_api !== false)
+    .filter((model) => model.hidden !== true)
+    .filter((model) => (model.visibility === undefined || model.visibility === 'list') && model.supported_in_api !== false)
     .sort((left, right) => readCodexPriority(left.priority) - readCodexPriority(right.priority));
 
   const options: ProviderModelOption[] = [];
@@ -133,25 +138,63 @@ const buildCodexModelsDefinition = (models: CodexCachedModel[]): ProviderModelsD
   };
 };
 
+async function readCodexConfig(): Promise<Record<string, unknown> | null> {
+  try {
+    return readObjectRecord(TOML.parse(await readFile(CODEX_CONFIG_PATH, 'utf8')));
+  } catch {
+    return null;
+  }
+}
+
+async function readCodexModelCatalog(config: Record<string, unknown> | null): Promise<CodexCachedModel[]> {
+  const catalogPath = readOptionalString(config?.model_catalog_json);
+  if (!catalogPath) {
+    return [];
+  }
+
+  const resolvedPath = path.isAbsolute(catalogPath)
+    ? catalogPath
+    : path.join(os.homedir(), '.codex', catalogPath);
+
+  try {
+    const parsed = readObjectRecord(JSON.parse(await readFile(resolvedPath, 'utf8')));
+    return Array.isArray(parsed?.models)
+      ? parsed.models.filter(isCodexCachedModel)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+async function readCodexCachedModels(): Promise<CodexCachedModel[]> {
+  try {
+    const parsed = readObjectRecord(JSON.parse(await readFile(CODEX_MODELS_CACHE_PATH, 'utf8')));
+    return Array.isArray(parsed?.models)
+      ? parsed.models.filter(isCodexCachedModel)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 export class CodexProviderModels implements IProviderModels {
   async getSupportedModels(): Promise<ProviderModelsDefinition> {
-    try {
-      const raw = await readFile(CODEX_MODELS_CACHE_PATH, 'utf8');
-      const parsed = readObjectRecord(JSON.parse(raw));
-      const models = Array.isArray(parsed?.models)
-        ? parsed.models.filter(isCodexCachedModel)
-        : [];
+    const config = await readCodexConfig();
+    const models = [
+      ...await readCodexModelCatalog(config),
+      ...await readCodexCachedModels(),
+    ];
 
-      return buildCodexModelsDefinition(models);
-    } catch {
+    if (models.length === 0) {
       return CODEX_FALLBACK_MODELS;
     }
+
+    return buildCodexModelsDefinition(models);
   }
 
   async getCurrentActiveModel(): Promise<ProviderCurrentActiveModel> {
     try {
-      const raw = await readFile(CODEX_CONFIG_PATH, 'utf8');
-      const parsed = readObjectRecord(TOML.parse(raw));
+      const parsed = await readCodexConfig();
       const model = readOptionalString(parsed?.model);
       if (!model) {
         return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());
