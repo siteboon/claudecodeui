@@ -112,7 +112,10 @@ export async function createProject(
   const normalizedCustomName = resolveDisplayName(input.customName ?? null, resolvedProjectPath);
   const persistedProject = dependencies.persistProjectPath(resolvedProjectPath, normalizedCustomName);
 
-  if (persistedProject.outcome === 'active_conflict') {
+  // `createProject` uses the default reactivation, so an archived path resolves to
+  // `reactivated_archived`; `archived_conflict` is only reachable when a caller opts out.
+  // Both conflict outcomes mean an existing row blocked a fresh insert, so treat them alike.
+  if (persistedProject.outcome === 'active_conflict' || persistedProject.outcome === 'archived_conflict') {
     throw new AppError('Project path already exists and is active', {
       code: 'PROJECT_ALREADY_EXISTS',
       statusCode: 409,

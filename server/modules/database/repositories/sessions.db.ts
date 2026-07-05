@@ -81,9 +81,29 @@ export const sessionsDb = {
     const updatedAtValue = normalizeTimestamp(updatedAt);
     const normalizedProjectPath = normalizeProjectPathForProvider(provider, projectPath);
 
-    // First, ensure the project path is recorded in the projects table,
-    // since it's a foreign key in the sessions table.
-    projectsDb.createProjectPath(normalizedProjectPath);
+    // Tombstone guard (all providers). If the user force-deleted this project, a transcript that
+    // survived on disk — e.g. a Codex/Gemini/Cursor/OpenCode session whose `jsonl_path` was still
+    // NULL, so it was not removed by the delete — must NOT recreate the project on the next scan.
+    // Only genuinely new activity (after the deletion) revives it; a stale leftover is skipped.
+    const deletedAt = projectsDb.getDeletedAtByPath(normalizedProjectPath);
+    if (deletedAt !== null) {
+      const activityValue = updatedAtValue ?? createdAtValue;
+      const deletedAtIso = normalizeTimestamp(deletedAt);
+      const revives =
+        Boolean(activityValue) &&
+        Boolean(deletedAtIso) &&
+        new Date(activityValue as string).getTime() > new Date(deletedAtIso as string).getTime();
+      if (!revives) {
+        return '';
+      }
+      // The path is being used again after deletion → lift the tombstone and index normally.
+      projectsDb.clearProjectDeletedByPath(normalizedProjectPath);
+    }
+
+    // Ensure the project path is recorded in the projects table, since it's a foreign key in the
+    // sessions table. This runs from the background synchronizer/watcher, so it must NOT reactivate
+    // a project the user archived — only explicit user actions (createAppSession/createProject) do.
+    projectsDb.createProjectPath(normalizedProjectPath, null, { reactivateArchived: false });
 
     const existing = db
       .prepare(

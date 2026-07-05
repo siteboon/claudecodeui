@@ -550,13 +550,28 @@ export type ProjectRepositoryRow = {
  * Result category returned by `projectsDb.createProjectPath`.
  *
  * `created` means a fresh row was inserted, `reactivated_archived` means an
- * existing archived path was accepted and updated, and `active_conflict` means
- * an already-active path blocked project creation.
+ * existing archived path was accepted and updated, `active_conflict` means an
+ * already-active path blocked project creation, and `archived_conflict` means an
+ * archived path already exists but was left archived (only possible when the
+ * caller opts out of reactivation via `reactivateArchived: false`).
  */
 export type CreateProjectPathOutcome =
   | 'created'
   | 'reactivated_archived'
-  | 'active_conflict';
+  | 'active_conflict'
+  | 'archived_conflict';
+
+/**
+ * Options for `projectsDb.createProjectPath`.
+ *
+ * `reactivateArchived` (default `true`) controls whether an existing archived
+ * path is un-archived on conflict. Explicit user actions leave it `true`; the
+ * background session synchronizer passes `false` so a passive re-scan can never
+ * silently reactivate a project the user archived.
+ */
+export type CreateProjectPathOptions = {
+  reactivateArchived?: boolean;
+};
 
 /**
  * Structured result returned by project-path upsert operations.
