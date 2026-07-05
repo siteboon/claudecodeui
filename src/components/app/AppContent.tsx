@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -11,6 +11,7 @@ import { useDeviceSettings } from '../../hooks/useDeviceSettings';
 import { useSessionProtection } from '../../hooks/useSessionProtection';
 import { useProjectsState } from '../../hooks/useProjectsState';
 import { api } from '../../utils/api';
+import { SIDEBAR_WIDTH_STORAGE_KEY, clampSidebarWidth, readStoredSidebarWidth } from './sidebarWidth';
 
 type RunningSessionApiItem = {
   sessionId?: unknown;
@@ -52,6 +53,7 @@ function AppContentInner() {
   const { t } = useTranslation('common');
   const { isMobile } = useDeviceSettings({ trackPWA: false });
   const { ws, sendMessage, subscribe } = useWebSocket();
+  const [sidebarWidth, setSidebarWidth] = useState(readStoredSidebarWidth);
 
   const {
     processingSessions,
@@ -132,6 +134,26 @@ function AppContentInner() {
     refreshProjects: refreshProjectsSilently,
   });
 
+  const startSidebarResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = sidebarWidth;
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const nextWidth = clampSidebarWidth(startWidth + moveEvent.clientX - startX);
+      setSidebarWidth(nextWidth);
+      window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(nextWidth));
+    };
+
+    const stopResize = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', stopResize);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', stopResize);
+  }, [sidebarWidth]);
+
   useEffect(() => {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
       return undefined;
@@ -193,8 +215,18 @@ function AppContentInner() {
   return (
     <div className="fixed inset-0 flex bg-background" style={{ bottom: 'var(--keyboard-height, 0px)' }}>
       {!isMobile ? (
-        <div className="h-full flex-shrink-0 border-r border-border/50">
+        <div
+          className="relative h-full flex-shrink-0 border-r border-border/50"
+          style={{ width: sidebarWidth }}
+        >
           <Sidebar {...sidebarSharedProps} />
+          <div
+            className="absolute right-[-3px] top-0 z-20 h-full w-1.5 cursor-col-resize touch-none bg-transparent transition-colors hover:bg-primary/30"
+            onPointerDown={startSidebarResize}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={t('versionUpdate.ariaLabels.resizeSidebar', 'Resize sidebar')}
+          />
         </div>
       ) : (
         <div
@@ -225,7 +257,7 @@ function AppContentInner() {
         </div>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col" style={!isMobile ? { minWidth: 360 } : undefined}>
         <MainContent
           selectedProject={selectedProject}
           selectedSession={selectedSession}

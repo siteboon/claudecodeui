@@ -149,6 +149,7 @@ type SidebarContentProps = {
   currentVersion: string;
   onShowVersionModal: () => void;
   onShowSettings: () => void;
+  onLogout: () => void;
   projectListProps: SidebarProjectListProps;
   bookmarks: BookmarkedSession[];
   selectedSessionId: string | null;
@@ -191,6 +192,7 @@ export default function SidebarContent({
   currentVersion,
   onShowVersionModal,
   onShowSettings,
+  onLogout,
   projectListProps,
   bookmarks,
   selectedSessionId,
@@ -580,6 +582,7 @@ export default function SidebarContent({
         currentVersion={currentVersion}
         onShowVersionModal={onShowVersionModal}
         onShowSettings={onShowSettings}
+        onLogout={onLogout}
         t={t}
       />
     </div>

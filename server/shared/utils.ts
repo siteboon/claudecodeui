@@ -1108,7 +1108,8 @@ export async function findFilesRecursivelyCreatedAfter(
   rootDir: string,
   extension: string,
   lastScanAt: Date | null,
-  fileList: string[] = []
+  fileList: string[] = [],
+  ignoredDirectoryNames: ReadonlySet<string> = new Set()
 ): Promise<string[]> {
   try {
     const entries = await readdir(rootDir, { withFileTypes: true });
@@ -1116,7 +1117,11 @@ export async function findFilesRecursivelyCreatedAfter(
       const fullPath = path.join(rootDir, entry.name);
 
       if (entry.isDirectory()) {
-        await findFilesRecursivelyCreatedAfter(fullPath, extension, lastScanAt, fileList);
+        if (ignoredDirectoryNames.has(entry.name)) {
+          continue;
+        }
+
+        await findFilesRecursivelyCreatedAfter(fullPath, extension, lastScanAt, fileList, ignoredDirectoryNames);
         continue;
       }
 
@@ -1238,4 +1243,3 @@ export async function extractFirstValidJsonlData<T>(
 
   return null;
 }
-

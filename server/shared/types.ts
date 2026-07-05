@@ -502,6 +502,7 @@ export type ProviderAuthStatus = {
   email: string | null;
   method: string | null;
   error?: string;
+  warning?: string;
 };
 
 // ---------------------------

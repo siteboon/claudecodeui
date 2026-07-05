@@ -108,6 +108,13 @@ export const api = {
   },
   getArchivedSessions: () =>
     authenticatedFetch('/api/providers/sessions/archived'),
+  deleteProjectSessions: (projectPath, hardDelete = false) => {
+    const params = new URLSearchParams({ projectPath });
+    if (hardDelete) params.set('force', 'true');
+    return authenticatedFetch(`/api/providers/sessions/by-project?${params.toString()}`, {
+      method: 'DELETE',
+    });
+  },
   runningSessions: () =>
     authenticatedFetch('/api/providers/sessions/running'),
   restoreSession: (sessionId) =>

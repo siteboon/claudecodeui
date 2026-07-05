@@ -558,6 +558,27 @@ router.get(
 );
 
 router.delete(
+  '/sessions/by-project',
+  asyncHandler(async (req: Request, res: Response) => {
+    const projectPath = readOptionalQueryString(req.query.projectPath);
+    if (!projectPath) {
+      throw new AppError('projectPath is required.', {
+        code: 'PROJECT_PATH_REQUIRED',
+        statusCode: 400,
+      });
+    }
+
+    const force = parseOptionalBooleanQuery(req.query.force, 'force') ?? false;
+    const deletedFromDisk = parseOptionalBooleanQuery(req.query.deletedFromDisk, 'deletedFromDisk') ?? force;
+    const result = await sessionsService.deleteOrArchiveSessionsByProjectPath(projectPath, {
+      force,
+      deletedFromDisk,
+    });
+    res.json(createApiSuccessResponse(result));
+  }),
+);
+
+router.delete(
   '/sessions/:sessionId',
   asyncHandler(async (req: Request, res: Response) => {
     const sessionId = parseSessionId(req.params.sessionId);

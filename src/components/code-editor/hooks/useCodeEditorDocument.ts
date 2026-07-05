@@ -24,6 +24,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isBinary, setIsBinary] = useState(false);
+  const [savedContent, setSavedContent] = useState('');
   // Some binaries (images, PDFs, audio, video) can be rendered natively, so the
   // editor shows an inline preview instead of the generic binary placeholder.
   const previewKind = getPreviewKind(file.name);
@@ -48,6 +49,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
         // stray save can't write stale content over the binary file.
         if (getPreviewKind(file.name)) {
           setContent('');
+          setSavedContent('');
           setLoading(false);
           return;
         }
@@ -55,6 +57,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
         // Check if file is binary by extension
         if (isBinaryFile(file.name)) {
           setContent('');
+          setSavedContent('');
           setIsBinary(true);
           setLoading(false);
           return;
@@ -63,6 +66,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
         // Diff payload may already include full old/new snapshots, so avoid disk read.
         if (file.diffInfo && fileDiffNewString !== undefined && fileDiffOldString !== undefined) {
           setContent(fileDiffNewString);
+          setSavedContent(fileDiffNewString);
           setLoading(false);
           return;
         }
@@ -78,10 +82,13 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
 
         const data = await response.json();
         setContent(data.content);
+        setSavedContent(data.content);
       } catch (error) {
         const message = getErrorMessage(error);
         console.error('Error loading file:', error);
-        setContent(`// Error loading file: ${message}\n// File: ${fileName}\n// Path: ${filePath}`);
+        const errorContent = `// Error loading file: ${message}\n// File: ${fileName}\n// Path: ${filePath}`;
+        setContent(errorContent);
+        setSavedContent(errorContent);
       } finally {
         setLoading(false);
       }
@@ -121,6 +128,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
 
       await response.json();
 
+      setSavedContent(content);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
     } catch (error) {
@@ -157,6 +165,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     isBinary,
     previewKind,
     fileProjectId,
+    isDirty: !previewKind && !isBinary && content !== savedContent,
     handleSave,
     handleDownload,
   };

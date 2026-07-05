@@ -151,6 +151,14 @@ export default function AccountContent({ agent, authStatus, onLogin }: AccountCo
               </div>
             </div>
           )}
+
+          {authStatus.warning && (
+            <div className="border-t border-border/50 pt-4">
+              <div className="text-sm text-amber-700 dark:text-amber-300">
+                {authStatus.warning}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -13,6 +13,7 @@ import type { CodeEditorFile } from '../types/types';
 import { createMinimapExtension, createScrollToFirstChunkExtension, getLanguageExtensions } from '../utils/editorExtensions';
 import { getEditorStyles } from '../utils/editorStyles';
 import { createEditorToolbarPanelExtension } from '../utils/editorToolbarPanel';
+import { shouldCloseCodeEditor } from '../utils/unsavedChanges';
 
 import CodeEditorFooter from './subcomponents/CodeEditorFooter';
 import CodeEditorHeader from './subcomponents/CodeEditorHeader';
@@ -66,6 +67,7 @@ export default function CodeEditor({
     isBinary,
     previewKind,
     fileProjectId,
+    isDirty,
     handleSave,
     handleDownload,
   } = useCodeEditorDocument({
@@ -100,6 +102,17 @@ export default function CodeEditor({
 
     previewWindow.document.body.appendChild(iframe);
   }, [content, file.name]);
+
+  const requestClose = useCallback(() => {
+    const canClose = shouldCloseCodeEditor({
+      isDirty,
+      confirm: () => window.confirm(t('unsavedChanges.confirm', 'You have unsaved changes. Close without saving?')),
+    });
+
+    if (canClose) {
+      onClose();
+    }
+  }, [isDirty, onClose, t]);
 
   const minimapExtension = useMemo(
     () => (
@@ -179,7 +192,7 @@ export default function CodeEditor({
 
   useEditorKeyboardShortcuts({
     onSave: handleSave,
-    onClose,
+    onClose: requestClose,
     dependency: content,
   });
 
@@ -262,7 +275,7 @@ export default function CodeEditor({
             onDownload={handleDownload}
             onSave={handleSave}
             onToggleFullscreen={() => setIsFullscreen((previous) => !previous)}
-            onClose={onClose}
+            onClose={requestClose}
             labels={{
               showingChanges: t('header.showingChanges'),
               editMarkdown: t('actions.editMarkdown'),

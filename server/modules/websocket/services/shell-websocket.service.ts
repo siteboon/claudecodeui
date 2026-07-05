@@ -24,6 +24,7 @@ type ShellIncomingMessage = {
 type PtySessionEntry = {
   pty: IPty;
   ws: WebSocket | null;
+  sockets: Set<WebSocket>;
   buffer: string[];
   timeoutId: NodeJS.Timeout | null;
   projectPath: string;
@@ -41,6 +42,38 @@ function clearPtySessionTimeout(session: PtySessionEntry): void {
   }
 }
 
+function getPtySessionSockets(session: PtySessionEntry): Set<WebSocket> {
+  if (!session.sockets) {
+    session.sockets = new Set(session.ws ? [session.ws] : []);
+  }
+
+  return session.sockets;
+}
+
+function addPtySessionSocket(session: PtySessionEntry, ws: WebSocket): void {
+  getPtySessionSockets(session).add(ws);
+  session.ws = ws;
+  clearPtySessionTimeout(session);
+}
+
+function getOpenPtySessionSocket(session: PtySessionEntry): WebSocket | null {
+  for (const socket of getPtySessionSockets(session)) {
+    if (socket.readyState === WebSocket.OPEN) {
+      return socket;
+    }
+  }
+
+  return null;
+}
+
+function sendToPtySessionSockets(session: PtySessionEntry, message: string): void {
+  for (const socket of getPtySessionSockets(session)) {
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(message);
+    }
+  }
+}
+
 export function handlePtySessionSocketClose(
   session: PtySessionEntry,
   closingWs: WebSocket,
@@ -48,15 +81,21 @@ export function handlePtySessionSocketClose(
   sessionsMap = ptySessionsMap,
   timeoutMs = PTY_SESSION_TIMEOUT
 ): boolean {
-  if (session.ws !== closingWs) {
+  const sockets = getPtySessionSockets(session);
+  const wasAttached = sockets.delete(closingWs);
+  if (!wasAttached && session.ws !== closingWs) {
     return false;
   }
 
-  session.ws = null;
+  session.ws = getOpenPtySessionSocket(session);
+  if (session.ws) {
+    return true;
+  }
+
   clearPtySessionTimeout(session);
   session.timeoutId = setTimeout(() => {
     session.timeoutId = null;
-    if (sessionsMap.get(ptySessionKey) !== session || session.ws !== null) {
+    if (sessionsMap.get(ptySessionKey) !== session || getOpenPtySessionSocket(session) !== null) {
       return;
     }
 
@@ -75,6 +114,7 @@ export function terminatePtySession(
 ): boolean {
   clearPtySessionTimeout(session);
   session.ws = null;
+  getPtySessionSockets(session).clear();
   session.pty.kill();
   return sessionsMap.delete(ptySessionKey);
 }
@@ -335,7 +375,7 @@ export function handleShellConnection(
           isLoginCommand || forceRestart ? null : ptySessionsMap.get(ptySessionKey);
         if (existingSession) {
           shellProcess = existingSession.pty;
-          clearPtySessionTimeout(existingSession);
+          addPtySessionSocket(existingSession, ws);
 
           ws.send(
             JSON.stringify({
@@ -355,7 +395,6 @@ export function handleShellConnection(
             });
           }
 
-          existingSession.ws = ws;
           return;
         }
 
@@ -402,6 +441,7 @@ export function handleShellConnection(
         ptySessionsMap.set(ptySessionKey, {
           pty: shellProcess,
           ws,
+          sockets: new Set([ws]),
           buffer: [],
           timeoutId: null,
           projectPath,
@@ -425,7 +465,7 @@ export function handleShellConnection(
             session.buffer.push(chunk);
           }
 
-          if (session.ws && session.ws.readyState === WebSocket.OPEN) {
+        if (getOpenPtySessionSocket(session)) {
             let outputData = chunk;
             const cleanChunk = dependencies.stripAnsiSequences(chunk);
             urlDetectionBuffer = `${urlDetectionBuffer}${cleanChunk}`.slice(-SHELL_URL_PARSE_BUFFER_LIMIT);
@@ -444,13 +484,11 @@ export function handleShellConnection(
               const isNewUrl = !announcedAuthUrls.has(normalizedUrl);
               if (isNewUrl) {
                 announcedAuthUrls.add(normalizedUrl);
-                session.ws?.send(
-                  JSON.stringify({
-                    type: 'auth_url',
-                    url: normalizedUrl,
-                    autoOpen,
-                  })
-                );
+            sendToPtySessionSockets(session, JSON.stringify({
+              type: 'auth_url',
+              url: normalizedUrl,
+              autoOpen,
+            }));
               }
             };
 
@@ -475,12 +513,10 @@ export function handleShellConnection(
               emitAuthUrl(bestUrl, true);
             }
 
-            session.ws.send(
-              JSON.stringify({
-                type: 'output',
-                data: outputData,
-              })
-            );
+          sendToPtySessionSockets(session, JSON.stringify({
+            type: 'output',
+            data: outputData,
+          }));
           }
         });
 
@@ -494,16 +530,14 @@ export function handleShellConnection(
             return;
           }
 
-          if (session && session.ws && session.ws.readyState === WebSocket.OPEN) {
-            session.ws.send(
-              JSON.stringify({
-                type: 'output',
-                data: `\r\n\x1b[33mProcess exited with code ${exitCode.exitCode}${
-                  exitCode.signal != null ? ` (${exitCode.signal})` : ''
-                }\x1b[0m\r\n`,
-              })
-            );
-          }
+        if (session) {
+          sendToPtySessionSockets(session, JSON.stringify({
+            type: 'output',
+            data: `\r\n\x1b[33mProcess exited with code ${exitCode.exitCode}${
+              exitCode.signal != null ? ` (${exitCode.signal})` : ''
+            }\x1b[0m\r\n`,
+          }));
+        }
 
           if (session?.timeoutId) {
             clearTimeout(session.timeoutId);

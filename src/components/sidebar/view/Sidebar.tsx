@@ -9,6 +9,7 @@ import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useBookmarks, type BookmarkedSession } from '../../../stores/useBookmarkStore';
+import { useAuth } from '../../auth/context/AuthContext';
 import type { Project, LLMProvider } from '../../../types/app';
 import type { MCPServerStatus, SidebarProps } from '../types/types';
 
@@ -43,6 +44,7 @@ function Sidebar({
   isMobile,
 }: SidebarProps) {
   const { t } = useTranslation(['sidebar', 'common']);
+  const { logout } = useAuth();
   const { isPWA } = useDeviceSettings({ trackMobile: false });
   const { updateAvailable, restartRequired, latestVersion, currentVersion, releaseInfo, installMode } = useVersionCheck(
     'siteboon',
@@ -103,6 +105,7 @@ function Sidebar({
     confirmDeleteSession,
     requestProjectDelete,
     confirmDeleteProject,
+    archiveProjectSessions,
     handleProjectSelect,
     openArchivedSession,
     restoreArchivedProject,
@@ -240,6 +243,7 @@ function Sidebar({
         deleteConfirmation={deleteConfirmation}
         onCancelDeleteProject={() => setDeleteConfirmation(null)}
         onConfirmDeleteProject={confirmDeleteProject}
+        onArchiveProjectSessions={archiveProjectSessions}
         sessionDeleteConfirmation={sessionDeleteConfirmation}
         onCancelDeleteSession={() => setSessionDeleteConfirmation(null)}
         onConfirmDeleteSession={confirmDeleteSession}
@@ -336,6 +340,7 @@ function Sidebar({
             currentVersion={currentVersion}
             onShowVersionModal={() => setShowVersionModal(true)}
             onShowSettings={onShowSettings}
+            onLogout={logout}
             projectListProps={projectListProps}
             bookmarks={bookmarks}
             selectedSessionId={selectedSession?.id ?? null}

@@ -178,6 +178,11 @@ stateDiagram-v2
   EmitError --> WaitingInit
 ```
 
+Multiple browser tabs can attach to the same PTY session key at the same time.
+The shell service keeps a set of attached sockets per PTY, fans output and URL
+events to every open socket, and only starts the detach timeout after the last
+socket closes.
+
 ### Shell Behaviors in Detail
 
 1. `init`:

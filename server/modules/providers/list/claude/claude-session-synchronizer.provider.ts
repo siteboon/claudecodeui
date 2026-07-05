@@ -13,6 +13,7 @@ import {
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
 
 const CLAUDE_UNTITLED_SESSION_NAME = 'Untitled Claude Session';
+const CLAUDE_INTERNAL_TRANSCRIPT_DIRS = new Set(['subagents', 'tool-results']);
 
 type ParsedSession = {
   sessionId: string;
@@ -47,8 +48,10 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
    * the main session record. The recursive scan in `synchronize()` reaches
    * them, so both entry points must skip them.
    */
-  private isSubagentTranscript(filePath: string): boolean {
-    return path.normalize(filePath).split(path.sep).includes('subagents');
+  private isInternalTranscript(filePath: string): boolean {
+    return path.normalize(filePath)
+      .split(path.sep)
+      .some((part) => CLAUDE_INTERNAL_TRANSCRIPT_DIRS.has(part));
   }
 
   /**
@@ -59,12 +62,14 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     const files = await findFilesRecursivelyCreatedAfter(
       path.join(this.claudeHome, 'projects'),
       '.jsonl',
-      since ?? null
+      since ?? null,
+      [],
+      CLAUDE_INTERNAL_TRANSCRIPT_DIRS
     );
 
     let processed = 0;
     for (const filePath of files) {
-      if (this.isSubagentTranscript(filePath)) {
+      if (this.isInternalTranscript(filePath)) {
         continue;
       }
 
@@ -96,7 +101,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     if (!filePath.endsWith('.jsonl')) {
       return null;
     }
-    if (this.isSubagentTranscript(filePath)) {
+    if (this.isInternalTranscript(filePath)) {
       return null;
     }
 

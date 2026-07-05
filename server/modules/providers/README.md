@@ -203,7 +203,7 @@ Current session sync roots are:
 
 | Provider | Scan Roots | Metadata Helpers / Notes |
 | --- | --- | --- |
-| Claude | `~/.claude/projects/**/*.jsonl` | Uses `~/.claude/history.jsonl` for name lookup and the trailing `ai-title`, `last-prompt`, or `custom-title` entries for title recovery. |
+| Claude | `~/.claude/projects/**/*.jsonl`, excluding nested `subagents/` and `tool-results/` directories | Uses `~/.claude/history.jsonl` for name lookup and the trailing `ai-title`, `last-prompt`, or `custom-title` entries for title recovery. Internal subagent/tool-result transcripts are skipped so they cannot overwrite top-level session rows. |
 | Codex | `~/.codex/sessions/**/*.jsonl` | Uses `~/.codex/session_index.jsonl` for title lookup and the last `task_complete` message for a fallback title. |
 | Cursor | `~/.cursor/projects/**/*.jsonl` | Uses sibling `worker.log` to recover `workspacePath`, then derives the session title from the first user prompt. |
 | Gemini | `~/.gemini/tmp/**/*.jsonl` | Current full scans only index temp JSONL chat artifacts. Single-file sync also accepts legacy `.json` files. |
@@ -365,4 +365,3 @@ alongside the implementation.
 - Forgetting that Claude plugin skills are discovered differently from normal
   user/project skill folders.
 - Assuming one provider's MCP config file format works for the others.
-

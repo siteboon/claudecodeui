@@ -14,6 +14,7 @@ type ClaudeCredentialsStatus = {
   email: string | null;
   method: string | null;
   error?: string;
+  warning?: string;
 };
 
 const hasErrorCode = (error: unknown, code: string): boolean => (
@@ -60,6 +61,7 @@ export class ClaudeProviderAuth implements IProviderAuth {
       email: credentials.authenticated ? credentials.email || 'Authenticated' : credentials.email,
       method: credentials.method,
       error: credentials.authenticated ? undefined : credentials.error || 'Not authenticated',
+      warning: credentials.warning,
     };
   }
 
@@ -77,6 +79,33 @@ export class ClaudeProviderAuth implements IProviderAuth {
     }
   }
 
+  private async hasUsableOAuthCredentials(): Promise<boolean> {
+    try {
+      const credPath = path.join(os.homedir(), '.claude', '.credentials.json');
+      const content = await readFile(credPath, 'utf8');
+      const creds = readObjectRecord(JSON.parse(content)) ?? {};
+      const oauth = readObjectRecord(creds.claudeAiOauth);
+      const accessToken = readOptionalString(oauth?.accessToken);
+
+      if (!accessToken) {
+        return false;
+      }
+
+      const expiresAt = typeof oauth?.expiresAt === 'number' ? oauth.expiresAt : undefined;
+      return !expiresAt || Date.now() < expiresAt;
+    } catch {
+      return false;
+    }
+  }
+
+  private async buildApiKeyWarning(source: string): Promise<string | undefined> {
+    if (!await this.hasUsableOAuthCredentials()) {
+      return undefined;
+    }
+
+    return `${source} is set, so Claude Code will use API key authentication instead of the saved OAuth subscription login.`;
+  }
+
   /**
    * Checks Claude credentials in the same priority order used by Claude Code.
    */
@@ -88,12 +117,22 @@ export class ClaudeProviderAuth implements IProviderAuth {
     }
 
     if (process.env.ANTHROPIC_API_KEY?.trim()) {
-      return { authenticated: true, email: 'API Key Auth', method: 'api_key' };
+      return {
+        authenticated: true,
+        email: 'API Key Auth',
+        method: 'api_key',
+        warning: await this.buildApiKeyWarning('ANTHROPIC_API_KEY'),
+      };
     }
 
     const settingsEnv = await this.loadSettingsEnv();
     if (readOptionalString(settingsEnv.ANTHROPIC_API_KEY)) {
-      return { authenticated: true, email: 'API Key Auth', method: 'api_key' };
+      return {
+        authenticated: true,
+        email: 'API Key Auth',
+        method: 'api_key',
+        warning: await this.buildApiKeyWarning('ANTHROPIC_API_KEY in ~/.claude/settings.json'),
+      };
     }
 
     if (readOptionalString(settingsEnv.ANTHROPIC_AUTH_TOKEN)) {

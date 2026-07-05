@@ -36,8 +36,13 @@ async function withIsolatedClaudeSync(runTest: (tempDirectory: string) => void |
   }
 }
 
-async function writeClaudeTranscript(tempDirectory: string, sessionId: string, lines: unknown[]): Promise<string> {
-  const projectDirectory = path.join(tempDirectory, '.claude', 'projects', 'demo');
+async function writeClaudeTranscriptAt(
+  tempDirectory: string,
+  relativeDirectory: string,
+  sessionId: string,
+  lines: unknown[]
+): Promise<string> {
+  const projectDirectory = path.join(tempDirectory, '.claude', 'projects', 'demo', relativeDirectory);
   await mkdir(projectDirectory, { recursive: true });
   const transcriptPath = path.join(projectDirectory, `${sessionId}.jsonl`);
   await writeFile(
@@ -48,7 +53,11 @@ async function writeClaudeTranscript(tempDirectory: string, sessionId: string, l
   return transcriptPath;
 }
 
-test('Claude synchronizer does not use last-prompt text as the session title', async () => {
+async function writeClaudeTranscript(tempDirectory: string, sessionId: string, lines: unknown[]): Promise<string> {
+  return writeClaudeTranscriptAt(tempDirectory, '.', sessionId, lines);
+}
+
+test('Claude synchronizer does not use last-prompt text as session title', async () => {
   await withIsolatedClaudeSync(async (tempDirectory) => {
     const transcriptPath = await writeClaudeTranscript(tempDirectory, 'claude-session-1', [
       { type: 'summary', sessionId: 'claude-session-1', cwd: '/workspace/demo' },
@@ -67,7 +76,7 @@ test('Claude synchronizer does not use last-prompt text as the session title', a
   });
 });
 
-test('Claude synchronizer recovers the latest meaningful explicit title', async () => {
+test('Claude synchronizer recovers latest meaningful explicit title', async () => {
   await withIsolatedClaudeSync(async (tempDirectory) => {
     const transcriptPath = await writeClaudeTranscript(tempDirectory, 'claude-session-2', [
       { type: 'summary', sessionId: 'claude-session-2', cwd: '/workspace/demo' },
@@ -89,5 +98,29 @@ test('Claude synchronizer recovers the latest meaningful explicit title', async 
     await synchronizer.synchronizeFile(transcriptPath);
 
     assert.equal(sessionsDb.getSessionById('claude-session-2')?.custom_name, 'Billing Migration Review');
+  });
+});
+
+test('Claude synchronizer skips nested subagent and tool-result transcripts', async () => {
+  await withIsolatedClaudeSync(async (tempDirectory) => {
+    await writeClaudeTranscript(tempDirectory, 'top-level-session', [
+      { type: 'summary', sessionId: 'top-level-session', cwd: '/workspace/demo' },
+    ]);
+
+    await writeClaudeTranscriptAt(tempDirectory, 'top-level-session/subagents', 'subagent-session', [
+      { type: 'summary', sessionId: 'subagent-session', cwd: '/workspace/demo' },
+    ]);
+
+    await writeClaudeTranscriptAt(tempDirectory, 'top-level-session/tool-results', 'tool-result-session', [
+      { type: 'summary', sessionId: 'tool-result-session', cwd: '/workspace/demo' },
+    ]);
+
+    const synchronizer = new ClaudeSessionSynchronizer();
+    const processed = await synchronizer.synchronize();
+
+    assert.equal(processed, 1);
+    assert.ok(sessionsDb.getSessionById('top-level-session'));
+    assert.equal(sessionsDb.getSessionById('subagent-session'), null);
+    assert.equal(sessionsDb.getSessionById('tool-result-session'), null);
   });
 });

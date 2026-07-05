@@ -14,6 +14,7 @@ class FakeWebSocket extends EventEmitter {
   readyState: number = WebSocket.OPEN;
   pingCalls = 0;
   terminateCalls = 0;
+  sentMessages: string[] = [];
 
   ping(): void {
     this.pingCalls += 1;
@@ -28,6 +29,10 @@ class FakeWebSocket extends EventEmitter {
   close(): void {
     this.readyState = WebSocket.CLOSED;
     this.emit('close');
+  }
+
+  send(message: string): void {
+    this.sentMessages.push(message);
   }
 }
 
@@ -51,6 +56,7 @@ function makeSession(ws: FakeWebSocket) {
       },
     },
     ws: asWebSocket(ws),
+    sockets: new Set([asWebSocket(ws)]),
     buffer: [],
     timeoutId: null,
     projectPath: '/tmp/project',
@@ -62,6 +68,28 @@ function makeSession(ws: FakeWebSocket) {
     getKillCalls: () => killCalls,
   };
 }
+
+test('shell socket close keeps a shared PTY session alive for other attached tabs', async () => {
+  const firstWs = new FakeWebSocket();
+  const secondWs = new FakeWebSocket();
+  const { session, getKillCalls } = makeSession(firstWs);
+  session.sockets.add(asWebSocket(secondWs));
+  const sessionsMap = new Map([['shell-key', session]]);
+
+  const detached = handlePtySessionSocketClose(
+    session as never,
+    asWebSocket(firstWs),
+    'shell-key',
+    sessionsMap as never,
+    TEST_GRACE_TIMEOUT_MS,
+  );
+
+  assert.equal(detached, true);
+  assert.equal(session.ws, asWebSocket(secondWs));
+  await delay(35);
+  assert.equal(getKillCalls(), 0);
+  assert.equal(sessionsMap.has('shell-key'), true);
+});
 
 test('websocket heartbeat terminates a connection that misses a pong', async () => {
   const ws = new FakeWebSocket();
@@ -132,6 +160,7 @@ test('shell socket close keeps a reattached PTY session alive', async () => {
   assert.equal(session.ws, null);
 
   session.ws = asWebSocket(reattachedWs);
+  session.sockets.add(asWebSocket(reattachedWs));
   await delay(35);
 
   assert.equal(getKillCalls(), 0);

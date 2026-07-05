@@ -5,6 +5,7 @@ export type ProviderAuthStatus = {
   email: string | null;
   method: string | null;
   error: string | null;
+  warning?: string | null;
   loading: boolean;
 };
 

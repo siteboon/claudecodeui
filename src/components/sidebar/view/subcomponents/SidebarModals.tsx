@@ -23,6 +23,7 @@ type SidebarModalsProps = {
   deleteConfirmation: DeleteProjectConfirmation | null;
   onCancelDeleteProject: () => void;
   onConfirmDeleteProject: (deleteData?: boolean) => void;
+  onArchiveProjectSessions: () => void;
   sessionDeleteConfirmation: SessionDeleteConfirmation | null;
   onCancelDeleteSession: () => void;
   onConfirmDeleteSession: (hardDelete?: boolean) => void;
@@ -59,6 +60,7 @@ export default function SidebarModals({
   deleteConfirmation,
   onCancelDeleteProject,
   onConfirmDeleteProject,
+  onArchiveProjectSessions,
   sessionDeleteConfirmation,
   onCancelDeleteSession,
   onConfirmDeleteSession,
@@ -135,6 +137,16 @@ export default function SidebarModals({
                   <EyeOff className="mr-2 h-4 w-4" />
                   {t('deleteConfirmation.archiveProject', 'Archive project')}
                 </Button>
+                {deleteConfirmation.sessionCount > 0 && (
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start"
+                    onClick={onArchiveProjectSessions}
+                  >
+                    <EyeOff className="mr-2 h-4 w-4" />
+                    {t('deleteConfirmation.archiveProjectSessions', 'Archive conversations only')}
+                  </Button>
+                )}
                 <Button
                   variant="destructive"
                   className="w-full justify-start bg-red-600 text-white hover:bg-red-700"

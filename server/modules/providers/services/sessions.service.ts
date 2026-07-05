@@ -274,6 +274,59 @@ export const sessionsService = {
     };
   },
 
+  async deleteOrArchiveSessionsByProjectPath(
+    projectPath: string,
+    options: {
+      force?: boolean;
+      deletedFromDisk?: boolean;
+    } = {},
+  ): Promise<{
+    projectPath: string;
+    action: 'archived' | 'deleted';
+    count: number;
+    deletedFromDisk: number;
+  }> {
+    const normalizedProjectPath = projectPath.trim();
+    if (!normalizedProjectPath) {
+      throw new AppError('projectPath is required.', {
+        code: 'PROJECT_PATH_REQUIRED',
+        statusCode: 400,
+      });
+    }
+
+    const sessions = options.force
+      ? sessionsDb.getSessionsByProjectPathIncludingArchived(normalizedProjectPath)
+      : sessionsDb.getSessionsByProjectPath(normalizedProjectPath);
+
+    if (!options.force) {
+      for (const session of sessions) {
+        sessionsDb.updateSessionIsArchived(session.session_id, true);
+      }
+
+      return {
+        projectPath: normalizedProjectPath,
+        action: 'archived',
+        count: sessions.length,
+        deletedFromDisk: 0,
+      };
+    }
+
+    let deletedFromDisk = 0;
+    for (const session of sessions) {
+      if (options.deletedFromDisk && session.jsonl_path && await removeFileIfExists(session.jsonl_path)) {
+        deletedFromDisk += 1;
+      }
+      sessionsDb.deleteSessionById(session.session_id);
+    }
+
+    return {
+      projectPath: normalizedProjectPath,
+      action: 'deleted',
+      count: sessions.length,
+      deletedFromDisk,
+    };
+  },
+
   /**
    * Restores one archived session back into the active sidebar lists.
    */

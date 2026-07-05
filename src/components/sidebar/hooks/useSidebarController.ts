@@ -809,6 +809,30 @@ export function useSidebarController({
     }
   }, [deleteConfirmation, onProjectDelete, t]);
 
+  const archiveProjectSessions = useCallback(async () => {
+    if (!deleteConfirmation) {
+      return;
+    }
+
+    const { project } = deleteConfirmation;
+    setDeleteConfirmation(null);
+
+    try {
+      const response = await api.deleteProjectSessions(project.fullPath, false);
+      if (response.ok) {
+        await Promise.all([
+          Promise.resolve(onRefresh()),
+          fetchArchivedSessions(),
+        ]);
+      } else {
+        alert(t('messages.deleteSessionFailed'));
+      }
+    } catch (error) {
+      console.error('[Sidebar] Error archiving project sessions:', error);
+      alert(t('messages.deleteSessionError'));
+    }
+  }, [deleteConfirmation, fetchArchivedSessions, onRefresh, t]);
+
   const handleProjectSelect = useCallback(
     (project: Project) => {
       onProjectSelect(project);
@@ -974,6 +998,7 @@ export function useSidebarController({
     confirmDeleteSession,
     requestProjectDelete,
     confirmDeleteProject,
+    archiveProjectSessions,
     handleProjectSelect,
     openArchivedSession,
     restoreArchivedProject,

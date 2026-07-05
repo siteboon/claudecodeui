@@ -110,6 +110,32 @@ export function useChatRealtimeHandlers({
           onWebSocketReconnect?.();
           return;
 
+        case 'websocket_send_queued':
+          if (sid) {
+            sessionStore.appendRealtime(sid, {
+              id: `websocket_send_queued_${Date.now()}`,
+              sessionId: sid,
+              timestamp: new Date().toISOString(),
+              provider,
+              kind: 'status',
+              content: 'Message queued while the WebSocket reconnects.',
+            } as NormalizedMessage);
+          }
+          return;
+
+        case 'websocket_send_failed':
+          if (sid) {
+            sessionStore.appendRealtime(sid, {
+              id: `websocket_send_failed_${Date.now()}`,
+              sessionId: sid,
+              timestamp: new Date().toISOString(),
+              provider,
+              kind: 'error',
+              content: 'Message could not be sent because the WebSocket send queue is full. Reconnect and try again.',
+            } as NormalizedMessage);
+          }
+          return;
+
         case 'chat_subscribed': {
           // Ack for chat.subscribe: authoritative processing state plus any
           // pending tool-permission prompts for the run.
