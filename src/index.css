@@ -603,13 +603,14 @@
   .chat-message.error {
     contain-intrinsic-size: auto 96px;
   }
+}
 
-  /* Mobile touch optimization and safe areas */
-  @media (max-width: 768px) {
-    * {
-      touch-action: manipulation;
-      -webkit-tap-highlight-color: transparent;
-    }
+/* Mobile touch optimization and safe areas */
+@media (max-width: 768px) {
+  * {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
     
     /* Allow vertical scrolling in scroll containers */
     .overflow-y-auto, [data-scroll-container] {
@@ -808,7 +809,6 @@
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
-}
 
 /* Hide markdown backticks in prose content */
 .prose code::before,
