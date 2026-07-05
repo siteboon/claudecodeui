@@ -369,6 +369,17 @@ export function useSidebarController({
     const accumulated: ConversationProjectResult[] = [];
     let totalMatches = 0;
 
+    es.addEventListener('auth_refresh', (evt) => {
+      try {
+        const data = JSON.parse(evt.data) as { token?: string };
+        if (typeof data.token === 'string' && data.token) {
+          localStorage.setItem('auth-token', data.token);
+        }
+      } catch {
+        // Ignore malformed SSE data
+      }
+    });
+
     es.addEventListener('result', (evt) => {
       if (seq !== searchSeqRef.current) { es.close(); return; }
       try {

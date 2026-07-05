@@ -10,7 +10,7 @@ import { WS_OPEN_STATE, connectedClients } from '@/modules/websocket/index.js';
 import type { LLMProvider } from '@/shared/types.js';
 import { generateDisplayName } from '@/modules/projects/index.js';
 
-type WatcherEventType = 'add' | 'change';
+type WatcherEventType = 'add' | 'change' | 'unlink' | 'unlinkDir';
 
 const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> = [
   {
@@ -86,6 +86,20 @@ function isWatcherTargetFile(provider: LLMProvider, filePath: string): boolean {
   }
 
   return filePath.endsWith('.jsonl');
+}
+
+function broadcastSessionDeleted(sessionId: string, provider: LLMProvider): void {
+  const event = JSON.stringify({
+    kind: 'session_deleted',
+    sessionId,
+    provider,
+  });
+
+  connectedClients.forEach(client => {
+    if (client.readyState === WS_OPEN_STATE) {
+      client.send(event);
+    }
+  });
 }
 
 function clearPendingWatcherFlushTimer(): void {
@@ -265,6 +279,39 @@ async function onUpdate(
   }
 }
 
+export async function handleSessionArtifactDeleted(
+  eventType: 'unlink',
+  filePath: string,
+  provider: LLMProvider
+): Promise<string | null> {
+  if (!isWatcherTargetFile(provider, filePath)) {
+    return null;
+  }
+
+  const deletedSessionId = sessionsDb.deleteSessionByTranscriptPath(provider, filePath);
+  if (!deletedSessionId) {
+    return null;
+  }
+
+  console.log(`Session deleted by ${eventType} event for provider "${provider}"`, {
+    filePath,
+    sessionId: deletedSessionId,
+  });
+  broadcastSessionDeleted(deletedSessionId, provider);
+  return deletedSessionId;
+}
+
+async function handleSessionArtifactDirectoryDeleted(
+  eventType: 'unlinkDir',
+  provider: LLMProvider
+): Promise<void> {
+  const deletedSessionIds = sessionsDb.deleteSessionsWithMissingTranscriptPaths(provider);
+  for (const sessionId of deletedSessionIds) {
+    console.log(`Session deleted by ${eventType} event for provider "${provider}"`, { sessionId });
+    broadcastSessionDeleted(sessionId, provider);
+  }
+}
+
 /**
  * Starts provider filesystem watchers and performs initial DB synchronization.
  */
@@ -298,6 +345,12 @@ export async function initializeSessionsWatcher(): Promise<void> {
         })
         .on('change', (filePath: string) => {
           void onUpdate('change', filePath, provider);
+        })
+        .on('unlink', (filePath: string) => {
+          void handleSessionArtifactDeleted('unlink', filePath, provider);
+        })
+        .on('unlinkDir', () => {
+          void handleSessionArtifactDirectoryDeleted('unlinkDir', provider);
         })
         .on('error', (error: unknown) => {
           const message = error instanceof Error ? error.message : String(error);

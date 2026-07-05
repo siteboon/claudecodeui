@@ -167,6 +167,11 @@ router.get('/clone-progress', async (req, res) => {
     res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`);
   };
 
+  const refreshedToken = (req as typeof req & { refreshedToken?: string | null }).refreshedToken;
+  if (refreshedToken) {
+    res.write(`event: auth_refresh\ndata: ${JSON.stringify({ token: refreshedToken })}\n\n`);
+  }
+
   let cloneOperation: Awaited<ReturnType<typeof startCloneProject>> | null = null;
   const closeListener = () => {
     cloneOperation?.cancel();

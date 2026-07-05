@@ -14,6 +14,13 @@ function getPluginIdentitySecret(): string {
     || appConfigDb.getOrCreateJwtSecret();
 }
 
+function derivePluginIdentityKey(pluginName: string): Buffer {
+  return crypto
+    .createHmac('sha256', getPluginIdentitySecret())
+    .update(`plugin:${pluginName}`)
+    .digest();
+}
+
 function readUserIdentity(user: PluginIdentityUser | null | undefined): { id: string; username: string } | null {
   const id = user?.id ?? user?.userId;
   if (id === undefined || id === null) {
@@ -26,14 +33,10 @@ function readUserIdentity(user: PluginIdentityUser | null | undefined): { id: st
   };
 }
 
-function signPluginIdentity(
-  pluginName: string,
-  identity: { id: string; username: string },
-  issuedAt: number,
-): string {
+function signPluginIdentityPayload(pluginName: string, payload: string): string {
   return crypto
-    .createHmac('sha256', getPluginIdentitySecret())
-    .update(`${pluginName}\n${identity.id}\n${identity.username}\n${issuedAt}`)
+    .createHmac('sha256', derivePluginIdentityKey(pluginName))
+    .update(payload)
     .digest('hex');
 }
 
@@ -48,16 +51,21 @@ export function buildPluginIdentityHeaders(
   }
 
   const issuedAt = Math.floor(now / 1000);
+  const payload = JSON.stringify({
+    userId: identity.id,
+    username: identity.username,
+    iat: issuedAt,
+  });
+
   return {
-    'x-plugin-user-id': identity.id,
-    'x-plugin-user-name': identity.username,
-    'x-plugin-user-iat': String(issuedAt),
-    'x-plugin-user-signature': signPluginIdentity(pluginName, identity, issuedAt),
+    'x-plugin-user-payload': Buffer.from(payload, 'utf8').toString('base64'),
+    'x-plugin-user-signature': `sha256=${signPluginIdentityPayload(pluginName, payload)}`,
+    'x-plugin-user-algorithm': 'sha256',
   };
 }
 
-export function buildPluginIdentityEnv(): Record<string, string> {
+export function buildPluginIdentityEnv(pluginName: string): Record<string, string> {
   return {
-    CLOUDCLI_PLUGIN_IDENTITY_SECRET: getPluginIdentitySecret(),
+    PLUGIN_IDENTITY_KEY: derivePluginIdentityKey(pluginName).toString('hex'),
   };
 }

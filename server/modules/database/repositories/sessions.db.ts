@@ -448,6 +448,26 @@ export const sessionsDb = {
     return missingSessionIds;
   },
 
+  deleteSessionByTranscriptPath(provider: string, transcriptPath: string): string | null {
+    const db = getConnection();
+    const row = db
+      .prepare(
+        `SELECT session_id
+         FROM sessions
+         WHERE provider = ?
+           AND jsonl_path = ?
+         LIMIT 1`
+      )
+      .get(provider, transcriptPath) as { session_id: string } | undefined;
+
+    if (!row) {
+      return null;
+    }
+
+    db.prepare('DELETE FROM sessions WHERE session_id = ?').run(row.session_id);
+    return row.session_id;
+  },
+
   getSessionName(sessionId: string, provider: string): string | null {
     const db = getConnection();
     const row = db

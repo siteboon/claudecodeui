@@ -41,6 +41,11 @@ type SessionUpsertedEvent = ServerEvent & {
   } | null;
 };
 
+type SessionDeletedEvent = ServerEvent & {
+  sessionId: string;
+  provider: LLMProvider;
+};
+
 type FetchProjectsOptions = {
   showLoadingState?: boolean;
 };
@@ -595,6 +600,27 @@ export function useProjectsState({
           }, 500);
         }
 
+        return;
+      }
+
+      if (event.kind === 'session_deleted') {
+        const deleted = event as SessionDeletedEvent;
+        if (!deleted.sessionId) {
+          return;
+        }
+
+        setProjects((previousProjects) =>
+          previousProjects.map((project) => removeSessionFromProject(project, deleted.sessionId)),
+        );
+        setSelectedProject((previousProject) => (
+          previousProject ? removeSessionFromProject(previousProject, deleted.sessionId) : previousProject
+        ));
+        setSelectedSession((previousSession) => (
+          previousSession?.id === deleted.sessionId ? null : previousSession
+        ));
+        if (sessionId === deleted.sessionId) {
+          navigate('/');
+        }
         return;
       }
 

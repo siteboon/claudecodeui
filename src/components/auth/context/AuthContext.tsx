@@ -26,6 +26,8 @@ const clearStoredToken = () => {
   localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
 };
 
+const AUTH_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
+
 export function useAuth(): AuthContextValue {
   const context = useContext(AuthContext);
   if (!context) {
@@ -95,6 +97,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       setNeedsSetup(false);
 
+      if (statusPayload?.isAuthenticated && statusPayload.user) {
+        setUser(statusPayload.user);
+        await checkOnboardingStatus();
+        return;
+      }
+
       if (!token) {
         return;
       }
@@ -133,6 +141,54 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     void checkAuthStatus();
   }, [checkAuthStatus, checkOnboardingStatus]);
+
+  const refreshToken = useCallback(async () => {
+    if (!token || IS_PLATFORM) {
+      return;
+    }
+
+    try {
+      const response = await api.auth.refresh();
+      const payload = await parseJsonSafely<AuthSessionPayload>(response);
+      if (response.ok && payload?.token) {
+        updateToken(payload.token);
+        return;
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        clearSession();
+      }
+    } catch (caughtError) {
+      console.error('Token refresh error:', caughtError);
+    }
+  }, [clearSession, token, updateToken]);
+
+  useEffect(() => {
+    if (!token || IS_PLATFORM) {
+      return;
+    }
+
+    const refreshOnFocus = () => {
+      void refreshToken();
+    };
+    const refreshOnVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshToken();
+      }
+    };
+    const interval = window.setInterval(() => {
+      void refreshToken();
+    }, AUTH_REFRESH_INTERVAL_MS);
+
+    window.addEventListener('focus', refreshOnFocus);
+    document.addEventListener('visibilitychange', refreshOnVisibility);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refreshOnFocus);
+      document.removeEventListener('visibilitychange', refreshOnVisibility);
+    };
+  }, [refreshToken, token]);
 
   const login = useCallback<AuthContextValue['login']>(
     async (username, password) => {

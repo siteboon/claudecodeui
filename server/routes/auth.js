@@ -11,10 +11,10 @@ const db = getConnection();
 // Check auth status and setup requirements
 router.get('/status', async (req, res) => {
   try {
-    const hasUsers = await userDb.hasUsers();
     const proxyUser = authenticateTrustedProxy(req);
+    const hasUsers = await userDb.hasUsers();
     res.json({ 
-      needsSetup: !hasUsers,
+      needsSetup: !hasUsers && !proxyUser,
       isAuthenticated: Boolean(proxyUser),
       user: proxyUser ? { id: proxyUser.id, username: proxyUser.username } : null
     });

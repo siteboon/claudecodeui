@@ -74,6 +74,21 @@ The existing provider folders are `claude`, `codex`, `cursor`, `gemini`, and
 - `sessions` handles runtime event normalization and history fetches.
 - `sessionSynchronizer` handles file-backed session indexing into `sessionsDb`.
 
+## Provider Model Catalogs
+
+Provider model lists are returned through each provider's `models` facet and
+normalized as `ProviderModelsDefinition`.
+
+Claude starts from the built-in model catalog, then may merge custom model ids
+from `CLOUDCLI_CLAUDE_MODELS`. `CLOUDCLI_CLAUDE_DEFAULT_MODEL` can select the
+default when that value exists in the merged catalog.
+
+Codex starts from the built-in model catalog, then may load
+`model_catalog_json` from `~/.codex/config.toml`. Relative catalog paths resolve
+from `~/.codex`. The catalog file is JSON shaped as `{ "models": [...] }`;
+entries can provide `id`, optional `displayName`, optional `description`, and
+`hidden: true` to omit a configured model from the selectable list.
+
 ## How To Add A Provider
 
 1. Add the provider id everywhere it is part of the contract.
@@ -350,5 +365,4 @@ alongside the implementation.
 - Forgetting that Claude plugin skills are discovered differently from normal
   user/project skill folders.
 - Assuming one provider's MCP config file format works for the others.
-
 

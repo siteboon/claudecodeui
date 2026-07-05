@@ -59,7 +59,7 @@ flowchart LR
   G --> L[Upstream Plugin ws://127.0.0.1:port/ws]
 
   I --> M[projects.service loading_progress]
-  I --> N[sessions-watcher.service session_upserted]
+  I --> N[sessions-watcher.service session_upserted/session_deleted]
 ```
 
 ## Connection Handshake + Routing
@@ -138,7 +138,7 @@ flowchart TD
 
 ### Chat Notes
 
-1. **Unified envelope**: every server-to-client frame carries a `kind` — either a provider `NormalizedMessage` kind or a gateway kind (`chat_subscribed`, `session_upserted`, `loading_progress`, `protocol_error`). There is no second `type`-based protocol.
+1. **Unified envelope**: every server-to-client frame carries a `kind` — either a provider `NormalizedMessage` kind or a gateway kind (`chat_subscribed`, `session_upserted`, `session_deleted`, `loading_progress`, `auth_refresh`, `protocol_error`). There is no second `type`-based protocol.
 2. **Unified terminal lifecycle**: every provider run ends with exactly one `complete` message built by `createCompleteMessage()` (`server/shared/utils.ts`): `{ kind: "complete", sessionId, actualSessionId, exitCode, success, aborted }`. The chat handler emits a synthetic `complete` for runs that crash or get aborted, and the run registry drops duplicate completes.
 3. **Per-run event log**: every live event gets a monotonically increasing `seq`. `chat.subscribe { sessions: [{ sessionId, lastSeq }] }` re-attaches the live stream to the requesting socket (any provider, not just Claude) and replays events with `seq > lastSeq`. If the buffer no longer covers `lastSeq`, the client refreshes over REST.
 4. `chat_subscribed` includes `isProcessing` (replaces `check-session-status`) and `pendingPermissions` (replaces `get-pending-permissions`).
@@ -166,6 +166,7 @@ stateDiagram-v2
 
   Running --> Running: input -> pty.write
   Running --> Running: resize -> pty.resize
+  Running --> Killed: terminate -> pty.kill
   Running --> Running: onData -> buffer + output + auth_url detection
   Running --> Exited: onExit
   Running --> Detached: ws close
@@ -193,6 +194,8 @@ Stores up to 5000 chunks for replay on reconnect.
 Strips ANSI, accumulates text buffer, extracts URLs, emits `auth_url` once per normalized URL, supports `autoOpen`.
 7. Close behavior:
 Socket disconnect does not instantly kill PTY; session is kept alive and terminated on timeout.
+8. Explicit termination:
+`message.type == terminate` kills the keyed PTY session immediately and removes it from the reconnect cache.
 
 ## `/plugin-ws/:pluginName` Proxy Flow
 
@@ -212,7 +215,7 @@ sequenceDiagram
     alt Plugin not running
       Proxy-->>Client: close(4404, "Plugin not running")
     else Port found
-      Proxy->>Upstream: new WebSocket(ws://127.0.0.1:port/ws)
+      Proxy->>Upstream: new WebSocket(ws://127.0.0.1:port/ws, signed identity headers)
       Client-->>Upstream: relay messages bidirectionally
       Upstream-->>Client: relay messages bidirectionally
       Upstream-->>Client: close propagation
@@ -221,6 +224,11 @@ sequenceDiagram
     end
   end
 ```
+
+Plugin HTTP RPC and WebSocket proxy requests include the signed
+`X-Plugin-User-Payload`, `X-Plugin-User-Signature`, and
+`X-Plugin-User-Algorithm` headers when an authenticated user is available.
+Plugins receive their per-plugin verification key in `PLUGIN_IDENTITY_KEY`.
 
 ## Shared Client Registry and Broadcasts
 
@@ -231,7 +239,7 @@ That shared set is consumed by:
 1. `modules/projects/services/projects-with-sessions-fetch.service.ts`
 Broadcasts `kind: loading_progress` while project snapshots are being built.
 2. `modules/providers/services/sessions-watcher.service.ts`
-Broadcasts per-session `kind: session_upserted` deltas when provider session artifacts change (no full project snapshots).
+Broadcasts per-session `kind: session_upserted` deltas when provider session artifacts change and `kind: session_deleted` when watched transcript files disappear (no full project snapshots).
 
 This design centralizes cross-module realtime fanout without requiring route-local references to WebSocket internals.
 

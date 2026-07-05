@@ -640,6 +640,11 @@ router.get('/search/sessions', asyncHandler(async (req: Request, res: Response) 
     'X-Accel-Buffering': 'no',
   });
 
+  const refreshedToken = (req as Request & { refreshedToken?: string | null }).refreshedToken;
+  if (refreshedToken) {
+    res.write(`event: auth_refresh\ndata: ${JSON.stringify({ token: refreshedToken })}\n\n`);
+  }
+
   let closed = false;
   const abortController = new AbortController();
   req.on('close', () => {

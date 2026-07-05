@@ -46,6 +46,7 @@ export const api = {
       body: JSON.stringify({ username, password }),
     }),
     user: () => authenticatedFetch('/api/auth/user'),
+    refresh: () => authenticatedFetch('/api/auth/refresh', { method: 'POST' }),
     logout: () => authenticatedFetch('/api/auth/logout', { method: 'POST' }),
   },
 

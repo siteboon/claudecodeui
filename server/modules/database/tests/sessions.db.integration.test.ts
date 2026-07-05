@@ -121,3 +121,36 @@ test('deleteSessionsWithMissingTranscriptPaths removes ghost rows only for missi
     await rm(transcriptDirectory, { recursive: true, force: true });
   });
 });
+
+test('deleteSessionByTranscriptPath removes one provider row for a deleted transcript', async () => {
+  await withIsolatedDatabase(async () => {
+    const transcriptDirectory = await mkdtemp(path.join(tmpdir(), 'session-transcript-delete-'));
+    const transcriptPath = path.join(transcriptDirectory, 'deleted.jsonl');
+
+    sessionsDb.createSession(
+      'session-deleted',
+      'claude',
+      '/workspace/demo-project',
+      'Deleted Transcript',
+      undefined,
+      undefined,
+      transcriptPath,
+    );
+    sessionsDb.createSession(
+      'session-other-provider',
+      'codex',
+      '/workspace/demo-project',
+      'Other Provider',
+      undefined,
+      undefined,
+      transcriptPath,
+    );
+
+    assert.equal(sessionsDb.deleteSessionByTranscriptPath('claude', transcriptPath), 'session-deleted');
+    assert.equal(sessionsDb.getSessionById('session-deleted'), null);
+    assert.ok(sessionsDb.getSessionById('session-other-provider'));
+    assert.equal(sessionsDb.deleteSessionByTranscriptPath('claude', transcriptPath), null);
+
+    await rm(transcriptDirectory, { recursive: true, force: true });
+  });
+});

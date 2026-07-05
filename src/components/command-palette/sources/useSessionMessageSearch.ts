@@ -53,6 +53,17 @@ export function useSessionMessageSearch(
       esRef.current = es;
       const accumulated: SessionMessageMatch[] = [];
 
+      es.addEventListener('auth_refresh', (evt) => {
+        try {
+          const data = JSON.parse((evt as MessageEvent).data) as { token?: string };
+          if (typeof data.token === 'string' && data.token) {
+            localStorage.setItem('auth-token', data.token);
+          }
+        } catch {
+          // ignore malformed
+        }
+      });
+
       es.addEventListener('result', (evt) => {
         if (seq !== seqRef.current) {
           es.close();

@@ -9,5 +9,6 @@ declare global {
     result: MessageEvent;
     progress: MessageEvent;
     done: MessageEvent;
+    auth_refresh: MessageEvent;
   }
 }

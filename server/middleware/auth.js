@@ -1,3 +1,6 @@
+import crypto from 'node:crypto';
+
+import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 
 import { IS_PLATFORM } from '../constants/config.js';
@@ -5,24 +8,86 @@ import { appConfigDb, userDb } from '../modules/database/index.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || appConfigDb.getOrCreateJwtSecret();
 const TOKEN_EXPIRES_IN = '7d';
-const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+const DEFAULT_TRUSTED_PROXY_CIDRS = '127.0.0.0/8,::1/128';
+const LOCKED_PROXY_PASSWORD_PREFIX = 'trusted-proxy:';
 
 function normalizeRemoteAddress(address) {
   return String(address || '').replace(/^::ffff:/, '');
 }
 
+function parseIpv4Address(address) {
+  const parts = address.split('.');
+  if (parts.length !== 4) {
+    return null;
+  }
+
+  let result = 0;
+  for (const part of parts) {
+    if (!/^\d+$/.test(part)) {
+      return null;
+    }
+
+    const value = Number(part);
+    if (value < 0 || value > 255) {
+      return null;
+    }
+
+    result = (result << 8) + value;
+  }
+
+  return result >>> 0;
+}
+
+function ipv4MatchesCidr(address, cidr) {
+  const [networkAddress, prefixRaw] = cidr.split('/');
+  const ip = parseIpv4Address(address);
+  const network = parseIpv4Address(networkAddress);
+  const prefix = prefixRaw === undefined ? 32 : Number(prefixRaw);
+
+  if (ip === null || network === null || !Number.isInteger(prefix) || prefix < 0 || prefix > 32) {
+    return false;
+  }
+
+  const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+  return (ip & mask) === (network & mask);
+}
+
+function matchesTrustedProxyCidr(remoteAddress, cidr) {
+  const normalizedCidr = normalizeRemoteAddress(cidr);
+  if (!normalizedCidr) {
+    return false;
+  }
+
+  if (normalizedCidr.includes(':')) {
+    return normalizedCidr === remoteAddress || normalizedCidr === `${remoteAddress}/128`;
+  }
+
+  return ipv4MatchesCidr(remoteAddress, normalizedCidr);
+}
+
 function isTrustedProxyPeer(req) {
   const remoteAddress = normalizeRemoteAddress(req.socket?.remoteAddress);
-  const trustedPeers = (process.env.TRUSTED_PROXY_CIDRS || '')
+  const trustedPeers = (process.env.TRUSTED_PROXY_CIDRS || DEFAULT_TRUSTED_PROXY_CIDRS)
     .split(',')
     .map((value) => normalizeRemoteAddress(value.trim()))
     .filter(Boolean);
 
-  if (trustedPeers.length === 0) {
-    return LOOPBACK_ADDRESSES.has(req.socket?.remoteAddress) || LOOPBACK_ADDRESSES.has(remoteAddress);
+  return trustedPeers.some((cidr) => matchesTrustedProxyCidr(remoteAddress, cidr));
+}
+
+function createTrustedProxyUser(username) {
+  const lockedPassword = `${LOCKED_PROXY_PASSWORD_PREFIX}${crypto.randomBytes(32).toString('hex')}`;
+  const passwordHash = bcrypt.hashSync(lockedPassword, 12);
+  return userDb.createUser(username, passwordHash);
+}
+
+function resolveTrustedProxyUser(username) {
+  const existingUser = userDb.getFirstUser();
+  if (existingUser) {
+    return existingUser.username === username ? existingUser : null;
   }
 
-  return trustedPeers.includes(remoteAddress) || trustedPeers.includes(req.socket?.remoteAddress);
+  return createTrustedProxyUser(username);
 }
 
 function authenticateTrustedProxy(req) {
@@ -36,12 +101,7 @@ function authenticateTrustedProxy(req) {
     return null;
   }
 
-  const user = userDb.getFirstUser();
-  if (!user || user.username !== username) {
-    return null;
-  }
-
-  return user;
+  return resolveTrustedProxyUser(username);
 }
 
 function generateToken(user) {

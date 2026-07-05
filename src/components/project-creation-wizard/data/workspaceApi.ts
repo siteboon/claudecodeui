@@ -146,19 +146,30 @@ export const cloneWorkspaceWithProgress = (
 ) =>
   new Promise<Record<string, unknown> | undefined>((resolve, reject) => {
     const query = buildCloneProgressQuery(params);
-    const eventSource = new EventSource(`/api/projects/clone-progress?${query}`);
-    let settled = false;
+  const eventSource = new EventSource(`/api/projects/clone-progress?${query}`);
+  let settled = false;
 
     const settle = (callback: () => void) => {
       if (settled) {
         return;
       }
       settled = true;
-      eventSource.close();
-      callback();
-    };
+    eventSource.close();
+    callback();
+  };
 
-    eventSource.onmessage = (event) => {
+  eventSource.addEventListener('auth_refresh', (event) => {
+    try {
+      const payload = JSON.parse(event.data) as { token?: string };
+      if (typeof payload.token === 'string' && payload.token) {
+        localStorage.setItem('auth-token', payload.token);
+      }
+    } catch {
+      // Ignore malformed refresh events.
+    }
+  });
+
+  eventSource.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data) as CloneProgressEvent;
 

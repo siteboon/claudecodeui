@@ -27,7 +27,7 @@ function buildPluginEnv(name) {
     HOME: process.env.HOME,
     NODE_ENV: process.env.NODE_ENV || 'production',
     PLUGIN_NAME: name,
-    ...buildPluginIdentityEnv(),
+    ...buildPluginIdentityEnv(name),
   };
 
   if (process.platform === 'win32') {

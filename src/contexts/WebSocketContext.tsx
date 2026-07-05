@@ -6,8 +6,9 @@ import { IS_PLATFORM } from '../constants/config';
 /**
  * One frame received from the chat websocket. The server guarantees every
  * frame carries a `kind` (provider message kinds plus gateway kinds such as
- * `chat_subscribed`, `session_upserted`, `loading_progress`,
- * `protocol_error`). The synthetic `websocket_reconnected` kind is injected
+ * `chat_subscribed`, `session_upserted`, `session_deleted`,
+ * `loading_progress`, `auth_refresh`, `protocol_error`). The synthetic
+ * `websocket_reconnected` kind is injected
  * client-side when the socket re-opens after a drop.
  */
 export type ServerEvent = {
@@ -52,9 +53,10 @@ export const useWebSocket = () => {
   return context;
 };
 
-const buildWebSocketUrl = (token: string | null) => {
+const buildWebSocketUrl = (token: string | null, hasAuthenticatedUser: boolean) => {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   if (IS_PLATFORM) return `${protocol}//${window.location.host}/ws`; // Platform mode: Use same domain as the page (goes through proxy)
+  if (!token && hasAuthenticatedUser) return `${protocol}//${window.location.host}/ws`;
   if (!token) return null;
   return `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}`; // OSS mode: Use same host:port that served the page
 };
@@ -72,7 +74,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   const [latestMessage, setLatestMessage] = useState<ServerEvent | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const { token, updateToken } = useAuth();
+  const { token, updateToken, user } = useAuth();
 
   const dispatch = useCallback((event: ServerEvent) => {
     for (const listener of listenersRef.current) {
@@ -107,7 +109,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     if (unmountedRef.current) return; // Prevent connection if unmounted
     try {
       // Construct WebSocket URL
-      const wsUrl = buildWebSocketUrl(token);
+      const wsUrl = buildWebSocketUrl(token, Boolean(user));
 
       if (!wsUrl) return console.warn('No authentication token found for WebSocket connection');
 
@@ -153,7 +155,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     } catch (error) {
       console.error('Error creating WebSocket connection:', error);
     }
-  }, [token, dispatch, updateToken]); // everytime token changes, we reconnect
+  }, [token, user, dispatch, updateToken]); // reconnect when auth state changes
 
   const sendMessage = useCallback((message: unknown) => {
     const socket = wsRef.current;
