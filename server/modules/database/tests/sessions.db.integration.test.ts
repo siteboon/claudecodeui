@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -80,5 +80,44 @@ test('repository reads normalize SQLite UTC timestamps to ISO strings', async ()
     assert.ok(row?.updated_at.endsWith('Z'));
     assert.match(row?.created_at ?? '', /^\d{4}-\d{2}-\d{2}T/);
     assert.match(row?.updated_at ?? '', /^\d{4}-\d{2}-\d{2}T/);
+  });
+});
+
+test('deleteSessionsWithMissingTranscriptPaths removes ghost rows only for missing transcript files', async () => {
+  await withIsolatedDatabase(async () => {
+    const transcriptDirectory = await mkdtemp(path.join(tmpdir(), 'session-transcripts-'));
+    const existingTranscript = path.join(transcriptDirectory, 'existing.jsonl');
+    const missingTranscript = path.join(transcriptDirectory, 'missing.jsonl');
+
+    await writeFile(existingTranscript, '{}\n', 'utf8');
+
+    sessionsDb.createSession(
+      'session-existing',
+      'claude',
+      '/workspace/demo-project',
+      'Existing Transcript',
+      undefined,
+      undefined,
+      existingTranscript,
+    );
+    sessionsDb.createSession(
+      'session-missing',
+      'claude',
+      '/workspace/demo-project',
+      'Missing Transcript',
+      undefined,
+      undefined,
+      missingTranscript,
+    );
+    sessionsDb.createAppSession('session-pending', 'claude', '/workspace/demo-project');
+
+    const deleted = sessionsDb.deleteSessionsWithMissingTranscriptPaths('claude');
+
+    assert.deepEqual(deleted, ['session-missing']);
+    assert.ok(sessionsDb.getSessionById('session-existing'));
+    assert.equal(sessionsDb.getSessionById('session-missing'), null);
+    assert.ok(sessionsDb.getSessionById('session-pending'));
+
+    await rm(transcriptDirectory, { recursive: true, force: true });
   });
 });

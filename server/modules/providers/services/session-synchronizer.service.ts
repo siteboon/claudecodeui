@@ -1,4 +1,4 @@
-import { scanStateDb } from '@/modules/database/index.js';
+import { scanStateDb, sessionsDb } from '@/modules/database/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import type { LLMProvider } from '@/shared/types.js';
 
@@ -27,10 +27,14 @@ export const sessionSynchronizerService = {
     const failures: string[] = [];
 
     const results = await Promise.allSettled(
-      providerRegistry.listProviders().map(async (provider) => ({
-        provider: provider.id,
-        processed: await provider.sessionSynchronizer.synchronize(lastScanAt ?? undefined),
-      }))
+      providerRegistry.listProviders().map(async (provider) => {
+        const processed = await provider.sessionSynchronizer.synchronize(lastScanAt ?? undefined);
+        sessionsDb.deleteSessionsWithMissingTranscriptPaths(provider.id);
+        return {
+          provider: provider.id,
+          processed,
+        };
+      })
     );
 
     for (const result of results) {

@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+
 import { getConnection } from '@/modules/database/connection.js';
 import { projectsDb } from '@/modules/database/repositories/projects.db.js';
 import { normalizeProjectPath } from '@/shared/utils.js';
@@ -414,6 +416,36 @@ export const sessionsDb = {
     const db = getConnection();
     const normalizedProjectPath = normalizeProjectPath(projectPath);
     db.prepare(`DELETE FROM sessions WHERE project_path = ?`).run(normalizedProjectPath);
+  },
+
+  deleteSessionsWithMissingTranscriptPaths(provider: string): string[] {
+    const db = getConnection();
+    const candidates = db
+      .prepare(
+        `SELECT session_id, jsonl_path
+         FROM sessions
+         WHERE provider = ?
+           AND jsonl_path IS NOT NULL`
+      )
+      .all(provider) as Array<{ session_id: string; jsonl_path: string | null }>;
+
+    const missingSessionIds = candidates
+      .filter((session) => session.jsonl_path && !fs.existsSync(session.jsonl_path))
+      .map((session) => session.session_id);
+
+    if (missingSessionIds.length === 0) {
+      return [];
+    }
+
+    const deleteMissing = db.transaction((sessionIds: string[]) => {
+      const statement = db.prepare('DELETE FROM sessions WHERE session_id = ?');
+      for (const sessionId of sessionIds) {
+        statement.run(sessionId);
+      }
+    });
+
+    deleteMissing(missingSessionIds);
+    return missingSessionIds;
   },
 
   getSessionName(sessionId: string, provider: string): string | null {
