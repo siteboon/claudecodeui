@@ -8,7 +8,7 @@ import { useVersionCheck } from '../../../../hooks/useVersionCheck';
 import { api } from '../../../../utils/api';
 import PremiumFeatureCard from '../PremiumFeatureCard';
 
-const GITHUB_REPO_URL = 'https://github.com/siteboon/claudecodeui';
+const GITHUB_REPO_URL = 'https://github.com/stefanriegel/claudecodeui';
 const DISCORD_URL = 'https://discord.gg/buxwujPNRE';
 const DOCS_URL = 'https://cloudcli.ai/docs/plugin-overview';
 const CLOUDCLI_URL = 'https://cloudcli.ai';
@@ -31,7 +31,7 @@ function DiscordIcon({ className }: { className?: string }) {
 
 export default function AboutTab() {
   const { t } = useTranslation('settings');
-  const { updateAvailable, latestVersion, currentVersion, releaseInfo } = useVersionCheck('siteboon', 'claudecodeui');
+  const { updateAvailable, latestVersion, currentVersion, releaseInfo } = useVersionCheck('stefanriegel', 'claudecodeui');
   const releasesUrl = releaseInfo?.htmlUrl || `${GITHUB_REPO_URL}/releases`;
   const [restarting, setRestarting] = useState(false);
   // Track the reconnect-polling timer so it is cancelled if the component unmounts

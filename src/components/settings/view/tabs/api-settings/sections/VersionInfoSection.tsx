@@ -5,7 +5,7 @@ import { CLOUDCLI_WORDMARK_FONT_FAMILY } from '../../../../../../constants/brand
 import { IS_PLATFORM } from '../../../../../../constants/config';
 import type { ReleaseInfo } from '../../../../../../types/sharedTypes';
 
-const GITHUB_REPO_URL = 'https://github.com/siteboon/claudecodeui';
+const GITHUB_REPO_URL = 'https://github.com/stefanriegel/claudecodeui';
 const DISCORD_URL = 'https://discord.gg/buxwujPNRE';
 const DOCS_URL = 'https://cloudcli.ai/docs/plugin-overview';
 const CLOUDCLI_URL = 'https://cloudcli.ai';

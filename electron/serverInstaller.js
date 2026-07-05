@@ -14,7 +14,7 @@ import path from 'node:path';
  */
 
 const DEFAULT_INSTALL_ROOT = path.join(os.homedir(), '.cloudcli', 'server');
-const DEFAULT_BUNDLE_BASE_URL = 'https://github.com/siteboon/claudecodeui/releases/download';
+const DEFAULT_BUNDLE_BASE_URL = 'https://github.com/stefanriegel/claudecodeui/releases/download';
 const MAX_REDIRECTS = 5;
 const LOCAL_DOWNLOAD_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 

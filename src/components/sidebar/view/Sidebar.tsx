@@ -47,7 +47,7 @@ function Sidebar({
   const { logout } = useAuth();
   const { isPWA } = useDeviceSettings({ trackMobile: false });
   const { updateAvailable, restartRequired, latestVersion, currentVersion, releaseInfo, installMode } = useVersionCheck(
-    'siteboon',
+    'stefanriegel',
     'claudecodeui',
   );
   const { preferences, setPreference } = useUiPreferences();
