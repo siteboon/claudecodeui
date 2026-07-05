@@ -1,6 +1,8 @@
 export const DEFAULT_SIDEBAR_WIDTH = 288;
 export const MIN_SIDEBAR_WIDTH = 240;
 export const MAX_SIDEBAR_WIDTH = 520;
+export const COLLAPSED_SIDEBAR_WIDTH = 48;
+export const DESKTOP_MAIN_MIN_WIDTH = 360;
 export const SIDEBAR_WIDTH_STORAGE_KEY = 'cloudcli.sidebarWidth';
 
 export function clampSidebarWidth(width: number): number {
@@ -17,4 +19,8 @@ export function readStoredSidebarWidth(): number {
   }
 
   return clampSidebarWidth(Number(window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY)));
+}
+
+export function getDesktopSidebarWidth(width: number, sidebarVisible: boolean): number {
+  return sidebarVisible ? clampSidebarWidth(width) : COLLAPSED_SIDEBAR_WIDTH;
 }

@@ -10,8 +10,15 @@ import { PaletteOpsProvider, usePaletteOpsRegister } from '../../contexts/Palett
 import { useDeviceSettings } from '../../hooks/useDeviceSettings';
 import { useSessionProtection } from '../../hooks/useSessionProtection';
 import { useProjectsState } from '../../hooks/useProjectsState';
+import { useUiPreferences } from '../../hooks/useUiPreferences';
 import { api } from '../../utils/api';
-import { SIDEBAR_WIDTH_STORAGE_KEY, clampSidebarWidth, readStoredSidebarWidth } from './sidebarWidth';
+import {
+  DESKTOP_MAIN_MIN_WIDTH,
+  SIDEBAR_WIDTH_STORAGE_KEY,
+  clampSidebarWidth,
+  getDesktopSidebarWidth,
+  readStoredSidebarWidth,
+} from './sidebarWidth';
 
 type RunningSessionApiItem = {
   sessionId?: unknown;
@@ -52,6 +59,7 @@ function AppContentInner() {
   const { sessionId } = useParams<{ sessionId?: string }>();
   const { t } = useTranslation('common');
   const { isMobile } = useDeviceSettings({ trackPWA: false });
+  const { preferences } = useUiPreferences();
   const { ws, sendMessage, subscribe } = useWebSocket();
   const [sidebarWidth, setSidebarWidth] = useState(readStoredSidebarWidth);
 
@@ -212,12 +220,21 @@ function AppContentInner() {
     return () => vv.removeEventListener('resize', update);
   }, []);
 
+  const desktopSidebarWidth = getDesktopSidebarWidth(sidebarWidth, preferences.sidebarVisible);
+  const desktopMainStyle = !isMobile ? { minWidth: DESKTOP_MAIN_MIN_WIDTH } : undefined;
+  const desktopSidebarStyle = !isMobile
+    ? {
+        width: desktopSidebarWidth,
+        maxWidth: `calc(100vw - ${DESKTOP_MAIN_MIN_WIDTH}px)`,
+      }
+    : undefined;
+
   return (
     <div className="fixed inset-0 flex bg-background" style={{ bottom: 'var(--keyboard-height, 0px)' }}>
       {!isMobile ? (
         <div
           className="relative h-full flex-shrink-0 border-r border-border/50"
-          style={{ width: sidebarWidth }}
+          style={desktopSidebarStyle}
         >
           <Sidebar {...sidebarSharedProps} />
           <div
@@ -257,7 +274,7 @@ function AppContentInner() {
         </div>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col" style={!isMobile ? { minWidth: 360 } : undefined}>
+      <div className="flex min-w-0 flex-1 flex-col" style={desktopMainStyle}>
         <MainContent
           selectedProject={selectedProject}
           selectedSession={selectedSession}
