@@ -300,10 +300,31 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       return [];
     }
 
+    // SDK 0.3.193+ wraps Anthropic SSE events inside type: 'stream_event' with
+    // an inner event object. Unwrap it so the handlers below work for both
+    // old (bare) and new (wrapped) transcript formats.
+    const innerEvent = raw.type === 'stream_event'
+      ? readObjectRecord(raw.event)
+      : raw;
+
+    if (!innerEvent) {
+      return [];
+    }
+
+    if (innerEvent.type === 'content_block_delta' && innerEvent.delta?.text) {
+      return [createNormalizedMessage({ kind: 'stream_delta', content: innerEvent.delta.text, sessionId, provider: PROVIDER })];
+    }
+    if (innerEvent.type === 'content_block_delta' && innerEvent.delta?.thinking) {
+      return [createNormalizedMessage({ kind: 'stream_delta', content: innerEvent.delta.thinking, sessionId, provider: PROVIDER })];
+    }
+    if (innerEvent.type === 'message_stop') {
+      return [createNormalizedMessage({ kind: 'stream_end', sessionId, provider: PROVIDER })];
+    }
+    // Also handle bare content_block_delta / content_block_stop from older SDK
     if (raw.type === 'content_block_delta' && raw.delta?.text) {
       return [createNormalizedMessage({ kind: 'stream_delta', content: raw.delta.text, sessionId, provider: PROVIDER })];
     }
-    if (raw.type === 'content_block_stop') {
+    if (raw.type === 'message_stop') {
       return [createNormalizedMessage({ kind: 'stream_end', sessionId, provider: PROVIDER })];
     }
 
