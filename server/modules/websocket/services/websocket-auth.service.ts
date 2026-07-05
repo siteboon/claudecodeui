@@ -4,10 +4,11 @@ import type { AuthenticatedWebSocketRequest } from '@/shared/types.js';
 
 type WebSocketAuthDependencies = {
   isPlatform: boolean;
-  authenticateWebSocket: (token: string | null) => {
+  authenticateWebSocket: (token: string | null, req?: AuthenticatedWebSocketRequest) => {
     id?: string | number;
     userId?: string | number;
     username?: string;
+    refreshedToken?: string | null;
     [key: string]: unknown;
   } | null;
 };
@@ -30,7 +31,7 @@ export function verifyWebSocketClient(
 
   // Platform mode: use the first DB user and skip token checks.
   if (dependencies.isPlatform) {
-    const user = dependencies.authenticateWebSocket(null);
+    const user = dependencies.authenticateWebSocket(null, request);
     if (!user) {
       console.log('[WARN] Platform mode: No user found in database');
       return false;
@@ -47,13 +48,15 @@ export function verifyWebSocketClient(
     request.headers.authorization?.split(' ')[1] ??
     null;
 
-  const user = dependencies.authenticateWebSocket(token);
+  const user = dependencies.authenticateWebSocket(token, request);
   if (!user) {
     console.log('[WARN] WebSocket authentication failed');
     return false;
   }
 
-  request.user = user;
+  const { refreshedToken, ...requestUser } = user;
+  request.refreshedToken = typeof refreshedToken === 'string' ? refreshedToken : null;
+  request.user = requestUser;
   console.log('[OK] WebSocket authenticated for user:', user.username);
   return true;
 }

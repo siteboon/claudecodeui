@@ -1,5 +1,8 @@
 import { spawn } from 'child_process';
 import path from 'path';
+
+import { buildPluginIdentityEnv } from '../modules/plugins/index.js';
+
 import { scanPlugins, getPluginsConfig, getPluginDir } from './plugin-loader.js';
 
 // Map<pluginName, { process, port }>
@@ -24,6 +27,7 @@ function buildPluginEnv(name) {
     HOME: process.env.HOME,
     NODE_ENV: process.env.NODE_ENV || 'production',
     PLUGIN_NAME: name,
+    ...buildPluginIdentityEnv(),
   };
 
   if (process.platform === 'win32') {

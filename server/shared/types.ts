@@ -55,6 +55,7 @@ export type AuthenticatedWebSocketUser = {
  */
 export type AuthenticatedWebSocketRequest = IncomingMessage & {
   user?: AuthenticatedWebSocketUser;
+  refreshedToken?: string | null;
 };
 
 // ---------------------------

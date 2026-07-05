@@ -1,27 +1,102 @@
 import jwt from 'jsonwebtoken';
-import { userDb, appConfigDb } from '../modules/database/index.js';
+
 import { IS_PLATFORM } from '../constants/config.js';
+import { appConfigDb, userDb } from '../modules/database/index.js';
 
-// Use env var if set, otherwise auto-generate a unique secret per installation
 const JWT_SECRET = process.env.JWT_SECRET || appConfigDb.getOrCreateJwtSecret();
+const TOKEN_EXPIRES_IN = '7d';
+const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 
-// Optional API key middleware
+function normalizeRemoteAddress(address) {
+  return String(address || '').replace(/^::ffff:/, '');
+}
+
+function isTrustedProxyPeer(req) {
+  const remoteAddress = normalizeRemoteAddress(req.socket?.remoteAddress);
+  const trustedPeers = (process.env.TRUSTED_PROXY_CIDRS || '')
+    .split(',')
+    .map((value) => normalizeRemoteAddress(value.trim()))
+    .filter(Boolean);
+
+  if (trustedPeers.length === 0) {
+    return LOOPBACK_ADDRESSES.has(req.socket?.remoteAddress) || LOOPBACK_ADDRESSES.has(remoteAddress);
+  }
+
+  return trustedPeers.includes(remoteAddress) || trustedPeers.includes(req.socket?.remoteAddress);
+}
+
+function authenticateTrustedProxy(req) {
+  if (process.env.TRUSTED_PROXY_AUTH !== 'true' || !isTrustedProxyPeer(req)) {
+    return null;
+  }
+
+  const headerName = (process.env.TRUSTED_PROXY_USER_HEADER || 'remote-user').toLowerCase();
+  const username = String(req.headers?.[headerName] || '').trim();
+  if (!username) {
+    return null;
+  }
+
+  const user = userDb.getFirstUser();
+  if (!user || user.username !== username) {
+    return null;
+  }
+
+  return user;
+}
+
+function generateToken(user) {
+  return jwt.sign(
+    {
+      userId: user.id,
+      username: user.username,
+    },
+    JWT_SECRET,
+    { expiresIn: TOKEN_EXPIRES_IN },
+  );
+}
+
+function maybeRefreshToken(decoded, user) {
+  if (!decoded?.exp || !decoded?.iat) {
+    return null;
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const halfLife = Math.floor((decoded.exp - decoded.iat) / 2);
+  return now > decoded.iat + halfLife ? generateToken(user) : null;
+}
+
+function verifyJwtToken(token) {
+  if (!token) {
+    return null;
+  }
+
+  const decoded = jwt.verify(token, JWT_SECRET);
+  const user = userDb.getUserById(decoded.userId);
+  if (!user) {
+    return null;
+  }
+
+  return {
+    user,
+    decoded,
+    refreshedToken: maybeRefreshToken(decoded, user),
+  };
+}
+
 const validateApiKey = (req, res, next) => {
-  // Skip API key validation if not configured
   if (!process.env.API_KEY) {
     return next();
   }
-  
+
   const apiKey = req.headers['x-api-key'];
   if (apiKey !== process.env.API_KEY) {
     return res.status(401).json({ error: 'Invalid API key' });
   }
-  next();
+
+  return next();
 };
 
-// JWT authentication middleware
 const authenticateToken = async (req, res, next) => {
-  // Platform mode:  use single database user
   if (IS_PLATFORM) {
     try {
       const user = userDb.getFirstUser();
@@ -36,87 +111,67 @@ const authenticateToken = async (req, res, next) => {
     }
   }
 
-  // Normal OSS JWT validation
-  const authHeader = req.headers['authorization'];
-  let token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
-
-  // Also check query param for SSE endpoints (EventSource can't set headers)
-  if (!token && req.query.token) {
-    token = req.query.token;
+  const proxyUser = authenticateTrustedProxy(req);
+  if (proxyUser) {
+    req.user = proxyUser;
+    return next();
   }
 
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.split(' ')[1] || req.query.token;
   if (!token) {
     return res.status(401).json({ error: 'Access denied. No token provided.' });
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-
-    // Verify user still exists and is active
-    const user = userDb.getUserById(decoded.userId);
-    if (!user) {
+    const result = verifyJwtToken(token);
+    if (!result) {
       return res.status(401).json({ error: 'Invalid token. User not found.' });
     }
 
-    // Auto-refresh: if token is past halfway through its lifetime, issue a new one
-    if (decoded.exp && decoded.iat) {
-      const now = Math.floor(Date.now() / 1000);
-      const halfLife = (decoded.exp - decoded.iat) / 2;
-      if (now > decoded.iat + halfLife) {
-        const newToken = generateToken(user);
-        res.setHeader('X-Refreshed-Token', newToken);
-      }
+    req.user = result.user;
+    req.refreshedToken = result.refreshedToken;
+    if (result.refreshedToken) {
+      res.setHeader('X-Refreshed-Token', result.refreshedToken);
     }
 
-    req.user = user;
-    next();
+    return next();
   } catch (error) {
     console.error('Token verification error:', error);
     return res.status(403).json({ error: 'Invalid token' });
   }
 };
 
-// Generate JWT token
-const generateToken = (user) => {
-  return jwt.sign(
-    {
-      userId: user.id,
-      username: user.username
-    },
-    JWT_SECRET,
-    { expiresIn: '7d' }
-  );
-};
-
-// WebSocket authentication function
-const authenticateWebSocket = (token) => {
-  // Platform mode: bypass token validation, return first user
+const authenticateWebSocket = (token, req = null) => {
   if (IS_PLATFORM) {
     try {
       const user = userDb.getFirstUser();
-      if (user) {
-        return { id: user.id, userId: user.id, username: user.username };
-      }
-      return null;
+      return user ? { id: user.id, userId: user.id, username: user.username } : null;
     } catch (error) {
       console.error('Platform mode WebSocket error:', error);
       return null;
     }
   }
 
-  // Normal OSS JWT validation
-  if (!token) {
-    return null;
+  if (req) {
+    const proxyUser = authenticateTrustedProxy(req);
+    if (proxyUser) {
+      return { id: proxyUser.id, userId: proxyUser.id, username: proxyUser.username };
+    }
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    // Verify user actually exists in database (matches REST authenticateToken behavior)
-    const user = userDb.getUserById(decoded.userId);
-    if (!user) {
+    const result = verifyJwtToken(token);
+    if (!result) {
       return null;
     }
-    return { userId: user.id, username: user.username };
+
+    return {
+      id: result.user.id,
+      userId: result.user.id,
+      username: result.user.username,
+      refreshedToken: result.refreshedToken,
+    };
   } catch (error) {
     console.error('WebSocket token verification error:', error);
     return null;
@@ -124,9 +179,11 @@ const authenticateWebSocket = (token) => {
 };
 
 export {
-  validateApiKey,
+  JWT_SECRET,
   authenticateToken,
-  generateToken,
+  authenticateTrustedProxy,
   authenticateWebSocket,
-  JWT_SECRET
+  generateToken,
+  validateApiKey,
+  verifyJwtToken,
 };

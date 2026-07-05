@@ -1,8 +1,10 @@
-import express from 'express';
 import path from 'path';
 import http from 'http';
-import mime from 'mime-types';
 import fs from 'fs';
+
+import mime from 'mime-types';
+import express from 'express';
+
 import {
   scanPlugins,
   getPluginsConfig,
@@ -20,6 +22,7 @@ import {
   getPluginPort,
   isPluginRunning,
 } from '../utils/plugin-process-manager.js';
+import { buildPluginIdentityHeaders } from '../modules/plugins/index.js';
 
 const router = express.Router();
 
@@ -238,6 +241,7 @@ router.all('/:name/rpc/*', async (req, res) => {
 
   const headers = {
     'content-type': req.headers['content-type'] || 'application/json',
+    ...buildPluginIdentityHeaders(pluginName, req.user),
   };
 
   // Add per-plugin user-configured secrets as X-Plugin-Secret-* headers

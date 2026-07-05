@@ -1,8 +1,9 @@
 import express from 'express';
 import bcrypt from 'bcrypt';
+
 import { userDb } from '../modules/database/index.js';
 import { getConnection } from '../modules/database/connection.js';
-import { generateToken, authenticateToken } from '../middleware/auth.js';
+import { authenticateToken, authenticateTrustedProxy, generateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 const db = getConnection();
@@ -11,9 +12,11 @@ const db = getConnection();
 router.get('/status', async (req, res) => {
   try {
     const hasUsers = await userDb.hasUsers();
+    const proxyUser = authenticateTrustedProxy(req);
     res.json({ 
       needsSetup: !hasUsers,
-      isAuthenticated: false // Will be overridden by frontend if token exists
+      isAuthenticated: Boolean(proxyUser),
+      user: proxyUser ? { id: proxyUser.id, username: proxyUser.username } : null
     });
   } catch (error) {
     console.error('Auth status error:', error);
@@ -125,6 +128,11 @@ router.get('/user', authenticateToken, (req, res) => {
   res.json({
     user: req.user
   });
+});
+
+router.post('/refresh', authenticateToken, (req, res) => {
+  const token = req.refreshedToken || generateToken(req.user);
+  res.json({ token });
 });
 
 // Logout (client-side token removal, but this endpoint can be used for logging)

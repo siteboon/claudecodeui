@@ -85,6 +85,14 @@ export function createWebSocketServer(
     attachWebSocketHeartbeat(ws);
 
     const incomingRequest = request as AuthenticatedWebSocketRequest;
+    if (incomingRequest.refreshedToken && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        kind: 'auth_refresh',
+        token: incomingRequest.refreshedToken,
+        timestamp: new Date().toISOString(),
+      }));
+    }
+
     const url = incomingRequest.url ?? '/';
     const pathname = new URL(url, 'http://localhost').pathname;
 
@@ -104,7 +112,7 @@ export function createWebSocketServer(
     }
 
     if (pathname.startsWith('/plugin-ws/')) {
-      handlePluginWsProxy(ws, pathname, dependencies.getPluginPort);
+      handlePluginWsProxy(ws, pathname, dependencies.getPluginPort, incomingRequest.user);
       return;
     }
 
