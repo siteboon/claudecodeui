@@ -89,6 +89,23 @@ export const userDb = {
       .get(userId) as UserPublicRow | undefined;
   },
 
+  /**
+   * Returns the full active user row by ID.
+   * Auth flows use this for password verification only.
+   */
+  getUserWithPasswordById(userId: number): UserRow | undefined {
+    const db = getConnection();
+    return db
+      .prepare('SELECT * FROM users WHERE id = ? AND is_active = 1')
+      .get(userId) as UserRow | undefined;
+  },
+
+  /** Replaces the password hash for an active user. */
+  updatePasswordHash(userId: number, passwordHash: string): void {
+    const db = getConnection();
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ? AND is_active = 1').run(passwordHash, userId);
+  },
+
   /** Returns the first active user. Used for single-user mode lookups. */
   getFirstUser(): UserPublicRow | undefined {
     const db = getConnection();

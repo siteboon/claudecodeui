@@ -112,6 +112,7 @@
     "browser": "Browser",
     "notifications": "Notifications",
     "plugins": "Plugins",
+    "password": "Password",
     "about": "About"
   },
   "notifications": {

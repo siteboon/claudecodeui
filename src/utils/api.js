@@ -48,6 +48,10 @@ export const api = {
     user: () => authenticatedFetch('/api/auth/user'),
     refresh: () => authenticatedFetch('/api/auth/refresh', { method: 'POST' }),
     logout: () => authenticatedFetch('/api/auth/logout', { method: 'POST' }),
+    changePassword: (currentPassword, newPassword) => authenticatedFetch('/api/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
   },
 
   // Restarts the running server process (picks up an already-installed update or

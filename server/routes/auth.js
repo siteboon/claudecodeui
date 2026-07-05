@@ -135,6 +135,37 @@ router.post('/refresh', authenticateToken, (req, res) => {
   res.json({ token });
 });
 
+router.post('/change-password', authenticateToken, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body || {};
+
+    if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
+      return res.status(400).json({ error: 'Current password and new password are required' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    }
+
+    const user = userDb.getUserWithPasswordById(Number(req.user.id));
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid token. User not found.' });
+    }
+
+    const isValidPassword = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!isValidPassword) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    userDb.updatePasswordHash(user.id, passwordHash);
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Change password error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Logout (client-side token removal, but this endpoint can be used for logging)
 router.post('/logout', authenticateToken, (req, res) => {
   // In a simple JWT system, logout is mainly client-side
