@@ -5,8 +5,10 @@
 try {
   const u = new URL(window.location.href);
   const t = u.searchParams.get('token');
-  if (t && !localStorage.getItem('auth-token')) {
-    localStorage.setItem('auth-token', t);
+  if (t) {
+    if (!localStorage.getItem('auth-token')) {
+      localStorage.setItem('auth-token', t);
+    }
     u.searchParams.delete('token');
     window.history.replaceState({}, '', u.pathname + u.search + u.hash);
   }
