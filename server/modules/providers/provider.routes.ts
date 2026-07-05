@@ -376,6 +376,25 @@ const parseChangeActiveModelPayload = (payload: unknown): ProviderChangeActiveMo
   };
 };
 
+const parseBulkSessionIdsPayload = (payload: unknown): string[] => {
+  if (!payload || typeof payload !== 'object') {
+    throw new AppError('Request body must be an object.', {
+      code: 'INVALID_REQUEST_BODY',
+      statusCode: 400,
+    });
+  }
+
+  const sessionIds = (payload as Record<string, unknown>).sessionIds;
+  if (!Array.isArray(sessionIds)) {
+    throw new AppError('sessionIds must be an array.', {
+      code: 'SESSION_IDS_REQUIRED',
+      statusCode: 400,
+    });
+  }
+
+  return sessionIds.filter((sessionId): sessionId is string => typeof sessionId === 'string');
+};
+
 router.get(
   '/:provider/auth/status',
   asyncHandler(async (req: Request, res: Response) => {
@@ -578,6 +597,20 @@ router.delete(
   }),
 );
 
+router.post(
+  '/sessions/bulk-delete',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionIds = parseBulkSessionIdsPayload(req.body);
+    const force = parseOptionalBooleanQuery(req.query.force, 'force') ?? false;
+    const deletedFromDisk = parseOptionalBooleanQuery(req.query.deletedFromDisk, 'deletedFromDisk') ?? force;
+    const result = await sessionsService.deleteOrArchiveSessionsByIds(sessionIds, {
+      force,
+      deletedFromDisk,
+    });
+    res.json(createApiSuccessResponse(result));
+  }),
+);
+
 router.delete(
   '/sessions/:sessionId',
   asyncHandler(async (req: Request, res: Response) => {
@@ -598,6 +631,15 @@ router.post(
     const sessionId = parseSessionId(req.params.sessionId);
     const result = sessionsService.restoreSessionById(sessionId);
     res.json(createApiSuccessResponse(result));
+  }),
+);
+
+router.post(
+  '/sessions/:sessionId/branch',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const result = await sessionsService.branchSessionById(sessionId);
+    res.status(201).json(createApiSuccessResponse(result));
   }),
 );
 

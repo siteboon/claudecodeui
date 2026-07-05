@@ -677,7 +677,7 @@ export function useChatComposerState({
         }
       }
 
-      const resolvedProjectPath = selectedProject.fullPath || selectedProject.path || '';
+      const resolvedProjectPath = selectedSession?.projectPath || selectedProject.fullPath || selectedProject.path || '';
       const sessionSummary = getNotificationSessionSummary(selectedSession, currentInput);
 
       // The conversation always has a stable backend-allocated session id

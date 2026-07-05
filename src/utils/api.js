@@ -115,6 +115,15 @@ export const api = {
       method: 'DELETE',
     });
   },
+  deleteSessions: (sessionIds, hardDelete = false) => {
+    const params = new URLSearchParams();
+    if (hardDelete) params.set('force', 'true');
+    const qs = params.toString();
+    return authenticatedFetch(`/api/providers/sessions/bulk-delete${qs ? `?${qs}` : ''}`, {
+      method: 'POST',
+      body: JSON.stringify({ sessionIds }),
+    });
+  },
   runningSessions: () =>
     authenticatedFetch('/api/providers/sessions/running'),
   restoreSession: (sessionId) =>

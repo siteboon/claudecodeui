@@ -27,7 +27,15 @@ function isMeaningfulClaudeTitle(value: unknown): value is string {
   }
 
   const trimmed = value.trim();
-  return Boolean(trimmed && trimmed !== CLAUDE_UNTITLED_SESSION_NAME);
+  if (!trimmed || trimmed === CLAUDE_UNTITLED_SESSION_NAME) {
+    return false;
+  }
+
+  if (trimmed.length > 120) {
+    return false;
+  }
+
+  return !/^(?:[-*]\s*)?(?:\*\*)?user['’]?s message(?:\*\*)?\s*:/i.test(trimmed);
 }
 
 /**

@@ -76,6 +76,25 @@ test('Claude synchronizer does not use last-prompt text as session title', async
   });
 });
 
+test('Claude synchronizer ignores prompt echo ai titles', async () => {
+  await withIsolatedClaudeSync(async (tempDirectory) => {
+    const transcriptPath = await writeClaudeTranscript(tempDirectory, 'claude-session-3', [
+      { type: 'summary', sessionId: 'claude-session-3', cwd: '/workspace/demo' },
+      {
+        type: 'ai-title',
+        sessionId: 'claude-session-3',
+        cwd: '/workspace/demo',
+        aiTitle: "- **User's message:** Please explain our private billing migration plan.",
+      },
+    ]);
+
+    const synchronizer = new ClaudeSessionSynchronizer();
+    await synchronizer.synchronizeFile(transcriptPath);
+
+    assert.equal(sessionsDb.getSessionById('claude-session-3')?.custom_name, 'Untitled Claude Session');
+  });
+});
+
 test('Claude synchronizer recovers latest meaningful explicit title', async () => {
   await withIsolatedClaudeSync(async (tempDirectory) => {
     const transcriptPath = await writeClaudeTranscript(tempDirectory, 'claude-session-2', [

@@ -19,6 +19,12 @@ type CreateAppSessionResult = {
   projectPath: string;
 };
 
+type BranchSessionResult = CreateAppSessionResult & {
+  sourceSessionId: string;
+  title: string;
+  copiedHistory: boolean;
+};
+
 type ArchivedSessionListItem = {
   sessionId: string;
   provider: LLMProvider;
@@ -46,6 +52,49 @@ async function removeFileIfExists(filePath: string): Promise<boolean> {
     }
     throw error;
   }
+}
+
+function replaceSessionIdsInTranscript(content: string, sourceProviderSessionId: string, targetProviderSessionId: string): string {
+  return content
+    .split(/\r?\n/)
+    .map((line) => {
+      if (!line.trim()) {
+        return line;
+      }
+
+      try {
+        const parsed = JSON.parse(line) as Record<string, unknown>;
+        if (parsed.sessionId === sourceProviderSessionId) {
+          parsed.sessionId = targetProviderSessionId;
+        }
+        if (parsed.session_id === sourceProviderSessionId) {
+          parsed.session_id = targetProviderSessionId;
+        }
+        return JSON.stringify(parsed);
+      } catch {
+        return line;
+      }
+    })
+    .join('\n');
+}
+
+async function copySessionTranscriptForBranch(
+  sourceJsonlPath: string | null,
+  sourceProviderSessionId: string,
+  targetProviderSessionId: string,
+): Promise<string | null> {
+  if (!sourceJsonlPath) {
+    return null;
+  }
+
+  const targetJsonlPath = path.join(path.dirname(sourceJsonlPath), `${targetProviderSessionId}.jsonl`);
+  const content = await fsp.readFile(sourceJsonlPath, 'utf8');
+  await fsp.writeFile(
+    targetJsonlPath,
+    replaceSessionIdsInTranscript(content, sourceProviderSessionId, targetProviderSessionId),
+    { flag: 'wx' },
+  );
+  return targetJsonlPath;
 }
 
 /**
@@ -136,6 +185,65 @@ export const sessionsService = {
       sessionId,
       provider,
       projectPath: normalizedProjectPath,
+    };
+  },
+
+  async branchSessionById(sourceSessionId: string): Promise<BranchSessionResult> {
+    const sourceSession = sessionsDb.getSessionById(sourceSessionId);
+    if (!sourceSession) {
+      throw new AppError(`Session "${sourceSessionId}" was not found.`, {
+        code: 'SESSION_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    const provider = sourceSession.provider as LLMProvider;
+    const projectPath = sourceSession.project_path?.trim();
+    if (!projectPath) {
+      throw new AppError(`Session "${sourceSessionId}" has no project path.`, {
+        code: 'SESSION_PROJECT_PATH_MISSING',
+        statusCode: 409,
+      });
+    }
+
+    const sessionId = randomUUID();
+    const sourceProviderSessionId = sourceSession.provider_session_id || sourceSession.session_id;
+    const sourceTitle = sourceSession.custom_name?.trim() || sourceSession.session_id;
+    const title = `Branch of ${sourceTitle}`;
+    let copiedHistory = false;
+
+    if (sourceSession.jsonl_path) {
+      const copiedJsonlPath = await copySessionTranscriptForBranch(
+        sourceSession.jsonl_path,
+        sourceProviderSessionId,
+        sessionId,
+      );
+      if (copiedJsonlPath) {
+        sessionsDb.createSession(
+          sessionId,
+          provider,
+          projectPath,
+          title,
+          undefined,
+          undefined,
+          copiedJsonlPath,
+        );
+        copiedHistory = true;
+      }
+    }
+
+    if (!copiedHistory) {
+      sessionsDb.createAppSession(sessionId, provider, projectPath);
+      sessionsDb.updateSessionCustomName(sessionId, title);
+    }
+
+    return {
+      sessionId,
+      sourceSessionId,
+      provider,
+      projectPath,
+      title,
+      copiedHistory,
     };
   },
 
@@ -271,6 +379,42 @@ export const sessionsService = {
       sessionId,
       action: 'deleted',
       deletedFromDisk: removedFromDisk,
+    };
+  },
+
+  async deleteOrArchiveSessionsByIds(
+    sessionIds: string[],
+    options: {
+      force?: boolean;
+      deletedFromDisk?: boolean;
+    } = {},
+  ): Promise<{
+    sessionIds: string[];
+    action: 'archived' | 'deleted';
+    count: number;
+    deletedFromDisk: number;
+  }> {
+    const uniqueSessionIds = Array.from(new Set(sessionIds.map((sessionId) => sessionId.trim()).filter(Boolean)));
+    if (uniqueSessionIds.length === 0) {
+      throw new AppError('sessionIds is required.', {
+        code: 'SESSION_IDS_REQUIRED',
+        statusCode: 400,
+      });
+    }
+
+    let deletedFromDisk = 0;
+    for (const sessionId of uniqueSessionIds) {
+      const result = await this.deleteOrArchiveSessionById(sessionId, options);
+      if (result.deletedFromDisk) {
+        deletedFromDisk += 1;
+      }
+    }
+
+    return {
+      sessionIds: uniqueSessionIds,
+      action: options.force ? 'deleted' : 'archived',
+      count: uniqueSessionIds.length,
+      deletedFromDisk,
     };
   },
 

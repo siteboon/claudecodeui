@@ -19,7 +19,7 @@ import path from 'path';
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
 
-import { CLAUDE_FALLBACK_MODELS } from './modules/providers/list/claude/claude-models.provider.js';
+import { CLAUDE_FALLBACK_MODELS, normalizeClaudeModelValue } from './modules/providers/list/claude/claude-models.provider.js';
 import { providerModelsService } from './modules/providers/services/provider-models.service.js';
 import { resolveClaudeCodeExecutablePath } from './shared/claude-cli-path.js';
 import {
@@ -39,7 +39,21 @@ const pendingToolApprovals = new Map();
 // emit a second one when its generator winds down.
 const abortedSessionIds = new Set();
 
-const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEOUT_MS, 10) || 55000;
+function resolveClaudeToolApprovalTimeoutMs(env = process.env) {
+  const raw = env.CLAUDE_TOOL_APPROVAL_TIMEOUT_MS;
+  if (raw === undefined || raw === null || raw === '') {
+    return 55000;
+  }
+
+  const parsed = Number.parseInt(String(raw), 10);
+  if (parsed === -1) {
+    return 0;
+  }
+
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 55000;
+}
+
+const TOOL_APPROVAL_TIMEOUT_MS = resolveClaudeToolApprovalTimeoutMs();
 
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
@@ -156,6 +170,33 @@ function matchesToolPermission(entry, toolName, input) {
   return false;
 }
 
+function resolveImmediateToolDecision(sdkOptions, toolName, input) {
+  if (sdkOptions.permissionMode === 'bypassPermissions') {
+    return { behavior: 'allow', updatedInput: input };
+  }
+
+  const requiresInteraction = TOOLS_REQUIRING_INTERACTION.has(toolName);
+  if (requiresInteraction) {
+    return null;
+  }
+
+  const isDisallowed = (sdkOptions.disallowedTools || []).some(entry =>
+    matchesToolPermission(entry, toolName, input)
+  );
+  if (isDisallowed) {
+    return { behavior: 'deny', message: 'Tool disallowed by settings' };
+  }
+
+  const isAllowed = (sdkOptions.allowedTools || []).some(entry =>
+    matchesToolPermission(entry, toolName, input)
+  );
+  if (isAllowed) {
+    return { behavior: 'allow', updatedInput: input };
+  }
+
+  return null;
+}
+
 function mapCliOptionsToSDK(options = {}) {
   const { sessionId, cwd, toolsSettings, permissionMode, effort } = options;
 
@@ -207,7 +248,7 @@ function mapCliOptionsToSDK(options = {}) {
 
   sdkOptions.disallowedTools = settings.disallowedTools || [];
 
-  sdkOptions.model = options.model || CLAUDE_FALLBACK_MODELS.DEFAULT;
+  sdkOptions.model = normalizeClaudeModelValue(options.model) || CLAUDE_FALLBACK_MODELS.DEFAULT;
 
   const resolvedEffort = resolveClaudeEffort(
     sdkOptions.model,
@@ -607,24 +648,9 @@ async function queryClaudeSDK(command, options = {}, ws) {
     sdkOptions.canUseTool = async (toolName, input, context) => {
       const requiresInteraction = TOOLS_REQUIRING_INTERACTION.has(toolName);
 
-      if (!requiresInteraction) {
-        if (sdkOptions.permissionMode === 'bypassPermissions') {
-          return { behavior: 'allow', updatedInput: input };
-        }
-
-        const isDisallowed = (sdkOptions.disallowedTools || []).some(entry =>
-          matchesToolPermission(entry, toolName, input)
-        );
-        if (isDisallowed) {
-          return { behavior: 'deny', message: 'Tool disallowed by settings' };
-        }
-
-        const isAllowed = (sdkOptions.allowedTools || []).some(entry =>
-          matchesToolPermission(entry, toolName, input)
-        );
-        if (isAllowed) {
-          return { behavior: 'allow', updatedInput: input };
-        }
+      const immediateDecision = resolveImmediateToolDecision(sdkOptions, toolName, input);
+      if (immediateDecision) {
+        return immediateDecision;
       }
 
       const requestId = createRequestId();
@@ -922,6 +948,18 @@ function __testClearClaudeSDKSessions() {
   abortedSessionIds.clear();
 }
 
+function __testResolveClaudeToolApprovalTimeoutMs(env) {
+  return resolveClaudeToolApprovalTimeoutMs(env);
+}
+
+function __testResolveImmediateToolDecision(sdkOptions, toolName, input) {
+  return resolveImmediateToolDecision(sdkOptions, toolName, input);
+}
+
+function __testMapCliOptionsToSDK(options) {
+  return mapCliOptionsToSDK(options);
+}
+
 // Export public API
 export {
   queryClaudeSDK,
@@ -933,5 +971,8 @@ export {
   reconnectSessionWriter,
   __testAddClaudeSDKSession,
   __testRemoveClaudeSDKSession,
-  __testClearClaudeSDKSessions
+  __testClearClaudeSDKSessions,
+  __testResolveClaudeToolApprovalTimeoutMs,
+  __testResolveImmediateToolDecision,
+  __testMapCliOptionsToSDK
 };

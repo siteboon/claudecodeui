@@ -4,6 +4,9 @@ import test from 'node:test';
 import {
   __testAddClaudeSDKSession,
   __testClearClaudeSDKSessions,
+  __testMapCliOptionsToSDK,
+  __testResolveClaudeToolApprovalTimeoutMs,
+  __testResolveImmediateToolDecision,
   __testRemoveClaudeSDKSession,
   getActiveClaudeSDKSessions,
 } from './claude-sdk.js';
@@ -32,4 +35,44 @@ test('Claude SDK session registry interrupts replaced instances and ignores stal
 
   __testRemoveClaudeSDKSession('claude-native-1', secondInstance);
   assert.deepEqual(getActiveClaudeSDKSessions(), []);
+});
+
+test('Claude tool approval timeout can be disabled with zero', () => {
+  assert.equal(
+    __testResolveClaudeToolApprovalTimeoutMs({ CLAUDE_TOOL_APPROVAL_TIMEOUT_MS: '0' }),
+    0,
+  );
+  assert.equal(
+    __testResolveClaudeToolApprovalTimeoutMs({ CLAUDE_TOOL_APPROVAL_TIMEOUT_MS: '-1' }),
+    0,
+  );
+  assert.equal(
+    __testResolveClaudeToolApprovalTimeoutMs({ CLAUDE_TOOL_APPROVAL_TIMEOUT_MS: '1500' }),
+    1500,
+  );
+  assert.equal(
+    __testResolveClaudeToolApprovalTimeoutMs({ CLAUDE_TOOL_APPROVAL_TIMEOUT_MS: 'invalid' }),
+    55000,
+  );
+});
+
+test('Claude bypass permission mode auto-allows every tool without prompting', () => {
+  const input = { question: 'Continue?' };
+  assert.deepEqual(
+    __testResolveImmediateToolDecision(
+      {
+        permissionMode: 'bypassPermissions',
+        allowedTools: [],
+        disallowedTools: [],
+      },
+      'AskUserQuestion',
+      input,
+    ),
+    { behavior: 'allow', updatedInput: input },
+  );
+});
+
+test('Claude SDK maps stale concrete Opus model id to Claude Code alias', () => {
+  const sdkOptions = __testMapCliOptionsToSDK({ model: 'claude-opus-4-8' });
+  assert.equal(sdkOptions.model, 'opus');
 });

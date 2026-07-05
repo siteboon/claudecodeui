@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { authenticatedFetch } from '../../../utils/api';
+import { ENABLED_LLM_PROVIDERS } from '../../../utils/enabledProviders';
 import type { PendingPermissionRequest, PermissionMode } from '../types/types';
 import type {
   ProjectSession,
@@ -24,7 +25,7 @@ const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   opencode: 'anthropic/claude-sonnet-4-5',
 };
 
-const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'gemini', 'opencode'];
+const PROVIDERS: LLMProvider[] = [...ENABLED_LLM_PROVIDERS];
 
 /**
  * Fallback permission-mode matrix used only until the backend capability
@@ -86,7 +87,8 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('default');
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<PendingPermissionRequest[]>([]);
   const [provider, setProvider] = useState<LLMProvider>(() => {
-    return (localStorage.getItem('selected-provider') as LLMProvider) || 'claude';
+    const storedProvider = localStorage.getItem('selected-provider') as LLMProvider | null;
+    return storedProvider && PROVIDERS.includes(storedProvider) ? storedProvider : PROVIDERS[0] || 'claude';
   });
   const [cursorModel, setCursorModel] = useState<string>(() => {
     return localStorage.getItem('cursor-model') || FALLBACK_DEFAULT_MODEL.cursor;
@@ -466,6 +468,9 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
 
   useEffect(() => {
     if (!selectedSession?.__provider || selectedSession.__provider === provider) {
+      return;
+    }
+    if (!PROVIDERS.includes(selectedSession.__provider)) {
       return;
     }
 

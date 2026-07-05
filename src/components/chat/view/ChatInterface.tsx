@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowDownIcon } from 'lucide-react';
+import { ArrowDownIcon, DownloadIcon } from 'lucide-react';
 
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useWebSocket } from '../../../contexts/WebSocketContext';
@@ -12,6 +12,7 @@ import { useChatSessionState } from '../hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '../hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '../hooks/useChatComposerState';
 import { useSessionStore } from '../../../stores/useSessionStore';
+import { downloadSessionMarkdown, exportSessionAsMarkdown } from '../utils/exportSession';
 
 import ChatMessagesPane from './subcomponents/ChatMessagesPane';
 import ChatComposer from './subcomponents/ChatComposer';
@@ -287,6 +288,13 @@ function ChatInterface({
     handlePermissionDecision,
   }), [pendingPermissionRequests, handlePermissionDecision]);
 
+  const handleExportSession = useCallback(() => {
+    const title = String(selectedSession?.title || selectedSession?.name || currentSessionId || 'CloudCLI session');
+    const markdown = exportSessionAsMarkdown(chatMessages, title);
+    const safeTitle = title.replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '') || 'cloudcli-session';
+    downloadSessionMarkdown(markdown, `${safeTitle}.md`);
+  }, [chatMessages, currentSessionId, selectedSession]);
+
   if (!selectedProject) {
     const selectedProviderLabel =
       provider === 'cursor'
@@ -366,6 +374,20 @@ function ChatInterface({
         />
 
         <div className="relative flex-shrink-0">
+          {chatMessages.length > 0 && (
+            <div className="pointer-events-none absolute -top-11 right-4 z-20">
+              <button
+                type="button"
+                onClick={handleExportSession}
+                aria-label={t('session.export', { defaultValue: 'Export session' })}
+                className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-full border border-border/50 bg-card text-muted-foreground shadow-sm transition-all duration-200 hover:bg-accent hover:text-foreground"
+                title={t('session.export', { defaultValue: 'Export session' })}
+              >
+                <DownloadIcon className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
+          )}
+
           {isUserScrolledUp && chatMessages.length > 0 && (
             <div className="pointer-events-none absolute -top-11 left-0 right-0 z-20 flex justify-center">
               <button

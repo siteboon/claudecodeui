@@ -13,6 +13,24 @@ function formatToolResultContent(content: unknown): string {
   return toolUseErrorMatch ? toolUseErrorMatch[1] : text;
 }
 
+function extractTaggedValue(content: string, tagName: string): string | null {
+  const escapedTagName = tagName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = new RegExp(`<${escapedTagName}>\\s*([\\s\\S]*?)\\s*<\\/${escapedTagName}>`).exec(content);
+  return match?.[1]?.trim() || null;
+}
+
+function parseTaskNotification(content: string): { status: string; summary: string } | null {
+  const notificationMatch = /<task-notification>\s*([\s\S]*?)\s*<\/task-notification>/i.exec(content);
+  if (!notificationMatch?.[1]) {
+    return null;
+  }
+
+  return {
+    status: extractTaggedValue(notificationMatch[1], 'status') || 'completed',
+    summary: extractTaggedValue(notificationMatch[1], 'summary') || 'Background task finished',
+  };
+}
+
 /**
  * Convert NormalizedMessage[] from the session store into ChatMessage[]
  * that the existing UI components expect.
@@ -55,15 +73,14 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
 
         if (msg.role === 'user') {
           // Parse task notifications
-          const taskNotifRegex = /<task-notification>\s*<task-id>[^<]*<\/task-id>\s*<output-file>[^<]*<\/output-file>\s*<status>([^<]*)<\/status>\s*<summary>([^<]*)<\/summary>\s*<\/task-notification>/g;
-          const taskNotifMatch = taskNotifRegex.exec(content);
-          if (taskNotifMatch) {
+          const taskNotification = parseTaskNotification(content);
+          if (taskNotification) {
             converted.push({
               type: 'assistant',
-              content: taskNotifMatch[2]?.trim() || 'Background task finished',
+              content: taskNotification.summary,
               timestamp: msg.timestamp,
               isTaskNotification: true,
-              taskStatus: taskNotifMatch[1]?.trim() || 'completed',
+              taskStatus: taskNotification.status,
               ...sharedMetadata,
             });
           } else {

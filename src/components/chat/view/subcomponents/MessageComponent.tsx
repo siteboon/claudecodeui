@@ -87,8 +87,10 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
         /* User message bubble on the right */
         <div className="flex w-full items-end space-x-0 sm:w-auto sm:max-w-[85%] sm:space-x-3 md:max-w-md lg:max-w-lg xl:max-w-xl">
           <div className="group flex-1 rounded-2xl rounded-br-md bg-blue-600 px-3 py-2 text-white shadow-sm sm:flex-initial sm:px-4">
-            <div dir="auto" className="whitespace-pre-wrap break-words font-serif text-sm">
-              {message.content}
+            <div dir="auto" className="break-words text-sm">
+              <Markdown className="prose prose-sm prose-invert max-w-none font-serif prose-p:my-0 prose-pre:my-2 prose-ol:my-1 prose-ul:my-1 prose-li:my-0">
+                {String(message.content || '')}
+              </Markdown>
             </div>
             {message.images && message.images.length > 0 && (
               <div className="mt-2 grid grid-cols-2 gap-2">
@@ -400,4 +402,3 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
 });
 
 export default MessageComponent;
-

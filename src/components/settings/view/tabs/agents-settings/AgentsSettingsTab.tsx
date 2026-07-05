@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
+import { ENABLED_LLM_PROVIDERS } from '../../../../../utils/enabledProviders';
 import type { AgentCategory, AgentProvider } from '../../../types/types';
 
 import type { AgentContext, AgentsSettingsTabProps } from './types';
@@ -29,7 +30,7 @@ export default function AgentsSettingsTab({
   ), [selectedAgent]);
 
   const visibleAgents = useMemo<AgentProvider[]>(() => {
-    return ['claude', 'cursor', 'codex', 'gemini', 'opencode'];
+    return ENABLED_LLM_PROVIDERS as AgentProvider[];
   }, []);
 
   const agentContextById = useMemo<Record<AgentProvider, AgentContext>>(() => ({
@@ -67,6 +68,12 @@ export default function AgentsSettingsTab({
       setSelectedCategory(visibleCategories[0] ?? 'account');
     }
   }, [selectedCategory, visibleCategories]);
+
+  useEffect(() => {
+    if (!visibleAgents.includes(selectedAgent)) {
+      setSelectedAgent(visibleAgents[0] ?? 'claude');
+    }
+  }, [selectedAgent, visibleAgents]);
 
   return (
     <div className="-mx-4 -mb-4 -mt-2 flex min-h-[300px] min-w-0 flex-col overflow-hidden md:-mx-6 md:-mb-6 md:-mt-2 md:min-h-[500px]">

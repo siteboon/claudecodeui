@@ -112,8 +112,26 @@ export const CLAUDE_FALLBACK_MODELS: ProviderModelsDefinition = {
   DEFAULT: 'default',
 };
 
-export const findClaudeModelOption = (model: string | undefined | null): ProviderModelOption | null => {
+const CLAUDE_CODE_MODEL_ALIASES = new Map<string, string>([
+  ['claude-opus-4-8', 'opus'],
+  ['claude-opus-4.8', 'opus'],
+  ['claude-sonnet-4-6', 'sonnet'],
+  ['claude-sonnet-4.6', 'sonnet'],
+  ['claude-haiku-4-5', 'haiku'],
+  ['claude-haiku-4.5', 'haiku'],
+]);
+
+export const normalizeClaudeModelValue = (model: string | undefined | null): string | undefined => {
   const normalizedModel = typeof model === 'string' ? model.trim() : '';
+  if (!normalizedModel) {
+    return undefined;
+  }
+
+  return CLAUDE_CODE_MODEL_ALIASES.get(normalizedModel.toLowerCase()) || normalizedModel;
+};
+
+export const findClaudeModelOption = (model: string | undefined | null): ProviderModelOption | null => {
+  const normalizedModel = normalizeClaudeModelValue(model) || '';
   if (!normalizedModel) {
     return null;
   }
@@ -180,7 +198,7 @@ function buildClaudeModelsDefinition(): ProviderModelsDefinition {
     options.push(option);
   }
 
-  const requestedDefault = process.env.CLOUDCLI_CLAUDE_DEFAULT_MODEL?.trim();
+  const requestedDefault = normalizeClaudeModelValue(process.env.CLOUDCLI_CLAUDE_DEFAULT_MODEL);
   const defaultModel = requestedDefault && seen.has(requestedDefault)
     ? requestedDefault
     : CLAUDE_FALLBACK_MODELS.DEFAULT;
@@ -338,6 +356,9 @@ export class ClaudeProviderModels implements IProviderModels {
   async changeActiveModel(
     input: ProviderChangeActiveModelInput,
   ): Promise<ProviderSessionActiveModelChange> {
-    return writeProviderSessionActiveModelChange('claude', input);
+    return writeProviderSessionActiveModelChange('claude', {
+      ...input,
+      model: normalizeClaudeModelValue(input.model) || input.model,
+    });
   }
 }

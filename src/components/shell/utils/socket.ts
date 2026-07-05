@@ -25,6 +25,15 @@ export function parseShellMessage(payload: string): ShellIncomingMessage | null 
   }
 }
 
+export function applyShellAuthRefresh(message: ShellIncomingMessage): boolean {
+  if (message.type !== 'auth_refresh' || typeof message.token !== 'string' || !message.token) {
+    return false;
+  }
+
+  localStorage.setItem('auth-token', message.token);
+  return true;
+}
+
 export function sendSocketMessage(ws: WebSocket | null, message: ShellOutgoingMessage): void {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify(message));

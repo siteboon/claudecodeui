@@ -17,6 +17,27 @@ const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
 
 let activeGeminiProcesses = new Map(); // Track active processes by session ID
 
+function resolveGeminiPermissionArgs({ settings = {}, options = {}, permissionMode } = {}) {
+  if (
+    settings.skipPermissions ||
+    options.skipPermissions ||
+    permissionMode === 'yolo' ||
+    permissionMode === 'bypassPermissions'
+  ) {
+    return ['--yolo'];
+  }
+
+  if (permissionMode === 'auto_edit' || permissionMode === 'acceptEdits') {
+    return ['--approval-mode', 'auto_edit'];
+  }
+
+  if (permissionMode === 'plan') {
+    return ['--approval-mode', 'plan'];
+  }
+
+  return [];
+}
+
 function mapGeminiExitCodeToMessage(exitCode) {
     switch (exitCode) {
         case 42:
@@ -257,14 +278,8 @@ async function spawnGemini(command, options = {}, ws) {
     args.push('--model', modelToUse);
     args.push('--output-format', 'stream-json');
 
-    // Handle approval modes and allowed tools
-    if (settings.skipPermissions || options.skipPermissions || permissionMode === 'yolo') {
-        args.push('--yolo');
-    } else if (permissionMode === 'auto_edit') {
-        args.push('--approval-mode', 'auto_edit');
-    } else if (permissionMode === 'plan') {
-        args.push('--approval-mode', 'plan');
-    }
+        // Handle approval modes and allowed tools
+        args.push(...resolveGeminiPermissionArgs({ settings, options, permissionMode }));
 
     if (settings.allowedTools && settings.allowedTools.length > 0) {
         args.push('--allowed-tools', settings.allowedTools.join(','));
@@ -630,9 +645,14 @@ function getActiveGeminiSessions() {
     return Array.from(activeGeminiProcesses.keys());
 }
 
+function __testResolveGeminiPermissionArgs(input) {
+    return resolveGeminiPermissionArgs(input);
+}
+
 export {
     spawnGemini,
     abortGeminiSession,
     isGeminiSessionActive,
-    getActiveGeminiSessions
+    getActiveGeminiSessions,
+    __testResolveGeminiPermissionArgs
 };

@@ -10,6 +10,7 @@ import { AppError } from '@/shared/utils.js';
 type SessionSummary = {
   id: string;
   provider: string;
+  projectPath: string | null;
   summary: string;
   messageCount: number;
   lastActivity: string;
@@ -18,6 +19,7 @@ type SessionSummary = {
 type SessionRepositoryRow = {
   provider: string;
   session_id: string;
+  project_path?: string | null;
   custom_name?: string | null;
   updated_at?: string | null;
   created_at?: string | null;
@@ -121,6 +123,7 @@ function mapSessionRowToSummary(row: SessionRepositoryRow): SessionSummary {
   return {
     id: row.session_id,
     provider: row.provider,
+    projectPath: row.project_path ?? null,
     summary: row.custom_name || '',
     messageCount: 0,
     lastActivity: row.updated_at ?? row.created_at ?? new Date().toISOString(),
