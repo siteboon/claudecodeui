@@ -68,6 +68,17 @@ export function handlePtySessionSocketClose(
   return true;
 }
 
+export function terminatePtySession(
+  session: PtySessionEntry,
+  ptySessionKey: string,
+  sessionsMap = ptySessionsMap
+): boolean {
+  clearPtySessionTimeout(session);
+  session.ws = null;
+  session.pty.kill();
+  return sessionsMap.delete(ptySessionKey);
+}
+
 type ShellWebSocketDependencies = {
   resolveProviderSessionId: (
     sessionId: string,
@@ -525,6 +536,17 @@ export function handleShellConnection(
             data: welcomeMsg,
           })
         );
+        return;
+      }
+
+      if (data.type === 'terminate') {
+        if (ptySessionKey) {
+          const session = ptySessionsMap.get(ptySessionKey);
+          if (session) {
+            terminatePtySession(session, ptySessionKey);
+          }
+        }
+        ws.close();
         return;
       }
 

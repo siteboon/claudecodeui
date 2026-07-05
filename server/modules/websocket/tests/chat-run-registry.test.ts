@@ -242,3 +242,40 @@ test('startRun rejects a second concurrent run for the same session', async () =
     assert.ok(third);
   });
 });
+
+test('startRun rejects a second concurrent run for the same provider-native session', async () => {
+  await withIsolatedDatabase(() => {
+    sessionsDb.createAppSession('app-run-native-1', 'claude', '/workspace/demo');
+    sessionsDb.createAppSession('app-run-native-2', 'claude', '/workspace/demo');
+    const connection = new FakeConnection();
+
+    const first = chatRunRegistry.startRun({
+      appSessionId: 'app-run-native-1',
+      provider: 'claude',
+      providerSessionId: 'claude-native-1',
+      connection,
+      userId: null,
+    });
+    assert.ok(first);
+
+    const second = chatRunRegistry.startRun({
+      appSessionId: 'app-run-native-2',
+      provider: 'claude',
+      providerSessionId: 'claude-native-1',
+      connection,
+      userId: null,
+    });
+    assert.equal(second, null);
+
+    chatRunRegistry.completeRun('app-run-native-1', { exitCode: 0 });
+
+    const third = chatRunRegistry.startRun({
+      appSessionId: 'app-run-native-2',
+      provider: 'claude',
+      providerSessionId: 'claude-native-1',
+      connection,
+      userId: null,
+    });
+    assert.ok(third);
+  });
+});

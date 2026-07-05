@@ -28,7 +28,15 @@ export type ShellInputMessage = {
   data: string;
 };
 
-export type ShellOutgoingMessage = ShellInitMessage | ShellResizeMessage | ShellInputMessage;
+export type ShellTerminateMessage = {
+  type: 'terminate';
+};
+
+export type ShellOutgoingMessage =
+  | ShellInitMessage
+  | ShellResizeMessage
+  | ShellInputMessage
+  | ShellTerminateMessage;
 
 export type ShellIncomingMessage =
   | { type: 'output'; data: string }

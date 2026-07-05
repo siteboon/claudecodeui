@@ -245,6 +245,16 @@ function mapCliOptionsToSDK(options = {}) {
  * @param {string} tempDir - Temp directory for cleanup
  */
 function addSession(sessionId, queryInstance, tempImagePaths = [], tempDir = null, writer = null) {
+  const existing = activeSessions.get(sessionId);
+  if (existing && existing.instance !== queryInstance) {
+    existing.status = 'replaced';
+    if (typeof existing.instance?.interrupt === 'function') {
+      void existing.instance.interrupt().catch(error => {
+        console.warn(`Failed to interrupt replaced Claude SDK session ${sessionId}:`, error?.message || error);
+      });
+    }
+  }
+
   activeSessions.set(sessionId, {
     instance: queryInstance,
     startTime: Date.now(),
@@ -259,8 +269,13 @@ function addSession(sessionId, queryInstance, tempImagePaths = [], tempDir = nul
  * Removes a session from the active sessions map
  * @param {string} sessionId - Session identifier
  */
-function removeSession(sessionId) {
+function removeSession(sessionId, queryInstance = null) {
+  if (queryInstance && activeSessions.get(sessionId)?.instance !== queryInstance) {
+    return false;
+  }
+
   activeSessions.delete(sessionId);
+  return true;
 }
 
 /**
@@ -740,7 +755,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
     // Clean up session on completion
     if (capturedSessionId) {
-      removeSession(capturedSessionId);
+      removeSession(capturedSessionId, queryInstance);
     }
 
     // Clean up temporary image files
@@ -766,7 +781,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
     // Clean up session on error
     if (capturedSessionId) {
-      removeSession(capturedSessionId);
+      removeSession(capturedSessionId, queryInstance);
     }
 
     // Clean up temporary image files on error
@@ -828,7 +843,7 @@ async function abortClaudeSDKSession(sessionId) {
     await cleanupTempFiles(session.tempImagePaths, session.tempDir);
 
     // Clean up session
-    removeSession(sessionId);
+    removeSession(sessionId, session.instance);
 
     return true;
   } catch (error) {
@@ -894,6 +909,19 @@ function reconnectSessionWriter(sessionId, newRawWs) {
   return true;
 }
 
+function __testAddClaudeSDKSession(sessionId, queryInstance) {
+  addSession(sessionId, queryInstance);
+}
+
+function __testRemoveClaudeSDKSession(sessionId, queryInstance = null) {
+  return removeSession(sessionId, queryInstance);
+}
+
+function __testClearClaudeSDKSessions() {
+  activeSessions.clear();
+  abortedSessionIds.clear();
+}
+
 // Export public API
 export {
   queryClaudeSDK,
@@ -902,5 +930,8 @@ export {
   getActiveClaudeSDKSessions,
   resolveToolApproval,
   getPendingApprovalsForSession,
-  reconnectSessionWriter
+  reconnectSessionWriter,
+  __testAddClaudeSDKSession,
+  __testRemoveClaudeSDKSession,
+  __testClearClaudeSDKSessions
 };

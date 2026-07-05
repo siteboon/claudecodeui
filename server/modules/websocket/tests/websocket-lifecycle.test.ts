@@ -4,7 +4,10 @@ import test from 'node:test';
 
 import { WebSocket } from 'ws';
 
-import { handlePtySessionSocketClose } from '@/modules/websocket/services/shell-websocket.service.js';
+import {
+  handlePtySessionSocketClose,
+  terminatePtySession,
+} from '@/modules/websocket/services/shell-websocket.service.js';
 import { attachWebSocketHeartbeat } from '@/modules/websocket/services/websocket-server.service.js';
 
 class FakeWebSocket extends EventEmitter {
@@ -76,11 +79,13 @@ test('websocket heartbeat terminates a connection that misses a pong', async () 
 
 test('websocket heartbeat keeps a connection alive when a pong arrives', async () => {
   const ws = new FakeWebSocket();
+  ws.ping = () => {
+    ws.pingCalls += 1;
+    ws.emit('pong');
+  };
 
   attachWebSocketHeartbeat(asWebSocket(ws), TEST_HEARTBEAT_INTERVAL_MS);
-  await delay(30);
-  ws.emit('pong');
-  await delay(30);
+  await delay(65);
 
   assert.equal(ws.terminateCalls, 0);
   assert.ok(ws.pingCalls >= 2);
@@ -153,4 +158,21 @@ test('shell socket close removes an unattached PTY session after the grace timeo
   assert.equal(getKillCalls(), 1);
   assert.equal(sessionsMap.has('shell-key'), false);
   assert.equal(session.timeoutId, null);
+});
+
+test('explicit shell termination kills and removes the PTY session immediately', () => {
+  const closingWs = new FakeWebSocket();
+  const { session, getKillCalls } = makeSession(closingWs);
+  const sessionsMap = new Map([['shell-key', session]]);
+
+  const terminated = terminatePtySession(
+    session as never,
+    'shell-key',
+    sessionsMap as never,
+  );
+
+  assert.equal(terminated, true);
+  assert.equal(getKillCalls(), 1);
+  assert.equal(sessionsMap.has('shell-key'), false);
+  assert.equal(session.ws, null);
 });

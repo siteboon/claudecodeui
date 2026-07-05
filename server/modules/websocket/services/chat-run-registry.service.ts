@@ -61,6 +61,40 @@ const MAX_BUFFERED_EVENTS_PER_RUN = 5000;
  * path all consult it instead of asking each provider runtime individually.
  */
 const runs = new Map<string, ChatRun>();
+const providerSessionRunOwners = new Map<string, string>();
+
+function providerSessionKey(provider: LLMProvider, providerSessionId: string): string {
+  return `${provider}:${providerSessionId}`;
+}
+
+function claimProviderSession(run: ChatRun, providerSessionId: string | null): boolean {
+  if (!providerSessionId) {
+    return true;
+  }
+
+  const key = providerSessionKey(run.provider, providerSessionId);
+  const ownerSessionId = providerSessionRunOwners.get(key);
+  if (ownerSessionId && ownerSessionId !== run.appSessionId) {
+    const ownerRun = runs.get(ownerSessionId);
+    if (ownerRun?.status === 'running') {
+      return false;
+    }
+  }
+
+  providerSessionRunOwners.set(key, run.appSessionId);
+  return true;
+}
+
+function releaseProviderSession(run: ChatRun): void {
+  if (!run.providerSessionId) {
+    return;
+  }
+
+  const key = providerSessionKey(run.provider, run.providerSessionId);
+  if (providerSessionRunOwners.get(key) === run.appSessionId) {
+    providerSessionRunOwners.delete(key);
+  }
+}
 
 async function broadcastCanonicalSessionUpsert(appSessionId: string): Promise<void> {
   const row = sessionsDb.getSessionById(appSessionId);
@@ -149,6 +183,7 @@ function decorateAndRecordEvent(run: ChatRun, message: NormalizedMessage): Norma
     outbound.actualSessionId = run.appSessionId;
     run.status = 'completed';
     run.completedAt = Date.now();
+    releaseProviderSession(run);
     evictRunLater(run.appSessionId);
   }
 
@@ -171,6 +206,17 @@ function decorateAndRecordEvent(run: ChatRun, message: NormalizedMessage): Norma
  */
 function recordProviderSessionId(run: ChatRun, providerSessionId: string): void {
   if (!providerSessionId || run.providerSessionId === providerSessionId) {
+    return;
+  }
+
+  if (!claimProviderSession(run, providerSessionId)) {
+    run.writer.send({
+      kind: 'error',
+      provider: run.provider,
+      sessionId: run.providerSessionId,
+      content: `Provider session "${providerSessionId}" is already running in another chat.`,
+    });
+    run.writer.sendComplete({ exitCode: 1 });
     return;
   }
 
@@ -232,6 +278,10 @@ export const chatRunRegistry = {
       startedAt: Date.now(),
       completedAt: null,
     };
+
+    if (!claimProviderSession(run, input.providerSessionId)) {
+      return null;
+    }
 
     run.writer = new ChatSessionWriter({
       connection: input.connection,
@@ -323,5 +373,6 @@ export const chatRunRegistry = {
    */
   clearAll(): void {
     runs.clear();
+    providerSessionRunOwners.clear();
   },
 };

@@ -209,13 +209,14 @@ export function useShellConnection({
       suppressAutoConnectRef.current = true;
     }
 
+    sendSocketMessage(wsRef.current, { type: 'terminate' });
     closeSocket();
     clearTerminalScreen();
     setIsConnected(false);
     setIsConnecting(false);
     connectingRef.current = false;
     forceRestartOnInitRef.current = false;
-  }, [clearTerminalScreen, closeSocket]);
+  }, [clearTerminalScreen, closeSocket, wsRef]);
 
   useEffect(() => {
     if (
