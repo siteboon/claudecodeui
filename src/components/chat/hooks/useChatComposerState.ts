@@ -660,7 +660,16 @@ export function useChatComposerState({
           });
 
           if (!response.ok) {
-            throw new Error('Failed to upload images');
+            let errorMessage = `Failed to upload images (${response.status})`;
+            try {
+              const errorPayload = await response.json();
+              if (typeof errorPayload?.error === 'string' && errorPayload.error.trim()) {
+                errorMessage = errorPayload.error;
+              }
+            } catch {
+              // Keep the status-based fallback when the response body is not JSON.
+            }
+            throw new Error(errorMessage);
           }
 
           const result = await response.json();

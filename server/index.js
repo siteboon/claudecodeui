@@ -1138,9 +1138,16 @@ app.post('/api/projects/:projectId/upload-images', authenticateToken, async (req
         // Configure multer for image uploads
         const storage = multer.diskStorage({
             destination: async (req, file, cb) => {
-                const uploadDir = path.join(os.tmpdir(), 'claude-ui-uploads', String(req.user.id));
-                await fs.mkdir(uploadDir, { recursive: true });
-                cb(null, uploadDir);
+                try {
+                    const ownerSegment = typeof process.getuid === 'function'
+                        ? `uid-${process.getuid()}`
+                        : `user-${os.userInfo().username.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+                    const uploadDir = path.join(os.tmpdir(), 'claude-ui-uploads', ownerSegment, String(req.user.id));
+                    await fs.mkdir(uploadDir, { recursive: true });
+                    cb(null, uploadDir);
+                } catch (error) {
+                    cb(error);
+                }
             },
             filename: (req, file, cb) => {
                 const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
