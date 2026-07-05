@@ -79,6 +79,30 @@ const getSessionProvider = (session: ProjectSession): LLMProvider => {
     : DEFAULT_PROVIDER;
 };
 
+const isMeaningfulSessionLabel = (value: unknown): value is string => {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  const trimmed = value.trim();
+  return Boolean(trimmed && !/^Untitled .+ Session$/i.test(trimmed));
+};
+
+const preserveMeaningfulSessionLabels = (
+  existingSession: ProjectSession,
+  incomingSession: ProjectSession,
+): ProjectSession => {
+  const nextSession = { ...incomingSession };
+
+  for (const key of ['summary', 'name', 'title'] as const) {
+    if (isMeaningfulSessionLabel(existingSession[key]) && !isMeaningfulSessionLabel(nextSession[key])) {
+      nextSession[key] = existingSession[key];
+    }
+  }
+
+  return nextSession;
+};
+
 const normalizeSessionProvider = (session: ProjectSession): ProjectSession => ({
   ...session,
   __provider: getSessionProvider(session),
@@ -259,7 +283,7 @@ const upsertSessionIntoProject = (project: Project, event: SessionUpsertedEvent)
 
     for (const [index, session] of sessions.entries()) {
       if (index === existingIndex) {
-        const updated = { ...session, ...normalizedSession };
+        const updated = preserveMeaningfulSessionLabels(session, { ...session, ...normalizedSession });
         if (serialize(session) !== serialize(updated)) {
           changed = true;
         }

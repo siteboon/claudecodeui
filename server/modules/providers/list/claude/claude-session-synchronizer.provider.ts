@@ -12,11 +12,22 @@ import {
 } from '@/shared/utils.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
 
+const CLAUDE_UNTITLED_SESSION_NAME = 'Untitled Claude Session';
+
 type ParsedSession = {
   sessionId: string;
   projectPath: string;
   sessionName?: string;
 };
+
+function isMeaningfulClaudeTitle(value: unknown): value is string {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  const trimmed = value.trim();
+  return Boolean(trimmed && trimmed !== CLAUDE_UNTITLED_SESSION_NAME);
+}
 
 /**
  * Session indexer for Claude transcript artifacts.
@@ -138,10 +149,10 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     const existingSession = sessionsDb.getSessionByProviderSessionId(parsed.sessionId)
       ?? sessionsDb.getSessionById(parsed.sessionId);
     const existingSessionName = existingSession?.custom_name;
-    if (existingSessionName && existingSessionName !== 'Untitled Claude Session') {
+    if (isMeaningfulClaudeTitle(existingSessionName)) {
       return {
         ...parsed,
-        sessionName: normalizeSessionName(existingSessionName, 'Untitled Claude Session'),
+        sessionName: normalizeSessionName(existingSessionName, CLAUDE_UNTITLED_SESSION_NAME),
       };
     }
 
@@ -152,7 +163,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
 
     return {
       ...parsed,
-      sessionName: normalizeSessionName(sessionName, 'Untitled Claude Session'),
+      sessionName: normalizeSessionName(sessionName, CLAUDE_UNTITLED_SESSION_NAME),
     };
   }
 
@@ -181,15 +192,18 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         const eventType = typeof data.type === 'string' ? data.type : undefined;
         const eventSessionId = typeof data.sessionId === 'string' ? data.sessionId : undefined;
         const aiTitle = typeof data.aiTitle === 'string' ? data.aiTitle : undefined;
-        const lastPrompt = typeof data.lastPrompt === 'string' ? data.lastPrompt : undefined;
         const claudeRenamedTitle = typeof data.customTitle === 'string' ? data.customTitle : undefined;
 
-        if (
-          (eventType === 'ai-title' && eventSessionId === sessionId && aiTitle?.trim()) ||
-          (eventType === 'last-prompt' && eventSessionId === sessionId && lastPrompt?.trim()) ||
-          (eventType === "custom-title" && eventSessionId === sessionId && claudeRenamedTitle?.trim())
-        ) {
-          return aiTitle || lastPrompt || claudeRenamedTitle;
+        if (eventSessionId !== sessionId) {
+          continue;
+        }
+
+        if (eventType === 'ai-title' && isMeaningfulClaudeTitle(aiTitle)) {
+          return aiTitle;
+        }
+
+        if (eventType === 'custom-title' && isMeaningfulClaudeTitle(claudeRenamedTitle)) {
+          return claudeRenamedTitle;
         }
       }
     } catch {
