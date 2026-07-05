@@ -1142,7 +1142,7 @@ app.post('/api/projects/:projectId/upload-images', authenticateToken, async (req
                     const ownerSegment = typeof process.getuid === 'function'
                         ? `uid-${process.getuid()}`
                         : `user-${os.userInfo().username.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-                    const uploadDir = path.join(os.tmpdir(), 'claude-ui-uploads', ownerSegment, String(req.user.id));
+                    const uploadDir = path.join(os.tmpdir(), `claude-ui-uploads-${ownerSegment}`, String(req.user.id));
                     await fs.mkdir(uploadDir, { recursive: true });
                     cb(null, uploadDir);
                 } catch (error) {
