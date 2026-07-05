@@ -57,6 +57,11 @@ const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
 // Match the runtime fallback in load-env.js so "cloudcli status" reports the same default
 // database location that the backend will actually use when no DATABASE_PATH is configured.
 const DEFAULT_DATABASE_PATH = path.join(os.homedir(), '.cloudcli', 'auth.db');
+const UPDATE_NPM_PACKAGE = process.env.CLOUDCLI_UPDATE_NPM_PACKAGE || packageJson.name || '@cloudcli-ai/cloudcli';
+
+function isGitInstall() {
+    return fs.existsSync(path.join(APP_ROOT, '.git'));
+}
 
 // Load environment variables from .env file if it exists
 function loadEnvFile() {
@@ -183,10 +188,10 @@ Environment Variables:
   CONTEXT_WINDOW      Set context window size (default: 160000)
 
 Documentation:
-  ${packageJson.homepage || 'https://github.com/siteboon/claudecodeui'}
+  ${packageJson.homepage || 'https://github.com/stefanriegel/claudecodeui'}
 
 Report Issues:
-  ${packageJson.bugs?.url || 'https://github.com/siteboon/claudecodeui/issues'}
+  ${packageJson.bugs?.url || 'https://github.com/stefanriegel/claudecodeui/issues'}
 `);
 }
 
@@ -210,8 +215,24 @@ function isNewerVersion(v1, v2) {
 async function checkForUpdates(silent = false) {
     try {
         const { execSync } = await import('child_process');
-        const latestVersion = execSync('npm show @cloudcli-ai/cloudcli version', { encoding: 'utf8' }).trim();
         const currentVersion = packageJson.version;
+
+        if (isGitInstall()) {
+            execSync('git fetch --prune origin main', { cwd: APP_ROOT, stdio: silent ? 'ignore' : 'inherit' });
+            const currentCommit = execSync('git rev-parse --short HEAD', { cwd: APP_ROOT, encoding: 'utf8' }).trim();
+            const upstreamCommit = execSync('git rev-parse --short origin/main', { cwd: APP_ROOT, encoding: 'utf8' }).trim();
+            const hasUpdate = currentCommit !== upstreamCommit;
+
+            if (hasUpdate) {
+                console.log(`\n${c.warn('[UPDATE]')} New git revision available: ${c.bright(upstreamCommit)} (current: ${currentCommit})`);
+                console.log(`         Run ${c.bright('cloudcli update')} to update\n`);
+            } else if (!silent) {
+                console.log(`${c.ok('[OK]')} You are on the latest git revision (${currentCommit})`);
+            }
+            return { hasUpdate, latestVersion: upstreamCommit, currentVersion: currentCommit };
+        }
+
+        const latestVersion = execSync(`npm show ${UPDATE_NPM_PACKAGE} version`, { encoding: 'utf8' }).trim();
 
         if (isNewerVersion(latestVersion, currentVersion)) {
             console.log(`\n${c.warn('[UPDATE]')} New version available: ${c.bright(latestVersion)} (current: ${currentVersion})`);
@@ -243,11 +264,21 @@ async function updatePackage() {
         }
 
         console.log(`${c.info('[INFO]')} Updating from ${currentVersion} to ${latestVersion}...`);
-        execSync('npm update -g @cloudcli-ai/cloudcli', { stdio: 'inherit' });
+        if (isGitInstall()) {
+            execSync('git checkout main && git pull --ff-only && npm install && npm run build', {
+                cwd: APP_ROOT,
+                stdio: 'inherit'
+            });
+        } else {
+            execSync(`npm update -g ${UPDATE_NPM_PACKAGE}`, { stdio: 'inherit' });
+        }
         console.log(`${c.ok('[OK]')} Update complete! Restart cloudcli to use the new version.`);
     } catch (e) {
         console.error(`${c.error('[ERROR]')} Update failed: ${e.message}`);
-        console.log(`${c.tip('[TIP]')} Try running manually: npm update -g @cloudcli-ai/cloudcli`);
+        const manualCommand = isGitInstall()
+            ? 'git checkout main && git pull --ff-only && npm install && npm run build'
+            : `npm update -g ${UPDATE_NPM_PACKAGE}`;
+        console.log(`${c.tip('[TIP]')} Try running manually: ${manualCommand}`);
     }
 }
 

@@ -2,7 +2,7 @@ import { Settings, Sparkles, PanelLeftOpen, Bug, AlertTriangle } from 'lucide-re
 import type { TFunction } from 'i18next';
 
 const DISCORD_INVITE_URL = 'https://discord.gg/buxwujPNRE';
-const GITHUB_ISSUES_URL = 'https://github.com/siteboon/claudecodeui/issues/new';
+const GITHUB_ISSUES_URL = 'https://github.com/stefanriegel/claudecodeui/issues/new';
 
 function DiscordIcon({ className }: { className?: string }) {
   return (
