@@ -8,6 +8,7 @@ import { useSidebarController } from '../hooks/useSidebarController';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
+import { useBookmarks, type BookmarkedSession } from '../../../stores/useBookmarkStore';
 import type { Project, LLMProvider } from '../../../types/app';
 import type { MCPServerStatus, SidebarProps } from '../types/types';
 
@@ -52,6 +53,13 @@ function Sidebar({
   const { setCurrentProject, mcpServerStatus } = useTaskMaster() as TaskMasterSidebarContext;
   const { tasksEnabled } = useTasksSettings();
   const paletteOps = usePaletteOps();
+  const {
+    bookmarks,
+    isBookmarked,
+    toggleBookmark,
+    removeBookmark,
+    refreshFromProjects: refreshBookmarksFromProjects,
+  } = useBookmarks();
 
   const {
     isSidebarCollapsed,
@@ -139,8 +147,31 @@ function Sidebar({
     document.body.classList.toggle('pwa-mode', isPWA);
   }, [isPWA]);
 
+  useEffect(() => {
+    refreshBookmarksFromProjects(projects);
+  }, [projects, refreshBookmarksFromProjects]);
+
   const handleProjectCreated = () => {
     void paletteOps.refreshProjects();
+  };
+
+  const handleSelectBookmark = (bookmark: BookmarkedSession) => {
+    const project = projects.find((candidate) => candidate.projectId === bookmark.projectId);
+    const session = {
+      id: bookmark.sessionId,
+      summary: bookmark.sessionSummary,
+      __provider: bookmark.provider,
+      __projectId: bookmark.projectId,
+    };
+
+    if (project) {
+      handleProjectSelect(project);
+      const existingSession = getProjectSessions(project).find((candidate) => candidate.id === bookmark.sessionId);
+      handleSessionClick(existingSession ?? session, project.projectId);
+      return;
+    }
+
+    handleSessionClick(session, bookmark.projectId);
   };
 
   const projectListProps: SidebarProjectListProps = {
@@ -191,6 +222,8 @@ function Sidebar({
     onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => {
       void updateSessionSummary(projectName, sessionId, summary, provider);
     },
+    isSessionBookmarked: isBookmarked,
+    onToggleSessionBookmark: toggleBookmark,
     t,
   };
 
@@ -304,6 +337,10 @@ function Sidebar({
             onShowVersionModal={() => setShowVersionModal(true)}
             onShowSettings={onShowSettings}
             projectListProps={projectListProps}
+            bookmarks={bookmarks}
+            selectedSessionId={selectedSession?.id ?? null}
+            onSelectBookmark={handleSelectBookmark}
+            onRemoveBookmark={removeBookmark}
             t={t}
           />
         </>

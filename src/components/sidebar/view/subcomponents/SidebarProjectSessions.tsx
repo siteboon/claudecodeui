@@ -3,6 +3,7 @@ import type { TFunction } from 'i18next';
 
 import { Button } from '../../../../shared/view/ui';
 import type { SessionActivityMap } from '../../../../hooks/useSessionProtection';
+import type { BookmarkedSession, BookmarkIdentity } from '../../../../stores/useBookmarkStore';
 import type { Project, ProjectSession, LLMProvider } from '../../../../types/app';
 import type { SessionWithProvider } from '../../types/types';
 
@@ -24,6 +25,8 @@ type SidebarProjectSessionsProps = {
   onStartEditingSession: (sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
   onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => void;
+  isSessionBookmarked: (session: BookmarkIdentity) => boolean;
+  onToggleSessionBookmark: (session: BookmarkedSession) => void;
   onProjectSelect: (project: Project) => void;
   onSessionSelect: (session: SessionWithProvider, projectName: string) => void;
   onDeleteSession: (
@@ -71,6 +74,8 @@ export default function SidebarProjectSessions({
   onStartEditingSession,
   onCancelEditingSession,
   onSaveEditingSession,
+  isSessionBookmarked,
+  onToggleSessionBookmark,
   onProjectSelect,
   onSessionSelect,
   onDeleteSession,
@@ -131,6 +136,12 @@ export default function SidebarProjectSessions({
               onStartEditingSession={onStartEditingSession}
               onCancelEditingSession={onCancelEditingSession}
               onSaveEditingSession={onSaveEditingSession}
+              isBookmarked={isSessionBookmarked({
+                projectId: project.projectId,
+                provider: session.__provider,
+                sessionId: session.id,
+              })}
+              onToggleBookmark={onToggleSessionBookmark}
               onProjectSelect={onProjectSelect}
               onSessionSelect={onSessionSelect}
               onDeleteSession={onDeleteSession}

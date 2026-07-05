@@ -4,6 +4,7 @@ import type { TFunction } from 'i18next';
 
 import { ScrollArea } from '../../../../shared/view/ui';
 import type { Project } from '../../../../types/app';
+import type { BookmarkedSession, BookmarkIdentity } from '../../../../stores/useBookmarkStore';
 import type { ReleaseInfo } from '../../../../types/sharedTypes';
 import type { ConversationSearchResults, SearchProgress } from '../../hooks/useSidebarController';
 import type { ArchivedProjectListItem, ArchivedSessionListItem, SidebarSearchMode } from '../../types/types';
@@ -12,6 +13,7 @@ import { getAllSessions } from '../../utils/utils';
 
 import SidebarFooter from './SidebarFooter';
 import SidebarHeader from './SidebarHeader';
+import SidebarBookmarks from './SidebarBookmarks';
 import SidebarProjectList, { type SidebarProjectListProps } from './SidebarProjectList';
 
 function HighlightedSnippet({ snippet, highlights }: { snippet: string; highlights: { start: number; end: number }[] }) {
@@ -148,6 +150,10 @@ type SidebarContentProps = {
   onShowVersionModal: () => void;
   onShowSettings: () => void;
   projectListProps: SidebarProjectListProps;
+  bookmarks: BookmarkedSession[];
+  selectedSessionId: string | null;
+  onSelectBookmark: (bookmark: BookmarkedSession) => void;
+  onRemoveBookmark: (bookmark: BookmarkIdentity) => void;
   t: TFunction;
 };
 
@@ -186,6 +192,10 @@ export default function SidebarContent({
   onShowVersionModal,
   onShowSettings,
   projectListProps,
+  bookmarks,
+  selectedSessionId,
+  onSelectBookmark,
+  onRemoveBookmark,
   t,
 }: SidebarContentProps) {
   const showConversationSearch = searchMode === 'conversations' && searchFilter.trim().length >= 2;
@@ -549,7 +559,16 @@ export default function SidebarContent({
             </div>
           )
         ) : (
-          <SidebarProjectList {...projectListProps} />
+          <>
+            <SidebarBookmarks
+              bookmarks={bookmarks}
+              selectedSessionId={selectedSessionId}
+              onSelectBookmark={onSelectBookmark}
+              onRemoveBookmark={onRemoveBookmark}
+              t={t}
+            />
+            <SidebarProjectList {...projectListProps} />
+          </>
         )}
       </ScrollArea>
 

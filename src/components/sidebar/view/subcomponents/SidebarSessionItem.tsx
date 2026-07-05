@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react';
-import { Check, Edit2, Loader2, Trash2, X } from 'lucide-react';
+import { Check, Edit2, Loader2, Pin, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { Badge, Tooltip, buttonVariants } from '../../../../shared/view/ui';
 import { cn } from '../../../../lib/utils';
+import type { BookmarkedSession } from '../../../../stores/useBookmarkStore';
 import type { Project, ProjectSession, LLMProvider } from '../../../../types/app';
 import type { SessionWithProvider } from '../../types/types';
 import { createSessionViewModel } from '../../utils/utils';
@@ -29,6 +30,8 @@ type SidebarSessionItemProps = {
     sessionTitle: string,
     provider: LLMProvider,
   ) => void;
+  isBookmarked: boolean;
+  onToggleBookmark: (bookmark: BookmarkedSession) => void;
   t: TFunction;
 };
 
@@ -75,6 +78,8 @@ export default function SidebarSessionItem({
   onProjectSelect,
   onSessionSelect,
   onDeleteSession,
+  isBookmarked,
+  onToggleBookmark,
   t,
 }: SidebarSessionItemProps) {
   const sessionView = createSessionViewModel(session, currentTime, t);
@@ -116,6 +121,17 @@ export default function SidebarSessionItem({
 
   const requestDeleteSession = () => {
     onDeleteSession(project.projectId, session.id, sessionView.sessionName, session.__provider);
+  };
+
+  const requestToggleBookmark = () => {
+    onToggleBookmark({
+      projectId: project.projectId,
+      projectDisplayName: project.displayName,
+      provider: session.__provider,
+      sessionId: session.id,
+      sessionSummary: sessionView.sessionName,
+      bookmarkedAt: new Date().toISOString(),
+    });
   };
 
   return (
@@ -178,6 +194,22 @@ export default function SidebarSessionItem({
                 )}
               </div>
             </div>
+
+            <button
+              className="ml-1 flex h-5 w-5 items-center justify-center rounded-md bg-blue-50 opacity-70 transition-transform active:scale-95 dark:bg-blue-900/20"
+              onClick={(event) => {
+                event.stopPropagation();
+                requestToggleBookmark();
+              }}
+              title={isBookmarked ? t('bookmarks.unpin', 'Unpin session') : t('bookmarks.pin', 'Pin session')}
+            >
+              <Pin
+                className={cn(
+                  'h-2.5 w-2.5',
+                  isBookmarked ? 'rotate-45 fill-blue-600 text-blue-600 dark:text-blue-400' : 'text-blue-600 dark:text-blue-400',
+                )}
+              />
+            </button>
 
             {!isProcessing && (
               <button
@@ -306,6 +338,21 @@ export default function SidebarSessionItem({
               </>
             ) : (
               <>
+                <button
+                  className="flex h-6 w-6 items-center justify-center rounded bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/40"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    requestToggleBookmark();
+                  }}
+                  title={isBookmarked ? t('bookmarks.unpin', 'Unpin session') : t('bookmarks.pin', 'Pin session')}
+                >
+                  <Pin
+                    className={cn(
+                      'h-3 w-3 text-blue-600 dark:text-blue-400',
+                      isBookmarked && 'rotate-45 fill-blue-600',
+                    )}
+                  />
+                </button>
                 <button
                   className="flex h-6 w-6 items-center justify-center rounded bg-gray-50 hover:bg-gray-100 dark:bg-gray-900/20 dark:hover:bg-gray-900/40"
                   onClick={(event) => {

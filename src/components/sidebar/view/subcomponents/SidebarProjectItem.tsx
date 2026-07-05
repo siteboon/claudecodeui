@@ -5,6 +5,7 @@ import { Button } from '../../../../shared/view/ui';
 import { cn } from '../../../../lib/utils';
 import type { Project, ProjectSession, LLMProvider } from '../../../../types/app';
 import type { SessionActivityMap } from '../../../../hooks/useSessionProtection';
+import type { BookmarkedSession, BookmarkIdentity } from '../../../../stores/useBookmarkStore';
 import type { MCPServerStatus, SessionWithProvider } from '../../types/types';
 import { getTaskIndicatorStatus } from '../../utils/utils';
 
@@ -50,6 +51,8 @@ type SidebarProjectItemProps = {
   onStartEditingSession: (sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
   onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => void;
+  isSessionBookmarked: (session: BookmarkIdentity) => boolean;
+  onToggleSessionBookmark: (session: BookmarkedSession) => void;
   t: TFunction;
 };
 
@@ -92,6 +95,8 @@ export default function SidebarProjectItem({
   onStartEditingSession,
   onCancelEditingSession,
   onSaveEditingSession,
+  isSessionBookmarked,
+  onToggleSessionBookmark,
   t,
 }: SidebarProjectItemProps) {
   // Project identity is tracked by the DB-assigned `projectId` everywhere
@@ -406,6 +411,8 @@ export default function SidebarProjectItem({
         onStartEditingSession={onStartEditingSession}
         onCancelEditingSession={onCancelEditingSession}
         onSaveEditingSession={onSaveEditingSession}
+        isSessionBookmarked={isSessionBookmarked}
+        onToggleSessionBookmark={onToggleSessionBookmark}
         onProjectSelect={onProjectSelect}
         onSessionSelect={onSessionSelect}
         onDeleteSession={onDeleteSession}
