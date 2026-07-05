@@ -666,6 +666,12 @@
       user-select: text !important;
       -webkit-touch-callout: default !important;
     }
+
+    .xterm .xterm-viewport {
+      touch-action: pan-y;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+    }
     
     /* Fix mobile scrolling */
     .overflow-y-auto {
