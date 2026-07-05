@@ -162,7 +162,6 @@ export function useShellConnection({
           setIsConnected(false);
           setIsConnecting(false);
           connectingRef.current = false;
-          clearTerminalScreen();
         };
 
         socket.onerror = () => {
@@ -178,7 +177,6 @@ export function useShellConnection({
       }
     },
     [
-      clearTerminalScreen,
       fitAddonRef,
       handleSocketMessage,
       initialCommandRef,
