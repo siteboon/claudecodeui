@@ -93,7 +93,7 @@ export function codexFunctionCallToTool(entry: AnyRecord): AnyRecord | null {
       toolInput: {
         items: plan
           .map((item) => readObjectRecord(item))
-          .filter(Boolean)
+          .filter((item): item is AnyRecord => item !== null)
           .map((item) => ({
             text: typeof item.step === 'string' ? item.step : '',
             status: typeof item.status === 'string' ? item.status : 'pending',
