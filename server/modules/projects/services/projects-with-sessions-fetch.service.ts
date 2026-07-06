@@ -25,6 +25,13 @@ type SessionRepositoryRow = {
   created_at?: string | null;
 };
 
+export type WorktreeInfo = {
+  isWorktree: boolean;
+  worktreeRoot: string;
+  mainRepoRoot: string;
+  branchName: string;
+};
+
 export type ProjectListItem = {
   projectId: string;
   path: string;
@@ -36,6 +43,10 @@ export type ProjectListItem = {
     hasMore: boolean;
     total: number;
   };
+  worktreeInfo?: WorktreeInfo | null;
+  repoGroup?: string;
+  isMainWorktree?: boolean;
+  isStale?: boolean;
 };
 
 export type ArchivedProjectListItem = ProjectListItem & {
@@ -77,6 +88,79 @@ export type ProjectSessionsPageApiView = {
 
 const DEFAULT_PROJECT_SESSIONS_PAGE_SIZE = 20;
 const MAX_PROJECT_SESSIONS_PAGE_SIZE = 200;
+const WORKTREE_MARKER = `${path.sep}.claude${path.sep}worktrees${path.sep}`;
+
+function detectWorktreeFromPath(projectPath: string): { mainRepoRoot: string; worktreeName: string } | null {
+  const markerIndex = projectPath.indexOf(WORKTREE_MARKER);
+  if (markerIndex < 0) {
+    return null;
+  }
+
+  const worktreeName = projectPath.slice(markerIndex + WORKTREE_MARKER.length).split(path.sep)[0] ?? '';
+  if (!worktreeName) {
+    return null;
+  }
+
+  return {
+    mainRepoRoot: projectPath.slice(0, markerIndex),
+    worktreeName,
+  };
+}
+
+function buildRepoGroupIndex(projectPaths: string[]): Set<string> {
+  const mainRepoRoots = new Set<string>();
+  for (const projectPath of projectPaths) {
+    const detected = detectWorktreeFromPath(projectPath);
+    if (detected) {
+      mainRepoRoots.add(detected.mainRepoRoot);
+    }
+  }
+  return mainRepoRoots;
+}
+
+async function checkPathExists(targetPath: string): Promise<boolean> {
+  try {
+    await fs.access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function resolveWorktreeFields(
+  projectPath: string,
+  repoRootsWithWorktrees: Set<string>,
+): Promise<Pick<ProjectListItem, 'worktreeInfo' | 'repoGroup' | 'isMainWorktree' | 'isStale'>> {
+  const detected = detectWorktreeFromPath(projectPath);
+  if (detected) {
+    return {
+      worktreeInfo: {
+        isWorktree: true,
+        worktreeRoot: projectPath,
+        mainRepoRoot: detected.mainRepoRoot,
+        branchName: detected.worktreeName,
+      },
+      repoGroup: detected.mainRepoRoot,
+      isMainWorktree: false,
+      isStale: !(await checkPathExists(projectPath)),
+    };
+  }
+
+  if (repoRootsWithWorktrees.has(projectPath)) {
+    return {
+      worktreeInfo: null,
+      repoGroup: projectPath,
+      isMainWorktree: true,
+      isStale: false,
+    };
+  }
+
+  return {
+    worktreeInfo: null,
+    isMainWorktree: false,
+    isStale: false,
+  };
+}
 
 /**
  * Generate better display name from path.
@@ -193,6 +277,7 @@ export async function getProjectsWithSessions(
     custom_project_name?: string | null;
     isStarred?: number;
   }>;
+  const repoRootsWithWorktrees = buildRepoGroupIndex(projectRows.map((row) => row.project_path));
   const totalProjects = projectRows.length;
   const projects: ProjectListItem[] = [];
   let processedProjects = 0;
@@ -219,6 +304,7 @@ export async function getProjectsWithSessions(
       limit: options.sessionsLimit,
       offset: options.sessionsOffset,
     });
+    const worktreeFields = await resolveWorktreeFields(projectPath, repoRootsWithWorktrees);
 
     projects.push({
       projectId,
@@ -231,6 +317,7 @@ export async function getProjectsWithSessions(
         hasMore: sessionsPage.hasMore,
         total: sessionsPage.total,
       },
+      ...worktreeFields,
     });
   }
 

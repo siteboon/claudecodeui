@@ -198,6 +198,10 @@ function ChatInterface({
     closeCommandModal,
     showCostModal,
     queuedPromptCount,
+    useWorktreeForSession,
+    setUseWorktreeForSession,
+    worktreeName,
+    setWorktreeName,
   } = useChatComposerState({
     selectedProject,
     selectedSession,
@@ -377,6 +381,10 @@ function ChatInterface({
           showRawParameters={showRawParameters}
           showThinking={showThinking}
           selectedProject={selectedProject}
+          useWorktreeForSession={useWorktreeForSession}
+          setUseWorktreeForSession={setUseWorktreeForSession}
+          worktreeName={worktreeName}
+          setWorktreeName={setWorktreeName}
         />
 
         <div className="relative flex-shrink-0">

@@ -82,6 +82,19 @@ test('force delete removes the transcript of an app-created session (jsonl_path 
   });
 });
 
+test('force delete removes managed Claude worktree directory', async () => {
+  await withEnv(async (home) => {
+    const worktreePath = path.join(home, 'repo', '.claude', 'worktrees', 'feature');
+    await mkdir(worktreePath, { recursive: true });
+    await writeFile(path.join(worktreePath, 'file.txt'), 'worktree data', 'utf8');
+
+    const created = projectsDb.createProjectPath(worktreePath);
+    await deleteOrArchiveProject(created.project!.project_id, true);
+
+    assert.equal(existsSync(worktreePath), false, 'worktree directory should be deleted');
+  });
+});
+
 test('force delete never removes files outside the Claude projects root', async () => {
   await withEnv(async (home) => {
     // A malformed/relative project_path must not let directory removal escape the root.

@@ -250,8 +250,11 @@ function mapCliOptionsToSDK(options = {}) {
   sdkOptions.disallowedTools = settings.disallowedTools || [];
 
   if (settings.useWorktree === true) {
+    const worktreeName = typeof settings.worktreeName === 'string'
+      ? settings.worktreeName.trim()
+      : '';
     sdkOptions.settings = {
-      worktree: {}
+      worktree: worktreeName ? { name: worktreeName } : {}
     };
   }
 

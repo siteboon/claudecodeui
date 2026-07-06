@@ -161,6 +161,46 @@ export const filterProjects = (projects: Project[], searchFilter: string): Proje
   });
 };
 
+export type RepoBucket = {
+  key: string;
+  mainProject: Project;
+  linkedWorktrees: Project[];
+  projects: Project[];
+};
+
+export const groupProjectsByRepo = (projects: Project[]): RepoBucket[] => {
+  const buckets = new Map<string, Project[]>();
+  const insertionOrder: string[] = [];
+
+  for (const project of projects) {
+    const groupKey = project.repoGroup ?? `__standalone__${project.projectId}`;
+    if (!buckets.has(groupKey)) {
+      buckets.set(groupKey, []);
+      insertionOrder.push(groupKey);
+    }
+    buckets.get(groupKey)!.push(project);
+  }
+
+  return insertionOrder.map((key) => {
+    const members = buckets.get(key)!;
+    if (members.length === 1) {
+      return { key, mainProject: members[0], linkedWorktrees: [], projects: members };
+    }
+
+    const sorted = [...members].sort((a, b) => {
+      if (a.isMainWorktree && !b.isMainWorktree) return -1;
+      if (!a.isMainWorktree && b.isMainWorktree) return 1;
+      const aBranch = a.worktreeInfo?.branchName || a.displayName;
+      const bBranch = b.worktreeInfo?.branchName || b.displayName;
+      return aBranch.localeCompare(bBranch);
+    });
+
+    const mainProject = sorted.find((project) => project.isMainWorktree) ?? sorted[0];
+    const linkedWorktrees = sorted.filter((project) => project !== mainProject);
+    return { key, mainProject, linkedWorktrees, projects: sorted };
+  });
+};
+
 export const getTaskIndicatorStatus = (
   project: Project,
   mcpServerStatus: { hasMCPServer?: boolean; isConfigured?: boolean } | null,

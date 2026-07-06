@@ -174,6 +174,15 @@ const getNotificationSessionSummary = (
   return normalizedFallback.length > 80 ? `${normalizedFallback.slice(0, 77)}...` : normalizedFallback;
 };
 
+function readUseWorktreeDefault(): boolean {
+  try {
+    const raw = safeLocalStorage.getItem('claude-settings');
+    return raw ? JSON.parse(raw)?.useWorktree === true : false;
+  } catch {
+    return false;
+  }
+}
+
 export function useChatComposerState({
   selectedProject,
   selectedSession,
@@ -217,6 +226,8 @@ export function useChatComposerState({
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
   const [commandModalPayload, setCommandModalPayload] = useState<CommandModalPayload | null>(null);
   const [queuedPrompts, setQueuedPrompts] = useState<QueuedPrompt[]>([]);
+  const [useWorktreeForSession, setUseWorktreeForSession] = useState(() => readUseWorktreeDefault());
+  const [worktreeName, setWorktreeName] = useState('');
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputHighlightRef = useRef<HTMLDivElement>(null);
@@ -230,6 +241,11 @@ export function useChatComposerState({
   const queuedPromptSendInFlightRef = useRef(false);
   const isLoadingRef = useRef(isLoading);
   const selectedProjectId = selectedProject?.projectId;
+
+  useEffect(() => {
+    setUseWorktreeForSession(readUseWorktreeDefault() && selectedProject?.worktreeInfo?.isWorktree !== true);
+    setWorktreeName('');
+  }, [selectedProject?.worktreeInfo?.isWorktree, selectedProjectId]);
 
   const setPromptQueue = useCallback((nextQueue: QueuedPrompt[]) => {
     queuedPromptsRef.current = nextQueue;
@@ -688,6 +704,7 @@ export function useChatComposerState({
 
       const resolvedProjectPath = selectedSession?.projectPath || selectedProject.fullPath || selectedProject.path || '';
       const sessionSummary = getNotificationSessionSummary(selectedSession, currentInput);
+      const isNewSession = !selectedSession?.id && !currentSessionId;
 
       // The conversation always has a stable backend-allocated session id
       // BEFORE the first websocket send: brand-new chats allocate one here
@@ -756,6 +773,13 @@ export function useChatComposerState({
 
       const providerPermissionSettings = await loadProviderPermissionSettings(authenticatedFetch);
       const toolsSettings = getProviderToolsSettings(provider, providerPermissionSettings);
+      const sessionToolsSettings = provider === 'claude' && isNewSession
+        ? {
+            ...toolsSettings,
+            useWorktree: useWorktreeForSession,
+            worktreeName: useWorktreeForSession ? worktreeName.trim() || undefined : undefined,
+          }
+        : toolsSettings;
       const model =
         provider === 'cursor'
           ? cursorModel
@@ -779,8 +803,8 @@ export function useChatComposerState({
           model,
           effort,
           permissionMode: resolvePermissionModeForProvider(provider, permissionMode),
-          toolsSettings,
-          skipPermissions: toolsSettings.skipPermissions === true,
+          toolsSettings: sessionToolsSettings,
+          skipPermissions: sessionToolsSettings.skipPermissions === true,
           sessionSummary,
           images: uploadedImages,
         },
@@ -825,6 +849,8 @@ export function useChatComposerState({
       setIsUserScrolledUp,
       slashCommands,
       setPromptQueue,
+      useWorktreeForSession,
+      worktreeName,
     ],
   );
 
@@ -1145,5 +1171,9 @@ export function useChatComposerState({
     closeCommandModal,
     showCostModal,
     queuedPromptCount: queuedPrompts.length,
+    useWorktreeForSession,
+    setUseWorktreeForSession,
+    worktreeName,
+    setWorktreeName,
   };
 }

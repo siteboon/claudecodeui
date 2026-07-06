@@ -125,6 +125,13 @@ export default function SidebarModals({
                         {t('deleteConfirmation.sessionCount', { count: deleteConfirmation.sessionCount })}
                       </p>
                     )}
+                    {deleteConfirmation.project.worktreeInfo?.isWorktree && !deleteConfirmation.project.isStale && (
+                      <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/20">
+                        <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                          {t('deleteConfirmation.worktreeWarning')}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

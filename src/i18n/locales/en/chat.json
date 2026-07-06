@@ -165,7 +165,12 @@
       "opencode": "Ready to use OpenCode with {{model}}. Start typing your message below.",
       "default": "Select a provider above to begin"
     },
-    "pressToSearch": "Press <kbd>{{shortcut}}</kbd> to search sessions, files, and commits"
+    "pressToSearch": "Press <kbd>{{shortcut}}</kbd> to search sessions, files, and commits",
+    "worktree": {
+      "checkboxLabel": "Spawn as worktree",
+      "description": "Run this session in an isolated git worktree.",
+      "namePlaceholder": "Auto-generate name if blank"
+    }
   },
   "session": {
     "continue": {

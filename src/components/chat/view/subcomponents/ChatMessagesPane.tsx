@@ -65,6 +65,10 @@ interface ChatMessagesPaneProps {
   showRawParameters?: boolean;
   showThinking?: boolean;
   selectedProject: Project;
+  useWorktreeForSession: boolean;
+  setUseWorktreeForSession: (value: boolean) => void;
+  worktreeName: string;
+  setWorktreeName: (value: string) => void;
 }
 
 function ChatMessagesPane({
@@ -114,6 +118,10 @@ function ChatMessagesPane({
   showRawParameters,
   showThinking,
   selectedProject,
+  useWorktreeForSession,
+  setUseWorktreeForSession,
+  worktreeName,
+  setWorktreeName,
 }: ChatMessagesPaneProps) {
   const { t } = useTranslation('chat');
   const groupedVisibleMessages = useMemo(
@@ -194,6 +202,10 @@ function ChatMessagesPane({
           isTaskMasterInstalled={isTaskMasterInstalled}
           onShowAllTasks={onShowAllTasks}
           setInput={setInput}
+          useWorktreeForSession={useWorktreeForSession}
+          setUseWorktreeForSession={setUseWorktreeForSession}
+          worktreeName={worktreeName}
+          setWorktreeName={setWorktreeName}
         />
       ) : (
         <>

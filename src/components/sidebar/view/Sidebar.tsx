@@ -57,8 +57,6 @@ function Sidebar({
   const paletteOps = usePaletteOps();
   const {
     bookmarks,
-    isBookmarked,
-    toggleBookmark,
     removeBookmark,
     refreshFromProjects: refreshBookmarksFromProjects,
   } = useBookmarks();
@@ -66,10 +64,7 @@ function Sidebar({
   const {
     isSidebarCollapsed,
     expandedProjects,
-    editingProject,
     showNewProject,
-    editingName,
-    initialSessionsLoaded,
     currentTime,
     isRefreshing,
     editingSession,
@@ -82,7 +77,6 @@ function Sidebar({
     searchProgress,
     clearConversationResults,
     runningSessionsCount,
-    deletingProjects,
     deleteConfirmation,
     sessionDeleteConfirmation,
     showVersionModal,
@@ -96,11 +90,7 @@ function Sidebar({
     toggleStarProject,
     isProjectStarred,
     getProjectSessions,
-    loadingMoreProjects,
     loadMoreSessionsForProject,
-    startEditing,
-    cancelEditing,
-    saveProjectName,
     showDeleteSessionConfirmation,
     confirmDeleteSession,
     requestProjectDelete,
@@ -115,7 +105,6 @@ function Sidebar({
     collapseSidebar: handleCollapseSidebar,
     expandSidebar: handleExpandSidebar,
     setShowNewProject,
-    setEditingName,
     setEditingSession,
     setEditingSessionName,
     setSearchFilter,
@@ -185,29 +174,14 @@ function Sidebar({
     isLoading,
     loadingProgress,
     expandedProjects,
-    editingProject,
-    editingName,
-    initialSessionsLoaded,
     currentTime,
     editingSession,
     editingSessionName,
-    deletingProjects,
     tasksEnabled,
     mcpServerStatus,
-    getProjectSessions,
-    loadingMoreProjects,
-    activeSessions,
-    forceExpanded: searchMode === 'running',
     isProjectStarred,
-    onEditingNameChange: setEditingName,
     onToggleProject: toggleProject,
-    onProjectSelect: handleProjectSelect,
     onToggleStarProject: toggleStarProject,
-    onStartEditingProject: startEditing,
-    onCancelEditingProject: cancelEditing,
-    onSaveProjectName: (projectName) => {
-      void saveProjectName(projectName);
-    },
     onDeleteProject: requestProjectDelete,
     onSessionSelect: handleSessionClick,
     onDeleteSession: showDeleteSessionConfirmation,
@@ -225,8 +199,6 @@ function Sidebar({
     onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => {
       void updateSessionSummary(projectName, sessionId, summary, provider);
     },
-    isSessionBookmarked: isBookmarked,
-    onToggleSessionBookmark: toggleBookmark,
     t,
   };
 

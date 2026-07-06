@@ -58,6 +58,13 @@ export interface ProjectTaskmasterInfo {
   [key: string]: unknown;
 }
 
+export interface WorktreeInfo {
+  isWorktree: boolean;
+  worktreeRoot: string;
+  mainRepoRoot: string;
+  branchName: string;
+}
+
 // After the projectName → projectId migration the backend no longer returns a
 // folder-derived `name` string. Projects are now addressed everywhere by the
 // DB-assigned `projectId` (primary key in the `projects` table), and the UI
@@ -69,8 +76,16 @@ export interface Project {
   path?: string;
   isStarred?: boolean;
   sessions?: ProjectSession[];
+  cursorSessions?: ProjectSession[];
+  codexSessions?: ProjectSession[];
+  geminiSessions?: ProjectSession[];
+  opencodeSessions?: ProjectSession[];
   sessionMeta?: ProjectSessionMeta;
   taskmaster?: ProjectTaskmasterInfo;
+  worktreeInfo?: WorktreeInfo | null;
+  repoGroup?: string;
+  isMainWorktree?: boolean;
+  isStale?: boolean;
   [key: string]: unknown;
 }
 

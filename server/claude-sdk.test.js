@@ -91,3 +91,19 @@ test('Claude SDK maps worktree permission setting to SDK settings', () => {
     worktree: {},
   });
 });
+
+test('Claude SDK maps named worktree permission setting to SDK settings', () => {
+  const sdkOptions = __testMapCliOptionsToSDK({
+    toolsSettings: {
+      allowedTools: [],
+      disallowedTools: [],
+      skipPermissions: false,
+      useWorktree: true,
+      worktreeName: 'feature-x',
+    },
+  });
+
+  assert.deepEqual(sdkOptions.settings, {
+    worktree: { name: 'feature-x' },
+  });
+});

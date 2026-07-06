@@ -75,6 +75,18 @@ function resolveClaudeProjectDir(projectPath: string): string | null {
   return projectDir;
 }
 
+function isManagedClaudeWorktreePath(projectPath: string): boolean {
+  return projectPath.includes(`${path.sep}.claude${path.sep}worktrees${path.sep}`);
+}
+
+async function deleteManagedWorktreeDir(projectPath: string): Promise<void> {
+  if (!isManagedClaudeWorktreePath(projectPath)) {
+    return;
+  }
+
+  await fs.rm(projectPath, { recursive: true, force: true });
+}
+
 /**
  * Removes the entire Claude transcript directory for a project path.
  *
@@ -128,6 +140,7 @@ export async function deleteOrArchiveProject(projectId: string, force: boolean):
 
   await deleteSessionJsonlFilesForProjectPath(row.project_path);
   await deleteClaudeProjectDir(row.project_path);
+  await deleteManagedWorktreeDir(row.project_path);
   sessionsDb.deleteSessionsByProjectPath(row.project_path);
   projectsDb.markProjectDeletedById(projectId);
 }
