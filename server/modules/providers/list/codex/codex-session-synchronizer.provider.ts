@@ -5,12 +5,12 @@ import { readFile } from 'node:fs/promises';
 import { sessionsDb } from '@/modules/database/index.js';
 import {
   buildLookupMap,
-  extractFirstValidJsonlData,
   findFilesRecursivelyCreatedAfter,
   normalizeSessionName,
   readFileTimestamps,
 } from '@/shared/utils.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
+import { isCodexSubagentTranscript, readCodexTranscriptMeta } from './codex-transcripts.js';
 
 type ParsedSession = {
   sessionId: string;
@@ -76,6 +76,10 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
       return null;
     }
 
+    if (await isCodexSubagentTranscript(filePath)) {
+      return null;
+    }
+
     const nameMap = await buildLookupMap(path.join(this.codexHome, 'session_index.jsonl'), 'id', 'thread_name');
     const parsed = await this.processSessionFile(filePath, nameMap);
     if (!parsed) {
@@ -101,21 +105,14 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
     filePath: string,
     nameMap: Map<string, string>
   ): Promise<ParsedSession | null> {
-    const parsed = await extractFirstValidJsonlData(filePath, (rawData) => {
-      const data = rawData as Record<string, unknown>;
-      const payload = data.payload as Record<string, unknown> | undefined;
-      const sessionId = typeof payload?.id === 'string' ? payload.id : undefined;
-      const projectPath = typeof payload?.cwd === 'string' ? payload.cwd : undefined;
-
-      if (!sessionId || !projectPath) {
-        return null;
-      }
-
-      return {
-        sessionId,
-        projectPath,
-      };
-    });
+    const meta = await readCodexTranscriptMeta(filePath);
+    if (!meta || meta.threadSource === 'subagent') {
+      return null;
+    }
+    const parsed = {
+      sessionId: meta.sessionId,
+      projectPath: meta.projectPath,
+    };
 
     if (!parsed) {
       return null;
