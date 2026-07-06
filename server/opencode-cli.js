@@ -15,6 +15,36 @@ const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
 
 const activeOpenCodeProcesses = new Map();
 
+/**
+ * Maps the UI permission mode onto OpenCode's non-interactive controls.
+ *
+ * OpenCode has no single "permission mode" flag; each mode uses a different
+ * lever of the `opencode run` CLI (verified against v1.17.13):
+ * - plan              → the built-in read-only `plan` agent (`--agent plan`).
+ * - bypassPermissions → `--auto`, which auto-approves every permission that
+ *                       is not explicitly denied in the user's config.
+ * - acceptEdits       → the OPENCODE_PERMISSION env var, whose JSON body the
+ *                       CLI merges into its permission config. Forcing
+ *                       `edit: allow` guarantees file edits go through while
+ *                       every other rule stays under the user's own config.
+ * - default           → nothing; the user's opencode.json governs. In
+ *                       non-interactive `run` mode any `ask` rule is denied.
+ *
+ * Exported for tests only.
+ */
+export function resolveOpenCodePermissionOptions(permissionMode) {
+  switch (permissionMode) {
+    case 'plan':
+      return { args: ['--agent', 'plan'], env: {} };
+    case 'bypassPermissions':
+      return { args: ['--auto'], env: {} };
+    case 'acceptEdits':
+      return { args: [], env: { OPENCODE_PERMISSION: JSON.stringify({ edit: 'allow' }) } };
+    default:
+      return { args: [], env: {} };
+  }
+}
+
 function resolveOpenCodeEffort(model, effort, modelsDefinition) {
   const selectedModel = modelsDefinition?.OPTIONS?.find((option) => option.value === model);
   const allowedEfforts = selectedModel?.effort?.values?.map((value) => value.value) || [];
@@ -93,7 +123,7 @@ function readOpenCodeTokenUsage(sessionId) {
 
 async function spawnOpenCode(command, options = {}, ws) {
   return new Promise((resolve, reject) => {
-    const { sessionId, projectPath, cwd, model, effort, sessionSummary, images } = options;
+    const { sessionId, projectPath, cwd, model, effort, sessionSummary, images, permissionMode } = options;
     const workingDir = cwd || projectPath || process.cwd();
     const processKey = sessionId || Date.now().toString();
     let capturedSessionId = sessionId || null;
@@ -224,6 +254,8 @@ async function spawnOpenCode(command, options = {}, ws) {
       if (resolvedEffort) {
         args.push('--variant', resolvedEffort);
       }
+      const permissionOptions = resolveOpenCodePermissionOptions(permissionMode);
+      args.push(...permissionOptions.args);
       if (command && command.trim()) {
         // Image attachments ride along as an <images_input> path list appended
         // to the prompt; the session history reader strips the tag back out.
@@ -235,7 +267,7 @@ async function spawnOpenCode(command, options = {}, ws) {
       opencodeProcess = spawnFunction('opencode', args, {
         cwd: workingDir,
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env },
+        env: { ...process.env, ...permissionOptions.env },
       });
 
       activeOpenCodeProcesses.set(processKey, opencodeProcess);

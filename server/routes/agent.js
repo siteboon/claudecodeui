@@ -1005,7 +1005,8 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         cwd: finalProjectPath,
         sessionId: sessionId || null,
         model: model || opencodeModels.DEFAULT,
-        effort
+        effort,
+        permissionMode: 'bypassPermissions' // Agent runs are non-interactive, like the other providers above
       }, writer);
     }
 
