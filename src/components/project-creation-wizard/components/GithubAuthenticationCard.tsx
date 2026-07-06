@@ -10,6 +10,7 @@ type GithubAuthenticationCardProps = {
   availableTokens: GithubTokenCredential[];
   loadingTokens: boolean;
   tokenLoadError: string | null;
+  providerLabel: string;
   onTokenModeChange: (tokenMode: TokenMode) => void;
   onSelectedGithubTokenChange: (tokenId: string) => void;
   onNewGithubTokenChange: (tokenValue: string) => void;
@@ -31,6 +32,7 @@ export default function GithubAuthenticationCard({
   availableTokens,
   loadingTokens,
   tokenLoadError,
+  providerLabel,
   onTokenModeChange,
   onSelectedGithubTokenChange,
   onNewGithubTokenChange,
@@ -43,10 +45,10 @@ export default function GithubAuthenticationCard({
         <Key className="mt-0.5 h-5 w-5 flex-shrink-0 text-gray-600 dark:text-gray-400" />
         <div className="flex-1">
           <h5 className="mb-1 font-medium text-gray-900 dark:text-white">
-            {t('projectWizard.step2.githubAuth')}
+            {t('projectWizard.step2.repositoryAuth', { provider: providerLabel })}
           </h5>
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            {t('projectWizard.step2.githubAuthHelp')}
+            {t('projectWizard.step2.repositoryAuthHelp')}
           </p>
         </div>
       </div>
@@ -116,7 +118,7 @@ export default function GithubAuthenticationCard({
                 type="password"
                 value={newGithubToken}
                 onChange={(event) => onNewGithubTokenChange(event.target.value)}
-                placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                placeholder={t('projectWizard.step2.tokenPlaceholder')}
                 className="w-full"
               />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -137,7 +139,7 @@ export default function GithubAuthenticationCard({
 
           <div>
             <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              {t('projectWizard.step2.optionalTokenPublic')}
+                {t('projectWizard.step2.optionalTokenPublic', { provider: providerLabel })}
             </label>
             <Input
               type="password"

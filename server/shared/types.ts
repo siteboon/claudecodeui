@@ -517,6 +517,7 @@ export type CredentialPublicRow = {
   id: number;
   credential_name: string;
   credential_type: string;
+  credential_host: string | null;
   description: string | null;
   created_at: string;
   is_active: number;
@@ -532,6 +533,7 @@ export type CreateCredentialResult = {
   id: number | bigint;
   credentialName: string;
   credentialType: string;
+  credentialHost?: string | null;
 };
 
 // ---------------------------

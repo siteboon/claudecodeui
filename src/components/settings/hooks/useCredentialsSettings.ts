@@ -12,6 +12,7 @@ import { copyTextToClipboard } from '../../../utils/clipboard';
 type UseCredentialsSettingsArgs = {
   confirmDeleteApiKeyText: string;
   confirmDeleteGithubCredentialText: string;
+  confirmDeleteGitlabCredentialText: string;
 };
 
 const getApiError = (payload: { error?: string } | undefined, fallback: string) => (
@@ -21,9 +22,11 @@ const getApiError = (payload: { error?: string } | undefined, fallback: string) 
 export function useCredentialsSettings({
   confirmDeleteApiKeyText,
   confirmDeleteGithubCredentialText,
+  confirmDeleteGitlabCredentialText,
 }: UseCredentialsSettingsArgs) {
   const [apiKeys, setApiKeys] = useState<ApiKeyItem[]>([]);
   const [githubCredentials, setGithubCredentials] = useState<GithubCredentialItem[]>([]);
+  const [gitlabCredentials, setGitlabCredentials] = useState<GithubCredentialItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [showNewKeyForm, setShowNewKeyForm] = useState(false);
@@ -33,6 +36,11 @@ export function useCredentialsSettings({
   const [newGithubName, setNewGithubName] = useState('');
   const [newGithubToken, setNewGithubToken] = useState('');
   const [newGithubDescription, setNewGithubDescription] = useState('');
+  const [showNewGitlabForm, setShowNewGitlabForm] = useState(false);
+  const [newGitlabName, setNewGitlabName] = useState('');
+  const [newGitlabHost, setNewGitlabHost] = useState('');
+  const [newGitlabToken, setNewGitlabToken] = useState('');
+  const [newGitlabDescription, setNewGitlabDescription] = useState('');
 
   const [showToken, setShowToken] = useState<Record<string, boolean>>({});
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -42,18 +50,21 @@ export function useCredentialsSettings({
     try {
       setLoading(true);
 
-      const [apiKeysResponse, credentialsResponse] = await Promise.all([
+      const [apiKeysResponse, credentialsResponse, gitlabCredentialsResponse] = await Promise.all([
         authenticatedFetch('/api/settings/api-keys'),
         authenticatedFetch('/api/settings/credentials?type=github_token'),
+        authenticatedFetch('/api/settings/credentials?type=gitlab_token'),
       ]);
 
-      const [apiKeysPayload, credentialsPayload] = await Promise.all([
+      const [apiKeysPayload, credentialsPayload, gitlabCredentialsPayload] = await Promise.all([
         apiKeysResponse.json() as Promise<ApiKeysResponse>,
         credentialsResponse.json() as Promise<GithubCredentialsResponse>,
+        gitlabCredentialsResponse.json() as Promise<GithubCredentialsResponse>,
       ]);
 
       setApiKeys(apiKeysPayload.apiKeys || []);
       setGithubCredentials(credentialsPayload.credentials || []);
+      setGitlabCredentials(gitlabCredentialsPayload.credentials || []);
     } catch (error) {
       console.error('Error fetching settings:', error);
     } finally {
@@ -163,6 +174,41 @@ export function useCredentialsSettings({
     }
   }, [fetchData, newGithubDescription, newGithubName, newGithubToken]);
 
+  const createGitlabCredential = useCallback(async () => {
+    if (!newGitlabName.trim() || !newGitlabHost.trim() || !newGitlabToken.trim()) {
+      return;
+    }
+
+    try {
+      const response = await authenticatedFetch('/api/settings/credentials', {
+        method: 'POST',
+        body: JSON.stringify({
+          credentialName: newGitlabName.trim(),
+          credentialType: 'gitlab_token',
+          credentialValue: newGitlabToken,
+          credentialHost: newGitlabHost.trim().toLowerCase(),
+          description: newGitlabDescription.trim(),
+        }),
+      });
+
+      const payload = await response.json() as GithubCredentialsResponse;
+      if (!response.ok || !payload.success) {
+        console.error('Error creating GitLab credential:', getApiError(payload, 'Failed to create GitLab credential'));
+        return;
+      }
+
+      setNewGitlabName('');
+      setNewGitlabHost('');
+      setNewGitlabToken('');
+      setNewGitlabDescription('');
+      setShowNewGitlabForm(false);
+      setShowToken((prev) => ({ ...prev, newGitlab: false }));
+      await fetchData();
+    } catch (error) {
+      console.error('Error creating GitLab credential:', error);
+    }
+  }, [fetchData, newGitlabDescription, newGitlabHost, newGitlabName, newGitlabToken]);
+
   const deleteGithubCredential = useCallback(async (credentialId: string) => {
     if (!window.confirm(confirmDeleteGithubCredentialText)) {
       return;
@@ -185,6 +231,28 @@ export function useCredentialsSettings({
     }
   }, [confirmDeleteGithubCredentialText, fetchData]);
 
+  const deleteGitlabCredential = useCallback(async (credentialId: string) => {
+    if (!window.confirm(confirmDeleteGitlabCredentialText)) {
+      return;
+    }
+
+    try {
+      const response = await authenticatedFetch(`/api/settings/credentials/${credentialId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const payload = await response.json() as GithubCredentialsResponse;
+        console.error('Error deleting GitLab credential:', getApiError(payload, 'Failed to delete GitLab credential'));
+        return;
+      }
+
+      await fetchData();
+    } catch (error) {
+      console.error('Error deleting GitLab credential:', error);
+    }
+  }, [confirmDeleteGitlabCredentialText, fetchData]);
+
   const toggleGithubCredential = useCallback(async (credentialId: string, isActive: boolean) => {
     try {
       const response = await authenticatedFetch(`/api/settings/credentials/${credentialId}/toggle`, {
@@ -201,6 +269,25 @@ export function useCredentialsSettings({
       await fetchData();
     } catch (error) {
       console.error('Error toggling GitHub credential:', error);
+    }
+  }, [fetchData]);
+
+  const toggleGitlabCredential = useCallback(async (credentialId: string, isActive: boolean) => {
+    try {
+      const response = await authenticatedFetch(`/api/settings/credentials/${credentialId}/toggle`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isActive: !isActive }),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json() as GithubCredentialsResponse;
+        console.error('Error toggling GitLab credential:', getApiError(payload, 'Failed to toggle GitLab credential'));
+        return;
+      }
+
+      await fetchData();
+    } catch (error) {
+      console.error('Error toggling GitLab credential:', error);
     }
   }, [fetchData]);
 
@@ -231,8 +318,21 @@ export function useCredentialsSettings({
     setShowToken((prev) => ({ ...prev, new: false }));
   }, []);
 
+  const cancelNewGitlabForm = useCallback(() => {
+    setShowNewGitlabForm(false);
+    setNewGitlabName('');
+    setNewGitlabHost('');
+    setNewGitlabToken('');
+    setNewGitlabDescription('');
+    setShowToken((prev) => ({ ...prev, newGitlab: false }));
+  }, []);
+
   const toggleNewGithubTokenVisibility = useCallback(() => {
     setShowToken((prev) => ({ ...prev, new: !prev.new }));
+  }, []);
+
+  const toggleNewGitlabTokenVisibility = useCallback(() => {
+    setShowToken((prev) => ({ ...prev, newGitlab: !prev.newGitlab }));
   }, []);
 
   useEffect(() => {
@@ -242,6 +342,7 @@ export function useCredentialsSettings({
   return {
     apiKeys,
     githubCredentials,
+    gitlabCredentials,
     loading,
     showNewKeyForm,
     setShowNewKeyForm,
@@ -255,6 +356,16 @@ export function useCredentialsSettings({
     setNewGithubToken,
     newGithubDescription,
     setNewGithubDescription,
+    showNewGitlabForm,
+    setShowNewGitlabForm,
+    newGitlabName,
+    setNewGitlabName,
+    newGitlabHost,
+    setNewGitlabHost,
+    newGitlabToken,
+    setNewGitlabToken,
+    newGitlabDescription,
+    setNewGitlabDescription,
     showToken,
     copiedKey,
     newlyCreatedKey,
@@ -262,12 +373,17 @@ export function useCredentialsSettings({
     deleteApiKey,
     toggleApiKey,
     createGithubCredential,
+    createGitlabCredential,
     deleteGithubCredential,
+    deleteGitlabCredential,
     toggleGithubCredential,
+    toggleGitlabCredential,
     copyToClipboard,
     dismissNewlyCreatedKey,
     cancelNewApiKeyForm,
     cancelNewGithubForm,
+    cancelNewGitlabForm,
     toggleNewGithubTokenVisibility,
+    toggleNewGitlabTokenVisibility,
   };
 }

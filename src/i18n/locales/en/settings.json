@@ -300,6 +300,22 @@
       "added": "Added:",
       "confirmDelete": "Are you sure you want to delete this GitHub token?"
     },
+    "gitlab": {
+      "title": "GitLab Tokens",
+      "description": "Add GitLab tokens for gitlab.com or self-hosted GitLab repositories.",
+      "addButton": "Add Token",
+      "form": {
+        "namePlaceholder": "Token Name (e.g., Company GitLab)",
+        "hostPlaceholder": "GitLab host, e.g. git.company.com",
+        "tokenPlaceholder": "GitLab token (glpat_...)",
+        "descriptionPlaceholder": "Description (optional)",
+        "addButton": "Add Token",
+        "cancelButton": "Cancel"
+      },
+      "empty": "No GitLab tokens added yet.",
+      "added": "Added:",
+      "confirmDelete": "Are you sure you want to delete this GitLab token?"
+    },
     "apiDocsLink": "API Documentation",
     "documentation": {
       "title": "External API Documentation",

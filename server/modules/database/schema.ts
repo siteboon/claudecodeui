@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS user_credentials (
     credential_name TEXT NOT NULL,
     credential_type TEXT NOT NULL, -- 'github_token', 'gitlab_token', 'bitbucket_token', etc.
     credential_value TEXT NOT NULL,
+    credential_host TEXT,
     description TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     is_active BOOLEAN DEFAULT 1,

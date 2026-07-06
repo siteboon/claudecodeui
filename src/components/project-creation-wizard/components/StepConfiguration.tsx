@@ -14,6 +14,7 @@ type StepConfigurationProps = {
   availableTokens: GithubTokenCredential[];
   loadingTokens: boolean;
   tokenLoadError: string | null;
+  providerLabel: string;
   isCreating: boolean;
   onWorkspacePathChange: (workspacePath: string) => void;
   onGithubUrlChange: (githubUrl: string) => void;
@@ -32,6 +33,7 @@ export default function StepConfiguration({
   availableTokens,
   loadingTokens,
   tokenLoadError,
+  providerLabel,
   isCreating,
   onWorkspacePathChange,
   onGithubUrlChange,
@@ -64,7 +66,7 @@ export default function StepConfiguration({
 
       <div>
         <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-          {t('projectWizard.step2.githubUrl')}
+          {t('projectWizard.step2.repositoryUrl')}
         </label>
         <Input
           type="text"
@@ -75,7 +77,7 @@ export default function StepConfiguration({
           disabled={isCreating}
         />
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          {t('projectWizard.step2.githubHelp')}
+          {t('projectWizard.step2.repositoryHelp')}
         </p>
       </div>
 
@@ -87,6 +89,7 @@ export default function StepConfiguration({
           availableTokens={availableTokens}
           loadingTokens={loadingTokens}
           tokenLoadError={tokenLoadError}
+          providerLabel={providerLabel}
           onTokenModeChange={onTokenModeChange}
           onSelectedGithubTokenChange={onSelectedGithubTokenChange}
           onNewGithubTokenChange={onNewGithubTokenChange}

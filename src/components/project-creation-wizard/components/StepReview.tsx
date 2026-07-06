@@ -6,6 +6,7 @@ import type { WizardFormState } from '../types';
 type StepReviewProps = {
   formState: WizardFormState;
   selectedTokenName: string | null;
+  providerLabel: string;
   isCreating: boolean;
   cloneProgress: string;
 };
@@ -13,6 +14,7 @@ type StepReviewProps = {
 export default function StepReview({
   formState,
   selectedTokenName,
+  providerLabel,
   isCreating,
   cloneProgress,
 }: StepReviewProps) {
@@ -24,7 +26,7 @@ export default function StepReview({
     }
 
     if (formState.tokenMode === 'new' && formState.newGithubToken.trim()) {
-      return t('projectWizard.step3.usingProvidedToken');
+      return t('projectWizard.step3.usingProvidedToken', { provider: providerLabel });
     }
 
     if (isSshGitUrl(formState.githubUrl)) {
@@ -32,7 +34,7 @@ export default function StepReview({
     }
 
     return t('projectWizard.step3.noAuthentication');
-  }, [formState, selectedTokenName, t]);
+  }, [formState, providerLabel, selectedTokenName, t]);
 
   return (
     <div className="space-y-4">

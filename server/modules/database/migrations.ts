@@ -7,6 +7,7 @@ import {
   PROJECTS_TABLE_SCHEMA_SQL,
   PUSH_SUBSCRIPTIONS_TABLE_SCHEMA_SQL,
   SESSIONS_TABLE_SCHEMA_SQL,
+  USER_CREDENTIALS_TABLE_SCHEMA_SQL,
   USER_NOTIFICATION_PREFERENCES_TABLE_SCHEMA_SQL,
   VAPID_KEYS_TABLE_SCHEMA_SQL,
 } from '@/modules/database/schema.js';
@@ -439,6 +440,12 @@ export const runMigrations = (db: Database) => {
       'has_completed_onboarding',
       'BOOLEAN DEFAULT 0'
     );
+
+    db.exec(USER_CREDENTIALS_TABLE_SCHEMA_SQL);
+
+    const credentialsTableInfo = db.prepare('PRAGMA table_info(user_credentials)').all() as { name: string }[];
+    const credentialColumnNames = credentialsTableInfo.map((column) => column.name);
+    addColumnToTableIfNotExists(db, 'user_credentials', credentialColumnNames, 'credential_host', 'TEXT');
 
     db.exec(APP_CONFIG_TABLE_SCHEMA_SQL);
     db.exec(USER_NOTIFICATION_PREFERENCES_TABLE_SCHEMA_SQL);

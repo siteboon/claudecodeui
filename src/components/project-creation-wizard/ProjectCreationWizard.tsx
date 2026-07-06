@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FolderPlus, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import ErrorBanner from './components/ErrorBanner';
@@ -8,8 +8,13 @@ import WizardFooter from './components/WizardFooter';
 import WizardProgress from './components/WizardProgress';
 import { useGithubTokens } from './hooks/useGithubTokens';
 import { cloneWorkspaceWithProgress, createProjectRequest } from './data/workspaceApi';
-import { isCloneWorkflow, shouldShowGithubAuthentication } from './utils/pathUtils';
-import type { TokenMode, WizardFormState, WizardStep } from './types';
+import {
+  getRepositoryHost,
+  getRepositoryProvider,
+  isCloneWorkflow,
+  shouldShowGithubAuthentication,
+} from './utils/pathUtils';
+import type { CredentialType, TokenMode, WizardFormState, WizardStep } from './types';
 
 type ProjectCreationWizardProps = {
   onClose: () => void;
@@ -35,23 +40,104 @@ export default function ProjectCreationWizard({
   const [error, setError] = useState<string | null>(null);
   const [cloneProgress, setCloneProgress] = useState('');
 
-  const shouldLoadTokens =
-    step === 1 && shouldShowGithubAuthentication(formState.githubUrl);
-
   const autoSelectToken = useCallback((tokenId: string) => {
     setFormState((previous) => ({ ...previous, selectedGithubToken: tokenId }));
   }, []);
 
+  const repositoryHost = useMemo(
+    () => getRepositoryHost(formState.githubUrl),
+    [formState.githubUrl],
+  );
+
+  const shouldLoadGitlabTokens =
+    step === 1 && shouldShowGithubAuthentication(formState.githubUrl);
+
   const {
-    tokens: availableTokens,
-    loading: loadingTokens,
-    loadError: tokenLoadError,
-    selectedTokenName,
+    tokens: gitlabTokens,
+    loading: loadingGitlabTokens,
+    loadError: gitlabTokenLoadError,
   } = useGithubTokens({
-    shouldLoad: shouldLoadTokens,
+    shouldLoad: shouldLoadGitlabTokens,
+    credentialType: 'gitlab_token',
+    selectedTokenId: formState.selectedGithubToken,
+    preferredHost: repositoryHost,
+    autoSelectFirst: false,
+    onAutoSelectToken: autoSelectToken,
+  });
+
+  const repositoryProvider = useMemo(
+    () => getRepositoryProvider(
+      formState.githubUrl,
+      gitlabTokens
+        .map((token) => token.credential_host)
+        .filter((host): host is string => Boolean(host)),
+    ),
+    [formState.githubUrl, gitlabTokens],
+  );
+
+  const selectedCredentialType: CredentialType | null =
+    repositoryProvider === 'github'
+      ? 'github_token'
+      : repositoryProvider === 'gitlab'
+        ? 'gitlab_token'
+        : null;
+
+  const {
+    tokens: githubTokens,
+    loading: loadingGithubTokens,
+    loadError: githubTokenLoadError,
+  } = useGithubTokens({
+    shouldLoad: step === 1 && repositoryProvider === 'github',
+    credentialType: 'github_token',
     selectedTokenId: formState.selectedGithubToken,
     onAutoSelectToken: autoSelectToken,
   });
+
+  const availableTokens =
+    selectedCredentialType === 'gitlab_token'
+      ? gitlabTokens
+      : selectedCredentialType === 'github_token'
+        ? githubTokens
+        : [];
+  const loadingTokens =
+    selectedCredentialType === 'gitlab_token'
+      ? loadingGitlabTokens
+      : selectedCredentialType === 'github_token'
+        ? loadingGithubTokens
+        : shouldLoadGitlabTokens && loadingGitlabTokens;
+  const tokenLoadError =
+    selectedCredentialType === 'gitlab_token'
+      ? gitlabTokenLoadError
+      : selectedCredentialType === 'github_token'
+        ? githubTokenLoadError
+        : null;
+  const selectedTokenName = useMemo(
+    () => availableTokens.find((token) => String(token.id) === formState.selectedGithubToken)?.credential_name || null,
+    [availableTokens, formState.selectedGithubToken],
+  );
+  const providerLabel =
+    repositoryProvider === 'gitlab' ? 'GitLab' : repositoryProvider === 'github' ? 'GitHub' : 'Repository';
+
+  useEffect(() => {
+    setFormState((previous) => {
+      if (!previous.selectedGithubToken) return previous;
+      const tokenStillAvailable = availableTokens.some((token) => String(token.id) === previous.selectedGithubToken);
+      return tokenStillAvailable ? previous : { ...previous, selectedGithubToken: '' };
+    });
+  }, [availableTokens, repositoryProvider]);
+
+  useEffect(() => {
+    if (selectedCredentialType !== 'gitlab_token' || !repositoryHost || formState.selectedGithubToken) {
+      return;
+    }
+
+    const matchingToken = gitlabTokens.find(
+      (token) => token.credential_host?.toLowerCase() === repositoryHost.toLowerCase(),
+    );
+    if (matchingToken) {
+      autoSelectToken(String(matchingToken.id));
+    }
+  }, [autoSelectToken, formState.selectedGithubToken, gitlabTokens, repositoryHost, selectedCredentialType]);
 
   // Keep cross-step values in this component; local UI state lives in child components.
   const updateField = useCallback(<K extends keyof WizardFormState>(key: K, value: WizardFormState[K]) => {
@@ -93,6 +179,7 @@ export default function ProjectCreationWizard({
           {
             workspacePath: formState.workspacePath,
             githubUrl: formState.githubUrl,
+            credentialType: selectedCredentialType,
             tokenMode: formState.tokenMode,
             selectedGithubToken: formState.selectedGithubToken,
             newGithubToken: formState.newGithubToken,
@@ -122,7 +209,7 @@ export default function ProjectCreationWizard({
     } finally {
       setIsCreating(false);
     }
-  }, [formState, onClose, onProjectCreated, t]);
+  }, [formState, onClose, onProjectCreated, selectedCredentialType, t]);
 
   const shouldCloneRepository = useMemo(
     () => isCloneWorkflow(formState.githubUrl),
@@ -165,6 +252,7 @@ export default function ProjectCreationWizard({
               availableTokens={availableTokens}
               loadingTokens={loadingTokens}
               tokenLoadError={tokenLoadError}
+              providerLabel={providerLabel}
               isCreating={isCreating}
               onWorkspacePathChange={(workspacePath) => updateField('workspacePath', workspacePath)}
               onGithubUrlChange={(githubUrl) => updateField('githubUrl', githubUrl)}
@@ -183,6 +271,7 @@ export default function ProjectCreationWizard({
             <StepReview
               formState={formState}
               selectedTokenName={selectedTokenName}
+              providerLabel={providerLabel}
               isCreating={isCreating}
               cloneProgress={cloneProgress}
             />

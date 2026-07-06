@@ -17,6 +17,7 @@ export type CreatedApiKey = {
 export type GithubCredentialItem = {
   id: string;
   credential_name: string;
+  credential_host?: string | null;
   description?: string | null;
   created_at: string;
   is_active: boolean;

@@ -1,16 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchGithubTokenCredentials } from '../data/workspaceApi';
-import type { GithubTokenCredential } from '../types';
+import type { CredentialType, GithubTokenCredential } from '../types';
 
 type UseGithubTokensParams = {
   shouldLoad: boolean;
+  credentialType?: CredentialType;
   selectedTokenId: string;
+  preferredHost?: string | null;
+  autoSelectFirst?: boolean;
   onAutoSelectToken: (tokenId: string) => void;
 };
 
 export const useGithubTokens = ({
   shouldLoad,
+  credentialType = 'github_token',
   selectedTokenId,
+  preferredHost = null,
+  autoSelectFirst = true,
   onAutoSelectToken,
 }: UseGithubTokensParams) => {
   const [tokens, setTokens] = useState<GithubTokenCredential[]>([]);
@@ -30,7 +36,7 @@ export const useGithubTokens = ({
       setLoadError(null);
 
       try {
-        const activeTokens = await fetchGithubTokenCredentials();
+        const activeTokens = await fetchGithubTokenCredentials(credentialType);
         if (isDisposed) {
           return;
         }
@@ -39,11 +45,18 @@ export const useGithubTokens = ({
         hasLoadedRef.current = true;
 
         if (activeTokens.length > 0 && !selectedTokenId) {
-          onAutoSelectToken(String(activeTokens[0].id));
+          const preferredToken = preferredHost
+            ? activeTokens.find((token) => token.credential_host?.toLowerCase() === preferredHost.toLowerCase())
+            : null;
+          if (preferredToken) {
+            onAutoSelectToken(String(preferredToken.id));
+          } else if (autoSelectFirst) {
+            onAutoSelectToken(String(activeTokens[0].id));
+          }
         }
       } catch (error) {
         if (!isDisposed) {
-          setLoadError(error instanceof Error ? error.message : 'Failed to load GitHub tokens');
+          setLoadError(error instanceof Error ? error.message : 'Failed to load repository tokens');
         }
       } finally {
         if (!isDisposed) {
@@ -57,7 +70,7 @@ export const useGithubTokens = ({
     return () => {
       isDisposed = true;
     };
-  }, [onAutoSelectToken, selectedTokenId, shouldLoad]);
+  }, [autoSelectFirst, credentialType, onAutoSelectToken, preferredHost, selectedTokenId, shouldLoad]);
 
   const selectedTokenName = useMemo(
     () => tokens.find((token) => String(token.id) === selectedTokenId)?.credential_name || null,

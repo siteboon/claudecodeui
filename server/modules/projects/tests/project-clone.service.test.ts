@@ -15,7 +15,7 @@ function buildDependencies(overrides: Partial<NonNullable<TestDependencies>> = {
     ensureDirectory: async () => undefined,
     pathExists: async () => false,
     removePath: async () => undefined,
-    getGithubTokenById: async () => ({ github_token: 'token-value' }),
+    getCredentialValueById: async () => 'token-value',
     spawnGitClone: () => {
       throw new Error('spawnGitClone should be overridden in this test');
     },
@@ -124,9 +124,9 @@ test('startCloneProject rejects when selected github token does not exist', asyn
           onProgress: () => undefined,
           onComplete: () => undefined,
         },
-        buildDependencies({
-          getGithubTokenById: async () => null,
-        }),
+    buildDependencies({
+      getCredentialValueById: async () => null,
+    }),
       ),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
@@ -180,4 +180,39 @@ test('startCloneProject completes and emits complete payload when git exits succ
   };
   assert.equal(resolvedCompletePayload.message, 'Repository cloned successfully');
   assert.equal((resolvedCompletePayload.project.projectId as string) || '', 'project-1');
+});
+
+test('startCloneProject injects selected gitlab token into https clone URL', async () => {
+  const gitProcess = createMockGitProcess();
+  let capturedCloneUrl = '';
+
+  const operation = await startCloneProject(
+    {
+      workspacePath: '/workspace/root',
+      repositoryUrl: 'https://git.company.com/team/repo.git',
+      credentialType: 'gitlab_token',
+      credentialId: 42,
+      userId: 1,
+    },
+    {
+      onProgress: () => undefined,
+      onComplete: () => undefined,
+    },
+    buildDependencies({
+      getCredentialValueById: async (_userId, credentialId, credentialType) => {
+        assert.equal(credentialId, 42);
+        assert.equal(credentialType, 'gitlab_token');
+        return 'gitlab-secret';
+      },
+      spawnGitClone: (cloneUrl) => {
+        capturedCloneUrl = cloneUrl;
+        return gitProcess as any;
+      },
+    }),
+  );
+
+  gitProcess.emit('close', 0);
+  await operation.waitForCompletion;
+
+  assert.equal(capturedCloneUrl, 'https://gitlab-secret@git.company.com/team/repo.git');
 });

@@ -6,6 +6,7 @@ import type {
   CreateProjectPayload,
   CreateProjectResponse,
   CredentialsResponse,
+  CredentialType,
   FolderSuggestion,
   TokenMode,
 } from '../types';
@@ -13,6 +14,7 @@ import type {
 type CloneWorkspaceParams = {
   workspacePath: string;
   githubUrl: string;
+  credentialType: CredentialType | null;
   tokenMode: TokenMode;
   selectedGithubToken: string;
   newGithubToken: string;
@@ -63,12 +65,12 @@ const resolveCreateProjectErrorMessage = (responseData: CreateProjectResponse): 
   return null;
 };
 
-export const fetchGithubTokenCredentials = async () => {
-  const response = await api.get('/settings/credentials?type=github_token');
+export const fetchGithubTokenCredentials = async (credentialType: CredentialType = 'github_token') => {
+  const response = await api.get(`/settings/credentials?type=${encodeURIComponent(credentialType)}`);
   const data = await parseJson<CredentialsResponse>(response);
 
   if (!response.ok) {
-    throw new Error(data.error || 'Failed to load GitHub tokens');
+    throw new Error(data.error || 'Failed to load repository tokens');
   }
 
   return (data.credentials || []).filter((credential) => credential.is_active);
@@ -114,21 +116,23 @@ export const createProjectRequest = async (payload: CreateProjectPayload) => {
 const buildCloneProgressQuery = ({
   workspacePath,
   githubUrl,
+  credentialType,
   tokenMode,
   selectedGithubToken,
   newGithubToken,
 }: CloneWorkspaceParams) => {
   const query = new URLSearchParams({
     path: workspacePath.trim(),
-    githubUrl: githubUrl.trim(),
+    repositoryUrl: githubUrl.trim(),
   });
 
-  if (tokenMode === 'stored' && selectedGithubToken) {
-    query.set('githubTokenId', selectedGithubToken);
+  if (tokenMode === 'stored' && selectedGithubToken && credentialType) {
+    query.set('credentialId', selectedGithubToken);
+    query.set('credentialType', credentialType);
   }
 
   if (tokenMode === 'new' && newGithubToken.trim()) {
-    query.set('newGithubToken', newGithubToken.trim());
+    query.set('newCredentialToken', newGithubToken.trim());
   }
 
   // EventSource cannot send custom headers, so the auth token is passed as query.

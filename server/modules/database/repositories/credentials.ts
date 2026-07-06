@@ -23,18 +23,20 @@ export const credentialsDb = {
     credentialName: string,
     credentialType: string,
     credentialValue: string,
-    description: string | null = null
+    description: string | null = null,
+    credentialHost: string | null = null
   ): CreateCredentialResult {
     const db = getConnection();
     const result = db
       .prepare(
-        'INSERT INTO user_credentials (user_id, credential_name, credential_type, credential_value, description) VALUES (?, ?, ?, ?, ?)'
+        'INSERT INTO user_credentials (user_id, credential_name, credential_type, credential_value, description, credential_host) VALUES (?, ?, ?, ?, ?, ?)'
       )
-      .run(userId, credentialName, credentialType, credentialValue, description);
+      .run(userId, credentialName, credentialType, credentialValue, description, credentialHost);
     return {
       id: result.lastInsertRowid,
       credentialName,
       credentialType,
+      credentialHost,
     };
   },
 
@@ -51,14 +53,14 @@ export const credentialsDb = {
     if (credentialType) {
       return db
         .prepare(
-          'SELECT id, credential_name, credential_type, description, created_at, is_active FROM user_credentials WHERE user_id = ? AND credential_type = ? ORDER BY created_at DESC'
+          'SELECT id, credential_name, credential_type, credential_host, description, created_at, is_active FROM user_credentials WHERE user_id = ? AND credential_type = ? ORDER BY created_at DESC'
         )
         .all(userId, credentialType) as CredentialPublicRow[];
     }
 
     return db
       .prepare(
-        'SELECT id, credential_name, credential_type, description, created_at, is_active FROM user_credentials WHERE user_id = ? ORDER BY created_at DESC'
+        'SELECT id, credential_name, credential_type, credential_host, description, created_at, is_active FROM user_credentials WHERE user_id = ? ORDER BY created_at DESC'
       )
       .all(userId) as CredentialPublicRow[];
   },
@@ -77,6 +79,20 @@ export const credentialsDb = {
         'SELECT credential_value FROM user_credentials WHERE user_id = ? AND credential_type = ? AND is_active = 1 ORDER BY created_at DESC LIMIT 1'
       )
       .get(userId, credentialType) as { credential_value: string } | undefined;
+    return row?.credential_value ?? null;
+  },
+
+  getCredentialValueById(
+    userId: number,
+    credentialId: number,
+    credentialType: string
+  ): string | null {
+    const db = getConnection();
+    const row = db
+      .prepare(
+        'SELECT credential_value FROM user_credentials WHERE id = ? AND user_id = ? AND credential_type = ? AND is_active = 1'
+      )
+      .get(credentialId, userId, credentialType) as { credential_value: string } | undefined;
     return row?.credential_value ?? null;
   },
 

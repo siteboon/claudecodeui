@@ -115,7 +115,7 @@ router.get('/credentials', async (req, res) => {
 // Create a new credential
 router.post('/credentials', async (req, res) => {
   try {
-    const { credentialName, credentialType, credentialValue, description } = req.body;
+    const { credentialName, credentialType, credentialValue, description, credentialHost } = req.body;
 
     if (!credentialName || !credentialName.trim()) {
       return res.status(400).json({ error: 'Credential name is required' });
@@ -134,7 +134,8 @@ router.post('/credentials', async (req, res) => {
       credentialName.trim(),
       credentialType.trim(),
       credentialValue.trim(),
-      description?.trim() || null
+      description?.trim() || null,
+      credentialHost?.trim() || null
     );
 
     res.json({

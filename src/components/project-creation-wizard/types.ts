@@ -1,6 +1,7 @@
 export type WizardStep = 1 | 2;
 
 export type TokenMode = 'stored' | 'new' | 'none';
+export type CredentialType = 'github_token' | 'gitlab_token';
 
 export type FolderSuggestion = {
   name: string;
@@ -11,6 +12,8 @@ export type FolderSuggestion = {
 export type GithubTokenCredential = {
   id: number;
   credential_name: string;
+  credential_type?: CredentialType;
+  credential_host?: string | null;
   is_active: boolean;
 };
 

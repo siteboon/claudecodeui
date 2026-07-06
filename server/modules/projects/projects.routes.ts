@@ -181,9 +181,15 @@ router.get('/clone-progress', async (req, res) => {
   try {
     const queryParams = req.query as Record<string, unknown>;
     const workspacePath = readQueryStringValue(queryParams.path);
-    const githubUrl = readQueryStringValue(queryParams.githubUrl);
-    const githubTokenId = readOptionalNumericQueryValue(queryParams.githubTokenId);
-    const newGithubToken = readQueryStringValue(queryParams.newGithubToken) || null;
+    const repositoryUrl =
+      readQueryStringValue(queryParams.repositoryUrl) || readQueryStringValue(queryParams.githubUrl);
+    const credentialType = readQueryStringValue(queryParams.credentialType) || null;
+    const credentialId =
+      readOptionalNumericQueryValue(queryParams.credentialId) ?? readOptionalNumericQueryValue(queryParams.githubTokenId);
+    const newCredentialToken =
+      readQueryStringValue(queryParams.newCredentialToken)
+      || readQueryStringValue(queryParams.newGithubToken)
+      || null;
 
     const authenticatedUser = (req as typeof req & { user?: AuthenticatedUser }).user;
     const userId = authenticatedUser?.id;
@@ -197,9 +203,10 @@ router.get('/clone-progress', async (req, res) => {
     cloneOperation = await startCloneProject(
       {
         workspacePath,
-        githubUrl,
-        githubTokenId,
-        newGithubToken,
+        repositoryUrl,
+        credentialType,
+        credentialId,
+        newCredentialToken,
         userId,
       },
       {

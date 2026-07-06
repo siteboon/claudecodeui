@@ -1,6 +1,8 @@
 const SSH_PREFIXES = ['git@', 'ssh://'];
 const WINDOWS_DRIVE_PATTERN = /^[A-Za-z]:\\?$/;
 
+export type RepositoryProvider = 'github' | 'gitlab' | 'unknown' | 'ssh' | null;
+
 export const isSshGitUrl = (url: string): boolean => {
   const trimmedUrl = url.trim();
   return SSH_PREFIXES.some((prefix) => trimmedUrl.startsWith(prefix));
@@ -11,6 +13,39 @@ export const shouldShowGithubAuthentication = (githubUrl: string): boolean =>
 
 export const isCloneWorkflow = (githubUrl: string): boolean =>
   githubUrl.trim().length > 0;
+
+export const getRepositoryHost = (repositoryUrl: string): string | null => {
+  const trimmedUrl = repositoryUrl.trim();
+  if (!trimmedUrl) return null;
+
+  if (trimmedUrl.startsWith('git@')) {
+    const host = trimmedUrl.slice(4).split(':')[0];
+    return host ? host.toLowerCase() : null;
+  }
+
+  try {
+    return new URL(trimmedUrl).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+};
+
+export const getRepositoryProvider = (
+  repositoryUrl: string,
+  gitlabHosts: string[] = [],
+): RepositoryProvider => {
+  if (!repositoryUrl.trim()) return null;
+  if (isSshGitUrl(repositoryUrl)) return 'ssh';
+
+  const host = getRepositoryHost(repositoryUrl);
+  if (!host) return 'unknown';
+  if (host === 'github.com') return 'github';
+  if (host.includes('gitlab')) return 'gitlab';
+
+  return gitlabHosts.map((gitlabHost) => gitlabHost.toLowerCase()).includes(host)
+    ? 'gitlab'
+    : 'unknown';
+};
 
 export const getSuggestionRootPath = (inputPath: string): string => {
   const trimmedPath = inputPath.trim();

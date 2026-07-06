@@ -2,14 +2,18 @@ import { spawn } from 'node:child_process';
 import { access, mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 
-import { githubTokensDb } from '@/modules/database/index.js';
+import { credentialsDb } from '@/modules/database/index.js';
 import { createProject } from '@/modules/projects/services/project-management.service.js';
 import type { WorkspacePathValidationResult } from '@/shared/types.js';
 import { AppError, validateWorkspacePath } from '@/shared/utils.js';
 
 type CloneProjectInput = {
   workspacePath: string;
-  githubUrl: string;
+  repositoryUrl?: string;
+  credentialType?: string | null;
+  credentialId?: number | null;
+  newCredentialToken?: string | null;
+  githubUrl?: string;
   githubTokenId?: number | null;
   newGithubToken?: string | null;
   userId: number | string;
@@ -38,10 +42,11 @@ type CloneProjectDependencies = {
   ensureDirectory: (directoryPath: string) => Promise<void>;
   pathExists: (targetPath: string) => Promise<boolean>;
   removePath: (targetPath: string) => Promise<void>;
-  getGithubTokenById: (
-    tokenId: number,
+  getCredentialValueById: (
     userId: number,
-  ) => Promise<{ github_token: string } | null>;
+    tokenId: number,
+    credentialType: string,
+  ) => Promise<string | null>;
   spawnGitClone: (cloneUrl: string, clonePath: string) => GitCloneProcess;
   registerProject: (projectPath: string, customName: string) => Promise<{ project: Record<string, unknown> }>;
   logError: (message: string, error: unknown) => void;
@@ -115,14 +120,12 @@ const defaultDependencies: CloneProjectDependencies = {
   removePath: async (targetPath: string): Promise<void> => {
     await rm(targetPath, { recursive: true, force: true });
   },
-  getGithubTokenById: async (
-    tokenId: number,
+  getCredentialValueById: async (
     userId: number,
-  ): Promise<{ github_token: string } | null> => {
-    const tokenRow = githubTokensDb.getGithubTokenById(userId, tokenId) as
-      | { github_token: string }
-      | null;
-    return tokenRow;
+    credentialId: number,
+    credentialType: string,
+  ): Promise<string | null> => {
+    return credentialsDb.getCredentialValueById(userId, credentialId, credentialType);
   },
   spawnGitClone: (cloneUrl: string, clonePath: string): GitCloneProcess =>
     spawn('git', ['clone', '--progress', '--', cloneUrl, clonePath], {
@@ -151,7 +154,7 @@ export async function startCloneProject(
   dependencies: CloneProjectDependencies = defaultDependencies,
 ): Promise<CloneProjectOperation> {
   const normalizedWorkspacePath = input.workspacePath.trim();
-  const normalizedGithubUrl = input.githubUrl.trim();
+  const normalizedRepositoryUrl = (input.repositoryUrl ?? input.githubUrl ?? '').trim();
 
   if (!normalizedWorkspacePath) {
     throw new AppError('workspacePath and githubUrl are required', {
@@ -160,14 +163,14 @@ export async function startCloneProject(
     });
   }
 
-  if (!normalizedGithubUrl) {
+  if (!normalizedRepositoryUrl) {
     throw new AppError('workspacePath and githubUrl are required', {
       code: 'GITHUB_URL_REQUIRED',
       statusCode: 400,
     });
   }
 
-  if (normalizedGithubUrl.startsWith('-')) {
+  if (normalizedRepositoryUrl.startsWith('-')) {
     throw new AppError('Invalid githubUrl', {
       code: 'INVALID_GITHUB_URL',
       statusCode: 400,
@@ -185,8 +188,19 @@ export async function startCloneProject(
   const absolutePath = pathValidation.resolvedPath;
   await dependencies.ensureDirectory(absolutePath);
 
-  let githubToken: string | null = null;
-  if (typeof input.githubTokenId === 'number') {
+  let credentialToken: string | null = null;
+  const credentialId = typeof input.credentialId === 'number' ? input.credentialId : input.githubTokenId;
+  const credentialType = input.credentialType || (typeof input.githubTokenId === 'number' ? 'github_token' : null);
+  const newCredentialToken = input.newCredentialToken ?? input.newGithubToken;
+
+  if (typeof credentialId === 'number') {
+    if (credentialType !== 'github_token' && credentialType !== 'gitlab_token') {
+      throw new AppError('Invalid credential type', {
+        code: 'INVALID_CREDENTIAL_TYPE',
+        statusCode: 400,
+      });
+    }
+
     const numericUserId =
       typeof input.userId === 'number' ? input.userId : Number.parseInt(String(input.userId), 10);
     if (Number.isNaN(numericUserId)) {
@@ -196,21 +210,21 @@ export async function startCloneProject(
       });
     }
 
-    const token = await dependencies.getGithubTokenById(input.githubTokenId, numericUserId);
+    const token = await dependencies.getCredentialValueById(numericUserId, credentialId, credentialType);
     if (!token) {
-      throw new AppError('GitHub token not found', {
-        code: 'GITHUB_TOKEN_NOT_FOUND',
+      throw new AppError('Credential not found', {
+        code: credentialType === 'github_token' ? 'GITHUB_TOKEN_NOT_FOUND' : 'CREDENTIAL_NOT_FOUND',
         statusCode: 404,
       });
     }
 
-    githubToken = token.github_token;
-  } else if (input.newGithubToken && input.newGithubToken.trim().length > 0) {
-    githubToken = input.newGithubToken.trim();
+    credentialToken = token;
+  } else if (newCredentialToken && newCredentialToken.trim().length > 0) {
+    credentialToken = newCredentialToken.trim();
   }
 
-  const sanitizedGithubUrl = normalizedGithubUrl.replace(/\/+$/, '').replace(/\.git$/, '');
-  const repoName = sanitizedGithubUrl.split('/').pop() || 'repository';
+  const sanitizedRepositoryUrl = normalizedRepositoryUrl.replace(/\/+$/, '').replace(/\.git$/, '');
+  const repoName = sanitizedRepositoryUrl.split('/').pop() || 'repository';
   const clonePath = path.join(absolutePath, repoName);
 
   if (await dependencies.pathExists(clonePath)) {
@@ -223,11 +237,11 @@ export async function startCloneProject(
     );
   }
 
-  let cloneUrl = normalizedGithubUrl;
-  if (githubToken) {
+  let cloneUrl = normalizedRepositoryUrl;
+  if (credentialToken) {
     try {
-      const url = new URL(normalizedGithubUrl);
-      url.username = githubToken;
+      const url = new URL(normalizedRepositoryUrl);
+      url.username = credentialToken;
       url.password = '';
       cloneUrl = url.toString();
     } catch {
@@ -275,7 +289,7 @@ export async function startCloneProject(
         return;
       }
 
-      const sanitizedError = sanitizeGitError(lastError, githubToken);
+      const sanitizedError = sanitizeGitError(lastError, credentialToken);
       const errorMessage = resolveCloneFailureMessage(lastError, sanitizedError);
 
       try {
