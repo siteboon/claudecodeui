@@ -15,14 +15,12 @@ export type CodexTranscriptMeta = {
 };
 
 export async function readCodexTranscriptMeta(filePath: string): Promise<CodexTranscriptMeta | null> {
-  try {
-    const fileStream = createReadStream(filePath);
-    const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
+  const fileStream = createReadStream(filePath);
+  const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
 
+  try {
     for await (const line of rl) {
-      if (!line.trim()) {
-        continue;
-      }
+      if (!line.trim()) continue;
 
       let parsed: unknown;
       try {
@@ -33,15 +31,11 @@ export async function readCodexTranscriptMeta(filePath: string): Promise<CodexTr
 
       const entry = readObjectRecord(parsed);
       const payload = readObjectRecord(entry?.payload);
-      if (entry?.type !== 'session_meta' || !payload) {
-        continue;
-      }
+      if (entry?.type !== 'session_meta' || !payload) continue;
 
       const sessionId = typeof payload.id === 'string' ? payload.id : undefined;
       const projectPath = typeof payload.cwd === 'string' ? payload.cwd : undefined;
-      if (!sessionId || !projectPath) {
-        return null;
-      }
+      if (!sessionId || !projectPath) return null;
 
       const source = readObjectRecord(payload.source);
       const subagent = readObjectRecord(source?.subagent);
@@ -50,21 +44,22 @@ export async function readCodexTranscriptMeta(filePath: string): Promise<CodexTr
       return {
         sessionId,
         projectPath,
-        threadSource:
-          typeof payload.thread_source === 'string' ? payload.thread_source : undefined,
+        threadSource: typeof payload.thread_source === 'string' ? payload.thread_source : undefined,
         parentThreadId:
           typeof payload.parent_thread_id === 'string'
             ? payload.parent_thread_id
             : typeof threadSpawn?.parent_thread_id === 'string'
               ? threadSpawn.parent_thread_id
               : undefined,
-        agentNickname:
-          typeof payload.agent_nickname === 'string' ? payload.agent_nickname : undefined,
+        agentNickname: typeof payload.agent_nickname === 'string' ? payload.agent_nickname : undefined,
         agentRole: typeof payload.agent_role === 'string' ? payload.agent_role : undefined,
       };
     }
   } catch {
     return null;
+  } finally {
+    rl.close();
+    fileStream.destroy();
   }
 
   return null;
