@@ -36,14 +36,9 @@ import {
     abortCodexSession,
 } from './openai-codex.js';
 import {
-    spawnGemini,
-    abortGeminiSession,
-} from './gemini-cli.js';
-import {
     spawnOpenCode,
     abortOpenCodeSession,
 } from './opencode-cli.js';
-import sessionManager from './sessionManager.js';
 import {
     stripAnsiSequences,
     normalizeDetectedUrl,
@@ -61,7 +56,6 @@ import agentRoutes from './routes/agent.js';
 import projectModuleRoutes from './modules/projects/projects.routes.js';
 import notificationRoutes from './modules/notifications/notifications.routes.js';
 import userRoutes from './routes/user.js';
-import geminiRoutes from './routes/gemini.js';
 import pluginsRoutes from './routes/plugins.js';
 import providerRoutes from './modules/providers/provider.routes.js';
 import voiceRoutes from './voice-proxy.js';
@@ -119,14 +113,12 @@ const wss = createWebSocketServer(server, {
             claude: queryClaudeSDK,
             cursor: spawnCursor,
             codex: queryCodex,
-            gemini: spawnGemini,
             opencode: spawnOpenCode,
         },
         abortFns: {
             claude: abortClaudeSDKSession,
             cursor: abortCursorSession,
             codex: abortCodexSession,
-            gemini: abortGeminiSession,
             opencode: abortOpenCodeSession,
         },
         resolveToolApproval,
@@ -135,14 +127,11 @@ const wss = createWebSocketServer(server, {
     shell: {
         resolveProviderSessionId: (sessionId, provider) => {
             const dbSession = sessionsDb.getSessionById(sessionId);
-            const legacyGeminiSession =
-                provider === 'gemini' ? sessionManager.getSession(sessionId) : null;
-
             if (dbSession) {
-                return dbSession.provider_session_id ?? legacyGeminiSession?.cliSessionId ?? null;
+                return dbSession.provider_session_id ?? null;
             }
 
-            return legacyGeminiSession?.cliSessionId;
+            return null;
         },
         stripAnsiSequences,
         normalizeDetectedUrl,
@@ -213,9 +202,6 @@ app.use('/api/notifications', authenticateToken, notificationRoutes);
 
 // User API Routes (protected)
 app.use('/api/user', authenticateToken, userRoutes);
-
-// Gemini API Routes (protected)
-app.use('/api/gemini', authenticateToken, geminiRoutes);
 
 // Plugins API Routes (protected)
 app.use('/api/plugins', authenticateToken, pluginsRoutes);
@@ -1116,62 +1102,6 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
                 breakdown: { input: 0, output: 0 },
                 unsupported: true,
                 message: 'Token usage tracking not available for Cursor sessions'
-            });
-        }
-
-        if (provider === 'gemini') {
-            const session = sessionsDb.getSessionById(safeSessionId);
-            const sessionFilePath = session?.jsonl_path;
-            if (!sessionFilePath) {
-                return res.json({
-                    used: 0,
-                    inputTokens: 0,
-                    outputTokens: 0,
-                    breakdown: { input: 0, output: 0 },
-                    unsupported: true,
-                    message: 'Token usage tracking not available for this Gemini session'
-                });
-            }
-
-            let fileContent;
-            try {
-                fileContent = await fsPromises.readFile(sessionFilePath, 'utf8');
-            } catch (error) {
-                if (error.code === 'ENOENT') {
-                    return res.status(404).json({ error: 'Session file not found', path: sessionFilePath });
-                }
-                throw error;
-            }
-
-            const lines = fileContent.trim().split('\n');
-            let inputTokens = 0;
-            let outputTokens = 0;
-            let totalTokens = 0;
-
-            for (let i = lines.length - 1; i >= 0; i--) {
-                try {
-                    const entry = JSON.parse(lines[i]);
-                    if (!entry.tokens || typeof entry.tokens !== 'object') {
-                        continue;
-                    }
-
-                    inputTokens = Number(entry.tokens.input || 0);
-                    outputTokens = Number(entry.tokens.output || 0);
-                    totalTokens = Number(entry.tokens.total || inputTokens + outputTokens || 0);
-                    break;
-                } catch {
-                    continue;
-                }
-            }
-
-            return res.json({
-                used: totalTokens,
-                inputTokens,
-                outputTokens,
-                breakdown: {
-                    input: inputTokens,
-                    output: outputTokens
-                }
             });
         }
 

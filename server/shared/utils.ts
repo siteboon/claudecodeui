@@ -1243,7 +1243,7 @@ export async function extractFirstValidJsonlData<T>(
 //----------------- CLI PROMPT ARGUMENT UTILITIES ------------
 /**
  * Makes a prompt safe to pass as one CLI argument to `.cmd`-shimmed tools on
- * Windows (cursor-agent, gemini, opencode installed via npm-style shims).
+ * Windows (cursor-agent and opencode installed via npm-style shims).
  *
  * cmd.exe cannot carry newlines inside an argument: everything after the
  * first newline is silently dropped before the target CLI ever sees it, which
@@ -1251,7 +1251,7 @@ export async function extractFirstValidJsonlData<T>(
  * Collapsing newline runs to single spaces loses formatting but never loses
  * content, so runtimes should call this on win32 right before spawning.
  *
- * Used by the cursor, gemini, and opencode spawn runtimes.
+ * Used by the cursor and opencode spawn runtimes.
  */
 export function flattenPromptForWindowsShell(prompt: string): string {
   if (process.platform !== 'win32' || typeof prompt !== 'string') {

@@ -13,7 +13,6 @@ const PROVIDER_LABELS = {
   claude: 'Claude',
   cursor: 'Cursor',
   codex: 'Codex',
-  gemini: 'Gemini',
   system: 'System'
 };
 

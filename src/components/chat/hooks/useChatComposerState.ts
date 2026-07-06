@@ -39,7 +39,6 @@ interface UseChatComposerStateArgs {
   claudeModel: string;
   codexModel: string;
   currentProviderEffort: string;
-  geminiModel: string;
   opencodeModel: string;
   isLoading: boolean;
   canAbortSession: boolean;
@@ -180,7 +179,6 @@ export function useChatComposerState({
   claudeModel,
   codexModel,
   currentProviderEffort,
-  geminiModel,
   opencodeModel,
   isLoading,
   canAbortSession,
@@ -353,9 +351,7 @@ export function useChatComposerState({
             ? cursorModel
             : provider === 'codex'
               ? codexModel
-              : provider === 'gemini'
-                ? geminiModel
-                : provider === 'opencode'
+              : provider === 'opencode'
                   ? opencodeModel
                   : claudeModel,
           tokenUsage: tokenBudget,
@@ -410,7 +406,6 @@ export function useChatComposerState({
       codexModel,
       currentSessionId,
       cursorModel,
-      geminiModel,
       opencodeModel,
       handleBuiltInCommand,
       handleCustomCommand,
@@ -741,9 +736,7 @@ export function useChatComposerState({
               ? 'cursor-tools-settings'
               : provider === 'codex'
                 ? 'codex-settings'
-                : provider === 'gemini'
-                  ? 'gemini-settings'
-                  : provider === 'opencode'
+                : provider === 'opencode'
                     ? 'opencode-settings'
                   : 'claude-settings';
           const savedSettings = safeLocalStorage.getItem(settingsKey);
@@ -767,9 +760,7 @@ export function useChatComposerState({
           ? cursorModel
           : provider === 'codex'
             ? codexModel
-            : provider === 'gemini'
-              ? geminiModel
-              : provider === 'opencode'
+            : provider === 'opencode'
               ? opencodeModel
               : claudeModel;
       const effort = currentProviderEffort;
@@ -815,7 +806,6 @@ export function useChatComposerState({
       currentSessionId,
       cursorModel,
       executeCommand,
-      geminiModel,
       opencodeModel,
       isLoading,
       onSessionProcessing,

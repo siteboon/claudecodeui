@@ -20,11 +20,17 @@ const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   claude: 'default',
   cursor: 'gpt-5.3-codex',
   codex: 'gpt-5.4',
-  gemini: 'gemini-3.1-pro-preview',
   opencode: 'anthropic/claude-sonnet-4-5',
 };
 
-const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'gemini', 'opencode'];
+const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode'];
+
+const readStoredProvider = (): LLMProvider => {
+  const storedProvider = localStorage.getItem('selected-provider');
+  return PROVIDERS.includes(storedProvider as LLMProvider)
+    ? storedProvider as LLMProvider
+    : 'claude';
+};
 
 /**
  * Fallback permission-mode matrix used only until the backend capability
@@ -36,7 +42,6 @@ const FALLBACK_PERMISSION_MODES: Record<LLMProvider, PermissionMode[]> = {
   claude: ['default', 'auto', 'acceptEdits', 'bypassPermissions', 'plan'],
   cursor: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
   codex: ['default', 'acceptEdits', 'bypassPermissions'],
-  gemini: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
   opencode: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
 };
 
@@ -85,9 +90,7 @@ type ChangeActiveModelApiResponse = {
 export function useChatProviderState({ selectedSession, selectedProject: _selectedProject }: UseChatProviderStateArgs) {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('default');
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<PendingPermissionRequest[]>([]);
-  const [provider, setProvider] = useState<LLMProvider>(() => {
-    return (localStorage.getItem('selected-provider') as LLMProvider) || 'claude';
-  });
+  const [provider, setProvider] = useState<LLMProvider>(readStoredProvider);
   const [cursorModel, setCursorModel] = useState<string>(() => {
     return localStorage.getItem('cursor-model') || FALLBACK_DEFAULT_MODEL.cursor;
   });
@@ -102,9 +105,6 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       acc[targetProvider] = localStorage.getItem(`${targetProvider}-effort`) || DEFAULT_EFFORT_VALUE;
       return acc;
     }, {});
-  });
-  const [geminiModel, setGeminiModel] = useState<string>(() => {
-    return localStorage.getItem('gemini-model') || FALLBACK_DEFAULT_MODEL.gemini;
   });
   const [opencodeModel, setOpenCodeModel] = useState<string>(() => {
     return localStorage.getItem('opencode-model') || FALLBACK_DEFAULT_MODEL.opencode;
@@ -148,12 +148,6 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     if (targetProvider === 'codex') {
       setCodexModel(model);
       localStorage.setItem('codex-model', model);
-      return;
-    }
-
-    if (targetProvider === 'gemini') {
-      setGeminiModel(model);
-      localStorage.setItem('gemini-model', model);
       return;
     }
 
@@ -360,9 +354,8 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     claude: claudeModel,
     cursor: cursorModel,
     codex: codexModel,
-    gemini: geminiModel,
     opencode: opencodeModel,
-  }), [claudeModel, cursorModel, codexModel, geminiModel, opencodeModel]);
+  }), [claudeModel, cursorModel, codexModel, opencodeModel]);
 
   useEffect(() => {
     const claude = providerModelCatalog.claude;
@@ -402,19 +395,6 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       }
     }
   }, [providerModelCatalog.codex, codexModel]);
-
-  useEffect(() => {
-    const gemini = providerModelCatalog.gemini;
-    if (gemini) {
-      const next = pickStoredOrCurrent('gemini-model', geminiModel, gemini);
-      if (next !== geminiModel) {
-        setGeminiModel(next);
-      }
-      if (localStorage.getItem('gemini-model') !== next) {
-        localStorage.setItem('gemini-model', next);
-      }
-    }
-  }, [providerModelCatalog.gemini, geminiModel]);
 
   useEffect(() => {
     const opencode = providerModelCatalog.opencode;
@@ -589,8 +569,6 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     setCodexModel,
     currentProviderEffort,
     currentProviderEffortOptions,
-    geminiModel,
-    setGeminiModel,
     opencodeModel,
     setOpenCodeModel,
     permissionMode,

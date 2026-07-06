@@ -71,8 +71,6 @@ function ChatInterface({
     setCodexModel,
     currentProviderEffort,
     currentProviderEffortOptions,
-    geminiModel,
-    setGeminiModel,
     opencodeModel,
     setOpenCodeModel,
     permissionMode,
@@ -204,7 +202,6 @@ function ChatInterface({
     claudeModel,
     codexModel,
     currentProviderEffort,
-    geminiModel,
     opencodeModel,
     isLoading: isProcessing,
     canAbortSession,
@@ -300,9 +297,7 @@ function ChatInterface({
         ? t('messageTypes.cursor')
         : provider === 'codex'
           ? t('messageTypes.codex')
-          : provider === 'gemini'
-            ? t('messageTypes.gemini')
-            : provider === 'opencode'
+          : provider === 'opencode'
               ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
             : t('messageTypes.claude');
 
@@ -342,8 +337,6 @@ function ChatInterface({
           setCursorModel={setCursorModel}
           codexModel={codexModel}
           setCodexModel={setCodexModel}
-          geminiModel={geminiModel}
-          setGeminiModel={setGeminiModel}
           opencodeModel={opencodeModel}
           setOpenCodeModel={setOpenCodeModel}
           providerModelCatalog={providerModelCatalog}
@@ -451,9 +444,7 @@ function ChatInterface({
                 ? t('messageTypes.cursor')
                 : provider === 'codex'
                   ? t('messageTypes.codex')
-                  : provider === 'gemini'
-                    ? t('messageTypes.gemini')
-                    : provider === 'opencode'
+                  : provider === 'opencode'
                       ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
                     : t('messageTypes.claude'),
           })}

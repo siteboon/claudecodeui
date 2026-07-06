@@ -186,22 +186,22 @@ test('replayEvents returns only events after the requested seq', async () => {
 
 test('attachConnection reroutes the live stream to a new socket', async () => {
   await withIsolatedDatabase(() => {
-    sessionsDb.createAppSession('app-run-5', 'gemini', '/workspace/demo');
+    sessionsDb.createAppSession('app-run-5', 'opencode', '/workspace/demo');
     const firstConnection = new FakeConnection();
     const run = chatRunRegistry.startRun({
       appSessionId: 'app-run-5',
-      provider: 'gemini',
+      provider: 'opencode',
       providerSessionId: null,
       connection: firstConnection,
       userId: null,
     });
     assert.ok(run);
 
-    run.writer.send({ kind: 'stream_delta', provider: 'gemini', sessionId: 'g', content: 'before' });
+    run.writer.send({ kind: 'stream_delta', provider: 'opencode', sessionId: 'o', content: 'before' });
 
     const secondConnection = new FakeConnection();
     assert.equal(chatRunRegistry.attachConnection('app-run-5', secondConnection), true);
-    run.writer.send({ kind: 'stream_delta', provider: 'gemini', sessionId: 'g', content: 'after' });
+    run.writer.send({ kind: 'stream_delta', provider: 'opencode', sessionId: 'o', content: 'after' });
 
     assert.deepEqual(firstConnection.frames.map((frame) => frame.content), ['before']);
     assert.deepEqual(secondConnection.frames.map((frame) => frame.content), ['after']);

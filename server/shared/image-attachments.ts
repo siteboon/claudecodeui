@@ -9,7 +9,7 @@ import path from 'node:path';
  * folder and referenced by absolute path everywhere else:
  * - Claude: paths are read back into base64 `image` content blocks.
  * - Codex: paths become `local_image` input items.
- * - Gemini/Cursor: paths are appended to the prompt inside an
+ * - Cursor/OpenCode: paths are appended to the prompt inside an
  *   `<images_input>` tag, which is stripped again when history is read.
  *
  * The chat UI loads them through the dedicated `/api/assets/images/:filename`
@@ -120,8 +120,8 @@ export type ParsedImagesInput = {
 };
 
 /**
- * Appends the `<images_input>` reference block used by the Gemini, Cursor,
- * and OpenCode CLIs. The block carries one numbered line per attachment with
+ * Appends the `<images_input>` reference block used by the Cursor and
+ * OpenCode CLIs. The block carries one numbered line per attachment with
  * the stored file path (quote-free on purpose — Windows .cmd shims mangle
  * quoted text) and the user's original filename, plus an explicit instruction
  * to read the files and keep the block out of the reply. The same block is

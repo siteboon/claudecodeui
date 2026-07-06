@@ -446,11 +446,6 @@ export const CURSOR_FALLBACK_MODELS: ProviderModelsDefinition = {
       description: "GPT-5.2 Extra High Fast",
     },
     {
-      value: "gemini-3.1-pro",
-      label: "gemini-3.1-pro",
-      description: "Gemini 3.1 Pro",
-    },
-    {
       value: "gpt-5.4-mini-none",
       label: "gpt-5.4-mini-none",
       description: "GPT-5.4 Mini None",
@@ -529,16 +524,6 @@ export const CURSOR_FALLBACK_MODELS: ProviderModelsDefinition = {
       value: "gpt-5.1-high",
       label: "gpt-5.1-high",
       description: "GPT-5.1 High",
-    },
-    {
-      value: "gemini-3-flash",
-      label: "gemini-3-flash",
-      description: "Gemini 3 Flash",
-    },
-    {
-      value: "gemini-3.5-flash",
-      label: "gemini-3.5-flash",
-      description: "Gemini 3.5 Flash",
     },
     {
       value: "gpt-5.1-codex-mini-low",

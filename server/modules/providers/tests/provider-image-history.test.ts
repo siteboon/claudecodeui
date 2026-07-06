@@ -1,13 +1,9 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
 import test from 'node:test';
 
 import { ClaudeSessionsProvider } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import { CodexSessionsProvider, extractCodexUserImages } from '@/modules/providers/list/codex/codex-sessions.provider.js';
 import { CursorSessionsProvider } from '@/modules/providers/list/cursor/cursor-sessions.provider.js';
-import { getGeminiJsonlSessionMessages } from '@/modules/providers/list/gemini/gemini-sessions.provider.js';
 import { appendImagesInputTag } from '@/shared/image-attachments.js';
 
 const SESSION_ID = 'session-1';
@@ -125,58 +121,6 @@ test('codex history: normalized user entries keep their images', () => {
   assert.equal(messages[0].role, 'user');
   assert.equal(messages[0].content, 'Look at this');
   assert.deepEqual(messages[0].images, [{ path: '.cloudcli/assets/a.png' }]);
-});
-
-// ---------------------------------------------------------------- Gemini
-
-test('gemini history: <images_input> tag is stripped and paths attached', async () => {
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gemini-image-history-'));
-  const jsonlPath = path.join(tempDir, 'session.jsonl');
-  try {
-    const taggedPrompt = appendImagesInputTag('Compare these designs', [
-      { path: '.cloudcli/assets/1-a.png' },
-      { path: '.cloudcli/assets/2-b.png' },
-    ]);
-    const lines = [
-      JSON.stringify({ type: 'user', id: 'm1', content: taggedPrompt, timestamp: '2026-07-03T10:00:00.000Z' }),
-      JSON.stringify({ type: 'gemini', id: 'm2', content: 'They differ in spacing.', timestamp: '2026-07-03T10:00:05.000Z' }),
-    ];
-    await writeFile(jsonlPath, `${lines.join('\n')}\n`, 'utf8');
-
-    const { messages } = await getGeminiJsonlSessionMessages(jsonlPath);
-
-    assert.equal(messages.length, 2);
-    assert.equal(messages[0].message.role, 'user');
-    assert.equal(messages[0].message.content, 'Compare these designs');
-    assert.deepEqual(messages[0].images, [
-      { path: '.cloudcli/assets/1-a.png' },
-      { path: '.cloudcli/assets/2-b.png' },
-    ]);
-    // Assistant text is left untouched.
-    assert.equal(messages[1].message.role, 'assistant');
-    assert.equal(messages[1].images, undefined);
-  } finally {
-    await rm(tempDir, { recursive: true, force: true });
-  }
-});
-
-test('gemini history: prompts without a tag are unchanged', async () => {
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'gemini-image-history-'));
-  const jsonlPath = path.join(tempDir, 'session.jsonl');
-  try {
-    await writeFile(
-      jsonlPath,
-      `${JSON.stringify({ type: 'user', id: 'm1', content: 'plain prompt', timestamp: '2026-07-03T10:00:00.000Z' })}\n`,
-      'utf8',
-    );
-
-    const { messages } = await getGeminiJsonlSessionMessages(jsonlPath);
-    assert.equal(messages.length, 1);
-    assert.equal(messages[0].message.content, 'plain prompt');
-    assert.equal(messages[0].images, undefined);
-  } finally {
-    await rm(tempDir, { recursive: true, force: true });
-  }
 });
 
 // ---------------------------------------------------------------- Cursor
