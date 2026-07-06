@@ -49,6 +49,46 @@ test('latest Claude TodoWrite snapshot wins and counts todo statuses', () => {
   assert.equal(summary.inProgressCount, 1);
 });
 
+test('grouped Codex subagent TodoList snapshots show as subagent todos', () => {
+  const summaries = deriveAgentTodoSummaries([
+    {
+      type: 'assistant',
+      timestamp: 1000,
+      isToolUse: true,
+      toolName: 'Task',
+      toolId: 'spawn-1',
+      toolInput: { description: 'banner-test' },
+      subagentState: {
+        currentToolIndex: 0,
+        isComplete: true,
+        childTools: [
+          {
+            toolId: 'plan-1',
+            toolName: 'TodoList',
+            timestamp: new Date(2000),
+            toolInput: {
+              items: [
+                { text: 'say hello', status: 'completed' },
+                { text: 'say bye', status: 'completed' },
+                { text: 'say thanks', status: 'completed' },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ]);
+
+  assert.equal(summaries.length, 1);
+  assert.equal(summaries[0]?.label, 'banner-test');
+  assert.equal(summaries[0]?.completedCount, 3);
+  assert.deepEqual(summaries[0]?.todos.map((todo) => todo.content), [
+    'say hello',
+    'say bye',
+    'say thanks',
+  ]);
+});
+
 test('TodoRead parses JSON result content', () => {
   const messages: ChatMessage[] = [
     {
