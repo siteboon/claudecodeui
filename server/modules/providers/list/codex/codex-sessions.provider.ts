@@ -1,7 +1,10 @@
 import fsSync from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import readline from 'node:readline';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import { findCodexSubagentTranscriptFiles, readCodexTranscriptMeta } from '@/modules/providers/list/codex/codex-transcripts.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
 import { createNormalizedMessage, generateMessageId, readObjectRecord, sliceTailPage } from '@/shared/utils.js';
@@ -56,27 +59,100 @@ function extractCodexTextContent(content: unknown): string {
     .join('\n');
 }
 
-async function getCodexSessionMessages(
-  sessionId: string,
-  limit: number | null = null,
-  offset = 0,
-): Promise<CodexHistoryResult> {
+function parseJsonRecord(value: unknown): AnyRecord | null {
+  if (typeof value !== 'string') {
+    return readObjectRecord(value);
+  }
+
   try {
-    const sessionFilePath = sessionsDb.getSessionById(sessionId)?.jsonl_path;
+    return readObjectRecord(JSON.parse(value));
+  } catch {
+    return null;
+  }
+}
 
-    if (!sessionFilePath) {
-      console.warn(`Codex session file not found for session ${sessionId}`);
-      return { messages: [], total: 0, hasMore: false };
+export function codexFunctionCallToTool(entry: AnyRecord): AnyRecord | null {
+  const payload = readObjectRecord(entry.payload);
+  if (entry.type !== 'response_item' || payload?.type !== 'function_call') {
+    return null;
+  }
+
+  const toolCallId = typeof payload.call_id === 'string'
+    ? payload.call_id
+    : generateMessageId('codex-tool');
+  const timestamp = entry.timestamp;
+
+  if (payload.name === 'update_plan') {
+    const input = parseJsonRecord(payload.arguments);
+    const plan = Array.isArray(input?.plan) ? input.plan : [];
+
+    return {
+      type: 'tool_use',
+      timestamp,
+      toolName: 'TodoList',
+      toolInput: {
+        items: plan
+          .map((item) => readObjectRecord(item))
+          .filter(Boolean)
+          .map((item) => ({
+            text: typeof item.step === 'string' ? item.step : '',
+            status: typeof item.status === 'string' ? item.status : 'pending',
+          }))
+          .filter((item) => item.text.trim()),
+      },
+      toolCallId,
+    };
+  }
+
+  if (payload.name === 'spawn_agent' && payload.namespace === 'multi_agent_v1') {
+    const input = parseJsonRecord(payload.arguments);
+    const message = typeof input?.message === 'string' ? input.message : '';
+
+    return {
+      type: 'tool_use',
+      timestamp,
+      toolName: 'Task',
+      toolInput: {
+        subagent_type: typeof input?.agent_type === 'string' ? input.agent_type : 'default',
+        description: message ? message.split('\n')[0] : 'Subagent',
+        prompt: message,
+      },
+      toolCallId,
+    };
+  }
+
+  let toolName = payload.name;
+  let toolInput = payload.arguments;
+  if (toolName === 'shell_command') {
+    toolName = 'Bash';
+    const args = parseJsonRecord(payload.arguments);
+    if (typeof args?.command === 'string') {
+      toolInput = JSON.stringify({ command: args.command });
     }
+  }
 
-    const messages: AnyRecord[] = [];
-    let tokenUsage: AnyRecord | null = null;
-    const fileStream = fsSync.createReadStream(sessionFilePath);
-    const rl = readline.createInterface({
-      input: fileStream,
-      crlfDelay: Infinity,
-    });
+  return {
+    type: 'tool_use',
+    timestamp,
+    toolName,
+    toolInput,
+    toolCallId,
+  };
+}
 
+async function readCodexSessionFileMessages(filePath: string): Promise<{
+  messages: AnyRecord[];
+  tokenUsage: AnyRecord | null;
+}> {
+  const messages: AnyRecord[] = [];
+  let tokenUsage: AnyRecord | null = null;
+  const fileStream = fsSync.createReadStream(filePath);
+  const rl = readline.createInterface({
+    input: fileStream,
+    crlfDelay: Infinity,
+  });
+
+  try {
     for await (const line of rl) {
       if (!line.trim()) {
         continue;
@@ -145,27 +221,9 @@ async function getCodexSessionMessages(
           }
         }
 
-        if (entry.type === 'response_item' && entry.payload?.type === 'function_call') {
-          let toolName = entry.payload.name;
-          let toolInput = entry.payload.arguments;
-
-          if (toolName === 'shell_command') {
-            toolName = 'Bash';
-            try {
-              const args = JSON.parse(entry.payload.arguments) as AnyRecord;
-              toolInput = JSON.stringify({ command: args.command });
-            } catch {
-              // Keep original arguments when parsing fails.
-            }
-          }
-
-          messages.push({
-            type: 'tool_use',
-            timestamp: entry.timestamp,
-            toolName,
-            toolInput,
-            toolCallId: entry.payload.call_id,
-          });
+        const tool = codexFunctionCallToTool(entry);
+        if (tool) {
+          messages.push(tool);
         }
 
         if (entry.type === 'response_item' && entry.payload?.type === 'function_call_output') {
@@ -183,7 +241,7 @@ async function getCodexSessionMessages(
 
           if (toolName === 'apply_patch') {
             const fileMatch = String(input).match(/\*\*\* Update File: (.+)/);
-            const filePath = fileMatch ? fileMatch[1].trim() : 'unknown';
+            const filePathMatch = fileMatch ? fileMatch[1].trim() : 'unknown';
             const lines = String(input).split('\n');
             const oldLines: string[] = [];
             const newLines: string[] = [];
@@ -201,7 +259,7 @@ async function getCodexSessionMessages(
               timestamp: entry.timestamp,
               toolName: 'Edit',
               toolInput: JSON.stringify({
-                file_path: filePath,
+                file_path: filePathMatch,
                 old_string: oldLines.join('\n'),
                 new_string: newLines.join('\n'),
               }),
@@ -230,6 +288,107 @@ async function getCodexSessionMessages(
         // Skip malformed lines.
       }
     }
+  } finally {
+    rl.close();
+    fileStream.destroy();
+  }
+
+  return { messages, tokenUsage };
+}
+
+async function attachCodexSubagentTools(
+  messages: AnyRecord[],
+  parentSessionId: string,
+  sessionFilePath: string,
+): Promise<void> {
+  if (!sessionFilePath) {
+    return;
+  }
+
+  const rootDir = path.join(os.homedir(), '.codex', 'sessions');
+  // ponytail: O(n) transcript scan; replace with an index if large Codex histories make parent loading slow.
+  const childFiles = await findCodexSubagentTranscriptFiles(parentSessionId, rootDir);
+  if (childFiles.length === 0) {
+    return;
+  }
+
+  const spawnByToolCallId = new Map<string, AnyRecord>();
+  for (const message of messages) {
+    if (message.type === 'tool_use' && message.toolName === 'Task' && typeof message.toolCallId === 'string') {
+      spawnByToolCallId.set(message.toolCallId, message);
+    }
+  }
+
+  const spawnByAgentId = new Map<string, AnyRecord>();
+  for (const message of messages) {
+    if (message.type !== 'tool_result' || typeof message.toolCallId !== 'string') {
+      continue;
+    }
+
+    const result = parseJsonRecord(message.output);
+    const agentId = typeof result?.agent_id === 'string' ? result.agent_id : undefined;
+    if (!agentId) {
+      continue;
+    }
+
+    const spawn = spawnByToolCallId.get(message.toolCallId);
+    if (spawn) {
+      spawnByAgentId.set(agentId, spawn);
+    }
+  }
+
+  for (const childFile of childFiles) {
+    const meta = await readCodexTranscriptMeta(childFile);
+    if (!meta) {
+      continue;
+    }
+
+    const spawn = spawnByAgentId.get(meta.sessionId);
+    if (!spawn) {
+      continue;
+    }
+
+    const child = await readCodexSessionFileMessages(childFile);
+    const childToolResults = new Map<string, AnyRecord>();
+    for (const message of child.messages) {
+      if (message.type === 'tool_result' && typeof message.toolCallId === 'string') {
+        childToolResults.set(message.toolCallId, {
+          content: message.output || '',
+          isError: Boolean(message.isError),
+        });
+      }
+    }
+
+    spawn.subagentTools = child.messages
+      .filter((message) => message.type === 'tool_use')
+      .map((message) => ({
+        toolId: message.toolCallId || generateMessageId('codex-subagent-tool'),
+        toolName: message.toolName || 'Unknown',
+        toolInput: message.toolInput,
+        timestamp: message.timestamp || new Date().toISOString(),
+        toolResult: typeof message.toolCallId === 'string'
+          ? (childToolResults.get(message.toolCallId) || null)
+          : null,
+      }));
+  }
+}
+
+async function getCodexSessionMessages(
+  sessionId: string,
+  providerSessionId: string,
+  limit: number | null = null,
+  offset = 0,
+): Promise<CodexHistoryResult> {
+  try {
+    const sessionFilePath = sessionsDb.getSessionById(sessionId)?.jsonl_path;
+
+    if (!sessionFilePath) {
+      console.warn(`Codex session file not found for session ${sessionId}`);
+      return { messages: [], total: 0, hasMore: false };
+    }
+
+    const { messages, tokenUsage } = await readCodexSessionFileMessages(sessionFilePath);
+    await attachCodexSubagentTools(messages, providerSessionId, sessionFilePath);
 
     messages.sort(
       (a, b) => new Date(a.timestamp || 0).getTime() - new Date(b.timestamp || 0).getTime(),
@@ -343,6 +502,7 @@ export class CodexSessionsProvider implements IProviderSessions {
         toolName: raw.toolName || 'Unknown',
         toolInput: raw.toolInput,
         toolId: raw.toolCallId || baseId,
+        subagentTools: raw.subagentTools,
       })];
     }
 
@@ -371,7 +531,14 @@ export class CodexSessionsProvider implements IProviderSessions {
       return [];
     }
 
-    if (raw.message?.role) {
+    if (
+      raw.message?.role
+      || raw.type === 'thinking'
+      || raw.isReasoning
+      || raw.type === 'tool_use'
+      || raw.toolName
+      || raw.type === 'tool_result'
+    ) {
       return this.normalizeHistoryEntry(raw, sessionId);
     }
 
@@ -520,12 +687,13 @@ export class CodexSessionsProvider implements IProviderSessions {
     options: FetchHistoryOptions = {},
   ): Promise<FetchHistoryResult> {
     const { limit = null, offset = 0 } = options;
+    const providerSessionId = options.providerSessionId ?? sessionId;
 
     let result: CodexHistoryResult;
     try {
       // Load full history first so `total` reflects frontend-normalized messages,
       // not raw JSONL records.
-      result = await getCodexSessionMessages(sessionId, null, 0);
+      result = await getCodexSessionMessages(sessionId, providerSessionId, null, 0);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`[CodexProvider] Failed to load session ${sessionId}:`, message);
