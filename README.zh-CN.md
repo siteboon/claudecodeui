@@ -1,7 +1,7 @@
 <div align="center">
  <img src="public/logo.svg" alt="CloudCLI UI" width="64" height="64">
  <h1>Cloud CLI（又名 Claude Code UI）</h1>
- <p><a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>、<a href="https://docs.cursor.com/en/cli/overview">Cursor CLI</a>、<a href="https://developers.openai.com/codex">Codex</a> 和 的桌面和移动端 UI。可在本地或远程使用，从任何地方查看激活的项目与会话。</p>
+ <p><a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>、<a href="https://docs.cursor.com/en/cli/overview">Cursor CLI</a>、<a href="https://developers.openai.com/codex">Codex</a> 的桌面和移动端 UI。可在本地或远程使用，从任何地方查看激活的项目与会话。</p>
 </div>
 
 <p align="center">
@@ -43,7 +43,7 @@
 <h3>CLI 选择</h3>
 <img src="public/screenshots/cli-selection.png" alt="CLI 选择" width="400">
 <br>
-<em>在 Claude Code、、Cursor CLI 与 Codex 之间进行选择</em>
+<em>在 Claude Code、Cursor CLI 与 Codex 之间进行选择</em>
 </td>
 </tr>
 </table>
@@ -60,7 +60,7 @@
 - **会话管理** - 恢复对话、管理多个会话并跟踪历史记录
 - **插件系统** - 通过自定义选项卡、后端服务与集成扩展 CloudCLI。 [开始构建 →](https://github.com/cloudcli-ai/cloudcli-plugin-starter)
 - **TaskMaster AI 集成** *(可选)* - 结合 AI 任务规划、PRD 分析与工作流自动化，实现高级项目管理
-- **模型兼容性** - 支持 Claude、GPT、 模型家族（完整支持列表可通过 `GET /api/providers/:provider/models` 接口获取）
+- **模型兼容性** - 支持 Claude、GPT 模型家族（完整支持列表可通过 `GET /api/providers/:provider/models` 接口获取）
 
 ## 快速开始
 
@@ -99,7 +99,7 @@ cloudcli
 npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
 ```
 
-支持 Claude Code、Codex 和。详情请参阅 [沙箱文档](docker/)。
+支持 Claude Code 和 Codex。详情请参阅 [沙箱文档](docker/)。
 
 ---
 
@@ -115,7 +115,7 @@ CloudCLI UI 是 CloudCLI Cloud 的开源 UI 层。你可以在本地机器上自
 | **机器需保持开机吗** | 是 | 否 |
 | **移动端访问** | 网络内任意浏览器 | 任意设备（原生应用即将推出） |
 | **可用会话** | 自动发现 `~/.claude` 中的所有会话 | 云端环境内的会话 |
-| **支持的 Agents** | Claude Code、Cursor CLI、Codex、 | Claude Code、Cursor CLI、Codex、 |
+| **支持的 Agents** | Claude Code、Cursor CLI、Codex | Claude Code、Cursor CLI、Codex |
 | **文件浏览与 Git** | 内置于 UI | 内置于 UI |
 | **MCP 配置** | UI 管理，与本地 `~/.claude` 配置同步 | UI 管理 |
 | **IDE 访问** | 本地 IDE | 任何连接到云环境的 IDE |
@@ -160,7 +160,7 @@ CloudCLI 配备插件系统，允许你添加带自定义前端 UI 和可选 Nod
 | **[Project Stats](https://github.com/cloudcli-ai/cloudcli-plugin-starter)** | 展示当前项目的文件数、代码行数、文件类型分布、最大文件以及最近修改的文件 |
 | **[Web Terminal](https://github.com/cloudcli-ai/cloudcli-plugin-terminal)** | 支持多标签页的完整 xterm.js 终端 |
 | **[Claude Watch](https://github.com/satsuki19980613/cloudcli-claude-watch)** | 监控长时间运行的 Claude Code 会话是否卡住，并提供进程控制 |
-| **[CloudCLI Scheduler](https://github.com/grostim/cloudcli-cron)** | 创建工作区范围的定时提示词，并通过 Codex、Claude Code 或 等本地 CLI 执行 |
+| **[CloudCLI Scheduler](https://github.com/grostim/cloudcli-cron)** | 创建工作区范围的定时提示词，并通过 Codex、Claude Code 等本地 CLI 执行 |
 | **[PRISM CloudCLI](https://github.com/jakeefr/cloudcli-plugin-prism)** | 在 CloudCLI 中提供 Claude Code 会话智能分析，包括 token 消耗可视化 |
 | **[Sessions](https://github.com/strykereye2/cloudcli-plugin-session-manager)** | 查看、管理并终止活动的 Claude Code 会话 |
 | **[Token Cost Calculator](https://github.com/NightmareAway/cloudcli-plugin-token-cost-calculator)** | 根据模型价格和 token 用量计算 API 成本，并支持模型价格预设 |
@@ -186,7 +186,7 @@ CloudCLI UI 与 CloudCLI Cloud 是对 Claude Code 的扩展，而非旁观 — M
 
 - **覆盖全部会话** — CloudCLI UI 会自动扫描 `~/.claude` 文件夹中的每个会话。Remote Control 只暴露当前活动的会话。
 - **设置统一** — 在 CloudCLI UI 中修改的 MCP、工具权限等设置会立即写入 Claude Code。
-- **支持更多 Agents** — Claude Code、Cursor CLI、Codex、。
+- **支持更多 Agents** — Claude Code、Cursor CLI、Codex。
 - **完整 UI** — 除了聊天界面，还包括文件浏览器、Git 集成、MCP 管理和 Shell 终端。
 - **CloudCLI Cloud 保持运行于云端** — 关闭本地设备也不会中断代理运行，无需监控终端。
 
@@ -195,7 +195,7 @@ CloudCLI UI 与 CloudCLI Cloud 是对 Claude Code 的扩展，而非旁观 — M
 <details>
 <summary>需要额外购买 AI 订阅吗？</summary>
 
-需要。CloudCLI 只提供环境。你仍需自行获取 Claude、Cursor、Codex 或 订阅。CloudCLI Cloud 从 €7/月起提供托管环境。
+需要。CloudCLI 只提供环境。你仍需自行获取 Claude、Cursor 或 Codex 订阅。CloudCLI Cloud 从 €7/月起提供托管环境。
 
 </details>
 

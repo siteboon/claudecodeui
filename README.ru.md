@@ -1,7 +1,7 @@
 <div align="center">
  <img src="public/logo.svg" alt="CloudCLI UI" width="64" height="64">
  <h1>Cloud CLI (aka Claude Code UI)</h1>
- <p>Десктопный и мобильный UI для <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>, <a href="https://docs.cursor.com/en/cli/overview">Cursor CLI</a>, <a href="https://developers.openai.com/codex">Codex</a> и .<br>Используйте локально или удалённо, чтобы просматривать активные проекты и сессии отовсюду.</p>
+ <p>Десктопный и мобильный UI для <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>, <a href="https://docs.cursor.com/en/cli/overview">Cursor CLI</a>, <a href="https://developers.openai.com/codex">Codex</a>.<br>Используйте локально или удалённо, чтобы просматривать активные проекты и сессии отовсюду.</p>
 </div>
 
 <p align="center">
@@ -62,7 +62,7 @@
 - **Управление сессиями** - возобновляйте диалоги, управляйте несколькими сессиями и отслеживайте историю
 - **Система плагинов** - расширяйте CloudCLI кастомными плагинами — добавляйте новые вкладки, бэкенд-сервисы и интеграции. [Создать свой →](https://github.com/cloudcli-ai/cloudcli-plugin-starter)
 - **Интеграция с TaskMaster AI** *(опционально)* - продвинутое управление проектами с планированием задач на базе AI, разбором PRD и автоматизацией workflow
-- **Совместимость с моделями** - работает с семействами моделей Claude, GPT и (полный список поддерживаемых моделей доступен через `GET /api/providers/:provider/models`)
+- **Совместимость с моделями** - работает с семействами моделей Claude и GPT (полный список поддерживаемых моделей доступен через `GET /api/providers/:provider/models`)
 
 
 ## Быстрый старт
@@ -103,7 +103,7 @@ cloudcli
 npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
 ```
 
-Поддерживаются Claude Code, Codex и. Подробнее в [документации sandbox](docker/).
+Поддерживаются Claude Code и Codex. Подробнее в [документации sandbox](docker/).
 
 ---
 
@@ -166,7 +166,7 @@ CloudCLI UI — это open source UI-слой, на котором постро
 | **[Project Stats](https://github.com/cloudcli-ai/cloudcli-plugin-starter)** | Показывает количество файлов, строки кода, разбивку по типам файлов, самые большие файлы и недавно изменённые файлы для текущего проекта |
 | **[Web Terminal](https://github.com/cloudcli-ai/cloudcli-plugin-terminal)** | Полноценный терминал xterm.js с поддержкой нескольких вкладок |
 | **[Claude Watch](https://github.com/satsuki19980613/cloudcli-claude-watch)** | Отслеживает зависания долгих сессий Claude Code и предоставляет управление процессами |
-| **[CloudCLI Scheduler](https://github.com/grostim/cloudcli-cron)** | Создаёт запланированные промпты для рабочей области и запускает их через локальную CLI, например Codex, Claude Code или |
+| **[CloudCLI Scheduler](https://github.com/grostim/cloudcli-cron)** | Создаёт запланированные промпты для рабочей области и запускает их через локальную CLI, например Codex или Claude Code |
 | **[PRISM CloudCLI](https://github.com/jakeefr/cloudcli-plugin-prism)** | Аналитика сессий Claude Code внутри CloudCLI, включая видимость расхода токенов |
 | **[Sessions](https://github.com/strykereye2/cloudcli-plugin-session-manager)** | Просмотр, управление и завершение активных сессий Claude Code |
 | **[Token Cost Calculator](https://github.com/NightmareAway/cloudcli-plugin-token-cost-calculator)** | Расчёт стоимости API по ценам моделей и использованию токенов, с поддержкой пресетов цен |
@@ -193,7 +193,7 @@ CloudCLI UI и CloudCLI Cloud расширяют Claude Code, а не работ
 
 - **Все ваши сессии, а не одна** — CloudCLI UI автоматически находит каждую сессию из папки `~/.claude`. Remote Control предоставляет только одну активную сессию, чтобы сделать её доступной в мобильном приложении Claude.
 - **Ваши настройки — это ваши настройки** — MCP-серверы, права инструментов и конфигурация проекта, изменённые в CloudCLI UI, записываются напрямую в конфиг Claude Code и вступают в силу сразу же, и наоборот.
-- **Работает с большим числом агентов** — Claude Code, Cursor CLI, Codex и, а не только Claude Code.
+- **Работает с большим числом агентов** — Claude Code, Cursor CLI и Codex, а не только Claude Code.
 - **Полноценный UI, а не просто окно чата** — проводник файлов, Git-интеграция, управление MCP и shell-терминал — всё встроено.
 - **CloudCLI Cloud работает в облаке** — закройте ноутбук, и агент продолжит работать. Не нужно следить за терминалом и держать машину постоянно активной.
 
@@ -202,7 +202,7 @@ CloudCLI UI и CloudCLI Cloud расширяют Claude Code, а не работ
 <details>
 <summary>Нужно ли отдельно платить за AI-подписку?</summary>
 
-Да. CloudCLI предоставляет среду, а не сам AI. Вы приносите свою подписку Claude, Cursor, Codex или . CloudCLI Cloud начинается от €7/месяц за хостируемую среду поверх этого.
+Да. CloudCLI предоставляет среду, а не сам AI. Вы приносите свою подписку Claude, Cursor или Codex. CloudCLI Cloud начинается от €7/месяц за хостируемую среду поверх этого.
 
 </details>
 

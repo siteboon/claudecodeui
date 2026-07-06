@@ -62,7 +62,9 @@ export default function CommitHistoryItem({
     return parseCommitFiles(diff);
   }, [diff]);
 
-  const badgeColor = graphRow ? laneColor(graphRow.nodeLane) : 'var(--color-primary, #0ea5e9)';
+  // Must stay a literal hex value: RefBadge derives its HEAD tint by
+  // appending an alpha byte (`${color}22`), which breaks for var() strings.
+  const badgeColor = graphRow ? laneColor(graphRow.nodeLane) : '#0ea5e9';
 
   return (
     <div className="flex border-b border-border last:border-0">

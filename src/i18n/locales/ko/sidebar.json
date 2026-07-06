@@ -48,7 +48,8 @@
     "activeSessionIndicator": "최근 활성 세션 (지난 10분)",
     "save": "저장",
     "cancel": "취소",
-    "openCommandPalette": "명령 팔레트 열기"
+    "openCommandPalette": "명령 팔레트 열기",
+    "attentionRequiredIndicator": "세션에 주의가 필요합니다"
   },
   "navigation": {
     "chat": "채팅",

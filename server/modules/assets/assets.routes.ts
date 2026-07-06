@@ -79,7 +79,17 @@ router.get('/images/:filename', async (req, res) => {
     return res.status(404).json({ error: 'Asset not found' });
   }
 
-  res.setHeader('Content-Type', mime.lookup(resolved) || 'application/octet-stream');
+  const contentType = mime.lookup(resolved) || 'application/octet-stream';
+  res.setHeader('Content-Type', contentType);
+  // Stored-XSS hardening: never let the browser sniff a different type, and
+  // force SVGs (which can carry scripts when rendered as a document) to
+  // download instead of rendering inline. The chat UI is unaffected — it
+  // fetches assets as blobs and shows them through <img>, where SVG scripts
+  // never execute.
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  if (contentType === 'image/svg+xml') {
+    res.setHeader('Content-Disposition', 'attachment');
+  }
   const fileStream = fsSync.createReadStream(resolved);
   fileStream.pipe(res);
   fileStream.on('error', (error) => {

@@ -810,19 +810,18 @@ export function useProjectsState({
       return;
     }
 
-    const projectForSession = selectedProject || projects.find((p) => (p.sessions?.length ?? 0) > 0);
-    if (!projectForSession) {
+    // Only the currently selected project may host the placeholder. Guessing
+    // another project (e.g. "first one with sessions") could bind the URL
+    // session to the wrong project — better to wait until the owning project
+    // arrives in a later `projects` payload and is matched by the loop above.
+    if (!selectedProject) {
       return;
-    }
-
-    if (selectedProject?.projectId !== projectForSession.projectId) {
-      setSelectedProject(projectForSession);
     }
 
     setSelectedSession({
       id: sessionId,
       __provider: readSelectedProvider(),
-      __projectId: projectForSession.projectId,
+      __projectId: selectedProject.projectId,
       summary: '',
     });
   }, [sessionId, projects, selectedProject, selectedSession?.id, selectedSession?.__provider]);

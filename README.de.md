@@ -62,7 +62,7 @@
 - **Sitzungsverwaltung** – Gespräche fortsetzen, mehrere Sitzungen verwalten und Verlauf nachverfolgen
 - **Plugin-System** – CloudCLI mit eigenen Plugins erweitern – neue Tabs, Backend-Dienste und Integrationen hinzufügen. [Eigenes Plugin erstellen →](https://github.com/cloudcli-ai/cloudcli-plugin-starter)
 - **TaskMaster AI Integration** *(Optional)* – Erweitertes Projektmanagement mit KI-gestützter Aufgabenplanung, PRD-Parsing und Workflow-Automatisierung
-- **Modell-Kompatibilität** – Funktioniert mit Claude, GPT und (vollständige Liste unterstützter Modelle zur Laufzeit über `GET /api/providers/:provider/models`)
+- **Modell-Kompatibilität** – Funktioniert mit den Claude- und GPT-Modellfamilien (vollständige Liste unterstützter Modelle zur Laufzeit über `GET /api/providers/:provider/models`)
 
 
 ## Schnellstart
@@ -103,7 +103,7 @@ Agents in isolierten Sandboxes mit Hypervisor-Isolation ausführen. Standardmä�
 npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
 ```
 
-Unterstützt Claude Code, Codex und. Weitere Details in der [Sandbox-Dokumentation](docker/).
+Unterstützt Claude Code und Codex. Weitere Details in der [Sandbox-Dokumentation](docker/).
 
 ---
 
@@ -166,7 +166,7 @@ CloudCLI verfügt über ein Plugin-System, mit dem benutzerdefinierte Tabs mit e
 | **[Project Stats](https://github.com/cloudcli-ai/cloudcli-plugin-starter)** | Zeigt Dateianzahl, Codezeilen, Dateityp-Aufschlüsselung, größte Dateien und zuletzt geänderte Dateien des aktuellen Projekts |
 | **[Web Terminal](https://github.com/cloudcli-ai/cloudcli-plugin-terminal)** | Vollwertiges xterm.js-Terminal mit Multi-Tab-Unterstützung |
 | **[Claude Watch](https://github.com/satsuki19980613/cloudcli-claude-watch)** | Überwacht lange laufende Claude-Code-Sitzungen auf Hänger und stellt Prozesssteuerungen bereit |
-| **[CloudCLI Scheduler](https://github.com/grostim/cloudcli-cron)** | Erstellt arbeitsbereichsbezogene geplante Prompts und führt sie über eine lokale CLI wie Codex, Claude Code oder aus |
+| **[CloudCLI Scheduler](https://github.com/grostim/cloudcli-cron)** | Erstellt arbeitsbereichsbezogene geplante Prompts und führt sie über eine lokale CLI wie Codex oder Claude Code aus |
 | **[PRISM CloudCLI](https://github.com/jakeefr/cloudcli-plugin-prism)** | Sitzungsintelligenz für Claude Code in CloudCLI, inklusive Sichtbarkeit des Token-Verbrauchs |
 | **[Sessions](https://github.com/strykereye2/cloudcli-plugin-session-manager)** | Aktive Claude-Code-Sitzungen anzeigen, verwalten und beenden |
 | **[Token Cost Calculator](https://github.com/NightmareAway/cloudcli-plugin-token-cost-calculator)** | API-Kosten anhand von Modellpreisen und Token-Nutzung berechnen, mit Unterstützung für Preisvorlagen |
@@ -193,7 +193,7 @@ Das bedeutet in der Praxis:
 
 - **Alle Sitzungen, nicht nur eine** – CloudCLI UI erkennt automatisch jede Sitzung aus dem `~/.claude`-Ordner. Remote Control stellt nur die einzelne aktive Sitzung bereit, um sie in der Claude Mobile App verfügbar zu machen.
 - **Deine Einstellungen sind deine Einstellungen** – MCP-Server, Tool-Berechtigungen und Projektkonfiguration, die in CloudCLI UI geändert werden, werden direkt in die Claude Code-Konfiguration geschrieben und treten sofort in Kraft – und umgekehrt.
-- **Funktioniert mit mehr Agents** – Claude Code, Cursor CLI, Codex und, nicht nur Claude Code.
+- **Funktioniert mit mehr Agents** – Claude Code, Cursor CLI und Codex, nicht nur Claude Code.
 - **Vollständige UI, nicht nur ein Chat-Fenster** – Datei-Explorer, Git-Integration, MCP-Verwaltung und ein Shell-Terminal sind alle eingebaut.
 - **CloudCLI Cloud läuft in der Cloud** – Laptop zuklappen, der Agent läuft weiter. Kein Terminal zu überwachen, kein Rechner, der laufen muss.
 
@@ -202,7 +202,7 @@ Das bedeutet in der Praxis:
 <details>
 <summary>Muss ich ein KI-Abonnement separat bezahlen?</summary>
 
-Ja. CloudCLI stellt die Umgebung bereit, nicht die KI. Du bringst dein eigenes Claude-, Cursor-, Codex- oder -Abonnement mit. CloudCLI Cloud beginnt bei €7/Monat für die gehostete Umgebung zusätzlich dazu.
+Ja. CloudCLI stellt die Umgebung bereit, nicht die KI. Du bringst dein eigenes Claude-, Cursor- oder Codex-Abonnement mit. CloudCLI Cloud beginnt bei €7/Monat für die gehostete Umgebung zusätzlich dazu.
 
 </details>
 
