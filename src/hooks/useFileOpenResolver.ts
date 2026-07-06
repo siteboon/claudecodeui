@@ -2,6 +2,7 @@ import { useCallback, useRef } from 'react';
 
 import { api } from '../utils/api';
 import type { Project } from '../types/app';
+import type { CodeEditorDiffInfo } from '../components/code-editor/types/types';
 
 type FileNode = {
   type: 'file' | 'directory';
@@ -15,9 +16,7 @@ type FlatFile = {
   path: string;
 };
 
-// `diffInfo` is intentionally `any` so this resolver can wrap editor handlers
-// that expect a concrete diff payload type as well as generic callers.
-type OnFileOpen = (filePath: string, diffInfo?: any) => void;
+type OnFileOpen = (filePath: string, diffInfo?: CodeEditorDiffInfo | null) => void;
 
 const normalize = (value: string): string => value.replace(/\\/g, '/');
 
@@ -96,7 +95,7 @@ export function useFileOpenResolver(
   }, [projectId]);
 
   return useCallback(
-    (filePath: string, diffInfo?: any) => {
+    (filePath: string, diffInfo?: CodeEditorDiffInfo | null) => {
       const ref = normalize(filePath).trim();
       void loadFiles().then((files) => {
         const match = findBestMatch(files, ref);

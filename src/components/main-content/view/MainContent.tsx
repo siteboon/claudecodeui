@@ -1,26 +1,27 @@
 import React, { useCallback, useEffect, useState } from 'react';
 
+import { usePaletteOpsRegister } from '../../../contexts/PaletteOpsContext';
+import { useTaskMaster } from '../../../contexts/TaskMasterContext';
+import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
+import { useFileOpenResolver } from '../../../hooks/useFileOpenResolver';
+import { useUiPreferences } from '../../../hooks/useUiPreferences';
+import type { Project } from '../../../types/app';
+import { authenticatedFetch } from '../../../utils/api';
+import { BrowserUsePanel } from '../../browser-use';
 import ChatInterface from '../../chat/view/ChatInterface';
+import { useEditorSidebar } from '../../code-editor/hooks/useEditorSidebar';
+import type { CodeEditorDiffInfo } from '../../code-editor/types/types';
+import EditorSidebar from '../../code-editor/view/EditorSidebar';
 import FileTree from '../../file-tree/view/FileTree';
-import StandaloneShell from '../../standalone-shell/view/StandaloneShell';
 import GitPanel from '../../git-panel/view/GitPanel';
 import PluginTabContent from '../../plugins/view/PluginTabContent';
-import { BrowserUsePanel } from '../../browser-use';
-import type { MainContentProps } from '../types/types';
-import { useTaskMaster } from '../../../contexts/TaskMasterContext';
-import { usePaletteOpsRegister } from '../../../contexts/PaletteOpsContext';
-import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
-import { useUiPreferences } from '../../../hooks/useUiPreferences';
-import { useFileOpenResolver } from '../../../hooks/useFileOpenResolver';
-import { authenticatedFetch } from '../../../utils/api';
-import { useEditorSidebar } from '../../code-editor/hooks/useEditorSidebar';
-import EditorSidebar from '../../code-editor/view/EditorSidebar';
-import type { Project } from '../../../types/app';
+import StandaloneShell from '../../standalone-shell/view/StandaloneShell';
 import { TaskMasterPanel } from '../../task-master';
+import type { MainContentProps } from '../types/types';
 
+import ErrorBoundary from './ErrorBoundary';
 import MainContentHeader from './subcomponents/MainContentHeader';
 import MainContentStateView from './subcomponents/MainContentStateView';
-import ErrorBoundary from './ErrorBoundary';
 
 type TaskMasterContextValue = {
   currentProject?: Project | null;
@@ -30,7 +31,6 @@ type TaskMasterContextValue = {
 type TasksSettingsContextValue = {
   tasksEnabled: boolean;
   isTaskMasterInstalled: boolean | null;
-  isTaskMasterReady: boolean | null;
 };
 
 function MainContent({
@@ -53,13 +53,11 @@ function MainContent({
   externalMessageUpdate,
   newSessionTrigger,
 }: MainContentProps) {
-  const { preferences } = useUiPreferences();
-  const { showRawParameters, showThinking, sendByCtrlEnter } = preferences;
-
   const { currentProject, setCurrentProject } = useTaskMaster() as TaskMasterContextValue;
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings() as TasksSettingsContextValue;
+  const { preferences } = useUiPreferences();
+  const { showRawParameters, showThinking, sendByCtrlEnter } = preferences;
   const [browserUseEnabled, setBrowserUseEnabled] = useState(false);
-
   const shouldShowTasksTab = Boolean(tasksEnabled && isTaskMasterInstalled);
   const shouldShowBrowserTab = browserUseEnabled;
 
@@ -73,18 +71,11 @@ function MainContent({
     handleCloseEditor,
     handleToggleEditorExpand,
     handleResizeStart,
-  } = useEditorSidebar({
-    selectedProject,
-    isMobile,
-  });
+  } = useEditorSidebar({ selectedProject, isMobile });
 
-  // Resolves bare/partial file references (e.g. links inside chat messages) to
-  // real project files before opening them in the in-app editor.
   const resolvedFileOpen = useFileOpenResolver(selectedProject, handleFileOpen);
 
   useEffect(() => {
-    // Identify projects by DB `projectId`; the TaskMaster context uses the
-    // same identifier to key its internal maps.
     const selectedProjectId = selectedProject?.projectId;
     const currentProjectId = currentProject?.projectId;
 
@@ -126,9 +117,8 @@ function MainContent({
       setActiveTab('files');
       handleFileOpen(filePath);
     },
-    // Opens the editor side panel in place, keeping the current tab (e.g. chat).
-    openFileInEditor: (filePath: string) => {
-      resolvedFileOpen(filePath);
+    openFileInEditor: (filePath: string, diffInfo?: CodeEditorDiffInfo | null) => {
+      resolvedFileOpen(filePath, diffInfo);
     },
   });
 
@@ -154,15 +144,15 @@ function MainContent({
       />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className={`flex min-h-0 min-w-[200px] flex-col overflow-hidden ${editorExpanded ? 'hidden' : ''} flex-1`}>
-          <div className={`h-full ${activeTab === 'chat' ? 'block' : 'hidden'}`}>
+        <div className={`min-h-0 min-w-[200px] flex-col overflow-hidden ${editorExpanded ? 'hidden' : 'flex flex-1'}`}>
+          {activeTab === 'chat' && (
             <ErrorBoundary showDetails>
               <ChatInterface
                 selectedProject={selectedProject}
                 selectedSession={selectedSession}
                 ws={ws}
                 sendMessage={sendMessage}
-                onFileOpen={handleFileOpen}
+                onFileOpen={resolvedFileOpen}
                 onInputFocusChange={onInputFocusChange}
                 onSessionProcessing={onSessionProcessing}
                 onSessionIdle={onSessionIdle}
@@ -178,7 +168,7 @@ function MainContent({
                 onShowAllTasks={tasksEnabled ? () => setActiveTab('tasks') : null}
               />
             </ErrorBoundary>
-          </div>
+          )}
 
           {activeTab === 'files' && (
             <div className="h-full overflow-hidden">
@@ -203,11 +193,11 @@ function MainContent({
             </div>
           )}
 
-          {shouldShowTasksTab && <TaskMasterPanel isVisible={activeTab === 'tasks'} />}
+          {activeTab === 'tasks' && shouldShowTasksTab && <TaskMasterPanel isVisible />}
 
-          {shouldShowBrowserTab && activeTab === 'browser' && (
+          {activeTab === 'browser' && shouldShowBrowserTab && (
             <div className="h-full overflow-hidden">
-              <BrowserUsePanel isVisible={activeTab === 'browser'} onShowSettings={onShowSettings} />
+              <BrowserUsePanel isVisible onShowSettings={onShowSettings} />
             </div>
           )}
 
