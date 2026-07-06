@@ -1,4 +1,4 @@
-import { promises as fs } from 'node:fs';
+import { promises as fs, realpathSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -99,6 +99,18 @@ function isPathInsideDirectory(candidate: string, directory: string): boolean {
   return path.resolve(candidate).startsWith(resolvedRoot);
 }
 
+function getDirectoryPathVariants(directory: string): string[] {
+  const resolvedDirectory = path.resolve(directory);
+  try {
+    const canonicalDirectory = path.resolve(realpathSync(directory));
+    return canonicalDirectory === resolvedDirectory
+      ? [resolvedDirectory]
+      : [resolvedDirectory, canonicalDirectory];
+  } catch {
+    return [resolvedDirectory];
+  }
+}
+
 /**
  * Second layer of the image trust boundary (the first is the chat.send filter
  * in the websocket gateway): provider builders only reference files that live
@@ -107,9 +119,10 @@ function isPathInsideDirectory(candidate: string, directory: string): boolean {
  * refused, so a caller-supplied descriptor can never leak arbitrary files.
  */
 export function isAllowedImageSourcePath(resolvedPath: string, cwd?: string): boolean {
-  return (
-    isPathInsideDirectory(resolvedPath, getGlobalImageAssetsDir()) ||
-    isPathInsideDirectory(resolvedPath, cwd || process.cwd())
+  return [getGlobalImageAssetsDir(), cwd || process.cwd()].some((directory) =>
+    getDirectoryPathVariants(directory).some((directoryVariant) =>
+      isPathInsideDirectory(resolvedPath, directoryVariant)
+    )
   );
 }
 
@@ -276,7 +289,13 @@ export async function buildClaudeUserContent(
     }
 
     try {
-      const bytes = await fs.readFile(resolvedPath);
+      const canonicalPath = await fs.realpath(resolvedPath);
+      if (!isAllowedImageSourcePath(canonicalPath, cwd)) {
+        console.warn(`[Images] Refusing to read symlinked image outside allowed roots: ${descriptor.path}`);
+        continue;
+      }
+
+      const bytes = await fs.readFile(canonicalPath);
       blocks.push({
         type: 'image',
         source: {
