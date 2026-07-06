@@ -1,6 +1,8 @@
-import { spawn } from 'node:child_process';
 import { access, mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
+
+// cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
+import spawn from 'cross-spawn';
 
 import { githubTokensDb } from '@/modules/database/index.js';
 import { createProject } from '@/modules/projects/services/project-management.service.js';

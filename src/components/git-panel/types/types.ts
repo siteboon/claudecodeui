@@ -51,6 +51,10 @@ export type GitCommitSummary = {
   date: string;
   message: string;
   stats?: string;
+  /** Parent commit hashes — drives the History view commit graph. */
+  parents?: string[];
+  /** Ref decorations, e.g. "HEAD -> main", "origin/main", "tag: v1.0". */
+  refs?: string[];
 };
 
 export type GitDiffMap = Record<string, string>;

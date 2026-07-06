@@ -1,4 +1,3 @@
-import { spawn } from 'child_process';
 import { promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
@@ -13,8 +12,9 @@ import { providerAuthService } from './modules/providers/services/provider-auth.
 import { providerModelsService } from './modules/providers/services/provider-models.service.js';
 import { createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell } from './shared/utils.js';
 
-// Use cross-spawn on Windows for correct .cmd resolution (same pattern as cursor-cli.js)
-const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
+// cross-spawn resolves .cmd shims/PATHEXT on Windows and delegates to
+// child_process.spawn everywhere else.
+const spawnFunction = crossSpawn;
 
 let activeGeminiProcesses = new Map(); // Track active processes by session ID
 

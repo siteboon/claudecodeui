@@ -1,7 +1,6 @@
 import { access, readdir } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
 
 import crossSpawn from 'cross-spawn';
 
@@ -589,7 +588,9 @@ type CursorModelRow = {
 
 const CURSOR_MODELS_TIMEOUT_MS = 10_000;
 const CURSOR_CHATS_ROOT = path.join(os.homedir(), '.cursor', 'chats');
-const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
+// cross-spawn resolves .cmd shims/PATHEXT on Windows and delegates to
+// child_process.spawn everywhere else.
+const spawnFunction = crossSpawn;
 const ANSI_PATTERN = new RegExp(
   // eslint-disable-next-line no-control-regex
   '[\\u001B\\u009B][[\\]()#;?]*(?:'

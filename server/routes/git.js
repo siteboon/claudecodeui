@@ -1,5 +1,6 @@
 import express from 'express';
-import { spawn } from 'child_process';
+// cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
+import spawn from 'cross-spawn';
 import path from 'path';
 import { promises as fs } from 'fs';
 import { projectsDb } from '../modules/database/index.js';
@@ -861,10 +862,57 @@ router.post('/delete-branch', async (req, res) => {
   }
 });
 
-// Get recent commits
+// Fields are joined with the ASCII unit separator so pipes (or anything else
+// typed into a commit subject) cannot break parsing.
+const GIT_LOG_FIELD_SEPARATOR = '\u001f';
+const GIT_LOG_PRETTY_FORMAT = '%H%x1f%P%x1f%D%x1f%an%x1f%ae%x1f%ad%x1f%s';
+
+/**
+ * Parses `git log --shortstat` output produced with GIT_LOG_PRETTY_FORMAT.
+ *
+ * Each commit is one format line (hash, parent hashes, ref decorations,
+ * author, email, date, subject) optionally followed by its `--shortstat`
+ * summary line ("N files changed, ..."). Parents and refs feed the commit
+ * graph rendered by the History view; merge commits carry no shortstat line,
+ * so their `stats` stays empty.
+ *
+ * Exported for tests.
+ */
+export function parseGitLogWithStats(stdout) {
+  const commits = [];
+
+  for (const rawLine of stdout.split('\n')) {
+    const line = rawLine.trimEnd();
+    if (!line.trim()) continue;
+
+    if (line.includes(GIT_LOG_FIELD_SEPARATOR)) {
+      const [hash, parents, refs, author, email, date, ...messageParts] = line.split(GIT_LOG_FIELD_SEPARATOR);
+      commits.push({
+        hash,
+        parents: parents ? parents.split(' ').filter(Boolean) : [],
+        // `%D` decorations, e.g. "HEAD -> main", "origin/main", "tag: v1.0".
+        refs: refs ? refs.split(', ').filter(Boolean) : [],
+        author,
+        email,
+        date,
+        message: messageParts.join(GIT_LOG_FIELD_SEPARATOR),
+        stats: ''
+      });
+      continue;
+    }
+
+    if (commits.length > 0 && /files? changed/.test(line)) {
+      commits[commits.length - 1].stats = line.trim();
+    }
+  }
+
+  return commits;
+}
+
+// Get recent commits (across all branches, in graph order)
 router.get('/commits', async (req, res) => {
   const { project, limit = 10 } = req.query;
-  
+
   if (!project) {
     return res.status(400).json({ error: 'Project id is required' });
   }
@@ -876,42 +924,28 @@ router.get('/commits', async (req, res) => {
     const safeLimit = Number.isFinite(parsedLimit) && parsedLimit > 0
       ? Math.min(parsedLimit, 100)
       : 10;
-    
-    // Get commit log with stats
+
+    // Branches/remotes/tags (not --all, which would drag in refs/stash) with
+    // `--topo-order` guarantee children appear before their parents across
+    // every branch, which the frontend lane-assignment relies on.
+    // `--shortstat` replaces the previous per-commit `git show --stat` calls.
     const { stdout } = await spawnAsync(
       'git',
-      ['log', '--pretty=format:%H|%an|%ae|%ad|%s', '--date=iso-strict', '-n', String(safeLimit)],
+      [
+        'log',
+        '--branches',
+        '--remotes',
+        '--tags',
+        '--topo-order',
+        '--shortstat',
+        `--pretty=format:${GIT_LOG_PRETTY_FORMAT}`,
+        '--date=iso-strict',
+        '-n', String(safeLimit)
+      ],
       { cwd: projectPath },
     );
-    
-    const commits = stdout
-      .split('\n')
-      .filter(line => line.trim())
-      .map(line => {
-        const [hash, author, email, date, ...messageParts] = line.split('|');
-        return {
-          hash,
-          author,
-          email,
-          date,
-          message: messageParts.join('|')
-        };
-      });
-    
-    // Get stats for each commit
-    for (const commit of commits) {
-      try {
-        const { stdout: stats } = await spawnAsync(
-          'git', ['show', '--stat', '--format=', commit.hash],
-          { cwd: projectPath }
-        );
-        commit.stats = stats.trim().split('\n').pop(); // Get the summary line
-      } catch (error) {
-        commit.stats = '';
-      }
-    }
-    
-    res.json({ commits });
+
+    res.json({ commits: parseGitLogWithStats(stdout) });
   } catch (error) {
     console.error('Git commits error:', error);
     res.json({ error: error.message });

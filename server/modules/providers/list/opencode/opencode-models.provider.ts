@@ -1,5 +1,3 @@
-import { spawn } from 'node:child_process';
-
 import Database from 'better-sqlite3';
 import crossSpawn from 'cross-spawn';
 
@@ -67,7 +65,9 @@ export const OPENCODE_FALLBACK_MODELS: ProviderModelsDefinition = {
 
 const OPEN_CODE_MODELS_TIMEOUT_MS = 20_000;
 const MODEL_ID_LINE = /^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*$/i;
-const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
+// cross-spawn resolves .cmd shims/PATHEXT on Windows and delegates to
+// child_process.spawn everywhere else.
+const spawnFunction = crossSpawn;
 const DATE_TOKEN = /^\d{8}$/;
 const SIMPLE_NUMBER_TOKEN = /^\d$/;
 const VERSION_TOKEN = /^[a-z]\d+$/i;

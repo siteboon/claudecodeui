@@ -1,5 +1,3 @@
-import { spawn } from 'child_process';
-
 import crossSpawn from 'cross-spawn';
 
 import { appendImagesInputTag } from './shared/image-attachments.js';
@@ -9,8 +7,9 @@ import { providerAuthService } from './modules/providers/services/provider-auth.
 import { providerModelsService } from './modules/providers/services/provider-models.service.js';
 import { createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell } from './shared/utils.js';
 
-// Use cross-spawn on Windows for better command execution
-const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
+// cross-spawn resolves .cmd shims/PATHEXT on Windows and delegates to
+// child_process.spawn everywhere else.
+const spawnFunction = crossSpawn;
 
 let activeCursorProcesses = new Map(); // Track active processes by session ID
 

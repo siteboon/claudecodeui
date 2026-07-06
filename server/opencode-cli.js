@@ -1,4 +1,3 @@
-import { spawn } from 'child_process';
 import fsSync from 'node:fs';
 
 import crossSpawn from 'cross-spawn';
@@ -11,7 +10,9 @@ import { providerModelsService } from './modules/providers/services/provider-mod
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
 import { createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell, getOpenCodeDatabasePath } from './shared/utils.js';
 
-const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
+// cross-spawn resolves .cmd shims/PATHEXT on Windows and delegates to
+// child_process.spawn everywhere else.
+const spawnFunction = crossSpawn;
 
 const activeOpenCodeProcesses = new Map();
 

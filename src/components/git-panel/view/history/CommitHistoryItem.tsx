@@ -1,8 +1,11 @@
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, GitBranch, Tag } from 'lucide-react';
 import { useMemo } from 'react';
 import type { GitCommitSummary } from '../../types/types';
+import type { CommitGraphRow } from '../../utils/commitGraph';
+import { laneColor } from '../../utils/commitGraph';
 import { getStatusBadgeClass, parseCommitFiles } from '../../utils/gitPanelUtils';
 import GitDiffViewer from '../shared/GitDiffViewer';
+import CommitGraphStrip from './CommitGraphStrip';
 
 function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleDateString('en-US', {
@@ -12,12 +15,36 @@ function formatDate(dateString: string): string {
   });
 }
 
+// One "HEAD -> main" / "origin/x" / "tag: v1" decoration pill next to the
+// commit message, tinted with the commit's graph lane color.
+function RefBadge({ refName, color }: { refName: string; color: string }) {
+  const isTag = refName.startsWith('tag: ');
+  const isHead = refName.startsWith('HEAD -> ');
+  const label = isTag ? refName.slice(5) : isHead ? refName.slice(8) : refName;
+
+  return (
+    <span
+      className="inline-flex max-w-40 items-center gap-1 rounded-full border px-1.5 py-px text-[10px] font-medium leading-4"
+      style={{
+        borderColor: color,
+        color,
+        backgroundColor: isHead ? `${color}22` : 'transparent',
+      }}
+      title={refName}
+    >
+      {isTag ? <Tag className="h-2.5 w-2.5 shrink-0" /> : <GitBranch className="h-2.5 w-2.5 shrink-0" />}
+      <span className="truncate">{label}</span>
+    </span>
+  );
+}
+
 type CommitHistoryItemProps = {
   commit: GitCommitSummary;
   isExpanded: boolean;
   diff?: string;
   isMobile: boolean;
   wrapText: boolean;
+  graphRow?: CommitGraphRow;
   onToggle: () => void;
 };
 
@@ -27,6 +54,7 @@ export default function CommitHistoryItem({
   diff,
   isMobile,
   wrapText,
+  graphRow,
   onToggle,
 }: CommitHistoryItemProps) {
   const fileSummary = useMemo(() => {
@@ -34,8 +62,12 @@ export default function CommitHistoryItem({
     return parseCommitFiles(diff);
   }, [diff]);
 
+  const badgeColor = graphRow ? laneColor(graphRow.nodeLane) : 'var(--color-primary, #0ea5e9)';
+
   return (
-    <div className="border-b border-border last:border-0">
+    <div className="flex border-b border-border last:border-0">
+      {graphRow && <CommitGraphStrip row={graphRow} />}
+      <div className="min-w-0 flex-1">
       <button
         type="button"
         aria-expanded={isExpanded}
@@ -48,6 +80,13 @@ export default function CommitHistoryItem({
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
+              {commit.refs && commit.refs.length > 0 && (
+                <span className="mb-0.5 flex flex-wrap gap-1">
+                  {commit.refs.map((refName) => (
+                    <RefBadge key={refName} refName={refName} color={badgeColor} />
+                  ))}
+                </span>
+              )}
               <p className="truncate text-sm font-medium text-foreground">{commit.message}</p>
               <p className="mt-1 text-sm text-muted-foreground">
                 {commit.author}
@@ -145,6 +184,7 @@ export default function CommitHistoryItem({
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }
