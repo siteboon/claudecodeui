@@ -136,7 +136,7 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 items-start gap-3">
-          <Server className="mt-0.5 h-5 w-5 flex-shrink-0 text-primary" />
+          <Server className="mt-0.5 h-5 w-5 flex-shrink-0 text-purple-500" />
           <div className="min-w-0 space-y-1">
             <h3 className="text-lg font-medium text-foreground">{t('mcpServers.title')}</h3>
             <p className="text-sm text-muted-foreground">{description}</p>
