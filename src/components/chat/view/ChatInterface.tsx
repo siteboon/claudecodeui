@@ -13,6 +13,7 @@ import { useChatRealtimeHandlers } from '../hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '../hooks/useChatComposerState';
 import { useSessionStore } from '../../../stores/useSessionStore';
 import { downloadSessionMarkdown, exportSessionAsMarkdown } from '../utils/exportSession';
+import { deriveAgentTodoSummaries } from '../utils/agentTodoSummary';
 
 import ChatMessagesPane from './subcomponents/ChatMessagesPane';
 import ChatComposer from './subcomponents/ChatComposer';
@@ -136,6 +137,11 @@ function ChatInterface({
     lastSeqRef,
     sessionStore,
   });
+
+  const agentTodoSummaries = useMemo(
+    () => deriveAgentTodoSummaries(chatMessages),
+    [chatMessages],
+  );
 
   // Brand-new conversation: the composer allocated a stable session id via
   // the session gateway before the first send. Record it locally and put it
@@ -406,6 +412,7 @@ function ChatInterface({
           pendingPermissionRequests={pendingPermissionRequests}
           handlePermissionDecision={handlePermissionDecision}
           handleGrantToolPermission={handleGrantToolPermission}
+          agentTodoSummaries={agentTodoSummaries}
           activity={sessionActivity}
           isLoading={isProcessing}
           onAbortSession={handleAbortSession}
