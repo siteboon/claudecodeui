@@ -91,8 +91,12 @@ export function resolveImageAbsolutePath(cwd: string | undefined, imagePath: str
 }
 
 function isPathInsideDirectory(candidate: string, directory: string): boolean {
-  const relative = path.relative(path.resolve(directory), candidate);
-  return relative.length > 0 && !relative.startsWith('..') && !path.isAbsolute(relative);
+  // resolve + startsWith(root + separator) is the containment idiom CodeQL
+  // recognizes as a path-injection barrier, and matches the check used by
+  // resolveImageAssetFile in the assets module. The root itself never
+  // matches (no trailing separator after resolve), only entries below it.
+  const resolvedRoot = path.resolve(directory) + path.sep;
+  return path.resolve(candidate).startsWith(resolvedRoot);
 }
 
 /**
