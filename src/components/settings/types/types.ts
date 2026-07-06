@@ -24,6 +24,7 @@ export type ClaudePermissionsState = {
   allowedTools: string[];
   disallowedTools: string[];
   skipPermissions: boolean;
+  useWorktree: boolean;
 };
 
 export type NotificationPreferencesState = {

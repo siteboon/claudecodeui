@@ -9,6 +9,7 @@ export type ProviderPermissionSettings = {
     allowedTools: string[];
     disallowedTools: string[];
     skipPermissions: boolean;
+    useWorktree: boolean;
     projectSortOrder: ProjectSortOrder;
   };
   cursor: {
@@ -50,6 +51,7 @@ export const DEFAULT_PROVIDER_PERMISSION_SETTINGS: ProviderPermissionSettings = 
     allowedTools: [],
     disallowedTools: [],
     skipPermissions: false,
+    useWorktree: false,
     projectSortOrder: 'name',
   },
   cursor: {
@@ -120,6 +122,7 @@ export function normalizeProviderPermissionSettings(value: unknown): ProviderPer
       allowedTools: readStringArray(claude.allowedTools),
       disallowedTools: readStringArray(claude.disallowedTools),
       skipPermissions: claude.skipPermissions === true,
+      useWorktree: claude.useWorktree === true,
       projectSortOrder: readProjectSortOrder(claude.projectSortOrder),
     },
     cursor: {

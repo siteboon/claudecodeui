@@ -67,6 +67,7 @@ const createEmptyClaudePermissions = (): ClaudePermissionsState => ({
   allowedTools: [],
   disallowedTools: [],
   skipPermissions: false,
+  useWorktree: false,
 });
 
 const createEmptyCursorPermissions = (): CursorPermissionsState => ({
@@ -166,6 +167,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
         allowedTools: savedClaudeSettings.allowedTools,
         disallowedTools: savedClaudeSettings.disallowedTools,
         skipPermissions: savedClaudeSettings.skipPermissions,
+        useWorktree: savedClaudeSettings.useWorktree,
       });
       setProjectSortOrder(savedClaudeSettings.projectSortOrder);
 

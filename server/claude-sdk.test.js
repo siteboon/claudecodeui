@@ -76,3 +76,18 @@ test('Claude SDK maps stale concrete Opus model id to Claude Code alias', () => 
   const sdkOptions = __testMapCliOptionsToSDK({ model: 'claude-opus-4-8' });
   assert.equal(sdkOptions.model, 'opus');
 });
+
+test('Claude SDK maps worktree permission setting to SDK settings', () => {
+  const sdkOptions = __testMapCliOptionsToSDK({
+    toolsSettings: {
+      allowedTools: [],
+      disallowedTools: [],
+      skipPermissions: false,
+      useWorktree: true,
+    },
+  });
+
+  assert.deepEqual(sdkOptions.settings, {
+    worktree: {},
+  });
+});

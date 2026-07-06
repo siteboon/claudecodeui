@@ -41,6 +41,7 @@ test('provider permission settings start as unstored defaults', async () => {
         allowedTools: [],
         disallowedTools: [],
         skipPermissions: false,
+        useWorktree: false,
         projectSortOrder: 'name',
       },
       cursor: {
@@ -70,6 +71,7 @@ test('provider permission settings are normalized and persisted', async () => {
         allowedTools: ['Bash', 42, 'Read'],
         disallowedTools: ['rm -rf /'],
         skipPermissions: true,
+        useWorktree: true,
         projectSortOrder: 'date',
       },
       cursor: {
@@ -90,6 +92,7 @@ test('provider permission settings are normalized and persisted', async () => {
         allowedTools: ['Bash', 'Read'],
         disallowedTools: ['rm -rf /'],
         skipPermissions: true,
+        useWorktree: true,
         projectSortOrder: 'date',
       },
       cursor: {

@@ -27,6 +27,8 @@ try {
 
 // Keep the default database in a stable user-level location so rebuilding dist-server
 // never changes where the backend stores auth.db when DATABASE_PATH is not set explicitly.
+delete process.env.CLAUDECODE;
+
 const DEFAULT_DATABASE_PATH = path.join(os.homedir(), '.cloudcli', 'auth.db');
 
 if (!process.env.DATABASE_PATH) {

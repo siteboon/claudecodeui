@@ -221,7 +221,8 @@ function mapCliOptionsToSDK(options = {}) {
   const settings = toolsSettings || {
     allowedTools: [],
     disallowedTools: [],
-    skipPermissions: false
+    skipPermissions: false,
+    useWorktree: false
   };
 
   if (settings.skipPermissions && permissionMode !== 'plan') {
@@ -247,6 +248,12 @@ function mapCliOptionsToSDK(options = {}) {
   sdkOptions.tools = { type: 'preset', preset: 'claude_code' };
 
   sdkOptions.disallowedTools = settings.disallowedTools || [];
+
+  if (settings.useWorktree === true) {
+    sdkOptions.settings = {
+      worktree: {}
+    };
+  }
 
   sdkOptions.model = normalizeClaudeModelValue(options.model) || CLAUDE_FALLBACK_MODELS.DEFAULT;
 

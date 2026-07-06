@@ -30,6 +30,7 @@ test('normalizes provider permission settings from unknown input', () => {
       allowedTools: ['Bash', 123, 'Read'],
       disallowedTools: ['Write'],
       skipPermissions: true,
+      useWorktree: true,
       projectSortOrder: 'date',
     },
     cursor: {
@@ -46,6 +47,7 @@ test('normalizes provider permission settings from unknown input', () => {
       allowedTools: ['Bash', 'Read'],
       disallowedTools: ['Write'],
       skipPermissions: true,
+      useWorktree: true,
       projectSortOrder: 'date',
     },
     cursor: {
@@ -64,6 +66,7 @@ test('reads and writes legacy local provider permission keys', () => {
       allowedTools: ['Bash'],
       disallowedTools: ['Write'],
       skipPermissions: true,
+      useWorktree: true,
       projectSortOrder: 'date',
     }),
     'cursor-tools-settings': JSON.stringify({
@@ -97,12 +100,19 @@ test('reads and writes legacy local provider permission keys', () => {
     permissionMode: 'default',
     lastUpdated: '2026-07-05T00:00:00.000Z',
   });
-  assert.equal(JSON.parse(storage.values.get('claude-settings') || '{}').projectSortOrder, 'name');
+  assert.deepEqual(JSON.parse(storage.values.get('claude-settings') || '{}'), {
+    allowedTools: ['Bash'],
+    disallowedTools: ['Write'],
+    skipPermissions: true,
+    useWorktree: true,
+    projectSortOrder: 'name',
+    lastUpdated: '2026-07-05T00:00:00.000Z',
+  });
 });
 
 test('maps provider settings to chat tools settings payloads', () => {
   const settings = normalizeProviderPermissionSettings({
-    claude: { allowedTools: ['Bash'], disallowedTools: ['Write'], skipPermissions: true },
+    claude: { allowedTools: ['Bash'], disallowedTools: ['Write'], skipPermissions: true, useWorktree: true },
     cursor: { allowedCommands: ['git status'], disallowedCommands: ['curl'], skipPermissions: true },
     codex: { permissionMode: 'acceptEdits' },
     gemini: { permissionMode: 'yolo' },
@@ -112,6 +122,7 @@ test('maps provider settings to chat tools settings payloads', () => {
     allowedTools: ['Bash'],
     disallowedTools: ['Write'],
     skipPermissions: true,
+    useWorktree: true,
     projectSortOrder: 'name',
   });
   assert.deepEqual(getProviderToolsSettings('cursor', settings), {
