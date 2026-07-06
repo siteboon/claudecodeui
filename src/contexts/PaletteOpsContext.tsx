@@ -1,11 +1,13 @@
 import { createContext, useContext, useEffect, useMemo, useRef } from 'react';
 import type { MutableRefObject, ReactNode } from 'react';
 
+import type { CodeEditorDiffInfo } from '../components/code-editor/types/types';
+
 export type PaletteOps = {
   openFile: (path: string) => void;
   // Opens a file in the editor side panel without changing the active tab
   // (used by in-chat file links so they behave like the inline edit view).
-  openFileInEditor: (path: string) => void;
+  openFileInEditor: (path: string, diffInfo?: CodeEditorDiffInfo | null) => void;
   openSettings: (tab?: string) => void;
   refreshProjects: () => Promise<void> | void;
 };
@@ -31,8 +33,8 @@ export function usePaletteOps(): PaletteOps {
   return useMemo<PaletteOps>(
     () => ({
       openFile: (path) => (ref?.current.openFile ?? defaultOps.openFile)(path),
-      openFileInEditor: (path) =>
-        (ref?.current.openFileInEditor ?? defaultOps.openFileInEditor)(path),
+      openFileInEditor: (path, diffInfo) =>
+        (ref?.current.openFileInEditor ?? defaultOps.openFileInEditor)(path, diffInfo),
       openSettings: (tab) => (ref?.current.openSettings ?? defaultOps.openSettings)(tab),
       refreshProjects: () => (ref?.current.refreshProjects ?? defaultOps.refreshProjects)(),
     }),

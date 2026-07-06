@@ -1,6 +1,8 @@
 export type CodeEditorDiffInfo = {
   old_string?: string;
   new_string?: string;
+  artifactPreview?: boolean;
+  artifactKind?: 'image' | 'html';
   [key: string]: unknown;
 };
 

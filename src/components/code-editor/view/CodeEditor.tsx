@@ -21,6 +21,7 @@ import CodeEditorLoadingState from './subcomponents/CodeEditorLoadingState';
 import CodeEditorSurface from './subcomponents/CodeEditorSurface';
 import CodeEditorBinaryFile from './subcomponents/CodeEditorBinaryFile';
 import CodeEditorMediaPreview from './subcomponents/CodeEditorMediaPreview';
+import CodeEditorHtmlPreview from './subcomponents/CodeEditorHtmlPreview';
 
 type CodeEditorProps = {
   file: CodeEditorFile;
@@ -204,6 +205,48 @@ export default function CodeEditor({
         loadingText={t('loading', { fileName: file.name })}
       />
     );
+  }
+
+  if (file.diffInfo?.artifactPreview) {
+    if (file.diffInfo.artifactKind === 'html') {
+      return (
+        <CodeEditorHtmlPreview
+          file={file}
+          content={content}
+          isSidebar={isSidebar}
+          isFullscreen={isFullscreen}
+          onClose={onClose}
+          onToggleFullscreen={() => setIsFullscreen((previous) => !previous)}
+          labels={{
+            fullscreen: t('actions.fullscreen', 'Fullscreen'),
+            exitFullscreen: t('actions.exitFullscreen', 'Exit fullscreen'),
+            close: t('actions.close', 'Close'),
+          }}
+        />
+      );
+    }
+
+    if (file.diffInfo.artifactKind === 'image' && previewKind === 'image') {
+      return (
+        <CodeEditorMediaPreview
+          file={file}
+          kind={previewKind}
+          projectId={fileProjectId}
+          isSidebar={isSidebar}
+          isFullscreen={isFullscreen}
+          onClose={onClose}
+          onToggleFullscreen={() => setIsFullscreen((previous) => !previous)}
+          labels={{
+            loading: t('filePreview.loading', 'Loading preview...'),
+            error: t('filePreview.error', 'Unable to display this file.'),
+            openInNewTab: t('filePreview.openInNewTab', 'Open in new tab'),
+            fullscreen: t('actions.fullscreen', 'Fullscreen'),
+            exitFullscreen: t('actions.exitFullscreen', 'Exit fullscreen'),
+            close: t('actions.close', 'Close'),
+          }}
+        />
+      );
+    }
   }
 
   // Natively previewable media (image/pdf/audio/video) is rendered inline

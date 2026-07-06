@@ -18,6 +18,7 @@ import { useVoiceAvailable } from '../../hooks/useVoiceAvailable';
 import type { SessionActivity } from '../../../../hooks/useSessionProtection';
 import type { PendingPermissionRequest, PermissionMode } from '../../types/types';
 import type { ProviderModelOption } from '../../../../types/app';
+import type { AgentTodoSummary } from '../../utils/agentTodoSummary';
 import {
   PromptInput,
   PromptInputHeader,
@@ -31,6 +32,7 @@ import {
 
 import CommandMenu from './CommandMenu';
 import ActivityIndicator from './ActivityIndicator';
+import AgentTodoStatusStrip from './AgentTodoStatusStrip';
 import ImageAttachment from './ImageAttachment';
 import VoiceInputButton from './VoiceInputButton';
 import PermissionRequestsBanner from './PermissionRequestsBanner';
@@ -58,6 +60,7 @@ interface ChatComposerProps {
     decision: { allow?: boolean; message?: string; rememberEntry?: string | null; updatedInput?: unknown },
   ) => void;
   handleGrantToolPermission: (suggestion: { entry: string; toolName: string }) => { success: boolean };
+  agentTodoSummaries?: AgentTodoSummary[];
   activity: SessionActivity | null;
   isLoading: boolean;
   onAbortSession: () => void;
@@ -114,6 +117,7 @@ export default function ChatComposer({
   pendingPermissionRequests,
   handlePermissionDecision,
   handleGrantToolPermission,
+  agentTodoSummaries = [],
   activity,
   isLoading,
   onAbortSession,
@@ -267,13 +271,14 @@ export default function ChatComposer({
 
   // Hide the thinking/status bar while any permission request is pending
   const hasPendingPermissions = pendingPermissionRequests.length > 0;
-  const hasActivityIndicator = Boolean(activity && !hasPendingPermissions);
+  const hasStatusRow = !hasPendingPermissions && (Boolean(activity) || agentTodoSummaries.length > 0);
 
   return (
     <div className="chat-composer-shell relative flex-shrink-0 px-2 pb-2 pt-0 sm:px-4 sm:pb-4 md:px-4 md:pb-6">
-      {!hasPendingPermissions && (
-        <div className="pointer-events-none mx-auto w-full max-w-[54.25rem] translate-y-px bg-transparent">
+      {hasStatusRow && (
+        <div className="pointer-events-none mx-auto flex w-full max-w-[54.25rem] flex-wrap items-end gap-1.5 translate-y-px bg-transparent">
           <ActivityIndicator activity={activity} onAbort={onAbortSession} isInputFocused={isInputFocused} />
+          <AgentTodoStatusStrip summaries={agentTodoSummaries} />
         </div>
       )}
 
@@ -330,7 +335,7 @@ export default function ChatComposer({
           status={isLoading ? 'streaming' : 'ready'}
           className={[
             isTextareaExpanded ? 'chat-input-expanded' : '',
-            hasActivityIndicator ? 'rounded-t-none' : '',
+            hasStatusRow ? 'rounded-t-none' : '',
           ].filter(Boolean).join(' ')}
           {...getRootProps()}
         >
