@@ -1,5 +1,5 @@
-import { Check, GitBranch, Globe, Plus, RefreshCw, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { Check, GitBranch, Globe, Plus, RefreshCw, Search, Trash2, X } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import type { ConfirmationRequest, GitRemoteStatus } from '../../types/types';
 import NewBranchModal from '../modals/NewBranchModal';
 
@@ -138,9 +138,20 @@ export default function BranchesView({
   onRequestConfirmation,
 }: BranchesViewProps) {
   const [showNewBranchModal, setShowNewBranchModal] = useState(false);
+  const [branchSearchQuery, setBranchSearchQuery] = useState('');
 
   const aheadCount = remoteStatus?.ahead ?? 0;
   const behindCount = remoteStatus?.behind ?? 0;
+
+  const normalizedQuery = branchSearchQuery.trim().toLowerCase();
+  const filteredLocalBranches = useMemo(
+    () => (normalizedQuery ? localBranches.filter((branch) => branch.toLowerCase().includes(normalizedQuery)) : localBranches),
+    [localBranches, normalizedQuery],
+  );
+  const filteredRemoteBranches = useMemo(
+    () => (normalizedQuery ? remoteBranches.filter((branch) => branch.toLowerCase().includes(normalizedQuery)) : remoteBranches),
+    [normalizedQuery, remoteBranches],
+  );
 
   const requestSwitch = (branch: string) => {
     onRequestConfirmation({
@@ -182,12 +193,33 @@ export default function BranchesView({
         </button>
       </div>
 
+      {/* Branch search */}
+      <div className="flex items-center gap-2 border-b border-border/40 px-4 py-2">
+        <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <input
+          type="text"
+          value={branchSearchQuery}
+          onChange={(event) => setBranchSearchQuery(event.target.value)}
+          placeholder="Search branches..."
+          className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+        />
+        {branchSearchQuery && (
+          <button
+            onClick={() => setBranchSearchQuery('')}
+            className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+            title="Clear search"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+
       {/* Branch list */}
       <div className="flex-1 overflow-y-auto">
-        {localBranches.length > 0 && (
+        {filteredLocalBranches.length > 0 && (
           <>
-            <SectionHeader label="Local" count={localBranches.length} />
-            {localBranches.map((branch) => (
+            <SectionHeader label="Local" count={filteredLocalBranches.length} />
+            {filteredLocalBranches.map((branch) => (
               <BranchRow
                 key={`local:${branch}`}
                 name={branch}
@@ -203,10 +235,10 @@ export default function BranchesView({
           </>
         )}
 
-        {remoteBranches.length > 0 && (
+        {filteredRemoteBranches.length > 0 && (
           <>
-            <SectionHeader label="Remote" count={remoteBranches.length} />
-            {remoteBranches.map((branch) => (
+            <SectionHeader label="Remote" count={filteredRemoteBranches.length} />
+            {filteredRemoteBranches.map((branch) => (
               <BranchRow
                 key={`remote:${branch}`}
                 name={branch}
@@ -222,10 +254,10 @@ export default function BranchesView({
           </>
         )}
 
-        {localBranches.length === 0 && remoteBranches.length === 0 && (
+        {filteredLocalBranches.length === 0 && filteredRemoteBranches.length === 0 && (
           <div className="flex h-32 flex-col items-center justify-center gap-2 text-muted-foreground">
             <GitBranch className="h-10 w-10 opacity-30" />
-            <p className="text-sm">No branches found</p>
+            <p className="text-sm">{normalizedQuery ? 'No branches match your search' : 'No branches found'}</p>
           </div>
         )}
       </div>

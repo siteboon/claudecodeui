@@ -1,5 +1,5 @@
-import { AlertCircle, Check, ChevronDown, Download, GitBranch, Plus, RefreshCw, RotateCcw, Upload, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { AlertCircle, Check, ChevronDown, Download, GitBranch, Plus, RefreshCw, RotateCcw, Search, Upload, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ConfirmationRequest, GitRemoteStatus } from '../types/types';
 import NewBranchModal from './modals/NewBranchModal';
 
@@ -54,7 +54,26 @@ export default function GitPanelHeader({
 }: GitPanelHeaderProps) {
   const [showBranchDropdown, setShowBranchDropdown] = useState(false);
   const [showNewBranchModal, setShowNewBranchModal] = useState(false);
+  const [branchSearchQuery, setBranchSearchQuery] = useState('');
   const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const branchSearchInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Focus the search box on open; drop any stale query on close.
+  useEffect(() => {
+    if (showBranchDropdown) {
+      branchSearchInputRef.current?.focus();
+    } else {
+      setBranchSearchQuery('');
+    }
+  }, [showBranchDropdown]);
+
+  const filteredBranches = useMemo(() => {
+    const query = branchSearchQuery.trim().toLowerCase();
+    if (!query) {
+      return branches;
+    }
+    return branches.filter((branch) => branch.toLowerCase().includes(query));
+  }, [branches, branchSearchQuery]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -149,21 +168,45 @@ export default function GitPanelHeader({
 
           {showBranchDropdown && (
             <div className="absolute left-0 top-full z-50 mt-1 w-64 overflow-hidden rounded-xl border border-border bg-card shadow-lg">
-              <div className="max-h-64 overflow-y-auto py-1">
-                {branches.map((branch) => (
+              <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+                <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <input
+                  ref={branchSearchInputRef}
+                  type="text"
+                  value={branchSearchQuery}
+                  onChange={(event) => setBranchSearchQuery(event.target.value)}
+                  placeholder="Search branches..."
+                  className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+                />
+                {branchSearchQuery && (
                   <button
-                    key={branch}
-                    onClick={() => void handleSwitchBranch(branch)}
-                    className={`w-full px-4 py-2 text-left text-sm transition-colors hover:bg-accent ${
-                      branch === currentBranch ? 'bg-accent/50 text-foreground' : 'text-muted-foreground'
-                    }`}
+                    onClick={() => setBranchSearchQuery('')}
+                    className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+                    title="Clear search"
                   >
-                    <span className="flex items-center space-x-2">
-                      {branch === currentBranch && <Check className="h-3 w-3 text-primary" />}
-                      <span className={branch === currentBranch ? 'font-medium' : ''}>{branch}</span>
-                    </span>
+                    <X className="h-3.5 w-3.5" />
                   </button>
-                ))}
+                )}
+              </div>
+              <div className="max-h-64 overflow-y-auto py-1">
+                {filteredBranches.length === 0 ? (
+                  <div className="px-4 py-3 text-center text-sm text-muted-foreground">No matching branches</div>
+                ) : (
+                  filteredBranches.map((branch) => (
+                    <button
+                      key={branch}
+                      onClick={() => void handleSwitchBranch(branch)}
+                      className={`w-full px-4 py-2 text-left text-sm transition-colors hover:bg-accent ${
+                        branch === currentBranch ? 'bg-accent/50 text-foreground' : 'text-muted-foreground'
+                      }`}
+                    >
+                      <span className="flex items-center space-x-2">
+                        {branch === currentBranch && <Check className="h-3 w-3 text-primary" />}
+                        <span className={branch === currentBranch ? 'font-medium' : ''}>{branch}</span>
+                      </span>
+                    </button>
+                  ))
+                )}
               </div>
               <div className="border-t border-border py-1">
                 <button

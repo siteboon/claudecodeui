@@ -19,6 +19,8 @@ type ChangesViewProps = {
   onOpenFile: (filePath: string) => Promise<void>;
   onDiscardFile: (filePath: string) => Promise<void>;
   onDeleteFile: (filePath: string) => Promise<void>;
+  onStageFiles: (files: string[]) => Promise<boolean>;
+  onUnstageFiles: (files: string[]) => Promise<boolean>;
   onCommitChanges: (message: string, files: string[]) => Promise<boolean>;
   onGenerateCommitMessage: (files: string[]) => Promise<string | null>;
   onRequestConfirmation: (request: ConfirmationRequest) => void;
@@ -38,6 +40,8 @@ export default function ChangesView({
   onOpenFile,
   onDiscardFile,
   onDeleteFile,
+  onStageFiles,
+  onUnstageFiles,
   onCommitChanges,
   onGenerateCommitMessage,
   onRequestConfirmation,
@@ -55,12 +59,9 @@ export default function ChangesView({
       return;
     }
 
-    // Remove any selected files that no longer exist in the status
-    setSelectedFiles((prev) => {
-      const allFiles = new Set(getAllChangedFiles(gitStatus));
-      const next = new Set([...prev].filter((f) => allFiles.has(f)));
-      return next;
-    });
+    // The Staged section mirrors the real git index reported by /status, so
+    // files staged outside the app (VSCode, terminal) show up here too.
+    setSelectedFiles(new Set(gitStatus.staged ?? []));
   }, [gitStatus]);
 
   useEffect(() => {
@@ -85,17 +86,25 @@ export default function ChangesView({
     });
   }, []);
 
-  const toggleFileSelected = useCallback((filePath: string) => {
-    setSelectedFiles((previous) => {
-      const next = new Set(previous);
-      if (next.has(filePath)) {
-        next.delete(filePath);
-      } else {
-        next.add(filePath);
-      }
-      return next;
-    });
-  }, []);
+  // Staging is real: every toggle runs git add / git reset through the API.
+  // The set is flipped optimistically; the status refresh triggered by the
+  // API call re-syncs it from the actual index afterwards.
+  const toggleFileSelected = useCallback(
+    (filePath: string) => {
+      const isStaged = selectedFiles.has(filePath);
+      setSelectedFiles((previous) => {
+        const next = new Set(previous);
+        if (isStaged) {
+          next.delete(filePath);
+        } else {
+          next.add(filePath);
+        }
+        return next;
+      });
+      void (isStaged ? onUnstageFiles([filePath]) : onStageFiles([filePath]));
+    },
+    [onStageFiles, onUnstageFiles, selectedFiles],
+  );
 
   const requestFileAction = useCallback(
     (filePath: string, status: FileStatusCode) => {
@@ -197,7 +206,11 @@ export default function ChangesView({
               </span>
               {selectedFiles.size > 0 && (
                 <button
-                  onClick={() => setSelectedFiles(new Set())}
+                  onClick={() => {
+                    const filesToUnstage = Array.from(selectedFiles);
+                    setSelectedFiles(new Set());
+                    void onUnstageFiles(filesToUnstage);
+                  }}
                   className="text-xs text-primary transition-colors hover:text-primary/80"
                 >
                   Unstage All
@@ -230,7 +243,11 @@ export default function ChangesView({
               </span>
               {unstagedFiles.size > 0 && (
                 <button
-                  onClick={() => setSelectedFiles(new Set(changedFiles))}
+                  onClick={() => {
+                    const filesToStage = Array.from(unstagedFiles);
+                    setSelectedFiles(new Set(changedFiles));
+                    void onStageFiles(filesToStage);
+                  }}
                   className="text-xs text-primary transition-colors hover:text-primary/80"
                 >
                   Stage All

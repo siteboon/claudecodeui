@@ -34,6 +34,17 @@ const PROVIDER_META: { id: LLMProvider; name: string }[] = [
 const MOD_KEY =
   typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
 
+// cmdk's default filter is fuzzy (loose character-subsequence scoring), which
+// surfaces unrelated models — e.g. searching "chatgpt" also matched "Fable".
+// Require every whitespace-separated search token to appear as a literal
+// substring instead, so "claude 4.5" still matches "Anthropic Claude Haiku 4.5"
+// but "chatgpt" only matches models that actually contain it.
+function modelSearchFilter(value: string, search: string): number {
+  const haystack = value.toLowerCase();
+  const tokens = search.toLowerCase().split(/\s+/).filter(Boolean);
+  return tokens.every((token) => haystack.includes(token)) ? 1 : 0;
+}
+
 type ProviderSelectionEmptyStateProps = {
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
@@ -234,7 +245,7 @@ export default function ProviderSelectionEmptyState({
               <div className="border-b border-border/60 bg-muted/20 px-4 py-3">
                 <p className="text-sm font-semibold text-foreground">Choose a model</p>
               </div>
-              <Command>
+              <Command filter={modelSearchFilter}>
                 <CommandInput
                   placeholder={t("providerSelection.searchModels", {
                     defaultValue: "Search models...",
