@@ -586,9 +586,8 @@ export function useChatComposerState({
         if (textareaRef.current) {
           textareaRef.current.style.height = 'auto';
         }
-        if (selectedProject) {
-          safeLocalStorage.removeItem(`draft_input_${selectedProject.projectId}`);
-        }
+        // selectedProject is guaranteed by the guard at the top of handleSubmit.
+        safeLocalStorage.removeItem(`draft_input_${selectedProject.projectId}`);
         return;
       }
 

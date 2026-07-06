@@ -90,6 +90,25 @@ export function resolveImageAbsolutePath(cwd: string | undefined, imagePath: str
   return path.resolve(cwd || process.cwd(), imagePath);
 }
 
+function isPathInsideDirectory(candidate: string, directory: string): boolean {
+  const relative = path.relative(path.resolve(directory), candidate);
+  return relative.length > 0 && !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
+/**
+ * Second layer of the image trust boundary (the first is the chat.send filter
+ * in the websocket gateway): provider builders only reference files that live
+ * in the global upload store or inside the run's working directory — places
+ * the agent could already access on its own. Anything else (e.g. `~/.ssh`) is
+ * refused, so a caller-supplied descriptor can never leak arbitrary files.
+ */
+export function isAllowedImageSourcePath(resolvedPath: string, cwd?: string): boolean {
+  return (
+    isPathInsideDirectory(resolvedPath, getGlobalImageAssetsDir()) ||
+    isPathInsideDirectory(resolvedPath, cwd || process.cwd())
+  );
+}
+
 /**
  * Resolves the media type for one image, preferring the uploaded mime type and
  * falling back to the file extension.
@@ -246,8 +265,14 @@ export async function buildClaudeUserContent(
       continue;
     }
 
+    const resolvedPath = resolveImageAbsolutePath(cwd, descriptor.path);
+    if (!isAllowedImageSourcePath(resolvedPath, cwd)) {
+      console.warn(`[Images] Refusing to read image outside allowed roots: ${descriptor.path}`);
+      continue;
+    }
+
     try {
-      const bytes = await fs.readFile(resolveImageAbsolutePath(cwd, descriptor.path));
+      const bytes = await fs.readFile(resolvedPath);
       blocks.push({
         type: 'image',
         source: {
@@ -277,9 +302,16 @@ type CodexInputItem =
 export function buildCodexInputItems(prompt: string, images: unknown, cwd?: string): CodexInputItem[] {
   const items: CodexInputItem[] = [{ type: 'text', text: prompt }];
   for (const descriptor of normalizeImageDescriptors(images)) {
+    const resolvedPath = resolveImageAbsolutePath(cwd, descriptor.path);
+    if (!isAllowedImageSourcePath(resolvedPath, cwd)) {
+      // Same trust boundary as buildClaudeUserContent — the Codex runtime
+      // reads this file, so it must stay within the allowed roots.
+      console.warn(`[Images] Refusing to attach image outside allowed roots: ${descriptor.path}`);
+      continue;
+    }
     items.push({
       type: 'local_image',
-      path: resolveImageAbsolutePath(cwd, descriptor.path),
+      path: resolvedPath,
     });
   }
   return items;

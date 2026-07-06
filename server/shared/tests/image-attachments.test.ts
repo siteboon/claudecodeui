@@ -8,6 +8,7 @@ import {
   appendImagesInputTag,
   buildClaudeUserContent,
   buildCodexInputItems,
+  isAllowedImageSourcePath,
   normalizeImageDescriptors,
   parseImagesInputTag,
   resolveImageMediaType,
@@ -185,4 +186,32 @@ test('buildCodexInputItems emits text plus absolute local_image paths', () => {
   const imageItem = items[1] as Extract<(typeof items)[number], { type: 'local_image' }>;
   assert.ok(path.isAbsolute(imageItem.path));
   assert.equal(imageItem.path, path.resolve(cwd, '.cloudcli/assets/pic.jpg'));
+});
+
+test('isAllowedImageSourcePath only accepts the upload store and the run cwd', () => {
+  const cwd = path.join(os.tmpdir(), 'some-project');
+  const uploadStore = path.join(os.homedir(), '.cloudcli', 'assets');
+
+  assert.equal(isAllowedImageSourcePath(path.join(uploadStore, 'shot.png'), cwd), true);
+  assert.equal(isAllowedImageSourcePath(path.join(cwd, 'docs', 'diagram.png'), cwd), true);
+
+  assert.equal(isAllowedImageSourcePath(path.join(os.homedir(), '.ssh', 'id_rsa'), cwd), false);
+  assert.equal(isAllowedImageSourcePath(path.join(cwd, '..', 'other-project', 'x.png'), cwd), false);
+  // The roots themselves are directories, not readable image files.
+  assert.equal(isAllowedImageSourcePath(cwd, cwd), false);
+});
+
+test('provider builders refuse descriptors outside the allowed roots', async () => {
+  const cwd = path.join(os.tmpdir(), 'codex-project');
+  const outsidePath = path.join(os.homedir(), '.ssh', 'id_rsa.png');
+
+  const codexItems = buildCodexInputItems('prompt', [{ path: outsidePath }], cwd);
+  assert.deepEqual(codexItems, [{ type: 'text', text: 'prompt' }]);
+
+  const claudeContent = await buildClaudeUserContent(
+    'prompt',
+    [{ path: outsidePath, mimeType: 'image/png' }],
+    cwd,
+  );
+  assert.deepEqual(claudeContent, [{ type: 'text', text: 'prompt' }]);
 });
