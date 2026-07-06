@@ -101,6 +101,7 @@ temp/
 
 # AI specific
 .worktrees/
+.superpowers/
 .claude/
 .cursor/
 .roo/
