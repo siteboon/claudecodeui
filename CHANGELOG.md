@@ -3,6 +3,14 @@
 All notable changes to CloudCLI UI will be documented in this file.
 
 
+## [1.37.3](https://github.com/stefanriegel/claudecodeui/compare/v1.37.2...v1.37.3) (2026-07-07)
+
+### Maintenance
+
+* add ship release command ([379a16d](https://github.com/stefanriegel/claudecodeui/commit/379a16d4825b818c41f4980a8066904b7230f2e8))
+* read ship github token from store ([daa38fb](https://github.com/stefanriegel/claudecodeui/commit/daa38fb18a6b9b631e6d297ca38a6ee725e39e00))
+* ship cloudcli updates via github release ([ff00a03](https://github.com/stefanriegel/claudecodeui/commit/ff00a03d4316b8063c767e9364f42acc42e95c17))
+
 ## [](https://github.com/siteboon/claudecodeui/compare/v1.35.1...vnull) (2026-07-03)
 
 ### New Features
