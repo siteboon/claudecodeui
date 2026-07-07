@@ -23,7 +23,10 @@ export const authenticatedFetch = (url, options = {}) => {
     },
   }).then((response) => {
     const refreshedToken = response.headers.get('X-Refreshed-Token');
-    if (refreshedToken) {
+    // Only accept a refreshed token that has this app's issued JWT shape
+    // (three base64url segments). An attacker-injected/malformed header value
+    // must never overwrite the stored auth token.
+    if (refreshedToken && /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(refreshedToken)) {
       localStorage.setItem('auth-token', refreshedToken);
     }
     return response;
