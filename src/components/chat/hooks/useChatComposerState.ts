@@ -14,7 +14,13 @@ import { useDropzone } from 'react-dropzone';
 import { authenticatedFetch } from '../../../utils/api';
 import type { MarkSessionProcessing } from '../../../hooks/useSessionProtection';
 import { grantClaudeToolPermission } from '../utils/chatPermissions';
-import { safeLocalStorage } from '../utils/chatStorage';
+import {
+  clearQueuedMessage,
+  readQueuedMessage,
+  safeLocalStorage,
+  writeQueuedMessage,
+  type QueuedSendOptions,
+} from '../utils/chatStorage';
 import type {
   ChatMessage,
   PendingPermissionRequest,
@@ -147,6 +153,18 @@ const createFakeSubmitEvent = () => {
 export type QueuedDraft = {
   content: string;
   images: File[];
+  /**
+   * Send options snapshotted at queue time. Persisted with the draft so the
+   * app-level auto-send can dispatch the message with the right model and
+   * permission settings while another session is being viewed.
+   */
+  options?: QueuedSendOptions;
+};
+
+const restoreQueuedDraft = (sessionKey: string): QueuedDraft | null => {
+  const saved = readQueuedMessage(sessionKey);
+  // Image attachments can't survive a reload; only text and options persist.
+  return saved ? { content: saved.content, images: [], options: saved.options } : null;
 };
 
 const getNotificationSessionSummary = (
@@ -227,9 +245,13 @@ export function useChatComposerState({
     if (typeof window === 'undefined' || !sessionKey) {
       return null;
     }
-    const saved = safeLocalStorage.getItem(`queued_message_${sessionKey}`);
-    return saved ? { content: saved, images: [] } : null;
+    return restoreQueuedDraft(sessionKey);
   });
+  // Which session the in-memory `queuedDraft` belongs to. On a session switch
+  // there is one commit where `sessionKey` already points at the new session
+  // while `queuedDraft` still holds the old session's draft; the persistence
+  // effect must not write across that gap.
+  const queuedDraftSessionRef = useRef<string | null>(sessionKey);
 
   const handleBuiltInCommand = useCallback(
     (result: CommandExecutionResult) => {
@@ -561,6 +583,66 @@ export function useChatComposerState({
     noKeyboard: true,
   });
 
+  // Snapshot of everything `chat.send` needs beyond the text itself. Built at
+  // send time for immediate sends and at queue time for queued ones, so a
+  // queued message keeps the provider settings it was composed under even if
+  // it is later dispatched outside this composer (app-level auto-send).
+  const buildSendOptions = useCallback((currentInput: string): QueuedSendOptions => {
+    const getToolsSettings = () => {
+      try {
+        const settingsKey =
+          provider === 'cursor'
+            ? 'cursor-tools-settings'
+            : provider === 'codex'
+              ? 'codex-settings'
+              : provider === 'opencode'
+                  ? 'opencode-settings'
+                : 'claude-settings';
+        const savedSettings = safeLocalStorage.getItem(settingsKey);
+        if (savedSettings) {
+          return JSON.parse(savedSettings);
+        }
+      } catch (error) {
+        console.error('Error loading tools settings:', error);
+      }
+
+      return {
+        allowedTools: [],
+        disallowedTools: [],
+        skipPermissions: false,
+      };
+    };
+
+    const toolsSettings = getToolsSettings();
+    const model =
+      provider === 'cursor'
+        ? cursorModel
+        : provider === 'codex'
+          ? codexModel
+          : provider === 'opencode'
+            ? opencodeModel
+            : claudeModel;
+
+    return {
+      model,
+      effort: currentProviderEffort,
+      permissionMode: resolvePermissionModeForProvider(provider, permissionMode),
+      toolsSettings,
+      skipPermissions: toolsSettings?.skipPermissions || false,
+      sessionSummary: getNotificationSessionSummary(selectedSession, currentInput),
+    };
+  }, [
+    claudeModel,
+    codexModel,
+    currentProviderEffort,
+    cursorModel,
+    opencodeModel,
+    permissionMode,
+    provider,
+    resolvePermissionModeForProvider,
+    selectedSession,
+  ]);
+
   const handleSubmit = useCallback(
     async (
       event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
@@ -575,7 +657,12 @@ export function useChatComposerState({
       // It's auto-flushed (re-running this same function) once the turn ends,
       // so it still goes through slash-command interception, image upload, etc.
       if (isLoading) {
-        setQueuedDraft({ content: currentInput, images: attachedImages });
+        queuedDraftSessionRef.current = sessionKey;
+        setQueuedDraft({
+          content: currentInput,
+          images: attachedImages,
+          options: buildSendOptions(currentInput),
+        });
         setInput('');
         inputValueRef.current = '';
         setAttachedImages([]);
@@ -728,42 +815,6 @@ export function useChatComposerState({
       setIsUserScrolledUp(false);
       setTimeout(() => scrollToBottom(), 100);
 
-      const getToolsSettings = () => {
-        try {
-          const settingsKey =
-            provider === 'cursor'
-              ? 'cursor-tools-settings'
-              : provider === 'codex'
-                ? 'codex-settings'
-                : provider === 'opencode'
-                    ? 'opencode-settings'
-                  : 'claude-settings';
-          const savedSettings = safeLocalStorage.getItem(settingsKey);
-          if (savedSettings) {
-            return JSON.parse(savedSettings);
-          }
-        } catch (error) {
-          console.error('Error loading tools settings:', error);
-        }
-
-        return {
-          allowedTools: [],
-          disallowedTools: [],
-          skipPermissions: false,
-        };
-      };
-
-      const toolsSettings = getToolsSettings();
-      const model =
-        provider === 'cursor'
-          ? cursorModel
-          : provider === 'codex'
-            ? codexModel
-            : provider === 'opencode'
-              ? opencodeModel
-              : claudeModel;
-      const effort = currentProviderEffort;
-
       // One message shape for every provider. The backend resolves the
       // provider, project path, and provider-native resume id from the
       // session row; `options` only carries composer-level preferences.
@@ -772,12 +823,7 @@ export function useChatComposerState({
         sessionId: targetSessionId,
         content: messageContent,
         options: {
-          model,
-          effort,
-          permissionMode: resolvePermissionModeForProvider(provider, permissionMode),
-          toolsSettings,
-          skipPermissions: toolsSettings?.skipPermissions || false,
-          sessionSummary,
+          ...buildSendOptions(messageContent),
           images: uploadedImages,
         },
       });
@@ -799,23 +845,18 @@ export function useChatComposerState({
     [
       selectedSession,
       attachedImages,
-      claudeModel,
-      codexModel,
-      currentProviderEffort,
+      buildSendOptions,
       currentSessionId,
-      cursorModel,
       executeCommand,
-      opencodeModel,
       isLoading,
       onSessionProcessing,
       onSessionEstablished,
-      permissionMode,
       provider,
-      resolvePermissionModeForProvider,
       resetCommandMenuState,
       scrollToBottom,
       selectedProject,
       sendMessage,
+      sessionKey,
       addMessage,
       setIsUserScrolledUp,
       slashCommands,
@@ -829,21 +870,47 @@ export function useChatComposerState({
   // Once the in-flight turn ends, replay the queued draft through the normal
   // submit path (slash commands, image upload, etc. all still apply).
   const wasLoadingRef = useRef(isLoading);
+  const flushSessionKeyRef = useRef(sessionKey);
   useEffect(() => {
     const wasLoading = wasLoadingRef.current;
     wasLoadingRef.current = isLoading;
-    if (!wasLoading || isLoading || !queuedDraft) {
+
+    // A session switch changes which session `isLoading` describes, so this
+    // transition says nothing about the queued draft's own session. Never
+    // flush across it — the swap effect below replaces `queuedDraft` with the
+    // new session's saved draft right after this.
+    if (flushSessionKeyRef.current !== sessionKey) {
+      flushSessionKeyRef.current = sessionKey;
       return;
     }
 
-    setQueuedDraft(null);
-    setInput(queuedDraft.content);
-    inputValueRef.current = queuedDraft.content;
-    setAttachedImages(queuedDraft.images);
-    setTimeout(() => {
-      handleSubmitRef.current?.(createFakeSubmitEvent());
-    }, 0);
-  }, [isLoading, queuedDraft]);
+    if (isLoading || !queuedDraft) {
+      return;
+    }
+
+    // Turn just ended in this session: flush immediately. Otherwise this is a
+    // saved draft restored into an apparently idle session — hold it briefly
+    // so the `chat_subscribed` ack can flip `isLoading` if a run is actually
+    // still live (the cleanup below cancels the send in that case).
+    const delay = wasLoading ? 0 : 750;
+    const timer = setTimeout(() => {
+      // The saved key is the claim ticket shared with the app-level auto-send
+      // (which handles sessions that finish while not viewed). If it's gone,
+      // the message was already dispatched — don't send it twice.
+      if (sessionKey && !readQueuedMessage(sessionKey)) {
+        setQueuedDraft(null);
+        return;
+      }
+      setQueuedDraft(null);
+      setInput(queuedDraft.content);
+      inputValueRef.current = queuedDraft.content;
+      setAttachedImages(queuedDraft.images);
+      setTimeout(() => {
+        handleSubmitRef.current?.(createFakeSubmitEvent());
+      }, 0);
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [isLoading, queuedDraft, sessionKey, setInput]);
 
   const editQueuedDraft = useCallback(() => {
     if (!queuedDraft) {
@@ -898,27 +965,32 @@ export function useChatComposerState({
     }
   }, [input, selectedProjectId]);
 
-  // Switching sessions swaps in that session's queued draft (image
-  // attachments can't survive a reload, so only the text is restored).
+  // Persist the queued draft under its session's key. Must be defined BEFORE
+  // the swap effect below: on a session switch there is one commit where
+  // `sessionKey` already points at the new session while `queuedDraft` (and
+  // the owner ref) still describe the old one — the ref mismatch makes this
+  // effect skip that commit instead of writing/clearing across sessions.
   useEffect(() => {
+    if (!sessionKey || queuedDraftSessionRef.current !== sessionKey) {
+      return;
+    }
+    if (queuedDraft?.content) {
+      writeQueuedMessage(sessionKey, { content: queuedDraft.content, options: queuedDraft.options });
+    } else {
+      clearQueuedMessage(sessionKey);
+    }
+  }, [queuedDraft, sessionKey]);
+
+  // Switching sessions swaps in that session's queued draft (image
+  // attachments can't survive a reload, so only text and options restore).
+  useEffect(() => {
+    queuedDraftSessionRef.current = sessionKey;
     if (!sessionKey) {
       setQueuedDraft(null);
       return;
     }
-    const saved = safeLocalStorage.getItem(`queued_message_${sessionKey}`);
-    setQueuedDraft(saved ? { content: saved, images: [] } : null);
+    setQueuedDraft(restoreQueuedDraft(sessionKey));
   }, [sessionKey]);
-
-  useEffect(() => {
-    if (!sessionKey) {
-      return;
-    }
-    if (queuedDraft?.content) {
-      safeLocalStorage.setItem(`queued_message_${sessionKey}`, queuedDraft.content);
-    } else {
-      safeLocalStorage.removeItem(`queued_message_${sessionKey}`);
-    }
-  }, [queuedDraft, sessionKey]);
 
   useEffect(() => {
     if (!textareaRef.current) {

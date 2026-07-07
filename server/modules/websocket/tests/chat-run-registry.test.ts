@@ -129,6 +129,44 @@ test('complete marks the run finished and duplicate completes are dropped', asyn
   });
 });
 
+test('a finished run\'s safety net cannot complete the session\'s next run', async () => {
+  await withIsolatedDatabase(() => {
+    sessionsDb.createAppSession('app-run-9', 'codex', '/workspace/demo');
+    const connection = new FakeConnection();
+
+    const firstRun = chatRunRegistry.startRun({
+      appSessionId: 'app-run-9',
+      provider: 'codex',
+      providerSessionId: null,
+      connection,
+      userId: null,
+    });
+    assert.ok(firstRun);
+    firstRun.writer.send({ kind: 'complete', provider: 'codex', sessionId: 'native-9', exitCode: 0 });
+
+    // A queued message starts the next run before the first run's runtime
+    // promise settles (the chat handler's `finally` hasn't executed yet).
+    const secondRun = chatRunRegistry.startRun({
+      appSessionId: 'app-run-9',
+      provider: 'codex',
+      providerSessionId: null,
+      connection,
+      userId: null,
+    });
+    assert.ok(secondRun);
+
+    // First run's safety net fires late: it must not touch the new run.
+    chatRunRegistry.completeRunIfCurrent(firstRun, { exitCode: 1 });
+    assert.equal(chatRunRegistry.isProcessing('app-run-9'), true);
+    assert.equal(connection.frames.filter((frame) => frame.kind === 'complete').length, 1);
+
+    // The second run's own safety net still works while it is current.
+    chatRunRegistry.completeRunIfCurrent(secondRun, { exitCode: 1 });
+    assert.equal(chatRunRegistry.isProcessing('app-run-9'), false);
+    assert.equal(connection.frames.filter((frame) => frame.kind === 'complete').length, 2);
+  });
+});
+
 test('listRunningRuns returns only currently running app sessions', async () => {
   await withIsolatedDatabase(() => {
     sessionsDb.createAppSession('app-run-7', 'claude', '/workspace/demo');

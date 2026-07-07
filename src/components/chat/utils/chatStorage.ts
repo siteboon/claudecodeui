@@ -43,6 +43,52 @@ export const safeLocalStorage = {
   },
 };
 
+/**
+ * Composer options captured when a message is queued, so the message can be
+ * sent later with the exact settings (model, permission mode, tools) the
+ * session's composer had at queue time — even from outside the composer,
+ * e.g. the app-level auto-send that fires while another session is viewed.
+ */
+export type QueuedSendOptions = Record<string, unknown>;
+
+export type StoredQueuedMessage = {
+  content: string;
+  options?: QueuedSendOptions;
+};
+
+export const queuedMessageKey = (sessionId: string) => `queued_message_${sessionId}`;
+
+/**
+ * Reads a session's queued message. Understands both the JSON
+ * `{ content, options }` format and the legacy raw-text format.
+ */
+export function readQueuedMessage(sessionId: string): StoredQueuedMessage | null {
+  const raw = safeLocalStorage.getItem(queuedMessageKey(sessionId));
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === 'object' && typeof (parsed as StoredQueuedMessage).content === 'string') {
+      const { content, options } = parsed as StoredQueuedMessage;
+      return content.trim() ? { content, options } : null;
+    }
+  } catch {
+    // Legacy format: the raw draft text itself.
+  }
+
+  return raw.trim() ? { content: raw } : null;
+}
+
+export function writeQueuedMessage(sessionId: string, message: StoredQueuedMessage): void {
+  safeLocalStorage.setItem(queuedMessageKey(sessionId), JSON.stringify(message));
+}
+
+export function clearQueuedMessage(sessionId: string): void {
+  safeLocalStorage.removeItem(queuedMessageKey(sessionId));
+}
+
 export function getClaudeSettings(): ClaudeSettings {
   const raw = safeLocalStorage.getItem(CLAUDE_SETTINGS_KEY);
   if (!raw) {
