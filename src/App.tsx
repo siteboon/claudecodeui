@@ -107,22 +107,22 @@ export default function App() {
     <I18nextProvider i18n={i18n}>
       <ThemeProvider>
         <AuthProvider>
-          <WebSocketProvider>
-            <PluginsProvider>
-              <TasksSettingsProvider>
-                <TaskMasterProvider>
-                <ProtectedRoute>
+          <ProtectedRoute>
+            <WebSocketProvider>
+              <PluginsProvider>
+                <TasksSettingsProvider>
+                  <TaskMasterProvider>
                   <Router basename={routerBasename}>
                     <Routes>
                       <Route path="/" element={<AppContent />} />
                       <Route path="/session/:sessionId" element={<AppContent />} />
                     </Routes>
                   </Router>
-                </ProtectedRoute>
-                </TaskMasterProvider>
-              </TasksSettingsProvider>
-            </PluginsProvider>
-          </WebSocketProvider>
+                  </TaskMasterProvider>
+                </TasksSettingsProvider>
+              </PluginsProvider>
+            </WebSocketProvider>
+          </ProtectedRoute>
         </AuthProvider>
       </ThemeProvider>
     </I18nextProvider>

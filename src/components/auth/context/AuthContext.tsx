@@ -103,7 +103,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return;
       }
 
-      if (!token) {
+      if (!readStoredToken()) {
         return;
       }
 
@@ -119,6 +119,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return;
       }
 
+      const refreshedToken = userResponse.headers.get('X-Refreshed-Token');
+      if (refreshedToken) {
+        updateToken(refreshedToken);
+      }
+
       setUser(userPayload.user);
       await checkOnboardingStatus();
     } catch (caughtError) {
@@ -127,7 +132,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [checkOnboardingStatus, clearSession, token]);
+  }, [checkOnboardingStatus, clearSession, updateToken]);
 
   useEffect(() => {
     if (IS_PLATFORM) {
