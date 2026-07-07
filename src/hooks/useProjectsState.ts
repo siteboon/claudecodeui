@@ -255,6 +255,13 @@ const upsertSessionIntoProject = (project: Project, event: SessionUpsertedEvent)
     for (const [index, session] of sessions.entries()) {
       if (index === existingIndex) {
         const updated = { ...session, ...normalizedSession };
+        // Never let a later upsert that carries an empty summary blank out a
+        // title we already have. Fresh sessions momentarily broadcast an empty
+        // custom_name before the disk indexer fills it in, which would
+        // otherwise flash the row back to the "New session" placeholder.
+        if (!normalizedSession.summary?.trim() && session.summary?.trim()) {
+          updated.summary = session.summary;
+        }
         if (serialize(session) !== serialize(updated)) {
           changed = true;
         }

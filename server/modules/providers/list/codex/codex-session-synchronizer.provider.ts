@@ -133,7 +133,23 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
       };
     }
 
-    let sessionName = nameMap.get(parsed.sessionId);
+    // Sessions started by sending a message from cloudcli carry a distinct
+    // app-allocated session_id mapped to the provider id. For these we title the
+    // conversation from the first user message the user typed, instead of the
+    // generic "Untitled Codex Session" placeholder. Sessions discovered purely
+    // by indexing (session_id === provider_session_id) keep the existing
+    // thread_name/last-agent-message setup below.
+    const isAppCreated =
+      existingSession != null &&
+      existingSession.provider_session_id != null &&
+      existingSession.session_id !== existingSession.provider_session_id;
+
+    let sessionName = isAppCreated
+      ? await this.extractFirstUserMessageFromStart(filePath)
+      : undefined;
+    if (!sessionName) {
+      sessionName = nameMap.get(parsed.sessionId);
+    }
     if (!sessionName) {
       sessionName = await this.extractLastAgentMessageFromEnd(filePath);
     }
@@ -142,6 +158,49 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
       ...parsed,
       sessionName: normalizeSessionName(sessionName, 'Untitled Codex Session'),
     };
+  }
+
+  /**
+   * Returns the first user message text in a Codex transcript, used to title
+   * app-created sessions from the prompt the user sent from cloudcli.
+   *
+   * Reads the `event_msg`/`user_message` payload rather than the raw
+   * `response_item` user turn so injected `<environment_context>` boilerplate is
+   * never mistaken for the user's prompt.
+   */
+  private async extractFirstUserMessageFromStart(filePath: string): Promise<string | undefined> {
+    try {
+      const content = await readFile(filePath, 'utf8');
+      const lines = content.split(/\r?\n/);
+
+      for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line) {
+          continue;
+        }
+
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(line);
+        } catch {
+          continue;
+        }
+
+        const data = parsed as Record<string, unknown>;
+        const eventType = typeof data.type === 'string' ? data.type : undefined;
+        const payload = data.payload as Record<string, unknown> | undefined;
+        const payloadType = typeof payload?.type === 'string' ? payload.type : undefined;
+        const message = typeof payload?.message === 'string' ? payload.message : undefined;
+
+        if (eventType === 'event_msg' && payloadType === 'user_message' && message?.trim()) {
+          return message;
+        }
+      }
+    } catch {
+      // Ignore missing/unreadable files so sync can continue.
+    }
+
+    return undefined;
   }
 
   private async extractLastAgentMessageFromEnd(filePath: string): Promise<string | undefined> {

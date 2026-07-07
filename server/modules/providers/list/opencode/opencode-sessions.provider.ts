@@ -14,6 +14,7 @@ import {
   readJsonRecord,
   readOptionalString,
   sliceTailPage,
+  unwrapJsonStringLiteral,
 } from '@/shared/utils.js';
 
 const PROVIDER = 'opencode';
@@ -57,25 +58,6 @@ const formatToolContent = (value: unknown): string => {
     return JSON.stringify(value, null, 2);
   } catch {
     return String(value);
-  }
-};
-
-/**
- * OpenCode can persist the first prompt as a JSON string literal inside a text
- * part, for example `"hello"` instead of `hello`. Decode only complete JSON
- * string literals so normal assistant/user prose remains untouched.
- */
-const unwrapJsonStringLiteral = (value: string): string => {
-  const trimmed = value.trim();
-  if (!trimmed.startsWith('"') || !trimmed.endsWith('"')) {
-    return value;
-  }
-
-  try {
-    const parsed = JSON.parse(trimmed);
-    return typeof parsed === 'string' ? parsed : value;
-  } catch {
-    return value;
   }
 };
 
