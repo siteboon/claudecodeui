@@ -37,11 +37,6 @@ NODE
   export GITHUB_TOKEN
 fi
 
-if ! npm whoami >/dev/null 2>&1; then
-  echo "npm is not authenticated. Run npm login before shipping." >&2
-  exit 1
-fi
-
 if [ -z "${GITHUB_TOKEN:-}" ]; then
   echo "GITHUB_TOKEN is required for GitHub releases. Put it in .env or export it." >&2
   exit 1
