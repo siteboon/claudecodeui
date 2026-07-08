@@ -86,6 +86,7 @@
   },
   "codex": {
     "permissionMode": "권한 모드",
+    "switchHint": "⇧ + tab 키로 전환",
     "modes": {
       "default": "기본 모드",
       "auto": "Auto Mode",

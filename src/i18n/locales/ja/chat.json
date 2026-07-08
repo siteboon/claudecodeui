@@ -86,6 +86,7 @@
   },
   "codex": {
     "permissionMode": "権限モード",
+    "switchHint": "⇧ + tab で切り替え",
     "modes": {
       "default": "デフォルトモード",
       "auto": "Auto Mode",

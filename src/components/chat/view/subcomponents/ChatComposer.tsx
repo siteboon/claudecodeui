@@ -11,7 +11,7 @@ import type {
   RefObject,
   TouchEvent,
 } from 'react';
-import { ImageIcon, MessageSquareIcon, XIcon, Loader2, ChevronDown, Check, ArrowUpIcon } from 'lucide-react';
+import { Plus, Zap, Hand, Code, ClipboardList, XIcon, Loader2, ChevronDown, Check, ArrowUpIcon } from 'lucide-react';
 
 import { useVoiceInput } from '../../hooks/useVoiceInput';
 import { useVoiceAvailable } from '../../hooks/useVoiceAvailable';
@@ -35,7 +35,6 @@ import ActivityIndicator from './ActivityIndicator';
 import ImageAttachment from './ImageAttachment';
 import VoiceInputButton from './VoiceInputButton';
 import PermissionRequestsBanner from './PermissionRequestsBanner';
-import TokenUsageSummary from './TokenUsageSummary';
 import QueuedMessageCard from './QueuedMessageCard';
 
 interface MentionableFile {
@@ -64,13 +63,11 @@ interface ChatComposerProps {
   isLoading: boolean;
   onAbortSession: () => void;
   permissionMode: PermissionMode | string;
-  onModeSwitch: () => void;
+  onSelectMode: (mode: PermissionMode) => void;
+  availableModes: PermissionMode[];
   effort: string;
   availableEffortOptions: NonNullable<ProviderModelOption['effort']>['values'];
   onSelectEffort: (effort: string) => void;
-  tokenBudget: Record<string, unknown> | null;
-  onShowTokenUsage: () => void;
-  slashCommandsCount: number;
   onToggleCommandMenu: () => void;
   hasInput: boolean;
   onClearInput: () => void;
@@ -122,13 +119,11 @@ export default function ChatComposer({
   isLoading,
   onAbortSession,
   permissionMode,
-  onModeSwitch,
+  onSelectMode,
+  availableModes,
   effort,
   availableEffortOptions,
   onSelectEffort,
-  tokenBudget,
-  onShowTokenUsage,
-  slashCommandsCount,
   onToggleCommandMenu,
   hasInput,
   onClearInput,
@@ -204,67 +199,61 @@ export default function ChatComposer({
   );
   const isRecording = voiceState === 'recording';
   const isTranscribing = voiceState === 'transcribing';
-  const [isEffortDropdownOpen, setIsEffortDropdownOpen] = useState(false);
-  const effortDropdownRef = useRef<HTMLDivElement | null>(null);
-  const effortDropdownMenuRef = useRef<HTMLDivElement | null>(null);
-  const effortDropdownButtonRef = useRef<HTMLButtonElement | null>(null);
-  const [effortDropdownPosition, setEffortDropdownPosition] = useState<{
-    left: number;
-    top: number;
-    maxHeight: number;
-  } | null>(null);
   const effortOptions = useMemo(
     () => [{ value: 'default' }, ...availableEffortOptions],
     [availableEffortOptions],
   );
   const selectedEffortLabel = effort === 'default' ? 'Default' : effort;
-  const updateEffortDropdownPosition = useCallback(() => {
-    const rect = effortDropdownButtonRef.current?.getBoundingClientRect();
-    if (!rect) {
-      return;
-    }
-
-    setEffortDropdownPosition({
-      left: rect.left,
+  const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
+  const modeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const modeMenuRef = useRef<HTMLDivElement | null>(null);
+  const [modeMenuPos, setModeMenuPos] = useState<{ left: number; top: number; width: number; maxHeight: number } | null>(null);
+  const updateModeMenuPos = useCallback(() => {
+    const rect = modeButtonRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const width = Math.min(288, window.innerWidth - 16);
+    setModeMenuPos({
+      left: Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8)),
       top: rect.top - 8,
-      maxHeight: Math.max(96, rect.top - 16),
+      width,
+      maxHeight: Math.max(180, rect.top - 16),
     });
   }, []);
-
   useEffect(() => {
-    if (!isEffortDropdownOpen) return;
-
+    if (!isModeMenuOpen) return;
+    updateModeMenuPos();
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
-      if (
-        !effortDropdownRef.current?.contains(target)
-        && !effortDropdownMenuRef.current?.contains(target)
-      ) {
-        setIsEffortDropdownOpen(false);
+      if (!modeButtonRef.current?.contains(target) && !modeMenuRef.current?.contains(target)) {
+        setIsModeMenuOpen(false);
       }
     };
-
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        event.stopPropagation();
-        setIsEffortDropdownOpen(false);
-      }
+      if (event.key === 'Escape') setIsModeMenuOpen(false);
     };
-
     document.addEventListener('pointerdown', handlePointerDown);
-    window.addEventListener('resize', updateEffortDropdownPosition);
-    window.addEventListener('scroll', updateEffortDropdownPosition, true);
+    window.addEventListener('resize', updateModeMenuPos);
+    window.addEventListener('scroll', updateModeMenuPos, true);
     window.addEventListener('keydown', handleKeyDown, { capture: true });
-    updateEffortDropdownPosition();
-
     return () => {
       document.removeEventListener('pointerdown', handlePointerDown);
-      window.removeEventListener('resize', updateEffortDropdownPosition);
-      window.removeEventListener('scroll', updateEffortDropdownPosition, true);
+      window.removeEventListener('resize', updateModeMenuPos);
+      window.removeEventListener('scroll', updateModeMenuPos, true);
       window.removeEventListener('keydown', handleKeyDown, { capture: true });
     };
-  }, [isEffortDropdownOpen, updateEffortDropdownPosition]);
+  }, [isModeMenuOpen, updateModeMenuPos]);
+  const MODE_ITEMS: { mode: PermissionMode; icon: typeof Zap }[] = [
+    { mode: 'default', icon: Hand },
+    { mode: 'acceptEdits', icon: Code },
+    { mode: 'plan', icon: ClipboardList },
+    { mode: 'auto', icon: Zap },
+    { mode: 'bypassPermissions', icon: Zap },
+  ];
+  const visibleModeItems = (availableModes && availableModes.length)
+    ? MODE_ITEMS.filter((m) => availableModes.includes(m.mode))
+    : MODE_ITEMS;
+  const currentModeItem = MODE_ITEMS.find((m) => m.mode === permissionMode);
+  const CurrentModeIcon = currentModeItem?.icon ?? Zap;
 
   // Detect if the AskUserQuestion interactive panel is active
   const hasQuestionPanel = pendingPermissionRequests.some(
@@ -431,17 +420,37 @@ export default function ChatComposer({
               tooltip={{ content: t('input.attachImages') }}
               onClick={openImagePicker}
             >
-              <ImageIcon />
+              <Plus />
             </PromptInputButton>
 
+            <PromptInputButton
+              tooltip={{ content: t('input.showAllCommands') }}
+              onClick={onToggleCommandMenu}
+            >
+              <span className="flex h-[18px] w-[18px] items-center justify-center rounded-[5px] border border-current text-[12px] font-medium leading-none">/</span>
+            </PromptInputButton>
+
+            {hasInput && (
+              <PromptInputButton
+                tooltip={{ content: t('input.clearInput', { defaultValue: 'Clear input' }) }}
+                onClick={onClearInput}
+                className="hidden sm:flex"
+              >
+                <XIcon />
+              </PromptInputButton>
+            )}
+          </PromptInputTools>
+
+          <div className="flex items-center gap-2">
             {onVoiceTranscript && voiceAvailable && (
               <VoiceInputButton state={voiceState} onToggle={voiceToggle} errorMsg={voiceError} />
             )}
 
             <button
+              ref={modeButtonRef}
               type="button"
-              onClick={onModeSwitch}
-              className={`inline-flex h-8 items-center rounded-lg border px-2 text-xs font-medium transition-all duration-200 sm:px-2.5 ${
+              onClick={() => setIsModeMenuOpen((open) => !open)}
+              className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-2 text-xs font-medium transition-all duration-200 sm:px-2.5 ${
                 permissionMode === 'default'
                   ? 'border-border/60 bg-muted/50 text-muted-foreground hover:bg-muted'
                   : permissionMode === 'acceptEdits'
@@ -454,124 +463,73 @@ export default function ChatComposer({
               }`}
               title={t('input.clickToChangeMode')}
             >
-              <div className="flex items-center gap-1.5">
-                <div
-                  className={`h-2.5 w-2.5 rounded-full sm:h-1.5 sm:w-1.5 ${
-                    permissionMode === 'default'
-                      ? 'bg-muted-foreground'
-                      : permissionMode === 'acceptEdits'
-                        ? 'bg-green-500'
-                        : permissionMode === 'auto'
-                          ? 'bg-blue-500'
-                          : permissionMode === 'bypassPermissions'
-                            ? 'bg-orange-500'
-                            : 'bg-primary'
-                  }`}
-                />
-                <span className="hidden whitespace-nowrap sm:inline">
-                  {permissionMode === 'default' && t('codex.modes.default')}
-                  {permissionMode === 'acceptEdits' && t('codex.modes.acceptEdits')}
-                  {permissionMode === 'auto' && t('codex.modes.auto')}
-                  {permissionMode === 'bypassPermissions' && t('codex.modes.bypassPermissions')}
-                  {permissionMode === 'plan' && t('codex.modes.plan')}
-                </span>
-              </div>
+              <CurrentModeIcon className="h-3.5 w-3.5" />
+              <span className="whitespace-nowrap">{currentModeItem ? t(`codex.modes.${currentModeItem.mode}`) : permissionMode}</span>
+              <ChevronDown className={`h-3 w-3 opacity-60 transition-transform ${isModeMenuOpen ? 'rotate-180' : ''}`} />
             </button>
 
-            {availableEffortOptions.length > 0 && (
-              <div ref={effortDropdownRef} className="relative">
-                <button
-                  ref={effortDropdownButtonRef}
-                  type="button"
-                  onClick={() => {
-                    updateEffortDropdownPosition();
-                    setIsEffortDropdownOpen((current) => !current);
-                  }}
-                  className="flex h-8 items-center gap-1.5 rounded-lg border border-border/60 bg-muted/40 px-2 text-xs font-medium text-foreground transition-all duration-200 hover:bg-muted"
-                  aria-haspopup="menu"
-                  aria-expanded={isEffortDropdownOpen}
-                  aria-label="Select reasoning effort"
-                  title="Select reasoning effort"
-                >
-                  <span className="hidden text-[11px] text-muted-foreground sm:inline">Effort</span>
-                  <span className="max-w-16 truncate capitalize sm:max-w-20">{selectedEffortLabel}</span>
-                  <ChevronDown className={`h-3 w-3 text-muted-foreground transition-transform ${isEffortDropdownOpen ? 'rotate-180' : ''}`} />
-                </button>
-
-                {isEffortDropdownOpen && effortDropdownPosition && createPortal(
-                  <div
-                    ref={effortDropdownMenuRef}
-                    className="fixed z-[100] min-w-36 overflow-y-auto rounded-lg border border-border bg-card p-1 shadow-lg"
-                    style={{
-                      left: effortDropdownPosition.left,
-                      top: effortDropdownPosition.top,
-                      maxHeight: effortDropdownPosition.maxHeight,
-                      transform: 'translateY(-100%)',
-                    }}
-                    role="menu"
-                  >
-                    {effortOptions.map((option) => {
-                      const isSelected = option.value === effort;
-                      const label = option.value === 'default' ? 'Default' : option.value;
-                      return (
-                        <button
-                          key={option.value}
-                          type="button"
-                          role="menuitemradio"
-                          aria-checked={isSelected}
-                          onClick={() => {
-                            onSelectEffort(option.value);
-                            setIsEffortDropdownOpen(false);
-                          }}
-                          className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs capitalize transition-colors ${
-                            isSelected
-                              ? 'bg-accent text-foreground'
-                              : 'text-muted-foreground hover:bg-accent/70 hover:text-foreground'
-                          }`}
-                        >
-                          <span className="flex h-3 w-3 items-center justify-center">
-                            {isSelected && <Check className="h-3 w-3 text-primary" />}
-                          </span>
-                          <span>{label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>,
-                  document.body,
-                )}
-              </div>
-            )}
-
-            <TokenUsageSummary usage={tokenBudget} onClick={onShowTokenUsage} />
-
-            <PromptInputButton
-              tooltip={{ content: t('input.showAllCommands') }}
-              onClick={onToggleCommandMenu}
-              className="relative"
-            >
-              <MessageSquareIcon />
-              {slashCommandsCount > 0 && (
-                <span
-                  className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground"
-                >
-                  {slashCommandsCount}
-                </span>
-              )}
-            </PromptInputButton>
-
-            {hasInput && (
-              <PromptInputButton
-                tooltip={{ content: t('input.clearInput', { defaultValue: 'Clear input' }) }}
-                onClick={onClearInput}
-                className="hidden sm:flex"
+            {isModeMenuOpen && modeMenuPos && createPortal(
+              <div
+                ref={modeMenuRef}
+                className="fixed z-[120] overflow-y-auto rounded-xl border border-border bg-card shadow-xl"
+                style={{ left: modeMenuPos.left, top: modeMenuPos.top, width: modeMenuPos.width, maxHeight: modeMenuPos.maxHeight, transform: 'translateY(-100%)' }}
+                role="menu"
               >
-                <XIcon />
-              </PromptInputButton>
+                <div className="flex items-center justify-between px-3 pb-1 pt-2.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <span>{t('codex.permissionMode')}</span>
+                  <span className="normal-case tracking-normal opacity-70">{t('codex.switchHint')}</span>
+                </div>
+                <div className="px-1 pb-1">
+                  {visibleModeItems.map((item) => {
+                    const isSelected = item.mode === permissionMode;
+                    const Icon = item.icon;
+                    return (
+                      <button
+                        key={item.mode}
+                        type="button"
+                        onClick={() => { onSelectMode(item.mode); setIsModeMenuOpen(false); }}
+                        className={`flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors ${isSelected ? 'bg-accent' : 'hover:bg-accent/60'}`}
+                      >
+                        <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center gap-1.5 text-[13px] font-medium text-foreground">
+                            {t(`codex.modes.${item.mode}`)}
+                            {isSelected && <Check className="h-3.5 w-3.5 text-primary" />}
+                          </span>
+                          <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">{t(`codex.descriptions.${item.mode}`)}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {availableEffortOptions.length > 0 && (
+                  <div className="flex items-center justify-between gap-3 border-t border-border px-3 py-2.5">
+                    <span className="whitespace-nowrap text-[12px] font-medium text-muted-foreground">
+                      Effort <span className="text-foreground">({selectedEffortLabel})</span>
+                    </span>
+                    <div className="relative flex flex-1 items-center justify-between px-1">
+                      <div className="absolute inset-x-1 top-1/2 h-px -translate-y-1/2 bg-border" />
+                      {effortOptions.map((option) => {
+                        const isSel = option.value === effort;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => onSelectEffort(option.value)}
+                            title={option.value === 'default' ? 'Default' : String(option.value)}
+                            className="relative z-10 flex h-4 w-4 items-center justify-center"
+                          >
+                            <span className={`rounded-full transition-all ${isSel ? 'h-3 w-3 bg-primary ring-2 ring-primary/25' : 'h-1.5 w-1.5 bg-muted-foreground/40 hover:bg-muted-foreground'}`} />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>,
+              document.body,
             )}
 
-          </PromptInputTools>
-
-          <div className="flex items-center gap-2">
             <div
               className={`hidden text-xs text-muted-foreground/50 transition-opacity duration-200 lg:block ${
                 input.trim() && !canQueueDraft ? 'opacity-0' : 'opacity-100'

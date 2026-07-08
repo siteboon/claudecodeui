@@ -77,6 +77,8 @@ function ChatInterface({
     pendingPermissionRequests,
     setPendingPermissionRequests,
     cyclePermissionMode,
+    selectPermissionMode,
+    availablePermissionModes,
     providerModelCatalog,
     providerModelCacheCatalog,
     providerModelsLoading,
@@ -149,7 +151,6 @@ function ChatInterface({
     textareaRef,
     inputHighlightRef,
     isTextareaExpanded,
-    slashCommandsCount,
     filteredCommands,
     frequentCommands,
     commandQuery,
@@ -190,7 +191,6 @@ function ChatInterface({
     isInputFocused,
     commandModalPayload,
     closeCommandModal,
-    showCostModal,
   } = useChatComposerState({
     selectedProject,
     selectedSession,
@@ -389,13 +389,11 @@ function ChatInterface({
           isLoading={isProcessing}
           onAbortSession={handleAbortSession}
           permissionMode={permissionMode}
-          onModeSwitch={cyclePermissionMode}
+          onSelectMode={selectPermissionMode}
+          availableModes={availablePermissionModes}
           effort={currentProviderEffort}
           availableEffortOptions={currentProviderEffortOptions}
           onSelectEffort={(nextEffort) => setStoredProviderEffort(provider, nextEffort)}
-          tokenBudget={tokenBudget}
-          onShowTokenUsage={showCostModal}
-          slashCommandsCount={slashCommandsCount}
           onToggleCommandMenu={handleToggleCommandMenu}
           hasInput={Boolean(input.trim())}
           onClearInput={handleClearInput}

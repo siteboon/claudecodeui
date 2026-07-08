@@ -86,6 +86,7 @@
   },
   "codex": {
     "permissionMode": "權限模式",
+    "switchHint": "⇧ + tab 切換",
     "modes": {
       "default": "預設模式",
       "auto": "自動模式",

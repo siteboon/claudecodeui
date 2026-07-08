@@ -86,6 +86,7 @@
   },
   "codex": {
     "permissionMode": "Режим разрешений",
+    "switchHint": "⇧ + tab для переключения",
     "modes": {
       "default": "Режим по умолчанию",
       "auto": "Auto Mode",

@@ -86,6 +86,7 @@
   },
   "codex": {
     "permissionMode": "İzin Modu",
+    "switchHint": "değiştirmek için ⇧ + tab",
     "modes": {
       "default": "Varsayılan Mod",
       "auto": "Auto Mode",

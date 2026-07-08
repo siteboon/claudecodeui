@@ -86,6 +86,7 @@
   },
   "codex": {
     "permissionMode": "Modalità permessi",
+    "switchHint": "⇧ + tab per cambiare",
     "modes": {
       "default": "Modalità predefinita",
       "auto": "Auto Mode",

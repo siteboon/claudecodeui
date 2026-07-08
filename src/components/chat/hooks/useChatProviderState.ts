@@ -502,6 +502,19 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     }
   }, [permissionMode, provider, selectedSession?.id, getPermissionModesForProvider]);
 
+  const selectPermissionMode = useCallback((mode: PermissionMode) => {
+    setPermissionMode(mode);
+    localStorage.setItem(`permissionMode-last-${provider}`, mode);
+    if (selectedSession?.id) {
+      localStorage.setItem(`permissionMode-${selectedSession.id}`, mode);
+    }
+  }, [provider, selectedSession?.id]);
+
+  const availablePermissionModes = useMemo(
+    () => getPermissionModesForProvider(provider),
+    [getPermissionModesForProvider, provider],
+  );
+
   const resolvePermissionModeForProvider = useCallback((
     targetProvider: LLMProvider,
     requestedMode: PermissionMode | string,
@@ -576,6 +589,8 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     pendingPermissionRequests,
     setPendingPermissionRequests,
     cyclePermissionMode,
+    selectPermissionMode,
+    availablePermissionModes,
     providerModelCatalog,
     providerModelCacheCatalog,
     providerModelsLoading,
