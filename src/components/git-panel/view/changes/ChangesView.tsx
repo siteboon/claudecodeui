@@ -1,5 +1,5 @@
 import { GitBranch, GitCommit, RefreshCw } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ConfirmationRequest, FileStatusCode, GitDiffMap, GitStatusResponse } from '../../types/types';
 import { getAllChangedFiles, hasChangedFiles } from '../../utils/gitPanelUtils';
 import CommitComposer from './CommitComposer';
@@ -19,6 +19,8 @@ type ChangesViewProps = {
   onOpenFile: (filePath: string) => Promise<void>;
   onDiscardFile: (filePath: string) => Promise<void>;
   onDeleteFile: (filePath: string) => Promise<void>;
+  onStageFiles: (files: string[]) => Promise<boolean>;
+  onUnstageFiles: (files: string[]) => Promise<boolean>;
   onCommitChanges: (message: string, files: string[]) => Promise<boolean>;
   onGenerateCommitMessage: (files: string[]) => Promise<string | null>;
   onRequestConfirmation: (request: ConfirmationRequest) => void;
@@ -38,6 +40,8 @@ export default function ChangesView({
   onOpenFile,
   onDiscardFile,
   onDeleteFile,
+  onStageFiles,
+  onUnstageFiles,
   onCommitChanges,
   onGenerateCommitMessage,
   onRequestConfirmation,
@@ -45,9 +49,24 @@ export default function ChangesView({
 }: ChangesViewProps) {
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  // Stage/unstage calls in flight or queued. While > 0, status refreshes must
+  // not overwrite the optimistic selection with a snapshot that predates the
+  // later clicks.
+  const [pendingStageOps, setPendingStageOps] = useState(0);
+  // Serializes stage/unstage requests so rapid toggles cannot interleave on
+  // the server or resolve out of order.
+  const stageOpQueueRef = useRef<Promise<unknown>>(Promise.resolve());
 
   const changedFiles = useMemo(() => getAllChangedFiles(gitStatus), [gitStatus]);
   const hasExpandedFiles = expandedFiles.size > 0;
+
+  const enqueueStageOp = useCallback((operation: () => Promise<unknown>) => {
+    setPendingStageOps((count) => count + 1);
+    stageOpQueueRef.current = stageOpQueueRef.current
+      .catch(() => {}) // a failed op must not block the queue
+      .then(operation)
+      .finally(() => setPendingStageOps((count) => count - 1));
+  }, []);
 
   useEffect(() => {
     if (!gitStatus || gitStatus.error) {
@@ -55,13 +74,15 @@ export default function ChangesView({
       return;
     }
 
-    // Remove any selected files that no longer exist in the status
-    setSelectedFiles((prev) => {
-      const allFiles = new Set(getAllChangedFiles(gitStatus));
-      const next = new Set([...prev].filter((f) => allFiles.has(f)));
-      return next;
-    });
-  }, [gitStatus]);
+    if (pendingStageOps > 0) {
+      return; // keep the optimistic state until the queued ops settle
+    }
+
+    // The Staged section mirrors the real git index reported by /status, so
+    // files staged outside the app (VSCode, terminal) show up here too. Also
+    // re-runs when the queue drains, syncing to the final refreshed status.
+    setSelectedFiles(new Set(gitStatus.staged ?? []));
+  }, [gitStatus, pendingStageOps]);
 
   useEffect(() => {
     onExpandedFilesChange(hasExpandedFiles);
@@ -85,17 +106,25 @@ export default function ChangesView({
     });
   }, []);
 
-  const toggleFileSelected = useCallback((filePath: string) => {
-    setSelectedFiles((previous) => {
-      const next = new Set(previous);
-      if (next.has(filePath)) {
-        next.delete(filePath);
-      } else {
-        next.add(filePath);
-      }
-      return next;
-    });
-  }, []);
+  // Staging is real: every toggle runs git add / git reset through the API.
+  // The set is flipped optimistically; the queued API call keeps the git
+  // index in sync and the final status refresh re-syncs once the queue drains.
+  const toggleFileSelected = useCallback(
+    (filePath: string) => {
+      const isStaged = selectedFiles.has(filePath);
+      setSelectedFiles((previous) => {
+        const next = new Set(previous);
+        if (isStaged) {
+          next.delete(filePath);
+        } else {
+          next.add(filePath);
+        }
+        return next;
+      });
+      enqueueStageOp(() => (isStaged ? onUnstageFiles([filePath]) : onStageFiles([filePath])));
+    },
+    [enqueueStageOp, onStageFiles, onUnstageFiles, selectedFiles],
+  );
 
   const requestFileAction = useCallback(
     (filePath: string, status: FileStatusCode) => {
@@ -197,7 +226,11 @@ export default function ChangesView({
               </span>
               {selectedFiles.size > 0 && (
                 <button
-                  onClick={() => setSelectedFiles(new Set())}
+                  onClick={() => {
+                    const filesToUnstage = Array.from(selectedFiles);
+                    setSelectedFiles(new Set());
+                    enqueueStageOp(() => onUnstageFiles(filesToUnstage));
+                  }}
                   className="text-xs text-primary transition-colors hover:text-primary/80"
                 >
                   Unstage All
@@ -230,7 +263,11 @@ export default function ChangesView({
               </span>
               {unstagedFiles.size > 0 && (
                 <button
-                  onClick={() => setSelectedFiles(new Set(changedFiles))}
+                  onClick={() => {
+                    const filesToStage = Array.from(unstagedFiles);
+                    setSelectedFiles(new Set(changedFiles));
+                    enqueueStageOp(() => onStageFiles(filesToStage));
+                  }}
                   className="text-xs text-primary transition-colors hover:text-primary/80"
                 >
                   Stage All

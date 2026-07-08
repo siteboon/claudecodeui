@@ -49,7 +49,8 @@
     "save": "Kaydet",
     "cancel": "İptal",
     "clearSearch": "Aramayı temizle",
-    "openCommandPalette": "Komut paletini aç"
+    "openCommandPalette": "Komut paletini aç",
+    "attentionRequiredIndicator": "Oturum ilgi bekliyor"
   },
   "navigation": {
     "chat": "Sohbet",

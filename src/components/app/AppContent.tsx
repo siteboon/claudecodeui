@@ -10,6 +10,7 @@ import { PaletteOpsProvider, usePaletteOpsRegister } from '../../contexts/Palett
 import { useDeviceSettings } from '../../hooks/useDeviceSettings';
 import { useSessionProtection } from '../../hooks/useSessionProtection';
 import { useProjectsState } from '../../hooks/useProjectsState';
+import { useQueuedMessageAutoSend } from '../../hooks/useQueuedMessageAutoSend';
 import { api } from '../../utils/api';
 
 type RunningSessionApiItem = {
@@ -82,6 +83,17 @@ function AppContentInner() {
     subscribe,
     isMobile,
     activeSessions: processingSessions,
+  });
+
+  // Queued messages for sessions that finish while another session (or none)
+  // is being viewed are sent from here; the viewed session's composer handles
+  // its own queue.
+  useQueuedMessageAutoSend({
+    processingSessions,
+    activeSessionId: selectedSession?.id ?? sessionId ?? null,
+    ws,
+    sendMessage,
+    markSessionProcessing,
   });
 
   const refreshRunningSessions = useCallback(async () => {

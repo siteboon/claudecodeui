@@ -1,13 +1,15 @@
-import { spawn } from 'child_process';
 import crossSpawn from 'cross-spawn';
+
+import { appendImagesInputTag } from './shared/image-attachments.js';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
 import { providerModelsService } from './modules/providers/services/provider-models.service.js';
-import { createCompleteMessage, createNormalizedMessage } from './shared/utils.js';
+import { createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell } from './shared/utils.js';
 
-// Use cross-spawn on Windows for better command execution
-const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
+// cross-spawn resolves .cmd shims/PATHEXT on Windows and delegates to
+// child_process.spawn everywhere else.
+const spawnFunction = crossSpawn;
 
 let activeCursorProcesses = new Map(); // Track active processes by session ID
 
@@ -28,7 +30,7 @@ function isWorkspaceTrustPrompt(text = '') {
 
 async function spawnCursor(command, options = {}, ws) {
   return new Promise(async (resolve, reject) => {
-    const { sessionId, projectPath, cwd, resume, toolsSettings, skipPermissions, model, sessionSummary } = options;
+    const { sessionId, projectPath, cwd, toolsSettings, skipPermissions, model, sessionSummary, images } = options;
     const resolvedModel = await providerModelsService.resolveResumeModel('cursor', sessionId, model);
     let capturedSessionId = sessionId; // Track session ID throughout the process
     let sessionCreatedSent = false; // Track if we've already sent session-created event
@@ -55,8 +57,12 @@ async function spawnCursor(command, options = {}, ws) {
     }
 
     if (command && command.trim()) {
-      // Provide a prompt (works for both new and resumed sessions)
-      baseArgs.push('-p', command);
+      // Provide a prompt (works for both new and resumed sessions). Image
+      // attachments ride along as an <images_input> path list appended to the
+      // prompt; the session history reader strips the tag back out for display.
+      // cursor-agent is a .cmd shim on Windows, so the whole argument must be
+      // newline-free or cmd.exe silently truncates it at the first newline.
+      baseArgs.push('-p', flattenPromptForWindowsShell(appendImagesInputTag(command, images)));
 
       // Model overrides are applied to both new and resumed sessions so a
       // session-scoped change request can take effect on the next turn.
@@ -71,7 +77,6 @@ async function spawnCursor(command, options = {}, ws) {
     // Add skip permissions flag if enabled
     if (skipPermissions || settings.skipPermissions) {
       baseArgs.push('-f');
-      console.log('Using -f flag (skip permissions)');
     }
 
     // Use cwd (actual project directory) instead of projectPath
@@ -125,10 +130,6 @@ async function spawnCursor(command, options = {}, ws) {
       if (isTrustRetry) {
         console.log('Retrying Cursor CLI with --trust after workspace trust prompt');
       }
-
-      console.log('Spawning Cursor CLI:', 'cursor-agent', args.join(' '));
-      console.log('Working directory:', workingDir);
-      console.log('Session info - Input sessionId:', sessionId, 'Resume:', resume);
 
       const cursorProcess = spawnFunction('cursor-agent', args, {
         cwd: workingDir,

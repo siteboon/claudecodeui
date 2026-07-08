@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { spawnOpenCode } from './opencode-cli.js';
+import { resolveOpenCodePermissionOptions, spawnOpenCode } from './opencode-cli.js';
 
 const findEnvKey = (name) =>
   Object.keys(process.env).find((key) => key.toLowerCase() === name.toLowerCase()) || name;
@@ -14,7 +14,10 @@ async function createFakeOpenCodeExecutable(binDir) {
   await writeFile(scriptPath, `
 const capturePath = process.env.OPENCODE_ARGS_CAPTURE;
 if (capturePath) {
-  require('node:fs').writeFileSync(capturePath, JSON.stringify(process.argv.slice(2)));
+  require('node:fs').writeFileSync(capturePath, JSON.stringify({
+    args: process.argv.slice(2),
+    permissionEnv: process.env.OPENCODE_PERMISSION ?? null,
+  }));
 }
 
 const events = [
@@ -86,10 +89,116 @@ test('spawnOpenCode emits session_created before normalized live messages for ne
     assert.equal(complete?.sessionId, 'open-live-1');
     assert.equal(messages.some((message) => message.kind === 'error'), false);
 
-    const launchedArgs = JSON.parse(await readFile(argsCapturePath, 'utf8'));
+    const capture = JSON.parse(await readFile(argsCapturePath, 'utf8'));
+    const launchedArgs = capture.args;
     assert.ok(Array.isArray(launchedArgs));
     assert.deepEqual(launchedArgs.slice(0, 4), ['run', '--format', 'json', '--dir']);
     assert.equal(launchedArgs[4], tempRoot);
+    // No permission mode requested → no permission flags and no env override.
+    assert.equal(launchedArgs.includes('--auto'), false);
+    assert.equal(launchedArgs.includes('--agent'), false);
+    assert.equal(capture.permissionEnv, null);
+  } finally {
+    if (previousPath === undefined) {
+      delete process.env[pathKey];
+    } else {
+      process.env[pathKey] = previousPath;
+    }
+
+    if (previousPathExt === undefined) {
+      delete process.env[pathExtKey];
+    } else {
+      process.env[pathExtKey] = previousPathExt;
+    }
+
+    if (previousArgsCapture === undefined) {
+      delete process.env.OPENCODE_ARGS_CAPTURE;
+    } else {
+      process.env.OPENCODE_ARGS_CAPTURE = previousArgsCapture;
+    }
+
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('resolveOpenCodePermissionOptions maps UI permission modes onto OpenCode controls', () => {
+  assert.deepEqual(resolveOpenCodePermissionOptions('plan'), {
+    args: ['--agent', 'plan'],
+    env: {},
+  });
+  assert.deepEqual(resolveOpenCodePermissionOptions('bypassPermissions'), {
+    args: ['--auto'],
+    env: {},
+  });
+  assert.deepEqual(resolveOpenCodePermissionOptions('acceptEdits'), {
+    args: [],
+    env: { OPENCODE_PERMISSION: '{"edit":"allow"}' },
+  });
+  // default and anything unknown leave the user's own opencode config in charge.
+  assert.deepEqual(resolveOpenCodePermissionOptions('default'), { args: [], env: {} });
+  assert.deepEqual(resolveOpenCodePermissionOptions(undefined), { args: [], env: {} });
+});
+
+test('spawnOpenCode passes permission mode flags and env to the CLI', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'opencode-cli-perms-'));
+  const pathKey = findEnvKey('PATH');
+  const pathExtKey = findEnvKey('PATHEXT');
+  const previousPath = process.env[pathKey];
+  const previousPathExt = process.env[pathExtKey];
+  const previousArgsCapture = process.env.OPENCODE_ARGS_CAPTURE;
+  const writer = {
+    userId: null,
+    sessionId: null,
+    send() {},
+    setSessionId(sessionId) {
+      this.sessionId = sessionId;
+    },
+  };
+
+  try {
+    await createFakeOpenCodeExecutable(tempRoot);
+    process.env[pathKey] = `${tempRoot}${path.delimiter}${previousPath || ''}`;
+    if (process.platform === 'win32') {
+      process.env[pathExtKey] = previousPathExt?.toUpperCase().includes('.CMD')
+        ? previousPathExt
+        : `.COM;.EXE;.BAT;.CMD${previousPathExt ? `;${previousPathExt}` : ''}`;
+    }
+
+    const scenarios = [
+      {
+        permissionMode: 'plan',
+        expectArgs: ['--agent', 'plan'],
+        expectPermissionEnv: null,
+      },
+      {
+        permissionMode: 'bypassPermissions',
+        expectArgs: ['--auto'],
+        expectPermissionEnv: null,
+      },
+      {
+        permissionMode: 'acceptEdits',
+        expectArgs: [],
+        expectPermissionEnv: '{"edit":"allow"}',
+      },
+    ];
+
+    for (const scenario of scenarios) {
+      const argsCapturePath = path.join(tempRoot, `opencode-args-${scenario.permissionMode}.json`);
+      process.env.OPENCODE_ARGS_CAPTURE = argsCapturePath;
+
+      await spawnOpenCode('Hi', { cwd: tempRoot, permissionMode: scenario.permissionMode }, writer);
+
+      const capture = JSON.parse(await readFile(argsCapturePath, 'utf8'));
+      for (const expectedArg of scenario.expectArgs) {
+        assert.ok(
+          capture.args.includes(expectedArg),
+          `${scenario.permissionMode}: expected "${expectedArg}" in ${JSON.stringify(capture.args)}`,
+        );
+      }
+      // The prompt stays the last positional argument, after any permission flags.
+      assert.equal(capture.args[capture.args.length - 1], 'Hi');
+      assert.equal(capture.permissionEnv, scenario.expectPermissionEnv);
+    }
   } finally {
     if (previousPath === undefined) {
       delete process.env[pathKey];

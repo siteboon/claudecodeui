@@ -12,7 +12,9 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { promises as fsPromises } from 'fs';
-import { spawn } from 'child_process';
+// cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution — required
+// here since task-master/npx are .cmd shims on Windows.
+import spawn from 'cross-spawn';
 import { projectsDb } from '../modules/database/index.js';
 import { detectTaskMasterMCPServer } from '../utils/mcp-detector.js';
 import { broadcastTaskMasterProjectUpdate, broadcastTaskMasterTasksUpdate } from '../utils/taskmaster-websocket.js';
