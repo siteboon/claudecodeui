@@ -23,7 +23,8 @@
     "files": "File",
     "git": "Controllo Versione",
     "tasks": "Attività",
-    "browser": "Browser"
+    "browser": "Browser",
+    "computer": "Computer"
   },
   "status": {
     "loading": "Caricamento...",

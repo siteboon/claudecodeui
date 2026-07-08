@@ -1,0 +1,289 @@
+name: Desktop Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to upload desktop assets to (defaults to v<package version>)"
+        required: false
+        type: string
+
+jobs:
+  resolve-release:
+    name: Resolve release metadata
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      server_bundle_tag: ${{ steps.release.outputs.server_bundle_tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Resolve release metadata
+        id: release
+        env:
+          TAG_INPUT: ${{ inputs.tag }}
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          TAG="$TAG_INPUT"
+          if [ -z "$TAG" ]; then
+            TAG="v${VERSION}"
+          fi
+          TAG="$(printf '%s' "$TAG" | tr -d '\r\n' | sed 's/[^A-Za-z0-9._-]/-/g')"
+          if [ -z "$TAG" ]; then
+            echo "Resolved release tag is empty after normalization." >&2
+            exit 1
+          fi
+
+          {
+            echo "tag=$TAG"
+            echo "server_bundle_tag=cloudcli-local-server-${TAG}"
+          } >> "$GITHUB_OUTPUT"
+
+  build-macos:
+    name: Build signed macOS desktop app
+    needs: resolve-release
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Configure release server bundle source
+        env:
+          SERVER_BUNDLE_TAG: ${{ needs.resolve-release.outputs.server_bundle_tag }}
+        run: printf '{"releaseTag":"%s"}\n' "$SERVER_BUNDLE_TAG" > electron/server-bundle-config.json
+
+      - name: Verify macOS signing secrets are configured
+        run: |
+          test -n "$CSC_LINK"
+          test -n "$CSC_KEY_PASSWORD"
+          test -n "$APPLE_ID"
+          test -n "$APPLE_APP_SPECIFIC_PASSWORD"
+          test -n "$APPLE_TEAM_ID"
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Build signed and notarized macOS artifacts
+        run: npm run desktop:dist:mac -- --publish never
+        env:
+          CLOUDCLI_SEMANTICS_BUILD_REQUIRED: "1"
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Build macOS local server bundle
+        run: node scripts/release/build-server-bundle.js
+
+      - name: Stage macOS release assets
+        run: |
+          mkdir -p desktop-release-assets server-release-assets
+          test -n "$(find release/desktop -maxdepth 1 -name '*.dmg' -print -quit)"
+          shasum -a 256 release/desktop/*.dmg > desktop-release-assets/SHASUMS256-macos.txt
+          cp release/desktop/*.dmg desktop-release-assets/
+
+          test -n "$(find release/local-server -maxdepth 1 -name 'cloudcli-local-server-*.tar.gz' -print -quit)"
+          test -n "$(find release/local-server -maxdepth 1 -name 'cloudcli-local-server-*.tar.gz.sha256' -print -quit)"
+          cp release/local-server/* server-release-assets/
+
+      - name: Upload macOS desktop assets
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: desktop-release-macos
+          path: desktop-release-assets/*
+          if-no-files-found: error
+
+      - name: Upload macOS server assets
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: server-release-macos
+          path: server-release-assets/*
+          if-no-files-found: error
+
+  build-windows:
+    name: Build Windows desktop app
+    needs: resolve-release
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Configure release server bundle source
+        shell: bash
+        env:
+          SERVER_BUNDLE_TAG: ${{ needs.resolve-release.outputs.server_bundle_tag }}
+        run: printf '{"releaseTag":"%s"}\n' "$SERVER_BUNDLE_TAG" > electron/server-bundle-config.json
+
+      - name: Check Windows signing secrets
+        id: windows-signing
+        shell: bash
+        env:
+          WINDOWS_CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          WINDOWS_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+        run: |
+          if [ -n "$WINDOWS_CSC_LINK" ] && [ -n "$WINDOWS_CSC_KEY_PASSWORD" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build signed Windows artifacts
+        if: steps.windows-signing.outputs.enabled == 'true'
+        run: npm run desktop:dist:win -- --publish never
+        env:
+          CLOUDCLI_SEMANTICS_BUILD_REQUIRED: "1"
+          CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+
+      - name: Build unsigned Windows artifacts
+        if: steps.windows-signing.outputs.enabled != 'true'
+        run: npm run desktop:dist:win -- --publish never
+        env:
+          CLOUDCLI_SEMANTICS_BUILD_REQUIRED: "1"
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Build Windows local server bundle
+        run: node scripts/release/build-server-bundle.js
+
+      - name: Stage Windows release assets
+        shell: bash
+        run: |
+          mkdir -p desktop-release-assets server-release-assets
+          test -n "$(find release/desktop -maxdepth 1 -name '*.exe' -print -quit)"
+          sha256sum release/desktop/*.exe > desktop-release-assets/SHASUMS256-windows.txt
+          cp release/desktop/*.exe desktop-release-assets/
+
+          test -n "$(find release/local-server -maxdepth 1 -name 'cloudcli-local-server-*.tar.gz' -print -quit)"
+          test -n "$(find release/local-server -maxdepth 1 -name 'cloudcli-local-server-*.tar.gz.sha256' -print -quit)"
+          cp release/local-server/* server-release-assets/
+
+      - name: Upload Windows desktop assets
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: desktop-release-windows
+          path: desktop-release-assets/*
+          if-no-files-found: error
+
+      - name: Upload Windows server assets
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: server-release-windows
+          path: server-release-assets/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish desktop release
+    needs:
+      - resolve-release
+      - build-macos
+      - build-windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download desktop assets
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          pattern: desktop-release-*
+          path: release/desktop
+          merge-multiple: true
+
+      - name: Download server assets
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          pattern: server-release-*
+          path: release/local-server
+          merge-multiple: true
+
+      - name: Verify release assets
+        run: |
+          test -n "$(find release/desktop -maxdepth 1 -name '*.dmg' -print -quit)"
+          test -n "$(find release/desktop -maxdepth 1 -name '*.exe' -print -quit)"
+          test -f release/desktop/SHASUMS256-macos.txt
+          test -f release/desktop/SHASUMS256-windows.txt
+          test -n "$(find release/local-server -maxdepth 1 -name 'cloudcli-local-server-*.tar.gz' -print -quit)"
+          test -n "$(find release/local-server -maxdepth 1 -name 'cloudcli-local-server-*.tar.gz.sha256' -print -quit)"
+          find release -maxdepth 2 -type f -print | sort
+
+      - name: Verify target GitHub release exists
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.resolve-release.outputs.tag }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" >/dev/null; then
+            echo "GitHub release $RELEASE_TAG does not exist. Run the normal Release workflow first, then rerun Desktop Release." >&2
+            exit 1
+          fi
+
+      - name: Publish local server runtime assets
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
+        with:
+          tag_name: ${{ needs.resolve-release.outputs.server_bundle_tag }}
+          target_commitish: ${{ github.sha }}
+          name: CloudCLI Local Server Runtime (${{ needs.resolve-release.outputs.tag }})
+          body: |
+            This prerelease contains the Local mode runtime for CloudCLI Desktop.
+
+            Download CloudCLI Desktop from the main ${{ needs.resolve-release.outputs.tag }} release. When you open Local CloudCLI, the desktop app automatically downloads the matching runtime from this prerelease.
+
+            You do not need to download these runtime files manually.
+          prerelease: true
+          fail_on_unmatched_files: false
+          overwrite_files: true
+          files: |
+            release/local-server/*
+
+      - name: Upload desktop assets to existing GitHub release
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.resolve-release.outputs.tag }}
+        run: |
+          mapfile -d '' DESKTOP_ASSETS < <(find release/desktop -maxdepth 1 -type f -print0 | sort -z)
+          gh release upload "$RELEASE_TAG" "${DESKTOP_ASSETS[@]}" --clobber

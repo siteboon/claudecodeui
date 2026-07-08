@@ -1,5 +1,7 @@
-import { spawn } from 'child_process';
 import path from 'path';
+
+// cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
+import spawn from 'cross-spawn';
 import { scanPlugins, getPluginsConfig, getPluginDir } from './plugin-loader.js';
 
 // Map<pluginName, { process, port }>

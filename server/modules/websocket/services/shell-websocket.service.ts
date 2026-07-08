@@ -146,14 +146,6 @@ function buildShellCommand(
     return 'codex';
   }
 
-  if (provider === 'gemini') {
-    const command = initialCommand || 'gemini';
-    if (resumeSessionId) {
-      return `${command} --resume "${resumeSessionId}"`;
-    }
-    return command;
-  }
-
   if (provider === 'opencode') {
     if (resumeSessionId) {
       return `opencode --session "${resumeSessionId}"`;
@@ -477,9 +469,7 @@ export function handleShellConnection(
               ? 'Cursor'
               : provider === 'codex'
                 ? 'Codex'
-                : provider === 'gemini'
-                  ? 'Gemini'
-                  : provider === 'opencode'
+                : provider === 'opencode'
                     ? 'OpenCode'
                   : 'Claude';
           welcomeMsg = hasSession && resumeSessionId

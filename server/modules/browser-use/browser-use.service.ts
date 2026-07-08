@@ -1,9 +1,11 @@
 import { createRequire } from 'node:module';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
+// cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
+import spawn from 'cross-spawn';
 
 import { appConfigDb } from '@/modules/database/index.js';
 import { providerMcpService } from '@/modules/providers/index.js';
@@ -270,8 +272,10 @@ function runCommand(command: string, args: string[]): Promise<void> {
     }, INSTALL_COMMAND_TIMEOUT_MS);
     timer.unref?.();
 
-    child.stdout.on('data', (chunk) => output.push(String(chunk)));
-    child.stderr.on('data', (chunk) => output.push(String(chunk)));
+    // stdio config above guarantees the pipes exist; cross-spawn's types
+    // just don't narrow them the way node's spawn overloads do.
+    child.stdout?.on('data', (chunk) => output.push(String(chunk)));
+    child.stderr?.on('data', (chunk) => output.push(String(chunk)));
     child.on('error', (error) => finish(() => reject(error)));
     child.on('close', (code) => finish(() => {
       if (code === 0) {

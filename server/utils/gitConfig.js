@@ -1,4 +1,5 @@
-import { spawn } from 'child_process';
+// cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
+import spawn from 'cross-spawn';
 
 function spawnAsync(command, args) {
   return new Promise((resolve, reject) => {

@@ -31,13 +31,6 @@ const providerCards = [
     loginButtonClassName: 'bg-gray-800 hover:bg-gray-900 dark:bg-gray-700 dark:hover:bg-gray-600',
   },
   {
-    provider: 'gemini' as const,
-    title: 'Gemini',
-    connectedClassName: 'bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800',
-    iconContainerClassName: 'bg-teal-100 dark:bg-teal-900/30',
-    loginButtonClassName: 'bg-teal-600 hover:bg-teal-700',
-  },
-  {
     provider: 'opencode' as const,
     title: 'OpenCode',
     connectedClassName: 'bg-zinc-100 dark:bg-zinc-800/50 border-zinc-300 dark:border-zinc-600',
@@ -51,15 +44,15 @@ export default function AgentConnectionsStep({
   onOpenProviderLogin,
 }: AgentConnectionsStepProps) {
   return (
-    <div className="space-y-6">
-      <div className="mb-6 text-center">
-        <h2 className="mb-2 text-2xl font-bold text-foreground">Connect Your AI Agents</h2>
-        <p className="text-muted-foreground">
+    <div className="space-y-4">
+      <div className="text-center">
+        <h2 className="font-serif text-xl font-bold tracking-tight text-foreground">Connect Your AI Agents</h2>
+        <p className="mx-auto mt-1 max-w-sm text-sm leading-relaxed text-muted-foreground">
           Login to one or more AI coding assistants. All are optional.
         </p>
       </div>
 
-      <div className="space-y-3">
+      <div className="-mr-1 max-h-[38vh] space-y-2 overflow-y-auto pr-1">
         {providerCards.map((providerCard) => (
           <AgentConnectionCard
             key={providerCard.provider}
@@ -74,9 +67,7 @@ export default function AgentConnectionsStep({
         ))}
       </div>
 
-      <div className="pt-2 text-center text-sm text-muted-foreground">
-        <p>You can configure these later in Settings.</p>
-      </div>
+      <p className="text-center text-xs text-muted-foreground">You can configure these later in Settings.</p>
     </div>
   );
 }

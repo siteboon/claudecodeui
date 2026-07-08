@@ -9,7 +9,6 @@ export type AgentCategory = 'account' | 'permissions' | 'mcp' | 'skills';
 export type ProjectSortOrder = 'name' | 'date';
 export type SaveStatus = 'success' | 'error' | null;
 export type CodexPermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions';
-export type GeminiPermissionMode = 'default' | 'auto_edit' | 'yolo';
 
 export type SettingsProject = {
   name: string;
@@ -30,6 +29,7 @@ export type NotificationPreferencesState = {
   channels: {
     inApp: boolean;
     webPush: boolean;
+    desktop: boolean;
     sound: boolean;
   };
   events: {
@@ -46,7 +46,6 @@ export type CursorPermissionsState = {
 };
 
 export type CodeEditorSettingsState = {
-  theme: 'dark' | 'light';
   wordWrap: boolean;
   showMinimap: boolean;
   lineNumbers: boolean;

@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import type { FormEvent } from 'react';
+import { Loader2, Lock, ShieldCheck, User } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import AuthErrorAlert from './AuthErrorAlert';
 import AuthInputField from './AuthInputField';
@@ -85,7 +86,6 @@ export default function SetupForm() {
       title="Welcome to CloudCLI"
       description="Set up your account to get started"
       footerText="This is a single-user system. Only one account can be created."
-      logo={<img src="/logo.svg" alt="CloudCLI" className="h-16 w-16" />}
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <AuthInputField
@@ -94,9 +94,10 @@ export default function SetupForm() {
           label="Username"
           value={formState.username}
           onChange={(value) => updateField('username', value)}
-          placeholder="Enter your username"
+          placeholder="Choose a username"
           isDisabled={isSubmitting}
           autoComplete="username"
+          icon={User}
         />
 
         <AuthInputField
@@ -105,10 +106,11 @@ export default function SetupForm() {
           label="Password"
           value={formState.password}
           onChange={(value) => updateField('password', value)}
-          placeholder="Enter your password"
+          placeholder="Create a password"
           isDisabled={isSubmitting}
           type="password"
           autoComplete="new-password"
+          icon={Lock}
         />
 
         <AuthInputField
@@ -117,20 +119,33 @@ export default function SetupForm() {
           label="Confirm Password"
           value={formState.confirmPassword}
           onChange={(value) => updateField('confirmPassword', value)}
-          placeholder="Confirm your password"
+          placeholder="Re-enter your password"
           isDisabled={isSubmitting}
           type="password"
           autoComplete="new-password"
+          icon={ShieldCheck}
         />
+
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <ShieldCheck className="h-3.5 w-3.5" />
+          At least 3 characters for username, 6 for password.
+        </p>
 
         <AuthErrorAlert errorMessage={errorMessage} />
 
         <button
           type="submit"
           disabled={isSubmitting}
-          className="w-full rounded-md bg-blue-600 px-4 py-2 font-medium text-white transition-colors duration-200 hover:bg-blue-700 disabled:bg-blue-400"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 font-medium text-primary-foreground shadow-lg shadow-primary/25 transition-all duration-200 hover:brightness-110 hover:shadow-primary/30 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2 focus:ring-offset-card active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isSubmitting ? 'Setting up...' : 'Create Account'}
+          {isSubmitting ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Setting up...
+            </>
+          ) : (
+            'Create Account'
+          )}
         </button>
       </form>
     </AuthScreenLayout>

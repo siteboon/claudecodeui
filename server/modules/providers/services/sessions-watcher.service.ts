@@ -25,16 +25,6 @@ const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> =
     provider: 'codex',
     rootPath: path.join(os.homedir(), '.codex', 'sessions'),
   },
-  // {
-  //   provider: 'gemini',
-  //   rootPath: path.join(os.homedir(), '.gemini', 'sessions'),
-  // },
-  // Keep `sessions/` watcher disabled: Gemini also mirrors artifacts there,
-  // which causes duplicate synchronization events.
-  {
-    provider: 'gemini',
-    rootPath: path.join(os.homedir(), '.gemini', 'tmp'),
-  },
   {
     provider: 'opencode',
     rootPath: path.join(os.homedir(), '.local', 'share', 'opencode'),
@@ -79,10 +69,6 @@ let watcherRescheduleAfterRefresh = false;
 function isWatcherTargetFile(provider: LLMProvider, filePath: string): boolean {
   if (provider === 'opencode') {
     return path.basename(filePath) === 'opencode.db';
-  }
-
-  if (provider === 'gemini') {
-    return filePath.endsWith('.json') || filePath.endsWith('.jsonl');
   }
 
   return filePath.endsWith('.jsonl');

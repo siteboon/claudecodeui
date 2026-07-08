@@ -13,9 +13,9 @@ import {
   pushSubscriptionsDb,
   sessionsDb,
   userDb,
-} from '../modules/database/index.js';
+} from '../../modules/database/index.js';
 
-import { notifyRunStopped } from './notification-orchestrator.js';
+import { notifyRunStopped } from '../notification-orchestrator.js';
 
 async function withIsolatedDatabase(runTest) {
   const previousDatabasePath = process.env.DATABASE_PATH;

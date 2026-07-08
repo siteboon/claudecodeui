@@ -285,7 +285,6 @@ const parseProvider = (value: unknown): LLMProvider => {
     normalized === 'claude'
     || normalized === 'codex'
     || normalized === 'cursor'
-    || normalized === 'gemini'
     || normalized === 'opencode'
   ) {
     return normalized;
@@ -427,6 +426,17 @@ router.post(
     const input = parseProviderSkillCreatePayload(req.body);
     const skills = await providerSkillsService.addProviderSkills(provider, input);
     res.json(createApiSuccessResponse({ provider, skills }));
+  }),
+);
+
+router.delete(
+  '/:provider/skills/:directoryName',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const result = await providerSkillsService.removeProviderSkill(provider, {
+      directoryName: readPathParam(req.params.directoryName, 'directoryName'),
+    });
+    res.json(createApiSuccessResponse(result));
   }),
 );
 

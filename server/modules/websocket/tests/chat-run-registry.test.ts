@@ -129,6 +129,44 @@ test('complete marks the run finished and duplicate completes are dropped', asyn
   });
 });
 
+test('a finished run\'s safety net cannot complete the session\'s next run', async () => {
+  await withIsolatedDatabase(() => {
+    sessionsDb.createAppSession('app-run-9', 'codex', '/workspace/demo');
+    const connection = new FakeConnection();
+
+    const firstRun = chatRunRegistry.startRun({
+      appSessionId: 'app-run-9',
+      provider: 'codex',
+      providerSessionId: null,
+      connection,
+      userId: null,
+    });
+    assert.ok(firstRun);
+    firstRun.writer.send({ kind: 'complete', provider: 'codex', sessionId: 'native-9', exitCode: 0 });
+
+    // A queued message starts the next run before the first run's runtime
+    // promise settles (the chat handler's `finally` hasn't executed yet).
+    const secondRun = chatRunRegistry.startRun({
+      appSessionId: 'app-run-9',
+      provider: 'codex',
+      providerSessionId: null,
+      connection,
+      userId: null,
+    });
+    assert.ok(secondRun);
+
+    // First run's safety net fires late: it must not touch the new run.
+    chatRunRegistry.completeRunIfCurrent(firstRun, { exitCode: 1 });
+    assert.equal(chatRunRegistry.isProcessing('app-run-9'), true);
+    assert.equal(connection.frames.filter((frame) => frame.kind === 'complete').length, 1);
+
+    // The second run's own safety net still works while it is current.
+    chatRunRegistry.completeRunIfCurrent(secondRun, { exitCode: 1 });
+    assert.equal(chatRunRegistry.isProcessing('app-run-9'), false);
+    assert.equal(connection.frames.filter((frame) => frame.kind === 'complete').length, 2);
+  });
+});
+
 test('listRunningRuns returns only currently running app sessions', async () => {
   await withIsolatedDatabase(() => {
     sessionsDb.createAppSession('app-run-7', 'claude', '/workspace/demo');
@@ -186,22 +224,22 @@ test('replayEvents returns only events after the requested seq', async () => {
 
 test('attachConnection reroutes the live stream to a new socket', async () => {
   await withIsolatedDatabase(() => {
-    sessionsDb.createAppSession('app-run-5', 'gemini', '/workspace/demo');
+    sessionsDb.createAppSession('app-run-5', 'opencode', '/workspace/demo');
     const firstConnection = new FakeConnection();
     const run = chatRunRegistry.startRun({
       appSessionId: 'app-run-5',
-      provider: 'gemini',
+      provider: 'opencode',
       providerSessionId: null,
       connection: firstConnection,
       userId: null,
     });
     assert.ok(run);
 
-    run.writer.send({ kind: 'stream_delta', provider: 'gemini', sessionId: 'g', content: 'before' });
+    run.writer.send({ kind: 'stream_delta', provider: 'opencode', sessionId: 'o', content: 'before' });
 
     const secondConnection = new FakeConnection();
     assert.equal(chatRunRegistry.attachConnection('app-run-5', secondConnection), true);
-    run.writer.send({ kind: 'stream_delta', provider: 'gemini', sessionId: 'g', content: 'after' });
+    run.writer.send({ kind: 'stream_delta', provider: 'opencode', sessionId: 'o', content: 'after' });
 
     assert.deepEqual(firstConnection.frames.map((frame) => frame.content), ['before']);
     assert.deepEqual(secondConnection.frames.map((frame) => frame.content), ['after']);

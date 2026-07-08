@@ -23,7 +23,8 @@
     "files": "Файлы",
     "git": "Система контроля версий",
     "tasks": "Задачи",
-    "browser": "Browser"
+    "browser": "Browser",
+    "computer": "Компьютер"
   },
   "status": {
     "loading": "Загрузка...",

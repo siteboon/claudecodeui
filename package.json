@@ -1,6 +1,6 @@
 {
   "name": "@cloudcli-ai/cloudcli",
-  "version": "1.34.0",
+  "version": "1.36.1",
   "productName": "CloudCLI",
   "description": "A web-based UI for Claude Code CLI",
   "type": "module",
@@ -34,8 +34,12 @@
     "client": "vite",
     "desktop": "electron electron/main.js",
     "desktop:dev": "cross-env ELECTRON_DEV_URL=http://127.0.0.1:5173 electron electron/main.js",
-    "desktop:pack": "npm run build && electron-builder --dir",
-    "desktop:dist:mac": "npm run build && electron-builder --mac dmg zip",
+    "desktop:stage": "node scripts/release/prepare-desktop-app.js",
+    "desktop:pack": "npm run build && npm run desktop:stage && electron-builder --projectDir .desktop-build/desktop-app --dir",
+    "desktop:dist:mac": "npm run build && npm run desktop:stage && electron-builder --projectDir .desktop-build/desktop-app --mac dmg",
+    "desktop:dist:win": "npm run build && npm run desktop:stage && electron-builder --projectDir .desktop-build/desktop-app --win nsis",
+    "server:bundle": "npm run build && node scripts/release/build-server-bundle.js",
+    "desktop:icon:mac": "node electron/scripts/generate-macos-icon.js",
     "build": "npm run build:client && npm run build:server",
     "build:client": "vite build",
     "prebuild:server": "node -e \"require('node:fs').rmSync('dist-server', { recursive: true, force: true })\"",
@@ -54,9 +58,10 @@
   "build": {
     "appId": "ai.cloudcli.desktop",
     "productName": "CloudCLI",
-    "artifactName": "CloudCLI-${version}-${arch}.${ext}",
+    "asar": false,
+    "artifactName": "cloudcli-desktop-${version}-${os}-${arch}.${ext}",
     "directories": {
-      "output": "release"
+      "output": "release/desktop"
     },
     "extraMetadata": {
       "main": "electron/main.js"
@@ -68,7 +73,8 @@
       "dist-server/",
       "shared/",
       "server/",
-      "package.json"
+      "package.json",
+      "!**/node_modules/@anthropic-ai/claude-agent-sdk-{darwin,linux,win32}-*/**"
     ],
     "protocols": [
       {
@@ -80,9 +86,10 @@
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
+      "icon": "electron/assets/logo-macos.icns",
+      "notarize": true,
       "target": [
-        "dmg",
-        "zip"
+        "dmg"
       ],
       "extendInfo": {
         "CFBundleName": "CloudCLI",
@@ -96,6 +103,16 @@
           }
         ]
       }
+    },
+    "win": {
+      "icon": "electron/assets/logo-windows.ico",
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "installerIcon": "electron/assets/logo-windows.ico",
+      "uninstallerIcon": "electron/assets/logo-windows.ico"
     }
   },
   "keywords": [
@@ -104,8 +121,6 @@
     "claude-code-ui",
     "cloudcli",
     "codex",
-    "gemini",
-    "gemini-cli",
     "cursor",
     "cursor-cli",
     "anthropic",
@@ -130,7 +145,7 @@
     "@codemirror/theme-one-dark": "^6.1.2",
     "@iarna/toml": "^2.2.5",
     "@octokit/rest": "^22.0.0",
-    "@openai/codex-sdk": "^0.125.0",
+    "@openai/codex-sdk": "^0.141.0",
     "@replit/codemirror-minimap": "^0.5.2",
     "@tailwindcss/typography": "^0.5.16",
     "@uiw/react-codemirror": "^4.23.13",
@@ -186,6 +201,8 @@
     "@types/better-sqlite3": "^7.6.13",
     "@types/cross-spawn": "^6.0.6",
     "@types/express": "^5.0.6",
+    "@types/mime-types": "^3.0.1",
+    "@types/multer": "^2.2.0",
     "@types/node": "^22.19.7",
     "@types/react": "^18.2.43",
     "@types/react-dom": "^18.2.17",
@@ -223,5 +240,9 @@
   "lint-staged": {
     "src/**/*.{ts,tsx,js,jsx}": "eslint",
     "server/**/*.{js,ts}": "eslint"
+  },
+  "optionalDependencies": {
+    "@nut-tree-fork/nut-js": "^4.2.6",
+    "screenshot-desktop": "^1.15.4"
   }
 }

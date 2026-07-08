@@ -48,7 +48,8 @@
     "save": "儲存",
     "cancel": "取消",
     "clearSearch": "清除搜尋",
-    "openCommandPalette": "開啟指令面板"
+    "openCommandPalette": "開啟指令面板",
+    "attentionRequiredIndicator": "工作階段需要處理"
   },
   "navigation": {
     "chat": "聊天",

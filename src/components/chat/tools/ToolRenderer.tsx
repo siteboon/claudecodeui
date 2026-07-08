@@ -4,7 +4,7 @@ import type { Project } from '../../../types/app';
 import type { SubagentChildTool } from '../types/types';
 
 import { getToolConfig } from './configs/toolConfigs';
-import { OneLineDisplay, CollapsibleDisplay, ToolDiffViewer, MarkdownContent, FileListContent, TodoListContent, TaskListContent, TextContent, QuestionAnswerContent, SubagentContainer } from './components';
+import { OneLineDisplay, BashCommandDisplay, CollapsibleDisplay, ToolDiffViewer, MarkdownContent, FileListContent, TodoListContent, TaskListContent, TextContent, QuestionAnswerContent, SubagentContainer } from './components';
 import { PlanDisplay } from './components/PlanDisplay';
 import { ToolStatusBadge } from './components/ToolStatusBadge';
 import type { ToolStatus } from './components/ToolStatusBadge';
@@ -24,7 +24,6 @@ interface ToolRendererProps {
   onFileOpen?: (filePath: string, diffInfo?: any) => void;
   createDiff?: (oldStr: string, newStr: string) => DiffLine[];
   selectedProject?: Project | null;
-  autoExpandTools?: boolean;
   showRawParameters?: boolean;
   rawToolInput?: string;
   isSubagentContainer?: boolean;
@@ -80,7 +79,6 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
   onFileOpen,
   createDiff,
   selectedProject,
-  autoExpandTools = false,
   showRawParameters = false,
   rawToolInput,
   isSubagentContainer,
@@ -125,6 +123,39 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
 
   if (!displayConfig) return null;
 
+  // Bash renders as a Codex-style command row: the command on a single line with
+  // a chevron that expands to show the output inline. The combined view lives on
+  // the input render; the separate result section is suppressed in MessageComponent.
+  if (toolName === 'Bash' && mode === 'input') {
+    const command = typeof parsedData === 'object' && parsedData !== null && 'command' in parsedData
+      ? String(parsedData.command || '')
+      : typeof toolInput === 'string'
+        ? toolInput
+        : typeof rawToolInput === 'string'
+          ? rawToolInput
+          : '';
+    const description = typeof parsedData === 'object' && parsedData !== null && 'description' in parsedData
+      ? String(parsedData.description || '')
+      : undefined;
+    const output = typeof toolResult?.content === 'string'
+      ? toolResult.content
+      : toolResult?.content != null
+        ? String(toolResult.content)
+        : '';
+    return (
+      <BashCommandDisplay
+        command={command}
+        description={description}
+        output={output}
+        isError={Boolean(toolResult?.isError)}
+        status={toolStatus !== 'completed' ? toolStatus : undefined}
+        // Commands stay collapsed by default; only failures auto-expand so they
+        // remain visible.
+        defaultOpen={false}
+      />
+    );
+  }
+
   if (displayConfig.type === 'one-line') {
     const value = displayConfig.getValue?.(parsedData) || '';
     const secondary = displayConfig.getSecondary?.(parsedData);
@@ -166,7 +197,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
       <PlanDisplay
         title={title}
         content={contentProps.content || ''}
-        defaultOpen={displayConfig.defaultOpen ?? autoExpandTools}
+        defaultOpen={displayConfig.defaultOpen ?? false}
         isStreaming={isStreaming}
         showRawParameters={mode === 'input' && showRawParameters}
         rawContent={rawToolInput}
@@ -183,7 +214,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
 
     const defaultOpen = displayConfig.defaultOpen !== undefined
       ? displayConfig.defaultOpen
-      : autoExpandTools;
+      : false;
 
     const contentProps = displayConfig.getContentProps?.(parsedData, {
       selectedProject,
