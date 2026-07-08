@@ -3,6 +3,12 @@
 All notable changes to CloudCLI UI will be documented in this file.
 
 
+## [1.36.1](https://github.com/siteboon/claudecodeui/compare/v1.36.0...v1.36.1) (2026-07-08)
+
+### New Features
+
+* **redesign:** skills and MCP action controls in settings ([#942](https://github.com/siteboon/claudecodeui/issues/942)) ([41e0d30](https://github.com/siteboon/claudecodeui/commit/41e0d309e06edda14abc6912ade5c2f9d4a90984))
+
 ## [](https://github.com/siteboon/claudecodeui/compare/v1.35.1...vnull) (2026-07-03)
 
 ### New Features
