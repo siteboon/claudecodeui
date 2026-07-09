@@ -39,6 +39,15 @@ test('isTokenExpired: a token missing the exp claim is treated as expired', () =
   assert.equal(isTokenExpired(token), true);
 });
 
+test('isTokenExpired: a non-finite exp claim (e.g. 1e309 parses to Infinity) is treated as expired', () => {
+  // JSON.stringify(Infinity) collapses to "null", which wouldn't reproduce this
+  // case — the payload segment has to contain the raw "1e309" numeric literal,
+  // matching how a malformed/adversarial token would actually be shaped.
+  const encode = (value: string) => Buffer.from(value).toString('base64url');
+  const token = `${encode('{"alg":"HS256"}')}.${encode('{"exp":1e309}')}.signature`;
+  assert.equal(isTokenExpired(token), true);
+});
+
 test('isTokenExpired: a malformed token (unreadable payload) is treated as expired', () => {
   assert.equal(isTokenExpired('not-a-jwt'), true);
   assert.equal(isTokenExpired('only.two-segments'), true);

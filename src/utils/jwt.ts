@@ -21,7 +21,11 @@ export const isTokenExpired = (token: string | null): boolean => {
     const normalized = payloadSegment.replace(/-/g, '+').replace(/_/g, '/');
     const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
     const payload = JSON.parse(atob(padded)) as { exp?: number };
-    return typeof payload.exp !== 'number' || Date.now() >= payload.exp * 1000 + TOKEN_EXPIRY_SKEW_MS;
+    const { exp } = payload;
+    // Number.isFinite on top of typeof — `typeof Infinity === 'number'` is true
+    // in JS, so a malformed exp like 1e309 (parses to Infinity) would otherwise
+    // pass this check and never be treated as expired.
+    return typeof exp !== 'number' || !Number.isFinite(exp) || Date.now() >= exp * 1000 + TOKEN_EXPIRY_SKEW_MS;
   } catch {
     // Unreadable token shape — treat as expired rather than retrying forever.
     return true;
