@@ -11,7 +11,7 @@ import type {
   RefObject,
   TouchEvent,
 } from 'react';
-import { ImageIcon, MessageSquareIcon, XIcon, Loader2, ChevronDown, Check, ArrowUpIcon } from 'lucide-react';
+import { ImageIcon, MessageSquareIcon, XIcon, Loader2, ChevronDown, Check, ArrowUpIcon, Paperclip } from 'lucide-react';
 
 import { useVoiceInput } from '../../hooks/useVoiceInput';
 import { useVoiceAvailable } from '../../hooks/useVoiceAvailable';
@@ -96,6 +96,9 @@ interface ChatComposerProps {
   getRootProps: (...args: unknown[]) => Record<string, unknown>;
   getInputProps: (...args: unknown[]) => Record<string, unknown>;
   openImagePicker: () => void;
+  onAttachFiles: (files: File[]) => void;
+  isAttachingFiles: boolean;
+  fileAttachError: string | null;
   inputHighlightRef: RefObject<HTMLDivElement>;
   renderInputWithMentions: (text: string) => ReactNode;
   textareaRef: RefObject<HTMLTextAreaElement>;
@@ -154,6 +157,9 @@ export default function ChatComposer({
   getRootProps,
   getInputProps,
   openImagePicker,
+  onAttachFiles,
+  isAttachingFiles,
+  fileAttachError,
   inputHighlightRef,
   renderInputWithMentions,
   textareaRef,
@@ -172,6 +178,7 @@ export default function ChatComposer({
   sendByCtrlEnter,
 }: ChatComposerProps) {
   const { t } = useTranslation('chat');
+  const attachFileInputRef = useRef<HTMLInputElement>(null);
   const commandMenuPosition = useMemo(() => {
     if (!isCommandMenuOpen) {
       return { top: 0, left: 16, bottom: 90 };
@@ -425,6 +432,10 @@ export default function ChatComposer({
             />
         </PromptInputBody>
 
+          {fileAttachError && (
+            <p className="px-4 pb-1 text-xs text-destructive">{fileAttachError}</p>
+          )}
+
         <PromptInputFooter>
           <PromptInputTools>
             <PromptInputButton
@@ -432,6 +443,27 @@ export default function ChatComposer({
               onClick={openImagePicker}
             >
               <ImageIcon />
+            </PromptInputButton>
+
+            <input
+              ref={attachFileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(event) => {
+                const files = Array.from(event.target.files ?? []);
+                event.target.value = "";
+                if (files.length > 0) {
+                  onAttachFiles(files);
+                }
+              }}
+            />
+            <PromptInputButton
+              tooltip={{ content: t("input.attachFiles") }}
+              onClick={() => attachFileInputRef.current?.click()}
+              disabled={isAttachingFiles}
+            >
+              {isAttachingFiles ? <Loader2 className="animate-spin" /> : <Paperclip />}
             </PromptInputButton>
 
             {onVoiceTranscript && voiceAvailable && (
