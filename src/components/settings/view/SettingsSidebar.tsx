@@ -1,4 +1,4 @@
-import { Bell, Bot, GitBranch, Info, Key, ListChecks, Mic, MonitorPlay, Palette, Puzzle } from 'lucide-react';
+import { Bell, Bot, CircleUserRound, GitBranch, Info, Key, ListChecks, Mic, MonitorPlay, Palette, Puzzle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '../../../lib/utils';
@@ -12,11 +12,13 @@ type SettingsSidebarProps = {
 
 type NavItem = {
   id: SettingsMainTab;
-  labelKey: string;
+  labelKey?: string;
+  label?: string;
   icon: typeof Bot;
 };
 
 const NAV_ITEMS: NavItem[] = [
+  { id: 'account', label: 'Account', icon: CircleUserRound },
   { id: 'agents', labelKey: 'mainTabs.agents', icon: Bot },
   { id: 'appearance', labelKey: 'mainTabs.appearance', icon: Palette },
   { id: 'git', labelKey: 'mainTabs.git', icon: GitBranch },
@@ -53,7 +55,7 @@ export default function SettingsSidebar({ activeTab, onChange }: SettingsSidebar
                 )}
               >
                 <Icon className="h-4 w-4 flex-shrink-0" />
-                {t(item.labelKey)}
+                {item.labelKey ? t(item.labelKey) : item.label}
               </button>
             );
           })}
@@ -74,7 +76,7 @@ export default function SettingsSidebar({ activeTab, onChange }: SettingsSidebar
                 className="flex-shrink-0"
               >
                 <Icon className="h-3.5 w-3.5" />
-                {t(item.labelKey)}
+                {item.labelKey ? t(item.labelKey) : item.label}
               </Pill>
             );
           })}

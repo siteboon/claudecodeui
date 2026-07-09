@@ -1,11 +1,15 @@
+import crypto from 'crypto';
 import express from 'express';
 import bcrypt from 'bcrypt';
-import { userDb } from '../modules/database/index.js';
+import { userDb, appConfigDb } from '../modules/database/index.js';
 import { getConnection } from '../modules/database/connection.js';
+import { IS_PLATFORM } from '../constants/config.js';
 import { generateToken, authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 const db = getConnection();
+const AUTH_TOKEN_GENERATION_KEY = 'auth_token_generation';
+const PASSWORD_MIN_LENGTH = 6;
 
 // Check auth status and setup requirements
 router.get('/status', async (req, res) => {
@@ -31,7 +35,7 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Username and password are required' });
     }
     
-    if (username.length < 3 || password.length < 6) {
+    if (username.length < 3 || password.length < PASSWORD_MIN_LENGTH) {
       return res.status(400).json({ error: 'Username must be at least 3 characters, password at least 6 characters' });
     }
     
@@ -125,6 +129,53 @@ router.get('/user', authenticateToken, (req, res) => {
   res.json({
     user: req.user
   });
+});
+
+// Change the local account password and invalidate older session tokens.
+router.post('/change-password', authenticateToken, async (req, res) => {
+  if (IS_PLATFORM) {
+    return res.status(403).json({ error: 'Password changes are not available in platform mode' });
+  }
+
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current password and new password are required' });
+    }
+
+    if (newPassword.length < PASSWORD_MIN_LENGTH) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    }
+
+    const user = userDb.getUserAuthById(req.user.id);
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid token. User not found.' });
+    }
+
+    const isValidPassword = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!isValidPassword) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    const nextTokenGeneration = crypto.randomUUID();
+
+    db.prepare('BEGIN').run();
+    try {
+      userDb.updatePasswordHash(user.id, passwordHash);
+      appConfigDb.set(AUTH_TOKEN_GENERATION_KEY, nextTokenGeneration);
+      db.prepare('COMMIT').run();
+    } catch (error) {
+      db.prepare('ROLLBACK').run();
+      throw error;
+    }
+
+    res.json({ success: true, message: 'Password updated. Please sign in again.' });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // Logout (client-side token removal, but this endpoint can be used for logging)

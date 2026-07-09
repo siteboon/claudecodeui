@@ -3,6 +3,7 @@ import { IS_PLATFORM } from '../../../constants/config';
 import { api } from '../../../utils/api';
 import { AUTH_ERROR_MESSAGES, AUTH_TOKEN_STORAGE_KEY } from '../constants';
 import type {
+  ApiErrorPayload,
   AuthContextValue,
   AuthProviderProps,
   AuthSessionPayload,
@@ -191,6 +192,28 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [clearSession, token]);
 
+  const changePassword = useCallback<AuthContextValue['changePassword']>(
+    async (currentPassword, newPassword) => {
+      try {
+        setError(null);
+        const response = await api.auth.changePassword(currentPassword, newPassword);
+        const payload = await parseJsonSafely<ApiErrorPayload>(response);
+
+        if (!response.ok) {
+          const message = resolveApiErrorMessage(payload, 'Password change failed');
+          return { success: false, error: message };
+        }
+
+        clearSession();
+        return { success: true };
+      } catch (caughtError) {
+        console.error('Change password error:', caughtError);
+        return { success: false, error: AUTH_ERROR_MESSAGES.networkError };
+      }
+    },
+    [clearSession],
+  );
+
   const contextValue = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -202,12 +225,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
       login,
       register,
       logout,
+      changePassword,
       refreshOnboardingStatus,
     }),
     [
       error,
       hasCompletedOnboarding,
       isLoading,
+      changePassword,
       login,
       logout,
       needsSetup,
