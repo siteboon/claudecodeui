@@ -71,6 +71,12 @@ const writeCredentialsFile = async (homeDir: string, body: unknown) => {
   await writeFile(path.join(claudeDir, '.credentials.json'), JSON.stringify(body));
 };
 
+const writeSettingsFile = async (homeDir: string, env: Record<string, string>) => {
+  const claudeDir = path.join(homeDir, '.claude');
+  await mkdir(claudeDir, { recursive: true });
+  await writeFile(path.join(claudeDir, 'settings.json'), JSON.stringify({ env }));
+};
+
 test('checkCredentials: CLAUDE_CODE_OAUTH_TOKEN set is authenticated via environment, even with a stale credentials file', async () => {
   await withTempHome(async (homeDir) => {
     await writeCredentialsFile(homeDir, {
@@ -78,6 +84,21 @@ test('checkCredentials: CLAUDE_CODE_OAUTH_TOKEN set is authenticated via environ
     });
 
     await withEnv({ CLAUDE_CODE_OAUTH_TOKEN: 'test-oauth-token' }, async () => {
+      const status = await checkCredentials(new ClaudeProviderAuth());
+      assert.equal(status.authenticated, true);
+      assert.equal(status.method, 'environment');
+    });
+  });
+});
+
+test('checkCredentials: CLAUDE_CODE_OAUTH_TOKEN configured via settings.json env block is authenticated via environment', async () => {
+  await withTempHome(async (homeDir) => {
+    await writeSettingsFile(homeDir, { CLAUDE_CODE_OAUTH_TOKEN: 'test-oauth-token-from-settings' });
+    await writeCredentialsFile(homeDir, {
+      claudeAiOauth: { accessToken: 'stale-token', expiresAt: 1_000_000_000_000 }, // long expired
+    });
+
+    await withEnv({}, async () => {
       const status = await checkCredentials(new ClaudeProviderAuth());
       assert.equal(status.authenticated, true);
       assert.equal(status.method, 'environment');
