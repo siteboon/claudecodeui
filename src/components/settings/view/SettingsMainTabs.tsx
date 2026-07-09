@@ -1,4 +1,4 @@
-import { GitBranch, Info, Key, Puzzle } from 'lucide-react';
+import { CircleUserRound, GitBranch, Info, Key, Puzzle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { SettingsMainTab } from '../types/types';
 
@@ -15,6 +15,7 @@ type MainTabConfig = {
 };
 
 const TAB_CONFIG: MainTabConfig[] = [
+  { id: 'account', label: 'Account', icon: CircleUserRound },
   { id: 'agents', labelKey: 'mainTabs.agents' },
   { id: 'appearance', labelKey: 'mainTabs.appearance' },
   { id: 'git', labelKey: 'mainTabs.git', icon: GitBranch },

@@ -1,8 +1,13 @@
+import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 
-import { getConnection, userDb } from '@/modules/database/index.js';
+import { appConfigDb, getConnection, userDb } from '@/modules/database/index.js';
 
-import { authenticateToken, generateToken } from './auth.middleware.js';
+import {
+  AUTH_TOKEN_GENERATION_KEY,
+  authenticateToken,
+  generateToken,
+} from './auth.middleware.js';
 import { createAuthRouter } from './auth.routes.js';
 import { createAuthService } from './auth.service.js';
 
@@ -22,13 +27,20 @@ const authService = createAuthService({
     hasUsers: () => userDb.hasUsers(),
     createUser: (username, passwordHash) => userDb.createUser(username, passwordHash),
     getUserByUsername: (username) => userDb.getUserByUsername(username),
+    getUserAuthById: (userId) => userDb.getUserAuthById(userId),
+    updatePasswordHash: (userId, passwordHash) => userDb.updatePasswordHash(userId, passwordHash),
     updateLastLogin: (userId) => userDb.updateLastLogin(userId),
+  },
+  authConfig: {
+    setTokenGeneration: (value) => appConfigDb.set(AUTH_TOKEN_GENERATION_KEY, value),
   },
   transaction: {
     begin: () => databaseConnection.prepare('BEGIN').run(),
     commit: () => databaseConnection.prepare('COMMIT').run(),
     rollback: () => databaseConnection.prepare('ROLLBACK').run(),
   },
+  isPlatform: process.env.VITE_IS_PLATFORM === 'true',
+  createTokenGeneration: randomUUID,
   hashPassword: (password) => bcrypt.hash(password, 12),
   comparePassword: (password, passwordHash) => bcrypt.compare(password, passwordHash),
   generateToken,
