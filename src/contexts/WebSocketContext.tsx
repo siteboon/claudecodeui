@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../components/auth/context/AuthContext';
 import { IS_PLATFORM } from '../constants/config';
+import { isTokenExpired } from '../utils/jwt';
 
 /**
  * One frame received from the chat websocket. The server guarantees every
@@ -56,36 +57,6 @@ const buildWebSocketUrl = (token: string | null) => {
   if (IS_PLATFORM) return `${protocol}//${window.location.host}/ws`; // Platform mode: Use same domain as the page (goes through proxy)
   if (!token) return null;
   return `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}`; // OSS mode: Use same host:port that served the page
-};
-
-// Tolerance for client/server clock skew. This check only decides whether to
-// keep retrying a WS reconnect — the server's own `jwt.verify` (which has no
-// skew allowance) is the real authority. Without this, a client clock running
-// even slightly ahead of the server could read a still-server-valid token as
-// expired and force an unwanted logout on a plain WS close.
-const TOKEN_EXPIRY_SKEW_MS = 60_000;
-
-/**
- * Reads the `exp` claim out of a JWT without verifying its signature — this
- * only needs to detect "this token cannot possibly still be valid" so the
- * reconnect loop can stop, not to authenticate anything. The server remains
- * the sole source of truth for verification.
- */
-const isTokenExpired = (token: string | null): boolean => {
-  if (!token) return true;
-
-  const payloadSegment = token.split('.')[1];
-  if (!payloadSegment) return true;
-
-  try {
-    const normalized = payloadSegment.replace(/-/g, '+').replace(/_/g, '/');
-    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
-    const payload = JSON.parse(atob(padded)) as { exp?: number };
-    return typeof payload.exp !== 'number' || Date.now() >= payload.exp * 1000 + TOKEN_EXPIRY_SKEW_MS;
-  } catch {
-    // Unreadable token shape — treat as expired rather than retrying forever.
-    return true;
-  }
 };
 
 const useWebSocketProviderState = (): WebSocketContextType => {
