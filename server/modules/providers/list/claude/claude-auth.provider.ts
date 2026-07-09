@@ -101,7 +101,7 @@ export class ClaudeProviderAuth implements IProviderAuth {
     }
 
     if (process.env.CLAUDE_CODE_OAUTH_TOKEN?.trim()) {
-      return { authenticated: true, email: 'CLAUDE_CODE_OAUTH_TOKEN', method: 'environment' };
+      return { authenticated: true, email: 'OAuth Token (long-lived)', method: 'environment' };
     }
 
     try {
