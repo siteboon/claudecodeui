@@ -133,7 +133,7 @@ export default function BrowserUseSettingsTab() {
   const selectedBackend = settings?.browserBackend || 'playwright';
   const effectiveBackend = status?.backend || 'playwright';
   const usesLocalWindowViewer = status?.viewerMode === 'window';
-  const camoufoxLabel = usesLocalWindowViewer ? 'Camoufox (visible window)' : 'Camoufox + noVNC';
+  const camoufoxRuntimeLabel = usesLocalWindowViewer ? 'Camoufox visible window' : 'Camoufox + noVNC';
   const needsBrowserBinaries = Boolean(browserEnabled && status && !status.available);
   const runtimeLabel = (installed?: boolean) => {
     if (isStatusLoading && !status) {
@@ -208,10 +208,10 @@ export default function BrowserUseSettingsTab() {
                     },
                     {
                       value: 'camoufox-vnc' as const,
-                      label: camoufoxLabel,
+                      label: 'Co-browse',
                       description: usesLocalWindowViewer
-                        ? 'Best when a person may need to log in or approve a step. The browser opens as a window on the machine running CloudCLI.'
-                        : 'Best when a person may need to log in, approve a step, or watch the browser session live.',
+                        ? 'Use Camoufox for co-browse sessions where a person may need to log in or approve a step on the machine running CloudCLI.'
+                        : 'Use Camoufox for live co-browse sessions where a person may need to watch, log in, or approve a step.',
                       icon: Eye,
                     },
                   ]).map((option) => {
@@ -293,7 +293,7 @@ export default function BrowserUseSettingsTab() {
           <div className="space-y-4 px-4 py-4">
             <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
               <span className="rounded-md border border-border px-2 py-1">
-                Backend: {effectiveBackend === 'camoufox-vnc' ? camoufoxLabel : 'Playwright'}
+                Backend: {effectiveBackend === 'camoufox-vnc' ? `Co-browse (${camoufoxRuntimeLabel})` : 'Playwright'}
               </span>
               <span className="rounded-md border border-border px-2 py-1">
                 Playwright: {runtimeLabel(status?.playwrightInstalled)}

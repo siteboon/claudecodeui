@@ -161,7 +161,7 @@ function getStatusDot(status: BrowserUseSession['status']): string {
 }
 
 function getEngineLabel(backend?: BrowserUseStatus['backend'] | BrowserUseSession['backend']): string {
-  return backend === 'camoufox-vnc' ? 'Visible browser' : 'Playwright';
+  return backend === 'camoufox-vnc' ? 'Co-browse' : 'Playwright';
 }
 
 const PROMPTS = [
@@ -207,6 +207,7 @@ export default function BrowserUsePanel({ isVisible, projectId, onShowSettings }
   const isBackgroundRefreshing = isRefreshing && !isInitialLoading;
   const needsBrowserBinaries = Boolean(status?.enabled && !status.available);
   const usesLocalWindowViewer = status?.viewerMode === 'window';
+  const panelTitle = status?.browserBackend === 'camoufox-vnc' ? 'Co-browse' : 'Browser';
   const runtimeLabel = isInitialLoading
     ? 'Loading'
     : !status?.enabled
@@ -491,7 +492,7 @@ export default function BrowserUsePanel({ isVisible, projectId, onShowSettings }
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <MonitorPlay className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-semibold text-foreground">Browser</h3>
+            <h3 className="text-sm font-semibold text-foreground">{panelTitle}</h3>
             <Badge variant="outline" className={cn('text-[10px]', getRuntimeTone(status, isInstalling))}>
               {runtimeLabel}
             </Badge>
@@ -499,7 +500,11 @@ export default function BrowserUsePanel({ isVisible, projectId, onShowSettings }
               {getEngineLabel(status?.backend)}
             </Badge>
           </div>
-          <p className="mt-0.5 text-xs text-muted-foreground">Watch and manage browser sessions agents use to test real websites.</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {status?.browserBackend === 'camoufox-vnc'
+              ? 'Watch and manage co-browse sessions agents use to test real websites.'
+              : 'Watch and manage browser sessions agents use to test real websites.'}
+          </p>
           {isBackgroundRefreshing && (
             <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
               <RefreshCw className="h-3 w-3 animate-spin" />

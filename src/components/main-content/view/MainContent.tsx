@@ -59,6 +59,7 @@ function MainContent({
   const { currentProject, setCurrentProject } = useTaskMaster() as TaskMasterContextValue;
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings() as TasksSettingsContextValue;
   const [browserUseEnabled, setBrowserUseEnabled] = useState(false);
+  const [shouldLabelBrowserTabAsCobrowse, setShouldLabelBrowserTabAsCobrowse] = useState(false);
 
   const shouldShowTasksTab = Boolean(tasksEnabled && isTaskMasterInstalled);
   const shouldShowBrowserTab = browserUseEnabled;
@@ -103,9 +104,13 @@ function MainContent({
     try {
       const response = await authenticatedFetch('/api/browser-use/settings');
       const data = await response.json();
-      setBrowserUseEnabled(Boolean(response.ok && data?.success !== false && data?.data?.settings?.enabled));
+      const settings = data?.data?.settings;
+      const enabled = Boolean(response.ok && data?.success !== false && settings?.enabled);
+      setBrowserUseEnabled(enabled);
+      setShouldLabelBrowserTabAsCobrowse(enabled && settings?.browserBackend === 'camoufox-vnc');
     } catch {
       setBrowserUseEnabled(false);
+      setShouldLabelBrowserTabAsCobrowse(false);
     }
   }, []);
 
@@ -149,6 +154,7 @@ function MainContent({
         selectedSession={selectedSession}
         shouldShowTasksTab={shouldShowTasksTab}
         shouldShowBrowserTab={shouldShowBrowserTab}
+        shouldLabelBrowserTabAsCobrowse={shouldLabelBrowserTabAsCobrowse}
         isMobile={isMobile}
         onMenuClick={onMenuClick}
       />
