@@ -11,6 +11,36 @@ import {
 
 const ATTACHMENTS_DIR = "attachments";
 
+const TRANSLIT: Record<string, string> = {
+  а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "yo", ж: "zh", з: "z",
+  и: "i", й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r",
+  с: "s", т: "t", у: "u", ф: "f", х: "h", ц: "ts", ч: "ch", ш: "sh",
+  щ: "sch", ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya",
+};
+
+export const sanitizeFileName = (name: string): string => {
+  const dot = name.lastIndexOf(".");
+  const base = dot > 0 ? name.slice(0, dot) : name;
+  const ext = dot > 0 ? name.slice(dot) : "";
+  const transliterated = base
+    .split("")
+    .map((char) => {
+      const lower = char.toLowerCase();
+      const mapped = TRANSLIT[lower];
+      if (mapped === undefined) {
+        return char;
+      }
+      return char === lower ? mapped : mapped.charAt(0).toUpperCase() + mapped.slice(1);
+    })
+    .join("");
+  const safeBase = transliterated
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-+|-+$/g, "");
+  const safeExt = ext.replace(/[^a-zA-Z0-9.]+/g, "");
+  return (safeBase || "file") + safeExt;
+};
+
 type UseChatFileAttachOptions = {
   selectedProject: Project | null;
   setInput: Dispatch<SetStateAction<string>>;
@@ -58,7 +88,7 @@ export function useChatFileAttach({ selectedProject, setInput }: UseChatFileAtta
       const formData = new FormData();
       formData.append("targetPath", ATTACHMENTS_DIR);
       formData.append("requestedFileCount", String(validFiles.length));
-      validFiles.forEach((file) => formData.append("files", file, file.name));
+      validFiles.forEach((file) => formData.append("files", file, sanitizeFileName(file.name)));
 
       setIsAttachingFiles(true);
       try {
