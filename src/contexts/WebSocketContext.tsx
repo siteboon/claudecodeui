@@ -63,6 +63,13 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   const wsRef = useRef<WebSocket | null>(null);
   const unmountedRef = useRef(false); // Track if component is unmounted
   const hasConnectedRef = useRef(false); // Track if we've ever connected (to detect reconnects)
+  // Identifies which `connect()` call a given socket belongs to. WebSocket's
+  // close handshake is asynchronous, so when a token change (or unmount)
+  // triggers cleanup on the old socket and immediately opens a new one, the
+  // *old* socket's onclose can still fire later — with its own closure's
+  // (now stale) token. Bumped on every new connection attempt and on
+  // cleanup/unmount so a stale onclose can recognize it's no longer current.
+  const connectionGenerationRef = useRef(0);
   /**
    * Listener registry for the subscribe API. A ref (not state) because the
    * set must be readable synchronously inside `onmessage` and never trigger
@@ -94,6 +101,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
 
     return () => {
       unmountedRef.current = true;
+      connectionGenerationRef.current += 1;
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
@@ -111,6 +119,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
 
       if (!wsUrl) return console.warn('No authentication token found for WebSocket connection');
 
+      const connectionGeneration = ++connectionGenerationRef.current;
       const websocket = new WebSocket(wsUrl);
 
       websocket.onopen = () => {
@@ -133,6 +142,16 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       };
 
       websocket.onclose = () => {
+        // This socket may already be superseded by a newer connection (see
+        // connectionGenerationRef above) — e.g. a token refresh triggered a
+        // reconnect while this socket's close handshake was still in
+        // flight. Acting on that here (dropping the session, or scheduling
+        // a redundant reconnect) could kill a perfectly healthy new
+        // connection over this socket's now-stale token.
+        if (connectionGenerationRef.current !== connectionGeneration) {
+          return;
+        }
+
         setIsConnected(false);
         wsRef.current = null;
 
