@@ -100,6 +100,10 @@ export class ClaudeProviderAuth implements IProviderAuth {
       return { authenticated: true, email: 'Configured via settings.json', method: 'api_key' };
     }
 
+    if (process.env.CLAUDE_CODE_OAUTH_TOKEN?.trim()) {
+      return { authenticated: true, email: 'CLAUDE_CODE_OAUTH_TOKEN', method: 'environment' };
+    }
+
     try {
       const credPath = path.join(os.homedir(), '.claude', '.credentials.json');
       const content = await readFile(credPath, 'utf8');
