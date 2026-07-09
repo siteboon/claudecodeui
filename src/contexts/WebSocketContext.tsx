@@ -58,6 +58,13 @@ const buildWebSocketUrl = (token: string | null) => {
   return `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}`; // OSS mode: Use same host:port that served the page
 };
 
+// Tolerance for client/server clock skew. This check only decides whether to
+// keep retrying a WS reconnect — the server's own `jwt.verify` (which has no
+// skew allowance) is the real authority. Without this, a client clock running
+// even slightly ahead of the server could read a still-server-valid token as
+// expired and force an unwanted logout on a plain WS close.
+const TOKEN_EXPIRY_SKEW_MS = 60_000;
+
 /**
  * Reads the `exp` claim out of a JWT without verifying its signature — this
  * only needs to detect "this token cannot possibly still be valid" so the
@@ -74,7 +81,7 @@ const isTokenExpired = (token: string | null): boolean => {
     const normalized = payloadSegment.replace(/-/g, '+').replace(/_/g, '/');
     const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
     const payload = JSON.parse(atob(padded)) as { exp?: number };
-    return typeof payload.exp !== 'number' || Date.now() >= payload.exp * 1000;
+    return typeof payload.exp !== 'number' || Date.now() >= payload.exp * 1000 + TOKEN_EXPIRY_SKEW_MS;
   } catch {
     // Unreadable token shape — treat as expired rather than retrying forever.
     return true;
