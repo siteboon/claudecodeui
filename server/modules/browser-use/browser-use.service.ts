@@ -39,7 +39,6 @@ const SESSION_TTL_MS = Number.parseInt(process.env.CLOUDCLI_BROWSER_USE_SESSION_
 
 const sessions = new Map<string, BrowserUseSession>();
 const handles = new Map<string, RuntimeHandle>();
-const reservedDisplays = new Set<string>();
 const viewerTokens = new Map<string, { token: string; expiresAt: number }>();
 let installPromise: Promise<{ success: boolean; message: string }> | null = null;
 let lastInstallMessage: string | null = null;
@@ -56,6 +55,7 @@ const X11VNC_BIN = process.env.CLOUDCLI_BROWSER_USE_X11VNC_BIN || path.join(RUNT
 const X11VNC_LIB_DIR = process.env.CLOUDCLI_BROWSER_USE_X11VNC_LIB_DIR || path.join(RUNTIME_ROOT, 'rootfs/usr/lib/x86_64-linux-gnu');
 const X11VNC_EXTRA_LIB_DIR = process.env.CLOUDCLI_BROWSER_USE_X11VNC_EXTRA_LIB_DIR || path.join(RUNTIME_ROOT, 'rootfs/lib/x86_64-linux-gnu');
 const LOG_RUNTIME_PROCESS_OUTPUT = process.env.CLOUDCLI_BROWSER_USE_RUNTIME_LOGS === 'true';
+const RUNTIME_PROCESS_SHUTDOWN_TIMEOUT_MS = 1_500;
 
 function getRuntime(): 'cloud' | 'local' {
   return IS_PLATFORM ? 'cloud' : 'local';
@@ -223,6 +223,10 @@ function isRuntimeProcessAlive(child: ReturnType<typeof spawn>): boolean {
   return child.exitCode === null && child.signalCode === null && !child.killed;
 }
 
+function isRuntimeProcessRunning(child: ReturnType<typeof spawn>): boolean {
+  return child.exitCode === null && child.signalCode === null;
+}
+
 function assertRuntimeProcessesAlive(processes: Array<ReturnType<typeof spawn>>, label: string) {
   const exited = processes.find((child) => !isRuntimeProcessAlive(child));
   if (exited) {
@@ -267,20 +271,60 @@ async function waitForRuntimePort(
   throw new Error(`${label} did not start listening on 127.0.0.1:${port}.`);
 }
 
-function killRuntimeProcesses(processes?: Array<ReturnType<typeof spawn>>) {
-  processes?.forEach((child) => child.kill('SIGTERM'));
-}
-
-function reserveDisplay(): string {
-  for (let index = 90; index < 140; index += 1) {
-    const display = `:${index}`;
-    if (!reservedDisplays.has(display)) {
-      reservedDisplays.add(display);
-      return display;
-    }
+function waitForRuntimeProcessExit(child: ReturnType<typeof spawn>, timeoutMs: number): Promise<boolean> {
+  if (!isRuntimeProcessRunning(child)) {
+    return Promise.resolve(true);
   }
 
-  throw new Error('No browser display slots are available.');
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (exited: boolean) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      child.off('exit', onExit);
+      resolve(exited);
+    };
+    const onExit = () => finish(true);
+    const timer = setTimeout(() => finish(false), timeoutMs);
+    timer.unref?.();
+    child.once('exit', onExit);
+  });
+}
+
+async function stopRuntimeProcesses(processes?: Array<ReturnType<typeof spawn>>) {
+  const liveProcesses = processes?.filter(isRuntimeProcessRunning) || [];
+  if (liveProcesses.length === 0) {
+    return;
+  }
+
+  liveProcesses.forEach((child) => {
+    try {
+      child.kill('SIGTERM');
+    } catch {
+      // Process may have exited between filtering and signalling.
+    }
+  });
+
+  const exited = await Promise.all(
+    liveProcesses.map((child) => waitForRuntimeProcessExit(child, RUNTIME_PROCESS_SHUTDOWN_TIMEOUT_MS)),
+  );
+  const stubbornProcesses = liveProcesses.filter((child, index) => !exited[index] && isRuntimeProcessRunning(child));
+  if (stubbornProcesses.length === 0) {
+    return;
+  }
+
+  console.warn(`[Browser runtime] Force stopping ${stubbornProcesses.length} runtime process(es).`);
+  stubbornProcesses.forEach((child) => {
+    try {
+      child.kill('SIGKILL');
+    } catch {
+      // Process may have exited before escalation.
+    }
+  });
+  await Promise.all(stubbornProcesses.map((child) => waitForRuntimeProcessExit(child, 500)));
 }
 
 function spawnRuntimeProcess(command: string, args: string[], options: { env?: NodeJS.ProcessEnv } = {}) {
@@ -303,23 +347,76 @@ function spawnRuntimeProcess(command: string, args: string[], options: { env?: N
   return child;
 }
 
-async function startVisibleRuntime(): Promise<NonNullable<RuntimeHandle['viewer']> & { processes: Array<ReturnType<typeof spawn>> }> {
-  const display = reserveDisplay();
-  const vncPort = await findAvailablePort();
-  const websockifyPort = await findAvailablePort();
-  const processes: Array<ReturnType<typeof spawn>> = [];
-
-  try {
-    processes.push(spawnRuntimeProcess('Xvfb', [
-      display,
+function startXvfbProcess(): Promise<{ child: ReturnType<typeof spawn>; display: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('Xvfb', [
+      '-displayfd',
+      '3',
       '-screen',
       '0',
       '1440x900x24',
       '-ac',
       '-nolisten',
       'tcp',
-    ]));
-    await delay(700);
+    ], {
+      env: process.env,
+      stdio: ['ignore', 'ignore', 'pipe', 'pipe'],
+    });
+
+    let settled = false;
+    let displayOutput = '';
+    const displayPipe = child.stdio[3];
+    const finish = (fn: () => void) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      fn();
+    };
+    const timer = setTimeout(() => {
+      void stopRuntimeProcesses([child]);
+      finish(() => reject(new Error('Xvfb did not report an available display.')));
+    }, 5_000);
+    timer.unref?.();
+
+    child.stderr?.on('data', (chunk) => {
+      if (!LOG_RUNTIME_PROCESS_OUTPUT) {
+        return;
+      }
+      const text = String(chunk).trim();
+      if (text) {
+        console.warn(`[Browser runtime] Xvfb: ${text}`);
+      }
+    });
+    child.on('error', (error) => {
+      console.warn('[Browser runtime] Xvfb failed:', error.message);
+      finish(() => reject(error));
+    });
+    child.on('exit', (code, signal) => {
+      finish(() => reject(new Error(`Xvfb exited before reporting a display (${signal || code}).`)));
+    });
+    displayPipe?.on('data', (chunk) => {
+      displayOutput += String(chunk);
+      const match = displayOutput.match(/\d+/);
+      if (!match) {
+        return;
+      }
+      finish(() => resolve({ child, display: `:${match[0]}` }));
+    });
+  });
+}
+
+async function startVisibleRuntime(): Promise<NonNullable<RuntimeHandle['viewer']> & { processes: Array<ReturnType<typeof spawn>> }> {
+  const processes: Array<ReturnType<typeof spawn>> = [];
+
+  try {
+    const xvfb = await startXvfbProcess();
+    const display = xvfb.display;
+    processes.push(xvfb.child);
+    const vncPort = await findAvailablePort();
+    const websockifyPort = await findAvailablePort();
+
     assertRuntimeProcessesAlive(processes, 'Xvfb');
 
     if (!fs.existsSync(X11VNC_BIN)) {
@@ -361,8 +458,7 @@ async function startVisibleRuntime(): Promise<NonNullable<RuntimeHandle['viewer'
       processes,
     };
   } catch (error) {
-    killRuntimeProcesses(processes);
-    reservedDisplays.delete(display);
+    await stopRuntimeProcesses(processes);
     throw error;
   }
 }
@@ -528,10 +624,7 @@ async function closeHandle(sessionId: string): Promise<void> {
   deleteViewerToken(sessionId);
   await handle?.context?.close?.().catch(() => undefined);
   await handle?.browser?.close().catch(() => undefined);
-  killRuntimeProcesses(handle?.processes);
-  if (handle?.viewer?.display) {
-    reservedDisplays.delete(handle.viewer.display);
-  }
+  await stopRuntimeProcesses(handle?.processes);
 }
 
 async function expireStaleSessions(now = Date.now()): Promise<void> {
@@ -743,7 +836,7 @@ export const browserUseService = {
     let context: any | undefined;
     let page: any;
     let viewer: RuntimeHandle['viewer'];
-    let processes: RuntimeHandle['processes'];
+    let processes: RuntimeHandle['processes'] = [];
     const launchOptions: Record<string, unknown> = {
       headless: !useVisibleBackend,
       args: ['--disable-dev-shm-usage'],
@@ -799,10 +892,7 @@ export const browserUseService = {
     } catch (error) {
       await context?.close?.().catch(() => undefined);
       await browser?.close?.().catch(() => undefined);
-      killRuntimeProcesses(processes);
-      if (viewer?.display) {
-        reservedDisplays.delete(viewer.display);
-      }
+      await stopRuntimeProcesses(processes);
       throw error;
     }
     session.status = 'ready';
