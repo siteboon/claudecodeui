@@ -87,6 +87,8 @@
   "codex": {
     "permissionMode": "권한 모드",
     "switchHint": "⇧ + tab 키로 전환",
+    "effort": "노력",
+    "effortDefault": "기본값",
     "modes": {
       "default": "기본 모드",
       "auto": "Auto Mode",

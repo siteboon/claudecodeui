@@ -87,6 +87,8 @@
   "codex": {
     "permissionMode": "Режим разрешений",
     "switchHint": "⇧ + tab для переключения",
+    "effort": "Усилие",
+    "effortDefault": "По умолчанию",
     "modes": {
       "default": "Режим по умолчанию",
       "auto": "Auto Mode",

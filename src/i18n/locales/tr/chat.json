@@ -87,6 +87,8 @@
   "codex": {
     "permissionMode": "İzin Modu",
     "switchHint": "değiştirmek için ⇧ + tab",
+    "effort": "Efor",
+    "effortDefault": "Varsayılan",
     "modes": {
       "default": "Varsayılan Mod",
       "auto": "Auto Mode",

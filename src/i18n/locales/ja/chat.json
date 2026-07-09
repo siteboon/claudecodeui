@@ -87,6 +87,8 @@
   "codex": {
     "permissionMode": "権限モード",
     "switchHint": "⇧ + tab で切り替え",
+    "effort": "労力",
+    "effortDefault": "デフォルト",
     "modes": {
       "default": "デフォルトモード",
       "auto": "Auto Mode",

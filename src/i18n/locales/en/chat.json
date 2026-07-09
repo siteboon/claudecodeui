@@ -88,6 +88,8 @@
   "codex": {
     "permissionMode": "Permission Mode",
     "switchHint": "⇧ + tab to switch",
+    "effort": "Effort",
+    "effortDefault": "Default",
     "modes": {
       "default": "Default Mode",
       "auto": "Auto Mode",

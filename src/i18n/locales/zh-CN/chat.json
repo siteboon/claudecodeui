@@ -87,6 +87,8 @@
   "codex": {
     "permissionMode": "权限模式",
     "switchHint": "⇧ + tab 切换",
+    "effort": "推理强度",
+    "effortDefault": "默认",
     "modes": {
       "default": "默认模式",
       "auto": "Auto Mode",

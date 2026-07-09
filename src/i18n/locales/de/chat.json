@@ -87,6 +87,8 @@
   "codex": {
     "permissionMode": "Berechtigungsmodus",
     "switchHint": "⇧ + Tab zum Wechseln",
+    "effort": "Aufwand",
+    "effortDefault": "Standard",
     "modes": {
       "default": "Standardmodus",
       "auto": "Auto Mode",

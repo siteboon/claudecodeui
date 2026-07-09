@@ -11,7 +11,7 @@ import type {
   RefObject,
   TouchEvent,
 } from 'react';
-import { Plus, Zap, Hand, Code, ClipboardList, XIcon, Loader2, ChevronDown, Check, ArrowUpIcon } from 'lucide-react';
+import { Plus, Zap, Hand, Code, ClipboardList, ShieldOff, XIcon, Loader2, ChevronDown, Check, ArrowUpIcon } from 'lucide-react';
 
 import { useVoiceInput } from '../../hooks/useVoiceInput';
 import { useVoiceAvailable } from '../../hooks/useVoiceAvailable';
@@ -203,7 +203,7 @@ export default function ChatComposer({
     () => [{ value: 'default' }, ...availableEffortOptions],
     [availableEffortOptions],
   );
-  const selectedEffortLabel = effort === 'default' ? 'Default' : effort;
+  const selectedEffortLabel = effort === 'default' ? t('codex.effortDefault') : effort;
   const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
   const modeButtonRef = useRef<HTMLButtonElement | null>(null);
   const modeMenuRef = useRef<HTMLDivElement | null>(null);
@@ -247,7 +247,7 @@ export default function ChatComposer({
     { mode: 'acceptEdits', icon: Code },
     { mode: 'plan', icon: ClipboardList },
     { mode: 'auto', icon: Zap },
-    { mode: 'bypassPermissions', icon: Zap },
+    { mode: 'bypassPermissions', icon: ShieldOff },
   ];
   const visibleModeItems = (availableModes && availableModes.length)
     ? MODE_ITEMS.filter((m) => availableModes.includes(m.mode))
@@ -449,6 +449,8 @@ export default function ChatComposer({
             <button
               ref={modeButtonRef}
               type="button"
+              aria-haspopup="menu"
+              aria-expanded={isModeMenuOpen}
               onClick={() => setIsModeMenuOpen((open) => !open)}
               className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-2 text-xs font-medium transition-all duration-200 sm:px-2.5 ${
                 permissionMode === 'default'
@@ -487,6 +489,8 @@ export default function ChatComposer({
                       <button
                         key={item.mode}
                         type="button"
+                        role="menuitemradio"
+                        aria-checked={isSelected}
                         onClick={() => { onSelectMode(item.mode); setIsModeMenuOpen(false); }}
                         className={`flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors ${isSelected ? 'bg-accent' : 'hover:bg-accent/60'}`}
                       >
@@ -505,9 +509,9 @@ export default function ChatComposer({
                 {availableEffortOptions.length > 0 && (
                   <div className="flex items-center justify-between gap-3 border-t border-border px-3 py-2.5">
                     <span className="whitespace-nowrap text-[12px] font-medium text-muted-foreground">
-                      Effort <span className="text-foreground">({selectedEffortLabel})</span>
+                      {t('codex.effort')} <span className="text-foreground">({selectedEffortLabel})</span>
                     </span>
-                    <div className="relative flex flex-1 items-center justify-between px-1">
+                    <div className="relative flex flex-1 items-center justify-between px-1" role="radiogroup" aria-label={t('codex.effort')}>
                       <div className="absolute inset-x-1 top-1/2 h-px -translate-y-1/2 bg-border" />
                       {effortOptions.map((option) => {
                         const isSel = option.value === effort;
@@ -515,8 +519,10 @@ export default function ChatComposer({
                           <button
                             key={option.value}
                             type="button"
+                            role="radio"
+                            aria-checked={isSel}
                             onClick={() => onSelectEffort(option.value)}
-                            title={option.value === 'default' ? 'Default' : String(option.value)}
+                            title={option.value === 'default' ? t('codex.effortDefault') : String(option.value)}
                             className="relative z-10 flex h-4 w-4 items-center justify-center"
                           >
                             <span className={`rounded-full transition-all ${isSel ? 'h-3 w-3 bg-primary ring-2 ring-primary/25' : 'h-1.5 w-1.5 bg-muted-foreground/40 hover:bg-muted-foreground'}`} />
