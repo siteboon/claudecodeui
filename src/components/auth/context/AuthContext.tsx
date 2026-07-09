@@ -144,16 +144,37 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // update localStorage. Without this, this context's `token` state — and
   // anything derived from it, like WebSocketContext's reconnect URL — keeps
   // using the token captured at login/mount and never picks up a refresh.
+  //
+  // AUTH_TOKEN_REFRESHED_EVENT only reaches the tab that made the request, so
+  // it alone doesn't help *other* open tabs — each of those would otherwise
+  // keep reconnecting with their own stale in-memory token until their own
+  // proactive refresh happens to run. The `storage` event is the complement:
+  // it fires in every *other* tab (never the one that made the write) when
+  // localStorage changes, so together the two listeners keep every open tab's
+  // token state in sync regardless of which tab actually refreshed it.
   useEffect(() => {
-    const handleTokenRefreshed = (event: Event) => {
-      const refreshedToken = (event as CustomEvent<string>).detail;
+    const syncToken = (refreshedToken: string | null) => {
       if (refreshedToken) {
         setToken(refreshedToken);
       }
     };
 
+    const handleTokenRefreshed = (event: Event) => {
+      syncToken((event as CustomEvent<string>).detail);
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === AUTH_TOKEN_STORAGE_KEY) {
+        syncToken(event.newValue);
+      }
+    };
+
     window.addEventListener(AUTH_TOKEN_REFRESHED_EVENT, handleTokenRefreshed);
-    return () => window.removeEventListener(AUTH_TOKEN_REFRESHED_EVENT, handleTokenRefreshed);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener(AUTH_TOKEN_REFRESHED_EVENT, handleTokenRefreshed);
+      window.removeEventListener('storage', handleStorage);
+    };
   }, []);
 
   // The server only refreshes the token in response to a request made past
@@ -169,9 +190,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     const checkAndRefreshToken = () => {
       lastRefreshCheckRef.current = Date.now();
-      void api.auth.user().catch((caughtError: unknown) => {
-        console.error('[Auth] Background token refresh check failed:', caughtError);
-      });
+      // fetch() only rejects on network failure, never on a non-2xx status —
+      // a 401 (token invalid for a reason other than plain expiry: the
+      // server's JWT_SECRET rotated, or the user record is gone) resolves
+      // normally and would otherwise pass through unnoticed here. Since that
+      // case isn't a mere timing issue, no retry will ever succeed either, so
+      // treat it the same as a client-side-detected expiry.
+      void api.auth
+        .user()
+        .then((response) => {
+          if (response.status === 401) {
+            endExpiredSession();
+          }
+        })
+        .catch((caughtError: unknown) => {
+          console.error('[Auth] Background token refresh check failed:', caughtError);
+        });
     };
 
     const intervalId = setInterval(checkAndRefreshToken, TOKEN_REFRESH_CHECK_INTERVAL_MS);
@@ -192,7 +226,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       clearInterval(intervalId);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [token]);
+  }, [endExpiredSession, token]);
 
   const login = useCallback<AuthContextValue['login']>(
     async (username, password) => {
