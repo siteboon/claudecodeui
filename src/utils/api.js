@@ -11,6 +11,25 @@ export const isValidRefreshedToken = (token) =>
   typeof token === 'string' &&
   /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token);
 
+// Fired on `window` whenever a refreshed token is persisted, so contexts
+// holding their own copy of the token (e.g. AuthContext's React state) can
+// stay in sync with localStorage instead of silently going stale. Without
+// this, background refreshes update localStorage but any consumer reading
+// the token from React state (rather than localStorage on every use) keeps
+// reconnecting with the original, eventually-expired token.
+export const AUTH_TOKEN_REFRESHED_EVENT = 'cloudcli:auth-token-refreshed';
+
+/**
+ * @param {unknown} token
+ */
+export const applyRefreshedToken = (token) => {
+  if (!isValidRefreshedToken(token)) {
+    return;
+  }
+  localStorage.setItem('auth-token', token);
+  window.dispatchEvent(new CustomEvent(AUTH_TOKEN_REFRESHED_EVENT, { detail: token }));
+};
+
 // Utility function for authenticated API calls
 export const authenticatedFetch = (url, options = {}) => {
   const token = localStorage.getItem('auth-token');
@@ -33,10 +52,7 @@ export const authenticatedFetch = (url, options = {}) => {
       ...options.headers,
     },
   }).then((response) => {
-    const refreshedToken = response.headers.get('X-Refreshed-Token');
-    if (isValidRefreshedToken(refreshedToken)) {
-      localStorage.setItem('auth-token', refreshedToken);
-    }
+    applyRefreshedToken(response.headers.get('X-Refreshed-Token'));
     return response;
   });
 };

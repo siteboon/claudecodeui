@@ -58,6 +58,29 @@ const buildWebSocketUrl = (token: string | null) => {
   return `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}`; // OSS mode: Use same host:port that served the page
 };
 
+/**
+ * Reads the `exp` claim out of a JWT without verifying its signature — this
+ * only needs to detect "this token cannot possibly still be valid" so the
+ * reconnect loop can stop, not to authenticate anything. The server remains
+ * the sole source of truth for verification.
+ */
+const isTokenExpired = (token: string | null): boolean => {
+  if (!token) return true;
+
+  const payloadSegment = token.split('.')[1];
+  if (!payloadSegment) return true;
+
+  try {
+    const normalized = payloadSegment.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
+    const payload = JSON.parse(atob(padded)) as { exp?: number };
+    return typeof payload.exp !== 'number' || Date.now() >= payload.exp * 1000;
+  } catch {
+    // Unreadable token shape — treat as expired rather than retrying forever.
+    return true;
+  }
+};
+
 const useWebSocketProviderState = (): WebSocketContextType => {
   const wsRef = useRef<WebSocket | null>(null);
   const unmountedRef = useRef(false); // Track if component is unmounted
@@ -71,7 +94,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   const [latestMessage, setLatestMessage] = useState<ServerEvent | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const { token } = useAuth();
+  const { token, endExpiredSession } = useAuth();
 
   const dispatch = useCallback((event: ServerEvent) => {
     for (const listener of listenersRef.current) {
@@ -135,6 +158,18 @@ const useWebSocketProviderState = (): WebSocketContextType => {
         setIsConnected(false);
         wsRef.current = null;
 
+        // A closed connection with an already-expired token can never
+        // succeed — the server rejects it at the handshake every time. Retrying
+        // that on a 3s loop forever is exactly the reconnect-spam issue #754
+        // describes (thousands of failed attempts/hour against a token that
+        // went stale days earlier). Stop and drop the session instead of
+        // retrying so the user sees a login screen rather than a silently
+        // spinning connection indicator.
+        if (isTokenExpired(token)) {
+          endExpiredSession();
+          return;
+        }
+
         // Attempt to reconnect after 3 seconds
         reconnectTimeoutRef.current = setTimeout(() => {
           if (unmountedRef.current) return; // Prevent reconnection if unmounted
@@ -149,7 +184,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     } catch (error) {
       console.error('Error creating WebSocket connection:', error);
     }
-  }, [token, dispatch]); // everytime token changes, we reconnect
+  }, [token, dispatch, endExpiredSession]); // everytime token changes, we reconnect
 
   const sendMessage = useCallback((message: unknown) => {
     const socket = wsRef.current;

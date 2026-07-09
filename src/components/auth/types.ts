@@ -39,9 +39,19 @@ export type AuthContextValue = {
   needsSetup: boolean;
   hasCompletedOnboarding: boolean;
   error: string | null;
+  /**
+   * True after `endExpiredSession` drops a session because the JWT itself
+   * expired (not a user-initiated logout). LoginForm surfaces this so the
+   * user understands why they were signed out instead of silently landing
+   * back on the login screen.
+   */
+  sessionExpired: boolean;
   login: (username: string, password: string) => Promise<AuthActionResult>;
   register: (username: string, password: string) => Promise<AuthActionResult>;
   logout: () => void;
+  /** Clears the session without pinging the (already-invalid) logout endpoint. */
+  endExpiredSession: () => void;
+  acknowledgeSessionExpired: () => void;
   refreshOnboardingStatus: () => Promise<void>;
 };
 
