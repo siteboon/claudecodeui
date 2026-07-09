@@ -22,6 +22,7 @@ type BrowserUseStatus = {
   available: boolean;
   backend: 'playwright' | 'camoufox-vnc';
   browserBackend: 'playwright' | 'camoufox-vnc';
+  viewerMode?: 'novnc' | 'window';
   playwrightInstalled: boolean;
   chromiumInstalled: boolean;
   camoufoxInstalled: boolean;
@@ -131,6 +132,8 @@ export default function BrowserUseSettingsTab() {
   const persistSessions = settings?.persistSessions === true;
   const selectedBackend = settings?.browserBackend || 'playwright';
   const effectiveBackend = status?.backend || 'playwright';
+  const usesLocalWindowViewer = status?.viewerMode === 'window';
+  const camoufoxLabel = usesLocalWindowViewer ? 'Camoufox (visible window)' : 'Camoufox + noVNC';
   const needsBrowserBinaries = Boolean(browserEnabled && status && !status.available);
   const runtimeLabel = (installed?: boolean) => {
     if (isStatusLoading && !status) {
@@ -205,8 +208,10 @@ export default function BrowserUseSettingsTab() {
                     },
                     {
                       value: 'camoufox-vnc' as const,
-                      label: 'Camoufox + noVNC',
-                      description: 'Best when a person may need to log in, approve a step, or watch the browser session live.',
+                      label: camoufoxLabel,
+                      description: usesLocalWindowViewer
+                        ? 'Best when a person may need to log in or approve a step. The browser opens as a window on the machine running CloudCLI.'
+                        : 'Best when a person may need to log in, approve a step, or watch the browser session live.',
                       icon: Eye,
                     },
                   ]).map((option) => {
@@ -288,7 +293,7 @@ export default function BrowserUseSettingsTab() {
           <div className="space-y-4 px-4 py-4">
             <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
               <span className="rounded-md border border-border px-2 py-1">
-                Backend: {effectiveBackend === 'camoufox-vnc' ? 'Camoufox + noVNC' : 'Playwright'}
+                Backend: {effectiveBackend === 'camoufox-vnc' ? camoufoxLabel : 'Playwright'}
               </span>
               <span className="rounded-md border border-border px-2 py-1">
                 Playwright: {runtimeLabel(status?.playwrightInstalled)}
@@ -299,9 +304,11 @@ export default function BrowserUseSettingsTab() {
               <span className="rounded-md border border-border px-2 py-1">
                 Camoufox: {runtimeLabel(status?.camoufoxInstalled)}
               </span>
-              <span className="rounded-md border border-border px-2 py-1">
-                noVNC: {runtimeLabel(status?.noVncInstalled)}
-              </span>
+              {!usesLocalWindowViewer && (
+                <span className="rounded-md border border-border px-2 py-1">
+                  noVNC: {runtimeLabel(status?.noVncInstalled)}
+                </span>
+              )}
               <span className="rounded-md border border-border px-2 py-1">
                 Status: {isStatusLoading && !status ? 'checking...' : status?.available ? 'ready' : browserEnabled ? 'setup required' : 'disabled'}
               </span>

@@ -49,6 +49,9 @@ const MCP_SERVER_NAME = 'cloudcli-browser';
 const LEGACY_MCP_SERVER_NAMES = ['cloudcli-browser-use'];
 const RUNTIME_READINESS_CACHE_TTL_MS = 30_000;
 const VISIBLE_BROWSER_ENABLED = process.env.CLOUDCLI_BROWSER_USE_VISIBLE !== 'false';
+// The noVNC viewer pipeline (Xvfb + x11vnc + websockify) only exists on Linux.
+// On other platforms visible Camoufox sessions open a normal window on the host desktop.
+const VNC_VIEWER_SUPPORTED = process.platform === 'linux';
 const RUNTIME_ROOT = process.env.CLOUDCLI_BROWSER_USE_RUNTIME_ROOT || '/opt/claudecodeui/.runtime-browser';
 const NOVNC_ROOT = process.env.CLOUDCLI_BROWSER_USE_NOVNC_ROOT || path.join(RUNTIME_ROOT, 'novnc');
 const X11VNC_BIN = process.env.CLOUDCLI_BROWSER_USE_X11VNC_BIN || path.join(RUNTIME_ROOT, 'rootfs/usr/bin/x11vnc');
@@ -61,24 +64,51 @@ function getRuntime(): 'cloud' | 'local' {
   return IS_PLATFORM ? 'cloud' : 'local';
 }
 
+const CAMOUFOX_CLI_CANDIDATES = [
+  path.join(os.homedir(), '.local/bin/camoufox'),
+  // PATH lookup covers pipx on Linux/macOS and the pip Scripts dir on Windows.
+  'camoufox',
+];
+const CAMOUFOX_BINARY_CANDIDATES = process.platform === 'win32'
+  ? ['camoufox.exe', 'camoufox']
+  : process.platform === 'darwin'
+    ? ['Camoufox.app/Contents/MacOS/camoufox', 'camoufox']
+    : ['camoufox'];
+
+function findCamoufoxBinary(installPath: string): string | null {
+  if (!fs.statSync(installPath).isDirectory()) {
+    return fs.existsSync(installPath) ? installPath : null;
+  }
+  for (const candidate of CAMOUFOX_BINARY_CANDIDATES) {
+    const executablePath = path.join(installPath, candidate);
+    if (fs.existsSync(executablePath)) {
+      return executablePath;
+    }
+  }
+  return null;
+}
+
 function getCamoufoxExecutablePath(): string | null {
   const configured = process.env.CLOUDCLI_BROWSER_USE_CAMOUFOX_EXECUTABLE;
   if (configured && fs.existsSync(configured)) {
-    return configured;
+    return findCamoufoxBinary(configured);
   }
 
-  try {
-    const output = execFileSync(path.join(os.homedir(), '.local/bin/camoufox'), ['path'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
-    const executablePath = fs.statSync(output).isDirectory()
-      ? path.join(output, 'camoufox')
-      : output;
-    return fs.existsSync(executablePath) ? executablePath : null;
-  } catch {
-    return null;
+  for (const cli of CAMOUFOX_CLI_CANDIDATES) {
+    try {
+      const output = execFileSync(cli, ['path'], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim();
+      const executablePath = findCamoufoxBinary(output);
+      if (executablePath) {
+        return executablePath;
+      }
+    } catch {
+      // Try the next candidate.
+    }
   }
+  return null;
 }
 
 function getSetupMessage(settings: BrowserUseSettings, readiness: RuntimeReadiness): string {
@@ -101,11 +131,13 @@ function getSetupMessage(settings: BrowserUseSettings, readiness: RuntimeReadine
     if (!getCamoufoxExecutablePath()) {
       return 'Camoufox is selected, but Camoufox is not installed.';
     }
-    if (!fs.existsSync(X11VNC_BIN)) {
-      return 'Camoufox is selected, but x11vnc is missing.';
-    }
-    if (!fs.existsSync(path.join(NOVNC_ROOT, 'vnc.html'))) {
-      return 'Camoufox is selected, but noVNC is missing.';
+    if (VNC_VIEWER_SUPPORTED) {
+      if (!fs.existsSync(X11VNC_BIN)) {
+        return 'Camoufox is selected, but x11vnc is missing.';
+      }
+      if (!fs.existsSync(path.join(NOVNC_ROOT, 'vnc.html'))) {
+        return 'Camoufox is selected, but noVNC is missing.';
+      }
     }
     return readiness.installMessage || 'Camoufox runtime is not ready.';
   }
@@ -115,6 +147,16 @@ function getSetupMessage(settings: BrowserUseSettings, readiness: RuntimeReadine
   }
 
   return readiness.installMessage || 'Browser runtime is not ready.';
+}
+
+function isVncRuntimeInstalled(): boolean {
+  return fs.existsSync(X11VNC_BIN) && fs.existsSync(path.join(NOVNC_ROOT, 'vnc.html'));
+}
+
+function isVisibleCamoufoxReady(): boolean {
+  return VISIBLE_BROWSER_ENABLED
+    && Boolean(getCamoufoxExecutablePath())
+    && (!VNC_VIEWER_SUPPORTED || isVncRuntimeInstalled());
 }
 
 function getPlaywright(): any | null {
@@ -712,11 +754,8 @@ export const browserUseService = {
     const readiness = getRuntimeReadiness();
     const useVisibleBackend = useVisibleCamoufoxBackend(settings);
     const visibleCamoufoxReady = useVisibleBackend
-      && VISIBLE_BROWSER_ENABLED
       && readiness.playwrightInstalled
-      && Boolean(getCamoufoxExecutablePath())
-      && fs.existsSync(X11VNC_BIN)
-      && fs.existsSync(path.join(NOVNC_ROOT, 'vnc.html'));
+      && isVisibleCamoufoxReady();
     const available = settings.enabled
       && readiness.playwrightInstalled
       && (useVisibleBackend ? visibleCamoufoxReady : readiness.chromiumInstalled);
@@ -726,6 +765,7 @@ export const browserUseService = {
       runtime: getRuntime(),
       backend: useVisibleBackend ? 'camoufox-vnc' : 'playwright',
       browserBackend: settings.browserBackend,
+      viewerMode: VNC_VIEWER_SUPPORTED ? 'novnc' : 'window',
       available,
       playwrightInstalled: readiness.playwrightInstalled,
       chromiumInstalled: readiness.chromiumInstalled,
@@ -821,11 +861,7 @@ export const browserUseService = {
 
     const readiness = getRuntimeReadiness();
     const useVisibleBackend = useVisibleCamoufoxBackend(settings);
-    const visibleCamoufoxReady = useVisibleBackend
-      && VISIBLE_BROWSER_ENABLED
-      && Boolean(getCamoufoxExecutablePath())
-      && fs.existsSync(X11VNC_BIN)
-      && fs.existsSync(path.join(NOVNC_ROOT, 'vnc.html'));
+    const visibleCamoufoxReady = useVisibleBackend && isVisibleCamoufoxReady();
     if (!settings.enabled || !readiness.playwrightInstalled || !readiness.playwright || (useVisibleBackend ? !visibleCamoufoxReady : !readiness.chromiumInstalled)) {
       session.message = getSetupMessage(settings, readiness);
       sessions.set(session.id, session);
@@ -854,25 +890,31 @@ export const browserUseService = {
         if (!camoufoxExecutable) {
           throw new Error('Camoufox is not installed.');
         }
-        const runtime = await startVisibleRuntime();
-        viewer = {
-          display: runtime.display,
-          vncPort: runtime.vncPort,
-          websockifyPort: runtime.websockifyPort,
-          noVncRoot: runtime.noVncRoot,
-        };
-        processes = runtime.processes;
         launchOptions.executablePath = camoufoxExecutable;
-        launchOptions.env = {
-          ...process.env,
-          DISPLAY: runtime.display,
-          LD_LIBRARY_PATH: `${X11VNC_LIB_DIR}:${X11VNC_EXTRA_LIB_DIR}:${process.env.LD_LIBRARY_PATH || ''}`,
-        };
         launchOptions.args = [];
         session.backend = 'camoufox-vnc';
-        const viewerToken = createViewerToken(session.id);
-        session.viewerUrl = getViewerUrl(session.id, viewerToken);
-        session.viewerEmbedUrl = session.viewerUrl;
+
+        if (VNC_VIEWER_SUPPORTED) {
+          const runtime = await startVisibleRuntime();
+          viewer = {
+            display: runtime.display,
+            vncPort: runtime.vncPort,
+            websockifyPort: runtime.websockifyPort,
+            noVncRoot: runtime.noVncRoot,
+          };
+          processes = runtime.processes;
+          launchOptions.env = {
+            ...process.env,
+            DISPLAY: runtime.display,
+            LD_LIBRARY_PATH: `${X11VNC_LIB_DIR}:${X11VNC_EXTRA_LIB_DIR}:${process.env.LD_LIBRARY_PATH || ''}`,
+          };
+          const viewerToken = createViewerToken(session.id);
+          session.viewerUrl = getViewerUrl(session.id, viewerToken);
+          session.viewerEmbedUrl = session.viewerUrl;
+        } else {
+          // Without a VNC pipeline the browser opens as a normal window on the host desktop.
+          session.message = 'Browser window is open on the machine running CloudCLI.';
+        }
       }
 
       if (profileName) {
@@ -896,7 +938,7 @@ export const browserUseService = {
       throw error;
     }
     session.status = 'ready';
-    session.message = 'Browser session is ready.';
+    session.message = session.message || 'Browser session is ready.';
     sessions.set(session.id, session);
     handles.set(session.id, { browser, context, page, processes, viewer });
     await captureSession(session, page);

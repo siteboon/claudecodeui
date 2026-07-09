@@ -28,6 +28,7 @@ type BrowserUseStatus = {
   available: boolean;
   backend: 'playwright' | 'camoufox-vnc';
   browserBackend: 'playwright' | 'camoufox-vnc';
+  viewerMode?: 'novnc' | 'window';
   playwrightInstalled: boolean;
   chromiumInstalled: boolean;
   installInProgress: boolean;
@@ -205,6 +206,7 @@ export default function BrowserUsePanel({ isVisible, projectId, onShowSettings }
   const isInitialLoading = isRefreshing && !hasLoadedOnce && sessions.length === 0;
   const isBackgroundRefreshing = isRefreshing && !isInitialLoading;
   const needsBrowserBinaries = Boolean(status?.enabled && !status.available);
+  const usesLocalWindowViewer = status?.viewerMode === 'window';
   const runtimeLabel = isInitialLoading
     ? 'Loading'
     : !status?.enabled
@@ -624,6 +626,14 @@ export default function BrowserUsePanel({ isVisible, projectId, onShowSettings }
                       <MousePointer2 className="h-4 w-4" />
                       Take control
                     </Button>
+                  )}
+                  {usesLocalWindowViewer && selectedSession?.backend === 'camoufox-vnc' && !selectedSession.viewerUrl && selectedSession.status === 'ready' && (
+                    <span
+                      className="hidden rounded border border-border/70 bg-muted/30 px-2 py-1 text-[10px] text-muted-foreground md:inline"
+                      title="This visible session runs as a browser window on the machine running CloudCLI"
+                    >
+                      Window on host
+                    </span>
                   )}
                   <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setIsFullscreen(true)} disabled={!selectedSession?.screenshotDataUrl} title="Full screen" aria-label="Full screen">
                     <Expand className="h-4 w-4" />
