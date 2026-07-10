@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
+import { useTranslation } from "react-i18next";
 
 import { api } from "../../../utils/api";
 import type { Project } from "../../../types/app";
@@ -41,6 +42,43 @@ export const sanitizeFileName = (name: string): string => {
   return (safeBase || "file") + safeExt;
 };
 
+/**
+ * Dedup sanitized filenames within a batch so that collisions like
+ * "тест.txt" → "test.txt" and "test.txt" → "test.txt" resolve to
+ * ["test.txt", "test-2.txt"] instead of silently overwriting each other.
+ */
+export const deduplicateFileNames = (files: File[]): Map<File, string> => {
+  const result = new Map<File, string>();
+  const usedLower = new Map<string, number>(); // case-insensitive counter
+
+  for (const file of files) {
+    const sanitized = sanitizeFileName(file.name);
+    const dot = sanitized.lastIndexOf(".");
+    const base = dot > 0 ? sanitized.slice(0, dot) : sanitized;
+    const ext = dot > 0 ? sanitized.slice(dot) : "";
+
+    const key = sanitized.toLowerCase();
+    const count = usedLower.get(key) ?? 0;
+    if (count === 0) {
+      usedLower.set(key, 1);
+      result.set(file, sanitized);
+    } else {
+      // Find next available suffix
+      let suffix = count + 1;
+      let candidate: string;
+      do {
+        candidate = `${base}-${suffix}${ext}`;
+        suffix++;
+      } while (usedLower.has(candidate.toLowerCase()));
+      usedLower.set(candidate.toLowerCase(), 1);
+      usedLower.set(key, suffix - 1);
+      result.set(file, candidate);
+    }
+  }
+
+  return result;
+};
+
 type UseChatFileAttachOptions = {
   selectedProject: Project | null;
   setInput: Dispatch<SetStateAction<string>>;
@@ -56,6 +94,7 @@ export const appendMentions = (previous: string, mentions: string): string => {
 };
 
 export function useChatFileAttach({ selectedProject, setInput }: UseChatFileAttachOptions) {
+  const { t } = useTranslation("chat");
   const [isAttachingFiles, setIsAttachingFiles] = useState(false);
   const [fileAttachError, setFileAttachError] = useState<string | null>(null);
 
@@ -68,7 +107,7 @@ export function useChatFileAttach({ selectedProject, setInput }: UseChatFileAtta
       setFileAttachError(null);
 
       if (files.length > MAX_FILE_UPLOAD_COUNT) {
-        setFileAttachError(`You can attach up to ${MAX_FILE_UPLOAD_COUNT} files at once.`);
+        setFileAttachError(t("input.attachTooMany", { count: MAX_FILE_UPLOAD_COUNT }));
         return;
       }
 
@@ -77,7 +116,10 @@ export function useChatFileAttach({ selectedProject, setInput }: UseChatFileAtta
 
       if (oversized.length > 0) {
         setFileAttachError(
-          `${oversized.map((file) => file.name).join(", ")}: larger than ${MAX_FILE_UPLOAD_SIZE_LABEL}, skipped.`,
+          t("input.attachTooLarge", {
+            files: oversized.map((file) => file.name).join(", "),
+            limit: MAX_FILE_UPLOAD_SIZE_LABEL,
+          }),
         );
       }
 
@@ -85,10 +127,14 @@ export function useChatFileAttach({ selectedProject, setInput }: UseChatFileAtta
         return;
       }
 
+      // Fix #1: deduplicate sanitized names within the batch to prevent
+      // silent overwrites (e.g. "тест.txt" and "test.txt" both → "test.txt")
+      const nameMap = deduplicateFileNames(validFiles);
+
       const formData = new FormData();
       formData.append("targetPath", ATTACHMENTS_DIR);
       formData.append("requestedFileCount", String(validFiles.length));
-      validFiles.forEach((file) => formData.append("files", file, sanitizeFileName(file.name)));
+      validFiles.forEach((file) => formData.append("files", file, nameMap.get(file)!));
 
       setIsAttachingFiles(true);
       try {
@@ -96,7 +142,9 @@ export function useChatFileAttach({ selectedProject, setInput }: UseChatFileAtta
         const data = await response.json().catch(() => ({}));
 
         if (!response.ok || data.error) {
-          setFileAttachError(data.error || `Upload failed (HTTP ${response.status}).`);
+          setFileAttachError(
+            data.error || t("input.attachUploadFailed", { status: response.status }),
+          );
           return;
         }
 
@@ -105,18 +153,18 @@ export function useChatFileAttach({ selectedProject, setInput }: UseChatFileAtta
           : [];
 
         if (uploadedNames.length === 0) {
-          setFileAttachError("Upload failed: no files were saved.");
+          setFileAttachError(t("input.attachNoneSaved"));
           return;
         }
 
         setInput((previous) => appendMentions(previous, buildAttachmentMentions(uploadedNames)));
       } catch (error) {
-        setFileAttachError(error instanceof Error ? error.message : "Upload failed.");
+        setFileAttachError(error instanceof Error ? error.message : t("input.attachUploadFailed", { status: "?" }));
       } finally {
         setIsAttachingFiles(false);
       }
     },
-    [selectedProject, isAttachingFiles, setInput],
+    [selectedProject, isAttachingFiles, setInput, t],
   );
 
   return { attachFiles, isAttachingFiles, fileAttachError };

@@ -117,7 +117,11 @@
     "clickToChangeMode": "點擊變更權限模式（或在輸入框中按 Tab）",
     "showAllCommands": "顯示所有指令",
     "clearInput": "清空輸入",
-    "scrollToBottom": "捲動到底部"
+    "scrollToBottom": "捲動到底部",
+    "attachTooMany": "You can attach up to {{count}} files at once.",
+    "attachTooLarge": "{{files}}: larger than {{limit}}, skipped.",
+    "attachUploadFailed": "Upload failed ({{status}}).",
+    "attachNoneSaved": "Upload failed: no files were saved."
   },
   "thinkingMode": {
     "selector": {

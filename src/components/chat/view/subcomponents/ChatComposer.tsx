@@ -433,7 +433,7 @@ export default function ChatComposer({
         </PromptInputBody>
 
           {fileAttachError && (
-            <p className="px-4 pb-1 text-xs text-destructive">{fileAttachError}</p>
+            <p className="px-4 pb-1 text-xs text-destructive" role="alert">{fileAttachError}</p>
           )}
 
         <PromptInputFooter>
