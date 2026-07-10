@@ -30,6 +30,7 @@ test('OpenCode models provider formats frontend labels from provider-prefixed id
     'opencode/nemotron-3-super-free',
     'anthropic/claude-3-5-sonnet-20241022',
     'anthropic/claude-opus-4-7-fast',
+    'google/model-alpha',
     'openai/gpt-5.4-mini-fast',
     'openai/gpt-5.5-pro',
     'newprovider/alpha-v12-special-20261231',
@@ -103,6 +104,12 @@ anthropic/claude-sonnet-5
       "effort": "max"
     }
   }
+}
+google/model-alpha
+{
+  "id": "model-alpha",
+  "providerID": "google",
+  "name": "Model Alpha"
 }
 `);
 

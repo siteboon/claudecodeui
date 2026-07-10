@@ -2,7 +2,6 @@ import type { LLMProvider } from '../../types/app';
 import ClaudeLogo from './ClaudeLogo';
 import CodexLogo from './CodexLogo';
 import CursorLogo from './CursorLogo';
-import GeminiLogo from './GeminiLogo';
 import OpenCodeLogo from './OpenCodeLogo';
 
 type SessionProviderLogoProps = {
@@ -20,10 +19,6 @@ export default function SessionProviderLogo({
 
   if (provider === 'codex') {
     return <CodexLogo className={className} />;
-  }
-
-  if (provider === 'gemini') {
-    return <GeminiLogo className={className} />;
   }
 
   if (provider === 'opencode') {

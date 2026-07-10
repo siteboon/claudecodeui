@@ -45,6 +45,7 @@ type SidebarProjectItemProps = {
   ) => void;
   onLoadMoreSessions: (projectId: string) => void;
   activeSessions: SessionActivityMap;
+  attentionSessionIds: ReadonlySet<string>;
   onNewSession: (project: Project) => void;
   onEditingSessionNameChange: (value: string) => void;
   onStartEditingSession: (sessionId: string, initialName: string) => void;
@@ -87,6 +88,7 @@ export default function SidebarProjectItem({
   onDeleteSession,
   onLoadMoreSessions,
   activeSessions,
+  attentionSessionIds,
   onNewSession,
   onEditingSessionNameChange,
   onStartEditingSession,
@@ -399,6 +401,7 @@ export default function SidebarProjectItem({
         hasMoreSessions={Boolean(project.sessionMeta?.hasMore)}
         isLoadingMoreSessions={isLoadingMoreSessions}
         activeSessions={activeSessions}
+        attentionSessionIds={attentionSessionIds}
         currentTime={currentTime}
         editingSession={editingSession}
         editingSessionName={editingSessionName}

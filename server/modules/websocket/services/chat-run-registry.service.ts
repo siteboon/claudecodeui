@@ -319,6 +319,22 @@ export const chatRunRegistry = {
   },
 
   /**
+   * Safety-net variant of `completeRun` scoped to one specific run: a no-op
+   * unless `run` is still the session's current, running run. A runtime
+   * promise can resolve after its own `complete` already streamed AND a new
+   * run has replaced it in the registry (a queued message sends within
+   * milliseconds of the previous turn ending) — the session-keyed
+   * `completeRun` would terminate that newer run.
+   */
+  completeRunIfCurrent(run: ChatRun, opts: { exitCode: number; aborted?: boolean }): void {
+    if (runs.get(run.appSessionId) !== run || run.status !== 'running') {
+      return;
+    }
+
+    run.writer.sendComplete(opts);
+  },
+
+  /**
    * Test-only escape hatch: clears every tracked run.
    */
   clearAll(): void {

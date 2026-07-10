@@ -12,7 +12,7 @@ window.__MOCK_STATE__ = {
     { id: 'env-api', name: 'api-gateway', subdomain: 'api-gateway', access_url: 'https://api-gateway.cloudcli.ai', status: 'running', region: 'fra1', agent: 'Claude Code' },
     { id: 'env-web', name: 'web-frontend', subdomain: 'web-frontend', access_url: 'https://web-frontend.cloudcli.ai', status: 'stopped', region: 'sfo1', agent: 'Codex' },
     { id: 'env-data', name: 'data-pipeline', subdomain: 'data-pipeline', access_url: 'https://data-pipeline.cloudcli.ai', status: 'stopped', region: 'fra1', agent: 'Cursor' },
-    { id: 'env-ml', name: 'ml-trainer', subdomain: 'ml-trainer', access_url: 'https://ml-trainer.cloudcli.ai', status: 'paused', region: 'iad1', agent: 'Gemini' },
+    { id: 'env-ml', name: 'ml-trainer', subdomain: 'ml-trainer', access_url: 'https://ml-trainer.cloudcli.ai', status: 'paused', region: 'iad1', agent: 'OpenCode' },
   ],
 };
 

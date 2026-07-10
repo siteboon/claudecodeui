@@ -1,5 +1,3 @@
-import { spawn } from 'node:child_process';
-
 import Database from 'better-sqlite3';
 import crossSpawn from 'cross-spawn';
 
@@ -51,23 +49,15 @@ export const OPENCODE_FALLBACK_MODELS: ProviderModelsDefinition = {
       label: 'GPT-5.4 Mini',
       description: 'openai - openai/gpt-5.4-mini',
     },
-    {
-      value: 'google/gemini-2.5-pro',
-      label: 'Gemini 2.5 Pro',
-      description: 'google - google/gemini-2.5-pro',
-    },
-    {
-      value: 'google/gemini-2.5-flash',
-      label: 'Gemini 2.5 Flash',
-      description: 'google - google/gemini-2.5-flash',
-    },
   ],
   DEFAULT: 'anthropic/claude-sonnet-4-5',
 };
 
 const OPEN_CODE_MODELS_TIMEOUT_MS = 20_000;
 const MODEL_ID_LINE = /^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*$/i;
-const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
+// cross-spawn resolves .cmd shims/PATHEXT on Windows and delegates to
+// child_process.spawn everywhere else.
+const spawnFunction = crossSpawn;
 const DATE_TOKEN = /^\d{8}$/;
 const SIMPLE_NUMBER_TOKEN = /^\d$/;
 const VERSION_TOKEN = /^[a-z]\d+$/i;
@@ -239,6 +229,10 @@ const readOpenCodeModelParts = (id: string): { upstreamProvider: string; slug: s
   };
 };
 
+const isSupportedOpenCodeModelId = (id: string): boolean => (
+  readOpenCodeModelParts(id).upstreamProvider.toLowerCase() !== 'google'
+);
+
 const readOpenCodeVerboseModelId = (model: OpenCodeVerboseModel): string | null => {
   const id = readOptionalString(model.id);
   if (!id) {
@@ -296,7 +290,7 @@ const readOpenCodeEffortValues = (
 
 const mapOpenCodeVerboseModel = (model: OpenCodeVerboseModel): ProviderModelOption | null => {
   const value = readOpenCodeVerboseModelId(model);
-  if (!value) {
+  if (!value || !isSupportedOpenCodeModelId(value)) {
     return null;
   }
 
@@ -315,11 +309,13 @@ const mapOpenCodeVerboseModel = (model: OpenCodeVerboseModel): ProviderModelOpti
 };
 
 export const buildOpenCodeDefinitionFromIds = (ids: string[]): ProviderModelsDefinition => {
-  const options: ProviderModelOption[] = ids.map((value) => ({
-    value,
-    label: labelForOpenCodeModelId(value),
-    description: descriptionForOpenCodeModelId(value),
-  }));
+  const options: ProviderModelOption[] = ids
+    .filter(isSupportedOpenCodeModelId)
+    .map((value) => ({
+      value,
+      label: labelForOpenCodeModelId(value),
+      description: descriptionForOpenCodeModelId(value),
+    }));
 
   const defaultValue = options.find((option) => option.value === OPENCODE_FALLBACK_MODELS.DEFAULT)?.value
     ?? options[0]?.value

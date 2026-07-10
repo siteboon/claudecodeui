@@ -170,13 +170,13 @@ test('provider model cache is persisted across service instances', async () => {
       cachePath,
       resolveProvider: () => ({
         models: {
-          getSupportedModels: async () => createModels('gemini-cached'),
-          getCurrentActiveModel: async () => createCurrentActiveModel('gemini-active'),
-          changeActiveModel: async (input) => createSessionActiveModelChange('gemini', input),
+          getSupportedModels: async () => createModels('cursor-cached'),
+          getCurrentActiveModel: async () => createCurrentActiveModel('cursor-active'),
+          changeActiveModel: async (input) => createSessionActiveModelChange('cursor', input),
         },
       }),
     });
-    await writer.getProviderModels('gemini');
+    await writer.getProviderModels('cursor');
 
     const reader = createProviderModelsService({
       cachePath,
@@ -185,13 +185,13 @@ test('provider model cache is persisted across service instances', async () => {
           getSupportedModels: async () => {
             throw new Error('loader should not be called for persisted cache hits');
           },
-          getCurrentActiveModel: async () => createCurrentActiveModel('gemini-active'),
-          changeActiveModel: async (input) => createSessionActiveModelChange('gemini', input),
+          getCurrentActiveModel: async () => createCurrentActiveModel('cursor-active'),
+          changeActiveModel: async (input) => createSessionActiveModelChange('cursor', input),
         },
       }),
     });
-    const models = await reader.getProviderModels('gemini');
-    assert.equal(models.models.DEFAULT, 'gemini-cached');
+    const models = await reader.getProviderModels('cursor');
+    assert.equal(models.models.DEFAULT, 'cursor-cached');
     assert.equal(models.cache.source, 'disk');
   } finally {
     await rm(tempRoot, { recursive: true, force: true });

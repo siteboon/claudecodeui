@@ -25,6 +25,8 @@ export type GitStatusResponse = {
   added?: string[];
   deleted?: string[];
   untracked?: string[];
+  /** Paths with index-side changes — mirrors the real git index. */
+  staged?: string[];
   error?: string;
   details?: string;
 };
@@ -49,6 +51,10 @@ export type GitCommitSummary = {
   date: string;
   message: string;
   stats?: string;
+  /** Parent commit hashes — drives the History view commit graph. */
+  parents?: string[];
+  /** Ref decorations, e.g. "HEAD -> main", "origin/main", "tag: v1.0". */
+  refs?: string[];
 };
 
 export type GitDiffMap = Record<string, string>;
@@ -99,6 +105,8 @@ export type GitPanelController = {
   handlePublish: () => Promise<void>;
   discardChanges: (filePath: string) => Promise<void>;
   deleteUntrackedFile: (filePath: string) => Promise<void>;
+  stageFiles: (files: string[]) => Promise<boolean>;
+  unstageFiles: (files: string[]) => Promise<boolean>;
   fetchCommitDiff: (commitHash: string) => Promise<void>;
   generateCommitMessage: (files: string[]) => Promise<string | null>;
   commitChanges: (message: string, files: string[]) => Promise<boolean>;

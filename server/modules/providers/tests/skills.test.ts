@@ -444,10 +444,10 @@ test('providerSkillsService lists opencode project and user compatibility skills
 });
 
 /**
- * This test covers Gemini and Cursor skill directory rules, including shared
+ * This test covers Cursor skill directory rules, including shared
  * `.agents/skills` project support.
  */
-test('providerSkillsService lists gemini and cursor skills from their configured directories', { concurrency: false }, async () => {
+test('providerSkillsService lists cursor skills from its configured directories', { concurrency: false }, async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-skills-gc-'));
   const workspacePath = path.join(tempRoot, 'workspace');
   await fs.mkdir(workspacePath, { recursive: true });
@@ -455,22 +455,10 @@ test('providerSkillsService lists gemini and cursor skills from their configured
   const restoreHomeDir = patchHomeDir(tempRoot);
   try {
     await writeSkill(
-      path.join(tempRoot, '.gemini', 'skills'),
-      'gemini-user-dir',
-      'gemini-user',
-      'Gemini user skill',
-    );
-    await writeSkill(
       path.join(tempRoot, '.agents', 'skills'),
       'agents-user-dir',
       'agents-user',
       'Agents user skill',
-    );
-    await writeSkill(
-      path.join(workspacePath, '.gemini', 'skills'),
-      'gemini-project-dir',
-      'gemini-project',
-      'Gemini project skill',
     );
     await writeSkill(
       path.join(workspacePath, '.agents', 'skills'),
@@ -491,14 +479,6 @@ test('providerSkillsService lists gemini and cursor skills from their configured
       'Cursor user skill',
     );
 
-    const geminiSkills = await providerSkillsService.listProviderSkills('gemini', { workspacePath });
-    const geminiByName = new Map(geminiSkills.map((skill) => [skill.name, skill]));
-    assert.equal(geminiByName.get('gemini-user')?.scope, 'user');
-    assert.equal(geminiByName.get('agents-user')?.scope, 'user');
-    assert.equal(geminiByName.get('gemini-project')?.scope, 'project');
-    assert.equal(geminiByName.get('agents-project')?.scope, 'project');
-    assert.equal(geminiByName.get('gemini-project')?.command, '/gemini-project');
-
     const cursorSkills = await providerSkillsService.listProviderSkills('cursor', { workspacePath });
     const cursorByName = new Map(cursorSkills.map((skill) => [skill.name, skill]));
     assert.equal(cursorByName.get('agents-project')?.scope, 'project');
@@ -515,7 +495,7 @@ test('providerSkillsService lists gemini and cursor skills from their configured
  * This test covers managed global skill creation for providers that own a
  * writable user skill directory.
  */
-test('providerSkillsService adds global skills for claude, codex, gemini, and cursor', { concurrency: false }, async () => {
+test('providerSkillsService adds global skills for claude, codex, and cursor', { concurrency: false }, async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-skills-create-'));
   const restoreHomeDir = patchHomeDir(tempRoot);
 
@@ -618,22 +598,6 @@ test('providerSkillsService adds global skills for claude, codex, gemini, and cu
     );
     await assert.rejects(fs.stat(pendingBatchSkillPath), { code: 'ENOENT' });
 
-    const createdGeminiSkills = await providerSkillsService.addProviderSkills('gemini', {
-      entries: [
-        {
-          directoryName: 'gemini-global-dir',
-          content: '---\nname: gemini-global\ndescription: Gemini global skill\n---\n\nGemini body.\n',
-        },
-      ],
-    });
-    const createdGeminiSkill = createdGeminiSkills[0];
-    assert.ok(createdGeminiSkill);
-    assert.equal(createdGeminiSkill.command, '/gemini-global');
-    assert.equal(
-      createdGeminiSkill.sourcePath.endsWith(path.join('.gemini', 'skills', 'gemini-global-dir', 'SKILL.md')),
-      true,
-    );
-
     const createdCursorSkills = await providerSkillsService.addProviderSkills('cursor', {
       entries: [
         {
@@ -655,9 +619,6 @@ test('providerSkillsService adds global skills for claude, codex, gemini, and cu
 
     const listedCodexSkills = await providerSkillsService.listProviderSkills('codex');
     assert.equal(listedCodexSkills.some((skill) => skill.name === 'replacement'), true);
-
-    const listedGeminiSkills = await providerSkillsService.listProviderSkills('gemini');
-    assert.equal(listedGeminiSkills.some((skill) => skill.name === 'gemini-global'), true);
 
     const listedCursorSkills = await providerSkillsService.listProviderSkills('cursor');
     assert.equal(listedCursorSkills.some((skill) => skill.name === 'cursor-global'), true);

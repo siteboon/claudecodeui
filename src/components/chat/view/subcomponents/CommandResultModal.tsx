@@ -61,7 +61,6 @@ const PROVIDER_LABELS: Record<string, string> = {
   claude: 'Claude',
   cursor: 'Cursor',
   codex: 'Codex',
-  gemini: 'Gemini',
   opencode: 'OpenCode',
 };
 

@@ -11,10 +11,11 @@ import type {
   RefObject,
   TouchEvent,
 } from 'react';
-import { ImageIcon, MessageSquareIcon, XIcon, Loader2, ChevronDown, Check } from 'lucide-react';
+import { ImageIcon, MessageSquareIcon, XIcon, Loader2, ChevronDown, Check, ArrowUpIcon } from 'lucide-react';
 
 import { useVoiceInput } from '../../hooks/useVoiceInput';
 import { useVoiceAvailable } from '../../hooks/useVoiceAvailable';
+import type { QueuedDraft } from '../../hooks/useChatComposerState';
 import type { SessionActivity } from '../../../../hooks/useSessionProtection';
 import type { PendingPermissionRequest, PermissionMode } from '../../types/types';
 import type { ProviderModelOption } from '../../../../types/app';
@@ -35,6 +36,7 @@ import ImageAttachment from './ImageAttachment';
 import VoiceInputButton from './VoiceInputButton';
 import PermissionRequestsBanner from './PermissionRequestsBanner';
 import TokenUsageSummary from './TokenUsageSummary';
+import QueuedMessageCard from './QueuedMessageCard';
 
 interface MentionableFile {
   name: string;
@@ -74,6 +76,9 @@ interface ChatComposerProps {
   onClearInput: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement> | MouseEvent<HTMLButtonElement> | TouchEvent<HTMLButtonElement>) => void;
   isDragActive: boolean;
+  queuedDraft: QueuedDraft | null;
+  onEditQueuedDraft: () => void;
+  onDeleteQueuedDraft: () => void;
   attachedImages: File[];
   onRemoveImage: (index: number) => void;
   uploadingImages: Map<string, number>;
@@ -129,6 +134,9 @@ export default function ChatComposer({
   onClearInput,
   onSubmit,
   isDragActive,
+  queuedDraft,
+  onEditQueuedDraft,
+  onDeleteQueuedDraft,
   attachedImages,
   onRemoveImage,
   uploadingImages,
@@ -267,6 +275,23 @@ export default function ChatComposer({
   const hasPendingPermissions = pendingPermissionRequests.length > 0;
   const hasActivityIndicator = Boolean(activity && !hasPendingPermissions);
 
+  const hasQueuedDraft = Boolean(queuedDraft);
+  const canQueueDraft = isLoading && Boolean(input.trim());
+  const submitHint = canQueueDraft
+    ? hasQueuedDraft
+      ? t('input.hintText.updateQueued', { defaultValue: 'Enter to update queued message' })
+      : t('input.hintText.queue', { defaultValue: 'Enter to queue your next message' })
+    : sendByCtrlEnter
+      ? t('input.hintText.ctrlEnter')
+      : t('input.hintText.enter');
+  const submitAriaLabel = canQueueDraft
+    ? hasQueuedDraft
+      ? t('input.queue.update', { defaultValue: 'Update queued message' })
+      : t('input.queue.sendNext', { defaultValue: 'Queue next message' })
+    : isLoading
+      ? t('input.stop')
+      : t('input.send');
+
   return (
     <div className="chat-composer-shell relative flex-shrink-0 px-2 pb-2 pt-0 sm:px-4 sm:pb-4 md:px-4 md:pb-6">
       {!hasPendingPermissions && (
@@ -283,6 +308,15 @@ export default function ChatComposer({
             handleGrantToolPermission={handleGrantToolPermission}
           />
         </div>
+      )}
+
+      {queuedDraft && (
+        <QueuedMessageCard
+          content={queuedDraft.content}
+          imageCount={queuedDraft.images.length}
+          onEdit={onEditQueuedDraft}
+          onDelete={onDeleteQueuedDraft}
+        />
       )}
 
       {!hasQuestionPanel && <div className="relative mx-auto max-w-[54.25rem]">
@@ -540,26 +574,37 @@ export default function ChatComposer({
           <div className="flex items-center gap-2">
             <div
               className={`hidden text-xs text-muted-foreground/50 transition-opacity duration-200 lg:block ${
-                input.trim() ? 'opacity-0' : 'opacity-100'
+                input.trim() && !canQueueDraft ? 'opacity-0' : 'opacity-100'
               }`}
             >
-              {sendByCtrlEnter ? t('input.hintText.ctrlEnter') : t('input.hintText.enter')}
+              {submitHint}
             </div>
             <PromptInputSubmit
               onClick={
-                isLoading
-                  ? onAbortSession
-                  : isRecording
-                    ? (e: MouseEvent<HTMLButtonElement>) => {
-                        e.preventDefault();
-                        voiceStop({ send: true });
-                      }
-                    : undefined
+                canQueueDraft
+                  ? (e: MouseEvent<HTMLButtonElement>) => {
+                      e.preventDefault();
+                      onSubmit(e);
+                    }
+                  : isLoading
+                    ? onAbortSession
+                    : isRecording
+                      ? (e: MouseEvent<HTMLButtonElement>) => {
+                          e.preventDefault();
+                          voiceStop({ send: true });
+                        }
+                      : undefined
               }
               disabled={isLoading ? false : isRecording ? false : isTranscribing ? true : !input.trim()}
+              aria-label={submitAriaLabel}
+              title={submitAriaLabel}
               className="h-10 w-10 sm:h-10 sm:w-10"
             >
-              {isTranscribing ? <Loader2 className="h-4 w-4 animate-spin" /> : undefined}
+              {isTranscribing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : canQueueDraft ? (
+                <ArrowUpIcon className="h-4 w-4" />
+              ) : undefined}
             </PromptInputSubmit>
           </div>
         </PromptInputFooter>

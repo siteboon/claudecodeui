@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
-import { randomUUID } from 'node:crypto';
 import { execFileSync, spawn } from 'node:child_process';
+import { randomBytes, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
@@ -8,6 +8,9 @@ import path from 'node:path';
 
 import { WebSocket } from 'ws';
 
+import spawn from 'cross-spawn';
+
+import { appConfigDb } from '@/modules/database/index.js';
 import { providerMcpService } from '@/modules/providers/index.js';
 import { getModuleDir } from '@/utils/runtime-paths.js';
 
@@ -537,8 +540,10 @@ function runCommand(command: string, args: string[]): Promise<void> {
     }, INSTALL_COMMAND_TIMEOUT_MS);
     timer.unref?.();
 
-    child.stdout.on('data', (chunk) => output.push(String(chunk)));
-    child.stderr.on('data', (chunk) => output.push(String(chunk)));
+    // stdio config above guarantees the pipes exist; cross-spawn's types
+    // just don't narrow them the way node's spawn overloads do.
+    child.stdout?.on('data', (chunk) => output.push(String(chunk)));
+    child.stderr?.on('data', (chunk) => output.push(String(chunk)));
     child.on('error', (error) => finish(() => reject(error)));
     child.on('close', (code) => finish(() => {
       if (code === 0) {
