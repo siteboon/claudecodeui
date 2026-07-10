@@ -48,13 +48,6 @@ const CONTEXT_MENU_EDGE_PADDING_PX = 8;
 const ZOOM_THROTTLE_MS = 50;
 const DEFAULT_MIN_FONT_SIZE = 8;
 const DEFAULT_MAX_FONT_SIZE = 48;
-// xterm scrolls the viewport 1:1 with the finger and never coasts, so we add
-// our own inertial (fling) scrolling: track finger velocity during the drag and
-// keep scrolling with friction after release.
-const SCROLL_INERTIA_FRICTION = 0.95; // velocity multiplier per ~16ms frame
-const SCROLL_INERTIA_MIN_VELOCITY = 0.02; // px/ms below which coasting stops
-const SCROLL_INERTIA_MAX_VELOCITY = 5; // px/ms cap to avoid runaway flings
-const SCROLL_INERTIA_MAX_IDLE_MS = 90; // ignore a flick if the finger paused before lifting
 
 type ContextMenuItem = {
   label: string;
@@ -87,6 +80,42 @@ function getDistance(start: TouchCoords, end: TouchCoords): number {
   return Math.hypot(end.clientX - start.clientX, end.clientY - start.clientY);
 }
 
+/** State that decides whether the terminal element should let the compositor scroll. */
+export type TerminalGestureState = {
+  isSelecting: boolean;
+  isHandleDragging: boolean;
+  isPinching: boolean;
+};
+
+/**
+ * Resolve the `touch-action` for the terminal element from the active gesture.
+ *
+ * Default is `pan-y`, which keeps one-finger vertical scrolling on the
+ * compositor thread (so the passive `touchmove` listener never has to block a
+ * scroll frame) while still preventing the browser's own pinch-to-zoom, which
+ * we handle ourselves as a font-size change. While a selection or pinch gesture
+ * is active we switch to `none` so a drag extends the selection / pinches the
+ * font instead of scrolling the viewport out from under it.
+ */
+export function resolveTerminalTouchAction(state: TerminalGestureState): 'pan-y' | 'none' {
+  if (state.isSelecting || state.isHandleDragging || state.isPinching) {
+    return 'none';
+  }
+  return 'pan-y';
+}
+
+/**
+ * True once a touch has travelled past `threshold` px from its origin — used to
+ * cancel a pending long-press and to mark a selection-clearing tap as a drag.
+ */
+export function touchMoveExceedsThreshold(
+  origin: TouchCoords,
+  current: TouchCoords,
+  threshold: number,
+): boolean {
+  return getDistance(origin, current) > threshold;
+}
+
 class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
   private readonly terminal: Terminal;
   private readonly terminalContent: HTMLElement;
@@ -117,12 +146,6 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
   private pinchStartDistance = 0;
   private initialFontSize = 0;
   private lastZoomTime = 0;
-
-  private viewportElement: HTMLElement | null = null;
-  private lastScrollTouchY: number | null = null;
-  private lastScrollTouchTime = 0;
-  private scrollVelocity = 0;
-  private inertiaFrame: number | null = null;
 
   constructor(
     terminal: Terminal,
@@ -270,11 +293,21 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
       return;
     }
 
+    // Only `touchmove` is registered passive: a non-passive touchmove forces the
+    // browser to wait for the main-thread handler on every scroll frame, which
+    // disables compositor-thread scrolling and makes the terminal stutter while
+    // it is producing output. Plain one-finger scrolling needs no JS at all now
+    // (it is driven natively via `touch-action: pan-y`); the selection/pinch
+    // gestures that used to call preventDefault here are instead arbitrated with
+    // `touch-action` (see syncGestureStyles). touchstart/touchend stay
+    // non-passive because they still preventDefault to start a pinch and to
+    // suppress the synthetic click that would refocus the input and pop up the
+    // mobile keyboard after a selection.
     this.terminal.element.addEventListener('touchstart', this.onTerminalTouchStart, {
       passive: false,
     });
     this.terminal.element.addEventListener('touchmove', this.onTerminalTouchMove, {
-      passive: false,
+      passive: true,
     });
     this.terminal.element.addEventListener('touchend', this.onTerminalTouchEnd, {
       passive: false,
@@ -300,12 +333,34 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
       this.terminal.onResize(this.onTerminalResize),
       this.terminal.onScroll(this.onTerminalScroll),
     );
+
+    this.syncGestureStyles();
+  }
+
+  /**
+   * Reflect the current gesture into the terminal element: `touch-action`
+   * controls whether the compositor may scroll (see resolveTerminalTouchAction),
+   * and the `shell-mobile-selecting` class re-enables native text selection in
+   * index.css only while a custom selection is being made.
+   */
+  private syncGestureStyles(): void {
+    const element = this.terminal.element;
+    if (!element) {
+      return;
+    }
+
+    element.style.touchAction = resolveTerminalTouchAction({
+      isSelecting: this.isSelecting,
+      isHandleDragging: this.isHandleDragging,
+      isPinching: this.isPinching,
+    });
+    element.classList.toggle(
+      'shell-mobile-selecting',
+      this.isSelecting || this.isHandleDragging,
+    );
   }
 
   private onTerminalTouchStart = (event: TouchEvent): void => {
-    this.cancelInertia();
-    this.resetScrollTracking();
-
     if (event.touches.length === 2) {
       event.preventDefault();
       this.startPinchZoom(event);
@@ -332,9 +387,12 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     }, LONG_PRESS_MS);
   };
 
+  // Registered passive: this handler must never call event.preventDefault().
+  // Gesture arbitration (scroll vs. select vs. pinch) is done through
+  // `touch-action` in syncGestureStyles, so plain one-finger scrolling stays on
+  // the compositor thread and the browser provides native momentum.
   private onTerminalTouchMove = (event: TouchEvent): void => {
     if (event.touches.length === 2 && this.isPinching) {
-      event.preventDefault();
       this.handlePinchZoom(event);
       return;
     }
@@ -354,7 +412,7 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     if (this.pendingClearTouch) {
       this.pendingClearTouch.moved =
         this.pendingClearTouch.moved ||
-        getDistance(this.pendingClearTouch.point, touch) > MOVE_THRESHOLD_PX;
+        touchMoveExceedsThreshold(this.pendingClearTouch.point, touch, MOVE_THRESHOLD_PX);
       return;
     }
 
@@ -362,20 +420,17 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
       return;
     }
 
-    const moved = getDistance(touchStart, touch) > MOVE_THRESHOLD_PX;
-    if (moved) {
+    if (touchMoveExceedsThreshold(touchStart, touch, MOVE_THRESHOLD_PX)) {
       this.clearTapHoldTimeout();
     }
 
     if (this.isSelecting && !this.isHandleDragging) {
-      event.preventDefault();
       this.extendSelection(touch);
       return;
     }
 
-    // Plain one-finger scrolling: xterm moves the viewport itself; we only
-    // record the finger velocity so we can add inertia when the touch ends.
-    this.recordScrollSample(touch);
+    // Plain one-finger scrolling is handled natively by the compositor
+    // (touch-action: pan-y); there is nothing to do on the main thread.
   };
 
   private onTerminalTouchEnd = (event: TouchEvent): void => {
@@ -397,7 +452,6 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     }
 
     if (!this.pendingClearTouch) {
-      this.maybeStartInertia();
       return;
     }
 
@@ -431,6 +485,7 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     this.dragHandle = target.dataset.handleType === 'start' ? 'start' : 'end';
     this.isHandleDragging = true;
     this.pendingClearTouch = null;
+    this.syncGestureStyles();
   };
 
   private onHandleTouchMove = (event: TouchEvent): void => {
@@ -470,6 +525,7 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     event.stopPropagation();
     this.isHandleDragging = false;
     this.dragHandle = null;
+    this.syncGestureStyles();
   };
 
   private onSelectionChange = (): void => {
@@ -516,6 +572,7 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     this.selectionStart = wordBounds?.start ?? coords;
     this.selectionEnd = wordBounds?.end ?? coords;
     this.isSelecting = true;
+    this.syncGestureStyles();
 
     // Dismiss the mobile keyboard if it was open: selecting text is not typing.
     this.blurTerminalInput();
@@ -675,6 +732,7 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     this.selectionStart = null;
     this.selectionEnd = null;
     this.isSelecting = true;
+    this.syncGestureStyles();
     this.hideHandles();
 
     if (this.terminal.hasSelection()) {
@@ -698,6 +756,7 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     this.initialFontSize = this.terminal.options.fontSize ?? DEFAULT_MIN_FONT_SIZE;
     this.pinchStartDistance = this.getTouchDistance(event.touches[0], event.touches[1]);
     this.lastZoomTime = 0;
+    this.syncGestureStyles();
   }
 
   private handlePinchZoom(event: TouchEvent): void {
@@ -728,106 +787,11 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     this.isPinching = false;
     this.pinchStartDistance = 0;
     this.initialFontSize = 0;
+    this.syncGestureStyles();
   }
 
   private getTouchDistance(first: Touch, second: Touch): number {
     return Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
-  }
-
-  private getViewportElement(): HTMLElement | null {
-    if (this.viewportElement?.isConnected) {
-      return this.viewportElement;
-    }
-
-    this.viewportElement =
-      this.terminal.element?.querySelector<HTMLElement>('.xterm-viewport') ?? null;
-    return this.viewportElement;
-  }
-
-  private resetScrollTracking(): void {
-    this.lastScrollTouchY = null;
-    this.lastScrollTouchTime = 0;
-    this.scrollVelocity = 0;
-  }
-
-  private recordScrollSample(touch: TouchCoords): void {
-    const now = performance.now();
-
-    if (this.lastScrollTouchY !== null) {
-      const dt = now - this.lastScrollTouchTime;
-      if (dt > 0) {
-        // Positive when the finger moves up, matching how xterm increases
-        // scrollTop, so the inertia continues in the same direction.
-        const velocity = (this.lastScrollTouchY - touch.clientY) / dt;
-        this.scrollVelocity = this.scrollVelocity * 0.4 + velocity * 0.6;
-      }
-    }
-
-    this.lastScrollTouchY = touch.clientY;
-    this.lastScrollTouchTime = now;
-  }
-
-  private maybeStartInertia(): void {
-    if (this.isSelecting || this.isHandleDragging || this.isPinching) {
-      return;
-    }
-
-    const idle = performance.now() - this.lastScrollTouchTime;
-    if (idle > SCROLL_INERTIA_MAX_IDLE_MS) {
-      return;
-    }
-
-    if (Math.abs(this.scrollVelocity) < SCROLL_INERTIA_MIN_VELOCITY) {
-      return;
-    }
-
-    this.startInertia(this.scrollVelocity);
-  }
-
-  private startInertia(initialVelocity: number): void {
-    const viewport = this.getViewportElement();
-    if (!viewport) {
-      return;
-    }
-
-    this.cancelInertia();
-
-    let velocity = clamp(
-      initialVelocity,
-      -SCROLL_INERTIA_MAX_VELOCITY,
-      SCROLL_INERTIA_MAX_VELOCITY,
-    );
-    let lastFrame = performance.now();
-
-    const step = (now: number): void => {
-      const dt = Math.max(1, now - lastFrame);
-      lastFrame = now;
-      velocity *= Math.pow(SCROLL_INERTIA_FRICTION, dt / 16);
-
-      if (Math.abs(velocity) < SCROLL_INERTIA_MIN_VELOCITY) {
-        this.inertiaFrame = null;
-        return;
-      }
-
-      const before = viewport.scrollTop;
-      viewport.scrollTop = before + velocity * dt;
-      if (viewport.scrollTop === before) {
-        // Reached the top or bottom of the buffer.
-        this.inertiaFrame = null;
-        return;
-      }
-
-      this.inertiaFrame = window.requestAnimationFrame(step);
-    };
-
-    this.inertiaFrame = window.requestAnimationFrame(step);
-  }
-
-  private cancelInertia(): void {
-    if (this.inertiaFrame !== null) {
-      window.cancelAnimationFrame(this.inertiaFrame);
-      this.inertiaFrame = null;
-    }
   }
 
   updateHandles(): void {
@@ -879,6 +843,7 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     this.selectionEnd = null;
     this.pendingClearTouch = null;
     this.touchStart = null;
+    this.syncGestureStyles();
     this.hideHandles();
     this.hideContextMenu();
     this.clearTapHoldTimeout();
@@ -1026,7 +991,11 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
 
     this.isDestroyed = true;
     this.clearTapHoldTimeout();
-    this.cancelInertia();
+
+    if (this.terminal.element) {
+      this.terminal.element.classList.remove('shell-mobile-selecting');
+      this.terminal.element.style.touchAction = '';
+    }
 
     this.terminal.element?.removeEventListener('touchstart', this.onTerminalTouchStart);
     this.terminal.element?.removeEventListener('touchmove', this.onTerminalTouchMove);

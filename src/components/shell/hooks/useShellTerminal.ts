@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MutableRefObject, RefObject } from 'react';
+import { CanvasAddon } from '@xterm/addon-canvas';
 import { ClipboardAddon, type IClipboardProvider } from '@xterm/addon-clipboard';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -56,6 +57,34 @@ const ClipboardAddonCtor = ClipboardAddon as unknown as new (
   base64?: unknown,
   provider?: IClipboardProvider,
 ) => ClipboardAddon;
+
+// Load an accelerated renderer, preferring WebGL and falling back to the canvas
+// renderer. Both addons require `terminal.element`, so this must run *after*
+// terminal.open() — loading them earlier silently threw and left the terminal on
+// xterm's slow built-in DOM renderer, which is markedly heavier per scroll frame
+// on mobile. If WebGL's GPU context is lost (common on mobile after the tab is
+// backgrounded) we drop to canvas rather than back to the DOM renderer.
+function loadTerminalRenderer(terminal: Terminal): void {
+  const loadCanvas = () => {
+    try {
+      terminal.loadAddon(new CanvasAddon());
+    } catch (error) {
+      console.warn('[Shell] Canvas renderer unavailable, using DOM renderer', error);
+    }
+  };
+
+  try {
+    const webglAddon = new WebglAddon();
+    webglAddon.onContextLoss(() => {
+      webglAddon.dispose();
+      loadCanvas();
+    });
+    terminal.loadAddon(webglAddon);
+  } catch {
+    console.warn('[Shell] WebGL renderer unavailable, falling back to canvas renderer');
+    loadCanvas();
+  }
+}
 
 type UseShellTerminalOptions = {
   terminalContainerRef: RefObject<HTMLDivElement>;
@@ -138,13 +167,9 @@ export function useShellTerminal({
       nextTerminal.loadAddon(new WebLinksAddon());
     }
 
-    try {
-      nextTerminal.loadAddon(new WebglAddon());
-    } catch {
-      console.warn('[Shell] WebGL renderer unavailable, using Canvas fallback');
-    }
-
     nextTerminal.open(terminalContainer);
+    loadTerminalRenderer(nextTerminal);
+
     mobileSelectionRef.current = installMobileTerminalSelection(
       nextTerminal,
       terminalContainer,

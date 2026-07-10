@@ -659,12 +659,26 @@
       max-width: calc(100vw - 120px); /* Account for sidebar padding and buttons */
     }
     
-    /* Enable text selection on mobile for terminal */
-    .xterm,
+    /* Let the compositor own one-finger vertical scrolling in the terminal.
+       Previously `.xterm-viewport` forced `user-select: text`, which on iOS
+       Safari turns a one-finger drag into a text-selection gesture instead of a
+       scroll (and with the WebGL/canvas renderer there is no selectable DOM text
+       to grab, so the drag did nothing at all). Terminal text is selected through
+       xterm's own selection model (see mobileTerminalSelection.ts), not the DOM,
+       so native selection stays off by default and is re-enabled only while a
+       custom selection gesture is active. */
     .xterm .xterm-viewport {
-      -webkit-user-select: text !important;
-      user-select: text !important;
-      -webkit-touch-callout: default !important;
+      touch-action: pan-y;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .xterm.shell-mobile-selecting,
+    .xterm.shell-mobile-selecting .xterm-rows,
+    .xterm.shell-mobile-selecting .xterm-viewport {
+      -webkit-user-select: text;
+      user-select: text;
+      -webkit-touch-callout: default;
     }
     
     /* Fix mobile scrolling */
