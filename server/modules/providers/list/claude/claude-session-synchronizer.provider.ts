@@ -156,6 +156,22 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     };
   }
 
+  /**
+   * Extracts the best available title from the JSONL transcript.
+   *
+   * Scans every line in the file (forward, not reverse), collecting
+   * {@code custom-title}, {@code ai-title}, and {@code last-prompt} events
+   * that match {@code sessionId}. Returns the highest-priority value found:
+   *
+   * <pre>
+   * custom-title  →  user-renamed via /rename
+   * ai-title      →  Claude Code auto-generated
+   * last-prompt   →  last user message (fallback)
+   * </pre>
+   *
+   * Silently returns {@code undefined} when the file is missing or unreadable
+   * so the synchronizer can continue with the remaining sessions.
+   */
   private async extractSessionAiTitleFromEnd(
     filePath: string,
     sessionId: string
