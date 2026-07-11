@@ -54,14 +54,11 @@
     "sections": {
       "appearance": "Внешний вид",
       "toolDisplay": "Отображение инструментов",
-      "viewOptions": "Параметры просмотра",
       "inputSettings": "Настройки ввода"
     },
     "darkMode": "Темная тема",
-    "autoExpandTools": "Автоматически разворачивать инструменты",
     "showRawParameters": "Показывать сырые параметры",
     "showThinking": "Показывать размышления",
-    "autoScrollToBottom": "Автопрокрутка вниз",
     "sendByCtrlEnter": "Отправка по Ctrl+Enter",
     "sendByCtrlEnterDescription": "Когда включено, нажатие Ctrl+Enter будет отправлять сообщение вместо просто Enter. Это полезно для пользователей IME, чтобы избежать случайной отправки.",
     "dragHandle": {
@@ -94,8 +91,34 @@
     "git": "Git",
     "apiTokens": "API и токены",
     "tasks": "Задачи",
+    "notifications": "Уведомления",
     "plugins": "Плагины",
     "about": "О программе"
+  },
+  "notifications": {
+    "title": "Уведомления",
+    "description": "Управляйте тем, какие события уведомлений вы получаете.",
+    "webPush": {
+      "title": "Web Push уведомления",
+      "enable": "Включить Push уведомления",
+      "disable": "Отключить Push уведомления",
+      "enabled": "Push уведомления включены",
+      "loading": "Обновление...",
+      "unsupported": "Push уведомления не поддерживаются в этом браузере.",
+      "denied": "Push уведомления заблокированы. Разрешите их в настройках браузера."
+    },
+    "sound": {
+      "title": "Звук",
+      "description": "Воспроизводить короткий сигнал при завершении запуска чата.",
+      "enabled": "Включено",
+      "test": "Проверить звук"
+    },
+    "events": {
+      "title": "Типы событий",
+      "actionRequired": "Требуется действие",
+      "stop": "Запуск остановлен",
+      "error": "Запуск завершился с ошибкой"
+    }
   },
   "appearanceSettings": {
     "darkMode": {
@@ -299,9 +322,6 @@
       },
       "codex": {
         "description": "AI-ассистент OpenAI Codex"
-      },
-      "gemini": {
-        "description": "AI-ассистент Google Gemini"
       }
     },
     "connectionStatus": "Статус подключения",

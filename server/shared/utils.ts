@@ -346,6 +346,84 @@ export function createNormalizedMessage(fields: NormalizedMessageInput): Normali
   };
 }
 
+/**
+ * Build the unified terminal `complete` lifecycle message.
+ *
+ * Contract: every provider run ends with exactly one `complete` (the
+ * abort-session handler emits it on behalf of cancelled runs, so aborted runs
+ * must NOT emit their own). The frontend treats `complete` as the only
+ * terminal signal and never needs provider-specific handling:
+ *
+ * - `sessionId`     — the id the client knows this run by ('' if never discovered)
+ * - `actualSessionId` — canonical id after the run; equals `sessionId` unless
+ *                       the provider rewrote it mid-run
+ * - `exitCode`      — 0 on success; a missing/null code (e.g. killed process)
+ *                     is reported as failure
+ * - `success`       — exitCode === 0 and not aborted
+ * - `aborted`       — run was cancelled by the user
+ */
+export function createCompleteMessage(opts: {
+  provider: NormalizedMessage['provider'];
+  sessionId?: string | null;
+  actualSessionId?: string | null;
+  exitCode?: number | null;
+  aborted?: boolean;
+}): NormalizedMessage {
+  const exitCode = typeof opts.exitCode === 'number' ? opts.exitCode : 1;
+  const aborted = Boolean(opts.aborted);
+
+  return createNormalizedMessage({
+    kind: 'complete',
+    provider: opts.provider,
+    sessionId: opts.sessionId || null,
+    actualSessionId: opts.actualSessionId || opts.sessionId || null,
+    exitCode,
+    success: exitCode === 0 && !aborted,
+    aborted,
+  });
+}
+
+// ---------------------------
+//----------------- CONVERSATION HISTORY PAGINATION UTILITIES ------------
+/**
+ * Slices one page from the END of a chronologically ordered message list.
+ *
+ * This is the single pagination contract for conversation history across all
+ * providers: `offset = 0` returns the most recent `limit` items, increasing
+ * offsets walk backwards in time (for "scroll up to load older" UIs), and a
+ * `null` limit returns everything. Items must already be sorted oldest-first;
+ * the returned page preserves that order.
+ *
+ * Every provider history reader must use this helper instead of slicing
+ * manually so `offset`/`limit` query params behave identically regardless of
+ * which provider produced the session.
+ */
+export function sliceTailPage<T>(
+  items: T[],
+  limit: number | null,
+  offset: number,
+): { page: T[]; hasMore: boolean } {
+  const total = items.length;
+  const normalizedOffset = Math.max(0, offset);
+
+  if (limit === null) {
+    // A null limit returns the full list; offset still trims newest entries
+    // so "everything before the page I already have" stays expressible.
+    const end = Math.max(0, total - normalizedOffset);
+    return {
+      page: items.slice(0, end),
+      hasMore: false,
+    };
+  }
+
+  const end = Math.max(0, total - normalizedOffset);
+  const start = Math.max(0, end - Math.max(0, limit));
+  return {
+    page: items.slice(start, end),
+    hasMore: start > 0,
+  };
+}
+
 // ---------------------------
 //----------------- MCP CONFIG PARSING UTILITIES ------------
 /**
@@ -879,9 +957,25 @@ export async function readProviderSkillMarkdownDefinition(
   skillPath: string,
 ): Promise<{ name: string; description: string }> {
   const content = await readFile(skillPath, 'utf8');
+  return readProviderSkillMarkdownDefinitionFromContent(
+    content,
+    path.basename(path.dirname(skillPath)),
+  );
+}
+
+/**
+ * Reads the `name` and `description` fields from raw skill markdown content.
+ *
+ * This keeps filesystem discovery and newly uploaded skill creation aligned on
+ * the same front matter parsing rules. `fallbackName` is used when the markdown
+ * omits a `name` field so callers still get a stable, non-empty skill id.
+ */
+export function readProviderSkillMarkdownDefinitionFromContent(
+  content: string,
+  fallbackName: string,
+): { name: string; description: string } {
   const parsed = parseFrontMatter(content);
   const data = readObjectRecord(parsed.data) ?? {};
-  const fallbackName = path.basename(path.dirname(skillPath));
 
   return {
     name: readOptionalString(data.name) ?? fallbackName,
@@ -970,6 +1064,30 @@ export function readJsonRecord(value: unknown): AnyRecord | null {
  */
 export function getOpenCodeDatabasePath(): string {
   return path.join(os.homedir(), '.local', 'share', 'opencode', 'opencode.db');
+}
+
+/**
+ * Decodes an OpenCode text payload that was persisted as a JSON string literal.
+ *
+ * OpenCode can store the first user prompt (and other text parts) as `"hello"`
+ * instead of `hello`. Used by both the OpenCode session reader (transcript
+ * history) and the OpenCode synchronizer (session titling) so a session name or
+ * message body never surfaces with surrounding quote characters. Only fully
+ * quoted, valid JSON string literals are unwrapped; ordinary prose that merely
+ * happens to start/end with a quote is returned untouched.
+ */
+export function unwrapJsonStringLiteral(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('"') || !trimmed.endsWith('"')) {
+    return value;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    return typeof parsed === 'string' ? parsed : value;
+  } catch {
+    return value;
+  }
 }
 
 // ---------------------------
@@ -1143,5 +1261,26 @@ export async function extractFirstValidJsonlData<T>(
   }
 
   return null;
+}
+
+// ---------------------------
+//----------------- CLI PROMPT ARGUMENT UTILITIES ------------
+/**
+ * Makes a prompt safe to pass as one CLI argument to `.cmd`-shimmed tools on
+ * Windows (cursor-agent and opencode installed via npm-style shims).
+ *
+ * cmd.exe cannot carry newlines inside an argument: everything after the
+ * first newline is silently dropped before the target CLI ever sees it, which
+ * truncates multi-line prompts and any appended `<images_input>` block.
+ * Collapsing newline runs to single spaces loses formatting but never loses
+ * content, so runtimes should call this on win32 right before spawning.
+ *
+ * Used by the cursor and opencode spawn runtimes.
+ */
+export function flattenPromptForWindowsShell(prompt: string): string {
+  if (process.platform !== 'win32' || typeof prompt !== 'string') {
+    return prompt;
+  }
+  return prompt.replace(/\s*\r?\n\s*/g, ' ').trim();
 }
 

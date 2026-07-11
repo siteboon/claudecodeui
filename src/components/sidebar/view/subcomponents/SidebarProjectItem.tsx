@@ -4,6 +4,7 @@ import type { TFunction } from 'i18next';
 import { Button } from '../../../../shared/view/ui';
 import { cn } from '../../../../lib/utils';
 import type { Project, ProjectSession, LLMProvider } from '../../../../types/app';
+import type { SessionActivityMap } from '../../../../hooks/useSessionProtection';
 import type { MCPServerStatus, SessionWithProvider } from '../../types/types';
 import { getTaskIndicatorStatus } from '../../utils/utils';
 
@@ -43,6 +44,8 @@ type SidebarProjectItemProps = {
     provider: LLMProvider,
   ) => void;
   onLoadMoreSessions: (projectId: string) => void;
+  activeSessions: SessionActivityMap;
+  attentionSessionIds: ReadonlySet<string>;
   onNewSession: (project: Project) => void;
   onEditingSessionNameChange: (value: string) => void;
   onStartEditingSession: (sessionId: string, initialName: string) => void;
@@ -84,6 +87,8 @@ export default function SidebarProjectItem({
   onSessionSelect,
   onDeleteSession,
   onLoadMoreSessions,
+  activeSessions,
+  attentionSessionIds,
   onNewSession,
   onEditingSessionNameChange,
   onStartEditingSession,
@@ -183,7 +188,7 @@ export default function SidebarProjectItem({
                   ) : (
                     <>
                       <div className="flex min-w-0 flex-1 items-center justify-between">
-                        <h3 className="truncate text-sm font-medium text-foreground">{project.displayName}</h3>
+                        <h3 className="truncate text-sm font-normal text-foreground">{project.displayName}</h3>
                         {tasksEnabled && (
                           <TaskIndicator
                             status={taskStatus}
@@ -315,7 +320,7 @@ export default function SidebarProjectItem({
                 </div>
               ) : (
                 <div>
-                  <div className="truncate text-sm font-semibold text-foreground" title={project.displayName}>
+                  <div className="truncate text-sm font-normal text-foreground" title={project.displayName}>
                     {project.displayName}
                   </div>
                   <div className="text-xs text-muted-foreground">
@@ -395,6 +400,8 @@ export default function SidebarProjectItem({
         initialSessionsLoaded={initialSessionsLoaded}
         hasMoreSessions={Boolean(project.sessionMeta?.hasMore)}
         isLoadingMoreSessions={isLoadingMoreSessions}
+        activeSessions={activeSessions}
+        attentionSessionIds={attentionSessionIds}
         currentTime={currentTime}
         editingSession={editingSession}
         editingSessionName={editingSessionName}

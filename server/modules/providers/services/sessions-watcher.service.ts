@@ -4,10 +4,12 @@ import { promises as fsPromises } from 'node:fs';
 
 import chokidar, { type FSWatcher } from 'chokidar';
 
+import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { sessionSynchronizerService } from '@/modules/providers/services/session-synchronizer.service.js';
+import { sessionsService } from '@/modules/providers/services/sessions.service.js';
 import { WS_OPEN_STATE, connectedClients } from '@/modules/websocket/index.js';
 import type { LLMProvider } from '@/shared/types.js';
-import { getProjectsWithSessions } from '@/modules/projects/index.js';
+import { generateDisplayName } from '@/modules/projects/index.js';
 
 type WatcherEventType = 'add' | 'change';
 
@@ -23,16 +25,6 @@ const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> =
   {
     provider: 'codex',
     rootPath: path.join(os.homedir(), '.codex', 'sessions'),
-  },
-  // {
-  //   provider: 'gemini',
-  //   rootPath: path.join(os.homedir(), '.gemini', 'sessions'),
-  // },
-  // Keep `sessions/` watcher disabled: Gemini also mirrors artifacts there,
-  // which causes duplicate synchronization events.
-  {
-    provider: 'gemini',
-    rootPath: path.join(os.homedir(), '.gemini', 'tmp'),
   },
   {
     provider: 'opencode',
@@ -58,6 +50,11 @@ const watchers: FSWatcher[] = [];
 type PendingWatcherUpdate = {
   providers: Set<LLMProvider>;
   changeTypes: Set<WatcherEventType>;
+  /**
+   * Provider-native session ids reported by the synchronizers. They are
+   * translated back to app-facing session rows at flush time, because the
+   * transcript file names on disk only ever contain provider ids.
+   */
   updatedSessionIds: Set<string>;
 };
 
@@ -73,10 +70,6 @@ let watcherRescheduleAfterRefresh = false;
 function isWatcherTargetFile(provider: LLMProvider, filePath: string): boolean {
   if (provider === 'opencode') {
     return path.basename(filePath) === 'opencode.db';
-  }
-
-  if (provider === 'gemini') {
-    return filePath.endsWith('.json') || filePath.endsWith('.jsonl');
   }
 
   return filePath.endsWith('.jsonl');
@@ -131,6 +124,50 @@ function queuePendingWatcherUpdate(
   schedulePendingWatcherFlush();
 }
 
+/**
+ * Builds one `session_upserted` delta event for a provider-native session id.
+ *
+ * The event carries everything a sidebar needs to upsert the session in place
+ * (session summary plus owning-project metadata), so clients never need a full
+ * project-list refetch when a transcript file changes on disk. Returns `null`
+ * when the id cannot be resolved to an indexed session row.
+ */
+async function buildSessionUpsertedEvent(updatedProviderSessionId: string): Promise<string | null> {
+  const row = sessionsDb.getSessionByProviderSessionId(updatedProviderSessionId)
+    ?? sessionsDb.getSessionById(updatedProviderSessionId);
+  if (!row || row.isArchived) {
+    return null;
+  }
+
+  const projectPath = row.project_path;
+  const project = projectPath ? projectsDb.getProjectPath(projectPath) : null;
+  const displayName = project?.custom_project_name?.trim()
+    ? project.custom_project_name
+    : await generateDisplayName(path.basename(projectPath ?? '') || (projectPath ?? ''), projectPath);
+
+  return JSON.stringify({
+    kind: 'session_upserted',
+    sessionId: row.session_id,
+    provider: row.provider,
+    session: {
+      id: row.session_id,
+      summary: row.custom_name || '',
+      messageCount: 0,
+      lastActivity: row.updated_at ?? row.created_at ?? new Date().toISOString(),
+    },
+    project: project
+      ? {
+        projectId: project.project_id,
+        path: project.project_path,
+        fullPath: project.project_path,
+        displayName,
+        isStarred: Boolean(project.isStarred),
+      }
+      : null,
+    timestamp: new Date().toISOString(),
+  });
+}
+
 async function flushPendingWatcherUpdate(): Promise<void> {
   clearPendingWatcherFlushTimer();
 
@@ -149,33 +186,29 @@ async function flushPendingWatcherUpdate(): Promise<void> {
   watcherRefreshInFlight = true;
 
   try {
-    const updatedProjects = await getProjectsWithSessions({ skipSynchronization: true });
-    const changeTypes = Array.from(queuedUpdate.changeTypes);
-    const watchProviders = Array.from(queuedUpdate.providers);
-    const updatedSessionIds = Array.from(queuedUpdate.updatedSessionIds);
-
-    // Backward-compatible fields stay populated with the first queued values.
-    const updateMessage = JSON.stringify({
-      type: 'projects_updated',
-      projects: updatedProjects,
-      timestamp: new Date().toISOString(),
-      changeType: changeTypes[0] ?? 'change',
-      updatedSessionId: updatedSessionIds[0] ?? undefined,
-      watchProvider: watchProviders[0] ?? undefined,
-      changeTypes,
-      updatedSessionIds,
-      watchProviders,
-      batched: true,
-    });
-
-    connectedClients.forEach(client => {
-      if (client.readyState === WS_OPEN_STATE) {
-        client.send(updateMessage);
+    // Per-session deltas instead of full project snapshots: an upsert of one
+    // session can never clobber unrelated client state, so the frontend needs
+    // no "suppress updates while a run is active" protection logic.
+    const events: string[] = [];
+    for (const updatedSessionId of queuedUpdate.updatedSessionIds) {
+      const event = await buildSessionUpsertedEvent(updatedSessionId);
+      if (event) {
+        events.push(event);
       }
-    });
+    }
+
+    if (events.length > 0) {
+      connectedClients.forEach(client => {
+        if (client.readyState === WS_OPEN_STATE) {
+          for (const event of events) {
+            client.send(event);
+          }
+        }
+      });
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error('Session watcher refresh failed while broadcasting projects_updated', { error: message });
+    console.error('Session watcher refresh failed while broadcasting session_upserted', { error: message });
   } finally {
     watcherRefreshInFlight = false;
 
@@ -230,6 +263,13 @@ export async function initializeSessionsWatcher(): Promise<void> {
     processedByProvider: initialSync.processedByProvider,
     failures: initialSync.failures,
   });
+
+  try {
+    await sessionsService.syncSessionNames();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Failed to sync session names to history', { error: message });
+  }
 
   for (const { provider, rootPath } of PROVIDER_WATCH_PATHS) {
     try {

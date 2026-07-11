@@ -1,0 +1,269 @@
+{
+  "buttons": {
+    "save": "儲存",
+    "cancel": "取消",
+    "delete": "刪除",
+    "create": "建立",
+    "edit": "編輯",
+    "close": "關閉",
+    "confirm": "確認",
+    "submit": "送出",
+    "retry": "重試",
+    "refresh": "重新整理",
+    "search": "搜尋",
+    "clear": "清除",
+    "copy": "複製",
+    "download": "下載",
+    "upload": "上傳",
+    "browse": "瀏覽"
+  },
+  "tabs": {
+    "chat": "聊天",
+    "shell": "終端機",
+    "files": "檔案",
+    "git": "版本控制",
+    "tasks": "任務",
+    "browser": "瀏覽器",
+    "computer": "電腦"
+  },
+  "status": {
+    "loading": "載入中...",
+    "success": "成功",
+    "error": "錯誤",
+    "failed": "失敗",
+    "pending": "待處理",
+    "completed": "已完成",
+    "inProgress": "進行中"
+  },
+  "messages": {
+    "savedSuccessfully": "儲存成功",
+    "deletedSuccessfully": "刪除成功",
+    "updatedSuccessfully": "更新成功",
+    "operationFailed": "操作失敗",
+    "networkError": "網路錯誤，請檢查您的連線。",
+    "unauthorized": "未授權，請登入。",
+    "notFound": "找不到",
+    "invalidInput": "輸入無效",
+    "requiredField": "此欄位為必填",
+    "unknownError": "發生未知錯誤"
+  },
+  "navigation": {
+    "settings": "設定",
+    "home": "首頁",
+    "back": "返回",
+    "next": "下一步",
+    "previous": "上一步",
+    "logout": "登出"
+  },
+  "common": {
+    "language": "語言",
+    "theme": "佈景主題",
+    "darkMode": "深色模式",
+    "lightMode": "淺色模式",
+    "name": "名稱",
+    "description": "描述",
+    "enabled": "已啟用",
+    "disabled": "已停用",
+    "optional": "選填",
+    "version": "版本",
+    "select": "選取",
+    "selectAll": "全選",
+    "deselectAll": "取消全選"
+  },
+  "time": {
+    "justNow": "剛剛",
+    "minutesAgo": "{{count}} 分鐘前",
+    "hoursAgo": "{{count}} 小時前",
+    "daysAgo": "{{count}} 天前",
+    "yesterday": "昨天"
+  },
+  "fileOperations": {
+    "newFile": "新增檔案",
+    "newFolder": "新增資料夾",
+    "rename": "重新命名",
+    "move": "移動",
+    "copyPath": "複製路徑",
+    "openInEditor": "在編輯器中開啟"
+  },
+  "mainContent": {
+    "loading": "正在載入 CloudCLI",
+    "settingUpWorkspace": "正在設定您的工作區...",
+    "chooseProject": "選擇您的專案",
+    "selectProjectDescription": "從側邊欄選擇一個專案以開始使用 Claude 進行程式開發。每個專案包含您的聊天紀錄和檔案歷史。",
+    "tip": "提示",
+    "createProjectMobile": "點擊上方的選單按鈕以存取專案",
+    "createProjectDesktop": "點擊側邊欄中的資料夾圖示以建立新專案",
+    "newSession": "新工作階段",
+    "untitledSession": "未命名工作階段",
+    "projectFiles": "專案檔案"
+  },
+  "fileTree": {
+    "loading": "正在載入檔案...",
+    "files": "檔案",
+    "simpleView": "簡易檢視",
+    "compactView": "精簡檢視",
+    "detailedView": "詳細檢視",
+    "searchPlaceholder": "搜尋檔案和資料夾...",
+    "clearSearch": "清除搜尋",
+    "name": "名稱",
+    "size": "大小",
+    "modified": "修改時間",
+    "permissions": "權限",
+    "noFilesFound": "找不到檔案",
+    "checkProjectPath": "請檢查專案路徑是否可存取",
+    "noMatchesFound": "找不到符合項目",
+    "tryDifferentSearch": "嘗試不同的搜尋詞或清除搜尋",
+    "justNow": "剛剛",
+    "minAgo": "{{count}} 分鐘前",
+    "hoursAgo": "{{count}} 小時前",
+    "daysAgo": "{{count}} 天前",
+    "newFile": "新增檔案 (Cmd+N)",
+    "newFolder": "新增資料夾 (Cmd+Shift+N)",
+    "refresh": "重新整理",
+    "collapseAll": "全部收合",
+    "context": {
+      "rename": "重新命名",
+      "delete": "刪除",
+      "copyPath": "複製路徑",
+      "download": "下載",
+      "newFile": "新增檔案",
+      "newFolder": "新增資料夾",
+      "refresh": "重新整理",
+      "menuLabel": "檔案右鍵選單",
+      "loading": "載入中..."
+    }
+  },
+  "projectWizard": {
+    "title": "建立新專案",
+    "steps": {
+      "type": "類型",
+      "configure": "設定",
+      "confirm": "確認"
+    },
+    "step1": {
+      "question": "您已經有工作區，還是想建立一個新的工作區？",
+      "existing": {
+        "title": "現有工作區",
+        "description": "我的伺服器上已經有工作區，只需要將其加入專案列表"
+      },
+      "new": {
+        "title": "新建工作區",
+        "description": "建立新工作區，可選擇從 GitHub 儲存庫複製"
+      }
+    },
+    "step2": {
+      "existingPath": "工作區路徑",
+      "newPath": "工作區路徑",
+      "existingPlaceholder": "/path/to/existing/workspace",
+      "newPlaceholder": "/path/to/new/workspace",
+      "existingHelp": "您現有工作區目錄的完整路徑",
+      "newHelp": "工作區目錄的完整路徑",
+      "githubUrl": "GitHub URL（選填）",
+      "githubPlaceholder": "https://github.com/username/repository",
+      "githubHelp": "選填：提供 GitHub URL 以複製儲存庫",
+      "githubAuth": "GitHub 身分驗證（選填）",
+      "githubAuthHelp": "僅私有儲存庫需要。公開儲存庫無需身分驗證即可複製。",
+      "loadingTokens": "正在載入已儲存的權杖...",
+      "storedToken": "已儲存的權杖",
+      "newToken": "新權杖",
+      "nonePublic": "無（公開）",
+      "selectToken": "選取權杖",
+      "selectTokenPlaceholder": "-- 選取權杖 --",
+      "tokenPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "tokenHelp": "此權杖僅用於此操作",
+      "publicRepoInfo": "公開儲存庫不需要身分驗證。如果複製公開儲存庫，可以略過提供權杖。",
+      "noTokensHelp": "沒有可用的已儲存權杖。您可以在 設定 → API 金鑰 中新增權杖以便重複使用。",
+      "optionalTokenPublic": "GitHub 權杖（公開儲存庫可選）",
+      "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx（公開儲存庫可留空）"
+    },
+    "step3": {
+      "reviewConfig": "檢閱您的設定",
+      "existingWorkspace": "現有工作區",
+      "newWorkspace": "新建工作區",
+      "path": "路徑：",
+      "cloneFrom": "複製自：",
+      "authentication": "身分驗證：",
+      "usingStoredToken": "使用已儲存的權杖：",
+      "usingProvidedToken": "使用提供的權杖",
+      "noAuthentication": "無身分驗證",
+      "sshKey": "SSH 金鑰",
+      "existingInfo": "工作區將加入您的專案列表，並可用於 Claude/Cursor 工作階段。",
+      "newWithClone": "儲存庫將從此資料夾複製。",
+      "newEmpty": "工作區將加入您的專案列表，並可用於 Claude/Cursor 工作階段。",
+      "cloningRepository": "正在複製儲存庫..."
+    },
+    "buttons": {
+      "cancel": "取消",
+      "back": "返回",
+      "next": "下一步",
+      "createProject": "建立專案",
+      "creating": "建立中...",
+      "cloning": "正在複製..."
+    },
+    "errors": {
+      "selectType": "請選擇您已有現有工作區還是想建立新工作區",
+      "providePath": "請提供工作區路徑",
+      "failedToCreate": "建立工作區失敗",
+      "failedToCreateFolder": "建立資料夾失敗"
+    }
+  },
+  "notifications": {
+    "genericTool": "工具",
+    "codes": {
+      "generic": {
+        "info": {
+          "title": "通知"
+        }
+      },
+      "permission": {
+        "required": {
+          "title": "需要處理",
+          "body": "{{toolName}} 正在等待你的決定。"
+        }
+      },
+      "run": {
+        "stopped": {
+          "title": "執行已停止",
+          "body": "原因：{{reason}}"
+        },
+        "failed": {
+          "title": "執行失敗"
+        }
+      },
+      "agent": {
+        "notification": {
+          "title": "Agent 通知"
+        }
+      }
+    }
+  },
+  "versionUpdate": {
+    "title": "有可用更新",
+    "newVersionReady": "新版本已準備就緒",
+    "currentVersion": "目前版本",
+    "latestVersion": "最新版本",
+    "whatsNew": "新功能：",
+    "viewFullRelease": "查看完整發行說明",
+    "updateProgress": "更新進度：",
+    "manualUpgrade": "手動升級：",
+    "npmUpgradeCommand": "npm install -g @cloudcli-ai/cloudcli@latest",
+    "manualUpgradeHint": "或點擊「立即更新」以自動執行更新。",
+    "updateCompleted": "更新成功完成！",
+    "restartServer": "請重新啟動伺服器以套用變更。",
+    "updateFailed": "更新失敗",
+    "buttons": {
+      "close": "關閉",
+      "later": "稍後",
+      "copyCommand": "複製指令",
+      "updateNow": "立即更新",
+      "updating": "更新中..."
+    },
+    "ariaLabels": {
+      "closeModal": "關閉版本升級對話框",
+      "showSidebar": "顯示側邊欄",
+      "settings": "設定",
+      "updateAvailable": "有可用更新",
+      "closeSidebar": "關閉側邊欄"
+    }
+  }
+}

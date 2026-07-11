@@ -1,11 +1,48 @@
-import { spawn } from 'child_process';
 import path from 'path';
+
+// cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
+import spawn from 'cross-spawn';
 import { scanPlugins, getPluginsConfig, getPluginDir } from './plugin-loader.js';
 
 // Map<pluginName, { process, port }>
 const runningPlugins = new Map();
 // Map<pluginName, Promise<port>> — in-flight start operations
 const startingPlugins = new Map();
+
+/**
+ * Build the environment handed to a plugin server subprocess.
+ *
+ * Intentionally minimal: only non-secret essentials, never the host's full
+ * environment. On Windows a handful of system variables are required for any
+ * child to bootstrap (Node itself, and any Python or CLI a plugin shells out
+ * to). Without APPDATA a `pip install --user` tool cannot locate its
+ * site-packages and fails to import; SystemRoot, PATHEXT and TEMP are needed to
+ * resolve system DLLs, executable extensions and a temp directory. None of
+ * these carry secrets, so the ones that are set get passed straight through.
+ */
+function buildPluginEnv(name) {
+  const env = {
+    PATH: process.env.PATH,
+    HOME: process.env.HOME,
+    NODE_ENV: process.env.NODE_ENV || 'production',
+    PLUGIN_NAME: name,
+  };
+
+  if (process.platform === 'win32') {
+    const WINDOWS_ESSENTIALS = [
+      'SystemRoot', 'windir', 'SystemDrive',
+      'USERPROFILE', 'APPDATA', 'LOCALAPPDATA',
+      'TEMP', 'TMP', 'PATHEXT',
+    ];
+    for (const key of WINDOWS_ESSENTIALS) {
+      if (process.env[key] !== undefined) {
+        env[key] = process.env[key];
+      }
+    }
+  }
+
+  return env;
+}
 
 /**
  * Start a plugin's server subprocess.
@@ -26,15 +63,9 @@ export function startPluginServer(name, pluginDir, serverEntry) {
 
     const serverPath = path.join(pluginDir, serverEntry);
 
-    // Restricted env — only essentials, no host secrets
     const pluginProcess = spawn('node', [serverPath], {
       cwd: pluginDir,
-      env: {
-        PATH: process.env.PATH,
-        HOME: process.env.HOME,
-        NODE_ENV: process.env.NODE_ENV || 'production',
-        PLUGIN_NAME: name,
-      },
+      env: buildPluginEnv(name),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 

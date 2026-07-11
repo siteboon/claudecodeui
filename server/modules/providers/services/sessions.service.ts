@@ -1,7 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
+import { chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import type {
   FetchHistoryOptions,
@@ -10,6 +12,12 @@ import type {
   NormalizedMessage,
 } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
+
+type CreateAppSessionResult = {
+  sessionId: string;
+  provider: LLMProvider;
+  projectPath: string;
+};
 
 type ArchivedSessionListItem = {
   sessionId: string;
@@ -63,6 +71,81 @@ function resolveProjectDisplayName(
 }
 
 /**
+ * Sets the custom title for a session by appending a custom-title entry
+ * to the session's JSONL file. This is what `claude -r` reads to display
+ * session names.
+ */
+async function setSessionTitle(sessionId: string, title: string): Promise<void> {
+  const session = sessionsDb.getSessionById(sessionId);
+  if (!session?.jsonl_path) return;
+
+  try {
+    const entry = JSON.stringify({
+      type: 'custom-title',
+      customTitle: title,
+      sessionId,
+    });
+    await fsp.appendFile(session.jsonl_path, '\n' + entry, 'utf8');
+  } catch {
+    // Session file may not exist or may be locked
+  }
+}
+
+/**
+ * Scans all sessions with custom_name and syncs them to their session JSONL files
+ * on startup so `claude -r` displays the CloudCLI session names.
+ */
+async function syncAllSessionNamesToHistory(): Promise<void> {
+  const sessions = sessionsDb.getSessionsWithCustomName();
+  if (sessions.length === 0) return;
+
+  let synced = 0;
+  for (const session of sessions) {
+    if (!session.jsonl_path) continue;
+    try {
+      const content = await fsp.readFile(session.jsonl_path, 'utf8');
+      const lines = content.split(/\r?\n/);
+      let hasCustomTitle = false;
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (
+            typeof parsed === 'object' &&
+            parsed !== null &&
+            (parsed as Record<string, unknown>).type === 'custom-title' &&
+            (parsed as Record<string, unknown>).sessionId === session.session_id
+          ) {
+            hasCustomTitle = true;
+            break;
+          }
+        } catch {
+          // skip non-JSON lines
+        }
+      }
+
+      if (!hasCustomTitle) {
+        const entry = JSON.stringify({
+          type: 'custom-title',
+          customTitle: session.custom_name,
+          sessionId: session.session_id,
+        });
+        await fsp.appendFile(session.jsonl_path, '\n' + entry, 'utf8');
+        synced++;
+      }
+    } catch {
+      // Session file may not exist
+    }
+  }
+
+  if (synced > 0) {
+    console.log(`[Sessions] Synced ${synced} session name(s) to session JSONL files`);
+  }
+}
+
+/**
  * Application service for provider-backed session message operations.
  *
  * Callers pass a provider id and this service resolves the concrete provider
@@ -78,23 +161,74 @@ export const sessionsService = {
   },
 
   /**
+   * Returns app-facing ids for provider runs that are currently processing.
+   *
+   * This is intentionally status-only: callers that only need sidebar activity
+   * indicators should not attach to chat streams or request replayed messages.
+   */
+  listRunningSessions(): Array<{
+    sessionId: string;
+    provider: LLMProvider;
+    startedAt: number;
+    lastSeq: number;
+  }> {
+    return chatRunRegistry.listRunningRuns();
+  },
+
+  /**
    * Normalizes one provider-native event into frontend session message events.
    */
   normalizeMessage(
     providerName: string,
     raw: unknown,
     sessionId: string | null,
+    subagentPrompts: Set<string> | null = null,
   ): NormalizedMessage[] {
-    return providerRegistry.resolveProvider(providerName).sessions.normalizeMessage(raw, sessionId);
+    return providerRegistry.resolveProvider(providerName).sessions.normalizeMessage(
+      raw,
+      sessionId,
+      subagentPrompts,
+    );
   },
 
   /**
-   * Fetches persisted history by session id.
+   * Allocates a stable app-facing session id before any provider run happens.
+   *
+   * This is the entry point of the session gateway: the frontend calls this
+   * (via `POST /api/providers/sessions`) when the user starts a brand-new
+   * chat, navigates to the returned id immediately, and the id never changes
+   * for the lifetime of the conversation. The provider-native id is mapped to
+   * this row later, when the provider runtime announces it mid-run.
+   */
+  createAppSession(provider: LLMProvider, projectPath: string): CreateAppSessionResult {
+    const normalizedProjectPath = projectPath.trim();
+    if (!normalizedProjectPath) {
+      throw new AppError('projectPath is required.', {
+        code: 'PROJECT_PATH_REQUIRED',
+        statusCode: 400,
+      });
+    }
+
+    const sessionId = randomUUID();
+    sessionsDb.createAppSession(sessionId, provider, normalizedProjectPath);
+
+    return {
+      sessionId,
+      provider,
+      projectPath: normalizedProjectPath,
+    };
+  },
+
+  /**
+   * Fetches persisted history by app session id.
    *
    * Provider and provider-specific lookup hints are resolved from the indexed
-   * session metadata in the database.
+   * session metadata in the database. The provider adapter receives the
+   * provider-native session id (the one written into transcripts on disk),
+   * and every returned message is remapped back to the app session id so
+   * provider ids never reach the frontend.
    */
-  fetchHistory(
+  async fetchHistory(
     sessionId: string,
     options: Pick<FetchHistoryOptions, 'limit' | 'offset'> = {},
   ): Promise<FetchHistoryResult> {
@@ -106,12 +240,33 @@ export const sessionsService = {
       });
     }
 
+    // App-created sessions that never produced a provider transcript yet
+    // (e.g. first message still streaming) simply have no history.
+    if (!session.provider_session_id) {
+      return {
+        messages: [],
+        total: 0,
+        hasMore: false,
+        offset: options.offset ?? 0,
+        limit: options.limit ?? null,
+      };
+    }
+
     const provider = session.provider as LLMProvider;
-    return providerRegistry.resolveProvider(provider).sessions.fetchHistory(sessionId, {
+    const result = await providerRegistry.resolveProvider(provider).sessions.fetchHistory(sessionId, {
       limit: options.limit ?? null,
       offset: options.offset ?? 0,
       projectPath: session.project_path ?? '',
+      providerSessionId: session.provider_session_id,
     });
+
+    return {
+      ...result,
+      messages: result.messages.map((message) => ({
+        ...message,
+        sessionId,
+      })),
+    };
   },
 
   /**
@@ -216,9 +371,9 @@ export const sessionsService = {
   },
 
   /**
-   * Renames one session by id without requiring the caller to pass provider.
+   * Renames one session by id and syncs the name to the provider's history file.
    */
-  renameSessionById(sessionId: string, summary: string): { sessionId: string; summary: string } {
+  async renameSessionById(sessionId: string, summary: string): Promise<{ sessionId: string; summary: string }> {
     const session = sessionsDb.getSessionById(sessionId);
     if (!session) {
       throw new AppError(`Session "${sessionId}" was not found.`, {
@@ -228,6 +383,16 @@ export const sessionsService = {
     }
 
     sessionsDb.updateSessionCustomName(sessionId, summary);
+    void setSessionTitle(sessionId, summary);
     return { sessionId, summary };
+  },
+
+  /**
+   * Scans all indexed sessions with custom_name and syncs them to their
+   * session JSONL files so `claude -r` displays the CloudCLI session names.
+   * Runs once at startup to keep existing sessions in sync.
+   */
+  async syncSessionNames(): Promise<void> {
+    await syncAllSessionNamesToHistory();
   },
 };

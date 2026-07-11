@@ -18,14 +18,16 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }: ImageAttachm
   
   return (
     <div className="group relative">
-      <img src={preview} alt={file.name} className="h-20 w-20 rounded object-cover" />
+      <div className="overflow-hidden rounded-xl border border-border/50 shadow-sm">
+        <img src={preview} alt={file.name} className="h-20 w-20 object-cover" />
+      </div>
       {uploadProgress !== undefined && uploadProgress < 100 && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+        <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/50">
           <div className="text-xs text-white">{uploadProgress}%</div>
         </div>
       )}
       {error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-red-500/50">
+        <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-red-500/50">
           <svg className="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
@@ -34,7 +36,7 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }: ImageAttachm
       <button
         type="button"
         onClick={onRemove}
-        className="absolute -right-2 -top-2 rounded-full bg-red-500 p-1 text-white opacity-100 transition-opacity focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+        className="absolute -right-1.5 -top-1.5 rounded-full border border-border/40 bg-background/90 p-1 text-foreground shadow-sm backdrop-blur transition-opacity hover:bg-background focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
         aria-label="Remove image"
       >
         <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

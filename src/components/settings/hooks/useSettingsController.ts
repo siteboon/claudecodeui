@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+
 import { useTheme } from '../../../contexts/ThemeContext';
 import { authenticatedFetch } from '../../../utils/api';
+import { setNotificationSoundEnabled } from '../../../utils/notificationSound';
 import { useProviderAuthStatus } from '../../provider-auth/hooks/useProviderAuthStatus';
 import {
   DEFAULT_CODE_EDITOR_SETTINGS,
@@ -12,7 +14,6 @@ import type {
   CodeEditorSettingsState,
   CodexPermissionMode,
   CursorPermissionsState,
-  GeminiPermissionMode,
   NotificationPreferencesState,
   ProjectSortOrder,
   SettingsMainTab,
@@ -52,7 +53,7 @@ type NotificationPreferencesResponse = {
 
 type ActiveLoginProvider = AgentProvider | '';
 
-const KNOWN_MAIN_TABS: SettingsMainTab[] = ['agents', 'appearance', 'git', 'api', 'tasks', 'notifications', 'plugins'];
+const KNOWN_MAIN_TABS: SettingsMainTab[] = ['agents', 'appearance', 'git', 'api', 'tasks', 'browser', 'notifications', 'plugins', 'about'];
 
 const normalizeMainTab = (tab: string): SettingsMainTab => {
   // Keep backwards compatibility with older callers that still pass "tools".
@@ -84,7 +85,6 @@ const toCodexPermissionMode = (value: unknown): CodexPermissionMode => {
 };
 
 const readCodeEditorSettings = (): CodeEditorSettingsState => ({
-  theme: localStorage.getItem('codeEditorTheme') === 'light' ? 'light' : 'dark',
   wordWrap: localStorage.getItem('codeEditorWordWrap') === 'true',
   showMinimap: localStorage.getItem('codeEditorShowMinimap') !== 'false',
   lineNumbers: localStorage.getItem('codeEditorLineNumbers') !== 'false',
@@ -107,6 +107,8 @@ const createDefaultNotificationPreferences = (): NotificationPreferencesState =>
   channels: {
     inApp: true,
     webPush: false,
+    desktop: false,
+    sound: true,
   },
   events: {
     actionRequired: true,
@@ -114,6 +116,26 @@ const createDefaultNotificationPreferences = (): NotificationPreferencesState =>
     error: true,
   },
 });
+
+const normalizeNotificationPreferences = (
+  preferences?: Partial<NotificationPreferencesState> | null,
+): NotificationPreferencesState => {
+  const defaults = createDefaultNotificationPreferences();
+
+  return {
+    channels: {
+      inApp: preferences?.channels?.inApp ?? defaults.channels.inApp,
+      webPush: preferences?.channels?.webPush ?? defaults.channels.webPush,
+      desktop: preferences?.channels?.desktop ?? defaults.channels.desktop,
+      sound: preferences?.channels?.sound ?? defaults.channels.sound,
+    },
+    events: {
+      actionRequired: preferences?.events?.actionRequired ?? defaults.events.actionRequired,
+      stop: preferences?.events?.stop ?? defaults.events.stop,
+      error: preferences?.events?.error ?? defaults.events.error,
+    },
+  };
+};
 
 export function useSettingsController({ isOpen, initialTab }: UseSettingsControllerArgs) {
   const { isDarkMode, toggleDarkMode } = useTheme() as ThemeContextValue;
@@ -136,7 +158,6 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     createDefaultNotificationPreferences()
   ));
   const [codexPermissionMode, setCodexPermissionMode] = useState<CodexPermissionMode>('default');
-  const [geminiPermissionMode, setGeminiPermissionMode] = useState<GeminiPermissionMode>('default');
 
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginProvider, setLoginProvider] = useState<ActiveLoginProvider>('');
@@ -175,18 +196,12 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
       );
       setCodexPermissionMode(toCodexPermissionMode(savedCodexSettings.permissionMode));
 
-      const savedGeminiSettings = parseJson<{ permissionMode?: GeminiPermissionMode }>(
-        localStorage.getItem('gemini-settings'),
-        {},
-      );
-      setGeminiPermissionMode(savedGeminiSettings.permissionMode || 'default');
-
       try {
         const notificationResponse = await authenticatedFetch('/api/settings/notification-preferences');
         if (notificationResponse.ok) {
           const notificationData = await toResponseJson<NotificationPreferencesResponse>(notificationResponse);
           if (notificationData.success && notificationData.preferences) {
-            setNotificationPreferences(notificationData.preferences);
+            setNotificationPreferences(normalizeNotificationPreferences(notificationData.preferences));
           } else {
             setNotificationPreferences(createDefaultNotificationPreferences());
           }
@@ -253,11 +268,6 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
         lastUpdated: now,
       }));
 
-      localStorage.setItem('gemini-settings', JSON.stringify({
-        permissionMode: geminiPermissionMode,
-        lastUpdated: now,
-      }));
-
       const notificationResponse = await authenticatedFetch('/api/settings/notification-preferences', {
         method: 'PUT',
         body: JSON.stringify(notificationPreferences),
@@ -280,7 +290,6 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     cursorPermissions.disallowedCommands,
     cursorPermissions.skipPermissions,
     notificationPreferences,
-    geminiPermissionMode,
     projectSortOrder,
   ]);
 
@@ -302,7 +311,10 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
   }, [initialTab, isOpen, loadSettings, refreshProviderAuthStatuses]);
 
   useEffect(() => {
-    localStorage.setItem('codeEditorTheme', codeEditorSettings.theme);
+    setNotificationSoundEnabled(notificationPreferences.channels.sound);
+  }, [notificationPreferences.channels.sound]);
+
+  useEffect(() => {
     localStorage.setItem('codeEditorWordWrap', String(codeEditorSettings.wordWrap));
     localStorage.setItem('codeEditorShowMinimap', String(codeEditorSettings.showMinimap));
     localStorage.setItem('codeEditorLineNumbers', String(codeEditorSettings.lineNumbers));
@@ -383,8 +395,6 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     codexPermissionMode,
     setCodexPermissionMode,
     providerAuthStatus,
-    geminiPermissionMode,
-    setGeminiPermissionMode,
     openLoginForProvider,
     showLoginModal,
     setShowLoginModal,

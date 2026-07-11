@@ -8,6 +8,7 @@
  *   (no args)     - Start the server (default)
  *   start         - Start the server
  *   sandbox       - Manage Docker sandbox environments
+ *   browser-use-mcp - Run Browser MCP stdio server
  *   status        - Show configuration and data locations
  *   help          - Show help information
  *   version       - Show version information
@@ -154,12 +155,13 @@ Usage:
   cloudcli [command] [options]
 
 Commands:
-  start          Start the CloudCLI server (default)
-  sandbox        Manage Docker sandbox environments
-  status         Show configuration and data locations
-  update         Update to the latest version
-  help           Show this help information
-  version        Show version information
+  start            Start the CloudCLI server (default)
+  sandbox          Manage Docker sandbox environments
+  browser-use-mcp  Run the Browser MCP stdio server
+  status           Show configuration and data locations
+  update           Update to the latest version
+  help             Show this help information
+  version          Show version information
 
 Options:
   -p, --port <port>           Set server port (default: 3001)
@@ -254,13 +256,11 @@ async function updatePackage() {
 const SANDBOX_TEMPLATES = {
     claude: 'docker.io/cloudcliai/sandbox:claude-code',
     codex: 'docker.io/cloudcliai/sandbox:codex',
-    gemini: 'docker.io/cloudcliai/sandbox:gemini',
 };
 
 const SANDBOX_SECRETS = {
     claude: 'anthropic',
     codex: 'openai',
-    gemini: 'google',
 };
 
 function parseSandboxArgs(args) {
@@ -336,7 +336,7 @@ Subcommands:
   ${c.bright('help')}         Show this help
 
 Options:
-  -a, --agent <agent>       Agent to use: claude, codex, gemini (default: claude)
+  -a, --agent <agent>       Agent to use: claude, codex (default: claude)
   -n, --name <name>         Sandbox name (default: derived from workspace folder)
   -t, --template <image>    Custom template image
   -e, --env <KEY=VALUE>     Set environment variable (repeatable)
@@ -357,7 +357,6 @@ Prerequisites:
        sbx login
        sbx secret set -g anthropic   # for Claude
        sbx secret set -g openai      # for Codex
-       sbx secret set -g google      # for Gemini
 
 Advanced usage:
   For branch mode, multiple workspaces, memory limits, network policies,
@@ -455,7 +454,7 @@ async function sandboxCommand(args) {
             await new Promise(resolve => setTimeout(resolve, 5000));
 
             console.log(`${c.info('▶')} Launching CloudCLI web server...`);
-            sbx(['exec', opts.name, 'bash', '-c', 'cloudcli start --port 3001 &']);
+            sbx(['exec', opts.name, 'bash', '-c', 'nohup cloudcli start --port 3001 > /tmp/cloudcli-ui.log 2>&1 & disown']);
 
             console.log(`${c.info('▶')} Forwarding port ${opts.port} → 3001...`);
             try {
@@ -554,7 +553,7 @@ async function sandboxCommand(args) {
 
             // Step 3: Start CloudCLI inside the sandbox
             console.log(`${c.info('▶')} Launching CloudCLI web server...`);
-            sbx(['exec', opts.name, 'bash', '-c', 'cloudcli start --port 3001 &']);
+            sbx(['exec', opts.name, 'bash', '-c', 'nohup cloudcli start --port 3001 > /tmp/cloudcli-ui.log 2>&1 & disown']);
 
             // Step 4: Forward port
             console.log(`${c.info('▶')} Forwarding port ${opts.port} → 3001...`);
@@ -603,6 +602,10 @@ async function startServer() {
 
     // Import and run the server
     await import('./index.js');
+}
+
+async function startBrowserUseMcp() {
+    await import('./browser-use-mcp.js');
 }
 
 // Parse CLI arguments
@@ -657,6 +660,9 @@ async function main() {
             break;
         case 'sandbox':
             await sandboxCommand(remainingArgs || []);
+            break;
+        case 'browser-use-mcp':
+            await startBrowserUseMcp();
             break;
         case 'status':
         case 'info':

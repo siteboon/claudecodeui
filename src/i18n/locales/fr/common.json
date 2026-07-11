@@ -1,0 +1,269 @@
+{
+  "buttons": {
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "create": "Créer",
+    "edit": "Modifier",
+    "close": "Fermer",
+    "confirm": "Confirmer",
+    "submit": "Soumettre",
+    "retry": "Réessayer",
+    "refresh": "Actualiser",
+    "search": "Rechercher",
+    "clear": "Effacer",
+    "copy": "Copier",
+    "download": "Télécharger",
+    "upload": "Envoyer",
+    "browse": "Parcourir"
+  },
+  "tabs": {
+    "chat": "Chat",
+    "shell": "Terminal",
+    "files": "Fichiers",
+    "git": "Contrôle de source",
+    "tasks": "Tâches",
+    "browser": "Navigateur",
+    "computer": "Ordinateur"
+  },
+  "status": {
+    "loading": "Chargement...",
+    "success": "Succès",
+    "error": "Erreur",
+    "failed": "Échec",
+    "pending": "En attente",
+    "completed": "Terminé",
+    "inProgress": "En cours"
+  },
+  "messages": {
+    "savedSuccessfully": "Enregistré avec succès",
+    "deletedSuccessfully": "Supprimé avec succès",
+    "updatedSuccessfully": "Mis à jour avec succès",
+    "operationFailed": "Opération échouée",
+    "networkError": "Erreur réseau. Vérifiez votre connexion.",
+    "unauthorized": "Non autorisé. Veuillez vous connecter.",
+    "notFound": "Introuvable",
+    "invalidInput": "Entrée invalide",
+    "requiredField": "Ce champ est obligatoire",
+    "unknownError": "Une erreur inconnue s'est produite"
+  },
+  "navigation": {
+    "settings": "Paramètres",
+    "home": "Accueil",
+    "back": "Retour",
+    "next": "Suivant",
+    "previous": "Précédent",
+    "logout": "Déconnexion"
+  },
+  "common": {
+    "language": "Langue",
+    "theme": "Thème",
+    "darkMode": "Mode sombre",
+    "lightMode": "Mode clair",
+    "name": "Nom",
+    "description": "Description",
+    "enabled": "Activé",
+    "disabled": "Désactivé",
+    "optional": "Optionnel",
+    "version": "Version",
+    "select": "Sélectionner",
+    "selectAll": "Tout sélectionner",
+    "deselectAll": "Tout désélectionner"
+  },
+  "time": {
+    "justNow": "À l'instant",
+    "minutesAgo": "Il y a {{count}} min",
+    "hoursAgo": "Il y a {{count}} h",
+    "daysAgo": "Il y a {{count}} j",
+    "yesterday": "Hier"
+  },
+  "fileOperations": {
+    "newFile": "Nouveau fichier",
+    "newFolder": "Nouveau dossier",
+    "rename": "Renommer",
+    "move": "Déplacer",
+    "copyPath": "Copier le chemin",
+    "openInEditor": "Ouvrir dans l'éditeur"
+  },
+  "mainContent": {
+    "loading": "Chargement de CloudCLI",
+    "settingUpWorkspace": "Préparation de votre espace de travail...",
+    "chooseProject": "Choisissez votre projet",
+    "selectProjectDescription": "Sélectionnez un projet dans la barre latérale pour commencer à coder avec Claude. Chaque projet contient vos sessions de chat et l'historique des fichiers.",
+    "tip": "Astuce",
+    "createProjectMobile": "Appuyez sur le bouton menu ci-dessus pour accéder aux projets",
+    "createProjectDesktop": "Créez un nouveau projet en cliquant sur l'icône de dossier dans la barre latérale",
+    "newSession": "Nouvelle session",
+    "untitledSession": "Session sans titre",
+    "projectFiles": "Fichiers du projet"
+  },
+  "fileTree": {
+    "loading": "Chargement des fichiers...",
+    "files": "Fichiers",
+    "simpleView": "Vue simple",
+    "compactView": "Vue compacte",
+    "detailedView": "Vue détaillée",
+    "searchPlaceholder": "Rechercher fichiers et dossiers...",
+    "clearSearch": "Effacer la recherche",
+    "name": "Nom",
+    "size": "Taille",
+    "modified": "Modifié",
+    "permissions": "Permissions",
+    "noFilesFound": "Aucun fichier trouvé",
+    "checkProjectPath": "Vérifiez si le chemin du projet est accessible",
+    "noMatchesFound": "Aucun résultat",
+    "tryDifferentSearch": "Essayez un autre terme ou effacez la recherche",
+    "justNow": "à l'instant",
+    "minAgo": "il y a {{count}} min",
+    "hoursAgo": "il y a {{count}} h",
+    "daysAgo": "il y a {{count}} j",
+    "newFile": "Nouveau fichier (Cmd+N)",
+    "newFolder": "Nouveau dossier (Cmd+Maj+N)",
+    "refresh": "Actualiser",
+    "collapseAll": "Tout réduire",
+    "context": {
+      "rename": "Renommer",
+      "delete": "Supprimer",
+      "copyPath": "Copier le chemin",
+      "download": "Télécharger",
+      "newFile": "Nouveau fichier",
+      "newFolder": "Nouveau dossier",
+      "refresh": "Actualiser",
+      "menuLabel": "Menu contextuel du fichier",
+      "loading": "Chargement..."
+    }
+  },
+  "projectWizard": {
+    "title": "Créer un nouveau projet",
+    "steps": {
+      "type": "Type",
+      "configure": "Configurer",
+      "confirm": "Confirmer"
+    },
+    "step1": {
+      "question": "Avez-vous déjà un espace de travail, ou souhaitez-vous en créer un nouveau ?",
+      "existing": {
+        "title": "Espace de travail existant",
+        "description": "J'ai déjà un espace de travail sur mon serveur et je veux juste l'ajouter à la liste des projets"
+      },
+      "new": {
+        "title": "Nouvel espace de travail",
+        "description": "Créer un nouvel espace de travail, éventuellement cloné depuis un dépôt GitHub"
+      }
+    },
+    "step2": {
+      "existingPath": "Chemin de l'espace de travail",
+      "newPath": "Chemin de l'espace de travail",
+      "existingPlaceholder": "/chemin/vers/espace-de-travail",
+      "newPlaceholder": "/chemin/vers/nouvel-espace",
+      "existingHelp": "Chemin complet vers votre répertoire d'espace de travail existant",
+      "newHelp": "Chemin complet vers votre répertoire d'espace de travail",
+      "githubUrl": "URL GitHub (optionnel)",
+      "githubPlaceholder": "https://github.com/utilisateur/depot",
+      "githubHelp": "Optionnel : fournissez une URL GitHub pour cloner un dépôt",
+      "githubAuth": "Authentification GitHub (optionnel)",
+      "githubAuthHelp": "Uniquement requis pour les dépôts privés. Les dépôts publics peuvent être clonés sans authentification.",
+      "loadingTokens": "Chargement des tokens enregistrés...",
+      "storedToken": "Token enregistré",
+      "newToken": "Nouveau token",
+      "nonePublic": "Aucun (Public)",
+      "selectToken": "Sélectionner un token",
+      "selectTokenPlaceholder": "-- Sélectionner un token --",
+      "tokenPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "tokenHelp": "Ce token sera utilisé uniquement pour cette opération",
+      "publicRepoInfo": "Les dépôts publics ne nécessitent pas d'authentification. Vous pouvez ignorer le token pour cloner un dépôt public.",
+      "noTokensHelp": "Aucun token enregistré. Vous pouvez en ajouter dans Paramètres → Clés API.",
+      "optionalTokenPublic": "Token GitHub (optionnel pour les dépôts publics)",
+      "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (laisser vide pour les dépôts publics)"
+    },
+    "step3": {
+      "reviewConfig": "Vérifiez votre configuration",
+      "existingWorkspace": "Espace de travail existant",
+      "newWorkspace": "Nouvel espace de travail",
+      "path": "Chemin :",
+      "cloneFrom": "Cloner depuis :",
+      "authentication": "Authentification :",
+      "usingStoredToken": "Utilisation du token enregistré :",
+      "usingProvidedToken": "Utilisation du token fourni",
+      "noAuthentication": "Sans authentification",
+      "sshKey": "Clé SSH",
+      "existingInfo": "L'espace de travail sera ajouté à votre liste de projets et disponible pour les sessions Claude/Cursor.",
+      "newWithClone": "Le dépôt sera cloné depuis ce dossier.",
+      "newEmpty": "L'espace de travail sera ajouté à votre liste de projets et disponible pour les sessions Claude/Cursor.",
+      "cloningRepository": "Clonage du dépôt..."
+    },
+    "buttons": {
+      "cancel": "Annuler",
+      "back": "Retour",
+      "next": "Suivant",
+      "createProject": "Créer le projet",
+      "creating": "Création...",
+      "cloning": "Clonage..."
+    },
+    "errors": {
+      "selectType": "Veuillez indiquer si vous avez un espace de travail existant ou si vous souhaitez en créer un nouveau",
+      "providePath": "Veuillez fournir un chemin d'espace de travail",
+      "failedToCreate": "Échec de la création de l'espace de travail",
+      "failedToCreateFolder": "Échec de la création du dossier"
+    }
+  },
+  "notifications": {
+    "genericTool": "un outil",
+    "codes": {
+      "generic": {
+        "info": {
+          "title": "Notification"
+        }
+      },
+      "permission": {
+        "required": {
+          "title": "Action requise",
+          "body": "{{toolName}} attend votre décision."
+        }
+      },
+      "run": {
+        "stopped": {
+          "title": "Exécution arrêtée",
+          "body": "Raison : {{reason}}"
+        },
+        "failed": {
+          "title": "Exécution échouée"
+        }
+      },
+      "agent": {
+        "notification": {
+          "title": "Notification de l'agent"
+        }
+      }
+    }
+  },
+  "versionUpdate": {
+    "title": "Mise à jour disponible",
+    "newVersionReady": "Une nouvelle version est prête",
+    "currentVersion": "Version actuelle",
+    "latestVersion": "Dernière version",
+    "whatsNew": "Nouveautés :",
+    "viewFullRelease": "Voir les notes de version complètes",
+    "updateProgress": "Progression de la mise à jour :",
+    "manualUpgrade": "Mise à jour manuelle :",
+    "npmUpgradeCommand": "npm install -g @cloudcli-ai/cloudcli@latest",
+    "manualUpgradeHint": "Ou cliquez sur « Mettre à jour maintenant » pour lancer la mise à jour automatiquement.",
+    "updateCompleted": "Mise à jour effectuée avec succès !",
+    "restartServer": "Veuillez redémarrer le serveur pour appliquer les modifications.",
+    "updateFailed": "Échec de la mise à jour",
+    "buttons": {
+      "close": "Fermer",
+      "later": "Plus tard",
+      "copyCommand": "Copier la commande",
+      "updateNow": "Mettre à jour maintenant",
+      "updating": "Mise à jour..."
+    },
+    "ariaLabels": {
+      "closeModal": "Fermer la fenêtre de mise à jour",
+      "showSidebar": "Afficher la barre latérale",
+      "settings": "Paramètres",
+      "updateAvailable": "Mise à jour disponible",
+      "closeSidebar": "Masquer la barre latérale"
+    }
+  }
+}

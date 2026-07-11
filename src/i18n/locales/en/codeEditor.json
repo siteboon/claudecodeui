@@ -32,5 +32,10 @@
   "binaryFile": {
     "title": "Binary File",
     "message": "The file \"{{fileName}}\" cannot be displayed in the text editor because it is a binary file."
+  },
+  "filePreview": {
+    "loading": "Loading preview...",
+    "error": "Unable to display this file.",
+    "openInNewTab": "Open in new tab"
   }
 }

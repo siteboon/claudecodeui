@@ -22,7 +22,9 @@
     "shell": "Shell",
     "files": "Dosyalar",
     "git": "Kaynak Kontrolü",
-    "tasks": "Görevler"
+    "tasks": "Görevler",
+    "browser": "Browser",
+    "computer": "Bilgisayar"
   },
   "status": {
     "loading": "Yükleniyor...",

@@ -1,5 +1,6 @@
 import express from 'express';
-import { spawn } from 'child_process';
+// cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
+import spawn from 'cross-spawn';
 import path from 'path';
 import { promises as fs } from 'fs';
 import { projectsDb } from '../modules/database/index.js';
@@ -293,6 +294,76 @@ async function resolveRepositoryFilePath(projectPath, filePath) {
 }
 
 // Get git status for a project
+/**
+ * Parses `git status --porcelain=v1 -z` output into the response shape the
+ * git panel consumes. NUL-separated entries carry no path quoting, so names
+ * with spaces/unicode survive intact (the plain porcelain output quotes and
+ * escapes them, which broke the old line-based parser).
+ *
+ * `staged` lists paths with index-side changes. The UI renders its "Staged"
+ * section from this list so it always mirrors the real git index (including
+ * files staged outside the app, e.g. via VSCode or the terminal).
+ *
+ * Exported for tests.
+ */
+export function parseGitStatusOutput(statusOutput) {
+  const modified = [];
+  const added = [];
+  const deleted = [];
+  const untracked = [];
+  const staged = [];
+
+  const statusEntries = statusOutput.split('\0');
+  for (let entryIndex = 0; entryIndex < statusEntries.length; entryIndex++) {
+    const entry = statusEntries[entryIndex];
+    if (!entry || entry.length < 4) continue;
+
+    // Porcelain v1: X = index (staged) status, Y = worktree (unstaged) status.
+    const indexStatus = entry[0];
+    const worktreeStatus = entry[1];
+    const file = entry.slice(3);
+
+    // Renames/copies carry the original path as the following NUL entry;
+    // the UI tracks the post-rename path only.
+    if (indexStatus === 'R' || indexStatus === 'C') {
+      entryIndex += 1;
+    }
+
+    if (indexStatus === '?') {
+      untracked.push(file);
+      continue;
+    }
+    if (indexStatus === '!') {
+      continue; // ignored files are never reported
+    }
+
+    const isConflict =
+      indexStatus === 'U' || worktreeStatus === 'U' ||
+      (indexStatus === 'A' && worktreeStatus === 'A') ||
+      (indexStatus === 'D' && worktreeStatus === 'D');
+    if (isConflict) {
+      // Merge conflicts must be resolved in the worktree first; surface them
+      // as modified and never as staged.
+      modified.push(file);
+      continue;
+    }
+
+    if (indexStatus !== ' ') {
+      staged.push(file);
+    }
+
+    if (indexStatus === 'D' || worktreeStatus === 'D') {
+      deleted.push(file);
+    } else if (indexStatus === 'A' || worktreeStatus === 'A') {
+      added.push(file);
+    } else {
+      modified.push(file);
+    }
+  }
+
+  return { modified, added, deleted, untracked, staged };
+}
+
 router.get('/status', async (req, res) => {
   const { project } = req.query;
 
@@ -309,30 +380,8 @@ router.get('/status', async (req, res) => {
     const branch = await getCurrentBranchName(projectPath);
     const hasCommits = await repositoryHasCommits(projectPath);
 
-    // Get git status
-    const { stdout: statusOutput } = await spawnAsync('git', ['status', '--porcelain'], { cwd: projectPath });
-
-    const modified = [];
-    const added = [];
-    const deleted = [];
-    const untracked = [];
-
-    statusOutput.split('\n').forEach(line => {
-      if (!line.trim()) return;
-
-      const status = line.substring(0, 2);
-      const file = line.substring(3);
-
-      if (status === 'M ' || status === ' M' || status === 'MM') {
-        modified.push(file);
-      } else if (status === 'A ' || status === 'AM') {
-        added.push(file);
-      } else if (status === 'D ' || status === ' D') {
-        deleted.push(file);
-      } else if (status === '??') {
-        untracked.push(file);
-      }
-    });
+    const { stdout: statusOutput } = await spawnAsync('git', ['status', '--porcelain=v1', '-z'], { cwd: projectPath });
+    const { modified, added, deleted, untracked, staged } = parseGitStatusOutput(statusOutput);
 
     res.json({
       branch,
@@ -340,7 +389,8 @@ router.get('/status', async (req, res) => {
       modified,
       added,
       deleted,
-      untracked
+      untracked,
+      staged
     });
   } catch (error) {
     console.error('Git status error:', error);
@@ -593,6 +643,64 @@ router.post('/commit', async (req, res) => {
   }
 });
 
+// Stage files (git add). Mirrors what the UI shows as the "Staged" section,
+// so the app's staging state and the real git index never drift apart.
+router.post('/stage', async (req, res) => {
+  const { project, files } = req.body;
+
+  if (!project || !Array.isArray(files) || files.length === 0) {
+    return res.status(400).json({ error: 'Project id and files are required' });
+  }
+
+  try {
+    const projectPath = await getActualProjectPath(project);
+    await validateGitRepository(projectPath);
+    const repositoryRootPath = await getRepositoryRootPath(projectPath);
+
+    for (const file of files) {
+      const { repositoryRelativeFilePath } = await resolveRepositoryFilePath(projectPath, file);
+      await spawnAsync('git', ['add', '--', repositoryRelativeFilePath], { cwd: repositoryRootPath });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Git stage error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Unstage files (remove from the index, keep the worktree changes)
+router.post('/unstage', async (req, res) => {
+  const { project, files } = req.body;
+
+  if (!project || !Array.isArray(files) || files.length === 0) {
+    return res.status(400).json({ error: 'Project id and files are required' });
+  }
+
+  try {
+    const projectPath = await getActualProjectPath(project);
+    await validateGitRepository(projectPath);
+    const repositoryRootPath = await getRepositoryRootPath(projectPath);
+    const hasCommits = await repositoryHasCommits(projectPath);
+
+    for (const file of files) {
+      const { repositoryRelativeFilePath } = await resolveRepositoryFilePath(projectPath, file);
+      if (hasCommits) {
+        await spawnAsync('git', ['reset', 'HEAD', '--', repositoryRelativeFilePath], { cwd: repositoryRootPath });
+      } else {
+        // No HEAD to reset against before the first commit; dropping the
+        // index entry is the only way to unstage while keeping the file.
+        await spawnAsync('git', ['rm', '--cached', '-r', '--force', '--', repositoryRelativeFilePath], { cwd: repositoryRootPath });
+      }
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Git unstage error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Revert latest local commit (keeps changes staged)
 router.post('/revert-local-commit', async (req, res) => {
   const { project } = req.body;
@@ -754,10 +862,57 @@ router.post('/delete-branch', async (req, res) => {
   }
 });
 
-// Get recent commits
+// Fields are joined with the ASCII unit separator so pipes (or anything else
+// typed into a commit subject) cannot break parsing.
+const GIT_LOG_FIELD_SEPARATOR = '\u001f';
+const GIT_LOG_PRETTY_FORMAT = '%H%x1f%P%x1f%D%x1f%an%x1f%ae%x1f%ad%x1f%s';
+
+/**
+ * Parses `git log --shortstat` output produced with GIT_LOG_PRETTY_FORMAT.
+ *
+ * Each commit is one format line (hash, parent hashes, ref decorations,
+ * author, email, date, subject) optionally followed by its `--shortstat`
+ * summary line ("N files changed, ..."). Parents and refs feed the commit
+ * graph rendered by the History view; merge commits carry no shortstat line,
+ * so their `stats` stays empty.
+ *
+ * Exported for tests.
+ */
+export function parseGitLogWithStats(stdout) {
+  const commits = [];
+
+  for (const rawLine of stdout.split('\n')) {
+    const line = rawLine.trimEnd();
+    if (!line.trim()) continue;
+
+    if (line.includes(GIT_LOG_FIELD_SEPARATOR)) {
+      const [hash, parents, refs, author, email, date, ...messageParts] = line.split(GIT_LOG_FIELD_SEPARATOR);
+      commits.push({
+        hash,
+        parents: parents ? parents.split(' ').filter(Boolean) : [],
+        // `%D` decorations, e.g. "HEAD -> main", "origin/main", "tag: v1.0".
+        refs: refs ? refs.split(', ').filter(Boolean) : [],
+        author,
+        email,
+        date,
+        message: messageParts.join(GIT_LOG_FIELD_SEPARATOR),
+        stats: ''
+      });
+      continue;
+    }
+
+    if (commits.length > 0 && /files? changed/.test(line)) {
+      commits[commits.length - 1].stats = line.trim();
+    }
+  }
+
+  return commits;
+}
+
+// Get recent commits (across all branches, in graph order)
 router.get('/commits', async (req, res) => {
   const { project, limit = 10 } = req.query;
-  
+
   if (!project) {
     return res.status(400).json({ error: 'Project id is required' });
   }
@@ -769,42 +924,28 @@ router.get('/commits', async (req, res) => {
     const safeLimit = Number.isFinite(parsedLimit) && parsedLimit > 0
       ? Math.min(parsedLimit, 100)
       : 10;
-    
-    // Get commit log with stats
+
+    // Branches/remotes/tags (not --all, which would drag in refs/stash) with
+    // `--topo-order` guarantee children appear before their parents across
+    // every branch, which the frontend lane-assignment relies on.
+    // `--shortstat` replaces the previous per-commit `git show --stat` calls.
     const { stdout } = await spawnAsync(
       'git',
-      ['log', '--pretty=format:%H|%an|%ae|%ad|%s', '--date=iso-strict', '-n', String(safeLimit)],
+      [
+        'log',
+        '--branches',
+        '--remotes',
+        '--tags',
+        '--topo-order',
+        '--shortstat',
+        `--pretty=format:${GIT_LOG_PRETTY_FORMAT}`,
+        '--date=iso-strict',
+        '-n', String(safeLimit)
+      ],
       { cwd: projectPath },
     );
-    
-    const commits = stdout
-      .split('\n')
-      .filter(line => line.trim())
-      .map(line => {
-        const [hash, author, email, date, ...messageParts] = line.split('|');
-        return {
-          hash,
-          author,
-          email,
-          date,
-          message: messageParts.join('|')
-        };
-      });
-    
-    // Get stats for each commit
-    for (const commit of commits) {
-      try {
-        const { stdout: stats } = await spawnAsync(
-          'git', ['show', '--stat', '--format=', commit.hash],
-          { cwd: projectPath }
-        );
-        commit.stats = stats.trim().split('\n').pop(); // Get the summary line
-      } catch (error) {
-        commit.stats = '';
-      }
-    }
-    
-    res.json({ commits });
+
+    res.json({ commits: parseGitLogWithStats(stdout) });
   } catch (error) {
     console.error('Git commits error:', error);
     res.json({ error: error.message });

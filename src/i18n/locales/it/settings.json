@@ -54,14 +54,11 @@
     "sections": {
       "appearance": "Aspetto",
       "toolDisplay": "Visualizzazione strumenti",
-      "viewOptions": "Opzioni visualizzazione",
       "inputSettings": "Impostazioni input"
     },
     "darkMode": "Modalità scura",
-    "autoExpandTools": "Espandi strumenti automaticamente",
     "showRawParameters": "Mostra parametri grezzi",
     "showThinking": "Mostra ragionamento",
-    "autoScrollToBottom": "Scorrimento automatico in basso",
     "sendByCtrlEnter": "Invia con Ctrl+Invio",
     "sendByCtrlEnterDescription": "Se abilitato, premere Ctrl+Invio invierà il messaggio invece di Invio. Utile per gli utenti IME per evitare invii accidentali.",
     "dragHandle": {
@@ -109,6 +106,12 @@
       "loading": "Aggiornamento...",
       "unsupported": "Le notifiche push non sono supportate in questo browser.",
       "denied": "Le notifiche push sono bloccate. Abilitale nelle impostazioni del browser."
+    },
+    "sound": {
+      "title": "Suono",
+      "description": "Riproduci un breve tono quando termina un'esecuzione della chat.",
+      "enabled": "Attivato",
+      "test": "Prova suono"
     },
     "events": {
       "title": "Tipi di evento",
@@ -319,9 +322,6 @@
       },
       "codex": {
         "description": "Assistente AI OpenAI Codex"
-      },
-      "gemini": {
-        "description": "Assistente AI Google Gemini"
       }
     },
     "connectionStatus": "Stato connessione",

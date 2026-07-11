@@ -54,14 +54,11 @@
     "sections": {
       "appearance": "Darstellung",
       "toolDisplay": "Werkzeuganzeige",
-      "viewOptions": "Anzeigeoptionen",
       "inputSettings": "Eingabeeinstellungen"
     },
     "darkMode": "Darkmode",
-    "autoExpandTools": "Werkzeuge automatisch erweitern",
     "showRawParameters": "Rohe Parameter anzeigen",
     "showThinking": "Denken anzeigen",
-    "autoScrollToBottom": "Automatisch nach unten scrollen",
     "sendByCtrlEnter": "Mit Strg+Enter senden",
     "sendByCtrlEnterDescription": "Wenn aktiviert, sendet Strg+Enter die Nachricht anstelle von Enter. Dies ist nützlich für IME-Benutzer:innen, um versehentliches Senden zu vermeiden.",
     "dragHandle": {
@@ -94,8 +91,34 @@
     "git": "Git",
     "apiTokens": "API & Token",
     "tasks": "Aufgaben",
+    "notifications": "Benachrichtigungen",
     "plugins": "Plugins",
     "about": "Info"
+  },
+  "notifications": {
+    "title": "Benachrichtigungen",
+    "description": "Lege fest, welche Benachrichtigungen du erhältst.",
+    "webPush": {
+      "title": "Web-Push-Benachrichtigungen",
+      "enable": "Push-Benachrichtigungen aktivieren",
+      "disable": "Push-Benachrichtigungen deaktivieren",
+      "enabled": "Push-Benachrichtigungen sind aktiviert",
+      "loading": "Wird aktualisiert...",
+      "unsupported": "Push-Benachrichtigungen werden in diesem Browser nicht unterstützt.",
+      "denied": "Push-Benachrichtigungen sind blockiert. Bitte erlaube sie in den Browsereinstellungen."
+    },
+    "sound": {
+      "title": "Ton",
+      "description": "Spielt einen kurzen Ton ab, wenn ein Chat-Lauf abgeschlossen ist.",
+      "enabled": "Aktiviert",
+      "test": "Ton testen"
+    },
+    "events": {
+      "title": "Ereignistypen",
+      "actionRequired": "Aktion erforderlich",
+      "stop": "Lauf gestoppt",
+      "error": "Lauf fehlgeschlagen"
+    }
   },
   "appearanceSettings": {
     "darkMode": {
@@ -299,9 +322,6 @@
       },
       "codex": {
         "description": "OpenAI Codex KI-Assistent"
-      },
-      "gemini": {
-        "description": "Google Gemini KI-Assistent"
       }
     },
     "connectionStatus": "Verbindungsstatus",

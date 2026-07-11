@@ -4,6 +4,7 @@
     "account": "Account",
     "permissions": "Permissions",
     "mcpServers": "MCP Servers",
+    "skills": "Skills",
     "appearance": "Appearance"
   },
   "account": {
@@ -49,20 +50,33 @@
     "resetToDefaults": "Reset to Defaults",
     "cancelChanges": "Cancel Changes"
   },
+  "voiceSettings": {
+    "title": "Voice",
+    "description": "Speech-to-text input and read-aloud, via an OpenAI-compatible audio backend.",
+    "enable": "Enable voice",
+    "enableDescription": "Show the mic button and the read-aloud button on messages.",
+    "backendTitle": "Backend",
+    "backendDescription": "Point at OpenAI, Groq, or a local server (LocalAI, Speaches, Kokoro-FastAPI). Leave blank to use the server default.",
+    "baseUrl": "Base URL",
+    "apiKey": "API key",
+    "sttModel": "Speech-to-text model",
+    "ttsModel": "Text-to-speech model",
+    "voice": "Voice",
+    "format": "Audio format",
+    "note": "A custom base URL is called directly by your browser and must allow browser CORS requests. Leave it blank to use the server-configured backend."
+  },
   "quickSettings": {
     "title": "Quick Settings",
     "sections": {
       "appearance": "Appearance",
       "toolDisplay": "Tool Display",
-      "viewOptions": "View Options",
       "inputSettings": "Input Settings"
     },
     "darkMode": "Dark Mode",
-    "autoExpandTools": "Auto-expand tools",
     "showRawParameters": "Show raw parameters",
     "showThinking": "Show thinking",
-    "autoScrollToBottom": "Auto-scroll to bottom",
     "sendByCtrlEnter": "Send by Ctrl+Enter",
+    "voiceEnabled": "Voice (mic + read aloud)",
     "sendByCtrlEnterDescription": "When enabled, pressing Ctrl+Enter will send the message instead of just Enter. This is useful for IME users to avoid accidental sends.",
     "dragHandle": {
       "dragging": "Dragging handle",
@@ -93,7 +107,9 @@
     "appearance": "Appearance",
     "git": "Git",
     "apiTokens": "API & Tokens",
+    "voice": "Voice",
     "tasks": "Tasks",
+    "browser": "Browser",
     "notifications": "Notifications",
     "plugins": "Plugins",
     "about": "About"
@@ -102,13 +118,26 @@
     "title": "Notifications",
     "description": "Control which notification events you receive.",
     "webPush": {
-      "title": "Web Push Notifications",
-      "enable": "Enable Push Notifications",
-      "disable": "Disable Push Notifications",
-      "enabled": "Push notifications are enabled",
+      "title": "Notify this browser",
+      "enable": "Enable notifications",
+      "disable": "Disable notifications",
+      "enabled": "Notifications are enabled for this browser",
       "loading": "Updating...",
       "unsupported": "Push notifications are not supported in this browser.",
       "denied": "Push notifications are blocked. Please allow them in your browser settings."
+    },
+    "desktop": {
+      "title": "Notify this desktop app",
+      "enable": "Enable notifications",
+      "disable": "Disable notifications",
+      "enabled": "Notifications are enabled for this desktop app",
+      "unsupported": "Desktop notifications are not supported on this system."
+    },
+    "sound": {
+      "title": "Sound",
+      "description": "Play a short tone when a chat run finishes or needs tool approval.",
+      "enabled": "Enabled",
+      "test": "Test sound"
     },
     "events": {
       "title": "Event Types",
@@ -320,9 +349,6 @@
       "codex": {
         "description": "OpenAI Codex AI assistant"
       },
-      "gemini": {
-        "description": "Google Gemini AI assistant"
-      },
       "opencode": {
         "description": "OpenCode CLI assistant"
       }
@@ -444,6 +470,10 @@
       "edit": "Edit server",
       "delete": "Delete server"
     },
+    "managed": {
+      "badge": "Managed",
+      "hint": "Managed by CloudCLI."
+    },
     "help": {
       "title": "About Codex MCP",
       "description": "Codex supports stdio-based MCP servers. You can add servers that extend Codex's capabilities with additional tools and resources."
@@ -500,6 +530,36 @@
       "name": "Claude Watch",
       "badge": "unofficial",
       "description": "Watch long-running Claude Code sessions for hangs and expose process controls.",
+      "install": "Install"
+    },
+    "prismCloudCLI": {
+      "name": "PRISM CloudCLI",
+      "badge": "unofficial",
+      "description": "Session intelligence for Claude Code, inside CloudCLI. See why your sessions are burning tokens without leaving the browser.",
+      "install": "Install"
+    },
+    "sessionManagerPlugin": {
+      "name": "Sessions",
+      "badge": "unofficial",
+      "description": "View, manage, and kill active Claude Code sessions.",
+      "install": "Install"
+    },
+    "tokenCostCalculatorPlugin": {
+      "name": "Token Cost Calculator",
+      "badge": "unofficial",
+      "description": "Calculate API costs from model prices and token usage, with preset model pricing support.",
+      "install": "Install"
+    },
+    "taskQueuePlugin": {
+      "name": "Task Queue",
+      "badge": "unofficial",
+      "description": "Task queue dashboard to view, filter, and launch agent tasks.",
+      "install": "Install"
+    },
+    "githubIssuesBoardPlugin": {
+      "name": "GitHub Issues Board",
+      "badge": "unofficial",
+      "description": "Kanban board for GitHub Issues with bidirectional TaskMaster sync and /github-task CLI skill auto-install",
       "install": "Install"
     },
     "morePlugins": "More",

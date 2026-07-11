@@ -36,7 +36,6 @@ Current provider ids in this repo are:
 - `claude`
 - `codex`
 - `cursor`
-- `gemini`
 - `opencode`
 
 Those ids are mirrored in backend unions and frontend provider constants. If
@@ -56,8 +55,7 @@ server/modules/providers/list/<provider>/
   <provider>-session-synchronizer.provider.ts
 ```
 
-The existing provider folders are `claude`, `codex`, `cursor`, `gemini`, and
-`opencode`.
+The existing provider folders are `claude`, `codex`, `cursor`, and `opencode`.
 
 ## What Each Facet Does
 
@@ -83,7 +81,7 @@ The existing provider folders are `claude`, `codex`, `cursor`, `gemini`, and
 - Update `server/modules/providers/provider.routes.ts`.
 - Update `server/routes/agent.js` if the provider is launchable from the agent runtime.
 - Update `server/index.js` if the provider needs runtime boot or shutdown wiring.
-- Update `public/modelConstants.js` if the provider appears in README or public API docs.
+- Update the `PROVIDER_ORDER` list in `public/api-docs.html` if the provider should appear in the public API docs.
 - Update `src/components/chat/hooks/useChatProviderState.ts` and
   `src/components/chat/view/subcomponents/ProviderSelectionEmptyState.tsx` if
   the provider should be selectable in chat.
@@ -123,7 +121,6 @@ Current MCP formats in this repo are:
 | Claude | `.mcp.json` in user / local / project locations | `user`, `local`, `project` | `stdio`, `http`, `sse` |
 | Codex | `.codex/config.toml` | `user`, `project` | `stdio`, `http` |
 | Cursor | `.cursor/mcp.json` | `user`, `project` | `stdio`, `http` |
-| Gemini | `.gemini/settings.json` | `user`, `project` | `stdio`, `http` |
 | OpenCode | `~/.config/opencode/opencode.json` or `<workspace>/opencode.json` (`.jsonc` is read when present) | `user`, `project` | `stdio`, `http` |
 
 5. Implement skills.
@@ -144,7 +141,6 @@ Current skill discovery roots are:
 | Claude | `~/.claude/skills` | `<workspace>/.claude/skills` | `/` | Also discovers Claude plugin skills from enabled plugin installs. Command skills live under `commands/`; markdown skills live under `skills/` and are scanned recursively. |
 | Codex | `~/.agents/skills`, `~/.codex/skills/.system`, `/etc/codex/skills` | `<workspace>/.agents/skills`, `path.dirname(workspacePath)/.agents/skills`, topmost git root `.agents/skills` | `$` | Overlapping roots are deduplicated before scanning. |
 | Cursor | `~/.cursor/skills` | `<workspace>/.cursor/skills`, `<workspace>/.agents/skills` | `/` | Uses slash-style commands. |
-| Gemini | `~/.gemini/skills`, `~/.agents/skills` | `<workspace>/.gemini/skills`, `<workspace>/.agents/skills` | `/` | Uses slash-style commands. |
 | OpenCode | `~/.config/opencode/skills`, `~/.claude/skills`, `~/.agents/skills` | Cwd-to-topmost-git-root `.opencode/skills`, `.claude/skills`, and `.agents/skills` | `/` | Reuses OpenCode, Claude, and Agents skill locations. Overlapping roots are deduplicated before scanning. |
 
 Command forms currently used by the providers are:
@@ -153,7 +149,6 @@ Command forms currently used by the providers are:
 - Claude plugin skills: `/plugin-name:skill-name`
 - Codex skills: `$skill-name`
 - Cursor skills: `/skill-name`
-- Gemini skills: `/skill-name`
 - OpenCode skills: `/skill-name`
 
 6. Implement sessions.
@@ -191,7 +186,6 @@ Current session sync roots are:
 | Claude | `~/.claude/projects/**/*.jsonl` | Uses `~/.claude/history.jsonl` for name lookup and the trailing `ai-title`, `last-prompt`, or `custom-title` entries for title recovery. |
 | Codex | `~/.codex/sessions/**/*.jsonl` | Uses `~/.codex/session_index.jsonl` for title lookup and the last `task_complete` message for a fallback title. |
 | Cursor | `~/.cursor/projects/**/*.jsonl` | Uses sibling `worker.log` to recover `workspacePath`, then derives the session title from the first user prompt. |
-| Gemini | `~/.gemini/tmp/**/*.jsonl` | Current full scans only index temp JSONL chat artifacts. Single-file sync also accepts legacy `.json` files. |
 | OpenCode | `~/.local/share/opencode/opencode.db` | Reads active sessions/messages/parts from OpenCode's shared SQLite database and stores `jsonl_path` as `null` so deleting one app session cannot remove the shared DB. |
 
 8. Register the provider.

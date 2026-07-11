@@ -12,11 +12,14 @@
  * - WebSocket message streaming
  */
 
-import { query } from '@anthropic-ai/claude-agent-sdk';
 import crypto from 'crypto';
 import { promises as fs } from 'fs';
-import path from 'path';
 import os from 'os';
+import path from 'path';
+
+import { query } from '@anthropic-ai/claude-agent-sdk';
+
+import { buildClaudeUserContent, normalizeImageDescriptors } from './shared/image-attachments.js';
 import { CLAUDE_FALLBACK_MODELS } from './modules/providers/list/claude/claude-models.provider.js';
 import { providerModelsService } from './modules/providers/services/provider-models.service.js';
 import { resolveClaudeCodeExecutablePath } from './shared/claude-cli-path.js';
@@ -28,14 +31,27 @@ import {
 } from './services/notification-orchestrator.js';
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
-import { createNormalizedMessage } from './shared/utils.js';
+import { createCompleteMessage, createNormalizedMessage } from './shared/utils.js';
 
 const activeSessions = new Map();
 const pendingToolApprovals = new Map();
+// Sessions cancelled via abort-session. The abort handler already sent the
+// terminal `complete` (aborted: true) to the client, so the run loop must not
+// emit a second one when its generator winds down.
+const abortedSessionIds = new Set();
 
 const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEOUT_MS, 10) || 55000;
 
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
+
+function resolveClaudeEffort(model, effort, modelsDefinition = CLAUDE_FALLBACK_MODELS) {
+  const selectedModel = modelsDefinition?.OPTIONS?.find((option) => option.value === model) || null;
+  const allowedEfforts = selectedModel?.effort?.values
+    ?.map((value) => value.value) || [];
+  return typeof effort === 'string' && effort !== 'default' && allowedEfforts.includes(effort)
+    ? effort
+    : undefined;
+}
 
 function createRequestId() {
   if (typeof crypto.randomUUID === 'function') {
@@ -141,13 +157,8 @@ function matchesToolPermission(entry, toolName, input) {
   return false;
 }
 
-/**
- * Maps CLI options to SDK-compatible options format
- * @param {Object} options - CLI options
- * @returns {Object} SDK-compatible options
- */
 function mapCliOptionsToSDK(options = {}) {
-  const { sessionId, cwd, toolsSettings, permissionMode } = options;
+  const { sessionId, cwd, toolsSettings, permissionMode, effort } = options;
 
   const sdkOptions = {};
 
@@ -159,32 +170,26 @@ function mapCliOptionsToSDK(options = {}) {
   // which does not reliably follow npm's shell wrappers like cross-spawn does.
   sdkOptions.pathToClaudeCodeExecutable = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH);
 
-  // Map working directory
   if (cwd) {
     sdkOptions.cwd = cwd;
   }
 
-  // Map permission mode
   if (permissionMode && permissionMode !== 'default') {
     sdkOptions.permissionMode = permissionMode;
   }
 
-  // Map tool settings
   const settings = toolsSettings || {
     allowedTools: [],
     disallowedTools: [],
     skipPermissions: false
   };
 
-  // Handle tool permissions
   if (settings.skipPermissions && permissionMode !== 'plan') {
-    // When skipping permissions, use bypassPermissions mode
     sdkOptions.permissionMode = 'bypassPermissions';
   }
 
   let allowedTools = [...(settings.allowedTools || [])];
 
-  // Add plan mode default tools
   if (permissionMode === 'plan') {
     const planModeTools = ['Read', 'Task', 'exit_plan_mode', 'TodoRead', 'TodoWrite', 'WebFetch', 'WebSearch'];
     for (const tool of planModeTools) {
@@ -203,25 +208,32 @@ function mapCliOptionsToSDK(options = {}) {
 
   sdkOptions.disallowedTools = settings.disallowedTools || [];
 
-  // Map model (default to sonnet)
-  // Valid models: sonnet, opus, haiku, opusplan, sonnet[1m]
   sdkOptions.model = options.model || CLAUDE_FALLBACK_MODELS.DEFAULT;
-  // Model logged at query start below
 
-  // Map system prompt configuration
+  const resolvedEffort = resolveClaudeEffort(
+    sdkOptions.model,
+    effort,
+    options.effortModels || CLAUDE_FALLBACK_MODELS,
+  );
+  if (resolvedEffort) {
+    sdkOptions.effort = resolvedEffort;
+  }
+
   sdkOptions.systemPrompt = {
     type: 'preset',
-    preset: 'claude_code'  // Required to use CLAUDE.md
+    preset: 'claude_code'
   };
 
-  // Map setting sources for CLAUDE.md loading
-  // This loads CLAUDE.md from project, user (~/.config/claude/CLAUDE.md), and local directories
   sdkOptions.settingSources = ['project', 'user', 'local'];
 
-  // Map resume session
   if (sessionId) {
     sdkOptions.resume = sessionId;
   }
+
+  // Enable partial messages so SDK yields content_block_delta events for streaming.
+  // Without this, SDK only emits complete assistant messages at the end of each turn,
+  // which means the frontend never receives stream_delta frames.
+  sdkOptions.includePartialMessages = true;
 
   return sdkOptions;
 }
@@ -230,16 +242,13 @@ function mapCliOptionsToSDK(options = {}) {
  * Adds a session to the active sessions map
  * @param {string} sessionId - Session identifier
  * @param {Object} queryInstance - SDK query instance
- * @param {Array<string>} tempImagePaths - Temp image file paths for cleanup
- * @param {string} tempDir - Temp directory for cleanup
+ * @param {Object} writer - WebSocket writer for reconnect support
  */
-function addSession(sessionId, queryInstance, tempImagePaths = [], tempDir = null, writer = null) {
+function addSession(sessionId, queryInstance, writer = null) {
   activeSessions.set(sessionId, {
     instance: queryInstance,
     startTime: Date.now(),
     status: 'active',
-    tempImagePaths,
-    tempDir,
     writer
   });
 }
@@ -304,7 +313,11 @@ function extractTokenBudget(sdkMessage) {
 
   const messageUsage = sdkMessage.message?.usage || sdkMessage.usage;
   if (messageUsage && typeof messageUsage === 'object') {
-    const inputTokens = readNumber(messageUsage.input_tokens ?? messageUsage.inputTokens);
+    const directInputTokens = readNumber(messageUsage.input_tokens ?? messageUsage.inputTokens);
+    const cacheCreationTokens = readNumber(messageUsage.cache_creation_input_tokens ?? messageUsage.cacheCreationInputTokens ?? messageUsage.cacheCreationTokens);
+    const cacheReadTokens = readNumber(messageUsage.cache_read_input_tokens ?? messageUsage.cacheReadInputTokens ?? messageUsage.cacheReadTokens);
+    const cacheTokens = cacheCreationTokens + cacheReadTokens;
+    const inputTokens = directInputTokens + cacheTokens;
     const outputTokens = readNumber(messageUsage.output_tokens ?? messageUsage.outputTokens);
     const totalUsed = inputTokens + outputTokens;
     const contextWindow = parseInt(process.env.CONTEXT_WINDOW, 10) || 160000;
@@ -314,6 +327,9 @@ function extractTokenBudget(sdkMessage) {
       total: contextWindow,
       inputTokens,
       outputTokens,
+      cacheReadTokens,
+      cacheCreationTokens,
+      cacheTokens,
       breakdown: {
         input: inputTokens,
         output: outputTokens,
@@ -351,90 +367,35 @@ function extractTokenBudget(sdkMessage) {
 }
 
 /**
- * Handles image processing for SDK queries
- * Saves base64 images to temporary files and returns modified prompt with file paths
- * @param {string} command - Original user prompt
- * @param {Array} images - Array of image objects with base64 data
- * @param {string} cwd - Working directory for temp file creation
- * @returns {Promise<Object>} {modifiedCommand, tempImagePaths, tempDir}
+ * Builds the SDK `prompt` payload for one turn.
+ *
+ * Plain text turns pass the string through unchanged. Turns with image
+ * attachments use the SDK's streaming-input mode: a single SDKUserMessage
+ * whose content carries the prompt text plus one base64 `image` block per
+ * attachment (read from the global `~/.cloudcli/assets` folder).
+ *
+ * @param {string} command - User prompt
+ * @param {Array} images - Image descriptors ({ path, name?, mimeType? })
+ * @param {string} cwd - Project working directory image paths resolve against
+ * @returns {Promise<string|AsyncIterable>} SDK prompt payload
  */
-async function handleImages(command, images, cwd) {
-  const tempImagePaths = [];
-  let tempDir = null;
-
-  if (!images || images.length === 0) {
-    return { modifiedCommand: command, tempImagePaths, tempDir };
+async function buildPromptPayload(command, images, cwd) {
+  if (normalizeImageDescriptors(images).length === 0) {
+    return command;
   }
 
-  try {
-    // Create temp directory in the project directory
-    const workingDir = cwd || process.cwd();
-    tempDir = path.join(workingDir, '.tmp', 'images', Date.now().toString());
-    await fs.mkdir(tempDir, { recursive: true });
-
-    // Save each image to a temp file
-    for (const [index, image] of images.entries()) {
-      // Extract base64 data and mime type
-      const matches = image.data.match(/^data:([^;]+);base64,(.+)$/);
-      if (!matches) {
-        console.error('Invalid image data format');
-        continue;
-      }
-
-      const [, mimeType, base64Data] = matches;
-      const extension = mimeType.split('/')[1] || 'png';
-      const filename = `image_${index}.${extension}`;
-      const filepath = path.join(tempDir, filename);
-
-      // Write base64 data to file
-      await fs.writeFile(filepath, Buffer.from(base64Data, 'base64'));
-      tempImagePaths.push(filepath);
-    }
-
-    // Include the full image paths in the prompt
-    let modifiedCommand = command;
-    if (tempImagePaths.length > 0 && command && command.trim()) {
-      const imageNote = `\n\n[Images provided at the following paths:]\n${tempImagePaths.map((p, i) => `${i + 1}. ${p}`).join('\n')}`;
-      modifiedCommand = command + imageNote;
-    }
-
-    // Images processed
-    return { modifiedCommand, tempImagePaths, tempDir };
-  } catch (error) {
-    console.error('Error processing images for SDK:', error);
-    return { modifiedCommand: command, tempImagePaths, tempDir };
-  }
-}
-
-/**
- * Cleans up temporary image files
- * @param {Array<string>} tempImagePaths - Array of temp file paths to delete
- * @param {string} tempDir - Temp directory to remove
- */
-async function cleanupTempFiles(tempImagePaths, tempDir) {
-  if (!tempImagePaths || tempImagePaths.length === 0) {
-    return;
-  }
-
-  try {
-    // Delete individual temp files
-    for (const imagePath of tempImagePaths) {
-      await fs.unlink(imagePath).catch(err =>
-        console.error(`Failed to delete temp image ${imagePath}:`, err)
-      );
-    }
-
-    // Delete temp directory
-    if (tempDir) {
-      await fs.rm(tempDir, { recursive: true, force: true }).catch(err =>
-        console.error(`Failed to delete temp directory ${tempDir}:`, err)
-      );
-    }
-
-    // Temp files cleaned
-  } catch (error) {
-    console.error('Error during temp file cleanup:', error);
-  }
+  const content = await buildClaudeUserContent(command, images, cwd);
+  return (async function* () {
+    yield {
+      type: 'user',
+      message: {
+        role: 'user',
+        content
+      },
+      parent_tool_use_id: null,
+      timestamp: new Date().toISOString()
+    };
+  })();
 }
 
 /**
@@ -505,8 +466,6 @@ async function queryClaudeSDK(command, options = {}, ws) {
   const { sessionId, sessionSummary } = options;
   let capturedSessionId = sessionId;
   let sessionCreatedSent = false;
-  let tempImagePaths = [];
-  let tempDir = null;
 
   const emitNotification = (event) => {
     notifyUserIfEnabled({
@@ -522,24 +481,28 @@ async function queryClaudeSDK(command, options = {}, ws) {
       sessionId,
       options.model,
     );
+    let effortModels = CLAUDE_FALLBACK_MODELS;
+    try {
+      effortModels = (await providerModelsService.getProviderModels('claude')).models;
+    } catch (error) {
+      console.warn('[Claude SDK] Unable to load provider models for effort validation:', error);
+    }
 
-    // Map CLI options to SDK format
     const sdkOptions = mapCliOptionsToSDK({
       ...options,
       model: resolvedModel || options.model,
+      effortModels,
     });
 
-    // Load MCP configuration
     const mcpServers = await loadMcpConfig(options.cwd);
     if (mcpServers) {
       sdkOptions.mcpServers = mcpServers;
     }
 
-    // Handle images - save to temp files and modify prompt
-    const imageResult = await handleImages(command, options.images, options.cwd);
-    const finalCommand = imageResult.modifiedCommand;
-    tempImagePaths = imageResult.tempImagePaths;
-    tempDir = imageResult.tempDir;
+    // Turns with image attachments switch to streaming input so the images
+    // ride along as real content blocks. Built per query attempt because an
+    // async generator cannot be replayed once consumed.
+    const createPrompt = () => buildPromptPayload(command, options.images, options.cwd);
 
     sdkOptions.hooks = {
       Notification: [{
@@ -639,14 +602,14 @@ async function queryClaudeSDK(command, options = {}, ws) {
       return { behavior: 'deny', message: decision.message ?? 'User denied tool use' };
     };
 
-    // Set stream-close timeout for interactive tools (Query constructor reads it synchronously). Claude Agent SDK has a default of 5s and this overrides it
+    // Query constructor reads this synchronously.
     const prevStreamTimeout = process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT;
     process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT = '300000';
 
     let queryInstance;
     try {
       queryInstance = query({
-        prompt: finalCommand,
+        prompt: await createPrompt(),
         options: sdkOptions
       });
     } catch (hookError) {
@@ -655,7 +618,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
       console.warn('Failed to initialize Claude query with hooks, retrying without hooks:', hookError?.message || hookError);
       delete sdkOptions.hooks;
       queryInstance = query({
-        prompt: finalCommand,
+        prompt: await createPrompt(),
         options: sdkOptions
       });
     }
@@ -669,7 +632,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
     // Track the query instance for abort capability
     if (capturedSessionId) {
-      addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir, ws);
+      addSession(capturedSessionId, queryInstance, ws);
     }
 
     // Process streaming messages
@@ -679,7 +642,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
       if (message.session_id && !capturedSessionId) {
 
         capturedSessionId = message.session_id;
-        addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir, ws);
+        addSession(capturedSessionId, queryInstance, ws);
 
         // Set session ID on writer
         if (ws.setSessionId && typeof ws.setSessionId === 'function') {
@@ -721,17 +684,18 @@ async function queryClaudeSDK(command, options = {}, ws) {
       removeSession(capturedSessionId);
     }
 
-    // Clean up temporary image files
-    await cleanupTempFiles(tempImagePaths, tempDir);
-
-    // Send completion event
-    ws.send(createNormalizedMessage({ kind: 'complete', exitCode: 0, isNewSession: !sessionId && !!command, sessionId: capturedSessionId, provider: 'claude' }));
+    // Send the terminal completion event — skipped for aborted runs, whose
+    // terminal `complete` (aborted: true) was already sent by abort-session.
+    const wasAborted = capturedSessionId ? abortedSessionIds.delete(capturedSessionId) : false;
+    if (!wasAborted) {
+      ws.send(createCompleteMessage({ provider: 'claude', sessionId: capturedSessionId || sessionId || null, exitCode: 0 }));
+    }
     notifyRunStopped({
       userId: ws?.userId || null,
       provider: 'claude',
       sessionId: capturedSessionId || sessionId || null,
       sessionName: sessionSummary,
-      stopReason: 'completed'
+      stopReason: wasAborted ? 'aborted' : 'completed'
     });
     // Complete
 
@@ -743,8 +707,12 @@ async function queryClaudeSDK(command, options = {}, ws) {
       removeSession(capturedSessionId);
     }
 
-    // Clean up temporary image files on error
-    await cleanupTempFiles(tempImagePaths, tempDir);
+    const wasAborted = capturedSessionId ? abortedSessionIds.delete(capturedSessionId) : false;
+    if (wasAborted) {
+      // The abort already produced the terminal complete; a generator throw
+      // caused by interrupt() is expected noise, not a user-facing error.
+      return;
+    }
 
     // Check if Claude CLI is installed for a clearer error message
     const installed = await providerAuthService.isProviderInstalled('claude');
@@ -752,8 +720,9 @@ async function queryClaudeSDK(command, options = {}, ws) {
       ? 'Claude Code is not installed. Please install it first: https://docs.anthropic.com/en/docs/claude-code'
       : error.message;
 
-    // Send error to WebSocket
+    // Send error to WebSocket, then the terminal complete
     ws.send(createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+    ws.send(createCompleteMessage({ provider: 'claude', sessionId: capturedSessionId || sessionId || null, exitCode: 1 }));
     notifyRunFailed({
       userId: ws?.userId || null,
       provider: 'claude',
@@ -780,14 +749,15 @@ async function abortClaudeSDKSession(sessionId) {
   try {
     console.log(`Aborting SDK session: ${sessionId}`);
 
+    // Mark before interrupting so the run loop knows not to emit its own
+    // terminal complete (the abort handler sends the aborted one).
+    abortedSessionIds.add(sessionId);
+
     // Call interrupt() on the query instance
     await session.instance.interrupt();
 
     // Update session status
     session.status = 'aborted';
-
-    // Clean up temporary image files
-    await cleanupTempFiles(session.tempImagePaths, session.tempDir);
 
     // Clean up session
     removeSession(sessionId);
@@ -795,6 +765,8 @@ async function abortClaudeSDKSession(sessionId) {
     return true;
   } catch (error) {
     console.error(`Error aborting session ${sessionId}:`, error);
+    // The run keeps going; let it emit its own terminal complete.
+    abortedSessionIds.delete(sessionId);
     return false;
   }
 }

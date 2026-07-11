@@ -1,18 +1,58 @@
-import { spawn } from 'child_process';
 import fsSync from 'node:fs';
 
 import crossSpawn from 'cross-spawn';
 import Database from 'better-sqlite3';
 
+import { appendImagesInputTag } from './shared/image-attachments.js';
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
 import { providerModelsService } from './modules/providers/services/provider-models.service.js';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
-import { createNormalizedMessage, getOpenCodeDatabasePath } from './shared/utils.js';
+import { createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell, getOpenCodeDatabasePath } from './shared/utils.js';
 
-const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
+// cross-spawn resolves .cmd shims/PATHEXT on Windows and delegates to
+// child_process.spawn everywhere else.
+const spawnFunction = crossSpawn;
 
 const activeOpenCodeProcesses = new Map();
+
+/**
+ * Maps the UI permission mode onto OpenCode's non-interactive controls.
+ *
+ * OpenCode has no single "permission mode" flag; each mode uses a different
+ * lever of the `opencode run` CLI (verified against v1.17.13):
+ * - plan              → the built-in read-only `plan` agent (`--agent plan`).
+ * - bypassPermissions → `--auto`, which auto-approves every permission that
+ *                       is not explicitly denied in the user's config.
+ * - acceptEdits       → the OPENCODE_PERMISSION env var, whose JSON body the
+ *                       CLI merges into its permission config. Forcing
+ *                       `edit: allow` guarantees file edits go through while
+ *                       every other rule stays under the user's own config.
+ * - default           → nothing; the user's opencode.json governs. In
+ *                       non-interactive `run` mode any `ask` rule is denied.
+ *
+ * Exported for tests only.
+ */
+export function resolveOpenCodePermissionOptions(permissionMode) {
+  switch (permissionMode) {
+    case 'plan':
+      return { args: ['--agent', 'plan'], env: {} };
+    case 'bypassPermissions':
+      return { args: ['--auto'], env: {} };
+    case 'acceptEdits':
+      return { args: [], env: { OPENCODE_PERMISSION: JSON.stringify({ edit: 'allow' }) } };
+    default:
+      return { args: [], env: {} };
+  }
+}
+
+function resolveOpenCodeEffort(model, effort, modelsDefinition) {
+  const selectedModel = modelsDefinition?.OPTIONS?.find((option) => option.value === model);
+  const allowedEfforts = selectedModel?.effort?.values?.map((value) => value.value) || [];
+  return typeof effort === 'string' && effort !== 'default' && allowedEfforts.includes(effort)
+    ? effort
+    : undefined;
+}
 
 function readOpenCodeSessionId(event) {
   if (!event || typeof event !== 'object') {
@@ -84,7 +124,7 @@ function readOpenCodeTokenUsage(sessionId) {
 
 async function spawnOpenCode(command, options = {}, ws) {
   return new Promise((resolve, reject) => {
-    const { sessionId, projectPath, cwd, model, sessionSummary } = options;
+    const { sessionId, projectPath, cwd, model, effort, sessionSummary, images, permissionMode } = options;
     const workingDir = cwd || projectPath || process.cwd();
     const processKey = sessionId || Date.now().toString();
     let capturedSessionId = sessionId || null;
@@ -92,6 +132,9 @@ async function spawnOpenCode(command, options = {}, ws) {
     let stdoutLineBuffer = '';
     let terminalNotificationSent = false;
     let opencodeProcess = null;
+    // Unified lifecycle contract: exactly one terminal `complete` per run
+    // (close and error handlers can both fire for spawn failures).
+    let completeSent = false;
 
     const notifyTerminalState = ({ code = null, error = null } = {}) => {
       if (terminalNotificationSent) {
@@ -189,22 +232,43 @@ async function spawnOpenCode(command, options = {}, ws) {
       }
     };
 
-    void providerModelsService.resolveResumeModel('opencode', sessionId, model).then((resolvedModel) => {
+    void providerModelsService.resolveResumeModel('opencode', sessionId, model).then(async (resolvedModel) => {
+      let effortModels = null;
+      try {
+        effortModels = (await providerModelsService.getProviderModels('opencode')).models;
+      } catch (error) {
+        console.warn('[OpenCode] Unable to load provider models for effort validation:', error);
+      }
+
+      const resolvedEffort = resolveOpenCodeEffort(resolvedModel, effort, effortModels);
       const args = ['run', '--format', 'json'];
+      // OpenCode's `run` command owns workspace selection through `--dir`.
+      // Relying on the child-process cwd alone is not enough on Linux, where
+      // the CLI can still resolve the session under the server install dir.
+      args.push('--dir', workingDir);
       if (sessionId) {
         args.push('--session', sessionId);
       }
       if (resolvedModel) {
         args.push('--model', resolvedModel);
       }
+      if (resolvedEffort) {
+        args.push('--variant', resolvedEffort);
+      }
+      const permissionOptions = resolveOpenCodePermissionOptions(permissionMode);
+      args.push(...permissionOptions.args);
       if (command && command.trim()) {
-        args.push(command.trim());
+        // Image attachments ride along as an <images_input> path list appended
+        // to the prompt; the session history reader strips the tag back out.
+        // opencode is a .cmd shim on Windows, so the whole argument must be
+        // newline-free or cmd.exe silently truncates it at the first newline.
+        args.push(flattenPromptForWindowsShell(appendImagesInputTag(command.trim(), images)));
       }
 
       opencodeProcess = spawnFunction('opencode', args, {
         cwd: workingDir,
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env },
+        env: { ...process.env, ...permissionOptions.env },
       });
 
       activeOpenCodeProcesses.set(processKey, opencodeProcess);
@@ -256,13 +320,12 @@ async function spawnOpenCode(command, options = {}, ws) {
           }));
         }
 
-        ws.send(createNormalizedMessage({
-          kind: 'complete',
-          exitCode: code,
-          isNewSession: !sessionId && !!command,
-          sessionId: finalSessionId,
-          provider: 'opencode',
-        }));
+        // Terminal complete — skipped for aborted runs (abort-session
+        // already sent the aborted complete on this run's behalf).
+        if (!completeSent && !opencodeProcess.aborted) {
+          completeSent = true;
+          ws.send(createCompleteMessage({ provider: 'opencode', sessionId: finalSessionId, exitCode: code }));
+        }
 
         if (code === 0) {
           notifyTerminalState({ code });
@@ -302,6 +365,10 @@ async function spawnOpenCode(command, options = {}, ws) {
           sessionId: finalSessionId,
           provider: 'opencode',
         }));
+        if (!completeSent && !opencodeProcess.aborted) {
+          completeSent = true;
+          ws.send(createCompleteMessage({ provider: 'opencode', sessionId: finalSessionId, exitCode: 1 }));
+        }
         notifyTerminalState({ error });
         reject(error);
       });
@@ -315,6 +382,9 @@ function abortOpenCodeSession(sessionId) {
     return false;
   }
 
+  // The abort handler sends the terminal complete (aborted: true); flag the
+  // process so its close handler does not emit a second one.
+  process.aborted = true;
   process.kill('SIGTERM');
   activeOpenCodeProcesses.delete(sessionId);
   return true;

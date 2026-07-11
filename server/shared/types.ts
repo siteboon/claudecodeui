@@ -65,15 +65,22 @@ export type AuthenticatedWebSocketRequest = IncomingMessage & {
  * Use this as the source of truth whenever a function or payload needs to identify
  * a specific LLM integration.
  */
-export type LLMProvider = 'claude' | 'codex' | 'gemini' | 'cursor' | 'opencode';
+export type LLMProvider = 'claude' | 'codex' | 'cursor' | 'opencode';
 
 /**
- * One selectable model row (matches the documentation `public/modelConstants.js` option shape).
+ * One selectable model row in a provider model catalog.
  */
 export type ProviderModelOption = {
   value: string;
   label: string;
   description?: string;
+  effort?: {
+    default?: string;
+    values: {
+      value: string;
+      description?: string;
+    }[];
+  };
 };
 
 /**
@@ -176,6 +183,30 @@ export type MessageKind =
   | 'task_notification';
 
 /**
+ * Event kinds added by the chat gateway layer on top of provider message kinds.
+ *
+ * These are app-level realtime events (subscription acks, sidebar deltas,
+ * project loading progress, protocol failures) that are not produced by any
+ * provider adapter. Together with `MessageKind` they form the complete set of
+ * `kind` values a websocket client can receive, so the frontend only ever
+ * needs one kind-based switch.
+ */
+export type GatewayEventKind =
+  | 'chat_subscribed'
+  | 'session_upserted'
+  | 'loading_progress'
+  | 'protocol_error';
+
+/**
+ * Complete set of `kind` values emitted to websocket clients.
+ *
+ * Every server-to-client websocket frame carries a `kind` from this union.
+ * Provider runtimes emit `MessageKind` values; gateway services emit
+ * `GatewayEventKind` values.
+ */
+export type ServerEventKind = MessageKind | GatewayEventKind;
+
+/**
  * Provider-neutral message envelope used in REST responses and realtime channels.
  *
  * Every provider-specific message must be converted into this shape before being
@@ -187,6 +218,13 @@ export type NormalizedMessage = {
   timestamp: string;
   provider: LLMProvider;
   kind: MessageKind;
+  /**
+   * Monotonic per-run sequence number assigned by the chat run registry when a
+   * live event is forwarded to the websocket. History messages loaded over
+   * REST do not carry it. Clients use it with `chat.subscribe` to replay only
+   * the live events they missed across websocket reconnects.
+   */
+  seq?: number;
   role?: 'user' | 'assistant';
   content?: string;
   /**
@@ -237,11 +275,18 @@ export type NormalizedMessage = {
  *
  * Consumers should pass provider-specific lookup hints (`projectPath`) only
  * when the selected provider requires them.
+ *
+ * `providerSessionId` is the provider-native session id from the sessions
+ * index (transcript file name / provider database key). Provider adapters
+ * must use it — never the app-facing session id they were called with — when
+ * matching transcript rows on disk, because app-created sessions use an
+ * app-allocated id that the provider has never seen.
  */
 export type FetchHistoryOptions = {
   projectPath?: string;
   limit?: number | null;
   offset?: number;
+  providerSessionId?: string;
 };
 
 /**
@@ -280,6 +325,51 @@ export type ProviderSkillScope = 'user' | 'project' | 'plugin' | 'repo' | 'admin
  */
 export type ProviderSkillListOptions = {
   workspacePath?: string;
+};
+
+/**
+ * One supporting file bundled with an uploaded provider skill.
+ *
+ * `relativePath` is resolved below the installed skill directory and must never
+ * be absolute or contain traversal segments. Text files may use `utf8`; binary
+ * scripts and assets should use `base64` so JSON transport does not corrupt
+ * their bytes.
+ */
+export type ProviderSkillCreateFile = {
+  relativePath: string;
+  content: string;
+  encoding: 'utf8' | 'base64';
+};
+
+/**
+ * One skill markdown payload submitted for provider-managed installation.
+ *
+ * `content` is the raw markdown body that will be written to `SKILL.md`.
+ * `directoryName` lets callers control the target folder name explicitly when
+ * they want stable filesystem paths that differ from the markdown front matter
+ * `name` field. `fileName` is optional upload metadata used only as a final
+ * fallback when no directory name or front matter name is present. `files`
+ * carries scripts, references, and other files from a complete skill folder.
+ */
+export type ProviderSkillCreateEntry = {
+  content: string;
+  directoryName?: string;
+  fileName?: string;
+  files?: ProviderSkillCreateFile[];
+};
+
+/**
+ * Shared input accepted by provider skill creation operations.
+ *
+ * The service layer batches multiple skill definitions in one request. Each
+ * entry can contain only markdown or a complete skill folder.
+ */
+export type ProviderSkillCreateInput = {
+  entries: ProviderSkillCreateEntry[];
+};
+
+export type ProviderSkillRemoveInput = {
+  directoryName: string;
 };
 
 /**

@@ -1,16 +1,18 @@
 import { type ReactNode } from 'react';
-import { Archive, Folder, MessageSquare, RotateCcw, Search, Trash2 } from 'lucide-react';
+import { Activity, Archive, Folder, MessageSquare, RotateCcw, Search, Trash2 } from 'lucide-react';
 import type { TFunction } from 'i18next';
+
 import { ScrollArea } from '../../../../shared/view/ui';
 import type { Project } from '../../../../types/app';
 import type { ReleaseInfo } from '../../../../types/sharedTypes';
 import type { ConversationSearchResults, SearchProgress } from '../../hooks/useSidebarController';
 import type { ArchivedProjectListItem, ArchivedSessionListItem, SidebarSearchMode } from '../../types/types';
 import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
+import { getAllSessions } from '../../utils/utils';
+
 import SidebarFooter from './SidebarFooter';
 import SidebarHeader from './SidebarHeader';
 import SidebarProjectList, { type SidebarProjectListProps } from './SidebarProjectList';
-import { getAllSessions } from '../../utils/utils';
 
 function HighlightedSnippet({ snippet, highlights }: { snippet: string; highlights: { start: number; end: number }[] }) {
   const parts: ReactNode[] = [];
@@ -30,7 +32,7 @@ function HighlightedSnippet({ snippet, highlights }: { snippet: string; highligh
     parts.push(snippet.slice(cursor));
   }
   return (
-    <span className="text-xs leading-relaxed text-muted-foreground">
+    <span className="min-w-0 flex-1 break-words text-xs leading-relaxed text-muted-foreground">
       {parts}
     </span>
   );
@@ -114,6 +116,7 @@ type SidebarContentProps = {
   isMobile: boolean;
   isLoading: boolean;
   projects: Project[];
+  runningSessionsCount: number;
   archivedProjects: ArchivedProjectListItem[];
   archivedSessions: ArchivedSessionListItem[];
   archivedSessionsCount: number;
@@ -138,6 +141,7 @@ type SidebarContentProps = {
   onCreateProject: () => void;
   onCollapseSidebar: () => void;
   updateAvailable: boolean;
+  restartRequired: boolean;
   releaseInfo: ReleaseInfo | null;
   latestVersion: string | null;
   currentVersion: string;
@@ -152,6 +156,7 @@ export default function SidebarContent({
   isMobile,
   isLoading,
   projects,
+  runningSessionsCount,
   archivedProjects,
   archivedSessions,
   archivedSessionsCount,
@@ -174,6 +179,7 @@ export default function SidebarContent({
   onCreateProject,
   onCollapseSidebar,
   updateAvailable,
+  restartRequired,
   releaseInfo,
   latestVersion,
   currentVersion,
@@ -196,6 +202,7 @@ export default function SidebarContent({
         isMobile={isMobile}
         isLoading={isLoading}
         projectsCount={projects.length}
+        runningSessionsCount={runningSessionsCount}
         archivedSessionsCount={archivedSessionsCount}
         isArchivedSessionsLoading={isArchivedSessionsLoading}
         searchFilter={searchFilter}
@@ -259,7 +266,7 @@ export default function SidebarContent({
                 <div key={projectResult.projectName} className="space-y-1">
                   <div className="flex items-center gap-1.5 px-1 py-1">
                     <Folder className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                    <span className="truncate text-xs font-medium text-foreground">
+                    <span className="truncate text-xs font-normal text-foreground">
                       {projectResult.projectDisplayName}
                     </span>
                   </div>
@@ -279,7 +286,7 @@ export default function SidebarContent({
                     >
                       <div className="mb-1 flex items-center gap-1.5">
                         <MessageSquare className="h-3 w-3 flex-shrink-0 text-primary" />
-                        <span className="truncate text-xs font-medium text-foreground">
+                        <span className="truncate text-xs font-normal text-foreground">
                           {session.sessionSummary}
                         </span>
                         {session.provider && session.provider !== 'claude' && (
@@ -291,7 +298,7 @@ export default function SidebarContent({
                       <div className="space-y-1 pl-4">
                         {session.matches.map((match, idx) => (
                           <div key={idx} className="flex items-start gap-1">
-                            <span className="mt-0.5 flex-shrink-0 text-[10px] font-medium uppercase text-muted-foreground/60">
+                            <span className="mt-0.5 flex-shrink-0 text-[10px] font-normal uppercase text-muted-foreground/60">
                               {match.role === 'user' ? 'U' : 'A'}
                             </span>
                             <HighlightedSnippet
@@ -307,6 +314,39 @@ export default function SidebarContent({
               ))}
             </div>
           ) : null
+        ) : searchMode === 'running' ? (
+          projectListProps.filteredProjects.length === 0 ? (
+            <div className="px-4 py-12 text-center md:py-8">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg border border-border/70 bg-muted/50 md:mb-3">
+                <Activity className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <h3 className="mb-2 text-base font-medium text-foreground md:mb-1">
+                {t('running.emptyTitle', 'No sessions running')}
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                {runningSessionsCount > 0
+                  ? t('running.noMatchingSessions', 'No running sessions match this search.')
+                  : t('running.emptyDescription', 'Active work will appear here while a provider is processing.')}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="mx-2 flex items-center justify-between rounded-lg border border-border/60 bg-card/50 px-3 py-2 shadow-sm">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                    <Activity className="h-3.5 w-3.5" />
+                  </span>
+                  <span className="truncate text-xs font-normal text-foreground">
+                    {t('running.title', 'Running now')}
+                  </span>
+                </div>
+                <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-normal text-emerald-700 dark:text-emerald-300">
+                  {runningSessionsCount}
+                </span>
+              </div>
+              <SidebarProjectList {...projectListProps} />
+            </div>
+          )
         ) : searchMode === 'archived' ? (
           isArchivedSessionsLoading ? (
             <div className="px-4 py-12 text-center md:py-8">
@@ -355,10 +395,10 @@ export default function SidebarContent({
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <Folder className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
-                          <span className="truncate text-sm font-medium text-foreground">
+                          <span className="truncate text-sm font-normal text-foreground">
                             {project.displayName}
                           </span>
-                          <span className="inline-flex items-center justify-center rounded-full bg-muted px-1 py-px text-[7px] font-medium uppercase leading-none tracking-[0.02em] text-center text-muted-foreground">
+                          <span className="inline-flex items-center justify-center rounded-full bg-muted px-1 py-px text-center text-[7px] font-medium uppercase leading-none tracking-[0.02em] text-muted-foreground">
                             {t('archived.projectArchived', 'Project archived')}
                           </span>
                         </div>
@@ -408,7 +448,7 @@ export default function SidebarContent({
                             <SessionProviderLogo provider={session.__provider} className="h-3.5 w-3.5 flex-shrink-0" />
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
-                                <span className="truncate text-xs font-medium text-foreground">
+                                <span className="truncate text-xs font-normal text-foreground">
                                   {(typeof session.summary === 'string' && session.summary.trim().length > 0
                                     ? session.summary
                                     : typeof session.name === 'string' && session.name.trim().length > 0
@@ -444,11 +484,11 @@ export default function SidebarContent({
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <Folder className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
-                        <span className="truncate text-sm font-medium text-foreground">
+                        <span className="truncate text-sm font-normal text-foreground">
                           {group.projectDisplayName}
                         </span>
                         {group.isProjectArchived && (
-                          <span className="inline-flex items-center justify-center rounded-full bg-muted px-1 py-px text-[7px] font-medium uppercase leading-none tracking-[0.02em] text-center text-muted-foreground">
+                          <span className="inline-flex items-center justify-center rounded-full bg-muted px-1 py-px text-center text-[7px] font-medium uppercase leading-none tracking-[0.02em] text-muted-foreground">
                             {t('archived.projectArchived', 'Project archived')}
                           </span>
                         )}
@@ -473,7 +513,7 @@ export default function SidebarContent({
                           <SessionProviderLogo provider={session.provider} className="h-3.5 w-3.5 flex-shrink-0" />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
-                              <span className="truncate text-xs font-medium text-foreground">
+                              <span className="truncate text-xs font-normal text-foreground">
                                 {session.sessionTitle}
                               </span>
                               {session.lastActivity && (
@@ -515,6 +555,7 @@ export default function SidebarContent({
 
       <SidebarFooter
         updateAvailable={updateAvailable}
+        restartRequired={restartRequired}
         releaseInfo={releaseInfo}
         latestVersion={latestVersion}
         currentVersion={currentVersion}

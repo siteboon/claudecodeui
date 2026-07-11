@@ -11,6 +11,7 @@ import {
   normalizeSessionName,
   readJsonRecord,
   readOptionalString,
+  unwrapJsonStringLiteral,
 } from '@/shared/utils.js';
 
 type OpenCodeSessionRow = {
@@ -112,15 +113,48 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
     }
 
     const fallbackTitle = 'Untitled OpenCode Session';
-    const existingSession = sessionsDb.getSessionById(sessionId);
+    const pendingAppSession = sessionsDb.getSessionByProviderSessionId(sessionId)
+      ?? sessionsDb.getSessionById(sessionId)
+      ?? sessionsDb.findLatestPendingAppSession(this.provider, projectPath);
+    if (pendingAppSession && !pendingAppSession.provider_session_id) {
+      // Slow networks can let the sqlite watcher index opencode.db before the
+      // runtime reports its provider id back through the websocket mapping.
+      // Bind that id to the fresh app row first so the watcher does not create
+      // a temporary provider-id sidebar entry for the same session.
+      sessionsDb.assignProviderSessionId(pendingAppSession.session_id, sessionId);
+    }
+
+    // App-created sessions are keyed by an app id, so disk-discovered provider
+    // ids must be resolved through the provider-id mapping first.
+    const existingSession = sessionsDb.getSessionByProviderSessionId(sessionId)
+      ?? sessionsDb.getSessionById(sessionId);
     const existingName = existingSession?.custom_name;
-    const nextName = existingName && existingName !== fallbackTitle
-      ? existingName
-      : readOptionalString(row.title) ?? this.readFirstUserText(db, sessionId);
+
+    // Sessions started by sending a message from cloudcli carry a distinct
+    // app-allocated session_id mapped to the provider id. For these we title the
+    // conversation from the first user message the user typed, matching how the
+    // app titles a brand-new conversation. Sessions discovered purely by
+    // indexing (session_id === provider_session_id) keep OpenCode's own stored
+    // title.
+    const isAppCreated =
+      existingSession != null &&
+      existingSession.provider_session_id != null &&
+      existingSession.session_id !== existingSession.provider_session_id;
+
+    let nextName: string | undefined;
+    if (existingName && existingName !== fallbackTitle) {
+      nextName = existingName;
+    } else if (isAppCreated) {
+      nextName = this.readFirstUserText(db, sessionId) ?? readOptionalString(row.title);
+    } else {
+      nextName = readOptionalString(row.title) ?? this.readFirstUserText(db, sessionId);
+    }
 
     // OpenCode stores every session in one shared sqlite database, so jsonl_path
     // must stay null to avoid deleting opencode.db when one app session is removed.
-    sessionsDb.createSession(
+    // Return the canonical stored row id so watcher-triggered sidebar updates
+    // stay on the app session once provider_session_id has already been mapped.
+    return sessionsDb.createSession(
       sessionId,
       this.provider,
       projectPath,
@@ -129,8 +163,6 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
       normalizeProviderTimestamp(row.time_updated ?? row.time_created),
       null,
     );
-
-    return sessionId;
   }
 
   private readFirstUserText(db: Database.Database, sessionId: string): string | undefined {
@@ -149,7 +181,10 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
       `).get(sessionId) as { data: string | null } | undefined;
 
       const data = readJsonRecord(row?.data);
-      return readOptionalString(data?.text);
+      const text = readOptionalString(data?.text);
+      // OpenCode persists the first prompt as a JSON string literal (e.g.
+      // `"hello"`), so decode it to avoid titling the session with quotes.
+      return text === undefined ? undefined : unwrapJsonStringLiteral(text);
     } catch {
       return undefined;
     }

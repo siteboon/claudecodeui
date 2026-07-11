@@ -134,6 +134,7 @@ tasks/
 
 # Translations
 !src/i18n/locales/en/tasks.json
+!src/i18n/locales/fr/tasks.json
 !src/i18n/locales/ja/tasks.json
 !src/i18n/locales/ru/tasks.json
 !src/i18n/locales/de/tasks.json
@@ -142,3 +143,12 @@ tasks/
 
 # Git worktrees
 .worktrees/
+
+# Local desktop packaging artifacts
+/.desktop-build/
+/release/
+/electron/server-bundle-config.json
+cloudcli-sidebar-app-source.tar.gz
+cloudcli-sidebar.html
+electron/*.tar.gz
+MERGE-CONFLICTS.md

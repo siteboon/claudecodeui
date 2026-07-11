@@ -5,6 +5,7 @@ import type { IProviderModels } from '@/shared/interfaces.js';
 import type {
   ProviderChangeActiveModelInput,
   ProviderCurrentActiveModel,
+  ProviderModelOption,
   ProviderModelsDefinition,
   ProviderSessionActiveModelChange,
 } from '@/shared/types.js';
@@ -18,17 +19,89 @@ export const CLAUDE_FALLBACK_MODELS: ProviderModelsDefinition = {
     {
       value: 'default',
       label: 'Default (recommended)',
-      description: 'Use the default model (currently Opus 4.7 (1M context)) · $5/$25 per Mtok',
+      description: 'Use the Claude Code default model (currently Sonnet 4.6)',
+      effort: {
+        default: 'high',
+        values: [
+          { value: 'low' },
+          { value: 'medium' },
+          { value: 'high' },
+          { value: 'max' },
+        ],
+      },
     },
     {
-      value: 'sonnet',
-      label: 'Sonnet',
-      description: 'Sonnet 4.6 · Best for everyday tasks · $3/$15 per Mtok',
+      value: 'fable',
+      label: 'Fable',
+      description: 'Fable 5 · Most capable for your hardest and longest-running tasks · Uses your limits ~2× faster than Opus',
+      effort: {
+        default: 'high',
+        values: [
+          { value: 'low' },
+          { value: 'medium' },
+          { value: 'high' },
+          { value: 'xhigh' },
+          { value: 'max' },
+        ],
+      },
+    },
+    {
+      value: "sonnet",
+      label: "Sonnet",
+      description: "Sonnet 4.6 · Best for everyday tasks · $3/$15 per Mtok",
+      effort: {
+        default: 'high',
+        values: [
+          { value: 'low' },
+          { value: 'medium' },
+          { value: 'high' },
+          { value: 'max' },
+        ],
+      },
     },
     {
       value: 'sonnet[1m]',
       label: 'Sonnet (1M context)',
       description: 'Sonnet 4.6 for long sessions · $3/$15 per Mtok',
+      effort: {
+        default: 'high',
+        values: [
+          { value: 'low' },
+          { value: 'medium' },
+          { value: 'high' },
+          { value: 'max' },
+        ],
+      },
+    },
+    {
+      value: 'opus',
+      label: 'Opus',
+      description: 'Opus 4.8 · Best for everyday, complex tasks · ~2× usage vs Sonnet',
+      effort: {
+        default: 'high',
+        values: [
+          { value: 'low' },
+          { value: 'medium' },
+          { value: 'high' },
+          { value: 'xhigh' },
+          { value: 'max' },
+        ],
+      },
+    },
+    {
+      value: 'opus[1m]',
+      label: 'Opus 4.8 (1M context)',
+      description: 'Opus 4.8 with 1M context · Most capable for complex work · $5/$25 per Mtok',
+      effort: {
+        default: 'high',
+        values: [
+          { value: 'low' },
+          { value: 'medium' },
+          { value: 'high' },
+          { value: 'xhigh' },
+          { value: 'max' },
+        ],
+      },
     },
     {
       value: 'haiku',
@@ -37,6 +110,15 @@ export const CLAUDE_FALLBACK_MODELS: ProviderModelsDefinition = {
     },
   ],
   DEFAULT: 'default',
+};
+
+export const findClaudeModelOption = (model: string | undefined | null): ProviderModelOption | null => {
+  const normalizedModel = typeof model === 'string' ? model.trim() : '';
+  if (!normalizedModel) {
+    return null;
+  }
+
+  return CLAUDE_FALLBACK_MODELS.OPTIONS.find((option) => option.value === normalizedModel) ?? null;
 };
 type ClaudeInitEvent = {
   sessionId?: string;

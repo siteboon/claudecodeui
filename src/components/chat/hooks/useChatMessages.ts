@@ -7,6 +7,12 @@ import type { NormalizedMessage } from '../../../stores/useSessionStore';
 import type { ChatMessage, SubagentChildTool } from '../types/types';
 import { decodeHtmlEntities, unescapeWithMathProtection, formatUsageLimitText } from '../utils/chatFormatting';
 
+function formatToolResultContent(content: unknown): string {
+  const text = typeof content === 'string' ? content : JSON.stringify(content);
+  const toolUseErrorMatch = /^<tool_use_error>([\s\S]*)<\/tool_use_error>$/.exec(text.trim());
+  return toolUseErrorMatch ? toolUseErrorMatch[1] : text;
+}
+
 /**
  * Convert NormalizedMessage[] from the session store into ChatMessage[]
  * that the existing UI components expect.
@@ -20,7 +26,12 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
 
   // First pass: collect tool results for attachment
   const toolResultMap = new Map<string, NormalizedMessage>();
+  const toolUseIds = new Set<string>();
   for (const msg of messages) {
+    if (msg.kind === 'tool_use' && msg.toolId) {
+      toolUseIds.add(msg.toolId);
+    }
+
     if (msg.kind === 'tool_result' && msg.toolId) {
       toolResultMap.set(msg.toolId, msg);
     }
@@ -44,8 +55,8 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
 
         if (msg.role === 'user') {
           // Parse task notifications
-          const taskNotifRegex = /<task-notification>\s*<task-id>[^<]*<\/task-id>\s*<output-file>[^<]*<\/output-file>\s*<status>([^<]*)<\/status>\s*<summary>([^<]*)<\/summary>\s*<\/task-notification>/g;
-          const taskNotifMatch = taskNotifRegex.exec(content);
+          const taskNotifRegex = /^\s*<task-notification>[\s\S]*?<status>([^<]*)<\/status>[\s\S]*?<summary>([^<]*)<\/summary>[\s\S]*?<\/task-notification>\s*$/;
+          const taskNotifMatch = taskNotifRegex.exec(content.trim());
           if (taskNotifMatch) {
             converted.push({
               type: 'assistant',
@@ -97,7 +108,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
 
         const toolResult = tr
           ? {
-              content: typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content),
+              content: formatToolResultContent(tr.content),
               isError: Boolean(tr.isError),
               toolUseResult: (tr as any).toolUseResult,
             }
@@ -167,17 +178,24 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
         });
         break;
 
-      case 'stream_delta':
-        if (msg.content) {
-          converted.push({
-            type: 'assistant',
-            content: msg.content,
-            timestamp: msg.timestamp,
-            isStreaming: true,
-            ...sharedMetadata,
-          });
+      case 'stream_delta': {
+        // Live streaming message (id starts with __streaming_) is the real-time
+        // accumulator — render it so the user sees text appear as it streams.
+        // Historical stream_delta events from JSONL are artifacts; skip those.
+        if (!msg.id?.startsWith('__streaming_')) {
+          break;
         }
+        const content = (msg.content || '').trim();
+        if (!content) break;
+        converted.push({
+          type: 'assistant',
+          content: decodeHtmlEntities(content),
+          timestamp: msg.timestamp,
+          isStreaming: true,
+          ...sharedMetadata,
+        });
         break;
+      }
 
       // stream_end, complete, status, permission_*, session_created
       // are control events — not rendered as messages
@@ -191,8 +209,34 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
         break;
 
       // tool_result is handled via attachment to tool_use above
-      case 'tool_result':
+      case 'tool_result': {
+        if (msg.toolId && toolUseIds.has(msg.toolId)) {
+          break;
+        }
+
+        // A result with a toolId but no matching tool_use in the loaded set is
+        // almost always a tool_use/tool_result pair split across a pagination
+        // boundary (older page not loaded yet). Rendering its raw content here
+        // produces an unstyled dump that "fixes itself" once the older page
+        // loads; skip it and let it attach to its tool_use when that arrives.
+        if (msg.toolId) {
+          break;
+        }
+
+        const content = formatToolResultContent(msg.content || '');
+        if (!content.trim()) {
+          break;
+        }
+
+        converted.push({
+          type: msg.isError ? 'error' : 'assistant',
+          content,
+          timestamp: msg.timestamp,
+          toolId: msg.toolId,
+          ...sharedMetadata,
+        });
         break;
+      }
 
       default:
         break;

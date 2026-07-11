@@ -16,13 +16,13 @@ export default function GitConfigurationStep({
   onGitEmailChange,
 }: GitConfigurationStepProps) {
   return (
-    <div className="space-y-6">
-      <div className="mb-8 text-center">
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/30">
-          <GitBranch className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+    <div className="space-y-5">
+      <div className="text-center">
+        <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-inset ring-primary/20">
+          <GitBranch className="h-7 w-7 text-primary" />
         </div>
-        <h2 className="mb-2 text-2xl font-bold text-foreground">Git Configuration</h2>
-        <p className="text-muted-foreground">
+        <h2 className="font-serif text-xl font-bold tracking-tight text-foreground">Git Configuration</h2>
+        <p className="mx-auto mt-1 max-w-sm text-sm leading-relaxed text-muted-foreground">
           Configure your git identity to ensure proper attribution for commits.
         </p>
       </div>
@@ -38,7 +38,7 @@ export default function GitConfigurationStep({
             id="gitName"
             value={gitName}
             onChange={(event) => onGitNameChange(event.target.value)}
-            className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded-xl border border-border bg-background/60 px-4 py-2.5 text-foreground shadow-sm transition-colors placeholder:text-muted-foreground/60 hover:border-foreground/20 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
             placeholder="John Doe"
             required
             disabled={isSubmitting}
@@ -56,7 +56,7 @@ export default function GitConfigurationStep({
             id="gitEmail"
             value={gitEmail}
             onChange={(event) => onGitEmailChange(event.target.value)}
-            className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded-xl border border-border bg-background/60 px-4 py-2.5 text-foreground shadow-sm transition-colors placeholder:text-muted-foreground/60 hover:border-foreground/20 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
             placeholder="john@example.com"
             required
             disabled={isSubmitting}

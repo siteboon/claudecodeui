@@ -21,11 +21,30 @@ import {
 
 export const CODEX_FALLBACK_MODELS: ProviderModelsDefinition = {
   OPTIONS: [
-    { value: 'gpt-5.5', label: 'gpt-5.5' },
-    { value: 'gpt-5.4', label: 'gpt-5.4' },
-    { value: 'gpt-5.4-mini', label: 'gpt-5.4-mini' },
-    { value: 'gpt-5.3-codex', label: 'gpt-5.3-codex' },
-    { value: 'gpt-5.2', label: 'gpt-5.2' },
+    {
+      value: 'gpt-5.5',
+      label: 'gpt-5.5',
+      effort: {
+        default: 'medium',
+        values: [{ value: 'low' }, { value: 'medium' }, { value: 'high' }, { value: 'xhigh' }],
+      },
+    },
+    {
+      value: 'gpt-5.4',
+      label: 'gpt-5.4',
+      effort: {
+        default: 'medium',
+        values: [{ value: 'low' }, { value: 'medium' }, { value: 'high' }, { value: 'xhigh' }],
+      },
+    },
+    {
+      value: 'gpt-5.4-mini',
+      label: 'gpt-5.4-mini',
+      effort: {
+        default: 'medium',
+        values: [{ value: 'low' }, { value: 'medium' }, { value: 'high' }, { value: 'xhigh' }],
+      },
+    },
   ],
   DEFAULT: 'gpt-5.4',
 };
@@ -37,6 +56,11 @@ type CodexCachedModel = {
   priority?: number;
   visibility?: string;
   supported_in_api?: boolean;
+  default_reasoning_level?: string;
+  supported_reasoning_levels?: Array<{
+    effort?: string;
+    description?: string;
+  }>;
 };
 
 const CODEX_MODELS_CACHE_PATH = path.join(os.homedir(), '.codex', 'models_cache.json');
@@ -51,15 +75,39 @@ const readCodexPriority = (value: unknown): number => (
   typeof value === 'number' && Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER
 );
 
-const mapCodexModel = (model: CodexCachedModel): ProviderModelOption => ({
-  value: model.slug as string,
-  label: readOptionalString(model.display_name) ?? (model.slug as string),
-  description: readOptionalString(model.description),
-});
+const mapCodexModel = (model: CodexCachedModel): ProviderModelOption => {
+  const effortValues = Array.isArray(model.supported_reasoning_levels)
+    ? model.supported_reasoning_levels
+      .map((level) => {
+        const value = readOptionalString(level?.effort);
+        if (!value) {
+          return null;
+        }
+
+        return {
+          value,
+          description: readOptionalString(level?.description),
+        };
+      })
+      .filter((level): level is NonNullable<typeof level> => Boolean(level))
+    : [];
+
+  return {
+    value: model.slug as string,
+    label: readOptionalString(model.display_name) ?? (model.slug as string),
+    description: readOptionalString(model.description),
+    effort: effortValues.length > 0
+      ? {
+          default: readOptionalString(model.default_reasoning_level) ?? undefined,
+          values: effortValues,
+        }
+      : undefined,
+  };
+};
 
 const buildCodexModelsDefinition = (models: CodexCachedModel[]): ProviderModelsDefinition => {
   const sortedModels = [...models]
-    .filter((model) => model.visibility !== 'hidden' && model.supported_in_api !== false)
+    .filter((model) => model.visibility === 'list' && model.supported_in_api !== false)
     .sort((left, right) => readCodexPriority(left.priority) - readCodexPriority(right.priority));
 
   const options: ProviderModelOption[] = [];

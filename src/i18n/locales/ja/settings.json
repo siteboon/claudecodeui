@@ -54,14 +54,11 @@
     "sections": {
       "appearance": "外観",
       "toolDisplay": "ツール表示",
-      "viewOptions": "表示オプション",
       "inputSettings": "入力設定"
     },
     "darkMode": "ダークモード",
-    "autoExpandTools": "ツールを自動展開",
     "showRawParameters": "生パラメータを表示",
     "showThinking": "思考を表示",
-    "autoScrollToBottom": "自動スクロール",
     "sendByCtrlEnter": "Ctrl+Enterで送信",
     "sendByCtrlEnterDescription": "有効にすると、Enterではなく Ctrl+Enter でメッセージを送信します。IMEユーザーの誤送信防止に便利です。",
     "dragHandle": {
@@ -109,6 +106,12 @@
       "loading": "更新中...",
       "unsupported": "このブラウザではプッシュ通知がサポートされていません。",
       "denied": "プッシュ通知がブロックされています。ブラウザの設定で許可してください。"
+    },
+    "sound": {
+      "title": "サウンド",
+      "description": "チャット実行が完了したときに短い音を再生します。",
+      "enabled": "有効",
+      "test": "サウンドをテスト"
     },
     "events": {
       "title": "イベント種別",
@@ -319,9 +322,6 @@
       },
       "codex": {
         "description": "OpenAI Codex AIアシスタント"
-      },
-      "gemini": {
-        "description": "Google Gemini AIアシスタント"
       }
     },
     "connectionStatus": "接続状態",

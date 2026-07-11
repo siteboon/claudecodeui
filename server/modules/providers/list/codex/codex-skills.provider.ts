@@ -57,4 +57,12 @@ export class CodexSkillsProvider extends SkillsProvider {
 
     return sources;
   }
+
+  protected async getGlobalSkillSource(): Promise<ProviderSkillSource> {
+    return {
+      scope: 'user',
+      rootDir: path.join(os.homedir(), '.agents', 'skills'),
+      commandPrefix: '$',
+    };
+  }
 }

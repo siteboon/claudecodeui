@@ -2,6 +2,7 @@ import fsSync from 'node:fs';
 
 import Database from 'better-sqlite3';
 
+import { parseImagesInputTag } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
 import {
@@ -12,6 +13,8 @@ import {
   readObjectRecord,
   readJsonRecord,
   readOptionalString,
+  sliceTailPage,
+  unwrapJsonStringLiteral,
 } from '@/shared/utils.js';
 
 const PROVIDER = 'opencode';
@@ -55,25 +58,6 @@ const formatToolContent = (value: unknown): string => {
     return JSON.stringify(value, null, 2);
   } catch {
     return String(value);
-  }
-};
-
-/**
- * OpenCode can persist the first prompt as a JSON string literal inside a text
- * part, for example `"hello"` instead of `hello`. Decode only complete JSON
- * string literals so normal assistant/user prose remains untouched.
- */
-const unwrapJsonStringLiteral = (value: string): string => {
-  const trimmed = value.trim();
-  if (!trimmed.startsWith('"') || !trimmed.endsWith('"')) {
-    return value;
-  }
-
-  try {
-    const parsed = JSON.parse(trimmed);
-    return typeof parsed === 'string' ? parsed : value;
-  } catch {
-    return value;
   }
 };
 
@@ -325,6 +309,9 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
     options: FetchHistoryOptions = {},
   ): Promise<FetchHistoryResult> {
     const { limit = null, offset = 0 } = options;
+    // OpenCode's shared sqlite database keys messages by the provider-native
+    // session id, not the app-facing id this method is addressed with.
+    const providerSessionId = options.providerSessionId ?? sessionId;
     const db = openOpenCodeDatabase();
     if (!db) {
       return { messages: [], total: 0, hasMore: false, offset: 0, limit: null };
@@ -349,27 +336,20 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
           m.id,
           COALESCE(p.time_created, 0),
           p.id
-      `).all(sessionId) as OpenCodeHistoryRow[];
+      `).all(providerSessionId) as OpenCodeHistoryRow[];
 
       const normalized = this.normalizeHistoryRows(rows, sessionId);
-      const tokenUsage = aggregateOpenCodeSessionTokenUsage(db, sessionId);
+      const tokenUsage = aggregateOpenCodeSessionTokenUsage(db, providerSessionId);
 
       const normalizedOffset = Math.max(0, offset);
       const normalizedLimit = limit === null ? null : Math.max(0, limit);
       const total = normalized.length;
-      const messages = normalizedLimit === null
-        ? normalized
-        : normalized.slice(
-            Math.max(0, total - normalizedOffset - normalizedLimit),
-            Math.max(0, total - normalizedOffset),
-          );
+      const { page, hasMore } = sliceTailPage(normalized, normalizedLimit, normalizedOffset);
 
       return {
-        messages,
+        messages: page,
         total,
-        hasMore: normalizedLimit === null
-          ? false
-          : Math.max(0, total - normalizedOffset - normalizedLimit) > 0,
+        hasMore,
         offset: normalizedOffset,
         limit: normalizedLimit,
         tokenUsage,
@@ -421,8 +401,13 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
       }
 
       if (partType === 'text') {
-        const content = extractText(partData);
-        if (content.trim()) {
+        const rawContent = extractText(partData);
+        // User prompts sent with attachments carry an <images_input> path
+        // list; strip it for display and surface the paths as images.
+        const { text: content, attachments } = messageRole === 'user'
+          ? parseImagesInputTag(rawContent)
+          : { text: rawContent, attachments: [] };
+        if (content.trim() || attachments.length > 0) {
           normalized.push(createNormalizedMessage({
             id: baseId,
             sessionId,
@@ -431,6 +416,7 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
             kind: 'text',
             role: messageRole === 'user' ? 'user' : 'assistant',
             content,
+            images: attachments.length > 0 ? attachments : undefined,
           }));
         }
         continue;

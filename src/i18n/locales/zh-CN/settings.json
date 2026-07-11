@@ -54,14 +54,11 @@
     "sections": {
       "appearance": "外观",
       "toolDisplay": "工具显示",
-      "viewOptions": "视图选项",
       "inputSettings": "输入设置"
     },
     "darkMode": "深色模式",
-    "autoExpandTools": "自动展开工具",
     "showRawParameters": "显示原始参数",
     "showThinking": "显示思考过程",
-    "autoScrollToBottom": "自动滚动到底部",
     "sendByCtrlEnter": "使用 Ctrl+Enter 发送",
     "sendByCtrlEnterDescription": "启用后，按 Ctrl+Enter 发送消息，而不是仅按 Enter。这对于使用输入法的用户可以避免意外发送。",
     "dragHandle": {
@@ -94,6 +91,7 @@
     "git": "Git",
     "apiTokens": "API 和令牌",
     "tasks": "任务",
+    "computer": "计算机使用",
     "notifications": "通知",
     "plugins": "插件",
     "about": "关于"
@@ -109,6 +107,12 @@
       "loading": "更新中...",
       "unsupported": "此浏览器不支持推送通知。",
       "denied": "推送通知已被阻止，请在浏览器设置中允许。"
+    },
+    "sound": {
+      "title": "声音",
+      "description": "聊天运行完成时播放短提示音。",
+      "enabled": "已启用",
+      "test": "测试声音"
     },
     "events": {
       "title": "事件类型",
@@ -319,9 +323,6 @@
       },
       "codex": {
         "description": "OpenAI Codex AI 助手"
-      },
-      "gemini": {
-        "description": "Google Gemini AI 助手"
       }
     },
     "connectionStatus": "连接状态",

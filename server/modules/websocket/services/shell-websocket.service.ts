@@ -35,7 +35,10 @@ const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
 const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
 
 type ShellWebSocketDependencies = {
-  getSessionById: (sessionId: string) => { cliSessionId?: string } | null | undefined;
+  resolveProviderSessionId: (
+    sessionId: string,
+    provider: string,
+  ) => string | null | undefined;
   stripAnsiSequences: (content: string) => string;
   normalizeDetectedUrl: (url: string) => string | null;
   extractUrlsFromText: (content: string) => string[];
@@ -76,6 +79,36 @@ function parseShellMessage(rawMessage: RawData): ShellIncomingMessage | null {
   return payload as ShellIncomingMessage;
 }
 
+const SAFE_SESSION_ID_PATTERN = /^[a-zA-Z0-9_.\-:]+$/;
+
+function resolveResumeSessionId(
+  message: ShellIncomingMessage,
+  dependencies: ShellWebSocketDependencies
+): string {
+  const hasSession = readBoolean(message.hasSession);
+  const sessionId = readString(message.sessionId);
+  const provider = readString(message.provider, 'claude');
+
+  if (!hasSession || !sessionId) {
+    return '';
+  }
+
+  let resumeSessionId: string | null | undefined;
+  try {
+    resumeSessionId = dependencies.resolveProviderSessionId(sessionId, provider);
+  } catch (error) {
+    console.error('Failed to resolve provider session ID:', error);
+    resumeSessionId = undefined;
+  }
+
+  const resolvedSessionId = resumeSessionId === undefined ? sessionId : resumeSessionId;
+  if (!resolvedSessionId || !SAFE_SESSION_ID_PATTERN.test(resolvedSessionId)) {
+    return '';
+  }
+
+  return resolvedSessionId;
+}
+
 /**
  * Resolves provider command line for plain shell and agent-backed shell modes.
  */
@@ -84,10 +117,9 @@ function buildShellCommand(
   dependencies: ShellWebSocketDependencies
 ): string {
   const hasSession = readBoolean(message.hasSession);
-  const sessionId = readString(message.sessionId);
   const initialCommand = readString(message.initialCommand);
   const provider = readString(message.provider, 'claude');
-  const safeSessionIdPattern = /^[a-zA-Z0-9_.\-:]+$/;
+  const resumeSessionId = resolveResumeSessionId(message, dependencies);
   const isPlainShell =
     readBoolean(message.isPlainShell) ||
     (!!initialCommand && !hasSession) ||
@@ -98,60 +130,93 @@ function buildShellCommand(
   }
 
   if (provider === 'cursor') {
-    if (hasSession && sessionId) {
-      return `cursor-agent --resume="${sessionId}"`;
+    if (resumeSessionId) {
+      return `cursor-agent --resume="${resumeSessionId}"`;
     }
     return 'cursor-agent';
   }
 
   if (provider === 'codex') {
-    if (hasSession && sessionId) {
+    if (resumeSessionId) {
       if (os.platform() === 'win32') {
-        return `codex resume "${sessionId}"; if ($LASTEXITCODE -ne 0) { codex }`;
+        return `codex resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { codex }`;
       }
-      return `codex resume "${sessionId}" || codex`;
+      return `codex resume "${resumeSessionId}" || codex`;
     }
     return 'codex';
   }
 
-  if (provider === 'gemini') {
-    const command = initialCommand || 'gemini';
-    let resumeId = sessionId;
-    if (hasSession && sessionId) {
-      try {
-        const existingSession = dependencies.getSessionById(sessionId);
-        if (existingSession && existingSession.cliSessionId) {
-          resumeId = existingSession.cliSessionId;
-          if (!safeSessionIdPattern.test(resumeId)) {
-            resumeId = '';
-          }
-        }
-      } catch (error) {
-        console.error('Failed to get Gemini CLI session ID:', error);
-      }
-    }
-
-    if (hasSession && resumeId) {
-      return `${command} --resume "${resumeId}"`;
-    }
-    return command;
-  }
-
   if (provider === 'opencode') {
-    if (hasSession && sessionId) {
-      return `opencode --session "${sessionId}"`;
+    if (resumeSessionId) {
+      return `opencode --session "${resumeSessionId}"`;
     }
     return initialCommand || 'opencode';
   }
 
   const command = initialCommand || 'claude';
-  if (hasSession && sessionId) {
+  if (resumeSessionId) {
     if (os.platform() === 'win32') {
-      return `claude --resume "${sessionId}"; if ($LASTEXITCODE -ne 0) { claude }`;
+      return `claude --resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { claude }`;
     }
-    return `claude --resume "${sessionId}" || claude`;
+    return `claude --resume "${resumeSessionId}" || claude`;
   }
   return command;
+}
+
+function readEnvValue(env: NodeJS.ProcessEnv, key: string): string | undefined {
+  const resolvedKey = Object.keys(env).find((envKey) => envKey.toLowerCase() === key.toLowerCase());
+  return resolvedKey ? env[resolvedKey] : undefined;
+}
+
+function getPathEnvKey(env: NodeJS.ProcessEnv): string {
+  return Object.keys(env).find((key) => key.toLowerCase() === 'path') || 'PATH';
+}
+
+function prioritizeUserNpmGlobalBin(env: NodeJS.ProcessEnv): { key: string; value: string | undefined } {
+  const pathKey = getPathEnvKey(env);
+  const currentPath = env[pathKey];
+  if (!currentPath) {
+    return { key: pathKey, value: currentPath };
+  }
+
+  const delimiter = path.delimiter;
+  const pathEntries = currentPath.split(delimiter).filter(Boolean);
+  const npmPrefix = readEnvValue(env, 'npm_config_prefix');
+  const appData = readEnvValue(env, 'APPDATA');
+  const candidates = [
+    npmPrefix || '',
+    npmPrefix ? path.join(npmPrefix, 'bin') : '',
+    appData ? path.join(appData, 'npm') : '',
+    path.join(os.homedir(), 'AppData', 'Roaming', 'npm'),
+    path.join(os.homedir(), '.npm-global', 'bin'),
+  ].filter(Boolean);
+
+  const normalizedPathEntries = pathEntries.map((entry) => os.platform() === 'win32' ? entry.toLowerCase() : entry);
+  const preferredEntries = candidates.filter((candidate, index) => {
+    const normalizedCandidate = os.platform() === 'win32' ? candidate.toLowerCase() : candidate;
+    return (
+      candidates.indexOf(candidate) === index &&
+      normalizedPathEntries.includes(normalizedCandidate)
+    );
+  });
+
+  if (preferredEntries.length === 0) {
+    return { key: pathKey, value: currentPath };
+  }
+
+  const normalizedPreferredEntries = preferredEntries.map((entry) =>
+    os.platform() === 'win32' ? entry.toLowerCase() : entry
+  );
+
+  const value = [
+    ...preferredEntries,
+    ...pathEntries.filter((entry) => {
+      const normalizedEntry = os.platform() === 'win32' ? entry.toLowerCase() : entry;
+      return !normalizedPreferredEntries.includes(normalizedEntry);
+    }),
+  ].join(delimiter);
+
+  return { key: pathKey, value };
 }
 
 /**
@@ -261,11 +326,13 @@ export function handleShellConnection(
         }
 
         const shellCommand = buildShellCommand(data, dependencies);
+        const resumeSessionId = resolveResumeSessionId(data, dependencies);
         const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
         const shellArgs =
           os.platform() === 'win32' ? ['-Command', shellCommand] : ['-c', shellCommand];
         const termCols = readNumber(data.cols, 80);
         const termRows = readNumber(data.rows, 24);
+        const prioritizedPath = prioritizeUserNpmGlobalBin(process.env);
 
         shellProcess = pty.spawn(shell, shellArgs, {
           name: 'xterm-256color',
@@ -274,6 +341,7 @@ export function handleShellConnection(
           cwd: resolvedProjectPath,
           env: {
             ...process.env,
+            [prioritizedPath.key]: prioritizedPath.value,
             TERM: 'xterm-256color',
             COLORTERM: 'truecolor',
             FORCE_COLOR: '3',
@@ -401,13 +469,11 @@ export function handleShellConnection(
               ? 'Cursor'
               : provider === 'codex'
                 ? 'Codex'
-                : provider === 'gemini'
-                  ? 'Gemini'
-                  : provider === 'opencode'
+                : provider === 'opencode'
                     ? 'OpenCode'
                   : 'Claude';
-          welcomeMsg = hasSession
-            ? `\x1b[36mResuming ${providerName} session ${sessionId} in: ${projectPath}\x1b[0m\r\n`
+          welcomeMsg = hasSession && resumeSessionId
+            ? `\x1b[36mResuming ${providerName} session ${resumeSessionId} in: ${projectPath}\x1b[0m\r\n`
             : `\x1b[36mStarting new ${providerName} session in: ${projectPath}\x1b[0m\r\n`;
         }
 

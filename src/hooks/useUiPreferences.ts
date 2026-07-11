@@ -1,12 +1,11 @@
 import { useEffect, useReducer, useRef } from 'react';
 
 type UiPreferences = {
-  autoExpandTools: boolean;
   showRawParameters: boolean;
   showThinking: boolean;
-  autoScrollToBottom: boolean;
   sendByCtrlEnter: boolean;
   sidebarVisible: boolean;
+  voiceEnabled: boolean;
 };
 
 type UiPreferenceKey = keyof UiPreferences;
@@ -33,12 +32,11 @@ type UiPreferencesAction =
   | ResetPreferencesAction;
 
 const DEFAULTS: UiPreferences = {
-  autoExpandTools: false,
   showRawParameters: false,
   showThinking: true,
-  autoScrollToBottom: true,
   sendByCtrlEnter: false,
   sidebarVisible: true,
+  voiceEnabled: false,
 };
 
 const PREFERENCE_KEYS = Object.keys(DEFAULTS) as UiPreferenceKey[];

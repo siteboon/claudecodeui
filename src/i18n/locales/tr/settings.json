@@ -54,14 +54,11 @@
     "sections": {
       "appearance": "Görünüm",
       "toolDisplay": "Araç Gösterimi",
-      "viewOptions": "Görünüm Seçenekleri",
       "inputSettings": "Girdi Ayarları"
     },
     "darkMode": "Koyu Mod",
-    "autoExpandTools": "Araçları otomatik genişlet",
     "showRawParameters": "Ham parametreleri göster",
     "showThinking": "Düşünmeyi göster",
-    "autoScrollToBottom": "Otomatik en alta kaydır",
     "sendByCtrlEnter": "Ctrl+Enter ile gönder",
     "sendByCtrlEnterDescription": "Etkinleştirildiğinde, Ctrl+Enter'a basmak yalnız Enter yerine mesajı gönderir. IME (girdi metot düzenleyici) kullananlar için yanlışlıkla göndermeyi önler.",
     "dragHandle": {
@@ -94,6 +91,7 @@
     "git": "Git",
     "apiTokens": "API ve Token'lar",
     "tasks": "Görevler",
+    "computer": "Bilgisayar Kullanımı",
     "notifications": "Bildirimler",
     "plugins": "Eklentiler",
     "about": "Hakkında"
@@ -109,6 +107,12 @@
       "loading": "Güncelleniyor...",
       "unsupported": "Bu tarayıcıda push bildirimleri desteklenmiyor.",
       "denied": "Push bildirimleri engellendi. Lütfen tarayıcı ayarlarından izin ver."
+    },
+    "sound": {
+      "title": "Ses",
+      "description": "Sohbet çalışması tamamlandığında kısa bir ton çal.",
+      "enabled": "Etkin",
+      "test": "Sesi test et"
     },
     "events": {
       "title": "Etkinlik Türleri",
@@ -319,9 +323,6 @@
       },
       "codex": {
         "description": "OpenAI Codex AI asistanı"
-      },
-      "gemini": {
-        "description": "Google Gemini AI asistanı"
       }
     },
     "connectionStatus": "Bağlantı Durumu",
