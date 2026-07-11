@@ -36,9 +36,13 @@ import {
     abortCodexSession,
 } from './openai-codex.js';
 import {
-    spawnOpenCode,
-    abortOpenCodeSession,
+  spawnOpenCode,
+  abortOpenCodeSession,
 } from './opencode-cli.js';
+import {
+  spawnAntigravity,
+  abortAntigravitySession,
+} from './antigravity-cli.js';
 import {
     stripAnsiSequences,
     normalizeDetectedUrl,
@@ -114,13 +118,15 @@ const wss = createWebSocketServer(server, {
             cursor: spawnCursor,
             codex: queryCodex,
             opencode: spawnOpenCode,
-        },
-        abortFns: {
+            antigravity: spawnAntigravity,
+          },
+          abortFns: {
             claude: abortClaudeSDKSession,
             cursor: abortCursorSession,
             codex: abortCodexSession,
             opencode: abortOpenCodeSession,
-        },
+            antigravity: abortAntigravitySession,
+          },
         resolveToolApproval,
         getPendingApprovalsForSession,
     },
