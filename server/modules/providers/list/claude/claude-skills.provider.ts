@@ -15,6 +15,7 @@ import {
   readObjectRecord,
   readOptionalString,
   readProviderSkillMarkdownDefinition,
+  readStringArray,
 } from '@/shared/utils.js';
 
 const getClaudeHomePath = (): string => path.join(os.homedir(), '.claude');
@@ -166,6 +167,14 @@ export class ClaudeSkillsProvider extends SkillsProvider {
             continue;
           }
 
+          // Check plugin.json skills field first (supports paths like "./" or "./skills/foo")
+          const configSkills = await this.listPluginSkillsFromConfig(pluginFolder, pluginId, pluginName);
+          if (configSkills.length > 0) {
+            skills.push(...configSkills);
+            continue;
+          }
+
+          // Fallback: scan skills/ subdirectory
           const skillsPath = path.join(pluginFolder, 'skills');
           if (!(await pathExistsAsDirectory(skillsPath))) {
             continue;
@@ -179,6 +188,76 @@ export class ClaudeSkillsProvider extends SkillsProvider {
     }
 
     return skills;
+  }
+
+  /**
+   * Reads the `skills` field from plugin.json and resolves each entry to a
+   * SKILL.md file. Supports directory paths (scanned for SKILL.md) and direct
+   * .md file paths.
+   */
+  private async listPluginSkillsFromConfig(
+    pluginFolder: string,
+    pluginId: string,
+    pluginName: string,
+  ): Promise<ProviderSkill[]> {
+    try {
+      const pluginConfig = await readJsonConfig(
+        path.join(pluginFolder, '.claude-plugin', 'plugin.json'),
+      );
+      const skillPaths = readStringArray(pluginConfig.skills);
+      if (!skillPaths || skillPaths.length === 0) {
+        return [];
+      }
+
+      const skills: ProviderSkill[] = [];
+      for (const skillPath of skillPaths) {
+        const resolvedPath = path.resolve(pluginFolder, skillPath);
+
+        if (await pathExistsAsDirectory(resolvedPath)) {
+          // Directory: scan for SKILL.md files inside
+          const skillFiles = await findProviderSkillMarkdownFiles(resolvedPath, { recursive: true });
+          for (const skillFile of skillFiles) {
+            try {
+              const definition = await readProviderSkillMarkdownDefinition(skillFile);
+              skills.push({
+                provider: this.provider,
+                name: definition.name,
+                description: definition.description,
+                command: `/${pluginName}:${definition.name}`,
+                scope: 'plugin',
+                sourcePath: skillFile,
+                pluginName,
+                pluginId,
+              });
+            } catch {
+              // Bad skill file should not block siblings.
+            }
+          }
+        } else if (resolvedPath.toLowerCase().endsWith('.md')) {
+          // Direct .md file path
+          try {
+            const definition = await readProviderSkillMarkdownDefinition(resolvedPath);
+            skills.push({
+              provider: this.provider,
+              name: definition.name,
+              description: definition.description,
+              command: `/${pluginName}:${definition.name}`,
+              scope: 'plugin',
+              sourcePath: resolvedPath,
+              pluginName,
+              pluginId,
+            });
+          } catch {
+            // Bad skill file should not block siblings.
+          }
+        }
+      }
+
+      return skills;
+    } catch {
+      // Missing or malformed plugin.json is not an error.
+      return [];
+    }
   }
 
   private async listPluginCommandSkills(

@@ -319,6 +319,162 @@ test('providerSkillsService lists claude user, project, and enabled plugin skill
 });
 
 /**
+ * This test verifies that plugin skills defined via plugin.json's `skills`
+ * field are discovered correctly. This covers plugins that place SKILL.md at
+ * the root level (skills: ["./"]) or in custom subdirectories.
+ */
+test('providerSkillsService discovers plugin skills from plugin.json skills field', { concurrency: false }, async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-skills-plugin-config-'));
+
+  // Plugin with skills: ["./"] — SKILL.md at root level (e.g., web-access)
+  const rootSkillPluginPath = path.join(
+    tempRoot,
+    '.claude',
+    'plugins',
+    'cache',
+    'web-access',
+    'web-access',
+    'v1',
+  );
+
+  // Plugin with skills: ["./skills/custom"] — custom subdirectory
+  const customSubdirPluginPath = path.join(
+    tempRoot,
+    '.claude',
+    'plugins',
+    'cache',
+    'my-plugin',
+    'my-plugin',
+    'v1',
+  );
+
+  // Plugin with skills pointing to a direct .md file
+  const directFilePluginPath = path.join(
+    tempRoot,
+    '.claude',
+    'plugins',
+    'cache',
+    'file-plugin',
+    'file-plugin',
+    'v1',
+  );
+
+  const restoreHomeDir = patchHomeDir(tempRoot);
+  try {
+    // Setup: root-level skill plugin (skills: ["./"])
+    await writeClaudePluginManifest(rootSkillPluginPath, 'web-access');
+    // Write plugin.json with skills field
+    await fs.writeFile(
+      path.join(rootSkillPluginPath, '.claude-plugin', 'plugin.json'),
+      JSON.stringify({
+        name: 'web-access',
+        version: '1.0.0',
+        skills: ['./'],
+      }, null, 2),
+      'utf8',
+    );
+    // SKILL.md at root level
+    await fs.writeFile(
+      path.join(rootSkillPluginPath, 'SKILL.md'),
+      '---\nname: web-access\ndescription: Web browsing skill\n---\n\nBody.\n',
+      'utf8',
+    );
+
+    // Setup: custom subdirectory plugin (skills: ["./skills/custom"])
+    await writeClaudePluginManifest(customSubdirPluginPath, 'MyPlugin');
+    await fs.writeFile(
+      path.join(customSubdirPluginPath, '.claude-plugin', 'plugin.json'),
+      JSON.stringify({
+        name: 'MyPlugin',
+        version: '1.0.0',
+        skills: ['./skills/custom'],
+      }, null, 2),
+      'utf8',
+    );
+    await fs.mkdir(path.join(customSubdirPluginPath, 'skills', 'custom'), { recursive: true });
+    await fs.writeFile(
+      path.join(customSubdirPluginPath, 'skills', 'custom', 'SKILL.md'),
+      '---\nname: custom-skill\ndescription: Custom directory skill\n---\n\nBody.\n',
+      'utf8',
+    );
+
+    // Setup: direct .md file plugin (skills: ["./my-skill.md"])
+    await writeClaudePluginManifest(directFilePluginPath, 'FilePlugin');
+    await fs.writeFile(
+      path.join(directFilePluginPath, '.claude-plugin', 'plugin.json'),
+      JSON.stringify({
+        name: 'FilePlugin',
+        version: '1.0.0',
+        skills: ['./my-skill.md'],
+      }, null, 2),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(directFilePluginPath, 'my-skill.md'),
+      '---\nname: file-skill\ndescription: Direct file skill\n---\n\nBody.\n',
+      'utf8',
+    );
+
+    // Write settings and installed_plugins
+    await fs.writeFile(
+      path.join(tempRoot, '.claude', 'settings.json'),
+      JSON.stringify({
+        enabledPlugins: {
+          'web-access@web-access': true,
+          'my-plugin@my-marketplace': true,
+          'file-plugin@file-marketplace': true,
+        },
+      }, null, 2),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(tempRoot, '.claude', 'plugins', 'installed_plugins.json'),
+      JSON.stringify({
+        version: 2,
+        plugins: {
+          'web-access@web-access': [
+            { scope: 'user', installPath: rootSkillPluginPath, version: 'v1' },
+          ],
+          'my-plugin@my-marketplace': [
+            { scope: 'user', installPath: customSubdirPluginPath, version: 'v1' },
+          ],
+          'file-plugin@file-marketplace': [
+            { scope: 'user', installPath: directFilePluginPath, version: 'v1' },
+          ],
+        },
+      }, null, 2),
+      'utf8',
+    );
+
+    const skills = await providerSkillsService.listProviderSkills('claude');
+    const byName = new Map(skills.map((skill) => [skill.name, skill]));
+
+    // Root-level skill discovered via plugin.json skills: ["./"]
+    const rootSkill = byName.get('web-access');
+    assert.ok(rootSkill, 'web-access skill should be discovered from plugin.json skills field');
+    assert.equal(rootSkill?.scope, 'plugin');
+    assert.equal(rootSkill?.command, '/web-access:web-access');
+    assert.equal(rootSkill?.pluginName, 'web-access');
+    assert.match(rootSkill?.sourcePath ?? '', /SKILL\.md$/);
+
+    // Custom subdirectory skill
+    const customSkill = byName.get('custom-skill');
+    assert.ok(customSkill, 'custom-skill should be discovered from custom subdir');
+    assert.equal(customSkill?.scope, 'plugin');
+    assert.equal(customSkill?.command, '/MyPlugin:custom-skill');
+
+    // Direct .md file skill
+    const fileSkill = byName.get('file-skill');
+    assert.ok(fileSkill, 'file-skill should be discovered from direct .md path');
+    assert.equal(fileSkill?.scope, 'plugin');
+    assert.equal(fileSkill?.command, '/FilePlugin:file-skill');
+  } finally {
+    restoreHomeDir();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+/**
  * This test covers Codex repository/user/system skill folders and verifies that
  * repository lookup includes cwd, parent, and git root skill locations.
  */
