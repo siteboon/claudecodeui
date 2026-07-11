@@ -307,7 +307,38 @@ function dedupeAdjacentAssistantEchoes(merged: NormalizedMessage[]): NormalizedM
         && m.role === 'assistant'
       ) {
         const ms = (m.content || '').trim();
-        if (ms.length > 0 && ms === (prev.content || '').trim()) {
+        const ps = (prev.content || '').trim();
+        if (ms.length > 0 && (ms === ps || ms.startsWith(ps))) {
+          // m is the same or a superset of prev (accumulated text during streaming) — keep m, drop prev
+          out[out.length - 1] = m;
+          continue;
+        }
+      }
+      // Dedupe thinking messages that are echoed as assistant text:
+      // thinking → text: keep thinking (renders as collapsible), skip text
+      if (
+        prev.kind === 'thinking'
+        && m.kind === 'text'
+        && m.role === 'assistant'
+      ) {
+        const ms = (m.content || '').trim();
+        const ps = (prev.content || '').trim();
+        if (ps.length > 0 && ms.length > 0 && (ms === ps || ms.startsWith(ps))) {
+          // Text echo of thinking content — skip the text message
+          continue;
+        }
+      }
+      // text → thinking: replace text with thinking (better rendering)
+      if (
+        prev.kind === 'text'
+        && prev.role === 'assistant'
+        && m.kind === 'thinking'
+      ) {
+        const ms = (m.content || '').trim();
+        const ps = (prev.content || '').trim();
+        if (ms.length > 0 && (ms === ps || ps.startsWith(ms) || ms.startsWith(ps))) {
+          // Replace the text echo with the thinking message
+          out[out.length - 1] = m;
           continue;
         }
       }
