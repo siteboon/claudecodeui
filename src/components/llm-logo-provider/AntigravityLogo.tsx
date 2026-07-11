@@ -5,34 +5,33 @@ type AntigravityLogoProps = {
 export default function AntigravityLogo({ className = 'w-5 h-5' }: AntigravityLogoProps) {
   return (
     <svg
-      viewBox="0 0 24 24"
+      viewBox="0 0 200 184"
       role="img"
       aria-label="Antigravity"
       className={className}
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
-      <rect x="2" y="2" width="20" height="20" rx="5" fill="#F8FAFC" />
       <path
-        d="M12 4.2a7.8 7.8 0 0 0 0 15.6v-3.2a4.6 4.6 0 0 1 0-9.2V4.2Z"
-        fill="#4285F4"
+        d="M100 0C118 0 132 10 140 26C152 49 160 84 168 122C176 153 187 170 198 182C199 183 200 184 198 184C191 184 186 182 180 176C157 154 140 131 126 110C119 100 111 96 100 96C89 96 81 100 74 110C60 131 43 154 20 176C14 182 9 184 2 184C0 184 1 183 2 182C13 170 24 153 32 122C40 84 48 49 60 26C68 10 82 0 100 0Z"
+        fill="url(#antigravity-gradient)"
       />
-      <path
-        d="M12 4.2a7.78 7.78 0 0 1 5.52 2.28l-2.26 2.26A4.55 4.55 0 0 0 12 7.4V4.2Z"
-        fill="#34A853"
-      />
-      <path
-        d="M19.8 12a7.77 7.77 0 0 1-2.28 5.52l-2.26-2.26A4.55 4.55 0 0 0 16.6 12h3.2Z"
-        fill="#FBBC04"
-      />
-      <path
-        d="M17.52 17.52A7.78 7.78 0 0 1 12 19.8v-3.2a4.55 4.55 0 0 0 3.26-1.34l2.26 2.26Z"
-        fill="#EA4335"
-      />
-      <path
-        d="M12 8.7 13.05 11H15.5l-1.98 1.47.76 2.33L12 13.36 9.72 14.8l.76-2.33L8.5 11h2.45L12 8.7Z"
-        fill="#111827"
-      />
+      <defs>
+        <linearGradient
+          id="antigravity-gradient"
+          x1="100"
+          y1="0"
+          x2="100"
+          y2="184"
+          gradientUnits="userSpaceOnUse"
+        >
+          <stop offset="0.02" stopColor="#FF5A36" />
+          <stop offset="0.22" stopColor="#FFB800" />
+          <stop offset="0.42" stopColor="#7ED957" />
+          <stop offset="0.64" stopColor="#46D7D1" />
+          <stop offset="1" stopColor="#3B82F6" />
+        </linearGradient>
+      </defs>
     </svg>
   );
 }
