@@ -2,6 +2,7 @@ import crossSpawn from 'cross-spawn';
 
 import type { IProviderAuth } from '@/shared/interfaces.js';
 import type { ProviderAuthStatus } from '@/shared/types.js';
+import { buildProviderCliEnv } from '@/shared/utils.js';
 
 const spawnFunction = crossSpawn;
 
@@ -9,6 +10,7 @@ export class AntigravityProviderAuth implements IProviderAuth {
   private checkInstalled(): boolean {
     try {
       const result = spawnFunction.sync('agy', ['--version'], {
+        env: buildProviderCliEnv(),
         stdio: 'ignore',
         timeout: 5000,
       });
@@ -33,6 +35,7 @@ export class AntigravityProviderAuth implements IProviderAuth {
 
     const modelsResult = spawnFunction.sync('agy', ['models'], {
       encoding: 'utf8',
+      env: buildProviderCliEnv(),
       timeout: 10_000,
     });
     const authenticated = !modelsResult.error && modelsResult.status === 0;

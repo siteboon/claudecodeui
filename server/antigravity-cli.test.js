@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -19,6 +19,12 @@ if (capturePath) {
     args: process.argv.slice(2),
     cwd: process.cwd(),
   }));
+}
+const conversationsDir = process.env.ANTIGRAVITY_CONVERSATIONS_DIR;
+const fakeConversationId = process.env.AGY_FAKE_CONVERSATION_ID;
+if (conversationsDir && fakeConversationId) {
+  fs.mkdirSync(conversationsDir, { recursive: true });
+  fs.writeFileSync(require('node:path').join(conversationsDir, fakeConversationId + '.db'), '');
 }
 console.log('assistant response');
 `, 'utf8');
@@ -42,14 +48,20 @@ test('resolveAntigravityPermissionArgs maps UI permission modes onto agy control
   assert.deepEqual(resolveAntigravityPermissionArgs(undefined), []);
 });
 
-test('spawnAntigravity uses app session id as conversation id for new sessions', async () => {
+test('spawnAntigravity starts new sessions without passing app id as agy conversation id', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'antigravity-cli-live-'));
+  const binDir = path.join(tempRoot, 'bin');
+  const conversationsDir = path.join(tempRoot, 'conversations');
   const argsCapturePath = path.join(tempRoot, 'agy-args.json');
+  const fakeConversationId = 'agy-native-session-1';
   const pathKey = findEnvKey('PATH');
   const pathExtKey = findEnvKey('PATHEXT');
   const previousPath = process.env[pathKey];
   const previousPathExt = process.env[pathExtKey];
   const previousArgsCapture = process.env.AGY_ARGS_CAPTURE;
+  const previousNpmPrefix = process.env.npm_config_prefix;
+  const previousConversationsDir = process.env.ANTIGRAVITY_CONVERSATIONS_DIR;
+  const previousFakeConversationId = process.env.AGY_FAKE_CONVERSATION_ID;
   const messages = [];
   const writer = {
     userId: null,
@@ -63,9 +75,13 @@ test('spawnAntigravity uses app session id as conversation id for new sessions',
   };
 
   try {
-    await createFakeAntigravityExecutable(tempRoot);
-    process.env[pathKey] = `${tempRoot}${path.delimiter}${previousPath || ''}`;
+    await mkdir(binDir);
+    await createFakeAntigravityExecutable(binDir);
+    process.env[pathKey] = `${binDir}${path.delimiter}${previousPath || ''}`;
+    process.env.npm_config_prefix = tempRoot;
     process.env.AGY_ARGS_CAPTURE = argsCapturePath;
+    process.env.ANTIGRAVITY_CONVERSATIONS_DIR = conversationsDir;
+    process.env.AGY_FAKE_CONVERSATION_ID = fakeConversationId;
     if (process.platform === 'win32') {
       process.env[pathExtKey] = previousPathExt?.toUpperCase().includes('.CMD')
         ? previousPathExt
@@ -84,17 +100,17 @@ test('spawnAntigravity uses app session id as conversation id for new sessions',
     );
     const complete = messages.find((message) => message.kind === 'complete');
 
-    assert.equal(writer.sessionId, 'app-session-1');
-    assert.equal(sessionCreated?.newSessionId, 'app-session-1');
-    assert.equal(assistantDelta?.sessionId, 'app-session-1');
-    assert.equal(complete?.sessionId, 'app-session-1');
+    assert.equal(writer.sessionId, fakeConversationId);
+    assert.equal(sessionCreated?.newSessionId, fakeConversationId);
+    assert.equal(assistantDelta?.sessionId, fakeConversationId);
+    assert.equal(complete?.sessionId, fakeConversationId);
     assert.equal(messages.some((message) => message.kind === 'error'), false);
 
     const capture = JSON.parse(await readFile(argsCapturePath, 'utf8'));
-    assert.deepEqual(capture.args.slice(0, 3), ['--print', '--conversation', 'app-session-1']);
+    assert.equal(capture.args.includes('--conversation'), false);
     assert.ok(capture.args.includes('--mode'));
     assert.ok(capture.args.includes('accept-edits'));
-    assert.equal(capture.args[capture.args.length - 1], 'Hi');
+    assert.deepEqual(capture.args.slice(-2), ['--print', 'Hi']);
     assert.equal(capture.cwd, tempRoot);
   } finally {
     if (previousPath === undefined) {
@@ -113,6 +129,117 @@ test('spawnAntigravity uses app session id as conversation id for new sessions',
       delete process.env.AGY_ARGS_CAPTURE;
     } else {
       process.env.AGY_ARGS_CAPTURE = previousArgsCapture;
+    }
+
+    if (previousNpmPrefix === undefined) {
+      delete process.env.npm_config_prefix;
+    } else {
+      process.env.npm_config_prefix = previousNpmPrefix;
+    }
+
+    if (previousConversationsDir === undefined) {
+      delete process.env.ANTIGRAVITY_CONVERSATIONS_DIR;
+    } else {
+      process.env.ANTIGRAVITY_CONVERSATIONS_DIR = previousConversationsDir;
+    }
+
+    if (previousFakeConversationId === undefined) {
+      delete process.env.AGY_FAKE_CONVERSATION_ID;
+    } else {
+      process.env.AGY_FAKE_CONVERSATION_ID = previousFakeConversationId;
+    }
+
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('spawnAntigravity resumes existing provider conversation ids with --conversation', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'antigravity-cli-resume-'));
+  const binDir = path.join(tempRoot, 'bin');
+  const conversationsDir = path.join(tempRoot, 'conversations');
+  const argsCapturePath = path.join(tempRoot, 'agy-args.json');
+  const pathKey = findEnvKey('PATH');
+  const pathExtKey = findEnvKey('PATHEXT');
+  const previousPath = process.env[pathKey];
+  const previousPathExt = process.env[pathExtKey];
+  const previousArgsCapture = process.env.AGY_ARGS_CAPTURE;
+  const previousNpmPrefix = process.env.npm_config_prefix;
+  const previousConversationsDir = process.env.ANTIGRAVITY_CONVERSATIONS_DIR;
+  const previousFakeConversationId = process.env.AGY_FAKE_CONVERSATION_ID;
+  const messages = [];
+  const writer = {
+    userId: null,
+    sessionId: null,
+    send(message) {
+      messages.push(message);
+    },
+    setSessionId(sessionId) {
+      this.sessionId = sessionId;
+    },
+  };
+
+  try {
+    await mkdir(binDir);
+    await createFakeAntigravityExecutable(binDir);
+    process.env[pathKey] = `${binDir}${path.delimiter}${previousPath || ''}`;
+    process.env.npm_config_prefix = tempRoot;
+    process.env.AGY_ARGS_CAPTURE = argsCapturePath;
+    process.env.ANTIGRAVITY_CONVERSATIONS_DIR = conversationsDir;
+    delete process.env.AGY_FAKE_CONVERSATION_ID;
+    if (process.platform === 'win32') {
+      process.env[pathExtKey] = previousPathExt?.toUpperCase().includes('.CMD')
+        ? previousPathExt
+        : `.COM;.EXE;.BAT;.CMD${previousPathExt ? `;${previousPathExt}` : ''}`;
+    }
+
+    await spawnAntigravity('Continue', {
+      cwd: tempRoot,
+      appSessionId: 'app-session-1',
+      sessionId: 'agy-existing-session',
+    }, writer);
+
+    const capture = JSON.parse(await readFile(argsCapturePath, 'utf8'));
+    const conversationIndex = capture.args.indexOf('--conversation');
+
+    assert.notEqual(conversationIndex, -1);
+    assert.equal(capture.args[conversationIndex + 1], 'agy-existing-session');
+    assert.deepEqual(capture.args.slice(-2), ['--print', 'Continue']);
+    assert.equal(writer.sessionId, 'agy-existing-session');
+  } finally {
+    if (previousPath === undefined) {
+      delete process.env[pathKey];
+    } else {
+      process.env[pathKey] = previousPath;
+    }
+
+    if (previousPathExt === undefined) {
+      delete process.env[pathExtKey];
+    } else {
+      process.env[pathExtKey] = previousPathExt;
+    }
+
+    if (previousArgsCapture === undefined) {
+      delete process.env.AGY_ARGS_CAPTURE;
+    } else {
+      process.env.AGY_ARGS_CAPTURE = previousArgsCapture;
+    }
+
+    if (previousNpmPrefix === undefined) {
+      delete process.env.npm_config_prefix;
+    } else {
+      process.env.npm_config_prefix = previousNpmPrefix;
+    }
+
+    if (previousConversationsDir === undefined) {
+      delete process.env.ANTIGRAVITY_CONVERSATIONS_DIR;
+    } else {
+      process.env.ANTIGRAVITY_CONVERSATIONS_DIR = previousConversationsDir;
+    }
+
+    if (previousFakeConversationId === undefined) {
+      delete process.env.AGY_FAKE_CONVERSATION_ID;
+    } else {
+      process.env.AGY_FAKE_CONVERSATION_ID = previousFakeConversationId;
     }
 
     await rm(tempRoot, { recursive: true, force: true });

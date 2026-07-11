@@ -8,6 +8,7 @@ import type {
   ProviderSessionActiveModelChange,
 } from '@/shared/types.js';
 import {
+  buildProviderCliEnv,
   buildDefaultProviderCurrentActiveModel,
   writeProviderSessionActiveModelChange,
 } from '@/shared/utils.js';
@@ -87,6 +88,7 @@ export class AntigravityProviderModels implements IProviderModels {
   async getSupportedModels(): Promise<ProviderModelsDefinition> {
     const result = spawnFunction.sync('agy', ['models'], {
       encoding: 'utf8',
+      env: buildProviderCliEnv(),
       timeout: MODELS_TIMEOUT_MS,
     });
 
