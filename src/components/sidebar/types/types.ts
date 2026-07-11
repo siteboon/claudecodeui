@@ -66,6 +66,7 @@ export type SessionViewModel = {
   sessionName: string;
   sessionTime: string;
   messageCount: number;
+  isCursorSession?: boolean;
 };
 
 export type MCPServerStatus = {
