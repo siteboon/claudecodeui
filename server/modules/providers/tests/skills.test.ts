@@ -839,3 +839,41 @@ test('providerSkillsService rejects managed skill creation for opencode', { conc
     /does not support managed global skills/i,
   );
 });
+
+/**
+ * This test verifies that skills installed as symlinks (e.g., via
+ * `ln -s`) are discovered correctly. This covers the common pattern
+ * of symlinking external skill repositories into ~/.claude/skills/.
+ */
+test('providerSkillsService discovers skills from symlinks', { concurrency: false }, async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-skills-symlink-'));
+
+  // External skill directory (simulates a git-cloned skill repo)
+  const externalSkillDir = path.join(tempRoot, 'external-skills', 'my-external-skill');
+  await fs.mkdir(externalSkillDir, { recursive: true });
+  await fs.writeFile(
+    path.join(externalSkillDir, 'SKILL.md'),
+    '---\nname: external-symlink-skill\ndescription: A skill installed via symlink\n---\n\nBody.\n',
+    'utf8',
+  );
+
+  // Symlink in ~/.claude/skills/ pointing to external directory
+  const skillsDir = path.join(tempRoot, '.claude', 'skills');
+  await fs.mkdir(skillsDir, { recursive: true });
+  await fs.symlink(externalSkillDir, path.join(skillsDir, 'my-external-skill'));
+
+  const restoreHomeDir = patchHomeDir(tempRoot);
+  try {
+    const skills = await providerSkillsService.listProviderSkills('claude');
+    const byName = new Map(skills.map((skill) => [skill.name, skill]));
+
+    const symlinkSkill = byName.get('external-symlink-skill');
+    assert.ok(symlinkSkill, 'symlinked skill should be discovered');
+    assert.equal(symlinkSkill?.scope, 'user');
+    assert.equal(symlinkSkill?.command, '/external-symlink-skill');
+    assert.match(symlinkSkill?.sourcePath ?? '', /SKILL\.md$/);
+  } finally {
+    restoreHomeDir();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});

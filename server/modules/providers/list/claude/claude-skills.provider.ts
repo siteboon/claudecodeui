@@ -46,7 +46,7 @@ const listChildDirectories = async (directoryPath: string): Promise<string[]> =>
   try {
     const entries = await readdir(directoryPath, { withFileTypes: true });
     return entries
-      .filter((entry) => entry.isDirectory())
+      .filter((entry) => entry.isDirectory() || entry.isSymbolicLink())
       .map((entry) => path.join(directoryPath, entry.name))
       .sort((left, right) => left.localeCompare(right));
   } catch {
