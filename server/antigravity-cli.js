@@ -1,14 +1,22 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import crossSpawn from 'cross-spawn';
 
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
 import { providerModelsService } from './modules/providers/services/provider-models.service.js';
 import { sessionsService } from './modules/providers/services/sessions.service.js';
-import { createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell } from './shared/utils.js';
+import { buildProviderCliEnv, createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell } from './shared/utils.js';
 
 const spawnFunction = crossSpawn;
 
 const activeAntigravityProcesses = new Map();
+function getAntigravityConversationsDir() {
+  return process.env.ANTIGRAVITY_CONVERSATIONS_DIR
+    || path.join(os.homedir(), '.gemini', 'antigravity-cli', 'conversations');
+}
 
 export function resolveAntigravityPermissionArgs(permissionMode) {
   switch (permissionMode) {
@@ -30,6 +38,45 @@ function sendAntigravityText(ws, text, sessionId) {
   }
 }
 
+function readAntigravityConversationDbFiles() {
+  try {
+    const conversationsDir = getAntigravityConversationsDir();
+    return fs.readdirSync(conversationsDir)
+      .filter((fileName) => fileName.endsWith('.db'))
+      .map((fileName) => {
+        const absolutePath = path.join(conversationsDir, fileName);
+        const id = fileName.slice(0, -'.db'.length);
+        const stat = fs.statSync(absolutePath);
+        return { id, mtimeMs: stat.mtimeMs };
+      });
+  } catch {
+    return [];
+  }
+}
+
+function findNewAntigravityConversationId(previousIds, startedAtMs) {
+  return readAntigravityConversationDbFiles()
+    .filter((entry) => !previousIds.has(entry.id) && entry.mtimeMs >= startedAtMs - 1000)
+    .sort((a, b) => b.mtimeMs - a.mtimeMs)[0]?.id || null;
+}
+
+function announceAntigravityConversation(ws, conversationId) {
+  if (!conversationId) {
+    return;
+  }
+
+  if (ws.setSessionId && typeof ws.setSessionId === 'function') {
+    ws.setSessionId(conversationId);
+  }
+
+  ws.send(createNormalizedMessage({
+    kind: 'session_created',
+    newSessionId: conversationId,
+    sessionId: conversationId,
+    provider: 'antigravity',
+  }));
+}
+
 async function spawnAntigravity(command, options = {}, ws) {
   return new Promise((resolve, reject) => {
     const {
@@ -42,24 +89,16 @@ async function spawnAntigravity(command, options = {}, ws) {
       permissionMode,
     } = options;
     const workingDir = cwd || projectPath || process.cwd();
-    const conversationId = sessionId || appSessionId || Date.now().toString();
-    const processKey = conversationId;
+    const resumeConversationId = sessionId || null;
+    const fallbackSessionId = appSessionId || resumeConversationId || Date.now().toString();
+    const processKey = resumeConversationId || fallbackSessionId;
+    const startedAtMs = Date.now();
+    const previousConversationIds = new Set(readAntigravityConversationDbFiles().map((entry) => entry.id));
     let antigravityProcess = null;
     let stdoutBuffer = '';
     let stderrBuffer = '';
     let completeSent = false;
     let terminalNotificationSent = false;
-
-    if (ws.setSessionId && typeof ws.setSessionId === 'function') {
-      ws.setSessionId(conversationId);
-    }
-
-    ws.send(createNormalizedMessage({
-      kind: 'session_created',
-      newSessionId: conversationId,
-      sessionId: conversationId,
-      provider: 'antigravity',
-    }));
 
     const notifyTerminalState = ({ code = null, error = null } = {}) => {
       if (terminalNotificationSent) {
@@ -71,7 +110,7 @@ async function spawnAntigravity(command, options = {}, ws) {
         notifyRunStopped({
           userId: ws?.userId || null,
           provider: 'antigravity',
-          sessionId: conversationId,
+          sessionId: processKey,
           sessionName: sessionSummary,
           stopReason: 'completed',
         });
@@ -81,30 +120,36 @@ async function spawnAntigravity(command, options = {}, ws) {
       notifyRunFailed({
         userId: ws?.userId || null,
         provider: 'antigravity',
-        sessionId: conversationId,
+        sessionId: processKey,
         sessionName: sessionSummary,
         error: error || `Antigravity CLI exited with code ${code}`,
       });
     };
 
-    void providerModelsService.resolveResumeModel('antigravity', conversationId, model).then((resolvedModel) => {
-      const args = ['--print', '--conversation', conversationId];
+    void providerModelsService.resolveResumeModel('antigravity', resumeConversationId || fallbackSessionId, model).then((resolvedModel) => {
+      const args = [];
+      if (resumeConversationId) {
+        args.push('--conversation', resumeConversationId);
+      }
       if (resolvedModel) {
         args.push('--model', resolvedModel);
       }
       args.push(...resolveAntigravityPermissionArgs(permissionMode));
+      args.push('--print');
       if (command && command.trim()) {
         args.push(flattenPromptForWindowsShell(command.trim()));
+      } else {
+        args.push('');
       }
 
       antigravityProcess = spawnFunction('agy', args, {
         cwd: workingDir,
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env },
+        env: buildProviderCliEnv(),
       });
 
       activeAntigravityProcesses.set(processKey, antigravityProcess);
-      antigravityProcess.sessionId = conversationId;
+      antigravityProcess.sessionId = processKey;
       antigravityProcess.stdin.end();
 
       antigravityProcess.stdout.on('data', (data) => {
@@ -117,10 +162,16 @@ async function spawnAntigravity(command, options = {}, ws) {
 
       antigravityProcess.on('close', async (code) => {
         activeAntigravityProcesses.delete(processKey);
+        const finalConversationId = resumeConversationId || findNewAntigravityConversationId(previousConversationIds, startedAtMs);
+        const outputSessionId = finalConversationId || fallbackSessionId;
+
+        if (finalConversationId) {
+          announceAntigravityConversation(ws, finalConversationId);
+        }
 
         const stdoutText = stdoutBuffer.trim();
         if (stdoutText) {
-          sendAntigravityText(ws, stdoutText, conversationId);
+          sendAntigravityText(ws, stdoutText, outputSessionId);
         }
 
         const stderrText = stderrBuffer.trim();
@@ -128,14 +179,14 @@ async function spawnAntigravity(command, options = {}, ws) {
           ws.send(createNormalizedMessage({
             kind: code === 0 ? 'stream_delta' : 'error',
             content: stderrText,
-            sessionId: conversationId,
+            sessionId: outputSessionId,
             provider: 'antigravity',
           }));
         }
 
         if (!completeSent && !antigravityProcess.aborted) {
           completeSent = true;
-          ws.send(createCompleteMessage({ provider: 'antigravity', sessionId: conversationId, exitCode: code }));
+          ws.send(createCompleteMessage({ provider: 'antigravity', sessionId: outputSessionId, exitCode: code }));
         }
 
         if (code === 0) {
@@ -150,7 +201,7 @@ async function spawnAntigravity(command, options = {}, ws) {
             ws.send(createNormalizedMessage({
               kind: 'error',
               content: 'Antigravity CLI is not installed. Install it from https://antigravity.google/cli/install.sh',
-              sessionId: conversationId,
+              sessionId: outputSessionId,
               provider: 'antigravity',
             }));
           }
@@ -171,12 +222,12 @@ async function spawnAntigravity(command, options = {}, ws) {
         ws.send(createNormalizedMessage({
           kind: 'error',
           content: errorContent,
-          sessionId: conversationId,
+          sessionId: fallbackSessionId,
           provider: 'antigravity',
         }));
         if (!completeSent && !antigravityProcess.aborted) {
           completeSent = true;
-          ws.send(createCompleteMessage({ provider: 'antigravity', sessionId: conversationId, exitCode: 1 }));
+          ws.send(createCompleteMessage({ provider: 'antigravity', sessionId: fallbackSessionId, exitCode: 1 }));
         }
         notifyTerminalState({ error });
         reject(error);

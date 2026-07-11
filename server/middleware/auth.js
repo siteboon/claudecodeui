@@ -1,9 +1,24 @@
 import jwt from 'jsonwebtoken';
+
 import { userDb, appConfigDb } from '../modules/database/index.js';
-import { IS_PLATFORM } from '../constants/config.js';
+import { TRUST_PROXY_AUTH } from '../constants/config.js';
 
 // Use env var if set, otherwise auto-generate a unique secret per installation
 const JWT_SECRET = process.env.JWT_SECRET || appConfigDb.getOrCreateJwtSecret();
+
+const getTrustedProxyUser = () => {
+  let user = userDb.getFirstUser();
+  if (!user) {
+    userDb.createUser('cloudflare-access', 'auth-disabled');
+    user = userDb.getFirstUser();
+  }
+
+  if (!user) {
+    throw new Error('Failed to initialize trusted proxy user');
+  }
+
+  return user;
+};
 
 // Optional API key middleware
 const validateApiKey = (req, res, next) => {
@@ -21,18 +36,14 @@ const validateApiKey = (req, res, next) => {
 
 // JWT authentication middleware
 const authenticateToken = async (req, res, next) => {
-  // Platform mode:  use single database user
-  if (IS_PLATFORM) {
+  // Trusted proxy mode: Cloudflare Access/platform auth already verified the request.
+  if (TRUST_PROXY_AUTH) {
     try {
-      const user = userDb.getFirstUser();
-      if (!user) {
-        return res.status(500).json({ error: 'Platform mode: No user found in database' });
-      }
-      req.user = user;
+      req.user = getTrustedProxyUser();
       return next();
     } catch (error) {
-      console.error('Platform mode error:', error);
-      return res.status(500).json({ error: 'Platform mode: Failed to fetch user' });
+      console.error('Trusted proxy auth error:', error);
+      return res.status(500).json({ error: 'Trusted proxy auth failed' });
     }
   }
 
@@ -90,16 +101,13 @@ const generateToken = (user) => {
 
 // WebSocket authentication function
 const authenticateWebSocket = (token) => {
-  // Platform mode: bypass token validation, return first user
-  if (IS_PLATFORM) {
+  // Trusted proxy mode: bypass token validation, return first user
+  if (TRUST_PROXY_AUTH) {
     try {
-      const user = userDb.getFirstUser();
-      if (user) {
-        return { id: user.id, userId: user.id, username: user.username };
-      }
-      return null;
+      const user = getTrustedProxyUser();
+      return { id: user.id, userId: user.id, username: user.username };
     } catch (error) {
-      console.error('Platform mode WebSocket error:', error);
+      console.error('Trusted proxy WebSocket auth error:', error);
       return null;
     }
   }
@@ -128,5 +136,6 @@ export {
   authenticateToken,
   generateToken,
   authenticateWebSocket,
-  JWT_SECRET
+  JWT_SECRET,
+  getTrustedProxyUser
 };

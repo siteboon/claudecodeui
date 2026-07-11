@@ -1,8 +1,10 @@
 import express from 'express';
 import bcrypt from 'bcrypt';
+
 import { userDb } from '../modules/database/index.js';
 import { getConnection } from '../modules/database/connection.js';
-import { generateToken, authenticateToken } from '../middleware/auth.js';
+import { generateToken, authenticateToken, getTrustedProxyUser } from '../middleware/auth.js';
+import { TRUST_PROXY_AUTH } from '../constants/config.js';
 
 const router = express.Router();
 const db = getConnection();
@@ -10,6 +12,15 @@ const db = getConnection();
 // Check auth status and setup requirements
 router.get('/status', async (req, res) => {
   try {
+    if (TRUST_PROXY_AUTH) {
+      const user = getTrustedProxyUser();
+      return res.json({
+        needsSetup: false,
+        isAuthenticated: true,
+        user,
+      });
+    }
+
     const hasUsers = await userDb.hasUsers();
     res.json({ 
       needsSetup: !hasUsers,
@@ -83,6 +94,15 @@ router.post('/register', async (req, res) => {
 // User login
 router.post('/login', async (req, res) => {
   try {
+    if (TRUST_PROXY_AUTH) {
+      const user = getTrustedProxyUser();
+      return res.json({
+        success: true,
+        user: { id: user.id, username: user.username },
+        token: '',
+      });
+    }
+
     const { username, password } = req.body;
     
     // Validate input

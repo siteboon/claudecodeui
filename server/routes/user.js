@@ -1,8 +1,10 @@
 import express from 'express';
 // cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
 import spawn from 'cross-spawn';
+
 import { userDb } from '../modules/database/index.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { DISABLE_AUTH } from '../constants/config.js';
 import { getSystemGitConfig } from '../utils/gitConfig.js';
 
 const router = express.Router();
@@ -108,6 +110,13 @@ router.post('/complete-onboarding', authenticateToken, async (req, res) => {
 
 router.get('/onboarding-status', authenticateToken, async (req, res) => {
   try {
+    if (DISABLE_AUTH) {
+      return res.json({
+        success: true,
+        hasCompletedOnboarding: true
+      });
+    }
+
     const userId = req.user.id;
     const hasCompleted = userDb.hasCompletedOnboarding(userId);
 

@@ -3,6 +3,8 @@
  * Indicates if the app is running in Platform mode (hosted) or OSS mode (self-hosted)
  */
 export const IS_PLATFORM = import.meta.env.VITE_IS_PLATFORM === 'true';
+export const DISABLE_AUTH = import.meta.env.VITE_DISABLE_AUTH === 'true';
+export const TRUST_PROXY_AUTH = IS_PLATFORM || DISABLE_AUTH;
 
 /**
  * For empty shell instances where no project is provided,

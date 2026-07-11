@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
 
-import { IS_PLATFORM } from '../../../constants/config';
+import { TRUST_PROXY_AUTH } from '../../../constants/config';
 import type { Project } from '../../../types/app';
 import { isValidRefreshedToken } from '../../../utils/api';
 import {
@@ -116,7 +116,7 @@ const uploadFormDataWithProgress = (
     xhr.open('POST', `/api/projects/${encodeURIComponent(projectId)}/files/upload`);
 
     const token = localStorage.getItem('auth-token');
-    if (!IS_PLATFORM && token) {
+    if (!TRUST_PROXY_AUTH && token) {
       xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     }
 
