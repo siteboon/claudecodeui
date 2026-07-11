@@ -238,6 +238,7 @@ export async function queryCodex(command, options = {}, ws) {
     'codex',
     sessionId,
     model,
+    options.appSessionId,
   );
 
   const workingDirectory = cwd || projectPath || process.cwd();

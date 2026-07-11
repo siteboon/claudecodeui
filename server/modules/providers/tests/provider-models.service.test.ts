@@ -347,3 +347,46 @@ test('resolveResumeModel prefers a stored changed model over the requested one',
     await rm(tempRoot, { recursive: true, force: true });
   }
 });
+
+/**
+ * This test verifies that resolveResumeModel uses the appSessionId parameter
+ * to look up per-session model overrides, since the /active-model endpoint
+ * stores changes against the app session ID, not the provider-native session ID.
+ */
+test('resolveResumeModel uses appSessionId for model override lookup', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'provider-model-appsession-'));
+  const activeModelChangesPath = path.join(tempRoot, 'session-model-changes.json');
+
+  try {
+    const service = createProviderModelsService({
+      activeModelChangesPath,
+      resolveProvider: (provider) => ({
+        models: {
+          getSupportedModels: async () => createModels(`${provider}-models`),
+          getCurrentActiveModel: async () => createCurrentActiveModel(`${provider}-active`),
+          changeActiveModel: async (input) => createSessionActiveModelChange(provider, input),
+        },
+      }),
+    });
+
+    // Store model change using app session ID (what the /active-model endpoint does)
+    await writeProviderSessionActiveModelChange('claude', {
+      sessionId: 'app-session-abc',
+      model: 'claude-opus-4-6',
+    }, {
+      filePath: activeModelChangesPath,
+    });
+
+    // When provider-native session ID differs from app session ID,
+    // resolveResumeModel should use appSessionId to find the override
+    const model = await service.resolveResumeModel(
+      'claude',
+      'provider-native-session-xyz', // different from app session ID
+      'claude-sonnet-4-6',
+      'app-session-abc', // app session ID where the change was stored
+    );
+    assert.equal(model, 'claude-opus-4-6');
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});

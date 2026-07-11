@@ -324,15 +324,21 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     provider: LLMProvider,
     sessionId: string | undefined,
     requestedModel?: string | null,
+    appSessionId?: string | null,
   ): Promise<string | undefined> => {
     const normalizedRequestedModel = typeof requestedModel === 'string' ? requestedModel.trim() : '';
-    if (!sessionId?.trim()) {
+    if (!sessionId?.trim() && !appSessionId?.trim()) {
       return normalizedRequestedModel || undefined;
     }
 
-    const changedModel = await getChangedActiveModel(provider, sessionId);
-    if (changedModel.supported && changedModel.changed && changedModel.model?.trim()) {
-      return changedModel.model.trim();
+    // Prefer appSessionId for looking up per-session model overrides,
+    // since that's what the /active-model endpoint stores against.
+    const lookupId = appSessionId?.trim() || sessionId?.trim();
+    if (lookupId) {
+      const changedModel = await getChangedActiveModel(provider, lookupId);
+      if (changedModel.supported && changedModel.changed && changedModel.model?.trim()) {
+        return changedModel.model.trim();
+      }
     }
 
     return normalizedRequestedModel || undefined;

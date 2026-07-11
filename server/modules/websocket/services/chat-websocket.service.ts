@@ -202,6 +202,9 @@ async function handleChatSend(
     resume: Boolean(session.provider_session_id),
     cwd: clientOptions.cwd ?? session.project_path ?? undefined,
     projectPath: session.project_path ?? clientOptions.projectPath,
+    // Pass the app-level session id so provider runtimes can resolve
+    // per-session model overrides stored by the /active-model endpoint.
+    appSessionId: sessionId,
   };
 
   try {

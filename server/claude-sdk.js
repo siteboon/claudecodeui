@@ -164,7 +164,9 @@ function mapCliOptionsToSDK(options = {}) {
 
   // Forward all host env vars (e.g. ANTHROPIC_BASE_URL) to the subprocess.
   // Since SDK 0.2.113, options.env replaces process.env instead of overlaying it.
-  sdkOptions.env = { ...process.env };
+  // Remove model-related env vars so the explicit model option takes precedence.
+  const { ANTHROPIC_MODEL: _m, ANTHROPIC_DEFAULT_OPUS_MODEL: _o, ANTHROPIC_DEFAULT_SONNET_MODEL: _s, ANTHROPIC_DEFAULT_HAIKU_MODEL: _h, ...envClean } = process.env;
+  sdkOptions.env = envClean;
 
   // Resolve the executable eagerly on Windows because the SDK uses raw child_process.spawn,
   // which does not reliably follow npm's shell wrappers like cross-spawn does.
@@ -475,6 +477,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
       'claude',
       sessionId,
       options.model,
+      options.appSessionId,
     );
     let effortModels = CLAUDE_FALLBACK_MODELS;
     try {
