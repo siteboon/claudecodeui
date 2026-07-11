@@ -475,6 +475,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
       'claude',
       sessionId,
       options.model,
+      options.appSessionId,
     );
     let effortModels = CLAUDE_FALLBACK_MODELS;
     try {
