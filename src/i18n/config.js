@@ -29,8 +29,9 @@ import koSettings from './locales/ko/settings.json';
 import koAuth from './locales/ko/auth.json';
 import koSidebar from './locales/ko/sidebar.json';
 import koChat from './locales/ko/chat.json';
-// eslint-disable-next-line import-x/order
 import koCodeEditor from './locales/ko/codeEditor.json';
+// eslint-disable-next-line import-x/order
+import koTasks from './locales/ko/tasks.json';
 
 import zhCommon from './locales/zh-CN/common.json';
 import zhSettings from './locales/zh-CN/settings.json';
@@ -133,6 +134,7 @@ i18n
         sidebar: koSidebar,
         chat: koChat,
         codeEditor: koCodeEditor,
+        tasks: koTasks,
       },
       'zh-CN': {
         common: zhCommon,
