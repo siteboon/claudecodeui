@@ -41,6 +41,14 @@ const resolveCommandModel = async (provider, catalog, sessionId) => {
     return catalog.DEFAULT;
   }
 
+  // Check for a user-initiated model override stored by the /active-model
+  // endpoint first, since that is the single source of truth for per-session
+  // model changes made from the UI.
+  const changedModel = await providerModelsService.getChangedActiveModel(provider, sessionId);
+  if (changedModel.supported && changedModel.changed && changedModel.model?.trim()) {
+    return changedModel.model.trim();
+  }
+
   const currentActiveModel = await providerModelsService.getCurrentActiveModel(
     provider,
     sessionId,
