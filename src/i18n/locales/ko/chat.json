@@ -135,7 +135,9 @@
       "codex": "{{model}} 모델로 Codex를 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요.",
       "default": "시작하려면 위에서 제공자를 선택하세요"
     },
-    "pressToSearch": "<kbd>{{shortcut}}</kbd>를 눌러 세션, 파일 및 커밋을 검색하세요"
+    "pressToSearch": "<kbd>{{shortcut}}</kbd>를 눌러 세션, 파일 및 커밋을 검색하세요",
+    "modelSelector": "모델 선택기",
+    "chooseAmodel": "모델을 선택하세요"
   },
   "session": {
     "continue": {
@@ -154,7 +156,8 @@
       "loadAll": "모든 메시지 로드",
       "loadingAll": "모든 메시지 로딩 중...",
       "allLoaded": "모든 메시지 로드 완료",
-      "perfWarning": "모든 메시지가 로드됨 - 스크롤이 느려질 수 있습니다. \"맨 아래로 스크롤\"을 클릭하면 성능이 복구됩니다."
+      "perfWarning": "모든 메시지가 로드됨 - 스크롤이 느려질 수 있습니다. \"맨 아래로 스크롤\"을 클릭하면 성능이 복구됩니다.",
+      "loadMore": "{{count}}개 더 로드"
     }
   },
   "shell": {
@@ -215,5 +218,14 @@
   },
   "tasks": {
     "nextTaskPrompt": "다음 작업 시작"
+  },
+  "scrollNav": {
+    "jumpTo": "이동: {{snippet}}",
+    "jumpToMessage": "{{index}}번 메시지로 이동",
+    "loadAll": "전체 로드",
+    "first": "첫 번째",
+    "previous": "이전",
+    "next": "다음",
+    "last": "마지막"
   }
 }

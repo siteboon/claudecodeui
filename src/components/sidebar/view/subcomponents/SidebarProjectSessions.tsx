@@ -3,6 +3,7 @@ import type { TFunction } from 'i18next';
 
 import { Button } from '../../../../shared/view/ui';
 import type { SessionActivityMap } from '../../../../hooks/useSessionProtection';
+import type { BookmarkedSession } from '../../../../stores/useBookmarkStore';
 import type { Project, ProjectSession, LLMProvider } from '../../../../types/app';
 import type { SessionWithProvider } from '../../types/types';
 
@@ -35,6 +36,8 @@ type SidebarProjectSessionsProps = {
   ) => void;
   onLoadMoreSessions: (projectId: string) => void;
   onNewSession: (project: Project) => void;
+  isBookmarked: (session: { sessionId: string; projectId: string; provider: string }) => boolean;
+  onToggleBookmark: (bookmark: BookmarkedSession) => void;
   t: TFunction;
 };
 
@@ -78,6 +81,8 @@ export default function SidebarProjectSessions({
   onDeleteSession,
   onLoadMoreSessions,
   onNewSession,
+  isBookmarked,
+  onToggleBookmark,
   t,
 }: SidebarProjectSessionsProps) {
   if (!isExpanded) {
@@ -137,6 +142,8 @@ export default function SidebarProjectSessions({
               onProjectSelect={onProjectSelect}
               onSessionSelect={onSessionSelect}
               onDeleteSession={onDeleteSession}
+              isBookmarked={isBookmarked({ sessionId: session.id, projectId: project.projectId, provider: session.__provider || 'claude' })}
+              onToggleBookmark={onToggleBookmark}
               t={t}
             />
           ))}
@@ -149,7 +156,7 @@ export default function SidebarProjectSessions({
               onClick={() => onLoadMoreSessions(project.projectId)}
               disabled={isLoadingMoreSessions}
             >
-              {isLoadingMoreSessions ? t('sessions.loadingSessions') : 'Load more sessions'}
+              {isLoadingMoreSessions ? t('sessions.loadingSessions') : t('sessions.showMore')}
             </Button>
           )}
         </>

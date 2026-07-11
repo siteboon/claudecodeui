@@ -1,4 +1,5 @@
 import { Sparkles, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 type CreateTaskModalProps = {
   isOpen: boolean;
@@ -6,6 +7,8 @@ type CreateTaskModalProps = {
 };
 
 export default function CreateTaskModal({ isOpen, onClose }: CreateTaskModalProps) {
+  const { t } = useTranslation('tasks');
+
   if (!isOpen) {
     return null;
   }
@@ -18,7 +21,7 @@ export default function CreateTaskModal({ isOpen, onClose }: CreateTaskModalProp
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/50">
               <Sparkles className="h-4 w-4 text-blue-600 dark:text-blue-400" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Create AI-Generated Task</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{t('createTaskModal.title', 'Create AI-Generated Task')}</h3>
           </div>
           <button
             onClick={onClose}
@@ -35,14 +38,14 @@ export default function CreateTaskModal({ isOpen, onClose }: CreateTaskModalProp
                 <Sparkles className="h-4 w-4 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
-                <h4 className="mb-2 font-semibold text-blue-900 dark:text-blue-100">Pro tip: ask Claude Code directly</h4>
+                <h4 className="mb-2 font-semibold text-blue-900 dark:text-blue-100">{t('createTaskModal.askClaudeTitle', 'Pro tip: ask Claude Code directly')}</h4>
                 <p className="mb-3 text-sm text-blue-800 dark:text-blue-200">
-                  Ask for a task in chat with context and requirements. TaskMaster can generate implementation-ready tasks.
+                  {t('createTaskModal.askClaudeDesc', 'Ask for a task in chat with context and requirements. TaskMaster can generate implementation-ready tasks.')}
                 </p>
                 <div className="rounded border border-blue-200 bg-white p-3 dark:border-blue-700 dark:bg-gray-800">
-                  <p className="mb-1 text-xs font-medium text-gray-600 dark:text-gray-400">Example:</p>
+                  <p className="mb-1 text-xs font-medium text-gray-600 dark:text-gray-400">{t('createTaskModal.example', 'Example:')}</p>
                   <p className="font-mono text-sm text-gray-900 dark:text-white">
-                    Please add a task for profile image uploads and include best-practice research.
+                    {t('createTaskModal.exampleText', 'Please add a task for profile image uploads and include best-practice research.')}
                   </p>
                 </div>
               </div>
@@ -56,7 +59,7 @@ export default function CreateTaskModal({ isOpen, onClose }: CreateTaskModalProp
               rel="noopener noreferrer"
               className="inline-block text-sm font-medium text-blue-600 underline hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
             >
-              View TaskMaster documentation
+              {t('createTaskModal.viewDocs', 'View TaskMaster documentation')}
             </a>
           </div>
 
@@ -64,7 +67,7 @@ export default function CreateTaskModal({ isOpen, onClose }: CreateTaskModalProp
             onClick={onClose}
             className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
           >
-            Got it
+            {t('createTaskModal.gotIt', 'Got it')}
           </button>
         </div>
       </div>

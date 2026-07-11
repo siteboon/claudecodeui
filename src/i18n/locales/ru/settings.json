@@ -93,7 +93,8 @@
     "tasks": "Задачи",
     "notifications": "Уведомления",
     "plugins": "Плагины",
-    "about": "О программе"
+    "about": "О программе",
+    "password": "Пароль"
   },
   "notifications": {
     "title": "Уведомления",
@@ -480,5 +481,27 @@
     "installAriaLabel": "URL git-репозитория плагина",
     "tab": "вкладка",
     "runningStatus": "запущен"
+  },
+  "password": {
+    "title": "Пароль",
+    "description": "Измените пароль вашей учётной записи",
+    "currentPassword": "Текущий пароль",
+    "currentPasswordPlaceholder": "Введите текущий пароль",
+    "newPassword": "Новый пароль",
+    "newPasswordPlaceholder": "Введите новый пароль",
+    "confirmPassword": "Подтвердите новый пароль",
+    "confirmPasswordPlaceholder": "Повторите новый пароль",
+    "minLengthHelp": "Пароль должен содержать не менее {{min}} символов",
+    "saveChanges": "Сохранить изменения",
+    "saving": "Сохранение...",
+    "success": "Пароль успешно изменён",
+    "error": {
+      "fillAllFields": "Пожалуйста, заполните все поля",
+      "minLength": "Пароль должен содержать не менее 6 символов",
+      "notMatch": "Пароли не совпадают",
+      "sameAsOld": "Новый пароль должен отличаться от текущего",
+      "incorrectOld": "Текущий пароль неверен",
+      "failed": "Не удалось изменить пароль"
+    }
   }
 }

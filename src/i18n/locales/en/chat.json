@@ -59,10 +59,7 @@
     "selectedOption": "✓ Claude selected option {{number}}",
     "instructionDetail": "In the CLI, you would select this option interactively using arrow keys or by typing the number."
   },
-  "thinking": {
-    "title": "Thinking...",
-    "emoji": "💭 Thinking..."
-  },
+  "thinking": "Thinking...",
   "json": {
     "response": "JSON Response"
   },
@@ -155,7 +152,9 @@
       "opencode": "Ready to use OpenCode with {{model}}. Start typing your message below.",
       "default": "Select a provider above to begin"
     },
-    "pressToSearch": "Press <kbd>{{shortcut}}</kbd> to search sessions, files, and commits"
+    "pressToSearch": "Press <kbd>{{shortcut}}</kbd> to search sessions, files, and commits",
+    "modelSelector": "Model Selector",
+    "chooseAmodel": "Choose a model"
   },
   "session": {
     "continue": {
@@ -172,6 +171,7 @@
       "showingLast": "Showing last {{count}} messages ({{total}} total)",
       "loadEarlier": "Load earlier messages",
       "loadAll": "Load all messages",
+      "loadMore": "Load {{count}} more",
       "loadingAll": "Loading all messages...",
       "allLoaded": "All messages loaded",
       "perfWarning": "All messages loaded — scrolling may be slower. Click \"Scroll to bottom\" to restore performance."
@@ -236,5 +236,20 @@
   },
   "tasks": {
     "nextTaskPrompt": "Start the next task"
-  }
+  },
+  "scrollNav": {
+    "jumpTo": "Jump to: {{snippet}}",
+    "jumpToMessage": "Jump to message {{index}}",
+    "fromYou": "You",
+    "aiReply": "AI Reply",
+    "loadAll": "Load all",
+    "first": "Top",
+    "previous": "Previous",
+    "next": "Next",
+    "last": "Bottom",
+    "export": "Export session",
+    "bookmarks": "{{count}} bookmark(s)",
+    "quickSettings": "Settings"
+  },
+  "thoughtProcess": "Thought process"
 }

@@ -1,4 +1,5 @@
 import { ChevronDown, ChevronRight, Info } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
 import { getStatusBadgeClass } from '../../utils/gitPanelUtils';
 
@@ -6,15 +7,16 @@ type FileStatusLegendProps = {
   isMobile: boolean;
 };
 
-const LEGEND_ITEMS = [
-  { status: 'M', label: 'Modified' },
-  { status: 'A', label: 'Added' },
-  { status: 'D', label: 'Deleted' },
-  { status: 'U', label: 'Untracked' },
-] as const;
-
 export default function FileStatusLegend({ isMobile }: FileStatusLegendProps) {
+  const { t } = useTranslation('common');
   const [isOpen, setIsOpen] = useState(false);
+
+  const LEGEND_ITEMS = [
+    { status: 'M', label: t('gitPanel.legend.modified') },
+    { status: 'A', label: t('gitPanel.legend.added') },
+    { status: 'D', label: t('gitPanel.legend.deleted') },
+    { status: 'U', label: t('gitPanel.legend.untracked') },
+  ] as const;
 
   if (isMobile) {
     return null;
@@ -27,7 +29,7 @@ export default function FileStatusLegend({ isMobile }: FileStatusLegendProps) {
         className="flex w-full items-center justify-center gap-1 bg-muted/30 px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50"
       >
         <Info className="h-3 w-3" />
-        <span>File Status Guide</span>
+        <span>{t('gitPanel.legend.title')}</span>
         {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
       </button>
 

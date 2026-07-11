@@ -1,5 +1,6 @@
 import { AlertCircle, Check, ChevronDown, Download, GitBranch, Plus, RefreshCw, RotateCcw, Search, Upload, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ConfirmationRequest, GitRemoteStatus } from '../types/types';
 import NewBranchModal from './modals/NewBranchModal';
 
@@ -52,6 +53,7 @@ export default function GitPanelHeader({
   onClearError,
   onRequestConfirmation,
 }: GitPanelHeaderProps) {
+  const { t } = useTranslation('common');
   const [showBranchDropdown, setShowBranchDropdown] = useState(false);
   const [showNewBranchModal, setShowNewBranchModal] = useState(false);
   const [branchSearchQuery, setBranchSearchQuery] = useState('');
@@ -110,7 +112,7 @@ export default function GitPanelHeader({
   const requestPublishConfirmation = () => {
     onRequestConfirmation({
       type: 'publish',
-      message: `Publish branch "${currentBranch}" to ${remoteName}?`,
+      message: t('gitPanel.action.publishConfirm', { branch: currentBranch, remote: remoteName }),
       onConfirm: onPublish,
     });
   };

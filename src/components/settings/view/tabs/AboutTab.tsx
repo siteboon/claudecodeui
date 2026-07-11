@@ -68,7 +68,7 @@ export default function AboutTab() {
             )}
           </div>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Open-source AI coding assistant interface
+            {t('aboutTab.tagline', 'Open-source AI coding assistant interface')}
           </p>
         </div>
       </div>
@@ -82,7 +82,7 @@ export default function AboutTab() {
       >
         <GitHubIcon className="h-4 w-4" />
         <Star className="h-3.5 w-3.5" />
-        <span>Star on GitHub</span>
+        <span>{t('aboutTab.starOnGithub', 'Star on GitHub')}</span>
       </a>
 
       {/* Links */}
@@ -128,9 +128,9 @@ export default function AboutTab() {
       {/* Hosted CTA (OSS mode only) */}
       {!IS_PLATFORM && (
         <div className="rounded-xl border border-primary/10 bg-primary/5 p-4">
-          <h4 className="text-sm font-medium text-foreground">Try CloudCLI Hosted</h4>
+          <h4 className="text-sm font-medium text-foreground">{t('aboutTab.tryHosted', 'Try CloudCLI Hosted')}</h4>
           <p className="mt-1 text-xs text-muted-foreground">
-            Team collaboration, shared MCP configs, settings sync across environments, and managed infrastructure.
+            {t('aboutTab.tryHostedDescription', 'Team collaboration, shared MCP configs, settings sync across environments, and managed infrastructure.')}
           </p>
           <a
             href={CLOUDCLI_URL}
@@ -138,7 +138,7 @@ export default function AboutTab() {
             rel="noopener noreferrer"
             className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary transition-colors hover:underline"
           >
-            Learn more
+            {t('aboutTab.learnMore', 'Learn more')}
             <ExternalLink className="h-3 w-3" />
           </a>
         </div>
@@ -147,16 +147,16 @@ export default function AboutTab() {
       {/* Premium feature placeholders (OSS mode only) */}
       {!IS_PLATFORM && (
         <div className="space-y-4 border-t border-border/50 pt-6">
-          <h3 className="text-sm font-medium text-foreground">CloudCLI Pro Features</h3>
+          <h3 className="text-sm font-medium text-foreground">{t('aboutTab.proFeatures', 'CloudCLI Pro Features')}</h3>
           <PremiumFeatureCard
             icon={<Cloud className="h-5 w-5" />}
-            title="Sync Settings"
-            description="Keep your preferences, MCP configs, and theme in sync across all your environments."
+            title={t('aboutTab.syncSettings', 'Sync Settings')}
+            description={t('aboutTab.syncSettingsDescription', 'Keep your preferences, MCP configs, and theme in sync across all your environments.')}
           />
           <PremiumFeatureCard
             icon={<Users className="h-5 w-5" />}
-            title="Team Management"
-            description="Multiple users, role-based access, and shared projects for your team."
+            title={t('aboutTab.teamManagement', 'Team Management')}
+            description={t('aboutTab.teamManagementDescription', 'Multiple users, role-based access, and shared projects for your team.')}
           />
         </div>
       )}

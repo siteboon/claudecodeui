@@ -122,7 +122,12 @@
   "search": {
     "modeProjects": "项目",
     "modeConversations": "对话",
+    "modeRunning": "运行中",
     "conversationsPlaceholder": "搜索对话内容...",
+    "runningPlaceholder": "搜索运行中的会话...",
+    "archivedPlaceholder": "搜索已归档会话...",
+    "runningTooltip": "运行中的会话",
+    "archiveOnlyTooltip": "仅归档",
     "searching": "搜索中...",
     "noResults": "未找到结果",
     "tryDifferentQuery": "尝试不同的搜索词",
@@ -138,8 +143,38 @@
     "sessionCount_one": "此项目包含 {{count}} 个对话。",
     "sessionCount_other": "此项目包含 {{count}} 个对话。",
     "removeFromSidebar": "仅从侧边栏移除",
+    "archiveProject": "归档项目",
     "deleteAllData": "永久删除所有数据",
     "allConversationsDeleted": "项目将从侧边栏中移除。您的文件、记忆和会话数据将会保留。",
-    "cannotUndo": "您可以稍后重新添加此项目。"
+    "cannotUndo": "您可以稍后重新添加此项目。",
+    "archiveSessionNotice": "归档会将会话从活动列表中移除，同时保留其历史记录。",
+    "archivedSessionNotice": "此会话已归档。您可以保持隐藏状态或永久删除。",
+    "archiveSession": "归档会话",
+    "deleteSessionPermanently": "永久删除"
+  },
+  "running": {
+    "emptyTitle": "暂无运行中的会话",
+    "emptyDescription": "当 AI 正在处理时，活动工作会显示在这里。",
+    "noMatchingSessions": "没有匹配的运行中会话。",
+    "title": "正在运行"
+  },
+  "archived": {
+    "emptyTitle": "暂无归档内容",
+    "emptyDescription": "当您将工作区或会话从活动列表中隐藏时，它们会显示在这里。",
+    "noMatchingSessions": "没有匹配的归档内容",
+    "tryDifferentSearch": "尝试不同的搜索词。",
+    "loadingTitle": "加载归档中...",
+    "loadingDescription": "正在获取隐藏的工作区和会话，以便稍后恢复。",
+    "projectArchived": "项目已归档",
+    "restoreProject": "恢复工作区",
+    "restore": "恢复会话",
+    "deletePermanently": "永久删除",
+    "sessionCountOne": "个归档项",
+    "sessionCountOther": "个归档项"
+  },
+  "bookmarks": {
+    "title": "已置顶",
+    "pin": "置顶会话",
+    "unpin": "取消置顶"
   }
 }

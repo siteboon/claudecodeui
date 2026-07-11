@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 
 import { useDeviceSettings } from '../../../hooks/useDeviceSettings';
@@ -8,7 +8,6 @@ import { useQuickSettingsDrag } from '../hooks/useQuickSettingsDrag';
 import type { PreferenceToggleKey, QuickSettingsPreferences } from '../types';
 
 import QuickSettingsContent from './QuickSettingsContent';
-import QuickSettingsHandle from './QuickSettingsHandle';
 import QuickSettingsPanelHeader from './QuickSettingsPanelHeader';
 
 export default function QuickSettingsPanelView() {
@@ -22,6 +21,13 @@ export default function QuickSettingsPanelView() {
     startDrag,
     consumeSuppressedClick,
   } = useQuickSettingsDrag({ isMobile });
+
+  // Listen for toggle events from ScrollNavigation
+  useEffect(() => {
+    const handler = () => setIsOpen((prev) => !prev);
+    window.addEventListener('cloudcli:toggle-quick-settings', handler);
+    return () => window.removeEventListener('cloudcli:toggle-quick-settings', handler);
+  }, []);
 
   const quickSettingsPreferences = useMemo<QuickSettingsPreferences>(() => ({
     showRawParameters: preferences.showRawParameters,
@@ -57,14 +63,7 @@ export default function QuickSettingsPanelView() {
 
   return (
     <>
-      <QuickSettingsHandle
-        isOpen={isOpen}
-        isDragging={isDragging}
-        style={handleStyle}
-        onClick={handleToggleFromHandle}
-        onMouseDown={startDrag}
-        onTouchStart={startDrag}
-      />
+      {/* Handle removed: now rendered in ScrollNavigation component */}
 
       <div
         className={`fixed right-0 top-0 z-40 h-full w-64 transform border-l border-border bg-background shadow-xl transition-transform duration-150 ease-out ${isOpen ? 'translate-x-0' : 'translate-x-full'} ${isMobile ? 'h-screen' : ''}`}

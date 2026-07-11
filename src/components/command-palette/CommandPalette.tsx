@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -75,6 +76,7 @@ export default function CommandPalette({
   const { toggleDarkMode } = useTheme();
   const navigate = useNavigate();
   const ops = usePaletteOps();
+  const { t } = useTranslation('settings');
 
   const page = pages.at(-1);
 
@@ -261,14 +263,14 @@ export default function CommandPalette({
 
             {showActions && (
               <CommandGroup heading="Settings">
-                {SETTINGS_MAIN_TABS.map(({ id, label, keywords, icon: Icon }) => (
+                {SETTINGS_MAIN_TABS.map(({ id, labelKey, keywords, icon: Icon }) => (
                   <CommandItem
                     key={id}
-                    value={`Settings ${label} ${keywords}`}
+                    value={`Settings ${t(labelKey)} ${keywords}`}
                     onSelect={() => run(() => onOpenSettings(id))}
                   >
                     <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                    <span className="flex-1">Settings: {label}</span>
+                    <span className="flex-1">Settings: {t(labelKey)}</span>
                   </CommandItem>
                 ))}
               </CommandGroup>

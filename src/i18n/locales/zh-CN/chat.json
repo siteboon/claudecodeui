@@ -58,10 +58,7 @@
     "selectedOption": "✓ Claude 选择了选项 {{number}}",
     "instructionDetail": "在 CLI 中，您可以使用方向键或输入数字来交互式地选择此选项。"
   },
-  "thinking": {
-    "title": "思考中...",
-    "emoji": "💭 思考中..."
-  },
+  "thinking": "思考中...",
   "json": {
     "response": "JSON 响应"
   },
@@ -135,7 +132,9 @@
       "codex": "准备好使用带有 {{model}} 的 Codex。请在下方开始输入您的消息。",
       "default": "请在上方选择一个提供者以开始"
     },
-    "pressToSearch": "按 <kbd>{{shortcut}}</kbd> 搜索会话、文件和提交"
+    "pressToSearch": "按 <kbd>{{shortcut}}</kbd> 搜索会话、文件和提交",
+    "modelSelector": "模型选择器",
+    "chooseAmodel": "选择模型"
   },
   "session": {
     "continue": {
@@ -152,6 +151,7 @@
       "showingLast": "显示最近 {{count}} 条消息（共 {{total}} 条）",
       "loadEarlier": "加载更早的消息",
       "loadAll": "加载全部消息",
+      "loadMore": "加载更多({{count}}条)",
       "loadingAll": "正在加载全部消息...",
       "allLoaded": "全部消息已加载",
       "perfWarning": "已加载全部消息 - 滚动可能变慢。点击「滚动到底部」恢复性能。"
@@ -215,5 +215,20 @@
   },
   "tasks": {
     "nextTaskPrompt": "开始下一个任务"
-  }
+  },
+  "scrollNav": {
+    "jumpTo": "跳转到: {{snippet}}",
+    "jumpToMessage": "跳转到第 {{index}} 条消息",
+    "fromYou": "你",
+    "aiReply": "AI 回复",
+    "loadAll": "加载全部",
+    "first": "顶部",
+    "previous": "上一条",
+    "next": "下一条",
+    "last": "底部",
+    "export": "导出会话",
+    "bookmarks": "{{count}} 个书签",
+    "quickSettings": "快速设置"
+  },
+  "thoughtProcess": "思考过程"
 }

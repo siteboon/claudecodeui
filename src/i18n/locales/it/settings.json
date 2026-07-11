@@ -93,7 +93,8 @@
     "tasks": "Attività",
     "notifications": "Notifiche",
     "plugins": "Plugin",
-    "about": "Informazioni"
+    "about": "Informazioni",
+    "password": "Password"
   },
   "notifications": {
     "title": "Notifiche",
@@ -486,5 +487,27 @@
     "installAriaLabel": "URL repository git del plugin",
     "tab": "scheda",
     "runningStatus": "in esecuzione"
+  },
+  "password": {
+    "title": "Password",
+    "description": "Cambia la password del tuo account",
+    "currentPassword": "Password attuale",
+    "currentPasswordPlaceholder": "Inserisci la password attuale",
+    "newPassword": "Nuova password",
+    "newPasswordPlaceholder": "Inserisci la nuova password",
+    "confirmPassword": "Conferma nuova password",
+    "confirmPasswordPlaceholder": "Reinserisci la nuova password",
+    "minLengthHelp": "La password deve essere di almeno {{min}} caratteri",
+    "saveChanges": "Salva modifiche",
+    "saving": "Salvataggio...",
+    "success": "Password modificata con successo",
+    "error": {
+      "fillAllFields": "Compila tutti i campi",
+      "minLength": "La password deve essere di almeno 6 caratteri",
+      "notMatch": "Le password non corrispondono",
+      "sameAsOld": "La nuova password deve essere diversa da quella attuale",
+      "incorrectOld": "La password attuale non è corretta",
+      "failed": "Modifica password non riuscita"
+    }
   }
 }

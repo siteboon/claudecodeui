@@ -171,7 +171,9 @@
       "codex": "準備好使用 {{model}} 的 Codex。請在下方開始輸入您的訊息。",
       "default": "請在上方選擇一個提供者以開始"
     },
-    "pressToSearch": "按 <kbd>{{shortcut}}</kbd> 搜尋工作階段、檔案和提交"
+    "pressToSearch": "按 <kbd>{{shortcut}}</kbd> 搜尋工作階段、檔案和提交",
+    "modelSelector": "模型選擇器",
+    "chooseAmodel": "選擇模型"
   },
   "session": {
     "continue": {
@@ -190,7 +192,8 @@
       "loadAll": "載入全部訊息",
       "loadingAll": "正在載入全部訊息...",
       "allLoaded": "全部訊息已載入",
-      "perfWarning": "已載入全部訊息 - 捲動可能變慢。點擊「捲動到底部」恢復效能。"
+      "perfWarning": "已載入全部訊息 - 捲動可能變慢。點擊「捲動到底部」恢復效能。",
+      "loadMore": "加載更多({{count}}條)"
     }
   },
   "shell": {
@@ -251,5 +254,16 @@
   },
   "tasks": {
     "nextTaskPrompt": "開始下一個任務"
+  },
+  "scrollNav": {
+    "jumpTo": "跳轉到：{{snippet}}",
+    "jumpToMessage": "跳轉到訊息 {{index}}",
+    "fromYou": "您",
+    "aiReply": "AI 回覆",
+    "loadAll": "載入全部",
+    "first": "頂部",
+    "previous": "上一條",
+    "next": "下一條",
+    "last": "底部"
   }
 }

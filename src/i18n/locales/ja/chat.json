@@ -132,7 +132,9 @@
       "codex": "{{model}}でCodexを使用する準備ができました。下にメッセージを入力してください。",
       "default": "上からプロバイダーを選択して開始してください"
     },
-    "pressToSearch": "<kbd>{{shortcut}}</kbd> を押してセッション、ファイル、コミットを検索"
+    "pressToSearch": "<kbd>{{shortcut}}</kbd> を押してセッション、ファイル、コミットを検索",
+    "modelSelector": "モデルセレクター",
+    "chooseAmodel": "モデルを選択"
   },
   "session": {
     "continue": {
@@ -147,7 +149,8 @@
       "showingOf": "{{total}}件中{{shown}}件を表示",
       "scrollToLoad": "上にスクロールしてさらに読み込む",
       "showingLast": "最新{{count}}件を表示（全{{total}}件）",
-      "loadEarlier": "過去のメッセージを読み込む"
+      "loadEarlier": "過去のメッセージを読み込む",
+      "loadMore": "さらに {{count}} 件読み込む"
     }
   },
   "shell": {
@@ -202,5 +205,14 @@
     "providers": {
       "assistant": "Assistant"
     }
+  },
+  "scrollNav": {
+    "jumpTo": "ジャンプ: {{snippet}}",
+    "jumpToMessage": "{{index}}番目のメッセージに移動",
+    "loadAll": "全ロード",
+    "first": "最初",
+    "previous": "前へ",
+    "next": "次へ",
+    "last": "最後"
   }
 }

@@ -1,0 +1,53 @@
+{
+  "header": {
+    "fileNamePlaceholder": "输入 PRD 文件名",
+    "focusFileName": "聚焦文件名输入框",
+    "badge": "PRD",
+    "newBadge": "新建",
+    "subtitle": "产品需求文档",
+    "togglePreview": "预览 Markdown",
+    "toggleEdit": "切换到编辑模式",
+    "enableWrap": "启用自动换行",
+    "disableWrap": "禁用自动换行",
+    "toggleTheme": "切换主题",
+    "download": "下载 PRD",
+    "generateTasksTitle": "从 PRD 内容生成任务",
+    "generateTasks": "生成任务",
+    "saved": "已保存！",
+    "saving": "保存中...",
+    "save": "保存 PRD",
+    "exitFullscreen": "退出全屏",
+    "fullscreen": "全屏",
+    "close": "关闭"
+  },
+  "footer": {
+    "lines": "行数",
+    "characters": "字符数",
+    "words": "词数",
+    "format": "格式",
+    "markdown": "Markdown",
+    "shortcutHint": "按 Ctrl+S 保存，Esc 关闭"
+  },
+  "loading": {
+    "text": "正在加载 PRD..."
+  },
+  "generateTasksModal": {
+    "title": "从 PRD 生成任务",
+    "askClaudeTitle": "直接向 Claude Code 提问",
+    "askClaudeDesc": "保存此 PRD，然后在聊天中让 Claude Code 解析文件并创建初始任务。",
+    "examplePrompt": "示例提示词",
+    "examplePromptText": "我有一个位于 .taskmaster/docs/{{fileName}} 的 PRD，请解析它并创建初始任务。",
+    "viewDocs": "查看 TaskMaster 文档",
+    "gotIt": "知道了"
+  },
+  "overwriteModal": {
+    "title": "文件已存在",
+    "description": "名为 \"{{fileName}}\" 的 PRD 已存在。要覆盖它吗？",
+    "cancel": "取消",
+    "saving": "保存中...",
+    "overwrite": "覆盖"
+  },
+  "alerts": {
+    "emptyContent": "请在生成任务前向 PRD 添加内容。"
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "header": {
+    "fileNamePlaceholder": "PRD dosya adını girin",
+    "focusFileName": "Dosya adı alanına odaklan",
+    "badge": "PRD",
+    "newBadge": "Yeni",
+    "subtitle": "Ürün Gereksinim Belgesi",
+    "togglePreview": "Markdown önizleme",
+    "toggleEdit": "Düzenleme moduna geç",
+    "enableWrap": "Satır sonlarını aç",
+    "disableWrap": "Satır sonlarını kapat",
+    "toggleTheme": "Temayı değiştir",
+    "download": "PRD'yi indir",
+    "generateTasksTitle": "PRD içeriğinden görevler oluştur",
+    "generateTasks": "Görevler oluştur",
+    "saved": "Kaydedildi!",
+    "saving": "Kaydediliyor...",
+    "save": "PRD'yi kaydet",
+    "exitFullscreen": "Tam ekrandan çık",
+    "fullscreen": "Tam ekran",
+    "close": "Kapat"
+  },
+  "footer": {
+    "lines": "Satır",
+    "characters": "Karakter",
+    "words": "Kelime",
+    "format": "Biçim",
+    "markdown": "Markdown",
+    "shortcutHint": "Kaydetmek için Ctrl+S, kapatmak için Esc"
+  },
+  "loading": {
+    "text": "PRD yükleniyor..."
+  },
+  "generateTasksModal": {
+    "title": "PRD'den görevler oluştur",
+    "askClaudeTitle": "Claude Code'a doğrudan sorun",
+    "askClaudeDesc": "Bu PRD'yi kaydedin, ardından sohbette Claude Code'a dosyayı ayrıştırmasını ve başlangıç görevlerini oluşturmasını söyleyin.",
+    "examplePrompt": "Örnek istem",
+    "examplePromptText": ".taskmaster/docs/{{fileName}} adresinde bir PRD'm var. Lütfen ayrıştırın ve başlangıç görevlerini oluşturun.",
+    "viewDocs": "TaskMaster dokümantasyonunu görüntüle",
+    "gotIt": "Anladım"
+  },
+  "overwriteModal": {
+    "title": "Dosya zaten var",
+    "description": "\"{{fileName}}\" adında bir PRD zaten var. Üzerine yazmak istiyor musunuz?",
+    "cancel": "İptal",
+    "saving": "Kaydediliyor...",
+    "overwrite": "Üzerine yaz"
+  },
+  "alerts": {
+    "emptyContent": "Görevler oluşturmadan önce PRD'ye içerik ekleyin."
+  }
+}

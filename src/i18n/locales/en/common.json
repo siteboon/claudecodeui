@@ -265,5 +265,142 @@
       "updateAvailable": "Update available",
       "closeSidebar": "Close sidebar"
     }
+  },
+  "browserPanel": {
+    "browserTitle": "Browser",
+    "monitorDescription": "Monitor browser sessions opened by AI agents.",
+    "runtimeDisabled": "Disabled",
+    "runtimeReady": "Ready",
+    "runtimeInstalling": "Installing",
+    "runtimeSetupRequired": "Setup required",
+    "failedToLoad": "Failed to load Browser",
+    "actionFailed": "Browser action failed",
+    "noSessionsYet": "No browser sessions yet",
+    "browserDisabled": "Browser is disabled",
+    "sessionsWillAppear": "Agent browser sessions appear here while an AI task is using Browser.",
+    "enableInSettings": "Enable Browser in settings to let agents open monitored browser sessions.",
+    "installRuntime": "Install Runtime",
+    "installing": "Installing...",
+    "prompt": "Prompt",
+    "promptExample1": "Use Browser to inspect the checkout flow and report any broken UI states.",
+    "promptExample2": "Open <url> with Browser, interact with the page, and summarize what changed after each step.",
+    "waitingForScreenshot": "Waiting for screenshot",
+    "screenshotWillAppear": "The next agent browser snapshot will render here.",
+    "screenshotAlt": "Browser session screenshot",
+    "openSettings": "Open Browser settings",
+    "refreshSessions": "Refresh browser sessions",
+    "active": "active",
+    "total": "total",
+    "updated": "Updated",
+    "empty": "empty",
+    "noPageLoaded": "No page loaded",
+    "fullScreen": "Full screen",
+    "stopSession": "Stop session",
+    "deleteSession": "Delete session",
+    "sessions": "Sessions",
+    "noAgentSessions": "No agent browser sessions.",
+    "selected": "Selected",
+    "status": "Status",
+    "lastAction": "Last action",
+    "profile": "Profile",
+    "none": "None",
+    "temporary": "Temporary",
+    "stop": "Stop",
+    "delete": "Delete",
+    "browserSession": "Browser session",
+    "close": "Close",
+    "never": "Never",
+    "unknown": "Unknown",
+    "justNow": "Just now",
+    "waiting": "Waiting"
+  },
+  "gitPanel": {
+    "tabs": {
+      "changes": "Changes",
+      "commits": "Commits",
+      "branches": "Branches"
+    },
+    "header": {
+      "fetch": "Fetch",
+      "fetching": "Fetching…",
+      "pull": "Pull",
+      "pulling": "Pulling…",
+      "push": "Push",
+      "pushing": "Pushing…",
+      "publish": "Publish",
+      "publishing": "Publishing…",
+      "createNewBranch": "Create new branch",
+      "revertLatestCommit": "Revert latest local commit",
+      "refreshStatus": "Refresh git status",
+      "ahead": "ahead",
+      "behind": "behind",
+      "upToDate": "Up to date"
+    },
+    "changes": {
+      "noCommitsYet": "No commits yet",
+      "noCommitsDesc": "This repository doesn't have any commits yet. Create your first commit to start tracking changes.",
+      "createInitialCommit": "Create Initial Commit",
+      "creatingInitialCommit": "Creating Initial Commit…",
+      "noChangesDetected": "No changes detected",
+      "staged": "Staged",
+      "unstageAll": "Unstage All",
+      "noStagedFiles": "No staged files",
+      "changes": "Changes",
+      "stageAll": "Stage All",
+      "allChangesStaged": "All changes staged"
+    },
+    "legend": {
+      "title": "File Status Guide",
+      "modified": "Modified",
+      "added": "Added",
+      "deleted": "Deleted",
+      "untracked": "Untracked"
+    },
+    "composer": {
+      "placeholder": "Message (Ctrl+Enter to commit)",
+      "filesSelected": "{{count}} file selected",
+      "filesSelected_plural": "{{count}} files selected",
+      "commit": "Commit",
+      "committing": "Committing…",
+      "commitFile": "Commit {{count}} file",
+      "commitFiles": "Commit {{count}} files",
+      "commitChanges": "Commit Changes",
+      "generateMessage": "Generate commit message"
+    },
+    "branches": {
+      "local": "Local",
+      "remote": "Remote",
+      "newBranch": "New branch",
+      "noBranchesFound": "No branches found",
+      "current": "current",
+      "switch": "Switch",
+      "branchCount": "{{local}} local{{remote}}",
+      "ahead": "ahead",
+      "behind": "behind"
+    },
+    "history": {
+      "noCommitsFound": "No commits found"
+    },
+    "newBranchModal": {
+      "title": "Create New Branch",
+      "branchName": "Branch Name",
+      "placeholder": "feature/new-feature",
+      "createFrom": "This will create a new branch from the current branch ({{current}})",
+      "cancel": "Cancel",
+      "creating": "Creating…",
+      "createBranch": "Create Branch"
+    },
+    "git": {
+      "error": {
+        "failed": "Git operation failed",
+        "notGitRepo": "Not a git repository. This directory does not contain a .git folder. Initialize a git repository with \"git init\" to use source control features."
+      },
+      "details": {
+        "failedStatus": "Failed to get git status: {{message}}"
+      },
+      "tip": "Tip",
+      "runGitInit": "Run",
+      "inProjectDir": "in your project directory to initialize git source control."
+    }
   }
 }

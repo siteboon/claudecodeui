@@ -90,10 +90,13 @@
     "appearance": "外观",
     "git": "Git",
     "apiTokens": "API 和令牌",
+    "voice": "语音",
     "tasks": "任务",
-    "computer": "计算机使用",
+    "browser": "浏览器",
     "notifications": "通知",
     "plugins": "插件",
+    "password": "修改密码",
+    "computer": "计算机使用",
     "about": "关于"
   },
   "notifications": {
@@ -481,5 +484,72 @@
     "installAriaLabel": "插件 git 仓库 URL",
     "tab": "标签",
     "runningStatus": "运行中"
+  },
+  "browserSettings": {
+    "title": "浏览器",
+    "description": "允许代理创建受控的 Playwright 浏览器会话，你可以在浏览器标签页中监控。",
+    "enableLabel": "启用浏览器",
+    "enableDescription": "为支持的代理注册浏览器功能。代理可以创建浏览器会话，你可以查看、停止和删除它们。",
+    "ariaLabel": "启用浏览器",
+    "runtimeRequired": "需要浏览器运行时",
+    "installPrompt": "安装 Playwright 和 Chromium 以使用浏览器会话。",
+    "checking": "检查中...",
+    "installed": "已安装",
+    "missing": "未安装",
+    "statusReady": "就绪",
+    "statusSetupRequired": "需要设置",
+    "statusDisabled": "已禁用",
+    "installButton": "安装运行时",
+    "installingButton": "安装中..."
+  },
+  "voiceSettings": {
+    "title": "语音",
+    "description": "语音转文字输入和文字朗读，通过兼容 OpenAI 的音频后端实现。",
+    "enable": "启用语音",
+    "enableDescription": "在消息上显示麦克风按钮和朗读按钮。",
+    "backendTitle": "后端",
+    "backendDescription": "指向 OpenAI、Groq 或本地服务器（LocalAI、Speaches、Kokoro-FastAPI）。留空以使用服务器默认值。",
+    "baseUrl": "基础 URL",
+    "apiKey": "***",
+    "sttModel": "语音转文字模型",
+    "ttsModel": "文字转语音模型",
+    "voice": "音色",
+    "format": "音频格式",
+    "note": "自定义基础 URL 由浏览器直接调用，必须允许浏览器 CORS 请求。留空以使用服务器配置的后端。"
+  },
+  "aboutTab": {
+    "tagline": "开源 AI 编程助手界面",
+    "starOnGithub": "在GitHub上加星",
+    "tryHosted": "试用 CloudCLI 托管版",
+    "tryHostedDescription": "团队协作、共享 MCP 配置、跨环境设置同步，以及托管基础设施。",
+    "learnMore": "了解更多",
+    "proFeatures": "CloudCLI Pro 功能",
+    "syncSettings": "同步设置",
+    "syncSettingsDescription": "保持您的偏好设置、MCP 配置和主题在所有环境中同步。",
+    "teamManagement": "团队管理",
+    "teamManagementDescription": "多用户、基于角色的访问控制和团队共享项目。",
+    "availableWithPro": "CloudCLI Pro 可用"
+  },
+  "password": {
+    "title": "修改密码",
+    "description": "修改您的账户密码",
+    "currentPassword": "当前密码",
+    "currentPasswordPlaceholder": "请输入当前密码",
+    "newPassword": "新密码",
+    "newPasswordPlaceholder": "请输入新密码",
+    "confirmPassword": "确认新密码",
+    "confirmPasswordPlaceholder": "请再次输入新密码",
+    "minLengthHelp": "密码至少需要 {{min}} 个字符",
+    "saveChanges": "保存更改",
+    "saving": "保存中...",
+    "success": "密码修改成功",
+    "error": {
+      "fillAllFields": "请填写所有字段",
+      "minLength": "密码至少需要 6 个字符",
+      "notMatch": "两次输入的密码不一致",
+      "sameAsOld": "新密码必须与当前密码不同",
+      "incorrectOld": "当前密码不正确",
+      "failed": "修改密码失败"
+    }
   }
 }

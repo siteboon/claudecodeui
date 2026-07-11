@@ -135,7 +135,9 @@
       "codex": "Bereit, Codex mit {{model}} zu verwenden. Gib unten deine Nachricht ein.",
       "default": "Wähl oben einen Anbieter, um zu beginnen"
     },
-    "pressToSearch": "Drücke <kbd>{{shortcut}}</kbd>, um Sitzungen, Dateien und Commits zu durchsuchen"
+    "pressToSearch": "Drücke <kbd>{{shortcut}}</kbd>, um Sitzungen, Dateien und Commits zu durchsuchen",
+    "modelSelector": "Modellauswahl",
+    "chooseAmodel": "Modell auswählen"
   },
   "session": {
     "continue": {
@@ -154,7 +156,8 @@
       "loadAll": "Alle Nachrichten laden",
       "loadingAll": "Alle Nachrichten werden geladen...",
       "allLoaded": "Alle Nachrichten geladen",
-      "perfWarning": "Alle Nachrichten geladen – Scrollen kann langsamer sein. Klick auf 'Nach unten scrollen', um die Leistung wiederherzustellen."
+      "perfWarning": "Alle Nachrichten geladen – Scrollen kann langsamer sein. Klick auf 'Nach unten scrollen', um die Leistung wiederherzustellen.",
+      "loadMore": "Noch {{count}} laden"
     }
   },
   "shell": {
@@ -215,5 +218,14 @@
   },
   "tasks": {
     "nextTaskPrompt": "Nächste Aufgabe starten"
+  },
+  "scrollNav": {
+    "jumpTo": "Springe zu: {{snippet}}",
+    "jumpToMessage": "Springe zu Nachricht {{index}}",
+    "loadAll": "Alle laden",
+    "first": "Erste",
+    "previous": "Vorherige",
+    "next": "Nächste",
+    "last": "Letzte"
   }
 }

@@ -94,7 +94,8 @@
     "computer": "電腦使用",
     "notifications": "通知",
     "plugins": "外掛",
-    "about": "關於"
+    "about": "關於",
+    "password": "密碼"
   },
   "notifications": {
     "title": "通知",
@@ -481,5 +482,27 @@
     "installAriaLabel": "外掛 git 儲存庫 URL",
     "tab": "分頁",
     "runningStatus": "執行中"
+  },
+  "password": {
+    "title": "密碼",
+    "description": "修改您的帳戶密碼",
+    "currentPassword": "當前密碼",
+    "currentPasswordPlaceholder": "請輸入當前密碼",
+    "newPassword": "新密碼",
+    "newPasswordPlaceholder": "請輸入新密碼",
+    "confirmPassword": "確認新密碼",
+    "confirmPasswordPlaceholder": "請再次輸入新密碼",
+    "minLengthHelp": "密碼至少需要 {{min}} 個字元",
+    "saveChanges": "儲存變更",
+    "saving": "儲存中...",
+    "success": "密碼修改成功",
+    "error": {
+      "fillAllFields": "請填寫所有欄位",
+      "minLength": "密碼至少需要 6 個字元",
+      "notMatch": "兩次輸入的密碼不一致",
+      "sameAsOld": "新密碼必須與當前密碼不同",
+      "incorrectOld": "當前密碼不正確",
+      "failed": "修改密碼失敗"
+    }
   }
 }
