@@ -512,7 +512,7 @@ router.post('/init/:projectId', async (req, res) => {
         }
 
         // Run taskmaster init command
-        const initProcess = spawn('npx', ['task-master', 'init'], {
+        const initProcess = spawn('task-master', ['init'], {
             cwd: projectPath,
             stdio: ['pipe', 'pipe', 'pipe']
         });
