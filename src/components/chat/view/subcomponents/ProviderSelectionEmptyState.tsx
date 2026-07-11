@@ -124,6 +124,7 @@ export default function ProviderSelectionEmptyState({
 }: ProviderSelectionEmptyStateProps) {
   const { t } = useTranslation("chat");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [modelQuery, setModelQuery] = useState("");
 
   const visibleProviderGroups = useMemo<ProviderGroup[]>(() => {
     return PROVIDER_META.map((p) => ({
@@ -154,7 +155,13 @@ export default function ProviderSelectionEmptyState({
   }, [provider, currentModel, providerModelCatalog]);
 
   const setModelForProvider = useCallback(
-    (providerId: LLMProvider, modelValue: string) => {
+    (providerId: LLMProvider, modelValue: string, isCustom = false) => {
+      if (isCustom) {
+        localStorage.setItem(`${providerId}-custom-model`, "true");
+      } else {
+        localStorage.removeItem(`${providerId}-custom-model`);
+      }
+
       if (providerId === "claude") {
         setClaudeModel(modelValue);
         localStorage.setItem("claude-model", modelValue);
@@ -173,15 +180,21 @@ export default function ProviderSelectionEmptyState({
   );
 
   const handleModelSelect = useCallback(
-    (providerId: LLMProvider, modelValue: string) => {
+    (providerId: LLMProvider, modelValue: string, isCustom = false) => {
       setProvider(providerId);
       localStorage.setItem("selected-provider", providerId);
-      setModelForProvider(providerId, modelValue);
+      setModelForProvider(providerId, modelValue, isCustom);
+      setModelQuery("");
       setDialogOpen(false);
       setTimeout(() => textareaRef.current?.focus(), 100);
     },
     [setProvider, setModelForProvider, textareaRef],
   );
+
+  const customModelId = modelQuery.trim();
+  const currentProviderModels = providerModelCatalog[provider]?.OPTIONS ?? [];
+  const showCustomModelOption = customModelId.length > 0
+    && !currentProviderModels.some((model) => model.value === customModelId);
 
   if (!selectedSession && !currentSessionId) {
     return (
@@ -236,8 +249,10 @@ export default function ProviderSelectionEmptyState({
               </div>
               <Command filter={modelSearchFilter}>
                 <CommandInput
+                  value={modelQuery}
+                  onValueChange={setModelQuery}
                   placeholder={t("providerSelection.searchModels", {
-                    defaultValue: "Search models...",
+                    defaultValue: "Search or enter a custom model ID...",
                   })}
                 />
                 <CommandList className="max-h-[350px]">
@@ -246,6 +261,21 @@ export default function ProviderSelectionEmptyState({
                       defaultValue: "No models found.",
                     })}
                   </CommandEmpty>
+                  {showCustomModelOption ? (
+                    <CommandGroup heading={`${getProviderDisplayName(provider)} custom model`}>
+                      <CommandItem
+                        value={`${getProviderDisplayName(provider)} custom ${customModelId}`}
+                        onSelect={() => handleModelSelect(provider, customModelId, true)}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-medium">Use custom model ID</div>
+                          <div className="truncate font-mono text-xs text-muted-foreground">
+                            {customModelId}
+                          </div>
+                        </div>
+                      </CommandItem>
+                    </CommandGroup>
+                  ) : null}
                   {visibleProviderGroups.map((group, idx) => (
                     <CommandGroup
                       key={group.id}

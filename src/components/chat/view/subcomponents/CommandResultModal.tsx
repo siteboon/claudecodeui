@@ -38,6 +38,7 @@ type CommandResultModalProps = {
     provider: LLMProvider,
     model: string,
     sessionId?: string | null,
+    options?: { custom?: boolean },
   ) => Promise<{
     scope: 'default' | 'session';
     changed: boolean;
@@ -127,10 +128,12 @@ function SearchField({
   value,
   onChange,
   placeholder,
+  onEnter,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
+  onEnter?: () => void;
 }) {
   return (
     <div className="relative">
@@ -138,6 +141,12 @@ function SearchField({
       <Input
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' && onEnter) {
+            event.preventDefault();
+            onEnter();
+          }
+        }}
         placeholder={placeholder}
         className="h-10 rounded-xl border-border/70 bg-background/75 pl-9 pr-3 shadow-none focus-visible:ring-primary/40"
       />
@@ -275,12 +284,19 @@ function ModelsContent({
   }, [availableOptions, query]);
 
   const hasConcreteSessionId = typeof currentSessionId === 'string' && currentSessionId.trim().length > 0;
-  const showSearch = availableOptions.length > 6;
+  const customModelId = query.trim();
+  const showCustomModelOption = customModelId.length > 0
+    && !availableOptions.some((option) => option.value === customModelId);
 
-  const handleSelectModel = async (model: string) => {
+  const handleSelectModel = async (model: string, isCustom = false) => {
     setChangingModel(model);
     try {
-      const result = await onSelectProviderModel(currentProvider, model, currentSessionId);
+      const result = await onSelectProviderModel(
+        currentProvider,
+        model,
+        currentSessionId,
+        { custom: isCustom },
+      );
       if (result.scope === 'session') {
         setPendingSessionModel(result.model);
         setSelectionNotice(`Next response will resume with ${result.model}.`);
@@ -328,8 +344,34 @@ function ModelsContent({
         </Button>
       </div>
 
-      {showSearch && (
-        <SearchField value={query} onChange={setQuery} placeholder={`Search ${providerLabel} models...`} />
+      <SearchField
+        value={query}
+        onChange={setQuery}
+        onEnter={() => {
+          if (showCustomModelOption && !changingModel) {
+            void handleSelectModel(customModelId, true);
+          }
+        }}
+        placeholder={`Search or enter a custom ${providerLabel} model ID...`}
+      />
+
+      {showCustomModelOption && (
+        <button
+          type="button"
+          onClick={() => void handleSelectModel(customModelId, true)}
+          disabled={Boolean(changingModel)}
+          className="flex items-center justify-between gap-3 rounded-2xl border border-dashed border-primary/40 bg-primary/5 px-3.5 py-3 text-left transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-60"
+        >
+          <span className="min-w-0">
+            <span className="block text-xs font-semibold text-foreground">Use custom model ID</span>
+            <span className="block truncate font-mono text-xs text-muted-foreground">{customModelId}</span>
+          </span>
+          {changingModel === customModelId ? (
+            <RefreshCw className="h-4 w-4 shrink-0 animate-spin text-primary" />
+          ) : (
+            <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">Use</span>
+          )}
+        </button>
       )}
 
       {filteredOptions.length > 0 ? (
