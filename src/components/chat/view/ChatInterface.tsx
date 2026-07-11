@@ -74,6 +74,8 @@ function ChatInterface({
     currentProviderModelOptions,
     opencodeModel,
     setOpenCodeModel,
+    antigravityModel,
+    setAntigravityModel,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
@@ -315,7 +317,9 @@ function ChatInterface({
         ? t('messageTypes.codex')
         : provider === 'opencode'
             ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
-          : t('messageTypes.claude');
+          : provider === 'antigravity'
+            ? t('messageTypes.antigravity', { defaultValue: 'Antigravity' })
+            : t('messageTypes.claude');
 
   if (!selectedProject) {
     return (
@@ -356,6 +360,8 @@ function ChatInterface({
           setCodexModel={setCodexModel}
           opencodeModel={opencodeModel}
           setOpenCodeModel={setOpenCodeModel}
+          antigravityModel={antigravityModel}
+          setAntigravityModel={setAntigravityModel}
           providerModelCatalog={providerModelCatalog}
           providerModelActions={providerModelActions}
           providerModelsLoading={providerModelsLoading}

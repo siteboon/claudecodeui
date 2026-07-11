@@ -41,6 +41,10 @@ const getProviderCommand = ({
     return 'opencode auth login';
   }
 
+  if (provider === 'antigravity') {
+    return 'agy';
+  }
+
   return 'claude --dangerously-skip-permissions /login';
 };
 
@@ -49,6 +53,7 @@ const getProviderTitle = (provider: LLMProvider) => {
   if (provider === 'cursor') return 'Cursor CLI Login';
   if (provider === 'codex') return 'Codex CLI Login';
   if (provider === 'opencode') return 'OpenCode CLI Login';
+  if (provider === 'antigravity') return 'Antigravity CLI Login';
   return 'Claude CLI Login';
 };
 

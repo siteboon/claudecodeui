@@ -22,9 +22,10 @@ const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   cursor: 'gpt-5.3-codex',
   codex: 'gpt-5.4',
   opencode: 'anthropic/claude-sonnet-4-5',
+  antigravity: 'Gemini 3.5 Flash (Medium)',
 };
 
-const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode'];
+const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode', 'antigravity'];
 
 const readStoredProvider = (): LLMProvider => {
   const storedProvider = localStorage.getItem('selected-provider');
@@ -44,6 +45,7 @@ const FALLBACK_PERMISSION_MODES: Record<LLMProvider, PermissionMode[]> = {
   cursor: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
   codex: ['default', 'acceptEdits', 'bypassPermissions'],
   opencode: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
+  antigravity: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
 };
 
 type ProviderCapabilities = {
@@ -137,6 +139,9 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   const [opencodeModel, setOpenCodeModel] = useState<string>(() => {
     return localStorage.getItem('opencode-model') || FALLBACK_DEFAULT_MODEL.opencode;
   });
+  const [antigravityModel, setAntigravityModel] = useState<string>(() => {
+    return localStorage.getItem('antigravity-model') || FALLBACK_DEFAULT_MODEL.antigravity;
+  });
 
   /**
    * Backend-owned capability matrix keyed by provider. Drives the permission
@@ -178,8 +183,14 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       return;
     }
 
-    setOpenCodeModel(model);
-    localStorage.setItem('opencode-model', model);
+    if (targetProvider === 'opencode') {
+      setOpenCodeModel(model);
+      localStorage.setItem('opencode-model', model);
+      return;
+    }
+
+    setAntigravityModel(model);
+    localStorage.setItem('antigravity-model', model);
   }, []);
 
   const setStoredProviderEffort = useCallback((targetProvider: LLMProvider, effort: string) => {
@@ -366,7 +377,8 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     cursor: cursorModel,
     codex: codexModel,
     opencode: opencodeModel,
-  }), [claudeModel, cursorModel, codexModel, opencodeModel]);
+    antigravity: antigravityModel,
+  }), [antigravityModel, claudeModel, cursorModel, codexModel, opencodeModel]);
 
   useEffect(() => {
     const claude = providerModelCatalog.claude;
@@ -419,6 +431,19 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       }
     }
   }, [providerModelCatalog.opencode, opencodeModel]);
+
+  useEffect(() => {
+    const antigravity = providerModelCatalog.antigravity;
+    if (antigravity) {
+      const next = pickStoredOrCurrent('antigravity-model', antigravityModel, antigravity);
+      if (next !== antigravityModel) {
+        setAntigravityModel(next);
+      }
+      if (localStorage.getItem('antigravity-model') !== next) {
+        localStorage.setItem('antigravity-model', next);
+      }
+    }
+  }, [providerModelCatalog.antigravity, antigravityModel]);
 
   useEffect(() => {
     const nextEfforts: Partial<Record<LLMProvider, string>> = {};
@@ -867,6 +892,8 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     currentProviderModelOptions,
     opencodeModel,
     setOpenCodeModel,
+    antigravityModel,
+    setAntigravityModel,
     permissionMode,
     setPermissionMode,
     pendingPermissionRequests,

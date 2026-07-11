@@ -37,6 +37,13 @@ const providerCards = [
     iconContainerClassName: 'bg-zinc-100 dark:bg-zinc-800',
     loginButtonClassName: 'bg-zinc-800 hover:bg-zinc-900 dark:bg-zinc-700 dark:hover:bg-zinc-600',
   },
+  {
+    provider: 'antigravity' as const,
+    title: 'Antigravity',
+    connectedClassName: 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800',
+    iconContainerClassName: 'bg-emerald-100 dark:bg-emerald-900/30',
+    loginButtonClassName: 'bg-emerald-700 hover:bg-emerald-800',
+  },
 ];
 
 export default function AgentConnectionsStep({
