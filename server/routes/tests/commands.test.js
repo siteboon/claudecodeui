@@ -80,3 +80,80 @@ test('models command falls back to claude for unsupported providers', async () =
     providerModelsService.getCurrentActiveModel = originalGetCurrentActiveModel;
   }
 });
+
+test('models command prefers the requested catalog model over a raw session model id', async () => {
+  const originalGetProviderModels = providerModelsService.getProviderModels;
+  const originalGetCurrentActiveModel = providerModelsService.getCurrentActiveModel;
+
+  providerModelsService.getProviderModels = async () => ({
+    models: {
+      OPTIONS: [
+        { value: 'default', label: 'Default (recommended)' },
+        { value: 'opus', label: 'Opus' },
+      ],
+      DEFAULT: 'default',
+    },
+    cache: {
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      expiresAt: '2026-01-04T00:00:00.000Z',
+      source: 'fresh',
+    },
+  });
+  // A normal turn only records the raw provider-native model id, which is not a
+  // catalog option value the picker can highlight.
+  providerModelsService.getCurrentActiveModel = async () => ({
+    model: 'claude-opus-4-8',
+  });
+
+  try {
+    const result = await executeModelsCommand([], {
+      provider: 'claude',
+      sessionId: 'session-abc',
+      model: 'opus',
+    });
+
+    assert.equal(result.data.current.model, 'opus');
+  } finally {
+    providerModelsService.getProviderModels = originalGetProviderModels;
+    providerModelsService.getCurrentActiveModel = originalGetCurrentActiveModel;
+  }
+});
+
+test('models command keeps a catalog session model (picker override) over the requested model', async () => {
+  const originalGetProviderModels = providerModelsService.getProviderModels;
+  const originalGetCurrentActiveModel = providerModelsService.getCurrentActiveModel;
+
+  providerModelsService.getProviderModels = async () => ({
+    models: {
+      OPTIONS: [
+        { value: 'default', label: 'Default (recommended)' },
+        { value: 'opus', label: 'Opus' },
+        { value: 'haiku', label: 'Haiku' },
+      ],
+      DEFAULT: 'default',
+    },
+    cache: {
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      expiresAt: '2026-01-04T00:00:00.000Z',
+      source: 'fresh',
+    },
+  });
+  // A picker override / explicit "set model" line resolves to a catalog value
+  // and must win over the composer's (possibly stale) requested model.
+  providerModelsService.getCurrentActiveModel = async () => ({
+    model: 'haiku',
+  });
+
+  try {
+    const result = await executeModelsCommand([], {
+      provider: 'claude',
+      sessionId: 'session-abc',
+      model: 'opus',
+    });
+
+    assert.equal(result.data.current.model, 'haiku');
+  } finally {
+    providerModelsService.getProviderModels = originalGetProviderModels;
+    providerModelsService.getCurrentActiveModel = originalGetCurrentActiveModel;
+  }
+});

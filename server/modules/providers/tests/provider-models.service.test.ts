@@ -15,7 +15,11 @@ import type {
   ProviderModelsDefinition,
   ProviderSessionActiveModelChange,
 } from '@/shared/types.js';
-import { writeProviderSessionActiveModelChange } from '@/shared/utils.js';
+import {
+  deleteProviderSessionActiveModelChanges,
+  readProviderSessionActiveModelChange,
+  writeProviderSessionActiveModelChange,
+} from '@/shared/utils.js';
 
 const createModels = (value: string): ProviderModelsDefinition => ({
   OPTIONS: [{ value, label: value }],
@@ -287,6 +291,48 @@ test('provider models service delegates current active model lookups to the prov
   assert.equal(activeModel.model, 'opencode-session-123');
 });
 
+test('getCurrentActiveModel surfaces a pending session model override before the adapter', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'provider-active-model-'));
+  const activeModelChangesPath = path.join(tempRoot, 'session-model-changes.json');
+
+  try {
+    let adapterCalls = 0;
+    const service = createProviderModelsService({
+      activeModelChangesPath,
+      resolveProvider: (provider) => ({
+        models: {
+          getSupportedModels: async () => createModels(`${provider}-models`),
+          getCurrentActiveModel: async () => {
+            adapterCalls += 1;
+            return createCurrentActiveModel(`${provider}-active`);
+          },
+          changeActiveModel: async (input) => createSessionActiveModelChange(provider, input),
+        },
+      }),
+    });
+
+    await writeProviderSessionActiveModelChange('claude', {
+      sessionId: 'session-789',
+      model: 'opus',
+    }, {
+      filePath: activeModelChangesPath,
+    });
+
+    // A pending override the user just picked wins over the provider's own
+    // (still-stale) transcript until the next resumed turn consumes it.
+    const overridden = await service.getCurrentActiveModel('claude', 'session-789');
+    assert.equal(overridden.model, 'opus');
+    assert.equal(adapterCalls, 0);
+
+    // Sessions without a pending override fall back to the provider adapter.
+    const fallback = await service.getCurrentActiveModel('claude', 'session-other');
+    assert.equal(fallback.model, 'claude-active');
+    assert.equal(adapterCalls, 1);
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('provider models service delegates active model change requests to the provider adapter', async () => {
   const calls: Array<{ provider: LLMProvider; input: ProviderChangeActiveModelInput }> = [];
   const service = createProviderModelsService({
@@ -343,6 +389,35 @@ test('resolveResumeModel prefers a stored changed model over the requested one',
 
     const model = await service.resolveResumeModel('cursor', 'session-456', 'composer-2-fast');
     assert.equal(model, 'composer-2');
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('deleteProviderSessionActiveModelChanges removes only the targeted sessions', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'provider-model-cleanup-'));
+  const activeModelChangesPath = path.join(tempRoot, 'session-model-changes.json');
+
+  try {
+    const write = (provider: LLMProvider, sessionId: string, model: string) =>
+      writeProviderSessionActiveModelChange(provider, { sessionId, model }, { filePath: activeModelChangesPath });
+    const read = (provider: LLMProvider, sessionId: string) =>
+      readProviderSessionActiveModelChange(provider, sessionId, { filePath: activeModelChangesPath });
+
+    await write('claude', 'session-keep', 'opus');
+    await write('claude', 'session-drop', 'sonnet');
+    await write('cursor', 'session-drop', 'composer-2'); // same id, different provider
+
+    await deleteProviderSessionActiveModelChanges(['session-drop'], { filePath: activeModelChangesPath });
+
+    // Untouched session survives.
+    const kept = await read('claude', 'session-keep');
+    assert.equal(kept.changed, true);
+    assert.equal(kept.model, 'opus');
+
+    // The deleted session id is removed for every provider.
+    assert.equal((await read('claude', 'session-drop')).changed, false);
+    assert.equal((await read('cursor', 'session-drop')).changed, false);
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }

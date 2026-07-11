@@ -199,6 +199,7 @@ async function handleChatSend(
     // global upload store may reach the provider runtimes' file reads.
     images: filterImagesToUploadStore(clientOptions.images),
     sessionId: session.provider_session_id ?? undefined,
+    appSessionId: session.session_id ?? undefined,
     resume: Boolean(session.provider_session_id),
     cwd: clientOptions.cwd ?? session.project_path ?? undefined,
     projectPath: session.project_path ?? clientOptions.projectPath,

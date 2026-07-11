@@ -11,7 +11,7 @@ import type {
   LLMProvider,
   NormalizedMessage,
 } from '@/shared/types.js';
-import { AppError } from '@/shared/utils.js';
+import { AppError, deleteProviderSessionActiveModelChanges } from '@/shared/utils.js';
 
 type CreateAppSessionResult = {
   sessionId: string;
@@ -266,6 +266,10 @@ export const sessionsService = {
         statusCode: 404,
       });
     }
+
+    // Drop the per-session model override (keyed by the app session id) so the
+    // override cache does not keep an orphaned entry after a permanent delete.
+    await deleteProviderSessionActiveModelChanges([sessionId]);
 
     return {
       sessionId,
