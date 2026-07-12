@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -19,6 +20,7 @@ type ShellIncomingMessage = {
   initialCommand?: string;
   isPlainShell?: boolean;
   forceRestart?: boolean;
+  shellClientId?: string;
 };
 
 type PtySessionEntry = {
@@ -28,11 +30,38 @@ type PtySessionEntry = {
   timeoutId: NodeJS.Timeout | null;
   projectPath: string;
   sessionId: string | null;
+  // Session id this PTY's `claude` was launched with (via --session-id), so a
+  // later init that references the session by id can find this same PTY.
+  assignedClaudeSessionId: string | null;
 };
 
 const ptySessionsMap = new Map<string, PtySessionEntry>();
+// Maps a pre-assigned Claude session id to the PTY registry key it lives under.
+// A shell that starts as "new" is keyed by its client identity; once the UI
+// re-opens the same conversation by session id, this alias routes the init back
+// to the original PTY instead of spawning a duplicate `claude --resume`.
+const claudeSessionAliasMap = new Map<string, string>();
 const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
 const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
+
+/**
+ * Drops a PTY registry entry along with its pending kill timer and any Claude
+ * session alias that still routes to it. Callers decide whether to kill the pty.
+ */
+function deletePtySessionEntry(key: string, session: PtySessionEntry): void {
+  if (session.timeoutId) {
+    clearTimeout(session.timeoutId);
+  }
+
+  if (
+    session.assignedClaudeSessionId &&
+    claudeSessionAliasMap.get(session.assignedClaudeSessionId) === key
+  ) {
+    claudeSessionAliasMap.delete(session.assignedClaudeSessionId);
+  }
+
+  ptySessionsMap.delete(key);
+}
 
 type ShellWebSocketDependencies = {
   resolveProviderSessionId: (
@@ -109,12 +138,86 @@ function resolveResumeSessionId(
   return resolvedSessionId;
 }
 
+// Client-generated shell identities are uuid-shaped; anything else is ignored
+// so a malformed value degrades to the legacy shared key instead of erroring.
+const SAFE_SHELL_CLIENT_ID_PATTERN = /^[a-zA-Z0-9-]{1,64}$/;
+
+export type PtySessionKeyParts = {
+  projectPath: string;
+  sessionId: string | null;
+  shellClientId: string | null;
+  isPlainShell: boolean;
+  initialCommand: string;
+};
+
+/**
+ * Resolves the PTY registry key for a shell init.
+ *
+ * Shells opened for an existing session are keyed by that session id, so any
+ * client (including another device) reattaches to the same PTY. Shells opened
+ * as "new" have no session id yet; keying them all to a shared default made
+ * every new-session shell in a project collide on one PTY (see #1004), so when
+ * the client supplies a per-tab identity the key includes it — distinct tabs
+ * get distinct PTYs while the same tab still reattaches after a remount.
+ * Clients that don't send an identity keep the legacy shared key.
+ */
+export function resolvePtySessionKey(parts: PtySessionKeyParts): string {
+  const commandSuffix =
+    parts.isPlainShell && parts.initialCommand
+      ? `_cmd_${Buffer.from(parts.initialCommand).toString('base64').slice(0, 16)}`
+      : '';
+
+  if (parts.sessionId) {
+    return `${parts.projectPath}_${parts.sessionId}${commandSuffix}`;
+  }
+
+  const clientId =
+    parts.shellClientId && SAFE_SHELL_CLIENT_ID_PATTERN.test(parts.shellClientId)
+      ? parts.shellClientId
+      : null;
+  if (clientId) {
+    return `${parts.projectPath}_new_${clientId}${commandSuffix}`;
+  }
+
+  return `${parts.projectPath}_default${commandSuffix}`;
+}
+
+/**
+ * Follows a Claude session-id alias to the PTY it was launched under, dropping
+ * the alias when that PTY is gone. Pure so the routing is unit-testable.
+ */
+export function resolveSessionAlias(
+  aliasMap: Map<string, string>,
+  liveKeys: { has(key: string): boolean },
+  sessionId: string,
+): string | null {
+  const key = aliasMap.get(sessionId);
+  if (!key) {
+    return null;
+  }
+
+  if (!liveKeys.has(key)) {
+    aliasMap.delete(sessionId);
+    return null;
+  }
+
+  return key;
+}
+
+export type BuildShellCommandOptions = {
+  // Pre-assigned session id for a brand-new Claude session (claude --session-id).
+  // Knowing the id at spawn time lets the server route later by-id opens back to
+  // this PTY instead of forking a duplicate `claude --resume` (see #1004).
+  newClaudeSessionId?: string | null;
+};
+
 /**
  * Resolves provider command line for plain shell and agent-backed shell modes.
  */
-function buildShellCommand(
+export function buildShellCommand(
   message: ShellIncomingMessage,
-  dependencies: ShellWebSocketDependencies
+  dependencies: ShellWebSocketDependencies,
+  options: BuildShellCommandOptions = {}
 ): string {
   const hasSession = readBoolean(message.hasSession);
   const initialCommand = readString(message.initialCommand);
@@ -153,14 +256,29 @@ function buildShellCommand(
     return initialCommand || 'opencode';
   }
 
-  const command = initialCommand || 'claude';
   if (resumeSessionId) {
     if (os.platform() === 'win32') {
       return `claude --resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { claude }`;
     }
     return `claude --resume "${resumeSessionId}" || claude`;
   }
-  return command;
+
+  if (initialCommand) {
+    return initialCommand;
+  }
+
+  if (options.newClaudeSessionId) {
+    // Fall back to a plain launch on CLIs that predate --session-id, mirroring
+    // the resume fallback above. On such CLIs the pre-assigned id never comes
+    // into existence, so the registered alias can never be resolved by a
+    // by-id open — it just ages out when the PTY exits.
+    if (os.platform() === 'win32') {
+      return `claude --session-id "${options.newClaudeSessionId}"; if ($LASTEXITCODE -ne 0) { claude }`;
+    }
+    return `claude --session-id "${options.newClaudeSessionId}" || claude`;
+  }
+
+  return 'claude';
 }
 
 function readEnvValue(env: NodeJS.ProcessEnv, key: string): string | undefined {
@@ -233,6 +351,16 @@ export function handleShellConnection(
   let urlDetectionBuffer = '';
   const announcedAuthUrls = new Set<string>();
 
+  // After another window takes over this PTY (init on the same key), this
+  // socket must stop driving it — a detached client typing or resizing a
+  // shared process is exactly the cross-talk described in #1004.
+  const isAttachedSocket = (): boolean => {
+    if (!ptySessionKey) {
+      return false;
+    }
+    return ptySessionsMap.get(ptySessionKey)?.ws === ws;
+  };
+
   ws.on('message', async (rawMessage) => {
     try {
       const data = parseShellMessage(rawMessage);
@@ -261,21 +389,47 @@ export function handleShellConnection(
             initialCommand.includes('cursor-agent login') ||
             initialCommand.includes('auth login'));
 
-        const commandSuffix =
-          isPlainShell && initialCommand
-            ? `_cmd_${Buffer.from(initialCommand).toString('base64').slice(0, 16)}`
-            : '';
-        ptySessionKey = `${projectPath}_${sessionId ?? 'default'}${commandSuffix}`;
+        const shellClientId = readString(data.shellClientId) || null;
+        ptySessionKey = resolvePtySessionKey({
+          projectPath,
+          sessionId,
+          shellClientId,
+          isPlainShell,
+          initialCommand,
+        });
+
+        // A conversation that started as a "new" shell lives under its client
+        // identity key. When the UI later opens the same conversation by its
+        // session id, follow the alias back to that PTY instead of spawning a
+        // duplicate `claude --resume` alongside the still-running original.
+        if (sessionId) {
+          const aliasedKey = resolveSessionAlias(
+            claudeSessionAliasMap,
+            ptySessionsMap,
+            sessionId,
+          );
+          if (aliasedKey) {
+            ptySessionKey = aliasedKey;
+          }
+        }
 
         if (isLoginCommand || forceRestart) {
           const oldSession = ptySessionsMap.get(ptySessionKey);
           if (oldSession) {
-            if (oldSession.timeoutId) {
-              clearTimeout(oldSession.timeoutId);
-            }
             oldSession.pty.kill();
-            ptySessionsMap.delete(ptySessionKey);
+            deletePtySessionEntry(ptySessionKey, oldSession);
           }
+          // The kill may have removed an alias-routed entry (and its alias).
+          // Recompute the canonical key for this init so the restarted PTY is
+          // registered where later by-id opens will look for it, instead of
+          // stranding it under the previous tab's client-identity key.
+          ptySessionKey = resolvePtySessionKey({
+            projectPath,
+            sessionId,
+            shellClientId,
+            isPlainShell,
+            initialCommand,
+          });
         }
 
         const existingSession =
@@ -304,6 +458,26 @@ export function handleShellConnection(
             });
           }
 
+          // Never steal a live client silently: tell it the PTY moved to
+          // another window before rebinding the output stream, so it doesn't
+          // keep rendering a shell it no longer owns.
+          const previousWs = existingSession.ws;
+          if (previousWs && previousWs !== ws && previousWs.readyState === WebSocket.OPEN) {
+            try {
+              previousWs.send(
+                JSON.stringify({ type: 'session_detached', reason: 'attached_elsewhere' })
+              );
+              previousWs.send(
+                JSON.stringify({
+                  type: 'output',
+                  data: '\r\n\x1b[33m[Detached: this shell was attached from another window]\x1b[0m\r\n',
+                })
+              );
+            } catch {
+              // The old socket may be mid-teardown; attaching proceeds regardless.
+            }
+          }
+
           existingSession.ws = ws;
           return;
         }
@@ -325,8 +499,17 @@ export function handleShellConnection(
           return;
         }
 
-        const shellCommand = buildShellCommand(data, dependencies);
         const resumeSessionId = resolveResumeSessionId(data, dependencies);
+        // Launch brand-new Claude sessions with a pre-assigned session id so
+        // the conversation's id is known from the start; the alias lets a later
+        // by-id open reattach to this PTY instead of forking a duplicate.
+        const isClaudeProvider =
+          provider !== 'cursor' && provider !== 'codex' && provider !== 'opencode';
+        const newClaudeSessionId =
+          !isPlainShell && isClaudeProvider && !resumeSessionId && !initialCommand
+            ? randomUUID()
+            : null;
+        const shellCommand = buildShellCommand(data, dependencies, { newClaudeSessionId });
         const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
         const shellArgs =
           os.platform() === 'win32' ? ['-Command', shellCommand] : ['-c', shellCommand];
@@ -355,7 +538,12 @@ export function handleShellConnection(
           timeoutId: null,
           projectPath,
           sessionId,
+          assignedClaudeSessionId: newClaudeSessionId,
         });
+
+        if (newClaudeSessionId) {
+          claudeSessionAliasMap.set(newClaudeSessionId, ptySessionKey);
+        }
 
         shellProcess.onData((chunk) => {
           if (!ptySessionKey) {
@@ -454,11 +642,11 @@ export function handleShellConnection(
             );
           }
 
-          if (session?.timeoutId) {
-            clearTimeout(session.timeoutId);
+          if (session) {
+            deletePtySessionEntry(ptySessionKey, session);
+          } else {
+            ptySessionsMap.delete(ptySessionKey);
           }
-
-          ptySessionsMap.delete(ptySessionKey);
           shellProcess = null;
         });
 
@@ -487,14 +675,14 @@ export function handleShellConnection(
       }
 
       if (data.type === 'input') {
-        if (shellProcess) {
+        if (shellProcess && isAttachedSocket()) {
           shellProcess.write(readString(data.data));
         }
         return;
       }
 
       if (data.type === 'resize') {
-        if (shellProcess) {
+        if (shellProcess && isAttachedSocket()) {
           shellProcess.resize(readNumber(data.cols, 80), readNumber(data.rows, 24));
         }
       }
@@ -522,14 +710,24 @@ export function handleShellConnection(
       return;
     }
 
+    // A newer socket may own this PTY (explicit takeover). A stale close from
+    // this socket must not detach the live client or arm a kill timer against
+    // the PTY it is using.
+    if (session.ws !== ws) {
+      return;
+    }
+
     session.ws = null;
+    if (session.timeoutId) {
+      clearTimeout(session.timeoutId);
+    }
     session.timeoutId = setTimeout(() => {
       if (ptySessionsMap.get(ptySessionKey as string) !== session) {
         return;
       }
 
       session.pty.kill();
-      ptySessionsMap.delete(ptySessionKey as string);
+      deletePtySessionEntry(ptySessionKey as string, session);
     }, PTY_SESSION_TIMEOUT);
   });
 
