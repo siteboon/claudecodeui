@@ -94,8 +94,11 @@ export type TerminalGestureState = {
  * compositor thread (so the passive `touchmove` listener never has to block a
  * scroll frame) while still preventing the browser's own pinch-to-zoom, which
  * we handle ourselves as a font-size change. While a selection or pinch gesture
- * is active we switch to `none` so a drag extends the selection / pinches the
- * font instead of scrolling the viewport out from under it.
+ * is active we switch to `none` so that subsequent touches adjust the
+ * selection (via its handles) or the font size without the viewport scrolling
+ * out from under them. (touch-action is latched per gesture, so this affects
+ * the NEXT touch, not the finger already down — which is why selections are
+ * adjusted with the handles rather than by dragging the long-press finger.)
  */
 export function resolveTerminalTouchAction(state: TerminalGestureState): 'pan-y' | 'none' {
   if (state.isSelecting || state.isHandleDragging || state.isPinching) {
@@ -424,13 +427,16 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
       this.clearTapHoldTimeout();
     }
 
-    if (this.isSelecting && !this.isHandleDragging) {
-      this.extendSelection(touch);
-      return;
-    }
-
     // Plain one-finger scrolling is handled natively by the compositor
     // (touch-action: pan-y); there is nothing to do on the main thread.
+    //
+    // Note that the finger that long-pressed cannot extend the selection by
+    // dragging: `touch-action` is latched when a touch starts, so switching it
+    // to `none` mid-gesture (when the long-press fires) cannot stop the
+    // browser from also panning that same finger's drag. Selections are
+    // adjusted with the drag handles instead, which sit on their own elements
+    // with `touch-action: none` from the start — the same pattern as native
+    // iOS text selection.
   };
 
   private onTerminalTouchEnd = (event: TouchEvent): void => {
@@ -580,16 +586,6 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     this.updateSelection();
     this.showHandles();
     this.showContextMenu();
-  }
-
-  private extendSelection(touch: TouchCoords): void {
-    const coords = this.touchToTerminalCoords(touch);
-    if (!coords) {
-      return;
-    }
-
-    this.selectionEnd = coords;
-    this.updateSelection();
   }
 
   private updateSelection(): void {
