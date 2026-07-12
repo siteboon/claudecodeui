@@ -670,7 +670,6 @@
     .xterm .xterm-viewport {
       touch-action: pan-y;
       overscroll-behavior: contain;
-      -webkit-overflow-scrolling: touch;
     }
 
     .xterm.shell-mobile-selecting,
