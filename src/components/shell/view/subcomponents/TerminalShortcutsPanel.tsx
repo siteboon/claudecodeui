@@ -81,12 +81,16 @@ export default function TerminalShortcutsPanel({
     try {
       const text = await navigator.clipboard.readText();
       if (text.length > 0) {
-        sendInput(text);
+        // terminal.paste() applies bracketed-paste wrapping and \n -> \r
+        // normalization before the text reaches the pty via onData; sending
+        // raw text as an input message made multi-line pastes execute
+        // line-by-line.
+        terminalRef.current?.paste(text);
       }
     } catch {
       // Ignore clipboard permission errors.
     }
-  }, [sendInput]);
+  }, [terminalRef]);
 
   const handleKeyPress = useCallback(
     (seq: string) => {
