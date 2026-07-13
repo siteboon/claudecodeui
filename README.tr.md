@@ -1,18 +1,18 @@
 <div align="center">
-  <img src="public/logo.svg" alt="CloudCLI UI" width="64" height="64">
-  <h1>Cloud CLI (Claude Code UI olarak da bilinir)</h1>
-  <p><a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>, <a href="https://docs.cursor.com/en/cli/overview">Cursor CLI</a>, <a href="https://developers.openai.com/codex">Codex</a> ve <a href="https://geminicli.com/">Gemini-CLI</a> için masaüstü ve mobil arayüz.<br>Yerel ya da uzaktan kullanarak aktif projelerine ve oturumlarına her yerden erişebilirsin.</p>
+ <img src="public/logo.svg" alt="CloudCLI UI" width="64" height="64">
+ <h1>Cloud CLI (Claude Code UI olarak da bilinir)</h1>
+ <p><a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>, <a href="https://docs.cursor.com/en/cli/overview">Cursor CLI</a>, <a href="https://developers.openai.com/codex">Codex</a> için masaüstü ve mobil arayüz.<br>Yerel ya da uzaktan kullanarak aktif projelerine ve oturumlarına her yerden erişebilirsin.</p>
 </div>
 
 <p align="center">
-  <a href="https://cloudcli.ai">CloudCLI Cloud</a> · <a href="https://cloudcli.ai/docs">Dokümantasyon</a> · <a href="https://discord.gg/buxwujPNRE">Discord</a> · <a href="https://github.com/siteboon/claudecodeui/issues">Sorun Bildir</a> · <a href="CONTRIBUTING.md">Katkıda Bulun</a>
+ <a href="https://cloudcli.ai">CloudCLI Cloud</a> · <a href="https://cloudcli.ai/docs">Dokümantasyon</a> · <a href="https://discord.gg/buxwujPNRE">Discord</a> · <a href="https://github.com/siteboon/claudecodeui/issues">Sorun Bildir</a> · <a href="CONTRIBUTING.md">Katkıda Bulun</a>
 </p>
 
 <p align="center">
-  <a href="https://cloudcli.ai"><img src="https://img.shields.io/badge/☁️_CloudCLI_Cloud-Hemen_Dene-0066FF?style=for-the-badge" alt="CloudCLI Cloud"></a>
-  <a href="https://discord.gg/buxwujPNRE"><img src="https://img.shields.io/badge/Discord-Toplulu%C4%9Fa%20Kat%C4%B1l-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord'a Katıl"></a>
-  <br><br>
-  <a href="https://trendshift.io/repositories/15586" target="_blank"><img src="https://trendshift.io/api/badge/repositories/15586" alt="siteboon%2Fclaudecodeui | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+ <a href="https://cloudcli.ai"><img src="https://img.shields.io/badge/☁️_CloudCLI_Cloud-Hemen_Dene-0066FF?style=for-the-badge" alt="CloudCLI Cloud"></a>
+ <a href="https://discord.gg/buxwujPNRE"><img src="https://img.shields.io/badge/Discord-Toplulu%C4%9Fa%20Kat%C4%B1l-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord'a Katıl"></a>
+ <br><br>
+ <a href="https://trendshift.io/repositories/15586" target="_blank"><img src="https://trendshift.io/api/badge/repositories/15586" alt="siteboon%2Fclaudecodeui | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 </p>
 
 <div align="right"><i><a href="./README.md">English</a> · <a href="./README.ru.md">Русский</a> · <a href="./README.de.md">Deutsch</a> · <a href="./README.ko.md">한국어</a> · <a href="./README.zh-CN.md">简体中文</a> · <a href="./README.zh-TW.md">繁體中文</a> · <a href="./README.ja.md">日本語</a> · <b>Türkçe</b></i></div>
@@ -43,7 +43,7 @@
 <h3>CLI Seçimi</h3>
 <img src="public/screenshots/cli-selection.png" alt="CLI Seçimi" width="400">
 <br>
-<em>Claude Code, Gemini, Cursor CLI ve Codex arasında seçim yap</em>
+<em>Claude Code, Cursor CLI ve Codex arasında seçim yap</em>
 </td>
 </tr>
 </table>
@@ -62,7 +62,7 @@
 - **Oturum Yönetimi** — Konuşmalara devam et, birden fazla oturumu yönet ve geçmişi takip et
 - **Eklenti Sistemi** — CloudCLI'ı özel eklentilerle genişlet: yeni sekmeler, arka uç servisleri ve entegrasyonlar ekle. [Kendi eklentini yaz →](https://github.com/cloudcli-ai/cloudcli-plugin-starter)
 - **TaskMaster AI Entegrasyonu** *(İsteğe Bağlı)* — AI destekli görev planlama, PRD ayrıştırma ve iş akışı otomasyonu ile gelişmiş proje yönetimi
-- **Model Uyumluluğu** — Claude, GPT ve Gemini model aileleriyle çalışır (desteklenen tüm modeller için `GET /api/providers/:provider/models` API'sine bak)
+- **Model Uyumluluğu** — Claude ve GPT model aileleriyle çalışır (desteklenen tüm modeller için `GET /api/providers/:provider/models` API'sine bak)
 
 
 ## Hızlı Başlangıç
@@ -103,7 +103,7 @@ Ajanları hipervizör seviyesinde izolasyonlu sandbox'larda çalıştır. Varsay
 npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
 ```
 
-Claude Code, Codex ve Gemini CLI destekler. Kurulum ve gelişmiş seçenekler için [sandbox dokümantasyonuna](docker/) bak.
+Claude Code ve Codex'i destekler. Kurulum ve gelişmiş seçenekler için [sandbox dokümantasyonuna](docker/) bak.
 
 
 ---
@@ -120,12 +120,12 @@ CloudCLI UI, CloudCLI Cloud'u güçlendiren açık kaynak arayüz katmanıdır. 
 | **İzolasyon** | Kendi host'unda çalışır | Hipervizör seviyesi sandbox (microVM) | Tam bulut izolasyonu |
 | **Makinenin açık kalması gerek** | Evet | Evet | Hayır |
 | **Mobil erişim** | Ağındaki herhangi bir tarayıcı | Ağındaki herhangi bir tarayıcı | Herhangi bir cihaz, native uygulama yolda |
-| **Desteklenen ajanlar** | Claude Code, Cursor CLI, Codex, Gemini CLI | Claude Code, Codex, Gemini CLI | Claude Code, Cursor CLI, Codex, Gemini CLI |
+| **Desteklenen ajanlar** | Claude Code, Cursor CLI, Codex | Claude Code, Codex | Claude Code, Cursor CLI, Codex |
 | **Dosya gezgini ve Git** | Evet | Evet | Evet |
 | **MCP yapılandırması** | `~/.claude` ile senkron | UI üzerinden yönetilir | UI üzerinden yönetilir |
 | **REST API** | Evet | Evet | Evet |
 | **Ekip paylaşımı** | Hayır | Hayır | Evet |
-| **Platform maliyeti** | Ücretsiz, açık kaynak | Ücretsiz, açık kaynak | Aylık 7 $'dan başlar |
+| **Platform maliyeti** | Ücretsiz, açık kaynak | Ücretsiz, açık kaynak | Aylık 7 €'dan başlar |
 
 > Tüm seçenekler kendi AI aboneliklerini (Claude, Cursor, vb.) kullanır — CloudCLI AI'ı değil, ortamı sağlar.
 
@@ -165,7 +165,7 @@ CloudCLI, kendi frontend UI'sı ve isteğe bağlı Node.js arka ucu olan özel s
 | **[Project Stats](https://github.com/cloudcli-ai/cloudcli-plugin-starter)** | Mevcut projen için dosya sayıları, kod satırları, dosya türü dağılımı, en büyük dosyalar ve son değiştirilen dosyaları gösterir |
 | **[Web Terminal](https://github.com/cloudcli-ai/cloudcli-plugin-terminal)** | Çoklu sekme destekli tam xterm.js terminali |
 | **[Claude Watch](https://github.com/satsuki19980613/cloudcli-claude-watch)** | Uzun süren Claude Code oturumlarını takılmalara karşı izler ve süreç kontrolleri sunar |
-| **[CloudCLI Scheduler](https://github.com/grostim/cloudcli-cron)** | Çalışma alanı kapsamlı zamanlanmış prompt'lar oluşturur ve bunları Codex, Claude Code veya Gemini CLI gibi yerel CLI'larla çalıştırır |
+| **[CloudCLI Scheduler](https://github.com/grostim/cloudcli-cron)** | Çalışma alanı kapsamlı zamanlanmış prompt'lar oluşturur ve bunları Codex veya Claude Code gibi yerel CLI'larla çalıştırır |
 | **[PRISM CloudCLI](https://github.com/jakeefr/cloudcli-plugin-prism)** | CloudCLI içinde Claude Code oturum zekası ve token tüketimi görünürlüğü sağlar |
 | **[Sessions](https://github.com/strykereye2/cloudcli-plugin-session-manager)** | Aktif Claude Code oturumlarını görüntülemeni, yönetmeni ve sonlandırmanı sağlar |
 | **[Token Cost Calculator](https://github.com/NightmareAway/cloudcli-plugin-token-cost-calculator)** | Model fiyatları ve token kullanımından API maliyetlerini hesaplar; model fiyatı hazır ayarlarını destekler |
@@ -192,7 +192,7 @@ Pratikte bu ne demek:
 
 - **Tek oturum değil, tüm oturumların** — CloudCLI UI, `~/.claude` klasöründeki her oturumu otomatik keşfeder. Remote Control yalnızca tek aktif oturumu Claude mobil uygulamasına açar.
 - **Ayarların sana ait** — UI'da değiştirdiğin MCP sunucuları, araç izinleri ve proje yapılandırması doğrudan Claude Code yapılandırmana yazılır ve anında etkili olur; tersi de geçerli.
-- **Daha fazla ajanla çalışır** — Sadece Claude Code değil; Cursor CLI, Codex ve Gemini CLI de.
+- **Daha fazla ajanla çalışır** — Sadece Claude Code değil; Cursor CLI ve Codex de.
 - **Sadece sohbet penceresi değil, tam UI** — dosya gezgini, Git entegrasyonu, MCP yönetimi ve shell terminali hepsi yerleşik.
 - **CloudCLI Cloud bulutta çalışır** — laptop'unu kapat, ajan çalışmaya devam eder. Beklemen gereken terminal yok, uyanık tutman gereken makine yok.
 
@@ -201,7 +201,7 @@ Pratikte bu ne demek:
 <details>
 <summary>AI aboneliği için ayrıca ödeme yapmam gerekiyor mu?</summary>
 
-Evet. CloudCLI AI'yi değil, ortamı sağlar. Kendi Claude, Cursor, Codex veya Gemini aboneliğini getirirsin. CloudCLI Cloud, barındırılan ortam için aylık 7 $'dan başlar — bunun üzerine eklenir.
+Evet. CloudCLI AI'yi değil, ortamı sağlar. Kendi Claude, Cursor veya Codex aboneliğini getirirsin. CloudCLI Cloud, barındırılan ortam için aylık 7 €'dan başlar — bunun üzerine eklenir.
 
 </details>
 
@@ -242,7 +242,6 @@ CloudCLI UI — (https://cloudcli.ai).
 - **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** — Anthropic'in resmi CLI'ı
 - **[Cursor CLI](https://docs.cursor.com/en/cli/overview)** — Cursor'un resmi CLI'ı
 - **[Codex](https://developers.openai.com/codex)** — OpenAI Codex
-- **[Gemini-CLI](https://geminicli.com/)** — Google Gemini CLI
 - **[React](https://react.dev/)** — Kullanıcı arayüzü kütüphanesi
 - **[Vite](https://vitejs.dev/)** — Hızlı derleme aracı ve geliştirme sunucusu
 - **[Tailwind CSS](https://tailwindcss.com/)** — Utility-first CSS framework
@@ -255,5 +254,5 @@ CloudCLI UI — (https://cloudcli.ai).
 ---
 
 <div align="center">
-  <strong>Claude Code, Cursor ve Codex topluluğu için özenle yapıldı.</strong>
+ <strong>Claude Code, Cursor ve Codex topluluğu için özenle yapıldı.</strong>
 </div>

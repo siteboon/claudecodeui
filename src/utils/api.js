@@ -1,5 +1,16 @@
 import { IS_PLATFORM } from "../constants/config";
 
+// Only accept a refreshed token that has this app's issued JWT shape
+// (three base64url segments). An attacker-injected/malformed header value
+// must never overwrite the stored auth token.
+/**
+ * @param {unknown} token
+ * @returns {token is string}
+ */
+export const isValidRefreshedToken = (token) =>
+  typeof token === 'string' &&
+  /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token);
+
 // Utility function for authenticated API calls
 export const authenticatedFetch = (url, options = {}) => {
   const token = localStorage.getItem('auth-token');
@@ -23,7 +34,7 @@ export const authenticatedFetch = (url, options = {}) => {
     },
   }).then((response) => {
     const refreshedToken = response.headers.get('X-Refreshed-Token');
-    if (refreshedToken) {
+    if (isValidRefreshedToken(refreshedToken)) {
       localStorage.setItem('auth-token', refreshedToken);
     }
     return response;

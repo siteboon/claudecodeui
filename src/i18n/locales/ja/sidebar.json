@@ -48,7 +48,8 @@
     "activeSessionIndicator": "最近アクティブなセッション（過去10分以内）",
     "save": "保存",
     "cancel": "キャンセル",
-    "openCommandPalette": "コマンドパレットを開く"
+    "openCommandPalette": "コマンドパレットを開く",
+    "attentionRequiredIndicator": "セッションが対応を必要としています"
   },
   "navigation": {
     "chat": "チャット",

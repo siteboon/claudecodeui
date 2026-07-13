@@ -49,7 +49,8 @@
     "save": "Save",
     "cancel": "Cancel",
     "clearSearch": "Clear search",
-    "openCommandPalette": "Open command palette"
+    "openCommandPalette": "Open command palette",
+    "attentionRequiredIndicator": "Session needs attention"
   },
   "navigation": {
     "chat": "Chat",

@@ -21,6 +21,8 @@ type ProviderCapabilities = {
   supportsPermissionRequests: boolean;
   /** Whether the token-usage endpoint has data for this provider. */
   supportsTokenUsage: boolean;
+  /** Whether the provider runtime can accept model-level reasoning effort. */
+  supportsEffort: boolean;
 };
 
 /**
@@ -38,42 +40,40 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsAbort: true,
     supportsPermissionRequests: true,
     supportsTokenUsage: true,
+    supportsEffort: true,
   },
   cursor: {
     provider: 'cursor',
     permissionModes: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
     defaultPermissionMode: 'default',
-    supportsImages: false,
+    supportsImages: true,
     supportsAbort: true,
     supportsPermissionRequests: false,
     supportsTokenUsage: false,
+    supportsEffort: false,
   },
   codex: {
     provider: 'codex',
     permissionModes: ['default', 'acceptEdits', 'bypassPermissions'],
     defaultPermissionMode: 'default',
-    supportsImages: false,
+    supportsImages: true,
     supportsAbort: true,
     supportsPermissionRequests: false,
     supportsTokenUsage: true,
-  },
-  gemini: {
-    provider: 'gemini',
-    permissionModes: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
-    defaultPermissionMode: 'default',
-    supportsImages: false,
-    supportsAbort: true,
-    supportsPermissionRequests: false,
-    supportsTokenUsage: true,
+    supportsEffort: true,
   },
   opencode: {
     provider: 'opencode',
-    permissionModes: ['default'],
+    // Mapped by the runtime onto OpenCode's controls: `--agent plan` (plan),
+    // `--auto` (bypassPermissions) and the OPENCODE_PERMISSION env var
+    // (acceptEdits). See resolveOpenCodePermissionOptions in opencode-cli.js.
+    permissionModes: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
     defaultPermissionMode: 'default',
-    supportsImages: false,
+    supportsImages: true,
     supportsAbort: true,
     supportsPermissionRequests: false,
     supportsTokenUsage: true,
+    supportsEffort: true,
   },
 };
 

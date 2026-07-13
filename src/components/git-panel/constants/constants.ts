@@ -1,7 +1,8 @@
 import type { ConfirmActionType, FileStatusCode, GitStatusGroupEntry } from '../types/types';
 
 export const DEFAULT_BRANCH = 'main';
-export const RECENT_COMMITS_LIMIT = 10;
+// High enough for the commit graph to show meaningful branch structure.
+export const RECENT_COMMITS_LIMIT = 50;
 
 export const FILE_STATUS_GROUPS: GitStatusGroupEntry[] = [
   { key: 'modified', status: 'M' },
