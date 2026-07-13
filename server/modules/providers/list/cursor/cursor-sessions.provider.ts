@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 
+import { parseImagesInputTag } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
 import {
@@ -24,7 +25,7 @@ type CursorJsonBlob = CursorDbBlob & {
   parsed: AnyRecord;
 };
 
-type CursorMessageBlob = {
+export type CursorMessageBlob = {
   id: string;
   sequence: number;
   rowid: number;
@@ -59,17 +60,42 @@ function unwrapUserQueryText(value: string, role: 'user' | 'assistant'): string 
     return value;
   }
 
-  const normalized = value.trimStart();
+  // Cursor wraps user turns as `<timestamp>…</timestamp>\n<user_query>…</user_query>`.
+  // Show only the `<user_query>` content, trimmed so there are no blank lines
+  // at the top/bottom and the `<timestamp>` prefix is dropped entirely.
   const openTag = '<user_query>';
   const closeTag = '</user_query>';
-  if (!normalized.startsWith(openTag)) {
-    return value;
+  const openIndex = value.indexOf(openTag);
+  if (openIndex >= 0) {
+    const afterOpen = value.slice(openIndex + openTag.length);
+    const closeIndex = afterOpen.lastIndexOf(closeTag);
+    const inner = closeIndex >= 0 ? afterOpen.slice(0, closeIndex) : afterOpen;
+    return inner.trim();
   }
 
-  const afterOpen = normalized.slice(openTag.length);
-  const closeIndex = afterOpen.lastIndexOf(closeTag);
-  const inner = closeIndex >= 0 ? afterOpen.slice(0, closeIndex) : afterOpen;
-  return inner.trim();
+  // No `<user_query>` wrapper: still strip a leading `<timestamp>…</timestamp>`.
+  return value.replace(/^\s*<timestamp>[\s\S]*?<\/timestamp>\s*/, '').trim();
+}
+
+/**
+ * Unwraps one user-authored text payload and splits off the `<images_input>`
+ * attachment block appended by the chat composer. Assistant text passes
+ * through untouched.
+ */
+function extractUserTextAndImages(
+  value: string,
+  role: 'user' | 'assistant',
+): { text: string; images?: Array<{ path: string; name?: string }> } {
+  const unwrapped = unwrapUserQueryText(value, role);
+  if (role !== 'user') {
+    return { text: unwrapped };
+  }
+
+  const { text, attachments } = parseImagesInputTag(unwrapped);
+  return {
+    text,
+    images: attachments.length > 0 ? attachments : undefined,
+  };
 }
 
 function normalizeToolId(value: unknown): string | null {
@@ -401,8 +427,11 @@ export class CursorSessionsProvider implements IProviderSessions {
   /**
    * Converts Cursor SQLite message blobs into normalized messages and attaches
    * matching tool results to their tool_use entries.
+   *
+   * Public so tests can drive history normalization with synthetic blobs
+   * without needing a real Cursor store.db.
    */
-  private normalizeCursorBlobs(blobs: CursorMessageBlob[], sessionId: string | null): NormalizedMessage[] {
+  normalizeCursorBlobs(blobs: CursorMessageBlob[], sessionId: string | null): NormalizedMessage[] {
     const messages: NormalizedMessage[] = [];
     const toolUseMap = new Map<string, NormalizedMessage>();
     const baseTime = Date.now();
@@ -442,7 +471,16 @@ export class CursorSessionsProvider implements IProviderSessions {
                 text = unwrapUserQueryText(content.message.content, role);
               }
             }
-            if (text?.trim()) {
+            const { text: cleanText, images } = role === 'user'
+              ? (() => {
+                const parsed = parseImagesInputTag(text);
+                return {
+                  text: parsed.text,
+                  images: parsed.attachments.length > 0 ? parsed.attachments : undefined,
+                };
+              })()
+              : { text, images: undefined };
+            if (cleanText?.trim() || images) {
               messages.push(createNormalizedMessage({
                 id: baseId,
                 sessionId,
@@ -450,7 +488,8 @@ export class CursorSessionsProvider implements IProviderSessions {
                 provider: PROVIDER,
                 kind: 'text',
                 role,
-                content: text,
+                content: cleanText,
+                images,
                 sequence: blob.sequence,
                 rowid: blob.rowid,
               }));
@@ -502,8 +541,8 @@ export class CursorSessionsProvider implements IProviderSessions {
             }
 
             if (part?.type === 'text' && part?.text) {
-              const normalizedPartText = unwrapUserQueryText(part.text, role);
-              if (!normalizedPartText) {
+              const { text: normalizedPartText, images } = extractUserTextAndImages(part.text, role);
+              if (!normalizedPartText && !images) {
                 continue;
               }
               messages.push(createNormalizedMessage({
@@ -514,6 +553,7 @@ export class CursorSessionsProvider implements IProviderSessions {
                 kind: 'text',
                 role,
                 content: normalizedPartText,
+                images,
                 sequence: blob.sequence,
                 rowid: blob.rowid,
               }));
@@ -553,8 +593,8 @@ export class CursorSessionsProvider implements IProviderSessions {
           && content.content.trim()
           && !isInternalCursorText(content.content)
         ) {
-          const normalizedText = unwrapUserQueryText(content.content, role);
-          if (!normalizedText) {
+          const { text: normalizedText, images } = extractUserTextAndImages(content.content, role);
+          if (!normalizedText && !images) {
             continue;
           }
           messages.push(createNormalizedMessage({
@@ -565,6 +605,7 @@ export class CursorSessionsProvider implements IProviderSessions {
             kind: 'text',
             role,
             content: normalizedText,
+            images,
             sequence: blob.sequence,
             rowid: blob.rowid,
           }));

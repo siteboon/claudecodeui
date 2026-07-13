@@ -1,9 +1,16 @@
-export type LLMProvider = 'claude' | 'cursor' | 'codex' | 'gemini' | 'opencode';
+export type LLMProvider = 'claude' | 'cursor' | 'codex' | 'opencode';
 
 export type ProviderModelOption = {
   value: string;
   label: string;
   description?: string;
+  effort?: {
+    default?: string;
+    values: {
+      value: string;
+      description?: string;
+    }[];
+  };
 };
 
 export type ProviderModelsDefinition = {

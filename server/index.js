@@ -5,8 +5,10 @@ import fs, { promises as fsPromises } from 'fs';
 import path from 'path';
 import os from 'os';
 import http from 'http';
-import { spawn } from 'child_process';
 
+// cross-spawn is a drop-in for child_process.spawn that resolves .cmd
+// shims/PATHEXT on Windows and delegates to the native spawn elsewhere.
+import spawn from 'cross-spawn';
 import express from 'express';
 import cors from 'cors';
 import mime from 'mime-types';
@@ -34,14 +36,9 @@ import {
     abortCodexSession,
 } from './openai-codex.js';
 import {
-    spawnGemini,
-    abortGeminiSession,
-} from './gemini-cli.js';
-import {
     spawnOpenCode,
     abortOpenCodeSession,
 } from './opencode-cli.js';
-import sessionManager from './sessionManager.js';
 import {
     stripAnsiSequences,
     normalizeDetectedUrl,
@@ -59,11 +56,11 @@ import agentRoutes from './routes/agent.js';
 import projectModuleRoutes from './modules/projects/projects.routes.js';
 import notificationRoutes from './modules/notifications/notifications.routes.js';
 import userRoutes from './routes/user.js';
-import geminiRoutes from './routes/gemini.js';
 import pluginsRoutes from './routes/plugins.js';
 import providerRoutes from './modules/providers/provider.routes.js';
 import voiceRoutes from './voice-proxy.js';
 import browserUseRoutes from './modules/browser-use/browser-use.routes.js';
+import { assetsRoutes } from './modules/assets/index.js';
 import browserUseMcpRoutes from './modules/browser-use/browser-use-mcp.routes.js';
 import { browserUseService } from './modules/browser-use/browser-use.service.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
@@ -116,14 +113,12 @@ const wss = createWebSocketServer(server, {
             claude: queryClaudeSDK,
             cursor: spawnCursor,
             codex: queryCodex,
-            gemini: spawnGemini,
             opencode: spawnOpenCode,
         },
         abortFns: {
             claude: abortClaudeSDKSession,
             cursor: abortCursorSession,
             codex: abortCodexSession,
-            gemini: abortGeminiSession,
             opencode: abortOpenCodeSession,
         },
         resolveToolApproval,
@@ -132,14 +127,11 @@ const wss = createWebSocketServer(server, {
     shell: {
         resolveProviderSessionId: (sessionId, provider) => {
             const dbSession = sessionsDb.getSessionById(sessionId);
-            const legacyGeminiSession =
-                provider === 'gemini' ? sessionManager.getSession(sessionId) : null;
-
             if (dbSession) {
-                return dbSession.provider_session_id ?? legacyGeminiSession?.cliSessionId ?? null;
+                return dbSession.provider_session_id ?? null;
             }
 
-            return legacyGeminiSession?.cliSessionId;
+            return null;
         },
         stripAnsiSequences,
         normalizeDetectedUrl,
@@ -185,6 +177,9 @@ app.use('/api/auth', authRoutes);
 // Projects API Routes (protected)
 app.use('/api/projects', authenticateToken, projectModuleRoutes);
 
+// Chat image asset upload/serving (global ~/.cloudcli/assets store, protected)
+app.use('/api/assets', authenticateToken, assetsRoutes);
+
 // Git API Routes (protected)
 app.use('/api/git', authenticateToken, gitRoutes);
 
@@ -207,9 +202,6 @@ app.use('/api/notifications', authenticateToken, notificationRoutes);
 
 // User API Routes (protected)
 app.use('/api/user', authenticateToken, userRoutes);
-
-// Gemini API Routes (protected)
-app.use('/api/gemini', authenticateToken, geminiRoutes);
 
 // Plugins API Routes (protected)
 app.use('/api/plugins', authenticateToken, pluginsRoutes);
@@ -1072,92 +1064,8 @@ const uploadFilesHandler = async (req, res) => {
 
 app.post('/api/projects/:projectId/files/upload', authenticateToken, uploadFilesHandler);
 
-// Image upload endpoint. Accepts the DB-assigned `projectId` (not a folder name)
-// but the current implementation doesn't need to touch the project directory,
-// so we just leave the param rename for consistency with the rest of the API.
-app.post('/api/projects/:projectId/upload-images', authenticateToken, async (req, res) => {
-    try {
-        const multer = (await import('multer')).default;
-        const path = (await import('path')).default;
-        const fs = (await import('fs')).promises;
-        const os = (await import('os')).default;
-
-        // Configure multer for image uploads
-        const storage = multer.diskStorage({
-            destination: async (req, file, cb) => {
-                const uploadDir = path.join(os.tmpdir(), 'claude-ui-uploads', String(req.user.id));
-                await fs.mkdir(uploadDir, { recursive: true });
-                cb(null, uploadDir);
-            },
-            filename: (req, file, cb) => {
-                const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-                const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
-                cb(null, uniqueSuffix + '-' + sanitizedName);
-            }
-        });
-
-        const fileFilter = (req, file, cb) => {
-            const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
-            if (allowedMimes.includes(file.mimetype)) {
-                cb(null, true);
-            } else {
-                cb(new Error('Invalid file type. Only JPEG, PNG, GIF, WebP, and SVG are allowed.'));
-            }
-        };
-
-        const upload = multer({
-            storage,
-            fileFilter,
-            limits: {
-                fileSize: 5 * 1024 * 1024, // 5MB
-                files: 5
-            }
-        });
-
-        // Handle multipart form data
-        upload.array('images', 5)(req, res, async (err) => {
-            if (err) {
-                return res.status(400).json({ error: err.message });
-            }
-
-            if (!req.files || req.files.length === 0) {
-                return res.status(400).json({ error: 'No image files provided' });
-            }
-
-            try {
-                // Process uploaded images
-                const processedImages = await Promise.all(
-                    req.files.map(async (file) => {
-                        // Read file and convert to base64
-                        const buffer = await fs.readFile(file.path);
-                        const base64 = buffer.toString('base64');
-                        const mimeType = file.mimetype;
-
-                        // Clean up temp file immediately
-                        await fs.unlink(file.path);
-
-                        return {
-                            name: file.originalname,
-                            data: `data:${mimeType};base64,${base64}`,
-                            size: file.size,
-                            mimeType: mimeType
-                        };
-                    })
-                );
-
-                res.json({ images: processedImages });
-            } catch (error) {
-                console.error('Error processing images:', error);
-                // Clean up any remaining files
-                await Promise.all(req.files.map(f => fs.unlink(f.path).catch(() => { })));
-                res.status(500).json({ error: 'Failed to process images' });
-            }
-        });
-    } catch (error) {
-        console.error('Error in image upload endpoint:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
+// Chat image uploads moved to POST /api/assets/images (server/modules/assets),
+// which stores them in the global ~/.cloudcli/assets folder.
 
 // Get token usage for a specific session. `projectId` is the DB primary key;
 // the Claude branch below resolves it to an absolute path via the DB.
@@ -1194,62 +1102,6 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
                 breakdown: { input: 0, output: 0 },
                 unsupported: true,
                 message: 'Token usage tracking not available for Cursor sessions'
-            });
-        }
-
-        if (provider === 'gemini') {
-            const session = sessionsDb.getSessionById(safeSessionId);
-            const sessionFilePath = session?.jsonl_path;
-            if (!sessionFilePath) {
-                return res.json({
-                    used: 0,
-                    inputTokens: 0,
-                    outputTokens: 0,
-                    breakdown: { input: 0, output: 0 },
-                    unsupported: true,
-                    message: 'Token usage tracking not available for this Gemini session'
-                });
-            }
-
-            let fileContent;
-            try {
-                fileContent = await fsPromises.readFile(sessionFilePath, 'utf8');
-            } catch (error) {
-                if (error.code === 'ENOENT') {
-                    return res.status(404).json({ error: 'Session file not found', path: sessionFilePath });
-                }
-                throw error;
-            }
-
-            const lines = fileContent.trim().split('\n');
-            let inputTokens = 0;
-            let outputTokens = 0;
-            let totalTokens = 0;
-
-            for (let i = lines.length - 1; i >= 0; i--) {
-                try {
-                    const entry = JSON.parse(lines[i]);
-                    if (!entry.tokens || typeof entry.tokens !== 'object') {
-                        continue;
-                    }
-
-                    inputTokens = Number(entry.tokens.input || 0);
-                    outputTokens = Number(entry.tokens.output || 0);
-                    totalTokens = Number(entry.tokens.total || inputTokens + outputTokens || 0);
-                    break;
-                } catch {
-                    continue;
-                }
-            }
-
-            return res.json({
-                used: totalTokens,
-                inputTokens,
-                outputTokens,
-                breakdown: {
-                    input: inputTokens,
-                    output: outputTokens
-                }
             });
         }
 

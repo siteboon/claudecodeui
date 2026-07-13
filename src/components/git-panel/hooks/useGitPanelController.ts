@@ -495,6 +495,71 @@ export function useGitPanelController({
     [fetchGitStatus, selectedProject],
   );
 
+  const stageFiles = useCallback(
+    async (files: string[]) => {
+      if (!selectedProject || files.length === 0) {
+        return false;
+      }
+
+      try {
+        const response = await fetchWithAuth('/api/git/stage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            project: selectedProject.projectId,
+            files,
+          }),
+        });
+
+        const data = await readJson<GitOperationResponse>(response);
+        if (!data.success) {
+          setOperationError(data.error ?? 'Stage failed');
+          return false;
+        }
+
+        // Refresh so the Staged section re-syncs from the real index.
+        await fetchGitStatus();
+        return true;
+      } catch (error) {
+        setOperationError(error instanceof Error ? error.message : 'Stage failed');
+        return false;
+      }
+    },
+    [fetchGitStatus, selectedProject],
+  );
+
+  const unstageFiles = useCallback(
+    async (files: string[]) => {
+      if (!selectedProject || files.length === 0) {
+        return false;
+      }
+
+      try {
+        const response = await fetchWithAuth('/api/git/unstage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            project: selectedProject.projectId,
+            files,
+          }),
+        });
+
+        const data = await readJson<GitOperationResponse>(response);
+        if (!data.success) {
+          setOperationError(data.error ?? 'Unstage failed');
+          return false;
+        }
+
+        await fetchGitStatus();
+        return true;
+      } catch (error) {
+        setOperationError(error instanceof Error ? error.message : 'Unstage failed');
+        return false;
+      }
+    },
+    [fetchGitStatus, selectedProject],
+  );
+
   const fetchRecentCommits = useCallback(async () => {
     if (!selectedProject) {
       return;
@@ -744,6 +809,8 @@ export function useGitPanelController({
     handlePublish,
     discardChanges,
     deleteUntrackedFile,
+    stageFiles,
+    unstageFiles,
     fetchCommitDiff,
     generateCommitMessage,
     commitChanges,

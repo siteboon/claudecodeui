@@ -17,7 +17,6 @@ import ChatMessagesPane from './subcomponents/ChatMessagesPane';
 import ChatComposer from './subcomponents/ChatComposer';
 import CommandResultModal from './subcomponents/CommandResultModal';
 
-
 function ChatInterface({
   selectedProject,
   selectedSession,
@@ -70,8 +69,8 @@ function ChatInterface({
     setClaudeModel,
     codexModel,
     setCodexModel,
-    geminiModel,
-    setGeminiModel,
+    currentProviderEffort,
+    currentProviderEffortOptions,
     opencodeModel,
     setOpenCodeModel,
     permissionMode,
@@ -84,6 +83,8 @@ function ChatInterface({
     providerModelsRefreshing,
     hardRefreshProviderModels,
     selectProviderModel,
+    setStoredProviderEffort,
+    resolvePermissionModeForProvider,
   } = useChatProviderState({
     selectedSession,
     selectedProject,
@@ -171,6 +172,9 @@ function ChatInterface({
     isDragActive,
     openImagePicker,
     handleSubmit,
+    queuedDraft,
+    editQueuedDraft,
+    deleteQueuedDraft,
     handleVoiceTranscript,
     handleInputChange,
     handleKeyDown,
@@ -197,7 +201,7 @@ function ChatInterface({
     cursorModel,
     claudeModel,
     codexModel,
-    geminiModel,
+    currentProviderEffort,
     opencodeModel,
     isLoading: isProcessing,
     canAbortSession,
@@ -213,6 +217,7 @@ function ChatInterface({
     addMessage,
     setIsUserScrolledUp,
     setPendingPermissionRequests,
+    resolvePermissionModeForProvider,
   });
 
   // On WebSocket reconnect, re-fetch the current session's messages from the
@@ -281,15 +286,18 @@ function ChatInterface({
     handlePermissionDecision,
   }), [pendingPermissionRequests, handlePermissionDecision]);
 
+  // Mirrors ChatComposer's own visibility check so the message pane can
+  // reserve enough bottom space to keep the floating status tab from
+  // overlapping the last message.
+  const hasActivityIndicator = Boolean(sessionActivity && pendingPermissionRequests.length === 0);
+
   if (!selectedProject) {
     const selectedProviderLabel =
       provider === 'cursor'
         ? t('messageTypes.cursor')
         : provider === 'codex'
           ? t('messageTypes.codex')
-          : provider === 'gemini'
-            ? t('messageTypes.gemini')
-            : provider === 'opencode'
+          : provider === 'opencode'
               ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
             : t('messageTypes.claude');
 
@@ -316,6 +324,7 @@ function ChatInterface({
           onTouchMove={handleScroll}
           isLoadingSessionMessages={isLoadingSessionMessages}
           isProcessing={isProcessing}
+          hasActivityIndicator={hasActivityIndicator}
           chatMessages={chatMessages}
           selectedSession={selectedSession}
           currentSessionId={currentSessionId}
@@ -328,8 +337,6 @@ function ChatInterface({
           setCursorModel={setCursorModel}
           codexModel={codexModel}
           setCodexModel={setCodexModel}
-          geminiModel={geminiModel}
-          setGeminiModel={setGeminiModel}
           opencodeModel={opencodeModel}
           setOpenCodeModel={setOpenCodeModel}
           providerModelCatalog={providerModelCatalog}
@@ -383,6 +390,9 @@ function ChatInterface({
           onAbortSession={handleAbortSession}
           permissionMode={permissionMode}
           onModeSwitch={cyclePermissionMode}
+          effort={currentProviderEffort}
+          availableEffortOptions={currentProviderEffortOptions}
+          onSelectEffort={(nextEffort) => setStoredProviderEffort(provider, nextEffort)}
           tokenBudget={tokenBudget}
           onShowTokenUsage={showCostModal}
           slashCommandsCount={slashCommandsCount}
@@ -391,6 +401,9 @@ function ChatInterface({
           onClearInput={handleClearInput}
           onSubmit={handleSubmit}
           isDragActive={isDragActive}
+          queuedDraft={queuedDraft}
+          onEditQueuedDraft={editQueuedDraft}
+          onDeleteQueuedDraft={deleteQueuedDraft}
           attachedImages={attachedImages}
           onRemoveImage={(index) =>
             setAttachedImages((previous) =>
@@ -431,9 +444,7 @@ function ChatInterface({
                 ? t('messageTypes.cursor')
                 : provider === 'codex'
                   ? t('messageTypes.codex')
-                  : provider === 'gemini'
-                    ? t('messageTypes.gemini')
-                    : provider === 'opencode'
+                  : provider === 'opencode'
                       ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
                     : t('messageTypes.claude'),
           })}

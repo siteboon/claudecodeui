@@ -83,6 +83,9 @@ function chatMessageToNormalized(
     kind: 'text',
     role: msg.type === 'user' ? 'user' : 'assistant',
     content: msg.content || '',
+    // Keep attachment references on the local echo so the user bubble shows
+    // its images immediately, before the server-backed copy replaces it.
+    images: Array.isArray(msg.images) && msg.images.length > 0 ? msg.images : undefined,
   } as NormalizedMessage;
 }
 

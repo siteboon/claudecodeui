@@ -10,8 +10,12 @@ export type Provider = LLMProvider;
 export type PermissionMode = 'default' | 'acceptEdits' | 'auto' | 'bypassPermissions' | 'plan';
 
 export interface ChatImage {
-  data: string;
-  name: string;
+  /** Inline data URL (Claude history stores attachments as base64). */
+  data?: string;
+  /** Project-relative path under `.cloudcli/assets` served via the files API. */
+  path?: string;
+  name?: string;
+  mimeType?: string;
 }
 
 export interface ToolResult {

@@ -1,7 +1,6 @@
 import { access, readdir } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
 
 import crossSpawn from 'cross-spawn';
 
@@ -447,11 +446,6 @@ export const CURSOR_FALLBACK_MODELS: ProviderModelsDefinition = {
       description: "GPT-5.2 Extra High Fast",
     },
     {
-      value: "gemini-3.1-pro",
-      label: "gemini-3.1-pro",
-      description: "Gemini 3.1 Pro",
-    },
-    {
       value: "gpt-5.4-mini-none",
       label: "gpt-5.4-mini-none",
       description: "GPT-5.4 Mini None",
@@ -532,16 +526,6 @@ export const CURSOR_FALLBACK_MODELS: ProviderModelsDefinition = {
       description: "GPT-5.1 High",
     },
     {
-      value: "gemini-3-flash",
-      label: "gemini-3-flash",
-      description: "Gemini 3 Flash",
-    },
-    {
-      value: "gemini-3.5-flash",
-      label: "gemini-3.5-flash",
-      description: "Gemini 3.5 Flash",
-    },
-    {
       value: "gpt-5.1-codex-mini-low",
       label: "gpt-5.1-codex-mini-low",
       description: "Codex 5.1 Mini Low",
@@ -589,7 +573,9 @@ type CursorModelRow = {
 
 const CURSOR_MODELS_TIMEOUT_MS = 10_000;
 const CURSOR_CHATS_ROOT = path.join(os.homedir(), '.cursor', 'chats');
-const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
+// cross-spawn resolves .cmd shims/PATHEXT on Windows and delegates to
+// child_process.spawn everywhere else.
+const spawnFunction = crossSpawn;
 const ANSI_PATTERN = new RegExp(
   // eslint-disable-next-line no-control-regex
   '[\\u001B\\u009B][[\\]()#;?]*(?:'

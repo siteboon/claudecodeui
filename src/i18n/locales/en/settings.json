@@ -349,9 +349,6 @@
       "codex": {
         "description": "OpenAI Codex AI assistant"
       },
-      "gemini": {
-        "description": "Google Gemini AI assistant"
-      },
       "opencode": {
         "description": "OpenCode CLI assistant"
       }

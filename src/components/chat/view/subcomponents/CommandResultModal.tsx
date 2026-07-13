@@ -61,7 +61,6 @@ const PROVIDER_LABELS: Record<string, string> = {
   claude: 'Claude',
   cursor: 'Cursor',
   codex: 'Codex',
-  gemini: 'Gemini',
   opencode: 'OpenCode',
 };
 
@@ -263,7 +262,6 @@ function ModelsContent({
     const availableModels = Array.isArray(data?.availableModels) ? data.availableModels : [];
     return availableModels.map((model) => ({ value: model, label: model }));
   }, [data, liveDefinition]);
-
   const filteredOptions = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     if (!normalized) {
