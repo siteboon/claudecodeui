@@ -62,6 +62,9 @@ const X11VNC_LIB_DIR = process.env.CLOUDCLI_BROWSER_USE_X11VNC_LIB_DIR || path.j
 const X11VNC_EXTRA_LIB_DIR = process.env.CLOUDCLI_BROWSER_USE_X11VNC_EXTRA_LIB_DIR || path.join(RUNTIME_ROOT, 'rootfs/lib/x86_64-linux-gnu');
 const LOG_RUNTIME_PROCESS_OUTPUT = process.env.CLOUDCLI_BROWSER_USE_RUNTIME_LOGS === 'true';
 const RUNTIME_PROCESS_SHUTDOWN_TIMEOUT_MS = 1_500;
+// Camoufox 135 is compatible with Playwright 1.51's Firefox protocol.
+// Later Playwright versions crash when Camoufox emits certain WebSocket events.
+const PLAYWRIGHT_RUNTIME_PACKAGE = 'playwright@1.51.1';
 
 function getRuntime(): 'cloud' | 'local' {
   return IS_PLATFORM ? 'cloud' : 'local';
@@ -573,8 +576,8 @@ async function installRuntime(): Promise<{ success: boolean; message: string }> 
   runtimeProbeCache = null;
   installPromise = (async () => {
     try {
-      lastInstallMessage = 'Installing Playwright package...';
-      await runCommand(npmCommand, ['install', '--no-save', '--no-package-lock', 'playwright']);
+      lastInstallMessage = 'Installing compatible Playwright package...';
+      await runCommand(npmCommand, ['install', '--no-save', '--no-package-lock', PLAYWRIGHT_RUNTIME_PACKAGE]);
 
       if (process.platform === 'linux') {
         lastInstallMessage = 'Installing Chromium system dependencies...';
