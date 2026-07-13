@@ -1,7 +1,8 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, session, shell } from 'electron';
-import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import spawn from 'cross-spawn';
 
 import { CloudController } from './cloud.js';
 import { DesktopWindowManager } from './desktopWindow.js';

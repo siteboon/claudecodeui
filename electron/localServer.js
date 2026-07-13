@@ -1,9 +1,10 @@
-import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import http from 'node:http';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
+
+import spawn from 'cross-spawn';
 
 import { ServerInstaller } from './serverInstaller.js';
 

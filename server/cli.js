@@ -17,6 +17,9 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+
+import spawn from 'cross-spawn';
+
 import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
 
 const __dirname = getModuleDir(import.meta.url);
@@ -370,7 +373,7 @@ Advanced usage:
 }
 
 async function sandboxCommand(args) {
-    const { execFileSync, spawn: spawnProcess } = await import('child_process');
+    const { execFileSync } = await import('child_process');
 
     // Safe execution — uses execFileSync (no shell) to prevent injection
     const sbx = (subcmd, opts = {}) => {
@@ -446,7 +449,7 @@ async function sandboxCommand(args) {
                 process.exit(1);
             }
             console.log(`\n${c.info('▶')} Starting sandbox ${c.bright(opts.name)}...`);
-            const restartRun = spawnProcess('sbx', ['run', opts.name], {
+            const restartRun = spawn('sbx', ['run', opts.name], {
                 detached: true,
                 stdio: ['ignore', 'ignore', 'ignore'],
             });
@@ -525,7 +528,7 @@ async function sandboxCommand(args) {
             // sbx run creates the sandbox (or reconnects) AND holds an active session,
             // which prevents the sandbox from auto-stopping.
             console.log(`\n${c.info('▶')} Creating sandbox ${c.bright(opts.name)}...`);
-            const bgRun = spawnProcess('sbx', [
+            const bgRun = spawn('sbx', [
                 'run', '--template', opts.template, '--name', opts.name, opts.agent, workspace,
             ], {
                 detached: true,

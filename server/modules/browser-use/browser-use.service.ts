@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import net from 'node:net';

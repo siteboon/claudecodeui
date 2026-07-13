@@ -1,4 +1,4 @@
-import type { spawn } from 'node:child_process';
+import type spawn from 'cross-spawn';
 
 export type BrowserUseRuntime = 'cloud' | 'local';
 export type BrowserUseBackend = 'playwright' | 'camoufox-vnc';
