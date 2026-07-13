@@ -43,6 +43,7 @@ type ShellWebSocketDependencies = {
   normalizeDetectedUrl: (url: string) => string | null;
   extractUrlsFromText: (content: string) => string[];
   shouldAutoOpenUrlFromOutput: (content: string) => boolean;
+  spawnPty?: typeof pty.spawn;
 };
 
 /**
@@ -220,7 +221,8 @@ function prioritizeUserNpmGlobalBin(env: NodeJS.ProcessEnv): { key: string; valu
 }
 
 /**
- * Handles websocket connections used by the standalone shell terminal UI.
+ * Used by this module's websocket gateway to connect the standalone Shell UI
+ * to a retained PTY while keeping process lifecycle ownership on the server.
  */
 export function handleShellConnection(
   ws: WebSocket,
@@ -284,6 +286,7 @@ export function handleShellConnection(
           shellProcess = existingSession.pty;
           if (existingSession.timeoutId) {
             clearTimeout(existingSession.timeoutId);
+            existingSession.timeoutId = null;
           }
 
           ws.send(
@@ -334,7 +337,7 @@ export function handleShellConnection(
         const termRows = readNumber(data.rows, 24);
         const prioritizedPath = prioritizeUserNpmGlobalBin(process.env);
 
-        shellProcess = pty.spawn(shell, shellArgs, {
+        shellProcess = (dependencies.spawnPty ?? pty.spawn)(shell, shellArgs, {
           name: 'xterm-256color',
           cols: termCols,
           rows: termRows,
@@ -522,9 +525,20 @@ export function handleShellConnection(
       return;
     }
 
+    // Mobile networks can deliver an old socket's close after its replacement
+    // has attached. Only the socket that currently owns the PTY may detach it.
+    if (session.ws !== ws) {
+      return;
+    }
+
     session.ws = null;
+    if (session.timeoutId) {
+      clearTimeout(session.timeoutId);
+    }
     session.timeoutId = setTimeout(() => {
-      if (ptySessionsMap.get(ptySessionKey as string) !== session) {
+      // A reconnect may win just as this timer becomes runnable. Re-check the
+      // active socket so a queued cleanup can never kill a reattached PTY.
+      if (ptySessionsMap.get(ptySessionKey as string) !== session || session.ws !== null) {
         return;
       }
 
