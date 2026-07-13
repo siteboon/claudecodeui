@@ -105,8 +105,12 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   const connect = useCallback(() => {
     if (unmountedRef.current) return; // Prevent connection if unmounted
     try {
-      // Construct WebSocket URL
-      const wsUrl = buildWebSocketUrl(token);
+      // Read the freshest token from localStorage (authenticatedFetch updates it
+      // on an X-Refreshed-Token) so a reconnect uses the refreshed token rather
+      // than a stale in-memory one. Mirrors the shell-WS / file-upload paths.
+      const freshToken =
+        (typeof localStorage !== 'undefined' && localStorage.getItem('auth-token')) || token;
+      const wsUrl = buildWebSocketUrl(freshToken);
 
       if (!wsUrl) return console.warn('No authentication token found for WebSocket connection');
 
