@@ -6,6 +6,7 @@ import { spawn } from 'cross-spawn';
 import { rgPath } from '@vscode/ripgrep';
 
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
+import { buildChildProcessEnv } from '@/utils/childProcessEnv.js';
 
 type AnyRecord = Record<string, any>;
 type SearchableProvider = 'claude' | 'codex';
@@ -586,6 +587,7 @@ async function runRipgrepFilesWithMatches(
     const rg = spawn(rgPath, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
+      env: buildChildProcessEnv(),
     });
 
     const stdoutChunks: Buffer[] = [];

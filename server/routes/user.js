@@ -4,12 +4,13 @@ import spawn from 'cross-spawn';
 import { userDb } from '../modules/database/index.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { getSystemGitConfig } from '../utils/gitConfig.js';
+import { buildChildProcessEnv } from '../utils/childProcessEnv.js';
 
 const router = express.Router();
 
 function spawnAsync(command, args, options = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { ...options, shell: false });
+    const child = spawn(command, args, { ...options, env: buildChildProcessEnv(options.env), shell: false });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (data) => { stdout += data.toString(); });

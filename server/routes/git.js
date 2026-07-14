@@ -6,6 +6,7 @@ import { promises as fs } from 'fs';
 import { projectsDb } from '../modules/database/index.js';
 import { queryClaudeSDK } from '../claude-sdk.js';
 import { spawnCursor } from '../cursor-cli.js';
+import { buildChildProcessEnv } from '../utils/childProcessEnv.js';
 
 const router = express.Router();
 const COMMIT_DIFF_CHARACTER_LIMIT = 500_000;
@@ -14,6 +15,7 @@ function spawnAsync(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       ...options,
+      env: buildChildProcessEnv(options.env),
       shell: false,
     });
 

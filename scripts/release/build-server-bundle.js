@@ -5,6 +5,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { buildChildProcessEnv } from '../../server/utils/childProcessEnv.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..', '..');
@@ -129,11 +130,10 @@ await writeServerPackageJson(stageDir);
 console.log('Installing production server dependencies into bundle stage...');
 await run('npm', ['ci', '--omit=dev'], {
   cwd: stageDir,
-  env: {
-    ...process.env,
+  env: buildChildProcessEnv({
     npm_config_audit: 'false',
     npm_config_fund: 'false',
-  },
+  }),
 });
 
 const electronVersion = getElectronVersion();
@@ -143,11 +143,10 @@ const electronRebuild = process.platform === 'win32'
 console.log(`Rebuilding native server dependencies for Electron ${electronVersion} (${arch})...`);
 await run(electronRebuild, ['--version', electronVersion, '--module-dir', stageDir, '--arch', arch, '--force'], {
   cwd: rootDir,
-  env: {
-    ...process.env,
+  env: buildChildProcessEnv({
     npm_config_audit: 'false',
     npm_config_fund: 'false',
-  },
+  }),
 });
 
 if (await pathExists(path.join(stageDir, 'scripts', 'fix-node-pty.js'))) {

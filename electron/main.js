@@ -8,6 +8,7 @@ import { DesktopWindowManager } from './desktopWindow.js';
 import { DesktopNotificationsController } from './desktopNotifications.js';
 import { LocalServerController } from './localServer.js';
 import { TabsController } from './tabs.js';
+import { buildChildProcessEnv } from '../server/utils/childProcessEnv.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -487,6 +488,7 @@ async function openEnvironmentInSsh(environment) {
     spawn('osascript', ['-e', `tell application "Terminal" to do script "${escaped}"`], {
       detached: true,
       stdio: 'ignore',
+      env: buildChildProcessEnv(),
     }).unref();
   } else {
     clipboard.writeText(sshCommand);

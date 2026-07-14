@@ -1,9 +1,11 @@
 // cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
 import spawn from 'cross-spawn';
 
+import { buildChildProcessEnv } from './childProcessEnv.js';
+
 function spawnAsync(command, args) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { shell: false });
+    const child = spawn(command, args, { shell: false, env: buildChildProcessEnv() });
     let stdout = '';
     child.stdout.on('data', (data) => { stdout += data.toString(); });
     child.on('error', (error) => { reject(error); });

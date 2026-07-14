@@ -18,6 +18,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
+import { buildChildProcessEnv } from './utils/childProcessEnv.js';
 
 const __dirname = getModuleDir(import.meta.url);
 // The CLI is compiled into dist-server/server, but it still needs to read the top-level
@@ -210,7 +211,7 @@ function isNewerVersion(v1, v2) {
 async function checkForUpdates(silent = false) {
     try {
         const { execSync } = await import('child_process');
-        const latestVersion = execSync('npm show @cloudcli-ai/cloudcli version', { encoding: 'utf8' }).trim();
+        const latestVersion = execSync('npm show @cloudcli-ai/cloudcli version', { encoding: 'utf8', env: buildChildProcessEnv() }).trim();
         const currentVersion = packageJson.version;
 
         if (isNewerVersion(latestVersion, currentVersion)) {
@@ -243,7 +244,7 @@ async function updatePackage() {
         }
 
         console.log(`${c.info('[INFO]')} Updating from ${currentVersion} to ${latestVersion}...`);
-        execSync('npm update -g @cloudcli-ai/cloudcli', { stdio: 'inherit' });
+        execSync('npm update -g @cloudcli-ai/cloudcli', { stdio: 'inherit', env: buildChildProcessEnv() });
         console.log(`${c.ok('[OK]')} Update complete! Restart cloudcli to use the new version.`);
     } catch (e) {
         console.error(`${c.error('[ERROR]')} Update failed: ${e.message}`);
@@ -377,6 +378,7 @@ async function sandboxCommand(args) {
         const result = execFileSync('sbx', subcmd, {
             encoding: 'utf8',
             stdio: opts.inherit ? 'inherit' : 'pipe',
+            env: buildChildProcessEnv(),
         });
         return result || '';
     };

@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import crossSpawn from 'cross-spawn';
 
+import { buildChildProcessEnv } from '@/utils/childProcessEnv.js';
 import type { IProviderModels } from '@/shared/interfaces.js';
 import type {
   ProviderChangeActiveModelInput,
@@ -633,7 +634,7 @@ const parseModelsOutput = (text: string): CursorModelRow[] => {
 
 const runCursorListModels = (): Promise<string> => new Promise((resolve, reject) => {
   const cursorProcess = spawnFunction('cursor-agent', ['--list-models'], {
-    env: { ...process.env },
+    env: buildChildProcessEnv(),
   });
 
   let stdout = '';

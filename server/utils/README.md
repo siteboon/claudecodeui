@@ -35,11 +35,35 @@ env: buildChildProcessEnv({ TERM: 'xterm-256color' })
 | `server/cursor-cli.js` | Cursor agent sessions |
 | `server/opencode-cli.js` | OpenCode agent sessions |
 | `server/index.js` | Self-update (`npm install` / `git pull`) |
-| `server/routes/taskmaster.js` | `task-master` init and PRD-parsing subprocesses |
+| `server/routes/taskmaster.js` | `task-master` install check, version, and PRD-parsing subprocesses |
 | `server/utils/commandParser.js` | Allowlisted user-invoked commands |
-| `server/utils/plugin-loader.js` | Plugin `npm install` and `npm run build` |
+| `server/utils/plugin-loader.js` | Plugin `npm install`/`npm run build` and git clone/pull |
 | `server/modules/browser-use/browser-use.service.ts` | browser-use install/runtime commands |
 | `server/modules/websocket/services/shell-websocket.service.ts` | Interactive terminal (PTY) shell sessions |
+| `server/utils/gitConfig.js` | System git config reads |
+| `server/routes/git.js` | Git operations issued from the Git panel |
+| `server/routes/user.js` | Per-user git subprocess helper |
+| `server/routes/agent.js` | Git remote/log/clone/checkout/push for the external agent API |
+| `server/modules/projects/services/project-clone.service.ts` | `git clone` for new projects |
+| `server/shared/claude-cli-path.ts` | Windows Claude CLI path resolution |
+| `server/modules/providers/list/claude/claude-auth.provider.ts` | Claude CLI install check |
+| `server/modules/providers/list/codex/codex-auth.provider.ts` | Codex CLI install check |
+| `server/modules/providers/list/cursor/cursor-auth.provider.ts` | Cursor CLI install check and status |
+| `server/modules/providers/list/cursor/cursor-models.provider.ts` | Cursor model listing |
+| `server/modules/providers/list/opencode/opencode-auth.provider.ts` | OpenCode CLI install check |
+| `server/modules/providers/list/opencode/opencode-models.provider.ts` | OpenCode model listing |
+| `server/modules/providers/services/session-conversations-search.service.ts` | ripgrep session search |
+| `electron/localServer.js` | Owned local server process |
+| `electron/main.js` | SSH terminal launch (macOS) |
+| `electron/serverInstaller.js` | Server bundle extraction |
+| `scripts/release/build-server-bundle.js` | Release bundle dependency install/rebuild |
+
+**Total known sites: 48** (16 fixed prior to this audit + 32 found in a
+full audit of every `spawn`/`exec`/`execSync`/`execFile*` call in
+`server/`, `electron/`, and `scripts/`). That audit was more thorough
+than the first pass, but per-site verification status still varies —
+treat the PR description's table as the source of truth for individual
+site status, not this summary count.
 
 ## Note on plugin-process-manager.js
 

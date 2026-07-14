@@ -8,6 +8,7 @@ import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
 import type { IProviderAuth } from '@/shared/interfaces.js';
 import type { ProviderAuthStatus } from '@/shared/types.js';
 import { readObjectRecord, readOptionalString } from '@/shared/utils.js';
+import { buildChildProcessEnv } from '@/utils/childProcessEnv.js';
 
 type ClaudeCredentialsStatus = {
   authenticated: boolean;
@@ -27,7 +28,7 @@ export class ClaudeProviderAuth implements IProviderAuth {
   private checkInstalled(): boolean {
     const cliPath = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH);
     try {
-      spawn.sync(cliPath, ['--version'], { stdio: 'ignore', timeout: 5000 });
+      spawn.sync(cliPath, ['--version'], { stdio: 'ignore', timeout: 5000, env: buildChildProcessEnv() });
       return true;
     } catch {
       return false;

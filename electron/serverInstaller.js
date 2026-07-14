@@ -6,6 +6,8 @@ import https from 'node:https';
 import os from 'node:os';
 import path from 'node:path';
 
+import { buildChildProcessEnv } from '../server/utils/childProcessEnv.js';
+
 /**
  * Installs the versioned local server runtime used by CloudCLI Desktop.
  *
@@ -232,6 +234,7 @@ export class ServerInstaller {
       const child = spawn('tar', ['-xzf', archivePath, '-C', destDir], {
         stdio: ['ignore', 'ignore', 'pipe'],
         windowsHide: true,
+        env: buildChildProcessEnv(),
       });
       let stderr = '';
       child.stderr?.on('data', (c) => (stderr += c));
@@ -248,6 +251,7 @@ export class ServerInstaller {
       const child = spawn('tar', ['-tzf', archivePath], {
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
+        env: buildChildProcessEnv(),
       });
       let stdout = '';
       let stderr = '';

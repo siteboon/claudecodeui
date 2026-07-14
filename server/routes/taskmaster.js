@@ -44,9 +44,10 @@ const router = express.Router();
 async function checkTaskMasterInstallation() {
     return new Promise((resolve) => {
         // Check if task-master command is available
-        const child = spawn('which', ['task-master'], { 
+        const child = spawn('which', ['task-master'], {
             stdio: ['ignore', 'pipe', 'pipe'],
-            shell: true 
+            shell: true,
+            env: buildChildProcessEnv()
         });
         
         let output = '';
@@ -63,9 +64,10 @@ async function checkTaskMasterInstallation() {
         child.on('close', (code) => {
             if (code === 0 && output.trim()) {
                 // TaskMaster is installed, get version
-                const versionChild = spawn('task-master', ['--version'], { 
+                const versionChild = spawn('task-master', ['--version'], {
                     stdio: ['ignore', 'pipe', 'pipe'],
-                    shell: true 
+                    shell: true,
+                    env: buildChildProcessEnv()
                 });
                 
                 let versionOutput = '';

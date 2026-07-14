@@ -7,6 +7,7 @@ import spawn from 'cross-spawn';
 import type { IProviderAuth } from '@/shared/interfaces.js';
 import type { ProviderAuthStatus } from '@/shared/types.js';
 import { readObjectRecord, readOptionalString } from '@/shared/utils.js';
+import { buildChildProcessEnv } from '@/utils/childProcessEnv.js';
 
 type OpenCodeCredentialsStatus = {
   authenticated: boolean;
@@ -29,7 +30,7 @@ export class OpenCodeProviderAuth implements IProviderAuth {
    */
   private checkInstalled(): boolean {
     try {
-      const result = spawn.sync('opencode', ['--version'], { stdio: 'ignore', timeout: 5000 });
+      const result = spawn.sync('opencode', ['--version'], { stdio: 'ignore', timeout: 5000, env: buildChildProcessEnv() });
       return !result.error && result.status === 0;
     } catch {
       return false;

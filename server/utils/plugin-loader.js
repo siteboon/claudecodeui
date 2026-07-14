@@ -299,6 +299,7 @@ export function installPluginFromGit(url) {
 
     const gitProcess = spawn('git', ['clone', '--depth', '1', '--', url, tempDir], {
       stdio: ['ignore', 'pipe', 'pipe'],
+      env: buildChildProcessEnv(),
     });
 
     let stderr = '';
@@ -383,6 +384,7 @@ export function updatePluginFromGit(name) {
     const gitProcess = spawn('git', ['pull', '--ff-only', '--'], {
       cwd: pluginDir,
       stdio: ['ignore', 'pipe', 'pipe'],
+      env: buildChildProcessEnv(),
     });
 
     let stderr = '';

@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import crossSpawn from 'cross-spawn';
 
+import { buildChildProcessEnv } from '@/utils/childProcessEnv.js';
 import type { IProviderModels } from '@/shared/interfaces.js';
 import type {
   ProviderChangeActiveModelInput,
@@ -386,7 +387,7 @@ const parseOpenCodeSessionModelValue = (rawModel: unknown): string | null => {
 const runOpenCodeModelsCommand = (): Promise<string> => new Promise((resolve, reject) => {
   const openCodeProcess = spawnFunction('opencode', ['models', '--verbose'], {
     cwd: process.cwd(),
-    env: { ...process.env },
+    env: buildChildProcessEnv(),
   });
 
   let stdout = '';

@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { ServerInstaller } from './serverInstaller.js';
+import { buildChildProcessEnv } from '../server/utils/childProcessEnv.js';
 
 const DEFAULT_PORT = 3001;
 const HOST = '127.0.0.1';
@@ -408,14 +409,13 @@ export class LocalServerController {
     this.ownedServerProcess = spawn(runtime.command, [serverEntry], {
       cwd: serverCwd,
       detached: true,
-      env: {
-        ...process.env,
+      env: buildChildProcessEnv({
         ...runtime.env,
         HOST: bindHost,
         SERVER_PORT: String(port),
         NODE_ENV: 'production',
         PATH: getDesktopPath(),
-      },
+      }),
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
     });
