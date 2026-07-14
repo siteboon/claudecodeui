@@ -2,24 +2,28 @@
 
 ## Overview
 
-This app's server process runs with `NODE_ENV=production` in production (correctly, set by its systemd unit). Any child process the server spawns inherits that value by default unless it's explicitly stripped. When `NODE_ENV=production` leaks into `npm`/`npx` invocations, those tools silently skip installing `devDependencies`, which breaks builds, lint, and typecheck in ways that are confusing to debug from the resulting error alone.
+`NODE_ENV=production` commonly ends up in a Node server's own environment — Heroku's Node.js buildpack sets it automatically by default, and it's standard boilerplate in hand-rolled systemd units and Dockerfiles. This app's own code never reads `NODE_ENV` at runtime, but any child process the server spawns inherits whatever's in its environment by default unless explicitly stripped. When `NODE_ENV=production` leaks into `npm`/`npx` invocations specifically, those tools silently skip installing `devDependencies`, breaking builds, lint, and typecheck in ways that are confusing to debug from the resulting error alone. Deployments that never set `NODE_ENV` (e.g. this project's documented bare `pm2 start` production instructions) aren't affected by the underlying issue, and applying this fix is a no-op for them.
 
 ## The problem
 
-Spawning child processes with an unfiltered `{ ...process.env }` spread — or passing `process.env` directly as `env` — carries `NODE_ENV` along with everything else. As of this writing, this same mistake had turned up at 10 spawn sites across the codebase. That count came from tracing the original bug reports, not from an exhaustive audit of every `spawn`/`exec` call in the repo — treat it as a snapshot, not a final tally.
+Spawning child processes with an unfiltered `{ ...process.env }` spread — or passing `process.env` directly as `env` — carries `NODE_ENV` along with everything else. This mistake was found at multiple spawn sites across the codebase, first via a small pass tracing specific bug reports, then via a full audit of every `spawn`/`exec` call in the repo. See "Current usage" below for the current site count and coverage caveats.
 
 ## Usage
 
-Whenever this codebase spawns a child process, build its `env` with `buildChildProcessEnv()` instead of spreading or referencing `process.env` directly:
+Whenever this codebase spawns a child process — via `spawn`, `exec`, `execFile`, `execSync`, `execFileSync`, or any wrapper around them — build its `env` with `buildChildProcessEnv()` instead of spreading or referencing `process.env` directly. This applies regardless of which of Node's child_process functions you're using; the leak isn't specific to `spawn()`.
 
 ```js
-// Don't:
+// Don't, in any of these forms:
 spawn('npm', ['install'], { env: { ...process.env } });
+execSync('git clone ...', { env: process.env });
+execFile('rg', args, { env: { ...process.env, EXTRA: 'value' } });
 
 // Do:
-import { buildChildProcessEnv } from './childProcessEnv.js';
+import { buildChildProcessEnv } from '../utils/childProcessEnv.js'; // adjust to your file's actual relative path
 spawn('npm', ['install'], { env: buildChildProcessEnv() });
 ```
+
+The import path above is only `./childProcessEnv.js` for files already inside `server/utils/` — everywhere else, adjust it to the correct relative path to `server/utils/childProcessEnv.js`.
 
 It returns a copy of `process.env` with `NODE_ENV` removed. Pass an optional object to add or override specific keys on top of the cleaned environment:
 
