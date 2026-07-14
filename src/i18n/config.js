@@ -11,7 +11,6 @@
 
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
-// eslint-disable-next-line import-x/order
 import LanguageDetector from 'i18next-browser-languagedetector';
 
 // Import translation resources
@@ -24,6 +23,20 @@ import enCodeEditor from './locales/en/codeEditor.json';
 // eslint-disable-next-line import-x/order
 import enTasks from './locales/en/tasks.json';
 
+import esESCommon from './locales/es-ES/common.json';
+import esESSettings from './locales/es-ES/settings.json';
+import esESAuth from './locales/es-ES/auth.json';
+import esESSidebar from './locales/es-ES/sidebar.json';
+import esESChat from './locales/es-ES/chat.json';
+import esESCodeEditor from './locales/es-ES/codeEditor.json';
+import esESTasks from './locales/es-ES/tasks.json';
+import es419Common from './locales/es-419/common.json';
+import es419Settings from './locales/es-419/settings.json';
+import es419Auth from './locales/es-419/auth.json';
+import es419Sidebar from './locales/es-419/sidebar.json';
+import es419Chat from './locales/es-419/chat.json';
+import es419CodeEditor from './locales/es-419/codeEditor.json';
+import es419Tasks from './locales/es-419/tasks.json';
 import koCommon from './locales/ko/common.json';
 import koSettings from './locales/ko/settings.json';
 import koAuth from './locales/ko/auth.json';
@@ -73,7 +86,6 @@ import trAuth from './locales/tr/auth.json';
 import trSidebar from './locales/tr/sidebar.json';
 import trChat from './locales/tr/chat.json';
 import trCodeEditor from './locales/tr/codeEditor.json';
-// eslint-disable-next-line import-x/order
 import trTasks from './locales/tr/tasks.json';
 import itCommon from './locales/it/common.json';
 import itSettings from './locales/it/settings.json';
@@ -125,6 +137,24 @@ i18n
         chat: enChat,
         codeEditor: enCodeEditor,
         tasks: enTasks,
+      },
+      'es-ES': {
+        common: esESCommon,
+        settings: esESSettings,
+        auth: esESAuth,
+        sidebar: esESSidebar,
+        chat: esESChat,
+        codeEditor: esESCodeEditor,
+        tasks: esESTasks,
+      },
+      'es-419': {
+        common: es419Common,
+        settings: es419Settings,
+        auth: es419Auth,
+        sidebar: es419Sidebar,
+        chat: es419Chat,
+        codeEditor: es419CodeEditor,
+        tasks: es419Tasks,
       },
       ko: {
         common: koCommon,

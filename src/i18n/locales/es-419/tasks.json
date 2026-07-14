@@ -1,0 +1,142 @@
+{
+  "notConfigured": {
+    "title": "TaskMaster AI no está configurado",
+    "description": "TaskMaster ayuda a dividir proyectos complejos en tareas manejables con asistencia basada en IA",
+    "whatIsTitle": "🎯 ¿Qué es TaskMaster?",
+    "features": {
+      "aiPowered": "Gestión de tareas con IA: divide proyectos complejos en subtareas manejables",
+      "prdTemplates": "Plantillas de PRD: genera tareas a partir de documentos de requisitos del producto",
+      "dependencyTracking": "Seguimiento de dependencias: comprende las relaciones entre tareas y el orden de ejecución",
+      "progressVisualization": "Visualización del progreso: tableros Kanban y análisis detallados de tareas",
+      "cliIntegration": "Integración con CLI: usa comandos de TaskMaster para flujos de trabajo avanzados"
+    },
+    "initializeButton": "Inicializar TaskMaster AI"
+  },
+  "gettingStarted": {
+    "title": "Primeros pasos con TaskMaster",
+    "subtitle": "TaskMaster se inicializó. Esto es lo que debes hacer ahora:",
+    "steps": {
+      "createPRD": {
+        "title": "Crear un documento de requisitos del producto (PRD)",
+        "description": "Explica la idea de tu proyecto y crea un PRD que describa lo que quieres desarrollar.",
+        "addButton": "Agregar PRD",
+        "existingPRDs": "PRD existentes:"
+      },
+      "generateTasks": {
+        "title": "Generar tareas desde el PRD",
+        "description": "Cuando tengas un PRD, pide a tu asistente de IA que lo analice y TaskMaster lo dividirá automáticamente en tareas manejables con detalles de implementación."
+      },
+      "analyzeTasks": {
+        "title": "Analizar y ampliar tareas",
+        "description": "Pide a tu asistente de IA que analice la complejidad de las tareas y las divida en subtareas detalladas para facilitar su implementación."
+      },
+      "startBuilding": {
+        "title": "Comenzar a desarrollar",
+        "description": "Pide a tu asistente de IA que comience a trabajar en las tareas, actualice su estado y agregue otras nuevas a medida que evolucione el proyecto."
+      }
+    },
+    "tip": "💡 Consejo: comienza con un PRD para aprovechar al máximo la generación de tareas con IA de TaskMaster"
+  },
+  "setupModal": {
+    "title": "Configuración de TaskMaster",
+    "subtitle": "CLI interactiva para {{projectName}}",
+    "willStart": "La inicialización de TaskMaster comenzará automáticamente",
+    "completed": "La configuración de TaskMaster terminó. Ya puedes cerrar esta ventana.",
+    "closeButton": "Cerrar",
+    "closeContinueButton": "Cerrar y continuar"
+  },
+  "helpGuide": {
+    "title": "Primeros pasos con TaskMaster",
+    "subtitle": "Tu guía para gestionar tareas de forma productiva",
+    "examples": {
+      "parsePRD": "💬 Ejemplo:\n\"Acabo de inicializar un proyecto nuevo con Claude Task Master. Tengo un PRD en .taskmaster/docs/prd.txt. ¿Puedes ayudarme a analizarlo y configurar las tareas iniciales?\"",
+      "expandTask": "💬 Ejemplo:\n\"La tarea 5 parece compleja. ¿Puedes dividirla en subtareas?\"",
+      "addTask": "💬 Ejemplo:\n\"Agrega una tarea nueva para implementar la carga de imágenes de perfil de usuario mediante Cloudinary e investiga el mejor enfoque.\""
+    },
+    "moreExamples": "Ver más ejemplos y patrones de uso →",
+    "proTips": {
+      "title": "💡 Consejos",
+      "search": "Usa la barra de búsqueda para encontrar tareas específicas rápidamente",
+      "views": "Alterna entre las vistas Kanban, Lista y Cuadrícula con los controles de vista",
+      "filters": "Usa filtros para enfocarte en estados o prioridades de tarea específicos",
+      "details": "Haz clic en cualquier tarea para consultar la información detallada y gestionar las subtareas"
+    },
+    "learnMore": {
+      "title": "📚 Más información",
+      "description": "TaskMaster AI es un sistema avanzado de gestión de tareas creado para desarrolladores. Consulta la documentación y los ejemplos, o contribuye al proyecto.",
+      "githubButton": "Ver en GitHub"
+    }
+  },
+  "search": {
+    "placeholder": "Buscar tareas..."
+  },
+  "filters": {
+    "button": "Filtros",
+    "status": "Estado",
+    "priority": "Prioridad",
+    "sortBy": "Ordenar por",
+    "allStatuses": "Todos los estados",
+    "allPriorities": "Todas las prioridades",
+    "showing": "Mostrando {{filtered}} de {{total}} tareas",
+    "clearFilters": "Borrar filtros"
+  },
+  "sort": {
+    "id": "ID",
+    "status": "Estado",
+    "priority": "Prioridad",
+    "idAsc": "ID (ascendente)",
+    "idDesc": "ID (descendente)",
+    "titleAsc": "Título (A-Z)",
+    "titleDesc": "Título (Z-A)",
+    "statusAsc": "Estado (pendientes primero)",
+    "statusDesc": "Estado (terminadas primero)",
+    "priorityAsc": "Prioridad (alta primero)",
+    "priorityDesc": "Prioridad (baja primero)"
+  },
+  "views": {
+    "kanban": "Vista Kanban",
+    "list": "Vista de lista",
+    "grid": "Vista de cuadrícula"
+  },
+  "kanban": {
+    "pending": "📋 Por hacer",
+    "inProgress": "🚀 En curso",
+    "done": "✅ Terminadas",
+    "blocked": "🚫 Bloqueadas",
+    "deferred": "⏳ Pospuestas",
+    "cancelled": "❌ Canceladas",
+    "noTasksYet": "Aún no hay tareas",
+    "tasksWillAppear": "Las tareas aparecerán aquí",
+    "moveTasksHere": "Mueve aquí las tareas cuando comiencen",
+    "completedTasksHere": "Las tareas terminadas aparecen aquí",
+    "statusTasksHere": "Las tareas con este estado aparecerán aquí"
+  },
+  "buttons": {
+    "help": "Guía de primeros pasos de TaskMaster",
+    "prds": "PRD",
+    "addPRD": "Agregar PRD",
+    "addTask": "Agregar tarea",
+    "createNewPRD": "Crear PRD",
+    "prdsAvailable": "{{count}} PRD disponibles"
+  },
+  "prd": {
+    "modified": "Modificado: {{date}}"
+  },
+  "statuses": {
+    "pending": "Pendiente",
+    "in-progress": "En curso",
+    "done": "Terminada",
+    "blocked": "Bloqueada",
+    "deferred": "Pospuesta",
+    "cancelled": "Cancelada"
+  },
+  "priorities": {
+    "high": "Alta",
+    "medium": "Media",
+    "low": "Baja"
+  },
+  "noMatchingTasks": {
+    "title": "Ninguna tarea coincide con los filtros",
+    "description": "Intenta ajustar la búsqueda o los criterios de filtrado."
+  }
+}

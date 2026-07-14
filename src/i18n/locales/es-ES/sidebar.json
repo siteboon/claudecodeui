@@ -1,0 +1,145 @@
+{
+  "projects": {
+    "title": "Proyectos",
+    "newProject": "Nuevo proyecto",
+    "deleteProject": "Quitar proyecto",
+    "renameProject": "Cambiar nombre del proyecto",
+    "noProjects": "No se han encontrado proyectos",
+    "loadingProjects": "Cargando proyectos...",
+    "searchPlaceholder": "Buscar proyectos...",
+    "projectNamePlaceholder": "Nombre del proyecto",
+    "starred": "Destacados",
+    "all": "Todos",
+    "untitledSession": "Sesión sin título",
+    "newSession": "Nueva sesión",
+    "codexSession": "Sesión de Codex",
+    "fetchingProjects": "Obteniendo tus proyectos y sesiones de Claude",
+    "projects": "proyectos",
+    "noMatchingProjects": "No hay proyectos coincidentes",
+    "tryDifferentSearch": "Prueba a cambiar el término de búsqueda",
+    "runClaudeCli": "Ejecuta Claude CLI en el directorio de un proyecto para empezar"
+  },
+  "app": {
+    "title": "CloudCLI",
+    "subtitle": "Interfaz del asistente de programación con IA"
+  },
+  "sessions": {
+    "title": "Sesiones",
+    "newSession": "Nueva sesión",
+    "deleteSession": "Eliminar sesión",
+    "renameSession": "Cambiar nombre de la sesión",
+    "noSessions": "Aún no hay sesiones",
+    "loadingSessions": "Cargando sesiones...",
+    "unnamed": "Sin nombre",
+    "loading": "Cargando...",
+    "showMore": "Mostrar más sesiones"
+  },
+  "tooltips": {
+    "viewEnvironments": "Ver entornos",
+    "hideSidebar": "Ocultar la barra lateral",
+    "createProject": "Crear un proyecto",
+    "refresh": "Actualizar proyectos y sesiones (Ctrl+R)",
+    "renameProject": "Cambiar nombre del proyecto (F2)",
+    "deleteProject": "Quitar proyecto de la barra lateral (Supr)",
+    "addToFavorites": "Añadir a favoritos",
+    "removeFromFavorites": "Quitar de favoritos",
+    "editSessionName": "Editar manualmente el nombre de la sesión",
+    "deleteSession": "Eliminar esta sesión de forma permanente",
+    "activeSessionIndicator": "Sesión activa recientemente (últimos 10 minutos)",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "clearSearch": "Borrar búsqueda",
+    "openCommandPalette": "Abrir la paleta de comandos",
+    "attentionRequiredIndicator": "La sesión requiere atención"
+  },
+  "navigation": {
+    "chat": "Chat",
+    "files": "Ficheros",
+    "git": "Git",
+    "terminal": "Terminal",
+    "tasks": "Tareas"
+  },
+  "actions": {
+    "refresh": "Actualizar",
+    "settings": "Ajustes",
+    "collapseAll": "Contraer todo",
+    "expandAll": "Expandir todo",
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "delete": "Eliminar",
+    "rename": "Cambiar nombre",
+    "joinCommunity": "Unirse a la comunidad",
+    "reportIssue": "Informar de un problema",
+    "starOnGithub": "Destacar en GitHub"
+  },
+  "branding": {
+    "openSource": "Código abierto"
+  },
+  "status": {
+    "active": "Activa",
+    "inactive": "Inactiva",
+    "thinking": "Pensando...",
+    "error": "Error",
+    "aborted": "Cancelada",
+    "unknown": "Desconocida"
+  },
+  "time": {
+    "justNow": "Ahora mismo",
+    "oneMinuteAgo": "Hace 1 min",
+    "minutesAgo": "Hace {{count}} min",
+    "oneHourAgo": "Hace 1 hora",
+    "hoursAgo": "Hace {{count}} horas",
+    "oneDayAgo": "Hace 1 día",
+    "daysAgo": "Hace {{count}} días"
+  },
+  "messages": {
+    "deleteConfirm": "¿Seguro que quieres eliminarlo?",
+    "renameSuccess": "Se ha cambiado el nombre correctamente",
+    "deleteSuccess": "Se ha eliminado correctamente",
+    "errorOccurred": "Se ha producido un error",
+    "deleteSessionConfirm": "¿Seguro que quieres eliminar esta sesión? Esta acción no se puede deshacer.",
+    "deleteProjectConfirm": "¿Quieres quitar este proyecto de la barra lateral? Los ficheros, las memorias y los datos de sesión no se eliminarán.",
+    "enterProjectPath": "Introduce una ruta de proyecto",
+    "deleteSessionFailed": "No se ha podido eliminar la sesión. Inténtalo de nuevo.",
+    "deleteSessionError": "Error al eliminar la sesión. Inténtalo de nuevo.",
+    "renameSessionFailed": "No se ha podido cambiar el nombre de la sesión. Inténtalo de nuevo.",
+    "renameSessionError": "Error al cambiar el nombre de la sesión. Inténtalo de nuevo.",
+    "deleteProjectFailed": "No se ha podido quitar el proyecto. Inténtalo de nuevo.",
+    "deleteProjectError": "Error al quitar el proyecto. Inténtalo de nuevo.",
+    "createProjectFailed": "No se ha podido crear el proyecto. Inténtalo de nuevo.",
+    "createProjectError": "Error al crear el proyecto. Inténtalo de nuevo.",
+    "updateProjectError": "Error al actualizar el proyecto. Inténtalo de nuevo.",
+    "refreshError": "No se ha podido actualizar. Inténtalo de nuevo.",
+    "restoreProjectFailed": "No se ha podido restaurar el proyecto. Inténtalo de nuevo.",
+    "restoreProjectError": "Error al restaurar el proyecto. Inténtalo de nuevo.",
+    "restoreSessionFailed": "No se ha podido restaurar la sesión. Inténtalo de nuevo.",
+    "restoreSessionError": "Error al restaurar la sesión. Inténtalo de nuevo."
+  },
+  "version": {
+    "updateAvailable": "Actualización disponible",
+    "restartRequired": "Actualización instalada; reinicia el servidor para aplicarla"
+  },
+  "search": {
+    "modeProjects": "Proyectos",
+    "modeConversations": "Conversaciones",
+    "conversationsPlaceholder": "Buscar en las conversaciones...",
+    "searching": "Buscando...",
+    "noResults": "No se han encontrado resultados",
+    "tryDifferentQuery": "Prueba otra búsqueda",
+    "matches_one": "{{count}} coincidencia",
+    "matches_other": "{{count}} coincidencias",
+    "projectsScanned_one": "{{count}} proyecto analizado",
+    "projectsScanned_other": "{{count}} proyectos analizados"
+  },
+  "deleteConfirmation": {
+    "deleteProject": "Quitar proyecto",
+    "deleteSession": "Eliminar sesión",
+    "confirmDelete": "¿Qué quieres hacer con",
+    "sessionCount_one": "Este proyecto contiene {{count}} conversación.",
+    "sessionCount_other": "Este proyecto contiene {{count}} conversaciones.",
+    "removeFromSidebar": "Quitar solo de la barra lateral",
+    "deleteAllData": "Eliminar todos los datos de forma permanente",
+    "allConversationsDeleted": "El proyecto se quitará de la barra lateral. Se conservarán tus ficheros, memorias y datos de sesión.",
+    "cannotUndo": "Puedes volver a añadir el proyecto más adelante."
+  }
+}

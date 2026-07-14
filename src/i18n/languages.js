@@ -20,6 +20,16 @@ export const languages = [
     nativeName: 'Français',
   },
   {
+    value: 'es-ES',
+    label: 'Spanish (Spain)',
+    nativeName: 'Español (España)',
+  },
+  {
+    value: 'es-419',
+    label: 'Spanish (Latin America)',
+    nativeName: 'Español (Latinoamérica)',
+  },
+  {
     value: 'ko',
     label: 'Korean',
     nativeName: '한국어',
