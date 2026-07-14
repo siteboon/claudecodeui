@@ -26,7 +26,6 @@ import {
 const PROVIDER_META: { id: LLMProvider; name: string }[] = [
   { id: "claude", name: "Anthropic" },
   { id: "codex", name: "OpenAI" },
-  { id: "gemini", name: "Google" },
   { id: "cursor", name: "Cursor" },
   { id: "opencode", name: "OpenCode" },
   { id: "kiro", name: "AWS Kiro" },
@@ -34,6 +33,17 @@ const PROVIDER_META: { id: LLMProvider; name: string }[] = [
 
 const MOD_KEY =
   typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
+
+// cmdk's default filter is fuzzy (loose character-subsequence scoring), which
+// surfaces unrelated models — e.g. searching "chatgpt" also matched "Fable".
+// Require every whitespace-separated search token to appear as a literal
+// substring instead, so "claude 4.5" still matches "Anthropic Claude Haiku 4.5"
+// but "chatgpt" only matches models that actually contain it.
+function modelSearchFilter(value: string, search: string): number {
+  const haystack = value.toLowerCase();
+  const tokens = search.toLowerCase().split(/\s+/).filter(Boolean);
+  return tokens.every((token) => haystack.includes(token)) ? 1 : 0;
+}
 
 type ProviderSelectionEmptyStateProps = {
   selectedSession: ProjectSession | null;
@@ -47,8 +57,6 @@ type ProviderSelectionEmptyStateProps = {
   setCursorModel: (model: string) => void;
   codexModel: string;
   setCodexModel: (model: string) => void;
-  geminiModel: string;
-  setGeminiModel: (model: string) => void;
   opencodeModel: string;
   setOpenCodeModel: (model: string) => void;
   kiroModel: string;
@@ -80,13 +88,11 @@ function getCurrentModel(
   c: string,
   cu: string,
   co: string,
-  g: string,
   o: string,
   k: string,
 ) {
   if (p === "claude") return c;
   if (p === "codex") return co;
-  if (p === "gemini") return g;
   if (p === "opencode") return o;
   if (p === "kiro") return k;
   return cu;
@@ -98,7 +104,7 @@ function getProviderDisplayName(p: LLMProvider) {
   if (p === "codex") return "Codex";
   if (p === "opencode") return "OpenCode";
   if (p === "kiro") return "Kiro";
-  return "Gemini";
+  return "Claude";
 }
 
 export default function ProviderSelectionEmptyState({
@@ -113,8 +119,6 @@ export default function ProviderSelectionEmptyState({
   setCursorModel,
   codexModel,
   setCodexModel,
-  geminiModel,
-  setGeminiModel,
   opencodeModel,
   setOpenCodeModel,
   kiroModel,
@@ -146,7 +150,6 @@ export default function ProviderSelectionEmptyState({
     claudeModel,
     cursorModel,
     codexModel,
-    geminiModel,
     opencodeModel,
     kiroModel,
   );
@@ -167,9 +170,6 @@ export default function ProviderSelectionEmptyState({
       } else if (providerId === "codex") {
         setCodexModel(modelValue);
         localStorage.setItem("codex-model", modelValue);
-      } else if (providerId === "gemini") {
-        setGeminiModel(modelValue);
-        localStorage.setItem("gemini-model", modelValue);
       } else if (providerId === "opencode") {
         setOpenCodeModel(modelValue);
         localStorage.setItem("opencode-model", modelValue);
@@ -181,7 +181,7 @@ export default function ProviderSelectionEmptyState({
         localStorage.setItem("cursor-model", modelValue);
       }
     },
-    [setClaudeModel, setCursorModel, setCodexModel, setGeminiModel, setOpenCodeModel, setKiroModel],
+    [setClaudeModel, setCursorModel, setCodexModel, setOpenCodeModel, setKiroModel],
   );
 
   const handleModelSelect = useCallback(
@@ -198,7 +198,7 @@ export default function ProviderSelectionEmptyState({
   if (!selectedSession && !currentSessionId) {
     return (
       <div className="flex h-full items-center justify-center px-4">
-        <div className="w-full max-w-md">
+        <div className="w-full max-w-[34.25rem]">
           <div className="mb-8 text-center">
             <h2 className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">
               {t("providerSelection.title")}
@@ -250,7 +250,7 @@ export default function ProviderSelectionEmptyState({
                   {t("providerSelection.chooseModel", { defaultValue: "Choose a model" })}
                 </p>
               </div>
-              <Command>
+              <Command filter={modelSearchFilter}>
                 <CommandInput
                   placeholder={t("providerSelection.searchModels", {
                     defaultValue: "Search models...",
@@ -328,9 +328,6 @@ export default function ProviderSelectionEmptyState({
                 codex: t("providerSelection.readyPrompt.codex", {
                   model: codexModel,
                 }),
-                gemini: t("providerSelection.readyPrompt.gemini", {
-                  model: geminiModel,
-                }),
                 opencode: t("providerSelection.readyPrompt.opencode", {
                   model: opencodeModel,
                   defaultValue: "Ready with OpenCode {{model}}",
@@ -372,7 +369,7 @@ export default function ProviderSelectionEmptyState({
   if (selectedSession) {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="max-w-md px-6 text-center">
+        <div className="max-w-[34.25rem] px-6 text-center">
           <p className="mb-1.5 text-lg font-semibold text-foreground">
             {t("session.continue.title")}
           </p>

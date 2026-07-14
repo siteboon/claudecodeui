@@ -22,7 +22,9 @@
     "shell": "シェル",
     "files": "ファイル",
     "git": "ソース管理",
-    "tasks": "タスク"
+    "tasks": "タスク",
+    "browser": "Browser",
+    "computer": "Computer"
   },
   "status": {
     "loading": "読み込み中...",

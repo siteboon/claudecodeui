@@ -10,7 +10,9 @@ type NotificationPreferences = {
   channels: {
     inApp: boolean;
     webPush: boolean;
+    desktop: boolean;
     sound: boolean;
+    [key: string]: boolean;
   };
   events: {
     actionRequired: boolean;
@@ -23,6 +25,7 @@ const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   channels: {
     inApp: false,
     webPush: false,
+    desktop: false,
     sound: true,
   },
   events: {
@@ -34,11 +37,20 @@ const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
 
 function normalizeNotificationPreferences(value: unknown): NotificationPreferences {
   const source = value && typeof value === 'object' ? (value as Record<string, any>) : {};
+  const sourceChannels = source.channels && typeof source.channels === 'object'
+    ? source.channels as Record<string, unknown>
+    : {};
+  const extraChannels = Object.fromEntries(
+    Object.entries(sourceChannels)
+      .filter(([key, channelValue]) => !['inApp', 'webPush', 'desktop', 'sound'].includes(key) && typeof channelValue === 'boolean')
+  ) as Record<string, boolean>;
 
   return {
     channels: {
+      ...extraChannels,
       inApp: source.channels?.inApp === true,
       webPush: source.channels?.webPush === true,
+      desktop: source.channels?.desktop === true,
       sound: source.channels?.sound !== false,
     },
     events: {
@@ -103,4 +115,3 @@ export const notificationPreferencesDb = {
     return notificationPreferencesDb.updateNotificationPreferences(userId, preferences);
   },
 };
-

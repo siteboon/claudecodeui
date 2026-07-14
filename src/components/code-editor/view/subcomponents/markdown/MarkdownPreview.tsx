@@ -12,6 +12,9 @@ type MarkdownPreviewProps = {
 
 const markdownPreviewComponents: Components = {
   code: MarkdownCodeBlock,
+  // MarkdownCodeBlock renders its own highlighted <pre>; passthrough prevents a
+  // second Typography-styled <pre> shell from framing it.
+  pre: ({ children }) => <>{children}</>,
   blockquote: ({ children }) => (
     <blockquote className="my-2 border-l-4 border-gray-300 pl-4 italic text-gray-600 dark:border-gray-600 dark:text-gray-400">
       {children}

@@ -49,7 +49,8 @@
     "save": "Enregistrer",
     "cancel": "Annuler",
     "clearSearch": "Effacer la recherche",
-    "openCommandPalette": "Ouvrir la palette de commandes"
+    "openCommandPalette": "Ouvrir la palette de commandes",
+    "attentionRequiredIndicator": "La session nécessite votre attention"
   },
   "navigation": {
     "chat": "Chat",
@@ -106,10 +107,17 @@
     "deleteProjectFailed": "Échec de la suppression du projet. Veuillez réessayer.",
     "deleteProjectError": "Erreur lors de la suppression du projet. Veuillez réessayer.",
     "createProjectFailed": "Échec de la création du projet. Veuillez réessayer.",
-    "createProjectError": "Erreur lors de la création du projet. Veuillez réessayer."
+    "createProjectError": "Erreur lors de la création du projet. Veuillez réessayer.",
+    "updateProjectError": "Erreur lors de la mise à jour du projet. Veuillez réessayer.",
+    "refreshError": "Échec de l'actualisation. Veuillez réessayer.",
+    "restoreProjectFailed": "Échec de la restauration du projet. Veuillez réessayer.",
+    "restoreProjectError": "Erreur lors de la restauration du projet. Veuillez réessayer.",
+    "restoreSessionFailed": "Échec de la restauration de la session. Veuillez réessayer.",
+    "restoreSessionError": "Erreur lors de la restauration de la session. Veuillez réessayer."
   },
   "version": {
-    "updateAvailable": "Mise à jour disponible"
+    "updateAvailable": "Mise à jour disponible",
+    "restartRequired": "Mise à jour installée — redémarrez le serveur pour l'appliquer"
   },
   "search": {
     "modeProjects": "Projets",

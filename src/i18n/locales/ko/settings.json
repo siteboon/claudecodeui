@@ -54,14 +54,11 @@
     "sections": {
       "appearance": "외관",
       "toolDisplay": "도구 표시",
-      "viewOptions": "보기 옵션",
       "inputSettings": "입력 설정"
     },
     "darkMode": "다크 모드",
-    "autoExpandTools": "도구 자동 펼치기",
     "showRawParameters": "Raw 파라미터 표시",
     "showThinking": "생각 과정 표시",
-    "autoScrollToBottom": "자동 스크롤",
     "sendByCtrlEnter": "Ctrl+Enter로 전송",
     "sendByCtrlEnterDescription": "활성화하면 Enter 대신 Ctrl+Enter로 메시지를 전송합니다. IME 사용자가 실수로 전송하는 것을 방지하는 데 유용합니다.",
     "dragHandle": {
@@ -325,9 +322,6 @@
       },
       "codex": {
         "description": "OpenAI Codex AI 어시스턴트"
-      },
-      "gemini": {
-        "description": "Google Gemini AI 어시스턴트"
       }
     },
     "connectionStatus": "연결 상태",

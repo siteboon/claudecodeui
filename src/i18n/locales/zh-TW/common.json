@@ -22,7 +22,9 @@
     "shell": "終端機",
     "files": "檔案",
     "git": "版本控制",
-    "tasks": "任務"
+    "tasks": "任務",
+    "browser": "瀏覽器",
+    "computer": "電腦"
   },
   "status": {
     "loading": "載入中...",

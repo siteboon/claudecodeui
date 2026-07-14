@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { McpProject, McpProvider, McpScope, ProviderMcpServer } from '../types';
 import { IS_PLATFORM } from '../../../constants/config';
-import { Badge, Button } from '../../../shared/view/ui';
+import { ActionMenu, Badge, Button } from '../../../shared/view/ui';
 import {
   MCP_GLOBAL_SUPPORTED_SCOPES,
   MCP_GLOBAL_SUPPORTED_TRANSPORTS,
@@ -51,6 +51,11 @@ const getScopeLabel = (scope: McpScope): string => {
 const getServerKey = (server: ProviderMcpServer): string => (
   `${server.provider}:${server.scope}:${server.workspacePath || 'global'}:${server.name}`
 );
+
+// Servers prefixed with `cloudcli-` are written and removed automatically by a
+// CloudCLI feature toggle (e.g. the Browser tab), not added by the user. They are
+// shown read-only so users don't edit/delete them out of sync with the feature.
+const isManagedServer = (server: ProviderMcpServer): boolean => server.name.startsWith('cloudcli-');
 
 function ConfigLine({ label, children }: { label: string; children: string }) {
   if (!children) {
@@ -122,40 +127,47 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
   });
   const globalButtonLabel = 'Add Global MCP Server';
   const providerButtonLabel = `Add ${providerName} MCP Server`;
-  const globalAddDescription = 'Add Global MCP Server writes one common stdio or HTTP server to Claude, Cursor, Codex, and Gemini.';
+  const globalAddDescription = 'Add Global MCP Server writes one common stdio or HTTP server to Claude, Cursor, Codex, and OpenCode.';
   const providerAddDescription = `${providerButtonLabel} only changes ${providerName}.`;
-  const globalModalDescription = 'Adds this MCP server to every provider: Claude, Cursor, Codex, and Gemini. '
+  const globalModalDescription = 'Adds this MCP server to every provider: Claude, Cursor, Codex, and OpenCode. '
     + 'Only stdio and HTTP transports are supported because the same config must work across all providers.';
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <Server className="h-5 w-5 text-purple-500" />
-        <h3 className="text-lg font-medium text-foreground">{t('mcpServers.title')}</h3>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <Server className="mt-0.5 h-5 w-5 flex-shrink-0 text-purple-500" />
+          <div className="min-w-0 space-y-1">
+            <h3 className="text-lg font-medium text-foreground">{t('mcpServers.title')}</h3>
+            <p className="text-sm text-muted-foreground">{description}</p>
+          </div>
+        </div>
+        <ActionMenu
+          label="Add MCP Server"
+          icon={Plus}
+          className="w-full sm:w-auto"
+          triggerClassName={`w-full sm:w-auto ${MCP_PROVIDER_BUTTON_CLASSES[selectedProvider]}`}
+          items={[
+            {
+              key: 'global',
+              label: globalButtonLabel,
+              description: globalAddDescription,
+              icon: Globe,
+              onSelect: openGlobalForm,
+            },
+            {
+              key: 'provider',
+              label: providerButtonLabel,
+              description: providerAddDescription,
+              icon: Server,
+              onSelect: () => openForm(),
+            },
+          ]}
+        />
+
       </div>
-      <p className="text-sm text-muted-foreground">{description}</p>
 
       <div className="space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            onClick={openGlobalForm}
-            className={MCP_PROVIDER_BUTTON_CLASSES[selectedProvider]}
-            size="sm"
-            title={globalAddDescription}
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            {globalButtonLabel}
-          </Button>
-          <Button
-            onClick={() => openForm()}
-            variant="outline"
-            size="sm"
-            title={providerAddDescription}
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            {providerButtonLabel}
-          </Button>
-        </div>
         <div className="min-h-4">
           {saveStatus === 'success' && (
             <span className="animate-in fade-in text-xs text-muted-foreground">{t('saveStatus.success')}</span>
@@ -177,65 +189,92 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
           <div className="py-8 text-center text-muted-foreground">Loading MCP servers...</div>
         )}
 
-        {servers.map((server) => (
-          <div key={getServerKey(server)} className="rounded-lg border border-border bg-card/50 p-4">
-            <div className="flex items-start justify-between">
-              <div className="min-w-0 flex-1">
-                <div className="mb-2 flex flex-wrap items-center gap-2">
-                  {getTransportIcon(server.transport)}
-                  <span className="font-medium text-foreground">{server.name}</span>
-                  <Badge variant="outline" className="text-xs">
-                    {server.transport || 'stdio'}
-                  </Badge>
-                  <Badge variant="outline" className="text-xs">
-                    {getScopeLabel(server.scope)}
-                  </Badge>
-                  {server.projectDisplayName && (
-                    <Badge variant="outline" className="max-w-full truncate text-xs">
-                      {server.projectDisplayName}
-                    </Badge>
-                  )}
+        {servers.map((server) => {
+          const managed = isManagedServer(server);
+
+          return (
+            <div key={getServerKey(server)} className="rounded-lg border border-border bg-card/50 p-4">
+              <div className="flex items-start justify-between">
+                <div className="min-w-0 flex-1">
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    {!managed && getTransportIcon(server.transport)}
+                    <span className="font-medium text-foreground">{server.name}</span>
+                    {!managed && (
+                      <>
+                        <Badge variant="outline" className="text-xs">
+                          {server.transport || 'stdio'}
+                        </Badge>
+                        <Badge variant="outline" className="text-xs">
+                          {getScopeLabel(server.scope)}
+                        </Badge>
+                        {server.projectDisplayName && (
+                          <Badge variant="outline" className="max-w-full truncate text-xs">
+                            {server.projectDisplayName}
+                          </Badge>
+                        )}
+                      </>
+                    )}
+                    {managed && (
+                      <Badge variant="outline" className="gap-1 text-xs text-muted-foreground">
+                        <Lock className="h-3 w-3" />
+                        {t('mcpServers.managed.badge', { defaultValue: 'Managed' })}
+                      </Badge>
+                    )}
+                  </div>
+
+                  <div className="space-y-1 text-sm text-muted-foreground">
+                    {!managed && (
+                      <>
+                        <ConfigLine label={t('mcpServers.config.command')}>{server.command || ''}</ConfigLine>
+                        <ConfigLine label={t('mcpServers.config.url')}>{server.url || ''}</ConfigLine>
+                        <ConfigLine label={t('mcpServers.config.args')}>{(server.args || []).join(' ')}</ConfigLine>
+                        <ConfigLine label="Cwd">{server.cwd || ''}</ConfigLine>
+                        {server.env && Object.keys(server.env).length > 0 && (
+                          <ConfigLine label={t('mcpServers.config.environment')}>
+                            {Object.entries(server.env).map(([key, value]) => `${key}=${maskSecret(value)}`).join(', ')}
+                          </ConfigLine>
+                        )}
+                        {server.envVars && server.envVars.length > 0 && (
+                          <ConfigLine label="Env Vars">{server.envVars.join(', ')}</ConfigLine>
+                        )}
+                      </>
+                    )}
+                    {managed && (
+                      <div className="text-xs text-muted-foreground">
+                        {t('mcpServers.managed.hint', {
+                          defaultValue: 'Managed by CloudCLI.',
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                <div className="space-y-1 text-sm text-muted-foreground">
-                  <ConfigLine label={t('mcpServers.config.command')}>{server.command || ''}</ConfigLine>
-                  <ConfigLine label={t('mcpServers.config.url')}>{server.url || ''}</ConfigLine>
-                  <ConfigLine label={t('mcpServers.config.args')}>{(server.args || []).join(' ')}</ConfigLine>
-                  <ConfigLine label="Cwd">{server.cwd || ''}</ConfigLine>
-                  {server.env && Object.keys(server.env).length > 0 && (
-                    <ConfigLine label={t('mcpServers.config.environment')}>
-                      {Object.entries(server.env).map(([key, value]) => `${key}=${maskSecret(value)}`).join(', ')}
-                    </ConfigLine>
-                  )}
-                  {server.envVars && server.envVars.length > 0 && (
-                    <ConfigLine label="Env Vars">{server.envVars.join(', ')}</ConfigLine>
-                  )}
-                </div>
-              </div>
-
-              <div className="ml-4 flex items-center gap-2">
-                <Button
-                  onClick={() => openForm(server)}
-                  variant="ghost"
-                  size="sm"
-                  className="text-muted-foreground hover:text-foreground"
-                  title={t('mcpServers.actions.edit')}
-                >
-                  <Edit3 className="h-4 w-4" />
-                </Button>
-                <Button
-                  onClick={() => deleteServer(server)}
-                  variant="ghost"
-                  size="sm"
-                  className="text-red-600 hover:text-red-700"
-                  title={t('mcpServers.actions.delete')}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                {!managed && (
+                  <div className="ml-4 flex items-center gap-2">
+                    <Button
+                      onClick={() => openForm(server)}
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground hover:text-foreground"
+                      title={t('mcpServers.actions.edit')}
+                    >
+                      <Edit3 className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      onClick={() => deleteServer(server)}
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-600 hover:text-red-700"
+                      title={t('mcpServers.actions.delete')}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {!isLoading && !isLoadingProjectScopes && servers.length === 0 && (
           <div className="py-8 text-center text-muted-foreground">{t('mcpServers.empty')}</div>

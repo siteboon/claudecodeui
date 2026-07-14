@@ -65,7 +65,7 @@ export type AuthenticatedWebSocketRequest = IncomingMessage & {
  * Use this as the source of truth whenever a function or payload needs to identify
  * a specific LLM integration.
  */
-export type LLMProvider = 'claude' | 'codex' | 'gemini' | 'cursor' | 'opencode' | 'kiro';
+export type LLMProvider = 'claude' | 'codex' | 'cursor' | 'opencode' | 'kiro';
 
 /**
  * One selectable model row in a provider model catalog.
@@ -74,6 +74,13 @@ export type ProviderModelOption = {
   value: string;
   label: string;
   description?: string;
+  effort?: {
+    default?: string;
+    values: {
+      value: string;
+      description?: string;
+    }[];
+  };
 };
 
 /**
@@ -318,6 +325,51 @@ export type ProviderSkillScope = 'user' | 'project' | 'plugin' | 'repo' | 'admin
  */
 export type ProviderSkillListOptions = {
   workspacePath?: string;
+};
+
+/**
+ * One supporting file bundled with an uploaded provider skill.
+ *
+ * `relativePath` is resolved below the installed skill directory and must never
+ * be absolute or contain traversal segments. Text files may use `utf8`; binary
+ * scripts and assets should use `base64` so JSON transport does not corrupt
+ * their bytes.
+ */
+export type ProviderSkillCreateFile = {
+  relativePath: string;
+  content: string;
+  encoding: 'utf8' | 'base64';
+};
+
+/**
+ * One skill markdown payload submitted for provider-managed installation.
+ *
+ * `content` is the raw markdown body that will be written to `SKILL.md`.
+ * `directoryName` lets callers control the target folder name explicitly when
+ * they want stable filesystem paths that differ from the markdown front matter
+ * `name` field. `fileName` is optional upload metadata used only as a final
+ * fallback when no directory name or front matter name is present. `files`
+ * carries scripts, references, and other files from a complete skill folder.
+ */
+export type ProviderSkillCreateEntry = {
+  content: string;
+  directoryName?: string;
+  fileName?: string;
+  files?: ProviderSkillCreateFile[];
+};
+
+/**
+ * Shared input accepted by provider skill creation operations.
+ *
+ * The service layer batches multiple skill definitions in one request. Each
+ * entry can contain only markdown or a complete skill folder.
+ */
+export type ProviderSkillCreateInput = {
+  entries: ProviderSkillCreateEntry[];
+};
+
+export type ProviderSkillRemoveInput = {
+  directoryName: string;
 };
 
 /**

@@ -2,9 +2,7 @@ import { useMemo, useState } from 'react';
 import {
   Activity,
   BadgeCheck,
-  Check,
   CircleHelp,
-  Clipboard,
   Coins,
   Cpu,
   Gauge,
@@ -59,24 +57,10 @@ type ModelOption = {
   description?: string;
 };
 
-const formatUpdatedAt = (value?: string) => {
-  if (!value) {
-    return 'Not cached yet';
-  }
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return 'Not cached yet';
-  }
-
-  return parsed.toLocaleString();
-};
-
 const PROVIDER_LABELS: Record<string, string> = {
   claude: 'Claude',
   cursor: 'Cursor',
   codex: 'Codex',
-  gemini: 'Gemini',
   opencode: 'OpenCode',
   kiro: 'Kiro',
 };
@@ -247,7 +231,6 @@ function HelpContent({ data }: { data: HelpCommandData }) {
 function ModelsContent({
   data,
   providerModelCatalog,
-  providerModelCacheCatalog,
   providerModelsRefreshing,
   onHardRefreshProviderModels,
   currentSessionId,
@@ -255,14 +238,12 @@ function ModelsContent({
 }: {
   data: ModelCommandData;
   providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
-  providerModelCacheCatalog: Partial<Record<LLMProvider, ProviderModelsCacheInfo>>;
   providerModelsRefreshing: boolean;
   onHardRefreshProviderModels: () => void;
   currentSessionId: string | null;
   onSelectProviderModel: CommandResultModalProps['onSelectProviderModel'];
 }) {
   const [query, setQuery] = useState('');
-  const [copiedModel, setCopiedModel] = useState<string | null>(null);
   const [changingModel, setChangingModel] = useState<string | null>(null);
   const [pendingSessionModel, setPendingSessionModel] = useState<string | null>(null);
   const [selectionNotice, setSelectionNotice] = useState<string | null>(null);
@@ -270,7 +251,6 @@ function ModelsContent({
   const currentModel = data?.current?.model || 'Unknown';
   const providerLabel = data?.current?.providerLabel || getProviderLabel(currentProvider);
   const liveDefinition = providerModelCatalog[currentProvider];
-  const currentCache = providerModelCacheCatalog[currentProvider] ?? data?.cache;
   const availableOptions = useMemo<ModelOption[]>(() => {
     if (liveDefinition?.OPTIONS && liveDefinition.OPTIONS.length > 0) {
       return liveDefinition.OPTIONS;
@@ -283,8 +263,6 @@ function ModelsContent({
     const availableModels = Array.isArray(data?.availableModels) ? data.availableModels : [];
     return availableModels.map((model) => ({ value: model, label: model }));
   }, [data, liveDefinition]);
-  const defaultModel = liveDefinition?.DEFAULT || data?.defaultModel || currentModel;
-
   const filteredOptions = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     if (!normalized) {
@@ -297,18 +275,8 @@ function ModelsContent({
     });
   }, [availableOptions, query]);
 
-  const activeOption = availableOptions.find((option) => option.value === currentModel);
   const hasConcreteSessionId = typeof currentSessionId === 'string' && currentSessionId.trim().length > 0;
-
-  const copyModel = (model: string) => {
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      void navigator.clipboard.writeText(model).catch(() => undefined);
-    }
-    setCopiedModel(model);
-    window.setTimeout(() => {
-      setCopiedModel((current) => (current === model ? null : current));
-    }, 1300);
-  };
+  const showSearch = availableOptions.length > 6;
 
   const handleSelectModel = async (model: string) => {
     setChangingModel(model);
@@ -331,162 +299,106 @@ function ModelsContent({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2.5">
-      <div className="rounded-2xl border border-border/70 bg-muted/20 p-2.5">
-        <div className="grid gap-2.5 lg:grid-cols-[minmax(0,1.55fr)_minmax(12rem,0.7fr)_minmax(15rem,0.9fr)] lg:items-start">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary" className="rounded-lg border border-primary/20 bg-primary/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">
-                {providerLabel}
-              </Badge>
-              <Badge variant="secondary" className="rounded-lg px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-foreground">
-                {availableOptions.length} models
-              </Badge>
-            </div>
-
-            <div className="mt-2 rounded-xl border border-primary/15 bg-primary/[0.06] px-3 py-2">
-              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-primary">Active Model</p>
-              <p className="mt-1 break-all font-mono text-[0.98rem] font-semibold leading-5 text-foreground sm:text-[1.05rem]">
-                {currentModel}
-              </p>
-              {activeOption?.label && activeOption.label !== currentModel && (
-                <p className="mt-1 text-[11px] font-medium text-foreground/85">{activeOption.label}</p>
-              )}
-              {activeOption?.description && (
-                <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">{activeOption.description}</p>
-              )}
-              {pendingSessionModel && pendingSessionModel !== currentModel && (
-                <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">
-                  Next response: {pendingSessionModel}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
-            <div className="rounded-xl border border-border/60 bg-background/55 px-2.5 py-1.5">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground/80">Default</p>
-              <p className="mt-1 break-all font-mono text-[11px] font-medium text-foreground">{defaultModel}</p>
-            </div>
-            <div className="rounded-xl border border-border/60 bg-background/55 px-2.5 py-1.5">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground/80">Updated</p>
-              <p className="mt-1 text-[11px] font-medium text-foreground">{formatUpdatedAt(currentCache?.updatedAt)}</p>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-border/60 bg-background/55 p-2.5">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground/80">
-                Catalog Refresh
-              </p>
-              <Badge variant="secondary" className="rounded-md px-1.5 py-0 text-[9px] uppercase tracking-[0.14em]">
-                All providers
-              </Badge>
-            </div>
-            <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
-              Model lists are cached for 3 days. Refresh after CLI, auth, or config changes,
-              or when a new model is missing.
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onHardRefreshProviderModels}
-              disabled={providerModelsRefreshing}
-              className="mt-2 h-8 w-full rounded-xl px-3"
-            >
-              <RefreshCw className={providerModelsRefreshing ? 'animate-spin' : ''} />
-              {providerModelsRefreshing ? 'Refreshing catalogs...' : 'Refresh from providers'}
-            </Button>
-          </div>
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      {/* Compact context bar: active model + refresh, no clutter */}
+      <div className="flex items-center justify-between gap-3 rounded-2xl border border-border/70 bg-muted/20 px-3.5 py-2.5">
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            Active model · {providerLabel}
+          </p>
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span className="break-all font-mono text-sm font-semibold text-foreground">{currentModel}</span>
+            {pendingSessionModel && pendingSessionModel !== currentModel && (
+              <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-500 dark:text-emerald-400">
+                → {pendingSessionModel} next
+              </span>
+            )}
+          </p>
         </div>
-
-        <div className="mt-2 border-t border-border/50 pt-1.5 text-[11px] text-muted-foreground">
-          {hasConcreteSessionId
-            ? 'Selecting a model stores a session override and applies it on the next response for this session.'
-            : 'Selecting a model updates the default model used for new turns in this provider.'}
-          {selectionNotice && <span className="ml-2 text-foreground">{selectionNotice}</span>}
-        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={onHardRefreshProviderModels}
+          disabled={providerModelsRefreshing}
+          title="Refresh model list from providers"
+          aria-label="Refresh model list from providers"
+          className="h-9 w-9 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
+        >
+          <RefreshCw className={`h-4 w-4 ${providerModelsRefreshing ? 'animate-spin' : ''}`} />
+        </Button>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col rounded-3xl border border-border/70 bg-muted/15 p-3 sm:p-4">
-        <div className="mb-2.5 grid gap-2 sm:grid-cols-[1fr_auto] sm:items-center">
-          <div className="min-w-0">
-            <SearchField value={query} onChange={setQuery} placeholder={`Search ${providerLabel} models...`} />
-          </div>
-          <Badge variant="secondary" className="h-9 justify-center rounded-xl px-3 font-mono text-xs">
-            {filteredOptions.length} shown
-          </Badge>
-        </div>
+      {showSearch && (
+        <SearchField value={query} onChange={setQuery} placeholder={`Search ${providerLabel} models...`} />
+      )}
 
-        {filteredOptions.length > 0 ? (
-          <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto pr-1">
-            <div className="grid gap-2 md:grid-cols-2">
-              {filteredOptions.map((option, index) => {
-                const isCurrent = option.value === currentModel;
-                const wasCopied = copiedModel === option.value;
-                const isPendingSelection = option.value === pendingSessionModel;
-                const isChanging = option.value === changingModel;
-                return (
-                  <div
-                    key={option.value}
-                    className={`settings-content-enter group flex min-h-[4.5rem] items-start gap-3 rounded-2xl border p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
-                      isCurrent
-                        ? 'border-primary/45 bg-primary/10'
-                        : isPendingSelection
-                          ? 'border-emerald-500/35 bg-emerald-500/10'
-                          : 'border-border/70 bg-background/80 hover:border-primary/30 hover:bg-background'
-                    }`}
-                    style={{ animationDelay: `${Math.min(index * 14, 180)}ms` }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => handleSelectModel(option.value)}
-                      disabled={Boolean(changingModel)}
-                      className="min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      aria-label={`Use model ${option.value}`}
-                    >
-                      <span className="flex items-center gap-2">
-                        <span className="break-all font-mono text-sm font-semibold text-foreground">{option.value}</span>
-                        {isCurrent && <BadgeCheck className="h-4 w-4 shrink-0 text-primary" />}
-                      </span>
-                      {option.label && option.label !== option.value && (
-                        <span className="mt-1 block text-xs text-muted-foreground">{option.label}</span>
-                      )}
-                      {option.description && (
-                        <span className="mt-1 block text-xs leading-5 text-muted-foreground">{option.description}</span>
-                      )}
-                      {isCurrent && <span className="mt-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">Current selection</span>}
-                      {isPendingSelection && !isCurrent && (
-                        <span className="mt-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-400">
-                          Next response selection
-                        </span>
-                      )}
-                      {isChanging && (
-                        <span className="mt-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
-                          Applying...
-                        </span>
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => copyModel(option.value)}
-                      className="rounded-lg border border-border/70 bg-muted/30 p-2 text-muted-foreground transition-colors group-hover:text-primary"
-                      aria-label={`Copy model id ${option.value}`}
-                    >
-                      {wasCopied ? <Check className="h-4 w-4" /> : <Clipboard className="h-4 w-4" />}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
+      {filteredOptions.length > 0 ? (
+        <div className="scrollbar-thin -mr-1 min-h-0 flex-1 overflow-y-auto pr-1">
+          <div className="grid gap-2 md:grid-cols-2">
+            {filteredOptions.map((option, index) => {
+              const isCurrent = option.value === currentModel;
+              const isPendingSelection = option.value === pendingSessionModel;
+              const isChanging = option.value === changingModel;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => handleSelectModel(option.value)}
+                  disabled={Boolean(changingModel)}
+                  aria-label={`Select model ${option.value}`}
+                  className={`settings-content-enter group flex min-h-[4rem] flex-col rounded-2xl border p-3 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-60 ${
+                    isCurrent
+                      ? 'border-primary/45 bg-primary/10'
+                      : isPendingSelection
+                        ? 'border-emerald-500/35 bg-emerald-500/10'
+                        : 'border-border/70 bg-background/80 hover:border-primary/30 hover:bg-background'
+                  }`}
+                  style={{ animationDelay: `${Math.min(index * 14, 180)}ms` }}
+                >
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="break-all font-mono text-sm font-semibold text-foreground">{option.value}</span>
+                    {isCurrent ? (
+                      <BadgeCheck className="h-4 w-4 shrink-0 text-primary" />
+                    ) : isChanging ? (
+                      <RefreshCw className="h-4 w-4 shrink-0 animate-spin text-primary" />
+                    ) : null}
+                  </span>
+                  {option.label && option.label !== option.value && (
+                    <span className="mt-1 text-xs font-medium text-foreground/85">{option.label}</span>
+                  )}
+                  {option.description && (
+                    <span className="mt-1 text-xs leading-5 text-muted-foreground">{option.description}</span>
+                  )}
+                  {isCurrent && (
+                    <span className="mt-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">Current selection</span>
+                  )}
+                  {isPendingSelection && !isCurrent && (
+                    <span className="mt-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-500 dark:text-emerald-400">
+                      Applies next response
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-dashed border-border bg-background/60 px-4 py-10 text-center text-sm text-muted-foreground">
+          No models match that search.
+        </div>
+      )}
+
+      {/* Single quiet line of guidance / feedback */}
+      <p className="shrink-0 text-[11px] leading-4 text-muted-foreground">
+        {selectionNotice ? (
+          <span className="text-foreground">{selectionNotice}</span>
+        ) : hasConcreteSessionId ? (
+          'Your choice applies to this session on the next response.'
         ) : (
-          <div className="rounded-2xl border border-dashed border-border bg-background/60 px-4 py-10 text-center text-sm text-muted-foreground">
-            No models match that search.
-          </div>
+          'Your choice becomes the default model for new turns.'
         )}
-      </div>
+      </p>
     </div>
   );
 }
@@ -607,7 +519,6 @@ export default function CommandResultModal({
   payload,
   onClose,
   providerModelCatalog,
-  providerModelCacheCatalog,
   providerModelsRefreshing,
   onHardRefreshProviderModels,
   currentSessionId,
@@ -625,9 +536,9 @@ export default function CommandResultModal({
       icon: CircleHelp,
     },
     models: {
-      eyebrow: 'Model inventory',
-      title: 'Available Models',
-      subtitle: 'Browse, search, and copy model IDs for the active provider.',
+      eyebrow: 'Model selection',
+      title: 'Choose a Model',
+      subtitle: 'Pick the model this provider should use.',
       icon: Cpu,
     },
     cost: {
@@ -653,46 +564,41 @@ export default function CommandResultModal({
         <DialogTitle>{activeMeta?.title || 'Command Result'}</DialogTitle>
 
         <div
-          className={`relative shrink-0 overflow-hidden border-b border-border/70 bg-gradient-to-br from-primary/15 via-background to-muted/40 ${
-            isModelsModal ? 'px-4 pb-3 pt-3 sm:px-5 sm:pb-4 sm:pt-4' : 'px-4 pb-4 pt-4 sm:px-6 sm:pb-5 sm:pt-5'
+          className={`flex shrink-0 items-start justify-between gap-3 border-b border-border bg-popover ${
+            isModelsModal ? 'px-4 py-3 sm:px-5 sm:py-4' : 'px-4 py-4 sm:px-6 sm:py-5'
           }`}
         >
-          <div className="pointer-events-none absolute -left-20 -top-24 h-56 w-56 rounded-full bg-primary/20 blur-3xl" />
-          <div className="pointer-events-none absolute right-0 top-0 h-full w-1/2 bg-[radial-gradient(circle_at_top_right,hsl(var(--primary)/0.16),transparent_58%)]" />
-
-          <div className="relative flex items-start justify-between gap-3">
-            <div className="flex min-w-0 items-start gap-3 sm:items-center">
-              <div
-                className={`rounded-2xl border border-primary/30 bg-primary/10 text-primary shadow-sm ${
-                  isModelsModal ? 'p-2.5' : 'p-3'
-                }`}
-              >
-                <HeaderIcon className={isModelsModal ? 'h-4 w-4' : 'h-5 w-5'} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[12px] font-bold uppercase tracking-[0.22em] text-primary">
-                  {activeMeta?.eyebrow}
-                </p>
-                <p className={`mt-1 font-semibold tracking-tight text-foreground ${isModelsModal ? 'text-xl sm:text-2xl' : 'text-xl sm:text-2xl'}`}>
-                  {activeMeta?.title}
-                </p>
-                <p className={`mt-1 max-w-2xl ${isModelsModal ? 'text-sm leading-5 text-foreground/75' : 'text-sm leading-5 text-muted-foreground'}`}>
-                  {activeMeta?.subtitle}
-                </p>
-              </div>
-            </div>
-
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              className="h-9 w-9 shrink-0 rounded-xl text-muted-foreground hover:bg-background/70 hover:text-foreground"
-              aria-label="Close command result modal"
+          <div className="flex min-w-0 items-center gap-3">
+            <div
+              className={`flex shrink-0 items-center justify-center rounded-xl border border-border bg-muted text-foreground ${
+                isModelsModal ? 'h-9 w-9' : 'h-10 w-10'
+              }`}
             >
-              <X className="h-4 w-4" />
-            </Button>
+              <HeaderIcon className={isModelsModal ? 'h-4 w-4' : 'h-5 w-5'} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                {activeMeta?.eyebrow}
+              </p>
+              <p className="mt-0.5 text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+                {activeMeta?.title}
+              </p>
+              <p className="mt-0.5 max-w-2xl text-sm leading-5 text-muted-foreground">
+                {activeMeta?.subtitle}
+              </p>
+            </div>
           </div>
+
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+            aria-label="Close command result modal"
+          >
+            <X className="h-4 w-4" />
+          </Button>
         </div>
 
         <div className="settings-content-enter min-h-0 flex-1 overflow-hidden px-4 py-4 sm:px-6 sm:py-5">
@@ -701,7 +607,6 @@ export default function CommandResultModal({
             <ModelsContent
               data={payload.data as ModelCommandData}
               providerModelCatalog={providerModelCatalog}
-              providerModelCacheCatalog={providerModelCacheCatalog}
               providerModelsRefreshing={providerModelsRefreshing}
               onHardRefreshProviderModels={onHardRefreshProviderModels}
               currentSessionId={currentSessionId}

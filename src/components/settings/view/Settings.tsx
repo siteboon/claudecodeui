@@ -1,12 +1,16 @@
+import { useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
 import ProviderLoginModal from '../../provider-auth/view/ProviderLoginModal';
 import { Button } from '../../../shared/view/ui';
 import SettingsSidebar from '../view/SettingsSidebar';
 import AgentsSettingsTab from '../view/tabs/agents-settings/AgentsSettingsTab';
 import AppearanceSettingsTab from '../view/tabs/AppearanceSettingsTab';
 import CredentialsSettingsTab from '../view/tabs/api-settings/CredentialsSettingsTab';
+import VoiceSettingsTab from '../view/tabs/VoiceSettingsTab';
 import GitSettingsTab from '../view/tabs/git-settings/GitSettingsTab';
+import BrowserUseSettingsTab from '../view/tabs/browser-use-settings/BrowserUseSettingsTab';
 import NotificationsSettingsTab from '../view/tabs/NotificationsSettingsTab';
 import TasksSettingsTab from '../view/tabs/tasks-settings/TasksSettingsTab';
 import PluginSettingsTab from '../../plugins/view/PluginSettingsTab';
@@ -15,8 +19,22 @@ import { useSettingsController } from '../hooks/useSettingsController';
 import { useWebPush } from '../../../hooks/useWebPush';
 import type { SettingsProps } from '../types/types';
 
+type DesktopNotificationsState = {
+  enabled: boolean;
+  supported: boolean;
+  connectedCount?: number;
+  targetCount?: number;
+  lastError?: string | null;
+};
+
 function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: SettingsProps) {
   const { t } = useTranslation('settings');
+  const desktopNotificationsBridge = useMemo(() => (
+    typeof window === 'undefined'
+      ? null
+      : ((window as any).cloudcliDesktopNotifications || null)
+  ), []);
+  const [desktopNotificationsState, setDesktopNotificationsState] = useState<DesktopNotificationsState | null>(null);
   const {
     activeTab,
     setActiveTab,
@@ -34,8 +52,6 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     codexPermissionMode,
     setCodexPermissionMode,
     providerAuthStatus,
-    geminiPermissionMode,
-    setGeminiPermissionMode,
     openLoginForProvider,
     showLoginModal,
     setShowLoginModal,
@@ -72,6 +88,45 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     });
   };
 
+  useEffect(() => {
+    if (!desktopNotificationsBridge) return undefined;
+    let mounted = true;
+    desktopNotificationsBridge.getState().then((state: any) => {
+      if (mounted) {
+        setDesktopNotificationsState(state?.desktopNotifications || null);
+      }
+    }).catch(() => {});
+    const unsubscribe = desktopNotificationsBridge.onStateUpdated?.((state: any) => {
+      if (mounted) {
+        setDesktopNotificationsState(state?.desktopNotifications || null);
+      }
+    });
+    return () => {
+      mounted = false;
+      unsubscribe?.();
+    };
+  }, [desktopNotificationsBridge]);
+
+  const handleEnableDesktopNotifications = async () => {
+    if (!desktopNotificationsBridge) return;
+    const state = await desktopNotificationsBridge.update({ enabled: true });
+    setDesktopNotificationsState(state?.desktopNotifications || null);
+    setNotificationPreferences({
+      ...notificationPreferences,
+      channels: { ...notificationPreferences.channels, desktop: true },
+    });
+  };
+
+  const handleDisableDesktopNotifications = async () => {
+    if (!desktopNotificationsBridge) return;
+    const state = await desktopNotificationsBridge.update({ enabled: false });
+    setDesktopNotificationsState(state?.desktopNotifications || null);
+    setNotificationPreferences({
+      ...notificationPreferences,
+      channels: { ...notificationPreferences.channels, desktop: false },
+    });
+  };
+
   if (!isOpen) {
     return null;
   }
@@ -100,18 +155,17 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
         </div>
 
         {/* Body: sidebar + content */}
-        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col md:flex-row">
           <SettingsSidebar activeTab={activeTab} onChange={setActiveTab} />
 
           {/* Content */}
-          <main className="flex-1 overflow-y-auto">
-            <div key={activeTab} className="settings-content-enter space-y-6 p-4 pb-safe-area-inset-bottom md:space-y-8 md:p-6">
+          <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
+            <div key={activeTab} className="settings-content-enter min-w-0 space-y-6 overflow-x-hidden p-4 pb-safe-area-inset-bottom md:space-y-8 md:p-6">
               {activeTab === 'appearance' && (
                 <AppearanceSettingsTab
                   projectSortOrder={projectSortOrder}
                   onProjectSortOrderChange={setProjectSortOrder}
                   codeEditorSettings={codeEditorSettings}
-                  onCodeEditorThemeChange={(value) => updateCodeEditorSetting('theme', value)}
                   onCodeEditorWordWrapChange={(value) => updateCodeEditorSetting('wordWrap', value)}
                   onCodeEditorShowMinimapChange={(value) => updateCodeEditorSetting('showMinimap', value)}
                   onCodeEditorLineNumbersChange={(value) => updateCodeEditorSetting('lineNumbers', value)}
@@ -131,27 +185,33 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
                   onCursorPermissionsChange={setCursorPermissions}
                   codexPermissionMode={codexPermissionMode}
                   onCodexPermissionModeChange={setCodexPermissionMode}
-                  geminiPermissionMode={geminiPermissionMode}
-                  onGeminiPermissionModeChange={setGeminiPermissionMode}
                   projects={projects}
                 />
               )}
 
               {activeTab === 'tasks' && <TasksSettingsTab />}
 
-            {activeTab === 'notifications' && (
-              <NotificationsSettingsTab
-                notificationPreferences={notificationPreferences}
-                onNotificationPreferencesChange={setNotificationPreferences}
-                pushPermission={pushPermission}
-                isPushSubscribed={isPushSubscribed}
-                isPushLoading={isPushLoading}
-                onEnablePush={handleEnablePush}
-                onDisablePush={handleDisablePush}
-              />
-            )}
+              {activeTab === 'browser' && <BrowserUseSettingsTab />}
+
+              {activeTab === 'notifications' && (
+                <NotificationsSettingsTab
+                  notificationPreferences={notificationPreferences}
+                  onNotificationPreferencesChange={setNotificationPreferences}
+                  pushPermission={pushPermission}
+                  isPushSubscribed={isPushSubscribed}
+                  isPushLoading={isPushLoading}
+                  onEnablePush={handleEnablePush}
+                  onDisablePush={handleDisablePush}
+                  isDesktop={Boolean(desktopNotificationsBridge)}
+                  desktopNotifications={desktopNotificationsState}
+                  onEnableDesktopNotifications={handleEnableDesktopNotifications}
+                  onDisableDesktopNotifications={handleDisableDesktopNotifications}
+                />
+              )}
 
               {activeTab === 'api' && <CredentialsSettingsTab />}
+
+              {activeTab === 'voice' && <VoiceSettingsTab />}
 
               {activeTab === 'plugins' && <PluginSettingsTab />}
 

@@ -7,6 +7,7 @@ import type { SessionActivity } from '../../../../hooks/useSessionProtection';
 type ActivityIndicatorProps = {
   activity: SessionActivity | null;
   onAbort?: () => void;
+  isInputFocused?: boolean;
 };
 
 const ACTION_KEYS = [
@@ -18,6 +19,7 @@ const ACTION_KEYS = [
   'claudeStatus.actions.reasoning',
 ];
 const DEFAULT_ACTION_WORDS = ['Thinking', 'Processing', 'Analyzing', 'Working', 'Computing', 'Reasoning'];
+const EXIT_ANIMATION_MS = 220;
 
 /**
  * Minimal response-in-progress indicator, in the spirit of the inline status
@@ -26,10 +28,30 @@ const DEFAULT_ACTION_WORDS = ['Thinking', 'Processing', 'Analyzing', 'Working', 
  * session has an entry in the processing map; it disappears the instant that
  * entry is removed.
  */
-export default function ActivityIndicator({ activity, onAbort }: ActivityIndicatorProps) {
+export default function ActivityIndicator({ activity, onAbort, isInputFocused = false }: ActivityIndicatorProps) {
   const { t } = useTranslation('chat');
-  const startedAt = activity?.startedAt ?? null;
+  const [renderedActivity, setRenderedActivity] = useState<SessionActivity | null>(activity);
+  const [isExiting, setIsExiting] = useState(false);
+  const startedAt = renderedActivity?.startedAt ?? null;
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    if (activity) {
+      setRenderedActivity(activity);
+      setIsExiting(false);
+      return;
+    }
+
+    if (!renderedActivity) return;
+
+    setIsExiting(true);
+    const timer = setTimeout(() => {
+      setRenderedActivity(null);
+      setIsExiting(false);
+    }, EXIT_ANIMATION_MS);
+
+    return () => clearTimeout(timer);
+  }, [activity, renderedActivity]);
 
   useEffect(() => {
     if (startedAt === null) return;
@@ -39,10 +61,10 @@ export default function ActivityIndicator({ activity, onAbort }: ActivityIndicat
     return () => clearInterval(timer);
   }, [startedAt]);
 
-  if (!activity) return null;
+  if (!renderedActivity) return null;
 
   const actionWords = ACTION_KEYS.map((key, i) => t(key, { defaultValue: DEFAULT_ACTION_WORDS[i] }));
-  const label = (activity.statusText || actionWords[Math.floor(elapsedSeconds / 4) % actionWords.length])
+  const label = (renderedActivity.statusText || actionWords[Math.floor(elapsedSeconds / 4) % actionWords.length])
     .replace(/\.+$/, '');
 
   const minutes = Math.floor(elapsedSeconds / 60);
@@ -50,19 +72,31 @@ export default function ActivityIndicator({ activity, onAbort }: ActivityIndicat
   const elapsedLabel = minutes < 1
     ? t('claudeStatus.elapsed.seconds', { count: seconds, defaultValue: '{{count}}s' })
     : t('claudeStatus.elapsed.minutesSeconds', { minutes, seconds, defaultValue: '{{minutes}}m {{seconds}}s' });
+  const tabSurfaceClassName = [
+    'chat-activity-tab inline-flex h-8 items-center rounded-b-none rounded-t-lg border border-b-0 bg-card px-3 text-xs transition-all duration-200',
+    isInputFocused
+      ? 'border-primary/30 shadow-[0_-1px_2px_hsl(var(--foreground)/0.08),1px_0_2px_hsl(var(--foreground)/0.06),-1px_0_2px_hsl(var(--foreground)/0.06)]'
+      : 'border-border/50 shadow-[0_-1px_1px_hsl(var(--foreground)/0.04),1px_0_1px_hsl(var(--foreground)/0.03),-1px_0_1px_hsl(var(--foreground)/0.03)]',
+  ].join(' ');
 
   return (
-    <div className="animate-in fade-in mb-2 w-full duration-300">
-      <div className="mx-auto flex max-w-4xl items-center gap-2 px-1">
-        <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-primary" aria-hidden />
-        <Shimmer className="text-xs font-medium">{`${label}…`}</Shimmer>
-        <span className="text-xs tabular-nums text-muted-foreground/60">{elapsedLabel}</span>
+    <div
+      className={`pointer-events-none bg-transparent ${
+        isExiting ? 'chat-activity-exit' : 'chat-activity-enter'
+      }`}
+    >
+      <div className="flex items-end justify-between gap-2">
+        <div className={`${tabSurfaceClassName} gap-2`}>
+          <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-primary" aria-hidden />
+          <Shimmer className="font-medium">{`${label}…`}</Shimmer>
+          <span className="tabular-nums text-muted-foreground/60">{elapsedLabel}</span>
+        </div>
 
-        {activity.canInterrupt && onAbort && (
+        {renderedActivity.canInterrupt && onAbort && (
           <button
             type="button"
             onClick={onAbort}
-            className="ml-auto flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+            className={`${tabSurfaceClassName} pointer-events-auto gap-1.5 text-muted-foreground hover:bg-card hover:text-destructive`}
             aria-label={t('claudeStatus.stop', { defaultValue: 'Stop' })}
           >
             <svg className="h-2.5 w-2.5 fill-current" viewBox="0 0 24 24" aria-hidden>

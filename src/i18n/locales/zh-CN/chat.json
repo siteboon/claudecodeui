@@ -18,7 +18,6 @@
     "claude": "Claude",
     "cursor": "Cursor",
     "codex": "Codex",
-    "gemini": "Gemini",
     "kiro": "Kiro"
   },
   "tools": {
@@ -135,7 +134,6 @@
       "claude": "准备好使用带有 {{model}} 的 Claude。请在下方开始输入您的消息。",
       "cursor": "准备好使用带有 {{model}} 的 Cursor。请在下方开始输入您的消息。",
       "codex": "准备好使用带有 {{model}} 的 Codex。请在下方开始输入您的消息。",
-      "gemini": "准备好使用带有 {{model}} 的 Gemini。请在下方开始输入您的消息。",
       "default": "请在上方选择一个提供者以开始",
       "kiro": "已准备好使用 Kiro 和 {{model}}。在下方输入您的消息。"
     },

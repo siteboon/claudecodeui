@@ -49,7 +49,8 @@
     "save": "Salva",
     "cancel": "Annulla",
     "clearSearch": "Cancella ricerca",
-    "openCommandPalette": "Apri tavolozza comandi"
+    "openCommandPalette": "Apri tavolozza comandi",
+    "attentionRequiredIndicator": "La sessione richiede attenzione"
   },
   "navigation": {
     "chat": "Chat",
@@ -106,10 +107,17 @@
     "deleteProjectFailed": "Impossibile rimuovere il progetto. Riprova.",
     "deleteProjectError": "Errore durante la rimozione del progetto. Riprova.",
     "createProjectFailed": "Impossibile creare il progetto. Riprova.",
-    "createProjectError": "Errore durante la creazione del progetto. Riprova."
+    "createProjectError": "Errore durante la creazione del progetto. Riprova.",
+    "updateProjectError": "Errore durante l'aggiornamento del progetto. Riprova.",
+    "refreshError": "Aggiornamento non riuscito. Riprova.",
+    "restoreProjectFailed": "Impossibile ripristinare il progetto. Riprova.",
+    "restoreProjectError": "Errore durante il ripristino del progetto. Riprova.",
+    "restoreSessionFailed": "Impossibile ripristinare la sessione. Riprova.",
+    "restoreSessionError": "Errore durante il ripristino della sessione. Riprova."
   },
   "version": {
-    "updateAvailable": "Aggiornamento disponibile"
+    "updateAvailable": "Aggiornamento disponibile",
+    "restartRequired": "Aggiornamento installato — riavvia il server per applicarlo"
   },
   "search": {
     "modeProjects": "Progetti",

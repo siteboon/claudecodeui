@@ -1,5 +1,6 @@
 import express from 'express';
-import { spawn } from 'child_process';
+// cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
+import spawn from 'cross-spawn';
 import path from 'path';
 import os from 'os';
 import { promises as fs } from 'fs';
@@ -8,7 +9,6 @@ import { userDb, apiKeysDb, githubTokensDb, projectsDb } from '../modules/databa
 import { queryClaudeSDK } from '../claude-sdk.js';
 import { spawnCursor } from '../cursor-cli.js';
 import { queryCodex } from '../openai-codex.js';
-import { spawnGemini } from '../gemini-cli.js';
 import { spawnOpenCode } from '../opencode-cli.js';
 import { spawnKiro } from '../kiro-cli.js';
 import { Octokit } from '@octokit/rest';
@@ -637,7 +637,7 @@ class ResponseCollector {
  *                          - Source for auto-generated branch names (if createBranch=true and no branchName)
  *                          - Fallback for PR title if no commits are made
  *
- * @param {string} provider - (Optional) AI provider to use. Options: 'claude' | 'cursor' | 'codex' | 'gemini' | 'opencode' | 'kiro'
+ * @param {string} provider - (Optional) AI provider to use. Options: 'claude' | 'cursor' | 'codex' | 'opencode' | 'kiro'
  *                           Default: 'claude'
  *
  * @param {boolean} stream - (Optional) Enable Server-Sent Events (SSE) streaming for real-time updates.
@@ -647,12 +647,17 @@ class ResponseCollector {
  *
  * @param {string} model - (Optional) Model identifier for providers.
  *
- *                        Claude models: 'sonnet' (default), 'opus', 'haiku', 'opusplan', 'sonnet[1m]', 'fable'
+ *                        Claude models: 'default', 'sonnet', 'opus', 'haiku', 'sonnet[1m]', 'opus[1m]', 'fable'
  *                        Cursor models: 'gpt-5' (default), 'gpt-5.2', 'gpt-5.2-high', 'sonnet-4.5', 'opus-4.5',
- *                                       'gemini-3-pro', 'composer-1', 'auto', 'gpt-5.1', 'gpt-5.1-high',
+ *                                       'composer-1', 'auto', 'gpt-5.1', 'gpt-5.1-high',
  *                                       'gpt-5.1-codex', 'gpt-5.1-codex-high', 'gpt-5.1-codex-max',
  *                                       'gpt-5.1-codex-max-high', 'opus-4.1', 'grok', and thinking variants
- *                        Codex models: 'gpt-5.2' (default), 'gpt-5.1-codex-max', 'o3', 'o4-mini'
+ *                        Codex models: 'gpt-5.4' (default), 'gpt-5.5', 'gpt-5.4-mini'
+ *
+ * @param {string} effort - (Optional) Reasoning effort for providers/models that support it.
+ *                          Claude supports: 'low', 'medium', 'high', 'xhigh', 'max' depending on model.
+ *                          Codex supports: 'low', 'medium', 'high', 'xhigh'.
+ *                          'default' or omission lets the provider decide.
  *
  * @param {boolean} cleanup - (Optional) Auto-cleanup project directory after completion.
  *                           Default: true
@@ -755,7 +760,7 @@ class ResponseCollector {
  * Input Validations (400 Bad Request):
  *   - Either githubUrl OR projectPath must be provided (not neither)
  *   - message must be non-empty string
- *   - provider must be 'claude', 'cursor', 'codex', 'gemini', 'opencode', or 'kiro'
+ *   - provider must be 'claude', 'cursor', 'codex', 'opencode', or 'kiro'
  *   - createBranch/createPR requires githubUrl OR projectPath (not neither)
  *   - branchName must pass Git naming rules (if provided)
  *
@@ -845,6 +850,9 @@ class ResponseCollector {
  */
 router.post('/', validateExternalApiKey, async (req, res) => {
   const { githubUrl, projectPath, message, provider = 'claude', model, githubToken, branchName, sessionId } = req.body;
+  const effort = typeof req.body.effort === 'string' && req.body.effort.trim()
+    ? req.body.effort.trim()
+    : undefined;
 
   // Parse stream and cleanup as booleans (handle string "true"/"false" from curl)
   const stream = req.body.stream === undefined ? true : (req.body.stream === true || req.body.stream === 'true');
@@ -863,8 +871,8 @@ router.post('/', validateExternalApiKey, async (req, res) => {
     return res.status(400).json({ error: 'message is required' });
   }
 
-  if (!['claude', 'cursor', 'codex', 'gemini', 'opencode', 'kiro'].includes(provider)) {
-    return res.status(400).json({ error: 'provider must be "claude", "cursor", "codex", "gemini", "opencode", or "kiro"' });
+  if (!['claude', 'cursor', 'codex', 'opencode', 'kiro'].includes(provider)) {
+    return res.status(400).json({ error: 'provider must be "claude", "cursor", "codex", "opencode", or "kiro"' });
   }
 
   // Validate GitHub branch/PR creation requirements
@@ -943,7 +951,6 @@ router.post('/', validateExternalApiKey, async (req, res) => {
     }
 
     const codexModels = (await providerModelsService.getProviderModels('codex')).models;
-    const geminiModels = (await providerModelsService.getProviderModels('gemini')).models;
     const opencodeModels = (await providerModelsService.getProviderModels('opencode')).models;
 
     // Start the appropriate session
@@ -955,6 +962,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         cwd: finalProjectPath,
         sessionId: sessionId || null,
         model: model,
+        effort,
         permissionMode: 'bypassPermissions' // Bypass all permissions for API calls
       }, writer);
 
@@ -976,17 +984,8 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         cwd: finalProjectPath,
         sessionId: sessionId || null,
         model: model || codexModels.DEFAULT,
+        effort,
         permissionMode: 'bypassPermissions'
-      }, writer);
-    } else if (provider === 'gemini') {
-      console.log('✨ Starting Gemini CLI session');
-
-      await spawnGemini(message.trim(), {
-        projectPath: finalProjectPath,
-        cwd: finalProjectPath,
-        sessionId: sessionId || null,
-        model: model || geminiModels.DEFAULT,
-        skipPermissions: true // CLI mode bypasses permissions
       }, writer);
     } else if (provider === 'opencode') {
       console.log('Starting OpenCode CLI session');
@@ -995,7 +994,9 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         projectPath: finalProjectPath,
         cwd: finalProjectPath,
         sessionId: sessionId || null,
-        model: model || opencodeModels.DEFAULT
+        model: model || opencodeModels.DEFAULT,
+        effort,
+        permissionMode: 'bypassPermissions' // Agent runs are non-interactive, like the other providers above
       }, writer);
     } else if (provider === 'kiro') {
       console.log('☁️ Starting Kiro CLI session');

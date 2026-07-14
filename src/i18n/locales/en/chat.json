@@ -18,7 +18,6 @@
     "claude": "Claude",
     "cursor": "Cursor",
     "codex": "Codex",
-    "gemini": "Gemini",
     "opencode": "OpenCode",
     "kiro": "Kiro"
   },
@@ -105,23 +104,13 @@
     },
     "technicalDetails": "Technical details"
   },
-  "gemini": {
-    "permissionMode": "Gemini Permission Mode",
-    "description": "Control how Gemini CLI handles operation approvals.",
-    "modes": {
-      "default": {
-        "title": "Standard (Ask for Approval)",
-        "description": "Gemini will prompt for approval before executing commands, writing files, and fetching web resources."
-      },
-      "autoEdit": {
-        "title": "Auto Edit (Skip File Approvals)",
-        "description": "Gemini will automatically approve file edits and web fetches, but will still prompt for shell commands."
-      },
-      "yolo": {
-        "title": "YOLO (Bypass All Permissions)",
-        "description": "Gemini will execute all operations without asking for approval. Exercise caution."
-      }
-    }
+  "voice": {
+    "input": "Voice input",
+    "stopRecording": "Stop recording",
+    "transcribing": "Transcribing…",
+    "speak": "Read aloud",
+    "stopSpeaking": "Stop",
+    "loading": "Loading…"
   },
   "input": {
     "placeholder": "Type / for commands, @ for files, or ask {{provider}} anything...",
@@ -133,12 +122,22 @@
     "stop": "Stop",
     "hintText": {
       "ctrlEnter": "Ctrl+Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands",
-      "enter": "Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands"
+      "enter": "Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands",
+      "queue": "Enter to queue your next message",
+      "updateQueued": "Enter to update queued message"
     },
     "clickToChangeMode": "Click to change permission mode (or press Tab in input)",
     "showAllCommands": "Show all commands",
     "clearInput": "Clear input",
-    "scrollToBottom": "Scroll to bottom"
+    "scrollToBottom": "Scroll to bottom",
+    "queue": {
+      "sendNext": "Queue next message",
+      "update": "Update queued message",
+      "label": "Queued",
+      "willSend": "Will send when this finishes",
+      "edit": "Edit queued message",
+      "delete": "Delete queued message"
+    }
   },
   "providerSelection": {
     "title": "Choose Your AI Assistant",
@@ -154,7 +153,6 @@
       "claude": "Ready to use Claude with {{model}}. Start typing your message below.",
       "cursor": "Ready to use Cursor with {{model}}. Start typing your message below.",
       "codex": "Ready to use Codex with {{model}}. Start typing your message below.",
-      "gemini": "Ready to use Gemini with {{model}}. Start typing your message below.",
       "opencode": "Ready to use OpenCode with {{model}}. Start typing your message below.",
       "kiro": "Ready to use Kiro with {{model}}. Start typing your message below.",
       "default": "Select a provider above to begin"

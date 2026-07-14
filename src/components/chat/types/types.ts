@@ -10,8 +10,12 @@ export type Provider = LLMProvider;
 export type PermissionMode = 'default' | 'acceptEdits' | 'auto' | 'bypassPermissions' | 'plan';
 
 export interface ChatImage {
-  data: string;
-  name: string;
+  /** Inline data URL (Claude history stores attachments as base64). */
+  data?: string;
+  /** Project-relative path under `.cloudcli/assets` served via the files API. */
+  path?: string;
+  name?: string;
+  mimeType?: string;
 }
 
 export interface ToolResult {
@@ -126,10 +130,8 @@ export interface ChatInterfaceProps {
   onNavigateToSession?: (targetSessionId: string, options?: SessionNavigationOptions) => void;
   onSessionEstablished?: (sessionId: string, context: SessionEstablishedContext) => void;
   onShowSettings?: () => void;
-  autoExpandTools?: boolean;
   showRawParameters?: boolean;
   showThinking?: boolean;
-  autoScrollToBottom?: boolean;
   sendByCtrlEnter?: boolean;
   externalMessageUpdate?: number;
   newSessionTrigger?: number;

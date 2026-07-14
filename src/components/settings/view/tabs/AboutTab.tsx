@@ -1,9 +1,10 @@
-import { ExternalLink, MessageSquare, Star } from 'lucide-react';
+import { Cloud, ExternalLink, MessageSquare, Star, Users } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
+import { CLOUDCLI_WORDMARK_FONT_FAMILY } from '../../../../constants/branding';
 import { IS_PLATFORM } from '../../../../constants/config';
 import { useVersionCheck } from '../../../../hooks/useVersionCheck';
 import PremiumFeatureCard from '../PremiumFeatureCard';
-import { Cloud, Users } from 'lucide-react';
 
 const GITHUB_REPO_URL = 'https://github.com/siteboon/claudecodeui';
 const DISCORD_URL = 'https://discord.gg/buxwujPNRE';
@@ -40,7 +41,12 @@ export default function AboutTab() {
         </div>
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-base font-semibold text-foreground">CloudCLI</span>
+            <span
+              className="text-base font-semibold text-foreground"
+              style={{ fontFamily: CLOUDCLI_WORDMARK_FONT_FAMILY }}
+            >
+              CloudCLI
+            </span>
             <a
               href={releasesUrl}
               target="_blank"

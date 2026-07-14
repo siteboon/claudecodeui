@@ -54,14 +54,11 @@
     "sections": {
       "appearance": "外觀",
       "toolDisplay": "工具顯示",
-      "viewOptions": "檢視選項",
       "inputSettings": "輸入設定"
     },
     "darkMode": "深色模式",
-    "autoExpandTools": "自動展開工具",
     "showRawParameters": "顯示原始參數",
     "showThinking": "顯示思考過程",
-    "autoScrollToBottom": "自動捲動到底部",
     "sendByCtrlEnter": "使用 Ctrl+Enter 傳送",
     "sendByCtrlEnterDescription": "啟用後，按 Ctrl+Enter 傳送訊息，而不是僅按 Enter。這對於使用輸入法的使用者可以避免意外傳送。",
     "dragHandle": {
@@ -94,6 +91,7 @@
     "git": "Git",
     "apiTokens": "API 和權杖",
     "tasks": "任務",
+    "computer": "電腦使用",
     "notifications": "通知",
     "plugins": "外掛",
     "about": "關於"
@@ -325,9 +323,6 @@
       },
       "codex": {
         "description": "OpenAI Codex AI 助手"
-      },
-      "gemini": {
-        "description": "Google Gemini AI 助手"
       }
     },
     "connectionStatus": "連線狀態",

@@ -69,6 +69,23 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 );
 `;
 
+export const NOTIFICATION_CHANNEL_ENDPOINTS_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS notification_channel_endpoints (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    channel TEXT NOT NULL,
+    endpoint_id TEXT NOT NULL,
+    label TEXT,
+    metadata_json TEXT,
+    enabled BOOLEAN DEFAULT 1,
+    last_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, channel, endpoint_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+`;
+
 export const PROJECTS_TABLE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS projects (
     project_id TEXT PRIMARY KEY NOT NULL,
@@ -143,6 +160,10 @@ ${VAPID_KEYS_TABLE_SCHEMA_SQL}
 
 ${PUSH_SUBSCRIPTIONS_TABLE_SCHEMA_SQL}
 CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user_id ON push_subscriptions(user_id);
+
+${NOTIFICATION_CHANNEL_ENDPOINTS_TABLE_SCHEMA_SQL}
+CREATE INDEX IF NOT EXISTS idx_notification_channel_endpoints_user_channel ON notification_channel_endpoints(user_id, channel);
+CREATE INDEX IF NOT EXISTS idx_notification_channel_endpoints_enabled ON notification_channel_endpoints(enabled);
 
 ${PROJECTS_TABLE_SCHEMA_SQL}
 -- NOTE: These indexes are created in migrations after legacy table-shape repairs.

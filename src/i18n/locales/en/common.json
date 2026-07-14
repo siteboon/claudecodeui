@@ -22,7 +22,9 @@
     "shell": "Shell",
     "files": "Files",
     "git": "Source Control",
-    "tasks": "Tasks"
+    "tasks": "Tasks",
+    "browser": "Browser",
+    "computer": "Computer"
   },
   "status": {
     "loading": "Loading...",
