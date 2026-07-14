@@ -6,6 +6,7 @@ import { sessionsService } from './modules/providers/services/sessions.service.j
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
 import { providerModelsService } from './modules/providers/services/provider-models.service.js';
 import { createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell } from './shared/utils.js';
+import { buildChildProcessEnv } from './utils/childProcessEnv.js';
 
 // cross-spawn resolves .cmd shims/PATHEXT on Windows and delegates to
 // child_process.spawn everywhere else.
@@ -134,7 +135,7 @@ async function spawnCursor(command, options = {}, ws) {
       const cursorProcess = spawnFunction('cursor-agent', args, {
         cwd: workingDir,
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env } // Inherit all environment variables
+        env: buildChildProcessEnv() // Inherit all environment variables except NODE_ENV
       });
 
       activeCursorProcesses.set(processKey, cursorProcess);

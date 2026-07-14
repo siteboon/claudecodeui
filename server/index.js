@@ -69,6 +69,7 @@ import { configureWebPush } from './services/vapid-keys.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
 import { c } from './utils/colors.js';
+import { buildChildProcessEnv } from './utils/childProcessEnv.js';
 
 const __dirname = getModuleDir(import.meta.url);
 // The server source runs from /server, while the compiled output runs from /dist-server/server.
@@ -265,7 +266,7 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
 
         const child = spawn('sh', ['-c', updateCommand], {
             cwd: updateCwd,
-            env: process.env
+            env: buildChildProcessEnv()
         });
 
         let output = '';

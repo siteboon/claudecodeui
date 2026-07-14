@@ -10,6 +10,7 @@ import spawn from 'cross-spawn';
 import { appConfigDb } from '@/modules/database/index.js';
 import { providerMcpService } from '@/modules/providers/index.js';
 import { getModuleDir } from '@/utils/runtime-paths.js';
+import { buildChildProcessEnv } from '@/utils/childProcessEnv.js';
 
 const require = createRequire(import.meta.url);
 const __dirname = getModuleDir(import.meta.url);
@@ -249,7 +250,7 @@ function runCommand(command: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: process.cwd(),
-      env: process.env,
+      env: buildChildProcessEnv(),
       shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
