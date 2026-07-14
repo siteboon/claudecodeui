@@ -125,9 +125,14 @@ function readOpenCodeTokenUsage(sessionId) {
 async function spawnOpenCode(command, options = {}, ws) {
   return new Promise((resolve, reject) => {
     const { sessionId, projectPath, cwd, model, effort, sessionSummary, images, permissionMode } = options;
+    // Callers pass the stable app session id; the CLI resumes with the
+    // provider-native id recorded on the session row.
+    const providerSessionId = sessionsService.resolveProviderSessionId(sessionId);
     const workingDir = cwd || projectPath || process.cwd();
+    // Process-map key: the app session id when the caller supplied one, so
+    // abort-by-app-id always works.
     const processKey = sessionId || Date.now().toString();
-    let capturedSessionId = sessionId || null;
+    let capturedSessionId = providerSessionId;
     let sessionCreatedSent = false;
     let stdoutLineBuffer = '';
     let terminalNotificationSent = false;
@@ -142,7 +147,8 @@ async function spawnOpenCode(command, options = {}, ws) {
       }
 
       terminalNotificationSent = true;
-      const finalSessionId = capturedSessionId || sessionId || processKey;
+      // Notifications are app-facing, so they carry the app session id.
+      const finalSessionId = sessionId || capturedSessionId || processKey;
       if (code === 0 && !error) {
         notifyRunStopped({
           userId: ws?.userId || null,
@@ -169,7 +175,9 @@ async function spawnOpenCode(command, options = {}, ws) {
       }
 
       capturedSessionId = nextSessionId;
-      if (processKey !== capturedSessionId && opencodeProcess) {
+      // Legacy/direct callers without an app session id re-key the process
+      // under the provider-native id once it is known.
+      if (!sessionId && processKey !== capturedSessionId && opencodeProcess) {
         activeOpenCodeProcesses.delete(processKey);
         activeOpenCodeProcesses.set(capturedSessionId, opencodeProcess);
       }
@@ -181,7 +189,7 @@ async function spawnOpenCode(command, options = {}, ws) {
         ws.setSessionId(capturedSessionId);
       }
 
-      if (!sessionId && !sessionCreatedSent) {
+      if (!providerSessionId && !sessionCreatedSent) {
         sessionCreatedSent = true;
         ws.send(createNormalizedMessage({
           kind: 'session_created',
@@ -246,8 +254,8 @@ async function spawnOpenCode(command, options = {}, ws) {
       // Relying on the child-process cwd alone is not enough on Linux, where
       // the CLI can still resolve the session under the server install dir.
       args.push('--dir', workingDir);
-      if (sessionId) {
-        args.push('--session', sessionId);
+      if (providerSessionId) {
+        args.push('--session', providerSessionId);
       }
       if (resolvedModel) {
         args.push('--model', resolvedModel);
@@ -300,7 +308,7 @@ async function spawnOpenCode(command, options = {}, ws) {
       });
 
       opencodeProcess.on('close', async (code) => {
-        const finalSessionId = capturedSessionId || sessionId || processKey;
+        const finalSessionId = sessionId || capturedSessionId || processKey;
         activeOpenCodeProcesses.delete(finalSessionId);
         activeOpenCodeProcesses.delete(processKey);
 
@@ -309,7 +317,8 @@ async function spawnOpenCode(command, options = {}, ws) {
           stdoutLineBuffer = '';
         }
 
-        const tokenBudget = readOpenCodeTokenUsage(finalSessionId);
+        // OpenCode's own database is keyed by the provider-native id.
+        const tokenBudget = readOpenCodeTokenUsage(capturedSessionId);
         if (tokenBudget) {
           ws.send(createNormalizedMessage({
             kind: 'status',
@@ -350,7 +359,7 @@ async function spawnOpenCode(command, options = {}, ws) {
       });
 
       opencodeProcess.on('error', async (error) => {
-        const finalSessionId = capturedSessionId || sessionId || processKey;
+        const finalSessionId = sessionId || capturedSessionId || processKey;
         activeOpenCodeProcesses.delete(finalSessionId);
         activeOpenCodeProcesses.delete(processKey);
 

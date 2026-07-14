@@ -31,8 +31,11 @@ function isWorkspaceTrustPrompt(text = '') {
 async function spawnCursor(command, options = {}, ws) {
   return new Promise(async (resolve, reject) => {
     const { sessionId, projectPath, cwd, toolsSettings, skipPermissions, model, sessionSummary, images } = options;
+    // Callers pass the stable app session id; the CLI resumes with the
+    // provider-native id recorded on the session row.
+    const providerSessionId = sessionsService.resolveProviderSessionId(sessionId);
     const resolvedModel = await providerModelsService.resolveResumeModel('cursor', sessionId, model);
-    let capturedSessionId = sessionId; // Track session ID throughout the process
+    let capturedSessionId = providerSessionId; // Track the provider-native session id throughout the process
     let sessionCreatedSent = false; // Track if we've already sent session-created event
     let hasRetriedWithTrust = false;
     let settled = false;
@@ -51,9 +54,9 @@ async function spawnCursor(command, options = {}, ws) {
     const baseArgs = [];
 
     // Build flags allowing both resume and prompt together (reply in existing session)
-    // Treat presence of sessionId as intention to resume, regardless of resume flag
-    if (sessionId) {
-      baseArgs.push('--resume=' + sessionId);
+    // Treat a known provider-native id as intention to resume
+    if (providerSessionId) {
+      baseArgs.push('--resume=' + providerSessionId);
     }
 
     if (command && command.trim()) {
@@ -82,8 +85,9 @@ async function spawnCursor(command, options = {}, ws) {
     // Use cwd (actual project directory) instead of projectPath
     const workingDir = cwd || projectPath || process.cwd();
 
-    // Store process reference for potential abort
-    const processKey = capturedSessionId || Date.now().toString();
+    // Store process reference for potential abort — keyed by the app session
+    // id when the caller supplied one, so abort-by-app-id always works.
+    const processKey = sessionId || Date.now().toString();
 
     const settleOnce = (callback) => {
       if (settled) {
@@ -106,7 +110,8 @@ async function spawnCursor(command, options = {}, ws) {
 
         terminalNotificationSent = true;
 
-        const finalSessionId = capturedSessionId || sessionId || processKey;
+        // Notifications are app-facing, so they carry the app session id.
+        const finalSessionId = sessionId || capturedSessionId || processKey;
         if (code === 0 && !error) {
           notifyRunStopped({
             userId: ws?.userId || null,
@@ -167,8 +172,9 @@ async function spawnCursor(command, options = {}, ws) {
                 if (response.session_id && !capturedSessionId) {
                   capturedSessionId = response.session_id;
 
-                  // Update process key with captured session ID
-                  if (processKey !== capturedSessionId) {
+                  // Legacy/direct callers without an app session id re-key the
+                  // process under the provider-native id once it is known.
+                  if (!sessionId && processKey !== capturedSessionId) {
                     activeCursorProcesses.delete(processKey);
                     activeCursorProcesses.set(capturedSessionId, cursorProcess);
                   }
@@ -178,8 +184,8 @@ async function spawnCursor(command, options = {}, ws) {
                     ws.setSessionId(capturedSessionId);
                   }
 
-                  // Send session-created event only once for new sessions
-                  if (!sessionId && !sessionCreatedSent) {
+                  // Send session-created event only once for sessions with nothing to resume
+                  if (!providerSessionId && !sessionCreatedSent) {
                     sessionCreatedSent = true;
                     ws.send(createNormalizedMessage({ kind: 'session_created', newSessionId: capturedSessionId, model: response.model, cwd: response.cwd, sessionId: capturedSessionId, provider: 'cursor' }));
                   }
@@ -256,7 +262,9 @@ async function spawnCursor(command, options = {}, ws) {
 
       // Handle process completion
       cursorProcess.on('close', async (code) => {
-        const finalSessionId = capturedSessionId || sessionId || processKey;
+        // The process map is keyed by the app session id when one was given,
+        // otherwise by the captured provider id (or the timestamp fallback).
+        const finalSessionId = sessionId || capturedSessionId || processKey;
         activeCursorProcesses.delete(finalSessionId);
 
         // Flush any final unterminated stdout line before completion handling.
@@ -297,7 +305,7 @@ async function spawnCursor(command, options = {}, ws) {
         console.error('Cursor CLI process error:', error);
 
         // Clean up process reference on error
-        const finalSessionId = capturedSessionId || sessionId || processKey;
+        const finalSessionId = sessionId || capturedSessionId || processKey;
         activeCursorProcesses.delete(finalSessionId);
 
         // Check if Cursor CLI is installed for a clearer error message

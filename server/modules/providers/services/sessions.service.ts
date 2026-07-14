@@ -120,6 +120,23 @@ export const sessionsService = {
   },
 
   /**
+   * Resolves the provider-native session id a runtime needs for resume.
+   *
+   * Callers hand provider runtimes the stable app session id; the provider
+   * CLIs/SDKs only understand their own native id, which lives on the session
+   * row. Ids without a row are assumed to be provider-native already (direct
+   * API callers that reference sessions the watcher has not indexed yet).
+   */
+  resolveProviderSessionId(sessionId: string | null | undefined): string | null {
+    if (!sessionId) {
+      return null;
+    }
+
+    const session = sessionsDb.getSessionById(sessionId);
+    return session ? session.provider_session_id : sessionId;
+  },
+
+  /**
    * Normalizes one provider-native event into frontend session message events.
    */
   normalizeMessage(

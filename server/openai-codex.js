@@ -234,6 +234,10 @@ export async function queryCodex(command, options = {}, ws) {
     permissionMode = 'default'
   } = options;
 
+  // Callers pass the stable app session id; the SDK resumes threads with the
+  // provider-native id recorded on the session row.
+  const providerSessionId = sessionsService.resolveProviderSessionId(sessionId);
+
   const resolvedModel = await providerModelsService.resolveResumeModel(
     'codex',
     sessionId,
@@ -251,10 +255,15 @@ export async function queryCodex(command, options = {}, ws) {
 
   let codex;
   let thread;
-  let capturedSessionId = sessionId;
+  // Provider-native thread id (starts as the resume id, or is captured from
+  // the stream for brand-new sessions).
+  let capturedSessionId = providerSessionId;
   let sessionCreatedSent = false;
   let terminalFailure = null;
   const abortController = new AbortController();
+  // Session-map key: the app session id when the caller supplied one, else
+  // the provider-native thread id once captured (legacy/direct API callers).
+  const sessionKey = () => sessionId || capturedSessionId || null;
 
   try {
     codex = new Codex();
@@ -268,8 +277,8 @@ export async function queryCodex(command, options = {}, ws) {
       modelReasoningEffort: resolvedEffort,
     };
 
-    if (sessionId) {
-      thread = codex.resumeThread(sessionId, threadOptions);
+    if (providerSessionId) {
+      thread = codex.resumeThread(providerSessionId, threadOptions);
     } else {
       thread = codex.startThread(threadOptions);
     }
@@ -287,8 +296,8 @@ export async function queryCodex(command, options = {}, ws) {
       });
     };
 
-    if (capturedSessionId) {
-      registerSession(capturedSessionId);
+    if (sessionKey()) {
+      registerSession(sessionKey());
     }
 
     // Execute with streaming. Turns with image attachments send structured
@@ -306,13 +315,13 @@ export async function queryCodex(command, options = {}, ws) {
         const discoveredSessionId = event.thread_id || event.id || null;
         if (discoveredSessionId && !capturedSessionId) {
           capturedSessionId = discoveredSessionId;
-          registerSession(capturedSessionId);
+          registerSession(sessionKey());
 
           if (ws.setSessionId && typeof ws.setSessionId === 'function') {
             ws.setSessionId(capturedSessionId);
           }
 
-          if (!sessionId && !sessionCreatedSent) {
+          if (!providerSessionId && !sessionCreatedSent) {
             sessionCreatedSent = true;
             sendMessage(ws, createNormalizedMessage({ kind: 'session_created', newSessionId: capturedSessionId, sessionId: capturedSessionId, provider: 'codex' }));
           }
@@ -323,8 +332,8 @@ export async function queryCodex(command, options = {}, ws) {
       if (abortController.signal.aborted) {
         break;
       }
-      if (capturedSessionId) {
-        const session = activeCodexSessions.get(capturedSessionId);
+      if (sessionKey()) {
+        const session = activeCodexSessions.get(sessionKey());
         if (session?.status === 'aborted') {
           break;
         }
@@ -344,10 +353,11 @@ export async function queryCodex(command, options = {}, ws) {
 
       if (event.type === 'turn.failed' && !terminalFailure) {
         terminalFailure = event.error || new Error('Turn failed');
+        // Notifications are app-facing, so they carry the app session id.
         notifyRunFailed({
           userId: ws?.userId || null,
           provider: 'codex',
-          sessionId: capturedSessionId || sessionId || null,
+          sessionId: sessionId || capturedSessionId || null,
           sessionName: sessionSummary,
           error: terminalFailure
         });
@@ -364,7 +374,7 @@ export async function queryCodex(command, options = {}, ws) {
 
     // Send the terminal completion event — skipped for aborted runs, whose
     // terminal `complete` (aborted: true) was already sent by abort-session.
-    const runSession = capturedSessionId ? activeCodexSessions.get(capturedSessionId) : null;
+    const runSession = sessionKey() ? activeCodexSessions.get(sessionKey()) : null;
     const runAborted = runSession?.status === 'aborted' || abortController.signal.aborted;
     if (!runAborted) {
       sendMessage(ws, createCompleteMessage({
@@ -377,7 +387,7 @@ export async function queryCodex(command, options = {}, ws) {
         notifyRunStopped({
           userId: ws?.userId || null,
           provider: 'codex',
-          sessionId: capturedSessionId || sessionId || null,
+          sessionId: sessionId || capturedSessionId || null,
           sessionName: sessionSummary,
           stopReason: 'completed'
         });
@@ -385,7 +395,7 @@ export async function queryCodex(command, options = {}, ws) {
     }
 
   } catch (error) {
-    const session = capturedSessionId ? activeCodexSessions.get(capturedSessionId) : null;
+    const session = sessionKey() ? activeCodexSessions.get(sessionKey()) : null;
     const wasAborted =
       session?.status === 'aborted' ||
       error?.name === 'AbortError' ||
@@ -410,7 +420,7 @@ export async function queryCodex(command, options = {}, ws) {
         notifyRunFailed({
           userId: ws?.userId || null,
           provider: 'codex',
-          sessionId: capturedSessionId || sessionId || null,
+          sessionId: sessionId || capturedSessionId || null,
           sessionName: sessionSummary,
           error
         });
@@ -419,8 +429,8 @@ export async function queryCodex(command, options = {}, ws) {
 
   } finally {
     // Update session status
-    if (capturedSessionId) {
-      const session = activeCodexSessions.get(capturedSessionId);
+    if (sessionKey()) {
+      const session = activeCodexSessions.get(sessionKey());
       if (session) {
         session.status = session.status === 'aborted' ? 'aborted' : 'completed';
       }

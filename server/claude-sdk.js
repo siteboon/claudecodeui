@@ -158,7 +158,7 @@ function matchesToolPermission(entry, toolName, input) {
 }
 
 function mapCliOptionsToSDK(options = {}) {
-  const { sessionId, cwd, toolsSettings, permissionMode, effort } = options;
+  const { providerSessionId, cwd, toolsSettings, permissionMode, effort } = options;
 
   const sdkOptions = {};
 
@@ -226,8 +226,9 @@ function mapCliOptionsToSDK(options = {}) {
 
   sdkOptions.settingSources = ['project', 'user', 'local'];
 
-  if (sessionId) {
-    sdkOptions.resume = sessionId;
+  // The SDK resumes with the provider-native session id, never the app id.
+  if (providerSessionId) {
+    sdkOptions.resume = providerSessionId;
   }
 
   return sdkOptions;
@@ -459,8 +460,16 @@ async function loadMcpConfig(cwd) {
  */
 async function queryClaudeSDK(command, options = {}, ws) {
   const { sessionId, sessionSummary } = options;
-  let capturedSessionId = sessionId;
+  // Callers pass the stable app session id; the SDK only understands the
+  // provider-native id recorded on the session row.
+  const providerSessionId = sessionsService.resolveProviderSessionId(sessionId);
+  // Provider-native id as the SDK reports it (starts as the resume id, or is
+  // captured from the stream for brand-new sessions).
+  let capturedSessionId = providerSessionId;
   let sessionCreatedSent = false;
+  // Process-map key: the app session id when the caller supplied one, else
+  // the provider-native id once captured (legacy/direct API callers).
+  const sessionKey = () => sessionId || capturedSessionId || null;
 
   const emitNotification = (event) => {
     notifyUserIfEnabled({
@@ -485,6 +494,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
     const sdkOptions = mapCliOptionsToSDK({
       ...options,
+      providerSessionId,
       model: resolvedModel || options.model,
       effortModels,
     });
@@ -504,15 +514,16 @@ async function queryClaudeSDK(command, options = {}, ws) {
         matcher: '',
         hooks: [async (input) => {
           const message = typeof input?.message === 'string' ? input.message : 'Claude requires your attention.';
+          // Notifications are app-facing, so they carry the app session id.
           emitNotification(createNotificationEvent({
             provider: 'claude',
-            sessionId: capturedSessionId || sessionId || null,
+            sessionId: sessionId || capturedSessionId || null,
             kind: 'action_required',
             code: 'agent.notification',
             meta: { message, sessionName: sessionSummary },
             severity: 'warning',
             requiresUserAction: true,
-            dedupeKey: `claude:hook:notification:${capturedSessionId || sessionId || 'none'}:${message}`
+            dedupeKey: `claude:hook:notification:${sessionId || capturedSessionId || 'none'}:${message}`
           }));
           return {};
         }]
@@ -552,20 +563,22 @@ async function queryClaudeSDK(command, options = {}, ws) {
       ws.send(createNormalizedMessage({ kind: 'permission_request', requestId, toolName, input, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
       emitNotification(createNotificationEvent({
         provider: 'claude',
-        sessionId: capturedSessionId || sessionId || null,
+        sessionId: sessionId || capturedSessionId || null,
         kind: 'action_required',
         code: 'permission.required',
         meta: { toolName, sessionName: sessionSummary },
         severity: 'warning',
         requiresUserAction: true,
-        dedupeKey: `claude:permission:${capturedSessionId || sessionId || 'none'}:${requestId}`
+        dedupeKey: `claude:permission:${sessionId || capturedSessionId || 'none'}:${requestId}`
       }));
 
       const decision = await waitForToolApproval(requestId, {
         timeoutMs: requiresInteraction ? 0 : undefined,
         signal: context?.signal,
         metadata: {
-          _sessionId: capturedSessionId || sessionId || null,
+          // Keyed by the app session id so `chat.subscribe` can look pending
+          // approvals up directly; provider id only for legacy callers.
+          _sessionId: sessionId || capturedSessionId || null,
           _toolName: toolName,
           _input: input,
           _receivedAt: new Date(),
@@ -626,8 +639,8 @@ async function queryClaudeSDK(command, options = {}, ws) {
     }
 
     // Track the query instance for abort capability
-    if (capturedSessionId) {
-      addSession(capturedSessionId, queryInstance, ws);
+    if (sessionKey()) {
+      addSession(sessionKey(), queryInstance, ws);
     }
 
     // Process streaming messages
@@ -637,15 +650,15 @@ async function queryClaudeSDK(command, options = {}, ws) {
       if (message.session_id && !capturedSessionId) {
 
         capturedSessionId = message.session_id;
-        addSession(capturedSessionId, queryInstance, ws);
+        addSession(sessionKey(), queryInstance, ws);
 
         // Set session ID on writer
         if (ws.setSessionId && typeof ws.setSessionId === 'function') {
           ws.setSessionId(capturedSessionId);
         }
 
-        // Send session-created event only once for new sessions
-        if (!sessionId && !sessionCreatedSent) {
+        // Send session-created event only once for sessions with nothing to resume
+        if (!providerSessionId && !sessionCreatedSent) {
           sessionCreatedSent = true;
           ws.send(createNormalizedMessage({ kind: 'session_created', newSessionId: capturedSessionId, sessionId: capturedSessionId, provider: 'claude' }));
         }
@@ -675,20 +688,20 @@ async function queryClaudeSDK(command, options = {}, ws) {
     }
 
     // Clean up session on completion
-    if (capturedSessionId) {
-      removeSession(capturedSessionId);
+    if (sessionKey()) {
+      removeSession(sessionKey());
     }
 
     // Send the terminal completion event — skipped for aborted runs, whose
     // terminal `complete` (aborted: true) was already sent by abort-session.
-    const wasAborted = capturedSessionId ? abortedSessionIds.delete(capturedSessionId) : false;
+    const wasAborted = sessionKey() ? abortedSessionIds.delete(sessionKey()) : false;
     if (!wasAborted) {
       ws.send(createCompleteMessage({ provider: 'claude', sessionId: capturedSessionId || sessionId || null, exitCode: 0 }));
     }
     notifyRunStopped({
       userId: ws?.userId || null,
       provider: 'claude',
-      sessionId: capturedSessionId || sessionId || null,
+      sessionId: sessionId || capturedSessionId || null,
       sessionName: sessionSummary,
       stopReason: wasAborted ? 'aborted' : 'completed'
     });
@@ -698,11 +711,11 @@ async function queryClaudeSDK(command, options = {}, ws) {
     console.error('SDK query error:', error);
 
     // Clean up session on error
-    if (capturedSessionId) {
-      removeSession(capturedSessionId);
+    if (sessionKey()) {
+      removeSession(sessionKey());
     }
 
-    const wasAborted = capturedSessionId ? abortedSessionIds.delete(capturedSessionId) : false;
+    const wasAborted = sessionKey() ? abortedSessionIds.delete(sessionKey()) : false;
     if (wasAborted) {
       // The abort already produced the terminal complete; a generator throw
       // caused by interrupt() is expected noise, not a user-facing error.
@@ -721,7 +734,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
     notifyRunFailed({
       userId: ws?.userId || null,
       provider: 'claude',
-      sessionId: capturedSessionId || sessionId || null,
+      sessionId: sessionId || capturedSessionId || null,
       sessionName: sessionSummary,
       error
     });
