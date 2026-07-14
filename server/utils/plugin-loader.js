@@ -4,6 +4,8 @@ import os from 'os';
 
 import { spawn } from 'cross-spawn';
 
+import { buildChildProcessEnv } from './childProcessEnv.js';
+
 const PLUGINS_DIR = path.join(os.homedir(), '.claude-code-ui', 'plugins');
 const PLUGINS_CONFIG_PATH = path.join(os.homedir(), '.claude-code-ui', 'plugins.json');
 
@@ -110,6 +112,7 @@ function runBuildIfNeeded(dir, packageJsonPath, onSuccess, onError) {
   const buildProcess = spawn('npm', ['run', 'build'], {
     cwd: dir,
     stdio: ['ignore', 'pipe', 'pipe'],
+    env: buildChildProcessEnv(),
   });
 
   let stderr = '';
@@ -342,6 +345,7 @@ export function installPluginFromGit(url) {
         const npmProcess = spawn('npm', ['install', '--ignore-scripts'], {
           cwd: tempDir,
           stdio: ['ignore', 'pipe', 'pipe'],
+          env: buildChildProcessEnv(),
         });
 
         npmProcess.on('close', (npmCode) => {
@@ -409,6 +413,7 @@ export function updatePluginFromGit(name) {
         const npmProcess = spawn('npm', ['install', '--ignore-scripts'], {
           cwd: pluginDir,
           stdio: ['ignore', 'pipe', 'pipe'],
+          env: buildChildProcessEnv(),
         });
         npmProcess.on('close', (npmCode) => {
           if (npmCode !== 0) {
