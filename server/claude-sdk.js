@@ -23,6 +23,7 @@ import { buildClaudeUserContent, normalizeImageDescriptors } from './shared/imag
 import { CLAUDE_FALLBACK_MODELS } from './modules/providers/list/claude/claude-models.provider.js';
 import { providerModelsService } from './modules/providers/services/provider-models.service.js';
 import { resolveClaudeCodeExecutablePath } from './shared/claude-cli-path.js';
+import { buildChildProcessEnv } from './utils/childProcessEnv.js';
 import {
   createNotificationEvent,
   notifyRunFailed,
@@ -162,9 +163,11 @@ function mapCliOptionsToSDK(options = {}) {
 
   const sdkOptions = {};
 
-  // Forward all host env vars (e.g. ANTHROPIC_BASE_URL) to the subprocess.
+  // Forward all host env vars (e.g. ANTHROPIC_BASE_URL) to the subprocess, except
+  // NODE_ENV — agent sessions run arbitrary project code/builds and should not
+  // silently run in production mode just because CloudCLI's server process does.
   // Since SDK 0.2.113, options.env replaces process.env instead of overlaying it.
-  sdkOptions.env = { ...process.env };
+  sdkOptions.env = buildChildProcessEnv();
 
   // Resolve the executable eagerly on Windows because the SDK uses raw child_process.spawn,
   // which does not reliably follow npm's shell wrappers like cross-spawn does.

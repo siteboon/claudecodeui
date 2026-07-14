@@ -2,6 +2,7 @@ import path from 'path';
 
 // cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
 import spawn from 'cross-spawn';
+
 import { scanPlugins, getPluginsConfig, getPluginDir } from './plugin-loader.js';
 
 // Map<pluginName, { process, port }>
@@ -24,7 +25,6 @@ function buildPluginEnv(name) {
   const env = {
     PATH: process.env.PATH,
     HOME: process.env.HOME,
-    NODE_ENV: process.env.NODE_ENV || 'production',
     PLUGIN_NAME: name,
   };
 

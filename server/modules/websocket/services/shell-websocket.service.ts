@@ -6,6 +6,7 @@ import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
 import { parseIncomingJsonObject } from '@/shared/utils.js';
+import { buildChildProcessEnv } from '@/utils/childProcessEnv.js';
 
 type ShellIncomingMessage = {
   type?: string;
@@ -339,13 +340,12 @@ export function handleShellConnection(
           cols: termCols,
           rows: termRows,
           cwd: resolvedProjectPath,
-          env: {
-            ...process.env,
+          env: buildChildProcessEnv({
             [prioritizedPath.key]: prioritizedPath.value,
             TERM: 'xterm-256color',
             COLORTERM: 'truecolor',
             FORCE_COLOR: '3',
-          },
+          }),
         });
 
         ptySessionsMap.set(ptySessionKey, {
