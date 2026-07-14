@@ -3,6 +3,14 @@
 All notable changes to CloudCLI UI will be documented in this file.
 
 
+## [1.36.2](https://github.com/siteboon/claudecodeui/compare/v1.36.1...v1.36.2) (2026-07-14)
+
+### Bug Fixes
+
+* bump @openai/codex-sdk to ^0.144.0 to support newer Codex models ([#1001](https://github.com/siteboon/claudecodeui/issues/1001)) ([038d960](https://github.com/siteboon/claudecodeui/commit/038d960c75b547f111751a39f28689ac66fca76d))
+* harden docker cloudcli install ([123d244](https://github.com/siteboon/claudecodeui/commit/123d244a5143c3954d2f1c54240a5e683ca74a4e))
+* validate X-Refreshed-Token before storing it as the auth token ([#971](https://github.com/siteboon/claudecodeui/issues/971)) ([5884573](https://github.com/siteboon/claudecodeui/commit/5884573a6975f53381759a28280afd9c8bb332c4))
+
 ## [1.36.1](https://github.com/siteboon/claudecodeui/compare/v1.36.0...v1.36.1) (2026-07-08)
 
 ### New Features
