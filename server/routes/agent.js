@@ -5,7 +5,7 @@ import path from 'path';
 import os from 'os';
 import { promises as fs } from 'fs';
 import crypto from 'crypto';
-import { userDb, apiKeysDb, githubTokensDb, projectsDb } from '../modules/database/index.js';
+import { userDb, apiKeysDb, githubTokensDb, projectsDb, sessionsDb } from '../modules/database/index.js';
 import { queryClaudeSDK } from '../claude-sdk.js';
 import { spawnCursor } from '../cursor-cli.js';
 import { queryCodex } from '../openai-codex.js';
@@ -1008,6 +1008,31 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         sessionId: sessionId || null,
         model: model === HERMES_CONFIGURED_MODEL ? undefined : model
       }, writer);
+
+      // Hermes's ACP adapter does not persist the session cwd into
+      // ~/.hermes/state.db, so the session synchronizer cannot attribute the
+      // session to a project and skips it. Index the session here, where the
+      // project path is known, so it appears in the UI sessions list.
+      // Skipped for throwaway clones that are removed right after the run.
+      if (!(cleanup && githubUrl)) {
+        const hermesSessionId = writer.getSessionId();
+        if (hermesSessionId) {
+          try {
+            const nowIso = new Date().toISOString();
+            sessionsDb.createSession(
+              hermesSessionId,
+              'hermes',
+              finalProjectPath,
+              sessionId ? null : message.trim().slice(0, 100),
+              nowIso,
+              nowIso,
+              path.join(os.homedir(), '.hermes', 'state.db')
+            );
+          } catch (indexError) {
+            console.error('Failed to index Hermes session:', indexError);
+          }
+        }
+      }
     }
 
     // Handle GitHub branch and PR creation after successful agent completion
