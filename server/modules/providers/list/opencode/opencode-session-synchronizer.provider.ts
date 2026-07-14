@@ -11,6 +11,7 @@ import {
   normalizeSessionName,
   readJsonRecord,
   readOptionalString,
+  unwrapJsonStringLiteral,
 } from '@/shared/utils.js';
 
 type OpenCodeSessionRow = {
@@ -128,9 +129,26 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
     const existingSession = sessionsDb.getSessionByProviderSessionId(sessionId)
       ?? sessionsDb.getSessionById(sessionId);
     const existingName = existingSession?.custom_name;
-    const nextName = existingName && existingName !== fallbackTitle
-      ? existingName
-      : readOptionalString(row.title) ?? this.readFirstUserText(db, sessionId);
+
+    // Sessions started by sending a message from cloudcli carry a distinct
+    // app-allocated session_id mapped to the provider id. For these we title the
+    // conversation from the first user message the user typed, matching how the
+    // app titles a brand-new conversation. Sessions discovered purely by
+    // indexing (session_id === provider_session_id) keep OpenCode's own stored
+    // title.
+    const isAppCreated =
+      existingSession != null &&
+      existingSession.provider_session_id != null &&
+      existingSession.session_id !== existingSession.provider_session_id;
+
+    let nextName: string | undefined;
+    if (existingName && existingName !== fallbackTitle) {
+      nextName = existingName;
+    } else if (isAppCreated) {
+      nextName = this.readFirstUserText(db, sessionId) ?? readOptionalString(row.title);
+    } else {
+      nextName = readOptionalString(row.title) ?? this.readFirstUserText(db, sessionId);
+    }
 
     // OpenCode stores every session in one shared sqlite database, so jsonl_path
     // must stay null to avoid deleting opencode.db when one app session is removed.
@@ -163,7 +181,10 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
       `).get(sessionId) as { data: string | null } | undefined;
 
       const data = readJsonRecord(row?.data);
-      return readOptionalString(data?.text);
+      const text = readOptionalString(data?.text);
+      // OpenCode persists the first prompt as a JSON string literal (e.g.
+      // `"hello"`), so decode it to avoid titling the session with quotes.
+      return text === undefined ? undefined : unwrapJsonStringLiteral(text);
     } catch {
       return undefined;
     }

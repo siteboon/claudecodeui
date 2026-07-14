@@ -16,8 +16,6 @@ export default function AgentsSettingsTab({
   onCursorPermissionsChange,
   codexPermissionMode,
   onCodexPermissionModeChange,
-  geminiPermissionMode,
-  onGeminiPermissionModeChange,
   projects,
 }: AgentsSettingsTabProps) {
   const [selectedAgent, setSelectedAgent] = useState<AgentProvider>('claude');
@@ -31,7 +29,7 @@ export default function AgentsSettingsTab({
   ), [selectedAgent]);
 
   const visibleAgents = useMemo<AgentProvider[]>(() => {
-    return ['claude', 'cursor', 'codex', 'gemini', 'opencode', 'hermes'];
+    return ['claude', 'cursor', 'codex', 'opencode', 'hermes'];
   }, []);
 
   const agentContextById = useMemo<Record<AgentProvider, AgentContext>>(() => ({
@@ -47,10 +45,6 @@ export default function AgentsSettingsTab({
       authStatus: providerAuthStatus.codex,
       onLogin: (customCommand, customTitle) => onProviderLogin('codex', customCommand, customTitle),
     },
-    gemini: {
-      authStatus: providerAuthStatus.gemini,
-      onLogin: (customCommand, customTitle) => onProviderLogin('gemini', customCommand, customTitle),
-    },
     opencode: {
       authStatus: providerAuthStatus.opencode,
       onLogin: (customCommand, customTitle) => onProviderLogin('opencode', customCommand, customTitle),
@@ -64,7 +58,6 @@ export default function AgentsSettingsTab({
     providerAuthStatus.claude,
     providerAuthStatus.codex,
     providerAuthStatus.cursor,
-    providerAuthStatus.gemini,
     providerAuthStatus.opencode,
     providerAuthStatus.hermes,
   ]);
@@ -102,8 +95,6 @@ export default function AgentsSettingsTab({
           onCursorPermissionsChange={onCursorPermissionsChange}
           codexPermissionMode={codexPermissionMode}
           onCodexPermissionModeChange={onCodexPermissionModeChange}
-          geminiPermissionMode={geminiPermissionMode}
-          onGeminiPermissionModeChange={onGeminiPermissionModeChange}
           projects={projects}
         />
       </div>

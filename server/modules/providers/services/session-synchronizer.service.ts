@@ -21,7 +21,6 @@ export const sessionSynchronizerService = {
       claude: 0,
       codex: 0,
       cursor: 0,
-      gemini: 0,
       opencode: 0,
       hermes: 0,
     };

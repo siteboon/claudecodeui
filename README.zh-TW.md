@@ -1,18 +1,18 @@
 <div align="center">
-  <img src="public/logo.svg" alt="CloudCLI UI" width="64" height="64">
-  <h1>Cloud CLI（又名 Claude Code UI）</h1>
-  <p><a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>、<a href="https://docs.cursor.com/en/cli/overview">Cursor CLI</a>、<a href="https://developers.openai.com/codex">Codex</a> 和 <a href="https://geminicli.com/">Gemini-CLI</a> 的桌面和行動裝置 UI。可在本機或遠端使用，從任何地方查看您的專案與工作階段。</p>
+ <img src="public/logo.svg" alt="CloudCLI UI" width="64" height="64">
+ <h1>Cloud CLI（又名 Claude Code UI）</h1>
+ <p><a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>、<a href="https://docs.cursor.com/en/cli/overview">Cursor CLI</a>、<a href="https://developers.openai.com/codex">Codex</a> 的桌面和行動裝置 UI。可在本機或遠端使用，從任何地方查看您的專案與工作階段。</p>
 </div>
 
 <p align="center">
-  <a href="https://cloudcli.ai">CloudCLI Cloud</a> · <a href="https://cloudcli.ai/docs">文件</a> · <a href="https://discord.gg/buxwujPNRE">Discord</a> · <a href="https://github.com/siteboon/claudecodeui/issues">Bug 回報</a> · <a href="CONTRIBUTING.md">貢獻指南</a>
+ <a href="https://cloudcli.ai">CloudCLI Cloud</a> · <a href="https://cloudcli.ai/docs">文件</a> · <a href="https://discord.gg/buxwujPNRE">Discord</a> · <a href="https://github.com/siteboon/claudecodeui/issues">Bug 回報</a> · <a href="CONTRIBUTING.md">貢獻指南</a>
 </p>
 
 <p align="center">
-  <a href="https://cloudcli.ai"><img src="https://img.shields.io/badge/☁️_CloudCLI_Cloud-Try_Now-0066FF?style=for-the-badge" alt="CloudCLI Cloud"></a>
-  <a href="https://discord.gg/buxwujPNRE"><img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="加入 Discord 社群"></a>
-  <br><br>
-  <a href="https://trendshift.io/repositories/15586" target="_blank"><img src="https://trendshift.io/api/badge/repositories/15586" alt="siteboon%2Fclaudecodeui | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+ <a href="https://cloudcli.ai"><img src="https://img.shields.io/badge/☁️_CloudCLI_Cloud-Try_Now-0066FF?style=for-the-badge" alt="CloudCLI Cloud"></a>
+ <a href="https://discord.gg/buxwujPNRE"><img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="加入 Discord 社群"></a>
+ <br><br>
+ <a href="https://trendshift.io/repositories/15586" target="_blank"><img src="https://trendshift.io/api/badge/repositories/15586" alt="siteboon%2Fclaudecodeui | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 </p>
 
 <div align="right"><i><a href="./README.md">English</a> · <a href="./README.ru.md">Русский</a> · <a href="./README.de.md">Deutsch</a> · <a href="./README.ko.md">한국어</a> · <a href="./README.zh-CN.md">简体中文</a> · <b>繁體中文</b> · <a href="./README.ja.md">日本語</a> · <a href="./README.tr.md">Türkçe</a></i></div>
@@ -43,7 +43,7 @@
 <h3>CLI 選擇</h3>
 <img src="public/screenshots/cli-selection.png" alt="CLI 選擇" width="400">
 <br>
-<em>在 Claude Code、Gemini、Cursor CLI 與 Codex 之間進行選擇</em>
+<em>在 Claude Code、Cursor CLI 與 Codex 之間進行選擇</em>
 </td>
 </tr>
 </table>
@@ -60,7 +60,7 @@
 - **工作階段管理** — 恢復對話、管理多個工作階段並追蹤歷史紀錄
 - **外掛系統** — 透過自訂分頁、後端服務與整合來擴充 CloudCLI。[開始建構 →](https://github.com/cloudcli-ai/cloudcli-plugin-starter)
 - **TaskMaster AI 整合** *(選用)* — 結合 AI 任務規劃、PRD 分析與工作流程自動化，實現進階專案管理
-- **模型相容性** — 支援 Claude、GPT、Gemini 模型家族（完整支援列表可透過 `GET /api/providers/:provider/models` 介面取得）
+- **模型相容性** — 支援 Claude、GPT 模型家族（完整支援列表可透過 `GET /api/providers/:provider/models` 介面取得）
 
 ## 快速開始
 
@@ -99,7 +99,7 @@ cloudcli
 npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
 ```
 
-支援 Claude Code、Codex 和 Gemini CLI。詳情請參閱[沙箱文件](docker/)。
+支援 Claude Code 和 Codex。詳情請參閱[沙箱文件](docker/)。
 
 ---
 
@@ -115,14 +115,14 @@ CloudCLI UI 是 CloudCLI Cloud 的開源 UI 層。你可以在本機上自架它
 | **機器需保持開機嗎** | 是 | 否 |
 | **行動裝置存取** | 網路內任意瀏覽器 | 任意裝置（原生應用程式即將推出） |
 | **可用工作階段** | 自動發現 `~/.claude` 中的所有工作階段 | 雲端環境內的工作階段 |
-| **支援的 Agents** | Claude Code、Cursor CLI、Codex、Gemini CLI | Claude Code、Cursor CLI、Codex、Gemini CLI |
+| **支援的 Agents** | Claude Code、Cursor CLI、Codex | Claude Code、Cursor CLI、Codex |
 | **檔案瀏覽與 Git** | 內建於 UI | 內建於 UI |
 | **MCP 設定** | UI 管理，與本機 `~/.claude` 設定同步 | UI 管理 |
 | **IDE 存取** | 本機 IDE | 任何連線到雲端環境的 IDE |
 | **REST API** | 是 | 是 |
 | **n8n 節點** | 否 | 是 |
 | **團隊共享** | 否 | 是 |
-| **平台費用** | 免費開源 | 起價 $7/月 |
+| **平台費用** | 免費開源 | 起價 €7/月 |
 
 > 兩種方式都使用你自己的 AI 訂閱（Claude、Cursor 等）— CloudCLI 提供環境，而非 AI。
 
@@ -160,7 +160,7 @@ CloudCLI 配備外掛系統，允許你新增帶有自訂前端 UI 和選用 Nod
 | **[Project Stats](https://github.com/cloudcli-ai/cloudcli-plugin-starter)** | 展示目前專案的檔案數、程式碼行數、檔案類型分佈、最大檔案以及最近修改的檔案 |
 | **[Web Terminal](https://github.com/cloudcli-ai/cloudcli-plugin-terminal)** | 支援多分頁的完整 xterm.js 終端機 |
 | **[Claude Watch](https://github.com/satsuki19980613/cloudcli-claude-watch)** | 監控長時間執行的 Claude Code 工作階段是否卡住，並提供程序控制 |
-| **[CloudCLI Scheduler](https://github.com/grostim/cloudcli-cron)** | 建立工作區範圍的排程提示詞，並透過 Codex、Claude Code 或 Gemini CLI 等本機 CLI 執行 |
+| **[CloudCLI Scheduler](https://github.com/grostim/cloudcli-cron)** | 建立工作區範圍的排程提示詞，並透過 Codex、Claude Code 等本機 CLI 執行 |
 | **[PRISM CloudCLI](https://github.com/jakeefr/cloudcli-plugin-prism)** | 在 CloudCLI 中提供 Claude Code 工作階段智慧分析，包括 token 消耗可視化 |
 | **[Sessions](https://github.com/strykereye2/cloudcli-plugin-session-manager)** | 檢視、管理並終止作用中的 Claude Code 工作階段 |
 | **[Token Cost Calculator](https://github.com/NightmareAway/cloudcli-plugin-token-cost-calculator)** | 根據模型價格與 token 用量計算 API 成本，並支援模型價格預設 |
@@ -186,7 +186,7 @@ CloudCLI UI 與 CloudCLI Cloud 是對 Claude Code 的擴充，而非旁觀 — M
 
 - **涵蓋全部工作階段** — CloudCLI UI 會自動掃描 `~/.claude` 資料夾中的每個工作階段。Remote Control 只暴露目前活動的工作階段。
 - **設定統一** — 在 CloudCLI UI 中修改的 MCP、工具權限等設定會立即寫入 Claude Code。
-- **支援更多 Agents** — Claude Code、Cursor CLI、Codex、Gemini CLI。
+- **支援更多 Agents** — Claude Code、Cursor CLI、Codex。
 - **完整 UI** — 除了聊天介面，還包括檔案瀏覽器、Git 整合、MCP 管理和 Shell 終端機。
 - **CloudCLI Cloud 持續運作於雲端** — 關閉本機裝置也不會中斷代理執行，無需監控終端機。
 
@@ -195,7 +195,7 @@ CloudCLI UI 與 CloudCLI Cloud 是對 Claude Code 的擴充，而非旁觀 — M
 <details>
 <summary>需要額外購買 AI 訂閱嗎？</summary>
 
-需要。CloudCLI 只提供環境。你仍需自行取得 Claude、Cursor、Codex 或 Gemini 訂閱。CloudCLI Cloud 從 $7/月起提供託管環境。
+需要。CloudCLI 只提供環境。你仍需自行取得 Claude、Cursor 或 Codex 訂閱。CloudCLI Cloud 從 €7/月起提供託管環境。
 
 </details>
 
@@ -234,7 +234,6 @@ GNU 通用公共授權條款 v3.0 — 詳見 [LICENSE](LICENSE) 檔案。
 - **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** — Anthropic 官方 CLI
 - **[Cursor CLI](https://docs.cursor.com/en/cli/overview)** — Cursor 官方 CLI
 - **[Codex](https://developers.openai.com/codex)** — OpenAI Codex
-- **[Gemini-CLI](https://geminicli.com/)** — Google Gemini CLI
 - **[React](https://react.dev/)** — 使用者介面函式庫
 - **[Vite](https://vitejs.dev/)** — 快速建構工具與開發伺服器
 - **[Tailwind CSS](https://tailwindcss.com/)** — 實用優先 CSS 框架
@@ -246,5 +245,5 @@ GNU 通用公共授權條款 v3.0 — 詳見 [LICENSE](LICENSE) 檔案。
 ---
 
 <div align="center">
-  <strong>為 Claude Code、Cursor 和 Codex 社群精心打造。</strong>
+ <strong>為 Claude Code、Cursor 和 Codex 社群精心打造。</strong>
 </div>

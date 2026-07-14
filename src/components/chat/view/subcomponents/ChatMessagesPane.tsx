@@ -24,6 +24,8 @@ interface ChatMessagesPaneProps {
   isLoadingSessionMessages: boolean;
   /** True while the viewed session has an active provider run in flight. */
   isProcessing?: boolean;
+  /** True while ChatComposer's floating activity/stop tab is rendered above the input. */
+  hasActivityIndicator?: boolean;
   chatMessages: ChatMessage[];
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
@@ -36,8 +38,6 @@ interface ChatMessagesPaneProps {
   setCursorModel: (model: string) => void;
   codexModel: string;
   setCodexModel: (model: string) => void;
-  geminiModel: string;
-  setGeminiModel: (model: string) => void;
   opencodeModel: string;
   setOpenCodeModel: (model: string) => void;
   hermesModel: string;
@@ -75,6 +75,7 @@ function ChatMessagesPane({
   onTouchMove,
   isLoadingSessionMessages,
   isProcessing = false,
+  hasActivityIndicator = false,
   chatMessages,
   selectedSession,
   currentSessionId,
@@ -87,8 +88,6 @@ function ChatMessagesPane({
   setCursorModel,
   codexModel,
   setCodexModel,
-  geminiModel,
-  setGeminiModel,
   opencodeModel,
   setOpenCodeModel,
   hermesModel,
@@ -165,7 +164,9 @@ function ChatMessagesPane({
       ref={scrollContainerRef}
       onWheel={onWheel}
       onTouchMove={onTouchMove}
-      className="chat-messages-pane relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-3 sm:py-4"
+      className={`chat-messages-pane relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden pt-3 sm:pt-4 ${
+        hasActivityIndicator ? 'pb-12 sm:pb-14' : 'pb-3 sm:pb-4'
+      }`}
     >
       <div className="mx-auto w-full max-w-[54.25rem] space-y-3 px-4 sm:space-y-4">
       {(isLoadingSessionMessages || isProcessing) && chatMessages.length === 0 ? (
@@ -188,8 +189,6 @@ function ChatMessagesPane({
           setCursorModel={setCursorModel}
           codexModel={codexModel}
           setCodexModel={setCodexModel}
-          geminiModel={geminiModel}
-          setGeminiModel={setGeminiModel}
           opencodeModel={opencodeModel}
           setOpenCodeModel={setOpenCodeModel}
           hermesModel={hermesModel}

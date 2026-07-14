@@ -323,9 +323,6 @@
       },
       "codex": {
         "description": "OpenAI Codex AI asistanı"
-      },
-      "gemini": {
-        "description": "Google Gemini AI asistanı"
       }
     },
     "connectionStatus": "Bağlantı Durumu",

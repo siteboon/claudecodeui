@@ -7,7 +7,6 @@ const AGENT_NAMES: Record<AgentProvider, string> = {
   claude: 'Claude',
   cursor: 'Cursor',
   codex: 'Codex',
-  gemini: 'Gemini',
   opencode: 'OpenCode',
   hermes: 'Hermes',
 };
@@ -25,7 +24,6 @@ export default function AgentSelectorSection({
           const dotColor =
             agent === 'claude' ? 'bg-blue-500' :
             agent === 'cursor' ? 'bg-purple-500' :
-            agent === 'gemini' ? 'bg-indigo-500' :
             agent === 'opencode' ? 'bg-zinc-500' :
             agent === 'hermes' ? 'bg-emerald-600' : 'bg-foreground/60';
 

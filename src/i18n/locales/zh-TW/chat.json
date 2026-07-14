@@ -17,8 +17,7 @@
     "tool": "工具",
     "claude": "Claude",
     "cursor": "Cursor",
-    "codex": "Codex",
-    "gemini": "Gemini"
+    "codex": "Codex"
   },
   "tools": {
     "settings": "工具設定",
@@ -170,7 +169,6 @@
       "claude": "準備好使用 {{model}} 的 Claude。請在下方開始輸入您的訊息。",
       "cursor": "準備好使用 {{model}} 的 Cursor。請在下方開始輸入您的訊息。",
       "codex": "準備好使用 {{model}} 的 Codex。請在下方開始輸入您的訊息。",
-      "gemini": "準備好使用 {{model}} 的 Gemini。請在下方開始輸入您的訊息。",
       "default": "請在上方選擇一個提供者以開始"
     },
     "pressToSearch": "按 <kbd>{{shortcut}}</kbd> 搜尋工作階段、檔案和提交"

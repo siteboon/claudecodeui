@@ -17,8 +17,7 @@
     "tool": "Strumento",
     "claude": "Claude",
     "cursor": "Cursor",
-    "codex": "Codex",
-    "gemini": "Gemini"
+    "codex": "Codex"
   },
   "tools": {
     "settings": "Impostazioni strumento",
@@ -103,24 +102,6 @@
     },
     "technicalDetails": "Dettagli tecnici"
   },
-  "gemini": {
-    "permissionMode": "Modalità permessi Gemini",
-    "description": "Controlla come Gemini CLI gestisce le approvazioni delle operazioni.",
-    "modes": {
-      "default": {
-        "title": "Standard (chiedi approvazione)",
-        "description": "Gemini chiederà l'approvazione prima di eseguire comandi, scrivere file e recuperare risorse web."
-      },
-      "autoEdit": {
-        "title": "Modifica automatica (salta approvazioni file)",
-        "description": "Gemini approverà automaticamente modifiche ai file e recupero web, ma chiederà conferma per i comandi shell."
-      },
-      "yolo": {
-        "title": "YOLO (ignora tutti i permessi)",
-        "description": "Gemini eseguirà tutte le operazioni senza chiedere approvazione. Usa con cautela."
-      }
-    }
-  },
   "input": {
     "placeholder": "Digita / per i comandi, @ per i file, o chiedi qualcosa a {{provider}}...",
     "placeholderDefault": "Scrivi il tuo messaggio...",
@@ -152,7 +133,6 @@
       "claude": "Pronto a usare Claude con {{model}}. Inizia a digitare il tuo messaggio qui sotto.",
       "cursor": "Pronto a usare Cursor con {{model}}. Inizia a digitare il tuo messaggio qui sotto.",
       "codex": "Pronto a usare Codex con {{model}}. Inizia a digitare il tuo messaggio qui sotto.",
-      "gemini": "Pronto a usare Gemini con {{model}}. Inizia a digitare il tuo messaggio qui sotto.",
       "default": "Seleziona un provider sopra per iniziare"
     },
     "pressToSearch": "Premi <kbd>{{shortcut}}</kbd> per cercare sessioni, file e commit"

@@ -60,7 +60,7 @@ export interface NormalizedMessage {
   isLocalCommand?: boolean;
   isLocalCommandStdout?: boolean;
   isCompactSummary?: boolean;
-  images?: string[];
+  images?: Array<{ path?: string; data?: string; name?: string }>;
   toolName?: string;
   toolInput?: unknown;
   toolId?: string;
@@ -97,6 +97,16 @@ export interface SessionSlot {
   /** @internal Cache-invalidation refs for computeMerged */
   _lastServerRef: NormalizedMessage[];
   _lastRealtimeRef: NormalizedMessage[];
+  /**
+   * @internal Monotonic ticket per server fetch (fetch/refresh/fetchMore) and
+   * the ticket of the last response applied. Concurrent fetches for the same
+   * session can resolve out of order — e.g. the `complete` refresh racing the
+   * watcher-triggered refresh right as a queued message is flushed — and a
+   * stale response applied last would wind `serverMessages` back to a
+   * transcript that no longer matches what the user already saw.
+   */
+  _fetchSeq: number;
+  _appliedFetchSeq: number;
   status: SessionStatus;
   fetchedAt: number;
   total: number;
@@ -120,6 +130,8 @@ function createEmptySlot(): SessionSlot {
     hasMore: false,
     offset: 0,
     tokenUsage: null,
+    _fetchSeq: 0,
+    _appliedFetchSeq: 0,
   };
 }
 
@@ -471,6 +483,7 @@ export function useSessionStore() {
     } = {},
   ) => {
     const slot = getSlot(sessionId);
+    const fetchTicket = ++slot._fetchSeq;
     slot.status = 'loading';
     notify(sessionId);
 
@@ -493,6 +506,12 @@ export function useSessionStore() {
       const data = body?.data ?? body;
       const messages: NormalizedMessage[] = data.messages || [];
 
+      // A later-started fetch already applied: this response is stale.
+      if (fetchTicket <= slot._appliedFetchSeq) {
+        return slot;
+      }
+      slot._appliedFetchSeq = fetchTicket;
+
       slot.serverMessages = messages;
       slot.total = data.total ?? messages.length;
       slot.hasMore = Boolean(data.hasMore);
@@ -508,8 +527,11 @@ export function useSessionStore() {
       return slot;
     } catch (error) {
       console.error(`[SessionStore] fetch failed for ${sessionId}:`, error);
-      slot.status = 'error';
-      notify(sessionId);
+      // Don't clobber a newer fetch's result with a stale failure.
+      if (fetchTicket > slot._appliedFetchSeq) {
+        slot.status = 'error';
+        notify(sessionId);
+      }
       return slot;
     }
   }, [getSlot, notify]);
@@ -526,6 +548,7 @@ export function useSessionStore() {
     const slot = getSlot(sessionId);
     if (!slot.hasMore) return slot;
 
+    const fetchTicket = ++slot._fetchSeq;
     const params = new URLSearchParams();
     const limit = opts.limit ?? 20;
     params.append('limit', String(limit));
@@ -540,6 +563,13 @@ export function useSessionStore() {
       const body = await response.json();
       const data = body?.data ?? body;
       const olderMessages: NormalizedMessage[] = data.messages || [];
+
+      // A full fetch/refresh replaced serverMessages while this page was in
+      // flight — prepending onto the new array would duplicate or misorder.
+      if (fetchTicket <= slot._appliedFetchSeq) {
+        return slot;
+      }
+      slot._appliedFetchSeq = fetchTicket;
 
       // Prepend older messages (they're earlier in the conversation)
       slot.serverMessages = [...olderMessages, ...slot.serverMessages];
@@ -600,6 +630,7 @@ export function useSessionStore() {
     sessionId: string,
   ) => {
     const slot = getSlot(sessionId);
+    const fetchTicket = ++slot._fetchSeq;
     try {
       const url = `/api/providers/sessions/${encodeURIComponent(sessionId)}/messages`;
       const response = await authenticatedFetch(url);
@@ -607,6 +638,14 @@ export function useSessionStore() {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const body = await response.json();
       const data = body?.data ?? body;
+
+      // A later-started fetch already applied: applying this stale transcript
+      // would erase rows the user has already seen (and re-prune realtime
+      // rows against an outdated snapshot).
+      if (fetchTicket <= slot._appliedFetchSeq) {
+        return;
+      }
+      slot._appliedFetchSeq = fetchTicket;
 
       slot.serverMessages = data.messages || [];
       slot.total = data.total ?? slot.serverMessages.length;

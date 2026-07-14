@@ -51,15 +51,6 @@ const agentConfig: Record<AgentProvider, AgentVisualConfig> = {
     subtextClass: 'text-gray-700 dark:text-gray-300',
     buttonClass: 'bg-gray-800 hover:bg-gray-900 active:bg-gray-950 dark:bg-gray-700 dark:hover:bg-gray-600 dark:active:bg-gray-500',
   },
-  gemini: {
-    name: 'Gemini',
-    description: 'Google Gemini AI assistant',
-    bgClass: 'bg-indigo-50 dark:bg-indigo-900/20',
-    borderClass: 'border-indigo-200 dark:border-indigo-800',
-    textClass: 'text-indigo-900 dark:text-indigo-100',
-    subtextClass: 'text-indigo-700 dark:text-indigo-300',
-    buttonClass: 'bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800',
-  },
   opencode: {
     name: 'OpenCode',
     description: 'OpenCode CLI assistant',

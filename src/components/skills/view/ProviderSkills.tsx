@@ -22,11 +22,6 @@ import {
   ActionMenu,
   Badge,
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
   Dialog,
   DialogContent,
   DialogTitle,
@@ -67,7 +62,6 @@ const PROVIDER_NAMES: Record<SkillsProvider, string> = {
   claude: 'Claude',
   codex: 'Codex',
   cursor: 'Cursor',
-  gemini: 'Gemini',
   opencode: 'OpenCode',
   hermes: 'Hermes',
 };
@@ -76,7 +70,6 @@ const PROVIDER_SKILL_PATHS: Record<Exclude<SkillsProvider, 'opencode'>, string> 
   claude: '~/.claude/skills/<skill-name>/SKILL.md',
   codex: '~/.agents/skills/<skill-name>/SKILL.md',
   cursor: '~/.cursor/skills/<skill-name>/SKILL.md',
-  gemini: '~/.gemini/skills/<skill-name>/SKILL.md',
   hermes: '~/.hermes/skills/<skill-name>/SKILL.md',
 };
 
@@ -252,12 +245,14 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
   const [queuedFiles, setQueuedFiles] = useState<QueuedSkillFile[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [justInstalled, setJustInstalled] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [registryQuery, setRegistryQuery] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [addMode, setAddMode] = useState<'upload' | 'hub'>('upload');
+  const [showInstallPath, setShowInstallPath] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const folderInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
 
   const providerName = PROVIDER_NAMES[selectedProvider];
   const providerPath = selectedProvider === 'opencode' ? null : PROVIDER_SKILL_PATHS[selectedProvider];
@@ -270,11 +265,18 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
     setRegistryQuery('');
     setIsAddDialogOpen(false);
     setAddMode('upload');
+    setShowInstallPath(false);
+    setJustInstalled(false);
   }, [selectedProvider]);
 
-  useEffect(() => {
-    folderInputRef.current?.setAttribute('webkitdirectory', '');
-    folderInputRef.current?.setAttribute('directory', '');
+  const setFolderInputRef = useCallback((node: HTMLInputElement | null) => {
+    folderInputRef.current = node;
+    if (!node) {
+      return;
+    }
+
+    node.setAttribute('webkitdirectory', '');
+    node.setAttribute('directory', '');
   }, []);
 
   const filteredSkills = useMemo(() => {
@@ -397,6 +399,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
       })));
       await addSkills({ entries });
       setQueuedFiles([]);
+      setJustInstalled(true);
       setIsAddDialogOpen(false);
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'Failed to import skills');
@@ -405,17 +408,30 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
     }
   }, [addSkills, queuedFiles]);
 
+  const handleAddDialogOpenChange = useCallback((open: boolean) => {
+    if (open) {
+      setSubmitError(null);
+      setShowInstallPath(false);
+      setJustInstalled(false);
+      setAddMode('upload');
+      setIsAddDialogOpen(true);
+      return;
+    }
+
+    setQueuedFiles([]);
+    setSubmitError(null);
+    setShowInstallPath(false);
+    setJustInstalled(false);
+    setAddMode('upload');
+    setIsAddDialogOpen(false);
+  }, []);
+
   const uploadPanel = (
     <div className="space-y-4">
-      <div className="rounded-lg border border-border/60 bg-muted/15 p-3">
-        <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Install Path</div>
-        <code className="mt-1 block whitespace-normal break-all text-xs text-foreground">{providerPath}</code>
-      </div>
-
       <div
         {...getRootProps()}
         className={cn(
-          'rounded-xl border border-dashed p-4 transition-colors sm:p-5',
+          'rounded-lg border border-dashed p-4 transition-colors sm:p-5',
           isDragActive
             ? 'border-foreground/40 bg-muted/35'
             : 'border-border/70 bg-muted/15 hover:border-foreground/25 hover:bg-muted/25',
@@ -433,7 +449,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
           }}
         />
         <input
-          ref={folderInputRef}
+          ref={setFolderInputRef}
           type="file"
           multiple
           className="hidden"
@@ -445,9 +461,9 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
         <div className="flex flex-col items-center justify-center gap-3 py-4 text-center">
           <FileUp className="h-7 w-7 text-muted-foreground" strokeWidth={1.5} />
           <div className="space-y-1">
-            <div className="text-sm font-medium text-foreground">Drop `.md` files or skill folders here</div>
+            <div className="text-sm font-medium text-foreground">Drop a skill folder or SKILL.md</div>
             <div className="text-sm text-muted-foreground">
-              Upload standalone definitions or choose a full folder to include scripts, references, and assets.
+              Folders can include scripts, references, and assets.
             </div>
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
@@ -477,14 +493,17 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
 
       {queuedFiles.length > 0 && (
         <div className="space-y-2">
-          <div className="text-sm font-medium text-foreground">Queued Files</div>
+          <div className="text-sm font-medium text-foreground">Ready to install</div>
           <div className="grid gap-2">
             {queuedFiles.map((queuedFile) => (
               <div
                 key={queuedFile.id}
-                className="flex flex-col gap-3 rounded-lg border border-border/70 bg-background/70 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:py-2"
+                className="flex items-center gap-3 rounded-lg border border-border/70 bg-background/70 px-3 py-2"
               >
-                <div className="min-w-0">
+                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-muted/60 text-muted-foreground">
+                  {queuedFile.kind === 'folder' ? <FolderUp className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
+                </div>
+                <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium text-foreground">{queuedFile.name}</div>
                   <div className="text-xs text-muted-foreground">
                     {queuedFile.kind === 'folder'
@@ -498,12 +517,13 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="w-full sm:w-auto"
+                  className="h-8 w-8 flex-shrink-0 p-0 text-muted-foreground hover:text-foreground"
+                  aria-label={`Remove ${queuedFile.name}`}
                   onClick={() => {
                     setQueuedFiles((previous) => previous.filter((file) => file.id !== queuedFile.id));
                   }}
                 >
-                  Remove
+                  <X className="h-4 w-4" />
                 </Button>
               </div>
             ))}
@@ -511,20 +531,23 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
         </div>
       )}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-        <Button
-          type="button"
-          onClick={() => void handleUploadInstall()}
-          disabled={isSubmitting}
-          className="w-full sm:w-auto"
-        >
-          {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-          Install {queuedFiles.length > 0 ? `${queuedFiles.length} Skill${queuedFiles.length === 1 ? '' : 's'}` : 'Skills'}
-        </Button>
-        <span className="text-xs text-muted-foreground">
-          Folder uploads keep the selected folder name; standalone files use the `name` in `SKILL.md`.
-        </span>
-      </div>
+      {providerPath && (
+        <div className="space-y-2">
+          <button
+            type="button"
+            className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+            onClick={() => setShowInstallPath((current) => !current)}
+          >
+            {showInstallPath ? 'Hide install location' : 'Where will this install?'}
+          </button>
+          {showInstallPath && (
+            <div className="rounded-lg border border-border/60 bg-muted/15 p-3">
+              <code className="block whitespace-normal break-all text-xs text-foreground">{providerPath}</code>
+            </div>
+          )}
+        </div>
+      )}
+
     </div>
   );
 
@@ -631,28 +654,46 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
 
   return (
     <div className="min-w-0 space-y-4 overflow-x-hidden">
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
-        <div className="flex min-w-0 items-start gap-3">
-          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/70 bg-muted/20 text-muted-foreground">
-            <FileCode2 className="h-4 w-4" strokeWidth={1.7} />
-          </div>
-          <div className="min-w-0 space-y-1">
-            <h3 className="text-lg font-medium text-foreground">{t('tabs.skills', { defaultValue: 'Skills' })}</h3>
-            <p className="text-sm text-muted-foreground">
-              Install global {providerName} skills from `.md` files or complete skill folders.
-            </p>
-          </div>
+      <div className="flex min-w-0 items-start gap-3">
+        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/70 bg-muted/20 text-muted-foreground">
+          <FileCode2 className="h-4 w-4" strokeWidth={1.7} />
         </div>
+        <div className="min-w-0 space-y-1">
+          <h3 className="text-lg font-medium text-foreground">{t('tabs.skills', { defaultValue: 'Skills' })}</h3>
+          <p className="text-sm text-muted-foreground">
+            Manage {providerName} skills from local files, complete folders, and project-aware locations.
+          </p>
+        </div>
+      </div>
 
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+      <div className="space-y-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative min-w-0 flex-1 sm:max-w-md">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="text"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search skills..."
+              aria-label="Search skills"
+              className="h-9 w-full pl-9 pr-9"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                aria-label="Clear skill search"
+                className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
           <Button
             type="button"
             size="sm"
             className="w-full sm:w-auto"
-            onClick={() => {
-              setAddMode('upload');
-              setIsAddDialogOpen(true);
-            }}
+            onClick={() => handleAddDialogOpenChange(true)}
           >
             <Plus className="h-4 w-4" />
             Add Skill
@@ -668,9 +709,15 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
             Refresh
           </Button>
         </div>
+        {isLoadingProjectScopes && (
+          <div className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Scanning project skills...
+          </div>
+        )}
       </div>
 
-      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+      <Dialog open={isAddDialogOpen} onOpenChange={handleAddDialogOpenChange}>
         <DialogContent
           wrapperClassName="z-[10000]"
           className="flex h-[calc(100vh-2rem)] max-h-[760px] w-[calc(100vw-2rem)] max-w-4xl flex-col overflow-hidden p-0 sm:h-[720px]"
@@ -686,7 +733,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
                 <div className="mt-1 text-sm text-muted-foreground">
                   {selectedProvider === 'hermes'
                     ? 'Upload a local skill or install one from the Hermes Skills Hub.'
-                    : 'Upload a markdown skill file or a complete skill folder.'}
+                    : 'Upload a SKILL.md file or a complete skill folder.'}
                 </div>
               </div>
               <Button
@@ -695,7 +742,8 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
                 size="sm"
                 className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
                 aria-label="Close add skill dialog"
-                onClick={() => setIsAddDialogOpen(false)}
+                disabled={isSubmitting}
+                onClick={() => handleAddDialogOpenChange(false)}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -731,146 +779,144 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
             {addMode === 'hub' && hermesHubPanel ? hermesHubPanel : uploadPanel}
           </div>
 
-          <div className="min-h-14 flex-shrink-0 border-t border-border/60 px-4 py-3">
-            {(submitError || loadError || registryError || registryStatus || saveStatus === 'success') && (
-              <div className={cn(
-                'rounded-lg border px-3 py-2 text-sm',
-                submitError || loadError || registryError
-                  ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-200'
-                  : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-              )}>
-                {submitError || loadError || registryError || registryStatus || 'Skills saved successfully.'}
-              </div>
-            )}
+          <div className="flex flex-shrink-0 flex-col gap-3 border-t border-border/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 flex-1">
+              {(submitError || loadError || registryError || registryStatus || (justInstalled && saveStatus === 'success')) ? (
+                <div className={cn(
+                  'max-h-24 overflow-y-auto whitespace-pre-wrap rounded-lg border px-3 py-2 text-sm',
+                  submitError || loadError || registryError
+                    ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-200'
+                    : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+                )}>
+                  {submitError || loadError || registryError || registryStatus || 'Skills saved successfully.'}
+                </div>
+              ) : (
+                <span className="text-xs text-muted-foreground">
+                  {addMode === 'hub'
+                    ? 'Hub installs go to the Hermes skills directory automatically.'
+                    : 'Folder uploads keep the selected folder name; standalone files use the `name` in `SKILL.md`.'}
+                </span>
+              )}
+            </div>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full sm:w-auto"
+                disabled={isSubmitting}
+                onClick={() => handleAddDialogOpenChange(false)}
+              >
+                Cancel
+              </Button>
+              {addMode !== 'hub' && (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="w-full sm:w-auto"
+                  onClick={() => void handleUploadInstall()}
+                  disabled={isSubmitting || queuedFiles.length === 0}
+                >
+                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  Install {queuedFiles.length > 0 ? `${queuedFiles.length} Skill${queuedFiles.length === 1 ? '' : 's'}` : 'Skill'}
+                </Button>
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      {saveStatus === 'success' && !isAddDialogOpen && (
+      {!isAddDialogOpen && (submitError || loadError) && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-200">
+          {submitError || loadError}
+        </div>
+      )}
+
+      {justInstalled && saveStatus === 'success' && !isAddDialogOpen && (
         <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
           <CheckCircle2 className="h-4 w-4" />
           Skills saved successfully.
         </div>
       )}
 
-      <Card className="min-w-0 border-border/70 bg-background/80 shadow-sm">
-        <CardHeader className="border-b border-border/60">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="min-w-0">
-              <CardTitle>Visible Skills</CardTitle>
-              <CardDescription>
-                The list below comes from the provider skill discovery API and includes global and project-aware locations.
-              </CardDescription>
-            </div>
-            <div className="relative w-full lg:w-72">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="text"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search skills..."
-                aria-label="Search visible skills"
-                className="h-9 w-full pl-9 pr-9"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  aria-label="Clear skill search"
-                  className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-            {isLoadingProjectScopes && (
-              <div className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Scanning project skills…
-              </div>
-            )}
+      <div className="space-y-5">
+        {isLoading && skills.length === 0 && (
+          <div className="flex min-h-[180px] items-center justify-center text-sm text-muted-foreground">
+            Loading {providerName} skills…
           </div>
-        </CardHeader>
+        )}
 
-        <CardContent className="space-y-5 p-4">
-          {isLoading && skills.length === 0 && (
-            <div className="flex min-h-[180px] items-center justify-center text-sm text-muted-foreground">
-              Loading {providerName} skills…
+        {!isLoading && skills.length === 0 && (
+          <div className="rounded-lg border border-dashed border-border/70 bg-muted/15 px-4 py-10 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-lg border border-border/60 bg-background/80 text-muted-foreground">
+              <FileText className="h-6 w-6" />
             </div>
-          )}
-
-          {!isLoading && skills.length === 0 && (
-            <div className="rounded-3xl border border-dashed border-border/70 bg-muted/15 px-4 py-10 text-center">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-border/60 bg-background/80 text-muted-foreground">
-                <FileText className="h-6 w-6" />
-              </div>
-              <div className="mt-4 text-sm font-medium text-foreground">No skills discovered yet</div>
-              <div className="mt-1 text-sm text-muted-foreground">
-                Add a global skill above or create project-specific skill folders in your workspace.
-              </div>
+            <div className="mt-4 text-sm font-medium text-foreground">No skills discovered yet</div>
+            <div className="mt-1 text-sm text-muted-foreground">
+              Add a global skill above or create project-specific skill folders in your workspace.
             </div>
-          )}
+          </div>
+        )}
 
-          {!isLoading && skills.length > 0 && filteredSkills.length === 0 && (
-            <div className="rounded-3xl border border-dashed border-border/70 bg-muted/15 px-4 py-10 text-center">
-              <Search className="mx-auto h-6 w-6 text-muted-foreground" />
-              <div className="mt-3 text-sm font-medium text-foreground">No matching skills</div>
-              <div className="mt-1 text-sm text-muted-foreground">
-                Try a different command, name, scope, project, or source path.
-              </div>
+        {!isLoading && skills.length > 0 && filteredSkills.length === 0 && (
+          <div className="rounded-lg border border-dashed border-border/70 bg-muted/15 px-4 py-10 text-center">
+            <Search className="mx-auto h-6 w-6 text-muted-foreground" />
+            <div className="mt-3 text-sm font-medium text-foreground">No matching skills</div>
+            <div className="mt-1 text-sm text-muted-foreground">
+              Try a different command, name, scope, project, or source path.
             </div>
-          )}
+          </div>
+        )}
 
-          {groupedSkills.map((group) => (
-            <section key={group.scope} className="min-w-0 space-y-3">
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className={cn('rounded-full px-2.5 py-1 text-xs', SCOPE_BADGE_CLASSES[group.scope])}>
-                  {SCOPE_LABELS[group.scope]}
-                </Badge>
-                <span className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                  {group.skills.length} skill{group.skills.length === 1 ? '' : 's'}
-                </span>
-              </div>
+        {groupedSkills.map((group) => (
+          <section key={group.scope} className="min-w-0 space-y-3">
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className={cn('rounded-full px-2.5 py-1 text-xs', SCOPE_BADGE_CLASSES[group.scope])}>
+                {SCOPE_LABELS[group.scope]}
+              </Badge>
+              <span className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                {group.skills.length} skill{group.skills.length === 1 ? '' : 's'}
+              </span>
+            </div>
 
-              <div className="grid min-w-0 gap-3 lg:grid-cols-2">
-                {group.skills.map((skill) => (
-                  <div
-                    key={`${skill.command}:${skill.sourcePath}:${skill.projectPath || 'global'}`}
-                    className="min-w-0 rounded-3xl border border-border/70 bg-gradient-to-br from-background via-background to-muted/25 p-4 shadow-sm"
-                  >
-                    <div className="min-w-0 space-y-1">
-                      <div className="break-all font-mono text-sm font-semibold text-foreground">{skill.command}</div>
-                      <div className="text-sm text-muted-foreground">{skill.name}</div>
-                    </div>
-
-                    <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                      {skill.description || 'No description provided in the skill front matter.'}
-                    </p>
-
-                    <div className="mt-4 flex flex-wrap items-center gap-2">
-                      {skill.pluginName && (
-                        <Badge variant="outline" className="rounded-full bg-background/70">
-                          Plugin: {skill.pluginName}
-                        </Badge>
-                      )}
-                      {skill.projectDisplayName && (
-                        <Badge variant="outline" className="rounded-full bg-background/70">
-                          Project: {skill.projectDisplayName}
-                        </Badge>
-                      )}
-                    </div>
-
-                    <div className="mt-4 min-w-0 rounded-2xl border border-border/60 bg-muted/20 px-3 py-2">
-                      <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Source</div>
-                      <code className="mt-1 block whitespace-normal break-all text-xs text-foreground">{skill.sourcePath}</code>
-                    </div>
+            <div className="grid min-w-0 gap-3 lg:grid-cols-2">
+              {group.skills.map((skill) => (
+                <div
+                  key={`${skill.command}:${skill.sourcePath}:${skill.projectPath || 'global'}`}
+                  className="min-w-0 rounded-lg border border-border bg-card/50 p-4"
+                >
+                  <div className="min-w-0 space-y-1">
+                    <div className="break-all font-mono text-sm font-semibold text-foreground">{skill.command}</div>
+                    <div className="text-sm text-muted-foreground">{skill.name}</div>
                   </div>
-                ))}
-              </div>
-            </section>
-          ))}
-        </CardContent>
-      </Card>
+
+                  <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                    {skill.description || 'No description provided in the skill front matter.'}
+                  </p>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    {skill.pluginName && (
+                      <Badge variant="outline" className="rounded-full bg-background/70">
+                        Plugin: {skill.pluginName}
+                      </Badge>
+                    )}
+                    {skill.projectDisplayName && (
+                      <Badge variant="outline" className="rounded-full bg-background/70">
+                        Project: {skill.projectDisplayName}
+                      </Badge>
+                    )}
+                  </div>
+
+                  <div className="mt-4 min-w-0 rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+                    <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Source</div>
+                    <code className="mt-1 block whitespace-normal break-all text-xs text-foreground">{skill.sourcePath}</code>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
     </div>
   );
 }

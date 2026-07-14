@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  buildOpenCodeDefinitionFromVerboseModels,
   buildOpenCodeDefinitionFromIds,
   parseOpenCodeModelsStdout,
+  parseOpenCodeVerboseModelsStdout,
 } from '@/modules/providers/list/opencode/opencode-models.provider.js';
 
 test('OpenCode models provider parses plain CLI output and removes duplicates', () => {
@@ -28,6 +30,7 @@ test('OpenCode models provider formats frontend labels from provider-prefixed id
     'opencode/nemotron-3-super-free',
     'anthropic/claude-3-5-sonnet-20241022',
     'anthropic/claude-opus-4-7-fast',
+    'google/model-alpha',
     'openai/gpt-5.4-mini-fast',
     'openai/gpt-5.5-pro',
     'newprovider/alpha-v12-special-20261231',
@@ -68,6 +71,72 @@ test('OpenCode models provider formats frontend labels from provider-prefixed id
       value: 'newprovider/alpha-v12-special-20261231',
       label: 'Alpha V12 Special (2026-12-31)',
       description: 'newprovider - newprovider/alpha-v12-special-20261231',
+    },
+  ]);
+});
+
+test('OpenCode models provider maps verbose model variants to effort options', () => {
+  const models = parseOpenCodeVerboseModelsStdout(`
+opencode/deepseek-v4-flash-free
+{
+  "id": "deepseek-v4-flash-free",
+  "providerID": "opencode",
+  "name": "DeepSeek V4 Flash Free",
+  "variants": {
+    "low": {
+      "reasoningEffort": "low"
+    },
+    "high": {
+      "reasoningEffort": "high"
+    }
+  }
+}
+anthropic/claude-sonnet-5
+{
+  "id": "claude-sonnet-5",
+  "providerID": "anthropic",
+  "name": "Claude Sonnet 5",
+  "variants": {
+    "low": {
+      "effort": "low"
+    },
+    "max": {
+      "effort": "max"
+    }
+  }
+}
+google/model-alpha
+{
+  "id": "model-alpha",
+  "providerID": "google",
+  "name": "Model Alpha"
+}
+`);
+
+  const definition = buildOpenCodeDefinitionFromVerboseModels(models);
+
+  assert.deepEqual(definition.OPTIONS, [
+    {
+      value: 'opencode/deepseek-v4-flash-free',
+      label: 'DeepSeek V4 Flash Free',
+      description: 'opencode - opencode/deepseek-v4-flash-free',
+      effort: {
+        values: [
+          { value: 'low' },
+          { value: 'high' },
+        ],
+      },
+    },
+    {
+      value: 'anthropic/claude-sonnet-5',
+      label: 'Claude Sonnet 5',
+      description: 'anthropic - anthropic/claude-sonnet-5',
+      effort: {
+        values: [
+          { value: 'low' },
+          { value: 'max' },
+        ],
+      },
     },
   ]);
 });
