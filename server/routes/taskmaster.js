@@ -18,6 +18,7 @@ import spawn from 'cross-spawn';
 import { projectsDb } from '../modules/database/index.js';
 import { detectTaskMasterMCPServer } from '../utils/mcp-detector.js';
 import { broadcastTaskMasterProjectUpdate, broadcastTaskMasterTasksUpdate } from '../utils/taskmaster-websocket.js';
+import { buildChildProcessEnv } from '../utils/childProcessEnv.js';
 
 /**
  * Resolve the absolute project directory from a DB-assigned `projectId`.
@@ -514,6 +515,7 @@ router.post('/init/:projectId', async (req, res) => {
         // Run taskmaster init command
         const initProcess = spawn('npx', ['task-master', 'init'], {
             cwd: projectPath,
+            env: buildChildProcessEnv(),
             stdio: ['pipe', 'pipe', 'pipe']
         });
 
@@ -616,6 +618,7 @@ router.post('/add-task/:projectId', async (req, res) => {
         // Run task-master add-task command
         const addTaskProcess = spawn('npx', args, {
             cwd: projectPath,
+            env: buildChildProcessEnv(),
             stdio: ['pipe', 'pipe', 'pipe']
         });
 
@@ -694,6 +697,7 @@ router.put('/update-task/:projectId/:taskId', async (req, res) => {
         if (status && Object.keys(req.body).length === 1) {
             const setStatusProcess = spawn('npx', ['task-master-ai', 'set-status', `--id=${taskId}`, `--status=${status}`], {
                 cwd: projectPath,
+                env: buildChildProcessEnv(),
                 stdio: ['pipe', 'pipe', 'pipe']
             });
 
@@ -746,6 +750,7 @@ router.put('/update-task/:projectId/:taskId', async (req, res) => {
 
             const updateProcess = spawn('npx', ['task-master-ai', 'update-task', `--id=${taskId}`, `--prompt=${prompt}`], {
                 cwd: projectPath,
+                env: buildChildProcessEnv(),
                 stdio: ['pipe', 'pipe', 'pipe']
             });
 
@@ -842,6 +847,7 @@ router.post('/parse-prd/:projectId', async (req, res) => {
         // Run task-master parse-prd command
         const parsePRDProcess = spawn('npx', args, {
             cwd: projectPath,
+            env: buildChildProcessEnv(),
             stdio: ['pipe', 'pipe', 'pipe']
         });
 

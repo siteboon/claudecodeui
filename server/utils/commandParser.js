@@ -6,6 +6,7 @@ import { promisify } from 'util';
 import { parse as parseShellCommand } from 'shell-quote';
 
 import { parseFrontMatter } from '../shared/frontmatter.js';
+import { buildChildProcessEnv } from './childProcessEnv.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -285,7 +286,7 @@ export async function processBashCommands(content, options = {}) {
           timeout,
           maxBuffer: 1024 * 1024, // 1MB max output
           shell: false, // IMPORTANT: No shell interpretation
-          env: { ...process.env, PATH: process.env.PATH } // Inherit PATH for finding commands
+          env: buildChildProcessEnv() // Inherit host env (minus NODE_ENV) for finding commands
         }
       );
 
