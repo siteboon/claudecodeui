@@ -185,7 +185,7 @@ export default function ChangesView({
           <div className="flex h-32 items-center justify-center">
             <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
-        ) : gitStatus?.hasCommits === false ? (
+        ) : gitStatus?.hasCommits === false && hasChangedFiles(gitStatus) ? (
           <div className="flex flex-col items-center justify-center p-8 text-center">
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/50">
               <GitBranch className="h-7 w-7 text-muted-foreground/50" />

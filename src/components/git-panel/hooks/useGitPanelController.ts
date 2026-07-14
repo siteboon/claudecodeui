@@ -51,6 +51,10 @@ export function useGitPanelController({
   const [currentBranch, setCurrentBranch] = useState('');
   const [branches, setBranches] = useState<string[]>([]);
   const [recentCommits, setRecentCommits] = useState<GitCommitSummary[]>([]);
+  // Separate from `isLoading` (status) so History never flashes "No commits
+  // found" while the commits request is still in flight.
+  const [isLoadingCommits, setIsLoadingCommits] = useState(false);
+  const [hasLoadedCommits, setHasLoadedCommits] = useState(false);
   const [commitDiffs, setCommitDiffs] = useState<GitDiffMap>({});
   const [remoteStatus, setRemoteStatus] = useState<GitRemoteStatus | null>(null);
   const [localBranches, setLocalBranches] = useState<string[]>([]);
@@ -61,6 +65,7 @@ export function useGitPanelController({
   const [isPushing, setIsPushing] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isCreatingInitialCommit, setIsCreatingInitialCommit] = useState(false);
+  const [isInitializingRepository, setIsInitializingRepository] = useState(false);
   const [operationError, setOperationError] = useState<string | null>(null);
 
   const clearOperationError = useCallback(() => setOperationError(null), []);
@@ -135,8 +140,15 @@ export function useGitPanelController({
       }
 
       if (data.error) {
-        console.error('Git status error:', data.error);
-        setGitStatus({ error: data.error, details: data.details });
+        // A missing repository is an expected state, not an error.
+        if (!data.notGitRepository) {
+          console.error('Git status error:', data.error);
+        }
+        setGitStatus({
+          error: data.error,
+          details: data.details,
+          notGitRepository: data.notGitRepository,
+        });
         setCurrentBranch('');
         return;
       }
@@ -565,17 +577,29 @@ export function useGitPanelController({
       return;
     }
 
+    const projectId = selectedProject.projectId;
+
+    setIsLoadingCommits(true);
     try {
       const response = await fetchWithAuth(
-        `/api/git/commits?project=${encodeURIComponent(selectedProject.projectId)}&limit=${RECENT_COMMITS_LIMIT}`,
+        `/api/git/commits?project=${encodeURIComponent(projectId)}&limit=${RECENT_COMMITS_LIMIT}`,
       );
       const data = await readJson<GitCommitsResponse>(response);
+
+      if (selectedProjectIdRef.current !== projectId) {
+        return;
+      }
 
       if (!data.error && data.commits) {
         setRecentCommits(data.commits);
       }
     } catch (error) {
       console.error('Error fetching commits:', error);
+    } finally {
+      if (selectedProjectIdRef.current === projectId) {
+        setIsLoadingCommits(false);
+        setHasLoadedCommits(true);
+      }
     }
   }, [selectedProject]);
 
@@ -701,6 +725,39 @@ export function useGitPanelController({
     }
   }, [fetchGitStatus, fetchRemoteStatus, selectedProject]);
 
+  const initRepository = useCallback(async () => {
+    if (!selectedProject) {
+      return false;
+    }
+
+    setIsInitializingRepository(true);
+    try {
+      const response = await fetchWithAuth('/api/git/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project: selectedProject.projectId,
+        }),
+      });
+
+      const data = await readJson<GitOperationResponse>(response);
+      if (!data.success) {
+        setOperationError(data.error ?? 'Failed to initialize repository');
+        return false;
+      }
+
+      void fetchGitStatus();
+      void fetchBranches();
+      void fetchRemoteStatus();
+      return true;
+    } catch (error) {
+      setOperationError(error instanceof Error ? error.message : 'Failed to initialize repository');
+      return false;
+    } finally {
+      setIsInitializingRepository(false);
+    }
+  }, [fetchBranches, fetchGitStatus, fetchRemoteStatus, selectedProject]);
+
   const openFile = useCallback(
     async (filePath: string) => {
       if (!onFileOpen) {
@@ -756,6 +813,8 @@ export function useGitPanelController({
     setRecentCommits([]);
     setCommitDiffs({});
     setIsLoading(false);
+    setIsLoadingCommits(false);
+    setHasLoadedCommits(false);
     setOperationError(null);
 
     if (!selectedProject) {
@@ -784,6 +843,9 @@ export function useGitPanelController({
     gitStatus,
     gitDiff,
     isLoading,
+    // History is "loading" until the first commits response for this project
+    // lands, so an empty list never renders before the data exists.
+    isLoadingCommits: isLoadingCommits || !hasLoadedCommits,
     currentBranch,
     branches,
     localBranches,
@@ -797,6 +859,7 @@ export function useGitPanelController({
     isPushing,
     isPublishing,
     isCreatingInitialCommit,
+    isInitializingRepository,
     operationError,
     clearOperationError,
     refreshAll,
@@ -815,6 +878,7 @@ export function useGitPanelController({
     generateCommitMessage,
     commitChanges,
     createInitialCommit,
+    initRepository,
     openFile,
   };
 }
