@@ -109,6 +109,10 @@ export const api = {
   },
   getArchivedSessions: () =>
     authenticatedFetch('/api/providers/sessions/archived'),
+  // Resolves one session (by app id or provider-native id) to its metadata and
+  // owning project — used when a /session/<id> URL isn't in loaded payloads.
+  sessionDetails: (sessionId) =>
+    authenticatedFetch(`/api/providers/sessions/${encodeURIComponent(sessionId)}`),
   runningSessions: () =>
     authenticatedFetch('/api/providers/sessions/running'),
   restoreSession: (sessionId) =>

@@ -149,8 +149,8 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
         output={output}
         isError={Boolean(toolResult?.isError)}
         status={toolStatus !== 'completed' ? toolStatus : undefined}
-        // Commands stay collapsed by default; only failures auto-expand so they
-        // remain visible.
+        // Commands stay collapsed by default — including failures; the status
+        // badge marks errors and the output expands via the chevron.
         defaultOpen={false}
       />
     );

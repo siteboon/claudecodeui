@@ -52,6 +52,28 @@ type RegisterOptimisticSessionArgs = {
   summary?: string | null;
 };
 
+/**
+ * Shape of `GET /api/providers/sessions/:sessionId` — the authoritative
+ * session → owning-project resolution used when a `/session/<id>` URL points
+ * at a session that is not present in the paginated project payloads.
+ */
+type SessionDetailsApiPayload = {
+  data?: {
+    sessionId?: string;
+    provider?: string;
+    summary?: string;
+    createdAt?: string | null;
+    lastActivity?: string | null;
+    project?: {
+      projectId?: string;
+      path?: string;
+      fullPath?: string;
+      displayName?: string;
+      isStarred?: boolean;
+    } | null;
+  };
+};
+
 type ProjectSessionPage = Pick<Project, 'sessions' | 'sessionMeta'>;
 
 const DEFAULT_PROVIDER: LLMProvider = 'claude';
@@ -412,6 +434,14 @@ export function useProjectsState({
   selectedSessionRef.current = selectedSession;
   const activeSessionsRef = useRef(activeSessions);
   activeSessionsRef.current = activeSessions;
+  const selectedProjectRef = useRef(selectedProject);
+  selectedProjectRef.current = selectedProject;
+  const projectsRef = useRef(projects);
+  projectsRef.current = projects;
+  const sessionIdRef = useRef(sessionId);
+  sessionIdRef.current = sessionId;
+  /** URL session id whose backend lookup already ran (or is in flight) — one attempt per id. */
+  const sessionLookupRef = useRef<string | null>(null);
 
   const markSessionAttention = useCallback((targetSessionId?: string | null) => {
     if (!targetSessionId) {
@@ -807,31 +837,111 @@ export function useProjectsState({
       }
     }
 
-    // Session id is in the URL but not yet present on any project payload
-    // (normal for a brand-new conversation: the composer allocates the id and
-    // navigates before the sidebar learns about the session via
-    // `session_upserted`). Without a `selectedSession`, chat state clears
-    // `currentSessionId` and the UI stops reading the session store even
-    // though messages stream under this id — so synthesize a placeholder.
     if (selectedSession?.id === sessionId) {
       return;
     }
 
-    // Only the currently selected project may host the placeholder. Guessing
-    // another project (e.g. "first one with sessions") could bind the URL
-    // session to the wrong project — better to wait until the owning project
-    // arrives in a later `projects` payload and is matched by the loop above.
-    if (!selectedProject) {
+    // Session id is in the URL but not present on any loaded project payload.
+    // The payloads are paginated (only each project's first session page is
+    // loaded), so this is normal for deep links to older sessions. Never guess
+    // the owning project from local state — that used to bind the session to
+    // whatever project happened to be selected. Ask the backend instead; one
+    // lookup per URL id.
+    if (sessionLookupRef.current === sessionId) {
       return;
     }
+    sessionLookupRef.current = sessionId;
 
-    setSelectedSession({
-      id: sessionId,
-      __provider: readSelectedProvider(),
-      __projectId: selectedProject.projectId,
-      summary: '',
-    });
-  }, [sessionId, projects, selectedProject, selectedSession?.id, selectedSession?.__provider]);
+    void (async () => {
+      let details: SessionDetailsApiPayload['data'] | null = null;
+      try {
+        const response = await api.sessionDetails(sessionId);
+        if (response.ok) {
+          const payload = (await response.json()) as SessionDetailsApiPayload;
+          details = payload.data ?? null;
+        }
+      } catch (error) {
+        console.error(`Error resolving session ${sessionId}:`, error);
+      }
+
+      // The user navigated elsewhere while the lookup was in flight.
+      if (sessionIdRef.current !== sessionId) {
+        return;
+      }
+
+      if (!details) {
+        // Unknown session id (or lookup failed). Fall back to the legacy
+        // behavior: host a placeholder under the currently selected project so
+        // chat state stays alive (without a `selectedSession`, chat clears
+        // `currentSessionId` and stops reading the session store).
+        const fallbackProject = selectedProjectRef.current;
+        if (!fallbackProject || selectedSessionRef.current?.id === sessionId) {
+          return;
+        }
+
+        setSelectedSession({
+          id: sessionId,
+          __provider: readSelectedProvider(),
+          __projectId: fallbackProject.projectId,
+          summary: '',
+        });
+        return;
+      }
+
+      // The URL carried a provider-native alias id: swap it for the canonical
+      // app-facing id and let this effect re-run against the new URL.
+      if (typeof details.sessionId === 'string' && details.sessionId && details.sessionId !== sessionId) {
+        navigate(`/session/${details.sessionId}`, { replace: true });
+        return;
+      }
+
+      const resolvedProjectId = details.project?.projectId;
+      if (resolvedProjectId) {
+        setSelectedProject((previousProject) => {
+          if (previousProject?.projectId === resolvedProjectId) {
+            return previousProject;
+          }
+
+          const loadedProject = projectsRef.current.find(
+            (candidate) => candidate.projectId === resolvedProjectId,
+          );
+          if (loadedProject) {
+            return loadedProject;
+          }
+
+          // Owning project is not in the active project list (e.g. archived):
+          // synthesize a minimal entry so the chat view still gets its paths.
+          return {
+            projectId: resolvedProjectId,
+            path: details.project?.path ?? details.project?.fullPath ?? '',
+            fullPath: details.project?.fullPath ?? details.project?.path ?? '',
+            displayName: details.project?.displayName ?? '',
+            isStarred: Boolean(details.project?.isStarred),
+            sessions: [],
+            sessionMeta: { hasMore: false, total: 0 },
+          };
+        });
+      }
+
+      const resolvedSession: ProjectSession = {
+        id: sessionId,
+        summary: details.summary ?? '',
+        createdAt: details.createdAt ?? undefined,
+        lastActivity: details.lastActivity ?? undefined,
+        __provider:
+          typeof details.provider === 'string' && details.provider.trim()
+            ? (details.provider as LLMProvider)
+            : readSelectedProvider(),
+        __projectId: resolvedProjectId,
+      };
+
+      setSelectedSession((previousSession) =>
+        previousSession?.id === sessionId
+          ? { ...previousSession, ...resolvedSession }
+          : resolvedSession,
+      );
+    })();
+  }, [navigate, sessionId, projects, selectedProject, selectedSession?.id, selectedSession?.__provider]);
 
   const handleProjectSelect = useCallback(
     (project: Project) => {

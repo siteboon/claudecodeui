@@ -556,6 +556,17 @@ router.get(
   }),
 );
 
+// Must stay registered after the static `/sessions/running` and
+// `/sessions/archived` routes so those literals never match `:sessionId`.
+router.get(
+  '/sessions/:sessionId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const result = sessionsService.getSessionDetailsById(sessionId);
+    res.json(createApiSuccessResponse(result));
+  }),
+);
+
 router.delete(
   '/sessions/:sessionId',
   asyncHandler(async (req: Request, res: Response) => {
