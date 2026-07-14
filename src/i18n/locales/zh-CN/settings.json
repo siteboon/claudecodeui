@@ -4,6 +4,7 @@
     "account": "账户",
     "permissions": "权限",
     "mcpServers": "MCP 服务器",
+    "skills": "技能",
     "appearance": "外观"
   },
   "account": {
@@ -49,6 +50,21 @@
     "resetToDefaults": "重置为默认值",
     "cancelChanges": "取消更改"
   },
+  "voiceSettings": {
+    "title": "语音",
+    "description": "通过兼容 OpenAI 的音频后端实现语音转文字输入和朗读功能。",
+    "enable": "启用语音",
+    "enableDescription": "在消息上显示麦克风按钮和朗读按钮。",
+    "backendTitle": "后端",
+    "backendDescription": "指向 OpenAI、Groq 或本地服务器（LocalAI、Speaches、Kokoro-FastAPI）。留空以使用服务器默认值。",
+    "baseUrl": "基础 URL",
+    "apiKey": "API 密钥",
+    "sttModel": "语音转文字模型",
+    "ttsModel": "文字转语音模型",
+    "voice": "语音",
+    "format": "音频格式",
+    "note": "自定义基础 URL 由您的浏览器直接调用，必须允许浏览器 CORS 请求。留空以使用服务器配置的后端。"
+  },
   "quickSettings": {
     "title": "快速设置",
     "sections": {
@@ -60,6 +76,7 @@
     "showRawParameters": "显示原始参数",
     "showThinking": "显示思考过程",
     "sendByCtrlEnter": "使用 Ctrl+Enter 发送",
+    "voiceEnabled": "语音（麦克风 + 朗读）",
     "sendByCtrlEnterDescription": "启用后，按 Ctrl+Enter 发送消息，而不是仅按 Enter。这对于使用输入法的用户可以避免意外发送。",
     "dragHandle": {
       "dragging": "正在拖拽手柄",
@@ -90,8 +107,9 @@
     "appearance": "外观",
     "git": "Git",
     "apiTokens": "API 和令牌",
+    "voice": "语音",
     "tasks": "任务",
-    "computer": "计算机使用",
+    "browser": "浏览器",
     "notifications": "通知",
     "plugins": "插件",
     "about": "关于"
@@ -100,13 +118,20 @@
     "title": "通知",
     "description": "控制你希望接收的通知事件。",
     "webPush": {
-      "title": "Web 推送通知",
-      "enable": "启用推送通知",
-      "disable": "关闭推送通知",
-      "enabled": "推送通知已启用",
+      "title": "通知此浏览器",
+      "enable": "启用通知",
+      "disable": "关闭通知",
+      "enabled": "此浏览器已启用通知",
       "loading": "更新中...",
       "unsupported": "此浏览器不支持推送通知。",
       "denied": "推送通知已被阻止，请在浏览器设置中允许。"
+    },
+    "desktop": {
+      "title": "通知此桌面应用",
+      "enable": "启用通知",
+      "disable": "关闭通知",
+      "enabled": "此桌面应用已启用通知",
+      "unsupported": "此系统不支持桌面通知。"
     },
     "sound": {
       "title": "声音",
@@ -323,6 +348,9 @@
       },
       "codex": {
         "description": "OpenAI Codex AI 助手"
+      },
+      "opencode": {
+        "description": "OpenCode CLI 助手"
       }
     },
     "connectionStatus": "连接状态",
@@ -417,7 +445,8 @@
     "description": {
       "claude": "Model Context Protocol 服务器为 Claude 提供额外的工具和数据源",
       "cursor": "Model Context Protocol 服务器为 Cursor 提供额外的工具和数据源",
-      "codex": "Model Context Protocol 服务器为 Codex 提供额外的工具和数据源"
+      "codex": "Model Context Protocol 服务器为 Codex 提供额外的工具和数据源",
+      "opencode": "Model Context Protocol 服务器为 OpenCode 提供额外的工具和数据源"
     },
     "addButton": "添加 MCP 服务器",
     "empty": "未配置 MCP 服务器",
@@ -440,6 +469,10 @@
     "actions": {
       "edit": "编辑服务器",
       "delete": "删除服务器"
+    },
+    "managed": {
+      "badge": "已托管",
+      "hint": "由 CloudCLI 管理。"
     },
     "help": {
       "title": "关于 Codex MCP",
@@ -466,13 +499,67 @@
     "installFailed": "安装失败",
     "uninstallFailed": "卸载失败",
     "toggleFailed": "切换失败",
-    "buildYourOwn": "构建您自己的插件",
+    "starterPluginLabel": "入门插件",
     "starter": "入门模板",
     "docs": "文档",
+    "sections": {
+      "officialTitle": "官方插件",
+      "officialDescription": "由 CloudCLI 团队维护，可直接安装。",
+      "unofficialTitle": "其他插件",
+      "unofficialDescription": "来自其他用户的非官方插件和集成。安装前请审查源代码。"
+    },
     "starterPlugin": {
       "name": "项目统计",
       "badge": "入门",
       "description": "查看项目的文件数、代码行数、文件类型分布以及最近活动。",
+      "install": "安装"
+    },
+    "terminalPlugin": {
+      "name": "终端",
+      "badge": "官方",
+      "description": "集成终端，可直接在界面内获得完整 Shell 访问权限。",
+      "install": "安装"
+    },
+    "scheduledPromptPlugin": {
+      "name": "定时提示",
+      "badge": "非官方",
+      "description": "安排工作区提示、查看运行历史并管理定期本地任务。",
+      "install": "安装"
+    },
+    "claudeWatchPlugin": {
+      "name": "Claude Watch",
+      "badge": "非官方",
+      "description": "监控长时间运行的 Claude Code 会话，检测挂起并暴露进程控制。",
+      "install": "安装"
+    },
+    "prismCloudCLI": {
+      "name": "PRISM CloudCLI",
+      "badge": "非官方",
+      "description": "CloudCLI 内的 Claude Code 会话智能分析。无需离开浏览器即可了解会话为何消耗大量 Token。",
+      "install": "安装"
+    },
+    "sessionManagerPlugin": {
+      "name": "会话管理",
+      "badge": "非官方",
+      "description": "查看、管理和终止活跃的 Claude Code 会话。",
+      "install": "安装"
+    },
+    "tokenCostCalculatorPlugin": {
+      "name": "Token 费用计算器",
+      "badge": "非官方",
+      "description": "根据模型价格和 Token 使用量计算 API 费用，支持预设模型定价。",
+      "install": "安装"
+    },
+    "taskQueuePlugin": {
+      "name": "任务队列",
+      "badge": "非官方",
+      "description": "任务队列仪表板，用于查看、筛选和启动 Agent 任务。",
+      "install": "安装"
+    },
+    "githubIssuesBoardPlugin": {
+      "name": "GitHub Issues 看板",
+      "badge": "非官方",
+      "description": "GitHub Issues 看板，支持双向 TaskMaster 同步和 /github-task CLI 技能自动安装",
       "install": "安装"
     },
     "morePlugins": "更多",

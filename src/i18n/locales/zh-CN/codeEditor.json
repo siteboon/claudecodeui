@@ -20,7 +20,9 @@
     "saved": "已保存！",
     "exitFullscreen": "退出全屏",
     "fullscreen": "全屏",
-    "close": "关闭"
+    "close": "关闭",
+    "previewMarkdown": "预览 Markdown",
+    "editMarkdown": "编辑 Markdown"
   },
   "footer": {
     "lines": "行数：",
@@ -30,5 +32,10 @@
   "binaryFile": {
     "title": "二进制文件",
     "message": "文件 \"{{fileName}}\" 无法在文本编辑器中显示，因为它是二进制文件。"
+  },
+  "filePreview": {
+    "loading": "正在加载预览...",
+    "error": "无法显示此文件。",
+    "openInNewTab": "在新标签页中打开"
   }
 }
