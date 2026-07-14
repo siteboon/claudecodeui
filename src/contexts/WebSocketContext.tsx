@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../components/auth/context/AuthContext';
+import { AUTH_TOKEN_STORAGE_KEY } from '../components/auth/constants';
 import { IS_PLATFORM } from '../constants/config';
 
 /**
@@ -109,7 +110,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       // on an X-Refreshed-Token) so a reconnect uses the refreshed token rather
       // than a stale in-memory one. Mirrors the shell-WS / file-upload paths.
       const freshToken =
-        (typeof localStorage !== 'undefined' && localStorage.getItem('auth-token')) || token;
+        (typeof localStorage !== 'undefined' && localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)) || token;
       const wsUrl = buildWebSocketUrl(freshToken);
 
       if (!wsUrl) return console.warn('No authentication token found for WebSocket connection');
