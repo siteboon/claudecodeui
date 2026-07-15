@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../components/auth/context/AuthContext';
 import { IS_PLATFORM } from '../constants/config';
+import { isTokenExpired } from '../utils/jwt';
 
 /**
  * One frame received from the chat websocket. The server guarantees every
@@ -62,6 +63,13 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   const wsRef = useRef<WebSocket | null>(null);
   const unmountedRef = useRef(false); // Track if component is unmounted
   const hasConnectedRef = useRef(false); // Track if we've ever connected (to detect reconnects)
+  // Identifies which `connect()` call a given socket belongs to. WebSocket's
+  // close handshake is asynchronous, so when a token change (or unmount)
+  // triggers cleanup on the old socket and immediately opens a new one, the
+  // *old* socket's onclose can still fire later — with its own closure's
+  // (now stale) token. Bumped on every new connection attempt and on
+  // cleanup/unmount so a stale onclose can recognize it's no longer current.
+  const connectionGenerationRef = useRef(0);
   /**
    * Listener registry for the subscribe API. A ref (not state) because the
    * set must be readable synchronously inside `onmessage` and never trigger
@@ -71,7 +79,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   const [latestMessage, setLatestMessage] = useState<ServerEvent | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const { token } = useAuth();
+  const { token, endExpiredSession } = useAuth();
 
   const dispatch = useCallback((event: ServerEvent) => {
     for (const listener of listenersRef.current) {
@@ -93,6 +101,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
 
     return () => {
       unmountedRef.current = true;
+      connectionGenerationRef.current += 1;
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
@@ -110,6 +119,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
 
       if (!wsUrl) return console.warn('No authentication token found for WebSocket connection');
 
+      const connectionGeneration = ++connectionGenerationRef.current;
       const websocket = new WebSocket(wsUrl);
 
       websocket.onopen = () => {
@@ -132,8 +142,30 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       };
 
       websocket.onclose = () => {
+        // This socket may already be superseded by a newer connection (see
+        // connectionGenerationRef above) — e.g. a token refresh triggered a
+        // reconnect while this socket's close handshake was still in
+        // flight. Acting on that here (dropping the session, or scheduling
+        // a redundant reconnect) could kill a perfectly healthy new
+        // connection over this socket's now-stale token.
+        if (connectionGenerationRef.current !== connectionGeneration) {
+          return;
+        }
+
         setIsConnected(false);
         wsRef.current = null;
+
+        // A closed connection with an already-expired token can never
+        // succeed — the server rejects it at the handshake every time. Retrying
+        // that on a 3s loop forever is exactly the reconnect-spam issue #754
+        // describes (thousands of failed attempts/hour against a token that
+        // went stale days earlier). Stop and drop the session instead of
+        // retrying so the user sees a login screen rather than a silently
+        // spinning connection indicator.
+        if (isTokenExpired(token)) {
+          endExpiredSession();
+          return;
+        }
 
         // Attempt to reconnect after 3 seconds
         reconnectTimeoutRef.current = setTimeout(() => {
@@ -149,7 +181,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     } catch (error) {
       console.error('Error creating WebSocket connection:', error);
     }
-  }, [token, dispatch]); // everytime token changes, we reconnect
+  }, [token, dispatch, endExpiredSession]); // everytime token changes, we reconnect
 
   const sendMessage = useCallback((message: unknown) => {
     const socket = wsRef.current;

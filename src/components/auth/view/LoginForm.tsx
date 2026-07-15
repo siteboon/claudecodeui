@@ -24,7 +24,7 @@ const initialState: LoginFormState = {
  */
 export default function LoginForm() {
   const { t } = useTranslation('auth');
-  const { login } = useAuth();
+  const { login, sessionExpired, acknowledgeSessionExpired } = useAuth();
 
   const [formState, setFormState] = useState<LoginFormState>(initialState);
   const [errorMessage, setErrorMessage] = useState('');
@@ -38,6 +38,7 @@ export default function LoginForm() {
     async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
       setErrorMessage('');
+      acknowledgeSessionExpired();
 
       // Keep form validation local so each auth screen owns its own UI feedback.
       if (!formState.username.trim() || !formState.password) {
@@ -52,8 +53,14 @@ export default function LoginForm() {
       }
       setIsSubmitting(false);
     },
-    [formState.password, formState.username, login, t],
+    [acknowledgeSessionExpired, formState.password, formState.username, login, t],
   );
+
+  // Landing here because a background reconnect found the JWT itself expired
+  // (see endExpiredSession in AuthContext / WebSocketContext) is a distinct
+  // case from a bad-credentials error below — surface it until the user
+  // acts on it, but let a fresh submit attempt's own error take over.
+  const displayedError = errorMessage || (sessionExpired ? t('login.errors.sessionExpired') : '');
 
   return (
     <AuthScreenLayout
@@ -85,7 +92,7 @@ export default function LoginForm() {
           icon={Lock}
         />
 
-        <AuthErrorAlert errorMessage={errorMessage} />
+        <AuthErrorAlert errorMessage={displayedError} />
 
         <button
           type="submit"

@@ -1,7 +1,7 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { IS_PLATFORM } from '../../../constants/config';
-import { api } from '../../../utils/api';
-import { AUTH_ERROR_MESSAGES, AUTH_TOKEN_STORAGE_KEY } from '../constants';
+import { api, AUTH_TOKEN_REFRESHED_EVENT } from '../../../utils/api';
+import { AUTH_ERROR_MESSAGES, AUTH_TOKEN_STORAGE_KEY, TOKEN_REFRESH_CHECK_INTERVAL_MS } from '../constants';
 import type {
   AuthContextValue,
   AuthProviderProps,
@@ -41,10 +41,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [needsSetup, setNeedsSetup] = useState(false);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const lastRefreshCheckRef = useRef(0);
 
   const setSession = useCallback((nextUser: AuthUser, nextToken: string) => {
     setUser(nextUser);
     setToken(nextToken);
+    setSessionExpired(false);
     persistToken(nextToken);
   }, []);
 
@@ -52,6 +55,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setUser(null);
     setToken(null);
     clearStoredToken();
+  }, []);
+
+  const endExpiredSession = useCallback(() => {
+    clearSession();
+    setSessionExpired(true);
+  }, [clearSession]);
+
+  const acknowledgeSessionExpired = useCallback(() => {
+    setSessionExpired(false);
   }, []);
 
   const checkOnboardingStatus = useCallback(async () => {
@@ -128,6 +140,94 @@ export function AuthProvider({ children }: AuthProviderProps) {
     void checkAuthStatus();
   }, [checkAuthStatus, checkOnboardingStatus]);
 
+  // Background HTTP refreshes (see applyRefreshedToken in utils/api.js) only
+  // update localStorage. Without this, this context's `token` state — and
+  // anything derived from it, like WebSocketContext's reconnect URL — keeps
+  // using the token captured at login/mount and never picks up a refresh.
+  //
+  // AUTH_TOKEN_REFRESHED_EVENT only reaches the tab that made the request, so
+  // it alone doesn't help *other* open tabs — each of those would otherwise
+  // keep reconnecting with their own stale in-memory token until their own
+  // proactive refresh happens to run. The `storage` event is the complement:
+  // it fires in every *other* tab (never the one that made the write) when
+  // localStorage changes, so together the two listeners keep every open tab's
+  // token state in sync regardless of which tab actually refreshed it.
+  useEffect(() => {
+    const syncToken = (refreshedToken: string | null) => {
+      if (refreshedToken) {
+        setToken(refreshedToken);
+      }
+    };
+
+    const handleTokenRefreshed = (event: Event) => {
+      syncToken((event as CustomEvent<string>).detail);
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === AUTH_TOKEN_STORAGE_KEY) {
+        syncToken(event.newValue);
+      }
+    };
+
+    window.addEventListener(AUTH_TOKEN_REFRESHED_EVENT, handleTokenRefreshed);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener(AUTH_TOKEN_REFRESHED_EVENT, handleTokenRefreshed);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, []);
+
+  // The server only refreshes the token in response to a request made past
+  // its half-life (server/middleware/auth.js). A tab with an open WS/SSE
+  // connection but no other user-triggered requests would never send one,
+  // so the token silently goes stale until the WS has to reconnect — at
+  // which point it's already expired. Proactively pinging an authenticated
+  // endpoint keeps it refreshed regardless of user activity.
+  useEffect(() => {
+    if (IS_PLATFORM || !token) {
+      return;
+    }
+
+    const checkAndRefreshToken = () => {
+      lastRefreshCheckRef.current = Date.now();
+      // fetch() only rejects on network failure, never on a non-2xx status —
+      // a 401 (token invalid for a reason other than plain expiry: the
+      // server's JWT_SECRET rotated, or the user record is gone) resolves
+      // normally and would otherwise pass through unnoticed here. Since that
+      // case isn't a mere timing issue, no retry will ever succeed either, so
+      // treat it the same as a client-side-detected expiry.
+      void api.auth
+        .user()
+        .then((response) => {
+          if (response.status === 401) {
+            endExpiredSession();
+          }
+        })
+        .catch((caughtError: unknown) => {
+          console.error('[Auth] Background token refresh check failed:', caughtError);
+        });
+    };
+
+    const intervalId = setInterval(checkAndRefreshToken, TOKEN_REFRESH_CHECK_INTERVAL_MS);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') {
+        return;
+      }
+      // Avoid refresh-storms from rapid tab/window focus churn.
+      if (Date.now() - lastRefreshCheckRef.current > TOKEN_REFRESH_CHECK_INTERVAL_MS / 4) {
+        checkAndRefreshToken();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [endExpiredSession, token]);
+
   const login = useCallback<AuthContextValue['login']>(
     async (username, password) => {
       try {
@@ -199,12 +299,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
       needsSetup,
       hasCompletedOnboarding,
       error,
+      sessionExpired,
       login,
       register,
       logout,
+      endExpiredSession,
+      acknowledgeSessionExpired,
       refreshOnboardingStatus,
     }),
     [
+      acknowledgeSessionExpired,
+      endExpiredSession,
       error,
       hasCompletedOnboarding,
       isLoading,
@@ -213,6 +318,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       needsSetup,
       refreshOnboardingStatus,
       register,
+      sessionExpired,
       token,
       user,
     ],
