@@ -30,6 +30,13 @@ export default defineConfig(({ mode }) => {
       port: parseInt(env.VITE_PORT) || 5173,
       proxy: {
         '/api': `http://${proxyHost}:${serverPort}`,
+        '/preview': {
+          target: `http://${proxyHost}:${serverPort}`,
+          ws: true,
+          // The dev server (e.g. another Vite) sends redirects and HMR sockets;
+          // don't let this proxy rewrite them.
+          autoRewrite: false,
+        },
         '/ws': {
           target: `ws://${proxyHost}:${serverPort}`,
           ws: true

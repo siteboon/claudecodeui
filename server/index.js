@@ -59,6 +59,8 @@ import userRoutes from './routes/user.js';
 import pluginsRoutes from './routes/plugins.js';
 import providerRoutes from './modules/providers/provider.routes.js';
 import voiceRoutes from './voice-proxy.js';
+import previewRoutes from './routes/preview.js';
+import { previewProxyMiddleware, isPreviewAuthenticated } from './utils/preview-proxy.js';
 import browserUseRoutes from './modules/browser-use/browser-use.routes.js';
 import { assetsRoutes } from './modules/assets/index.js';
 import browserUseMcpRoutes from './modules/browser-use/browser-use-mcp.routes.js';
@@ -107,6 +109,7 @@ const wss = createWebSocketServer(server, {
     verifyClient: {
         isPlatform: IS_PLATFORM,
         authenticateWebSocket,
+        verifyPreviewCookie: isPreviewAuthenticated,
     },
     chat: {
         spawnFns: {
@@ -145,6 +148,12 @@ const wss = createWebSocketServer(server, {
 app.locals.wss = wss;
 
 app.use(cors({ exposedHeaders: ['X-Refreshed-Token'] }));
+
+// Preview proxy: serves /preview/<port>/ by streaming to a local dev server.
+// Mounted before the body parsers so request bodies pass through untouched, and
+// outside the JWT-protected /api mount because it self-authenticates via cookie.
+app.use(previewProxyMiddleware);
+
 app.use(express.json({
     limit: '50mb',
     type: (req) => {
@@ -219,6 +228,9 @@ app.use('/api/providers', authenticateToken, providerRoutes);
 app.use('/api/agent', agentRoutes);
 
 app.use('/api/voice', authenticateToken, voiceRoutes);
+
+// Preview API: mint the preview cookie, list ports, control docker (protected)
+app.use('/api/preview', authenticateToken, previewRoutes);
 
 // Serve public files (like api-docs.html)
 app.use(express.static(path.join(APP_ROOT, 'public')));

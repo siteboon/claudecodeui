@@ -10,6 +10,10 @@ type WebSocketAuthDependencies = {
     username?: string;
     [key: string]: unknown;
   } | null;
+  // Injected from the composition root so the websocket module stays free of
+  // direct util imports; returns true when the request carries a valid preview
+  // cookie (used to authorize /preview/* HMR sockets an iframe can't token).
+  verifyPreviewCookie: (req: AuthenticatedWebSocketRequest) => boolean;
 };
 
 /**
@@ -27,6 +31,16 @@ export function verifyWebSocketClient(
   }
 
   console.log('WebSocket connection attempt to:', `${loggedUrl.pathname}${loggedUrl.search}`);
+
+  // Preview HMR/app websockets authenticate with the preview cookie, since an
+  // iframe cannot attach a JWT to the sockets its app opens.
+  if (upgradeUrl.pathname.startsWith('/preview/')) {
+    if (dependencies.verifyPreviewCookie(request)) {
+      return true;
+    }
+    console.log('[WARN] Preview WebSocket rejected: missing/invalid preview cookie');
+    return false;
+  }
 
   // Platform mode: use the first DB user and skip token checks.
   if (dependencies.isPlatform) {

@@ -6,6 +6,8 @@ import StandaloneShell from '../../standalone-shell/view/StandaloneShell';
 import GitPanel from '../../git-panel/view/GitPanel';
 import PluginTabContent from '../../plugins/view/PluginTabContent';
 import { BrowserUsePanel } from '../../browser-use';
+import PreviewPanel from '../../preview/view/PreviewPanel';
+import DockerPanel from '../../docker/view/DockerPanel';
 import type { MainContentProps } from '../types/types';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { usePaletteOpsRegister } from '../../../contexts/PaletteOpsContext';
@@ -59,6 +61,16 @@ function MainContent({
   const { currentProject, setCurrentProject } = useTaskMaster() as TaskMasterContextValue;
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings() as TasksSettingsContextValue;
   const [browserUseEnabled, setBrowserUseEnabled] = useState(false);
+  // Port requested from the Docker tab; opening it switches to the Preview tab.
+  const [previewPort, setPreviewPort] = useState<number | null>(null);
+
+  const openPreview = useCallback(
+    (port: number) => {
+      setPreviewPort(port);
+      setActiveTab('preview');
+    },
+    [setActiveTab],
+  );
 
   const shouldShowTasksTab = Boolean(tasksEnabled && isTaskMasterInstalled);
   const shouldShowBrowserTab = browserUseEnabled;
@@ -208,6 +220,27 @@ function MainContent({
           {shouldShowBrowserTab && activeTab === 'browser' && (
             <div className="h-full overflow-hidden">
               <BrowserUsePanel isVisible={activeTab === 'browser'} onShowSettings={onShowSettings} />
+            </div>
+          )}
+
+          {activeTab === 'preview' && (
+            <div className="h-full overflow-hidden">
+              <PreviewPanel
+                selectedProject={selectedProject}
+                isVisible={activeTab === 'preview'}
+                requestedPort={previewPort}
+                onPortConsumed={() => setPreviewPort(null)}
+              />
+            </div>
+          )}
+
+          {activeTab === 'docker' && (
+            <div className="h-full overflow-hidden">
+              <DockerPanel
+                selectedProject={selectedProject}
+                isVisible={activeTab === 'docker'}
+                onOpenPreview={openPreview}
+              />
             </div>
           )}
 

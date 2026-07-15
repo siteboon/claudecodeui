@@ -5,6 +5,7 @@ import { WebSocketServer, type VerifyClientCallbackSync } from 'ws';
 import { handleChatConnection } from '@/modules/websocket/services/chat-websocket.service.js';
 import { verifyWebSocketClient } from '@/modules/websocket/services/websocket-auth.service.js';
 import { handlePluginWsProxy } from '@/modules/websocket/services/plugin-websocket-proxy.service.js';
+import { handlePreviewWsProxy } from '@/modules/websocket/services/preview-websocket-proxy.service.js';
 import { handleShellConnection } from '@/modules/websocket/services/shell-websocket.service.js';
 import { handleDesktopNotificationsConnection } from '@/modules/notifications/index.js';
 import type { AuthenticatedWebSocketRequest } from '@/shared/types.js';
@@ -71,6 +72,12 @@ export function createWebSocketServer(
 
     if (pathname.startsWith('/plugin-ws/')) {
       handlePluginWsProxy(ws, pathname, dependencies.getPluginPort);
+      return;
+    }
+
+    if (pathname.startsWith('/preview/')) {
+      const search = new URL(url, 'http://localhost').search;
+      handlePreviewWsProxy(ws, pathname, search);
       return;
     }
 
