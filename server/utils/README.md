@@ -62,7 +62,7 @@ env: buildChildProcessEnv({ TERM: 'xterm-256color' })
 | `electron/serverInstaller.js` | Server bundle extraction |
 | `scripts/release/build-server-bundle.js` | Release bundle dependency install/rebuild |
 
-**Total known sites: 48** (16 fixed prior to this audit + 32 found in a
+**Total known sites: 48** (16 fixed before this audit + 32 found in a
 full audit of every `spawn`/`exec`/`execSync`/`execFile*` call in
 `server/`, `electron/`, and `scripts/`). That audit was more thorough
 than the first pass, but per-site verification status still varies —
