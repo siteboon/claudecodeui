@@ -1,6 +1,6 @@
 {
   "name": "@cloudcli-ai/cloudcli",
-  "version": "1.36.1",
+  "version": "1.36.3",
   "productName": "CloudCLI",
   "description": "A web-based UI for Claude Code CLI",
   "type": "module",
@@ -145,7 +145,7 @@
     "@codemirror/theme-one-dark": "^6.1.2",
     "@iarna/toml": "^2.2.5",
     "@octokit/rest": "^22.0.0",
-    "@openai/codex-sdk": "^0.141.0",
+    "@openai/codex-sdk": "^0.144.0",
     "@replit/codemirror-minimap": "^0.5.2",
     "@tailwindcss/typography": "^0.5.16",
     "@uiw/react-codemirror": "^4.23.13",
