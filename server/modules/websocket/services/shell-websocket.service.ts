@@ -34,6 +34,40 @@ const ptySessionsMap = new Map<string, PtySessionEntry>();
 const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
 const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
 
+function clearPtySessionTimeout(session: PtySessionEntry): void {
+  if (session.timeoutId) {
+    clearTimeout(session.timeoutId);
+    session.timeoutId = null;
+  }
+}
+
+export function handlePtySessionSocketClose(
+  session: PtySessionEntry,
+  closingWs: WebSocket,
+  ptySessionKey: string,
+  sessionsMap = ptySessionsMap,
+  timeoutMs = PTY_SESSION_TIMEOUT
+): boolean {
+  if (session.ws !== closingWs) {
+    return false;
+  }
+
+  session.ws = null;
+  clearPtySessionTimeout(session);
+  session.timeoutId = setTimeout(() => {
+    session.timeoutId = null;
+    if (sessionsMap.get(ptySessionKey) !== session || session.ws !== null) {
+      return;
+    }
+
+    session.pty.kill();
+    sessionsMap.delete(ptySessionKey);
+  }, timeoutMs);
+  session.timeoutId.unref();
+
+  return true;
+}
+
 type ShellWebSocketDependencies = {
   resolveProviderSessionId: (
     sessionId: string,
@@ -282,9 +316,7 @@ export function handleShellConnection(
           isLoginCommand || forceRestart ? null : ptySessionsMap.get(ptySessionKey);
         if (existingSession) {
           shellProcess = existingSession.pty;
-          if (existingSession.timeoutId) {
-            clearTimeout(existingSession.timeoutId);
-          }
+          clearPtySessionTimeout(existingSession);
 
           ws.send(
             JSON.stringify({
@@ -522,15 +554,7 @@ export function handleShellConnection(
       return;
     }
 
-    session.ws = null;
-    session.timeoutId = setTimeout(() => {
-      if (ptySessionsMap.get(ptySessionKey as string) !== session) {
-        return;
-      }
-
-      session.pty.kill();
-      ptySessionsMap.delete(ptySessionKey as string);
-    }, PTY_SESSION_TIMEOUT);
+    handlePtySessionSocketClose(session, ws, ptySessionKey);
   });
 
   ws.on('error', (error) => {
