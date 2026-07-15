@@ -197,7 +197,9 @@ const markdownComponents = {
 export function Markdown({ children, className, breaks = false }: MarkdownProps) {
   const content = normalizeInlineCodeFences(String(children ?? ''));
   const remarkPlugins = useMemo(
-    () => (breaks ? [remarkGfm, remarkMath, remarkBreaks] : [remarkGfm, remarkMath]),
+    () => (breaks
+      ? [remarkGfm, [remarkMath, { singleDollarTextMath: false }], remarkBreaks]
+      : [remarkGfm, [remarkMath, { singleDollarTextMath: false }]]) as any,
     [breaks],
   );
   const rehypePlugins = useMemo(() => [rehypeKatex], []);
