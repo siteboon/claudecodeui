@@ -105,18 +105,18 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
     filePath: string,
     nameMap: Map<string, string>
   ): Promise<ParsedSession | null> {
+    // Codex >=0.144 sub-agent rollouts (spawn_agent, review, compact) live in
+    // the same sessions tree as user sessions and must stay out of the sidebar.
+    // Top-level sessions carry thread_source "user"; sub-agents carry
+    // thread_source "subagent" or a source object keyed by "subagent".
     const meta = await readCodexTranscriptMeta(filePath);
-    if (!meta || meta.threadSource === 'subagent') {
+    if (!meta || meta.threadSource === 'subagent' || meta.hasSubagentSource) {
       return null;
     }
     const parsed = {
       sessionId: meta.sessionId,
       projectPath: meta.projectPath,
     };
-
-    if (!parsed) {
-      return null;
-    }
 
     // App-created sessions are keyed by an app id, so disk-discovered provider
     // ids must be resolved through the provider-id mapping first.

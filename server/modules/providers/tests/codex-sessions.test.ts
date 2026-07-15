@@ -80,6 +80,23 @@ test('Codex synchronizer skips subagent transcripts', async () => {
   assert.equal(await synchronizer.synchronizeFile(filePath), null);
 });
 
+test('Codex synchronizer skips transcripts marked only via source.subagent', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'codex-subagent-source-sync-'));
+  const filePath = path.join(dir, 'child.jsonl');
+  await writeCodexJsonl(filePath, [{
+    type: 'session_meta',
+    payload: {
+      id: 'child-2',
+      cwd: '/workspace/demo',
+      source: { subagent: { thread_spawn: { parent_thread_id: 'parent-1', depth: 1 } } },
+    },
+  }]);
+
+  const synchronizer = new CodexSessionSynchronizer();
+
+  assert.equal(await synchronizer.synchronizeFile(filePath), null);
+});
+
 test('Codex history exposes spawned agent transcript as Task subagent tools', () => {
   const provider = new CodexSessionsProvider();
 

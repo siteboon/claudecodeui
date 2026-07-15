@@ -9,6 +9,7 @@ export type CodexTranscriptMeta = {
   sessionId: string;
   projectPath: string;
   threadSource?: string;
+  hasSubagentSource?: boolean;
   parentThreadId?: string;
   agentNickname?: string;
   agentRole?: string;
@@ -45,6 +46,7 @@ export async function readCodexTranscriptMeta(filePath: string): Promise<CodexTr
         sessionId,
         projectPath,
         threadSource: typeof payload.thread_source === 'string' ? payload.thread_source : undefined,
+        hasSubagentSource: subagent !== null,
         parentThreadId:
           typeof payload.parent_thread_id === 'string'
             ? payload.parent_thread_id
