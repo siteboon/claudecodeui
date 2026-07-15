@@ -3,6 +3,17 @@
 All notable changes to CloudCLI UI will be documented in this file.
 
 
+## [1.36.3](https://github.com/siteboon/claudecodeui/compare/v1.36.2...v1.36.3) (2026-07-15)
+
+### Bug Fixes
+
+* codex subagents should not appear in the sidebar ([283b558](https://github.com/siteboon/claudecodeui/commit/283b5586d2a6704d93ab7d0627ee947f8fef9809))
+* remove node_env from electron ([f2a95d6](https://github.com/siteboon/claudecodeui/commit/f2a95d64982c3372abfb9ff144244c2383476bd3))
+
+### Maintenance
+
+* refresh better-sqlite3 lock ([#1027](https://github.com/siteboon/claudecodeui/issues/1027)) ([31645e3](https://github.com/siteboon/claudecodeui/commit/31645e3fdc63857d9970eae8abef8ecbc5122796))
+
 ## [1.36.2](https://github.com/siteboon/claudecodeui/compare/v1.36.1...v1.36.2) (2026-07-14)
 
 ### Bug Fixes
