@@ -74,13 +74,20 @@ const sessions = new Map<string, BrowserUseSession>();
 const handles = new Map<string, RuntimeHandle>();
 let installPromise: Promise<{ success: boolean; message: string }> | null = null;
 let lastInstallMessage: string | null = null;
-let runtimeProbeCache: { value: RuntimeProbe; updatedAt: number } | null = null;
+let runtimeProbeCache: { value: RuntimeProbe; updatedAt: number; runtimeInstallDir: string } | null = null;
 
 const DEFAULT_SETTINGS: BrowserUseSettings = {
   enabled: false,
 };
 const AGENT_OWNER_ID = 'agent';
 const PROFILE_ROOT = path.join(os.homedir(), '.cloudcli', 'browser-use', 'profiles');
+const RUNTIME_ROOT = path.join(os.homedir(), '.cloudcli', 'browser-use', 'runtime');
+const PLAYWRIGHT_RUNTIME_VERSION = '1.61.1';
+const RUNTIME_PACKAGE_JSON = JSON.stringify({
+  private: true,
+  name: 'cloudcli-browser-use-runtime',
+  version: '0.0.0',
+}, null, 2);
 const MCP_SERVER_NAME = 'cloudcli-browser';
 const LEGACY_MCP_SERVER_NAMES = ['cloudcli-browser-use'];
 const RUNTIME_READINESS_CACHE_TTL_MS = 30_000;
@@ -141,11 +148,35 @@ function getSetupMessage(settings: BrowserUseSettings, readiness: RuntimeReadine
   return readiness.installMessage || 'Browser runtime is not ready.';
 }
 
+function getRuntimeInstallDir(): string {
+  return process.env.CLOUDCLI_BROWSER_USE_RUNTIME_DIR || RUNTIME_ROOT;
+}
+
+function getRuntimePackageJsonPath(): string {
+  return path.join(getRuntimeInstallDir(), 'package.json');
+}
+
+function ensureRuntimeInstallDir(): string {
+  const runtimeDir = getRuntimeInstallDir();
+  const packageJsonPath = path.join(runtimeDir, 'package.json');
+  fs.mkdirSync(runtimeDir, { recursive: true });
+
+  if (!fs.existsSync(packageJsonPath)) {
+    fs.writeFileSync(packageJsonPath, `${RUNTIME_PACKAGE_JSON}\n`, 'utf8');
+  }
+
+  return runtimeDir;
+}
+
 function getPlaywright(): any | null {
   try {
     return require('playwright');
   } catch {
-    return null;
+    try {
+      return createRequire(getRuntimePackageJsonPath())('playwright');
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -223,14 +254,16 @@ function probeRuntime(): RuntimeProbe {
 function getRuntimeReadiness(options: { force?: boolean } = {}): RuntimeReadiness {
   const now = Date.now();
   const cachedProbe = runtimeProbeCache;
+  const runtimeInstallDir = getRuntimeInstallDir();
   const canUseCache = !options.force
     && !installPromise
     && cachedProbe
+    && cachedProbe.runtimeInstallDir === runtimeInstallDir
     && now - cachedProbe.updatedAt < RUNTIME_READINESS_CACHE_TTL_MS;
   const probe = canUseCache ? cachedProbe.value : probeRuntime();
 
   if (!canUseCache && !installPromise) {
-    runtimeProbeCache = { value: probe, updatedAt: now };
+    runtimeProbeCache = { value: probe, updatedAt: now, runtimeInstallDir };
   }
 
   return {
@@ -245,12 +278,12 @@ const INSTALL_COMMAND_TIMEOUT_MS = Number.parseInt(
   10,
 );
 
-function runCommand(command: string, args: string[]): Promise<void> {
+function runCommand(command: string, args: string[], cwd: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
-      cwd: process.cwd(),
+      cwd,
       env: process.env,
-      shell: false,
+      shell: process.platform === 'win32',
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     const output: string[] = [];
@@ -302,19 +335,24 @@ async function installRuntime(): Promise<{ success: boolean; message: string }> 
   }
 
   const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const runtimeDir = ensureRuntimeInstallDir();
   runtimeProbeCache = null;
   installPromise = (async () => {
     try {
       lastInstallMessage = 'Installing Playwright package...';
-      await runCommand(npmCommand, ['install', '--no-save', '--no-package-lock', 'playwright']);
+      await runCommand(
+        npmCommand,
+        ['install', '--no-save', '--no-package-lock', `playwright@${PLAYWRIGHT_RUNTIME_VERSION}`],
+        runtimeDir,
+      );
 
       if (process.platform === 'linux') {
         lastInstallMessage = 'Installing Chromium system dependencies...';
-        await runCommand(npmCommand, ['exec', '--', 'playwright', 'install-deps', 'chromium']);
+        await runCommand(npmCommand, ['exec', '--', 'playwright', 'install-deps', 'chromium'], runtimeDir);
       }
 
       lastInstallMessage = 'Installing Chromium runtime...';
-      await runCommand(npmCommand, ['exec', '--', 'playwright', 'install', 'chromium']);
+      await runCommand(npmCommand, ['exec', '--', 'playwright', 'install', 'chromium'], runtimeDir);
 
       lastInstallMessage = 'Browser runtime installed.';
       return { success: true, message: lastInstallMessage };
