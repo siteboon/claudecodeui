@@ -51,7 +51,6 @@ export default function GitPanel({ selectedProject, isMobile = false, onFileOpen
     stageFiles,
     unstageFiles,
     fetchCommitDiff,
-    generateCommitMessage,
     commitChanges,
     createInitialCommit,
     initRepository,
@@ -161,7 +160,6 @@ export default function GitPanel({ selectedProject, isMobile = false, onFileOpen
               onStageFiles={stageFiles}
               onUnstageFiles={unstageFiles}
               onCommitChanges={commitChanges}
-              onGenerateCommitMessage={generateCommitMessage}
               onRequestConfirmation={setConfirmAction}
               onExpandedFilesChange={setHasExpandedFiles}
             />

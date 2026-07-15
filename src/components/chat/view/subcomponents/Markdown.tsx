@@ -1,11 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useTranslation } from 'react-i18next';
+
 import { normalizeInlineCodeFences } from '../../utils/chatFormatting';
 import { copyTextToClipboard } from '../../../../utils/clipboard';
 import { usePaletteOps } from '../../../../contexts/PaletteOpsContext';
@@ -14,6 +16,8 @@ import { useTheme } from '../../../../contexts/ThemeContext';
 type MarkdownProps = {
   children: React.ReactNode;
   className?: string;
+  /** Render single newlines as hard line breaks (for user-typed messages). */
+  breaks?: boolean;
 };
 
 // Links to the wider web (or in-page anchors) keep normal browser navigation;
@@ -169,6 +173,13 @@ const markdownComponents = {
     </blockquote>
   ),
   p: ({ children }: { children?: React.ReactNode }) => <div className="mb-2 last:mb-0">{children}</div>,
+  ul: ({ children }: { children?: React.ReactNode }) => (
+    <ul className="mb-2 list-outside list-disc space-y-1 pl-5 marker:text-current last:mb-0">{children}</ul>
+  ),
+  ol: ({ children }: { children?: React.ReactNode }) => (
+    <ol className="mb-2 list-outside list-decimal space-y-1 pl-5 marker:text-current last:mb-0">{children}</ol>
+  ),
+  li: ({ children }: { children?: React.ReactNode }) => <li className="[&>div:last-child]:mb-0 [&>div]:mb-1">{children}</li>,
   table: ({ children }: { children?: React.ReactNode }) => (
     <div className="my-2 overflow-x-auto">
       <table className="min-w-full border-collapse border border-gray-200 dark:border-gray-700">{children}</table>
@@ -183,9 +194,12 @@ const markdownComponents = {
   ),
 };
 
-export function Markdown({ children, className }: MarkdownProps) {
+export function Markdown({ children, className, breaks = false }: MarkdownProps) {
   const content = normalizeInlineCodeFences(String(children ?? ''));
-  const remarkPlugins = useMemo(() => [remarkGfm, remarkMath], []);
+  const remarkPlugins = useMemo(
+    () => (breaks ? [remarkGfm, remarkMath, remarkBreaks] : [remarkGfm, remarkMath]),
+    [breaks],
+  );
   const rehypePlugins = useMemo(() => [rehypeKatex], []);
   const { openFileInEditor } = usePaletteOps();
 

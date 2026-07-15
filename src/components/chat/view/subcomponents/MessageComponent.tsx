@@ -96,8 +96,13 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
             )}
             {userCopyContent.trim().length > 0 || !message.images?.length ? (
               <div className="group max-w-full rounded-2xl rounded-br-md bg-blue-600 px-3 py-2 text-white shadow-sm sm:px-4">
-                <div dir="auto" className="whitespace-pre-wrap break-words font-serif text-sm">
-                  {message.content}
+                <div dir="auto" className="break-words font-serif text-sm">
+                  <Markdown
+                    breaks
+                    className="prose prose-sm prose-invert max-w-none font-serif [&_a]:text-blue-100 [&_a]:underline"
+                  >
+                    {message.content}
+                  </Markdown>
                 </div>
                 <div className="mt-1 flex items-center justify-end gap-1 text-xs text-blue-100">
                   {shouldShowUserCopyControl && (

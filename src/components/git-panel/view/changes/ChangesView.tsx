@@ -22,7 +22,6 @@ type ChangesViewProps = {
   onStageFiles: (files: string[]) => Promise<boolean>;
   onUnstageFiles: (files: string[]) => Promise<boolean>;
   onCommitChanges: (message: string, files: string[]) => Promise<boolean>;
-  onGenerateCommitMessage: (files: string[]) => Promise<string | null>;
   onRequestConfirmation: (request: ConfirmationRequest) => void;
   onExpandedFilesChange: (hasExpandedFiles: boolean) => void;
 };
@@ -43,7 +42,6 @@ export default function ChangesView({
   onStageFiles,
   onUnstageFiles,
   onCommitChanges,
-  onGenerateCommitMessage,
   onRequestConfirmation,
   onExpandedFilesChange,
 }: ChangesViewProps) {
@@ -157,10 +155,6 @@ export default function ChangesView({
     [onCommitChanges, selectedFiles],
   );
 
-  const generateMessageForSelection = useCallback(() => {
-    return onGenerateCommitMessage(Array.from(selectedFiles));
-  }, [onGenerateCommitMessage, selectedFiles]);
-
   const unstagedFiles = useMemo(
     () => new Set(changedFiles.filter((f) => !selectedFiles.has(f))),
     [changedFiles, selectedFiles],
@@ -174,7 +168,6 @@ export default function ChangesView({
         selectedFileCount={selectedFiles.size}
         isHidden={hasExpandedFiles}
         onCommit={commitSelectedFiles}
-        onGenerateMessage={generateMessageForSelection}
         onRequestConfirmation={onRequestConfirmation}
       />
 

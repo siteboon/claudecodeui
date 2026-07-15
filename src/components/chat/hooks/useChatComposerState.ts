@@ -649,7 +649,7 @@ export function useChatComposerState({
     ) => {
       event.preventDefault();
       const currentInput = inputValueRef.current;
-      if (!currentInput.trim() || !selectedProject) {
+      if ((!currentInput.trim() && attachedImages.length === 0) || !selectedProject) {
         return;
       }
 
