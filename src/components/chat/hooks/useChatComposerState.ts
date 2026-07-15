@@ -653,6 +653,26 @@ export function useChatComposerState({
         return;
       }
 
+      // Check provider authentication before sending
+      try {
+        const providerStatusUrl = `/api/providers/${provider}/auth/status`;
+        const authResponse = await authenticatedFetch(providerStatusUrl);
+        if (authResponse.ok) {
+          const authPayload = (await authResponse.json()) as { data?: { authenticated?: boolean } };
+          if (!authPayload.data?.authenticated) {
+            addMessage({
+              type: 'error',
+              content: `Not logged in to ${provider}. Please log in via Settings > Login in CloudCLI, or in the Shell tab.`,
+              timestamp: new Date(),
+            });
+            return;
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to check provider auth status:', error);
+        // Don't block on auth check failure — backend may also validate
+      }
+
       // A turn is already in flight: stash this message instead of sending it.
       // It's auto-flushed (re-running this same function) once the turn ends,
       // so it still goes through slash-command interception, image upload, etc.
