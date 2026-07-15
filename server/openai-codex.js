@@ -237,7 +237,7 @@ export async function queryCodex(command, options = {}, ws) {
 
   const resolvedModel = await providerModelsService.resolveResumeModel(
     'codex',
-    appSessionId ?? sessionId,
+    appSessionId?.trim() || sessionId,
     model,
   );
 

@@ -269,7 +269,11 @@ export const sessionsService = {
 
     // Drop the per-session model override (keyed by the app session id) so the
     // override cache does not keep an orphaned entry after a permanent delete.
-    await deleteProviderSessionActiveModelChanges([sessionId]);
+    try {
+      await deleteProviderSessionActiveModelChanges([sessionId]);
+    } catch (error) {
+      console.warn('Failed to clean up session model override:', error);
+    }
 
     return {
       sessionId,

@@ -77,7 +77,11 @@ export async function deleteOrArchiveProject(projectId: string, force: boolean):
 
   await deleteSessionJsonlFilesForProjectPath(row.project_path);
   sessionsDb.deleteSessionsByProjectPath(row.project_path);
-  await deleteProviderSessionActiveModelChanges(sessionIds);
+  try {
+    await deleteProviderSessionActiveModelChanges(sessionIds);
+  } catch (error) {
+    console.warn('Failed to clean up session model overrides:', error);
+  }
   projectsDb.deleteProjectById(projectId);
 }
 

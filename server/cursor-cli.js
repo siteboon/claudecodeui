@@ -33,7 +33,7 @@ async function spawnCursor(command, options = {}, ws) {
     const { sessionId, appSessionId, projectPath, cwd, toolsSettings, skipPermissions, model, sessionSummary, images } = options;
     // The session model override is stored under the app-facing session id, so
     // resolve it with that id (falling back to the provider id when absent).
-    const resolvedModel = await providerModelsService.resolveResumeModel('cursor', appSessionId ?? sessionId, model);
+    const resolvedModel = await providerModelsService.resolveResumeModel('cursor', appSessionId?.trim() || sessionId, model);
     let capturedSessionId = sessionId; // Track session ID throughout the process
     let sessionCreatedSent = false; // Track if we've already sent session-created event
     let hasRetriedWithTrust = false;

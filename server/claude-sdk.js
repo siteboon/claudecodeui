@@ -174,6 +174,7 @@ function mapCliOptionsToSDK(options = {}) {
   delete sdkEnv.ANTHROPIC_DEFAULT_OPUS_MODEL;
   delete sdkEnv.ANTHROPIC_DEFAULT_SONNET_MODEL;
   delete sdkEnv.ANTHROPIC_DEFAULT_HAIKU_MODEL;
+  delete sdkEnv.CLAUDE_CODE_SUBAGENT_MODEL;
   sdkOptions.env = sdkEnv;
 
   // Resolve the executable eagerly on Windows because the SDK uses raw child_process.spawn,
@@ -483,7 +484,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
   try {
     const resolvedModel = await providerModelsService.resolveResumeModel(
       'claude',
-      appSessionId ?? sessionId,
+      appSessionId?.trim() || sessionId,
       options.model,
     );
     let effortModels = CLAUDE_FALLBACK_MODELS;
