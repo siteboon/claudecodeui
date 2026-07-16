@@ -722,6 +722,49 @@ export async function writeProviderSessionActiveModelChange(
   };
 }
 
+/**
+ * Removes persisted session model-change entries for the given app session ids
+ * (across all providers).
+ *
+ * Called when sessions are permanently deleted so the override cache does not
+ * accumulate orphaned entries. Archived (soft-deleted) sessions are intentionally
+ * left untouched so their pinned model survives an un-archive. A missing file or
+ * no matching entries is a no-op.
+ */
+export async function deleteProviderSessionActiveModelChanges(
+  sessionIds: readonly string[],
+  options: {
+    filePath?: string;
+  } = {},
+): Promise<void> {
+  const targetSessionIds = new Set(
+    sessionIds.map((sessionId) => sessionId.trim()).filter(Boolean),
+  );
+  if (targetSessionIds.size === 0) {
+    return;
+  }
+
+  const filePath = options.filePath ?? getProviderSessionActiveModelChangesPath();
+  const cacheFile = await readProviderSessionActiveModelChangeCacheFile(filePath);
+  const entries = Object.entries(cacheFile.entries);
+
+  // Keys are `${provider}:${sessionId}`; neither provider names nor the app
+  // session ids contain a colon, so the segment after the first one is the id.
+  const remainingEntries = entries.filter(([key]) => {
+    const sessionId = key.slice(key.indexOf(':') + 1);
+    return !targetSessionIds.has(sessionId);
+  });
+
+  if (remainingEntries.length === entries.length) {
+    return; // nothing matched — avoid rewriting (or creating) the file
+  }
+
+  await writeProviderSessionActiveModelChangeCacheFile(filePath, {
+    version: cacheFile.version,
+    entries: Object.fromEntries(remainingEntries),
+  });
+}
+
 // ---------------------------
 //----------------- WEBSOCKET PAYLOAD PARSING UTILITIES ------------
 /**

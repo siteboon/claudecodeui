@@ -164,7 +164,18 @@ function mapCliOptionsToSDK(options = {}) {
 
   // Forward all host env vars (e.g. ANTHROPIC_BASE_URL) to the subprocess.
   // Since SDK 0.2.113, options.env replaces process.env instead of overlaying it.
-  sdkOptions.env = { ...process.env };
+  //
+  // Strip the model-selecting env vars first: the app owns model selection and
+  // passes it explicitly via `sdkOptions.model`. If the host has `ANTHROPIC_MODEL`
+  // (or the per-tier defaults) set, the subprocess would otherwise honor them —
+  // most visibly when the user picks `default`, silently overriding the choice.
+  const sdkEnv = { ...process.env };
+  delete sdkEnv.ANTHROPIC_MODEL;
+  delete sdkEnv.ANTHROPIC_DEFAULT_OPUS_MODEL;
+  delete sdkEnv.ANTHROPIC_DEFAULT_SONNET_MODEL;
+  delete sdkEnv.ANTHROPIC_DEFAULT_HAIKU_MODEL;
+  delete sdkEnv.CLAUDE_CODE_SUBAGENT_MODEL;
+  sdkOptions.env = sdkEnv;
 
   // Resolve the executable eagerly on Windows because the SDK uses raw child_process.spawn,
   // which does not reliably follow npm's shell wrappers like cross-spawn does.
@@ -458,7 +469,7 @@ async function loadMcpConfig(cwd) {
  * @returns {Promise<void>}
  */
 async function queryClaudeSDK(command, options = {}, ws) {
-  const { sessionId, sessionSummary } = options;
+  const { sessionId, appSessionId, sessionSummary } = options;
   let capturedSessionId = sessionId;
   let sessionCreatedSent = false;
 
@@ -473,7 +484,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
   try {
     const resolvedModel = await providerModelsService.resolveResumeModel(
       'claude',
-      sessionId,
+      appSessionId?.trim() || sessionId,
       options.model,
     );
     let effortModels = CLAUDE_FALLBACK_MODELS;

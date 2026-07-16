@@ -540,6 +540,9 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       throw new Error('Unable to change the active model for this session.');
     }
 
+    // new session will use the latest model
+    setStoredProviderModel(targetProvider, model);
+
     return {
       scope: 'session' as const,
       changed: body.data.changed === true,

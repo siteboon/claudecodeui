@@ -36,16 +36,33 @@ const readModelProvider = (value) => {
 const hasConcreteSessionId = (value) =>
   typeof value === "string" && value.trim().length > 0;
 
-const resolveCommandModel = async (provider, catalog, sessionId) => {
-  if (!hasConcreteSessionId(sessionId)) {
-    return catalog.DEFAULT;
+const isCatalogModel = (catalog, model) =>
+  typeof model === "string" && catalog.OPTIONS.some((option) => option.value === model);
+
+const resolveCommandModel = async (provider, catalog, sessionId, requestedModel) => {
+  // A model pinned to this session (via the picker override) or set explicitly
+  // in the transcript resolves to a catalog option value. A normal turn only
+  // records the raw provider-native model id (e.g. "claude-opus-4-8"), which is
+  // not a catalog value and cannot be highlighted, so it is skipped here in
+  // favor of the composer's current selection below.
+  if (hasConcreteSessionId(sessionId)) {
+    const currentActiveModel = await providerModelsService.getCurrentActiveModel(
+      provider,
+      sessionId,
+    );
+    if (isCatalogModel(catalog, currentActiveModel?.model)) {
+      return currentActiveModel.model;
+    }
   }
 
-  const currentActiveModel = await providerModelsService.getCurrentActiveModel(
-    provider,
-    sessionId,
-  );
-  return currentActiveModel?.model || catalog.DEFAULT;
+  // The composer already reconciled its selection to a catalog option value and
+  // sends it as the requested model; it is what the next turn will actually use
+  // when no session override is pinned.
+  if (isCatalogModel(catalog, requestedModel)) {
+    return requestedModel;
+  }
+
+  return catalog.DEFAULT;
 };
 
 export const executeModelsCommand = async (args, context) => {
@@ -56,6 +73,7 @@ export const executeModelsCommand = async (args, context) => {
     currentProvider,
     catalog,
     context?.sessionId,
+    context?.model,
   );
   const availableModels = catalog.OPTIONS.map((option) => option.value);
   const availableOptions = catalog.OPTIONS.map((option) => ({
@@ -255,7 +273,7 @@ Custom commands can be created in:
     const tokenUsage = context?.tokenUsage || {};
     const provider = readModelProvider(context?.provider);
     const catalog = (await providerModelsService.getProviderModels(provider)).models;
-    const model = await resolveCommandModel(provider, catalog, context?.sessionId);
+    const model = await resolveCommandModel(provider, catalog, context?.sessionId, context?.model);
 
     const reportedUsed =
       Number(
@@ -358,7 +376,7 @@ Custom commands can be created in:
 
     const statusProvider = readModelProvider(context?.provider);
     const statusCatalog = (await providerModelsService.getProviderModels(statusProvider)).models;
-    const model = await resolveCommandModel(statusProvider, statusCatalog, context?.sessionId);
+    const model = await resolveCommandModel(statusProvider, statusCatalog, context?.sessionId, context?.model);
     const memoryUsage = process.memoryUsage();
 
     return {

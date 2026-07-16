@@ -306,7 +306,18 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
   const getCurrentActiveModel = async (
     provider: LLMProvider,
     sessionId?: string,
-  ): Promise<ProviderCurrentActiveModel> => resolveProvider(provider).models.getCurrentActiveModel(sessionId);
+  ): Promise<ProviderCurrentActiveModel> => {
+    // A model the user just picked in the UI is persisted as a session override
+    // that only lands in the provider's own transcript/config on the next resumed
+    // turn. Surface it here so reopening the model picker reflects the pending
+    // choice instead of the stale model still recorded in the provider source.
+    const changedModel = await getChangedActiveModel(provider, sessionId?.trim() ?? '');
+    if (changedModel.supported && changedModel.changed && changedModel.model?.trim()) {
+      return { model: changedModel.model.trim() };
+    }
+
+    return resolveProvider(provider).models.getCurrentActiveModel(sessionId);
+  };
 
   const changeActiveModel = async (
     provider: LLMProvider,

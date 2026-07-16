@@ -139,6 +139,12 @@ const ANSI_PATTERN = new RegExp(
   'g',
 );
 
+// Claude tags system-generated placeholder turns (e.g. an interrupted or
+// errored response) with sentinel model values like `<synthetic>`. These are
+// never a real model selection, so they must not mask the actual active model
+// recorded earlier in the transcript.
+const isPlaceholderClaudeModel = (model: string): boolean => model.startsWith('<');
+
 const extractClaudeEventModel = (event: ClaudeInitEvent, sessionId: string): string | null => {
   const eventSessionId = event.sessionId ?? event.session_id;
   if (eventSessionId && eventSessionId !== sessionId) {
@@ -151,12 +157,12 @@ const extractClaudeEventModel = (event: ClaudeInitEvent, sessionId: string): str
   }
 
   const directModel = event.model?.trim();
-  if (directModel) {
+  if (directModel && !isPlaceholderClaudeModel(directModel)) {
     return directModel;
   }
 
   const messageModel = event.message?.model?.trim();
-  return messageModel || null;
+  return messageModel && !isPlaceholderClaudeModel(messageModel) ? messageModel : null;
 };
 
 const stripAnsi = (value: string): string => value.replace(ANSI_PATTERN, '');
@@ -229,6 +235,40 @@ const readClaudeSessionModelFromJsonl = async (
   return null;
 };
 
+// Resolves the model recorded for a session to a catalog option value the model
+// picker can highlight. Explicit selections (picker override, `/model` command)
+// are already option values and pass through unchanged. A normal turn only
+// records the raw provider-native id (e.g. `claude-opus-4-8`), so it is mapped
+// back to the catalog option whose value names the model family.
+//
+// Families are derived from the catalog itself rather than hard-coded, so a
+// newly released model (e.g. a future `claude-<family>-*`) is matched as soon as
+// it has a catalog entry — no change is needed here. Unknown values are returned
+// as-is so callers can decide how to fall back.
+const resolveClaudeActiveOptionValue = (
+  model: string,
+  models: ProviderModelsDefinition,
+): string => {
+  const normalized = model.trim();
+  if (models.OPTIONS.some((option) => option.value === normalized)) {
+    return normalized;
+  }
+
+  const lowered = normalized.toLowerCase();
+  const familyMatch = models.OPTIONS
+    .filter((option) => {
+      const value = option.value.toLowerCase();
+      // Only simple family aliases (e.g. `opus`) can name a raw model id; skip
+      // decorated values like `opus[1m]` and non-model aliases like `default`.
+      return /^[a-z][a-z0-9.]*$/.test(value)
+        && (lowered === `claude-${value}` || lowered.startsWith(`claude-${value}-`));
+    })
+    // Prefer the most specific family when several share a prefix.
+    .sort((first, second) => second.value.length - first.value.length)[0];
+
+  return familyMatch?.value ?? normalized;
+};
+
 export class ClaudeProviderModels implements IProviderModels {
   async getSupportedModels(): Promise<ProviderModelsDefinition> {
     // claude creates a new jsonl file as a separate session for this request.
@@ -246,23 +286,30 @@ export class ClaudeProviderModels implements IProviderModels {
   }
 
   async getCurrentActiveModel(sessionId?: string): Promise<ProviderCurrentActiveModel> {
+    const models = await this.getSupportedModels();
     if (!sessionId?.trim()) {
-      return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());
+      return buildDefaultProviderCurrentActiveModel(models);
     }
 
     try {
-      const jsonlPath = sessionsDb.getSessionById(sessionId)?.jsonl_path;
+      const session = sessionsDb.getSessionById(sessionId);
+      const jsonlPath = session?.jsonl_path;
+      // The transcript records events under the provider-native session id, which
+      // differs from the app-facing session id the frontend passes here. Match on
+      // the provider id so the lookup is not filtered out; fall back to the given
+      // id for rows created before that mapping was stored.
+      const transcriptSessionId = session?.provider_session_id ?? sessionId;
       const activeModel = jsonlPath
-        ? await readClaudeSessionModelFromJsonl(sessionId, jsonlPath)
+        ? await readClaudeSessionModelFromJsonl(transcriptSessionId, jsonlPath)
         : null;
       if (activeModel?.model) {
-        return activeModel;
+        return { model: resolveClaudeActiveOptionValue(activeModel.model, models) };
       }
     } catch {
       // Fall through to the provider default when the session-backed lookup fails.
     }
 
-    return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());
+    return buildDefaultProviderCurrentActiveModel(models);
   }
 
   async changeActiveModel(

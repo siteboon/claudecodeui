@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
-import { AppError } from '@/shared/utils.js';
+import { AppError, deleteProviderSessionActiveModelChanges } from '@/shared/utils.js';
 
 function uniqueJsonlPathsFromSessions(
   sessions: Array<{ jsonl_path: string | null }>,
@@ -69,8 +69,19 @@ export async function deleteOrArchiveProject(projectId: string, force: boolean):
     return;
   }
 
+  // Capture the session ids before the rows are removed so their per-session
+  // model overrides can be cleared alongside the permanent delete.
+  const sessionIds = sessionsDb
+    .getSessionsByProjectPathIncludingArchived(row.project_path)
+    .map((session) => session.session_id);
+
   await deleteSessionJsonlFilesForProjectPath(row.project_path);
   sessionsDb.deleteSessionsByProjectPath(row.project_path);
+  try {
+    await deleteProviderSessionActiveModelChanges(sessionIds);
+  } catch (error) {
+    console.warn('Failed to clean up session model overrides:', error);
+  }
   projectsDb.deleteProjectById(projectId);
 }
 
