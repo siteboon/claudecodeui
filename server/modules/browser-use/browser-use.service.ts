@@ -149,6 +149,37 @@ function getPlaywright(): any | null {
   }
 }
 
+let cachedPackageRoot: string | null = null;
+
+/**
+ * Directory of the package.json that owns this module (the CloudCLI install
+ * root). Runtime installs must run here — not in `process.cwd()` — so that
+ * `npm install playwright` lands in a `node_modules` that getPlaywright()'s
+ * `require('playwright')` can actually resolve. `require` resolves relative to
+ * this module's location, so installing into whatever directory CloudCLI was
+ * launched from leaves the package unresolvable and the runtime stuck as "not
+ * installed". Falls back to `process.cwd()` if no package.json is found.
+ */
+function getPackageRoot(): string {
+  if (cachedPackageRoot) {
+    return cachedPackageRoot;
+  }
+
+  let dir = __dirname;
+  while (true) {
+    if (fs.existsSync(path.join(dir, 'package.json'))) {
+      cachedPackageRoot = dir;
+      return dir;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) {
+      cachedPackageRoot = process.cwd();
+      return cachedPackageRoot;
+    }
+    dir = parent;
+  }
+}
+
 function getMcpCommand(): { command: string; args: string[] } {
   const serverDir = path.resolve(__dirname, '..', '..');
   const mcpScriptPath = path.join(serverDir, 'browser-use-mcp.js');
@@ -245,10 +276,10 @@ const INSTALL_COMMAND_TIMEOUT_MS = Number.parseInt(
   10,
 );
 
-function runCommand(command: string, args: string[]): Promise<void> {
+function runCommand(command: string, args: string[], cwd: string = getPackageRoot()): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
-      cwd: process.cwd(),
+      cwd,
       env: process.env,
       shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
