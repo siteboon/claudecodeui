@@ -232,7 +232,7 @@ async function spawnOpenCode(command, options = {}, ws) {
       }
     };
 
-    void providerModelsService.resolveResumeModel('opencode', sessionId, model).then(async (resolvedModel) => {
+    void providerModelsService.resolveResumeModel('opencode', sessionId, model, options.appSessionId).then(async (resolvedModel) => {
       let effortModels = null;
       try {
         effortModels = (await providerModelsService.getProviderModels('opencode')).models;
