@@ -112,13 +112,44 @@ export const CLAUDE_FALLBACK_MODELS: ProviderModelsDefinition = {
   DEFAULT: 'default',
 };
 
+// Maps raw Anthropic API model ids (from JSONL transcripts, e.g. 'claude-sonnet-5')
+// to the short CLI aliases used in CLAUDE_FALLBACK_MODELS.OPTIONS.
+const CLAUDE_MODEL_FAMILY_PATTERNS: [alias: string, pattern: RegExp][] = [
+  ['opus', /opus/i],
+  ['sonnet', /sonnet/i],
+  ['haiku', /haiku/i],
+  ['fable', /fable/i],
+];
+
+const matchClaudeModelOptionFromRawId = (rawModel: string): ProviderModelOption | null => {
+  const family = CLAUDE_MODEL_FAMILY_PATTERNS.find(([, pattern]) => pattern.test(rawModel));
+
+  if (!family) {
+    console.warn(
+      `[claude-models] Unrecognized model id "${rawModel}" — no family pattern matched. `
+      + 'Falling back to the catalog default; update CLAUDE_MODEL_FAMILY_PATTERNS '
+      + 'in claude-models.provider.ts if a new Claude model was introduced.',
+    );
+    return null;
+  }
+
+  const [name] = family;
+
+  return CLAUDE_FALLBACK_MODELS.OPTIONS.find((option) => option.value === name) ?? null;
+};
+
 export const findClaudeModelOption = (model: string | undefined | null): ProviderModelOption | null => {
   const normalizedModel = typeof model === 'string' ? model.trim() : '';
   if (!normalizedModel) {
     return null;
   }
 
-  return CLAUDE_FALLBACK_MODELS.OPTIONS.find((option) => option.value === normalizedModel) ?? null;
+  const exactMatch = CLAUDE_FALLBACK_MODELS.OPTIONS.find((option) => option.value === normalizedModel);
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  return matchClaudeModelOptionFromRawId(normalizedModel);
 };
 type ClaudeInitEvent = {
   sessionId?: string;
@@ -219,7 +250,7 @@ const readClaudeSessionModelFromJsonl = async (
       const event = JSON.parse(lines[index]) as ClaudeInitEvent;
       const model = extractClaudeEventModel(event, sessionId);
       if (model) {
-        return { model };
+        return { model: findClaudeModelOption(model)?.value ?? CLAUDE_FALLBACK_MODELS.DEFAULT };
       }
     } catch {
       // Skip malformed JSONL lines that can happen during concurrent writes.
@@ -251,9 +282,13 @@ export class ClaudeProviderModels implements IProviderModels {
     }
 
     try {
-      const jsonlPath = sessionsDb.getSessionById(sessionId)?.jsonl_path;
+      const sessionRow = sessionsDb.getSessionById(sessionId);
+      const jsonlPath = sessionRow?.jsonl_path;
+      // JSONL events carry the provider-native session id, not the app-facing
+      // `sessionId` used to look up the row, so compare against that instead.
+      const providerSessionId = sessionRow?.provider_session_id || sessionId;
       const activeModel = jsonlPath
-        ? await readClaudeSessionModelFromJsonl(sessionId, jsonlPath)
+        ? await readClaudeSessionModelFromJsonl(providerSessionId, jsonlPath)
         : null;
       if (activeModel?.model) {
         return activeModel;
