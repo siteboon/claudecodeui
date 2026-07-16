@@ -124,7 +124,7 @@ function readOpenCodeTokenUsage(sessionId) {
 
 async function spawnOpenCode(command, options = {}, ws) {
   return new Promise((resolve, reject) => {
-    const { sessionId, projectPath, cwd, model, effort, sessionSummary, images, permissionMode } = options;
+    const { sessionId, appSessionId, projectPath, cwd, model, effort, sessionSummary, images, permissionMode } = options;
     const workingDir = cwd || projectPath || process.cwd();
     const processKey = sessionId || Date.now().toString();
     let capturedSessionId = sessionId || null;
@@ -232,7 +232,7 @@ async function spawnOpenCode(command, options = {}, ws) {
       }
     };
 
-    void providerModelsService.resolveResumeModel('opencode', sessionId, model).then(async (resolvedModel) => {
+    void providerModelsService.resolveResumeModel('opencode', { sessionId, appSessionId }, model).then(async (resolvedModel) => {
       let effortModels = null;
       try {
         effortModels = (await providerModelsService.getProviderModels('opencode')).models;
