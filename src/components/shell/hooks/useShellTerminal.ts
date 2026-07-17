@@ -216,21 +216,30 @@ export function useShellTerminal({
         (event.ctrlKey || event.metaKey) &&
         event.key?.toLowerCase() === 'v'
       ) {
+        // Without the async clipboard API (common on self-hosted plain-http
+        // deployments, where navigator.clipboard doesn't exist) there is
+        // nothing to read here — let the event through so the browser's native
+        // paste event can still reach xterm's hidden textarea, instead of
+        // swallowing the keystroke and pasting nothing.
+        if (typeof navigator === 'undefined' || !navigator.clipboard?.readText) {
+          return true;
+        }
+
         // Block native paste so data is only injected after clipboard-read resolves.
         event.preventDefault();
         event.stopPropagation();
 
-        if (typeof navigator !== 'undefined' && navigator.clipboard?.readText) {
-          navigator.clipboard
-            .readText()
-            .then((text) => {
-              sendSocketMessage(wsRef.current, {
-                type: 'input',
-                data: text,
-              });
-            })
-            .catch(() => {});
-        }
+        navigator.clipboard
+          .readText()
+          .then((text) => {
+            // terminal.paste() applies bracketed-paste wrapping (DECSET 2004)
+            // and \n -> \r normalization, then emits onData, which flows to
+            // the pty through the existing socket input subscription. Sending
+            // the raw text as an input message bypassed bracketed paste, so
+            // multi-line pastes executed line-by-line in shells and CLIs.
+            nextTerminal.paste(text);
+          })
+          .catch(() => {});
 
         return false;
       }
