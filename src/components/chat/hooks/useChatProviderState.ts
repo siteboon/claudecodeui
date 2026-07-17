@@ -15,6 +15,7 @@ import {
   FALLBACK_PROVIDER_EFFORT_VALUES,
   toProviderEffortOptions,
 } from '../constants/providerEffort';
+import { reconcileProviderModel } from './reconcileProviderModel';
 
 const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   claude: 'default',
@@ -293,23 +294,12 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     opencode: setOpenCodeModel,
   }), []);
 
-  // `current` wins over the stored value on purpose: this runs on every model
-  // change, so preferring `stored` would immediately overwrite a freshly-applied
-  // session-scoped model back to the last persisted default.
-  const pickStoredOrCurrent = (
-    storageKey: string,
-    current: string,
-    def: ProviderModelsDefinition,
-  ): string => {
-    if (current && def.OPTIONS.some((o) => o.value === current)) {
-      return current;
-    }
-    const stored = localStorage.getItem(storageKey);
-    if (stored && def.OPTIONS.some((o) => o.value === stored)) {
-      return stored;
-    }
-    return def.DEFAULT;
-  };
+  // Tracks the most recent session-scoped model applied via setProviderModelState,
+  // per provider. While `current` still equals the recorded value, the reconcile
+  // effect below must not persist it as the provider-level default — it stays set
+  // until the model actually diverges (a real change, or falling out of the
+  // catalog), not just for one effect pass.
+  const sessionScopedModelRef = useRef<Partial<Record<LLMProvider, string>>>({});
 
   const getModelOption = useCallback((
     targetProvider: LLMProvider,
@@ -383,12 +373,16 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
 
       const storageKey = PROVIDER_MODEL_STORAGE_KEYS[targetProvider];
       const current = providerModels[targetProvider];
-      const next = pickStoredOrCurrent(storageKey, current, catalog);
+      const { next } = reconcileProviderModel({
+        storage: localStorage,
+        storageKey,
+        current,
+        catalog,
+        sessionScoped: sessionScopedModelRef.current,
+        targetProvider,
+      });
       if (next !== current) {
         providerModelSetters[targetProvider](next);
-      }
-      if (localStorage.getItem(storageKey) !== next) {
-        localStorage.setItem(storageKey, next);
       }
     }
   }, [providerModelCatalog, providerModels, providerModelSetters]);
@@ -497,8 +491,12 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   }, [getDefaultPermissionModeForProvider, getPermissionModesForProvider]);
 
   // Applies a model choice in memory only, without touching the localStorage
-  // default that setStoredProviderModel owns.
+  // default that setStoredProviderModel owns. Flags it as session-scoped so
+  // the reconcile effect above won't persist it as the provider-level default
+  // once it re-runs for an unrelated reason (another provider's model
+  // changing, a catalog refresh, etc).
   const setProviderModelState = useCallback((targetProvider: LLMProvider, model: string) => {
+    sessionScopedModelRef.current[targetProvider] = model;
     providerModelSetters[targetProvider](model);
   }, [providerModelSetters]);
 
