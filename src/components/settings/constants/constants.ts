@@ -39,7 +39,7 @@ export const SETTINGS_MAIN_TABS: SettingsMainTabMeta[] = [
   { id: 'about', label: 'About', keywords: 'about version info', icon: Info },
 ];
 
-export const AGENT_PROVIDERS: AgentProvider[] = ['claude', 'cursor', 'codex', 'opencode'];
+export const AGENT_PROVIDERS: AgentProvider[] = ['claude', 'cursor', 'codex', 'opencode', 'antigravity'];
 export const AGENT_CATEGORIES: AgentCategory[] = ['account', 'permissions', 'mcp'];
 
 export const DEFAULT_PROJECT_SORT_ORDER: ProjectSortOrder = 'name';

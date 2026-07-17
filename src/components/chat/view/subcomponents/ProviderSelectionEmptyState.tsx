@@ -28,6 +28,7 @@ const PROVIDER_META: { id: LLMProvider; name: string }[] = [
   { id: "codex", name: "OpenAI" },
   { id: "cursor", name: "Cursor" },
   { id: "opencode", name: "OpenCode" },
+  { id: "antigravity", name: "Antigravity" },
 ];
 
 const MOD_KEY =
@@ -58,6 +59,8 @@ type ProviderSelectionEmptyStateProps = {
   setCodexModel: (model: string) => void;
   opencodeModel: string;
   setOpenCodeModel: (model: string) => void;
+  antigravityModel: string;
+  setAntigravityModel: (model: string) => void;
   providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
   providerModelsLoading: boolean;
   tasksEnabled: boolean;
@@ -86,10 +89,12 @@ function getCurrentModel(
   cu: string,
   co: string,
   o: string,
+  a: string,
 ) {
   if (p === "claude") return c;
   if (p === "codex") return co;
   if (p === "opencode") return o;
+  if (p === "antigravity") return a;
   return cu;
 }
 
@@ -98,6 +103,7 @@ function getProviderDisplayName(p: LLMProvider) {
   if (p === "cursor") return "Cursor";
   if (p === "codex") return "Codex";
   if (p === "opencode") return "OpenCode";
+  if (p === "antigravity") return "Antigravity";
   return "Claude";
 }
 
@@ -115,6 +121,8 @@ export default function ProviderSelectionEmptyState({
   setCodexModel,
   opencodeModel,
   setOpenCodeModel,
+  antigravityModel,
+  setAntigravityModel,
   providerModelCatalog,
   providerModelsLoading,
   tasksEnabled,
@@ -143,6 +151,7 @@ export default function ProviderSelectionEmptyState({
     cursorModel,
     codexModel,
     opencodeModel,
+    antigravityModel,
   );
 
   const currentModelLabel = useMemo(() => {
@@ -164,12 +173,15 @@ export default function ProviderSelectionEmptyState({
       } else if (providerId === "opencode") {
         setOpenCodeModel(modelValue);
         localStorage.setItem("opencode-model", modelValue);
+      } else if (providerId === "antigravity") {
+        setAntigravityModel(modelValue);
+        localStorage.setItem("antigravity-model", modelValue);
       } else {
         setCursorModel(modelValue);
         localStorage.setItem("cursor-model", modelValue);
       }
     },
-    [setClaudeModel, setCursorModel, setCodexModel, setOpenCodeModel],
+    [setClaudeModel, setCursorModel, setCodexModel, setOpenCodeModel, setAntigravityModel],
   );
 
   const handleModelSelect = useCallback(
@@ -315,6 +327,10 @@ export default function ProviderSelectionEmptyState({
                 opencode: t("providerSelection.readyPrompt.opencode", {
                   model: opencodeModel,
                   defaultValue: "Ready with OpenCode {{model}}",
+                }),
+                antigravity: t("providerSelection.readyPrompt.antigravity", {
+                  model: antigravityModel,
+                  defaultValue: "Ready with Antigravity {{model}}",
                 }),
               }[provider]
             }

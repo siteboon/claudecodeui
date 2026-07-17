@@ -1284,3 +1284,55 @@ export function flattenPromptForWindowsShell(prompt: string): string {
   return prompt.replace(/\s*\r?\n\s*/g, ' ').trim();
 }
 
+function readEnvValue(env: NodeJS.ProcessEnv, key: string): string | undefined {
+  const resolvedKey = Object.keys(env).find((envKey) => envKey.toLowerCase() === key.toLowerCase());
+  return resolvedKey ? env[resolvedKey] : undefined;
+}
+
+export function getPathEnvKey(env: NodeJS.ProcessEnv): string {
+  return Object.keys(env).find((key) => key.toLowerCase() === 'path') || 'PATH';
+}
+
+function uniquePathEntries(entries: string[]): string[] {
+  const seen = new Set<string>();
+  return entries.filter((entry) => {
+    const normalized = os.platform() === 'win32' ? entry.toLowerCase() : entry;
+    if (!entry || seen.has(normalized)) {
+      return false;
+    }
+
+    seen.add(normalized);
+    return true;
+  });
+}
+
+function getUserExecutablePathCandidates(env: NodeJS.ProcessEnv): string[] {
+  const home = os.homedir();
+  const npmPrefix = readEnvValue(env, 'npm_config_prefix');
+  const appData = readEnvValue(env, 'APPDATA');
+
+  return [
+    npmPrefix ? path.join(npmPrefix, 'bin') : '',
+    appData ? path.join(appData, 'npm') : '',
+    os.platform() === 'win32' ? path.join(home, 'AppData', 'Roaming', 'npm') : '',
+    path.join(home, '.local', 'bin'),
+    path.join(home, '.npm-global', 'bin'),
+    path.join(home, '.bun', 'bin'),
+    path.join(home, '.cargo', 'bin'),
+    path.join(home, 'go', 'bin'),
+  ];
+}
+
+export function buildProviderCliEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const nextEnv = { ...env };
+  const pathKey = getPathEnvKey(nextEnv);
+  const currentPath = nextEnv[pathKey] || '';
+  const pathEntries = currentPath.split(path.delimiter).filter(Boolean);
+
+  nextEnv[pathKey] = uniquePathEntries([
+    ...getUserExecutablePathCandidates(nextEnv),
+    ...pathEntries,
+  ]).join(path.delimiter);
+
+  return nextEnv;
+}

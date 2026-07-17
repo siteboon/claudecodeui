@@ -36,9 +36,13 @@ import {
     abortCodexSession,
 } from './openai-codex.js';
 import {
-    spawnOpenCode,
-    abortOpenCodeSession,
+  spawnOpenCode,
+  abortOpenCodeSession,
 } from './opencode-cli.js';
+import {
+  spawnAntigravity,
+  abortAntigravitySession,
+} from './antigravity-cli.js';
 import {
     stripAnsiSequences,
     normalizeDetectedUrl,
@@ -67,7 +71,7 @@ import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './util
 import { initializeDatabase, projectsDb, sessionsDb } from './modules/database/index.js';
 import { configureWebPush } from './services/vapid-keys.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
-import { IS_PLATFORM } from './constants/config.js';
+import { IS_PLATFORM, TRUST_PROXY_AUTH } from './constants/config.js';
 import { c } from './utils/colors.js';
 
 const __dirname = getModuleDir(import.meta.url);
@@ -105,7 +109,7 @@ const server = http.createServer(app);
 // Single WebSocket server that handles chat, shell, and plugin proxy paths.
 const wss = createWebSocketServer(server, {
     verifyClient: {
-        isPlatform: IS_PLATFORM,
+        isPlatform: TRUST_PROXY_AUTH,
         authenticateWebSocket,
     },
     chat: {
@@ -114,13 +118,15 @@ const wss = createWebSocketServer(server, {
             cursor: spawnCursor,
             codex: queryCodex,
             opencode: spawnOpenCode,
-        },
-        abortFns: {
+            antigravity: spawnAntigravity,
+          },
+          abortFns: {
             claude: abortClaudeSDKSession,
             cursor: abortCursorSession,
             codex: abortCodexSession,
             opencode: abortOpenCodeSession,
-        },
+            antigravity: abortAntigravitySession,
+          },
         resolveToolApproval,
         getPendingApprovalsForSession,
     },

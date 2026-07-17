@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { IS_PLATFORM } from '../../../constants/config';
+import { DISABLE_AUTH, TRUST_PROXY_AUTH } from '../../../constants/config';
 import { api } from '../../../utils/api';
 import { AUTH_ERROR_MESSAGES, AUTH_TOKEN_STORAGE_KEY } from '../constants';
 import type {
@@ -116,12 +116,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [checkOnboardingStatus, clearSession, token]);
 
   useEffect(() => {
-    if (IS_PLATFORM) {
-      setUser({ username: 'platform-user' });
+    if (TRUST_PROXY_AUTH) {
+      setUser({ username: 'cloudflare-access' });
+      setToken(null);
       setNeedsSetup(false);
-      void checkOnboardingStatus().finally(() => {
+      if (DISABLE_AUTH) {
+        setHasCompletedOnboarding(true);
         setIsLoading(false);
-      });
+      } else {
+        void checkOnboardingStatus().finally(() => {
+          setIsLoading(false);
+        });
+      }
       return;
     }
 

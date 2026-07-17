@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { IS_PLATFORM } from '../../../constants/config';
+import { DISABLE_AUTH, TRUST_PROXY_AUTH } from '../../../constants/config';
 import { useAuth } from '../context/AuthContext';
 import Onboarding from '../../onboarding/view/Onboarding';
 import AuthLoadingScreen from './AuthLoadingScreen';
@@ -17,7 +17,11 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     return <AuthLoadingScreen />;
   }
 
-  if (IS_PLATFORM) {
+  if (TRUST_PROXY_AUTH) {
+    if (DISABLE_AUTH) {
+      return <>{children}</>;
+    }
+
     if (!hasCompletedOnboarding) {
       return <Onboarding onComplete={refreshOnboardingStatus} />;
     }

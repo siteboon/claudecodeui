@@ -46,6 +46,7 @@ interface UseChatComposerStateArgs {
   codexModel: string;
   currentProviderEffort: string;
   opencodeModel: string;
+  antigravityModel: string;
   isLoading: boolean;
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
@@ -198,6 +199,7 @@ export function useChatComposerState({
   codexModel,
   currentProviderEffort,
   opencodeModel,
+  antigravityModel,
   isLoading,
   canAbortSession,
   tokenBudget,
@@ -373,8 +375,10 @@ export function useChatComposerState({
             ? cursorModel
             : provider === 'codex'
               ? codexModel
-              : provider === 'opencode'
-                  ? opencodeModel
+            : provider === 'opencode'
+                ? opencodeModel
+                : provider === 'antigravity'
+                  ? antigravityModel
                   : claudeModel,
           tokenUsage: tokenBudget,
         };
@@ -424,6 +428,7 @@ export function useChatComposerState({
       }
     },
     [
+      antigravityModel,
       claudeModel,
       codexModel,
       currentSessionId,
@@ -595,8 +600,10 @@ export function useChatComposerState({
             ? 'cursor-tools-settings'
             : provider === 'codex'
               ? 'codex-settings'
-              : provider === 'opencode'
-                  ? 'opencode-settings'
+          : provider === 'opencode'
+              ? 'opencode-settings'
+              : provider === 'antigravity'
+                ? 'antigravity-settings'
                 : 'claude-settings';
         const savedSettings = safeLocalStorage.getItem(settingsKey);
         if (savedSettings) {
@@ -621,6 +628,8 @@ export function useChatComposerState({
           ? codexModel
           : provider === 'opencode'
             ? opencodeModel
+            : provider === 'antigravity'
+              ? antigravityModel
             : claudeModel;
 
     return {
@@ -633,6 +642,7 @@ export function useChatComposerState({
     };
   }, [
     claudeModel,
+    antigravityModel,
     codexModel,
     currentProviderEffort,
     cursorModel,

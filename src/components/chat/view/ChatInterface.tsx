@@ -73,6 +73,8 @@ function ChatInterface({
     currentProviderEffortOptions,
     opencodeModel,
     setOpenCodeModel,
+    antigravityModel,
+    setAntigravityModel,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
@@ -203,6 +205,7 @@ function ChatInterface({
     codexModel,
     currentProviderEffort,
     opencodeModel,
+    antigravityModel,
     isLoading: isProcessing,
     canAbortSession,
     tokenBudget,
@@ -299,6 +302,8 @@ function ChatInterface({
           ? t('messageTypes.codex')
           : provider === 'opencode'
               ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
+              : provider === 'antigravity'
+                ? t('messageTypes.antigravity', { defaultValue: 'Antigravity' })
             : t('messageTypes.claude');
 
     return (
@@ -339,6 +344,8 @@ function ChatInterface({
           setCodexModel={setCodexModel}
           opencodeModel={opencodeModel}
           setOpenCodeModel={setOpenCodeModel}
+          antigravityModel={antigravityModel}
+          setAntigravityModel={setAntigravityModel}
           providerModelCatalog={providerModelCatalog}
           providerModelsLoading={providerModelsLoading}
           tasksEnabled={tasksEnabled}
@@ -446,6 +453,8 @@ function ChatInterface({
                   ? t('messageTypes.codex')
                   : provider === 'opencode'
                       ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
+                      : provider === 'antigravity'
+                        ? t('messageTypes.antigravity', { defaultValue: 'Antigravity' })
                     : t('messageTypes.claude'),
           })}
           isTextareaExpanded={isTextareaExpanded}

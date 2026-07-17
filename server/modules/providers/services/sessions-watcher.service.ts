@@ -29,6 +29,10 @@ const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> =
     provider: 'opencode',
     rootPath: path.join(os.homedir(), '.local', 'share', 'opencode'),
   },
+  {
+    provider: 'antigravity',
+    rootPath: path.join(os.homedir(), '.gemini', 'antigravity-cli', 'brain'),
+  },
 ];
 
 const WATCHER_IGNORED_PATTERNS = [
@@ -69,6 +73,9 @@ let watcherRescheduleAfterRefresh = false;
 function isWatcherTargetFile(provider: LLMProvider, filePath: string): boolean {
   if (provider === 'opencode') {
     return path.basename(filePath) === 'opencode.db';
+  }
+  if (provider === 'antigravity') {
+    return path.basename(filePath) === 'transcript.jsonl';
   }
 
   return filePath.endsWith('.jsonl');
