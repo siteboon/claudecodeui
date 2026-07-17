@@ -139,6 +139,13 @@ const ANSI_PATTERN = new RegExp(
   'g',
 );
 
+// Claude Code stamps locally-fabricated assistant rows (API-error notices,
+// "No response requested.", session-limit messages) with the placeholder
+// model "<synthetic>". Adopting it would feed a non-model into the send path,
+// so placeholder values are skipped and the transcript scan keeps walking back
+// to the last real turn.
+const isPlaceholderClaudeModel = (value: string): boolean => /^<.*>$/.test(value);
+
 const extractClaudeEventModel = (event: ClaudeInitEvent, sessionId: string): string | null => {
   const eventSessionId = event.sessionId ?? event.session_id;
   if (eventSessionId && eventSessionId !== sessionId) {
@@ -151,12 +158,16 @@ const extractClaudeEventModel = (event: ClaudeInitEvent, sessionId: string): str
   }
 
   const directModel = event.model?.trim();
-  if (directModel) {
+  if (directModel && !isPlaceholderClaudeModel(directModel)) {
     return directModel;
   }
 
   const messageModel = event.message?.model?.trim();
-  return messageModel || null;
+  if (messageModel && !isPlaceholderClaudeModel(messageModel)) {
+    return messageModel;
+  }
+
+  return null;
 };
 
 const stripAnsi = (value: string): string => value.replace(ANSI_PATTERN, '');
