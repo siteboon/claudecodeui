@@ -178,6 +178,7 @@ export const sessionsService = {
       offset: options.offset ?? 0,
       projectPath: session.project_path ?? '',
       providerSessionId: session.provider_session_id,
+      jsonlPath: session.jsonl_path ?? null,
     });
 
     return {

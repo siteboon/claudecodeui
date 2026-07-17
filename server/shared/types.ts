@@ -287,6 +287,7 @@ export type FetchHistoryOptions = {
   limit?: number | null;
   offset?: number;
   providerSessionId?: string;
+  jsonlPath?: string | null;
 };
 
 /**
