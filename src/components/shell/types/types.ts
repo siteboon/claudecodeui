@@ -15,6 +15,7 @@ export type ShellInitMessage = {
   initialCommand: string | null | undefined;
   isPlainShell: boolean;
   forceRestart?: boolean;
+  shellClientId: string | null;
 };
 
 export type ShellResizeMessage = {
@@ -34,6 +35,7 @@ export type ShellIncomingMessage =
   | { type: 'output'; data: string }
   | { type: 'auth_url'; url?: string }
   | { type: 'url_open'; url?: string }
+  | { type: 'session_detached'; reason?: string }
   | { type: string; [key: string]: unknown };
 
 export type UseShellRuntimeOptions = {
