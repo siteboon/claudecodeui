@@ -19,6 +19,7 @@ type ShellIncomingMessage = {
   initialCommand?: string;
   isPlainShell?: boolean;
   forceRestart?: boolean;
+  dangerouslySkipPermissions?: boolean;
 };
 
 type PtySessionEntry = {
@@ -109,13 +110,58 @@ function resolveResumeSessionId(
   return resolvedSessionId;
 }
 
+const SKIP_PERMISSIONS_ENV_KEY = 'SHELL_DANGEROUSLY_SKIP_PERMISSIONS';
+const SKIP_PERMISSIONS_FLAG = '--dangerously-skip-permissions';
+
+/**
+ * Interprets an environment string as a boolean opt-in. Only the common truthy
+ * spellings enable the flag; anything else (including unset) stays off.
+ */
+function parseBooleanEnv(value: string | undefined): boolean {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+}
+
+/**
+ * Whether the web shell should launch Claude Code with
+ * `--dangerously-skip-permissions`, which bypasses its permission prompts.
+ *
+ * This is a deliberate security downgrade, so it is DEFAULT OFF and must be
+ * opted into explicitly. Precedence: an explicit per-session request from the
+ * client (the settings toggle) wins; otherwise the server-wide
+ * `SHELL_DANGEROUSLY_SKIP_PERMISSIONS` environment default applies. Both default
+ * to off, so the shell behaves exactly as before unless an operator opts in.
+ */
+export function shouldSkipClaudePermissions(
+  message: Pick<ShellIncomingMessage, 'dangerouslySkipPermissions'>,
+  env: NodeJS.ProcessEnv = process.env
+): boolean {
+  if (typeof message.dangerouslySkipPermissions === 'boolean') {
+    return message.dangerouslySkipPermissions;
+  }
+
+  return parseBooleanEnv(readEnvValue(env, SKIP_PERMISSIONS_ENV_KEY));
+}
+
+export type BuildShellCommandOptions = {
+  env?: NodeJS.ProcessEnv;
+  platform?: NodeJS.Platform;
+};
+
 /**
  * Resolves provider command line for plain shell and agent-backed shell modes.
  */
-function buildShellCommand(
+export function buildShellCommand(
   message: ShellIncomingMessage,
-  dependencies: ShellWebSocketDependencies
+  dependencies: ShellWebSocketDependencies,
+  options: BuildShellCommandOptions = {}
 ): string {
+  const env = options.env ?? process.env;
+  const platform = options.platform ?? os.platform();
   const hasSession = readBoolean(message.hasSession);
   const initialCommand = readString(message.initialCommand);
   const provider = readString(message.provider, 'claude');
@@ -138,7 +184,7 @@ function buildShellCommand(
 
   if (provider === 'codex') {
     if (resumeSessionId) {
-      if (os.platform() === 'win32') {
+      if (platform === 'win32') {
         return `codex resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { codex }`;
       }
       return `codex resume "${resumeSessionId}" || codex`;
@@ -153,14 +199,19 @@ function buildShellCommand(
     return initialCommand || 'opencode';
   }
 
-  const command = initialCommand || 'claude';
+  // The claude launcher is the only provider that supports (and defaults off on)
+  // permission-prompt bypass. `claudeBase` is reused across the resume fallback
+  // so both the primary and fallback invocation carry the same flags.
+  const claudeBase = shouldSkipClaudePermissions(message, env)
+    ? `claude ${SKIP_PERMISSIONS_FLAG}`
+    : 'claude';
   if (resumeSessionId) {
-    if (os.platform() === 'win32') {
-      return `claude --resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { claude }`;
+    if (platform === 'win32') {
+      return `${claudeBase} --resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { ${claudeBase} }`;
     }
-    return `claude --resume "${resumeSessionId}" || claude`;
+    return `${claudeBase} --resume "${resumeSessionId}" || ${claudeBase}`;
   }
-  return command;
+  return initialCommand || claudeBase;
 }
 
 function readEnvValue(env: NodeJS.ProcessEnv, key: string): string | undefined {

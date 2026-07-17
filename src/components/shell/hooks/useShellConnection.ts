@@ -7,6 +7,26 @@ import type { Project, ProjectSession } from '../../../types/app';
 import { TERMINAL_INIT_DELAY_MS } from '../constants/constants';
 import { getShellWebSocketUrl, parseShellMessage, sendSocketMessage } from '../utils/socket';
 
+/**
+ * The web shell honors the same Claude "Skip Permissions" setting as the
+ * chat/SDK path (Settings → Agents → Permissions → Claude), persisted under
+ * `claude-settings`. When enabled, the server launches Claude Code with
+ * --dangerously-skip-permissions. Defaults to false / off.
+ */
+function readClaudeSkipPermissions(): boolean {
+  try {
+    const raw = localStorage.getItem('claude-settings');
+    if (!raw) {
+      return false;
+    }
+
+    const parsed = JSON.parse(raw) as { skipPermissions?: unknown };
+    return parsed?.skipPermissions === true;
+  } catch {
+    return false;
+  }
+}
+
 const ANSI_ESCAPE_REGEX =
   /(?:\u001B\[[0-?]*[ -/]*[@-~]|\u009B[0-?]*[ -/]*[@-~]|\u001B\][^\u0007\u001B]*(?:\u0007|\u001B\\)|\u009D[^\u0007\u009C]*(?:\u0007|\u009C)|\u001B[PX^_][^\u001B]*\u001B\\|[\u0090\u0098\u009E\u009F][^\u009C]*\u009C|\u001B[@-Z\\-_])/g;
 const PROCESS_EXIT_REGEX = /Process exited with code (\d+)/;
@@ -149,6 +169,10 @@ export function useShellConnection({
               initialCommand: initialCommandRef.current,
               isPlainShell: isPlainShellRef.current,
               forceRestart,
+              // Mirrors the Claude "Skip Permissions" setting; the server also
+              // honors a SHELL_DANGEROUSLY_SKIP_PERMISSIONS env default. Both are
+              // off by default. See shell-websocket.service.ts.
+              dangerouslySkipPermissions: readClaudeSkipPermissions(),
             });
           }, TERMINAL_INIT_DELAY_MS);
         };
