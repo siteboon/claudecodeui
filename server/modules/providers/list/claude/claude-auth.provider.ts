@@ -21,14 +21,16 @@ const hasErrorCode = (error: unknown, code: string): boolean => (
 );
 
 export class ClaudeProviderAuth implements IProviderAuth {
+  constructor(private readonly spawnSync: typeof spawn.sync = spawn.sync) {}
+
   /**
    * Checks whether the Claude Code CLI is available on this host.
    */
   private checkInstalled(): boolean {
     const cliPath = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH);
     try {
-      spawn.sync(cliPath, ['--version'], { stdio: 'ignore', timeout: 5000 });
-      return true;
+      const result = this.spawnSync(cliPath, ['--version'], { stdio: 'ignore', timeout: 5000 });
+      return !result.error && result.status === 0;
     } catch {
       return false;
     }
@@ -61,6 +63,62 @@ export class ClaudeProviderAuth implements IProviderAuth {
       method: credentials.method,
       error: credentials.authenticated ? undefined : credentials.error || 'Not authenticated',
     };
+  }
+
+  /**
+   * Asks Claude Code to resolve its own authentication state, including credentials
+   * stored in the macOS Keychain. Older CLI versions fall back to the existing checks.
+   */
+  private checkCliAuthStatus(): ClaudeCredentialsStatus | null {
+    const cliPath = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH);
+
+    let result: ReturnType<typeof spawn.sync>;
+    try {
+      result = this.spawnSync(cliPath, ['auth', 'status', '--json'], {
+        encoding: 'utf8',
+        timeout: 10000,
+      });
+    } catch {
+      return null;
+    }
+
+    if (result.error) {
+      return {
+        authenticated: false,
+        email: null,
+        method: null,
+        error: 'Unable to check Claude CLI authentication status. Try running claude auth status --json in a terminal.',
+      };
+    }
+
+    if (typeof result.stdout === 'string' && result.stdout.trim()) {
+      try {
+        const parsed = readObjectRecord(JSON.parse(result.stdout));
+
+        if (typeof parsed?.loggedIn === 'boolean') {
+          if (!parsed.loggedIn) {
+            return {
+              authenticated: false,
+              email: null,
+              method: null,
+              error: 'Claude CLI is not authenticated. Run claude /login or configure ANTHROPIC_API_KEY.',
+            };
+          }
+
+          const authMethod = readOptionalString(parsed.authMethod);
+          return {
+            authenticated: true,
+            email: readOptionalString(parsed.email) ?? null,
+            method: authMethod ? `cli:${authMethod}` : 'cli',
+          };
+        }
+      } catch {
+        // Fall back to the legacy credential checks when the command is unavailable
+        // or an older Claude version returns an unexpected response.
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -98,6 +156,11 @@ export class ClaudeProviderAuth implements IProviderAuth {
 
     if (readOptionalString(settingsEnv.ANTHROPIC_AUTH_TOKEN)) {
       return { authenticated: true, email: 'Configured via settings.json', method: 'api_key' };
+    }
+
+    const cliStatus = this.checkCliAuthStatus();
+    if (cliStatus) {
+      return cliStatus;
     }
 
     try {
