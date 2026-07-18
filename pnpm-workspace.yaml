@@ -1,0 +1,9 @@
+allowBuilds:
+  bcrypt: true
+  better-sqlite3: true
+  electron: set this to true or false
+  electron-winstaller: set this to true or false
+  esbuild: true
+  node-pty: true
+  sharp: set this to true or false
+  unrs-resolver: set this to true or false

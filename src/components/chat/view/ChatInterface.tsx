@@ -16,6 +16,8 @@ import { useSessionStore } from '../../../stores/useSessionStore';
 import ChatMessagesPane from './subcomponents/ChatMessagesPane';
 import ChatComposer from './subcomponents/ChatComposer';
 import CommandResultModal from './subcomponents/CommandResultModal';
+import ScrollNavigation from './subcomponents/ScrollNavigation';
+import { exportSessionAsMarkdown } from '../utils/exportSession';
 
 function ChatInterface({
   selectedProject,
@@ -317,54 +319,75 @@ function ChatInterface({
 
   return (
     <PermissionContext.Provider value={permissionContextValue}>
-      <div className="flex h-full min-h-0 flex-col">
-        <ChatMessagesPane
-          scrollContainerRef={scrollContainerRef}
-          onWheel={handleScroll}
-          onTouchMove={handleScroll}
-          isLoadingSessionMessages={isLoadingSessionMessages}
-          isProcessing={isProcessing}
-          hasActivityIndicator={hasActivityIndicator}
-          chatMessages={chatMessages}
-          selectedSession={selectedSession}
-          currentSessionId={currentSessionId}
-          provider={provider}
-          setProvider={(nextProvider) => setProvider(nextProvider as Provider)}
-          textareaRef={textareaRef}
-          claudeModel={claudeModel}
-          setClaudeModel={setClaudeModel}
-          cursorModel={cursorModel}
-          setCursorModel={setCursorModel}
-          codexModel={codexModel}
-          setCodexModel={setCodexModel}
-          opencodeModel={opencodeModel}
-          setOpenCodeModel={setOpenCodeModel}
-          providerModelCatalog={providerModelCatalog}
-          providerModelsLoading={providerModelsLoading}
-          tasksEnabled={tasksEnabled}
-          isTaskMasterInstalled={isTaskMasterInstalled}
-          onShowAllTasks={onShowAllTasks}
-          setInput={setInput}
-          isLoadingMoreMessages={isLoadingMoreMessages}
-          hasMoreMessages={hasMoreMessages}
-          totalMessages={totalMessages}
-          sessionMessagesCount={chatMessages.length}
-          visibleMessageCount={visibleMessageCount}
-          visibleMessages={visibleMessages}
-          loadEarlierMessages={loadEarlierMessages}
-          loadAllMessages={loadAllMessages}
-          allMessagesLoaded={allMessagesLoaded}
-          isLoadingAllMessages={isLoadingAllMessages}
-          loadAllJustFinished={loadAllJustFinished}
-          showLoadAllOverlay={showLoadAllOverlay}
-          createDiff={createDiff}
-          onFileOpen={onFileOpen}
-          onShowSettings={onShowSettings}
-          onGrantToolPermission={handleGrantToolPermission}
-          showRawParameters={showRawParameters}
-          showThinking={showThinking}
-          selectedProject={selectedProject}
-        />
+      <div className="relative flex h-full flex-col overflow-hidden">
+        <div className="relative flex flex-1 overflow-hidden">
+          <div className="flex-1 h-full overflow-hidden">
+          <ChatMessagesPane
+            scrollContainerRef={scrollContainerRef}
+            onWheel={handleScroll}
+            onTouchMove={handleScroll}
+            isLoadingSessionMessages={isLoadingSessionMessages}
+            isProcessing={isProcessing}
+            hasActivityIndicator={hasActivityIndicator}
+            chatMessages={chatMessages}
+            selectedSession={selectedSession}
+            currentSessionId={currentSessionId}
+            provider={provider}
+            setProvider={(nextProvider) => setProvider(nextProvider as Provider)}
+            textareaRef={textareaRef}
+            claudeModel={claudeModel}
+            setClaudeModel={setClaudeModel}
+            cursorModel={cursorModel}
+            setCursorModel={setCursorModel}
+            codexModel={codexModel}
+            setCodexModel={setCodexModel}
+            opencodeModel={opencodeModel}
+            setOpenCodeModel={setOpenCodeModel}
+            providerModelCatalog={providerModelCatalog}
+            providerModelsLoading={providerModelsLoading}
+            tasksEnabled={tasksEnabled}
+            isTaskMasterInstalled={isTaskMasterInstalled}
+            onShowAllTasks={onShowAllTasks}
+            setInput={setInput}
+            isLoadingMoreMessages={isLoadingMoreMessages}
+            hasMoreMessages={hasMoreMessages}
+            totalMessages={totalMessages}
+            sessionMessagesCount={chatMessages.length}
+            visibleMessageCount={visibleMessageCount}
+            visibleMessages={visibleMessages}
+            loadEarlierMessages={loadEarlierMessages}
+            loadAllMessages={loadAllMessages}
+            allMessagesLoaded={allMessagesLoaded}
+            isLoadingAllMessages={isLoadingAllMessages}
+            loadAllJustFinished={loadAllJustFinished}
+            showLoadAllOverlay={showLoadAllOverlay}
+            createDiff={createDiff}
+            onFileOpen={onFileOpen}
+            onShowSettings={onShowSettings}
+            onGrantToolPermission={handleGrantToolPermission}
+            showRawParameters={showRawParameters}
+            showThinking={showThinking}
+            selectedProject={selectedProject}
+          />
+          </div>
+          {/* ponytail: nav strip flush to right edge; ChatMessagesPane mr-[33px] makes room for nav strip (32px btn + 1px border) */}
+          <div className="pointer-events-none absolute inset-y-0 right-0 z-30 flex items-center justify-end">
+            <div className="pointer-events-auto h-full min-h-0">
+              <ScrollNavigation
+                scrollContainerRef={scrollContainerRef}
+                chatMessages={visibleMessages}
+                loadAllMessages={loadAllMessages}
+                hasMoreMessages={hasMoreMessages}
+                sessionId={currentSessionId || undefined}
+                onExportSession={() => {
+                  if (currentSessionId) {
+                    exportSessionAsMarkdown(chatMessages, currentSessionId);
+                  }
+                }}
+              />
+            </div>
+          </div>
+        </div>
 
         <div className="relative flex-shrink-0">
           {isUserScrolledUp && chatMessages.length > 0 && (

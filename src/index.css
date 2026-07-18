@@ -572,22 +572,6 @@
     contain: layout style;
   }
 
-  .chat-activity-enter {
-    animation: chat-activity-enter 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
-    transform-origin: bottom center;
-    will-change: transform, opacity, filter;
-  }
-
-  .chat-activity-exit {
-    animation: chat-activity-exit 220ms cubic-bezier(0.4, 0, 1, 1) both;
-    transform-origin: bottom center;
-    will-change: transform, opacity, filter;
-  }
-
-  .chat-activity-tab {
-    clip-path: inset(-8px -8px 0 -8px);
-  }
-
   .chat-message {
     contain: layout style paint;
     content-visibility: auto;
@@ -793,14 +777,15 @@
     box-sizing: border-box;
   }
 
-  /* Hide scrollbar utility for horizontal scroll */
-  .scrollbar-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;
+  /* Hide scrollbar on mobile only — keep visible on desktop */
+  @media (max-width: 639px) {
+    .scrollbar-hide {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    .scrollbar-hide::-webkit-scrollbar {
+      display: none;
+    }
   }
 }
 
@@ -962,37 +947,6 @@
 
   .settings-content-enter {
     animation: settings-fade-in 150ms ease-out;
-  }
-
-  @keyframes chat-activity-enter {
-    0% {
-      opacity: 0;
-      filter: blur(3px);
-      transform: translateY(18px) scaleY(0.92);
-    }
-    65% {
-      opacity: 1;
-      filter: blur(0);
-      transform: translateY(-2px) scaleY(1.01);
-    }
-    100% {
-      opacity: 1;
-      filter: blur(0);
-      transform: translateY(0) scaleY(1);
-    }
-  }
-
-  @keyframes chat-activity-exit {
-    0% {
-      opacity: 1;
-      filter: blur(0);
-      transform: translateY(0) scaleY(1);
-    }
-    100% {
-      opacity: 0;
-      filter: blur(2px);
-      transform: translateY(14px) scaleY(0.96);
-    }
   }
 
   /* Search result highlight flash */
