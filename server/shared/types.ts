@@ -580,3 +580,79 @@ export type WorkspacePathValidationResult = {
   resolvedPath?: string;
   error?: string;
 };
+
+// ---------------------------
+//----------------- GIT WORKTREE MANAGEMENT ------------
+/**
+ * Captured output of one completed `git` invocation.
+ *
+ * Returned by `GitCommandRunner` implementations so worktree services can read
+ * both streams without caring about process plumbing.
+ */
+export type GitCommandResult = {
+  stdout: string;
+  stderr: string;
+};
+
+/**
+ * Executes `git <args>` inside `cwd` and resolves with the captured output.
+ *
+ * All worktree services receive their git access through this contract so
+ * tests can inject a fake runner instead of spawning real processes. The
+ * promise must reject (with `stderr` attached when available) on a non-zero
+ * exit code.
+ */
+export type GitCommandRunner = (args: string[], cwd: string) => Promise<GitCommandResult>;
+
+/**
+ * One entry parsed from `git worktree list --porcelain`.
+ *
+ * This is the raw repository-level view (path/HEAD/branch/flags) before any
+ * enrichment with project links or ahead/behind counts. `branch` is null for
+ * detached-HEAD worktrees.
+ */
+export type WorktreePorcelainEntry = {
+  path: string;
+  headSha: string | null;
+  branch: string | null;
+  isDetached: boolean;
+  isLocked: boolean;
+  isPrunable: boolean;
+};
+
+/**
+ * Fully enriched worktree row served to the UI.
+ *
+ * Extends the porcelain entry with everything the Worktrees panel renders:
+ * dirty-file count, ahead/behind relative to the base branch (the branch
+ * checked out in the main worktree), last-commit metadata, and the CloudCLI
+ * project row linked to the worktree directory (if one was registered).
+ */
+export type WorktreeDescriptor = {
+  path: string;
+  branch: string | null;
+  headSha: string | null;
+  isMain: boolean;
+  isCurrent: boolean;
+  isLocked: boolean;
+  isDetached: boolean;
+  changedFileCount: number;
+  ahead: number;
+  behind: number;
+  lastCommitSubject: string | null;
+  lastCommitDate: string | null;
+  linkedProjectId: string | null;
+  linkedProjectArchived: boolean;
+};
+
+/**
+ * Response payload of `GET /api/worktrees`.
+ *
+ * `baseBranch` is the branch checked out in the main worktree — the merge
+ * target offered by the UI. `worktrees` always lists the main worktree first.
+ */
+export type WorktreeListResult = {
+  repositoryRoot: string;
+  baseBranch: string | null;
+  worktrees: WorktreeDescriptor[];
+};

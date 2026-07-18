@@ -78,6 +78,7 @@ function AppContentInner() {
     registerOptimisticSession,
     sidebarSharedProps,
     handleNewSession,
+    handleProjectSelect,
   } = useProjectsState({
     sessionId,
     navigate,
@@ -262,6 +263,8 @@ function AppContentInner() {
           onShowSettings={openSettings}
           externalMessageUpdate={externalMessageUpdate}
           newSessionTrigger={newSessionTrigger}
+          onProjectSelect={handleProjectSelect}
+          onProjectsRefresh={() => void refreshProjectsSilently()}
         />
       </div>
 
