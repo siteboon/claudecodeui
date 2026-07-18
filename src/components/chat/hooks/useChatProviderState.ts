@@ -132,7 +132,18 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
 
   const providerModelsRequestIdRef = useRef(0);
 
-  const setStoredProviderModel = useCallback((targetProvider: LLMProvider, model: string) => {
+  const setStoredProviderModel = useCallback((
+    targetProvider: LLMProvider,
+    model: string,
+    isCustom = false,
+  ) => {
+    const customModelStorageKey = `${targetProvider}-custom-model`;
+    if (isCustom) {
+      localStorage.setItem(customModelStorageKey, 'true');
+    } else {
+      localStorage.removeItem(customModelStorageKey);
+    }
+
     if (targetProvider === 'claude') {
       setClaudeModel(model);
       localStorage.setItem('claude-model', model);
@@ -280,11 +291,16 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   }, [providerCapabilities]);
 
   const pickStoredOrCurrent = (
+    targetProvider: LLMProvider,
     storageKey: string,
     current: string,
     def: ProviderModelsDefinition,
   ): string => {
     const stored = localStorage.getItem(storageKey);
+    const storedIsCustom = localStorage.getItem(`${targetProvider}-custom-model`) === 'true';
+    if (stored && storedIsCustom) {
+      return stored;
+    }
     if (stored && def.OPTIONS.some((o) => o.value === stored)) {
       return stored;
     }
@@ -360,7 +376,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   useEffect(() => {
     const claude = providerModelCatalog.claude;
     if (claude) {
-      const next = pickStoredOrCurrent('claude-model', claudeModel, claude);
+      const next = pickStoredOrCurrent('claude', 'claude-model', claudeModel, claude);
       if (next !== claudeModel) {
         setClaudeModel(next);
       }
@@ -373,7 +389,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   useEffect(() => {
     const cursor = providerModelCatalog.cursor;
     if (cursor) {
-      const next = pickStoredOrCurrent('cursor-model', cursorModel, cursor);
+      const next = pickStoredOrCurrent('cursor', 'cursor-model', cursorModel, cursor);
       if (next !== cursorModel) {
         setCursorModel(next);
       }
@@ -386,7 +402,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   useEffect(() => {
     const codex = providerModelCatalog.codex;
     if (codex) {
-      const next = pickStoredOrCurrent('codex-model', codexModel, codex);
+      const next = pickStoredOrCurrent('codex', 'codex-model', codexModel, codex);
       if (next !== codexModel) {
         setCodexModel(next);
       }
@@ -399,7 +415,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   useEffect(() => {
     const opencode = providerModelCatalog.opencode;
     if (opencode) {
-      const next = pickStoredOrCurrent('opencode-model', opencodeModel, opencode);
+      const next = pickStoredOrCurrent('opencode', 'opencode-model', opencodeModel, opencode);
       if (next !== opencodeModel) {
         setOpenCodeModel(next);
       }
@@ -516,10 +532,11 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     targetProvider: LLMProvider,
     model: string,
     sessionId?: string | null,
+    options: { custom?: boolean } = {},
   ) => {
     const normalizedSessionId = typeof sessionId === 'string' ? sessionId.trim() : '';
     if (!normalizedSessionId) {
-      setStoredProviderModel(targetProvider, model);
+      setStoredProviderModel(targetProvider, model, options.custom === true);
       return {
         scope: 'default' as const,
         changed: false,
