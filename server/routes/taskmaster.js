@@ -42,8 +42,9 @@ const router = express.Router();
  */
 async function checkTaskMasterInstallation() {
     return new Promise((resolve) => {
-        // Check if task-master command is available
-        const child = spawn('which', ['task-master'], { 
+        // Check if task-master command is available ('which' is not available in cmd.exe)
+        const whichCommand = process.platform === 'win32' ? 'where' : 'which';
+        const child = spawn(whichCommand, ['task-master'], {
             stdio: ['ignore', 'pipe', 'pipe'],
             shell: true 
         });
@@ -61,6 +62,8 @@ async function checkTaskMasterInstallation() {
         
         child.on('close', (code) => {
             if (code === 0 && output.trim()) {
+                // 'where' may return multiple matches (e.g. task-master and task-master.cmd)
+                const installPath = output.trim().split(/\r?\n/)[0];
                 // TaskMaster is installed, get version
                 const versionChild = spawn('task-master', ['--version'], { 
                     stdio: ['ignore', 'pipe', 'pipe'],
@@ -76,16 +79,16 @@ async function checkTaskMasterInstallation() {
                 versionChild.on('close', (versionCode) => {
                     resolve({
                         isInstalled: true,
-                        installPath: output.trim(),
+                        installPath,
                         version: versionCode === 0 ? versionOutput.trim() : 'unknown',
                         reason: null
                     });
                 });
-                
+
                 versionChild.on('error', () => {
                     resolve({
                         isInstalled: true,
-                        installPath: output.trim(),
+                        installPath,
                         version: 'unknown',
                         reason: null
                     });
