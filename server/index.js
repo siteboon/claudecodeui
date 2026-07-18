@@ -15,6 +15,7 @@ import mime from 'mime-types';
 import Database from 'better-sqlite3';
 
 import { AppError, WORKSPACES_ROOT, getOpenCodeDatabasePath, validateWorkspacePath } from '@/shared/utils.js';
+import { getClaudeConfigDir } from '@/shared/claude-config-dir.js';
 import { closeSessionsWatcher, initializeSessionsWatcher } from '@/modules/providers/index.js';
 import { createWebSocketServer } from '@/modules/websocket/index.js';
 
@@ -1256,10 +1257,11 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
         }
 
         // Construct the JSONL file path
-        // Claude stores session files in ~/.claude/projects/[encoded-project-path]/[session-id].jsonl
+        // Claude stores session files in $CLAUDE_CONFIG_DIR/projects/[encoded-project-path]/[session-id].jsonl
+        // (or ~/.claude/projects/... when CLAUDE_CONFIG_DIR is unset)
         // The encoding replaces any non-alphanumeric character (except -) with -
         const encodedPath = projectPath.replace(/[^a-zA-Z0-9-]/g, '-');
-        const projectDir = path.join(homeDir, '.claude', 'projects', encodedPath);
+        const projectDir = path.join(getClaudeConfigDir(), 'projects', encodedPath);
 
         // Prefer the indexed transcript path (already produced by the trusted
         // session synchronizer); fall back to the conventional location
