@@ -1,7 +1,7 @@
 import crossSpawn from 'cross-spawn';
 
 import { appendImagesInputTag } from './shared/image-attachments.js';
-import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
+import { notifyRunFailed, notifyRunStopped } from './modules/notifications/index.js';
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
 import { providerModelsService } from './modules/providers/services/provider-models.service.js';

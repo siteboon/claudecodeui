@@ -18,39 +18,16 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
-import { findApplicationRoot, getModuleDirectory } from './shared/utils.js';
+import {
+    findApplicationRoot,
+    getModuleDirectory,
+    terminalTextStyles,
+} from './shared/utils.js';
 
 const __dirname = getModuleDirectory(import.meta.url);
 // The CLI is compiled into dist-server/server, but it still needs to read the top-level
 // package.json and .env file. Resolving the app root once keeps those lookups stable.
 const APP_ROOT = findApplicationRoot(__dirname);
-
-// ANSI color codes for terminal output
-const colors = {
-    reset: '\x1b[0m',
-    bright: '\x1b[1m',
-    dim: '\x1b[2m',
-
-    // Foreground colors
-    cyan: '\x1b[36m',
-    green: '\x1b[32m',
-    yellow: '\x1b[33m',
-    blue: '\x1b[34m',
-    magenta: '\x1b[35m',
-    white: '\x1b[37m',
-    gray: '\x1b[90m',
-};
-
-// Helper to colorize text
-const c = {
-    info: (text) => `${colors.cyan}${text}${colors.reset}`,
-    ok: (text) => `${colors.green}${text}${colors.reset}`,
-    warn: (text) => `${colors.yellow}${text}${colors.reset}`,
-    error: (text) => `${colors.yellow}${text}${colors.reset}`,
-    tip: (text) => `${colors.blue}${text}${colors.reset}`,
-    bright: (text) => `${colors.bright}${text}${colors.reset}`,
-    dim: (text) => `${colors.dim}${text}${colors.reset}`,
-};
 
 // Load package.json for version info
 const packageJsonPath = path.join(APP_ROOT, 'package.json');
@@ -91,57 +68,57 @@ function getInstallDir() {
 
 // Show status command
 function showStatus() {
-    console.log(`\n${c.bright('CloudCLI UI - Status')}\n`);
-    console.log(c.dim('═'.repeat(60)));
+    console.log(`\n${terminalTextStyles.bright('CloudCLI UI - Status')}\n`);
+    console.log(terminalTextStyles.dim('═'.repeat(60)));
 
     // Version info
-    console.log(`\n${c.info('[INFO]')} Version: ${c.bright(packageJson.version)}`);
+    console.log(`\n${terminalTextStyles.info('[INFO]')} Version: ${terminalTextStyles.bright(packageJson.version)}`);
 
     // Installation location
     const installDir = getInstallDir();
-    console.log(`\n${c.info('[INFO]')} Installation Directory:`);
-    console.log(`       ${c.dim(installDir)}`);
+    console.log(`\n${terminalTextStyles.info('[INFO]')} Installation Directory:`);
+    console.log(`       ${terminalTextStyles.dim(installDir)}`);
 
     // Database location
     const dbPath = getDatabasePath();
     const dbExists = fs.existsSync(dbPath);
-    console.log(`\n${c.info('[INFO]')} Database Location:`);
-    console.log(`       ${c.dim(dbPath)}`);
-    console.log(`       Status: ${dbExists ? c.ok('[OK] Exists') : c.warn('[WARN] Not created yet (will be created on first run)')}`);
+    console.log(`\n${terminalTextStyles.info('[INFO]')} Database Location:`);
+    console.log(`       ${terminalTextStyles.dim(dbPath)}`);
+    console.log(`       Status: ${dbExists ? terminalTextStyles.ok('[OK] Exists') : terminalTextStyles.warn('[WARN] Not created yet (will be created on first run)')}`);
 
     if (dbExists) {
         const stats = fs.statSync(dbPath);
-        console.log(`       Size: ${c.dim((stats.size / 1024).toFixed(2) + ' KB')}`);
-        console.log(`       Modified: ${c.dim(stats.mtime.toLocaleString())}`);
+        console.log(`       Size: ${terminalTextStyles.dim((stats.size / 1024).toFixed(2) + ' KB')}`);
+        console.log(`       Modified: ${terminalTextStyles.dim(stats.mtime.toLocaleString())}`);
     }
 
     // Environment variables
-    console.log(`\n${c.info('[INFO]')} Configuration:`);
-    console.log(`       SERVER_PORT: ${c.bright(process.env.SERVER_PORT || process.env.PORT || '3001')} ${c.dim(process.env.SERVER_PORT || process.env.PORT ? '' : '(default)')}`);
-    console.log(`       DATABASE_PATH: ${c.dim(process.env.DATABASE_PATH || '(using default location)')}`);
-    console.log(`       CLAUDE_CLI_PATH: ${c.dim(process.env.CLAUDE_CLI_PATH || 'claude (default)')}`);
-    console.log(`       CONTEXT_WINDOW: ${c.dim(process.env.CONTEXT_WINDOW || '160000 (default)')}`);
+    console.log(`\n${terminalTextStyles.info('[INFO]')} Configuration:`);
+    console.log(`       SERVER_PORT: ${terminalTextStyles.bright(process.env.SERVER_PORT || process.env.PORT || '3001')} ${terminalTextStyles.dim(process.env.SERVER_PORT || process.env.PORT ? '' : '(default)')}`);
+    console.log(`       DATABASE_PATH: ${terminalTextStyles.dim(process.env.DATABASE_PATH || '(using default location)')}`);
+    console.log(`       CLAUDE_CLI_PATH: ${terminalTextStyles.dim(process.env.CLAUDE_CLI_PATH || 'claude (default)')}`);
+    console.log(`       CONTEXT_WINDOW: ${terminalTextStyles.dim(process.env.CONTEXT_WINDOW || '160000 (default)')}`);
 
     // Claude projects folder
     const claudeProjectsPath = path.join(os.homedir(), '.claude', 'projects');
     const projectsExists = fs.existsSync(claudeProjectsPath);
-    console.log(`\n${c.info('[INFO]')} Claude Projects Folder:`);
-    console.log(`       ${c.dim(claudeProjectsPath)}`);
-    console.log(`       Status: ${projectsExists ? c.ok('[OK] Exists') : c.warn('[WARN] Not found')}`);
+    console.log(`\n${terminalTextStyles.info('[INFO]')} Claude Projects Folder:`);
+    console.log(`       ${terminalTextStyles.dim(claudeProjectsPath)}`);
+    console.log(`       Status: ${projectsExists ? terminalTextStyles.ok('[OK] Exists') : terminalTextStyles.warn('[WARN] Not found')}`);
 
     // Config file location
     const envFilePath = path.join(APP_ROOT, '.env');
     const envExists = fs.existsSync(envFilePath);
-    console.log(`\n${c.info('[INFO]')} Configuration File:`);
-    console.log(`       ${c.dim(envFilePath)}`);
-    console.log(`       Status: ${envExists ? c.ok('[OK] Exists') : c.warn('[WARN] Not found (using defaults)')}`);
+    console.log(`\n${terminalTextStyles.info('[INFO]')} Configuration File:`);
+    console.log(`       ${terminalTextStyles.dim(envFilePath)}`);
+    console.log(`       Status: ${envExists ? terminalTextStyles.ok('[OK] Exists') : terminalTextStyles.warn('[WARN] Not found (using defaults)')}`);
 
-    console.log('\n' + c.dim('═'.repeat(60)));
-    console.log(`\n${c.tip('[TIP]')} Hints:`);
-    console.log(`      ${c.dim('>')} Use ${c.bright('cloudcli --port 8080')} to run on a custom port`);
-    console.log(`      ${c.dim('>')} Use ${c.bright('cloudcli --database-path /path/to/db')} for custom database`);
-    console.log(`      ${c.dim('>')} Run ${c.bright('cloudcli help')} for all options`);
-    console.log(`      ${c.dim('>')} Access the UI at http://localhost:${process.env.SERVER_PORT || process.env.PORT || '3001'}\n`);
+    console.log('\n' + terminalTextStyles.dim('═'.repeat(60)));
+    console.log(`\n${terminalTextStyles.tip('[TIP]')} Hints:`);
+    console.log(`      ${terminalTextStyles.dim('>')} Use ${terminalTextStyles.bright('cloudcli --port 8080')} to run on a custom port`);
+    console.log(`      ${terminalTextStyles.dim('>')} Use ${terminalTextStyles.bright('cloudcli --database-path /path/to/db')} for custom database`);
+    console.log(`      ${terminalTextStyles.dim('>')} Run ${terminalTextStyles.bright('cloudcli help')} for all options`);
+    console.log(`      ${terminalTextStyles.dim('>')} Access the UI at http://localhost:${process.env.SERVER_PORT || process.env.PORT || '3001'}\n`);
 }
 
 // Show help
@@ -215,16 +192,16 @@ async function checkForUpdates(silent = false) {
         const currentVersion = packageJson.version;
 
         if (isNewerVersion(latestVersion, currentVersion)) {
-            console.log(`\n${c.warn('[UPDATE]')} New version available: ${c.bright(latestVersion)} (current: ${currentVersion})`);
-            console.log(`         Run ${c.bright('cloudcli update')} to update\n`);
+            console.log(`\n${terminalTextStyles.warn('[UPDATE]')} New version available: ${terminalTextStyles.bright(latestVersion)} (current: ${currentVersion})`);
+            console.log(`         Run ${terminalTextStyles.bright('cloudcli update')} to update\n`);
             return { hasUpdate: true, latestVersion, currentVersion };
         } else if (!silent) {
-            console.log(`${c.ok('[OK]')} You are on the latest version (${currentVersion})`);
+            console.log(`${terminalTextStyles.ok('[OK]')} You are on the latest version (${currentVersion})`);
         }
         return { hasUpdate: false, latestVersion, currentVersion };
     } catch (e) {
         if (!silent) {
-            console.log(`${c.warn('[WARN]')} Could not check for updates`);
+            console.log(`${terminalTextStyles.warn('[WARN]')} Could not check for updates`);
         }
         return { hasUpdate: false, error: e.message };
     }
@@ -234,21 +211,21 @@ async function checkForUpdates(silent = false) {
 async function updatePackage() {
     try {
         const { execSync } = await import('child_process');
-        console.log(`${c.info('[INFO]')} Checking for updates...`);
+        console.log(`${terminalTextStyles.info('[INFO]')} Checking for updates...`);
 
         const { hasUpdate, latestVersion, currentVersion } = await checkForUpdates(true);
 
         if (!hasUpdate) {
-            console.log(`${c.ok('[OK]')} Already on the latest version (${currentVersion})`);
+            console.log(`${terminalTextStyles.ok('[OK]')} Already on the latest version (${currentVersion})`);
             return;
         }
 
-        console.log(`${c.info('[INFO]')} Updating from ${currentVersion} to ${latestVersion}...`);
+        console.log(`${terminalTextStyles.info('[INFO]')} Updating from ${currentVersion} to ${latestVersion}...`);
         execSync('npm update -g @cloudcli-ai/cloudcli', { stdio: 'inherit' });
-        console.log(`${c.ok('[OK]')} Update complete! Restart cloudcli to use the new version.`);
+        console.log(`${terminalTextStyles.ok('[OK]')} Update complete! Restart cloudcli to use the new version.`);
     } catch (e) {
-        console.error(`${c.error('[ERROR]')} Update failed: ${e.message}`);
-        console.log(`${c.tip('[TIP]')} Try running manually: npm update -g @cloudcli-ai/cloudcli`);
+        console.error(`${terminalTextStyles.error('[ERROR]')} Update failed: ${e.message}`);
+        console.log(`${terminalTextStyles.tip('[TIP]')} Try running manually: npm update -g @cloudcli-ai/cloudcli`);
     }
 }
 
@@ -321,20 +298,20 @@ function parseSandboxArgs(args) {
 
 function showSandboxHelp() {
     console.log(`
-${c.bright('CloudCLI Sandbox')} — Run CloudCLI inside Docker Sandboxes
+${terminalTextStyles.bright('CloudCLI Sandbox')} — Run CloudCLI inside Docker Sandboxes
 
 Usage:
   cloudcli sandbox <workspace>            Create and start a sandbox
   cloudcli sandbox <subcommand> [name]    Manage sandboxes
 
 Subcommands:
-  ${c.bright('(default)')}    Create a sandbox and start the web UI
-  ${c.bright('ls')}           List all sandboxes
-  ${c.bright('start')}        Restart a stopped sandbox and re-launch the web UI
-  ${c.bright('stop')}         Stop a sandbox (preserves state)
-  ${c.bright('rm')}           Remove a sandbox
-  ${c.bright('logs')}         Show CloudCLI server logs
-  ${c.bright('help')}         Show this help
+  ${terminalTextStyles.bright('(default)')}    Create a sandbox and start the web UI
+  ${terminalTextStyles.bright('ls')}           List all sandboxes
+  ${terminalTextStyles.bright('start')}        Restart a stopped sandbox and re-launch the web UI
+  ${terminalTextStyles.bright('stop')}         Stop a sandbox (preserves state)
+  ${terminalTextStyles.bright('rm')}           Remove a sandbox
+  ${terminalTextStyles.bright('logs')}         Show CloudCLI server logs
+  ${terminalTextStyles.bright('help')}         Show this help
 
 Options:
   -a, --agent <agent>       Agent to use: claude, codex (default: claude)
@@ -391,7 +368,7 @@ async function sandboxCommand(args) {
 
     // Validate name (alphanumeric, hyphens, underscores only)
     if (opts.name && !/^[\w-]+$/.test(opts.name)) {
-        console.error(`\n${c.error('❌')} Invalid sandbox name: ${opts.name}`);
+        console.error(`\n${terminalTextStyles.error('❌')} Invalid sandbox name: ${opts.name}`);
         console.log(`   Names may only contain letters, numbers, hyphens, and underscores.\n`);
         process.exit(1);
     }
@@ -400,10 +377,10 @@ async function sandboxCommand(args) {
     try {
         sbx(['version']);
     } catch {
-        console.error(`\n${c.error('❌')} ${c.bright('sbx')} CLI not found.\n`);
-        console.log(`   Install it from: ${c.info('https://docs.docker.com/ai/sandboxes/get-started/')}`);
-        console.log(`   Then run: ${c.bright('sbx login')}`);
-        console.log(`   And store your API key: ${c.bright('sbx secret set -g anthropic')}\n`);
+        console.error(`\n${terminalTextStyles.error('❌')} ${terminalTextStyles.bright('sbx')} CLI not found.\n`);
+        console.log(`   Install it from: ${terminalTextStyles.info('https://docs.docker.com/ai/sandboxes/get-started/')}`);
+        console.log(`   Then run: ${terminalTextStyles.bright('sbx login')}`);
+        console.log(`   And store your API key: ${terminalTextStyles.bright('sbx secret set -g anthropic')}\n`);
         process.exit(1);
     }
 
@@ -415,7 +392,7 @@ async function sandboxCommand(args) {
 
         case 'stop':
             if (!opts.name) {
-                console.error(`\n${c.error('❌')} Sandbox name required: cloudcli sandbox stop <name>\n`);
+                console.error(`\n${terminalTextStyles.error('❌')} Sandbox name required: cloudcli sandbox stop <name>\n`);
                 process.exit(1);
             }
             sbx(['stop', opts.name], { inherit: true });
@@ -423,7 +400,7 @@ async function sandboxCommand(args) {
 
         case 'rm':
             if (!opts.name) {
-                console.error(`\n${c.error('❌')} Sandbox name required: cloudcli sandbox rm <name>\n`);
+                console.error(`\n${terminalTextStyles.error('❌')} Sandbox name required: cloudcli sandbox rm <name>\n`);
                 process.exit(1);
             }
             sbx(['rm', opts.name], { inherit: true });
@@ -431,22 +408,22 @@ async function sandboxCommand(args) {
 
         case 'logs':
             if (!opts.name) {
-                console.error(`\n${c.error('❌')} Sandbox name required: cloudcli sandbox logs <name>\n`);
+                console.error(`\n${terminalTextStyles.error('❌')} Sandbox name required: cloudcli sandbox logs <name>\n`);
                 process.exit(1);
             }
             try {
                 sbx(['exec', opts.name, 'bash', '-c', 'cat /tmp/cloudcli-ui.log'], { inherit: true });
             } catch (e) {
-                console.error(`\n${c.error('❌')} Could not read logs: ${e.message || 'Is the sandbox running?'}\n`);
+                console.error(`\n${terminalTextStyles.error('❌')} Could not read logs: ${e.message || 'Is the sandbox running?'}\n`);
             }
             break;
 
         case 'start': {
             if (!opts.name) {
-                console.error(`\n${c.error('❌')} Sandbox name required: cloudcli sandbox start <name>\n`);
+                console.error(`\n${terminalTextStyles.error('❌')} Sandbox name required: cloudcli sandbox start <name>\n`);
                 process.exit(1);
             }
-            console.log(`\n${c.info('▶')} Starting sandbox ${c.bright(opts.name)}...`);
+            console.log(`\n${terminalTextStyles.info('▶')} Starting sandbox ${terminalTextStyles.bright(opts.name)}...`);
             const restartRun = spawnProcess('sbx', ['run', opts.name], {
                 detached: true,
                 stdio: ['ignore', 'ignore', 'ignore'],
@@ -454,22 +431,22 @@ async function sandboxCommand(args) {
             restartRun.unref();
             await new Promise(resolve => setTimeout(resolve, 5000));
 
-            console.log(`${c.info('▶')} Launching CloudCLI web server...`);
+            console.log(`${terminalTextStyles.info('▶')} Launching CloudCLI web server...`);
             sbx(['exec', opts.name, 'bash', '-c', 'nohup cloudcli start --port 3001 > /tmp/cloudcli-ui.log 2>&1 & disown']);
 
-            console.log(`${c.info('▶')} Forwarding port ${opts.port} → 3001...`);
+            console.log(`${terminalTextStyles.info('▶')} Forwarding port ${opts.port} → 3001...`);
             try {
                 sbx(['ports', opts.name, '--publish', `${opts.port}:3001`]);
             } catch (e) {
                 const msg = e.stdout || e.stderr || e.message || '';
                 if (msg.includes('address already in use')) {
                     const altPort = opts.port + 1;
-                    console.log(`${c.warn('⚠')}  Port ${opts.port} in use, trying ${altPort}...`);
+                    console.log(`${terminalTextStyles.warn('⚠')}  Port ${opts.port} in use, trying ${altPort}...`);
                     try {
                         sbx(['ports', opts.name, '--publish', `${altPort}:3001`]);
                         opts.port = altPort;
                     } catch {
-                        console.error(`${c.error('❌')} Ports ${opts.port} and ${altPort} both in use. Use --port to specify a free port.`);
+                        console.error(`${terminalTextStyles.error('❌')} Ports ${opts.port} and ${altPort} both in use. Use --port to specify a free port.`);
                         process.exit(1);
                     }
                 } else {
@@ -477,15 +454,15 @@ async function sandboxCommand(args) {
                 }
             }
 
-            console.log(`\n${c.ok('✔')} ${c.bright('CloudCLI is ready!')}`);
-            console.log(`  ${c.info('→')} ${c.bright(`http://localhost:${opts.port}`)}\n`);
+            console.log(`\n${terminalTextStyles.ok('✔')} ${terminalTextStyles.bright('CloudCLI is ready!')}`);
+            console.log(`  ${terminalTextStyles.info('→')} ${terminalTextStyles.bright(`http://localhost:${opts.port}`)}\n`);
             break;
         }
 
         case 'create': {
             if (!opts.workspace) {
-                console.error(`\n${c.error('❌')} Workspace path required: cloudcli sandbox <path>\n`);
-                console.log(`   Example: ${c.bright('cloudcli sandbox ~/my-project')}\n`);
+                console.error(`\n${terminalTextStyles.error('❌')} Workspace path required: cloudcli sandbox <path>\n`);
+                console.log(`   Example: ${terminalTextStyles.bright('cloudcli sandbox ~/my-project')}\n`);
                 process.exit(1);
             }
 
@@ -494,7 +471,7 @@ async function sandboxCommand(args) {
                 : path.resolve(opts.workspace);
 
             if (!fs.existsSync(workspace)) {
-                console.error(`\n${c.error('❌')} Workspace path not found: ${c.dim(workspace)}\n`);
+                console.error(`\n${terminalTextStyles.error('❌')} Workspace path not found: ${terminalTextStyles.dim(workspace)}\n`);
                 process.exit(1);
             }
 
@@ -504,28 +481,28 @@ async function sandboxCommand(args) {
             try {
                 const secretList = sbx(['secret', 'ls']);
                 if (!secretList.includes(secret)) {
-                    console.error(`\n${c.error('❌')} No ${c.bright(secret)} API key found.\n`);
-                    console.log(`   Run: ${c.bright(`sbx secret set -g ${secret}`)}\n`);
+                    console.error(`\n${terminalTextStyles.error('❌')} No ${terminalTextStyles.bright(secret)} API key found.\n`);
+                    console.log(`   Run: ${terminalTextStyles.bright(`sbx secret set -g ${secret}`)}\n`);
                     process.exit(1);
                 }
             } catch { /* sbx secret ls not available, skip check */ }
 
-            console.log(`\n${c.bright('CloudCLI Sandbox')}`);
-            console.log(c.dim('─'.repeat(50)));
-            console.log(`  Agent:     ${c.info(opts.agent)} ${c.dim(`(${secret} credentials)`)}`);
-            console.log(`  Workspace: ${c.dim(workspace)}`);
-            console.log(`  Name:      ${c.dim(opts.name)}`);
-            console.log(`  Template:  ${c.dim(opts.template)}`);
-            console.log(`  Port:      ${c.dim(String(opts.port))}`);
+            console.log(`\n${terminalTextStyles.bright('CloudCLI Sandbox')}`);
+            console.log(terminalTextStyles.dim('─'.repeat(50)));
+            console.log(`  Agent:     ${terminalTextStyles.info(opts.agent)} ${terminalTextStyles.dim(`(${secret} credentials)`)}`);
+            console.log(`  Workspace: ${terminalTextStyles.dim(workspace)}`);
+            console.log(`  Name:      ${terminalTextStyles.dim(opts.name)}`);
+            console.log(`  Template:  ${terminalTextStyles.dim(opts.template)}`);
+            console.log(`  Port:      ${terminalTextStyles.dim(String(opts.port))}`);
             if (opts.env.length > 0) {
-                console.log(`  Env:       ${c.dim(opts.env.join(', '))}`);
+                console.log(`  Env:       ${terminalTextStyles.dim(opts.env.join(', '))}`);
             }
-            console.log(c.dim('─'.repeat(50)));
+            console.log(terminalTextStyles.dim('─'.repeat(50)));
 
             // Step 1: Launch sandbox with sbx run in background.
             // sbx run creates the sandbox (or reconnects) AND holds an active session,
             // which prevents the sandbox from auto-stopping.
-            console.log(`\n${c.info('▶')} Creating sandbox ${c.bright(opts.name)}...`);
+            console.log(`\n${terminalTextStyles.info('▶')} Creating sandbox ${terminalTextStyles.bright(opts.name)}...`);
             const bgRun = spawnProcess('sbx', [
                 'run', '--template', opts.template, '--name', opts.name, opts.agent, workspace,
             ], {
@@ -538,7 +515,7 @@ async function sandboxCommand(args) {
 
             // Step 2: Inject environment variables
             if (opts.env.length > 0) {
-                console.log(`${c.info('▶')} Setting environment variables...`);
+                console.log(`${terminalTextStyles.info('▶')} Setting environment variables...`);
                 const exports = opts.env
                     .filter(e => /^\w+=.+$/.test(e))
                     .map(e => `export ${e}`)
@@ -548,28 +525,28 @@ async function sandboxCommand(args) {
                 }
                 const invalid = opts.env.filter(e => !/^\w+=.+$/.test(e));
                 if (invalid.length > 0) {
-                    console.log(`${c.warn('⚠')}  Skipped invalid env vars: ${invalid.join(', ')} (expected KEY=VALUE)`);
+                    console.log(`${terminalTextStyles.warn('⚠')}  Skipped invalid env vars: ${invalid.join(', ')} (expected KEY=VALUE)`);
                 }
             }
 
             // Step 3: Start CloudCLI inside the sandbox
-            console.log(`${c.info('▶')} Launching CloudCLI web server...`);
+            console.log(`${terminalTextStyles.info('▶')} Launching CloudCLI web server...`);
             sbx(['exec', opts.name, 'bash', '-c', 'nohup cloudcli start --port 3001 > /tmp/cloudcli-ui.log 2>&1 & disown']);
 
             // Step 4: Forward port
-            console.log(`${c.info('▶')} Forwarding port ${opts.port} → 3001...`);
+            console.log(`${terminalTextStyles.info('▶')} Forwarding port ${opts.port} → 3001...`);
             try {
                 sbx(['ports', opts.name, '--publish', `${opts.port}:3001`]);
             } catch (e) {
                 const msg = e.stdout || e.stderr || e.message || '';
                 if (msg.includes('address already in use')) {
                     const altPort = opts.port + 1;
-                    console.log(`${c.warn('⚠')}  Port ${opts.port} in use, trying ${altPort}...`);
+                    console.log(`${terminalTextStyles.warn('⚠')}  Port ${opts.port} in use, trying ${altPort}...`);
                     try {
                         sbx(['ports', opts.name, '--publish', `${altPort}:3001`]);
                         opts.port = altPort;
                     } catch {
-                        console.error(`${c.error('❌')} Ports ${opts.port} and ${altPort} both in use. Use --port to specify a free port.`);
+                        console.error(`${terminalTextStyles.error('❌')} Ports ${opts.port} and ${altPort} both in use. Use --port to specify a free port.`);
                         process.exit(1);
                     }
                 } else {
@@ -578,14 +555,14 @@ async function sandboxCommand(args) {
             }
 
             // Done
-            console.log(`\n${c.ok('✔')} ${c.bright('CloudCLI is ready!')}`);
-            console.log(`  ${c.info('→')} Open ${c.bright(`http://localhost:${opts.port}`)}`);
-            console.log(`\n${c.dim('  Manage with:')}`);
-            console.log(`  ${c.dim('$')} sbx ls`);
-            console.log(`  ${c.dim('$')} sbx stop ${opts.name}`);
-            console.log(`  ${c.dim('$')} sbx start ${opts.name}`);
-            console.log(`  ${c.dim('$')} sbx rm ${opts.name}`);
-            console.log(`\n${c.dim('  Or install globally:')} npm install -g @cloudcli-ai/cloudcli\n`);
+            console.log(`\n${terminalTextStyles.ok('✔')} ${terminalTextStyles.bright('CloudCLI is ready!')}`);
+            console.log(`  ${terminalTextStyles.info('→')} Open ${terminalTextStyles.bright(`http://localhost:${opts.port}`)}`);
+            console.log(`\n${terminalTextStyles.dim('  Manage with:')}`);
+            console.log(`  ${terminalTextStyles.dim('$')} sbx ls`);
+            console.log(`  ${terminalTextStyles.dim('$')} sbx stop ${opts.name}`);
+            console.log(`  ${terminalTextStyles.dim('$')} sbx start ${opts.name}`);
+            console.log(`  ${terminalTextStyles.dim('$')} sbx rm ${opts.name}`);
+            console.log(`\n${terminalTextStyles.dim('  Or install globally:')} npm install -g @cloudcli-ai/cloudcli\n`);
             break;
         }
 

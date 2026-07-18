@@ -28,7 +28,7 @@ import {
   notifyRunFailed,
   notifyRunStopped,
   notifyUserIfEnabled
-} from './services/notification-orchestrator.js';
+} from './modules/notifications/index.js';
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
 import { createCompleteMessage, createNormalizedMessage } from './shared/utils.js';

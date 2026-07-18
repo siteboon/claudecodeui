@@ -16,7 +16,7 @@
 import { Codex } from '@openai/codex-sdk';
 
 import { buildCodexInputItems, normalizeImageDescriptors } from './shared/image-attachments.js';
-import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
+import { notifyRunFailed, notifyRunStopped } from './modules/notifications/index.js';
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
 import { providerModelsService } from './modules/providers/services/provider-models.service.js';

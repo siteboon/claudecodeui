@@ -50,10 +50,6 @@ test('a stale socket close cannot detach the socket that replaced it', () => {
   const pty = createFakePty();
   const dependencies = {
     resolveProviderSessionId: () => null,
-    stripAnsiSequences: (content: string) => content,
-    normalizeDetectedUrl: (url: string) => url,
-    extractUrlsFromText: () => [],
-    shouldAutoOpenUrlFromOutput: () => false,
     spawnPty: () => pty as never,
   };
   const initMessage = JSON.stringify({
@@ -82,6 +78,42 @@ test('a stale socket close cannot detach the socket that replaced it', () => {
   assert.equal(pty.killed, false);
   assert.equal(replacementSocket.frames.length, 1);
   assert.match(replacementSocket.frames[0], /output-after-stale-close/);
+
+  pty.emitExit();
+});
+
+test('shell output detects and normalizes a wrapped authentication URL', () => {
+  const pty = createFakePty();
+  const socket = createFakeSocket();
+  const dependencies = {
+    resolveProviderSessionId: () => null,
+    spawnPty: () => pty as never,
+  };
+
+  handleShellConnection(socket as never, dependencies);
+  socket.emit(
+    'message',
+    JSON.stringify({
+      type: 'init',
+      projectPath: process.cwd(),
+      sessionId: `wrapped-url-${Date.now()}`,
+      hasSession: false,
+      provider: 'plain-shell',
+      isPlainShell: true,
+      initialCommand: 'test-command',
+    })
+  );
+  socket.frames.length = 0;
+
+  pty.emitData("Continue in your browser: https://example.com/authorize?\ncode=abc\x1b[0m");
+
+  const frames = socket.frames.map((frame) => JSON.parse(frame) as Record<string, unknown>);
+  const authenticationFrame = frames.find((frame) => frame.type === 'auth_url');
+  assert.deepEqual(authenticationFrame, {
+    type: 'auth_url',
+    url: 'https://example.com/authorize?code=abc',
+    autoOpen: false,
+  });
 
   pty.emitExit();
 });

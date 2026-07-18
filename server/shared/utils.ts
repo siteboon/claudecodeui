@@ -1286,6 +1286,42 @@ export function flattenPromptForWindowsShell(prompt: string): string {
 }
 
 // ---------------------------
+//----------------- TERMINAL OUTPUT UTILITIES ------------
+const ANSI_TERMINAL_STYLES = {
+  reset: '\x1b[0m',
+  bright: '\x1b[1m',
+  dim: '\x1b[2m',
+  cyan: '\x1b[36m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+} as const;
+
+/**
+ * Applies the small, consistent ANSI style vocabulary used by backend
+ * terminal output. The CLI and server bootstrap share these formatters so
+ * status, warning, and startup messages use one implementation. Callers
+ * should pass complete display strings and write the returned value directly
+ * to stdout or stderr; the reset suffix prevents styling subsequent output.
+ */
+export const terminalTextStyles = {
+  info: (text: string): string =>
+    `${ANSI_TERMINAL_STYLES.cyan}${text}${ANSI_TERMINAL_STYLES.reset}`,
+  ok: (text: string): string =>
+    `${ANSI_TERMINAL_STYLES.green}${text}${ANSI_TERMINAL_STYLES.reset}`,
+  warn: (text: string): string =>
+    `${ANSI_TERMINAL_STYLES.yellow}${text}${ANSI_TERMINAL_STYLES.reset}`,
+  error: (text: string): string =>
+    `${ANSI_TERMINAL_STYLES.yellow}${text}${ANSI_TERMINAL_STYLES.reset}`,
+  tip: (text: string): string =>
+    `${ANSI_TERMINAL_STYLES.blue}${text}${ANSI_TERMINAL_STYLES.reset}`,
+  bright: (text: string): string =>
+    `${ANSI_TERMINAL_STYLES.bright}${text}${ANSI_TERMINAL_STYLES.reset}`,
+  dim: (text: string): string =>
+    `${ANSI_TERMINAL_STYLES.dim}${text}${ANSI_TERMINAL_STYLES.reset}`,
+};
+
+// ---------------------------
 //----------------- RUNTIME PATH RESOLUTION UTILITIES ------------
 /**
  * Resolves the directory containing an ES module from `import.meta.url`.

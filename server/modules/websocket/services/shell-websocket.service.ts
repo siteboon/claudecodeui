@@ -33,16 +33,78 @@ type PtySessionEntry = {
 const ptySessionsMap = new Map<string, PtySessionEntry>();
 const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
 const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
+const ANSI_ESCAPE_SEQUENCE_REGEX = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1B\\))/g;
+const TRAILING_URL_PUNCTUATION_REGEX = /[)\]}>.,;:!?]+$/;
+
+function stripAnsiSequences(value: string): string {
+  return value.replace(ANSI_ESCAPE_SEQUENCE_REGEX, '');
+}
+
+function normalizeDetectedUrl(url: string): string | null {
+  const cleanedUrl = url.trim().replace(TRAILING_URL_PUNCTUATION_REGEX, '');
+  if (!cleanedUrl) {
+    return null;
+  }
+
+  try {
+    const parsedUrl = new URL(cleanedUrl);
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      return null;
+    }
+    return parsedUrl.toString();
+  } catch {
+    return null;
+  }
+}
+
+function extractUrlsFromText(value: string): string[] {
+  const directMatches = value.match(/https?:\/\/[^\s<>"'`\\\x1b\x07]+/gi) ?? [];
+
+  // Terminal width can split a URL across lines, so valid URL characters on
+  // immediately following lines are joined before the URL is validated.
+  const wrappedMatches: string[] = [];
+  const urlContinuationPattern = /^[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+$/;
+  const lines = value.split(/\r?\n/);
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex].trim();
+    const startMatch = line.match(/https?:\/\/[^\s<>"'`\\\x1b\x07]+/i);
+    if (!startMatch) {
+      continue;
+    }
+
+    let combinedUrl = startMatch[0];
+    let continuationIndex = lineIndex + 1;
+    while (continuationIndex < lines.length) {
+      const continuation = lines[continuationIndex].trim();
+      if (!continuation || !urlContinuationPattern.test(continuation)) {
+        break;
+      }
+      combinedUrl += continuation;
+      continuationIndex += 1;
+    }
+
+    wrappedMatches.push(combinedUrl);
+  }
+
+  return Array.from(new Set([...directMatches, ...wrappedMatches]));
+}
+
+function shouldAutoOpenUrlFromOutput(value: string): boolean {
+  const normalizedOutput = value.toLowerCase();
+  return (
+    normalizedOutput.includes("browser didn't open") ||
+    normalizedOutput.includes('open this url') ||
+    normalizedOutput.includes('continue in your browser') ||
+    normalizedOutput.includes('press enter to open') ||
+    normalizedOutput.includes('open_url:')
+  );
+}
 
 type ShellWebSocketDependencies = {
   resolveProviderSessionId: (
     sessionId: string,
     provider: string,
   ) => string | null | undefined;
-  stripAnsiSequences: (content: string) => string;
-  normalizeDetectedUrl: (url: string) => string | null;
-  extractUrlsFromText: (content: string) => string[];
-  shouldAutoOpenUrlFromOutput: (content: string) => boolean;
   spawnPty?: typeof pty.spawn;
 };
 
@@ -379,7 +441,7 @@ export function handleShellConnection(
 
           if (session.ws && session.ws.readyState === WebSocket.OPEN) {
             let outputData = chunk;
-            const cleanChunk = dependencies.stripAnsiSequences(chunk);
+            const cleanChunk = stripAnsiSequences(chunk);
             urlDetectionBuffer = `${urlDetectionBuffer}${cleanChunk}`.slice(-SHELL_URL_PARSE_BUFFER_LIMIT);
 
             outputData = outputData.replace(
@@ -388,7 +450,7 @@ export function handleShellConnection(
             );
 
             const emitAuthUrl = (detectedUrl: string, autoOpen = false) => {
-              const normalizedUrl = dependencies.normalizeDetectedUrl(detectedUrl);
+              const normalizedUrl = normalizeDetectedUrl(detectedUrl);
               if (!normalizedUrl) {
                 return;
               }
@@ -406,8 +468,8 @@ export function handleShellConnection(
               }
             };
 
-            const normalizedDetectedUrls = dependencies.extractUrlsFromText(urlDetectionBuffer)
-              .map((url) => dependencies.normalizeDetectedUrl(url))
+            const normalizedDetectedUrls = extractUrlsFromText(urlDetectionBuffer)
+              .map((url) => normalizeDetectedUrl(url))
               .filter((url): url is string => Boolean(url));
 
             const dedupedDetectedUrls = Array.from(new Set(normalizedDetectedUrls)).filter(
@@ -418,7 +480,7 @@ export function handleShellConnection(
             dedupedDetectedUrls.forEach((url) => emitAuthUrl(url, false));
 
             if (
-              dependencies.shouldAutoOpenUrlFromOutput(cleanChunk) &&
+              shouldAutoOpenUrlFromOutput(cleanChunk) &&
               dedupedDetectedUrls.length > 0
             ) {
               const bestUrl = dedupedDetectedUrls.reduce((longest, current) =>

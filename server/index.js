@@ -14,7 +14,7 @@ import cors from 'cors';
 import mime from 'mime-types';
 import Database from 'better-sqlite3';
 
-import { AppError, WORKSPACES_ROOT, findApplicationRoot, getModuleDirectory, getOpenCodeDatabasePath, validateWorkspacePath } from '@/shared/utils.js';
+import { AppError, WORKSPACES_ROOT, findApplicationRoot, getModuleDirectory, getOpenCodeDatabasePath, terminalTextStyles, validateWorkspacePath } from '@/shared/utils.js';
 import { closeSessionsWatcher, initializeSessionsWatcher } from '@/modules/providers/index.js';
 import { createWebSocketServer } from '@/modules/websocket/index.js';
 
@@ -38,12 +38,6 @@ import {
     spawnOpenCode,
     abortOpenCodeSession,
 } from './opencode-cli.js';
-import {
-    stripAnsiSequences,
-    normalizeDetectedUrl,
-    extractUrlsFromText,
-    shouldAutoOpenUrlFromOutput,
-} from './utils/url-detection.js';
 import { createGitModule } from './modules/git/index.js';
 import {
     authenticateToken,
@@ -74,7 +68,6 @@ import { browserUseService } from './modules/browser-use/browser-use.service.js'
 import { initializeDatabase, projectsDb, sessionsDb } from './modules/database/index.js';
 import { configureWebPush } from './modules/notifications/index.js';
 import { IS_PLATFORM } from './constants/config.js';
-import { c } from './utils/colors.js';
 
 const __dirname = getModuleDirectory(import.meta.url);
 // The server source runs from /server, while the compiled output runs from /dist-server/server.
@@ -149,10 +142,6 @@ const wss = createWebSocketServer(server, {
 
             return null;
         },
-        stripAnsiSequences,
-        normalizeDetectedUrl,
-        extractUrlsFromText,
-        shouldAutoOpenUrlFromOutput,
     },
     getPluginPort,
 });
@@ -1599,14 +1588,14 @@ async function startServer() {
         const isProduction = fs.existsSync(distIndexPath);
 
         // Log Claude implementation mode
-        console.log(`${c.info('[INFO]')} Using Claude Agents SDK for Claude integration`);
+        console.log(`${terminalTextStyles.info('[INFO]')} Using Claude Agents SDK for Claude integration`);
         console.log('');
 
         if (isProduction) {
-            console.log(`${c.info('[INFO]')} To run in production mode, go to http://${DISPLAY_HOST}:${SERVER_PORT}`);            
+            console.log(`${terminalTextStyles.info('[INFO]')} To run in production mode, go to http://${DISPLAY_HOST}:${SERVER_PORT}`);
         }
 
-        console.log(`${c.info('[INFO]')} To run in development mode with hot-module replacement, go to http://${DISPLAY_HOST}:${VITE_PORT}`);
+        console.log(`${terminalTextStyles.info('[INFO]')} To run in development mode with hot-module replacement, go to http://${DISPLAY_HOST}:${VITE_PORT}`);
    
         server.listen(SERVER_PORT, HOST, async () => {
             const appInstallPath = APP_ROOT;
@@ -1615,13 +1604,13 @@ async function startServer() {
             });
 
             console.log('');
-            console.log(c.dim('═'.repeat(63)));
-            console.log(`  ${c.bright('CloudCLI Server - Ready')}`);
-            console.log(c.dim('═'.repeat(63)));
+            console.log(terminalTextStyles.dim('═'.repeat(63)));
+            console.log(`  ${terminalTextStyles.bright('CloudCLI Server - Ready')}`);
+            console.log(terminalTextStyles.dim('═'.repeat(63)));
             console.log('');
-            console.log(`${c.info('[INFO]')} Server URL:  ${c.bright('http://' + DISPLAY_HOST + ':' + SERVER_PORT)}`);
-            console.log(`${c.info('[INFO]')} Installed at: ${c.dim(appInstallPath)}`);
-            console.log(`${c.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
+            console.log(`${terminalTextStyles.info('[INFO]')} Server URL:  ${terminalTextStyles.bright('http://' + DISPLAY_HOST + ':' + SERVER_PORT)}`);
+            console.log(`${terminalTextStyles.info('[INFO]')} Installed at: ${terminalTextStyles.dim(appInstallPath)}`);
+            console.log(`${terminalTextStyles.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
             console.log('');
 
             // Start watching the projects folder for changes
