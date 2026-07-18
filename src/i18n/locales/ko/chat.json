@@ -17,7 +17,8 @@
     "tool": "도구",
     "claude": "Claude",
     "cursor": "Cursor",
-    "codex": "Codex"
+    "codex": "Codex",
+    "kiro": "Kiro"
   },
   "tools": {
     "settings": "도구 설정",
@@ -133,7 +134,8 @@
       "claude": "{{model}} 모델로 Claude를 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요.",
       "cursor": "{{model}} 모델로 Cursor를 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요.",
       "codex": "{{model}} 모델로 Codex를 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요.",
-      "default": "시작하려면 위에서 제공자를 선택하세요"
+      "default": "시작하려면 위에서 제공자를 선택하세요",
+      "kiro": "Kiro를 {{model}}와 함께 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요."
     },
     "pressToSearch": "<kbd>{{shortcut}}</kbd>를 눌러 세션, 파일 및 커밋을 검색하세요"
   },

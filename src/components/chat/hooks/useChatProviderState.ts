@@ -21,9 +21,10 @@ const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   cursor: 'gpt-5.3-codex',
   codex: 'gpt-5.4',
   opencode: 'anthropic/claude-sonnet-4-5',
+  kiro: 'auto',
 };
 
-const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode'];
+const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode', 'kiro'];
 
 const readStoredProvider = (): LLMProvider => {
   const storedProvider = localStorage.getItem('selected-provider');
@@ -43,6 +44,7 @@ const FALLBACK_PERMISSION_MODES: Record<LLMProvider, PermissionMode[]> = {
   cursor: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
   codex: ['default', 'acceptEdits', 'bypassPermissions'],
   opencode: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
+  kiro: ['default'],
 };
 
 type ProviderCapabilities = {
@@ -109,6 +111,9 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   const [opencodeModel, setOpenCodeModel] = useState<string>(() => {
     return localStorage.getItem('opencode-model') || FALLBACK_DEFAULT_MODEL.opencode;
   });
+  const [kiroModel, setKiroModel] = useState<string>(() => {
+    return localStorage.getItem('kiro-model') || FALLBACK_DEFAULT_MODEL.kiro;
+  });
 
   /**
    * Backend-owned capability matrix keyed by provider. Drives the permission
@@ -148,6 +153,12 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     if (targetProvider === 'codex') {
       setCodexModel(model);
       localStorage.setItem('codex-model', model);
+      return;
+    }
+
+    if (targetProvider === 'kiro') {
+      setKiroModel(model);
+      localStorage.setItem('kiro-model', model);
       return;
     }
 
@@ -355,7 +366,8 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     cursor: cursorModel,
     codex: codexModel,
     opencode: opencodeModel,
-  }), [claudeModel, cursorModel, codexModel, opencodeModel]);
+    kiro: kiroModel,
+  }), [claudeModel, cursorModel, codexModel, opencodeModel, kiroModel]);
 
   useEffect(() => {
     const claude = providerModelCatalog.claude;
@@ -410,6 +422,19 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   }, [providerModelCatalog.opencode, opencodeModel]);
 
   useEffect(() => {
+    const kiro = providerModelCatalog.kiro;
+    if (kiro) {
+      const next = pickStoredOrCurrent('kiro-model', kiroModel, kiro);
+      if (next !== kiroModel) {
+        setKiroModel(next);
+      }
+      if (localStorage.getItem('kiro-model') !== next) {
+        localStorage.setItem('kiro-model', next);
+      }
+    }
+  }, [providerModelCatalog.kiro, kiroModel]);
+
+  useEffect(() => {
     const nextEfforts: Partial<Record<LLMProvider, string>> = {};
     let hasUpdates = false;
 
@@ -431,6 +456,10 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   }, [providerEfforts, providerModels, reconcileStoredEffort]);
 
   useEffect(() => {
+    if (!selectedSession?.id) {
+      return;
+    }
+
     const validModes = getPermissionModesForProvider(provider);
     const sessionSavedMode = selectedSession?.id
       ? (localStorage.getItem(`permissionMode-${selectedSession.id}`) as PermissionMode | null)
@@ -571,6 +600,8 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     currentProviderEffortOptions,
     opencodeModel,
     setOpenCodeModel,
+    kiroModel,
+    setKiroModel,
     permissionMode,
     setPermissionMode,
     pendingPermissionRequests,

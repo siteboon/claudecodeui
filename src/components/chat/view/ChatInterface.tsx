@@ -73,6 +73,8 @@ function ChatInterface({
     currentProviderEffortOptions,
     opencodeModel,
     setOpenCodeModel,
+    kiroModel,
+    setKiroModel,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
@@ -203,6 +205,7 @@ function ChatInterface({
     codexModel,
     currentProviderEffort,
     opencodeModel,
+    kiroModel,
     isLoading: isProcessing,
     canAbortSession,
     tokenBudget,
@@ -299,6 +302,8 @@ function ChatInterface({
           ? t('messageTypes.codex')
           : provider === 'opencode'
               ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
+              : provider === 'kiro'
+                ? t('messageTypes.kiro', { defaultValue: 'Kiro' })
             : t('messageTypes.claude');
 
     return (
@@ -341,6 +346,8 @@ function ChatInterface({
           setOpenCodeModel={setOpenCodeModel}
           providerModelCatalog={providerModelCatalog}
           providerModelsLoading={providerModelsLoading}
+          kiroModel={kiroModel}
+          setKiroModel={setKiroModel}
           tasksEnabled={tasksEnabled}
           isTaskMasterInstalled={isTaskMasterInstalled}
           onShowAllTasks={onShowAllTasks}
@@ -446,6 +453,8 @@ function ChatInterface({
                   ? t('messageTypes.codex')
                   : provider === 'opencode'
                       ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
+                      : provider === 'kiro'
+                        ? t('messageTypes.kiro', { defaultValue: 'Kiro' })
                     : t('messageTypes.claude'),
           })}
           isTextareaExpanded={isTextareaExpanded}

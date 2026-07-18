@@ -40,6 +40,10 @@ import {
     abortOpenCodeSession,
 } from './opencode-cli.js';
 import {
+    spawnKiro,
+    abortKiroSession,
+} from './kiro-cli.js';
+import {
     stripAnsiSequences,
     normalizeDetectedUrl,
     extractUrlsFromText,
@@ -114,12 +118,14 @@ const wss = createWebSocketServer(server, {
             cursor: spawnCursor,
             codex: queryCodex,
             opencode: spawnOpenCode,
+            kiro: spawnKiro,
         },
         abortFns: {
             claude: abortClaudeSDKSession,
             cursor: abortCursorSession,
             codex: abortCodexSession,
             opencode: abortOpenCodeSession,
+            kiro: abortKiroSession,
         },
         resolveToolApproval,
         getPendingApprovalsForSession,
@@ -1102,6 +1108,20 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
                 breakdown: { input: 0, output: 0 },
                 unsupported: true,
                 message: 'Token usage tracking not available for Cursor sessions'
+            });
+        }
+
+        // Kiro sessions report `context_usage_percentage` per turn but not a
+        // running total/used pair compatible with this endpoint. Defer accurate
+        // accounting to a follow-up; the UI will treat Kiro as "no budget" for
+        // now (parity with Cursor).
+        if (provider === 'kiro') {
+            return res.json({
+                used: 0,
+                total: 0,
+                breakdown: { input: 0, cacheCreation: 0, cacheRead: 0 },
+                unsupported: true,
+                message: 'Token usage tracking not available for Kiro sessions'
             });
         }
 

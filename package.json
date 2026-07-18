@@ -40,6 +40,7 @@
     "desktop:dist:win": "npm run build && npm run desktop:stage && electron-builder --projectDir .desktop-build/desktop-app --win nsis",
     "server:bundle": "npm run build && node scripts/release/build-server-bundle.js",
     "desktop:icon:mac": "node electron/scripts/generate-macos-icon.js",
+    "test:server": "tsx --tsconfig server/tsconfig.json --test \"server/**/*.test.ts\"",
     "build": "npm run build:client && npm run build:server",
     "build:client": "vite build",
     "prebuild:server": "node -e \"require('node:fs').rmSync('dist-server', { recursive: true, force: true })\"",

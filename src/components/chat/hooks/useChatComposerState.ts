@@ -46,6 +46,7 @@ interface UseChatComposerStateArgs {
   codexModel: string;
   currentProviderEffort: string;
   opencodeModel: string;
+  kiroModel: string;
   isLoading: boolean;
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
@@ -198,6 +199,7 @@ export function useChatComposerState({
   codexModel,
   currentProviderEffort,
   opencodeModel,
+  kiroModel,
   isLoading,
   canAbortSession,
   tokenBudget,
@@ -375,7 +377,9 @@ export function useChatComposerState({
               ? codexModel
               : provider === 'opencode'
                   ? opencodeModel
-                  : claudeModel,
+                  : provider === 'kiro'
+                    ? kiroModel
+                    : claudeModel,
           tokenUsage: tokenBudget,
         };
 
@@ -429,6 +433,7 @@ export function useChatComposerState({
       currentSessionId,
       cursorModel,
       opencodeModel,
+      kiroModel,
       handleBuiltInCommand,
       handleCustomCommand,
       input,
@@ -596,8 +601,10 @@ export function useChatComposerState({
             : provider === 'codex'
               ? 'codex-settings'
               : provider === 'opencode'
-                  ? 'opencode-settings'
-                : 'claude-settings';
+                ? 'opencode-settings'
+                : provider === 'kiro'
+                  ? 'kiro-settings'
+                  : 'claude-settings';
         const savedSettings = safeLocalStorage.getItem(settingsKey);
         if (savedSettings) {
           return JSON.parse(savedSettings);
@@ -621,7 +628,9 @@ export function useChatComposerState({
           ? codexModel
           : provider === 'opencode'
             ? opencodeModel
-            : claudeModel;
+            : provider === 'kiro'
+              ? kiroModel
+              : claudeModel;
 
     return {
       model,
@@ -636,6 +645,7 @@ export function useChatComposerState({
     codexModel,
     currentProviderEffort,
     cursorModel,
+    kiroModel,
     opencodeModel,
     permissionMode,
     provider,
