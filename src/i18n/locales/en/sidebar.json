@@ -131,6 +131,14 @@
     "projectsScanned_one": "{{count}} project scanned",
     "projectsScanned_other": "{{count}} projects scanned"
   },
+  "recent": {
+    "title": "Recent conversations",
+    "emptyTitle": "No conversations yet",
+    "emptyDescription": "Your most recently updated conversations will appear here.",
+    "loadFailed": "Could not load recent conversations",
+    "loadMore": "Load older conversations",
+    "loadingMore": "Loading more..."
+  },
   "deleteConfirmation": {
     "deleteProject": "Remove Project",
     "deleteSession": "Delete Session",

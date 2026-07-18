@@ -22,6 +22,11 @@ export type ArchivedSessionListItem = {
   isProjectArchived: boolean;
 };
 
+export type RecentConversationListItem = Pick<
+  ArchivedSessionListItem,
+  'sessionId' | 'provider' | 'projectId' | 'projectDisplayName' | 'sessionTitle' | 'lastActivity'
+>;
+
 export type DeleteProjectConfirmation = {
   project: Project;
   sessionCount: number;

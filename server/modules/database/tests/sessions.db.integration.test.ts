@@ -6,6 +6,7 @@ import test from 'node:test';
 
 import { closeConnection } from '@/modules/database/connection.js';
 import { initializeDatabase } from '@/modules/database/init-db.js';
+import { projectsDb } from '@/modules/database/repositories/projects.db.js';
 import { sessionsDb } from '@/modules/database/repositories/sessions.db.js';
 
 async function withIsolatedDatabase(runTest: () => void | Promise<void>): Promise<void> {
@@ -80,5 +81,36 @@ test('repository reads normalize SQLite UTC timestamps to ISO strings', async ()
     assert.ok(row?.updated_at.endsWith('Z'));
     assert.match(row?.created_at ?? '', /^\d{4}-\d{2}-\d{2}T/);
     assert.match(row?.updated_at ?? '', /^\d{4}-\d{2}-\d{2}T/);
+  });
+});
+
+test('recent sessions are globally ordered, paginated, and limited to visible conversations', async () => {
+  await withIsolatedDatabase(() => {
+    const fixtures: Array<Parameters<typeof sessionsDb.createSession>> = [
+      ['session-oldest', 'claude', '/workspace/project-a', 'Oldest', '2026-07-18T09:00:00.000Z', '2026-07-18T10:00:00.000Z'],
+      ['session-newest', 'codex', '/workspace/project-b', 'Newest', '2026-07-18T11:00:00.000Z', '2026-07-18T12:00:00.900Z'],
+      ['session-same-second', 'claude', '/workspace/project-a', 'Same second, slightly older', '2026-07-18T12:00:00.000Z', '2026-07-18T12:00:00.100Z'],
+      ['session-middle', 'claude', '/workspace/project-a', 'Middle', '2026-07-18T10:00:00.000Z', '2026-07-18T11:00:00.000Z'],
+      ['session-archived', 'claude', '/workspace/project-a', 'Archived session', '2026-07-18T13:00:00.000Z', '2026-07-18T13:00:00.000Z'],
+      ['session-hidden-project', 'claude', '/workspace/project-hidden', 'Archived project session', '2026-07-18T14:00:00.000Z', '2026-07-18T14:00:00.000Z'],
+    ];
+    fixtures.forEach((fixture) => sessionsDb.createSession(...fixture));
+
+    sessionsDb.updateSessionIsArchived('session-archived', true);
+    projectsDb.updateProjectIsArchived('/workspace/project-hidden', true);
+
+    const firstPage = sessionsDb.getRecentSessionsPage(2, 0);
+    const secondPage = sessionsDb.getRecentSessionsPage(2, 2);
+
+    assert.equal(firstPage.total, 4);
+    assert.deepEqual(
+      firstPage.sessions.map((session) => session.session_id),
+      ['session-newest', 'session-same-second'],
+    );
+    assert.equal(secondPage.total, 4);
+    assert.deepEqual(
+      secondPage.sessions.map((session) => session.session_id),
+      ['session-middle', 'session-oldest'],
+    );
   });
 });
