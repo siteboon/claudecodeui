@@ -3,6 +3,8 @@ import path from 'path';
 
 import express from 'express';
 
+import type { ProviderRunFunction } from '@/shared/interfaces.js';
+
 import { normalizeProjectPath } from '../../shared/utils.js';
 
 type AgentRouterDependencies = {
@@ -16,10 +18,10 @@ type AgentRouterDependencies = {
   githubTokens: { getActiveGithubToken(userId: number): string | null };
   projects: { createProjectPath(projectPath: string, customName: string | null): unknown };
   models: typeof import('../providers/index.js').providerModelsService;
-  queryClaude: typeof import('../../claude-sdk.js').queryClaudeSDK;
-  queryCursor: typeof import('../../cursor-cli.js').spawnCursor;
-  queryCodex: typeof import('../../openai-codex.js').queryCodex;
-  queryOpenCode: typeof import('../../opencode-cli.js').spawnOpenCode;
+  queryClaude: ProviderRunFunction;
+  queryCursor: ProviderRunFunction;
+  queryCodex: ProviderRunFunction;
+  queryOpenCode: ProviderRunFunction;
   GithubClient: typeof import('@octokit/rest').Octokit;
 };
 

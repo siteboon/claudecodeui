@@ -7,6 +7,10 @@ import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.
 import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
 import { getGlobalImageAssetsDir, normalizeImageDescriptors } from '@/shared/image-attachments.js';
 import type {
+  ProviderPermissionDecision,
+  ProviderRuntimeWriter,
+} from '@/shared/interfaces.js';
+import type {
   AnyRecord,
   AuthenticatedWebSocketRequest,
   LLMProvider,
@@ -44,38 +48,23 @@ export function filterImagesToUploadStore(images: unknown, assetsRootOverride?: 
   });
 }
 
-/**
- * One provider runtime entry point. All five runtimes share this signature,
- * which lets the chat handler dispatch through a provider-keyed map instead
- * of provider-specific branches.
- */
-type ProviderSpawnFn = (
-  command: string,
-  options: AnyRecord,
-  writer: unknown
-) => Promise<unknown>;
+/** Application boundary for dispatching provider runs and approvals. */
+type ProviderRuntimeGateway = {
+  hasRuntime(provider: string): boolean;
+  run(
+    provider: LLMProvider,
+    command: string,
+    options: AnyRecord,
+    writer: ProviderRuntimeWriter,
+  ): Promise<unknown>;
+  abort(provider: LLMProvider, sessionId: string): Promise<boolean>;
+  resolveToolApproval(requestId: string, payload: ProviderPermissionDecision): void;
+  getPendingApprovalsForSession(sessionId: string): unknown[];
+};
 
 type ChatWebSocketDependencies = {
-  /** Provider runtimes keyed by provider id. */
-  spawnFns: Record<LLMProvider, ProviderSpawnFn>;
-  /**
-   * Abort functions keyed by provider id. They are addressed with the app
-   * session id (runtimes key their process maps by the id they were spawned
-   * with). The Claude abort is async; the rest are sync — both shapes are
-   * accepted.
-   */
-  abortFns: Record<LLMProvider, (sessionId: string) => boolean | Promise<boolean>>;
-  resolveToolApproval: (
-    requestId: string,
-    payload: {
-      allow: boolean;
-      updatedInput?: unknown;
-      message?: string;
-      rememberEntry?: unknown;
-    }
-  ) => void;
-  /** Claude-only today: pending tool approvals included in `chat_subscribed`. */
-  getPendingApprovalsForSession: (sessionId: string) => unknown[];
+  /** Central dispatcher for every provider SDK/CLI runtime. */
+  runtime: ProviderRuntimeGateway;
 };
 
 /**
@@ -163,8 +152,7 @@ async function handleChatSend(
   }
 
   const provider = session.provider as LLMProvider;
-  const spawnFn = dependencies.spawnFns[provider];
-  if (!spawnFn) {
+  if (!dependencies.runtime.hasRuntime(provider)) {
     sendProtocolError(ws, 'UNSUPPORTED_PROVIDER', `Provider "${provider}" is not available.`, sessionId);
     return;
   }
@@ -207,7 +195,7 @@ async function handleChatSend(
   };
 
   try {
-    await spawnFn(command, runtimeOptions, run.writer);
+    await dependencies.runtime.run(provider, command, runtimeOptions, run.writer);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[Chat] Provider runtime "${provider}" failed`, { sessionId, error: message });
@@ -243,8 +231,7 @@ async function handleChatAbort(
     return;
   }
 
-  const abortFn = dependencies.abortFns[run.provider];
-  const success = abortFn ? Boolean(await abortFn(sessionId)) : false;
+  const success = await dependencies.runtime.abort(run.provider, sessionId);
 
   chatRunRegistry.completeRun(sessionId, {
     exitCode: success ? 0 : 1,
@@ -295,7 +282,7 @@ function handleChatSubscribe(
 
     // Pending approvals are tracked under the app session id inside the
     // Claude runtime, so they can be looked up directly.
-    const pendingPermissions = dependencies.getPendingApprovalsForSession(sessionId);
+    const pendingPermissions = dependencies.runtime.getPendingApprovalsForSession(sessionId);
 
     sendJson(ws, {
       kind: 'chat_subscribed',
@@ -328,7 +315,7 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
     return;
   }
 
-  dependencies.resolveToolApproval(data.requestId, {
+  dependencies.runtime.resolveToolApproval(data.requestId, {
     allow: Boolean(data.allow),
     updatedInput: data.updatedInput,
     message: typeof data.message === 'string' ? data.message : undefined,

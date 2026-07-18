@@ -4,7 +4,10 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { resolveOpenCodePermissionOptions, spawnOpenCode } from './opencode-cli.js';
+import {
+  resolveOpenCodePermissionOptions,
+  spawnOpenCode,
+} from './opencode-runtime.provider.js';
 
 const findEnvKey = (name) =>
   Object.keys(process.env).find((key) => key.toLowerCase() === name.toLowerCase()) || name;

@@ -7,8 +7,9 @@ without guessing which files need to move.
 
 ## Current Provider Shape
 
-Every provider wrapper exposes five facets:
+Every provider wrapper exposes six facets:
 
+- `models`
 - `auth`
 - `mcp`
 - `skills`
@@ -17,6 +18,7 @@ Every provider wrapper exposes five facets:
 
 These correspond to the shared interfaces in `server/shared/interfaces.ts`:
 
+- `IProviderModels`
 - `IProviderAuth`
 - `IProviderMcp`
 - `IProviderSkills`
@@ -25,11 +27,15 @@ These correspond to the shared interfaces in `server/shared/interfaces.ts`:
 
 The services that consume them are:
 
+- `providerModelsService`
 - `providerAuthService`
 - `providerMcpService`
 - `providerSkillsService`
 - `sessionsService`
 - `sessionSynchronizerService`
+
+Live execution is consumed through `providerRuntimeService`, which dispatches
+to the separate runtime registry rather than the lower-level provider registry.
 
 Current provider ids in this repo are:
 
@@ -48,6 +54,7 @@ Each provider lives under its own folder in `server/modules/providers/list/`:
 ```text
 server/modules/providers/list/<provider>/
   <provider>.provider.ts
+  <provider>-runtime.provider.js
   <provider>-auth.provider.ts
   <provider>-mcp.provider.ts
   <provider>-skills.provider.ts
@@ -56,6 +63,15 @@ server/modules/providers/list/<provider>/
 ```
 
 The existing provider folders are `claude`, `codex`, `cursor`, and `opencode`.
+
+Live SDK/CLI execution is intentionally registered separately from the provider
+wrapper facets. Runtime adapters consume the registry-backed auth, model, and
+session services, so importing them from the wrappers would create a circular
+dependency. `providerRuntimeService` is the application-facing dispatcher for
+starting runs, aborting them, and forwarding interactive permission decisions.
+It is exported from the dedicated `server/modules/providers/runtime.ts`
+entrypoint so importing the lower-level `providers/index.ts` barrel does not
+initialize every stateful runtime adapter.
 
 ## What Each Facet Does
 
@@ -79,7 +95,7 @@ The existing provider folders are `claude`, `codex`, `cursor`, and `opencode`.
 - Update `server/shared/types.ts` `LLMProvider`.
 - Update `src/types/app.ts` `LLMProvider` if the frontend should know about it.
 - Update `server/modules/providers/provider.routes.ts`.
-- Update `server/routes/agent.js` if the provider is launchable from the agent runtime.
+- Update `server/modules/agent/agent.routes.ts` if the provider is launchable from the agent runtime.
 - Update `server/index.js` if the provider needs runtime boot or shutdown wiring.
 - Update the `PROVIDER_ORDER` list in `public/api-docs.html` if the provider should appear in the public API docs.
 - Update `src/components/chat/hooks/useChatProviderState.ts` and
@@ -91,6 +107,8 @@ The existing provider folders are `claude`, `codex`, `cursor`, and `opencode`.
 2. Create the wrapper class.
 
 - Add `server/modules/providers/list/<provider>/<provider>.provider.ts`.
+- Add `server/modules/providers/list/<provider>/<provider>-runtime.provider.js`
+  when the provider supports live SDK/CLI execution.
 - Extend `AbstractProvider`.
 - Expose readonly `auth`, `mcp`, `skills`, `sessions`, and `sessionSynchronizer`.
 - Call `super('<provider>')`.
@@ -198,7 +216,9 @@ Current session sync roots are:
 
 If the provider can run live chat sessions, update the runtime entrypoints too:
 
-- `server/routes/agent.js`
+- `server/modules/providers/list/<provider>/<provider>-runtime.provider.js`
+- `server/modules/providers/provider-runtime.registry.ts`
+- `server/modules/agent/agent.routes.ts`
 - `server/index.js`
 
 If the provider is visible in the UI, update:
@@ -290,14 +310,16 @@ Add a new provider "<provider>" using the current provider module architecture.
 
 Requirements:
 1) Create:
-   - server/modules/providers/list/<provider>/<provider>.provider.ts
+    - server/modules/providers/list/<provider>/<provider>.provider.ts
+    - server/modules/providers/list/<provider>/<provider>-runtime.provider.js
    - server/modules/providers/list/<provider>/<provider>-auth.provider.ts
    - server/modules/providers/list/<provider>/<provider>-mcp.provider.ts
    - server/modules/providers/list/<provider>/<provider>-skills.provider.ts
    - server/modules/providers/list/<provider>/<provider>-sessions.provider.ts
    - server/modules/providers/list/<provider>/<provider>-session-synchronizer.provider.ts
 2) Register in:
-   - server/modules/providers/provider.registry.ts
+    - server/modules/providers/provider.registry.ts
+    - server/modules/providers/provider-runtime.registry.ts
    - server/modules/providers/provider.routes.ts
    - server/shared/types.ts LLMProvider
    - src/types/app.ts LLMProvider
@@ -334,6 +356,7 @@ alongside the implementation.
 
 - Adding provider files but forgetting `provider.registry.ts` or
   `provider.routes.ts`.
+- Adding a live runtime without registering it in `provider-runtime.registry.ts`.
 - Updating backend provider ids but not `src/types/app.ts` or the frontend
   provider constants.
 - Omitting `skills` or `sessionSynchronizer` from the wrapper.

@@ -3,7 +3,7 @@
  * =============================
  *
  * This module provides integration with the OpenAI Codex SDK for non-interactive
- * chat sessions. It mirrors the pattern used in claude-sdk.js for consistency.
+ * chat sessions. It mirrors the Claude runtime adapter for consistency.
  *
  * ## Usage
  *
@@ -15,12 +15,12 @@
 
 import { Codex } from '@openai/codex-sdk';
 
-import { buildCodexInputItems, normalizeImageDescriptors } from './shared/image-attachments.js';
-import { notifyRunFailed, notifyRunStopped } from './modules/notifications/index.js';
-import { sessionsService } from './modules/providers/services/sessions.service.js';
-import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
-import { providerModelsService } from './modules/providers/services/provider-models.service.js';
-import { createCompleteMessage, createNormalizedMessage } from './shared/utils.js';
+import { buildCodexInputItems, normalizeImageDescriptors } from '@/shared/image-attachments.js';
+import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
+import { sessionsService } from '@/modules/providers/services/sessions.service.js';
+import { providerAuthService } from '@/modules/providers/services/provider-auth.service.js';
+import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
+import { createCompleteMessage, createNormalizedMessage } from '@/shared/utils.js';
 
 const activeCodexSessions = new Map();
 
@@ -490,6 +490,11 @@ export function getActiveCodexSessions() {
   return sessions;
 }
 
+export const codexRuntime = {
+  run: queryCodex,
+  abort: abortCodexSession,
+};
+
 /**
  * Helper to send message via WebSocket or writer
  * @param {WebSocket|object} ws - WebSocket or response writer
@@ -510,7 +515,7 @@ function sendMessage(ws, data) {
 }
 
 // Clean up old completed sessions periodically
-setInterval(() => {
+const completedSessionCleanupTimer = setInterval(() => {
   const now = Date.now();
   const maxAge = 30 * 60 * 1000; // 30 minutes
 
@@ -523,3 +528,7 @@ setInterval(() => {
     }
   }
 }, 5 * 60 * 1000); // Every 5 minutes
+
+// Runtime cleanup should not keep focused tests or one-off scripts alive after
+// their provider work has completed.
+completedSessionCleanupTimer.unref?.();

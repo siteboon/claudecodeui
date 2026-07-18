@@ -11,7 +11,7 @@ type GitExternalDependencies = Pick<
   'queryClaude' | 'queryCursor'
 >;
 
-/** Assembles the Git router while accepting provider runtimes from the server bootstrap. */
+/** Assembles the Git router with runners from the centralized provider runtime service. */
 export function createGitModule(externalDependencies: GitExternalDependencies) {
   return createGitRouter({
     fileSystem: fs,

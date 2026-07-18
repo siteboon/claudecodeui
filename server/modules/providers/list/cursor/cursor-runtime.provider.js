@@ -1,11 +1,11 @@
 import crossSpawn from 'cross-spawn';
 
-import { appendImagesInputTag } from './shared/image-attachments.js';
-import { notifyRunFailed, notifyRunStopped } from './modules/notifications/index.js';
-import { sessionsService } from './modules/providers/services/sessions.service.js';
-import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
-import { providerModelsService } from './modules/providers/services/provider-models.service.js';
-import { createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell } from './shared/utils.js';
+import { appendImagesInputTag } from '@/shared/image-attachments.js';
+import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
+import { sessionsService } from '@/modules/providers/services/sessions.service.js';
+import { providerAuthService } from '@/modules/providers/services/provider-auth.service.js';
+import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
+import { createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell } from '@/shared/utils.js';
 
 // cross-spawn resolves .cmd shims/PATHEXT on Windows and delegates to
 // child_process.spawn everywhere else.
@@ -353,6 +353,11 @@ function isCursorSessionActive(sessionId) {
 function getActiveCursorSessions() {
   return Array.from(activeCursorProcesses.keys());
 }
+
+export const cursorRuntime = {
+  run: spawnCursor,
+  abort: abortCursorSession,
+};
 
 export {
   spawnCursor,

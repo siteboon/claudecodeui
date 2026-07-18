@@ -19,19 +19,19 @@ import path from 'path';
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
 
-import { buildClaudeUserContent, normalizeImageDescriptors } from './shared/image-attachments.js';
-import { CLAUDE_FALLBACK_MODELS } from './modules/providers/list/claude/claude-models.provider.js';
-import { providerModelsService } from './modules/providers/services/provider-models.service.js';
-import { resolveClaudeCodeExecutablePath } from './shared/claude-cli-path.js';
+import { buildClaudeUserContent, normalizeImageDescriptors } from '@/shared/image-attachments.js';
+import { CLAUDE_FALLBACK_MODELS } from '@/modules/providers/list/claude/claude-models.provider.js';
+import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
+import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
 import {
   createNotificationEvent,
   notifyRunFailed,
   notifyRunStopped,
   notifyUserIfEnabled
-} from './modules/notifications/index.js';
-import { sessionsService } from './modules/providers/services/sessions.service.js';
-import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
-import { createCompleteMessage, createNormalizedMessage } from './shared/utils.js';
+} from '@/modules/notifications/index.js';
+import { sessionsService } from '@/modules/providers/services/sessions.service.js';
+import { providerAuthService } from '@/modules/providers/services/provider-auth.service.js';
+import { createCompleteMessage, createNormalizedMessage } from '@/shared/utils.js';
 
 const activeSessions = new Map();
 const pendingToolApprovals = new Map();
@@ -833,6 +833,15 @@ function reconnectSessionWriter(sessionId, newRawWs) {
   console.log(`[RECONNECT] Writer swapped for session ${sessionId}`);
   return true;
 }
+
+export const claudeRuntime = {
+  run: queryClaudeSDK,
+  abort: abortClaudeSDKSession,
+  permissions: {
+    resolve: resolveToolApproval,
+    listPending: getPendingApprovalsForSession,
+  },
+};
 
 // Export public API
 export {

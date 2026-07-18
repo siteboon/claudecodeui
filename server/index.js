@@ -13,29 +13,15 @@ import express from 'express';
 import cors from 'cors';
 
 import { AppError, findApplicationRoot, getModuleDirectory, terminalTextStyles } from '@/shared/utils.js';
-import { closeSessionsWatcher, initializeSessionsWatcher } from '@/modules/providers/index.js';
+import {
+    closeSessionsWatcher,
+    initializeSessionsWatcher,
+} from '@/modules/providers/index.js';
+import { providerRuntimeService } from '@/modules/providers/runtime.js';
 import { createWebSocketServer } from '@/modules/websocket/index.js';
 
 import { getConnectableHost } from '../shared/networkHosts.js';
 
-import {
-    queryClaudeSDK,
-    abortClaudeSDKSession,
-    resolveToolApproval,
-    getPendingApprovalsForSession,
-} from './claude-sdk.js';
-import {
-    spawnCursor,
-    abortCursorSession,
-} from './cursor-cli.js';
-import {
-    queryCodex,
-    abortCodexSession,
-} from './openai-codex.js';
-import {
-    spawnOpenCode,
-    abortOpenCodeSession,
-} from './opencode-cli.js';
 import { createGitModule } from './modules/git/index.js';
 import {
     authenticateToken,
@@ -90,15 +76,19 @@ console.log('SERVER_PORT from env:', process.env.SERVER_PORT);
 
 const app = express();
 const server = http.createServer(app);
+const queryClaude = providerRuntimeService.getRunner('claude');
+const queryCursor = providerRuntimeService.getRunner('cursor');
+const queryCodex = providerRuntimeService.getRunner('codex');
+const queryOpenCode = providerRuntimeService.getRunner('opencode');
 const gitRoutes = createGitModule({
-    queryClaude: queryClaudeSDK,
-    queryCursor: spawnCursor,
+    queryClaude,
+    queryCursor,
 });
 const agentRoutes = createAgentModule({
-    queryClaude: queryClaudeSDK,
-    queryCursor: spawnCursor,
+    queryClaude,
+    queryCursor,
     queryCodex,
-    queryOpenCode: spawnOpenCode,
+    queryOpenCode,
 });
 
 // Single WebSocket server that handles chat, shell, and plugin proxy paths.
@@ -108,20 +98,7 @@ const wss = createWebSocketServer(server, {
         authenticateWebSocket,
     },
     chat: {
-        spawnFns: {
-            claude: queryClaudeSDK,
-            cursor: spawnCursor,
-            codex: queryCodex,
-            opencode: spawnOpenCode,
-        },
-        abortFns: {
-            claude: abortClaudeSDKSession,
-            cursor: abortCursorSession,
-            codex: abortCodexSession,
-            opencode: abortOpenCodeSession,
-        },
-        resolveToolApproval,
-        getPendingApprovalsForSession,
+        runtime: providerRuntimeService,
     },
     shell: {
         resolveProviderSessionId: (sessionId, provider) => {

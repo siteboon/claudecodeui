@@ -3,6 +3,8 @@ import path from 'path';
 
 import express from 'express';
 
+import type { ProviderRunFunction } from '@/shared/interfaces.js';
+
 // cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
 import { parseGitLogWithStats, parseGitStatusOutput } from './git-parsing.service.js';
 
@@ -10,8 +12,8 @@ type GitRouterDependencies = {
   fileSystem: typeof import('node:fs/promises');
   spawnProcess: typeof import('cross-spawn').default;
   resolveProjectPathById(projectId: string): string | null;
-  queryClaude: typeof import('../../claude-sdk.js').queryClaudeSDK;
-  queryCursor: typeof import('../../cursor-cli.js').spawnCursor;
+  queryClaude: ProviderRunFunction;
+  queryCursor: ProviderRunFunction;
 };
 
 /** Creates Git routes around explicit repository, filesystem, subprocess, and AI adapters. */

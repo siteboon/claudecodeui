@@ -21,8 +21,8 @@ type AgentExternalDependencies = Pick<
 >;
 
 /**
- * Assembles the production Agent router while accepting the legacy provider
- * runtimes already owned by the server bootstrap.
+ * Assembles the production Agent router while accepting provider runners from
+ * the centralized provider runtime service.
  */
 export function createAgentModule(externalDependencies: AgentExternalDependencies) {
   return createAgentRouter({
