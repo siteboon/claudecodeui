@@ -2,6 +2,7 @@ import { Check, ChevronDown, ChevronRight, Edit3, Star, Trash2, X } from 'lucide
 import type { TFunction } from 'i18next';
 
 import { Button } from '../../../../shared/view/ui';
+import type { BookmarkedSession } from '../../../../stores/useBookmarkStore';
 import { cn } from '../../../../lib/utils';
 import type { Project, ProjectSession, LLMProvider } from '../../../../types/app';
 import type { SessionActivityMap } from '../../../../hooks/useSessionProtection';
@@ -51,6 +52,8 @@ type SidebarProjectItemProps = {
   onStartEditingSession: (sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
   onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => void;
+  isBookmarked: (session: { sessionId: string; projectId: string; provider: string }) => boolean;
+  onToggleBookmark: (bookmark: BookmarkedSession) => void;
   t: TFunction;
 };
 
@@ -94,6 +97,8 @@ export default function SidebarProjectItem({
   onStartEditingSession,
   onCancelEditingSession,
   onSaveEditingSession,
+  isBookmarked,
+  onToggleBookmark,
   t,
 }: SidebarProjectItemProps) {
   // Project identity is tracked by the DB-assigned `projectId` everywhere
@@ -273,7 +278,8 @@ export default function SidebarProjectItem({
           onClick={selectAndToggleProject}
         >
           <div className="flex min-w-0 flex-1 items-center gap-3">
-            <div
+            <button
+              type="button"
               className={cn(
                 'w-6 h-6 flex items-center justify-center rounded cursor-pointer transition-all duration-200',
                 isStarred
@@ -285,6 +291,7 @@ export default function SidebarProjectItem({
                 toggleStarProject();
               }}
               title={isStarred ? t('tooltips.removeFromFavorites') : t('tooltips.addToFavorites')}
+              aria-label={isStarred ? t('tooltips.removeFromFavorites') : t('tooltips.addToFavorites')}
             >
               <Star
                 className={cn(
@@ -294,7 +301,7 @@ export default function SidebarProjectItem({
                     : 'text-muted-foreground',
                 )}
               />
-            </div>
+            </button>
             <div className="min-w-0 flex-1 text-left">
               {isEditing ? (
                 <div className="space-y-1">
@@ -414,6 +421,8 @@ export default function SidebarProjectItem({
         onDeleteSession={onDeleteSession}
         onLoadMoreSessions={onLoadMoreSessions}
         onNewSession={onNewSession}
+        isBookmarked={isBookmarked}
+        onToggleBookmark={onToggleBookmark}
         t={t}
       />
     </div>
