@@ -14,13 +14,12 @@ import cors from 'cors';
 import mime from 'mime-types';
 import Database from 'better-sqlite3';
 
-import { AppError, WORKSPACES_ROOT, getOpenCodeDatabasePath, validateWorkspacePath } from '@/shared/utils.js';
+import { AppError, WORKSPACES_ROOT, findApplicationRoot, getModuleDirectory, getOpenCodeDatabasePath, validateWorkspacePath } from '@/shared/utils.js';
 import { closeSessionsWatcher, initializeSessionsWatcher } from '@/modules/providers/index.js';
 import { createWebSocketServer } from '@/modules/websocket/index.js';
 
 import { getConnectableHost } from '../shared/networkHosts.js';
 
-import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
 import {
     queryClaudeSDK,
     abortClaudeSDKSession,
@@ -45,18 +44,26 @@ import {
     extractUrlsFromText,
     shouldAutoOpenUrlFromOutput,
 } from './utils/url-detection.js';
-import gitRoutes from './routes/git.js';
-import authRoutes from './routes/auth.js';
-import cursorRoutes from './routes/cursor.js';
-import taskmasterRoutes from './routes/taskmaster.js';
-import mcpUtilsRoutes from './routes/mcp-utils.js';
-import commandsRoutes from './routes/commands.js';
-import settingsRoutes from './routes/settings.js';
-import agentRoutes from './routes/agent.js';
+import { createGitModule } from './modules/git/index.js';
+import {
+    authenticateToken,
+    authenticateWebSocket,
+    authRoutes,
+    validateApiKey,
+} from './modules/auth/index.js';
+import { taskmasterRoutes } from './modules/taskmaster/index.js';
+import { commandsRoutes } from './modules/commands/index.js';
+import { settingsRoutes } from './modules/settings/index.js';
+import { createAgentModule } from './modules/agent/index.js';
 import projectModuleRoutes from './modules/projects/projects.routes.js';
 import notificationRoutes from './modules/notifications/notifications.routes.js';
-import userRoutes from './routes/user.js';
-import pluginsRoutes from './routes/plugins.js';
+import { userRoutes } from './modules/user/index.js';
+import {
+    getPluginPort,
+    pluginsRoutes,
+    startEnabledPluginServers,
+    stopAllPlugins,
+} from './modules/plugins/index.js';
 import providerRoutes from './modules/providers/provider.routes.js';
 import voiceRoutes from './voice-proxy.js';
 import browserUseRoutes from './modules/browser-use/browser-use.routes.js';
@@ -64,17 +71,15 @@ import { assetsRoutes } from './modules/assets/index.js';
 import { worktreesRoutes } from './modules/worktrees/index.js';
 import browserUseMcpRoutes from './modules/browser-use/browser-use-mcp.routes.js';
 import { browserUseService } from './modules/browser-use/browser-use.service.js';
-import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
 import { initializeDatabase, projectsDb, sessionsDb } from './modules/database/index.js';
-import { configureWebPush } from './services/vapid-keys.js';
-import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
+import { configureWebPush } from './modules/notifications/index.js';
 import { IS_PLATFORM } from './constants/config.js';
 import { c } from './utils/colors.js';
 
-const __dirname = getModuleDir(import.meta.url);
+const __dirname = getModuleDirectory(import.meta.url);
 // The server source runs from /server, while the compiled output runs from /dist-server/server.
 // Resolving the app root once keeps every repo-level lookup below aligned across both layouts.
-const APP_ROOT = findAppRoot(__dirname);
+const APP_ROOT = findApplicationRoot(__dirname);
 const installMode = fs.existsSync(path.join(APP_ROOT, '.git')) ? 'git' : 'npm';
 // Version of the code that is actually running, captured once at process
 // startup. This intentionally does NOT re-read package.json per request: after
@@ -102,6 +107,16 @@ function readUsageNumber(value) {
 
 const app = express();
 const server = http.createServer(app);
+const gitRoutes = createGitModule({
+    queryClaude: queryClaudeSDK,
+    queryCursor: spawnCursor,
+});
+const agentRoutes = createAgentModule({
+    queryClaude: queryClaudeSDK,
+    queryCursor: spawnCursor,
+    queryCodex,
+    queryOpenCode: spawnOpenCode,
+});
 
 // Single WebSocket server that handles chat, shell, and plugin proxy paths.
 const wss = createWebSocketServer(server, {
@@ -187,14 +202,8 @@ app.use('/api/git', authenticateToken, gitRoutes);
 // Git worktree management (protected)
 app.use('/api/worktrees', authenticateToken, worktreesRoutes);
 
-// Cursor API Routes (protected)
-app.use('/api/cursor', authenticateToken, cursorRoutes);
-
 // TaskMaster API Routes (protected)
 app.use('/api/taskmaster', authenticateToken, taskmasterRoutes);
-
-// MCP utilities
-app.use('/api/mcp-utils', authenticateToken, mcpUtilsRoutes);
 
 // Commands API Routes (protected)
 app.use('/api/commands', authenticateToken, commandsRoutes);

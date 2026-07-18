@@ -17,12 +17,13 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
 
-const __dirname = getModuleDir(import.meta.url);
+import { findApplicationRoot, getModuleDirectory } from './shared/utils.js';
+
+const __dirname = getModuleDirectory(import.meta.url);
 // The CLI is compiled into dist-server/server, but it still needs to read the top-level
 // package.json and .env file. Resolving the app root once keeps those lookups stable.
-const APP_ROOT = findAppRoot(__dirname);
+const APP_ROOT = findApplicationRoot(__dirname);
 
 // ANSI color codes for terminal output
 const colors = {

@@ -2,12 +2,25 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
+import { fileURLToPath } from 'url';
 
-const __dirname = getModuleDir(import.meta.url);
+// This bootstrap cannot import shared/utils.ts: that module reads environment
+// defaults during evaluation, before this file has loaded `.env`.
+function getBootstrapApplicationRoot(importMetaUrl) {
+  const moduleDirectory = path.dirname(fileURLToPath(importMetaUrl));
+  let serverRoot = moduleDirectory;
+  while (path.basename(serverRoot) !== 'server') {
+    const parent = path.dirname(serverRoot);
+    if (parent === serverRoot) throw new Error('Could not resolve server root');
+    serverRoot = parent;
+  }
+  const parent = path.dirname(serverRoot);
+  return path.basename(parent) === 'dist-server' ? path.dirname(parent) : parent;
+}
+
 // Resolve the repo/app root via the nearest /server folder so this file keeps finding the
 // same top-level .env file from both /server/load-env.js and /dist-server/server/load-env.js.
-const APP_ROOT = findAppRoot(__dirname);
+const APP_ROOT = getBootstrapApplicationRoot(import.meta.url);
 
 try {
   const envPath = path.join(APP_ROOT, '.env');

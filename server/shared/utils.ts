@@ -14,6 +14,7 @@ import {
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
+import { fileURLToPath } from 'node:url';
 
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 
@@ -1284,3 +1285,41 @@ export function flattenPromptForWindowsShell(prompt: string): string {
   return prompt.replace(/\s*\r?\n\s*/g, ' ').trim();
 }
 
+// ---------------------------
+//----------------- RUNTIME PATH RESOLUTION UTILITIES ------------
+/**
+ * Resolves the directory containing an ES module from `import.meta.url`.
+ * Backend entrypoints and feature composition roots use this instead of
+ * recreating CommonJS `__dirname` logic.
+ */
+export function getModuleDirectory(importMetaUrl: string): string {
+  return path.dirname(fileURLToPath(importMetaUrl));
+}
+
+/**
+ * Walks upward to the nearest `server` directory in either source or compiled
+ * output. Callers use this stable anchor for server-relative resources.
+ */
+export function findServerRoot(startDirectory: string): string {
+  let currentDirectory = startDirectory;
+  while (path.basename(currentDirectory) !== 'server') {
+    const parentDirectory = path.dirname(currentDirectory);
+    if (parentDirectory === currentDirectory) {
+      throw new Error(`Could not resolve the backend server root from "${startDirectory}".`);
+    }
+    currentDirectory = parentDirectory;
+  }
+  return currentDirectory;
+}
+
+/**
+ * Resolves the application root from a source or `dist-server/server` path so
+ * package-level resources work identically before and after compilation.
+ */
+export function findApplicationRoot(startDirectory: string): string {
+  const serverRoot = findServerRoot(startDirectory);
+  const parentDirectory = path.dirname(serverRoot);
+  return path.basename(parentDirectory) === 'dist-server'
+    ? path.dirname(parentDirectory)
+    : parentDirectory;
+}
