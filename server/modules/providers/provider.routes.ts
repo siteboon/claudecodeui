@@ -556,6 +556,15 @@ router.get(
   }),
 );
 
+router.get(
+  '/sessions/:sessionId/provider-id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const providerSessionId = sessionsService.getProviderSessionId(sessionId);
+    res.json(createApiSuccessResponse({ sessionId: providerSessionId }));
+  }),
+);
+
 router.delete(
   '/sessions/:sessionId',
   asyncHandler(async (req: Request, res: Response) => {

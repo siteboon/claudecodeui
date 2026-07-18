@@ -111,6 +111,8 @@ export const api = {
     authenticatedFetch('/api/providers/sessions/archived'),
   runningSessions: () =>
     authenticatedFetch('/api/providers/sessions/running'),
+  providerSessionId: (sessionId) =>
+    authenticatedFetch(`/api/providers/sessions/${encodeURIComponent(sessionId)}/provider-id`),
   restoreSession: (sessionId) =>
     authenticatedFetch(`/api/providers/sessions/${sessionId}/restore`, {
       method: 'POST',
