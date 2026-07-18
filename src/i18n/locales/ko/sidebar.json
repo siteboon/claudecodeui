@@ -48,6 +48,7 @@
     "activeSessionIndicator": "최근 활성 세션 (지난 10분)",
     "save": "저장",
     "cancel": "취소",
+    "clearSearch": "검색 지우기",
     "openCommandPalette": "명령 팔레트 열기",
     "attentionRequiredIndicator": "세션에 주의가 필요합니다"
   },
@@ -117,6 +118,18 @@
   "version": {
     "updateAvailable": "업데이트 가능",
     "restartRequired": "업데이트가 설치됨 — 적용하려면 서버를 재시작하세요"
+  },
+  "search": {
+    "modeProjects": "프로젝트",
+    "modeConversations": "대화",
+    "conversationsPlaceholder": "대화 내용 검색...",
+    "searching": "검색 중...",
+    "noResults": "결과를 찾을 수 없습니다",
+    "tryDifferentQuery": "다른 검색어로 시도해보세요",
+    "matches_one": "{{count}}개 일치",
+    "matches_other": "{{count}}개 일치",
+    "projectsScanned_one": "프로젝트 {{count}}개 검색됨",
+    "projectsScanned_other": "프로젝트 {{count}}개 검색됨"
   },
   "deleteConfirmation": {
     "deleteProject": "프로젝트 제거",

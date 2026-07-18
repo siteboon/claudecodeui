@@ -20,7 +20,9 @@
     "saved": "저장됨!",
     "exitFullscreen": "전체화면 종료",
     "fullscreen": "전체화면",
-    "close": "닫기"
+    "close": "닫기",
+    "previewMarkdown": "마크다운 미리보기",
+    "editMarkdown": "마크다운 편집"
   },
   "footer": {
     "lines": "줄:",
@@ -30,5 +32,10 @@
   "binaryFile": {
     "title": "바이너리 파일",
     "message": "파일 \"{{fileName}}\"은(는) 바이너리 파일이므로 텍스트 편집기에서 표시할 수 없습니다."
+  },
+  "filePreview": {
+    "loading": "미리보기 로딩 중...",
+    "error": "이 파일을 표시할 수 없습니다.",
+    "openInNewTab": "새 탭에서 열기"
   }
 }

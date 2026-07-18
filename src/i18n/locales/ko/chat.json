@@ -17,7 +17,8 @@
     "tool": "도구",
     "claude": "Claude",
     "cursor": "Cursor",
-    "codex": "Codex"
+    "codex": "Codex",
+    "opencode": "OpenCode"
   },
   "tools": {
     "settings": "도구 설정",
@@ -102,6 +103,14 @@
     },
     "technicalDetails": "기술 상세"
   },
+  "voice": {
+    "input": "음성 입력",
+    "stopRecording": "녹음 중지",
+    "transcribing": "받아쓰는 중…",
+    "speak": "소리 내어 읽기",
+    "stopSpeaking": "중지",
+    "loading": "로딩 중…"
+  },
   "input": {
     "placeholder": "/를 입력하여 명령어, @를 입력하여 파일, 또는 {{provider}}에게 무엇이든 물어보세요...",
     "placeholderDefault": "메시지를 입력하세요...",
@@ -112,12 +121,22 @@
     "stop": "중지",
     "hintText": {
       "ctrlEnter": "Ctrl+Enter로 전송 • Shift+Enter로 줄바꿈 • Tab으로 모드 변경 • /로 슬래시 명령어",
-      "enter": "Enter로 전송 • Shift+Enter로 줄바꿈 • Tab으로 모드 변경 • /로 슬래시 명령어"
+      "enter": "Enter로 전송 • Shift+Enter로 줄바꿈 • Tab으로 모드 변경 • /로 슬래시 명령어",
+      "queue": "Enter로 다음 메시지 대기열에 추가",
+      "updateQueued": "Enter로 대기 중인 메시지 업데이트"
     },
     "clickToChangeMode": "클릭하여 권한 모드 변경 (또는 입력창에서 Tab)",
     "showAllCommands": "모든 명령어 보기",
     "clearInput": "입력 지우기",
-    "scrollToBottom": "맨 아래로 스크롤"
+    "scrollToBottom": "맨 아래로 스크롤",
+    "queue": {
+      "sendNext": "다음 메시지 대기열에 추가",
+      "update": "대기 중인 메시지 업데이트",
+      "label": "대기 중",
+      "willSend": "완료되면 전송됩니다",
+      "edit": "대기 중인 메시지 편집",
+      "delete": "대기 중인 메시지 삭제"
+    }
   },
   "providerSelection": {
     "title": "AI 어시스턴트 선택",
@@ -133,6 +152,7 @@
       "claude": "{{model}} 모델로 Claude를 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요.",
       "cursor": "{{model}} 모델로 Cursor를 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요.",
       "codex": "{{model}} 모델로 Codex를 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요.",
+      "opencode": "{{model}} 모델로 OpenCode를 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요.",
       "default": "시작하려면 위에서 제공자를 선택하세요"
     },
     "pressToSearch": "<kbd>{{shortcut}}</kbd>를 눌러 세션, 파일 및 커밋을 검색하세요"
@@ -202,6 +222,7 @@
       "label": "{{time}} elapsed",
       "startingNow": "Starting now"
     },
+    "stop": "중지",
     "controls": {
       "stopGeneration": "Stop Generation",
       "pressEscToStop": "Press Esc anytime to stop"
