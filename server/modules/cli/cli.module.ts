@@ -83,16 +83,14 @@ export function createCliApplication(): CliApplication {
       execSync('npm update -g @cloudcli-ai/cloudcli', { stdio: 'inherit' });
     },
     startServer: async () => {
-      // The legacy server executable is an entrypoint rather than a feature
-      // module, so it has no barrel contract to import through yet.
+      // The server executable is an entrypoint rather than a feature module,
+      // so it has no barrel contract to import through.
       // eslint-disable-next-line boundaries/no-unknown
       await import('../../index.js');
     },
     startBrowserUseMcp: async () => {
-      // The stdio executable is likewise a top-level entrypoint, not another
-      // module's internal implementation.
-      // eslint-disable-next-line boundaries/no-unknown
-      await import('../../browser-use-mcp.js');
+      const { startBrowserUseMcp } = await import('../browser-use/index.js');
+      await startBrowserUseMcp();
     },
   });
 }

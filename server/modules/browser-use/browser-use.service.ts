@@ -150,8 +150,7 @@ function getPlaywright(): any | null {
 }
 
 function getMcpCommand(): { command: string; args: string[] } {
-  const serverDir = path.resolve(__dirname, '..', '..');
-  const mcpScriptPath = path.join(serverDir, 'browser-use-mcp.js');
+  const mcpScriptPath = path.join(__dirname, 'browser-use-mcp.js');
   if (fs.existsSync(mcpScriptPath)) {
     return {
       command: process.execPath,

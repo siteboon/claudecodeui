@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// Load environment variables before other imports execute
+// Load environment variables before other imports execute.
 import './load-env.js';
 import fs, { promises as fsPromises } from 'fs';
 import path from 'path';
 import os from 'os';
 import http from 'http';
 
-import express from 'express';
+import express, { type NextFunction, type Request, type Response } from 'express';
 import cors from 'cors';
 
 import { AppError, findApplicationRoot, getModuleDirectory, terminalTextStyles } from '@/shared/utils.js';
@@ -249,7 +249,7 @@ app.get('*', (req, res) => {
 });
 
 // global error middleware must be last
-app.use((err, req, res, next) => {
+app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
   if (err instanceof AppError) {
     return res.status(err.statusCode).json({
       success: false,
@@ -272,11 +272,22 @@ app.use((err, req, res, next) => {
   });
 });
 
-const SERVER_PORT = process.env.SERVER_PORT || 3001;
+const SERVER_PORT = Number.parseInt(process.env.SERVER_PORT || '3001', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 const DISPLAY_HOST = getConnectableHost(HOST);
 const VITE_PORT = process.env.VITE_PORT || 5173;
 const LOCAL_SERVER_MARKER_PATH = path.join(os.homedir(), '.cloudcli', 'local-server.json');
+
+function getErrorCode(error: unknown): string | undefined {
+    if (typeof error !== 'object' || error === null || !('code' in error)) {
+        return undefined;
+    }
+    return String(error.code);
+}
+
+function getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}
 
 async function writeLocalServerMarker() {
     const marker = {
@@ -299,14 +310,14 @@ async function removeLocalServerMarker() {
         const marker = JSON.parse(raw);
         if (marker.pid && marker.pid !== process.pid) return;
     } catch (error) {
-        if (error.code === 'ENOENT') return;
+        if (getErrorCode(error) === 'ENOENT') return;
     }
 
     try {
         await fsPromises.unlink(LOCAL_SERVER_MARKER_PATH);
     } catch (error) {
-        if (error.code !== 'ENOENT') {
-            console.warn('[WARN] Could not remove local server marker:', error.message);
+        if (getErrorCode(error) !== 'ENOENT') {
+            console.warn('[WARN] Could not remove local server marker:', getErrorMessage(error));
         }
     }
 }
@@ -365,17 +376,17 @@ async function startServer() {
             try {
                 await browserUseService.stopAllSessions();
             } catch (err) {
-                console.error('[Browser] Error stopping sessions during shutdown:', err?.message || err);
+                console.error('[Browser] Error stopping sessions during shutdown:', getErrorMessage(err));
             }
             try {
                 await stopAllPlugins();
             } catch (err) {
-                console.error('[Plugins] Error stopping plugins during shutdown:', err?.message || err);
+                console.error('[Plugins] Error stopping plugins during shutdown:', getErrorMessage(err));
             }
             try {
                 await removeLocalServerMarker();
             } catch (err) {
-                console.error('[Local Server] Error removing server marker during shutdown:', err?.message || err);
+                console.error('[Local Server] Error removing server marker during shutdown:', getErrorMessage(err));
             }
             process.exit(0);
         };

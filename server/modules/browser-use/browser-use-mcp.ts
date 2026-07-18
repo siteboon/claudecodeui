@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-import './load-env.js';
+// The MCP executable must load the root environment bootstrap before reading configuration.
+// eslint-disable-next-line boundaries/no-unknown
+import '../../load-env.js';
 
 type JsonRpcRequest = {
   jsonrpc: '2.0';

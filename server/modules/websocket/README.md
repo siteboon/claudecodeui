@@ -19,7 +19,7 @@ Shared chat client registry and open-state constant used by other modules.
 
 ## Why Dependency Injection Is Used
 
-The module receives runtime-specific functions from `server/index.js` instead of importing legacy runtime files directly.
+The module receives runtime-specific functions from `server/index.ts` instead of importing legacy runtime files directly.
 
 Benefits:
 
@@ -269,5 +269,5 @@ To add a new websocket route:
 1. Add a new handler service under `services/`.
 2. Extend `WebSocketServerDependencies` in `websocket-server.service.ts` if needed.
 3. Add a new pathname branch in the router.
-4. Wire dependency injection from `server/index.js`.
+4. Wire dependency injection from `server/index.ts`.
 5. Keep `index.ts` as barrel-only export surface.

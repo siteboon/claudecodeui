@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 
 // This bootstrap cannot import shared/utils.ts: that module reads environment
 // defaults during evaluation, before this file has loaded `.env`.
-function getBootstrapApplicationRoot(importMetaUrl) {
+function getBootstrapApplicationRoot(importMetaUrl: string) {
   const moduleDirectory = path.dirname(fileURLToPath(importMetaUrl));
   let serverRoot = moduleDirectory;
   while (path.basename(serverRoot) !== 'server') {
@@ -19,7 +19,7 @@ function getBootstrapApplicationRoot(importMetaUrl) {
 }
 
 // Resolve the repo/app root via the nearest /server folder so this file keeps finding the
-// same top-level .env file from both /server/load-env.js and /dist-server/server/load-env.js.
+// same top-level .env file from both /server/load-env.ts and /dist-server/server/load-env.js.
 const APP_ROOT = getBootstrapApplicationRoot(import.meta.url);
 
 try {
@@ -34,7 +34,7 @@ try {
       }
     }
   });
-} catch (e) {
+} catch (e: any) {
   console.error('No .env file found or error reading it:', e.message);
 }
 
