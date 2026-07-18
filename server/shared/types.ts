@@ -272,6 +272,55 @@ export type NormalizedMessage = {
 };
 
 /**
+ * Output gateway shared by WebSocket and SSE provider runs.
+ *
+ * Runtime adapters only depend on this structural surface, which keeps them
+ * independent from the transport that ultimately delivers normalized events.
+ */
+export type ProviderRuntimeWriter = {
+  send(data: unknown): void;
+  setSessionId?(sessionId: string): void;
+  userId?: string | number | null;
+  isWebSocketWriter?: boolean;
+  isSSEStreamWriter?: boolean;
+};
+
+export type ProviderPermissionDecision = {
+  allow: boolean;
+  updatedInput?: unknown;
+  message?: string;
+  rememberEntry?: unknown;
+};
+
+export type ProviderRuntimePermissionGateway = {
+  resolve(requestId: string, decision: ProviderPermissionDecision): void;
+  listPending(sessionId: string): unknown[];
+};
+
+/**
+ * Provider-scoped application capabilities supplied to a runtime for one run.
+ *
+ * Keeping these lookups outside concrete SDK/CLI adapters prevents the
+ * adapters from importing services that resolve back through providerRegistry.
+ */
+export type ProviderRuntimeContext = {
+  resolveProviderSessionId(sessionId: string | null | undefined): string | null;
+  resolveResumeModel(
+    sessionId: string | undefined,
+    requestedModel?: string | null,
+  ): Promise<string | undefined>;
+  getProviderModels(): Promise<ProviderModelsDefinition>;
+  normalizeMessage(raw: unknown, sessionId: string | null): NormalizedMessage[];
+  isProviderInstalled(): Promise<boolean>;
+};
+
+export type ProviderRunFunction = (
+  command: string,
+  options: AnyRecord,
+  writer: ProviderRuntimeWriter,
+) => Promise<unknown>;
+
+/**
  * Shared options used to fetch historical provider messages.
  *
  * Consumers should pass provider-specific lookup hints (`projectPath`) only

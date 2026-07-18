@@ -3,7 +3,7 @@ import path from 'path';
 
 import express from 'express';
 
-import type { ProviderRunFunction } from '@/shared/interfaces.js';
+import type { ProviderRunFunction } from '@/shared/types.js';
 
 // cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
 import { parseGitLogWithStats, parseGitStatusOutput } from './git-parsing.service.js';

@@ -5,9 +5,19 @@ import path from 'node:path';
 import test from 'node:test';
 
 import {
+  opencodeRuntime,
   resolveOpenCodePermissionOptions,
-  spawnOpenCode,
 } from './opencode-runtime.provider.js';
+import { OpenCodeSessionsProvider } from './opencode-sessions.provider.js';
+
+const sessionsProvider = new OpenCodeSessionsProvider();
+const runtimeContext = {
+  resolveProviderSessionId: (sessionId) => sessionId || null,
+  resolveResumeModel: async (_sessionId, requestedModel) => requestedModel || undefined,
+  getProviderModels: async () => ({ OPTIONS: [], DEFAULT: '' }),
+  normalizeMessage: (raw, sessionId) => sessionsProvider.normalizeMessage(raw, sessionId),
+  isProviderInstalled: async () => true,
+};
 
 const findEnvKey = (name) =>
   Object.keys(process.env).find((key) => key.toLowerCase() === name.toLowerCase()) || name;
@@ -74,7 +84,7 @@ test('spawnOpenCode emits session_created before normalized live messages for ne
         : `.COM;.EXE;.BAT;.CMD${previousPathExt ? `;${previousPathExt}` : ''}`;
     }
 
-    await spawnOpenCode('Hi', { cwd: tempRoot }, writer);
+    await opencodeRuntime.run('Hi', { cwd: tempRoot }, writer, runtimeContext);
 
     const sessionCreatedIndex = messages.findIndex((message) => message.kind === 'session_created');
     const assistantDeltaIndex = messages.findIndex((message) =>
@@ -189,7 +199,12 @@ test('spawnOpenCode passes permission mode flags and env to the CLI', async () =
       const argsCapturePath = path.join(tempRoot, `opencode-args-${scenario.permissionMode}.json`);
       process.env.OPENCODE_ARGS_CAPTURE = argsCapturePath;
 
-      await spawnOpenCode('Hi', { cwd: tempRoot, permissionMode: scenario.permissionMode }, writer);
+      await opencodeRuntime.run(
+        'Hi',
+        { cwd: tempRoot, permissionMode: scenario.permissionMode },
+        writer,
+        runtimeContext,
+      );
 
       const capture = JSON.parse(await readFile(argsCapturePath, 'utf8'));
       for (const expectedArg of scenario.expectArgs) {

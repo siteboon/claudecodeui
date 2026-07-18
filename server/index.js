@@ -13,8 +13,8 @@ import { AppError, findApplicationRoot, getModuleDirectory, terminalTextStyles }
 import {
     closeSessionsWatcher,
     initializeSessionsWatcher,
+    providerRuntimeService,
 } from '@/modules/providers/index.js';
-import { providerRuntimeService } from '@/modules/providers/runtime.js';
 import { createWebSocketServer } from '@/modules/websocket/index.js';
 
 import { getConnectableHost } from '../shared/networkHosts.js';

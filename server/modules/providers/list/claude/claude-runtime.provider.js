@@ -21,7 +21,6 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 
 import { buildClaudeUserContent, normalizeImageDescriptors } from '@/shared/image-attachments.js';
 import { CLAUDE_FALLBACK_MODELS } from '@/modules/providers/list/claude/claude-models.provider.js';
-import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
 import {
   createNotificationEvent,
@@ -29,8 +28,6 @@ import {
   notifyRunStopped,
   notifyUserIfEnabled
 } from '@/modules/notifications/index.js';
-import { sessionsService } from '@/modules/providers/services/sessions.service.js';
-import { providerAuthService } from '@/modules/providers/services/provider-auth.service.js';
 import { createCompleteMessage, createNormalizedMessage } from '@/shared/utils.js';
 
 const activeSessions = new Map();
@@ -456,13 +453,14 @@ async function loadMcpConfig(cwd) {
  * @param {string} command - User prompt/command
  * @param {Object} options - Query options
  * @param {Object} ws - WebSocket connection
+ * @param {Object} context - Provider-scoped model, session, and auth lookups
  * @returns {Promise<void>}
  */
-async function queryClaudeSDK(command, options = {}, ws) {
+async function queryClaudeSDK(command, options = {}, ws, context) {
   const { sessionId, sessionSummary } = options;
   // Callers pass the stable app session id; the SDK only understands the
   // provider-native id recorded on the session row.
-  const providerSessionId = sessionsService.resolveProviderSessionId(sessionId);
+  const providerSessionId = context.resolveProviderSessionId(sessionId);
   // Provider-native id as the SDK reports it (starts as the resume id, or is
   // captured from the stream for brand-new sessions).
   let capturedSessionId = providerSessionId;
@@ -480,14 +478,10 @@ async function queryClaudeSDK(command, options = {}, ws) {
   };
 
   try {
-    const resolvedModel = await providerModelsService.resolveResumeModel(
-      'claude',
-      sessionId,
-      options.model,
-    );
+    const resolvedModel = await context.resolveResumeModel(sessionId, options.model);
     let effortModels = CLAUDE_FALLBACK_MODELS;
     try {
-      effortModels = (await providerModelsService.getProviderModels('claude')).models;
+      effortModels = await context.getProviderModels();
     } catch (error) {
       console.warn('[Claude SDK] Unable to load provider models for effort validation:', error);
     }
@@ -671,7 +665,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
       const sid = capturedSessionId || sessionId || null;
 
       // Use adapter to normalize SDK events into NormalizedMessage[]
-      const normalized = sessionsService.normalizeMessage('claude', transformedMessage, sid);
+      const normalized = context.normalizeMessage(transformedMessage, sid);
       for (const msg of normalized) {
         // Preserve parentToolUseId from SDK wrapper for subagent tool grouping
         if (transformedMessage.parentToolUseId && !msg.parentToolUseId) {
@@ -723,7 +717,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
     }
 
     // Check if Claude CLI is installed for a clearer error message
-    const installed = await providerAuthService.isProviderInstalled('claude');
+    const installed = await context.isProviderInstalled();
     const errorContent = !installed
       ? 'Claude Code is not installed. Please install it first: https://docs.anthropic.com/en/docs/claude-code'
       : error.message;

@@ -7,13 +7,11 @@ import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.
 import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
 import { getGlobalImageAssetsDir, normalizeImageDescriptors } from '@/shared/image-attachments.js';
 import type {
-  ProviderPermissionDecision,
-  ProviderRuntimeWriter,
-} from '@/shared/interfaces.js';
-import type {
   AnyRecord,
   AuthenticatedWebSocketRequest,
   LLMProvider,
+  ProviderPermissionDecision,
+  ProviderRuntimeWriter,
 } from '@/shared/types.js';
 import { parseIncomingJsonObject } from '@/shared/utils.js';
 

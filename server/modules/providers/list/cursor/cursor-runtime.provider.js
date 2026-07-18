@@ -2,9 +2,6 @@ import crossSpawn from 'cross-spawn';
 
 import { appendImagesInputTag } from '@/shared/image-attachments.js';
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
-import { sessionsService } from '@/modules/providers/services/sessions.service.js';
-import { providerAuthService } from '@/modules/providers/services/provider-auth.service.js';
-import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
 import { createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell } from '@/shared/utils.js';
 
 // cross-spawn resolves .cmd shims/PATHEXT on Windows and delegates to
@@ -28,13 +25,13 @@ function isWorkspaceTrustPrompt(text = '') {
   return WORKSPACE_TRUST_PATTERNS.some((pattern) => pattern.test(text));
 }
 
-async function spawnCursor(command, options = {}, ws) {
+async function spawnCursor(command, options = {}, ws, context) {
   return new Promise(async (resolve, reject) => {
     const { sessionId, projectPath, cwd, toolsSettings, skipPermissions, model, sessionSummary, images } = options;
     // Callers pass the stable app session id; the CLI resumes with the
     // provider-native id recorded on the session row.
-    const providerSessionId = sessionsService.resolveProviderSessionId(sessionId);
-    const resolvedModel = await providerModelsService.resolveResumeModel('cursor', sessionId, model);
+    const providerSessionId = context.resolveProviderSessionId(sessionId);
+    const resolvedModel = await context.resolveResumeModel(sessionId, model);
     let capturedSessionId = providerSessionId; // Track the provider-native session id throughout the process
     let sessionCreatedSent = false; // Track if we've already sent session-created event
     let hasRetriedWithTrust = false;
@@ -202,7 +199,7 @@ async function spawnCursor(command, options = {}, ws) {
             case 'assistant':
               // Accumulate assistant message chunks
               if (response.message && response.message.content && response.message.content.length > 0) {
-                const normalized = sessionsService.normalizeMessage('cursor', response, capturedSessionId || sessionId || null);
+                const normalized = context.normalizeMessage(response, capturedSessionId || sessionId || null);
                 for (const msg of normalized) ws.send(msg);
               }
               break;
@@ -229,7 +226,7 @@ async function spawnCursor(command, options = {}, ws) {
           }
 
           // If not JSON, send as stream delta via adapter
-          const normalized = sessionsService.normalizeMessage('cursor', line, capturedSessionId || sessionId || null);
+          const normalized = context.normalizeMessage(line, capturedSessionId || sessionId || null);
           for (const msg of normalized) ws.send(msg);
         }
       };
@@ -309,7 +306,7 @@ async function spawnCursor(command, options = {}, ws) {
         activeCursorProcesses.delete(finalSessionId);
 
         // Check if Cursor CLI is installed for a clearer error message
-        const installed = await providerAuthService.isProviderInstalled('cursor');
+        const installed = await context.isProviderInstalled();
         const errorContent = !installed
           ? 'Cursor CLI is not installed. Please install it from https://cursor.com'
           : error.message;

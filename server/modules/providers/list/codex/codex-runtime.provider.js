@@ -7,7 +7,7 @@
  *
  * ## Usage
  *
- * - queryCodex(command, options, ws) - Execute a prompt with streaming via WebSocket
+ * - codexRuntime.run(command, options, writer, context) - Execute a streamed prompt
  * - abortCodexSession(sessionId) - Cancel an active session
  * - isCodexSessionActive(sessionId) - Check if a session is running
  * - getActiveCodexSessions() - List all active sessions
@@ -17,9 +17,6 @@ import { Codex } from '@openai/codex-sdk';
 
 import { buildCodexInputItems, normalizeImageDescriptors } from '@/shared/image-attachments.js';
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
-import { sessionsService } from '@/modules/providers/services/sessions.service.js';
-import { providerAuthService } from '@/modules/providers/services/provider-auth.service.js';
-import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
 import { createCompleteMessage, createNormalizedMessage } from '@/shared/utils.js';
 
 const activeCodexSessions = new Map();
@@ -222,7 +219,7 @@ function mapPermissionModeToCodexOptions(permissionMode) {
  * @param {object} options - Options including cwd, sessionId, model, permissionMode
  * @param {WebSocket|object} ws - WebSocket connection or response writer
  */
-export async function queryCodex(command, options = {}, ws) {
+export async function queryCodex(command, options = {}, ws, context) {
   const {
     sessionId,
     sessionSummary,
@@ -236,17 +233,13 @@ export async function queryCodex(command, options = {}, ws) {
 
   // Callers pass the stable app session id; the SDK resumes threads with the
   // provider-native id recorded on the session row.
-  const providerSessionId = sessionsService.resolveProviderSessionId(sessionId);
+  const providerSessionId = context.resolveProviderSessionId(sessionId);
 
-  const resolvedModel = await providerModelsService.resolveResumeModel(
-    'codex',
-    sessionId,
-    model,
-  );
+  const resolvedModel = await context.resolveResumeModel(sessionId, model);
 
   const workingDirectory = cwd || projectPath || process.cwd();
   const { sandboxMode, approvalPolicy } = mapPermissionModeToCodexOptions(permissionMode);
-  const catalog = (await providerModelsService.getProviderModels('codex')).models;
+  const catalog = await context.getProviderModels();
   const selectedModel = catalog.OPTIONS.find((option) => option.value === resolvedModel) || null;
   const allowedEfforts = selectedModel?.effort?.values?.map((value) => value.value) || [];
   const resolvedEffort = typeof effort === 'string' && effort !== 'default' && allowedEfforts.includes(effort)
@@ -346,7 +339,7 @@ export async function queryCodex(command, options = {}, ws) {
       const transformed = transformCodexEvent(event);
 
       // Normalize the transformed event into NormalizedMessage(s) via adapter
-      const normalizedMsgs = sessionsService.normalizeMessage('codex', transformed, capturedSessionId || sessionId || null);
+      const normalizedMsgs = context.normalizeMessage(transformed, capturedSessionId || sessionId || null);
       for (const msg of normalizedMsgs) {
         sendMessage(ws, msg);
       }
@@ -405,7 +398,7 @@ export async function queryCodex(command, options = {}, ws) {
       console.error('[Codex] Error:', error);
 
       // Check if Codex SDK is available for a clearer error message
-      const installed = await providerAuthService.isProviderInstalled('codex');
+      const installed = await context.isProviderInstalled();
       const errorContent = !installed
         ? 'Codex CLI is not configured. Please set up authentication first.'
         : error.message;

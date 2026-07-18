@@ -15,51 +15,30 @@ import type {
   ProviderSessionActiveModelChange,
   ProviderSkillCreateInput,
   ProviderSkillRemoveInput,
+  ProviderRuntimeContext,
+  ProviderRuntimePermissionGateway,
+  ProviderRuntimeWriter,
   UpsertProviderMcpServerInput,
 } from '@/shared/types.js';
 
 //----------------- PROVIDER CONTRACT INTERFACES ------------
 
 /**
- * Output gateway shared by WebSocket and SSE provider runs.
- *
- * Runtime adapters only depend on this structural surface, which keeps them
- * independent from the transport that ultimately delivers normalized events.
- */
-export type ProviderRuntimeWriter = {
-  send(data: unknown): void;
-  setSessionId?(sessionId: string): void;
-  userId?: string | number | null;
-  isWebSocketWriter?: boolean;
-  isSSEStreamWriter?: boolean;
-};
-
-export type ProviderPermissionDecision = {
-  allow: boolean;
-  updatedInput?: unknown;
-  message?: string;
-  rememberEntry?: unknown;
-};
-
-export type ProviderRuntimePermissionGateway = {
-  resolve(requestId: string, decision: ProviderPermissionDecision): void;
-  listPending(sessionId: string): unknown[];
-};
-
-/**
  * Live execution contract implemented by each provider SDK/CLI adapter.
  *
- * Runtime orchestration deliberately remains separate from `IProvider`: the
- * adapters consume registry-backed auth, model, and session services, while
- * the provider registry owns those lower-level facets.
+ * The provider registry owns this adapter as one facet of `IProvider`; runtime
+ * execution context is supplied by the application service at call time.
  */
 export interface IProviderRuntime {
-  run(command: string, options: AnyRecord, writer: ProviderRuntimeWriter): Promise<unknown>;
+  run(
+    command: string,
+    options: AnyRecord,
+    writer: ProviderRuntimeWriter,
+    context: ProviderRuntimeContext,
+  ): Promise<unknown>;
   abort(sessionId: string): boolean | Promise<boolean>;
   permissions?: ProviderRuntimePermissionGateway;
 }
-
-export type ProviderRunFunction = IProviderRuntime['run'];
 
 /**
  * Main provider contract for CLI and SDK integrations.
@@ -69,6 +48,7 @@ export type ProviderRunFunction = IProviderRuntime['run'];
  */
 export interface IProvider {
   readonly id: LLMProvider;
+  readonly runtime: IProviderRuntime;
   readonly models: IProviderModels;
   readonly mcp: IProviderMcp;
   readonly auth: IProviderAuth;

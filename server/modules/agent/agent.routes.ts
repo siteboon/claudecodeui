@@ -3,7 +3,7 @@ import path from 'path';
 
 import express from 'express';
 
-import type { ProviderRunFunction } from '@/shared/interfaces.js';
+import type { ProviderRunFunction } from '@/shared/types.js';
 
 import { normalizeProjectPath } from '../../shared/utils.js';
 
