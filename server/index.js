@@ -6,9 +6,6 @@ import path from 'path';
 import os from 'os';
 import http from 'http';
 
-// cross-spawn is a drop-in for child_process.spawn that resolves .cmd
-// shims/PATHEXT on Windows and delegates to the native spawn elsewhere.
-import spawn from 'cross-spawn';
 import express from 'express';
 import cors from 'cors';
 
@@ -32,6 +29,7 @@ import {
 import { taskmasterRoutes } from './modules/taskmaster/index.js';
 import { commandsRoutes } from './modules/commands/index.js';
 import { settingsRoutes } from './modules/settings/index.js';
+import { createSystemModule } from './modules/system/index.js';
 import { createAgentModule } from './modules/agent/index.js';
 import projectModuleRoutes from './modules/projects/projects.routes.js';
 import notificationRoutes from './modules/notifications/notifications.routes.js';
@@ -72,6 +70,11 @@ const RUNNING_VERSION = (() => {
         return null;
     }
 })();
+const systemRoutes = createSystemModule({
+    appRoot: APP_ROOT,
+    installMode,
+    isPlatform: IS_PLATFORM,
+});
 console.log('SERVER_PORT from env:', process.env.SERVER_PORT);
 
 const app = express();
@@ -170,6 +173,8 @@ app.use('/api/commands', authenticateToken, commandsRoutes);
 // Settings API Routes (protected)
 app.use('/api/settings', authenticateToken, settingsRoutes);
 
+app.use('/api/system', authenticateToken, systemRoutes);
+
 app.use('/api/notifications', authenticateToken, notificationRoutes);
 
 // User API Routes (protected)
@@ -214,81 +219,6 @@ app.use(express.static(path.join(APP_ROOT, 'dist'), {
 // API Routes (protected)
 // /api/config endpoint removed - no longer needed
 // Frontend now uses window.location for WebSocket URLs
-
-// System update endpoint
-app.post('/api/system/update', authenticateToken, async (req, res) => {
-    try {
-        // Get the project root directory (parent of server directory)
-        const projectRoot = APP_ROOT;
-
-        console.log('Starting system update from directory:', projectRoot);
-
-        // Platform deployments use their own update workflow from the project root.
-        const updateCommand = IS_PLATFORM
-        // In platform, husky and dev dependencies are not needed
-            ? 'npm run update:platform'
-            : installMode === 'git'
-                ? 'git checkout main && git pull && npm install'
-                : 'npm install -g @cloudcli-ai/cloudcli@latest';
-
-        const updateCwd = IS_PLATFORM || installMode === 'git'
-            ? projectRoot
-            : os.homedir();
-
-        const child = spawn('sh', ['-c', updateCommand], {
-            cwd: updateCwd,
-            env: process.env
-        });
-
-        let output = '';
-        let errorOutput = '';
-
-        child.stdout.on('data', (data) => {
-            const text = data.toString();
-            output += text;
-            console.log('Update output:', text);
-        });
-
-        child.stderr.on('data', (data) => {
-            const text = data.toString();
-            errorOutput += text;
-            console.error('Update error:', text);
-        });
-
-        child.on('close', (code) => {
-            if (code === 0) {
-                res.json({
-                    success: true,
-                    output: output || 'Update completed successfully',
-                    message: 'Update completed. Please restart the server to apply changes.'
-                });
-            } else {
-                res.status(500).json({
-                    success: false,
-                    error: 'Update command failed',
-                    output: output,
-                    errorOutput: errorOutput
-                });
-            }
-        });
-
-        child.on('error', (error) => {
-            console.error('Update process error:', error);
-            res.status(500).json({
-                success: false,
-                error: error.message
-            });
-        });
-
-    } catch (error) {
-        console.error('System update error:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
 
 // Chat image uploads moved to POST /api/assets/images (server/modules/assets),
 // which stores them in the global ~/.cloudcli/assets folder.
