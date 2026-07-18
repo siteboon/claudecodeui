@@ -74,7 +74,7 @@ export default function CodeEditorMediaPreview({
         // The content endpoint requires the auth header, so we fetch the bytes
         // ourselves and hand the media element a blob URL instead of a bare src.
         // Fetching a blob (rather than streaming) also lets <video>/<audio> seek.
-        const contentUrl = `/api/projects/${projectId}/files/content?path=${encodeURIComponent(file.path)}`;
+        const contentUrl = `/api/file-tree/projects/${projectId}/files/content?path=${encodeURIComponent(file.path)}`;
         const response = await authenticatedFetch(contentUrl, { signal: controller.signal });
 
         if (!response.ok) {

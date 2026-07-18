@@ -6,7 +6,7 @@
   "type": "module",
   "main": "dist-server/server/index.js",
   "bin": {
-    "cloudcli": "dist-server/server/cli.js"
+    "cloudcli": "dist-server/server/modules/cli/cli.js"
   },
   "files": [
     "electron/",

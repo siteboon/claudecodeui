@@ -39,7 +39,7 @@ function useChatImageSrc(image: ChatImage, projectId?: string | null): { src: st
     const candidateUrls = [
       `/api/assets/images/${encodeURIComponent(filename)}`,
       ...(projectId
-        ? [`/api/projects/${projectId}/files/content?path=${encodeURIComponent(imagePath)}`]
+        ? [`/api/file-tree/projects/${projectId}/files/content?path=${encodeURIComponent(imagePath)}`]
         : []),
     ];
 

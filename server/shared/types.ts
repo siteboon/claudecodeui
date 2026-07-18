@@ -1,4 +1,5 @@
 import type { IncomingMessage } from 'node:http';
+import type { Readable } from 'node:stream';
 
 //----------------- HTTP RESPONSE SHAPES ------------
 /**
@@ -819,4 +820,334 @@ export type WorktreeServices = {
   open(input: OpenWorktreeInput): Promise<WorktreeProjectView>;
   merge(input: MergeWorktreeInput): Promise<MergeWorktreeResult>;
   remove(input: RemoveWorktreeInput): Promise<RemoveWorktreeResult>;
+};
+
+// ---------------------------
+//----------------- FILE TREE MODULE CONTRACTS ------------
+/**
+ * One filesystem item returned by the File Tree API.
+ *
+ * The service populates metadata without following symlinks and recursively
+ * attaches `children` only while the requested depth permits traversal. The
+ * frontend uses the absolute `path` as the stable identifier for editor and
+ * file-operation requests.
+ */
+export type FileTreeNode = {
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  size: number;
+  modified: string | null;
+  permissions: string;
+  permissionsRwx: string;
+  isSymlink?: boolean;
+  children?: FileTreeNode[];
+};
+
+/**
+ * Minimal directory-entry shape required during File Tree traversal.
+ *
+ * Production adapts Node `Dirent` objects to this structural contract. Tests
+ * provide small handwritten entries and therefore never read real directories.
+ */
+export type FileTreeDirectoryEntry = {
+  name: string;
+  isDirectory(): boolean;
+};
+
+/**
+ * Minimal file-stat shape used for tree metadata and delete decisions.
+ *
+ * The numeric mode is converted to octal and rwx strings for the UI. `lstat`
+ * supplies symlink state while `stat` is used when deciding file versus folder
+ * deletion behavior.
+ */
+export type FileTreeStats = {
+  size: number;
+  mtime: Date;
+  mode: number;
+  isDirectory(): boolean;
+  isSymbolicLink(): boolean;
+};
+
+/**
+ * Complete filesystem capability injected into File Tree services.
+ *
+ * The production composition root delegates these operations to Node's fs
+ * APIs. Unit tests provide deterministic path-keyed fakes so service tests
+ * cannot inspect, write, rename, or delete developer files.
+ */
+export type FileTreeFileSystem = {
+  access(candidatePath: string): Promise<void>;
+  stat(candidatePath: string): Promise<FileTreeStats>;
+  lstat(candidatePath: string): Promise<FileTreeStats>;
+  readdir(directoryPath: string): Promise<FileTreeDirectoryEntry[]>;
+  realpath(candidatePath: string): Promise<string>;
+  readTextFile(filePath: string): Promise<string>;
+  writeTextFile(filePath: string, content: string): Promise<void>;
+  makeDirectory(directoryPath: string, recursive: boolean): Promise<void>;
+  rename(oldPath: string, newPath: string): Promise<void>;
+  removeDirectory(directoryPath: string): Promise<void>;
+  unlink(filePath: string): Promise<void>;
+  copyFile(sourcePath: string, destinationPath: string): Promise<void>;
+  createReadStream(filePath: string): Readable;
+};
+
+/**
+ * Project lookup boundary consumed by File Tree workflows.
+ *
+ * File Tree services resolve DB-assigned project ids through this contract and
+ * never import the Database module or its repositories directly.
+ */
+export type FileTreeProjectGateway = {
+  getProjectPathById(projectId: string): string | null | Promise<string | null>;
+};
+
+/**
+ * Workspace validation boundary used by filesystem browsing and folder creation.
+ *
+ * The injected validator enforces the configured workspace root and resolves
+ * symlinks before the File Tree service exposes or mutates paths.
+ */
+export type FileTreeWorkspaceGateway = {
+  rootPath: string;
+  validatePath(candidatePath: string): Promise<WorkspacePathValidationResult>;
+};
+
+/**
+ * Uploaded-file record passed from the Multer transport adapter into the File
+ * Tree service.
+ *
+ * Transport-specific field names are normalized so upload workflows do not
+ * depend on Express or Multer types.
+ */
+export type FileTreeUploadedFile = {
+  originalName: string;
+  temporaryPath: string;
+  size: number;
+  mimeType: string;
+};
+
+/**
+ * Logger boundary for expected File Tree diagnostics.
+ *
+ * Production delegates to the server console. Unit tests use no-op or captured
+ * loggers and never patch the global console singleton.
+ */
+export type FileTreeLogger = {
+  error(message: string, error?: unknown): void;
+};
+
+/**
+ * Required production dependencies for the File Tree application service.
+ *
+ * Filesystem, project lookup, workspace policy, MIME detection, concurrency,
+ * and logging are all explicit so service construction has no hidden process,
+ * repository, or machine-wide defaults.
+ */
+export type FileTreeServiceDependencies = {
+  fileSystem: FileTreeFileSystem;
+  projects: FileTreeProjectGateway;
+  workspace: FileTreeWorkspaceGateway;
+  resolveMimeType(filePath: string): string;
+  fileSystemConcurrency: number;
+  logger: FileTreeLogger;
+};
+
+/**
+ * Complete File Tree application-service surface consumed by HTTP routes.
+ *
+ * Routes parse transport inputs and call these methods; they never resolve
+ * project repositories, validate filesystem ownership, or perform filesystem
+ * mutations themselves.
+ */
+export type FileTreeServices = {
+  browseWorkspace(inputPath: string | null): Promise<{
+    path: string;
+    suggestions: Array<{ path: string; name: string; type: 'directory' }>;
+  }>;
+  createWorkspaceFolder(folderPath: string): Promise<{ success: true; path: string }>;
+  readTextFile(projectId: string, filePath: string): Promise<{ content: string; path: string }>;
+  openFile(projectId: string, filePath: string): Promise<{ contentType: string; stream: Readable }>;
+  saveTextFile(projectId: string, filePath: string, content: string): Promise<{
+    success: true;
+    path: string;
+    message: string;
+  }>;
+  listProjectFiles(projectId: string): Promise<FileTreeNode[]>;
+  createEntry(input: {
+    projectId: string;
+    parentPath: string;
+    type: 'file' | 'directory';
+    name: string;
+  }): Promise<{ success: true; path: string; name: string; type: 'file' | 'directory'; message: string }>;
+  renameEntry(input: { projectId: string; oldPath: string; newName: string }): Promise<{
+    success: true;
+    oldPath: string;
+    newPath: string;
+    newName: string;
+    message: string;
+  }>;
+  deleteEntry(input: { projectId: string; targetPath: string }): Promise<{
+    success: true;
+    path: string;
+    type: 'file' | 'directory';
+    message: string;
+  }>;
+  storeUploadedFiles(input: {
+    projectId: string;
+    targetPath: string;
+    relativePaths: string[];
+    requestedFileCount: number;
+    files: FileTreeUploadedFile[];
+  }): Promise<{
+    success: true;
+    files: Array<{ name: string; path: string; size: number; mimeType: string }>;
+    uploadedCount: number;
+    requestedFileCount: number;
+    targetPath: string;
+    message: string;
+  }>;
+};
+
+// ---------------------------
+//----------------- VOICE MODULE CONTRACTS ------------
+/**
+ * Per-request voice settings parsed from authenticated HTTP headers.
+ *
+ * The Voice routes create this value from the optional `x-voice-*` headers and
+ * pass it to the Voice service. Empty values mean "use the server-configured
+ * default"; the backend base URL is intentionally absent because clients must
+ * never control the server's outbound destination.
+ */
+export type VoiceRequestOverrides = {
+  apiKey?: string;
+  sttModel?: string;
+  ttsModel?: string;
+  ttsVoice?: string;
+  ttsFormat?: string;
+};
+
+/**
+ * Uploaded audio accepted by the Voice transcription service.
+ *
+ * Routes translate Multer's transport-specific file object into this minimal
+ * shape so the service does not depend on Express or Multer types.
+ */
+export type VoiceAudioUpload = {
+  bytes: Buffer;
+  mimeType: string;
+  fileName: string;
+};
+
+/**
+ * Successful speech payload returned by the Voice service.
+ *
+ * The route copies `contentType` to the client response and pipes `body`
+ * without buffering the complete synthesized audio in application memory.
+ */
+export type VoiceSpeechPayload = {
+  contentType: string;
+  body: ReadableStream<Uint8Array> | null;
+};
+
+/**
+ * Explicit service result used by Voice routes instead of transport-aware
+ * exceptions.
+ *
+ * Services return `ok: false` with the exact client status/message for expected
+ * backend, validation, and timeout failures. Routes only translate the result
+ * into HTTP output, while unexpected programming errors still reject normally.
+ */
+export type VoiceServiceResult<TValue> =
+  | { ok: true; value: TValue }
+  | { ok: false; status: number; error: string };
+
+/**
+ * Complete application-service surface consumed by the Voice HTTP router.
+ *
+ * The composition root supplies a concrete implementation with environment
+ * configuration and an injected outbound HTTP adapter. Unit tests use the same
+ * contract with handwritten fetch fakes and never patch global state.
+ */
+export type VoiceService = {
+  getHealth(): { configured: boolean };
+  transcribe(input: {
+    audio: VoiceAudioUpload;
+    overrides: VoiceRequestOverrides;
+  }): Promise<VoiceServiceResult<{ text: string }>>;
+  synthesizeSpeech(input: {
+    text: string;
+    overrides: VoiceRequestOverrides;
+  }): Promise<VoiceServiceResult<VoiceSpeechPayload>>;
+};
+
+// ---------------------------
+//----------------- CLI MODULE CONTRACTS ------------
+/**
+ * Output boundary used by the CLI and Sandbox services.
+ *
+ * Production wiring delegates to the real console. Unit tests collect these
+ * calls in arrays, which keeps command assertions deterministic and avoids
+ * monkey-patching the global console singleton.
+ */
+export type CliOutput = {
+  log(message?: string): void;
+  error(message?: string): void;
+};
+
+/**
+ * Minimal synchronous filesystem surface shared by CLI status reporting and
+ * sandbox workspace validation.
+ *
+ * The production composition root adapts Node's filesystem module. Tests supply
+ * path-keyed fakes, so service tests never inspect or modify the real machine.
+ */
+export type CliFileSystem = {
+  readTextFile(filePath: string): string;
+  pathExists(filePath: string): boolean;
+  getFileStats(filePath: string): { size: number; modifiedAt: Date };
+};
+
+/**
+ * Mutable environment view owned by the CLI application.
+ *
+ * CLI options update this object before the server starts. Production passes
+ * `process.env`; tests pass a plain record to verify option precedence without
+ * changing process-wide environment state.
+ */
+export type CliEnvironment = Record<string, string | undefined>;
+
+/**
+ * Package metadata displayed by CLI help, status, version, and update commands.
+ *
+ * The composition root reads this once from the application package file and
+ * injects only the fields the service needs.
+ */
+export type CliPackageMetadata = {
+  version: string;
+  homepage?: string;
+  bugsUrl?: string;
+};
+
+/**
+ * Executable CLI application returned by the CLI composition root.
+ *
+ * The thin executable entrypoint passes `process.argv` arguments to `run` and
+ * copies the returned code to `process.exitCode`. Tests invoke the same method
+ * directly with isolated dependencies.
+ */
+export type CliApplication = {
+  run(argumentsList: string[]): Promise<number>;
+};
+
+/**
+ * Sandbox command service consumed by the top-level CLI command dispatcher.
+ *
+ * Keeping this behind one required dependency lets CLI tests use a tiny fake,
+ * while focused Sandbox tests exercise subprocess and filesystem behavior with
+ * their own handwritten adapters.
+ */
+export type SandboxCommandService = {
+  execute(argumentsList: string[]): Promise<number>;
 };

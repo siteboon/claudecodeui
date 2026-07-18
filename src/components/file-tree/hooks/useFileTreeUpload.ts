@@ -113,7 +113,7 @@ const uploadFormDataWithProgress = (
   new Promise<UploadResponse>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
 
-    xhr.open('POST', `/api/projects/${encodeURIComponent(projectId)}/files/upload`);
+    xhr.open('POST', `/api/file-tree/projects/${encodeURIComponent(projectId)}/files/upload`);
 
     const token = localStorage.getItem('auth-token');
     if (!IS_PLATFORM && token) {

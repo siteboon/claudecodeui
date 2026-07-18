@@ -154,38 +154,38 @@ export const api = {
       method: 'POST',
     }),
   readFile: (projectId, filePath) =>
-    authenticatedFetch(`/api/projects/${projectId}/file?filePath=${encodeURIComponent(filePath)}`),
+    authenticatedFetch(`/api/file-tree/projects/${projectId}/file?filePath=${encodeURIComponent(filePath)}`),
   readFileBlob: (projectId, filePath) =>
-    authenticatedFetch(`/api/projects/${projectId}/files/content?path=${encodeURIComponent(filePath)}`),
+    authenticatedFetch(`/api/file-tree/projects/${projectId}/files/content?path=${encodeURIComponent(filePath)}`),
   saveFile: (projectId, filePath, content) =>
-    authenticatedFetch(`/api/projects/${projectId}/file`, {
+    authenticatedFetch(`/api/file-tree/projects/${projectId}/file`, {
       method: 'PUT',
       body: JSON.stringify({ filePath, content }),
     }),
   getFiles: (projectId, options = {}) =>
-    authenticatedFetch(`/api/projects/${projectId}/files`, options),
+    authenticatedFetch(`/api/file-tree/projects/${projectId}/files`, options),
 
   // File operations
   createFile: (projectId, { path, type, name }) =>
-    authenticatedFetch(`/api/projects/${projectId}/files/create`, {
+    authenticatedFetch(`/api/file-tree/projects/${projectId}/files/create`, {
       method: 'POST',
       body: JSON.stringify({ path, type, name }),
     }),
 
   renameFile: (projectId, { oldPath, newName }) =>
-    authenticatedFetch(`/api/projects/${projectId}/files/rename`, {
+    authenticatedFetch(`/api/file-tree/projects/${projectId}/files/rename`, {
       method: 'PUT',
       body: JSON.stringify({ oldPath, newName }),
     }),
 
   deleteFile: (projectId, { path, type }) =>
-    authenticatedFetch(`/api/projects/${projectId}/files`, {
+    authenticatedFetch(`/api/file-tree/projects/${projectId}/files`, {
       method: 'DELETE',
       body: JSON.stringify({ path, type }),
     }),
 
   uploadFiles: (projectId, formData) =>
-    authenticatedFetch(`/api/projects/${projectId}/files/upload`, {
+    authenticatedFetch(`/api/file-tree/projects/${projectId}/files/upload`, {
       method: 'POST',
       body: formData,
       headers: {}, // Let browser set Content-Type for FormData
@@ -237,11 +237,11 @@ export const api = {
     const params = new URLSearchParams();
     if (dirPath) params.append('path', dirPath);
 
-    return authenticatedFetch(`/api/browse-filesystem?${params}`);
+    return authenticatedFetch(`/api/file-tree/browse-filesystem?${params}`);
   },
 
   createFolder: (folderPath) =>
-    authenticatedFetch('/api/create-folder', {
+    authenticatedFetch('/api/file-tree/create-folder', {
       method: 'POST',
       body: JSON.stringify({ path: folderPath }),
     }),
