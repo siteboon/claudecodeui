@@ -29,8 +29,8 @@ export class ClaudeProviderAuth implements IProviderAuth {
   private checkInstalled(): boolean {
     const cliPath = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH);
     try {
-      this.spawnSync(cliPath, ['--version'], { stdio: 'ignore', timeout: 5000 });
-      return true;
+      const result = this.spawnSync(cliPath, ['--version'], { stdio: 'ignore', timeout: 5000 });
+      return !result.error && result.status === 0;
     } catch {
       return false;
     }

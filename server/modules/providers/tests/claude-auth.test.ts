@@ -7,13 +7,35 @@ import { ClaudeProviderAuth } from '@/modules/providers/list/claude/claude-auth.
 
 const createSpawnSync = (
   authResult: Record<string, unknown>,
+  versionResult: Record<string, unknown> = { status: 0 },
 ): typeof spawn.sync => ((_: string, args: readonly string[]) => {
   if (args[0] === '--version') {
-    return { status: 0 };
+    return versionResult;
   }
 
   return authResult;
 }) as unknown as typeof spawn.sync;
+
+test('Claude installation check rejects a missing executable', async () => {
+  const auth = new ClaudeProviderAuth(createSpawnSync({}, {
+    status: null,
+    error: Object.assign(new Error('not found'), { code: 'ENOENT' }),
+  }));
+
+  const status = await auth.getStatus();
+
+  assert.equal(status.installed, false);
+  assert.match(status.error ?? '', /not installed/i);
+});
+
+test('Claude installation check rejects a nonzero version exit', async () => {
+  const auth = new ClaudeProviderAuth(createSpawnSync({}, { status: 1 }));
+
+  const status = await auth.getStatus();
+
+  assert.equal(status.installed, false);
+  assert.match(status.error ?? '', /not installed/i);
+});
 
 test('Claude auth status recognizes a macOS Keychain-backed login', async () => {
   const auth = new ClaudeProviderAuth(createSpawnSync({
