@@ -50,3 +50,15 @@ test('provider session id is unavailable until the provider assigns one', { conc
     );
   });
 });
+
+test('provider session id reports a missing app session', { concurrency: false }, async () => {
+  await withIsolatedDatabase(() => {
+    assert.throws(
+      () => sessionsService.getProviderSessionId('missing-session'),
+      (error: unknown) => {
+        const typedError = error as { code?: string; statusCode?: number };
+        return typedError.code === 'SESSION_NOT_FOUND' && typedError.statusCode === 404;
+      },
+    );
+  });
+});

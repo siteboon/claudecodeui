@@ -98,6 +98,7 @@ export default function SidebarSessionItem({
   const [isMobileOptionsOpen, setIsMobileOptionsOpen] = useState(false);
   const [copyState, setCopyState] = useState<CopyState>('idle');
   const [providerSessionId, setProviderSessionId] = useState<string | null>(null);
+  const providerIdRequestRef = useRef(0);
   const showAttentionIndicator = needsAttention && !isSelected;
   const showRecentIndicator = !showAttentionIndicator && !isProcessing && sessionView.isActive;
   const providerLabel = PROVIDER_LABELS[session.__provider];
@@ -136,6 +137,7 @@ export default function SidebarSessionItem({
   };
 
   const loadProviderSessionId = async () => {
+    const requestId = ++providerIdRequestRef.current;
     setCopyState('loading');
     try {
       const response = await api.providerSessionId(session.id);
@@ -145,15 +147,18 @@ export default function SidebarSessionItem({
         throw new Error('Provider session ID is unavailable');
       }
 
+      if (requestId !== providerIdRequestRef.current) return;
       setProviderSessionId(loadedSessionId);
       setCopyState('idle');
     } catch {
+      if (requestId !== providerIdRequestRef.current) return;
       setProviderSessionId(null);
       setCopyState('error');
     }
   };
 
   const resetCopyState = () => {
+    providerIdRequestRef.current += 1;
     setCopyState('idle');
     setProviderSessionId(null);
   };
@@ -184,7 +189,7 @@ export default function SidebarSessionItem({
   };
 
   const handleCopyAction = () => {
-    if (copyState === 'error') {
+    if (copyState === 'error' && !providerSessionId) {
       void loadProviderSessionId();
     } else {
       void copyProviderSessionId();
@@ -198,7 +203,9 @@ export default function SidebarSessionItem({
     : copyState === 'copied'
       ? `${providerLabel} session ID copied`
       : copyState === 'error'
-        ? `${providerLabel} session ID unavailable`
+        ? providerSessionId
+          ? `Couldn't copy ${providerLabel} session ID`
+          : `${providerLabel} session ID unavailable`
         : `Copy ${providerLabel} session ID`;
 
   return (
