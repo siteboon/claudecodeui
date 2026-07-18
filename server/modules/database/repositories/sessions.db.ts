@@ -14,6 +14,11 @@ type SessionRow = {
   updated_at: string;
 };
 
+type RecentSessionsPage = {
+  sessions: SessionRow[];
+  total: number;
+};
+
 const SESSION_ROW_COLUMNS =
   'session_id, provider, provider_session_id, project_path, jsonl_path, custom_name, isArchived, created_at, updated_at';
 
@@ -305,6 +310,46 @@ export const sessionsDb = {
       .all() as SessionRow[];
 
     return normalizeSessionRows(rows);
+  },
+
+  /**
+   * Returns one globally ordered page of visible conversations.
+   *
+   * Pagination happens after archived sessions and sessions belonging to an
+   * archived project have been excluded. This keeps the sidebar feed complete
+   * and correctly ordered across projects instead of flattening only the
+   * per-project slices already loaded by the client.
+   */
+  getRecentSessionsPage(limit: number, offset: number): RecentSessionsPage {
+    const db = getConnection();
+    const visibilityClause = `
+      sessions.isArchived = 0
+      AND (projects.isArchived IS NULL OR projects.isArchived = 0)
+    `;
+    const rows = db
+      .prepare(
+        `SELECT sessions.*
+         FROM sessions
+         LEFT JOIN projects ON projects.project_path = sessions.project_path
+         WHERE ${visibilityClause}
+         ORDER BY julianday(COALESCE(sessions.updated_at, sessions.created_at)) DESC,
+                  sessions.session_id DESC
+         LIMIT ? OFFSET ?`
+      )
+      .all(limit, offset) as SessionRow[];
+    const countRow = db
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM sessions
+         LEFT JOIN projects ON projects.project_path = sessions.project_path
+         WHERE ${visibilityClause}`
+      )
+      .get() as { count: number } | undefined;
+
+    return {
+      sessions: normalizeSessionRows(rows),
+      total: Number(countRow?.count ?? 0),
+    };
   },
 
   /**
