@@ -9,9 +9,17 @@ type MainContentTitleProps = {
   selectedProject: Project;
   selectedSession: ProjectSession | null;
   shouldShowTasksTab: boolean;
+  shouldLabelBrowserTabAsCobrowse: boolean;
 };
 
-function getTabTitle(activeTab: AppTab, shouldShowTasksTab: boolean, t: (key: string) => string, pluginDisplayName?: string) {
+function getTabTitle(
+  activeTab: AppTab,
+  shouldShowTasksTab: boolean,
+  shouldLabelBrowserTabAsCobrowse: boolean,
+  t: (key: string) => string,
+  coBrowseLabel: string,
+  pluginDisplayName?: string,
+) {
   if (activeTab.startsWith('plugin:') && pluginDisplayName) {
     return pluginDisplayName;
   }
@@ -29,6 +37,9 @@ function getTabTitle(activeTab: AppTab, shouldShowTasksTab: boolean, t: (key: st
   }
 
   if (activeTab === 'browser') {
+    if (shouldLabelBrowserTabAsCobrowse) {
+      return coBrowseLabel;
+    }
     return t('tabs.browser');
   }
 
@@ -48,9 +59,11 @@ export default function MainContentTitle({
   selectedProject,
   selectedSession,
   shouldShowTasksTab,
+  shouldLabelBrowserTabAsCobrowse,
 }: MainContentTitleProps) {
   const { t } = useTranslation();
   const { plugins } = usePlugins();
+  const coBrowseLabel = t('tabs.coBrowse', { defaultValue: 'Co-browse' });
 
   const pluginDisplayName = activeTab.startsWith('plugin:')
     ? plugins.find((p) => p.name === activeTab.replace('plugin:', ''))?.displayName
@@ -73,7 +86,15 @@ export default function MainContentTitle({
             <h2 title={getSessionTitle(selectedSession)} className="truncate text-sm font-semibold leading-tight text-foreground">
               {getSessionTitle(selectedSession)}
             </h2>
-            <div className="truncate text-[11px] leading-tight text-muted-foreground">{selectedProject.displayName}</div>
+            <div className="flex min-w-0 items-center gap-2 text-[11px] leading-tight text-muted-foreground">
+              <span className="min-w-0 truncate">{selectedProject.displayName}</span>
+              <span
+                className="hidden min-w-0 max-w-[45%] flex-shrink truncate border-l border-border/60 pl-2 font-mono text-[10px] sm:block"
+                title={selectedSession.id}
+              >
+                {selectedSession.id}
+              </span>
+            </div>
           </div>
         ) : showChatNewSession ? (
           <div className="min-w-0">
@@ -83,7 +104,7 @@ export default function MainContentTitle({
         ) : (
           <div className="min-w-0">
             <h2 className="text-sm font-semibold leading-tight text-foreground">
-              {getTabTitle(activeTab, shouldShowTasksTab, t, pluginDisplayName)}
+              {getTabTitle(activeTab, shouldShowTasksTab, shouldLabelBrowserTabAsCobrowse, t, coBrowseLabel, pluginDisplayName)}
             </h2>
             <div className="truncate text-[11px] leading-tight text-muted-foreground">{selectedProject.displayName}</div>
           </div>

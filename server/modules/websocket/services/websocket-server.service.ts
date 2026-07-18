@@ -1,8 +1,9 @@
 import type { Server as HttpServer } from 'node:http';
 
-import { WebSocketServer, type VerifyClientCallbackSync } from 'ws';
+import { WebSocket, WebSocketServer, type VerifyClientCallbackSync } from 'ws';
 
 import { handleChatConnection } from '@/modules/websocket/services/chat-websocket.service.js';
+import { VIEWER_COOKIE_NAME } from '@/modules/browser-use/index.js';
 import { verifyWebSocketClient } from '@/modules/websocket/services/websocket-auth.service.js';
 import { handlePluginWsProxy } from '@/modules/websocket/services/plugin-websocket-proxy.service.js';
 import { handleShellConnection } from '@/modules/websocket/services/shell-websocket.service.js';
@@ -14,7 +15,20 @@ type WebSocketServerDependencies = {
   chat: Parameters<typeof handleChatConnection>[2];
   shell: Parameters<typeof handleShellConnection>[1];
   getPluginPort: Parameters<typeof handlePluginWsProxy>[2];
+  browserUseViewer?: (ws: WebSocket, pathname: string) => void;
+  authenticateBrowserUseViewer?: (pathname: string, token: string | null) => boolean;
 };
+
+function readCookieValue(header: unknown, name: string): string | null {
+  if (!header) return null;
+  const prefix = `${name}=`;
+  const cookie = String(header).split(';').map((part) => part.trim()).find((part) => part.startsWith(prefix));
+  return cookie ? decodeURIComponent(cookie.slice(prefix.length)) : null;
+}
+
+function getBrowserUseViewerToken(url: URL, headers: Record<string, unknown>): string | null {
+  return url.searchParams.get('viewerToken') || readCookieValue(headers.cookie, VIEWER_COOKIE_NAME);
+}
 
 /**
  * Creates and wires the server-wide websocket gateway used for chat, shell, and
@@ -28,7 +42,17 @@ export function createWebSocketServer(
     server,
     verifyClient: ((
       info: Parameters<VerifyClientCallbackSync<AuthenticatedWebSocketRequest>>[0]
-    ) => verifyWebSocketClient(info, dependencies.verifyClient)),
+    ) => {
+      const requestUrl = new URL(info.req.url ?? '/', 'http://localhost');
+      if (
+        requestUrl.pathname.startsWith('/api/browser-use/sessions/')
+        && requestUrl.pathname.endsWith('/viewer/websockify')
+      ) {
+        const token = getBrowserUseViewerToken(requestUrl, info.req.headers as Record<string, unknown>);
+        return Boolean(dependencies.authenticateBrowserUseViewer?.(requestUrl.pathname, token));
+      }
+      return verifyWebSocketClient(info, dependencies.verifyClient);
+    }),
   });
 
   wss.on('connection', (ws, request) => {
@@ -71,6 +95,11 @@ export function createWebSocketServer(
 
     if (pathname.startsWith('/plugin-ws/')) {
       handlePluginWsProxy(ws, pathname, dependencies.getPluginPort);
+      return;
+    }
+
+    if (pathname.startsWith('/api/browser-use/sessions/') && pathname.endsWith('/viewer/websockify')) {
+      dependencies.browserUseViewer?.(ws, pathname);
       return;
     }
 

@@ -24,6 +24,7 @@
     "git": "Source Control",
     "tasks": "Tasks",
     "browser": "Browser",
+    "coBrowse": "Co-browse",
     "computer": "Computer"
   },
   "status": {
