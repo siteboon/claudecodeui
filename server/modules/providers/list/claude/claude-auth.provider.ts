@@ -100,6 +100,29 @@ export class ClaudeProviderAuth implements IProviderAuth {
       return { authenticated: true, email: 'Configured via settings.json', method: 'api_key' };
     }
 
+    // Fall back to a plaintext credentials file if one exists (older Claude
+    // Code versions, or platforms where OAuth creds aren't OS-keychain backed).
+    const fileCredentials = await this.readCredentialsFile();
+    if (fileCredentials) {
+      return fileCredentials;
+    }
+
+    // Claude Code stores OAuth credentials in a macOS Keychain entry whose
+    // service name is derived from CLAUDE_CONFIG_DIR (a different, hashed
+    // service name per profile) rather than a file we can read directly.
+    // That derivation isn't a stable contract we should reimplement, so defer
+    // to the CLI's own `claude auth status`, which already resolves it
+    // correctly (file, keychain, or otherwise) for whichever CLAUDE_CONFIG_DIR
+    // is active in this process's environment.
+    return this.checkCliAuthStatus(missingCredentialsError);
+  }
+
+  /**
+   * Reads the plaintext OAuth credentials file, when Claude Code uses one.
+   * Returns null (rather than an "unauthenticated" result) when the file is
+   * simply absent, so the caller can fall back to `claude auth status`.
+   */
+  private async readCredentialsFile(): Promise<ClaudeCredentialsStatus | null> {
     try {
       const credPath = path.join(os.homedir(), '.claude', '.credentials.json');
       const content = await readFile(credPath, 'utf8');
@@ -107,46 +130,91 @@ export class ClaudeProviderAuth implements IProviderAuth {
       const oauth = readObjectRecord(creds.claudeAiOauth);
       const accessToken = readOptionalString(oauth?.accessToken);
 
-      if (accessToken) {
-        const expiresAt = typeof oauth?.expiresAt === 'number' ? oauth.expiresAt : undefined;
-        const email = readOptionalString(creds.email) ?? readOptionalString(creds.user) ?? null;
-        if (!expiresAt || Date.now() < expiresAt) {
-          return {
-            authenticated: true,
-            email,
-            method: 'credentials_file',
-          };
-        }
+      if (!accessToken) {
+        return null;
+      }
 
-        return {
-          authenticated: false,
-          email: null,
-          method: null,
-          error: 'Claude login has expired. Run claude /login again.',
-        };
+      const expiresAt = typeof oauth?.expiresAt === 'number' ? oauth.expiresAt : undefined;
+      const email = readOptionalString(creds.email) ?? readOptionalString(creds.user) ?? null;
+      if (!expiresAt || Date.now() < expiresAt) {
+        return { authenticated: true, email, method: 'credentials_file' };
       }
 
       return {
         authenticated: false,
         email: null,
         method: null,
-        error: missingCredentialsError,
+        error: 'Claude login has expired. Run claude /login again.',
       };
     } catch (error) {
-      let errorMessage = 'Unable to read Claude credentials. Run claude /login again.';
-
       if (hasErrorCode(error, 'ENOENT')) {
-        errorMessage = missingCredentialsError;
-      } else if (error instanceof SyntaxError) {
-        errorMessage = 'Claude credentials are unreadable. Run claude /login again.';
+        return null;
       }
 
       return {
         authenticated: false,
         email: null,
         method: null,
-        error: errorMessage,
+        error: error instanceof SyntaxError
+          ? 'Claude credentials are unreadable. Run claude /login again.'
+          : 'Unable to read Claude credentials. Run claude /login again.',
       };
     }
+  }
+
+  /**
+   * Resolves OAuth login state via `claude auth status --json`, inheriting
+   * this process's environment (including CLAUDE_CONFIG_DIR) so it reports
+   * the profile actually in use rather than always the default one.
+   */
+  private async checkCliAuthStatus(missingCredentialsError: string): Promise<ClaudeCredentialsStatus> {
+    const cliPath = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH);
+
+    let result;
+    try {
+      result = spawn.sync(cliPath, ['auth', 'status', '--json'], {
+        timeout: 10000,
+        encoding: 'utf8',
+        env: process.env,
+      });
+    } catch {
+      return {
+        authenticated: false,
+        email: null,
+        method: null,
+        error: 'Unable to check Claude authentication status. Run claude /login again.',
+      };
+    }
+
+    const stdout = typeof result.stdout === 'string' ? result.stdout.trim() : '';
+    if (!stdout) {
+      return { authenticated: false, email: null, method: null, error: missingCredentialsError };
+    }
+
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = readObjectRecord(JSON.parse(stdout)) ?? {};
+    } catch {
+      return {
+        authenticated: false,
+        email: null,
+        method: null,
+        error: 'Unable to parse Claude authentication status. Run claude /login again.',
+      };
+    }
+
+    if (parsed.loggedIn !== true) {
+      return { authenticated: false, email: null, method: null, error: missingCredentialsError };
+    }
+
+    const orgName = readOptionalString(parsed.orgName);
+    const email = readOptionalString(parsed.email) ?? (orgName ? `Authenticated (${orgName})` : null);
+    const authMethod = readOptionalString(parsed.authMethod);
+
+    return {
+      authenticated: true,
+      email,
+      method: authMethod === 'claude.ai' ? 'oauth' : (readOptionalString(parsed.apiProvider) ?? 'api_key'),
+    };
   }
 }
