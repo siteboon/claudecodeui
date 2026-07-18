@@ -1,4 +1,6 @@
 import { readFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import type { IProviderModels } from '@/shared/interfaces.js';
@@ -13,6 +15,105 @@ import {
   buildDefaultProviderCurrentActiveModel,
   writeProviderSessionActiveModelChange,
 } from '@/shared/utils.js';
+
+// cc-switch integration is opt-in via env so installs without cc-switch keep the
+// static fallback list. CLAUDE_CC_SWITCH_DB_PATH overrides the default DB location.
+const isCcSwitchModelsEnabled = (): boolean => {
+  const value = process.env.CLAUDE_CC_SWITCH_MODELS_ENABLED;
+  return value === 'true' || value === '1';
+};
+
+const getCcSwitchDbPath = (): string => process.env.CLAUDE_CC_SWITCH_DB_PATH?.trim()
+  || path.join(os.homedir(), '.cc-switch', 'cc-switch.db');
+
+// claude CLI accepts tier aliases, not full model IDs. cc-switch's proxy rewrites
+// each alias to a real model ID via the ANTHROPIC_DEFAULT_<TIER>_MODEL env vars on
+// the current provider. The OPTIONS value must stay a CLI alias so the SDK passes
+// it through unchanged; the label surfaces the real model name from cc-switch.
+const CLAUDE_MODEL_TIERS = [
+  { alias: 'opus', envKey: 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME', label: 'Opus' },
+  { alias: 'sonnet', envKey: 'ANTHROPIC_DEFAULT_SONNET_MODEL_NAME', label: 'Sonnet' },
+  { alias: 'haiku', envKey: 'ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME', label: 'Haiku' },
+  { alias: 'fable', envKey: 'ANTHROPIC_DEFAULT_FABLE_MODEL_NAME', label: 'Fable' },
+] as const;
+
+type CcSwitchProviderSettings = {
+  env?: Record<string, string>;
+};
+
+type CcSwitchProviderRow = {
+  settings_config: string;
+};
+
+const readClaudeAliasMapFromCcSwitch = async (
+  dbPath = getCcSwitchDbPath(),
+): Promise<Record<string, string> | null> => {
+  const { default: Database } = await import('better-sqlite3');
+  const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+
+  try {
+    const row = db.prepare(
+      "SELECT settings_config FROM providers WHERE app_type = 'claude' AND is_current = 1 LIMIT 1",
+    ).get() as CcSwitchProviderRow | undefined;
+
+    if (!row?.settings_config) {
+      return null;
+    }
+
+    const settings = JSON.parse(row.settings_config) as CcSwitchProviderSettings;
+    return settings.env ?? {};
+  } finally {
+    db.close();
+  }
+};
+
+const buildClaudeModelsFromCcSwitch = (
+  env: Record<string, string>,
+): ProviderModelsDefinition | null => {
+  const options: ProviderModelOption[] = CLAUDE_MODEL_TIERS
+    .map((tier): ProviderModelOption | null => {
+      const modelName = env[tier.envKey]?.trim();
+      if (!modelName) {
+        return null;
+      }
+
+      return {
+        value: tier.alias,
+        label: `${tier.label} · ${modelName}`,
+      };
+    })
+    .filter((option): option is ProviderModelOption => option !== null);
+
+  if (options.length === 0) {
+    return null;
+  }
+
+  // "default" is the CLI's recommended alias — it follows the provider's own
+  // model preference rather than pinning a tier. Keep it first.
+  const defaultOption: ProviderModelOption = {
+    value: 'default',
+    label: 'Default (recommended)',
+  };
+
+  return {
+    OPTIONS: [defaultOption, ...options],
+    DEFAULT: 'default',
+  };
+};
+
+const resolveClaudeModelsFromCcSwitch = async (): Promise<ProviderModelsDefinition | null> => {
+  if (!isCcSwitchModelsEnabled()) {
+    return null;
+  }
+
+  try {
+    const env = await readClaudeAliasMapFromCcSwitch();
+    return env ? buildClaudeModelsFromCcSwitch(env) : null;
+  } catch {
+    // DB missing, locked, malformed, or better-sqlite3 unavailable — fall back.
+    return null;
+  }
+};
 
 export const CLAUDE_FALLBACK_MODELS: ProviderModelsDefinition = {
   OPTIONS: [
@@ -242,7 +343,12 @@ export class ClaudeProviderModels implements IProviderModels {
     // const supportedModels = await queryInstance.supportedModels();
     // queryInstance.close();
     // return buildClaudeModelsDefinition(supportedModels);
-    return CLAUDE_FALLBACK_MODELS;
+
+    // Source the model list from cc-switch's current claude provider when available:
+    // it carries the alias→real-model mapping the proxy actually honors. Fall back to
+    // the static list when cc-switch is absent or unconfigured.
+    const ccSwitchModels = await resolveClaudeModelsFromCcSwitch();
+    return ccSwitchModels ?? CLAUDE_FALLBACK_MODELS;
   }
 
   async getCurrentActiveModel(sessionId?: string): Promise<ProviderCurrentActiveModel> {
