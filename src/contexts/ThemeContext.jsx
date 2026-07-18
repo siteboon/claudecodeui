@@ -27,6 +27,10 @@ export const ThemeProvider = ({ children }) => {
     return false;
   });
 
+  const [useSystemFont, setUseSystemFont] = useState(
+    () => localStorage.getItem('useSystemFont') === 'true',
+  );
+
   // Update document class and localStorage when theme changes
   useEffect(() => {
     if (isDarkMode) {
@@ -60,6 +64,11 @@ export const ThemeProvider = ({ children }) => {
     }
   }, [isDarkMode]);
 
+  useEffect(() => {
+    document.documentElement.classList.toggle('system-font', useSystemFont);
+    localStorage.setItem('useSystemFont', String(useSystemFont));
+  }, [useSystemFont]);
+
   // Listen for system theme changes
   useEffect(() => {
     if (!window.matchMedia) return;
@@ -84,6 +93,8 @@ export const ThemeProvider = ({ children }) => {
   const value = {
     isDarkMode,
     toggleDarkMode,
+    useSystemFont,
+    setUseSystemFont,
   };
 
   return (
