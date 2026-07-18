@@ -656,3 +656,167 @@ export type WorktreeListResult = {
   baseBranch: string | null;
   worktrees: WorktreeDescriptor[];
 };
+
+// ---------------------------
+//----------------- WORKTREE SERVICE INPUTS AND RESULTS ------------
+/**
+ * Input accepted by the worktree-listing workflow.
+ *
+ * `projectPath` may point at the main checkout or any linked worktree. The
+ * service uses Git to resolve the complete repository-level worktree list.
+ */
+export type ListWorktreesInput = {
+  projectPath: string;
+};
+
+/**
+ * Input accepted when creating a linked Git worktree.
+ *
+ * `branch` is checked out when it already exists, otherwise it is created from
+ * `baseBranch`. When `baseBranch` is omitted, the main worktree branch is used.
+ */
+export type CreateWorktreeInput = {
+  projectPath: string;
+  branch: string;
+  baseBranch?: string | null;
+};
+
+/**
+ * Result of successfully creating a linked Git worktree.
+ *
+ * `createdBranch` distinguishes a new branch from an existing branch checkout,
+ * allowing API clients to accurately describe what Git changed.
+ */
+export type CreateWorktreeResult = {
+  worktreePath: string;
+  branch: string;
+  createdBranch: boolean;
+};
+
+/**
+ * Input accepted when registering an existing worktree as a CloudCLI project.
+ *
+ * The service verifies that `worktreePath` belongs to the repository containing
+ * `projectPath` before it creates or restores any project record.
+ */
+export type OpenWorktreeInput = {
+  projectPath: string;
+  worktreePath: string;
+};
+
+/**
+ * Project view returned after a worktree is opened in CloudCLI.
+ *
+ * This deliberately mirrors the project-selection payload used by the Projects
+ * module so the frontend can switch to the worktree without another lookup.
+ */
+export type WorktreeProjectView = {
+  projectId: string;
+  path: string;
+  fullPath: string;
+  displayName: string;
+  isStarred: boolean;
+  sessions: [];
+  sessionMeta: { hasMore: false; total: 0 };
+};
+
+/**
+ * Input accepted when removing a linked Git worktree.
+ *
+ * `force` permits removal with local changes. `deleteBranch` requests
+ * best-effort branch cleanup after the worktree directory is removed.
+ */
+export type RemoveWorktreeInput = {
+  projectPath: string;
+  worktreePath: string;
+  force?: boolean;
+  deleteBranch?: boolean;
+};
+
+/**
+ * Result of removing a linked Git worktree.
+ *
+ * `archivedProjectId` identifies the CloudCLI project hidden as part of the
+ * operation. It is null when the worktree had no active linked project.
+ */
+export type RemoveWorktreeResult = {
+  removedPath: string;
+  branch: string | null;
+  branchDeleted: boolean;
+  archivedProjectId: string | null;
+};
+
+/**
+ * Input accepted when merging a linked worktree into the main worktree branch.
+ *
+ * The service verifies both worktrees are clean, supports squash and regular
+ * merges, and may remove the source worktree after a successful merge.
+ */
+export type MergeWorktreeInput = {
+  projectPath: string;
+  worktreePath: string;
+  squash?: boolean;
+  message?: string | null;
+  removeAfterMerge?: boolean;
+};
+
+/**
+ * Result of a completed worktree merge.
+ *
+ * `removedWorktree` is populated only when `removeAfterMerge` was requested and
+ * the post-merge cleanup completed successfully.
+ */
+export type MergeWorktreeResult = {
+  mergedBranch: string;
+  targetBranch: string;
+  squash: boolean;
+  removedWorktree: RemoveWorktreeResult | null;
+};
+
+// ---------------------------
+//----------------- WORKTREE MODULE DEPENDENCY CONTRACTS ------------
+/**
+ * Filesystem capability required by the Worktrees module.
+ *
+ * Production wiring checks the real filesystem; unit tests provide a small
+ * deterministic fake so worktree creation never touches developer directories.
+ */
+export type WorktreeFileSystem = {
+  pathExists(candidatePath: string): Promise<boolean>;
+};
+
+/**
+ * Project-management boundary consumed by Worktrees workflows.
+ *
+ * The Worktrees module uses this contract instead of importing Database or
+ * Projects internals. Production adapters delegate through those modules'
+ * `index.ts` barrels, while unit tests supply in-memory functions.
+ */
+export type WorktreeProjectGateway = {
+  getProjectPathById(projectId: string): string | null;
+  getProjectByPath(projectPath: string): ProjectRepositoryRow | null;
+  createProject(input: {
+    projectPath: string;
+    customName: string;
+  }): Promise<{
+    outcome: 'created' | 'reactivated_archived';
+    project: { projectId: string };
+  }>;
+  restoreProject(projectId: string): void | Promise<void>;
+  archiveProject(projectId: string): void | Promise<void>;
+};
+
+/**
+ * Complete application-service surface used by the Worktrees HTTP router.
+ *
+ * Routes parse transport values and call these functions; they do not import
+ * repositories, filesystem adapters, Git runners, or individual service files.
+ */
+export type WorktreeServices = {
+  resolveProjectPath(projectId: string): string;
+  list(input: ListWorktreesInput): Promise<WorktreeListResult>;
+  create(input: CreateWorktreeInput): Promise<CreateWorktreeResult>;
+  open(input: OpenWorktreeInput): Promise<WorktreeProjectView>;
+  merge(input: MergeWorktreeInput): Promise<MergeWorktreeResult>;
+  remove(input: RemoveWorktreeInput): Promise<RemoveWorktreeResult>;
+};

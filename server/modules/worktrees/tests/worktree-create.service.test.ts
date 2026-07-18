@@ -43,12 +43,21 @@ function createFakeRunner(existingBranches: string[]) {
   return { calls, runner };
 }
 
+function createDependencies(runner: ReturnType<typeof createFakeRunner>['runner'], pathExists = false) {
+  return {
+    runGit: runner,
+    fileSystem: {
+      pathExists: async () => pathExists,
+    },
+  };
+}
+
 test('createWorktree creates a new branch from the main branch by default', async () => {
   const { calls, runner } = createFakeRunner([]);
 
   const result = await createWorktree(
     { projectPath: '/home/user/repo', branch: 'feature/login' },
-    runner,
+    createDependencies(runner),
   );
 
   assert.equal(result.branch, 'feature/login');
@@ -67,7 +76,7 @@ test('createWorktree checks out an existing branch without -b', async () => {
 
   const result = await createWorktree(
     { projectPath: '/home/user/repo', branch: 'bugfix' },
-    runner,
+    createDependencies(runner),
   );
 
   assert.equal(result.createdBranch, false);
@@ -83,7 +92,7 @@ test('createWorktree honors an explicit base branch', async () => {
 
   await createWorktree(
     { projectPath: '/home/user/repo', branch: 'hotfix', baseBranch: 'release/1.0' },
-    runner,
+    createDependencies(runner),
   );
 
   const addCall = calls.find((call) => call.args[0] === 'worktree' && call.args[1] === 'add');
@@ -95,7 +104,10 @@ test('createWorktree rejects a branch already checked out in another worktree', 
   const { runner } = createFakeRunner(['existing-branch']);
 
   await assert.rejects(
-    createWorktree({ projectPath: '/home/user/repo', branch: 'existing-branch' }, runner),
+    createWorktree(
+      { projectPath: '/home/user/repo', branch: 'existing-branch' },
+      createDependencies(runner),
+    ),
     (error: unknown) =>
       error instanceof AppError && error.code === 'BRANCH_ALREADY_CHECKED_OUT' && error.statusCode === 409,
   );
@@ -105,9 +117,26 @@ test('createWorktree rejects invalid branch names before touching git state', as
   const { calls, runner } = createFakeRunner([]);
 
   await assert.rejects(
-    createWorktree({ projectPath: '/home/user/repo', branch: '-rf' }, runner),
+    createWorktree(
+      { projectPath: '/home/user/repo', branch: '-rf' },
+      createDependencies(runner),
+    ),
     (error: unknown) => error instanceof AppError && error.code === 'INVALID_BRANCH_NAME',
   );
 
   assert.equal(calls.length, 0);
+});
+
+test('createWorktree rejects an occupied destination without running a mutating git command', async () => {
+  const { calls, runner } = createFakeRunner([]);
+
+  await assert.rejects(
+    createWorktree(
+      { projectPath: '/home/user/repo', branch: 'feature/login' },
+      createDependencies(runner, true),
+    ),
+    (error: unknown) => error instanceof AppError && error.code === 'WORKTREE_FOLDER_EXISTS',
+  );
+
+  assert.equal(calls.some((call) => call.args[0] === 'worktree' && call.args[1] === 'add'), false);
 });

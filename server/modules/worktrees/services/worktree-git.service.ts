@@ -137,7 +137,7 @@ export function parseWorktreeListPorcelain(output: string): WorktreePorcelainEnt
  */
 export async function listWorktreePorcelainEntries(
   projectPath: string,
-  runGit: GitCommandRunner = runGitCommand,
+  runGit: GitCommandRunner,
 ): Promise<WorktreePorcelainEntry[]> {
   let output: string;
   try {
@@ -192,7 +192,7 @@ export function findWorktreeEntryByPath(
  */
 export async function countChangedFiles(
   worktreePath: string,
-  runGit: GitCommandRunner = runGitCommand,
+  runGit: GitCommandRunner,
 ): Promise<number> {
   try {
     const { stdout } = await runGit(['status', '--porcelain'], worktreePath);

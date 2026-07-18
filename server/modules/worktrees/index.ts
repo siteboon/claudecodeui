@@ -1,2 +1,2 @@
-// Used by server/index.js to mount the /api/worktrees router.
-export { default as worktreesRoutes } from './worktrees.routes.js';
+// worktreesRoutes: used by the server entrypoint to mount the complete Worktrees HTTP API at `/api/worktrees`.
+export { worktreesRoutes } from './worktrees.module.js';

@@ -1,34 +1,16 @@
-import type { GitCommandRunner } from '@/shared/types.js';
+import type {
+  GitCommandRunner,
+  MergeWorktreeInput,
+  MergeWorktreeResult,
+  RemoveWorktreeInput,
+  RemoveWorktreeResult,
+} from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
-
 import {
   countChangedFiles,
   findWorktreeEntryByPath,
   listWorktreePorcelainEntries,
-  runGitCommand,
 } from '@/modules/worktrees/services/worktree-git.service.js';
-import { removeWorktree } from '@/modules/worktrees/services/worktree-remove.service.js';
-import type { RemoveWorktreeResult } from '@/modules/worktrees/services/worktree-remove.service.js';
-
-type MergeWorktreeInput = {
-  /** Absolute path of the requesting project (any worktree of the repo). */
-  projectPath: string;
-  /** Absolute path of the worktree whose branch gets merged into the base branch. */
-  worktreePath: string;
-  /** Squash all worktree commits into a single commit on the base branch. */
-  squash?: boolean;
-  /** Merge/squash commit message; a sensible default is generated when omitted. */
-  message?: string | null;
-  /** Remove the worktree (and delete its branch) after a successful merge. */
-  removeAfterMerge?: boolean;
-};
-
-export type MergeWorktreeResult = {
-  mergedBranch: string;
-  targetBranch: string;
-  squash: boolean;
-  removedWorktree: RemoveWorktreeResult | null;
-};
 
 /** Reads the paths currently in conflict inside the main worktree (best effort). */
 async function readConflictedFiles(repositoryRoot: string, runGit: GitCommandRunner): Promise<string[]> {
@@ -52,8 +34,12 @@ async function readConflictedFiles(repositoryRoot: string, runGit: GitCommandRun
  */
 export async function mergeWorktree(
   input: MergeWorktreeInput,
-  runGit: GitCommandRunner = runGitCommand,
+  dependencies: {
+    runGit: GitCommandRunner;
+    removeWorktree: (input: RemoveWorktreeInput) => Promise<RemoveWorktreeResult>;
+  },
 ): Promise<MergeWorktreeResult> {
+  const { removeWorktree, runGit } = dependencies;
   const entries = await listWorktreePorcelainEntries(input.projectPath, runGit);
   const entry = findWorktreeEntryByPath(entries, input.worktreePath);
   const repositoryRoot = entries[0].path;
@@ -141,7 +127,6 @@ export async function mergeWorktree(
         force: false,
         deleteBranch: true,
       },
-      runGit,
     );
   }
 

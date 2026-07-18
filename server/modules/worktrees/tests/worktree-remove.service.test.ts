@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { projectsDb } from '@/modules/database/index.js';
 import { removeWorktree } from '@/modules/worktrees/services/worktree-remove.service.js';
-import type { GitCommandResult } from '@/shared/types.js';
+import type { GitCommandResult, ProjectRepositoryRow } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
 
 const PORCELAIN = [
@@ -42,112 +41,141 @@ function createFakeRunner(options: { dirty?: boolean; branchDeleteFails?: boolea
   return { calls, runner };
 }
 
-/** Runs `callback` with `projectsDb.getProjectPath` stubbed to return no linked project. */
-async function withNoLinkedProject(callback: () => Promise<void>): Promise<void> {
-  const originalGetProjectPath = projectsDb.getProjectPath;
-  try {
-    projectsDb.getProjectPath = () => null;
-    await callback();
-  } finally {
-    projectsDb.getProjectPath = originalGetProjectPath;
-  }
+function createDependencies(
+  runner: ReturnType<typeof createFakeRunner>['runner'],
+  linkedProject: ProjectRepositoryRow | null = null,
+) {
+  const archivedProjectIds: string[] = [];
+
+  return {
+    archivedProjectIds,
+    dependencies: {
+      runGit: runner,
+      projects: {
+        getProjectByPath: () => linkedProject,
+        archiveProject: async (projectId: string) => {
+          archivedProjectIds.push(projectId);
+        },
+      },
+    },
+  };
 }
 
 test('removeWorktree removes a clean worktree and deletes its branch', async () => {
-  await withNoLinkedProject(async () => {
-    const { calls, runner } = createFakeRunner();
+  const { calls, runner } = createFakeRunner();
+  const { dependencies } = createDependencies(runner);
 
-    const result = await removeWorktree(
-      {
-        projectPath: '/home/user/repo',
-        worktreePath: '/home/user/repo-worktrees/feature-login',
-        deleteBranch: true,
-      },
-      runner,
-    );
+  const result = await removeWorktree(
+    {
+      projectPath: '/home/user/repo',
+      worktreePath: '/home/user/repo-worktrees/feature-login',
+      deleteBranch: true,
+    },
+    dependencies,
+  );
 
-    assert.equal(result.branch, 'feature/login');
-    assert.equal(result.branchDeleted, true);
-    assert.equal(result.archivedProjectId, null);
+  assert.equal(result.branch, 'feature/login');
+  assert.equal(result.branchDeleted, true);
+  assert.equal(result.archivedProjectId, null);
 
-    const removeCall = calls.find((call) => call.args[0] === 'worktree' && call.args[1] === 'remove');
-    assert.ok(removeCall, 'expected a worktree remove call');
-    assert.ok(!removeCall.args.includes('--force'));
+  const removeCall = calls.find((call) => call.args[0] === 'worktree' && call.args[1] === 'remove');
+  assert.ok(removeCall, 'expected a worktree remove call');
+  assert.ok(!removeCall.args.includes('--force'));
 
-    const branchDeleteCall = calls.find((call) => call.args[0] === 'branch' && call.args[1] === '-D');
-    assert.ok(branchDeleteCall, 'expected the branch to be deleted');
-    assert.equal(branchDeleteCall.args[2], 'feature/login');
-  });
+  const branchDeleteCall = calls.find((call) => call.args[0] === 'branch' && call.args[1] === '-D');
+  assert.ok(branchDeleteCall, 'expected the branch to be deleted');
+  assert.equal(branchDeleteCall.args[2], 'feature/login');
 });
 
 test('removeWorktree rejects a dirty worktree unless forced', async () => {
-  await withNoLinkedProject(async () => {
-    const { runner } = createFakeRunner({ dirty: true });
+  const { runner } = createFakeRunner({ dirty: true });
+  const { dependencies } = createDependencies(runner);
 
-    await assert.rejects(
-      removeWorktree(
-        {
-          projectPath: '/home/user/repo',
-          worktreePath: '/home/user/repo-worktrees/feature-login',
-        },
-        runner,
-      ),
-      (error: unknown) =>
-        error instanceof AppError && error.code === 'WORKTREE_DIRTY' && error.statusCode === 409,
-    );
-  });
+  await assert.rejects(
+    removeWorktree(
+      {
+        projectPath: '/home/user/repo',
+        worktreePath: '/home/user/repo-worktrees/feature-login',
+      },
+      dependencies,
+    ),
+    (error: unknown) =>
+      error instanceof AppError && error.code === 'WORKTREE_DIRTY' && error.statusCode === 409,
+  );
 });
 
 test('removeWorktree passes --force through and skips the dirty check', async () => {
-  await withNoLinkedProject(async () => {
-    const { calls, runner } = createFakeRunner({ dirty: true });
+  const { calls, runner } = createFakeRunner({ dirty: true });
+  const { dependencies } = createDependencies(runner);
 
-    await removeWorktree(
-      {
-        projectPath: '/home/user/repo',
-        worktreePath: '/home/user/repo-worktrees/feature-login',
-        force: true,
-      },
-      runner,
-    );
+  await removeWorktree(
+    {
+      projectPath: '/home/user/repo',
+      worktreePath: '/home/user/repo-worktrees/feature-login',
+      force: true,
+    },
+    dependencies,
+  );
 
-    const removeCall = calls.find((call) => call.args[0] === 'worktree' && call.args[1] === 'remove');
-    assert.ok(removeCall);
-    assert.ok(removeCall.args.includes('--force'));
-  });
+  const removeCall = calls.find((call) => call.args[0] === 'worktree' && call.args[1] === 'remove');
+  assert.ok(removeCall);
+  assert.ok(removeCall.args.includes('--force'));
 });
 
 test('removeWorktree reports branchDeleted=false when branch deletion fails', async () => {
-  await withNoLinkedProject(async () => {
-    const { runner } = createFakeRunner({ branchDeleteFails: true });
+  const { runner } = createFakeRunner({ branchDeleteFails: true });
+  const { dependencies } = createDependencies(runner);
 
-    const result = await removeWorktree(
-      {
-        projectPath: '/home/user/repo',
-        worktreePath: '/home/user/repo-worktrees/feature-login',
-        deleteBranch: true,
-      },
-      runner,
-    );
+  const result = await removeWorktree(
+    {
+      projectPath: '/home/user/repo',
+      worktreePath: '/home/user/repo-worktrees/feature-login',
+      deleteBranch: true,
+    },
+    dependencies,
+  );
 
-    assert.equal(result.branchDeleted, false);
-  });
+  assert.equal(result.branchDeleted, false);
+});
+
+test('removeWorktree archives an active project linked to the removed path', async () => {
+  const { runner } = createFakeRunner();
+  const linkedProject: ProjectRepositoryRow = {
+    project_id: 'project-1',
+    project_path: '/home/user/repo-worktrees/feature-login',
+    custom_project_name: 'repo · feature/login',
+    isStarred: 0,
+    isArchived: 0,
+  };
+  const { archivedProjectIds, dependencies } = createDependencies(runner, linkedProject);
+
+  const result = await removeWorktree(
+    {
+      projectPath: '/home/user/repo',
+      worktreePath: linkedProject.project_path,
+    },
+    dependencies,
+  );
+
+  assert.equal(result.archivedProjectId, 'project-1');
+  assert.deepEqual(archivedProjectIds, ['project-1']);
 });
 
 test('removeWorktree never removes the main worktree', async () => {
-  await withNoLinkedProject(async () => {
-    const { runner } = createFakeRunner();
+  const { runner } = createFakeRunner();
+  const { dependencies } = createDependencies(runner);
 
-    await assert.rejects(
-      removeWorktree(
-        {
-          projectPath: '/home/user/repo-worktrees/feature-login',
-          worktreePath: '/home/user/repo',
-        },
-        runner,
-      ),
-      (error: unknown) =>
-        error instanceof AppError && error.code === 'WORKTREE_MAIN_NOT_REMOVABLE' && error.statusCode === 400,
-    );
-  });
+  await assert.rejects(
+    removeWorktree(
+      {
+        projectPath: '/home/user/repo-worktrees/feature-login',
+        worktreePath: '/home/user/repo',
+      },
+      dependencies,
+    ),
+    (error: unknown) =>
+      error instanceof AppError
+      && error.code === 'WORKTREE_MAIN_NOT_REMOVABLE'
+      && error.statusCode === 400,
+  );
 });

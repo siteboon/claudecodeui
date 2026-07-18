@@ -1,29 +1,16 @@
-import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import type { GitCommandRunner } from '@/shared/types.js';
+import type {
+  CreateWorktreeInput,
+  CreateWorktreeResult,
+  GitCommandRunner,
+  WorktreeFileSystem,
+} from '@/shared/types.js';
 import { AppError, normalizeProjectPath } from '@/shared/utils.js';
-
 import {
   listWorktreePorcelainEntries,
-  runGitCommand,
   validateWorktreeBranchName,
 } from '@/modules/worktrees/services/worktree-git.service.js';
-
-type CreateWorktreeInput = {
-  /** Absolute path of the requesting project (any worktree of the repo). */
-  projectPath: string;
-  /** Branch to check out in the new worktree (created when it does not exist yet). */
-  branch: string;
-  /** Start point for a newly created branch; defaults to the main worktree's branch. */
-  baseBranch?: string | null;
-};
-
-export type CreateWorktreeResult = {
-  worktreePath: string;
-  branch: string;
-  createdBranch: boolean;
-};
 
 /**
  * Turns a branch name into a filesystem-safe folder name:
@@ -45,15 +32,6 @@ function sanitizeBranchForDirectoryName(branch: string): string {
   return sanitized;
 }
 
-async function pathExists(candidate: string): Promise<boolean> {
-  try {
-    await fs.access(candidate);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /**
  * Creates a new worktree in a sibling folder of the repository:
  * `<repoParent>/<repoName>-worktrees/<branch>`. Existing local branches are
@@ -62,8 +40,12 @@ async function pathExists(candidate: string): Promise<boolean> {
  */
 export async function createWorktree(
   input: CreateWorktreeInput,
-  runGit: GitCommandRunner = runGitCommand,
+  dependencies: {
+    runGit: GitCommandRunner;
+    fileSystem: WorktreeFileSystem;
+  },
 ): Promise<CreateWorktreeResult> {
+  const { fileSystem, runGit } = dependencies;
   const branch = validateWorktreeBranchName(input.branch);
 
   const entries = await listWorktreePorcelainEntries(input.projectPath, runGit);
@@ -86,7 +68,7 @@ export async function createWorktree(
     path.join(worktreesContainer, sanitizeBranchForDirectoryName(branch)),
   );
 
-  if (await pathExists(worktreePath)) {
+  if (await fileSystem.pathExists(worktreePath)) {
     throw new AppError(`Folder already exists: ${worktreePath}`, {
       code: 'WORKTREE_FOLDER_EXISTS',
       statusCode: 409,

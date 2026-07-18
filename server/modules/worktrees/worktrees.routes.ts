@@ -1,21 +1,15 @@
 import express from 'express';
 
-import { projectsDb } from '@/modules/database/index.js';
+import type { WorktreeServices } from '@/shared/types.js';
 import { AppError, asyncHandler, createApiSuccessResponse } from '@/shared/utils.js';
 
-import { createWorktree } from '@/modules/worktrees/services/worktree-create.service.js';
-import { listWorktrees } from '@/modules/worktrees/services/worktree-list.service.js';
-import { mergeWorktree } from '@/modules/worktrees/services/worktree-merge.service.js';
-import { openWorktreeAsProject } from '@/modules/worktrees/services/worktree-open.service.js';
-import { removeWorktree } from '@/modules/worktrees/services/worktree-remove.service.js';
-
-const router = express.Router();
-
 /**
- * Resolves the `project` request parameter (DB projectId — same contract as
- * /api/git) to the project's absolute directory path.
+ * Parses the project identifier shared by all Worktrees routes.
+ *
+ * Path resolution intentionally remains in the injected application service so
+ * this transport layer never reaches into the Database module.
  */
-function resolveProjectPath(projectIdValue: unknown): string {
+function readProjectId(projectIdValue: unknown): string {
   const projectId = typeof projectIdValue === 'string' ? projectIdValue.trim() : '';
   if (!projectId) {
     throw new AppError('project is required', {
@@ -24,15 +18,7 @@ function resolveProjectPath(projectIdValue: unknown): string {
     });
   }
 
-  const projectPath = projectsDb.getProjectPathById(projectId);
-  if (!projectPath) {
-    throw new AppError(`Unable to resolve project path for "${projectId}"`, {
-      code: 'PROJECT_NOT_FOUND',
-      statusCode: 404,
-    });
-  }
-
-  return projectPath;
+  return projectId;
 }
 
 function readRequiredString(value: unknown, name: string): string {
@@ -46,82 +32,93 @@ function readRequiredString(value: unknown, name: string): string {
   return parsed;
 }
 
-router.get(
-  '/',
-  asyncHandler(async (req, res) => {
-    const projectPath = resolveProjectPath(req.query.project);
-    const result = await listWorktrees({ projectPath });
-    res.json(createApiSuccessResponse(result));
-  }),
-);
+/**
+ * Builds the Worktrees HTTP router around an injected application-service API.
+ *
+ * Keeping construction explicit lets route tests supply deterministic services
+ * and ensures parsing remains the route layer's only responsibility.
+ */
+export function createWorktreesRouter(services: WorktreeServices): express.Router {
+  const router = express.Router();
 
-router.post(
-  '/create',
-  asyncHandler(async (req, res) => {
-    const body = req.body as Record<string, unknown>;
-    const projectPath = resolveProjectPath(body.project);
-    const branch = readRequiredString(body.branch, 'branch');
-    const baseBranch = typeof body.baseBranch === 'string' ? body.baseBranch : null;
+  router.get(
+    '/',
+    asyncHandler(async (req, res) => {
+      const projectPath = services.resolveProjectPath(readProjectId(req.query.project));
+      const result = await services.list({ projectPath });
+      res.json(createApiSuccessResponse(result));
+    }),
+  );
 
-    const created = await createWorktree({ projectPath, branch, baseBranch });
-    // Register the worktree as a project immediately so it is switchable in
-    // one round-trip; the client decides whether to actually select it.
-    const project = await openWorktreeAsProject({
-      projectPath,
-      worktreePath: created.worktreePath,
-    });
+  router.post(
+    '/create',
+    asyncHandler(async (req, res) => {
+      const body = req.body as Record<string, unknown>;
+      const projectPath = services.resolveProjectPath(readProjectId(body.project));
+      const branch = readRequiredString(body.branch, 'branch');
+      const baseBranch = typeof body.baseBranch === 'string' ? body.baseBranch : null;
 
-    res.json(createApiSuccessResponse({ ...created, project }));
-  }),
-);
+      const created = await services.create({ projectPath, branch, baseBranch });
+      // Register the new worktree immediately so the client can switch to it in
+      // the same round-trip. Routes may orchestrate multiple services after all
+      // transport values have been parsed.
+      const project = await services.open({
+        projectPath,
+        worktreePath: created.worktreePath,
+      });
 
-router.post(
-  '/open',
-  asyncHandler(async (req, res) => {
-    const body = req.body as Record<string, unknown>;
-    const projectPath = resolveProjectPath(body.project);
-    const worktreePath = readRequiredString(body.worktreePath, 'worktreePath');
+      res.json(createApiSuccessResponse({ ...created, project }));
+    }),
+  );
 
-    const project = await openWorktreeAsProject({ projectPath, worktreePath });
-    res.json(createApiSuccessResponse({ project }));
-  }),
-);
+  router.post(
+    '/open',
+    asyncHandler(async (req, res) => {
+      const body = req.body as Record<string, unknown>;
+      const projectPath = services.resolveProjectPath(readProjectId(body.project));
+      const worktreePath = readRequiredString(body.worktreePath, 'worktreePath');
 
-router.post(
-  '/merge',
-  asyncHandler(async (req, res) => {
-    const body = req.body as Record<string, unknown>;
-    const projectPath = resolveProjectPath(body.project);
-    const worktreePath = readRequiredString(body.worktreePath, 'worktreePath');
+      const project = await services.open({ projectPath, worktreePath });
+      res.json(createApiSuccessResponse({ project }));
+    }),
+  );
 
-    const result = await mergeWorktree({
-      projectPath,
-      worktreePath,
-      squash: Boolean(body.squash),
-      message: typeof body.message === 'string' ? body.message : null,
-      removeAfterMerge: Boolean(body.removeAfterMerge),
-    });
+  router.post(
+    '/merge',
+    asyncHandler(async (req, res) => {
+      const body = req.body as Record<string, unknown>;
+      const projectPath = services.resolveProjectPath(readProjectId(body.project));
+      const worktreePath = readRequiredString(body.worktreePath, 'worktreePath');
 
-    res.json(createApiSuccessResponse(result));
-  }),
-);
+      const result = await services.merge({
+        projectPath,
+        worktreePath,
+        squash: Boolean(body.squash),
+        message: typeof body.message === 'string' ? body.message : null,
+        removeAfterMerge: Boolean(body.removeAfterMerge),
+      });
 
-router.post(
-  '/remove',
-  asyncHandler(async (req, res) => {
-    const body = req.body as Record<string, unknown>;
-    const projectPath = resolveProjectPath(body.project);
-    const worktreePath = readRequiredString(body.worktreePath, 'worktreePath');
+      res.json(createApiSuccessResponse(result));
+    }),
+  );
 
-    const result = await removeWorktree({
-      projectPath,
-      worktreePath,
-      force: Boolean(body.force),
-      deleteBranch: Boolean(body.deleteBranch),
-    });
+  router.post(
+    '/remove',
+    asyncHandler(async (req, res) => {
+      const body = req.body as Record<string, unknown>;
+      const projectPath = services.resolveProjectPath(readProjectId(body.project));
+      const worktreePath = readRequiredString(body.worktreePath, 'worktreePath');
 
-    res.json(createApiSuccessResponse(result));
-  }),
-);
+      const result = await services.remove({
+        projectPath,
+        worktreePath,
+        force: Boolean(body.force),
+        deleteBranch: Boolean(body.deleteBranch),
+      });
 
-export default router;
+      res.json(createApiSuccessResponse(result));
+    }),
+  );
+
+  return router;
+}

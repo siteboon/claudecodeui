@@ -56,6 +56,15 @@ function createFakeRunner(options: FakeRunnerOptions = {}) {
   return { calls, runner };
 }
 
+function createDependencies(runner: ReturnType<typeof createFakeRunner>['runner']) {
+  return {
+    runGit: runner,
+    removeWorktree: async () => {
+      throw new Error('removeWorktree should not be called by this test');
+    },
+  };
+}
+
 test('mergeWorktree squash-merges into the main worktree branch', async () => {
   const { calls, runner } = createFakeRunner();
 
@@ -65,7 +74,7 @@ test('mergeWorktree squash-merges into the main worktree branch', async () => {
       worktreePath: '/home/user/repo-worktrees/feature-login',
       squash: true,
     },
-    runner,
+    createDependencies(runner),
   );
 
   assert.equal(result.mergedBranch, 'feature/login');
@@ -94,7 +103,7 @@ test('mergeWorktree performs a regular --no-ff merge with a custom message', asy
       squash: false,
       message: 'Land the login feature',
     },
-    runner,
+    createDependencies(runner),
   );
 
   const mergeCall = calls.find((call) => call.args[0] === 'merge');
@@ -111,7 +120,7 @@ test('mergeWorktree rejects when the source worktree is dirty', async () => {
         projectPath: '/home/user/repo',
         worktreePath: '/home/user/repo-worktrees/feature-login',
       },
-      runner,
+      createDependencies(runner),
     ),
     (error: unknown) =>
       error instanceof AppError && error.code === 'WORKTREE_SOURCE_DIRTY' && error.statusCode === 409,
@@ -127,7 +136,7 @@ test('mergeWorktree aborts and reports conflicted files on merge conflict', asyn
         projectPath: '/home/user/repo',
         worktreePath: '/home/user/repo-worktrees/feature-login',
       },
-      runner,
+      createDependencies(runner),
     ),
     (error: unknown) =>
       error instanceof AppError &&
@@ -151,7 +160,7 @@ test('mergeWorktree refuses to merge the main worktree into itself', async () =>
         projectPath: '/home/user/repo',
         worktreePath: '/home/user/repo',
       },
-      runner,
+      createDependencies(runner),
     ),
     (error: unknown) => error instanceof AppError && error.code === 'WORKTREE_MERGE_MAIN',
   );

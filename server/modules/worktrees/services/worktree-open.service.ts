@@ -1,36 +1,17 @@
 import path from 'node:path';
 
-import { projectsDb } from '@/modules/database/index.js';
-import { createProject, restoreArchivedProject } from '@/modules/projects/index.js';
-import type { GitCommandRunner, ProjectRepositoryRow } from '@/shared/types.js';
+import type {
+  GitCommandRunner,
+  OpenWorktreeInput,
+  ProjectRepositoryRow,
+  WorktreeProjectGateway,
+  WorktreeProjectView,
+} from '@/shared/types.js';
 import { AppError, normalizeProjectPath } from '@/shared/utils.js';
-
 import {
   findWorktreeEntryByPath,
   listWorktreePorcelainEntries,
-  runGitCommand,
 } from '@/modules/worktrees/services/worktree-git.service.js';
-
-type OpenWorktreeInput = {
-  /** Absolute path of the requesting project (any worktree of the repo). */
-  projectPath: string;
-  /** Absolute path of the worktree to open as a CloudCLI project. */
-  worktreePath: string;
-};
-
-/**
- * Project payload in the same shape as `POST /api/projects/create-project`, so
- * the frontend can hand it straight to its existing project-selection flow.
- */
-export type WorktreeProjectView = {
-  projectId: string;
-  path: string;
-  fullPath: string;
-  displayName: string;
-  isStarred: boolean;
-  sessions: [];
-  sessionMeta: { hasMore: false; total: 0 };
-};
 
 function mapRowToProjectView(row: ProjectRepositoryRow): WorktreeProjectView {
   return {
@@ -54,8 +35,15 @@ function mapRowToProjectView(row: ProjectRepositoryRow): WorktreeProjectView {
  */
 export async function openWorktreeAsProject(
   input: OpenWorktreeInput,
-  runGit: GitCommandRunner = runGitCommand,
+  dependencies: {
+    runGit: GitCommandRunner;
+    projects: Pick<
+      WorktreeProjectGateway,
+      'getProjectByPath' | 'createProject' | 'restoreProject'
+    >;
+  },
 ): Promise<WorktreeProjectView> {
+  const { projects, runGit } = dependencies;
   const entries = await listWorktreePorcelainEntries(input.projectPath, runGit);
   const entry = findWorktreeEntryByPath(entries, input.worktreePath);
 
@@ -65,16 +53,16 @@ export async function openWorktreeAsProject(
   // parent repository in the sidebar.
   const displayName = entry.branch ? `${repoName} · ${entry.branch}` : repoName;
 
-  const existingRow = projectsDb.getProjectPath(normalizedWorktreePath);
+  const existingRow = projects.getProjectByPath(normalizedWorktreePath);
   if (existingRow) {
     if (existingRow.isArchived) {
-      restoreArchivedProject(existingRow.project_id);
+      await projects.restoreProject(existingRow.project_id);
     }
-    const refreshedRow = projectsDb.getProjectPath(normalizedWorktreePath) ?? existingRow;
+    const refreshedRow = projects.getProjectByPath(normalizedWorktreePath) ?? existingRow;
     return mapRowToProjectView(refreshedRow);
   }
 
-  const created = await createProject({
+  const created = await projects.createProject({
     projectPath: normalizedWorktreePath,
     customName: displayName,
   });
@@ -82,10 +70,10 @@ export async function openWorktreeAsProject(
   // `createProject` intentionally keeps reactivated archived rows archived;
   // an opened worktree must be active so it shows up in the sidebar.
   if (created.outcome === 'reactivated_archived') {
-    restoreArchivedProject(created.project.projectId);
+    await projects.restoreProject(created.project.projectId);
   }
 
-  const row = projectsDb.getProjectPath(normalizedWorktreePath);
+  const row = projects.getProjectByPath(normalizedWorktreePath);
   if (!row) {
     throw new AppError('Failed to resolve project for worktree', {
       code: 'WORKTREE_PROJECT_RESOLVE_FAILED',

@@ -1,32 +1,20 @@
-import { projectsDb } from '@/modules/database/index.js';
 import type {
   GitCommandRunner,
+  ListWorktreesInput,
   ProjectRepositoryRow,
   WorktreeDescriptor,
   WorktreeListResult,
   WorktreePorcelainEntry,
 } from '@/shared/types.js';
 import { normalizeProjectPath } from '@/shared/utils.js';
-
 import {
   countChangedFiles,
   listWorktreePorcelainEntries,
-  runGitCommand,
 } from '@/modules/worktrees/services/worktree-git.service.js';
-
-type ListWorktreesInput = {
-  /** Absolute path of the project the request was made from (any worktree of the repo). */
-  projectPath: string;
-};
 
 type ListWorktreesDependencies = {
   runGit: GitCommandRunner;
   getProjectByPath: (projectPath: string) => ProjectRepositoryRow | null;
-};
-
-const defaultDependencies: ListWorktreesDependencies = {
-  runGit: runGitCommand,
-  getProjectByPath: (projectPath: string) => projectsDb.getProjectPath(projectPath),
 };
 
 /**
@@ -81,7 +69,7 @@ async function readLastCommit(
  */
 export async function listWorktrees(
   input: ListWorktreesInput,
-  dependencies: ListWorktreesDependencies = defaultDependencies,
+  dependencies: ListWorktreesDependencies,
 ): Promise<WorktreeListResult> {
   const { runGit, getProjectByPath } = dependencies;
   const entries = await listWorktreePorcelainEntries(input.projectPath, runGit);

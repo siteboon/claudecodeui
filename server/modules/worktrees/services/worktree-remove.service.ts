@@ -1,32 +1,15 @@
-import { projectsDb } from '@/modules/database/index.js';
-import { deleteOrArchiveProject } from '@/modules/projects/index.js';
-import type { GitCommandRunner } from '@/shared/types.js';
+import type {
+  GitCommandRunner,
+  RemoveWorktreeInput,
+  RemoveWorktreeResult,
+  WorktreeProjectGateway,
+} from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
-
 import {
   countChangedFiles,
   findWorktreeEntryByPath,
   listWorktreePorcelainEntries,
-  runGitCommand,
 } from '@/modules/worktrees/services/worktree-git.service.js';
-
-type RemoveWorktreeInput = {
-  /** Absolute path of the requesting project (any worktree of the repo). */
-  projectPath: string;
-  /** Absolute path of the worktree to remove. */
-  worktreePath: string;
-  /** Remove even when the worktree has uncommitted changes. */
-  force?: boolean;
-  /** Also delete the worktree's branch after removal. */
-  deleteBranch?: boolean;
-};
-
-export type RemoveWorktreeResult = {
-  removedPath: string;
-  branch: string | null;
-  branchDeleted: boolean;
-  archivedProjectId: string | null;
-};
 
 /**
  * Removes a linked worktree (never the main one), optionally deletes its
@@ -35,8 +18,12 @@ export type RemoveWorktreeResult = {
  */
 export async function removeWorktree(
   input: RemoveWorktreeInput,
-  runGit: GitCommandRunner = runGitCommand,
+  dependencies: {
+    runGit: GitCommandRunner;
+    projects: Pick<WorktreeProjectGateway, 'getProjectByPath' | 'archiveProject'>;
+  },
 ): Promise<RemoveWorktreeResult> {
+  const { projects, runGit } = dependencies;
   const entries = await listWorktreePorcelainEntries(input.projectPath, runGit);
   const entry = findWorktreeEntryByPath(entries, input.worktreePath);
   const repositoryRoot = entries[0].path;
@@ -80,9 +67,9 @@ export async function removeWorktree(
   }
 
   let archivedProjectId: string | null = null;
-  const linkedProject = projectsDb.getProjectPath(entry.path);
+  const linkedProject = projects.getProjectByPath(entry.path);
   if (linkedProject && !linkedProject.isArchived) {
-    await deleteOrArchiveProject(linkedProject.project_id, false);
+    await projects.archiveProject(linkedProject.project_id);
     archivedProjectId = linkedProject.project_id;
   }
 
