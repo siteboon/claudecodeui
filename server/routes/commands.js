@@ -1,5 +1,4 @@
 import { promises as fs } from "fs";
-import os from "os";
 import path from "path";
 
 import express from "express";
@@ -7,6 +6,7 @@ import express from "express";
 import { providerModelsService } from "../modules/providers/services/provider-models.service.js";
 import { parseFrontMatter } from "../shared/frontmatter.js";
 import { findAppRoot, getModuleDir } from "../utils/runtime-paths.js";
+import { getClaudeConfigDir } from "../shared/claude-config-dir.js";
 
 const __dirname = getModuleDir(import.meta.url);
 // This route reads the top-level package.json for the status command, so it needs the real
@@ -452,9 +452,8 @@ router.post("/list", async (req, res) => {
       allCommands.push(...projectCommands);
     }
 
-    // Scan user-level commands (~/.claude/commands/)
-    const homeDir = os.homedir();
-    const userCommandsDir = path.join(homeDir, ".claude", "commands");
+    // Scan user-level commands (~/.claude/commands/, or CLAUDE_CONFIG_DIR/commands/ if set)
+    const userCommandsDir = path.join(getClaudeConfigDir(), "commands");
     const userCommands = await scanCommandsDirectory(
       userCommandsDir,
       userCommandsDir,
@@ -534,7 +533,7 @@ router.post("/execute", async (req, res) => {
     {
       const resolvedPath = path.resolve(commandPath);
       const userBase = path.resolve(
-        path.join(os.homedir(), ".claude", "commands"),
+        path.join(getClaudeConfigDir(), "commands"),
       );
       const projectBase = context?.projectPath
         ? path.resolve(path.join(context.projectPath, ".claude", "commands"))

@@ -14,7 +14,6 @@
 
 import crypto from 'crypto';
 import { promises as fs } from 'fs';
-import os from 'os';
 import path from 'path';
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
@@ -23,6 +22,7 @@ import { buildClaudeUserContent, normalizeImageDescriptors } from './shared/imag
 import { CLAUDE_FALLBACK_MODELS } from './modules/providers/list/claude/claude-models.provider.js';
 import { providerModelsService } from './modules/providers/services/provider-models.service.js';
 import { resolveClaudeCodeExecutablePath } from './shared/claude-cli-path.js';
+import { getClaudeConfigDir } from './shared/claude-config-dir.js';
 import {
   createNotificationEvent,
   notifyRunFailed,
@@ -400,7 +400,7 @@ async function buildPromptPayload(command, images, cwd) {
  */
 async function loadMcpConfig(cwd) {
   try {
-    const claudeConfigPath = path.join(os.homedir(), '.claude.json');
+    const claudeConfigPath = path.join(getClaudeConfigDir(), '.claude.json');
 
     // Check if config file exists
     try {

@@ -9,13 +9,14 @@ import { sessionSynchronizerService } from '@/modules/providers/services/session
 import { WS_OPEN_STATE, connectedClients } from '@/modules/websocket/index.js';
 import type { LLMProvider } from '@/shared/types.js';
 import { generateDisplayName } from '@/modules/projects/index.js';
+import { getClaudeConfigDir } from '@/shared/claude-config-dir.js';
 
 type WatcherEventType = 'add' | 'change';
 
 const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> = [
   {
     provider: 'claude',
-    rootPath: path.join(os.homedir(), '.claude', 'projects'),
+    rootPath: path.join(getClaudeConfigDir(), 'projects'),
   },
   {
     provider: 'cursor',
