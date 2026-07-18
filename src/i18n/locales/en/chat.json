@@ -136,7 +136,11 @@
       "willSend": "Will send when this finishes",
       "edit": "Edit queued message",
       "delete": "Delete queued message"
-    }
+    },
+    "attachTooMany": "You can attach up to {{count}} files at once.",
+    "attachTooLarge": "{{files}}: larger than {{limit}}, skipped.",
+    "attachUploadFailed": "Upload failed ({{status}}).",
+    "attachNoneSaved": "Upload failed: no files were saved."
   },
   "providerSelection": {
     "title": "Choose Your AI Assistant",

@@ -117,7 +117,11 @@
     "clickToChangeMode": "Нажмите для смены режима разрешений (или нажмите Tab в поле ввода)",
     "showAllCommands": "Показать все команды",
     "clearInput": "Очистить ввод",
-    "scrollToBottom": "Прокрутить вниз"
+    "scrollToBottom": "Прокрутить вниз",
+    "attachTooMany": "Можно прикрепить не более {{count}} файлов за раз.",
+    "attachTooLarge": "{{files}}: превышает {{limit}}, пропущено.",
+    "attachUploadFailed": "Ошибка загрузки ({{status}}).",
+    "attachNoneSaved": "Ошибка загрузки: файлы не были сохранены."
   },
   "providerSelection": {
     "title": "Выберите вашего AI-ассистента",

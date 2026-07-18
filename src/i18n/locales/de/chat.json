@@ -117,7 +117,11 @@
     "clickToChangeMode": "Klicken, um den Berechtigungsmodus zu ändern (oder Tab in der Eingabe drücken)",
     "showAllCommands": "Alle Befehle anzeigen",
     "clearInput": "Eingabe leeren",
-    "scrollToBottom": "Nach unten scrollen"
+    "scrollToBottom": "Nach unten scrollen",
+    "attachTooMany": "You can attach up to {{count}} files at once.",
+    "attachTooLarge": "{{files}}: larger than {{limit}}, skipped.",
+    "attachUploadFailed": "Upload failed ({{status}}).",
+    "attachNoneSaved": "Upload failed: no files were saved."
   },
   "providerSelection": {
     "title": "KI-Assistent wählen",

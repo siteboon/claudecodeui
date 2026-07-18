@@ -117,7 +117,11 @@
     "clickToChangeMode": "Clicca per cambiare modalità permessi (o premi Tab nell'input)",
     "showAllCommands": "Mostra tutti i comandi",
     "clearInput": "Cancella input",
-    "scrollToBottom": "Scorri in basso"
+    "scrollToBottom": "Scorri in basso",
+    "attachTooMany": "You can attach up to {{count}} files at once.",
+    "attachTooLarge": "{{files}}: larger than {{limit}}, skipped.",
+    "attachUploadFailed": "Upload failed ({{status}}).",
+    "attachNoneSaved": "Upload failed: no files were saved."
   },
   "providerSelection": {
     "title": "Scegli il tuo assistente AI",

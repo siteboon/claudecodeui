@@ -117,7 +117,11 @@
     "clickToChangeMode": "点击更改权限模式（或在输入框中按 Tab）",
     "showAllCommands": "显示所有命令",
     "clearInput": "清空输入",
-    "scrollToBottom": "滚动到底部"
+    "scrollToBottom": "滚动到底部",
+    "attachTooMany": "You can attach up to {{count}} files at once.",
+    "attachTooLarge": "{{files}}: larger than {{limit}}, skipped.",
+    "attachUploadFailed": "Upload failed ({{status}}).",
+    "attachNoneSaved": "Upload failed: no files were saved."
   },
   "providerSelection": {
     "title": "选择您的 AI 助手",
