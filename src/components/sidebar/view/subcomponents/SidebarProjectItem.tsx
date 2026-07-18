@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Check, ChevronDown, ChevronRight, Edit3, Star, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
@@ -104,6 +105,29 @@ export default function SidebarProjectItem({
   const sessionCountDisplay = getSessionCountDisplay(project, sessions);
   const sessionCountLabel = `${sessionCountDisplay} session${totalSessionCount === 1 ? '' : 's'}`;
   const taskStatus = getTaskIndicatorStatus(project, mcpServerStatus);
+  const mobileRenameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isEditing || !mobileRenameInputRef.current) {
+      return;
+    }
+
+    let animationFrame = 0;
+    const revealInput = () => {
+      window.cancelAnimationFrame(animationFrame);
+      animationFrame = window.requestAnimationFrame(() => {
+        mobileRenameInputRef.current?.scrollIntoView({ block: 'center', inline: 'nearest' });
+      });
+    };
+
+    revealInput();
+    window.visualViewport?.addEventListener('resize', revealInput);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      window.visualViewport?.removeEventListener('resize', revealInput);
+    };
+  }, [isEditing]);
 
   const toggleProject = () => onToggleProject(project.projectId);
   const toggleStarProject = () => onToggleStarProject(project.projectId);
@@ -162,6 +186,7 @@ export default function SidebarProjectItem({
                 <div className="min-w-0 flex-1">
                   {isEditing ? (
                     <input
+                      ref={mobileRenameInputRef}
                       type="text"
                       value={editingName}
                       onChange={(event) => onEditingNameChange(event.target.value)}
