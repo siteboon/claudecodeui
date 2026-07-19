@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 const ThemeContext = createContext();
 
@@ -26,6 +26,10 @@ export const ThemeProvider = ({ children }) => {
     
     return false;
   });
+
+  const [useSystemFont, setUseSystemFont] = useState(
+    () => localStorage.getItem('useSystemFont') === 'true',
+  );
 
   // Update document class and localStorage when theme changes
   useEffect(() => {
@@ -60,6 +64,11 @@ export const ThemeProvider = ({ children }) => {
     }
   }, [isDarkMode]);
 
+  useEffect(() => {
+    document.documentElement.classList.toggle('system-font', useSystemFont);
+    localStorage.setItem('useSystemFont', String(useSystemFont));
+  }, [useSystemFont]);
+
   // Listen for system theme changes
   useEffect(() => {
     if (!window.matchMedia) return;
@@ -77,14 +86,19 @@ export const ThemeProvider = ({ children }) => {
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, []);
 
-  const toggleDarkMode = () => {
+  const toggleDarkMode = useCallback(() => {
     setIsDarkMode(prev => !prev);
-  };
+  }, []);
 
-  const value = {
-    isDarkMode,
-    toggleDarkMode,
-  };
+  const value = useMemo(
+    () => ({
+      isDarkMode,
+      toggleDarkMode,
+      useSystemFont,
+      setUseSystemFont,
+    }),
+    [isDarkMode, toggleDarkMode, useSystemFont],
+  );
 
   return (
     <ThemeContext.Provider value={value}>

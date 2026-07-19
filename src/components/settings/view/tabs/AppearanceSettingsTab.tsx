@@ -8,6 +8,8 @@ import SettingsSection from '../SettingsSection';
 import SettingsToggle from '../SettingsToggle';
 
 type AppearanceSettingsTabProps = {
+  useSystemFont: boolean;
+  onUseSystemFontChange: (value: boolean) => void;
   projectSortOrder: ProjectSortOrder;
   onProjectSortOrderChange: (value: ProjectSortOrder) => void;
   codeEditorSettings: CodeEditorSettingsState;
@@ -18,6 +20,8 @@ type AppearanceSettingsTabProps = {
 };
 
 export default function AppearanceSettingsTab({
+  useSystemFont,
+  onUseSystemFontChange,
   projectSortOrder,
   onProjectSortOrderChange,
   codeEditorSettings,
@@ -61,6 +65,21 @@ export default function AppearanceSettingsTab({
               <option value="name">{t('appearanceSettings.projectSorting.alphabetical')}</option>
               <option value="date">{t('appearanceSettings.projectSorting.recentActivity')}</option>
             </select>
+          </SettingsRow>
+        </SettingsCard>
+      </SettingsSection>
+
+      <SettingsSection title={t('appearanceSettings.typography.title')}>
+        <SettingsCard>
+          <SettingsRow
+            label={t('appearanceSettings.typography.systemFont.label')}
+            description={t('appearanceSettings.typography.systemFont.description')}
+          >
+            <SettingsToggle
+              checked={useSystemFont}
+              onChange={onUseSystemFontChange}
+              ariaLabel={t('appearanceSettings.typography.systemFont.label')}
+            />
           </SettingsRow>
         </SettingsCard>
       </SettingsSection>

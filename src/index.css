@@ -43,6 +43,8 @@
     --input: 44 14% 87%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
+    --font-sans: "Encode Sans", -apple-system, "BlinkMacSystemFont", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", sans-serif;
+    --font-serif: "Merriweather", "Georgia", "Cambria", "Times New Roman", serif;
 
     /* Nav design tokens */
     --nav-glass-bg: 44 22% 96% / 0.7;
@@ -72,6 +74,11 @@
     --header-safe-area-top: env(safe-area-inset-top, 0px);
     --header-base-padding: 8px;
     --header-total-padding: calc(var(--header-safe-area-top) + var(--header-base-padding));
+  }
+
+  :root.system-font {
+    --font-sans: -apple-system, "BlinkMacSystemFont", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", sans-serif;
+    --font-serif: -apple-system, "BlinkMacSystemFont", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", sans-serif;
   }
   
   /* Fallback for older iOS versions */
@@ -129,7 +136,7 @@
   body {
     @apply bg-background text-foreground;
 
-    font-family: "Encode Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     margin: 0;
