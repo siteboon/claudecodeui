@@ -1,10 +1,10 @@
-import { IS_PLATFORM } from '../../../constants/config';
+import { TRUST_LOCAL_AUTH_BYPASS } from '../../../constants/config';
 import type { ShellIncomingMessage, ShellOutgoingMessage } from '../types/types';
 
 export function getShellWebSocketUrl(): string | null {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 
-  if (IS_PLATFORM) {
+  if (TRUST_LOCAL_AUTH_BYPASS) {
     return `${protocol}//${window.location.host}/shell`;
   }
 

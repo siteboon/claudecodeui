@@ -1,9 +1,11 @@
 import jwt from 'jsonwebtoken';
 import { userDb, appConfigDb } from '../modules/database/index.js';
-import { IS_PLATFORM } from '../constants/config.js';
+import { TRUST_LOCAL_AUTH_BYPASS } from '../constants/config.js';
 
 // Use env var if set, otherwise auto-generate a unique secret per installation
 const JWT_SECRET = process.env.JWT_SECRET || appConfigDb.getOrCreateJwtSecret();
+
+const getLocalBypassUser = () => userDb.getFirstUser();
 
 // Optional API key middleware
 const validateApiKey = (req, res, next) => {
@@ -21,18 +23,19 @@ const validateApiKey = (req, res, next) => {
 
 // JWT authentication middleware
 const authenticateToken = async (req, res, next) => {
-  // Platform mode:  use single database user
-  if (IS_PLATFORM) {
+  // Trusted deployment mode: the hosting platform or upstream proxy already
+  // authenticated the request, so use the installation's single local user.
+  if (TRUST_LOCAL_AUTH_BYPASS) {
     try {
-      const user = userDb.getFirstUser();
+      const user = getLocalBypassUser();
       if (!user) {
-        return res.status(500).json({ error: 'Platform mode: No user found in database' });
+        return res.status(503).json({ error: 'Authentication bypass requires an existing local user' });
       }
       req.user = user;
       return next();
     } catch (error) {
-      console.error('Platform mode error:', error);
-      return res.status(500).json({ error: 'Platform mode: Failed to fetch user' });
+      console.error('Authentication bypass error:', error);
+      return res.status(500).json({ error: 'Authentication bypass failed' });
     }
   }
 
@@ -90,16 +93,16 @@ const generateToken = (user) => {
 
 // WebSocket authentication function
 const authenticateWebSocket = (token) => {
-  // Platform mode: bypass token validation, return first user
-  if (IS_PLATFORM) {
+  // Trusted deployment mode: bypass token validation and use the local user.
+  if (TRUST_LOCAL_AUTH_BYPASS) {
     try {
-      const user = userDb.getFirstUser();
+      const user = getLocalBypassUser();
       if (user) {
         return { id: user.id, userId: user.id, username: user.username };
       }
       return null;
     } catch (error) {
-      console.error('Platform mode WebSocket error:', error);
+      console.error('Authentication bypass WebSocket error:', error);
       return null;
     }
   }
@@ -128,5 +131,6 @@ export {
   authenticateToken,
   generateToken,
   authenticateWebSocket,
+  getLocalBypassUser,
   JWT_SECRET
 };
