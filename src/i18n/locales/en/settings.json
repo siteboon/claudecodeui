@@ -112,7 +112,8 @@
     "browser": "Browser",
     "notifications": "Notifications",
     "plugins": "Plugins",
-    "about": "About"
+    "about": "About",
+    "password": "Password"
   },
   "notifications": {
     "title": "Notifications",
@@ -580,5 +581,27 @@
     "installAriaLabel": "Plugin git repository URL",
     "tab": "tab",
     "runningStatus": "running"
+  },
+  "password": {
+    "title": "Change Password",
+    "description": "Update your account password to keep your CloudCLI instance secure.",
+    "currentPassword": "Current Password",
+    "currentPasswordPlaceholder": "Enter your current password",
+    "newPassword": "New Password",
+    "newPasswordPlaceholder": "Enter your new password",
+    "minLengthHelp": "Password must be at least 8 characters",
+    "confirmPassword": "Confirm New Password",
+    "confirmPasswordPlaceholder": "Re-enter your new password",
+    "saveChanges": "Save Changes",
+    "saving": "Saving...",
+    "success": "Password updated successfully.",
+    "error": {
+      "fillAllFields": "Please fill in all fields.",
+      "incorrectOld": "Current password is incorrect.",
+      "minLength": "Password must be at least 8 characters.",
+      "notMatch": "Passwords do not match.",
+      "sameAsOld": "New password must be different from the current one.",
+      "failed": "Failed to update password."
+    }
   }
 }
