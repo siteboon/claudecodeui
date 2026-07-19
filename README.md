@@ -98,8 +98,14 @@ Visit the **[documentation →](https://cloudcli.ai/docs)** for full configurati
 #### Authentication behind a reverse proxy
 
 CloudCLI requires its own local login by default. When an upstream proxy already
-enforces authentication, such as Cloudflare Access, you can disable the second
-login by setting both variables before building and starting CloudCLI:
+enforces authentication, you can disable the second login. For example, create
+a Cloudflare Access self-hosted application for the CloudCLI hostname and attach
+an Access policy that allows your Google Workspace identity (or selected Google
+users). Requests are then challenged by Google OAuth at Cloudflare before the
+tunnel forwards them to CloudCLI.
+
+After the upstream login is enforced, set both variables before building and
+starting CloudCLI:
 
 ```bash
 DISABLE_AUTH=true
@@ -107,9 +113,11 @@ VITE_DISABLE_AUTH=true
 ```
 
 This mode uses the installation's existing single local user. Complete the
-normal first-user setup before enabling it. Only use it when the CloudCLI server
-is bound to a private address and cannot be reached around the authenticating
-proxy; otherwise every direct request would be accepted without credentials.
+normal first-user setup before enabling it. Bind CloudCLI to `127.0.0.1` (or an
+otherwise private interface), point `cloudflared` at that private origin, and do
+not expose the CloudCLI port publicly. The Access application must cover the
+whole hostname, including `/api`, `/ws`, and `/shell`. Otherwise a direct or
+uncovered request would be accepted without CloudCLI credentials.
 
 #### Docker Sandboxes (Experimental)
 
