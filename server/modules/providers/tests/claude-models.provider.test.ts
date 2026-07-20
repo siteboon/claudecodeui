@@ -98,6 +98,40 @@ test('getCurrentActiveModel maps raw JSONL model ids to catalog aliases', async 
   });
 });
 
+test('getCurrentActiveModel matches the model family anywhere in a Bedrock-style raw id', async () => {
+  await withIsolatedDatabase(async () => {
+    const tempDirectory = await mkdtemp(path.join(os.tmpdir(), 'claude-provider-models-jsonl-'));
+    try {
+      const appSessionId = 'app-bedrock-id';
+      const jsonlPath = path.join(tempDirectory, `${appSessionId}.jsonl`);
+
+      // Bedrock-hosted sessions record region-prefixed, version-suffixed ids
+      // rather than plain 'claude-<family>-<version>' ones.
+      await writeFile(
+        jsonlPath,
+        `${JSON.stringify({
+          type: 'assistant',
+          sessionId: appSessionId,
+          message: { model: 'us.anthropic.claude-haiku-4-5-20251001-v1:0' },
+        })}\n`,
+        'utf8',
+      );
+
+      sessionsDb.createAppSession(appSessionId, 'claude', tempDirectory);
+      getConnection()
+        .prepare('UPDATE sessions SET jsonl_path = ? WHERE session_id = ?')
+        .run(jsonlPath, appSessionId);
+
+      const provider = new ClaudeProviderModels();
+      const activeModel = await provider.getCurrentActiveModel(appSessionId);
+
+      assert.equal(activeModel.model, 'haiku');
+    } finally {
+      await rm(tempDirectory, { recursive: true, force: true });
+    }
+  });
+});
+
 test('getCurrentActiveModel falls back to the catalog default for an unrecognized raw model id', async () => {
   await withIsolatedDatabase(async () => {
     const tempDirectory = await mkdtemp(path.join(os.tmpdir(), 'claude-provider-models-jsonl-'));

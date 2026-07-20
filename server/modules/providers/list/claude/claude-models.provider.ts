@@ -83,30 +83,32 @@ export const CLAUDE_FALLBACK_MODELS: ProviderModelsDefinition = {
   DEFAULT: 'default',
 };
 
-// Maps raw Anthropic API model ids (from JSONL transcripts, e.g. 'claude-sonnet-5')
-// to the short CLI aliases used in CLAUDE_FALLBACK_MODELS.OPTIONS.
-const CLAUDE_MODEL_FAMILY_PATTERNS: [alias: string, pattern: RegExp][] = [
-  ['opus', /opus/i],
-  ['sonnet', /sonnet/i],
-  ['haiku', /haiku/i],
-  ['fable', /fable/i],
-];
+// Maps raw Anthropic API model ids (from JSONL transcripts, e.g. 'claude-sonnet-5'
+// or a Bedrock-style 'us.anthropic.claude-opus-4-8-v1:0') back to the catalog
+// option whose value names the model family. Families come from the catalog
+// itself: every plain-word option value other than the 'default' sentinel is a
+// family alias, so a new model works here as soon as it has a catalog entry.
+const isFamilyAliasOption = (option: ProviderModelOption): boolean =>
+  option.value !== CLAUDE_FALLBACK_MODELS.DEFAULT && /^[a-z][a-z0-9]*$/.test(option.value);
 
 const matchClaudeModelOptionFromRawId = (rawModel: string): ProviderModelOption | null => {
-  const family = CLAUDE_MODEL_FAMILY_PATTERNS.find(([, pattern]) => pattern.test(rawModel));
+  const lowered = rawModel.toLowerCase();
+  const match = CLAUDE_FALLBACK_MODELS.OPTIONS
+    .filter((option) => isFamilyAliasOption(option)
+      && new RegExp(`(^|[^a-z0-9])${option.value}([^a-z0-9]|$)`).test(lowered))
+    // Prefer the most specific alias if several appear in one id.
+    .sort((first, second) => second.value.length - first.value.length)[0];
 
-  if (!family) {
+  if (!match) {
     console.warn(
-      `[claude-models] Unrecognized model id "${rawModel}" — no family pattern matched. `
-      + 'Falling back to the catalog default; update CLAUDE_MODEL_FAMILY_PATTERNS '
-      + 'in claude-models.provider.ts if a new Claude model was introduced.',
+      `[claude-models] Unrecognized model id "${rawModel}" — it names no catalog model family. `
+      + 'Falling back to the catalog default; if a new Claude model was introduced, add it to '
+      + 'CLAUDE_FALLBACK_MODELS in claude-models.provider.ts and it will match automatically.',
     );
     return null;
   }
 
-  const [name] = family;
-
-  return CLAUDE_FALLBACK_MODELS.OPTIONS.find((option) => option.value === name) ?? null;
+  return match;
 };
 
 export const findClaudeModelOption = (model: string | undefined | null): ProviderModelOption | null => {
