@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+
 import { authenticatedFetch } from '../../../utils/api';
 import type { Project } from '../../../types/app';
 import type {
@@ -44,6 +45,7 @@ export function useWorktreesController({
   const [isCreatingWorktree, setIsCreatingWorktree] = useState(false);
   /** Path of the worktree with an open/merge/remove request in flight (one at a time). */
   const [busyWorktreePath, setBusyWorktreePath] = useState<string | null>(null);
+  const activeWorktreeOperationRef = useRef<symbol | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const clearActionError = useCallback(() => setActionError(null), []);
@@ -151,10 +153,12 @@ export function useWorktreesController({
 
   const openWorktree = useCallback(
     async (worktreePath: string) => {
-      if (!selectedProject) {
+      if (!selectedProject || activeWorktreeOperationRef.current !== null) {
         return false;
       }
       const projectId = selectedProject.projectId;
+      const operationToken = Symbol('open-worktree');
+      activeWorktreeOperationRef.current = operationToken;
 
       setBusyWorktreePath(worktreePath);
       setActionError(null);
@@ -187,7 +191,10 @@ export function useWorktreesController({
         }
         return false;
       } finally {
-        setBusyWorktreePath(null);
+        if (activeWorktreeOperationRef.current === operationToken) {
+          activeWorktreeOperationRef.current = null;
+          setBusyWorktreePath(null);
+        }
       }
     },
     [onProjectSelect, onProjectsRefresh, selectedProject],
@@ -195,9 +202,11 @@ export function useWorktreesController({
 
   const mergeWorktree = useCallback(
     async (worktreePath: string, options: MergeWorktreeOptions) => {
-      if (!selectedProject) {
+      if (!selectedProject || activeWorktreeOperationRef.current !== null) {
         return false;
       }
+      const operationToken = Symbol('merge-worktree');
+      activeWorktreeOperationRef.current = operationToken;
 
       setBusyWorktreePath(worktreePath);
       setActionError(null);
@@ -227,7 +236,10 @@ export function useWorktreesController({
         setActionError(error instanceof Error ? error.message : 'Merge failed');
         return false;
       } finally {
-        setBusyWorktreePath(null);
+        if (activeWorktreeOperationRef.current === operationToken) {
+          activeWorktreeOperationRef.current = null;
+          setBusyWorktreePath(null);
+        }
       }
     },
     [fetchWorktrees, onProjectsRefresh, selectedProject],
@@ -235,9 +247,11 @@ export function useWorktreesController({
 
   const removeWorktree = useCallback(
     async (worktreePath: string, options: RemoveWorktreeOptions) => {
-      if (!selectedProject) {
+      if (!selectedProject || activeWorktreeOperationRef.current !== null) {
         return false;
       }
+      const operationToken = Symbol('remove-worktree');
+      activeWorktreeOperationRef.current = operationToken;
 
       setBusyWorktreePath(worktreePath);
       setActionError(null);
@@ -266,7 +280,10 @@ export function useWorktreesController({
         setActionError(error instanceof Error ? error.message : 'Failed to remove worktree');
         return false;
       } finally {
-        setBusyWorktreePath(null);
+        if (activeWorktreeOperationRef.current === operationToken) {
+          activeWorktreeOperationRef.current = null;
+          setBusyWorktreePath(null);
+        }
       }
     },
     [fetchWorktrees, onProjectsRefresh, selectedProject],

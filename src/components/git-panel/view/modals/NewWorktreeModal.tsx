@@ -43,9 +43,12 @@ export default function NewWorktreeModal({
       setBranchName('');
       setOpenAfterCreate(true);
     } else {
-      setSelectedBaseBranch(baseBranch ?? '');
+      const availableBaseBranch = baseBranch && localBranches.includes(baseBranch)
+        ? baseBranch
+        : localBranches[0] ?? '';
+      setSelectedBaseBranch(availableBaseBranch);
     }
-  }, [isOpen, baseBranch]);
+  }, [isOpen, baseBranch, localBranches]);
 
   const trimmedBranch = branchName.trim();
   const branchExists = localBranches.includes(trimmedBranch);
