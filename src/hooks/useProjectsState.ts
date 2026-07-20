@@ -443,6 +443,10 @@ export function useProjectsState({
   /** URL session id whose backend lookup already ran (or is in flight) — one attempt per id. */
   const sessionLookupRef = useRef<string | null>(null);
 
+  useEffect(() => {
+    sessionLookupRef.current = null;
+  }, [sessionId]);
+
   const markSessionAttention = useCallback((targetSessionId?: string | null) => {
     if (!targetSessionId) {
       return;
@@ -814,7 +818,7 @@ export function useProjectsState({
   }, [clearSessionAttention, selectedSession?.id, sessionId]);
 
   useEffect(() => {
-    if (!sessionId || projects.length === 0) {
+    if (!sessionId) {
       return;
     }
 
