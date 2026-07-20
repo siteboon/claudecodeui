@@ -297,34 +297,6 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
    * @param {string} baseBranch - Base branch to branch from (default: 'main')
    * @returns {Promise<void>}
    */
-  async function createGitHubBranch(octokit, owner, repo, branchName, baseBranch = 'main') {
-    try {
-      // Get the SHA of the base branch
-      const { data: ref } = await octokit.git.getRef({
-        owner,
-        repo,
-        ref: `heads/${baseBranch}`
-      });
-
-      const baseSha = ref.object.sha;
-
-      // Create the new branch
-      await octokit.git.createRef({
-        owner,
-        repo,
-        ref: `refs/heads/${branchName}`,
-        sha: baseSha
-      });
-
-      console.log(`✅ Created branch '${branchName}' on GitHub`);
-    } catch (error) {
-      if (error.status === 422 && error.message.includes('Reference already exists')) {
-        console.log(`ℹ️ Branch '${branchName}' already exists on GitHub`);
-      } else {
-        throw error;
-      }
-    }
-  }
 
   /**
    * Create a pull request on GitHub
@@ -365,10 +337,22 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
   async function cloneGitHubRepo(githubUrl, githubToken = null, projectPath) {
     return new Promise(async (resolve, reject) => {
       try {
-        // Validate GitHub URL
-        if (!githubUrl || !githubUrl.includes('github.com')) {
+        // Validate the host before using credentials or invoking Git.
+        let parsedGithubUrl;
+        try {
+          parsedGithubUrl = new URL(githubUrl);
+        } catch {
           throw new Error('Invalid GitHub URL');
         }
+        if (
+          parsedGithubUrl.protocol !== 'https:'
+          || parsedGithubUrl.hostname !== 'github.com'
+          || parsedGithubUrl.username
+          || parsedGithubUrl.password
+        ) {
+          throw new Error('Invalid GitHub URL');
+        }
+        const cloneUrl = parsedGithubUrl.toString();
 
         const cloneDir = path.resolve(projectPath);
 
@@ -379,7 +363,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
           try {
             const existingUrl = await getGitRemoteUrl(cloneDir);
             const normalizedExisting = normalizeGitHubUrl(existingUrl);
-            const normalizedRequested = normalizeGitHubUrl(githubUrl);
+            const normalizedRequested = normalizeGitHubUrl(cloneUrl);
 
             if (normalizedExisting === normalizedRequested) {
               console.log('✅ Repository already exists at path with correct URL');
@@ -397,20 +381,23 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
         // Ensure parent directory exists
         await fs.mkdir(path.dirname(cloneDir), { recursive: true });
 
-        // Prepare the git clone URL with authentication if token is provided
-        let cloneUrl = githubUrl;
-        if (githubToken) {
-          // Convert HTTPS URL to authenticated URL
-          // Example: https://github.com/user/repo -> https://token@github.com/user/repo
-          cloneUrl = githubUrl.replace('https://github.com', `https://${githubToken}@github.com`);
-        }
-
         console.log('🔄 Cloning repository:', githubUrl);
         console.log('📁 Destination:', cloneDir);
 
         // Execute git clone
-        const gitProcess = spawn('git', ['clone', '--depth', '1', cloneUrl, cloneDir], {
-          stdio: ['pipe', 'pipe', 'pipe']
+        const gitEnvironment = githubToken ? {
+          ...process.env,
+          GIT_CONFIG_COUNT: '2',
+          GIT_CONFIG_KEY_0: 'credential.helper',
+          GIT_CONFIG_VALUE_0: '',
+          GIT_CONFIG_KEY_1: 'credential.helper',
+          GIT_CONFIG_VALUE_1: '!f() { echo username=x-access-token; echo "password=$CLOUDCLI_GITHUB_TOKEN"; }; f',
+          CLOUDCLI_GITHUB_TOKEN: githubToken,
+          GIT_TERMINAL_PROMPT: '0'
+        } : process.env;
+        const gitProcess = spawn('git', ['clone', '--depth', '1', '--', cloneUrl, cloneDir], {
+          stdio: ['pipe', 'pipe', 'pipe'],
+          env: gitEnvironment
         });
 
         let stdout = '';

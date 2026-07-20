@@ -61,4 +61,4 @@ Before finishing:
 1. Confirm all cross-module imports use `index.ts` barrels and all public exports are necessary and documented.
 2. Confirm shared definitions follow the one-use versus multiple-use placement rule and grouping-comment format.
 3. Confirm routes only parse, call services, and format responses.
-4. Run the narrow relevant tests, then `npm run typecheck` and `npm run lint` when the task scope and environment permit.
+4. Run the narrow relevant tests, then `npm run build`, `npm run typecheck`, and `npm run lint` when the task scope and environment permit.

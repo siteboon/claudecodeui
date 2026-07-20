@@ -71,6 +71,30 @@ export function createTaskmasterRouter(dependencies: TaskmasterRouterDependencie
         : null;
     const router = express.Router();
 
+    function runTaskmasterProcess(command, args, options, onComplete) {
+        const child = spawn(command, args, options);
+        let stdout = '';
+        let stderr = '';
+        let settled = false;
+
+        child.stdout.on('data', (data) => {
+            stdout += data.toString();
+        });
+        child.stderr.on('data', (data) => {
+            stderr += data.toString();
+        });
+
+        const settle = (code, error = null) => {
+            if (settled) return;
+            settled = true;
+            onComplete({ code, error, stdout, stderr });
+        };
+
+        child.once('error', (error) => settle(null, error));
+        child.once('close', (code) => settle(code));
+        return child;
+    }
+
     /**
      * Check if TaskMaster CLI is installed globally
      * @returns {Promise<Object>} Installation status result
@@ -564,23 +588,10 @@ export function createTaskmasterRouter(dependencies: TaskmasterRouterDependencie
             }
 
             // Run taskmaster init command
-            const initProcess = spawn('npx', ['task-master', 'init'], {
+            const initProcess = runTaskmasterProcess('npx', ['task-master', 'init'], {
                 cwd: projectPath,
                 stdio: ['pipe', 'pipe', 'pipe']
-            });
-
-            let stdout = '';
-            let stderr = '';
-
-            initProcess.stdout.on('data', (data) => {
-                stdout += data.toString();
-            });
-
-            initProcess.stderr.on('data', (data) => {
-                stderr += data.toString();
-            });
-
-            initProcess.on('close', (code) => {
+            }, ({ code, error, stdout, stderr }) => {
                 if (code === 0) {
                     // Broadcast TaskMaster project update via WebSocket. The
                     // WebSocket payload keeps using `projectId` so the frontend
@@ -604,7 +615,7 @@ export function createTaskmasterRouter(dependencies: TaskmasterRouterDependencie
                     console.error('TaskMaster init failed:', stderr);
                     res.status(500).json({
                         error: 'Failed to initialize TaskMaster',
-                        message: stderr || stdout,
+                        message: error?.message || stderr || stdout,
                         code
                     });
                 }
@@ -666,23 +677,10 @@ export function createTaskmasterRouter(dependencies: TaskmasterRouterDependencie
             }
 
             // Run task-master add-task command
-            const addTaskProcess = spawn('npx', args, {
+            const addTaskProcess = runTaskmasterProcess('npx', args, {
                 cwd: projectPath,
                 stdio: ['pipe', 'pipe', 'pipe']
-            });
-
-            let stdout = '';
-            let stderr = '';
-
-            addTaskProcess.stdout.on('data', (data) => {
-                stdout += data.toString();
-            });
-
-            addTaskProcess.stderr.on('data', (data) => {
-                stderr += data.toString();
-            });
-
-            addTaskProcess.on('close', (code) => {
+            }, ({ code, error, stdout, stderr }) => {
                 console.log('Add task process completed with code:', code);
                 console.log('Stdout:', stdout);
                 console.log('Stderr:', stderr);
@@ -708,7 +706,7 @@ export function createTaskmasterRouter(dependencies: TaskmasterRouterDependencie
                     console.error('Add task failed:', stderr);
                     res.status(500).json({
                         error: 'Failed to add task',
-                        message: stderr || stdout,
+                        message: error?.message || stderr || stdout,
                         code
                     });
                 }
@@ -744,23 +742,10 @@ export function createTaskmasterRouter(dependencies: TaskmasterRouterDependencie
 
             // If only updating status, use set-status command
             if (status && Object.keys(req.body).length === 1) {
-                const setStatusProcess = spawn('npx', ['task-master-ai', 'set-status', `--id=${taskId}`, `--status=${status}`], {
+                const setStatusProcess = runTaskmasterProcess('npx', ['task-master-ai', 'set-status', `--id=${taskId}`, `--status=${status}`], {
                     cwd: projectPath,
                     stdio: ['pipe', 'pipe', 'pipe']
-                });
-
-                let stdout = '';
-                let stderr = '';
-
-                setStatusProcess.stdout.on('data', (data) => {
-                    stdout += data.toString();
-                });
-
-                setStatusProcess.stderr.on('data', (data) => {
-                    stderr += data.toString();
-                });
-
-                setStatusProcess.on('close', (code) => {
+                }, ({ code, error, stdout, stderr }) => {
                     if (code === 0) {
                         // Broadcast task update via WebSocket
                         if (req.app.locals.wss) {
@@ -779,7 +764,7 @@ export function createTaskmasterRouter(dependencies: TaskmasterRouterDependencie
                         console.error('Set task status failed:', stderr);
                         res.status(500).json({
                             error: 'Failed to update task status',
-                            message: stderr || stdout,
+                            message: error?.message || stderr || stdout,
                             code
                         });
                     }
@@ -796,23 +781,10 @@ export function createTaskmasterRouter(dependencies: TaskmasterRouterDependencie
 
                 const prompt = `Update task with the following changes: ${updates.join(', ')}`;
 
-                const updateProcess = spawn('npx', ['task-master-ai', 'update-task', `--id=${taskId}`, `--prompt=${prompt}`], {
+                const updateProcess = runTaskmasterProcess('npx', ['task-master-ai', 'update-task', `--id=${taskId}`, `--prompt=${prompt}`], {
                     cwd: projectPath,
                     stdio: ['pipe', 'pipe', 'pipe']
-                });
-
-                let stdout = '';
-                let stderr = '';
-
-                updateProcess.stdout.on('data', (data) => {
-                    stdout += data.toString();
-                });
-
-                updateProcess.stderr.on('data', (data) => {
-                    stderr += data.toString();
-                });
-
-                updateProcess.on('close', (code) => {
+                }, ({ code, error, stdout, stderr }) => {
                     if (code === 0) {
                         // Broadcast task update via WebSocket
                         if (req.app.locals.wss) {
@@ -831,7 +803,7 @@ export function createTaskmasterRouter(dependencies: TaskmasterRouterDependencie
                         console.error('Update task failed:', stderr);
                         res.status(500).json({
                             error: 'Failed to update task',
-                            message: stderr || stdout,
+                            message: error?.message || stderr || stdout,
                             code
                         });
                     }
@@ -892,23 +864,10 @@ export function createTaskmasterRouter(dependencies: TaskmasterRouterDependencie
             args.push('--research'); // Use research for better PRD parsing
 
             // Run task-master parse-prd command
-            const parsePRDProcess = spawn('npx', args, {
+            const parsePRDProcess = runTaskmasterProcess('npx', args, {
                 cwd: projectPath,
                 stdio: ['pipe', 'pipe', 'pipe']
-            });
-
-            let stdout = '';
-            let stderr = '';
-
-            parsePRDProcess.stdout.on('data', (data) => {
-                stdout += data.toString();
-            });
-
-            parsePRDProcess.stderr.on('data', (data) => {
-                stderr += data.toString();
-            });
-
-            parsePRDProcess.on('close', (code) => {
+            }, ({ code, error, stdout, stderr }) => {
                 if (code === 0) {
                     // Broadcast task update via WebSocket
                     if (req.app.locals.wss) {
@@ -930,7 +889,7 @@ export function createTaskmasterRouter(dependencies: TaskmasterRouterDependencie
                     console.error('Parse PRD failed:', stderr);
                     res.status(500).json({
                         error: 'Failed to parse PRD',
-                        message: stderr || stdout,
+                        message: error?.message || stderr || stdout,
                         code
                     });
                 }
