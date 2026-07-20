@@ -75,6 +75,7 @@
     "darkMode": "Dark Mode",
     "showRawParameters": "Show raw parameters",
     "showThinking": "Show thinking",
+    "showSubagentSessions": "Show subagent sessions",
     "sendByCtrlEnter": "Send by Ctrl+Enter",
     "voiceEnabled": "Voice (mic + read aloud)",
     "sendByCtrlEnterDescription": "When enabled, pressing Ctrl+Enter will send the message instead of just Enter. This is useful for IME users to avoid accidental sends.",

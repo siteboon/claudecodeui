@@ -73,10 +73,14 @@ router.get(
       readQueryStringValue(req.query.skipSync).trim() === '1';
     const sessionsLimit = readOptionalNumericQueryValue(req.query.sessionsLimit) ?? undefined;
     const sessionsOffset = readOptionalNumericQueryValue(req.query.sessionsOffset) ?? undefined;
+    const includeSubagents =
+      readQueryStringValue(req.query.includeSubagents).trim() === '1' ||
+      readQueryStringValue(req.query.includeSubagents).trim() === 'true';
     const projects = await getProjectsWithSessions({
       skipSynchronization,
       sessionsLimit,
       sessionsOffset,
+      includeSubagents,
     });
     res.json(projects);
   }),
@@ -96,7 +100,10 @@ router.get(
     const projectId = typeof req.params.projectId === 'string' ? req.params.projectId : '';
     const limit = parseNonNegativeIntQuery(req.query.limit, 'limit', 20);
     const offset = parseNonNegativeIntQuery(req.query.offset, 'offset', 0);
-    const sessionsPage = await getProjectSessionsPage(projectId, { limit, offset });
+    const includeSubagents =
+      readQueryStringValue(req.query.includeSubagents).trim() === '1' ||
+      readQueryStringValue(req.query.includeSubagents).trim() === 'true';
+    const sessionsPage = await getProjectSessionsPage(projectId, { limit, offset, includeSubagents });
     res.json(sessionsPage);
   }),
 );

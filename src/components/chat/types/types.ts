@@ -57,6 +57,8 @@ export interface ChatMessage {
   isLocalCommandStdout?: boolean;
   isCompactSummary?: boolean;
   isSubagentContainer?: boolean;
+  /** Cursor/Claude Task child session id — opens `/session/:id`. */
+  subagentSessionId?: string;
   subagentState?: {
     childTools: SubagentChildTool[];
     currentToolIndex: number;

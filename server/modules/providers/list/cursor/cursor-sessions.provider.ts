@@ -1,7 +1,11 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import readline from 'node:readline';
 
+import { sessionsDb } from '@/modules/database/index.js';
 import { parseImagesInputTag } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
@@ -12,6 +16,8 @@ import {
   sanitizeLeafDirectoryName,
   sliceTailPage,
 } from '@/shared/utils.js';
+
+import { extractAgentIdFromToolResult } from './utils/cursor-subagent.js';
 
 const PROVIDER = 'cursor';
 
@@ -404,8 +410,19 @@ export class CursorSessionsProvider implements IProviderSessions {
     const providerSessionId = options.providerSessionId ?? sessionId;
 
     try {
-      const blobs = await this.loadCursorBlobs(providerSessionId, projectPath);
-      const allNormalized = this.normalizeCursorBlobs(blobs, sessionId);
+      let allNormalized: NormalizedMessage[];
+      try {
+        const blobs = await this.loadCursorBlobs(providerSessionId, projectPath);
+        allNormalized = this.normalizeCursorBlobs(blobs, sessionId);
+      } catch (storeError) {
+        // Subagent sessions usually only have agent-transcripts JSONL, no store.db.
+        allNormalized = await this.loadCursorJsonlHistory(sessionId, providerSessionId);
+        if (allNormalized.length === 0) {
+          throw storeError;
+        }
+      }
+
+      await this.enrichTaskSubagentLinks(allNormalized, sessionId);
       const renderableMessages = allNormalized.filter((msg) => msg.kind !== 'tool_result');
       const total = renderableMessages.length;
       const { page, hasMore } = sliceTailPage(renderableMessages, limit, offset);
@@ -422,6 +439,189 @@ export class CursorSessionsProvider implements IProviderSessions {
       console.warn(`[CursorProvider] Failed to load session ${sessionId}:`, message);
       return { messages: [], total: 0, hasMore: false, offset: 0, limit: null };
     }
+  }
+
+  /**
+   * Attaches Cursor Task → subagent session links (and optional tool history)
+   * so the parent chat can open the subagent transcript.
+   */
+  private async enrichTaskSubagentLinks(
+    messages: NormalizedMessage[],
+    parentSessionId: string | null,
+  ): Promise<void> {
+    for (const message of messages) {
+      if (message.kind !== 'tool_use' || message.toolName !== 'Task') {
+        continue;
+      }
+
+      const agentId = extractAgentIdFromToolResult(message.toolResult)
+        ?? extractAgentIdFromToolResult(message.toolResult?.toolUseResult);
+      if (!agentId) {
+        continue;
+      }
+
+      message.subagentSessionId = agentId;
+      if (parentSessionId) {
+        sessionsDb.markSessionAsSubagent(agentId, parentSessionId);
+      }
+
+      const tools = await this.loadSubagentToolsFromJsonl(agentId);
+      if (tools.length > 0) {
+        message.subagentTools = tools;
+      }
+    }
+  }
+
+  /**
+   * Loads tool_use entries from a Cursor agent-transcripts JSONL file.
+   */
+  private async loadSubagentToolsFromJsonl(agentId: string): Promise<AnyRecord[]> {
+    const row = sessionsDb.getSessionById(agentId)
+      ?? sessionsDb.getSessionByProviderSessionId(agentId);
+    const jsonlPath = row?.jsonl_path;
+    if (!jsonlPath) {
+      return [];
+    }
+
+    const tools: AnyRecord[] = [];
+    try {
+      const fileStream = fs.createReadStream(jsonlPath, { encoding: 'utf8' });
+      const lineReader = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
+      for await (const line of lineReader) {
+        if (!line.trim()) {
+          continue;
+        }
+        try {
+          const entry = JSON.parse(line) as AnyRecord;
+          const content = entry.message?.content;
+          if (!Array.isArray(content)) {
+            continue;
+          }
+          for (const part of content) {
+            if (part?.type === 'tool_use' && part?.name) {
+              tools.push({
+                toolId: part.id || `${agentId}_${tools.length}`,
+                toolName: part.name,
+                toolInput: part.input,
+                timestamp: entry.timestamp,
+              });
+            }
+          }
+        } catch {
+          // Skip malformed JSONL lines.
+        }
+      }
+    } catch {
+      return [];
+    }
+
+    return tools;
+  }
+
+  /**
+   * Fallback history reader for Cursor sessions that only have agent-transcripts
+   * JSONL (typical for Task/subagent runs without a chats/<hash>/<id>/store.db).
+   */
+  private async loadCursorJsonlHistory(
+    sessionId: string,
+    providerSessionId: string,
+  ): Promise<NormalizedMessage[]> {
+    const row = sessionsDb.getSessionById(sessionId)
+      ?? sessionsDb.getSessionByProviderSessionId(providerSessionId);
+    const jsonlPath = row?.jsonl_path;
+    if (!jsonlPath) {
+      return [];
+    }
+
+    try {
+      await fsp.access(jsonlPath);
+    } catch {
+      return [];
+    }
+
+    const messages: NormalizedMessage[] = [];
+    const baseTime = Date.now();
+    let sequence = 0;
+
+    try {
+      const fileStream = fs.createReadStream(jsonlPath, { encoding: 'utf8' });
+      const lineReader = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
+      for await (const line of lineReader) {
+        if (!line.trim()) {
+          continue;
+        }
+        try {
+          const entry = JSON.parse(line) as AnyRecord;
+          const roleRaw = entry.role || entry.message?.role;
+          if (roleRaw !== 'user' && roleRaw !== 'assistant') {
+            continue;
+          }
+          const role = roleRaw === 'user' ? 'user' : 'assistant';
+          const content = entry.message?.content ?? entry.content;
+          const ts = typeof entry.timestamp === 'string'
+            ? entry.timestamp
+            : new Date(baseTime + sequence * 100).toISOString();
+
+          if (Array.isArray(content)) {
+            for (let partIdx = 0; partIdx < content.length; partIdx++) {
+              const part = content[partIdx] as AnyRecord;
+              if (part?.type === 'text' && typeof part.text === 'string') {
+                const { text } = extractUserTextAndImages(part.text, role);
+                if (!text.trim()) {
+                  continue;
+                }
+                sequence += 1;
+                messages.push(createNormalizedMessage({
+                  id: `${providerSessionId}_${sequence}`,
+                  sessionId,
+                  timestamp: ts,
+                  provider: PROVIDER,
+                  kind: 'text',
+                  role,
+                  content: text,
+                  sequence,
+                }));
+              } else if (part?.type === 'tool_use' && part?.name) {
+                sequence += 1;
+                messages.push(createNormalizedMessage({
+                  id: `${providerSessionId}_${sequence}`,
+                  sessionId,
+                  timestamp: ts,
+                  provider: PROVIDER,
+                  kind: 'tool_use',
+                  toolName: part.name === 'ApplyPatch' ? 'Edit' : part.name,
+                  toolInput: normalizeCursorToolInput(part.name, part.input),
+                  toolId: typeof part.id === 'string' ? part.id : `tool_${sequence}`,
+                  sequence,
+                }));
+              }
+            }
+          } else if (typeof content === 'string' && content.trim()) {
+            const { text } = extractUserTextAndImages(content, role);
+            if (!text.trim()) {
+              continue;
+            }
+            sequence += 1;
+            messages.push(createNormalizedMessage({
+              id: `${providerSessionId}_${sequence}`,
+              sessionId,
+              timestamp: ts,
+              provider: PROVIDER,
+              kind: 'text',
+              role,
+              content: text,
+              sequence,
+            }));
+          }
+        } catch {
+          // Skip malformed lines.
+        }
+      }
+    } catch {
+      return [];
+    }
+
+    return messages;
   }
 
   /**

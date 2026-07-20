@@ -26,11 +26,13 @@ export default function QuickSettingsPanelView() {
   const quickSettingsPreferences = useMemo<QuickSettingsPreferences>(() => ({
     showRawParameters: preferences.showRawParameters,
     showThinking: preferences.showThinking,
+    showSubagentSessions: preferences.showSubagentSessions,
     sendByCtrlEnter: preferences.sendByCtrlEnter,
     voiceEnabled: preferences.voiceEnabled,
   }), [
     preferences.sendByCtrlEnter,
     preferences.showRawParameters,
+    preferences.showSubagentSessions,
     preferences.showThinking,
     preferences.voiceEnabled,
   ]);

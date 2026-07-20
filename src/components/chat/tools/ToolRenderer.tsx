@@ -27,6 +27,7 @@ interface ToolRendererProps {
   showRawParameters?: boolean;
   rawToolInput?: string;
   isSubagentContainer?: boolean;
+  subagentSessionId?: string;
   subagentState?: {
     childTools: SubagentChildTool[];
     currentToolIndex: number;
@@ -82,6 +83,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
   showRawParameters = false,
   rawToolInput,
   isSubagentContainer,
+  subagentSessionId,
   subagentState
 }) => {
   const config = getToolConfig(toolName);
@@ -117,6 +119,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
         toolInput={toolInput}
         toolResult={toolResult}
         subagentState={subagentState}
+        subagentSessionId={subagentSessionId}
       />
     );
   }

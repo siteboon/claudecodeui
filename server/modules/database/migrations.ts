@@ -259,9 +259,12 @@ const rebuildSessionsTableWithProjectSchema = (db: Database): void => {
   if (!shouldRebuild) {
     addColumnToTableIfNotExists(db, 'sessions', columnNames, 'jsonl_path', 'TEXT');
     addColumnToTableIfNotExists(db, 'sessions', columnNames, 'isArchived', 'BOOLEAN DEFAULT 0');
+    addColumnToTableIfNotExists(db, 'sessions', columnNames, 'is_subagent', 'BOOLEAN DEFAULT 0');
+    addColumnToTableIfNotExists(db, 'sessions', columnNames, 'parent_session_id', 'TEXT');
     addColumnToTableIfNotExists(db, 'sessions', columnNames, 'created_at', 'DATETIME');
     addColumnToTableIfNotExists(db, 'sessions', columnNames, 'updated_at', 'DATETIME');
     db.exec('UPDATE sessions SET isArchived = COALESCE(isArchived, 0)');
+    db.exec('UPDATE sessions SET is_subagent = COALESCE(is_subagent, 0)');
     db.exec('UPDATE sessions SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP)');
     db.exec('UPDATE sessions SET updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP)');
     return;
@@ -421,6 +424,48 @@ const ensureProjectsForSessionPaths = (db: Database): void => {
   `);
 };
 
+/**
+ * Ensures subagent columns exist on upgraded installs and backfills the classic
+ * Cursor `…/subagents/<id>.jsonl` path layout.
+ */
+const ensureSessionSubagentColumns = (db: Database): void => {
+  if (!tableExists(db, 'sessions')) {
+    return;
+  }
+
+  const columnNames = getTableInfo(db, 'sessions').map((column) => column.name);
+  addColumnToTableIfNotExists(db, 'sessions', columnNames, 'is_subagent', 'BOOLEAN DEFAULT 0');
+  addColumnToTableIfNotExists(db, 'sessions', columnNames, 'parent_session_id', 'TEXT');
+  db.exec('UPDATE sessions SET is_subagent = COALESCE(is_subagent, 0)');
+
+  // Classic Cursor layout: agent-transcripts/<parent>/subagents/<child>.jsonl
+  const subagentPathRows = db
+    .prepare(
+      `SELECT session_id, jsonl_path, parent_session_id
+       FROM sessions
+       WHERE jsonl_path LIKE '%/subagents/%'`,
+    )
+    .all() as Array<{ session_id: string; jsonl_path: string; parent_session_id: string | null }>;
+
+  const updateSubagent = db.prepare(
+    `UPDATE sessions
+     SET is_subagent = 1, parent_session_id = COALESCE(?, parent_session_id)
+     WHERE session_id = ?`,
+  );
+
+  for (const row of subagentPathRows) {
+    const normalized = row.jsonl_path.replace(/\\/g, '/');
+    const marker = '/subagents/';
+    const markerIndex = normalized.lastIndexOf(marker);
+    let parentProviderSessionId: string | null = row.parent_session_id;
+    if (markerIndex >= 0) {
+      const before = normalized.slice(0, markerIndex);
+      parentProviderSessionId = before.slice(before.lastIndexOf('/') + 1) || parentProviderSessionId;
+    }
+    updateSubagent.run(parentProviderSessionId, row.session_id);
+  }
+};
+
 export const runMigrations = (db: Database) => {
   try {
     const usersTableInfo = db.prepare('PRAGMA table_info(users)').all() as { name: string }[];
@@ -453,11 +498,14 @@ export const runMigrations = (db: Database) => {
     migrateLegacySessionNames(db);
     addProviderSessionIdMapping(db);
     ensureProjectsForSessionPaths(db);
+    ensureSessionSubagentColumns(db);
 
     db.exec('CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_provider_session_id ON sessions(provider_session_id)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_project_path ON sessions(project_path)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_is_archived ON sessions(isArchived)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_is_subagent ON sessions(is_subagent)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_parent_session_id ON sessions(parent_session_id)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_projects_is_starred ON projects(isStarred)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_projects_is_archived ON projects(isArchived)');
 

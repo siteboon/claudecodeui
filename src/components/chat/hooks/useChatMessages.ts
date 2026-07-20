@@ -177,6 +177,9 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           toolId: msg.toolId,
           toolResult,
           isSubagentContainer,
+          subagentSessionId: typeof (msg as { subagentSessionId?: unknown }).subagentSessionId === 'string'
+            ? (msg as { subagentSessionId: string }).subagentSessionId
+            : undefined,
           subagentState: isSubagentContainer
             ? {
                 childTools,

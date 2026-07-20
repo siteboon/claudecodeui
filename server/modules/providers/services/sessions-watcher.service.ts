@@ -144,6 +144,7 @@ async function buildSessionUpsertedEvent(updatedProviderSessionId: string): Prom
     ? project.custom_project_name
     : await generateDisplayName(path.basename(projectPath ?? '') || (projectPath ?? ''), projectPath);
 
+  const isSubagent = Boolean((row as { is_subagent?: number }).is_subagent);
   return JSON.stringify({
     kind: 'session_upserted',
     sessionId: row.session_id,
@@ -153,6 +154,12 @@ async function buildSessionUpsertedEvent(updatedProviderSessionId: string): Prom
       summary: row.custom_name || '',
       messageCount: 0,
       lastActivity: row.updated_at ?? row.created_at ?? new Date().toISOString(),
+      ...(isSubagent
+        ? {
+            isSubagent: true,
+            parentSessionId: (row as { parent_session_id?: string | null }).parent_session_id ?? null,
+          }
+        : {}),
     },
     project: project
       ? {

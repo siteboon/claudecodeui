@@ -1,6 +1,7 @@
 import {
   Brain,
   Eye,
+  GitBranch,
   Languages,
   Mic,
 } from 'lucide-react';
@@ -32,6 +33,11 @@ export const TOOL_DISPLAY_TOGGLES: PreferenceToggleItem[] = [
     key: 'showThinking',
     labelKey: 'quickSettings.showThinking',
     icon: Brain,
+  },
+  {
+    key: 'showSubagentSessions',
+    labelKey: 'quickSettings.showSubagentSessions',
+    icon: GitBranch,
   },
 ];
 
