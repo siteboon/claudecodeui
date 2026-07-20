@@ -97,6 +97,7 @@ async function spawnCursor(command, options = {}, ws) {
       const isTrustRetry = runReason === 'trust-retry';
       let runSawWorkspaceTrustPrompt = false;
       let stdoutLineBuffer = '';
+      let thinkingBuffer = ''; // accumulate cursor thinking deltas for UI
       let terminalNotificationSent = false;
 
       const notifyTerminalState = ({ code = null, error = null } = {}) => {
@@ -193,7 +194,36 @@ async function spawnCursor(command, options = {}, ws) {
               // User messages are not displayed in the UI — skip.
               break;
 
+            case 'thinking':
+              // Forward Cursor Agent stream-json thinking events to the UI.
+              // Cursor Agent emits type=thinking deltas; without this the CloudCLI
+              // "Show thinking" toggle stays empty for Cursor sessions.
+              if (response.subtype === 'delta' && typeof response.text === 'string' && response.text) {
+                thinkingBuffer += response.text;
+              } else if (response.subtype === 'completed') {
+                if (thinkingBuffer.trim()) {
+                  ws.send(createNormalizedMessage({
+                    kind: 'thinking',
+                    content: thinkingBuffer,
+                    sessionId: capturedSessionId || sessionId || null,
+                    provider: 'cursor',
+                  }));
+                }
+                thinkingBuffer = '';
+              }
+              break;
+
             case 'assistant':
+              // Flush thinking if completed event was skipped.
+              if (thinkingBuffer.trim()) {
+                ws.send(createNormalizedMessage({
+                  kind: 'thinking',
+                  content: thinkingBuffer,
+                  sessionId: capturedSessionId || sessionId || null,
+                  provider: 'cursor',
+                }));
+                thinkingBuffer = '';
+              }
               // Accumulate assistant message chunks
               if (response.message && response.message.content && response.message.content.length > 0) {
                 const normalized = sessionsService.normalizeMessage('cursor', response, capturedSessionId || sessionId || null);
