@@ -458,7 +458,7 @@ async function loadMcpConfig(cwd) {
  * @returns {Promise<void>}
  */
 async function queryClaudeSDK(command, options = {}, ws) {
-  const { sessionId, sessionSummary } = options;
+  const { sessionId, appSessionId, sessionSummary } = options;
   let capturedSessionId = sessionId;
   let sessionCreatedSent = false;
 
@@ -473,7 +473,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
   try {
     const resolvedModel = await providerModelsService.resolveResumeModel(
       'claude',
-      sessionId,
+      { sessionId, appSessionId },
       options.model,
     );
     let effortModels = CLAUDE_FALLBACK_MODELS;

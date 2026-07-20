@@ -15,6 +15,7 @@ import {
   FALLBACK_PROVIDER_EFFORT_VALUES,
   toProviderEffortOptions,
 } from '../constants/providerEffort';
+import { reconcileProviderModel } from './reconcileProviderModel';
 
 const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   claude: 'default',
@@ -24,6 +25,13 @@ const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
 };
 
 const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode'];
+
+const PROVIDER_MODEL_STORAGE_KEYS: Record<LLMProvider, string> = {
+  claude: 'claude-model',
+  cursor: 'cursor-model',
+  codex: 'codex-model',
+  opencode: 'opencode-model',
+};
 
 const readStoredProvider = (): LLMProvider => {
   const storedProvider = localStorage.getItem('selected-provider');
@@ -279,20 +287,19 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     return Boolean(FALLBACK_PROVIDER_EFFORT_VALUES[targetProvider]?.length);
   }, [providerCapabilities]);
 
-  const pickStoredOrCurrent = (
-    storageKey: string,
-    current: string,
-    def: ProviderModelsDefinition,
-  ): string => {
-    const stored = localStorage.getItem(storageKey);
-    if (stored && def.OPTIONS.some((o) => o.value === stored)) {
-      return stored;
-    }
-    if (current && def.OPTIONS.some((o) => o.value === current)) {
-      return current;
-    }
-    return def.DEFAULT;
-  };
+  const providerModelSetters = useMemo<Record<LLMProvider, (model: string) => void>>(() => ({
+    claude: setClaudeModel,
+    cursor: setCursorModel,
+    codex: setCodexModel,
+    opencode: setOpenCodeModel,
+  }), []);
+
+  // Tracks the most recent session-scoped model applied via setProviderModelState,
+  // per provider. While `current` still equals the recorded value, the reconcile
+  // effect below must not persist it as the provider-level default — it stays set
+  // until the model actually diverges (a real change, or falling out of the
+  // catalog), not just for one effect pass.
+  const sessionScopedModelRef = useRef<Partial<Record<LLMProvider, string>>>({});
 
   const getModelOption = useCallback((
     targetProvider: LLMProvider,
@@ -358,56 +365,27 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   }), [claudeModel, cursorModel, codexModel, opencodeModel]);
 
   useEffect(() => {
-    const claude = providerModelCatalog.claude;
-    if (claude) {
-      const next = pickStoredOrCurrent('claude-model', claudeModel, claude);
-      if (next !== claudeModel) {
-        setClaudeModel(next);
+    for (const targetProvider of PROVIDERS) {
+      const catalog = providerModelCatalog[targetProvider];
+      if (!catalog) {
+        continue;
       }
-      if (localStorage.getItem('claude-model') !== next) {
-        localStorage.setItem('claude-model', next);
-      }
-    }
-  }, [providerModelCatalog.claude, claudeModel]);
 
-  useEffect(() => {
-    const cursor = providerModelCatalog.cursor;
-    if (cursor) {
-      const next = pickStoredOrCurrent('cursor-model', cursorModel, cursor);
-      if (next !== cursorModel) {
-        setCursorModel(next);
-      }
-      if (localStorage.getItem('cursor-model') !== next) {
-        localStorage.setItem('cursor-model', next);
-      }
-    }
-  }, [providerModelCatalog.cursor, cursorModel]);
-
-  useEffect(() => {
-    const codex = providerModelCatalog.codex;
-    if (codex) {
-      const next = pickStoredOrCurrent('codex-model', codexModel, codex);
-      if (next !== codexModel) {
-        setCodexModel(next);
-      }
-      if (localStorage.getItem('codex-model') !== next) {
-        localStorage.setItem('codex-model', next);
+      const storageKey = PROVIDER_MODEL_STORAGE_KEYS[targetProvider];
+      const current = providerModels[targetProvider];
+      const { next } = reconcileProviderModel({
+        storage: localStorage,
+        storageKey,
+        current,
+        catalog,
+        sessionScoped: sessionScopedModelRef.current,
+        targetProvider,
+      });
+      if (next !== current) {
+        providerModelSetters[targetProvider](next);
       }
     }
-  }, [providerModelCatalog.codex, codexModel]);
-
-  useEffect(() => {
-    const opencode = providerModelCatalog.opencode;
-    if (opencode) {
-      const next = pickStoredOrCurrent('opencode-model', opencodeModel, opencode);
-      if (next !== opencodeModel) {
-        setOpenCodeModel(next);
-      }
-      if (localStorage.getItem('opencode-model') !== next) {
-        localStorage.setItem('opencode-model', next);
-      }
-    }
-  }, [providerModelCatalog.opencode, opencodeModel]);
+  }, [providerModelCatalog, providerModels, providerModelSetters]);
 
   useEffect(() => {
     const nextEfforts: Partial<Record<LLMProvider, string>> = {};
@@ -512,6 +490,16 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       : getDefaultPermissionModeForProvider(targetProvider);
   }, [getDefaultPermissionModeForProvider, getPermissionModesForProvider]);
 
+  // Applies a model choice in memory only, without touching the localStorage
+  // default that setStoredProviderModel owns. Flags it as session-scoped so
+  // the reconcile effect above won't persist it as the provider-level default
+  // once it re-runs for an unrelated reason (another provider's model
+  // changing, a catalog refresh, etc).
+  const setProviderModelState = useCallback((targetProvider: LLMProvider, model: string) => {
+    sessionScopedModelRef.current[targetProvider] = model;
+    providerModelSetters[targetProvider](model);
+  }, [providerModelSetters]);
+
   const selectProviderModel = useCallback(async (
     targetProvider: LLMProvider,
     model: string,
@@ -540,12 +528,17 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       throw new Error('Unable to change the active model for this session.');
     }
 
+    // Apply the resolved model to in-memory state so the next message sent
+    // for this session uses it, rather than waiting on a future reconcile.
+    const resolvedModel = body.data.model || model;
+    setProviderModelState(targetProvider, resolvedModel);
+
     return {
       scope: 'session' as const,
       changed: body.data.changed === true,
-      model: body.data.model || model,
+      model: resolvedModel,
     };
-  }, [setStoredProviderModel]);
+  }, [setStoredProviderModel, setProviderModelState]);
 
   const currentProviderEffortOptions = useMemo(() => {
     return getEffortOptionsForModel(provider, providerModels[provider]);

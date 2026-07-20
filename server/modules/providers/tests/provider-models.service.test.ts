@@ -341,7 +341,7 @@ test('resolveResumeModel prefers a stored changed model over the requested one',
       filePath: activeModelChangesPath,
     });
 
-    const model = await service.resolveResumeModel('cursor', 'session-456', 'composer-2-fast');
+    const model = await service.resolveResumeModel('cursor', { sessionId: 'session-456' }, 'composer-2-fast');
     assert.equal(model, 'composer-2');
   } finally {
     await rm(tempRoot, { recursive: true, force: true });

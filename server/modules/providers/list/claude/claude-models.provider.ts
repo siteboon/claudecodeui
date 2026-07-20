@@ -19,7 +19,7 @@ export const CLAUDE_FALLBACK_MODELS: ProviderModelsDefinition = {
     {
       value: 'default',
       label: 'Default (recommended)',
-      description: 'Use the Claude Code default model (currently Sonnet 4.6)',
+      description: 'Use the Claude Code default model (currently Sonnet 5)',
       effort: {
         default: 'high',
         values: [
@@ -48,21 +48,7 @@ export const CLAUDE_FALLBACK_MODELS: ProviderModelsDefinition = {
     {
       value: "sonnet",
       label: "Sonnet",
-      description: "Sonnet 4.6 · Best for everyday tasks · $3/$15 per Mtok",
-      effort: {
-        default: 'high',
-        values: [
-          { value: 'low' },
-          { value: 'medium' },
-          { value: 'high' },
-          { value: 'max' },
-        ],
-      },
-    },
-    {
-      value: 'sonnet[1m]',
-      label: 'Sonnet (1M context)',
-      description: 'Sonnet 4.6 for long sessions · $3/$15 per Mtok',
+      description: "Sonnet 5 · Best for everyday tasks · $3/$15 per Mtok",
       effort: {
         default: 'high',
         values: [
@@ -89,21 +75,6 @@ export const CLAUDE_FALLBACK_MODELS: ProviderModelsDefinition = {
       },
     },
     {
-      value: 'opus[1m]',
-      label: 'Opus 4.8 (1M context)',
-      description: 'Opus 4.8 with 1M context · Most capable for complex work · $5/$25 per Mtok',
-      effort: {
-        default: 'high',
-        values: [
-          { value: 'low' },
-          { value: 'medium' },
-          { value: 'high' },
-          { value: 'xhigh' },
-          { value: 'max' },
-        ],
-      },
-    },
-    {
       value: 'haiku',
       label: 'Haiku',
       description: 'Haiku 4.5 · Fastest for quick answers · $1/$5 per Mtok',
@@ -112,13 +83,46 @@ export const CLAUDE_FALLBACK_MODELS: ProviderModelsDefinition = {
   DEFAULT: 'default',
 };
 
+// Maps raw Anthropic API model ids (from JSONL transcripts, e.g. 'claude-sonnet-5'
+// or a Bedrock-style 'us.anthropic.claude-opus-4-8-v1:0') back to the catalog
+// option whose value names the model family. Families come from the catalog
+// itself: every plain-word option value other than the 'default' sentinel is a
+// family alias, so a new model works here as soon as it has a catalog entry.
+const isFamilyAliasOption = (option: ProviderModelOption): boolean =>
+  option.value !== CLAUDE_FALLBACK_MODELS.DEFAULT && /^[a-z][a-z0-9]*$/.test(option.value);
+
+const matchClaudeModelOptionFromRawId = (rawModel: string): ProviderModelOption | null => {
+  const lowered = rawModel.toLowerCase();
+  const match = CLAUDE_FALLBACK_MODELS.OPTIONS
+    .filter((option) => isFamilyAliasOption(option)
+      && new RegExp(`(^|[^a-z0-9])${option.value}([^a-z0-9]|$)`).test(lowered))
+    // Prefer the most specific alias if several appear in one id.
+    .sort((first, second) => second.value.length - first.value.length)[0];
+
+  if (!match) {
+    console.warn(
+      `[claude-models] Unrecognized model id "${rawModel}" — it names no catalog model family. `
+      + 'Falling back to the catalog default; if a new Claude model was introduced, add it to '
+      + 'CLAUDE_FALLBACK_MODELS in claude-models.provider.ts and it will match automatically.',
+    );
+    return null;
+  }
+
+  return match;
+};
+
 export const findClaudeModelOption = (model: string | undefined | null): ProviderModelOption | null => {
   const normalizedModel = typeof model === 'string' ? model.trim() : '';
   if (!normalizedModel) {
     return null;
   }
 
-  return CLAUDE_FALLBACK_MODELS.OPTIONS.find((option) => option.value === normalizedModel) ?? null;
+  const exactMatch = CLAUDE_FALLBACK_MODELS.OPTIONS.find((option) => option.value === normalizedModel);
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  return matchClaudeModelOptionFromRawId(normalizedModel);
 };
 type ClaudeInitEvent = {
   sessionId?: string;
@@ -219,7 +223,7 @@ const readClaudeSessionModelFromJsonl = async (
       const event = JSON.parse(lines[index]) as ClaudeInitEvent;
       const model = extractClaudeEventModel(event, sessionId);
       if (model) {
-        return { model };
+        return { model: findClaudeModelOption(model)?.value ?? CLAUDE_FALLBACK_MODELS.DEFAULT };
       }
     } catch {
       // Skip malformed JSONL lines that can happen during concurrent writes.
@@ -251,9 +255,13 @@ export class ClaudeProviderModels implements IProviderModels {
     }
 
     try {
-      const jsonlPath = sessionsDb.getSessionById(sessionId)?.jsonl_path;
+      const sessionRow = sessionsDb.getSessionById(sessionId);
+      const jsonlPath = sessionRow?.jsonl_path;
+      // JSONL events carry the provider-native session id, not the app-facing
+      // `sessionId` used to look up the row, so compare against that instead.
+      const providerSessionId = sessionRow?.provider_session_id || sessionId;
       const activeModel = jsonlPath
-        ? await readClaudeSessionModelFromJsonl(sessionId, jsonlPath)
+        ? await readClaudeSessionModelFromJsonl(providerSessionId, jsonlPath)
         : null;
       if (activeModel?.model) {
         return activeModel;

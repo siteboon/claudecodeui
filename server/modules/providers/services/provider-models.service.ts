@@ -322,15 +322,18 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
 
   const resolveResumeModel = async (
     provider: LLMProvider,
-    sessionId: string | undefined,
+    sessionIds: { sessionId?: string | null; appSessionId?: string | null },
     requestedModel?: string | null,
   ): Promise<string | undefined> => {
     const normalizedRequestedModel = typeof requestedModel === 'string' ? requestedModel.trim() : '';
-    if (!sessionId?.trim()) {
+    // Stored active-model overrides are keyed by the app-facing session id,
+    // not the provider-native one, so that's what a lookup must use.
+    const overrideSessionId = sessionIds.appSessionId?.trim() || sessionIds.sessionId?.trim();
+    if (!overrideSessionId) {
       return normalizedRequestedModel || undefined;
     }
 
-    const changedModel = await getChangedActiveModel(provider, sessionId);
+    const changedModel = await getChangedActiveModel(provider, overrideSessionId);
     if (changedModel.supported && changedModel.changed && changedModel.model?.trim()) {
       return changedModel.model.trim();
     }
