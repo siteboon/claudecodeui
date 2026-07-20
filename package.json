@@ -6,7 +6,7 @@
   "type": "module",
   "main": "dist-server/server/index.js",
   "bin": {
-    "cloudcli": "dist-server/server/cli.js"
+    "cloudcli": "dist-server/server/modules/cli/cli.js"
   },
   "files": [
     "electron/",
@@ -29,8 +29,8 @@
   "scripts": {
     "dev": "concurrently --kill-others \"npm run server:dev\" \"npm run client\"",
     "server": "node dist-server/server/index.js",
-    "server:dev": "tsx --tsconfig server/tsconfig.json server/index.js",
-    "server:dev-watch": "tsx watch --tsconfig server/tsconfig.json server/index.js",
+    "server:dev": "tsx --tsconfig server/tsconfig.json server/index.ts",
+    "server:dev-watch": "tsx watch --tsconfig server/tsconfig.json server/index.ts",
     "client": "vite",
     "desktop": "electron electron/main.js",
     "desktop:dev": "cross-env ELECTRON_DEV_URL=http://127.0.0.1:5173 electron electron/main.js",
@@ -46,6 +46,7 @@
     "build:server": "tsc -p server/tsconfig.json && tsc-alias -p server/tsconfig.json",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p server/tsconfig.json",
+    "test": "node --import tsx --test \"server/**/*.test.ts\" \"server/**/*.test.js\"",
     "lint": "eslint src/ server/",
     "lint:fix": "eslint src/ server/ --fix",
     "start": "npm run build && npm run server",
@@ -187,6 +188,7 @@
     "react-syntax-highlighter": "^15.6.1",
     "rehype-katex": "^7.0.1",
     "rehype-raw": "^7.0.0",
+    "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.0",
     "remark-math": "^6.0.0",
     "tailwind-merge": "^3.3.1",
@@ -199,6 +201,7 @@
     "@eslint/js": "^9.39.3",
     "@release-it/conventional-changelog": "^10.0.5",
     "@types/better-sqlite3": "^7.6.13",
+    "@types/cors": "^2.8.19",
     "@types/cross-spawn": "^6.0.6",
     "@types/express": "^5.0.6",
     "@types/mime-types": "^3.0.1",

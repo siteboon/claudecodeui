@@ -36,6 +36,8 @@ const WATCHER_IGNORED_PATTERNS = [
   '**/.git/**',
   '**/dist/**',
   '**/build/**',
+  '**/subagents/**',
+  '**/tool-results/**',
   '**/*.tmp',
   '**/*.swp',
   '**/.DS_Store',

@@ -1,4 +1,5 @@
 import type {
+  AnyRecord,
   FetchHistoryOptions,
   FetchHistoryResult,
   LLMProvider,
@@ -14,10 +15,31 @@ import type {
   ProviderSessionActiveModelChange,
   ProviderSkillCreateInput,
   ProviderSkillRemoveInput,
+  ProviderRuntimeContext,
+  ProviderRuntimePermissionGateway,
+  ProviderRuntimeWriter,
   UpsertProviderMcpServerInput,
 } from '@/shared/types.js';
 
 //----------------- PROVIDER CONTRACT INTERFACES ------------
+
+/**
+ * Live execution contract implemented by each provider SDK/CLI adapter.
+ *
+ * The provider registry owns this adapter as one facet of `IProvider`; runtime
+ * execution context is supplied by the application service at call time.
+ */
+export interface IProviderRuntime {
+  run(
+    command: string,
+    options: AnyRecord,
+    writer: ProviderRuntimeWriter,
+    context: ProviderRuntimeContext,
+  ): Promise<unknown>;
+  abort(sessionId: string): boolean | Promise<boolean>;
+  permissions?: ProviderRuntimePermissionGateway;
+}
+
 /**
  * Main provider contract for CLI and SDK integrations.
  *
@@ -26,6 +48,7 @@ import type {
  */
 export interface IProvider {
   readonly id: LLMProvider;
+  readonly runtime: IProviderRuntime;
   readonly models: IProviderModels;
   readonly mcp: IProviderMcp;
   readonly auth: IProviderAuth;

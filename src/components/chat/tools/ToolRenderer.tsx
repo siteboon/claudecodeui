@@ -46,7 +46,7 @@ function getToolCategory(toolName: string): string {
   return 'default';
 }
 
-// Exact denial messages from server/claude-sdk.js — other providers can't reliably signal denial
+// Exact denial messages from the Claude runtime adapter — other providers can't reliably signal denial
 const CLAUDE_DENIAL_MESSAGES = [
   'user denied tool use',
   'tool disallowed by settings',
@@ -149,8 +149,8 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
         output={output}
         isError={Boolean(toolResult?.isError)}
         status={toolStatus !== 'completed' ? toolStatus : undefined}
-        // Commands stay collapsed by default; only failures auto-expand so they
-        // remain visible.
+        // Commands stay collapsed by default — including failures; the status
+        // badge marks errors and the output expands via the chevron.
         defaultOpen={false}
       />
     );

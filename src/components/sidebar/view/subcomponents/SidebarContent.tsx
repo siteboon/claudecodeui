@@ -191,6 +191,9 @@ export default function SidebarContent({
   const showConversationSearch = searchMode === 'conversations' && searchFilter.trim().length >= 2;
   const hasPartialResults = conversationResults && conversationResults.results.length > 0;
   const groupedArchivedSessions = groupArchivedSessionsByProject(archivedSessions);
+  const isRenamingOnMobile = isMobile && Boolean(
+    projectListProps.editingProject || projectListProps.editingSession,
+  );
 
   return (
     <div
@@ -553,16 +556,18 @@ export default function SidebarContent({
         )}
       </ScrollArea>
 
-      <SidebarFooter
-        updateAvailable={updateAvailable}
-        restartRequired={restartRequired}
-        releaseInfo={releaseInfo}
-        latestVersion={latestVersion}
-        currentVersion={currentVersion}
-        onShowVersionModal={onShowVersionModal}
-        onShowSettings={onShowSettings}
-        t={t}
-      />
+      {!isRenamingOnMobile && (
+        <SidebarFooter
+          updateAvailable={updateAvailable}
+          restartRequired={restartRequired}
+          releaseInfo={releaseInfo}
+          latestVersion={latestVersion}
+          currentVersion={currentVersion}
+          onShowVersionModal={onShowVersionModal}
+          onShowSettings={onShowSettings}
+          t={t}
+        />
+      )}
     </div>
   );
 }

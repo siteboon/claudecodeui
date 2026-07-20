@@ -45,6 +45,11 @@ export class CodexSkillsProvider extends SkillsProvider {
       commandPrefix: '$',
     });
     addUniqueProviderSkillSource(sources, seenRootDirs, {
+      scope: 'user',
+      rootDir: path.join(os.homedir(), '.codex', 'skills'),
+      commandPrefix: '$',
+    });
+    addUniqueProviderSkillSource(sources, seenRootDirs, {
       scope: 'admin',
       rootDir: path.join('/etc', 'codex', 'skills'),
       commandPrefix: '$',

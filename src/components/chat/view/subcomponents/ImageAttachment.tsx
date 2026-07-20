@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 
+import { ImageLightbox } from './ChatMessageImages';
+
 interface ImageAttachmentProps {
   file: File;
   onRemove: () => void;
@@ -9,25 +11,31 @@ interface ImageAttachmentProps {
 
 const ImageAttachment = ({ file, onRemove, uploadProgress, error }: ImageAttachmentProps) => {
   const [preview, setPreview] = useState<string | undefined>(undefined);
-  
+  const [expanded, setExpanded] = useState(false);
+
   useEffect(() => {
     const url = URL.createObjectURL(file);
     setPreview(url);
     return () => URL.revokeObjectURL(url);
   }, [file]);
-  
+
   return (
     <div className="group relative">
-      <div className="overflow-hidden rounded-xl border border-border/50 shadow-sm">
-        <img src={preview} alt={file.name} className="h-20 w-20 object-cover" />
-      </div>
+      <button
+        type="button"
+        onClick={() => preview && setExpanded(true)}
+        aria-label={`Expand ${file.name}`}
+        className="block overflow-hidden rounded-xl border border-border/50 shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/60"
+      >
+        <img src={preview} alt={file.name} className="h-20 w-20 cursor-zoom-in object-cover" />
+      </button>
       {uploadProgress !== undefined && uploadProgress < 100 && (
-        <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/50">
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-xl bg-black/50">
           <div className="text-xs text-white">{uploadProgress}%</div>
         </div>
       )}
       {error && (
-        <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-red-500/50">
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-xl bg-red-500/50">
           <svg className="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
@@ -43,10 +51,11 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }: ImageAttachm
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
         </svg>
       </button>
+      {expanded && preview && (
+        <ImageLightbox src={preview} alt={file.name} onClose={() => setExpanded(false)} />
+      )}
     </div>
   );
 };
 
 export default ImageAttachment;
-
-

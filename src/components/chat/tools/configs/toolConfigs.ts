@@ -541,10 +541,42 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     result: {
       type: 'collapsible',
       contentType: 'text',
-      getContentProps: (result) => ({
-        content: String(result?.content || ''),
-        format: 'plain'
-      })
+      getContentProps: (result) => {
+        let content = result?.content || '';
+
+        // Handle MCP format: array of objects with type and text fields
+        if (typeof content === 'string') {
+          try {
+            const parsed = JSON.parse(content);
+            if (Array.isArray(parsed)) {
+              const textParts = parsed
+                .filter((p: any) => p.type === 'text' && p.text)
+                .map((p: any) => p.text);
+              if (textParts.length > 0) {
+                content = textParts.join('\n');
+              }
+            }
+          } catch {
+            // Not JSON or not MCP format, use as-is
+          }
+        } else if (Array.isArray(content)) {
+          const textParts = content
+            .filter((p: any) => p.type === 'text' && p.text)
+            .map((p: any) => p.text);
+          if (textParts.length > 0) {
+            content = textParts.join('\n');
+          } else {
+            content = JSON.stringify(content, null, 2);
+          }
+        } else if (typeof content === 'object' && content !== null) {
+          content = JSON.stringify(content, null, 2);
+        }
+
+        return {
+          content: String(content),
+          format: 'plain'
+        };
+      }
     }
   }
 };

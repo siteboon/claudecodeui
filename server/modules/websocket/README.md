@@ -19,7 +19,7 @@ Shared chat client registry and open-state constant used by other modules.
 
 ## Why Dependency Injection Is Used
 
-The module receives runtime-specific functions from `server/index.js` instead of importing legacy runtime files directly.
+The module receives runtime-specific functions from `server/index.ts` instead of importing legacy runtime files directly.
 
 Benefits:
 
@@ -117,8 +117,8 @@ The frontend only ever knows the **app session id** (allocated by
 `POST /api/providers/sessions` or discovered via the session index). The
 provider-native id (JSONL file name, CLI resume id) stays inside the backend:
 
-1. `chat.send` resolves the app id to `{ provider, provider_session_id, project_path }` from the sessions DB.
-2. The provider runtime receives the provider-native id for resume.
+1. `chat.send` resolves the app id to `{ provider, project_path }` from the sessions DB and passes the **app session id** to the provider runtime.
+2. The provider runtime resolves the provider-native id from the sessions DB itself (`sessionsService.resolveProviderSessionId`) at the exact points its CLI/SDK needs it (resume flags, provider-owned databases). Runtimes key their process maps by the app session id, so abort and pending-approval lookups use app ids too.
 3. The `ChatSessionWriter` remaps every outbound event back to the app id, and turns `session_created` announcements into a DB mapping update instead of forwarding them.
 
 ### Chat Message Dispatch
@@ -129,10 +129,10 @@ flowchart TD
   B -->|invalid| C[send kind:protocol_error]
   B -->|ok| D{data.type}
 
-  D -->|chat.send| E[resolve session row -> startRun -> spawnFns provider]
-  D -->|chat.abort| F[abortFns provider + synthetic complete]
+  D -->|chat.send| E[resolve session row -> startRun -> providerRuntimeService.run]
+  D -->|chat.abort| F[providerRuntimeService.abort + synthetic complete]
   D -->|chat.subscribe| G[chat_subscribed ack + attach socket + replay events seq > lastSeq]
-  D -->|chat.permission-response| H[resolveToolApproval]
+  D -->|chat.permission-response| H[providerRuntimeService.resolveToolApproval]
   D -->|other| I[send kind:protocol_error]
 ```
 
@@ -269,5 +269,5 @@ To add a new websocket route:
 1. Add a new handler service under `services/`.
 2. Extend `WebSocketServerDependencies` in `websocket-server.service.ts` if needed.
 3. Add a new pathname branch in the router.
-4. Wire dependency injection from `server/index.js`.
+4. Wire dependency injection from `server/index.ts`.
 5. Keep `index.ts` as barrel-only export surface.

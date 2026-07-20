@@ -276,7 +276,7 @@ export default function ChatComposer({
   const hasActivityIndicator = Boolean(activity && !hasPendingPermissions);
 
   const hasQueuedDraft = Boolean(queuedDraft);
-  const canQueueDraft = isLoading && Boolean(input.trim());
+  const canQueueDraft = isLoading && Boolean(input.trim() || attachedImages.length > 0);
   const submitHint = canQueueDraft
     ? hasQueuedDraft
       ? t('input.hintText.updateQueued', { defaultValue: 'Enter to update queued message' })
@@ -595,7 +595,15 @@ export default function ChatComposer({
                         }
                       : undefined
               }
-              disabled={isLoading ? false : isRecording ? false : isTranscribing ? true : !input.trim()}
+              disabled={
+                isLoading
+                  ? false
+                  : isRecording
+                    ? false
+                    : isTranscribing
+                      ? true
+                      : !input.trim() && attachedImages.length === 0
+              }
               aria-label={submitAriaLabel}
               title={submitAriaLabel}
               className="h-10 w-10 sm:h-10 sm:w-10"

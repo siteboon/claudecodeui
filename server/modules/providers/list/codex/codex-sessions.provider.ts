@@ -93,6 +93,144 @@ function extractCodexTextContent(content: unknown): string {
     .join('\n');
 }
 
+function extractCodexToolOutput(output: unknown): string {
+  if (typeof output === 'string') {
+    return output;
+  }
+
+  if (!Array.isArray(output)) {
+    return output == null ? '' : JSON.stringify(output);
+  }
+
+  return output
+    .map((item) => {
+      const record = readObjectRecord(item);
+      return typeof record?.text === 'string' ? record.text : '';
+    })
+    .filter(Boolean)
+    .join('');
+}
+
+function readRunningExecOutput(output: string): { cellId: string; content: string } | null {
+  const runningCell = /Script running with cell ID\s+(\S+)/i.exec(output);
+  if (!runningCell) {
+    return null;
+  }
+
+  const outputMarker = /\r?\nOutput:\r?\n/i.exec(output);
+  return {
+    cellId: runningCell[1],
+    content: outputMarker ? output.slice((outputMarker.index || 0) + outputMarker[0].length) : '',
+  };
+}
+
+function decodeJavaScriptStringLiteral(literal: string): string {
+  if (literal.startsWith('"')) {
+    try {
+      return JSON.parse(literal) as string;
+    } catch {
+      return literal.slice(1, -1);
+    }
+  }
+
+  return literal
+    .slice(1, -1)
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r')
+    .replace(/\\t/g, '\t')
+    .replace(/\\([\\'`])/g, '$1');
+}
+
+function extractNestedCodexCommands(source: string): string[] {
+  const commands: string[] = [];
+  const commandPattern = /\bcommand\s*:\s*("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)/gs;
+  for (const match of source.matchAll(commandPattern)) {
+    commands.push(decodeJavaScriptStringLiteral(match[1]));
+  }
+
+  if (commands.length === 0) {
+    const arrayPattern = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*\[([\s\S]*?)\]\s*;/g;
+    const stringPattern = /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)/g;
+
+    for (const arrayMatch of source.matchAll(arrayPattern)) {
+      const arrayName = arrayMatch[1];
+      if (!new RegExp(`\\b${arrayName}\\.map\\s*\\(`).test(source)) {
+        continue;
+      }
+      for (const stringMatch of arrayMatch[2].matchAll(stringPattern)) {
+        commands.push(decodeJavaScriptStringLiteral(stringMatch[1]));
+      }
+    }
+  }
+
+  return commands;
+}
+
+/**
+ * Newer Codex rollouts persist the orchestration wrapper (`exec`) instead of
+ * the nested tool name. Recover the useful UI-level operation so history does
+ * not degrade into rows labelled only "exec / Parameters".
+ */
+function translateCodexExecInput(input: unknown): { toolName: string; toolInput: string } | null {
+  const source = typeof input === 'string' ? input : String(input || '');
+  if (/\btools\.shell_command\s*\(/.test(source)) {
+    const commands = extractNestedCodexCommands(source);
+    if (commands.length > 0) {
+      return {
+        toolName: 'Bash',
+        toolInput: JSON.stringify({ command: commands.join('\n') }),
+      };
+    }
+  }
+
+  return null;
+}
+
+function humanizeCodexToolName(toolName: string): string {
+  return toolName
+    .replace(/__/g, ' ')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+type CodexSubagentRecord = {
+  toolCallId: string;
+  message: AnyRecord;
+  agentPath?: string;
+  isComplete: boolean;
+};
+
+function parseCodexSubagentMessage(payload: AnyRecord): {
+  author: string;
+  messageType: string;
+  result: string;
+} | null {
+  const text = extractCodexTextContent(payload.content);
+  const header = /Message Type:\s*([^\r\n]+)[\s\S]*?Sender:\s*([^\r\n]+)[\s\S]*?Payload:\s*\r?\n([\s\S]*)/i.exec(text);
+  const author = readNonEmptyString(payload.author) || header?.[2]?.trim();
+  if (!author) {
+    return null;
+  }
+
+  return {
+    author,
+    messageType: header?.[1]?.trim().toUpperCase() || 'MESSAGE',
+    result: header?.[3]?.trim() || '',
+  };
+}
+
+const CODEX_COLLABORATION_CONTROL_TOOLS = new Set([
+  'followup_task',
+  'interrupt_agent',
+  'list_agents',
+  'send_message',
+  'wait_agent',
+]);
+
+function readNonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
 async function getCodexSessionMessages(
   sessionId: string,
   limit: number | null = null,
@@ -108,6 +246,14 @@ async function getCodexSessionMessages(
 
     const messages: AnyRecord[] = [];
     let tokenUsage: AnyRecord | null = null;
+    const ignoredToolCallIds = new Set<string>();
+    const execToolCallIds = new Set<string>();
+    const execCallByCellId = new Map<string, string>();
+    const waitCallToExecCall = new Map<string, string>();
+    const pendingExecOutput = new Map<string, string>();
+    const completedExecCalls = new Set<string>();
+    const subagentsByCallId = new Map<string, CodexSubagentRecord>();
+    const subagentsByPath = new Map<string, CodexSubagentRecord>();
     const fileStream = fsSync.createReadStream(sessionFilePath);
     const rl = readline.createInterface({
       input: fileStream,
@@ -121,7 +267,6 @@ async function getCodexSessionMessages(
 
       try {
         const entry = JSON.parse(line) as AnyRecord;
-
         if (entry.type === 'event_msg' && entry.payload?.type === 'token_count' && entry.payload?.info) {
           const info = entry.payload.info as AnyRecord;
           if (info.total_token_usage) {
@@ -130,6 +275,20 @@ async function getCodexSessionMessages(
               used: usage.total_tokens || 0,
               total: info.model_context_window || 200000,
             };
+          }
+        }
+
+        if (
+          entry.type === 'event_msg'
+          && entry.payload?.type === 'sub_agent_activity'
+          && entry.payload.kind === 'started'
+        ) {
+          const eventId = readNonEmptyString(entry.payload.event_id);
+          const agentPath = readNonEmptyString(entry.payload.agent_path);
+          const subagent = eventId ? subagentsByCallId.get(eventId) : undefined;
+          if (subagent && agentPath) {
+            subagent.agentPath = agentPath;
+            subagentsByPath.set(agentPath, subagent);
           }
         }
 
@@ -183,9 +342,100 @@ async function getCodexSessionMessages(
           }
         }
 
+        if (entry.type === 'response_item' && entry.payload?.type === 'agent_message') {
+          const agentMessage = parseCodexSubagentMessage(entry.payload as AnyRecord);
+          if (agentMessage && agentMessage.messageType === 'FINAL_ANSWER' && agentMessage.result) {
+            let subagent = subagentsByPath.get(agentMessage.author);
+            if (!subagent) {
+              const fallbackCallId = entry.payload.id || generateMessageId('codex-subagent');
+              const taskName = agentMessage.author.split('/').filter(Boolean).pop() || 'agent';
+              const taskMessage: AnyRecord = {
+                uuid: fallbackCallId,
+                type: 'tool_use',
+                timestamp: entry.timestamp,
+                toolName: 'Task',
+                toolInput: JSON.stringify({
+                  subagent_type: 'Codex',
+                  description: humanizeCodexToolName(taskName),
+                }),
+                toolCallId: fallbackCallId,
+              };
+              messages.push(taskMessage);
+              subagent = {
+                toolCallId: fallbackCallId,
+                message: taskMessage,
+                agentPath: agentMessage.author,
+                isComplete: false,
+              };
+              subagentsByCallId.set(fallbackCallId, subagent);
+              subagentsByPath.set(agentMessage.author, subagent);
+            }
+
+            if (!subagent.isComplete) {
+              messages.push({
+                type: 'tool_result',
+                timestamp: entry.timestamp,
+                toolCallId: subagent.toolCallId,
+                output: agentMessage.result,
+              });
+              subagent.isComplete = true;
+            }
+          }
+        }
+
         if (entry.type === 'response_item' && entry.payload?.type === 'function_call') {
           let toolName = entry.payload.name;
           let toolInput = entry.payload.arguments;
+
+          if (toolName === 'spawn_agent') {
+            let taskName = 'agent';
+            try {
+              const args = JSON.parse(String(entry.payload.arguments || '{}')) as AnyRecord;
+              taskName = readNonEmptyString(args.task_name) || taskName;
+            } catch {
+              // The activity event can still provide the canonical agent path.
+            }
+
+            const taskMessage: AnyRecord = {
+              uuid: entry.payload.call_id,
+              type: 'tool_use',
+              timestamp: entry.timestamp,
+              toolName: 'Task',
+              toolInput: JSON.stringify({
+                subagent_type: 'Codex',
+                description: humanizeCodexToolName(taskName),
+              }),
+              toolCallId: entry.payload.call_id,
+            };
+            messages.push(taskMessage);
+            subagentsByCallId.set(entry.payload.call_id, {
+              toolCallId: entry.payload.call_id,
+              message: taskMessage,
+              isComplete: false,
+            });
+            ignoredToolCallIds.add(entry.payload.call_id);
+            continue;
+          }
+
+          if (toolName === 'wait') {
+            try {
+              const args = JSON.parse(String(entry.payload.arguments || '{}')) as AnyRecord;
+              const cellId = String(args.cell_id || '');
+              const execCallId = execCallByCellId.get(cellId);
+              if (execCallId) {
+                waitCallToExecCall.set(entry.payload.call_id, execCallId);
+              }
+            } catch {
+              // Suppress the orchestration wait even when its payload is malformed.
+            }
+            ignoredToolCallIds.add(entry.payload.call_id);
+            continue;
+          }
+
+          if (CODEX_COLLABORATION_CONTROL_TOOLS.has(toolName)) {
+            ignoredToolCallIds.add(entry.payload.call_id);
+            continue;
+          }
 
           if (toolName === 'shell_command') {
             toolName = 'Bash';
@@ -207,17 +457,73 @@ async function getCodexSessionMessages(
         }
 
         if (entry.type === 'response_item' && entry.payload?.type === 'function_call_output') {
+          const waitExecCallId = waitCallToExecCall.get(entry.payload.call_id);
+          if (waitExecCallId) {
+            const output = extractCodexToolOutput(entry.payload.output);
+            const runningOutput = readRunningExecOutput(output);
+            const accumulatedOutput = `${pendingExecOutput.get(waitExecCallId) || ''}${runningOutput?.content ?? output}`;
+            pendingExecOutput.set(waitExecCallId, accumulatedOutput);
+
+            if (!runningOutput && !completedExecCalls.has(waitExecCallId)) {
+              messages.push({
+                type: 'tool_result',
+                timestamp: entry.timestamp,
+                toolCallId: waitExecCallId,
+                output: accumulatedOutput,
+              });
+              completedExecCalls.add(waitExecCallId);
+            }
+            continue;
+          }
+
+          const subagent = subagentsByCallId.get(entry.payload.call_id);
+          if (subagent) {
+            const output = extractCodexToolOutput(entry.payload.output);
+            try {
+              const taskPath = readNonEmptyString((JSON.parse(output) as AnyRecord).task_name);
+              if (taskPath) {
+                subagent.agentPath = taskPath;
+                subagentsByPath.set(taskPath, subagent);
+              }
+            } catch {
+              // The sub_agent_activity event normally supplies the path.
+            }
+            continue;
+          }
+
+          if (ignoredToolCallIds.has(entry.payload.call_id)) {
+            continue;
+          }
+
           messages.push({
             type: 'tool_result',
             timestamp: entry.timestamp,
             toolCallId: entry.payload.call_id,
-            output: entry.payload.output,
+            output: extractCodexToolOutput(entry.payload.output),
           });
         }
 
         if (entry.type === 'response_item' && entry.payload?.type === 'custom_tool_call') {
-          const toolName = entry.payload.name || 'custom_tool';
+          let toolName = entry.payload.name || 'custom_tool';
           const input = entry.payload.input || '';
+
+          if (toolName === 'exec') {
+            const translated = translateCodexExecInput(input);
+            if (!translated) {
+              ignoredToolCallIds.add(entry.payload.call_id);
+              continue;
+            }
+            toolName = translated.toolName;
+            messages.push({
+              type: 'tool_use',
+              timestamp: entry.timestamp,
+              toolName,
+              toolInput: translated.toolInput,
+              toolCallId: entry.payload.call_id,
+            });
+            execToolCallIds.add(entry.payload.call_id);
+            continue;
+          }
 
           if (toolName === 'apply_patch') {
             const fileMatch = String(input).match(/\*\*\* Update File: (.+)/);
@@ -257,11 +563,26 @@ async function getCodexSessionMessages(
         }
 
         if (entry.type === 'response_item' && entry.payload?.type === 'custom_tool_call_output') {
+          if (ignoredToolCallIds.has(entry.payload.call_id)) {
+            continue;
+          }
+
+          const output = extractCodexToolOutput(entry.payload.output);
+          if (execToolCallIds.has(entry.payload.call_id)) {
+            const runningOutput = readRunningExecOutput(output);
+            if (runningOutput) {
+              execCallByCellId.set(runningOutput.cellId, entry.payload.call_id);
+              pendingExecOutput.set(entry.payload.call_id, runningOutput.content);
+              continue;
+            }
+            completedExecCalls.add(entry.payload.call_id);
+          }
+
           messages.push({
             type: 'tool_result',
             timestamp: entry.timestamp,
             toolCallId: entry.payload.call_id,
-            output: entry.payload.output || '',
+            output,
           });
         }
       } catch {

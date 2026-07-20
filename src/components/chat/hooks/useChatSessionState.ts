@@ -705,17 +705,18 @@ export function useChatSessionState({
 
   // Initial token usage fetch for providers with file-backed usage data.
   useEffect(() => {
-    if (!selectedProject || !selectedSession?.id) {
+    if (!selectedSession?.id) {
       setTokenBudget(null);
       return;
     }
     const fetchInitialTokenUsage = async () => {
       try {
-        // The backend resolves the provider from the indexed session row.
-        const url = `/api/projects/${selectedProject.projectId}/sessions/${selectedSession.id}/token-usage`;
+        // The provider module resolves storage and provider details from the session id.
+        const url = `/api/providers/sessions/${encodeURIComponent(selectedSession.id)}/token-usage`;
         const response = await authenticatedFetch(url);
         if (response.ok) {
-          setTokenBudget(await response.json());
+          const payload = await response.json();
+          setTokenBudget(payload.data ?? null);
         } else {
           setTokenBudget(null);
         }
@@ -724,7 +725,7 @@ export function useChatSessionState({
       }
     };
     fetchInitialTokenUsage();
-  }, [selectedProject, selectedSession?.id]);
+  }, [selectedSession?.id]);
 
   const visibleMessages = useMemo(() => {
     if (chatMessages.length <= visibleMessageCount) return chatMessages;
