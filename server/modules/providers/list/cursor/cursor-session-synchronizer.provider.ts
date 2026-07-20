@@ -14,17 +14,24 @@ import {
 } from '@/shared/utils.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
 
+import {
+  extractCursorAgentIds,
+  parseCursorSubagentTranscriptPath,
+} from './utils/cursor-subagent.js';
+
 type ParsedSession = {
   sessionId: string;
   projectPath: string;
   sessionName?: string;
+  isSubagent?: boolean;
+  parentProviderSessionId?: string | null;
 };
 
 /**
  * Returns directory entries or an empty list when the folder is missing.
  */
 async function listDirectoryEntriesSafe(
-  directoryPath: string
+  directoryPath: string,
 ): Promise<import('node:fs').Dirent[]> {
   try {
     return await fsp.readdir(directoryPath, { withFileTypes: true });
@@ -64,10 +71,18 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
         parsed.sessionName,
         timestamps.createdAt,
         timestamps.updatedAt,
-        filePath
+        filePath,
+        {
+          isSubagent: Boolean(parsed.isSubagent),
+          parentSessionId: parsed.parentProviderSessionId ?? null,
+        },
       );
       processed += 1;
     }
+
+    // Cursor Task subagents often land as peer agent-transcript folders (not
+    // under …/subagents/). Link those via parent store.db agentId references.
+    processed += await this.linkSubagentsFromCursorStores();
 
     return processed;
   }
@@ -86,15 +101,26 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
     }
 
     const timestamps = await readFileTimestamps(filePath);
-    return sessionsDb.createSession(
+    const sessionId = sessionsDb.createSession(
       parsed.sessionId,
       this.provider,
       parsed.projectPath,
       parsed.sessionName,
       timestamps.createdAt,
       timestamps.updatedAt,
-      filePath
+      filePath,
+      {
+        isSubagent: Boolean(parsed.isSubagent),
+        parentSessionId: parsed.parentProviderSessionId ?? null,
+      },
     );
+
+    // A parent transcript update may reveal new Task agentIds.
+    if (!parsed.isSubagent) {
+      await this.linkSubagentsFromParentStore(parsed.sessionId, parsed.projectPath);
+    }
+
+    return sessionId;
   }
 
   /**
@@ -126,8 +152,14 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
    */
   private async processSessionFile(filePath: string): Promise<ParsedSession | null> {
     const sessionId = path.basename(filePath, '.jsonl');
-    const grandparentDir = path.dirname(path.dirname(path.dirname(filePath)));
-    const workerLogPath = path.join(grandparentDir, 'worker.log');
+    const subagentPath = parseCursorSubagentTranscriptPath(filePath);
+
+    // worker.log lives on the project slug directory. For classic subagent
+    // paths that is four levels up from the file; for root transcripts, three.
+    const projectSlugDir = subagentPath
+      ? path.dirname(path.dirname(path.dirname(path.dirname(filePath))))
+      : path.dirname(path.dirname(path.dirname(filePath)));
+    const workerLogPath = path.join(projectSlugDir, 'worker.log');
     const projectPath = await this.extractProjectPathFromWorkerLog(workerLogPath);
 
     if (!projectPath) {
@@ -153,7 +185,107 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
         sessionId,
         projectPath,
         sessionName: normalizeSessionName(firstLine, 'Untitled Cursor Session'),
+        isSubagent: Boolean(subagentPath),
+        parentProviderSessionId: subagentPath?.parentProviderSessionId ?? null,
       };
     });
+  }
+
+  /**
+   * Scans Cursor chat store.db files for Task tool agentId references and marks
+   * those sessions as hidden subagents of the parent conversation.
+   */
+  private async linkSubagentsFromCursorStores(): Promise<number> {
+    const chatsRoot = path.join(this.cursorHome, 'chats');
+    const cwdEntries = await listDirectoryEntriesSafe(chatsRoot);
+    let linked = 0;
+
+    for (const cwdEntry of cwdEntries) {
+      if (!cwdEntry.isDirectory()) {
+        continue;
+      }
+
+      const cwdDir = path.join(chatsRoot, cwdEntry.name);
+      const sessionEntries = await listDirectoryEntriesSafe(cwdDir);
+      for (const sessionEntry of sessionEntries) {
+        if (!sessionEntry.isDirectory()) {
+          continue;
+        }
+
+        const parentProviderSessionId = sessionEntry.name;
+        const storeDbPath = path.join(cwdDir, parentProviderSessionId, 'store.db');
+        try {
+          await fsp.access(storeDbPath);
+        } catch {
+          continue;
+        }
+
+        linked += await this.linkSubagentsFromStoreDb(parentProviderSessionId, storeDbPath);
+      }
+    }
+
+    return linked;
+  }
+
+  private async linkSubagentsFromParentStore(
+    parentProviderSessionId: string,
+    projectPath: string,
+  ): Promise<number> {
+    const cwdId = crypto.createHash('md5').update(projectPath || process.cwd()).digest('hex');
+    const storeDbPath = path.join(this.cursorHome, 'chats', cwdId, parentProviderSessionId, 'store.db');
+    try {
+      await fsp.access(storeDbPath);
+    } catch {
+      return 0;
+    }
+
+    return this.linkSubagentsFromStoreDb(parentProviderSessionId, storeDbPath);
+  }
+
+  private async linkSubagentsFromStoreDb(
+    parentProviderSessionId: string,
+    storeDbPath: string,
+  ): Promise<number> {
+    const parentRow = sessionsDb.getSessionByProviderSessionId(parentProviderSessionId)
+      ?? sessionsDb.getSessionById(parentProviderSessionId);
+    const parentSessionId = parentRow?.session_id ?? parentProviderSessionId;
+
+    let agentIds: string[] = [];
+    try {
+      const { default: Database } = await import('better-sqlite3');
+      const db = new Database(storeDbPath, { readonly: true, fileMustExist: true });
+      try {
+        const blobs = db.prepare('SELECT data FROM blobs').all() as Array<{ data?: Buffer }>;
+        const found = new Set<string>();
+        for (const blob of blobs) {
+          if (!blob.data || blob.data[0] !== 0x7b) {
+            continue;
+          }
+          const text = blob.data.toString('utf8');
+          if (!text.includes('agentId') && !text.includes('Agent ID:')) {
+            continue;
+          }
+          for (const agentId of extractCursorAgentIds(text)) {
+            if (agentId !== parentProviderSessionId && agentId !== parentSessionId) {
+              found.add(agentId);
+            }
+          }
+        }
+        agentIds = [...found];
+      } finally {
+        db.close();
+      }
+    } catch {
+      return 0;
+    }
+
+    let linked = 0;
+    for (const agentId of agentIds) {
+      if (sessionsDb.markSessionAsSubagent(agentId, parentSessionId)) {
+        linked += 1;
+      }
+    }
+
+    return linked;
   }
 }

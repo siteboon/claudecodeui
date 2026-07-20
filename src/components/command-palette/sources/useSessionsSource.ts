@@ -19,6 +19,15 @@ export function useSessionsSource(projectId: string | undefined, enabled: boolea
     deps: [projectId],
     fetcher: (signal) => {
       const params = new URLSearchParams({ limit: '50', offset: '0' });
+      try {
+        const raw = localStorage.getItem('uiPreferences');
+        const parsed = raw ? JSON.parse(raw) as { showSubagentSessions?: boolean } : null;
+        if (parsed?.showSubagentSessions) {
+          params.set('includeSubagents', '1');
+        }
+      } catch {
+        // Ignore malformed preference storage.
+      }
       return authenticatedFetch(
         `/api/projects/${encodeURIComponent(projectId!)}/sessions?${params.toString()}`,
         { signal },

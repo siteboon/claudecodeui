@@ -80,6 +80,7 @@ export interface NormalizedMessage {
   actualSessionId?: string;
   parentToolUseId?: string;
   subagentTools?: unknown[];
+  subagentSessionId?: string;
   isFinal?: boolean;
   // Cursor-specific ordering
   sequence?: number;

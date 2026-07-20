@@ -41,6 +41,9 @@ export interface ProjectSession {
   // Tags the session with the owning project's DB `projectId` so UI handlers
   // (session switching, sidebar focus, etc.) can match against selectedProject.
   __projectId?: string;
+  /** Cursor Task/subagent transcript — hidden from sidebar by default. */
+  isSubagent?: boolean;
+  parentSessionId?: string | null;
   [key: string]: unknown;
 }
 

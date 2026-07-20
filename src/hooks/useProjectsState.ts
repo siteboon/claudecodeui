@@ -12,6 +12,7 @@ import type {
 } from '../types/app';
 
 import type { SessionActivityMap } from './useSessionProtection';
+import { useUiPreferences } from './useUiPreferences';
 
 type UseProjectsStateArgs = {
   sessionId?: string;
@@ -356,6 +357,11 @@ export function useProjectsState({
   isMobile,
   activeSessions,
 }: UseProjectsStateArgs) {
+  const { preferences } = useUiPreferences();
+  const includeSubagents = preferences.showSubagentSessions;
+  const includeSubagentsRef = useRef(includeSubagents);
+  includeSubagentsRef.current = includeSubagents;
+
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [selectedSession, setSelectedSession] = useState<ProjectSession | null>(null);
@@ -455,7 +461,7 @@ export function useProjectsState({
       if (showLoadingState) {
         setIsLoadingProjects(true);
       }
-      const response = await api.projects();
+      const response = await api.projects({ includeSubagents });
       const projectData = (await response.json()) as Project[];
 
       setProjects((prevProjects) => {
@@ -477,7 +483,7 @@ export function useProjectsState({
         setIsLoadingProjects(false);
       }
     }
-  }, []);
+  }, [includeSubagents]);
 
   const refreshProjectsSilently = useCallback(async () => {
     // Keep chat view stable while still syncing sidebar/session metadata in background.
@@ -683,6 +689,16 @@ export function useProjectsState({
         setExternalMessageUpdate((prev) => prev + 1);
       } else {
         markSessionAttention(upsert.sessionId);
+      }
+
+      // Hide Cursor Task/subagent sessions from the sidebar unless the user
+      // opted into "Show subagent sessions". Direct /session/:id still works.
+      if (
+        upsert.session.isSubagent
+        && !includeSubagentsRef.current
+        && currentSelectedSession?.id !== upsert.sessionId
+      ) {
+        return;
       }
 
       setProjects((previousProjects) => {
@@ -967,6 +983,7 @@ export function useProjectsState({
     const response = await api.projectSessions(projectId, {
       limit: 20,
       offset: loadedCount,
+      includeSubagents,
     });
 
     if (!response.ok) {
@@ -999,7 +1016,7 @@ export function useProjectsState({
     if (selectedProject?.projectId === projectId && mergedProjectForSelection) {
       setSelectedProject(mergedProjectForSelection);
     }
-  }, [projects, selectedProject?.projectId]);
+  }, [includeSubagents, projects, selectedProject?.projectId]);
 
   // `projectId` is the DB identifier passed from the sidebar's delete flow
   // after the migration away from folder-derived project names.

@@ -110,6 +110,10 @@ CREATE TABLE IF NOT EXISTS sessions (
     project_path TEXT,
     jsonl_path TEXT,
     isArchived BOOLEAN DEFAULT 0,
+    -- Cursor (and similar) Task/subagent transcripts. Hidden from the default
+    -- sidebar list; still addressable via /session/:id and parent-chat links.
+    is_subagent BOOLEAN DEFAULT 0,
+    parent_session_id TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (session_id),

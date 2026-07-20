@@ -10,12 +10,23 @@ type SessionRow = {
   jsonl_path: string | null;
   custom_name: string | null;
   isArchived: number;
+  is_subagent: number;
+  parent_session_id: string | null;
   created_at: string;
   updated_at: string;
 };
 
+export type CreateSessionOptions = {
+  isSubagent?: boolean;
+  parentSessionId?: string | null;
+};
+
+export type ListSessionsOptions = {
+  includeSubagents?: boolean;
+};
+
 const SESSION_ROW_COLUMNS =
-  'session_id, provider, provider_session_id, project_path, jsonl_path, custom_name, isArchived, created_at, updated_at';
+  'session_id, provider, provider_session_id, project_path, jsonl_path, custom_name, isArchived, is_subagent, parent_session_id, created_at, updated_at';
 
 const SQLITE_UTC_TIMESTAMP_REGEX = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 
@@ -44,6 +55,8 @@ function normalizeSessionRow<T extends SessionRow | null | undefined>(row: T): T
 
   return {
     ...row,
+    is_subagent: Number(row.is_subagent ?? 0),
+    parent_session_id: row.parent_session_id ?? null,
     created_at: normalizeTimestamp(row.created_at) ?? row.created_at,
     updated_at: normalizeTimestamp(row.updated_at) ?? row.updated_at,
   };
@@ -56,6 +69,10 @@ function normalizeSessionRows(rows: SessionRow[]): SessionRow[] {
 function normalizeProjectPathForProvider(provider: string, projectPath: string): string {
   void provider;
   return normalizeProjectPath(projectPath);
+}
+
+function subagentFilterSql(includeSubagents: boolean): string {
+  return includeSubagents ? '' : ' AND COALESCE(is_subagent, 0) = 0';
 }
 
 export const sessionsDb = {
@@ -74,12 +91,15 @@ export const sessionsDb = {
     customName?: string,
     createdAt?: string,
     updatedAt?: string,
-    jsonlPath?: string | null
+    jsonlPath?: string | null,
+    options: CreateSessionOptions = {},
   ): string {
     const db = getConnection();
     const createdAtValue = normalizeTimestamp(createdAt);
     const updatedAtValue = normalizeTimestamp(updatedAt);
     const normalizedProjectPath = normalizeProjectPathForProvider(provider, projectPath);
+    const isSubagent = options.isSubagent ? 1 : 0;
+    const parentSessionId = options.parentSessionId ?? null;
 
     // First, ensure the project path is recorded in the projects table,
     // since it's a foreign key in the sessions table.
@@ -89,7 +109,7 @@ export const sessionsDb = {
       .prepare(
         `SELECT session_id FROM sessions
          WHERE provider_session_id = ? AND provider = ?
-         LIMIT 1`
+         LIMIT 1`,
       )
       .get(providerSessionId, provider) as { session_id: string } | undefined;
 
@@ -101,15 +121,23 @@ export const sessionsDb = {
            project_path = ?,
            jsonl_path = ?,
            isArchived = 0,
-           custom_name = COALESCE(?, custom_name)
-         WHERE session_id = ?`
+           custom_name = COALESCE(?, custom_name),
+           is_subagent = CASE WHEN ? = 1 THEN 1 ELSE is_subagent END,
+           parent_session_id = CASE
+             WHEN ? IS NOT NULL THEN ?
+             ELSE parent_session_id
+           END
+         WHERE session_id = ?`,
       ).run(
         provider,
         updatedAtValue,
         normalizedProjectPath,
         jsonlPath ?? null,
         customName ?? null,
-        existing.session_id
+        isSubagent,
+        parentSessionId,
+        parentSessionId,
+        existing.session_id,
       );
 
       return existing.session_id;
@@ -119,8 +147,11 @@ export const sessionsDb = {
     // keyed by the provider-native id for both columns. The ON CONFLICT path
     // covers legacy rows that predate the provider_session_id mapping.
     db.prepare(
-      `INSERT INTO sessions (session_id, provider, provider_session_id, custom_name, project_path, jsonl_path, isArchived, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 0, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))
+      `INSERT INTO sessions (
+         session_id, provider, provider_session_id, custom_name, project_path, jsonl_path,
+         isArchived, is_subagent, parent_session_id, created_at, updated_at
+       )
+       VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))
        ON CONFLICT(session_id) DO UPDATE SET
          provider = excluded.provider,
          provider_session_id = excluded.provider_session_id,
@@ -128,7 +159,9 @@ export const sessionsDb = {
          project_path = excluded.project_path,
          jsonl_path = excluded.jsonl_path,
          isArchived = 0,
-         custom_name = COALESCE(excluded.custom_name, sessions.custom_name)`
+         custom_name = COALESCE(excluded.custom_name, sessions.custom_name),
+         is_subagent = CASE WHEN excluded.is_subagent = 1 THEN 1 ELSE sessions.is_subagent END,
+         parent_session_id = COALESCE(excluded.parent_session_id, sessions.parent_session_id)`,
     ).run(
       providerSessionId,
       provider,
@@ -136,11 +169,35 @@ export const sessionsDb = {
       customName ?? null,
       normalizedProjectPath,
       jsonlPath ?? null,
+      isSubagent,
+      parentSessionId,
       createdAtValue,
-      updatedAtValue
+      updatedAtValue,
     );
 
     return providerSessionId;
+  },
+
+  /**
+   * Marks an existing session as a subagent of another session.
+   * Used after Cursor store.db Task results reveal an agentId link.
+   */
+  markSessionAsSubagent(
+    providerOrSessionId: string,
+    parentSessionId: string,
+  ): boolean {
+    const db = getConnection();
+    const result = db
+      .prepare(
+        `UPDATE sessions
+         SET
+           is_subagent = 1,
+           parent_session_id = COALESCE(?, parent_session_id)
+         WHERE session_id = ? OR provider_session_id = ?`,
+      )
+      .run(parentSessionId, providerOrSessionId, providerOrSessionId);
+
+    return result.changes > 0;
   },
 
   /**
@@ -158,8 +215,11 @@ export const sessionsDb = {
     projectsDb.createProjectPath(normalizedProjectPath);
 
     db.prepare(
-      `INSERT INTO sessions (session_id, provider, provider_session_id, custom_name, project_path, jsonl_path, isArchived, created_at, updated_at)
-       VALUES (?, ?, NULL, NULL, ?, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+      `INSERT INTO sessions (
+         session_id, provider, provider_session_id, custom_name, project_path, jsonl_path,
+         isArchived, is_subagent, parent_session_id, created_at, updated_at
+       )
+       VALUES (?, ?, NULL, NULL, ?, NULL, 0, 0, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
     ).run(sessionId, provider, normalizedProjectPath);
 
     return sessionId;
@@ -183,7 +243,7 @@ export const sessionsDb = {
           `SELECT ${SESSION_ROW_COLUMNS} FROM sessions
            WHERE (session_id = ? OR provider_session_id = ?)
              AND session_id <> ?
-           LIMIT 1`
+           LIMIT 1`,
         )
         .get(providerSessionId, providerSessionId, sessionId) as SessionRow | undefined;
 
@@ -194,9 +254,18 @@ export const sessionsDb = {
              provider_session_id = ?,
              jsonl_path = COALESCE(jsonl_path, ?),
              custom_name = COALESCE(custom_name, ?),
+             is_subagent = CASE WHEN ? = 1 THEN 1 ELSE is_subagent END,
+             parent_session_id = COALESCE(parent_session_id, ?),
              updated_at = CURRENT_TIMESTAMP
-           WHERE session_id = ?`
-        ).run(providerSessionId, duplicate.jsonl_path, duplicate.custom_name, sessionId);
+           WHERE session_id = ?`,
+        ).run(
+          providerSessionId,
+          duplicate.jsonl_path,
+          duplicate.custom_name,
+          Number(duplicate.is_subagent ?? 0),
+          duplicate.parent_session_id,
+          sessionId,
+        );
         return;
       }
 
@@ -204,7 +273,7 @@ export const sessionsDb = {
         `UPDATE sessions SET
            provider_session_id = ?,
            updated_at = CURRENT_TIMESTAMP
-         WHERE session_id = ?`
+         WHERE session_id = ?`,
       ).run(providerSessionId, sessionId);
     });
 
@@ -216,7 +285,7 @@ export const sessionsDb = {
     db.prepare(
       `UPDATE sessions
        SET custom_name = ?
-       WHERE session_id = ?`
+       WHERE session_id = ?`,
     ).run(customName, sessionId);
   },
 
@@ -228,7 +297,7 @@ export const sessionsDb = {
          FROM sessions
          WHERE session_id = ?
          ORDER BY updated_at DESC
-         LIMIT 1`
+         LIMIT 1`,
       )
       .get(sessionId) as SessionRow | undefined;
 
@@ -250,7 +319,7 @@ export const sessionsDb = {
          FROM sessions
          WHERE provider_session_id = ?
          ORDER BY updated_at DESC
-         LIMIT 1`
+         LIMIT 1`,
       )
       .get(providerSessionId) as SessionRow | undefined;
 
@@ -286,21 +355,23 @@ export const sessionsDb = {
            AND project_path = ?
            AND provider_session_id IS NULL
            AND isArchived = 0
+           AND COALESCE(is_subagent, 0) = 0
          ORDER BY datetime(COALESCE(updated_at, created_at)) DESC, session_id DESC
-         LIMIT 1`
+         LIMIT 1`,
       )
       .get(provider, normalizedProjectPath) as SessionRow | undefined;
 
     return normalizeSessionRow(row) ?? null;
   },
 
-  getAllSessions(): SessionRow[] {
+  getAllSessions(options: ListSessionsOptions = {}): SessionRow[] {
     const db = getConnection();
+    const includeSubagents = Boolean(options.includeSubagents);
     const rows = db
       .prepare(
         `SELECT ${SESSION_ROW_COLUMNS}
          FROM sessions
-         WHERE isArchived = 0`
+         WHERE isArchived = 0${subagentFilterSql(includeSubagents)}`,
       )
       .all() as SessionRow[];
 
@@ -318,22 +389,23 @@ export const sessionsDb = {
         `SELECT ${SESSION_ROW_COLUMNS}
          FROM sessions
          WHERE isArchived = 1
-         ORDER BY datetime(COALESCE(updated_at, created_at)) DESC, session_id DESC`
+         ORDER BY datetime(COALESCE(updated_at, created_at)) DESC, session_id DESC`,
       )
       .all() as SessionRow[];
 
     return normalizeSessionRows(rows);
   },
 
-  getSessionsByProjectPath(projectPath: string): SessionRow[] {
+  getSessionsByProjectPath(projectPath: string, options: ListSessionsOptions = {}): SessionRow[] {
     const db = getConnection();
     const normalizedProjectPath = normalizeProjectPath(projectPath);
+    const includeSubagents = Boolean(options.includeSubagents);
     const rows = db
       .prepare(
         `SELECT ${SESSION_ROW_COLUMNS}
          FROM sessions
          WHERE project_path = ?
-           AND isArchived = 0`
+           AND isArchived = 0${subagentFilterSql(includeSubagents)}`,
       )
       .all(normalizedProjectPath) as SessionRow[];
 
@@ -351,39 +423,46 @@ export const sessionsDb = {
       .prepare(
         `SELECT ${SESSION_ROW_COLUMNS}
          FROM sessions
-         WHERE project_path = ?`
+         WHERE project_path = ?`,
       )
       .all(normalizedProjectPath) as SessionRow[];
 
     return normalizeSessionRows(rows);
   },
 
-  getSessionsByProjectPathPage(projectPath: string, limit: number, offset: number): SessionRow[] {
+  getSessionsByProjectPathPage(
+    projectPath: string,
+    limit: number,
+    offset: number,
+    options: ListSessionsOptions = {},
+  ): SessionRow[] {
     const db = getConnection();
     const normalizedProjectPath = normalizeProjectPath(projectPath);
+    const includeSubagents = Boolean(options.includeSubagents);
     const rows = db
       .prepare(
         `SELECT ${SESSION_ROW_COLUMNS}
          FROM sessions
          WHERE project_path = ?
-           AND isArchived = 0
+           AND isArchived = 0${subagentFilterSql(includeSubagents)}
          ORDER BY datetime(COALESCE(updated_at, created_at)) DESC, session_id DESC
-         LIMIT ? OFFSET ?`
+         LIMIT ? OFFSET ?`,
       )
       .all(normalizedProjectPath, limit, offset) as SessionRow[];
 
     return normalizeSessionRows(rows);
   },
 
-  countSessionsByProjectPath(projectPath: string): number {
+  countSessionsByProjectPath(projectPath: string, options: ListSessionsOptions = {}): number {
     const db = getConnection();
     const normalizedProjectPath = normalizeProjectPath(projectPath);
+    const includeSubagents = Boolean(options.includeSubagents);
     const row = db
       .prepare(
         `SELECT COUNT(*) AS count
          FROM sessions
          WHERE project_path = ?
-           AND isArchived = 0`
+           AND isArchived = 0${subagentFilterSql(includeSubagents)}`,
       )
       .get(normalizedProjectPath) as { count: number } | undefined;
 
@@ -402,7 +481,7 @@ export const sessionsDb = {
       .prepare(
         `SELECT custom_name
          FROM sessions
-         WHERE session_id = ? AND provider = ?`
+         WHERE session_id = ? AND provider = ?`,
       )
       .get(sessionId, provider) as { custom_name: string | null } | undefined;
 
@@ -418,7 +497,7 @@ export const sessionsDb = {
     db.prepare(
       `UPDATE sessions
        SET isArchived = ?
-       WHERE session_id = ?`
+       WHERE session_id = ?`,
     ).run(isArchived ? 1 : 0, sessionId);
   },
 

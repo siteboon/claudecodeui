@@ -264,6 +264,8 @@ export type NormalizedMessage = {
   summary?: string;
   tokenBudget?: unknown;
   subagentTools?: unknown;
+  /** Cursor Task child session id (provider-native / app-facing). */
+  subagentSessionId?: string;
   toolUseResult?: unknown;
   sequence?: number;
   rowid?: number;

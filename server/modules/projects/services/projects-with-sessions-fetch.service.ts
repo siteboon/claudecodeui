@@ -13,6 +13,8 @@ type SessionSummary = {
   summary: string;
   messageCount: number;
   lastActivity: string;
+  isSubagent?: boolean;
+  parentSessionId?: string | null;
 };
 
 type SessionRepositoryRow = {
@@ -21,6 +23,8 @@ type SessionRepositoryRow = {
   custom_name?: string | null;
   updated_at?: string | null;
   created_at?: string | null;
+  is_subagent?: number | null;
+  parent_session_id?: string | null;
 };
 
 export type ProjectListItem = {
@@ -51,11 +55,13 @@ type GetProjectsWithSessionsOptions = {
   skipSynchronization?: boolean;
   sessionsLimit?: number;
   sessionsOffset?: number;
+  includeSubagents?: boolean;
 };
 
 type SessionPaginationOptions = {
   limit?: number;
   offset?: number;
+  includeSubagents?: boolean;
 };
 
 type ProjectSessionsPageResult = {
@@ -118,12 +124,19 @@ function normalizeSessionPagination(options: SessionPaginationOptions = {}): { l
 }
 
 function mapSessionRowToSummary(row: SessionRepositoryRow): SessionSummary {
+  const isSubagent = Boolean(row.is_subagent);
   return {
     id: row.session_id,
     provider: row.provider,
     summary: row.custom_name || '',
     messageCount: 0,
     lastActivity: row.updated_at ?? row.created_at ?? new Date().toISOString(),
+    ...(isSubagent
+      ? {
+          isSubagent: true,
+          parentSessionId: row.parent_session_id ?? null,
+        }
+      : {}),
   };
 }
 
@@ -145,12 +158,14 @@ function readProjectSessionsPageByPath(
   options: SessionPaginationOptions = {},
 ): ProjectSessionsPageResult {
   const pagination = normalizeSessionPagination(options);
+  const listOptions = { includeSubagents: Boolean(options.includeSubagents) };
   const rows = sessionsDb.getSessionsByProjectPathPage(
     projectPath,
     pagination.limit,
     pagination.offset,
+    listOptions,
   ) as SessionRepositoryRow[];
-  const total = sessionsDb.countSessionsByProjectPath(projectPath);
+  const total = sessionsDb.countSessionsByProjectPath(projectPath, listOptions);
 
   return {
     sessions: rows.map(mapSessionRowToSummary),
@@ -215,6 +230,7 @@ export async function getProjectsWithSessions(
     const sessionsPage = readProjectSessionsPageByPath(projectPath, {
       limit: options.sessionsLimit,
       offset: options.sessionsOffset,
+      includeSubagents: options.includeSubagents,
     });
 
     projects.push({
@@ -302,7 +318,11 @@ export async function getProjectSessionsPage(
     });
   }
 
-  const sessionsPage = readProjectSessionsPageByPath(projectRow.project_path, options);
+  const sessionsPage = readProjectSessionsPageByPath(projectRow.project_path, {
+    limit: options.limit,
+    offset: options.offset,
+    includeSubagents: options.includeSubagents,
+  });
   return {
     projectId: projectRow.project_id,
     sessions: sessionsPage.sessions,

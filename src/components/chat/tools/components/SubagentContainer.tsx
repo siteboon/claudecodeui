@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import type { SubagentChildTool } from '../../types/types';
 import { CollapsibleSection } from './CollapsibleSection';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../../../../shared/view/ui';
@@ -6,6 +7,7 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../../../..
 interface SubagentContainerProps {
   toolInput: unknown;
   toolResult?: { content?: unknown; isError?: boolean } | null;
+  subagentSessionId?: string;
   subagentState: {
     childTools: SubagentChildTool[];
     currentToolIndex: number;
@@ -43,6 +45,7 @@ const getCompactToolDisplay = (toolName: string, toolInput: unknown): string => 
 export const SubagentContainer: React.FC<SubagentContainerProps> = ({
   toolInput,
   toolResult,
+  subagentSessionId,
   subagentState,
 }) => {
   const parsedInput = typeof toolInput === 'string' ? (() => {
@@ -64,6 +67,17 @@ export const SubagentContainer: React.FC<SubagentContainerProps> = ({
         toolName="Task"
         open={false}
       >
+        {subagentSessionId && (
+          <div className="mb-2">
+            <Link
+              to={`/session/${encodeURIComponent(subagentSessionId)}`}
+              className="text-xs font-medium text-purple-700 underline-offset-2 hover:underline dark:text-purple-300"
+            >
+              Open transcript
+            </Link>
+          </div>
+        )}
+
         {/* Prompt/request to the subagent */}
         {prompt && (
           <div className="mb-2 line-clamp-4 whitespace-pre-wrap break-words text-xs text-muted-foreground">

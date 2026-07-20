@@ -96,13 +96,20 @@ export const createSessionViewModel = (
   };
 };
 
-export const getAllSessions = (project: Project): SessionWithProvider[] => {
-  return (project.sessions || []).map((session) => ({
-    ...session,
-    __provider: getSessionProvider(session),
-  })).sort(
-    (a, b) => getSessionDate(b).getTime() - getSessionDate(a).getTime(),
-  );
+export const getAllSessions = (
+  project: Project,
+  options: { includeSubagents?: boolean } = {},
+): SessionWithProvider[] => {
+  const includeSubagents = Boolean(options.includeSubagents);
+  return (project.sessions || [])
+    .filter((session) => includeSubagents || !session.isSubagent)
+    .map((session) => ({
+      ...session,
+      __provider: getSessionProvider(session),
+    }))
+    .sort(
+      (a, b) => getSessionDate(b).getTime() - getSessionDate(a).getTime(),
+    );
 };
 
 export const getProjectLastActivity = (project: Project): Date => {
