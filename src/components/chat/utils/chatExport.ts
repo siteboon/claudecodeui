@@ -20,6 +20,15 @@ function formatTimestamp(date: Date | string | number): string {
   }).format(d);
 }
 
+function escapeHTML(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 /**
  * Convert messages to markdown format with proper styling and structure.
  */
@@ -95,7 +104,7 @@ export function exportToHTML(
       const time = includeMeta && msg.timestamp ? `<p style="font-size: 12px; color: #999; margin-top: 8px;">${formatTimestamp(msg.timestamp)}</p>` : '';
 
       const contentStr = typeof msg.content === 'string' ? msg.content : String(msg.content ?? '');
-      const contentHTML = contentStr.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const contentHTML = escapeHTML(contentStr);
 
       return `
         <div style="margin-bottom: 24px; padding: 16px; border-radius: 8px; background-color: ${msg.type === 'user' ? '#e3f2fd' : '#f5f5f5'};">
@@ -113,7 +122,7 @@ export function exportToHTML(
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>${sessionTitle || 'Chat Export'}</title>
+        <title>${escapeHTML(sessionTitle || 'Chat Export')}</title>
         <style>
           body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -129,7 +138,7 @@ export function exportToHTML(
         </style>
       </head>
       <body>
-        <h1>${sessionTitle || 'Chat Export'}</h1>
+        <h1>${escapeHTML(sessionTitle || 'Chat Export')}</h1>
         <div class="meta">Exported on ${formatTimestamp(new Date())}</div>
         <div class="divider"></div>
         ${htmlContent}
@@ -175,16 +184,19 @@ export function downloadPDF(
 ): void {
   const htmlContent = exportToHTML(messages, sessionTitle);
   const win = window.open('', '', 'width=800,height=600');
-  if (win) {
-    win.document.write(htmlContent);
-    win.document.close();
-    // Delay print dialog to ensure content is loaded
-    setTimeout(() => {
-      win.print();
-      // Optionally close after printing
-      // win.close();
-    }, 250);
+  if (!win) {
+    window.alert('PDF export could not start because the browser blocked the popup. Allow popups and try again.');
+    return;
   }
+
+  win.document.write(htmlContent);
+  win.document.close();
+  // Delay print dialog to ensure content is loaded
+  setTimeout(() => {
+    win.print();
+    // Optionally close after printing
+    // win.close();
+  }, 250);
 }
 
 /**

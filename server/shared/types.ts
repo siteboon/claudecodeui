@@ -744,6 +744,16 @@ export type CreateWorktreeResult = {
 };
 
 /**
+ * Result of atomically creating and registering a worktree for project use.
+ *
+ * The Worktrees application service compensates the Git creation if project
+ * registration fails, so routes only receive this shape after both steps pass.
+ */
+export type CreateAndOpenWorktreeResult = CreateWorktreeResult & {
+  project: WorktreeProjectView;
+};
+
+/**
  * Input accepted when registering an existing worktree as a CloudCLI project.
  *
  * The service verifies that `worktreePath` belongs to the repository containing
@@ -786,14 +796,15 @@ export type RemoveWorktreeInput = {
 /**
  * Result of removing a linked Git worktree.
  *
- * `archivedProjectId` identifies the CloudCLI project hidden as part of the
- * operation. It is null when the worktree had no active linked project.
+ * `archivalError` reports best-effort project archival failure after Git has
+ * already removed the worktree, allowing callers to represent partial success.
  */
 export type RemoveWorktreeResult = {
   removedPath: string;
   branch: string | null;
   branchDeleted: boolean;
   archivedProjectId: string | null;
+  archivalError: string | null;
 };
 
 /**
@@ -813,14 +824,16 @@ export type MergeWorktreeInput = {
 /**
  * Result of a completed worktree merge.
  *
- * `removedWorktree` is populated only when `removeAfterMerge` was requested and
- * the post-merge cleanup completed successfully.
+ * `removedWorktree` is populated only when post-merge removal succeeds.
+ * `cleanupError` reports failed optional removal without misrepresenting the
+ * already-completed merge as a failure.
  */
 export type MergeWorktreeResult = {
   mergedBranch: string;
   targetBranch: string;
   squash: boolean;
   removedWorktree: RemoveWorktreeResult | null;
+  cleanupError: string | null;
 };
 
 // ---------------------------
@@ -866,6 +879,7 @@ export type WorktreeServices = {
   resolveProjectPath(projectId: string): string;
   list(input: ListWorktreesInput): Promise<WorktreeListResult>;
   create(input: CreateWorktreeInput): Promise<CreateWorktreeResult>;
+  createAndOpen(input: CreateWorktreeInput): Promise<CreateAndOpenWorktreeResult>;
   open(input: OpenWorktreeInput): Promise<WorktreeProjectView>;
   merge(input: MergeWorktreeInput): Promise<MergeWorktreeResult>;
   remove(input: RemoveWorktreeInput): Promise<RemoveWorktreeResult>;

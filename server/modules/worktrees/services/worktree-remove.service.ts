@@ -67,10 +67,15 @@ export async function removeWorktree(
   }
 
   let archivedProjectId: string | null = null;
-  const linkedProject = projects.getProjectByPath(entry.path);
-  if (linkedProject && !linkedProject.isArchived) {
-    await projects.archiveProject(linkedProject.project_id);
-    archivedProjectId = linkedProject.project_id;
+  let archivalError: string | null = null;
+  try {
+    const linkedProject = projects.getProjectByPath(entry.path);
+    if (linkedProject && !linkedProject.isArchived) {
+      await projects.archiveProject(linkedProject.project_id);
+      archivedProjectId = linkedProject.project_id;
+    }
+  } catch (error) {
+    archivalError = error instanceof Error ? error.message : String(error);
   }
 
   return {
@@ -78,5 +83,6 @@ export async function removeWorktree(
     branch: entry.branch,
     branchDeleted,
     archivedProjectId,
+    archivalError,
   };
 }

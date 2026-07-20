@@ -178,10 +178,12 @@ test('Codex history renders Promise.all shell wrappers as Bash activity', { conc
 
       const history = await new CodexSessionsProvider().fetchHistory('app-exec-1');
       const toolUses = history.messages.filter((message) => message.kind === 'tool_use');
+      const toolResults = history.messages.filter((message) => message.kind === 'tool_result');
 
       assert.equal(toolUses.length, 1);
       assert.equal(toolUses[0].toolName, 'Bash');
       assert.equal(toolUses[0].toolInput, JSON.stringify({ command: 'echo one\necho two' }));
+      assert.equal(toolResults.some((message) => message.toolCallId === 'plan-1'), false);
     });
   } finally {
     restoreHomeDir();

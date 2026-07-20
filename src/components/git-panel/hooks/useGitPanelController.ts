@@ -729,6 +729,7 @@ export function useGitPanelController({
     if (!selectedProject) {
       return false;
     }
+    const projectId = selectedProject.projectId;
 
     setIsInitializingRepository(true);
     try {
@@ -736,11 +737,14 @@ export function useGitPanelController({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          project: selectedProject.projectId,
+          project: projectId,
         }),
       });
 
       const data = await readJson<GitOperationResponse>(response);
+      if (selectedProjectIdRef.current !== projectId) {
+        return false;
+      }
       if (!data.success) {
         setOperationError(data.error ?? 'Failed to initialize repository');
         return false;
@@ -751,7 +755,9 @@ export function useGitPanelController({
       void fetchRemoteStatus();
       return true;
     } catch (error) {
-      setOperationError(error instanceof Error ? error.message : 'Failed to initialize repository');
+      if (selectedProjectIdRef.current === projectId) {
+        setOperationError(error instanceof Error ? error.message : 'Failed to initialize repository');
+      }
       return false;
     } finally {
       setIsInitializingRepository(false);

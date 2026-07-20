@@ -18,7 +18,11 @@ const PORCELAIN = [
 
 type RecordedCall = { args: string[]; cwd: string };
 
-function createFakeRunner(options: { dirty?: boolean; branchDeleteFails?: boolean } = {}) {
+function createFakeRunner(options: {
+  dirty?: boolean;
+  branchDeleteFails?: boolean;
+  statusFails?: boolean;
+} = {}) {
   const calls: RecordedCall[] = [];
   const runner = async (args: string[], cwd: string): Promise<GitCommandResult> => {
     calls.push({ args, cwd });
@@ -28,6 +32,9 @@ function createFakeRunner(options: { dirty?: boolean; branchDeleteFails?: boolea
     }
 
     if (args[0] === 'status') {
+      if (options.statusFails) {
+        throw new AppError('status failed', { code: 'GIT_COMMAND_FAILED' });
+      }
       return { stdout: options.dirty ? '?? new-file.txt\n' : '', stderr: '' };
     }
 
@@ -44,6 +51,7 @@ function createFakeRunner(options: { dirty?: boolean; branchDeleteFails?: boolea
 function createDependencies(
   runner: ReturnType<typeof createFakeRunner>['runner'],
   linkedProject: ProjectRepositoryRow | null = null,
+  archiveError: Error | null = null,
 ) {
   const archivedProjectIds: string[] = [];
 
@@ -54,6 +62,9 @@ function createDependencies(
       projects: {
         getProjectByPath: () => linkedProject,
         archiveProject: async (projectId: string) => {
+          if (archiveError) {
+            throw archiveError;
+          }
           archivedProjectIds.push(projectId);
         },
       },
@@ -77,6 +88,7 @@ test('removeWorktree removes a clean worktree and deletes its branch', async () 
   assert.equal(result.branch, 'feature/login');
   assert.equal(result.branchDeleted, true);
   assert.equal(result.archivedProjectId, null);
+  assert.equal(result.archivalError, null);
 
   const removeCall = calls.find((call) => call.args[0] === 'worktree' && call.args[1] === 'remove');
   assert.ok(removeCall, 'expected a worktree remove call');
@@ -102,6 +114,18 @@ test('removeWorktree rejects a dirty worktree unless forced', async () => {
     (error: unknown) =>
       error instanceof AppError && error.code === 'WORKTREE_DIRTY' && error.statusCode === 409,
   );
+});
+
+test('removeWorktree does not remove when status cannot confirm the worktree is clean', async () => {
+  const { calls, runner } = createFakeRunner({ statusFails: true });
+  const { dependencies } = createDependencies(runner);
+
+  await assert.rejects(removeWorktree({
+    projectPath: '/home/user/repo',
+    worktreePath: '/home/user/repo-worktrees/feature-login',
+  }, dependencies));
+
+  assert.equal(calls.some((call) => call.args[0] === 'worktree' && call.args[1] === 'remove'), false);
 });
 
 test('removeWorktree passes --force through and skips the dirty check', async () => {
@@ -158,7 +182,29 @@ test('removeWorktree archives an active project linked to the removed path', asy
   );
 
   assert.equal(result.archivedProjectId, 'project-1');
+  assert.equal(result.archivalError, null);
   assert.deepEqual(archivedProjectIds, ['project-1']);
+});
+
+test('removeWorktree reports archival failure after successful Git removal', async () => {
+  const { runner } = createFakeRunner();
+  const linkedProject: ProjectRepositoryRow = {
+    project_id: 'project-1',
+    project_path: '/home/user/repo-worktrees/feature-login',
+    custom_project_name: 'feature/login',
+    isStarred: 0,
+    isArchived: 0,
+  };
+  const { dependencies } = createDependencies(runner, linkedProject, new Error('archive failed'));
+
+  const result = await removeWorktree({
+    projectPath: '/home/user/repo',
+    worktreePath: linkedProject.project_path,
+  }, dependencies);
+
+  assert.equal(result.removedPath.replace(/\\/g, '/'), linkedProject.project_path);
+  assert.equal(result.archivedProjectId, null);
+  assert.equal(result.archivalError, 'archive failed');
 });
 
 test('removeWorktree never removes the main worktree', async () => {

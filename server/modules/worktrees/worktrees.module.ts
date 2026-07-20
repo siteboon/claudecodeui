@@ -13,6 +13,7 @@ import type {
 } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
 import { createWorktree } from '@/modules/worktrees/services/worktree-create.service.js';
+import { createAndOpenWorktree } from '@/modules/worktrees/services/worktree-create-and-open.service.js';
 import { runGitCommand } from '@/modules/worktrees/services/worktree-git.service.js';
 import { listWorktrees } from '@/modules/worktrees/services/worktree-list.service.js';
 import { mergeWorktree } from '@/modules/worktrees/services/worktree-merge.service.js';
@@ -57,6 +58,16 @@ const remove: WorktreeServices['remove'] = (input) => removeWorktree(input, {
   projects: worktreeProjects,
 });
 
+const create: WorktreeServices['create'] = (input) => createWorktree(input, {
+  runGit: runGitCommand,
+  fileSystem: worktreeFileSystem,
+});
+
+const open: WorktreeServices['open'] = (input) => openWorktreeAsProject(input, {
+  runGit: runGitCommand,
+  projects: worktreeProjects,
+});
+
 /**
  * Production Worktrees application-service surface.
  *
@@ -79,14 +90,13 @@ const worktreeServices: WorktreeServices = {
     runGit: runGitCommand,
     getProjectByPath: worktreeProjects.getProjectByPath,
   }),
-  create: (input) => createWorktree(input, {
-    runGit: runGitCommand,
-    fileSystem: worktreeFileSystem,
+  create,
+  createAndOpen: (input) => createAndOpenWorktree(input, {
+    createWorktree: create,
+    openWorktree: open,
+    removeWorktree: remove,
   }),
-  open: (input) => openWorktreeAsProject(input, {
-    runGit: runGitCommand,
-    projects: worktreeProjects,
-  }),
+  open,
   merge: (input) => mergeWorktree(input, {
     runGit: runGitCommand,
     removeWorktree: remove,

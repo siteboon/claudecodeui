@@ -58,16 +58,8 @@ export function createWorktreesRouter(services: WorktreeServices): express.Route
       const branch = readRequiredString(body.branch, 'branch');
       const baseBranch = typeof body.baseBranch === 'string' ? body.baseBranch : null;
 
-      const created = await services.create({ projectPath, branch, baseBranch });
-      // Register the new worktree immediately so the client can switch to it in
-      // the same round-trip. Routes may orchestrate multiple services after all
-      // transport values have been parsed.
-      const project = await services.open({
-        projectPath,
-        worktreePath: created.worktreePath,
-      });
-
-      res.json(createApiSuccessResponse({ ...created, project }));
+      const result = await services.createAndOpen({ projectPath, branch, baseBranch });
+      res.json(createApiSuccessResponse(result));
     }),
   );
 
@@ -93,9 +85,9 @@ export function createWorktreesRouter(services: WorktreeServices): express.Route
       const result = await services.merge({
         projectPath,
         worktreePath,
-        squash: Boolean(body.squash),
+        squash: typeof body.squash === 'boolean' ? body.squash : false,
         message: typeof body.message === 'string' ? body.message : null,
-        removeAfterMerge: Boolean(body.removeAfterMerge),
+        removeAfterMerge: typeof body.removeAfterMerge === 'boolean' ? body.removeAfterMerge : false,
       });
 
       res.json(createApiSuccessResponse(result));
@@ -112,8 +104,8 @@ export function createWorktreesRouter(services: WorktreeServices): express.Route
       const result = await services.remove({
         projectPath,
         worktreePath,
-        force: Boolean(body.force),
-        deleteBranch: Boolean(body.deleteBranch),
+        force: typeof body.force === 'boolean' ? body.force : false,
+        deleteBranch: typeof body.deleteBranch === 'boolean' ? body.deleteBranch : false,
       });
 
       res.json(createApiSuccessResponse(result));

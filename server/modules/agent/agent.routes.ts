@@ -332,7 +332,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
    * @param {string} githubUrl - GitHub repository URL
    * @param {string} githubToken - Optional GitHub token for private repos
    * @param {string} projectPath - Path for cloning the repository
-   * @returns {Promise<string>} - Path to the cloned repository
+   * @returns {Promise<{path: string, created: boolean}>} - Checkout path and ownership flag
    */
   async function cloneGitHubRepo(githubUrl, githubToken = null, projectPath) {
     return new Promise(async (resolve, reject) => {
@@ -367,7 +367,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
 
             if (normalizedExisting === normalizedRequested) {
               console.log('✅ Repository already exists at path with correct URL');
-              return resolve(cloneDir);
+              return resolve({ path: cloneDir, created: false });
             } else {
               throw new Error(`Directory ${cloneDir} already exists with a different repository (${existingUrl}). Expected: ${githubUrl}`);
             }
@@ -415,7 +415,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
         gitProcess.on('close', (code) => {
           if (code === 0) {
             console.log('✅ Repository cloned successfully');
-            resolve(cloneDir);
+            resolve({ path: cloneDir, created: true });
           } else {
             console.error('❌ Git clone failed:', stderr);
             reject(new Error(`Git clone failed: ${stderr}`));
@@ -438,14 +438,23 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
    */
   async function cleanupProject(projectPath, sessionId = null) {
     try {
-      // Only clean up projects in the external-projects directory
-      if (!projectPath.includes('.claude/external-projects')) {
+      const externalProjectsRoot = await fs.realpath(
+        path.join(os.homedir(), '.claude', 'external-projects')
+      );
+      const canonicalProjectPath = await fs.realpath(projectPath);
+      const relativeProjectPath = path.relative(externalProjectsRoot, canonicalProjectPath);
+      const isContained = relativeProjectPath !== ''
+        && relativeProjectPath !== '..'
+        && !relativeProjectPath.startsWith(`..${path.sep}`)
+        && !path.isAbsolute(relativeProjectPath);
+
+      if (!isContained) {
         console.warn('⚠️ Refusing to clean up non-external project:', projectPath);
         return;
       }
 
       console.log('🧹 Cleaning up project:', projectPath);
-      await fs.rm(projectPath, { recursive: true, force: true });
+      await fs.rm(canonicalProjectPath, { recursive: true, force: true });
       console.log('✅ Project cleaned up');
 
       // Also clean up the Claude session directory if sessionId provided
@@ -898,6 +907,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
     }
 
     let finalProjectPath = null;
+    let clonedProjectCreated = false;
     let writer = null;
 
     try {
@@ -915,7 +925,9 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
           targetPath = path.join(os.homedir(), '.claude', 'external-projects', repoHash);
         }
 
-        finalProjectPath = await cloneGitHubRepo(githubUrl.trim(), tokenToUse, targetPath);
+        const clonedProject = await cloneGitHubRepo(githubUrl.trim(), tokenToUse, targetPath);
+        finalProjectPath = clonedProject.path;
+        clonedProjectCreated = clonedProject.created;
       } else {
         // Use existing project path
         finalProjectPath = normalizeProjectPath(path.resolve(projectPath));
@@ -1226,7 +1238,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       }
 
       // Clean up if requested
-      if (cleanup && githubUrl) {
+      if (cleanup && githubUrl && clonedProjectCreated) {
         // Only cleanup if we cloned a repo (not for existing project paths)
         const sessionIdForCleanup = writer.getSessionId();
         setTimeout(() => {
@@ -1238,7 +1250,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       console.error('❌ External session error:', error);
 
       // Clean up on error
-      if (finalProjectPath && cleanup && githubUrl) {
+      if (finalProjectPath && cleanup && githubUrl && clonedProjectCreated) {
         const sessionIdForCleanup = writer ? writer.getSessionId() : null;
         cleanupProject(finalProjectPath, sessionIdForCleanup);
       }

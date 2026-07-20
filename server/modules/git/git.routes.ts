@@ -4,6 +4,7 @@ import path from 'path';
 import express from 'express';
 
 import type { ProviderRunFunction } from '@/shared/types.js';
+import { AppError } from '@/shared/utils.js';
 
 // cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
 import { parseGitLogWithStats, parseGitStatusOutput } from './git-parsing.service.js';
@@ -178,13 +179,30 @@ async function validateGitRepository(projectPath) {
     const { stdout: insideWorkTreeOutput } = await spawnAsync('git', ['rev-parse', '--is-inside-work-tree'], { cwd: projectPath });
     const isInsideWorkTree = insideWorkTreeOutput.trim() === 'true';
     if (!isInsideWorkTree) {
-      throw new Error('Not inside a git work tree');
+      throw new AppError('Not a git repository', {
+        code: 'NOT_A_GIT_REPOSITORY',
+        statusCode: 400,
+      });
     }
 
     // Ensure git can resolve the repository root for this directory.
     await spawnAsync('git', ['rev-parse', '--show-toplevel'], { cwd: projectPath });
-  } catch {
-    throw new Error('Not a git repository. This directory does not contain a .git folder. Initialize a git repository with "git init" to use source control features.');
+  } catch (error) {
+    if (
+      error instanceof AppError
+      && error.code === 'NOT_A_GIT_REPOSITORY'
+    ) {
+      throw error;
+    }
+
+    if (/not a git repository/i.test(getGitErrorDetails(error))) {
+      throw new AppError('Not a git repository. Initialize a git repository with "git init" to use source control features.', {
+        code: 'NOT_A_GIT_REPOSITORY',
+        statusCode: 400,
+      });
+    }
+
+    throw error;
   }
 }
 
@@ -341,7 +359,7 @@ router.get('/status', async (req, res) => {
   } catch (error) {
     // Case-insensitive so "Not a git repository..." from validateGitRepository
     // matches; `notGitRepository` lets the UI offer a one-click `git init`.
-    const isNotGitRepository = /not a git repository/i.test(error.message);
+    const isNotGitRepository = error instanceof AppError && error.code === 'NOT_A_GIT_REPOSITORY';
     // A project without a repository is an expected state, not a failure.
     if (!isNotGitRepository) {
       console.error('Git status error:', error);
@@ -369,7 +387,10 @@ router.post('/init', async (req, res) => {
     try {
       await validateGitRepository(projectPath);
       isAlreadyRepository = true;
-    } catch {
+    } catch (error) {
+      if (!(error instanceof AppError) || error.code !== 'NOT_A_GIT_REPOSITORY') {
+        throw error;
+      }
       // Not a repository yet — proceed with git init.
     }
 

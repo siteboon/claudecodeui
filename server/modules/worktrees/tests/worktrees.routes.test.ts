@@ -12,7 +12,6 @@ import express, {
 import { createWorktreesRouter } from '@/modules/worktrees/worktrees.routes.js';
 import type {
   CreateWorktreeInput,
-  OpenWorktreeInput,
   WorktreeServices,
 } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
@@ -28,6 +27,7 @@ function createFakeServices(overrides: Partial<WorktreeServices> = {}): Worktree
     },
     list: unused,
     create: unused,
+    createAndOpen: unused,
     open: unused,
     merge: unused,
     remove: unused,
@@ -64,32 +64,28 @@ async function withWorktreesServer(
   }
 }
 
-test('create route parses input and orchestrates create then open services', async () => {
+test('create route parses input and invokes the create-and-open application service', async () => {
   const createInputs: CreateWorktreeInput[] = [];
-  const openInputs: OpenWorktreeInput[] = [];
   const services = createFakeServices({
     resolveProjectPath: (projectId) => {
       assert.equal(projectId, 'project-1');
       return '/workspace/repo';
     },
-    create: async (input) => {
+    createAndOpen: async (input) => {
       createInputs.push(input);
       return {
         worktreePath: '/workspace/repo-worktrees/feature-login',
         branch: input.branch,
         createdBranch: true,
-      };
-    },
-    open: async (input) => {
-      openInputs.push(input);
-      return {
-        projectId: 'worktree-project-1',
-        path: input.worktreePath,
-        fullPath: input.worktreePath,
-        displayName: 'repo · feature/login',
-        isStarred: false,
-        sessions: [],
-        sessionMeta: { hasMore: false, total: 0 },
+        project: {
+          projectId: 'worktree-project-1',
+          path: '/workspace/repo-worktrees/feature-login',
+          fullPath: '/workspace/repo-worktrees/feature-login',
+          displayName: 'repo worktree',
+          isStarred: false,
+          sessions: [],
+          sessionMeta: { hasMore: false, total: 0 },
+        },
       };
     },
   });
@@ -119,17 +115,13 @@ test('create route parses input and orchestrates create then open services', asy
     branch: 'feature/login',
     baseBranch: 'main',
   }]);
-  assert.deepEqual(openInputs, [{
-    projectPath: '/workspace/repo',
-    worktreePath: '/workspace/repo-worktrees/feature-login',
-  }]);
 });
 
 test('create route rejects missing branch before calling a mutation service', async () => {
   let createCalled = false;
   const services = createFakeServices({
     resolveProjectPath: () => '/workspace/repo',
-    create: async () => {
+    createAndOpen: async () => {
       createCalled = true;
       throw new Error('create should not run for invalid input');
     },
@@ -148,4 +140,60 @@ test('create route rejects missing branch before calling a mutation service', as
   });
 
   assert.equal(createCalled, false);
+});
+
+test('merge and remove routes do not coerce string booleans to true', async () => {
+  const mergeInputs: Array<{ squash?: boolean; removeAfterMerge?: boolean }> = [];
+  const removeInputs: Array<{ force?: boolean; deleteBranch?: boolean }> = [];
+  const services = createFakeServices({
+    resolveProjectPath: () => '/workspace/repo',
+    merge: async (input) => {
+      mergeInputs.push(input);
+      return {
+        mergedBranch: 'feature/login',
+        targetBranch: 'main',
+        squash: false,
+        removedWorktree: null,
+        cleanupError: null,
+      };
+    },
+    remove: async (input) => {
+      removeInputs.push(input);
+      return {
+        removedPath: input.worktreePath,
+        branch: 'feature/login',
+        branchDeleted: false,
+        archivedProjectId: null,
+        archivalError: null,
+      };
+    },
+  });
+
+  await withWorktreesServer(services, async (baseUrl) => {
+    const body = {
+      project: 'project-1',
+      worktreePath: '/workspace/repo-worktrees/feature-login',
+      squash: 'false',
+      removeAfterMerge: 'false',
+      force: 'false',
+      deleteBranch: 'false',
+    };
+    const mergeResponse = await fetch(`${baseUrl}/api/worktrees/merge`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const removeResponse = await fetch(`${baseUrl}/api/worktrees/remove`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    assert.equal(mergeResponse.status, 200);
+    assert.equal(removeResponse.status, 200);
+  });
+
+  assert.equal(mergeInputs[0].squash, false);
+  assert.equal(mergeInputs[0].removeAfterMerge, false);
+  assert.equal(removeInputs[0].force, false);
+  assert.equal(removeInputs[0].deleteBranch, false);
 });

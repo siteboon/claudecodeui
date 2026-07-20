@@ -563,6 +563,10 @@ async function getCodexSessionMessages(
         }
 
         if (entry.type === 'response_item' && entry.payload?.type === 'custom_tool_call_output') {
+          if (ignoredToolCallIds.has(entry.payload.call_id)) {
+            continue;
+          }
+
           const output = extractCodexToolOutput(entry.payload.output);
           if (execToolCallIds.has(entry.payload.call_id)) {
             const runningOutput = readRunningExecOutput(output);

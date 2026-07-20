@@ -70,7 +70,11 @@ test('validateWorktreeBranchName accepts slash-separated branch names', () => {
 });
 
 test('validateWorktreeBranchName rejects unsafe names', () => {
-  for (const invalidName of ['', '   ', '-oops', '.', '..', 'bad name', 'bad;name', 'bad$(name)']) {
+  for (const invalidName of [
+    '', '   ', '-oops', '.', '..', 'bad name', 'bad;name', 'bad$(name)',
+    'foo..bar', 'foo.', 'foo//bar', 'foo.lock', 'feature/foo.LOCK', '/feature', 'feature/',
+    '.hidden', 'feature/.hidden', 'feature/./name',
+  ]) {
     assert.throws(
       () => validateWorktreeBranchName(invalidName),
       (error: unknown) => error instanceof AppError && error.code === 'INVALID_BRANCH_NAME',

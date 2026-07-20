@@ -23,6 +23,7 @@ type FakeRunnerOptions = {
   dirtyPaths?: string[];
   /** When true, `git merge` fails and reports one conflicted file. */
   mergeConflicts?: boolean;
+  rollbackFails?: boolean;
 };
 
 function createFakeRunner(options: FakeRunnerOptions = {}) {
@@ -48,6 +49,13 @@ function createFakeRunner(options: FakeRunnerOptions = {}) {
 
     if (args[0] === 'diff' && args.includes('--diff-filter=U')) {
       return { stdout: options.mergeConflicts ? 'file.txt\n' : '', stderr: '' };
+    }
+
+    if (args[0] === 'reset' && options.rollbackFails) {
+      throw new AppError('git reset failed', {
+        code: 'GIT_COMMAND_FAILED',
+        details: 'index.lock permission denied',
+      });
     }
 
     return { stdout: '', stderr: '' };
@@ -81,6 +89,7 @@ test('mergeWorktree squash-merges into the main worktree branch', async () => {
   assert.equal(result.targetBranch, 'main');
   assert.equal(result.squash, true);
   assert.equal(result.removedWorktree, null);
+  assert.equal(result.cleanupError, null);
 
   const mergeCall = calls.find((call) => call.args[0] === 'merge');
   assert.ok(mergeCall, 'expected a merge call');
@@ -149,6 +158,43 @@ test('mergeWorktree aborts and reports conflicted files on merge conflict', asyn
   const resetCall = calls.find((call) => call.args[0] === 'reset');
   assert.ok(resetCall, 'expected the merge to be rolled back');
   assert.deepEqual(resetCall.args, ['reset', '--merge']);
+});
+
+test('mergeWorktree reports rollback failure instead of claiming a conflict was aborted', async () => {
+  const { runner } = createFakeRunner({ mergeConflicts: true, rollbackFails: true });
+
+  await assert.rejects(
+    mergeWorktree(
+      {
+        projectPath: '/home/user/repo',
+        worktreePath: '/home/user/repo-worktrees/feature-login',
+      },
+      createDependencies(runner),
+    ),
+    (error: unknown) =>
+      error instanceof AppError
+      && error.code === 'WORKTREE_MERGE_ROLLBACK_FAILED'
+      && typeof error.details === 'object',
+  );
+});
+
+test('mergeWorktree preserves merge success when optional worktree cleanup fails', async () => {
+  const { runner } = createFakeRunner();
+  const result = await mergeWorktree(
+    {
+      projectPath: '/home/user/repo',
+      worktreePath: '/home/user/repo-worktrees/feature-login',
+      removeAfterMerge: true,
+    },
+    {
+      runGit: runner,
+      removeWorktree: async () => { throw new Error('cleanup unavailable'); },
+    },
+  );
+
+  assert.equal(result.mergedBranch, 'feature/login');
+  assert.equal(result.removedWorktree, null);
+  assert.equal(result.cleanupError, 'cleanup unavailable');
 });
 
 test('mergeWorktree refuses to merge the main worktree into itself', async () => {

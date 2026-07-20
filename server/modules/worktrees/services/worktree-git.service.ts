@@ -56,11 +56,19 @@ export function runGitCommand(args: string[], cwd: string): Promise<GitCommandRe
  */
 export function validateWorktreeBranchName(branch: string): string {
   const trimmed = branch.trim();
+  const components = trimmed.split('/');
   if (
     !trimmed ||
     trimmed.startsWith('-') ||
+    trimmed.startsWith('/') ||
+    trimmed.endsWith('/') ||
+    trimmed.endsWith('.') ||
     trimmed === '.' ||
     trimmed === '..' ||
+    trimmed.includes('..') ||
+    trimmed.includes('//') ||
+    components.some((component) =>
+      component.startsWith('.') || component.toLowerCase().endsWith('.lock')) ||
     !/^[a-zA-Z0-9._/-]+$/.test(trimmed)
   ) {
     throw new AppError('Invalid branch name', {
@@ -187,17 +195,13 @@ export function findWorktreeEntryByPath(
 }
 
 /**
- * Counts dirty paths (`git status --porcelain`) inside one worktree. Returns 0
- * when status cannot be read (e.g. the worktree directory was deleted on disk).
+ * Counts dirty paths (`git status --porcelain`) inside one worktree. Status
+ * failures propagate so callers never mistake an unreadable worktree for clean.
  */
 export async function countChangedFiles(
   worktreePath: string,
   runGit: GitCommandRunner,
 ): Promise<number> {
-  try {
-    const { stdout } = await runGit(['status', '--porcelain'], worktreePath);
-    return stdout.split('\n').filter((line) => line.trim().length > 0).length;
-  } catch {
-    return 0;
-  }
+  const { stdout } = await runGit(['status', '--porcelain'], worktreePath);
+  return stdout.split('\n').filter((line) => line.trim().length > 0).length;
 }

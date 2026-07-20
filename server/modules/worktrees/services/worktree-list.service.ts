@@ -17,6 +17,30 @@ type ListWorktreesDependencies = {
   getProjectByPath: (projectPath: string) => ProjectRepositoryRow | null;
 };
 
+const WORKTREE_LIST_CONCURRENCY = 4;
+
+async function mapWithConcurrency<TInput, TOutput>(
+  inputs: TInput[],
+  concurrency: number,
+  mapper: (input: TInput, index: number) => Promise<TOutput>,
+): Promise<TOutput[]> {
+  const results = new Array<TOutput>(inputs.length);
+  let nextIndex = 0;
+
+  async function worker(): Promise<void> {
+    while (nextIndex < inputs.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await mapper(inputs[index], index);
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, inputs.length) }, () => worker()),
+  );
+  return results;
+}
+
 /**
  * Computes how many commits `branch` is ahead/behind `baseBranch`. Runs in the
  * main worktree so both refs are resolvable regardless of which worktree has
@@ -84,8 +108,10 @@ export async function listWorktrees(
   const comparable = (value: string) =>
     process.platform === 'win32' ? value.toLowerCase() : value;
 
-  const worktrees = await Promise.all(
-    entries.map(async (entry: WorktreePorcelainEntry, index: number): Promise<WorktreeDescriptor> => {
+  const worktrees = await mapWithConcurrency(
+    entries,
+    WORKTREE_LIST_CONCURRENCY,
+    async (entry: WorktreePorcelainEntry, index: number): Promise<WorktreeDescriptor> => {
       const [changedFileCount, aheadBehind, lastCommit] = await Promise.all([
         countChangedFiles(entry.path, runGit),
         countAheadBehind(repositoryRoot, baseBranch, index === 0 ? null : entry.branch, runGit),
@@ -110,7 +136,7 @@ export async function listWorktrees(
         linkedProjectId: linkedProject?.project_id ?? null,
         linkedProjectArchived: Boolean(linkedProject?.isArchived),
       };
-    }),
+    },
   );
 
   return { repositoryRoot, baseBranch, worktrees };

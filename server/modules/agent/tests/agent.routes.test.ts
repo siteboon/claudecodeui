@@ -156,3 +156,50 @@ test('GitHub cloning keeps credentials out of arguments and remote URL', async (
   assert.equal(cloneEnvironment?.GIT_CONFIG_VALUE_0, '');
   assert.equal(cloneEnvironment?.GIT_CONFIG_KEY_1, 'credential.helper');
 });
+
+test('Agent route reuses a matching checkout without cloning or deleting it', async () => {
+  const spawnedArguments: string[][] = [];
+  const removedPaths: string[] = [];
+  const spawnProcess = ((_command: string, args: readonly string[]) => {
+    spawnedArguments.push([...args]);
+    const child = new EventEmitter() as EventEmitter & {
+      stdout: PassThrough;
+      stderr: PassThrough;
+    };
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    process.nextTick(() => {
+      child.stdout.end('https://github.com/owner/repo.git\n');
+      child.emit('close', 0);
+    });
+    return child;
+  }) as unknown as AgentDependencies['spawnProcess'];
+
+  await withAgentServer(createDependencies({
+    fileSystem: {
+      access: async () => undefined,
+      rm: async (targetPath: string) => { removedPaths.push(targetPath); },
+    } as unknown as AgentDependencies['fileSystem'],
+    spawnProcess,
+    models: {
+      getProviderModels: async () => ({ models: { DEFAULT: 'default-model' } }),
+    } as unknown as AgentDependencies['models'],
+    queryClaude: (async () => undefined) as AgentDependencies['queryClaude'],
+  }), async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/agent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        githubUrl: 'https://github.com/owner/repo.git',
+        projectPath: '/home/test/.claude/external-projects/existing',
+        message: 'Run',
+        stream: false,
+        cleanup: true,
+      }),
+    });
+    assert.equal(response.status, 200);
+  });
+
+  assert.deepEqual(spawnedArguments, [['config', '--get', 'remote.origin.url']]);
+  assert.deepEqual(removedPaths, []);
+});

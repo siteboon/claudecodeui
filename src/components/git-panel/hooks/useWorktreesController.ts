@@ -105,6 +105,7 @@ export function useWorktreesController({
       if (!selectedProject || !trimmedBranch) {
         return false;
       }
+      const projectId = selectedProject.projectId;
 
       setIsCreatingWorktree(true);
       setActionError(null);
@@ -113,12 +114,16 @@ export function useWorktreesController({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            project: selectedProject.projectId,
+            project: projectId,
             branch: trimmedBranch,
             baseBranch,
           }),
         });
         const payload = (await response.json()) as WorktreeApiEnvelope<WorktreeProjectPayload>;
+
+        if (selectedProjectIdRef.current !== projectId) {
+          return false;
+        }
 
         if (!response.ok || !payload.data) {
           setActionError(readEnvelopeError(payload, 'Failed to create worktree'));
@@ -133,7 +138,9 @@ export function useWorktreesController({
         }
         return true;
       } catch (error) {
-        setActionError(error instanceof Error ? error.message : 'Failed to create worktree');
+        if (selectedProjectIdRef.current === projectId) {
+          setActionError(error instanceof Error ? error.message : 'Failed to create worktree');
+        }
         return false;
       } finally {
         setIsCreatingWorktree(false);
@@ -147,6 +154,7 @@ export function useWorktreesController({
       if (!selectedProject) {
         return false;
       }
+      const projectId = selectedProject.projectId;
 
       setBusyWorktreePath(worktreePath);
       setActionError(null);
@@ -155,11 +163,15 @@ export function useWorktreesController({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            project: selectedProject.projectId,
+            project: projectId,
             worktreePath,
           }),
         });
         const payload = (await response.json()) as WorktreeApiEnvelope<WorktreeProjectPayload>;
+
+        if (selectedProjectIdRef.current !== projectId) {
+          return false;
+        }
 
         if (!response.ok || !payload.data?.project) {
           setActionError(readEnvelopeError(payload, 'Failed to open worktree'));
@@ -170,7 +182,9 @@ export function useWorktreesController({
         onProjectSelect?.(payload.data.project);
         return true;
       } catch (error) {
-        setActionError(error instanceof Error ? error.message : 'Failed to open worktree');
+        if (selectedProjectIdRef.current === projectId) {
+          setActionError(error instanceof Error ? error.message : 'Failed to open worktree');
+        }
         return false;
       } finally {
         setBusyWorktreePath(null);

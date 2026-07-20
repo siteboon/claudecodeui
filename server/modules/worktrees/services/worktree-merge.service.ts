@@ -100,8 +100,20 @@ export async function mergeWorktree(
     // clears a half-applied squash since the target was verified clean above.
     try {
       await runGit(['reset', '--merge'], repositoryRoot);
-    } catch {
-      // If even the rollback fails, surface the original merge error below.
+    } catch (rollbackError) {
+      throw new AppError(
+        `Merge of '${entry.branch}' into '${targetBranch}' failed and could not be rolled back`,
+        {
+          code: 'WORKTREE_MERGE_ROLLBACK_FAILED',
+          statusCode: 500,
+          details: {
+            mergeError: error instanceof Error ? error.message : String(error),
+            rollbackError: rollbackError instanceof AppError
+              ? rollbackError.details ?? rollbackError.message
+              : rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
+          },
+        },
+      );
     }
 
     if (conflictedFiles.length > 0) {
@@ -119,15 +131,20 @@ export async function mergeWorktree(
   }
 
   let removedWorktree: RemoveWorktreeResult | null = null;
+  let cleanupError: string | null = null;
   if (input.removeAfterMerge) {
-    removedWorktree = await removeWorktree(
-      {
-        projectPath: repositoryRoot,
-        worktreePath: entry.path,
-        force: false,
-        deleteBranch: true,
-      },
-    );
+    try {
+      removedWorktree = await removeWorktree(
+        {
+          projectPath: repositoryRoot,
+          worktreePath: entry.path,
+          force: false,
+          deleteBranch: true,
+        },
+      );
+    } catch (error) {
+      cleanupError = error instanceof Error ? error.message : String(error);
+    }
   }
 
   return {
@@ -135,5 +152,6 @@ export async function mergeWorktree(
     targetBranch,
     squash,
     removedWorktree,
+    cleanupError,
   };
 }
