@@ -56,6 +56,39 @@ function parseTaskNotification(content: string): ParsedTaskNotification | null {
 }
 
 /**
+ * Per-source-message conversion cache.
+ *
+ * Streaming re-runs this transform ~10×/sec. The session store rebuilds its
+ * `merged` array on every tick but preserves the *identity* of every
+ * `NormalizedMessage` except the one streaming row (which is replaced with a
+ * fresh object each tick). Without a cache we minted brand-new `ChatMessage`
+ * objects for every message on every tick, defeating `React.memo` on
+ * `MessageComponent` and re-rendering (and re-parsing markdown / re-highlighting
+ * code for) the entire visible list 10×/sec — the root cause of scroll jank.
+ *
+ * Keying by source-message identity lets unchanged messages return the *same*
+ * `ChatMessage` reference across ticks, so `React.memo` short-circuits them and
+ * only the streaming row re-renders. `depRef` guards the one case where a
+ * message's output can change while its identity does not: a `tool_use` whose
+ * `tool_result` arrives later as a separate message.
+ */
+const conversionCache = new WeakMap<NormalizedMessage, { produced: ChatMessage[]; depRef: unknown }>();
+
+/**
+ * Resolve the tool result a `tool_use` message renders — either the inline
+ * result object on the message or the `tool_result` message supplied later.
+ * The returned value is used only as an identity token (compared with `===`)
+ * to invalidate a cached `tool_use` conversion when its result changes.
+ */
+function resolveToolResultRef(
+  msg: NormalizedMessage,
+  toolResultMap: Map<string, NormalizedMessage>,
+): unknown {
+  if (msg.kind !== 'tool_use') return null;
+  return msg.toolResult || (msg.toolId ? toolResultMap.get(msg.toolId) ?? null : null);
+}
+
+/**
  * Convert NormalizedMessage[] from the session store into ChatMessage[]
  * that the existing UI components expect.
  *
@@ -80,6 +113,38 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
   }
 
   for (const msg of messages) {
+    // Reuse the previous conversion when this source message is unchanged.
+    // `depRef` invalidates a cached `tool_use` when its resolved tool result
+    // changes (e.g. the result message arrives on a later tick).
+    const depRef = resolveToolResultRef(msg, toolResultMap);
+    const cached = conversionCache.get(msg);
+    if (cached && cached.depRef === depRef) {
+      for (const item of cached.produced) converted.push(item);
+      continue;
+    }
+
+    const produced = convertMessage(msg, toolResultMap, toolUseIds);
+    conversionCache.set(msg, { produced, depRef });
+    for (const item of produced) converted.push(item);
+  }
+
+  return converted;
+}
+
+/**
+ * Convert a single NormalizedMessage into zero or more ChatMessages.
+ * Extracted so results can be cached by source-message identity (see
+ * `conversionCache`). Output depends only on `msg` itself plus, for `tool_use`,
+ * its resolved tool result — both captured by the cache key/`depRef`.
+ */
+function convertMessage(
+  msg: NormalizedMessage,
+  toolResultMap: Map<string, NormalizedMessage>,
+  toolUseIds: Set<string>,
+): ChatMessage[] {
+  const converted: ChatMessage[] = [];
+
+  {
     const sharedMetadata = {
       displayText: msg.displayText,
       commandName: msg.commandName,
@@ -94,7 +159,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
       case 'text': {
         const content = msg.content || '';
         const images = Array.isArray(msg.images) && msg.images.length > 0 ? msg.images : undefined;
-        if (!content.trim() && !images) continue;
+        if (!content.trim() && !images) break;
 
         if (msg.role === 'user') {
           // Parse task notifications

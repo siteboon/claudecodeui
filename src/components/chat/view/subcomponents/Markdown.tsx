@@ -58,7 +58,7 @@ type CodeBlockProps = {
   children?: React.ReactNode;
 };
 
-const CodeBlock = ({ node, inline, className, children, ...props }: CodeBlockProps) => {
+const CodeBlock = React.memo(({ node, inline, className, children, ...props }: CodeBlockProps) => {
   const { t } = useTranslation('chat');
   const { isDarkMode } = useTheme();
   const [copied, setCopied] = useState(false);
@@ -155,7 +155,8 @@ const CodeBlock = ({ node, inline, className, children, ...props }: CodeBlockPro
       </SyntaxHighlighter>
     </div>
   );
-};
+});
+CodeBlock.displayName = 'CodeBlock';
 
 const markdownComponents = {
   code: CodeBlock,
@@ -183,7 +184,12 @@ const markdownComponents = {
   ),
 };
 
-export function Markdown({ children, className }: MarkdownProps) {
+// Memoized on props: markdown parsing (ReactMarkdown + remark/rehype) and Prism
+// code highlighting are expensive and, absent this, re-ran on every parent
+// re-render. `Markdown`'s only inputs are `children`/`className` plus the stable
+// `openFileInEditor` from context, so shallow prop comparison is a safe guard
+// that stops the whole tree from re-parsing when the content hasn't changed.
+export const Markdown = React.memo(function Markdown({ children, className }: MarkdownProps) {
   const content = normalizeInlineCodeFences(String(children ?? ''));
   const remarkPlugins = useMemo(() => [remarkGfm, remarkMath], []);
   const rehypePlugins = useMemo(() => [rehypeKatex], []);
@@ -235,4 +241,4 @@ export function Markdown({ children, className }: MarkdownProps) {
       </ReactMarkdown>
     </div>
   );
-}
+});

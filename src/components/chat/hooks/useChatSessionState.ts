@@ -755,11 +755,31 @@ export function useChatSessionState({
     if (heightDiff > 0 && prevTop > 0) container.scrollTop = prevTop + heightDiff;
   }, [chatMessages.length, isLoadingMoreMessages, isUserScrolledUp, scrollToBottom]);
 
+  // Scroll listener: coalesce to one run per frame and register passively.
+  //
+  // `handleScroll` reads layout (scrollTop/scrollHeight/clientHeight) and calls
+  // setState, so running it for every raw scroll event thrashed layout and made
+  // scrolling choppy — especially on long, un-virtualized conversations. A rAF
+  // gate collapses a burst of scroll events into a single handler call per
+  // frame, and `{ passive: true }` lets the browser scroll without waiting on
+  // this listener. It is the sole scroll trigger now (the redundant
+  // onWheel/onTouchMove bindings that re-ran the same work were removed).
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
-    container.addEventListener('scroll', handleScroll);
-    return () => container.removeEventListener('scroll', handleScroll);
+    let rafId = 0;
+    const onScroll = () => {
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = 0;
+        handleScroll();
+      });
+    };
+    container.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      container.removeEventListener('scroll', onScroll);
+    };
   }, [handleScroll]);
 
   // "Load all" overlay visibility is driven by scroll-to-top in handleScroll;
