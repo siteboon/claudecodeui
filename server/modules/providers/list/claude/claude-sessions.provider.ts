@@ -246,6 +246,14 @@ type ClaudeLocalCommandPayload = {
  * normal text path continue untouched for unrelated messages.
  */
 function parseLocalCommandPayload(content: string): ClaudeLocalCommandPayload | null {
+  // Only treat the text as a local command when the wrapper opens the payload.
+  // A normal user message that merely mentions a `<command-name>` tag somewhere
+  // in its body must stay untouched — otherwise it would collapse into a compact
+  // bubble and its surrounding prose would be discarded (issue #1009 follow-up).
+  if (!/^\s*<command-(?:name|message|args)>/.test(content)) {
+    return null;
+  }
+
   const commandName = extractTaggedContent(content, 'command-name');
   const commandMessage = extractTaggedContent(content, 'command-message');
   const commandArgs = extractTaggedContent(content, 'command-args');
@@ -267,6 +275,13 @@ function parseLocalCommandPayload(content: string): ClaudeLocalCommandPayload | 
  * We prefer the slash-prefixed command name because that most closely matches
  * what the user actually typed, and only fall back to the message body when the
  * command name is unavailable in older transcript variants.
+ *
+ * INVARIANT (issue #1009): the base+args formatting MUST stay byte-identical to
+ * the frontend `formatLocalCommandDisplayText` in
+ * `src/components/chat/hooks/useChatComposerState.ts`. The optimistic user
+ * bubble is de-duplicated against this replayed value via an exact text
+ * fingerprint; drift between the two produces a duplicate bubble after a run
+ * completes. Keep the trim/spacing rules in sync on both sides.
  */
 function buildLocalCommandDisplayText(payload: ClaudeLocalCommandPayload): string {
   const commandName = payload.commandName.trim();
@@ -342,7 +357,30 @@ export class ClaudeSessionsProvider implements IProviderSessions {
             }));
           } else if (part.type === 'text') {
             const text = part.text || '';
-            if (text && !isInternalContent(text)) {
+            // The SDK persists web-UI prompts as array content, so the tagged
+            // local-command wrapper arrives here rather than in the string
+            // branch below — parse it in both places (issue #1009).
+            const localCommandPayload = parseLocalCommandPayload(text);
+            if (localCommandPayload) {
+              const displayText = buildLocalCommandDisplayText(localCommandPayload);
+              if (displayText) {
+                messages.push(createNormalizedMessage({
+                  id: `${baseId}_cmd_${partIndex}`,
+                  sessionId,
+                  timestamp: ts,
+                  provider: PROVIDER,
+                  kind: 'text',
+                  role: 'user',
+                  content: displayText,
+                  images: !imagesAttached && imageAttachments.length > 0 ? imageAttachments : undefined,
+                  commandName: localCommandPayload.commandName,
+                  commandMessage: localCommandPayload.commandMessage,
+                  commandArgs: localCommandPayload.commandArgs,
+                  isLocalCommand: true,
+                }));
+                imagesAttached = true;
+              }
+            } else if (text && !isInternalContent(text)) {
               messages.push(createNormalizedMessage({
                 id: `${baseId}_text_${partIndex}`,
                 sessionId,
@@ -364,7 +402,9 @@ export class ClaudeSessionsProvider implements IProviderSessions {
             .map((part: AnyRecord) => part.text)
             .filter(Boolean)
             .join('\n');
-          if (textParts && !isInternalContent(textParts)) {
+          // A command payload whose display text came up empty must stay
+          // hidden rather than fall through as raw tagged text.
+          if (textParts && !isInternalContent(textParts) && !parseLocalCommandPayload(textParts)) {
             messages.push(createNormalizedMessage({
               id: `${baseId}_text`,
               sessionId,

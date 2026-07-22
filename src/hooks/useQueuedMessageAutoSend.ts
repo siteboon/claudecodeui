@@ -61,7 +61,10 @@ export function useQueuedMessageAutoSend({
       sendMessage({
         type: 'chat.send',
         sessionId,
-        content: queued.content,
+        // Custom slash commands carry their expanded prompt in `promptContent`;
+        // this hook can't re-intercept the compact "/name args" the way the
+        // composer flush does, so it must send the expanded form (issue #1009).
+        content: queued.promptContent ?? queued.content,
         options: { ...(queued.options ?? {}), images: [] },
       });
       markSessionProcessing(sessionId, { statusText: null, canInterrupt: true });
