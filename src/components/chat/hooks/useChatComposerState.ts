@@ -150,6 +150,44 @@ const createFakeSubmitEvent = () => {
   return { preventDefault: () => undefined } as unknown as FormEvent<HTMLFormElement>;
 };
 
+/**
+ * Builds the compact command string shown in the optimistic user bubble,
+ * e.g. "/deploy prod".
+ *
+ * INVARIANT (issue #1009): the output MUST stay byte-identical to the
+ * server-side `buildLocalCommandDisplayText` in
+ * `server/modules/providers/list/claude/claude-sessions.provider.ts`. The
+ * optimistic bubble is de-duplicated against the replayed server transcript
+ * via an exact text fingerprint (`hasServerEchoForLocalUser` in
+ * `useSessionStore.ts`); if the two formatters drift, the command resurfaces
+ * as a duplicate bubble once the run completes. Keep the trim/spacing rules
+ * in sync on both sides.
+ */
+export function formatLocalCommandDisplayText(commandName: string, args: string): string {
+  const base = commandName.trim();
+  const trimmedArgs = args.trim();
+  if (!base) {
+    return '';
+  }
+  return trimmedArgs ? `${base} ${trimmedArgs}` : base;
+}
+
+/**
+ * Decouples what a custom slash command shows in chat from what it sends to
+ * the provider. The user bubble renders only the compact `displayText`
+ * (`/name args`) while `promptContent` — the expanded command body — is what
+ * actually goes out as `chat.send.content`, so the internal prompt never
+ * appears as user input (issue #1009).
+ */
+export type CommandSubmitOverride = {
+  /** Compact command string shown as the user bubble, e.g. "/deploy prod". */
+  displayText: string;
+  /** Full prompt sent to the provider (expanded body, tagged for Claude). */
+  promptContent: string;
+  commandName: string;
+  commandArgs: string;
+};
+
 export type QueuedDraft = {
   content: string;
   images: File[];
@@ -159,12 +197,20 @@ export type QueuedDraft = {
    * permission settings while another session is being viewed.
    */
   options?: QueuedSendOptions;
+  /**
+   * For queued custom slash commands, the already-expanded prompt. Only the
+   * app-level auto-send uses it (see `StoredQueuedMessage.promptContent`); the
+   * in-composer flush re-expands the compact `content` instead (issue #1009).
+   */
+  promptContent?: string;
 };
 
 const restoreQueuedDraft = (sessionKey: string): QueuedDraft | null => {
   const saved = readQueuedMessage(sessionKey);
   // Image attachments can't survive a reload; only text and options persist.
-  return saved ? { content: saved.content, images: [], options: saved.options } : null;
+  return saved
+    ? { content: saved.content, images: [], options: saved.options, promptContent: saved.promptContent }
+    : null;
 };
 
 const getNotificationSessionSummary = (
@@ -232,7 +278,10 @@ export function useChatComposerState({
   const textareaLineHeightRef = useRef<number | null>(null);
   const lastAutosizedInputRef = useRef<string | null>(null);
   const handleSubmitRef = useRef<
-    ((event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>) => Promise<void>) | null
+    ((
+      event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
+      commandOverride?: CommandSubmitOverride,
+    ) => Promise<void>) | null
   >(null);
   const inputValueRef = useRef(input);
   const selectedProjectId = selectedProject?.projectId;
@@ -321,7 +370,10 @@ export function useChatComposerState({
     setCommandModalPayload(null);
   }, []);
 
-  const handleCustomCommand = useCallback(async (result: CommandExecutionResult) => {
+  const handleCustomCommand = useCallback(async (
+    result: CommandExecutionResult,
+    invocation: { commandName: string; args: string[] },
+  ) => {
     const { content, hasBashCommands } = result;
 
     if (hasBashCommands) {
@@ -338,17 +390,36 @@ export function useChatComposerState({
       }
     }
 
-    const commandContent = content || '';
-    setInput(commandContent);
-    inputValueRef.current = commandContent;
+    const commandBody = content || '';
+    const slashName = invocation.commandName.startsWith('/')
+      ? invocation.commandName
+      : `/${invocation.commandName}`;
+    const commandArgs = invocation.args.join(' ');
+    const displayText = formatLocalCommandDisplayText(slashName, commandArgs);
 
-    // Defer submit to next tick so the command text is reflected in UI before dispatching.
-    setTimeout(() => {
-      if (handleSubmitRef.current) {
-        handleSubmitRef.current(createFakeSubmitEvent());
-      }
-    }, 0);
-  }, [addMessage]);
+    // Claude transcripts are normalized through `parseLocalCommandPayload`,
+    // which understands the CLI's native <command-name> wrapper. Prefixing the
+    // expanded body with the same tags makes live and history rendering show
+    // the compact command instead of the full prompt (issue #1009).
+    //
+    // Other providers keep receiving the plain body: their transcripts have no
+    // tag-aware normalization, so embedding the tags would only leak them as
+    // literal text on reload. The known trade-off is that the compact live
+    // bubble still expands back to the full body in their reloaded history —
+    // acceptable until those providers gain equivalent normalization.
+    const promptContent = provider === 'claude'
+      ? `<command-message>${slashName.slice(1)}</command-message>\n` +
+        `<command-name>${slashName}</command-name>\n` +
+        `<command-args>${commandArgs}</command-args>\n\n${commandBody}`
+      : commandBody;
+
+    handleSubmitRef.current?.(createFakeSubmitEvent(), {
+      displayText,
+      promptContent,
+      commandName: slashName,
+      commandArgs,
+    });
+  }, [addMessage, provider]);
 
   const executeCommand = useCallback(
     async (command: SlashCommand, rawInput?: string, options?: { preserveInput?: boolean }) => {
@@ -411,7 +482,7 @@ export function useChatComposerState({
             inputValueRef.current = '';
           }
         } else if (result.type === 'custom') {
-          await handleCustomCommand(result);
+          await handleCustomCommand(result, { commandName: command.name, args });
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
@@ -646,9 +717,13 @@ export function useChatComposerState({
   const handleSubmit = useCallback(
     async (
       event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
+      commandOverride?: CommandSubmitOverride,
     ) => {
       event.preventDefault();
-      const currentInput = inputValueRef.current;
+      const currentInput = commandOverride?.promptContent ?? inputValueRef.current;
+      // What the user bubble (and session summary) shows; identical to the
+      // sent text except for command overrides, which display only "/name args".
+      const displayContent = commandOverride?.displayText ?? currentInput;
       if (!currentInput.trim() || !selectedProject) {
         return;
       }
@@ -659,9 +734,17 @@ export function useChatComposerState({
       if (isLoading) {
         queuedDraftSessionRef.current = sessionKey;
         setQueuedDraft({
-          content: currentInput,
+          // For command overrides, queue the compact "/name args" text: the
+          // flush replays it through slash-command interception, so the
+          // command is re-expanded at send time and the already-expanded
+          // prompt never surfaces as editable draft text.
+          content: commandOverride ? commandOverride.displayText : currentInput,
           images: attachedImages,
-          options: buildSendOptions(currentInput),
+          options: buildSendOptions(displayContent),
+          // The app-level auto-send (fired when this session completes while
+          // unviewed) can't re-intercept the slash command, so carry the
+          // expanded prompt for it to dispatch verbatim (issue #1009).
+          ...(commandOverride ? { promptContent: commandOverride.promptContent } : {}),
         });
         setInput('');
         inputValueRef.current = '';
@@ -680,9 +763,10 @@ export function useChatComposerState({
 
       // Intercept slash commands only when "/" is the first input character.
       // Also accept exact "help" as a convenience alias for users who expect CLI-style help.
+      // Command overrides carry an already-expanded command and must not be re-intercepted.
       const commandInput = currentInput.trimEnd();
-      const isHelpAlias = commandInput.trim().toLowerCase() === 'help';
-      if (commandInput.startsWith('/') || isHelpAlias) {
+      const isHelpAlias = !commandOverride && commandInput.trim().toLowerCase() === 'help';
+      if (!commandOverride && (commandInput.startsWith('/') || isHelpAlias)) {
         const firstSpace = commandInput.indexOf(' ');
         const commandName = isHelpAlias
           ? '/help'
@@ -748,7 +832,7 @@ export function useChatComposerState({
       }
 
       const resolvedProjectPath = selectedProject.fullPath || selectedProject.path || '';
-      const sessionSummary = getNotificationSessionSummary(selectedSession, currentInput);
+      const sessionSummary = getNotificationSessionSummary(selectedSession, displayContent);
 
       // The conversation always has a stable backend-allocated session id
       // BEFORE the first websocket send: brand-new chats allocate one here
@@ -798,9 +882,16 @@ export function useChatComposerState({
 
       const userMessage: ChatMessage = {
         type: 'user',
-        content: currentInput,
+        content: displayContent,
         images: uploadedImages as any,
         timestamp: new Date(),
+        ...(commandOverride
+          ? {
+              isLocalCommand: true,
+              commandName: commandOverride.commandName,
+              commandArgs: commandOverride.commandArgs,
+            }
+          : {}),
       };
 
       addMessage(userMessage);
@@ -823,7 +914,7 @@ export function useChatComposerState({
         sessionId: targetSessionId,
         content: messageContent,
         options: {
-          ...buildSendOptions(messageContent),
+          ...buildSendOptions(displayContent),
           images: uploadedImages,
         },
       });
@@ -975,7 +1066,11 @@ export function useChatComposerState({
       return;
     }
     if (queuedDraft?.content) {
-      writeQueuedMessage(sessionKey, { content: queuedDraft.content, options: queuedDraft.options });
+      writeQueuedMessage(sessionKey, {
+        content: queuedDraft.content,
+        options: queuedDraft.options,
+        promptContent: queuedDraft.promptContent,
+      });
     } else {
       clearQueuedMessage(sessionKey);
     }
