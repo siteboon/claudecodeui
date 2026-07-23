@@ -54,6 +54,15 @@ export type QueuedSendOptions = Record<string, unknown>;
 export type StoredQueuedMessage = {
   content: string;
   options?: QueuedSendOptions;
+  /**
+   * For queued custom slash commands, the fully expanded prompt to dispatch
+   * verbatim (the tagged wrapper for Claude, the plain body otherwise). The
+   * app-level auto-send has no access to slash-command re-interception, so it
+   * must send this instead of the compact `content` — otherwise the provider
+   * receives an un-expanded "/name args" string. The in-composer flush ignores
+   * this field and re-expands `content` live (issue #1009).
+   */
+  promptContent?: string;
 };
 
 export const queuedMessageKey = (sessionId: string) => `queued_message_${sessionId}`;
@@ -71,8 +80,12 @@ export function readQueuedMessage(sessionId: string): StoredQueuedMessage | null
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (parsed && typeof parsed === 'object' && typeof (parsed as StoredQueuedMessage).content === 'string') {
-      const { content, options } = parsed as StoredQueuedMessage;
-      return content.trim() ? { content, options } : null;
+      const { content, options, promptContent } = parsed as StoredQueuedMessage;
+      // Persisted data is untrusted — drop a malformed promptContent instead
+      // of letting a non-string reach the auto-send dispatch.
+      return content.trim()
+        ? { content, options, promptContent: typeof promptContent === 'string' ? promptContent : undefined }
+        : null;
     }
   } catch {
     // Legacy format: the raw draft text itself.
