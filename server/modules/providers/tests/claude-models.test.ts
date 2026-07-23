@@ -90,6 +90,8 @@ test('claude current active model skips synthetic error rows and recovers the re
         {
           type: 'assistant',
           sessionId: PROVIDER_SESSION_ID,
+          // Placeholder in the top-level event model field.
+          model: '<synthetic>',
           message: {
             model: '<synthetic>',
             content: [{ type: 'text', text: 'API Error: 529 Overloaded.' }],
@@ -98,6 +100,7 @@ test('claude current active model skips synthetic error rows and recovers the re
         {
           type: 'assistant',
           sessionId: PROVIDER_SESSION_ID,
+          // Placeholder only in message.model.
           message: {
             model: '<synthetic>',
             content: [{ type: 'text', text: 'No response requested.' }],
