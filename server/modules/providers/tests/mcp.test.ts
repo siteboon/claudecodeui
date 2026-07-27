@@ -313,8 +313,9 @@ test('providerMcpService global adder writes to all providers and rejects unsupp
       workspacePath,
     });
 
-    assert.equal(globalResult.length, 4);
+    assert.equal(globalResult.length, 5);
     assert.ok(globalResult.every((entry) => entry.created === true));
+    assert.ok(globalResult.some((entry) => entry.provider === 'minimax'));
 
     const claudeProject = await readJson(path.join(workspacePath, '.mcp.json'));
     assert.ok((claudeProject.mcpServers as Record<string, unknown>)['global-http']);
@@ -346,4 +347,3 @@ test('providerMcpService global adder writes to all providers and rejects unsupp
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
 });
-

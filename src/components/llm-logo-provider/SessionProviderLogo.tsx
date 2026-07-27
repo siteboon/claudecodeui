@@ -2,6 +2,7 @@ import type { LLMProvider } from '../../types/app';
 import ClaudeLogo from './ClaudeLogo';
 import CodexLogo from './CodexLogo';
 import CursorLogo from './CursorLogo';
+import MiniMaxLogo from './MiniMaxLogo';
 import OpenCodeLogo from './OpenCodeLogo';
 
 type SessionProviderLogoProps = {
@@ -23,6 +24,10 @@ export default function SessionProviderLogo({
 
   if (provider === 'opencode') {
     return <OpenCodeLogo className={className} />;
+  }
+
+  if (provider === 'minimax') {
+    return <MiniMaxLogo className={className} />;
   }
 
   return <ClaudeLogo className={className} />;

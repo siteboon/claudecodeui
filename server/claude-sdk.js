@@ -165,6 +165,10 @@ function mapCliOptionsToSDK(options = {}) {
   // Forward all host env vars (e.g. ANTHROPIC_BASE_URL) to the subprocess.
   // Since SDK 0.2.113, options.env replaces process.env instead of overlaying it.
   sdkOptions.env = { ...process.env };
+  for (const environmentName of options.unsetEnvironment || []) {
+    delete sdkOptions.env[environmentName];
+  }
+  Object.assign(sdkOptions.env, options.environment || {});
 
   // Resolve the executable eagerly on Windows because the SDK uses raw child_process.spawn,
   // which does not reliably follow npm's shell wrappers like cross-spawn does.
@@ -208,7 +212,7 @@ function mapCliOptionsToSDK(options = {}) {
 
   sdkOptions.disallowedTools = settings.disallowedTools || [];
 
-  sdkOptions.model = options.model || CLAUDE_FALLBACK_MODELS.DEFAULT;
+  sdkOptions.model = options.model || options.defaultModel || CLAUDE_FALLBACK_MODELS.DEFAULT;
 
   const resolvedEffort = resolveClaudeEffort(
     sdkOptions.model,
@@ -301,7 +305,7 @@ function readNumber(value) {
  * @param {Object} sdkMessage - SDK stream message
  * @returns {Object|null} Token budget object or null
  */
-function extractTokenBudget(sdkMessage) {
+function extractTokenBudget(sdkMessage, contextWindowOverride) {
   if (!sdkMessage || typeof sdkMessage !== 'object') {
     return null;
   }
@@ -315,7 +319,9 @@ function extractTokenBudget(sdkMessage) {
     const inputTokens = directInputTokens + cacheTokens;
     const outputTokens = readNumber(messageUsage.output_tokens ?? messageUsage.outputTokens);
     const totalUsed = inputTokens + outputTokens;
-    const contextWindow = parseInt(process.env.CONTEXT_WINDOW, 10) || 160000;
+    const contextWindow = Number.isFinite(contextWindowOverride)
+      ? contextWindowOverride
+      : parseInt(process.env.CONTEXT_WINDOW, 10) || 160000;
 
     return {
       used: totalUsed,
@@ -455,10 +461,12 @@ async function loadMcpConfig(cwd) {
  * @param {string} command - User prompt/command
  * @param {Object} options - Query options
  * @param {Object} ws - WebSocket connection
+ * @param {Object} runtimeConfig - Provider identity and compatible runtime overrides
  * @returns {Promise<void>}
  */
-async function queryClaudeSDK(command, options = {}, ws) {
+async function queryClaudeSDK(command, options = {}, ws, runtimeConfig = {}) {
   const { sessionId, sessionSummary } = options;
+  const provider = runtimeConfig.provider || 'claude';
   let capturedSessionId = sessionId;
   let sessionCreatedSent = false;
 
@@ -472,21 +480,24 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
   try {
     const resolvedModel = await providerModelsService.resolveResumeModel(
-      'claude',
+      provider,
       sessionId,
       options.model,
     );
     let effortModels = CLAUDE_FALLBACK_MODELS;
     try {
-      effortModels = (await providerModelsService.getProviderModels('claude')).models;
+      effortModels = (await providerModelsService.getProviderModels(provider)).models;
     } catch (error) {
-      console.warn('[Claude SDK] Unable to load provider models for effort validation:', error);
+      console.warn(`[${provider}] Unable to load provider models for effort validation:`, error);
     }
 
     const sdkOptions = mapCliOptionsToSDK({
       ...options,
       model: resolvedModel || options.model,
       effortModels,
+      defaultModel: runtimeConfig.defaultModel,
+      environment: runtimeConfig.environment,
+      unsetEnvironment: runtimeConfig.unsetEnvironment,
     });
 
     const mcpServers = await loadMcpConfig(options.cwd);
@@ -503,16 +514,16 @@ async function queryClaudeSDK(command, options = {}, ws) {
       Notification: [{
         matcher: '',
         hooks: [async (input) => {
-          const message = typeof input?.message === 'string' ? input.message : 'Claude requires your attention.';
+          const message = typeof input?.message === 'string' ? input.message : 'The provider requires your attention.';
           emitNotification(createNotificationEvent({
-            provider: 'claude',
+            provider,
             sessionId: capturedSessionId || sessionId || null,
             kind: 'action_required',
             code: 'agent.notification',
             meta: { message, sessionName: sessionSummary },
             severity: 'warning',
             requiresUserAction: true,
-            dedupeKey: `claude:hook:notification:${capturedSessionId || sessionId || 'none'}:${message}`
+            dedupeKey: `${provider}:hook:notification:${capturedSessionId || sessionId || 'none'}:${message}`
           }));
           return {};
         }]
@@ -549,16 +560,16 @@ async function queryClaudeSDK(command, options = {}, ws) {
       }
 
       const requestId = createRequestId();
-      ws.send(createNormalizedMessage({ kind: 'permission_request', requestId, toolName, input, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+      ws.send(createNormalizedMessage({ kind: 'permission_request', requestId, toolName, input, sessionId: capturedSessionId || sessionId || null, provider }));
       emitNotification(createNotificationEvent({
-        provider: 'claude',
+        provider,
         sessionId: capturedSessionId || sessionId || null,
         kind: 'action_required',
         code: 'permission.required',
         meta: { toolName, sessionName: sessionSummary },
         severity: 'warning',
         requiresUserAction: true,
-        dedupeKey: `claude:permission:${capturedSessionId || sessionId || 'none'}:${requestId}`
+        dedupeKey: `${provider}:permission:${capturedSessionId || sessionId || 'none'}:${requestId}`
       }));
 
       const decision = await waitForToolApproval(requestId, {
@@ -571,7 +582,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
           _receivedAt: new Date(),
         },
         onCancel: (reason) => {
-          ws.send(createNormalizedMessage({ kind: 'permission_cancelled', requestId, reason, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+          ws.send(createNormalizedMessage({ kind: 'permission_cancelled', requestId, reason, sessionId: capturedSessionId || sessionId || null, provider }));
         }
       });
       if (!decision) {
@@ -647,7 +658,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
         // Send session-created event only once for new sessions
         if (!sessionId && !sessionCreatedSent) {
           sessionCreatedSent = true;
-          ws.send(createNormalizedMessage({ kind: 'session_created', newSessionId: capturedSessionId, sessionId: capturedSessionId, provider: 'claude' }));
+          ws.send(createNormalizedMessage({ kind: 'session_created', newSessionId: capturedSessionId, sessionId: capturedSessionId, provider }));
         }
       } else {
         // session_id already captured
@@ -658,7 +669,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
       const sid = capturedSessionId || sessionId || null;
 
       // Use adapter to normalize SDK events into NormalizedMessage[]
-      const normalized = sessionsService.normalizeMessage('claude', transformedMessage, sid);
+      const normalized = sessionsService.normalizeMessage(provider, transformedMessage, sid);
       for (const msg of normalized) {
         // Preserve parentToolUseId from SDK wrapper for subagent tool grouping
         if (transformedMessage.parentToolUseId && !msg.parentToolUseId) {
@@ -668,9 +679,9 @@ async function queryClaudeSDK(command, options = {}, ws) {
       }
 
       // Extract and send token budget updates from assistant/result usage payloads
-      const tokenBudgetData = extractTokenBudget(message);
+      const tokenBudgetData = extractTokenBudget(message, runtimeConfig.contextWindow);
       if (tokenBudgetData) {
-        ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+        ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider }));
       }
     }
 
@@ -683,11 +694,11 @@ async function queryClaudeSDK(command, options = {}, ws) {
     // terminal `complete` (aborted: true) was already sent by abort-session.
     const wasAborted = capturedSessionId ? abortedSessionIds.delete(capturedSessionId) : false;
     if (!wasAborted) {
-      ws.send(createCompleteMessage({ provider: 'claude', sessionId: capturedSessionId || sessionId || null, exitCode: 0 }));
+      ws.send(createCompleteMessage({ provider, sessionId: capturedSessionId || sessionId || null, exitCode: 0 }));
     }
     notifyRunStopped({
       userId: ws?.userId || null,
-      provider: 'claude',
+      provider,
       sessionId: capturedSessionId || sessionId || null,
       sessionName: sessionSummary,
       stopReason: wasAborted ? 'aborted' : 'completed'
@@ -709,18 +720,18 @@ async function queryClaudeSDK(command, options = {}, ws) {
       return;
     }
 
-    // Check if Claude CLI is installed for a clearer error message
-    const installed = await providerAuthService.isProviderInstalled('claude');
+    // Check whether the compatible runtime is installed for a clearer error message.
+    const installed = await providerAuthService.isProviderInstalled(provider);
     const errorContent = !installed
-      ? 'Claude Code is not installed. Please install it first: https://docs.anthropic.com/en/docs/claude-code'
+      ? 'The compatible coding runtime is not installed.'
       : error.message;
 
     // Send error to WebSocket, then the terminal complete
-    ws.send(createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
-    ws.send(createCompleteMessage({ provider: 'claude', sessionId: capturedSessionId || sessionId || null, exitCode: 1 }));
+    ws.send(createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider }));
+    ws.send(createCompleteMessage({ provider, sessionId: capturedSessionId || sessionId || null, exitCode: 1 }));
     notifyRunFailed({
       userId: ws?.userId || null,
-      provider: 'claude',
+      provider,
       sessionId: capturedSessionId || sessionId || null,
       sessionName: sessionSummary,
       error

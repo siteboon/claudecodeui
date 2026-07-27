@@ -63,16 +63,10 @@ function ChatInterface({
   const {
     provider,
     setProvider,
-    cursorModel,
-    setCursorModel,
-    claudeModel,
-    setClaudeModel,
-    codexModel,
-    setCodexModel,
+    providerModels,
+    setStoredProviderModel,
     currentProviderEffort,
     currentProviderEffortOptions,
-    opencodeModel,
-    setOpenCodeModel,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
@@ -198,11 +192,8 @@ function ChatInterface({
     provider,
     permissionMode,
     cyclePermissionMode,
-    cursorModel,
-    claudeModel,
-    codexModel,
+    providerModels,
     currentProviderEffort,
-    opencodeModel,
     isLoading: isProcessing,
     canAbortSession,
     tokenBudget,
@@ -299,6 +290,8 @@ function ChatInterface({
           ? t('messageTypes.codex')
           : provider === 'opencode'
               ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
+            : provider === 'minimax'
+              ? t('messageTypes.minimax', { defaultValue: 'MiniMax' })
             : t('messageTypes.claude');
 
     return (
@@ -331,14 +324,8 @@ function ChatInterface({
           provider={provider}
           setProvider={(nextProvider) => setProvider(nextProvider as Provider)}
           textareaRef={textareaRef}
-          claudeModel={claudeModel}
-          setClaudeModel={setClaudeModel}
-          cursorModel={cursorModel}
-          setCursorModel={setCursorModel}
-          codexModel={codexModel}
-          setCodexModel={setCodexModel}
-          opencodeModel={opencodeModel}
-          setOpenCodeModel={setOpenCodeModel}
+          providerModels={providerModels}
+          setProviderModel={setStoredProviderModel}
           providerModelCatalog={providerModelCatalog}
           providerModelsLoading={providerModelsLoading}
           tasksEnabled={tasksEnabled}
@@ -446,6 +433,8 @@ function ChatInterface({
                   ? t('messageTypes.codex')
                   : provider === 'opencode'
                       ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
+                    : provider === 'minimax'
+                      ? t('messageTypes.minimax', { defaultValue: 'MiniMax' })
                     : t('messageTypes.claude'),
           })}
           isTextareaExpanded={isTextareaExpanded}

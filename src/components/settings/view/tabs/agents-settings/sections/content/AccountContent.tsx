@@ -45,6 +45,15 @@ const agentConfig: Record<AgentProvider, AgentVisualConfig> = {
     subtextClass: 'text-gray-700 dark:text-gray-300',
     buttonClass: 'bg-gray-800 hover:bg-gray-900 active:bg-gray-950 dark:bg-gray-700 dark:hover:bg-gray-600 dark:active:bg-gray-500',
   },
+  minimax: {
+    name: 'MiniMax',
+    description: 'MiniMax coding assistant',
+    bgClass: 'bg-red-50 dark:bg-red-900/20',
+    borderClass: 'border-red-200 dark:border-red-800',
+    textClass: 'text-red-900 dark:text-red-100',
+    subtextClass: 'text-red-700 dark:text-red-300',
+    buttonClass: 'bg-red-600 hover:bg-red-700 active:bg-red-800',
+  },
   opencode: {
     name: 'OpenCode',
     description: 'OpenCode CLI assistant',

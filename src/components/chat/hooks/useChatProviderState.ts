@@ -20,10 +20,11 @@ const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   claude: 'default',
   cursor: 'gpt-5.3-codex',
   codex: 'gpt-5.4',
+  minimax: 'MiniMax-M3',
   opencode: 'anthropic/claude-sonnet-4-5',
 };
 
-const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode'];
+const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'minimax', 'opencode'];
 
 const readStoredProvider = (): LLMProvider => {
   const storedProvider = localStorage.getItem('selected-provider');
@@ -42,6 +43,7 @@ const FALLBACK_PERMISSION_MODES: Record<LLMProvider, PermissionMode[]> = {
   claude: ['default', 'auto', 'acceptEdits', 'bypassPermissions', 'plan'],
   cursor: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
   codex: ['default', 'acceptEdits', 'bypassPermissions'],
+  minimax: ['default', 'auto', 'acceptEdits', 'bypassPermissions', 'plan'],
   opencode: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
 };
 
@@ -100,6 +102,9 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   const [codexModel, setCodexModel] = useState<string>(() => {
     return localStorage.getItem('codex-model') || FALLBACK_DEFAULT_MODEL.codex;
   });
+  const [minimaxModel, setMiniMaxModel] = useState<string>(() => {
+    return localStorage.getItem('minimax-model') || FALLBACK_DEFAULT_MODEL.minimax;
+  });
   const [providerEfforts, setProviderEfforts] = useState<Partial<Record<LLMProvider, string>>>(() => {
     return PROVIDERS.reduce<Partial<Record<LLMProvider, string>>>((acc, targetProvider) => {
       acc[targetProvider] = localStorage.getItem(`${targetProvider}-effort`) || DEFAULT_EFFORT_VALUE;
@@ -148,6 +153,12 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     if (targetProvider === 'codex') {
       setCodexModel(model);
       localStorage.setItem('codex-model', model);
+      return;
+    }
+
+    if (targetProvider === 'minimax') {
+      setMiniMaxModel(model);
+      localStorage.setItem('minimax-model', model);
       return;
     }
 
@@ -354,8 +365,9 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     claude: claudeModel,
     cursor: cursorModel,
     codex: codexModel,
+    minimax: minimaxModel,
     opencode: opencodeModel,
-  }), [claudeModel, cursorModel, codexModel, opencodeModel]);
+  }), [claudeModel, cursorModel, codexModel, minimaxModel, opencodeModel]);
 
   useEffect(() => {
     const claude = providerModelCatalog.claude;
@@ -395,6 +407,19 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       }
     }
   }, [providerModelCatalog.codex, codexModel]);
+
+  useEffect(() => {
+    const minimax = providerModelCatalog.minimax;
+    if (minimax) {
+      const next = pickStoredOrCurrent('minimax-model', minimaxModel, minimax);
+      if (next !== minimaxModel) {
+        setMiniMaxModel(next);
+      }
+      if (localStorage.getItem('minimax-model') !== next) {
+        localStorage.setItem('minimax-model', next);
+      }
+    }
+  }, [providerModelCatalog.minimax, minimaxModel]);
 
   useEffect(() => {
     const opencode = providerModelCatalog.opencode;
@@ -567,10 +592,14 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     setClaudeModel,
     codexModel,
     setCodexModel,
+    minimaxModel,
+    setMiniMaxModel,
     currentProviderEffort,
     currentProviderEffortOptions,
     opencodeModel,
     setOpenCodeModel,
+    providerModels,
+    setStoredProviderModel,
     permissionMode,
     setPermissionMode,
     pendingPermissionRequests,
