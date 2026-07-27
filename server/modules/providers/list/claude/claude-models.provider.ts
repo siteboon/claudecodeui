@@ -62,7 +62,7 @@ export const CLAUDE_FALLBACK_MODELS: ProviderModelsDefinition = {
     {
       value: 'opus',
       label: 'Opus',
-      description: 'Opus 4.8 · Best for everyday, complex tasks · ~2× usage vs Sonnet',
+      description: 'Opus 5 · Best for everyday, complex tasks · ~2× usage vs Sonnet',
       effort: {
         default: 'high',
         values: [
