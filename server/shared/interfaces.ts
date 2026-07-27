@@ -168,11 +168,15 @@ export interface IProviderSessions {
  * interface for both full rescans and single-file incremental sync triggered
  * by filesystem watcher events.
  */
+export type SessionSynchronizeOptions = {
+  initializing?: boolean;
+};
+
 export interface IProviderSessionSynchronizer {
   /**
    * Scans provider session artifacts and upserts discovered sessions into DB.
    */
-  synchronize(since?: Date): Promise<number>;
+  synchronize(since?: Date, options?: SessionSynchronizeOptions): Promise<number>;
 
   /**
    * Parses and upserts one provider artifact file without running a full scan.

@@ -98,6 +98,21 @@ test('assignProviderSessionId merges a watcher-created duplicate into the app ro
   });
 });
 
+test('assignProviderSessionId preserves a duplicate manual name over a provider name', async () => {
+  await withIsolatedDatabase(() => {
+    sessionsDb.createAppSession('app-id-3', 'codex', '/workspace/demo');
+    sessionsDb.updateSessionProviderName('app-id-3', 'Provider title');
+    sessionsDb.createSession('provider-manual-race', 'codex', '/workspace/demo', 'Provider duplicate name');
+    sessionsDb.updateSessionCustomName('provider-manual-race', 'Manual duplicate name');
+
+    sessionsDb.assignProviderSessionId('app-id-3', 'provider-manual-race');
+
+    const row = sessionsDb.getSessionById('app-id-3');
+    assert.equal(row?.custom_name, 'Manual duplicate name');
+    assert.equal(row?.custom_name_source, 'manual');
+  });
+});
+
 test('legacy provider-keyed rows stay resolvable through both lookups', async () => {
   await withIsolatedDatabase(() => {
     sessionsDb.createSession('legacy-1', 'opencode', '/workspace/demo');

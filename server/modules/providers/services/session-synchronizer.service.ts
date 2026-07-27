@@ -1,5 +1,6 @@
 import { scanStateDb } from '@/modules/database/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
+import type { SessionSynchronizeOptions } from '@/shared/interfaces.js';
 import type { LLMProvider } from '@/shared/types.js';
 
 type SessionSynchronizeResult = {
@@ -14,7 +15,7 @@ export const sessionSynchronizerService = {
   /**
    * Runs all provider synchronizers and updates scan_state.last_scanned_at.
    */
-  async synchronizeSessions(): Promise<SessionSynchronizeResult> {
+  async synchronizeSessions(options: SessionSynchronizeOptions = {}): Promise<SessionSynchronizeResult> {
     const lastScanAt = scanStateDb.getLastScannedAt();
     const scanBoundary = new Date();
     const processedByProvider: Record<LLMProvider, number> = {
@@ -28,7 +29,7 @@ export const sessionSynchronizerService = {
     const results = await Promise.allSettled(
       providerRegistry.listProviders().map(async (provider) => ({
         provider: provider.id,
-        processed: await provider.sessionSynchronizer.synchronize(lastScanAt ?? undefined),
+        processed: await provider.sessionSynchronizer.synchronize(lastScanAt ?? undefined, options),
       }))
     );
 

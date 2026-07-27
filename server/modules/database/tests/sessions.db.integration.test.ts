@@ -4,17 +4,23 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
+import Database from 'better-sqlite3';
+
 import { closeConnection } from '@/modules/database/connection.js';
 import { initializeDatabase } from '@/modules/database/init-db.js';
 import { sessionsDb } from '@/modules/database/repositories/sessions.db.js';
 
-async function withIsolatedDatabase(runTest: () => void | Promise<void>): Promise<void> {
+async function withIsolatedDatabase(
+  runTest: () => void | Promise<void>,
+  prepareDatabase?: (databasePath: string) => void,
+): Promise<void> {
   const previousDatabasePath = process.env.DATABASE_PATH;
   const tempDirectory = await mkdtemp(path.join(tmpdir(), 'sessions-db-'));
   const databasePath = path.join(tempDirectory, 'auth.db');
 
   closeConnection();
   process.env.DATABASE_PATH = databasePath;
+  prepareDatabase?.(databasePath);
   await initializeDatabase();
 
   try {
@@ -29,6 +35,93 @@ async function withIsolatedDatabase(runTest: () => void | Promise<void>): Promis
     await rm(tempDirectory, { recursive: true, force: true });
   }
 }
+
+test('migration preserves legacy session names as manual overrides', async () => {
+  await withIsolatedDatabase(() => {
+    const migrated = sessionsDb.getSessionById('legacy-manual');
+    assert.equal(migrated?.custom_name_source, 'manual');
+
+    sessionsDb.updateSessionProviderName('legacy-manual', 'Codex title');
+    assert.equal(sessionsDb.getSessionById('legacy-manual')?.custom_name, 'My existing name');
+  }, (databasePath) => {
+    const db = new Database(databasePath);
+    db.exec(`
+      CREATE TABLE sessions (
+        session_id TEXT PRIMARY KEY,
+        provider TEXT NOT NULL,
+        custom_name TEXT,
+        project_path TEXT,
+        jsonl_path TEXT,
+        isArchived BOOLEAN DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO sessions (session_id, provider, custom_name)
+      VALUES ('legacy-manual', 'codex', 'My existing name');
+    `);
+    db.close();
+  });
+});
+
+test('session_names migration preserves custom names as manual overrides', async () => {
+  await withIsolatedDatabase(() => {
+    const migrated = sessionsDb.getSessionById('legacy-session-name');
+    assert.equal(migrated?.custom_name_source, 'manual');
+
+    sessionsDb.updateSessionProviderName('legacy-session-name', 'Provider title');
+    assert.equal(sessionsDb.getSessionById('legacy-session-name')?.custom_name, 'Legacy custom name');
+  }, (databasePath) => {
+    const db = new Database(databasePath);
+    db.exec(`
+      CREATE TABLE session_names (
+        session_id TEXT PRIMARY KEY,
+        provider TEXT,
+        custom_name TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO session_names (session_id, provider, custom_name)
+      VALUES ('legacy-session-name', 'codex', 'Legacy custom name');
+    `);
+    db.close();
+  });
+});
+
+test('session_names migration treats blank names as absent during conflict merge', async () => {
+  await withIsolatedDatabase(() => {
+    const migrated = sessionsDb.getSessionById('existing-provider-name');
+    assert.equal(migrated?.custom_name, 'Existing provider name');
+    assert.equal(migrated?.custom_name_source, 'provider');
+  }, (databasePath) => {
+    const db = new Database(databasePath);
+    db.exec(`
+      CREATE TABLE sessions (
+        session_id TEXT PRIMARY KEY,
+        provider TEXT NOT NULL,
+        provider_session_id TEXT,
+        custom_name TEXT,
+        custom_name_source TEXT,
+        project_path TEXT,
+        jsonl_path TEXT,
+        isArchived BOOLEAN DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO sessions (session_id, provider, provider_session_id, custom_name, custom_name_source)
+      VALUES ('existing-provider-name', 'codex', 'codex-existing-provider-name', 'Existing provider name', 'provider');
+      CREATE TABLE session_names (
+        session_id TEXT PRIMARY KEY,
+        provider TEXT,
+        custom_name TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO session_names (session_id, provider, custom_name)
+      VALUES ('existing-provider-name', 'codex', '   ');
+    `);
+    db.close();
+  });
+});
 
 test('session archive queries hide archived rows from active project views', async () => {
   await withIsolatedDatabase(() => {

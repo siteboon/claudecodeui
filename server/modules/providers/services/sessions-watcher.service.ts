@@ -259,7 +259,7 @@ async function onUpdate(
 export async function initializeSessionsWatcher(): Promise<void> {
   console.log('Setting up session watchers');
 
-  const initialSync = await sessionSynchronizerService.synchronizeSessions();
+  const initialSync = await sessionSynchronizerService.synchronizeSessions({ initializing: true });
   console.log('Initial session synchronization complete', {
     processedByProvider: initialSync.processedByProvider,
     failures: initialSync.failures,

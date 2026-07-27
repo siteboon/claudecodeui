@@ -58,18 +58,28 @@ const migrateLegacySessionNames = (db: Database): void => {
   if (hasSessionsTable) {
     console.log('Running migration: Merging session_names into sessions');
     db.exec(`
-      INSERT INTO sessions (session_id, provider, custom_name, created_at, updated_at)
+      INSERT INTO sessions (session_id, provider, custom_name, custom_name_source, created_at, updated_at)
       SELECT
         session_id,
         COALESCE(provider, 'claude'),
         custom_name,
+        CASE WHEN custom_name IS NULL OR trim(custom_name) = '' THEN NULL ELSE 'manual' END,
         COALESCE(created_at, CURRENT_TIMESTAMP),
         COALESCE(updated_at, CURRENT_TIMESTAMP)
       FROM session_names
       WHERE true
       ON CONFLICT(session_id) DO UPDATE SET
         provider = excluded.provider,
-        custom_name = COALESCE(excluded.custom_name, sessions.custom_name),
+        custom_name = CASE
+          WHEN excluded.custom_name IS NOT NULL AND trim(excluded.custom_name) <> ''
+            THEN excluded.custom_name
+          ELSE sessions.custom_name
+        END,
+        custom_name_source = CASE
+          WHEN excluded.custom_name IS NOT NULL AND trim(excluded.custom_name) <> ''
+            THEN 'manual'
+          ELSE sessions.custom_name_source
+        END,
         created_at = COALESCE(sessions.created_at, excluded.created_at),
         updated_at = COALESCE(excluded.updated_at, sessions.updated_at)
     `);
@@ -79,6 +89,13 @@ const migrateLegacySessionNames = (db: Database): void => {
 
   console.log('Running migration: Renaming session_names table to sessions');
   db.exec('ALTER TABLE session_names RENAME TO sessions');
+  const columnNames = getTableInfo(db, 'sessions').map((column) => column.name);
+  addColumnToTableIfNotExists(db, 'sessions', columnNames, 'custom_name_source', 'TEXT');
+  db.exec(`
+    UPDATE sessions
+    SET custom_name_source = 'manual'
+    WHERE custom_name IS NOT NULL AND trim(custom_name) <> ''
+  `);
 };
 
 const migrateLegacyWorkspaceTableIntoProjects = (db: Database): void => {
@@ -416,6 +433,19 @@ const addSessionModelColumn = (db: Database): void => {
   addColumnToTableIfNotExists(db, 'sessions', columnNames, 'model', 'TEXT');
 };
 
+const addSessionCustomNameSource = (db: Database): void => {
+  const columnNames = getTableInfo(db, 'sessions').map((column) => column.name);
+  const isLegacySchema = !columnNames.includes('custom_name_source');
+  addColumnToTableIfNotExists(db, 'sessions', columnNames, 'custom_name_source', 'TEXT');
+  if (isLegacySchema) {
+    db.exec(`
+      UPDATE sessions
+      SET custom_name_source = 'manual'
+      WHERE custom_name IS NOT NULL AND trim(custom_name) <> ''
+    `);
+  }
+};
+
 const ensureProjectsForSessionPaths = (db: Database): void => {
   if (!tableExists(db, 'sessions')) {
     return;
@@ -464,6 +494,7 @@ export const runMigrations = (db: Database) => {
 
     migrateLegacyWorkspaceTableIntoProjects(db);
     rebuildSessionsTableWithProjectSchema(db);
+    addSessionCustomNameSource(db);
     migrateLegacySessionNames(db);
     addProviderSessionIdMapping(db);
     addSessionModelColumn(db);
