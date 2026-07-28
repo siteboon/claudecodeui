@@ -211,11 +211,19 @@ async function getSessionMessages(
  * - local command payloads (`<command-name>...`) and stdout wrappers
  *   (`<local-command-stdout>...`) should be remapped into normal chat messages
  *   instead of being discarded as internal content
+ *
+ * Skill bodies belong in the first group. When a skill is invoked, Claude
+ * injects the entire SKILL.md as a synthetic user turn. Persisted transcripts
+ * tag it `isMeta: true`, but the live SDK stream does not, so without a
+ * content-level check the same payload renders as a huge user bubble during the
+ * run and then vanishes on reload. The skill is already represented by the
+ * `Skill` tool call, so it is never user-visible content.
  */
 const INTERNAL_CONTENT_PREFIXES = [
   '<system-reminder>',
   'Caveat:',
   '[Request interrupted',
+  'Base directory for this skill:',
 ] as const;
 
 function isInternalContent(content: string): boolean {
