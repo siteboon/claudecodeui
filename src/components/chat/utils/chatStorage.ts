@@ -54,12 +54,13 @@ export type QueuedSendOptions = Record<string, unknown>;
 export type StoredQueuedMessage = {
   content: string;
   options?: QueuedSendOptions;
-  /**
-   * Server-side image descriptors returned by POST /api/assets/images.
-   * Unlike browser File objects, these are JSON-safe and can follow a queued
-   * message across session switches (or a page reload).
-   */
+  /** Legacy image-only descriptors retained for queued draft compatibility. */
   images?: unknown[];
+  /**
+   * JSON-safe descriptors returned by POST /api/assets/files. Unlike browser
+   * File objects, they can follow a queued message across session switches.
+   */
+  attachments?: unknown[];
 };
 
 export const queuedMessageKey = (sessionId: string) => `queued_message_${sessionId}`;
@@ -77,10 +78,14 @@ export function readQueuedMessage(sessionId: string): StoredQueuedMessage | null
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (parsed && typeof parsed === 'object' && typeof (parsed as StoredQueuedMessage).content === 'string') {
-      const { content, options, images } = parsed as StoredQueuedMessage;
-      const normalizedImages = Array.isArray(images) ? images : [];
-      return content.trim() || normalizedImages.length > 0
-        ? { content, options, images: normalizedImages }
+      const { content, options, images, attachments } = parsed as StoredQueuedMessage;
+      const normalizedAttachments = Array.isArray(attachments)
+        ? attachments
+        : Array.isArray(images)
+          ? images
+          : [];
+      return content.trim() || normalizedAttachments.length > 0
+        ? { content, options, attachments: normalizedAttachments }
         : null;
     }
   } catch {

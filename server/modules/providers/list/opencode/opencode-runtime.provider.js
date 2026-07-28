@@ -3,7 +3,11 @@ import fsSync from 'node:fs';
 import crossSpawn from 'cross-spawn';
 import Database from 'better-sqlite3';
 
-import { appendImagesInputTag } from '@/shared/image-attachments.js';
+import {
+  appendFilesInputTag,
+  appendImagesInputTag,
+  normalizeAttachmentDescriptors
+} from '@/shared/image-attachments.js';
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
 import { createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell, getOpenCodeDatabasePath } from '@/shared/utils.js';
 
@@ -121,7 +125,17 @@ function readOpenCodeTokenUsage(sessionId) {
 
 async function spawnOpenCode(command, options = {}, ws, context) {
   return new Promise((resolve, reject) => {
-    const { sessionId, projectPath, cwd, model, effort, sessionSummary, images, permissionMode } = options;
+    const {
+      sessionId,
+      projectPath,
+      cwd,
+      model,
+      effort,
+      sessionSummary,
+      images,
+      files,
+      permissionMode
+    } = options;
     // Callers pass the stable app session id; the CLI resumes with the
     // provider-native id recorded on the session row.
     const providerSessionId = context.resolveProviderSessionId(sessionId);
@@ -258,12 +272,19 @@ async function spawnOpenCode(command, options = {}, ws, context) {
       }
       const permissionOptions = resolveOpenCodePermissionOptions(permissionMode);
       args.push(...permissionOptions.args);
-      if (command && command.trim()) {
+      const hasAttachments =
+        normalizeAttachmentDescriptors(images).length > 0
+        || normalizeAttachmentDescriptors(files).length > 0;
+      if ((command && command.trim()) || hasAttachments) {
         // Image attachments ride along as an <images_input> path list appended
         // to the prompt; the session history reader strips the tag back out.
         // opencode is a .cmd shim on Windows, so the whole argument must be
         // newline-free or cmd.exe silently truncates it at the first newline.
-        args.push(flattenPromptForWindowsShell(appendImagesInputTag(command.trim(), images)));
+        const promptWithAttachments = appendFilesInputTag(
+          appendImagesInputTag(command?.trim() || '', images),
+          files
+        );
+        args.push(flattenPromptForWindowsShell(promptWithAttachments));
       }
 
       opencodeProcess = spawnFunction('opencode', args, {

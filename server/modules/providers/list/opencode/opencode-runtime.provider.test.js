@@ -111,6 +111,26 @@ test('spawnOpenCode emits session_created before normalized live messages for ne
     assert.equal(launchedArgs.includes('--auto'), false);
     assert.equal(launchedArgs.includes('--agent'), false);
     assert.equal(capture.permissionEnv, null);
+
+    const attachmentOnlyCapturePath = path.join(tempRoot, 'opencode-attachment-only.json');
+    process.env.OPENCODE_ARGS_CAPTURE = attachmentOnlyCapturePath;
+    await opencodeRuntime.run(
+      '',
+      {
+        cwd: tempRoot,
+        files: [{
+          path: path.join(tempRoot, 'brief.pdf'),
+          name: 'brief.pdf',
+          mimeType: 'application/pdf',
+        }],
+      },
+      writer,
+      runtimeContext,
+    );
+    const attachmentOnlyCapture = JSON.parse(await readFile(attachmentOnlyCapturePath, 'utf8'));
+    const attachmentPrompt = attachmentOnlyCapture.args[attachmentOnlyCapture.args.length - 1];
+    assert.match(attachmentPrompt, /<files_input>/);
+    assert.match(attachmentPrompt, /brief\.pdf/);
   } finally {
     if (previousPath === undefined) {
       delete process.env[pathKey];

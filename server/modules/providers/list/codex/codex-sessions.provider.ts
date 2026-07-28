@@ -2,7 +2,7 @@ import fsSync from 'node:fs';
 import readline from 'node:readline';
 
 import { sessionsDb } from '@/modules/database/index.js';
-import { toImageAttachments } from '@/shared/image-attachments.js';
+import { parseFilesInputTag, toImageAttachments } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
 import { createNormalizedMessage, generateMessageId, readObjectRecord, sliceTailPage } from '@/shared/utils.js';
@@ -655,8 +655,10 @@ export class CodexSessionsProvider implements IProviderSessions {
               .filter(Boolean)
               .join('\n')
           : String(raw.message.content || '');
+      const parsedFiles = parseFilesInputTag(content);
       const rawImages = Array.isArray(raw.images) && raw.images.length > 0 ? raw.images : undefined;
-      if (!content.trim() && !rawImages) {
+      const files = parsedFiles.attachments.length > 0 ? parsedFiles.attachments : undefined;
+      if (!parsedFiles.text.trim() && !rawImages && !files) {
         return [];
       }
       return [createNormalizedMessage({
@@ -666,8 +668,9 @@ export class CodexSessionsProvider implements IProviderSessions {
         provider: PROVIDER,
         kind: 'text',
         role: 'user',
-        content,
+        content: parsedFiles.text,
         images: rawImages,
+        files,
       })];
     }
 

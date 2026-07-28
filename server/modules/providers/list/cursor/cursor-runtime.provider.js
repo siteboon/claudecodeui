@@ -1,6 +1,10 @@
 import crossSpawn from 'cross-spawn';
 
-import { appendImagesInputTag } from '@/shared/image-attachments.js';
+import {
+  appendFilesInputTag,
+  appendImagesInputTag,
+  normalizeAttachmentDescriptors
+} from '@/shared/image-attachments.js';
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
 import { createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell } from '@/shared/utils.js';
 
@@ -27,7 +31,17 @@ function isWorkspaceTrustPrompt(text = '') {
 
 async function spawnCursor(command, options = {}, ws, context) {
   return new Promise(async (resolve, reject) => {
-    const { sessionId, projectPath, cwd, toolsSettings, skipPermissions, model, sessionSummary, images } = options;
+    const {
+      sessionId,
+      projectPath,
+      cwd,
+      toolsSettings,
+      skipPermissions,
+      model,
+      sessionSummary,
+      images,
+      files
+    } = options;
     // Callers pass the stable app session id; the CLI resumes with the
     // provider-native id recorded on the session row.
     const providerSessionId = context.resolveProviderSessionId(sessionId);
@@ -56,13 +70,20 @@ async function spawnCursor(command, options = {}, ws, context) {
       baseArgs.push('--resume=' + providerSessionId);
     }
 
-    if (command && command.trim()) {
+    const hasAttachments =
+      normalizeAttachmentDescriptors(images).length > 0
+      || normalizeAttachmentDescriptors(files).length > 0;
+    if ((command && command.trim()) || hasAttachments) {
       // Provide a prompt (works for both new and resumed sessions). Image
       // attachments ride along as an <images_input> path list appended to the
       // prompt; the session history reader strips the tag back out for display.
       // cursor-agent is a .cmd shim on Windows, so the whole argument must be
       // newline-free or cmd.exe silently truncates it at the first newline.
-      baseArgs.push('-p', flattenPromptForWindowsShell(appendImagesInputTag(command, images)));
+      const promptWithAttachments = appendFilesInputTag(
+        appendImagesInputTag(command || '', images),
+        files
+      );
+      baseArgs.push('-p', flattenPromptForWindowsShell(promptWithAttachments));
 
       // Model overrides are applied to both new and resumed sessions so a
       // session-scoped change request can take effect on the next turn.

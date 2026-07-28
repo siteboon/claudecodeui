@@ -4,7 +4,7 @@ import test from 'node:test';
 import { ClaudeSessionsProvider } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import { CodexSessionsProvider, extractCodexUserImages } from '@/modules/providers/list/codex/codex-sessions.provider.js';
 import { CursorSessionsProvider } from '@/modules/providers/list/cursor/cursor-sessions.provider.js';
-import { appendImagesInputTag } from '@/shared/image-attachments.js';
+import { appendFilesInputTag, appendImagesInputTag } from '@/shared/image-attachments.js';
 
 const SESSION_ID = 'session-1';
 
@@ -71,6 +71,29 @@ test('claude history: plain text user turns carry no images field', () => {
   assert.equal(messages[0].images, undefined);
 });
 
+test('claude history: file reference blocks restore non-image attachments', () => {
+  const provider = new ClaudeSessionsProvider();
+  const entry = {
+    uuid: 'u4',
+    timestamp: '2026-07-03T10:00:00.000Z',
+    message: {
+      role: 'user',
+      content: [{
+        type: 'text',
+        text: appendFilesInputTag('Summarize this', [
+          { path: 'C:/Users/x/.cloudcli/assets/brief.pdf', name: 'brief.pdf' },
+        ]),
+      }],
+    },
+  };
+
+  const messages = provider.normalizeMessage(entry, SESSION_ID);
+  assert.equal(messages[0].content, 'Summarize this');
+  assert.deepEqual(messages[0].files, [
+    { path: 'C:/Users/x/.cloudcli/assets/brief.pdf', name: 'brief.pdf' },
+  ]);
+});
+
 // ---------------------------------------------------------------- Codex
 
 test('codex history: user_message payload images become path attachments', () => {
@@ -121,6 +144,27 @@ test('codex history: normalized user entries keep their images', () => {
   assert.equal(messages[0].role, 'user');
   assert.equal(messages[0].content, 'Look at this');
   assert.deepEqual(messages[0].images, [{ path: '.cloudcli/assets/a.png' }]);
+});
+
+test('codex history: normalized user entries restore file reference blocks', () => {
+  const provider = new CodexSessionsProvider();
+  const messages = provider.normalizeMessage(
+    {
+      timestamp: '2026-07-03T10:00:00.000Z',
+      message: {
+        role: 'user',
+        content: appendFilesInputTag('Review this', [
+          { path: 'C:/Users/x/.cloudcli/assets/spec.docx', name: 'spec.docx' },
+        ]),
+      },
+    },
+    SESSION_ID,
+  );
+
+  assert.equal(messages[0].content, 'Review this');
+  assert.deepEqual(messages[0].files, [
+    { path: 'C:/Users/x/.cloudcli/assets/spec.docx', name: 'spec.docx' },
+  ]);
 });
 
 // ---------------------------------------------------------------- Cursor
@@ -177,4 +221,27 @@ test('cursor history: user text without a tag keeps existing behavior', () => {
   assert.equal(messages.length, 1);
   assert.equal(messages[0].content, 'plain question');
   assert.equal(messages[0].images, undefined);
+});
+
+test('cursor history: file reference blocks are stripped and attached', () => {
+  const provider = new CursorSessionsProvider();
+  const taggedPrompt = appendFilesInputTag('Check the data', [
+    { path: 'C:/Users/x/.cloudcli/assets/data.csv', name: 'data.csv' },
+  ]);
+  const messages = provider.normalizeCursorBlobs([
+    {
+      id: 'blob-file',
+      sequence: 1,
+      rowid: 1,
+      content: {
+        role: 'user',
+        content: `<user_query>${taggedPrompt}</user_query>`,
+      },
+    },
+  ], SESSION_ID);
+
+  assert.equal(messages[0].content, 'Check the data');
+  assert.deepEqual(messages[0].files, [
+    { path: 'C:/Users/x/.cloudcli/assets/data.csv', name: 'data.csv' },
+  ]);
 });

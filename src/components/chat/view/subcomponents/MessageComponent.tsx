@@ -14,6 +14,7 @@ import { ToolRenderer, ToolErrorDisplay, shouldHideToolResult } from '../../tool
 import { Reasoning, ReasoningTrigger, ReasoningContent } from '../../../../shared/view/ui';
 
 import ChatMessageImages from './ChatMessageImages';
+import ChatMessageFiles from './ChatMessageFiles';
 import { Markdown } from './Markdown';
 import MessageCopyControl from './MessageCopyControl';
 import MessageSpeakControl from './MessageSpeakControl';
@@ -94,7 +95,10 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                 projectId={selectedProject?.projectId}
               />
             )}
-            {userCopyContent.trim().length > 0 || !message.images?.length ? (
+            {message.files && message.files.length > 0 && (
+              <ChatMessageFiles files={message.files} />
+            )}
+            {userCopyContent.trim().length > 0 || (!message.images?.length && !message.files?.length) ? (
               <div className="group max-w-full rounded-2xl rounded-br-md bg-blue-600 px-3 py-2 text-white shadow-sm sm:px-4">
                 <div dir="auto" className="break-words font-serif text-sm">
                   <Markdown
@@ -112,7 +116,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                 </div>
               </div>
             ) : (
-              /* Image-only turn: no text bubble, but the timestamp still shows */
+              /* Attachment-only turn: no text bubble, but the timestamp still shows */
               <div className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
                 <span>{formattedTime}</span>
               </div>

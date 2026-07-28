@@ -61,6 +61,7 @@ export interface NormalizedMessage {
   isLocalCommandStdout?: boolean;
   isCompactSummary?: boolean;
   images?: Array<{ path?: string; data?: string; name?: string }>;
+  files?: Array<{ path?: string; name?: string; mimeType?: string; size?: number }>;
   toolName?: string;
   toolInput?: unknown;
   toolId?: string;

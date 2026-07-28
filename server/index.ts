@@ -155,7 +155,7 @@ app.use('/api/file-tree', authenticateToken, fileTreeRoutes);
 // Projects API Routes (protected)
 app.use('/api/projects', authenticateToken, projectModuleRoutes);
 
-// Chat image asset upload/serving (global ~/.cloudcli/assets store, protected)
+// Chat attachment upload/serving (global ~/.cloudcli/assets store, protected)
 app.use('/api/assets', authenticateToken, assetsRoutes);
 
 // Git API Routes (protected)
@@ -220,8 +220,8 @@ app.use(express.static(path.join(APP_ROOT, 'dist'), {
 // /api/config endpoint removed - no longer needed
 // Frontend now uses window.location for WebSocket URLs
 
-// Chat image uploads moved to POST /api/assets/images (server/modules/assets),
-// which stores them in the global ~/.cloudcli/assets folder.
+// Chat uploads live under /api/assets (server/modules/assets), which stores
+// images and general files in the global ~/.cloudcli/assets folder.
 
 // Serve React app for all other routes (excluding static files)
 app.get('*', (req, res) => {

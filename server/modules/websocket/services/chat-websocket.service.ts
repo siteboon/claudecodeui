@@ -5,7 +5,12 @@ import type { WebSocket } from 'ws';
 import { sessionsDb } from '@/modules/database/index.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
 import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
-import { getGlobalImageAssetsDir, normalizeImageDescriptors } from '@/shared/image-attachments.js';
+import {
+  getGlobalImageAssetsDir,
+  isImageAttachmentDescriptor,
+  normalizeAttachmentDescriptors,
+  type ChatAttachmentDescriptor,
+} from '@/shared/image-attachments.js';
 import type {
   AnyRecord,
   AuthenticatedWebSocketRequest,
@@ -25,10 +30,13 @@ import { parseIncomingJsonObject } from '@/shared/utils.js';
  *
  * Exported for tests; `assetsRootOverride` exists only for them.
  */
-export function filterImagesToUploadStore(images: unknown, assetsRootOverride?: string): AnyRecord[] {
+export function filterAttachmentsToUploadStore(
+  attachments: unknown,
+  assetsRootOverride?: string,
+): ChatAttachmentDescriptor[] {
   const assetsRoot = path.resolve(assetsRootOverride ?? getGlobalImageAssetsDir());
 
-  return normalizeImageDescriptors(images).filter((descriptor) => {
+  return normalizeAttachmentDescriptors(attachments).filter((descriptor) => {
     // Relative paths are anchored in the store; absolute ones must already be in it.
     const resolved = path.resolve(assetsRoot, descriptor.path);
     const relative = path.relative(assetsRoot, resolved);
@@ -40,10 +48,18 @@ export function filterImagesToUploadStore(images: unknown, assetsRootOverride?: 
       !relative.includes('/');
 
     if (!isDirectChild) {
-      console.warn(`[Chat] Dropping image outside the upload store: ${descriptor.path}`);
+      console.warn(`[Chat] Dropping attachment outside the upload store: ${descriptor.path}`);
     }
     return isDirectChild;
   });
+}
+
+/** Backward-compatible image filter consumed by existing websocket tests. */
+export function filterImagesToUploadStore(
+  images: unknown,
+  assetsRootOverride?: string,
+): ChatAttachmentDescriptor[] {
+  return filterAttachmentsToUploadStore(images, assetsRootOverride);
 }
 
 /** Application boundary for dispatching provider runs and approvals. */
@@ -175,6 +191,15 @@ async function handleChatSend(
 
   const clientOptions = (data.options ?? {}) as AnyRecord;
   const command = typeof data.content === 'string' ? data.content : '';
+  const attachmentCandidates = [
+    ...normalizeAttachmentDescriptors(clientOptions.images),
+    ...normalizeAttachmentDescriptors(clientOptions.files),
+    ...normalizeAttachmentDescriptors(clientOptions.attachments),
+  ];
+  const verifiedAttachments = filterAttachmentsToUploadStore(attachmentCandidates);
+  const uniqueAttachments = verifiedAttachments.filter(
+    (descriptor, index, all) => all.findIndex((candidate) => candidate.path === descriptor.path) === index,
+  );
 
   // The provider runtimes receive the stable app session id. When their
   // CLI/SDK needs the provider-native id for resume, they resolve it from the
@@ -184,9 +209,11 @@ async function handleChatSend(
   // app session id.
   const runtimeOptions: AnyRecord = {
     ...clientOptions,
-    // Image attachments are re-validated server-side: only files inside the
-    // global upload store may reach the provider runtimes' file reads.
-    images: filterImagesToUploadStore(clientOptions.images),
+    // Attachments are re-validated server-side: only direct children of the
+    // global upload store may reach provider runtimes or their file tools.
+    attachments: uniqueAttachments,
+    images: uniqueAttachments.filter(isImageAttachmentDescriptor),
+    files: uniqueAttachments.filter((descriptor) => !isImageAttachmentDescriptor(descriptor)),
     sessionId,
     cwd: clientOptions.cwd ?? session.project_path ?? undefined,
     projectPath: session.project_path ?? clientOptions.projectPath,

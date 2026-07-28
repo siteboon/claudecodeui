@@ -5,6 +5,7 @@ import readline from 'node:readline';
 
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
+import { parseFilesInputTag } from '@/shared/image-attachments.js';
 import { createNormalizedMessage, generateMessageId, readObjectRecord, sliceTailPage } from '@/shared/utils.js';
 import { sessionsDb } from '@/modules/database/index.js';
 
@@ -332,6 +333,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
           }
         }
         let imagesAttached = false;
+        let filesAttached = false;
 
         for (let partIndex = 0; partIndex < raw.message.content.length; partIndex++) {
           const part = raw.message.content[partIndex];
@@ -350,7 +352,11 @@ export class ClaudeSessionsProvider implements IProviderSessions {
             }));
           } else if (part.type === 'text') {
             const text = part.text || '';
-            if (text && !isInternalContent(text)) {
+            const parsedFiles = parseFilesInputTag(text);
+            if (
+              (parsedFiles.text || parsedFiles.attachments.length > 0)
+              && !isInternalContent(parsedFiles.text)
+            ) {
               messages.push(createNormalizedMessage({
                 id: `${baseId}_text_${partIndex}`,
                 sessionId,
@@ -358,10 +364,14 @@ export class ClaudeSessionsProvider implements IProviderSessions {
                 provider: PROVIDER,
                 kind: 'text',
                 role: 'user',
-                content: text,
+                content: parsedFiles.text,
                 images: !imagesAttached && imageAttachments.length > 0 ? imageAttachments : undefined,
+                files: !filesAttached && parsedFiles.attachments.length > 0
+                  ? parsedFiles.attachments
+                  : undefined,
               }));
               imagesAttached = true;
+              filesAttached = filesAttached || parsedFiles.attachments.length > 0;
             }
           }
         }
@@ -476,7 +486,11 @@ export class ClaudeSessionsProvider implements IProviderSessions {
           return messages;
         }
 
-        if (text && !isInternalContent(text)) {
+        const parsedFiles = parseFilesInputTag(text);
+        if (
+          (parsedFiles.text || parsedFiles.attachments.length > 0)
+          && !isInternalContent(parsedFiles.text)
+        ) {
           messages.push(createNormalizedMessage({
             id: baseId,
             sessionId,
@@ -484,7 +498,8 @@ export class ClaudeSessionsProvider implements IProviderSessions {
             provider: PROVIDER,
             kind: 'text',
             role: 'user',
-            content: text,
+            content: parsedFiles.text,
+            files: parsedFiles.attachments.length > 0 ? parsedFiles.attachments : undefined,
           }));
         }
       }

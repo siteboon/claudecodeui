@@ -244,6 +244,8 @@ export type NormalizedMessage = {
   isLocalCommandStdout?: boolean;
   isCompactSummary?: boolean;
   images?: unknown;
+  /** Non-image files attached to a user turn after provider history normalization. */
+  files?: unknown;
   toolName?: string;
   toolInput?: unknown;
   toolId?: string;

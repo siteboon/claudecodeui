@@ -3,7 +3,10 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { filterImagesToUploadStore } from '@/modules/websocket/services/chat-websocket.service.js';
+import {
+  filterAttachmentsToUploadStore,
+  filterImagesToUploadStore,
+} from '@/modules/websocket/services/chat-websocket.service.js';
 
 const STORE = path.join(os.tmpdir(), 'cloudcli-assets-store');
 
@@ -37,8 +40,20 @@ test('paths outside the store, traversal, and subdirs are dropped', () => {
   assert.deepEqual(result, []);
 });
 
-test('malformed payloads yield no images', () => {
+test('malformed payloads yield no attachments', () => {
   assert.deepEqual(filterImagesToUploadStore(undefined, STORE), []);
   assert.deepEqual(filterImagesToUploadStore('nope', STORE), []);
   assert.deepEqual(filterImagesToUploadStore([{ name: 'no-path' }, 42], STORE), []);
+});
+
+test('general files inside the upload store preserve their metadata', () => {
+  const inside = path.join(STORE, 'brief.pdf');
+  const result = filterAttachmentsToUploadStore(
+    [{ path: inside, name: 'brief.pdf', mimeType: 'application/pdf', size: 2048 }],
+    STORE,
+  );
+
+  assert.deepEqual(result, [
+    { path: inside, name: 'brief.pdf', mimeType: 'application/pdf', size: 2048 },
+  ]);
 });

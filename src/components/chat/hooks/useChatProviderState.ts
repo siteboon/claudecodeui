@@ -50,6 +50,7 @@ type ProviderCapabilities = {
   permissionModes: string[];
   defaultPermissionMode: string;
   supportsImages: boolean;
+  supportsFiles: boolean;
   supportsAbort: boolean;
   supportsPermissionRequests: boolean;
   supportsTokenUsage: boolean;
