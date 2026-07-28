@@ -3,6 +3,7 @@ import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import { isMiniMaxModel } from '@/modules/providers/list/minimax/minimax-models.provider.js';
 import {
   buildLookupMap,
   extractFirstValidJsonlData,
@@ -11,10 +12,12 @@ import {
   readFileTimestamps,
 } from '@/shared/utils.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
+import type { LLMProvider } from '@/shared/types.js';
 
 type ParsedSession = {
   sessionId: string;
   projectPath: string;
+  provider: LLMProvider;
   sessionName?: string;
 };
 
@@ -22,7 +25,6 @@ type ParsedSession = {
  * Session indexer for Claude transcript artifacts.
  */
 export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
-  private readonly provider = 'claude' as const;
   private readonly claudeHome = path.join(os.homedir(), '.claude');
 
   /**
@@ -65,7 +67,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       const timestamps = await readFileTimestamps(filePath);
       sessionsDb.createSession(
         parsed.sessionId,
-        this.provider,
+        parsed.provider,
         parsed.projectPath,
         parsed.sessionName,
         timestamps.createdAt,
@@ -98,7 +100,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     const timestamps = await readFileTimestamps(filePath);
     return sessionsDb.createSession(
       parsed.sessionId,
-      this.provider,
+      parsed.provider,
       parsed.projectPath,
       parsed.sessionName,
       timestamps.createdAt,
@@ -137,11 +139,18 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     // ids must be resolved through the provider-id mapping first.
     const existingSession = sessionsDb.getSessionByProviderSessionId(parsed.sessionId)
       ?? sessionsDb.getSessionById(parsed.sessionId);
+    const provider = existingSession?.provider === 'minimax'
+      ? 'minimax'
+      : await this.detectCompatibleProvider(filePath);
+    const defaultSessionName = provider === 'minimax'
+      ? 'Untitled MiniMax Session'
+      : 'Untitled Claude Session';
     const existingSessionName = existingSession?.custom_name;
-    if (existingSessionName && existingSessionName !== 'Untitled Claude Session') {
+    if (existingSessionName && existingSessionName !== defaultSessionName) {
       return {
         ...parsed,
-        sessionName: normalizeSessionName(existingSessionName, 'Untitled Claude Session'),
+        provider,
+        sessionName: normalizeSessionName(existingSessionName, defaultSessionName),
       };
     }
 
@@ -152,8 +161,39 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
 
     return {
       ...parsed,
-      sessionName: normalizeSessionName(sessionName, 'Untitled Claude Session'),
+      provider,
+      sessionName: normalizeSessionName(sessionName, defaultSessionName),
     };
+  }
+
+  private async detectCompatibleProvider(filePath: string): Promise<LLMProvider> {
+    try {
+      const content = await readFile(filePath, 'utf8');
+      for (const line of content.split(/\r?\n/)) {
+        if (!line.trim()) {
+          continue;
+        }
+
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(line);
+        } catch {
+          continue;
+        }
+
+        const data = parsed as Record<string, unknown>;
+        const message = data.message && typeof data.message === 'object'
+          ? data.message as Record<string, unknown>
+          : null;
+        if (isMiniMaxModel(data.model) || isMiniMaxModel(message?.model)) {
+          return 'minimax';
+        }
+      }
+    } catch {
+      // Unreadable transcripts remain attached to the default compatible provider.
+    }
+
+    return 'claude';
   }
 
   private async extractSessionAiTitleFromEnd(

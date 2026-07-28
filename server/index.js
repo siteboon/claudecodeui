@@ -40,6 +40,10 @@ import {
     abortOpenCodeSession,
 } from './opencode-cli.js';
 import {
+    queryMiniMaxSDK,
+    abortMiniMaxSDKSession,
+} from './minimax-sdk.js';
+import {
     stripAnsiSequences,
     normalizeDetectedUrl,
     extractUrlsFromText,
@@ -113,12 +117,14 @@ const wss = createWebSocketServer(server, {
             claude: queryClaudeSDK,
             cursor: spawnCursor,
             codex: queryCodex,
+            minimax: queryMiniMaxSDK,
             opencode: spawnOpenCode,
         },
         abortFns: {
             claude: abortClaudeSDKSession,
             cursor: abortCursorSession,
             codex: abortCodexSession,
+            minimax: abortMiniMaxSDKSession,
             opencode: abortOpenCodeSession,
         },
         resolveToolApproval,

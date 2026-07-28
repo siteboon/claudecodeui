@@ -4,6 +4,7 @@ export const MCP_PROVIDER_NAMES: Record<McpProvider, string> = {
   claude: 'Claude',
   cursor: 'Cursor',
   codex: 'Codex',
+  minimax: 'MiniMax',
   opencode: 'OpenCode',
 };
 
@@ -11,6 +12,7 @@ export const MCP_SUPPORTED_SCOPES: Record<McpProvider, McpScope[]> = {
   claude: ['user', 'project', 'local'],
   cursor: ['user', 'project'],
   codex: ['user', 'project'],
+  minimax: ['user', 'project', 'local'],
   opencode: ['user', 'project'],
 };
 
@@ -18,6 +20,7 @@ export const MCP_SUPPORTED_TRANSPORTS: Record<McpProvider, McpTransport[]> = {
   claude: ['stdio', 'http', 'sse'],
   cursor: ['stdio', 'http'],
   codex: ['stdio', 'http'],
+  minimax: ['stdio', 'http', 'sse'],
   opencode: ['stdio', 'http'],
 };
 
@@ -29,6 +32,7 @@ export const MCP_PROVIDER_BUTTON_CLASSES: Record<McpProvider, string> = {
   claude: 'bg-primary text-primary-foreground hover:bg-primary/90',
   cursor: 'bg-primary text-primary-foreground hover:bg-primary/90',
   codex: 'bg-primary text-primary-foreground hover:bg-primary/90',
+  minimax: 'bg-primary text-primary-foreground hover:bg-primary/90',
   opencode: 'bg-primary text-primary-foreground hover:bg-primary/90',
 };
 
@@ -36,6 +40,7 @@ export const MCP_SUPPORTS_WORKING_DIRECTORY: Record<McpProvider, boolean> = {
   claude: false,
   cursor: false,
   codex: true,
+  minimax: false,
   opencode: false,
 };
 

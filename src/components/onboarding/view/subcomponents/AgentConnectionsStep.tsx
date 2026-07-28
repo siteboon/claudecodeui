@@ -31,6 +31,13 @@ const providerCards = [
     loginButtonClassName: 'bg-gray-800 hover:bg-gray-900 dark:bg-gray-700 dark:hover:bg-gray-600',
   },
   {
+    provider: 'minimax' as const,
+    title: 'MiniMax',
+    connectedClassName: 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800',
+    iconContainerClassName: 'bg-red-100 dark:bg-red-900/30',
+    loginButtonClassName: 'bg-red-600 hover:bg-red-700',
+  },
+  {
     provider: 'opencode' as const,
     title: 'OpenCode',
     connectedClassName: 'bg-zinc-100 dark:bg-zinc-800/50 border-zinc-300 dark:border-zinc-600',

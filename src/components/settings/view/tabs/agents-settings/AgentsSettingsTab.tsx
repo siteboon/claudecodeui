@@ -27,7 +27,7 @@ export default function AgentsSettingsTab({
   ), [selectedAgent]);
 
   const visibleAgents = useMemo<AgentProvider[]>(() => {
-    return ['claude', 'cursor', 'codex', 'opencode'];
+    return ['claude', 'cursor', 'codex', 'minimax', 'opencode'];
   }, []);
 
   const agentContextById = useMemo<Record<AgentProvider, AgentContext>>(() => ({
@@ -43,6 +43,10 @@ export default function AgentsSettingsTab({
       authStatus: providerAuthStatus.codex,
       onLogin: () => onProviderLogin('codex'),
     },
+    minimax: {
+      authStatus: providerAuthStatus.minimax,
+      onLogin: () => onProviderLogin('minimax'),
+    },
     opencode: {
       authStatus: providerAuthStatus.opencode,
       onLogin: () => onProviderLogin('opencode'),
@@ -52,6 +56,7 @@ export default function AgentsSettingsTab({
     providerAuthStatus.claude,
     providerAuthStatus.codex,
     providerAuthStatus.cursor,
+    providerAuthStatus.minimax,
     providerAuthStatus.opencode,
   ]);
 

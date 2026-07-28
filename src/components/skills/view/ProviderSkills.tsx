@@ -59,6 +59,7 @@ const PROVIDER_NAMES: Record<SkillsProvider, string> = {
   claude: 'Claude',
   codex: 'Codex',
   cursor: 'Cursor',
+  minimax: 'MiniMax',
   opencode: 'OpenCode',
 };
 
@@ -66,6 +67,7 @@ const PROVIDER_SKILL_PATHS: Record<Exclude<SkillsProvider, 'opencode'>, string> 
   claude: '~/.claude/skills/<skill-name>/SKILL.md',
   codex: '~/.agents/skills/<skill-name>/SKILL.md',
   cursor: '~/.cursor/skills/<skill-name>/SKILL.md',
+  minimax: '~/.claude/skills/<skill-name>/SKILL.md',
 };
 
 const SCOPE_LABELS: Record<SkillsScope, string> = {

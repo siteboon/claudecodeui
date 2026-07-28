@@ -41,11 +41,8 @@ interface UseChatComposerStateArgs {
   permissionMode: PermissionMode | string;
   cyclePermissionMode: () => void;
   resolvePermissionModeForProvider: (provider: LLMProvider, requestedMode: PermissionMode | string) => PermissionMode;
-  cursorModel: string;
-  claudeModel: string;
-  codexModel: string;
+  providerModels: Record<LLMProvider, string>;
   currentProviderEffort: string;
-  opencodeModel: string;
   isLoading: boolean;
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
@@ -193,11 +190,8 @@ export function useChatComposerState({
   permissionMode,
   cyclePermissionMode,
   resolvePermissionModeForProvider,
-  cursorModel,
-  claudeModel,
-  codexModel,
+  providerModels,
   currentProviderEffort,
-  opencodeModel,
   isLoading,
   canAbortSession,
   tokenBudget,
@@ -369,13 +363,7 @@ export function useChatComposerState({
           projectId: selectedProject.projectId,
           sessionId: currentSessionId,
           provider,
-          model: provider === 'cursor'
-            ? cursorModel
-            : provider === 'codex'
-              ? codexModel
-              : provider === 'opencode'
-                  ? opencodeModel
-                  : claudeModel,
+          model: providerModels[provider],
           tokenUsage: tokenBudget,
         };
 
@@ -424,15 +412,12 @@ export function useChatComposerState({
       }
     },
     [
-      claudeModel,
-      codexModel,
       currentSessionId,
-      cursorModel,
-      opencodeModel,
       handleBuiltInCommand,
       handleCustomCommand,
       input,
       provider,
+      providerModels,
       selectedProject,
       addMessage,
       tokenBudget,
@@ -595,6 +580,8 @@ export function useChatComposerState({
             ? 'cursor-tools-settings'
             : provider === 'codex'
               ? 'codex-settings'
+              : provider === 'minimax'
+                ? 'claude-settings'
               : provider === 'opencode'
                   ? 'opencode-settings'
                 : 'claude-settings';
@@ -614,14 +601,7 @@ export function useChatComposerState({
     };
 
     const toolsSettings = getToolsSettings();
-    const model =
-      provider === 'cursor'
-        ? cursorModel
-        : provider === 'codex'
-          ? codexModel
-          : provider === 'opencode'
-            ? opencodeModel
-            : claudeModel;
+    const model = providerModels[provider];
 
     return {
       model,
@@ -632,13 +612,10 @@ export function useChatComposerState({
       sessionSummary: getNotificationSessionSummary(selectedSession, currentInput),
     };
   }, [
-    claudeModel,
-    codexModel,
     currentProviderEffort,
-    cursorModel,
-    opencodeModel,
     permissionMode,
     provider,
+    providerModels,
     resolvePermissionModeForProvider,
     selectedSession,
   ]);

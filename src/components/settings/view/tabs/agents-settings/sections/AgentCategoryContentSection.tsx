@@ -29,7 +29,7 @@ export default function AgentCategoryContentSection({
         />
       )}
 
-      {selectedCategory === 'permissions' && selectedAgent === 'claude' && (
+      {selectedCategory === 'permissions' && (selectedAgent === 'claude' || selectedAgent === 'minimax') && (
         <PermissionsContent
           agent="claude"
           skipPermissions={claudePermissions.skipPermissions}

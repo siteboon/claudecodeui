@@ -27,6 +27,7 @@ const PROVIDER_META: { id: LLMProvider; name: string }[] = [
   { id: "claude", name: "Anthropic" },
   { id: "codex", name: "OpenAI" },
   { id: "cursor", name: "Cursor" },
+  { id: "minimax", name: "MiniMax" },
   { id: "opencode", name: "OpenCode" },
 ];
 
@@ -50,14 +51,8 @@ type ProviderSelectionEmptyStateProps = {
   provider: LLMProvider;
   setProvider: (next: LLMProvider) => void;
   textareaRef: React.RefObject<HTMLTextAreaElement>;
-  claudeModel: string;
-  setClaudeModel: (model: string) => void;
-  cursorModel: string;
-  setCursorModel: (model: string) => void;
-  codexModel: string;
-  setCodexModel: (model: string) => void;
-  opencodeModel: string;
-  setOpenCodeModel: (model: string) => void;
+  providerModels: Record<LLMProvider, string>;
+  setProviderModel: (provider: LLMProvider, model: string) => void;
   providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
   providerModelsLoading: boolean;
   tasksEnabled: boolean;
@@ -80,23 +75,11 @@ function getModelConfig(
   return entry ?? { OPTIONS: [], DEFAULT: "" };
 }
 
-function getCurrentModel(
-  p: LLMProvider,
-  c: string,
-  cu: string,
-  co: string,
-  o: string,
-) {
-  if (p === "claude") return c;
-  if (p === "codex") return co;
-  if (p === "opencode") return o;
-  return cu;
-}
-
 function getProviderDisplayName(p: LLMProvider) {
   if (p === "claude") return "Claude";
   if (p === "cursor") return "Cursor";
   if (p === "codex") return "Codex";
+  if (p === "minimax") return "MiniMax";
   if (p === "opencode") return "OpenCode";
   return "Claude";
 }
@@ -107,14 +90,8 @@ export default function ProviderSelectionEmptyState({
   provider,
   setProvider,
   textareaRef,
-  claudeModel,
-  setClaudeModel,
-  cursorModel,
-  setCursorModel,
-  codexModel,
-  setCodexModel,
-  opencodeModel,
-  setOpenCodeModel,
+  providerModels,
+  setProviderModel,
   providerModelCatalog,
   providerModelsLoading,
   tasksEnabled,
@@ -137,13 +114,7 @@ export default function ProviderSelectionEmptyState({
     defaultValue: "Start the next task",
   });
 
-  const currentModel = getCurrentModel(
-    provider,
-    claudeModel,
-    cursorModel,
-    codexModel,
-    opencodeModel,
-  );
+  const currentModel = providerModels[provider];
 
   const currentModelLabel = useMemo(() => {
     const config = getModelConfig(provider, providerModelCatalog);
@@ -155,21 +126,9 @@ export default function ProviderSelectionEmptyState({
 
   const setModelForProvider = useCallback(
     (providerId: LLMProvider, modelValue: string) => {
-      if (providerId === "claude") {
-        setClaudeModel(modelValue);
-        localStorage.setItem("claude-model", modelValue);
-      } else if (providerId === "codex") {
-        setCodexModel(modelValue);
-        localStorage.setItem("codex-model", modelValue);
-      } else if (providerId === "opencode") {
-        setOpenCodeModel(modelValue);
-        localStorage.setItem("opencode-model", modelValue);
-      } else {
-        setCursorModel(modelValue);
-        localStorage.setItem("cursor-model", modelValue);
-      }
+      setProviderModel(providerId, modelValue);
     },
-    [setClaudeModel, setCursorModel, setCodexModel, setOpenCodeModel],
+    [setProviderModel],
   );
 
   const handleModelSelect = useCallback(
@@ -304,16 +263,20 @@ export default function ProviderSelectionEmptyState({
             {
               {
                 claude: t("providerSelection.readyPrompt.claude", {
-                  model: claudeModel,
+                  model: providerModels.claude,
                 }),
                 cursor: t("providerSelection.readyPrompt.cursor", {
-                  model: cursorModel,
+                  model: providerModels.cursor,
                 }),
                 codex: t("providerSelection.readyPrompt.codex", {
-                  model: codexModel,
+                  model: providerModels.codex,
+                }),
+                minimax: t("providerSelection.readyPrompt.minimax", {
+                  model: providerModels.minimax,
+                  defaultValue: "Ready with MiniMax {{model}}",
                 }),
                 opencode: t("providerSelection.readyPrompt.opencode", {
-                  model: opencodeModel,
+                  model: providerModels.opencode,
                   defaultValue: "Ready with OpenCode {{model}}",
                 }),
               }[provider]

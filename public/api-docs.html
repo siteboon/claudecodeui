@@ -489,7 +489,7 @@
                                 <span class="endpoint-path"><span class="api-url">http://localhost:3001</span>/api/agent</span>
                             </div>
 
-                            <p>Trigger an AI agent (Claude, Cursor, Codex, or OpenCode) to work on a project.</p>
+                            <p>Trigger an AI agent, including MiniMax, to work on a project.</p>
 
                             <h4>Request Body Parameters</h4>
                             <table>
@@ -524,7 +524,7 @@
                                         <td><code>provider</code></td>
                                         <td>string</td>
                                         <td><span class="badge badge-optional">Optional</span></td>
-                                        <td><code>claude</code>, <code>cursor</code>, <code>codex</code>, or <code>opencode</code> (default: <code>claude</code>)</td>
+                                        <td>Supported provider identifier, including <code>minimax</code> (default: <code>claude</code>)</td>
                                     </tr>
                                     <tr>
                                         <td><code>stream</code></td>
@@ -838,6 +838,7 @@ data: {"type":"done"}</code></pre>
             { id: 'claude',   name: 'Anthropic' },
             { id: 'codex',    name: 'OpenAI' },
             { id: 'cursor',   name: 'Cursor' },
+            { id: 'minimax',  name: 'MiniMax' },
             { id: 'opencode', name: 'OpenCode' },
         ];
 

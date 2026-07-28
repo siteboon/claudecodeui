@@ -8,7 +8,7 @@ import { rgPath } from '@vscode/ripgrep';
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 
 type AnyRecord = Record<string, any>;
-type SearchableProvider = 'claude' | 'codex';
+type SearchableProvider = 'claude' | 'codex' | 'minimax';
 
 type SearchSnippetHighlight = {
   start: number;
@@ -82,7 +82,7 @@ type ProjectBucket = {
   sessions: SearchableSessionRow[];
 };
 
-const SUPPORTED_PROVIDERS = new Set<SearchableProvider>(['claude', 'codex']);
+const SUPPORTED_PROVIDERS = new Set<SearchableProvider>(['claude', 'codex', 'minimax']);
 const MAX_MATCHES_PER_SESSION = 2;
 const RIPGREP_FILE_CHUNK_SIZE = 40;
 const RIPGREP_CHUNK_CONCURRENCY = 6;
@@ -789,8 +789,10 @@ async function parseClaudeSessionMatches(
 
     const targetSessionIds = new Set(targetSessions.map((candidate) => candidate.session_id));
     const customNameBySessionId = new Map<string, string | null>();
+    const providerBySessionId = new Map<string, SearchableProvider>();
     for (const candidate of targetSessions) {
       customNameBySessionId.set(candidate.session_id, candidate.custom_name ?? null);
+      providerBySessionId.set(candidate.session_id, candidate.provider);
     }
 
     type ClaudeSessionSearchState = {
@@ -897,7 +899,7 @@ async function parseClaudeSessionMatches(
           snippet,
           highlights,
           timestamp: entry.timestamp ? String(entry.timestamp) : null,
-          provider: 'claude',
+          provider: providerBySessionId.get(entrySessionId) ?? session.provider,
           messageUuid: entry.uuid ? String(entry.uuid) : null,
         });
       }
@@ -914,7 +916,7 @@ async function parseClaudeSessionMatches(
 
       fileResults.set(sessionId, {
         sessionId,
-        provider: 'claude',
+        provider: providerBySessionId.get(sessionId) ?? session.provider,
         sessionSummary: toSummaryText(
           customNameBySessionId.get(sessionId) ?? null,
           state.resolvedSummary || state.fallbackUserText || state.fallbackAssistantText,
@@ -1054,7 +1056,7 @@ async function parseSessionMatches(
   session: SearchableSessionRow,
   runtime: SearchRuntime,
 ): Promise<SessionConversationResult | null> {
-  if (session.provider === 'claude') {
+  if (session.provider === 'claude' || session.provider === 'minimax') {
     return parseClaudeSessionMatches(session, runtime);
   }
   if (session.provider === 'codex') {
@@ -1146,7 +1148,9 @@ export async function searchConversations(
   };
 
   for (const [fileKey, sessions] of sessionsByPathKey.entries()) {
-    const claudeSessions = sessions.filter((session) => session.provider === 'claude');
+    const claudeSessions = sessions.filter(
+      (session) => session.provider === 'claude' || session.provider === 'minimax',
+    );
     if (claudeSessions.length > 0) {
       runtime.claudeSessionsByFileKey.set(fileKey, claudeSessions);
     }
