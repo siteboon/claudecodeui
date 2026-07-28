@@ -95,6 +95,30 @@ Open `http://localhost:3001` — all your existing sessions are discovered autom
 
 Visit the **[documentation →](https://cloudcli.ai/docs)** for full configuration options, PM2, remote server setup and more.
 
+#### Authentication behind a reverse proxy
+
+CloudCLI requires its own local login by default. When an upstream proxy already
+enforces authentication, you can disable the second login. For example, create
+a Cloudflare Access self-hosted application for the CloudCLI hostname and attach
+an Access policy that allows your Google Workspace identity (or selected Google
+users). Requests are then challenged by Google OAuth at Cloudflare before the
+tunnel forwards them to CloudCLI.
+
+After the upstream login is enforced, set both variables before building and
+starting CloudCLI:
+
+```bash
+DISABLE_AUTH=true
+VITE_DISABLE_AUTH=true
+```
+
+This mode uses the installation's existing single local user. Complete the
+normal first-user setup before enabling it. Bind CloudCLI to `127.0.0.1` (or an
+otherwise private interface), point `cloudflared` at that private origin, and do
+not expose the CloudCLI port publicly. The Access application must cover the
+whole hostname, including `/api`, `/ws`, and `/shell`. Otherwise a direct or
+uncovered request would be accepted without CloudCLI credentials.
+
 #### Docker Sandboxes (Experimental)
 
 Run agents in isolated sandboxes with hypervisor-level isolation. Starts Claude Code by default. Requires the [`sbx` CLI](https://docs.docker.com/ai/sandboxes/get-started/).
