@@ -57,10 +57,10 @@ async function withFileTreeServer(
 }
 
 test('project files route uses the File Tree API namespace and forwards the project id', async () => {
-  const projectIds: string[] = [];
+  const inputs: Parameters<FileTreeServices['listProjectFiles']>[] = [];
   const services = createFakeServices({
-    listProjectFiles: async (projectId) => {
-      projectIds.push(projectId);
+    listProjectFiles: async (...input) => {
+      inputs.push(input);
       return [];
     },
   });
@@ -72,7 +72,27 @@ test('project files route uses the File Tree API namespace and forwards the proj
     assert.deepEqual(await response.json(), []);
   });
 
-  assert.deepEqual(projectIds, ['project-1']);
+  assert.deepEqual(inputs, [['project-1', { respectGitignore: false }]]);
+});
+
+test('project files route requests gitignore filtering when explicitly enabled', async () => {
+  const inputs: Parameters<FileTreeServices['listProjectFiles']>[] = [];
+  const services = createFakeServices({
+    listProjectFiles: async (...input) => {
+      inputs.push(input);
+      return [];
+    },
+  });
+
+  await withFileTreeServer(services, async (baseUrl) => {
+    const response = await fetch(
+      `${baseUrl}/api/file-tree/projects/project-1/files?respectGitignore=true`,
+    );
+
+    assert.equal(response.status, 200);
+  });
+
+  assert.deepEqual(inputs, [['project-1', { respectGitignore: true }]]);
 });
 
 test('create route parses the transport payload before invoking the service', async () => {

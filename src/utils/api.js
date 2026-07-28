@@ -242,6 +242,8 @@ export const api = {
     }),
   getFiles: (projectId, options = {}) =>
     authenticatedFetch(`/api/file-tree/projects/${projectId}/files`, options),
+  getMentionableFiles: (projectId, options = {}) =>
+    authenticatedFetch(`/api/file-tree/projects/${projectId}/files?respectGitignore=true`, options),
 
   // File operations
   createFile: (projectId, { path, type, name }) =>

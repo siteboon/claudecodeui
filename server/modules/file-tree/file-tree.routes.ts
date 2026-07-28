@@ -162,7 +162,9 @@ export function createFileTreeRouter(
   }, logger));
 
   router.get('/projects/:projectId/files', createRouteHandler(async (request, response) => {
-    response.json(await services.listProjectFiles(readProjectId(request)));
+    response.json(await services.listProjectFiles(readProjectId(request), {
+      respectGitignore: request.query.respectGitignore === 'true',
+    }));
   }, logger));
 
   router.post('/projects/:projectId/files/create', createRouteHandler(async (request, response) => {

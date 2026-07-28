@@ -1,5 +1,7 @@
 import path from 'node:path';
 
+import ignore from 'ignore';
+
 import type {
   FileTreeNode,
   FileTreeServiceDependencies,
@@ -25,6 +27,8 @@ const COMMON_WORKSPACE_DIRECTORY_NAMES = [
   'Code',
   'workspace',
 ];
+
+type FileTreeEntryFilter = (entryPath: string, isDirectory: boolean) => boolean;
 
 function createFileTreeError(message: string, statusCode: number, code: string): AppError {
   return new AppError(message, { statusCode, code });
@@ -129,6 +133,19 @@ function mapFileSystemError(
   throw error;
 }
 
+function createGitignoreEntryFilter(
+  projectRoot: string,
+  gitignoreContent: string,
+): FileTreeEntryFilter {
+  const gitignore = ignore().add(gitignoreContent);
+
+  return (entryPath, isDirectory) => {
+    const relativePath = path.relative(projectRoot, entryPath).split(path.sep).join('/');
+    const matchPath = isDirectory ? `${relativePath}/` : relativePath;
+    return !gitignore.ignores(matchPath);
+  };
+}
+
 /**
  * Creates File Tree workflows for the module composition root and route tests.
  * Every filesystem, project, workspace, environment, and logging dependency is
@@ -154,6 +171,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
     directoryPath: string,
     maximumDepth: number,
     currentDepth = 0,
+    includeEntry: FileTreeEntryFilter = () => true,
   ): Promise<FileTreeNode[]> {
     let entries;
     try {
@@ -171,9 +189,13 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       return [];
     }
 
-    const visibleEntries = entries.filter(
-      (entry) => !(entry.isDirectory() && IGNORED_DIRECTORY_NAMES.has(entry.name)),
-    );
+    const visibleEntries = entries.filter((entry) => {
+      const isDirectory = entry.isDirectory();
+      if (isDirectory && IGNORED_DIRECTORY_NAMES.has(entry.name)) {
+        return false;
+      }
+      return includeEntry(path.join(directoryPath, entry.name), isDirectory);
+    });
 
     const items = await Promise.all(visibleEntries.map(async (entry): Promise<FileTreeNode> => {
       const itemPath = path.join(directoryPath, entry.name);
@@ -212,7 +234,12 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       }
 
       if (entry.isDirectory() && currentDepth < maximumDepth) {
-        item.children = await buildFileTree(itemPath, maximumDepth, currentDepth + 1);
+        item.children = await buildFileTree(
+          itemPath,
+          maximumDepth,
+          currentDepth + 1,
+          includeEntry,
+        );
       }
 
       return item;
@@ -365,14 +392,27 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       return { success: true, path: resolvedPath, message: 'File saved successfully' };
     },
 
-    async listProjectFiles(projectId) {
+    async listProjectFiles(projectId, options) {
       const projectRoot = await resolveProjectRoot(projectId);
       try {
         await fileSystem.access(projectRoot);
       } catch {
         throw createFileTreeError(`Project path not found: ${projectRoot}`, 404, 'PROJECT_PATH_NOT_FOUND');
       }
-      return buildFileTree(projectRoot, 10);
+
+      let includeEntry: FileTreeEntryFilter | undefined;
+      if (options?.respectGitignore) {
+        try {
+          const gitignoreContent = await fileSystem.readTextFile(path.join(projectRoot, '.gitignore'));
+          includeEntry = createGitignoreEntryFilter(projectRoot, gitignoreContent);
+        } catch (error) {
+          if (readErrorCode(error) !== 'ENOENT') {
+            dependencies.logger.error(`Error reading .gitignore in "${projectRoot}"`, error);
+          }
+        }
+      }
+
+      return buildFileTree(projectRoot, 10, 0, includeEntry);
     },
 
     async createEntry(input) {
