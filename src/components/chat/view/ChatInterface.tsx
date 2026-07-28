@@ -203,6 +203,7 @@ function ChatInterface({
     currentProviderEffort,
     opencodeModel,
     isLoading: isProcessing,
+    processingSessions,
     canAbortSession,
     tokenBudget,
     sendMessage,

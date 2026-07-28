@@ -313,7 +313,7 @@ export default function ChatComposer({
       {queuedDraft && (
         <QueuedMessageCard
           content={queuedDraft.content}
-          imageCount={queuedDraft.images.length}
+          imageCount={queuedDraft.uploadedImages?.length ?? queuedDraft.images.length}
           onEdit={onEditQueuedDraft}
           onDelete={onDeleteQueuedDraft}
         />

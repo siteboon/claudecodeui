@@ -62,7 +62,7 @@ export function useQueuedMessageAutoSend({
         type: 'chat.send',
         sessionId,
         content: queued.content,
-        options: { ...(queued.options ?? {}), images: [] },
+        options: { ...(queued.options ?? {}), images: queued.images ?? [] },
       });
       markSessionProcessing(sessionId, { statusText: null, canInterrupt: true });
     }

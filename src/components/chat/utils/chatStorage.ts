@@ -54,6 +54,12 @@ export type QueuedSendOptions = Record<string, unknown>;
 export type StoredQueuedMessage = {
   content: string;
   options?: QueuedSendOptions;
+  /**
+   * Server-side image descriptors returned by POST /api/assets/images.
+   * Unlike browser File objects, these are JSON-safe and can follow a queued
+   * message across session switches (or a page reload).
+   */
+  images?: unknown[];
 };
 
 export const queuedMessageKey = (sessionId: string) => `queued_message_${sessionId}`;
@@ -71,8 +77,11 @@ export function readQueuedMessage(sessionId: string): StoredQueuedMessage | null
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (parsed && typeof parsed === 'object' && typeof (parsed as StoredQueuedMessage).content === 'string') {
-      const { content, options } = parsed as StoredQueuedMessage;
-      return content.trim() ? { content, options } : null;
+      const { content, options, images } = parsed as StoredQueuedMessage;
+      const normalizedImages = Array.isArray(images) ? images : [];
+      return content.trim() || normalizedImages.length > 0
+        ? { content, options, images: normalizedImages }
+        : null;
     }
   } catch {
     // Legacy format: the raw draft text itself.

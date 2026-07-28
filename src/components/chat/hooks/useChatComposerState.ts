@@ -12,7 +12,7 @@ import type {
 import { useDropzone } from 'react-dropzone';
 
 import { authenticatedFetch } from '../../../utils/api';
-import type { MarkSessionProcessing } from '../../../hooks/useSessionProtection';
+import type { MarkSessionProcessing, SessionActivityMap } from '../../../hooks/useSessionProtection';
 import { grantClaudeToolPermission } from '../utils/chatPermissions';
 import {
   clearQueuedMessage,
@@ -47,6 +47,7 @@ interface UseChatComposerStateArgs {
   currentProviderEffort: string;
   opencodeModel: string;
   isLoading: boolean;
+  processingSessions?: SessionActivityMap;
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
   sendMessage: (message: unknown) => void;
@@ -150,9 +151,39 @@ const createFakeSubmitEvent = () => {
   return { preventDefault: () => undefined } as unknown as FormEvent<HTMLFormElement>;
 };
 
+const uploadImageFiles = async (files: File[]): Promise<unknown[]> => {
+  if (files.length === 0) {
+    return [];
+  }
+
+  const formData = new FormData();
+  files.forEach((file) => {
+    formData.append('images', file);
+  });
+
+  const response = await authenticatedFetch('/api/assets/images', {
+    method: 'POST',
+    headers: {},
+    body: formData,
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to upload images');
+  }
+
+  const result = await response.json();
+  if (!Array.isArray(result.images) || result.images.length !== files.length) {
+    throw new Error('Image upload returned an incomplete result');
+  }
+  return result.images;
+};
+
 export type QueuedDraft = {
   content: string;
+  /** Browser files retained while this composer stays mounted, for editing. */
   images: File[];
+  /** JSON-safe descriptors uploaded when the message is queued. */
+  uploadedImages?: unknown[];
   /**
    * Send options snapshotted at queue time. Persisted with the draft so the
    * app-level auto-send can dispatch the message with the right model and
@@ -163,8 +194,14 @@ export type QueuedDraft = {
 
 const restoreQueuedDraft = (sessionKey: string): QueuedDraft | null => {
   const saved = readQueuedMessage(sessionKey);
-  // Image attachments can't survive a reload; only text and options persist.
-  return saved ? { content: saved.content, images: [], options: saved.options } : null;
+  return saved
+    ? {
+        content: saved.content,
+        images: [],
+        uploadedImages: saved.images,
+        options: saved.options,
+      }
+    : null;
 };
 
 const getNotificationSessionSummary = (
@@ -199,6 +236,7 @@ export function useChatComposerState({
   currentProviderEffort,
   opencodeModel,
   isLoading,
+  processingSessions,
   canAbortSession,
   tokenBudget,
   sendMessage,
@@ -232,7 +270,10 @@ export function useChatComposerState({
   const textareaLineHeightRef = useRef<number | null>(null);
   const lastAutosizedInputRef = useRef<string | null>(null);
   const handleSubmitRef = useRef<
-    ((event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>) => Promise<void>) | null
+    ((
+      event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
+      queuedSubmission?: QueuedDraft,
+    ) => Promise<void>) | null
   >(null);
   const inputValueRef = useRef(input);
   const selectedProjectId = selectedProject?.projectId;
@@ -240,6 +281,10 @@ export function useChatComposerState({
   // to currentSessionId for a just-established session that hasn't been
   // handed back to the parent's `selectedSession` prop yet.
   const sessionKey = selectedSession?.id || currentSessionId || null;
+  const sessionKeyRef = useRef(sessionKey);
+  const processingSessionsRef = useRef<SessionActivityMap | undefined>(processingSessions);
+  sessionKeyRef.current = sessionKey;
+  processingSessionsRef.current = processingSessions;
 
   const [queuedDraft, setQueuedDraft] = useState<QueuedDraft | null>(() => {
     if (typeof window === 'undefined' || !sessionKey) {
@@ -646,23 +691,89 @@ export function useChatComposerState({
   const handleSubmit = useCallback(
     async (
       event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
+      queuedSubmission?: QueuedDraft,
     ) => {
       event.preventDefault();
-      const currentInput = inputValueRef.current;
-      if ((!currentInput.trim() && attachedImages.length === 0) || !selectedProject) {
+      const currentInput = queuedSubmission?.content ?? inputValueRef.current;
+      const currentAttachedImages = queuedSubmission?.images ?? attachedImages;
+      const previouslyUploadedImages = queuedSubmission?.uploadedImages ?? [];
+      if (
+        (!currentInput.trim() && currentAttachedImages.length === 0 && previouslyUploadedImages.length === 0)
+        || !selectedProject
+      ) {
         return;
       }
 
       // A turn is already in flight: stash this message instead of sending it.
-      // It's auto-flushed (re-running this same function) once the turn ends,
-      // so it still goes through slash-command interception, image upload, etc.
+      // Upload attached files now so the queued record contains durable image
+      // descriptors that can be sent even if another session is open later.
       if (isLoading) {
-        queuedDraftSessionRef.current = sessionKey;
-        setQueuedDraft({
+        // A run can restart in the tiny gap between scheduling and flushing a
+        // queued submission. Put the same durable draft back without uploading
+        // its files again.
+        if (queuedSubmission) {
+          queuedDraftSessionRef.current = sessionKey;
+          setQueuedDraft(queuedSubmission);
+          return;
+        }
+
+        const queuedOptions = buildSendOptions(currentInput);
+        const queuedSessionKey = sessionKey;
+        let uploadedImages: unknown[] = [];
+        try {
+          uploadedImages = await uploadImageFiles(currentAttachedImages);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unknown error';
+          console.error('Queued image upload failed:', error);
+          addMessage({
+            type: 'error',
+            content: `Failed to upload images: ${message}`,
+            timestamp: new Date(),
+          });
+          return;
+        }
+
+        const durableDraft: QueuedDraft = {
           content: currentInput,
-          images: attachedImages,
-          options: buildSendOptions(currentInput),
-        });
+          images: currentAttachedImages,
+          uploadedImages,
+          options: queuedOptions,
+        };
+        if (queuedSessionKey) {
+          // Write the claim ticket synchronously after upload; this closes the
+          // gap before React's persistence effect runs.
+          writeQueuedMessage(queuedSessionKey, {
+            content: durableDraft.content,
+            options: durableDraft.options,
+            images: durableDraft.uploadedImages,
+          });
+        }
+
+        // The upload is asynchronous. If the user changed sessions while it
+        // was running, persist/send against the session where Queue was
+        // pressed rather than putting the draft into the newly opened chat.
+        if (queuedSessionKey && sessionKeyRef.current !== queuedSessionKey) {
+          if (
+            processingSessionsRef.current
+            && !processingSessionsRef.current.has(queuedSessionKey)
+          ) {
+            clearQueuedMessage(queuedSessionKey);
+            sendMessage({
+              type: 'chat.send',
+              sessionId: queuedSessionKey,
+              content: durableDraft.content,
+              options: {
+                ...(durableDraft.options ?? {}),
+                images: durableDraft.uploadedImages ?? [],
+              },
+            });
+            onSessionProcessing?.(queuedSessionKey, { statusText: null, canInterrupt: true });
+          }
+          return;
+        }
+
+        queuedDraftSessionRef.current = queuedSessionKey;
+        setQueuedDraft(durableDraft);
         setInput('');
         inputValueRef.current = '';
         setAttachedImages([]);
@@ -715,26 +826,10 @@ export function useChatComposerState({
 
       const messageContent = currentInput;
 
-      let uploadedImages: unknown[] = [];
-      if (attachedImages.length > 0) {
-        const formData = new FormData();
-        attachedImages.forEach((file) => {
-          formData.append('images', file);
-        });
-
+      let uploadedImages = previouslyUploadedImages;
+      if (uploadedImages.length === 0 && currentAttachedImages.length > 0) {
         try {
-          const response = await authenticatedFetch('/api/assets/images', {
-            method: 'POST',
-            headers: {},
-            body: formData,
-          });
-
-          if (!response.ok) {
-            throw new Error('Failed to upload images');
-          }
-
-          const result = await response.json();
-          uploadedImages = result.images;
+          uploadedImages = await uploadImageFiles(currentAttachedImages);
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
           console.error('Image upload failed:', error);
@@ -823,7 +918,7 @@ export function useChatComposerState({
         sessionId: targetSessionId,
         content: messageContent,
         options: {
-          ...buildSendOptions(messageContent),
+          ...(queuedSubmission?.options ?? buildSendOptions(messageContent)),
           images: uploadedImages,
         },
       });
@@ -868,7 +963,8 @@ export function useChatComposerState({
   }, [handleSubmit]);
 
   // Once the in-flight turn ends, replay the queued draft through the normal
-  // submit path (slash commands, image upload, etc. all still apply).
+  // submit path. The draft itself is passed directly so submission never
+  // depends on React committing restored attachment state first.
   const wasLoadingRef = useRef(isLoading);
   const flushSessionKeyRef = useRef(sessionKey);
   useEffect(() => {
@@ -905,9 +1001,7 @@ export function useChatComposerState({
       setInput(queuedDraft.content);
       inputValueRef.current = queuedDraft.content;
       setAttachedImages(queuedDraft.images);
-      setTimeout(() => {
-        handleSubmitRef.current?.(createFakeSubmitEvent());
-      }, 0);
+      handleSubmitRef.current?.(createFakeSubmitEvent(), queuedDraft);
     }, delay);
     return () => clearTimeout(timer);
   }, [isLoading, queuedDraft, sessionKey, setInput]);
@@ -974,15 +1068,20 @@ export function useChatComposerState({
     if (!sessionKey || queuedDraftSessionRef.current !== sessionKey) {
       return;
     }
-    if (queuedDraft?.content) {
-      writeQueuedMessage(sessionKey, { content: queuedDraft.content, options: queuedDraft.options });
+    if (queuedDraft && (queuedDraft.content.trim() || (queuedDraft.uploadedImages?.length ?? 0) > 0)) {
+      writeQueuedMessage(sessionKey, {
+        content: queuedDraft.content,
+        options: queuedDraft.options,
+        images: queuedDraft.uploadedImages,
+      });
     } else {
       clearQueuedMessage(sessionKey);
     }
   }, [queuedDraft, sessionKey]);
 
-  // Switching sessions swaps in that session's queued draft (image
-  // attachments can't survive a reload, so only text and options restore).
+  // Switching sessions swaps in that session's queued draft. Browser File
+  // objects are local to the mounted composer, while their already-uploaded
+  // descriptors restore from storage and remain sendable.
   useEffect(() => {
     queuedDraftSessionRef.current = sessionKey;
     if (!sessionKey) {
