@@ -3,7 +3,11 @@ import type { DragEvent } from 'react';
 
 import { IS_PLATFORM } from '../../../constants/config';
 import type { Project } from '../../../types/app';
-import { isValidRefreshedToken } from '../../../utils/api';
+import {
+  expireAuthSession,
+  getStoredAuthToken,
+  storeAuthToken,
+} from '../../../utils/api';
 import {
   MAX_FILE_UPLOAD_COUNT,
   MAX_FILE_UPLOAD_SIZE_BYTES,
@@ -115,7 +119,7 @@ const uploadFormDataWithProgress = (
 
     xhr.open('POST', `/api/file-tree/projects/${encodeURIComponent(projectId)}/files/upload`);
 
-    const token = localStorage.getItem('auth-token');
+    const token = getStoredAuthToken();
     if (!IS_PLATFORM && token) {
       xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     }
@@ -132,8 +136,11 @@ const uploadFormDataWithProgress = (
 
     xhr.onload = () => {
       const refreshedToken = xhr.getResponseHeader('X-Refreshed-Token');
-      if (isValidRefreshedToken(refreshedToken)) {
-        localStorage.setItem('auth-token', refreshedToken);
+      if (refreshedToken) {
+        storeAuthToken(refreshedToken);
+      }
+      if (xhr.getResponseHeader('X-Auth-Error')) {
+        expireAuthSession();
       }
 
       const payload = parseUploadResponse(xhr);

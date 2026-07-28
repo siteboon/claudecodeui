@@ -1,5 +1,8 @@
 import { IS_PLATFORM } from "../constants/config";
 
+export const AUTH_TOKEN_REFRESHED_EVENT = 'auth-token-refreshed';
+export const AUTH_SESSION_EXPIRED_EVENT = 'auth-session-expired';
+
 // Only accept a refreshed token that has this app's issued JWT shape
 // (three base64url segments). An attacker-injected/malformed header value
 // must never overwrite the stored auth token.
@@ -11,9 +14,80 @@ export const isValidRefreshedToken = (token) =>
   typeof token === 'string' &&
   /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token);
 
+const readTokenClaims = (token) => {
+  if (!isValidRefreshedToken(token)) {
+    return null;
+  }
+
+  try {
+    const encodedPayload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const paddedPayload = encodedPayload.padEnd(
+      encodedPayload.length + ((4 - (encodedPayload.length % 4)) % 4),
+      '=',
+    );
+    const payload = JSON.parse(atob(paddedPayload));
+
+    if (
+      typeof payload.iat !== 'number' ||
+      !Number.isFinite(payload.iat) ||
+      typeof payload.exp !== 'number' ||
+      !Number.isFinite(payload.exp)
+    ) {
+      return null;
+    }
+
+    return { issuedAt: payload.iat * 1000, expiresAt: payload.exp * 1000 };
+  } catch {
+    return null;
+  }
+};
+
+export const isAuthTokenExpired = (token) => {
+  const claims = readTokenClaims(token);
+  return claims ? Date.now() >= claims.expiresAt : false;
+};
+
+export const getAuthTokenRefreshDelay = (token) => {
+  const claims = readTokenClaims(token);
+  if (!claims) {
+    return null;
+  }
+
+  const refreshAt = claims.issuedAt + ((claims.expiresAt - claims.issuedAt) / 2);
+  return Math.max(0, refreshAt - Date.now());
+};
+
+export const expireAuthSession = () => {
+  localStorage.removeItem('auth-token');
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(AUTH_SESSION_EXPIRED_EVENT));
+  }
+};
+
+export const getStoredAuthToken = () => {
+  const token = localStorage.getItem('auth-token');
+  if (token && isAuthTokenExpired(token)) {
+    expireAuthSession();
+    return null;
+  }
+  return token;
+};
+
+export const storeAuthToken = (token) => {
+  if (!isValidRefreshedToken(token)) {
+    return false;
+  }
+
+  localStorage.setItem('auth-token', token);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(AUTH_TOKEN_REFRESHED_EVENT, { detail: token }));
+  }
+  return true;
+};
+
 // Utility function for authenticated API calls
 export const authenticatedFetch = (url, options = {}) => {
-  const token = localStorage.getItem('auth-token');
+  const token = getStoredAuthToken();
 
   const defaultHeaders = {};
 
@@ -34,8 +108,11 @@ export const authenticatedFetch = (url, options = {}) => {
     },
   }).then((response) => {
     const refreshedToken = response.headers.get('X-Refreshed-Token');
-    if (isValidRefreshedToken(refreshedToken)) {
-      localStorage.setItem('auth-token', refreshedToken);
+    if (refreshedToken) {
+      storeAuthToken(refreshedToken);
+    }
+    if (response.headers.get('X-Auth-Error')) {
+      expireAuthSession();
     }
     return response;
   });
@@ -56,6 +133,7 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     }),
+    refresh: () => authenticatedFetch('/api/auth/refresh', { method: 'POST' }),
     user: () => authenticatedFetch('/api/auth/user'),
     logout: () => authenticatedFetch('/api/auth/logout', { method: 'POST' }),
   },
@@ -134,7 +212,7 @@ export const api = {
     });
   },
   searchConversationsUrl: (query, limit = 50) => {
-    const token = localStorage.getItem('auth-token');
+    const token = getStoredAuthToken();
     const params = new URLSearchParams({ q: query, limit: String(limit) });
     if (token) params.set('token', token);
     return `/api/providers/search/sessions?${params.toString()}`;

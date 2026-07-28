@@ -45,6 +45,10 @@ export function createAuthRouter(
     res.json(service.getCurrentUser((req as AuthenticatedRequest).user));
   });
 
+  router.post('/refresh', authenticateToken, (req, res) => {
+    res.json(service.refreshSession((req as AuthenticatedRequest).user));
+  });
+
   router.post('/logout', authenticateToken, (_req, res) => {
     res.json(service.logout());
   });

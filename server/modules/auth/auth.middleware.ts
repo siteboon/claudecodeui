@@ -49,7 +49,11 @@ const authenticateToken = async (req, res, next) => {
   }
 
   if (!token) {
-    return res.status(401).json({ error: 'Access denied. No token provided.' });
+    res.setHeader('X-Auth-Error', 'invalid-token');
+    return res.status(401).json({
+      error: 'Access denied. No token provided.',
+      code: 'AUTH_TOKEN_INVALID',
+    });
   }
 
   try {
@@ -58,7 +62,11 @@ const authenticateToken = async (req, res, next) => {
     // Verify user still exists and is active
     const user = userDb.getUserById(decoded.userId);
     if (!user) {
-      return res.status(401).json({ error: 'Invalid token. User not found.' });
+      res.setHeader('X-Auth-Error', 'invalid-token');
+      return res.status(401).json({
+        error: 'Invalid token. User not found.',
+        code: 'AUTH_TOKEN_INVALID',
+      });
     }
 
     // Auto-refresh: if token is past halfway through its lifetime, issue a new one
@@ -74,8 +82,23 @@ const authenticateToken = async (req, res, next) => {
     req.user = user;
     next();
   } catch (error) {
-    console.error('Token verification error:', error);
-    return res.status(403).json({ error: 'Invalid token' });
+    if (error instanceof jwt.TokenExpiredError) {
+      res.setHeader('X-Auth-Error', 'session-expired');
+      return res.status(401).json({
+        error: 'Session expired. Please log in again.',
+        code: 'AUTH_TOKEN_EXPIRED',
+      });
+    }
+
+    console.warn(
+      'Token verification failed:',
+      error instanceof Error ? error.message : String(error),
+    );
+    res.setHeader('X-Auth-Error', 'invalid-token');
+    return res.status(401).json({
+      error: 'Invalid token',
+      code: 'AUTH_TOKEN_INVALID',
+    });
   }
 };
 
@@ -121,7 +144,12 @@ const authenticateWebSocket = (token) => {
     }
     return { userId: user.id, username: user.username };
   } catch (error) {
-    console.error('WebSocket token verification error:', error);
+    if (!(error instanceof jwt.TokenExpiredError)) {
+      console.warn(
+        'WebSocket token verification failed:',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
     return null;
   }
 };

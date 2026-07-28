@@ -78,3 +78,18 @@ test('login rejects an invalid password without issuing a token', async () => {
   );
   assert.equal(tokenIssued, false);
 });
+
+test('refreshSession issues a replacement token for the authenticated user', () => {
+  let tokenUser: { id: number | bigint; username: string } | undefined;
+  const service = createAuthService(createDependencies({
+    generateToken: (user) => {
+      tokenUser = user;
+      return 'replacement-token';
+    },
+  }));
+
+  const result = service.refreshSession({ id: 7, username: 'alice' });
+
+  assert.deepEqual(result, { token: 'replacement-token' });
+  assert.deepEqual(tokenUser, { id: 7, username: 'alice' });
+});

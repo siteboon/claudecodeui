@@ -130,6 +130,24 @@ export function createAuthService(dependencies: AuthDependencies) {
       return { user };
     },
 
+    refreshSession(user: unknown) {
+      if (
+        typeof user !== 'object'
+        || user === null
+        || !('id' in user)
+        || !('username' in user)
+        || (typeof user.id !== 'number' && typeof user.id !== 'bigint')
+        || typeof user.username !== 'string'
+      ) {
+        throw new AppError('Authenticated user is required', {
+          code: 'AUTH_USER_REQUIRED',
+          statusCode: 401,
+        });
+      }
+
+      return { token: dependencies.generateToken(user as AuthUser) };
+    },
+
     logout() {
       return { success: true, message: 'Logged out successfully' };
     },
