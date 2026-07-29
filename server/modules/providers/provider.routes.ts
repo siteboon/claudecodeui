@@ -584,7 +584,7 @@ router.put(
   asyncHandler(async (req: Request, res: Response) => {
     const sessionId = parseSessionId(req.params.sessionId);
     const summary = parseSessionRenameSummary(req.body);
-    const result = sessionsService.renameSessionById(sessionId, summary);
+    const result = await sessionsService.renameSessionById(sessionId, summary);
     res.json(createApiSuccessResponse(result));
   }),
 );
