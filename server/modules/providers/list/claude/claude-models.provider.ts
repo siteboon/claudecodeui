@@ -3,16 +3,11 @@ import { readFile } from 'node:fs/promises';
 import { sessionsDb } from '@/modules/database/index.js';
 import type { IProviderModels } from '@/shared/interfaces.js';
 import type {
-  ProviderChangeActiveModelInput,
   ProviderCurrentActiveModel,
   ProviderModelOption,
   ProviderModelsDefinition,
-  ProviderSessionActiveModelChange,
 } from '@/shared/types.js';
-import {
-  buildDefaultProviderCurrentActiveModel,
-  writeProviderSessionActiveModelChange,
-} from '@/shared/utils.js';
+import { buildDefaultProviderCurrentActiveModel } from '@/shared/utils.js';
 
 export const CLAUDE_FALLBACK_MODELS: ProviderModelsDefinition = {
   OPTIONS: [
@@ -263,11 +258,5 @@ export class ClaudeProviderModels implements IProviderModels {
     }
 
     return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());
-  }
-
-  async changeActiveModel(
-    input: ProviderChangeActiveModelInput,
-  ): Promise<ProviderSessionActiveModelChange> {
-    return writeProviderSessionActiveModelChange('claude', input);
   }
 }

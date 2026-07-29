@@ -1,4 +1,5 @@
 import type {
+  AnyRecord,
   FetchHistoryOptions,
   FetchHistoryResult,
   LLMProvider,
@@ -7,17 +8,36 @@ import type {
   ProviderSkill,
   ProviderSkillListOptions,
   ProviderAuthStatus,
-  ProviderChangeActiveModelInput,
   ProviderCurrentActiveModel,
   ProviderModelsDefinition,
   ProviderMcpServer,
-  ProviderSessionActiveModelChange,
   ProviderSkillCreateInput,
   ProviderSkillRemoveInput,
+  ProviderRuntimeContext,
+  ProviderRuntimePermissionGateway,
+  ProviderRuntimeWriter,
   UpsertProviderMcpServerInput,
 } from '@/shared/types.js';
 
 //----------------- PROVIDER CONTRACT INTERFACES ------------
+
+/**
+ * Live execution contract implemented by each provider SDK/CLI adapter.
+ *
+ * The provider registry owns this adapter as one facet of `IProvider`; runtime
+ * execution context is supplied by the application service at call time.
+ */
+export interface IProviderRuntime {
+  run(
+    command: string,
+    options: AnyRecord,
+    writer: ProviderRuntimeWriter,
+    context: ProviderRuntimeContext,
+  ): Promise<unknown>;
+  abort(sessionId: string): boolean | Promise<boolean>;
+  permissions?: ProviderRuntimePermissionGateway;
+}
+
 /**
  * Main provider contract for CLI and SDK integrations.
  *
@@ -26,6 +46,7 @@ import type {
  */
 export interface IProvider {
   readonly id: LLMProvider;
+  readonly runtime: IProviderRuntime;
   readonly models: IProviderModels;
   readonly mcp: IProviderMcp;
   readonly auth: IProviderAuth;
@@ -52,26 +73,15 @@ export interface IProviderModels {
   getSupportedModels(): Promise<ProviderModelsDefinition>;
 
   /**
-   * Returns the currently active model for one session or provider runtime.
+   * Reads the model the provider itself believes one session is running with.
    *
-   * Implementations must use the provider-specific lookup mechanism approved
-   * for that provider and fall back only to the provider catalog default when
-   * no active model can be resolved.
+   * Only consulted for sessions the app has never recorded a model for — a
+   * session started directly in the provider CLI, for example. Selecting a
+   * model in the app is persisted on the session row instead, so adapters here
+   * are read-only and must fall back to the catalog default when the
+   * provider-specific lookup finds nothing.
    */
   getCurrentActiveModel(sessionId?: string): Promise<ProviderCurrentActiveModel>;
-
-  /**
-   * Persists a session-scoped model override that the next resumed turn should
-   * honor for this provider.
-   *
-   * This does not require the provider to mutate an already running remote
-   * session in-place. Instead, adapters store the user's explicit model choice
-   * so the backend resume path can add the correct provider-native model option
-   * on the next CLI/SDK invocation for the same session.
-   */
-  changeActiveModel(
-    input: ProviderChangeActiveModelInput,
-  ): Promise<ProviderSessionActiveModelChange>;
 }
 
 // ---------------------------

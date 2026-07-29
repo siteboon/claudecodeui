@@ -34,6 +34,7 @@ const SESSION_MANAGER_PLUGIN_URL = 'https://github.com/strykereye2/cloudcli-plug
 const TOKEN_COST_CALCULATOR_PLUGIN_URL = 'https://github.com/NightmareAway/cloudcli-plugin-token-cost-calculator';
 const TASK_QUEUE_PLUGIN_URL = 'https://github.com/TadMSTR/cloudcli-plugin-task-queue';
 const GITHUB_ISSUES_BOARD_PLUGIN_URL = 'https://github.com/szmidtpiotr/claude-github-issue';
+const CLAUDE_USAGE_PLUGIN_URL = 'https://github.com/HandyS11/cloudcli-plugin-claude-usage';
 
 type PluginRecommendation = {
   id: string;
@@ -118,6 +119,14 @@ const UNOFFICIAL_PLUGIN_RECOMMENDATIONS: PluginRecommendation[] = [
     repoUrl: GITHUB_ISSUES_BOARD_PLUGIN_URL,
     installedNames: ['claude-github-issue'],
     icon: Github,
+    source: 'unofficial',
+  },
+  {
+    id: 'claude-usage',
+    translationKey: 'claudeUsagePlugin',
+    repoUrl: CLAUDE_USAGE_PLUGIN_URL,
+    installedNames: ['claude-usage'],
+    icon: BarChart3,
     source: 'unofficial',
   },
 ];
