@@ -1,0 +1,3 @@
+{"version":"v1","kind":"Prompt","data":{"message_id":"p1","content":[{"kind":"text","data":"please fail"}],"meta":{"timestamp":1778546781}}}
+{"version":"v1","kind":"AssistantMessage","data":{"message_id":"a1","content":[{"kind":"toolUse","data":{"toolUseId":"tooluse_failing","name":"execute_bash","input":{"command":"false"}}}]}}
+{"version":"v1","kind":"ToolResults","data":{"message_id":"r1","content":[{"kind":"toolResult","data":{"toolUseId":"tooluse_failing","content":[{"kind":"text","data":"command exited 1"}]}}],"status":"error"}}

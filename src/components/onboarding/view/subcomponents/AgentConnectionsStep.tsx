@@ -37,6 +37,13 @@ const providerCards = [
     iconContainerClassName: 'bg-zinc-100 dark:bg-zinc-800',
     loginButtonClassName: 'bg-zinc-800 hover:bg-zinc-900 dark:bg-zinc-700 dark:hover:bg-zinc-600',
   },
+  {
+    provider: 'kiro' as const,
+    title: 'AWS Kiro',
+    connectedClassName: 'bg-slate-50 dark:bg-slate-900/20 border-slate-200 dark:border-slate-800',
+    iconContainerClassName: 'bg-slate-100 dark:bg-slate-900/30',
+    loginButtonClassName: 'bg-slate-700 hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600',
+  },
 ];
 
 export default function AgentConnectionsStep({

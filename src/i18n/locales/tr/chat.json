@@ -17,7 +17,8 @@
     "tool": "Araç",
     "claude": "Claude",
     "cursor": "Cursor",
-    "codex": "Codex"
+    "codex": "Codex",
+    "kiro": "Kiro"
   },
   "tools": {
     "settings": "Araç Ayarları",
@@ -133,7 +134,8 @@
       "claude": "Claude'u {{model}} ile kullanmaya hazır. Mesajını aşağıya yazmaya başla.",
       "cursor": "Cursor'ı {{model}} ile kullanmaya hazır. Mesajını aşağıya yazmaya başla.",
       "codex": "Codex'i {{model}} ile kullanmaya hazır. Mesajını aşağıya yazmaya başla.",
-      "default": "Başlamak için yukarıdan bir sağlayıcı seç"
+      "default": "Başlamak için yukarıdan bir sağlayıcı seç",
+      "kiro": "Kiro {{model}} ile kullanıma hazır. Mesajınızı aşağıya yazmaya başlayın."
     },
     "pressToSearch": "Oturumlarda, dosyalarda ve commit'lerde arama yapmak için <kbd>{{shortcut}}</kbd> tuşlarına bas"
   },

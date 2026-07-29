@@ -17,7 +17,8 @@
     "tool": "ツール",
     "claude": "Claude",
     "cursor": "Cursor",
-    "codex": "Codex"
+    "codex": "Codex",
+    "kiro": "Kiro"
   },
   "tools": {
     "settings": "ツール設定",
@@ -130,7 +131,8 @@
       "claude": "{{model}}でClaudeを使用する準備ができました。下にメッセージを入力してください。",
       "cursor": "{{model}}でCursorを使用する準備ができました。下にメッセージを入力してください。",
       "codex": "{{model}}でCodexを使用する準備ができました。下にメッセージを入力してください。",
-      "default": "上からプロバイダーを選択して開始してください"
+      "default": "上からプロバイダーを選択して開始してください",
+      "kiro": "Kiro を {{model}} で使用する準備ができました。下にメッセージを入力してください。"
     },
     "pressToSearch": "<kbd>{{shortcut}}</kbd> を押してセッション、ファイル、コミットを検索"
   },
