@@ -1,6 +1,5 @@
 import { useTranslation } from 'react-i18next';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import type {
   ChangeEvent,
   ClipboardEvent,
@@ -11,7 +10,7 @@ import type {
   RefObject,
   TouchEvent,
 } from 'react';
-import { PaperclipIcon, MessageSquareIcon, XIcon, Loader2, ChevronDown, Check, ArrowUpIcon } from 'lucide-react';
+import { PaperclipIcon, MessageSquareIcon, XIcon, Loader2, ArrowUpIcon } from 'lucide-react';
 
 import { useVoiceInput } from '../../hooks/useVoiceInput';
 import { useVoiceAvailable } from '../../hooks/useVoiceAvailable';
@@ -37,6 +36,8 @@ import VoiceInputButton from './VoiceInputButton';
 import PermissionRequestsBanner from './PermissionRequestsBanner';
 import TokenUsageSummary from './TokenUsageSummary';
 import QueuedMessageCard from './QueuedMessageCard';
+import ComposerModelMenu from './ComposerModelMenu';
+import ComposerPermissionMenu from './ComposerPermissionMenu';
 
 interface MentionableFile {
   name: string;
@@ -64,10 +65,16 @@ interface ChatComposerProps {
   isLoading: boolean;
   onAbortSession: () => void;
   permissionMode: PermissionMode | string;
-  onModeSwitch: () => void;
+  availablePermissionModes: (PermissionMode | string)[];
+  onSelectPermissionMode: (mode: PermissionMode | string) => void;
+  providerLabel: string;
   effort: string;
   availableEffortOptions: NonNullable<ProviderModelOption['effort']>['values'];
   onSelectEffort: (effort: string) => void;
+  model: string;
+  availableModelOptions: ProviderModelOption[];
+  onSelectModel: (model: string) => void;
+  modelsLoading: boolean;
   tokenBudget: Record<string, unknown> | null;
   onShowTokenUsage: () => void;
   slashCommandsCount: number;
@@ -122,10 +129,16 @@ export default function ChatComposer({
   isLoading,
   onAbortSession,
   permissionMode,
-  onModeSwitch,
+  availablePermissionModes,
+  onSelectPermissionMode,
+  providerLabel,
   effort,
   availableEffortOptions,
   onSelectEffort,
+  model,
+  availableModelOptions,
+  onSelectModel,
+  modelsLoading,
   tokenBudget,
   onShowTokenUsage,
   slashCommandsCount,
@@ -204,67 +217,6 @@ export default function ChatComposer({
   );
   const isRecording = voiceState === 'recording';
   const isTranscribing = voiceState === 'transcribing';
-  const [isEffortDropdownOpen, setIsEffortDropdownOpen] = useState(false);
-  const effortDropdownRef = useRef<HTMLDivElement | null>(null);
-  const effortDropdownMenuRef = useRef<HTMLDivElement | null>(null);
-  const effortDropdownButtonRef = useRef<HTMLButtonElement | null>(null);
-  const [effortDropdownPosition, setEffortDropdownPosition] = useState<{
-    left: number;
-    top: number;
-    maxHeight: number;
-  } | null>(null);
-  const effortOptions = useMemo(
-    () => [{ value: 'default' }, ...availableEffortOptions],
-    [availableEffortOptions],
-  );
-  const selectedEffortLabel = effort === 'default' ? 'Default' : effort;
-  const updateEffortDropdownPosition = useCallback(() => {
-    const rect = effortDropdownButtonRef.current?.getBoundingClientRect();
-    if (!rect) {
-      return;
-    }
-
-    setEffortDropdownPosition({
-      left: rect.left,
-      top: rect.top - 8,
-      maxHeight: Math.max(96, rect.top - 16),
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!isEffortDropdownOpen) return;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (
-        !effortDropdownRef.current?.contains(target)
-        && !effortDropdownMenuRef.current?.contains(target)
-      ) {
-        setIsEffortDropdownOpen(false);
-      }
-    };
-
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        event.stopPropagation();
-        setIsEffortDropdownOpen(false);
-      }
-    };
-
-    document.addEventListener('pointerdown', handlePointerDown);
-    window.addEventListener('resize', updateEffortDropdownPosition);
-    window.addEventListener('scroll', updateEffortDropdownPosition, true);
-    window.addEventListener('keydown', handleKeyDown, { capture: true });
-    updateEffortDropdownPosition();
-
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
-      window.removeEventListener('resize', updateEffortDropdownPosition);
-      window.removeEventListener('scroll', updateEffortDropdownPosition, true);
-      window.removeEventListener('keydown', handleKeyDown, { capture: true });
-    };
-  }, [isEffortDropdownOpen, updateEffortDropdownPosition]);
 
   // Detect if the AskUserQuestion interactive panel is active
   const hasQuestionPanel = pendingPermissionRequests.some(
@@ -428,7 +380,7 @@ export default function ChatComposer({
         </PromptInputBody>
 
         <PromptInputFooter>
-          <PromptInputTools>
+          <PromptInputTools className="min-w-0">
             <PromptInputButton
               tooltip={{ content: t('input.attachFiles') }}
               onClick={openAttachmentPicker}
@@ -439,110 +391,6 @@ export default function ChatComposer({
 
             {onVoiceTranscript && voiceAvailable && (
               <VoiceInputButton state={voiceState} onToggle={voiceToggle} errorMsg={voiceError} />
-            )}
-
-            <button
-              type="button"
-              onClick={onModeSwitch}
-              className={`inline-flex h-8 items-center rounded-lg border px-2 text-xs font-medium transition-all duration-200 sm:px-2.5 ${
-                permissionMode === 'default'
-                  ? 'border-border/60 bg-muted/50 text-muted-foreground hover:bg-muted'
-                  : permissionMode === 'acceptEdits'
-                    ? 'border-green-300/60 bg-green-50 text-green-700 hover:bg-green-100 dark:border-green-600/40 dark:bg-green-900/15 dark:text-green-300 dark:hover:bg-green-900/25'
-                    : permissionMode === 'auto'
-                      ? 'border-blue-300/60 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-600/40 dark:bg-blue-900/15 dark:text-blue-300 dark:hover:bg-blue-900/25'
-                      : permissionMode === 'bypassPermissions'
-                        ? 'border-orange-300/60 bg-orange-50 text-orange-700 hover:bg-orange-100 dark:border-orange-600/40 dark:bg-orange-900/15 dark:text-orange-300 dark:hover:bg-orange-900/25'
-                        : 'border-primary/20 bg-primary/5 text-primary hover:bg-primary/10'
-              }`}
-              title={t('input.clickToChangeMode')}
-            >
-              <div className="flex items-center gap-1.5">
-                <div
-                  className={`h-2.5 w-2.5 rounded-full sm:h-1.5 sm:w-1.5 ${
-                    permissionMode === 'default'
-                      ? 'bg-muted-foreground'
-                      : permissionMode === 'acceptEdits'
-                        ? 'bg-green-500'
-                        : permissionMode === 'auto'
-                          ? 'bg-blue-500'
-                          : permissionMode === 'bypassPermissions'
-                            ? 'bg-orange-500'
-                            : 'bg-primary'
-                  }`}
-                />
-                <span className="hidden whitespace-nowrap sm:inline">
-                  {permissionMode === 'default' && t('codex.modes.default')}
-                  {permissionMode === 'acceptEdits' && t('codex.modes.acceptEdits')}
-                  {permissionMode === 'auto' && t('codex.modes.auto')}
-                  {permissionMode === 'bypassPermissions' && t('codex.modes.bypassPermissions')}
-                  {permissionMode === 'plan' && t('codex.modes.plan')}
-                </span>
-              </div>
-            </button>
-
-            {availableEffortOptions.length > 0 && (
-              <div ref={effortDropdownRef} className="relative">
-                <button
-                  ref={effortDropdownButtonRef}
-                  type="button"
-                  onClick={() => {
-                    updateEffortDropdownPosition();
-                    setIsEffortDropdownOpen((current) => !current);
-                  }}
-                  className="flex h-8 items-center gap-1.5 rounded-lg border border-border/60 bg-muted/40 px-2 text-xs font-medium text-foreground transition-all duration-200 hover:bg-muted"
-                  aria-haspopup="menu"
-                  aria-expanded={isEffortDropdownOpen}
-                  aria-label="Select reasoning effort"
-                  title="Select reasoning effort"
-                >
-                  <span className="hidden text-[11px] text-muted-foreground sm:inline">Effort</span>
-                  <span className="max-w-16 truncate capitalize sm:max-w-20">{selectedEffortLabel}</span>
-                  <ChevronDown className={`h-3 w-3 text-muted-foreground transition-transform ${isEffortDropdownOpen ? 'rotate-180' : ''}`} />
-                </button>
-
-                {isEffortDropdownOpen && effortDropdownPosition && createPortal(
-                  <div
-                    ref={effortDropdownMenuRef}
-                    className="fixed z-[100] min-w-36 overflow-y-auto rounded-lg border border-border bg-card p-1 shadow-lg"
-                    style={{
-                      left: effortDropdownPosition.left,
-                      top: effortDropdownPosition.top,
-                      maxHeight: effortDropdownPosition.maxHeight,
-                      transform: 'translateY(-100%)',
-                    }}
-                    role="menu"
-                  >
-                    {effortOptions.map((option) => {
-                      const isSelected = option.value === effort;
-                      const label = option.value === 'default' ? 'Default' : option.value;
-                      return (
-                        <button
-                          key={option.value}
-                          type="button"
-                          role="menuitemradio"
-                          aria-checked={isSelected}
-                          onClick={() => {
-                            onSelectEffort(option.value);
-                            setIsEffortDropdownOpen(false);
-                          }}
-                          className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs capitalize transition-colors ${
-                            isSelected
-                              ? 'bg-accent text-foreground'
-                              : 'text-muted-foreground hover:bg-accent/70 hover:text-foreground'
-                          }`}
-                        >
-                          <span className="flex h-3 w-3 items-center justify-center">
-                            {isSelected && <Check className="h-3 w-3 text-primary" />}
-                          </span>
-                          <span>{label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>,
-                  document.body,
-                )}
-              </div>
             )}
 
             <TokenUsageSummary usage={tokenBudget} onClick={onShowTokenUsage} />
@@ -574,7 +422,7 @@ export default function ChatComposer({
 
           </PromptInputTools>
 
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             <div
               className={`hidden text-xs text-muted-foreground/50 transition-opacity duration-200 lg:block ${
                 input.trim() && !canQueueDraft ? 'opacity-0' : 'opacity-100'
@@ -582,6 +430,24 @@ export default function ChatComposer({
             >
               {submitHint}
             </div>
+
+            <ComposerModelMenu
+              effort={effort}
+              effortOptions={availableEffortOptions}
+              onSelectEffort={onSelectEffort}
+              model={model}
+              modelOptions={availableModelOptions}
+              onSelectModel={onSelectModel}
+              modelsLoading={modelsLoading}
+            />
+
+            <ComposerPermissionMenu
+              permissionMode={permissionMode}
+              permissionModes={availablePermissionModes}
+              onSelectPermissionMode={onSelectPermissionMode}
+              providerLabel={providerLabel}
+            />
+
             <PromptInputSubmit
               onClick={
                 canQueueDraft

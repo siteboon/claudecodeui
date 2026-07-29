@@ -5,7 +5,7 @@ import { ArrowDownIcon } from 'lucide-react';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useWebSocket } from '../../../contexts/WebSocketContext';
 import PermissionContext from '../../../contexts/PermissionContext';
-import type { ChatInterfaceProps, Provider  } from '../types/types';
+import type { ChatInterfaceProps, PermissionMode, Provider  } from '../types/types';
 import { useChatProviderState } from '../hooks/useChatProviderState';
 import { useChatSessionState } from '../hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '../hooks/useChatRealtimeHandlers';
@@ -70,12 +70,17 @@ function ChatInterface({
     setCodexModel,
     currentProviderEffort,
     currentProviderEffortOptions,
+    currentProviderModel,
+    currentProviderModelOptions,
     opencodeModel,
     setOpenCodeModel,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
+    availablePermissionModes,
+    selectPermissionMode,
     cyclePermissionMode,
+    setStoredProviderModel,
     providerModelCatalog,
     providerModelCacheCatalog,
     providerModelsLoading,
@@ -286,21 +291,39 @@ function ChatInterface({
     handlePermissionDecision,
   }), [pendingPermissionRequests, handlePermissionDecision]);
 
+  // Composer model picks are stored locally (that is the model every send
+  // carries) and, when a session is already live, also pushed to the provider
+  // so the running session switches on its next turn.
+  const handleSelectComposerModel = useCallback(async (model: string) => {
+    setStoredProviderModel(provider, model);
+
+    const sessionId = currentSessionId || selectedSession?.id || null;
+    if (!sessionId) {
+      return;
+    }
+
+    try {
+      await selectProviderModel(provider, model, sessionId);
+    } catch (error) {
+      console.error('Error changing the active session model:', error);
+    }
+  }, [currentSessionId, provider, selectProviderModel, selectedSession?.id, setStoredProviderModel]);
+
   // Mirrors ChatComposer's own visibility check so the message pane can
   // reserve enough bottom space to keep the floating status tab from
   // overlapping the last message.
   const hasActivityIndicator = Boolean(sessionActivity && pendingPermissionRequests.length === 0);
 
-  if (!selectedProject) {
-    const selectedProviderLabel =
-      provider === 'cursor'
-        ? t('messageTypes.cursor')
-        : provider === 'codex'
-          ? t('messageTypes.codex')
-          : provider === 'opencode'
-              ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
-            : t('messageTypes.claude');
+  const selectedProviderLabel =
+    provider === 'cursor'
+      ? t('messageTypes.cursor')
+      : provider === 'codex'
+        ? t('messageTypes.codex')
+        : provider === 'opencode'
+            ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
+          : t('messageTypes.claude');
 
+  if (!selectedProject) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-center text-muted-foreground">
@@ -389,10 +412,16 @@ function ChatInterface({
           isLoading={isProcessing}
           onAbortSession={handleAbortSession}
           permissionMode={permissionMode}
-          onModeSwitch={cyclePermissionMode}
+          availablePermissionModes={availablePermissionModes}
+          onSelectPermissionMode={(mode) => selectPermissionMode(mode as PermissionMode)}
+          providerLabel={selectedProviderLabel}
           effort={currentProviderEffort}
           availableEffortOptions={currentProviderEffortOptions}
           onSelectEffort={(nextEffort) => setStoredProviderEffort(provider, nextEffort)}
+          model={currentProviderModel}
+          availableModelOptions={currentProviderModelOptions}
+          onSelectModel={handleSelectComposerModel}
+          modelsLoading={providerModelsLoading}
           tokenBudget={tokenBudget}
           onShowTokenUsage={showCostModal}
           slashCommandsCount={slashCommandsCount}
@@ -438,16 +467,7 @@ function ChatInterface({
           onTextareaInput={handleTextareaInput}
           isInputFocused={isInputFocused}
           onInputFocusChange={handleInputFocusChange}
-          placeholder={t('input.placeholder', {
-            provider:
-              provider === 'cursor'
-                ? t('messageTypes.cursor')
-                : provider === 'codex'
-                  ? t('messageTypes.codex')
-                  : provider === 'opencode'
-                      ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
-                    : t('messageTypes.claude'),
-          })}
+          placeholder={t('input.placeholder', { provider: selectedProviderLabel })}
           isTextareaExpanded={isTextareaExpanded}
           sendByCtrlEnter={sendByCtrlEnter}
         />

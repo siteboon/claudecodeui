@@ -464,12 +464,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     );
   }, [selectedSession?.id]);
 
-  const cyclePermissionMode = useCallback(() => {
-    const modes = getPermissionModesForProvider(provider);
-
-    const currentIndex = modes.indexOf(permissionMode);
-    const nextIndex = (currentIndex + 1) % modes.length;
-    const nextMode = modes[nextIndex];
+  const selectPermissionMode = useCallback((nextMode: PermissionMode) => {
     setPermissionMode(nextMode);
 
     // Persist per provider as well as per session: a brand-new chat has no
@@ -479,7 +474,20 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     if (selectedSession?.id) {
       localStorage.setItem(`permissionMode-${selectedSession.id}`, nextMode);
     }
-  }, [permissionMode, provider, selectedSession?.id, getPermissionModesForProvider]);
+  }, [provider, selectedSession?.id]);
+
+  const cyclePermissionMode = useCallback(() => {
+    const modes = getPermissionModesForProvider(provider);
+
+    const currentIndex = modes.indexOf(permissionMode);
+    const nextIndex = (currentIndex + 1) % modes.length;
+    selectPermissionMode(modes[nextIndex]);
+  }, [permissionMode, provider, getPermissionModesForProvider, selectPermissionMode]);
+
+  const availablePermissionModes = useMemo(
+    () => getPermissionModesForProvider(provider),
+    [getPermissionModesForProvider, provider],
+  );
 
   const resolvePermissionModeForProvider = useCallback((
     targetProvider: LLMProvider,
@@ -536,6 +544,11 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       providerEfforts[provider] ?? DEFAULT_EFFORT_VALUE,
     );
   }, [provider, providerEfforts, providerModels, reconcileStoredEffort]);
+  const currentProviderModel = providerModels[provider];
+  const currentProviderModelOptions = useMemo(
+    () => providerModelCatalog[provider]?.OPTIONS ?? [],
+    [provider, providerModelCatalog],
+  );
 
   return {
     provider,
@@ -548,13 +561,18 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     setCodexModel,
     currentProviderEffort,
     currentProviderEffortOptions,
+    currentProviderModel,
+    currentProviderModelOptions,
     opencodeModel,
     setOpenCodeModel,
     permissionMode,
     setPermissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
+    availablePermissionModes,
+    selectPermissionMode,
     cyclePermissionMode,
+    setStoredProviderModel,
     providerModelCatalog,
     providerModelCacheCatalog,
     providerModelsLoading,
