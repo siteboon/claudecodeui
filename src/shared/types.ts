@@ -1471,6 +1471,10 @@ export type SidebarProjectListProps = SessionRowActions & {
   isProjectExpanded: (projectId: string) => boolean;
   initialSessionsLoaded: Set<string>;
   currentTime: Date;
+  /** Collapses projects sharing the same trailing folder name into one group; purely presentational, off by default. */
+  groupProjectsByName?: boolean;
+  /** The active project search, so a grouped list does not hide a match behind a collapsed header. */
+  searchFilter?: string;
   deletingProjects: Set<string>;
   tasksEnabled: boolean;
   mcpServerStatus: MCPServerStatus;

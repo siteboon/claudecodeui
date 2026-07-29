@@ -11,6 +11,8 @@ import SettingsToggle from '@/modules/settings/SettingsToggle';
 type AppearanceSettingsTabProps = {
   projectSortOrder: ProjectSortOrder;
   onProjectSortOrderChange: (value: ProjectSortOrder) => void;
+  groupProjectsByName: boolean;
+  onGroupProjectsByNameChange: (value: boolean) => void;
   codeEditorSettings: CodeEditorSettingsState;
   onCodeEditorWordWrapChange: (value: boolean) => void;
   onCodeEditorShowMinimapChange: (value: boolean) => void;
@@ -22,6 +24,8 @@ type AppearanceSettingsTabProps = {
 export default function AppearanceSettingsTab({
   projectSortOrder,
   onProjectSortOrderChange,
+  groupProjectsByName,
+  onGroupProjectsByNameChange,
   codeEditorSettings,
   onCodeEditorWordWrapChange,
   onCodeEditorShowMinimapChange,
@@ -50,7 +54,7 @@ export default function AppearanceSettingsTab({
       </SettingsSection>
 
       <SettingsSection title={t('appearanceSettings.projectSorting.label')}>
-        <SettingsCard>
+        <SettingsCard divided>
           <SettingsRow
             label={t('appearanceSettings.projectSorting.label')}
             description={t('appearanceSettings.projectSorting.description')}
@@ -63,6 +67,17 @@ export default function AppearanceSettingsTab({
               <option value="name">{t('appearanceSettings.projectSorting.alphabetical')}</option>
               <option value="date">{t('appearanceSettings.projectSorting.recentActivity')}</option>
             </select>
+          </SettingsRow>
+
+          <SettingsRow
+            label={t('appearanceSettings.projectGrouping.label')}
+            description={t('appearanceSettings.projectGrouping.description')}
+          >
+            <SettingsToggle
+              checked={groupProjectsByName}
+              onChange={onGroupProjectsByNameChange}
+              ariaLabel={t('appearanceSettings.projectGrouping.label')}
+            />
           </SettingsRow>
         </SettingsCard>
       </SettingsSection>

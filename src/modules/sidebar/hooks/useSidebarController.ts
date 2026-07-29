@@ -12,6 +12,7 @@ import {
 } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import {
   clearLegacyStarredProjectIds,
+  readGroupProjectsByName,
   readLegacyStarredProjectIds,
   readProjectSortOrder,
 } from '@/modules/sidebar/utils/sidebarStoredPreferences';
@@ -89,6 +90,7 @@ export function useSidebarController({
   const [initialSessionsLoaded, setInitialSessionsLoaded] = useState<Set<string>>(new Set());
   const [currentTime, setCurrentTime] = useState(new Date());
   const [projectSortOrder, setProjectSortOrder] = useState<ProjectSortOrder>('name');
+  const [groupProjectsByName, setGroupProjectsByName] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
   const [deletingProjects, setDeletingProjects] = useState<Set<string>>(new Set());
@@ -173,6 +175,7 @@ export function useSidebarController({
   useEffect(() => {
     const loadSortOrder = () => {
       setProjectSortOrder(readProjectSortOrder());
+      setGroupProjectsByName(readGroupProjectsByName());
     };
 
     loadSortOrder();
@@ -1069,6 +1072,7 @@ export function useSidebarController({
     showNewProject,
     initialSessionsLoaded,
     currentTime,
+    groupProjectsByName,
     isRefreshing,
     searchFilter,
     deletingProjects,
