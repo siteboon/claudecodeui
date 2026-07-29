@@ -8,6 +8,7 @@ import {
   isAllowedImageMimeType,
   openStoredAttachmentAsset,
 } from '@/modules/assets/services/image-assets.service.js';
+import { FLAT_MULTIPART_FIELD_NESTING_DEPTH } from '@/shared/multipart-upload-limits.js';
 
 const router = express.Router();
 
@@ -36,6 +37,7 @@ const upload = multer({
     }
   },
   limits: {
+    fieldNestingDepth: FLAT_MULTIPART_FIELD_NESTING_DEPTH,
     fileSize: 5 * 1024 * 1024, // 5MB
     files: 5,
   },
@@ -44,6 +46,7 @@ const upload = multer({
 const attachmentUpload = multer({
   storage,
   limits: {
+    fieldNestingDepth: FLAT_MULTIPART_FIELD_NESTING_DEPTH,
     fileSize: 10 * 1024 * 1024,
     files: 10,
   },
