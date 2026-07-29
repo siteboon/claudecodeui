@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+
 import { DarkModeToggle } from '../../../../shared/view/ui';
 import type { CodeEditorSettingsState, ProjectSortOrder } from '../../types/types';
 import LanguageSelector from '../../../../shared/view/ui/LanguageSelector';
@@ -10,6 +11,8 @@ import SettingsToggle from '../SettingsToggle';
 type AppearanceSettingsTabProps = {
   projectSortOrder: ProjectSortOrder;
   onProjectSortOrderChange: (value: ProjectSortOrder) => void;
+  groupProjectsByName: boolean;
+  onGroupProjectsByNameChange: (value: boolean) => void;
   codeEditorSettings: CodeEditorSettingsState;
   onCodeEditorWordWrapChange: (value: boolean) => void;
   onCodeEditorShowMinimapChange: (value: boolean) => void;
@@ -20,6 +23,8 @@ type AppearanceSettingsTabProps = {
 export default function AppearanceSettingsTab({
   projectSortOrder,
   onProjectSortOrderChange,
+  groupProjectsByName,
+  onGroupProjectsByNameChange,
   codeEditorSettings,
   onCodeEditorWordWrapChange,
   onCodeEditorShowMinimapChange,
@@ -48,7 +53,7 @@ export default function AppearanceSettingsTab({
       </SettingsSection>
 
       <SettingsSection title={t('appearanceSettings.projectSorting.label')}>
-        <SettingsCard>
+        <SettingsCard divided>
           <SettingsRow
             label={t('appearanceSettings.projectSorting.label')}
             description={t('appearanceSettings.projectSorting.description')}
@@ -56,11 +61,22 @@ export default function AppearanceSettingsTab({
             <select
               value={projectSortOrder}
               onChange={(event) => onProjectSortOrderChange(event.target.value as ProjectSortOrder)}
-              className="w-full rounded-lg border border-input bg-card p-2.5 text-sm text-foreground touch-manipulation focus:border-primary focus:ring-1 focus:ring-primary sm:w-36"
+              className="w-full touch-manipulation rounded-lg border border-input bg-card p-2.5 text-sm text-foreground focus:border-primary focus:ring-1 focus:ring-primary sm:w-36"
             >
               <option value="name">{t('appearanceSettings.projectSorting.alphabetical')}</option>
               <option value="date">{t('appearanceSettings.projectSorting.recentActivity')}</option>
             </select>
+          </SettingsRow>
+
+          <SettingsRow
+            label={t('appearanceSettings.projectGrouping.label')}
+            description={t('appearanceSettings.projectGrouping.description')}
+          >
+            <SettingsToggle
+              checked={groupProjectsByName}
+              onChange={onGroupProjectsByNameChange}
+              ariaLabel={t('appearanceSettings.projectGrouping.label')}
+            />
           </SettingsRow>
         </SettingsCard>
       </SettingsSection>
@@ -107,7 +123,7 @@ export default function AppearanceSettingsTab({
             <select
               value={codeEditorSettings.fontSize}
               onChange={(event) => onCodeEditorFontSizeChange(event.target.value)}
-              className="w-full rounded-lg border border-input bg-card p-2.5 text-sm text-foreground touch-manipulation focus:border-primary focus:ring-1 focus:ring-primary sm:w-28"
+              className="w-full touch-manipulation rounded-lg border border-input bg-card p-2.5 text-sm text-foreground focus:border-primary focus:ring-1 focus:ring-primary sm:w-28"
             >
               <option value="10">10px</option>
               <option value="11">11px</option>

@@ -141,5 +141,9 @@
     "deleteAllData": "Supprimer toutes les données définitivement",
     "allConversationsDeleted": "Le projet sera retiré de la barre latérale. Vos fichiers, mémoires et données de session seront conservés.",
     "cannotUndo": "Vous pourrez rajouter le projet ultérieurement."
+  },
+  "projectGroup": {
+    "locations_one": "{{count}} chemin",
+    "locations_other": "{{count}} chemins"
   }
 }

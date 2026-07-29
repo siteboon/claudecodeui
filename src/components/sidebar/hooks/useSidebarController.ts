@@ -18,6 +18,7 @@ import {
   clearLegacyStarredProjectIds,
   filterProjects,
   getAllSessions,
+  readGroupProjectsByName,
   readLegacyStarredProjectIds,
   readProjectSortOrder,
   sortProjects,
@@ -124,6 +125,7 @@ export function useSidebarController({
   const [initialSessionsLoaded, setInitialSessionsLoaded] = useState<Set<string>>(new Set());
   const [currentTime, setCurrentTime] = useState(new Date());
   const [projectSortOrder, setProjectSortOrder] = useState<ProjectSortOrder>('name');
+  const [groupProjectsByName, setGroupProjectsByName] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [editingSession, setEditingSession] = useState<string | null>(null);
   const [editingSessionName, setEditingSessionName] = useState('');
@@ -198,6 +200,7 @@ export function useSidebarController({
   useEffect(() => {
     const loadSortOrder = () => {
       setProjectSortOrder(readProjectSortOrder());
+      setGroupProjectsByName(readGroupProjectsByName());
     };
 
     loadSortOrder();
@@ -935,6 +938,7 @@ export function useSidebarController({
     initialSessionsLoaded,
     currentTime,
     projectSortOrder,
+    groupProjectsByName,
     isRefreshing,
     editingSession,
     editingSessionName,

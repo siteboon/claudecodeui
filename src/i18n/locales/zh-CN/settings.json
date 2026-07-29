@@ -132,6 +132,10 @@
       "alphabetical": "按字母顺序",
       "recentActivity": "最近活动"
     },
+    "projectGrouping": {
+      "label": "按名称分组项目",
+      "description": "将来自不同路径但文件夹名相同的项目合并为一组"
+    },
     "codeEditor": {
       "title": "代码编辑器",
       "theme": {

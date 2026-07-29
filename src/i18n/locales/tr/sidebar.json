@@ -141,5 +141,9 @@
     "deleteAllData": "Tüm veriyi kalıcı olarak sil",
     "allConversationsDeleted": "Proje kenar çubuğundan kaldırılacak. Dosyaların, bellek verilerin ve oturum verilerin korunacak.",
     "cannotUndo": "Projeyi sonra tekrar ekleyebilirsin."
+  },
+  "projectGroup": {
+    "locations_one": "{{count}} yol",
+    "locations_other": "{{count}} yol"
   }
 }

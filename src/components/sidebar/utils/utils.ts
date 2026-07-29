@@ -17,6 +17,57 @@ export const readProjectSortOrder = (): ProjectSortOrder => {
   }
 };
 
+export const readGroupProjectsByName = (): boolean => {
+  try {
+    const rawSettings = localStorage.getItem('claude-settings');
+    if (!rawSettings) {
+      return false;
+    }
+
+    const settings = JSON.parse(rawSettings) as { groupProjectsByName?: boolean };
+    return settings.groupProjectsByName === true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Trailing path segment of a project's full path, tolerant of both `/` and `\`
+ * separators so paths recorded on different machines (macOS/Linux vs Windows)
+ * produce the same key for the same project folder name.
+ */
+export const getProjectGroupKey = (project: Project): string => {
+  const fullPath = String(project.fullPath || project.path || '').replace(/\\/g, '/');
+  const segments = fullPath.split('/').filter((segment) => segment.length > 0);
+  return segments[segments.length - 1] || project.displayName || project.projectId;
+};
+
+export type ProjectGroup = {
+  key: string;
+  projects: Project[];
+};
+
+/**
+ * Groups projects whose paths share the same trailing folder name, preserving
+ * the incoming (already sorted) order by first occurrence. Purely visual: the
+ * grouped projects keep their own identity, sessions and actions.
+ */
+export const groupProjectsByBasename = (projects: Project[]): ProjectGroup[] => {
+  const groups = new Map<string, ProjectGroup>();
+
+  for (const project of projects) {
+    const key = getProjectGroupKey(project);
+    const group = groups.get(key);
+    if (group) {
+      group.projects.push(project);
+    } else {
+      groups.set(key, { key, projects: [project] });
+    }
+  }
+
+  return Array.from(groups.values());
+};
+
 const LEGACY_STARRED_PROJECTS_STORAGE_KEY = 'starredProjects';
 
 /**

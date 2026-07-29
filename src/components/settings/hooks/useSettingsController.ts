@@ -34,6 +34,7 @@ type ClaudeSettingsStorage = {
   disallowedTools?: string[];
   skipPermissions?: boolean;
   projectSortOrder?: ProjectSortOrder;
+  groupProjectsByName?: boolean;
 };
 
 type CursorSettingsStorage = {
@@ -144,6 +145,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
   const [activeTab, setActiveTab] = useState<SettingsMainTab>(() => normalizeMainTab(initialTab));
   const [saveStatus, setSaveStatus] = useState<'success' | 'error' | null>(null);
   const [projectSortOrder, setProjectSortOrder] = useState<ProjectSortOrder>('name');
+  const [groupProjectsByName, setGroupProjectsByName] = useState<boolean>(false);
   const [codeEditorSettings, setCodeEditorSettings] = useState<CodeEditorSettingsState>(() => (
     readCodeEditorSettings()
   ));
@@ -179,6 +181,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
         skipPermissions: Boolean(savedClaudeSettings.skipPermissions),
       });
       setProjectSortOrder(savedClaudeSettings.projectSortOrder === 'date' ? 'date' : 'name');
+      setGroupProjectsByName(savedClaudeSettings.groupProjectsByName === true);
 
       const savedCursorSettings = parseJson<CursorSettingsStorage>(
         localStorage.getItem('cursor-tools-settings'),
@@ -253,6 +256,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
         disallowedTools: claudePermissions.disallowedTools,
         skipPermissions: claudePermissions.skipPermissions,
         projectSortOrder,
+        groupProjectsByName,
         lastUpdated: now,
       }));
 
@@ -291,6 +295,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     cursorPermissions.skipPermissions,
     notificationPreferences,
     projectSortOrder,
+    groupProjectsByName,
   ]);
 
   const updateCodeEditorSetting = useCallback(
@@ -384,6 +389,8 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     saveStatus,
     projectSortOrder,
     setProjectSortOrder,
+    groupProjectsByName,
+    setGroupProjectsByName,
     codeEditorSettings,
     updateCodeEditorSetting,
     claudePermissions,

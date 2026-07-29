@@ -147,5 +147,11 @@
     "deleteAllData": "Удалить все данные навсегда",
     "allConversationsDeleted": "Проект будет убран из боковой панели. Ваши файлы, воспоминания и данные сеансов сохранятся.",
     "cannotUndo": "Вы сможете добавить проект позже."
+  },
+  "projectGroup": {
+    "locations_one": "{{count}} путь",
+    "locations_few": "{{count}} пути",
+    "locations_many": "{{count}} путей",
+    "locations_other": "{{count}} путей"
   }
 }

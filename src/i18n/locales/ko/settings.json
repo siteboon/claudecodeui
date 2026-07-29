@@ -131,6 +131,10 @@
       "alphabetical": "알파벳순",
       "recentActivity": "최근 활동순"
     },
+    "projectGrouping": {
+      "label": "이름별 프로젝트 그룹화",
+      "description": "같은 폴더 이름을 가진 서로 다른 경로의 프로젝트를 하나의 그룹으로 묶습니다"
+    },
     "codeEditor": {
       "title": "코드 에디터",
       "theme": {
