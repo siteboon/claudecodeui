@@ -33,6 +33,40 @@ type ArchivedSessionListItem = {
 };
 
 /**
+ * Mirrors a rename into the Claude transcript as a `custom-title` event.
+ *
+ * Claude Code appends the same event on `/rename` and reads the last one back
+ * for its own session list, so writing it keeps both sides on the newest name
+ * and lets the session synchronizer re-derive the stored name from disk.
+ * Best effort by design: a missing or unwritable transcript must not fail the
+ * rename, which has already been persisted.
+ */
+async function appendClaudeCustomTitle(
+  session: { session_id: string; provider: string; provider_session_id: string | null; jsonl_path: string | null },
+  customTitle: string
+): Promise<void> {
+  if (session.provider !== 'claude' || !session.jsonl_path) {
+    return;
+  }
+
+  const event = JSON.stringify({
+    type: 'custom-title',
+    customTitle,
+    sessionId: session.provider_session_id ?? session.session_id,
+  });
+
+  try {
+    // Never create the transcript: appendFile would happily materialize a file
+    // that Claude never wrote, leaving an orphan in ~/.claude/projects.
+    await fsp.access(session.jsonl_path);
+    await fsp.appendFile(session.jsonl_path, `${event}\n`, 'utf8');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`Failed to record rename in Claude transcript for session ${session.session_id}:`, message);
+  }
+}
+
+/**
  * Removes one file if it exists.
  */
 async function removeFileIfExists(filePath: string): Promise<boolean> {
@@ -293,7 +327,7 @@ export const sessionsService = {
   /**
    * Renames one session by id without requiring the caller to pass provider.
    */
-  renameSessionById(sessionId: string, summary: string): { sessionId: string; summary: string } {
+  async renameSessionById(sessionId: string, summary: string): Promise<{ sessionId: string; summary: string }> {
     const session = sessionsDb.getSessionById(sessionId);
     if (!session) {
       throw new AppError(`Session "${sessionId}" was not found.`, {
@@ -303,6 +337,7 @@ export const sessionsService = {
     }
 
     sessionsDb.updateSessionCustomName(sessionId, summary);
+    await appendClaudeCustomTitle(session, summary);
     return { sessionId, summary };
   },
 };

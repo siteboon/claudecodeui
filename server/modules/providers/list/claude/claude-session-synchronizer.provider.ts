@@ -18,6 +18,12 @@ type ParsedSession = {
   sessionName?: string;
 };
 
+type TranscriptTitles = {
+  customTitle?: string;
+  aiTitle?: string;
+  lastPrompt?: string;
+};
+
 /**
  * Session indexer for Claude transcript artifacts.
  */
@@ -137,18 +143,21 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     // ids must be resolved through the provider-id mapping first.
     const existingSession = sessionsDb.getSessionByProviderSessionId(parsed.sessionId)
       ?? sessionsDb.getSessionById(parsed.sessionId);
-    const existingSessionName = existingSession?.custom_name;
-    if (existingSessionName && existingSessionName !== 'Untitled Claude Session') {
-      return {
-        ...parsed,
-        sessionName: normalizeSessionName(existingSessionName, 'Untitled Claude Session'),
-      };
-    }
+    const existingSessionName = existingSession?.custom_name !== 'Untitled Claude Session'
+      ? existingSession?.custom_name ?? undefined
+      : undefined;
 
-    let sessionName = nameMap.get(parsed.sessionId);
-    if (!sessionName) {
-      sessionName = await this.extractSessionAiTitleFromEnd(filePath, parsed.sessionId);
-    }
+    // The transcript is the source of truth for explicit names: `/rename` in the
+    // Claude CLI and a rename in this UI both land as a `custom-title` event, and
+    // the reverse scan below returns the newest one. The stored name only ranks
+    // above the history.jsonl first prompt so a UI rename whose transcript
+    // write-back failed is not silently reverted to that prompt.
+    const titles = await this.extractSessionTitlesFromEnd(filePath, parsed.sessionId);
+    const sessionName = titles.customTitle
+      ?? titles.aiTitle
+      ?? existingSessionName
+      ?? nameMap.get(parsed.sessionId)
+      ?? titles.lastPrompt;
 
     return {
       ...parsed,
@@ -156,10 +165,19 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     };
   }
 
-  private async extractSessionAiTitleFromEnd(
+  /**
+   * Collects the newest title-bearing transcript events for one session.
+   *
+   * Scans backwards so the last event of each type wins, matching how Claude
+   * itself resolves these `last-wins` records; the scan stops as soon as a
+   * `custom-title` is found because nothing outranks it.
+   */
+  private async extractSessionTitlesFromEnd(
     filePath: string,
     sessionId: string
-  ): Promise<string | undefined> {
+  ): Promise<TranscriptTitles> {
+    const titles: TranscriptTitles = {};
+
     try {
       const content = await readFile(filePath, 'utf8');
       const lines = content.split(/\r?\n/);
@@ -180,22 +198,29 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         const data = parsed as Record<string, unknown>;
         const eventType = typeof data.type === 'string' ? data.type : undefined;
         const eventSessionId = typeof data.sessionId === 'string' ? data.sessionId : undefined;
+        if (!eventType || eventSessionId !== sessionId) {
+          continue;
+        }
+
         const aiTitle = typeof data.aiTitle === 'string' ? data.aiTitle : undefined;
         const lastPrompt = typeof data.lastPrompt === 'string' ? data.lastPrompt : undefined;
-        const claudeRenamedTitle = typeof data.customTitle === 'string' ? data.customTitle : undefined;
+        const customTitle = typeof data.customTitle === 'string' ? data.customTitle : undefined;
 
-        if (
-          (eventType === 'ai-title' && eventSessionId === sessionId && aiTitle?.trim()) ||
-          (eventType === 'last-prompt' && eventSessionId === sessionId && lastPrompt?.trim()) ||
-          (eventType === "custom-title" && eventSessionId === sessionId && claudeRenamedTitle?.trim())
-        ) {
-          return aiTitle || lastPrompt || claudeRenamedTitle;
+        if (eventType === 'custom-title' && customTitle?.trim()) {
+          titles.customTitle = customTitle;
+          break;
+        }
+        if (eventType === 'ai-title' && aiTitle?.trim()) {
+          titles.aiTitle ??= aiTitle;
+        }
+        if (eventType === 'last-prompt' && lastPrompt?.trim()) {
+          titles.lastPrompt ??= lastPrompt;
         }
       }
     } catch {
       // Ignore missing/unreadable files so sync can continue.
     }
 
-    return undefined;
+    return titles;
   }
 }
