@@ -176,5 +176,9 @@
     "archiveSessions_other": "Archive {{count}} sessions",
     "archiveSessionsNotice_one": "Archive keeps the session out of the active list while preserving its history.",
     "archiveSessionsNotice_other": "Archive keeps the sessions out of the active list while preserving their history."
+  },
+  "projectGroup": {
+    "locations_one": "{{count}} path",
+    "locations_other": "{{count}} paths"
   }
 }
