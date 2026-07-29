@@ -52,8 +52,11 @@ test('session archive queries hide archived rows from active project views', asy
   });
 });
 
-test('createSession reactivates archived rows when the session becomes active again', async () => {
+test('createSession preserves isArchived when a session is re-synced (does not un-archive)', async () => {
   await withIsolatedDatabase(() => {
+    // Regression coverage for B2: createSession runs on every full sync, not
+    // just on real activity, so it must never force an archived row back to
+    // active — that silently un-archives anything the user archived in the UI.
     sessionsDb.createSession('session-reused', 'claude', '/workspace/demo-project', 'First Name');
     sessionsDb.updateSessionIsArchived('session-reused', true);
 
@@ -63,11 +66,29 @@ test('createSession reactivates archived rows when the session becomes active ag
     const archivedSessions = sessionsDb.getArchivedSessions();
     const restoredSession = sessionsDb.getSessionById('session-reused');
 
-    assert.equal(activeSessions.length, 1);
-    assert.equal(activeSessions[0]?.session_id, 'session-reused');
-    assert.equal(activeSessions[0]?.custom_name, 'Updated Name');
-    assert.equal(archivedSessions.length, 0);
-    assert.equal(restoredSession?.isArchived, 0);
+    assert.equal(activeSessions.length, 0);
+    assert.equal(archivedSessions.length, 1);
+    assert.equal(archivedSessions[0]?.session_id, 'session-reused');
+    assert.equal(archivedSessions[0]?.custom_name, 'Updated Name');
+    assert.equal(restoredSession?.isArchived, 1);
+  });
+});
+
+test('createSession preserves isArchived on the ON CONFLICT(session_id) legacy path', async () => {
+  await withIsolatedDatabase(() => {
+    // Legacy rows predate the provider_session_id mapping: session_id itself
+    // is the provider-native id, and provider_session_id is left NULL. That
+    // means the `existing` lookup by provider_session_id misses, so
+    // createSession falls through to the INSERT ... ON CONFLICT(session_id)
+    // path instead of the UPDATE path exercised above.
+    sessionsDb.createAppSession('legacy-session', 'claude', '/workspace/demo-project');
+    sessionsDb.updateSessionIsArchived('legacy-session', true);
+
+    sessionsDb.createSession('legacy-session', 'claude', '/workspace/demo-project', 'Updated Name');
+
+    const restoredSession = sessionsDb.getSessionById('legacy-session');
+    assert.equal(restoredSession?.isArchived, 1);
+    assert.equal(restoredSession?.custom_name, 'Updated Name');
   });
 });
 
