@@ -80,7 +80,6 @@ function ChatInterface({
     availablePermissionModes,
     selectPermissionMode,
     cyclePermissionMode,
-    setStoredProviderModel,
     providerModelCatalog,
     providerModelCacheCatalog,
     providerModelsLoading,
@@ -202,11 +201,8 @@ function ChatInterface({
     provider,
     permissionMode,
     cyclePermissionMode,
-    cursorModel,
-    claudeModel,
-    codexModel,
+    currentProviderModel,
     currentProviderEffort,
-    opencodeModel,
     isLoading: isProcessing,
     processingSessions,
     canAbortSession,
@@ -291,23 +287,15 @@ function ChatInterface({
     handlePermissionDecision,
   }), [pendingPermissionRequests, handlePermissionDecision]);
 
-  // Composer model picks are stored locally (that is the model every send
-  // carries) and, when a session is already live, also pushed to the provider
-  // so the running session switches on its next turn.
+  // A composer pick becomes the default for new chats and, when a session is
+  // open, is recorded against that session so reopening it restores this model.
   const handleSelectComposerModel = useCallback(async (model: string) => {
-    setStoredProviderModel(provider, model);
-
-    const sessionId = currentSessionId || selectedSession?.id || null;
-    if (!sessionId) {
-      return;
-    }
-
     try {
-      await selectProviderModel(provider, model, sessionId);
+      await selectProviderModel(provider, model, currentSessionId || selectedSession?.id || null);
     } catch (error) {
       console.error('Error changing the active session model:', error);
     }
-  }, [currentSessionId, provider, selectProviderModel, selectedSession?.id, setStoredProviderModel]);
+  }, [currentSessionId, provider, selectProviderModel, selectedSession?.id]);
 
   // Mirrors ChatComposer's own visibility check so the message pane can
   // reserve enough bottom space to keep the floating status tab from

@@ -46,31 +46,26 @@ const readModelProvider = (value) => {
   return MODEL_PROVIDERS.includes(normalized) ? normalized : "claude";
 };
 
-const hasConcreteSessionId = (value) =>
-  typeof value === "string" && value.trim().length > 0;
-
-const resolveCommandModel = async (modelsService, provider, catalog, sessionId) => {
-  if (!hasConcreteSessionId(sessionId)) {
-    return catalog.DEFAULT;
-  }
-
-  const currentActiveModel = await modelsService.getCurrentActiveModel(
-    provider,
-    sessionId,
-  );
-  return currentActiveModel?.model || catalog.DEFAULT;
+/**
+ * Resolves the model a command should report.
+ *
+ * `context.model` is what the composer would send right now, so it stands in
+ * for a chat that has no session row yet; the service prefers the session's own
+ * recorded model whenever there is one.
+ */
+const resolveCommandModel = async (modelsService, provider, context) => {
+  const resolved = await modelsService.resolveSessionModel(provider, {
+    sessionId: context?.sessionId,
+    requestedModel: context?.model,
+  });
+  return resolved.model;
 };
 
 const executeModelsCommand = async (args, context, modelsService) => {
   const currentProvider = readModelProvider(context?.provider);
   const result = await modelsService.getProviderModels(currentProvider);
   const catalog = result.models;
-  const currentModel = await resolveCommandModel(
-    modelsService,
-    currentProvider,
-    catalog,
-    context?.sessionId,
-  );
+  const currentModel = await resolveCommandModel(modelsService, currentProvider, context);
   const availableModels = catalog.OPTIONS.map((option) => option.value);
   const availableOptions = catalog.OPTIONS.map((option) => ({
     value: option.value,
@@ -268,8 +263,7 @@ Custom commands can be created in:
   "/cost": async (args, context) => {
     const tokenUsage = context?.tokenUsage || {};
     const provider = readModelProvider(context?.provider);
-    const catalog = (await providerModelsService.getProviderModels(provider)).models;
-    const model = await resolveCommandModel(provider, catalog, context?.sessionId);
+    const model = await resolveCommandModel(providerModelsService, provider, context);
 
     const reportedUsed =
       Number(
@@ -371,8 +365,7 @@ Custom commands can be created in:
         : `${uptimeMinutes}m`;
 
     const statusProvider = readModelProvider(context?.provider);
-    const statusCatalog = (await providerModelsService.getProviderModels(statusProvider)).models;
-    const model = await resolveCommandModel(statusProvider, statusCatalog, context?.sessionId);
+    const model = await resolveCommandModel(providerModelsService, statusProvider, context);
     const memoryUsage = process.memoryUsage();
 
     return {

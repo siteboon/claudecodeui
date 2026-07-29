@@ -42,11 +42,12 @@ interface UseChatComposerStateArgs {
   permissionMode: PermissionMode | string;
   cyclePermissionMode: () => void;
   resolvePermissionModeForProvider: (provider: LLMProvider, requestedMode: PermissionMode | string) => PermissionMode;
-  cursorModel: string;
-  claudeModel: string;
-  codexModel: string;
+  /**
+   * Model every send and command carries: the open session's model when there
+   * is one, otherwise the user's per-provider selection.
+   */
+  currentProviderModel: string;
   currentProviderEffort: string;
-  opencodeModel: string;
   isLoading: boolean;
   processingSessions?: SessionActivityMap;
   canAbortSession: boolean;
@@ -240,11 +241,8 @@ export function useChatComposerState({
   permissionMode,
   cyclePermissionMode,
   resolvePermissionModeForProvider,
-  cursorModel,
-  claudeModel,
-  codexModel,
+  currentProviderModel,
   currentProviderEffort,
-  opencodeModel,
   isLoading,
   processingSessions,
   canAbortSession,
@@ -422,15 +420,9 @@ export function useChatComposerState({
         const context = {
           projectPath: selectedProject.fullPath || selectedProject.path,
           projectId: selectedProject.projectId,
-          sessionId: currentSessionId,
+          sessionId: currentSessionId || selectedSession?.id || null,
           provider,
-          model: provider === 'cursor'
-            ? cursorModel
-            : provider === 'codex'
-              ? codexModel
-              : provider === 'opencode'
-                  ? opencodeModel
-                  : claudeModel,
+          model: currentProviderModel,
           tokenUsage: tokenBudget,
         };
 
@@ -479,16 +471,14 @@ export function useChatComposerState({
       }
     },
     [
-      claudeModel,
-      codexModel,
+      currentProviderModel,
       currentSessionId,
-      cursorModel,
-      opencodeModel,
       handleBuiltInCommand,
       handleCustomCommand,
       input,
       provider,
       selectedProject,
+      selectedSession?.id,
       addMessage,
       tokenBudget,
     ],
@@ -662,17 +652,9 @@ export function useChatComposerState({
     };
 
     const toolsSettings = getToolsSettings();
-    const model =
-      provider === 'cursor'
-        ? cursorModel
-        : provider === 'codex'
-          ? codexModel
-          : provider === 'opencode'
-            ? opencodeModel
-            : claudeModel;
 
     return {
-      model,
+      model: currentProviderModel,
       effort: currentProviderEffort,
       permissionMode: resolvePermissionModeForProvider(provider, permissionMode),
       toolsSettings,
@@ -680,11 +662,8 @@ export function useChatComposerState({
       sessionSummary: getNotificationSessionSummary(selectedSession, currentInput),
     };
   }, [
-    claudeModel,
-    codexModel,
     currentProviderEffort,
-    cursorModel,
-    opencodeModel,
+    currentProviderModel,
     permissionMode,
     provider,
     resolvePermissionModeForProvider,

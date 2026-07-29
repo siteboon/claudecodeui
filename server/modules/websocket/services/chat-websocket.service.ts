@@ -3,6 +3,7 @@ import path from 'node:path';
 import type { WebSocket } from 'ws';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import { providerModelsService } from '@/modules/providers/index.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
 import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
 import {
@@ -191,6 +192,13 @@ async function handleChatSend(
 
   const clientOptions = (data.options ?? {}) as AnyRecord;
   const command = typeof data.content === 'string' ? data.content : '';
+
+  // Record what this turn runs with so reopening the session later restores the
+  // same model, and so the resume path has a session-scoped answer to use.
+  if (typeof clientOptions.model === 'string' && clientOptions.model.trim()) {
+    providerModelsService.setSessionModel(provider, sessionId, clientOptions.model);
+  }
+
   const attachmentCandidates = [
     ...normalizeAttachmentDescriptors(clientOptions.images),
     ...normalizeAttachmentDescriptors(clientOptions.files),

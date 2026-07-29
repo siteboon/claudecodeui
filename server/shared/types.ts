@@ -132,34 +132,32 @@ export type ProviderCurrentActiveModel = {
 };
 
 /**
- * Input payload used when one session needs to use a different model on its
- * next resumed turn.
+ * Where a resolved session model came from.
  *
- * This is a backend-owned session override, not a claim that the provider has
- * already switched the currently running session in-place. Provider adapters
- * persist this request so the next CLI/SDK resume can inject the chosen model
- * using the provider-specific mechanism supported by that runtime.
+ * `session` means the app has recorded a model for this session (the user
+ * picked one, or the session has been sent on at least once) and that value is
+ * authoritative. `provider` means the session predates any app-recorded model
+ * and the value was read back from the provider's own session state — the case
+ * for sessions started directly in a provider CLI. `default` means neither was
+ * available and the catalog default is standing in.
+ *
+ * Routes surface this so the frontend can tell a real selection apart from a
+ * placeholder without re-deriving the precedence chain.
  */
-export type ProviderChangeActiveModelInput = {
-  sessionId: string;
-  model: string;
-};
+export type ProviderSessionModelSource = 'session' | 'provider' | 'default';
 
 /**
- * Provider-neutral session model-change state.
+ * The model one session runs with, plus where that answer came from.
  *
- * `supported` indicates whether the provider adapter supports the app's
- * session-scoped resume override flow. `changed` is the persisted boolean the
- * resume layer checks before forcing a model on the next resumed turn. When
- * `changed` is `false`, `model` is `null` and the runtime should use the
- * normal request/default model selection path.
+ * Returned by `providerModelsService.resolveSessionModel` and used by the
+ * `/models`, `/cost` and `/status` commands, the active-model route, and the
+ * composer's model picker so every surface agrees on one answer.
  */
-export type ProviderSessionActiveModelChange = {
+export type ProviderSessionModel = {
   provider: LLMProvider;
-  sessionId: string;
-  supported: boolean;
-  changed: boolean;
-  model: string | null;
+  sessionId: string | null;
+  model: string;
+  source: ProviderSessionModelSource;
 };
 
 /**
