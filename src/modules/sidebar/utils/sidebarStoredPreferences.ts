@@ -5,6 +5,10 @@ export const readProjectSortOrder = (): ProjectSortOrder => (
   readUserPreference<ProjectSortOrder>('projectSortOrder', 'name') === 'date' ? 'date' : 'name'
 );
 
+export const readGroupProjectsByName = (): boolean => (
+  readUserPreference<boolean>('groupProjectsByName', false) === true
+);
+
 const LEGACY_STARRED_PROJECTS_STORAGE_KEY = 'starredProjects';
 
 /**
