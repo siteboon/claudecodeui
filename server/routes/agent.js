@@ -2,7 +2,6 @@ import express from 'express';
 // cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
 import spawn from 'cross-spawn';
 import path from 'path';
-import os from 'os';
 import { promises as fs } from 'fs';
 import crypto from 'crypto';
 import { userDb, apiKeysDb, githubTokensDb, projectsDb } from '../modules/database/index.js';
@@ -14,6 +13,7 @@ import { Octokit } from '@octokit/rest';
 import { providerModelsService } from '../modules/providers/services/provider-models.service.js';
 import { IS_PLATFORM } from '../constants/config.js';
 import { normalizeProjectPath } from '../shared/utils.js';
+import { getClaudeConfigDir } from '../shared/claude-config-dir.js';
 
 const router = express.Router();
 
@@ -434,7 +434,7 @@ async function cleanupProject(projectPath, sessionId = null) {
     // Also clean up the Claude session directory if sessionId provided
     if (sessionId) {
       try {
-        const sessionPath = path.join(os.homedir(), '.claude', 'sessions', sessionId);
+        const sessionPath = path.join(getClaudeConfigDir(), 'sessions', sessionId);
         console.log('🧹 Cleaning up session directory:', sessionPath);
         await fs.rm(sessionPath, { recursive: true, force: true });
         console.log('✅ Session directory cleaned up');
@@ -895,7 +895,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       } else {
         // Generate a unique path for cloning
         const repoHash = crypto.createHash('md5').update(githubUrl + Date.now()).digest('hex');
-        targetPath = path.join(os.homedir(), '.claude', 'external-projects', repoHash);
+        targetPath = path.join(getClaudeConfigDir(), 'external-projects', repoHash);
       }
 
       finalProjectPath = await cloneGitHubRepo(githubUrl.trim(), tokenToUse, targetPath);

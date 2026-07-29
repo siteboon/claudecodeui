@@ -161,6 +161,7 @@ export default tseslint.config(
             "server/shared/utils.{js,ts}",
             "server/shared/frontmatter.ts",
             "server/shared/claude-cli-path.ts",
+            "server/shared/claude-config-dir.ts",
             "server/shared/image-attachments.ts",
           ], // classify shared utility files so modules can depend on them explicitly
           mode: "file",

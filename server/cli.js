@@ -18,6 +18,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
+import { getClaudeConfigDir } from './shared/claude-config-dir.js';
 
 const __dirname = getModuleDir(import.meta.url);
 // The CLI is compiled into dist-server/server, but it still needs to read the top-level
@@ -120,9 +121,10 @@ function showStatus() {
     console.log(`       DATABASE_PATH: ${c.dim(process.env.DATABASE_PATH || '(using default location)')}`);
     console.log(`       CLAUDE_CLI_PATH: ${c.dim(process.env.CLAUDE_CLI_PATH || 'claude (default)')}`);
     console.log(`       CONTEXT_WINDOW: ${c.dim(process.env.CONTEXT_WINDOW || '160000 (default)')}`);
+    console.log(`       CLAUDE_CONFIG_DIR: ${c.dim(process.env.CLAUDE_CONFIG_DIR || '(using default ~/.claude)')}`);
 
     // Claude projects folder
-    const claudeProjectsPath = path.join(os.homedir(), '.claude', 'projects');
+    const claudeProjectsPath = path.join(getClaudeConfigDir(), 'projects');
     const projectsExists = fs.existsSync(claudeProjectsPath);
     console.log(`\n${c.info('[INFO]')} Claude Projects Folder:`);
     console.log(`       ${c.dim(claudeProjectsPath)}`);
