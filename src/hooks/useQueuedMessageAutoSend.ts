@@ -8,7 +8,7 @@ interface UseQueuedMessageAutoSendArgs {
   processingSessions: SessionActivityMap;
   /**
    * The session currently open in the chat view. Its queued draft is owned by
-   * the composer (which also handles image attachments and slash commands),
+   * the composer (which also handles file attachments and slash commands),
    * so this hook never touches it.
    */
   activeSessionId: string | null;
@@ -62,7 +62,7 @@ export function useQueuedMessageAutoSend({
         type: 'chat.send',
         sessionId,
         content: queued.content,
-        options: { ...(queued.options ?? {}), images: [] },
+        options: { ...(queued.options ?? {}), attachments: queued.attachments ?? queued.images ?? [] },
       });
       markSessionProcessing(sessionId, { statusText: null, canInterrupt: true });
     }

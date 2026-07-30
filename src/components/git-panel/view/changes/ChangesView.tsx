@@ -22,7 +22,6 @@ type ChangesViewProps = {
   onStageFiles: (files: string[]) => Promise<boolean>;
   onUnstageFiles: (files: string[]) => Promise<boolean>;
   onCommitChanges: (message: string, files: string[]) => Promise<boolean>;
-  onGenerateCommitMessage: (files: string[]) => Promise<string | null>;
   onRequestConfirmation: (request: ConfirmationRequest) => void;
   onExpandedFilesChange: (hasExpandedFiles: boolean) => void;
 };
@@ -43,7 +42,6 @@ export default function ChangesView({
   onStageFiles,
   onUnstageFiles,
   onCommitChanges,
-  onGenerateCommitMessage,
   onRequestConfirmation,
   onExpandedFilesChange,
 }: ChangesViewProps) {
@@ -157,10 +155,6 @@ export default function ChangesView({
     [onCommitChanges, selectedFiles],
   );
 
-  const generateMessageForSelection = useCallback(() => {
-    return onGenerateCommitMessage(Array.from(selectedFiles));
-  }, [onGenerateCommitMessage, selectedFiles]);
-
   const unstagedFiles = useMemo(
     () => new Set(changedFiles.filter((f) => !selectedFiles.has(f))),
     [changedFiles, selectedFiles],
@@ -174,7 +168,6 @@ export default function ChangesView({
         selectedFileCount={selectedFiles.size}
         isHidden={hasExpandedFiles}
         onCommit={commitSelectedFiles}
-        onGenerateMessage={generateMessageForSelection}
         onRequestConfirmation={onRequestConfirmation}
       />
 
@@ -185,7 +178,7 @@ export default function ChangesView({
           <div className="flex h-32 items-center justify-center">
             <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
-        ) : gitStatus?.hasCommits === false ? (
+        ) : gitStatus?.hasCommits === false && hasChangedFiles(gitStatus) ? (
           <div className="flex flex-col items-center justify-center p-8 text-center">
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/50">
               <GitBranch className="h-7 w-7 text-muted-foreground/50" />

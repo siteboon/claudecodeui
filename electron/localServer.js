@@ -404,7 +404,7 @@ export class LocalServerController {
     this.appendStartupLog(`$ ${command}`);
     this.appendStartupLog(`runtime: ${runtime.label}`);
     this.appendStartupLog(`cwd: ${serverCwd}`);
-    this.appendStartupLog(`HOST=${bindHost} SERVER_PORT=${port} NODE_ENV=production`);
+    this.appendStartupLog(`HOST=${bindHost} SERVER_PORT=${port}`);
 
     this.ownedServerProcess = spawn(runtime.command, [serverEntry], {
       cwd: serverCwd,
@@ -414,7 +414,6 @@ export class LocalServerController {
         ...runtime.env,
         HOST: bindHost,
         SERVER_PORT: String(port),
-        NODE_ENV: 'production',
         PATH: getDesktopPath(),
       },
       stdio: ['ignore', 'pipe', 'pipe'],

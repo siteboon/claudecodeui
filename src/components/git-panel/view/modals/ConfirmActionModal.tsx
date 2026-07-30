@@ -61,39 +61,49 @@ export default function ConfirmActionModal({ action, onCancel, onConfirm }: Conf
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
+      {/*
+        Capped to the viewport with only the message scrolling, so a long body
+        (a multi-paragraph commit message, a long file list) can never push the
+        Cancel/Confirm buttons off screen.
+      */}
       <div
-        className="relative w-full max-w-md overflow-hidden rounded-xl border border-border bg-card shadow-2xl"
+        className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
       >
-        <div className="p-6">
-          <div className="mb-4 flex items-center">
-            <div className={`mr-3 rounded-full p-2 ${CONFIRMATION_ICON_CONTAINER_CLASSES[action.type]}`}>
-              {renderConfirmActionIcon(action.type)}
-            </div>
-            <h3 id={titleId} className="text-lg font-semibold text-foreground">
-              {CONFIRMATION_TITLES[action.type]}
-            </h3>
+        <div className="flex shrink-0 items-center px-6 pt-6">
+          <div className={`mr-3 rounded-full p-2 ${CONFIRMATION_ICON_CONTAINER_CLASSES[action.type]}`}>
+            {renderConfirmActionIcon(action.type)}
           </div>
+          <h3 id={titleId} className="text-lg font-semibold text-foreground">
+            {CONFIRMATION_TITLES[action.type]}
+          </h3>
+        </div>
 
-          <p className="mb-6 text-sm text-muted-foreground">{action.message}</p>
+        {/*
+          `whitespace-pre-wrap` keeps the blank lines and bullets of a commit
+          message intact — collapsing them turned the body into one unreadable
+          paragraph. `break-words` handles long paths and URLs.
+        */}
+        <p className="scrollbar-thin my-4 min-h-0 flex-1 overflow-y-auto overscroll-contain whitespace-pre-wrap break-words px-6 text-sm text-muted-foreground">
+          {action.message}
+        </p>
 
-          <div className="flex justify-end space-x-3">
-            <button
-              onClick={onCancel}
-              className="rounded-lg px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={onConfirm}
-              className={`flex items-center space-x-2 rounded-lg px-4 py-2 text-sm text-white transition-colors ${CONFIRMATION_BUTTON_CLASSES[action.type]}`}
-            >
-              {renderConfirmActionIcon(action.type)}
-              <span>{CONFIRMATION_ACTION_LABELS[action.type]}</span>
-            </button>
-          </div>
+        <div className="flex shrink-0 justify-end space-x-3 px-6 pb-6">
+          <button
+            onClick={onCancel}
+            className="rounded-lg px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className={`flex items-center space-x-2 rounded-lg px-4 py-2 text-sm text-white transition-colors ${CONFIRMATION_BUTTON_CLASSES[action.type]}`}
+          >
+            {renderConfirmActionIcon(action.type)}
+            <span>{CONFIRMATION_ACTION_LABELS[action.type]}</span>
+          </button>
         </div>
       </div>
     </div>

@@ -31,7 +31,7 @@ test('browser profile names are canonicalized before storage and path resolution
   assert.equal(normalizeDefaultProfileName(' Work Profile!! '), 'work-profile');
   assert.equal(
     getProfilePath(' Work Profile!! '),
-    `${PROFILE_ROOT}/work-profile`,
+    path.join(PROFILE_ROOT, 'work-profile'),
   );
   assert.equal(
     resolveSessionProfileName({

@@ -1,18 +1,16 @@
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 
 import { WebSocket } from 'ws';
-
 import spawn from 'cross-spawn';
 
-import { appConfigDb } from '@/modules/database/index.js';
 import { providerMcpService } from '@/modules/providers/index.js';
-import { getModuleDir } from '@/utils/runtime-paths.js';
+import { getModuleDirectory } from '@/shared/utils.js';
 
 import {
   getOrCreateMcpToken,
@@ -35,7 +33,7 @@ import type {
 import { getViewerUrl, handleViewerWebSocket, VIEWER_TOKEN_TTL_MS } from './browser-use.viewer.js';
 
 const require = createRequire(import.meta.url);
-const __dirname = getModuleDir(import.meta.url);
+const __dirname = getModuleDirectory(import.meta.url);
 const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
 const MAX_SESSIONS_PER_OWNER = Number.parseInt(process.env.CLOUDCLI_BROWSER_USE_MAX_SESSIONS_PER_OWNER || '3', 10);
 const SESSION_TTL_MS = Number.parseInt(process.env.CLOUDCLI_BROWSER_USE_SESSION_TTL_MS || String(30 * 60 * 1000), 10);
@@ -174,8 +172,7 @@ function getPlaywright(): any | null {
 }
 
 function getMcpCommand(): { command: string; args: string[] } {
-  const serverDir = path.resolve(__dirname, '..', '..');
-  const mcpScriptPath = path.join(serverDir, 'browser-use-mcp.js');
+  const mcpScriptPath = path.join(__dirname, 'browser-use-mcp.js');
   if (fs.existsSync(mcpScriptPath)) {
     return {
       command: process.execPath,

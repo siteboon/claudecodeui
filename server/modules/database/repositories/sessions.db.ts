@@ -9,13 +9,15 @@ type SessionRow = {
   project_path: string | null;
   jsonl_path: string | null;
   custom_name: string | null;
+  /** Model this session runs with; NULL until the app records one for it. */
+  model: string | null;
   isArchived: number;
   created_at: string;
   updated_at: string;
 };
 
 const SESSION_ROW_COLUMNS =
-  'session_id, provider, provider_session_id, project_path, jsonl_path, custom_name, isArchived, created_at, updated_at';
+  'session_id, provider, provider_session_id, project_path, jsonl_path, custom_name, model, isArchived, created_at, updated_at';
 
 const SQLITE_UTC_TIMESTAMP_REGEX = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 
@@ -209,6 +211,22 @@ export const sessionsDb = {
     });
 
     merge();
+  },
+
+  /**
+   * Records the model one session runs with.
+   *
+   * Called both when the user picks a model for the session and on every send,
+   * so the row always reflects what the session last ran with and reopening it
+   * restores that model instead of a catalog default.
+   */
+  setSessionModel(sessionId: string, model: string): void {
+    const db = getConnection();
+    db.prepare(
+      `UPDATE sessions
+       SET model = ?
+       WHERE session_id = ?`
+    ).run(model, sessionId);
   },
 
   updateSessionCustomName(sessionId: string, customName: string): void {
