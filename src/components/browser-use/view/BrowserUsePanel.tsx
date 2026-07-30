@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 
 import { cn } from '../../../lib/utils';
-import { Badge, Button } from '../../../shared/view/ui';
+import { Badge, Button, Tooltip } from '../../../shared/view/ui';
 import { authenticatedFetch } from '../../../utils/api';
 import type { SettingsMainTab } from '../../settings/types/types';
 
@@ -694,8 +694,19 @@ export default function BrowserUsePanel({ isVisible, projectId, onShowSettings }
                   <span className="font-medium text-foreground">{selectedSession?.status || 'None'}</span>
                 </div>
                 <div className="flex items-center justify-between gap-3">
-                  <span>Last action</span>
-                  <span className="truncate font-medium text-foreground">{formatAction(selectedSession?.lastAction || null)}</span>
+                  <span className="shrink-0">Last action</span>
+                  <div className="min-w-0 max-w-[70%] text-right">
+                    <Tooltip
+                      content={formatAction(selectedSession?.lastAction || null)}
+                      position="left"
+                      delay={200}
+                      className="max-w-sm whitespace-normal break-all text-left leading-relaxed"
+                    >
+                      <span className="block truncate font-medium text-foreground">
+                        {formatAction(selectedSession?.lastAction || null)}
+                      </span>
+                    </Tooltip>
+                  </div>
                 </div>
                 <div className="flex items-center justify-between gap-3">
                   <span>Profile</span>
