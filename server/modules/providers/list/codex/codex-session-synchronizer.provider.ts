@@ -114,10 +114,11 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
       return {
         sessionId,
         projectPath,
+        isSubagent: payload ? this.isSubagentSessionMeta(payload) : false,
       };
     });
 
-    if (!parsed) {
+    if (!parsed || parsed.isSubagent) {
       return null;
     }
 
@@ -158,6 +159,25 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
       ...parsed,
       sessionName: normalizeSessionName(sessionName, 'Untitled Codex Session'),
     };
+  }
+
+  /**
+   * Returns true when a session_meta payload belongs to a Codex sub-agent
+   * thread (Codex >=0.144 collaboration spawn_agent, review, compact, etc.).
+   * Sub-agent rollouts live in the same sessions tree as user sessions, so
+   * they must be skipped here to stay out of the sidebar — the Codex
+   * equivalent of the Claude synchronizer's subagent transcript skip.
+   * Top-level sessions carry thread_source "user" and a string source
+   * ("exec"/"cli"); sub-agents carry thread_source "subagent" and an object
+   * source keyed by "subagent".
+   */
+  private isSubagentSessionMeta(payload: Record<string, unknown>): boolean {
+    if (payload.thread_source === 'subagent') {
+      return true;
+    }
+
+    const source = payload.source;
+    return typeof source === 'object' && source !== null && 'subagent' in source;
   }
 
   /**
