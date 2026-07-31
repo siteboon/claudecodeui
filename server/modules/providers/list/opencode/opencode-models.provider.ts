@@ -1,20 +1,18 @@
 import Database from 'better-sqlite3';
 import crossSpawn from 'cross-spawn';
 
+import { sessionsDb } from '@/modules/database/index.js';
 import type { IProviderModels } from '@/shared/interfaces.js';
 import type {
-  ProviderChangeActiveModelInput,
   ProviderCurrentActiveModel,
   ProviderModelOption,
   ProviderModelsDefinition,
-  ProviderSessionActiveModelChange,
 } from '@/shared/types.js';
 import {
   buildDefaultProviderCurrentActiveModel,
   getOpenCodeDatabasePath,
   readObjectRecord,
   readOptionalString,
-  writeProviderSessionActiveModelChange,
 } from '@/shared/utils.js';
 
 export const OPENCODE_FALLBACK_MODELS: ProviderModelsDefinition = {
@@ -464,6 +462,11 @@ export class OpenCodeProviderModels implements IProviderModels {
       return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());
     }
 
+    // OpenCode's `session` table is keyed by its own session id, so the stable
+    // app id has to be translated first; sessions discovered on disk store the
+    // provider id in both columns and resolve to themselves.
+    const providerSessionId = sessionsDb.getSessionById(sessionId)?.provider_session_id ?? sessionId;
+
     try {
       const dbPath = getOpenCodeDatabasePath();
       const db = new Database(dbPath, { readonly: true, fileMustExist: true });
@@ -481,7 +484,7 @@ export class OpenCodeProviderModels implements IProviderModels {
           WHERE s.id = ?
           ORDER BY COALESCE(s.time_updated, s.time_created, 0) DESC
           LIMIT 1
-        `).get(sessionId) as {
+        `).get(providerSessionId) as {
           sessionId?: string;
           model?: unknown;
           agent?: string | null;
@@ -504,11 +507,5 @@ export class OpenCodeProviderModels implements IProviderModels {
     }
 
     return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());
-  }
-
-  async changeActiveModel(
-    input: ProviderChangeActiveModelInput,
-  ): Promise<ProviderSessionActiveModelChange> {
-    return writeProviderSessionActiveModelChange('opencode', input);
   }
 }

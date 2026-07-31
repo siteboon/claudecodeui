@@ -191,6 +191,10 @@ export default function SidebarContent({
   const showConversationSearch = searchMode === 'conversations' && searchFilter.trim().length >= 2;
   const hasPartialResults = conversationResults && conversationResults.results.length > 0;
   const groupedArchivedSessions = groupArchivedSessionsByProject(archivedSessions);
+  const visibleArchivedItemsCount = archivedProjects.length + archivedSessions.length;
+  const isRenamingOnMobile = isMobile && Boolean(
+    projectListProps.editingProject || projectListProps.editingSession,
+  );
 
   return (
     <div
@@ -349,77 +353,120 @@ export default function SidebarContent({
           )
         ) : searchMode === 'archived' ? (
           isArchivedSessionsLoading ? (
-            <div className="px-4 py-12 text-center md:py-8">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-muted md:mb-3">
-                <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+            <div className="space-y-2 px-2 py-1" aria-live="polite" aria-busy="true">
+              <div className="flex items-center gap-2 px-1 py-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-muted/70">
+                  <div className="h-3.5 w-3.5 animate-spin rounded-full border-[1.5px] border-muted-foreground/40 border-t-muted-foreground" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-medium text-foreground">
+                    {t('archived.loadingTitle', 'Loading archive...')}
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground">
+                    {t('archived.loadingDescription', 'Fetching hidden workspaces and sessions you can restore later.')}
+                  </p>
+                </div>
               </div>
-              <h3 className="mb-2 text-base font-medium text-foreground md:mb-1">
-                {t('archived.loadingTitle', 'Loading archive...')}
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                {t('archived.loadingDescription', 'Fetching hidden workspaces and sessions you can restore later.')}
-              </p>
+              {[0, 1].map((skeleton) => (
+                <div key={skeleton} className="animate-pulse rounded-xl border border-border/50 bg-card/40 p-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-8 w-8 rounded-lg bg-muted" />
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <div className="h-3 w-2/3 rounded bg-muted" />
+                      <div className="h-2.5 w-5/6 rounded bg-muted/70" />
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : archivedProjects.length === 0 && groupedArchivedSessions.length === 0 ? (
-            <div className="px-4 py-12 text-center md:py-8">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-muted md:mb-3">
-                <Archive className="h-6 w-6 text-muted-foreground" />
+            <div className="px-3 py-8 text-center">
+              <div className="mx-auto max-w-[240px] rounded-2xl border border-dashed border-border/80 bg-muted/20 px-5 py-7">
+                <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl border border-border/70 bg-background shadow-sm">
+                  <Archive className="h-[18px] w-[18px] text-muted-foreground" />
+                </div>
+                <h3 className="text-sm font-medium text-foreground">
+                  {archivedSessionsCount > 0
+                    ? t('archived.noMatchingSessions', 'No matching archived items')
+                    : t('archived.emptyTitle', 'No archived items')}
+                </h3>
+                <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                  {archivedSessionsCount > 0
+                    ? t('archived.tryDifferentSearch', 'Try a different search term.')
+                    : t('archived.emptyDescription', 'Archived workspaces and sessions will appear here when you hide them from the active list.')}
+                </p>
               </div>
-              <h3 className="mb-2 text-base font-medium text-foreground md:mb-1">
-                {archivedSessionsCount > 0
-                  ? t('archived.noMatchingSessions', 'No matching archived items')
-                  : t('archived.emptyTitle', 'No archived items')}
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                {archivedSessionsCount > 0
-                  ? t('archived.tryDifferentSearch', 'Try a different search term.')
-                  : t('archived.emptyDescription', 'Archived workspaces and sessions will appear here when you hide them from the active list.')}
-              </p>
             </div>
           ) : (
-            <div className="space-y-3 px-2">
-              <div className="flex items-center justify-between px-1">
-                <p className="text-xs text-muted-foreground">
-                  {`${archivedSessionsCount} ${t(
-                    archivedSessionsCount === 1 ? 'archived.sessionCountOne' : 'archived.sessionCountOther',
-                    archivedSessionsCount === 1 ? 'archived item' : 'archived items',
-                  )}`}
-                </p>
+            <div className="space-y-2.5 px-2 pb-3">
+              <div className="flex items-center justify-between px-1 pb-0.5 pt-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground">
+                    <Archive className="h-3.5 w-3.5" />
+                  </span>
+                  <div>
+                    <h2 className="text-xs font-medium leading-none text-foreground">
+                      {t('archived.title', 'Archive')}
+                    </h2>
+                    <p className="mt-1 text-[10px] leading-none text-muted-foreground">
+                      {t('archived.restoreHint', 'Restore items whenever you need them')}
+                    </p>
+                  </div>
+                </div>
+                <span
+                  className="rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[10px] tabular-nums text-muted-foreground"
+                  title={visibleArchivedItemsCount !== archivedSessionsCount
+                    ? `${visibleArchivedItemsCount} of ${archivedSessionsCount}`
+                    : undefined}
+                >
+                  {visibleArchivedItemsCount !== archivedSessionsCount
+                    ? `${visibleArchivedItemsCount}/${archivedSessionsCount}`
+                    : archivedSessionsCount}
+                </span>
               </div>
               {archivedProjects.map((project) => {
                 const projectSessions = getAllSessions(project);
 
                 return (
-                  <div key={project.projectId} className="overflow-hidden rounded-xl border border-border/70 bg-card/60 shadow-sm">
-                    <div className="flex items-start justify-between gap-3 border-b border-border/60 px-3 py-2.5">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <Folder className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
-                          <span className="truncate text-sm font-normal text-foreground">
+                  <section
+                    key={project.projectId}
+                    className="group/archive overflow-hidden rounded-xl border border-border/70 bg-card/45 shadow-[0_1px_0_hsl(var(--border)/0.2)] transition-colors hover:border-border"
+                  >
+                    <div className="flex items-center gap-2.5 px-2.5 py-2.5">
+                      <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-border/60 bg-muted/45 text-muted-foreground">
+                        <Folder className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <h3 className="truncate text-[13px] font-medium text-foreground">
                             {project.displayName}
-                          </span>
-                          <span className="inline-flex items-center justify-center rounded-full bg-muted px-1 py-px text-center text-[7px] font-medium uppercase leading-none tracking-[0.02em] text-muted-foreground">
-                            {t('archived.projectArchived', 'Project archived')}
-                          </span>
+                          </h3>
+                          {projectSessions.length > 0 && (
+                            <span className="flex-shrink-0 rounded-md bg-muted/60 px-1.5 py-0.5 text-[9px] tabular-nums text-muted-foreground">
+                              {projectSessions.length}
+                            </span>
+                          )}
                         </div>
-                        <p className="mt-1 truncate text-xs text-muted-foreground/70" title={project.fullPath}>
+                        <p className="mt-0.5 truncate text-[11px] text-muted-foreground/70" title={project.fullPath}>
                           {project.fullPath}
                         </p>
                       </div>
                       <button
-                        className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 transition-colors hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/30"
+                        className="flex h-7 flex-shrink-0 items-center gap-1.5 rounded-lg border border-emerald-600/15 bg-emerald-500/10 px-2 text-[10px] font-medium text-emerald-700 transition-all hover:border-emerald-600/25 hover:bg-emerald-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 dark:text-emerald-300"
                         onClick={() => onRestoreArchivedProject(project.projectId)}
                         title={t('archived.restoreProject', 'Restore workspace')}
+                        aria-label={`${t('archived.restoreProject', 'Restore workspace')}: ${project.displayName}`}
                       >
-                        <RotateCcw className="h-3.5 w-3.5" />
+                        <RotateCcw className="h-3 w-3" />
+                        {t('archived.restoreAction', 'Restore')}
                       </button>
                     </div>
                     {projectSessions.length > 0 && (
-                      <div className="divide-y divide-border/50">
+                      <div className="border-t border-border/45 bg-muted/[0.08]">
                         {projectSessions.map((session) => (
                           <button
                             key={String(session.id)}
-                            className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-accent/40"
+                            className="flex w-full items-center gap-2.5 border-b border-border/35 px-2.5 py-2 text-left transition-colors last:border-b-0 hover:bg-accent/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                             onClick={() => onArchivedSessionClick({
                               sessionId: String(session.id),
                               provider: session.__provider,
@@ -445,17 +492,21 @@ export default function SidebarContent({
                               isProjectArchived: true,
                             })}
                           >
-                            <SessionProviderLogo provider={session.__provider} className="h-3.5 w-3.5 flex-shrink-0" />
+                            <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-background/70">
+                              <SessionProviderLogo provider={session.__provider} className="h-3.5 w-3.5" />
+                            </span>
                             <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="truncate text-xs font-normal text-foreground">
-                                  {(typeof session.summary === 'string' && session.summary.trim().length > 0
-                                    ? session.summary
-                                    : typeof session.name === 'string' && session.name.trim().length > 0
-                                      ? session.name
-                                      : String(session.id))}
-                                </span>
-                                <span className="ml-auto flex-shrink-0 text-[11px] text-muted-foreground">
+                              <p className="truncate text-xs text-foreground">
+                                {(typeof session.summary === 'string' && session.summary.trim().length > 0
+                                  ? session.summary
+                                  : typeof session.name === 'string' && session.name.trim().length > 0
+                                    ? session.name
+                                    : String(session.id))}
+                              </p>
+                              <div className="mt-0.5 flex items-center gap-1 text-[10px] text-muted-foreground/70">
+                                <span className="uppercase tracking-wide">{session.__provider}</span>
+                                <span aria-hidden>·</span>
+                                <span className="tabular-nums">
                                   {formatCompactArchivedAge(
                                     typeof session.lastActivity === 'string'
                                       ? session.lastActivity
@@ -467,84 +518,89 @@ export default function SidebarContent({
                                   )}
                                 </span>
                               </div>
-                              <p className="mt-0.5 text-[11px] uppercase tracking-wide text-muted-foreground/70">
-                                {session.__provider}
-                              </p>
                             </div>
                           </button>
                         ))}
                       </div>
                     )}
-                  </div>
+                  </section>
                 );
               })}
               {groupedArchivedSessions.map((group) => (
-                <div key={group.key} className="overflow-hidden rounded-xl border border-border/70 bg-card/60 shadow-sm">
-                  <div className="flex items-start justify-between gap-3 border-b border-border/60 px-3 py-2.5">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <Folder className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
-                        <span className="truncate text-sm font-normal text-foreground">
+                <section
+                  key={group.key}
+                  className="group/archive overflow-hidden rounded-xl border border-border/70 bg-card/45 shadow-[0_1px_0_hsl(var(--border)/0.2)] transition-colors hover:border-border"
+                >
+                  <div className="flex items-center gap-2.5 px-2.5 py-2.5">
+                    <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-border/60 bg-muted/45 text-muted-foreground">
+                      <Folder className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <h3 className="truncate text-[13px] font-medium text-foreground">
                           {group.projectDisplayName}
+                        </h3>
+                        <span className="flex-shrink-0 rounded-md bg-muted/60 px-1.5 py-0.5 text-[9px] tabular-nums text-muted-foreground">
+                          {group.sessions.length}
                         </span>
-                        {group.isProjectArchived && (
-                          <span className="inline-flex items-center justify-center rounded-full bg-muted px-1 py-px text-center text-[7px] font-medium uppercase leading-none tracking-[0.02em] text-muted-foreground">
-                            {t('archived.projectArchived', 'Project archived')}
-                          </span>
-                        )}
                       </div>
                       {group.projectPath && (
-                        <p className="mt-1 truncate text-xs text-muted-foreground/70" title={group.projectPath}>
+                        <p className="mt-0.5 truncate text-[11px] text-muted-foreground/70" title={group.projectPath}>
                           {group.projectPath}
                         </p>
                       )}
                     </div>
-                    <span className="flex-shrink-0 text-[11px] text-muted-foreground">
-                      {group.sessions.length}
-                    </span>
                   </div>
-                  <div className="divide-y divide-border/50">
+                  <div className="border-t border-border/45 bg-muted/[0.08]">
                     {group.sessions.map((session) => (
-                      <div key={session.sessionId} className="flex items-center gap-2 px-3 py-2.5">
+                      <div
+                        key={session.sessionId}
+                        className="group/session flex items-center gap-1 border-b border-border/35 px-2.5 py-2 last:border-b-0 hover:bg-accent/35"
+                      >
                         <button
-                          className="flex min-w-0 flex-1 items-center gap-2 text-left transition-colors hover:text-foreground"
+                          className="flex min-w-0 flex-1 items-center gap-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           onClick={() => onArchivedSessionClick(session)}
                         >
-                          <SessionProviderLogo provider={session.provider} className="h-3.5 w-3.5 flex-shrink-0" />
+                          <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-background/70">
+                            <SessionProviderLogo provider={session.provider} className="h-3.5 w-3.5" />
+                          </span>
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className="truncate text-xs font-normal text-foreground">
-                                {session.sessionTitle}
-                              </span>
+                            <p className="truncate text-xs text-foreground">
+                              {session.sessionTitle}
+                            </p>
+                            <div className="mt-0.5 flex items-center gap-1 text-[10px] text-muted-foreground/70">
+                              <span className="uppercase tracking-wide">{session.provider}</span>
                               {session.lastActivity && (
-                                <span className="ml-auto flex-shrink-0 text-[11px] text-muted-foreground">
-                                  {formatCompactArchivedAge(session.lastActivity)}
-                                </span>
+                                <>
+                                  <span aria-hidden>·</span>
+                                  <span className="tabular-nums">{formatCompactArchivedAge(session.lastActivity)}</span>
+                                </>
                               )}
                             </div>
-                            <p className="mt-0.5 text-[11px] uppercase tracking-wide text-muted-foreground/70">
-                              {session.provider}
-                            </p>
                           </div>
                         </button>
-                        <button
-                          className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 transition-colors hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/30"
-                          onClick={() => onRestoreArchivedSession(session.sessionId)}
-                          title={t('archived.restore', 'Restore session')}
-                        >
-                          <RotateCcw className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-700 transition-colors hover:bg-red-100 dark:bg-red-900/20 dark:text-red-300 dark:hover:bg-red-900/30"
-                          onClick={() => onDeleteArchivedSession(session)}
-                          title={t('archived.deletePermanently', 'Delete permanently')}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        <div className="flex flex-shrink-0 items-center gap-0.5">
+                          <button
+                            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-emerald-500/10 hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 dark:hover:text-emerald-300"
+                            onClick={() => onRestoreArchivedSession(session.sessionId)}
+                            title={t('archived.restore', 'Restore session')}
+                            aria-label={`${t('archived.restore', 'Restore session')}: ${session.sessionTitle}`}
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground/60 transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
+                            onClick={() => onDeleteArchivedSession(session)}
+                            title={t('archived.deletePermanently', 'Delete permanently')}
+                            aria-label={`${t('archived.deletePermanently', 'Delete permanently')}: ${session.sessionTitle}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
-                </div>
+                </section>
               ))}
             </div>
           )
@@ -553,16 +609,18 @@ export default function SidebarContent({
         )}
       </ScrollArea>
 
-      <SidebarFooter
-        updateAvailable={updateAvailable}
-        restartRequired={restartRequired}
-        releaseInfo={releaseInfo}
-        latestVersion={latestVersion}
-        currentVersion={currentVersion}
-        onShowVersionModal={onShowVersionModal}
-        onShowSettings={onShowSettings}
-        t={t}
-      />
+      {!isRenamingOnMobile && (
+        <SidebarFooter
+          updateAvailable={updateAvailable}
+          restartRequired={restartRequired}
+          releaseInfo={releaseInfo}
+          latestVersion={latestVersion}
+          currentVersion={currentVersion}
+          onShowVersionModal={onShowVersionModal}
+          onShowSettings={onShowSettings}
+          t={t}
+        />
+      )}
     </div>
   );
 }

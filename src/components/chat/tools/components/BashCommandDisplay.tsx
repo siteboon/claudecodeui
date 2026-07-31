@@ -38,16 +38,18 @@ export const BashCommandDisplay: React.FC<BashCommandDisplayProps> = ({
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Output (and errors) often arrive after this component first mounts, so apply
-  // the auto-open intent once when there is finally something to show. After that
-  // the user is in control of the toggle.
+  // Output often arrives after this component first mounts, so apply the
+  // auto-open intent once when there is finally something to show. After that
+  // the user is in control of the toggle. Errors intentionally do NOT
+  // auto-expand — the red border and status badge already signal the failure,
+  // and the output stays one click away.
   const autoAppliedRef = useRef(false);
   useEffect(() => {
-    if (!autoAppliedRef.current && hasOutput && (defaultOpen || isError)) {
+    if (!autoAppliedRef.current && hasOutput && defaultOpen) {
       autoAppliedRef.current = true;
       setOpen(true);
     }
-  }, [hasOutput, defaultOpen, isError]);
+  }, [hasOutput, defaultOpen]);
 
   const toggle = () => {
     if (hasOutput) {
@@ -99,14 +101,17 @@ export const BashCommandDisplay: React.FC<BashCommandDisplayProps> = ({
         <span className="flex-shrink-0 select-none font-mono text-xs font-semibold text-emerald-500 dark:text-emerald-400">
           $
         </span>
-        <code
+        {/* Not a <code> tag: the global `.chat-message code` rule forces
+            `white-space: pre-wrap !important`, which would defeat `truncate`
+            and render collapsed multi-line commands in full. */}
+        <span
           className={cn(
             'min-w-0 flex-1 font-mono text-xs text-foreground',
             open ? 'whitespace-pre-wrap break-all' : 'truncate',
           )}
         >
           {command}
-        </code>
+        </span>
 
         {isRunning && (
           <span className="h-2.5 w-2.5 flex-shrink-0 animate-spin rounded-full border-[1.5px] border-muted-foreground/30 border-t-emerald-400" />
