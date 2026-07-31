@@ -13,5 +13,16 @@ export function resolveApiErrorMessage(payload: ApiErrorPayload | null, fallback
     return fallback;
   }
 
-  return payload.error ?? payload.message ?? fallback;
+  // The server returns errors as either a plain string or a structured
+  // `{ code, message }` object. Rendering the raw object as a React child
+  // crashes the tree, so the message string is always extracted here.
+  const { error } = payload;
+  if (typeof error === 'string') {
+    return error;
+  }
+  if (error && typeof error === 'object' && typeof error.message === 'string') {
+    return error.message;
+  }
+
+  return payload.message ?? fallback;
 }

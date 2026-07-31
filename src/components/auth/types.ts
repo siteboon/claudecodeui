@@ -11,7 +11,7 @@ export type AuthActionResult = { success: true } | { success: false; error: stri
 export type AuthSessionPayload = {
   token?: string;
   user?: AuthUser;
-  error?: string;
+  error?: string | ApiErrorDetail;
   message?: string;
 };
 
@@ -27,8 +27,13 @@ export type OnboardingStatusPayload = {
   hasCompletedOnboarding?: boolean;
 };
 
+export type ApiErrorDetail = {
+  code?: string;
+  message?: string;
+};
+
 export type ApiErrorPayload = {
-  error?: string;
+  error?: string | ApiErrorDetail;
   message?: string;
 };
 
