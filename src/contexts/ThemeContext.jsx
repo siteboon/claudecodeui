@@ -1,5 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
+import { getLocalStorageItem, setLocalStorageItem } from '../utils/localStorage.js';
+
 const ThemeContext = createContext();
 
 export const useTheme = () => {
@@ -14,7 +16,7 @@ export const ThemeProvider = ({ children }) => {
   // Check for saved theme preference or default to system preference
   const [isDarkMode, setIsDarkMode] = useState(() => {
     // Check localStorage first
-    const savedTheme = localStorage.getItem('theme');
+    const savedTheme = getLocalStorageItem('theme');
     if (savedTheme) {
       return savedTheme === 'dark';
     }
@@ -28,14 +30,14 @@ export const ThemeProvider = ({ children }) => {
   });
 
   const [useSystemFont, setUseSystemFont] = useState(
-    () => localStorage.getItem('useSystemFont') === 'true',
+    () => getLocalStorageItem('useSystemFont') === 'true',
   );
 
   // Update document class and localStorage when theme changes
   useEffect(() => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
+      setLocalStorageItem('theme', 'dark');
       
       // Update iOS status bar style and theme color for dark mode
       const statusBarMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
@@ -49,7 +51,7 @@ export const ThemeProvider = ({ children }) => {
       }
     } else {
       document.documentElement.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
+      setLocalStorageItem('theme', 'light');
       
       // Update iOS status bar style and theme color for light mode
       const statusBarMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
@@ -66,7 +68,7 @@ export const ThemeProvider = ({ children }) => {
 
   useEffect(() => {
     document.documentElement.classList.toggle('system-font', useSystemFont);
-    localStorage.setItem('useSystemFont', String(useSystemFont));
+    setLocalStorageItem('useSystemFont', String(useSystemFont));
   }, [useSystemFont]);
 
   // Listen for system theme changes
@@ -76,7 +78,7 @@ export const ThemeProvider = ({ children }) => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = (e) => {
       // Only update if user hasn't manually set a preference
-      const savedTheme = localStorage.getItem('theme');
+      const savedTheme = getLocalStorageItem('theme');
       if (!savedTheme) {
         setIsDarkMode(e.matches);
       }
