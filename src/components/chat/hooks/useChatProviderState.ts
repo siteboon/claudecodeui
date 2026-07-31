@@ -50,6 +50,7 @@ type ProviderCapabilities = {
   permissionModes: string[];
   defaultPermissionMode: string;
   supportsImages: boolean;
+  supportsFiles: boolean;
   supportsAbort: boolean;
   supportsPermissionRequests: boolean;
   supportsTokenUsage: boolean;
@@ -76,14 +77,18 @@ type ProviderModelsApiResponse = {
   };
 };
 
-type ChangeActiveModelApiResponse = {
+type SessionModelApiResponse = {
   success?: boolean;
   data?: {
     provider?: LLMProvider;
-    sessionId?: string;
-    supported?: boolean;
-    changed?: boolean;
+    sessionId?: string | null;
     model?: string | null;
+    /**
+     * `session` and `provider` are real answers for this session; `default`
+     * means the backend had nothing recorded and returned the catalog default,
+     * which the composer replaces with the user's per-provider selection.
+     */
+    source?: 'session' | 'provider' | 'default';
   };
 };
 
@@ -463,34 +468,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     );
   }, [selectedSession?.id]);
 
-  useEffect(() => {
-    if (provider !== 'cursor') {
-      return;
-    }
-
-    authenticatedFetch('/api/cursor/config')
-      .then((response) => response.json())
-      .then((data) => {
-        if (!data.success || !data.config?.model?.modelId) {
-          return;
-        }
-
-        const modelId = data.config.model.modelId as string;
-        if (!localStorage.getItem('cursor-model')) {
-          setCursorModel(modelId);
-        }
-      })
-      .catch((error) => {
-        console.error('Error loading Cursor config:', error);
-      });
-  }, [provider]);
-
-  const cyclePermissionMode = useCallback(() => {
-    const modes = getPermissionModesForProvider(provider);
-
-    const currentIndex = modes.indexOf(permissionMode);
-    const nextIndex = (currentIndex + 1) % modes.length;
-    const nextMode = modes[nextIndex];
+  const selectPermissionMode = useCallback((nextMode: PermissionMode) => {
     setPermissionMode(nextMode);
 
     // Persist per provider as well as per session: a brand-new chat has no
@@ -500,7 +478,20 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     if (selectedSession?.id) {
       localStorage.setItem(`permissionMode-${selectedSession.id}`, nextMode);
     }
-  }, [permissionMode, provider, selectedSession?.id, getPermissionModesForProvider]);
+  }, [provider, selectedSession?.id]);
+
+  const cyclePermissionMode = useCallback(() => {
+    const modes = getPermissionModesForProvider(provider);
+
+    const currentIndex = modes.indexOf(permissionMode);
+    const nextIndex = (currentIndex + 1) % modes.length;
+    selectPermissionMode(modes[nextIndex]);
+  }, [permissionMode, provider, getPermissionModesForProvider, selectPermissionMode]);
+
+  const availablePermissionModes = useMemo(
+    () => getPermissionModesForProvider(provider),
+    [getPermissionModesForProvider, provider],
+  );
 
   const resolvePermissionModeForProvider = useCallback((
     targetProvider: LLMProvider,
@@ -512,19 +503,68 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       : getDefaultPermissionModeForProvider(targetProvider);
   }, [getDefaultPermissionModeForProvider, getPermissionModesForProvider]);
 
+  /**
+   * Model the open session runs with, as reported by the backend. Null while no
+   * session is open, or when the backend has nothing recorded for it and only
+   * offered the catalog default — the per-provider selection covers that case.
+   */
+  const [sessionModel, setSessionModel] = useState<string | null>(null);
+
+  useEffect(() => {
+    const sessionId = selectedSession?.id;
+    if (!sessionId) {
+      setSessionModel(null);
+      return;
+    }
+
+    let cancelled = false;
+    const targetProvider = selectedSession?.__provider ?? provider;
+
+    const loadSessionModel = async () => {
+      try {
+        const response = await authenticatedFetch(
+          `/api/providers/${targetProvider}/sessions/${encodeURIComponent(sessionId)}/active-model`,
+        );
+        const body = (await response.json()) as SessionModelApiResponse;
+        if (cancelled) {
+          return;
+        }
+
+        const resolvedModel = body.data?.model?.trim();
+        setSessionModel(
+          body.success && resolvedModel && body.data?.source !== 'default' ? resolvedModel : null,
+        );
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Error loading the session model:', error);
+          setSessionModel(null);
+        }
+      }
+    };
+
+    void loadSessionModel();
+    return () => {
+      cancelled = true;
+    };
+  }, [provider, selectedSession?.__provider, selectedSession?.id]);
+
+  /**
+   * Applies a model choice.
+   *
+   * The pick always becomes the per-provider default so the next new chat
+   * inherits it, and — when a session is open — is also recorded against that
+   * session so reopening it later restores this model.
+   */
   const selectProviderModel = useCallback(async (
     targetProvider: LLMProvider,
     model: string,
     sessionId?: string | null,
   ) => {
+    setStoredProviderModel(targetProvider, model);
+
     const normalizedSessionId = typeof sessionId === 'string' ? sessionId.trim() : '';
     if (!normalizedSessionId) {
-      setStoredProviderModel(targetProvider, model);
-      return {
-        scope: 'default' as const,
-        changed: false,
-        model,
-      };
+      return { scope: 'default' as const, model };
     }
 
     const response = await authenticatedFetch(
@@ -535,28 +575,33 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       },
     );
 
-    const body = (await response.json()) as ChangeActiveModelApiResponse;
-    if (!response.ok || !body.success || !body.data?.supported) {
+    const body = (await response.json()) as SessionModelApiResponse;
+    if (!response.ok || !body.success) {
       throw new Error('Unable to change the active model for this session.');
     }
 
-    return {
-      scope: 'session' as const,
-      changed: body.data.changed === true,
-      model: body.data.model || model,
-    };
+    const storedModel = body.data?.model?.trim() || model;
+    setSessionModel(storedModel);
+    return { scope: 'session' as const, model: storedModel };
   }, [setStoredProviderModel]);
 
+  // The open session's model wins over the per-provider default, so switching
+  // sessions shows (and sends) what each session actually runs with.
+  const currentProviderModel = sessionModel ?? providerModels[provider];
   const currentProviderEffortOptions = useMemo(() => {
-    return getEffortOptionsForModel(provider, providerModels[provider]);
-  }, [getEffortOptionsForModel, provider, providerModels]);
+    return getEffortOptionsForModel(provider, currentProviderModel);
+  }, [currentProviderModel, getEffortOptionsForModel, provider]);
   const currentProviderEffort = useMemo(() => {
     return reconcileStoredEffort(
       provider,
-      providerModels[provider],
+      currentProviderModel,
       providerEfforts[provider] ?? DEFAULT_EFFORT_VALUE,
     );
-  }, [provider, providerEfforts, providerModels, reconcileStoredEffort]);
+  }, [currentProviderModel, provider, providerEfforts, reconcileStoredEffort]);
+  const currentProviderModelOptions = useMemo(
+    () => providerModelCatalog[provider]?.OPTIONS ?? [],
+    [provider, providerModelCatalog],
+  );
 
   return {
     provider,
@@ -569,12 +614,16 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     setCodexModel,
     currentProviderEffort,
     currentProviderEffortOptions,
+    currentProviderModel,
+    currentProviderModelOptions,
     opencodeModel,
     setOpenCodeModel,
     permissionMode,
     setPermissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
+    availablePermissionModes,
+    selectPermissionMode,
     cyclePermissionMode,
     providerModelCatalog,
     providerModelCacheCatalog,

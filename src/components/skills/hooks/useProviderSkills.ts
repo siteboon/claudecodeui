@@ -78,7 +78,7 @@ const normalizeScope = (value: unknown): SkillsScope => (
 const createProjectTargets = (projects: SkillsProject[]): ProjectTarget[] => {
   const seenPaths = new Set<string>();
 
-  return projects.reduce<ProjectTarget[]>((acc, project) => {
+  const targets = projects.reduce<ProjectTarget[]>((acc, project) => {
     const projectPath = project.fullPath || project.path || '';
     if (!projectPath || seenPaths.has(projectPath)) {
       return acc;
@@ -92,6 +92,8 @@ const createProjectTargets = (projects: SkillsProject[]): ProjectTarget[] => {
     });
     return acc;
   }, []);
+
+  return targets.sort((left, right) => left.path.localeCompare(right.path));
 };
 
 const normalizeSkill = (
@@ -198,7 +200,7 @@ const saveProviderSkills = async (
 };
 
 const getCacheKey = (provider: SkillsProvider, projects: ProjectTarget[]): string => {
-  const projectKey = projects.map((project) => project.path).sort().join('|');
+  const projectKey = JSON.stringify(projects);
   return `${provider}:${projectKey}`;
 };
 
@@ -223,7 +225,11 @@ export function useProviderSkills({ selectedProvider, currentProjects }: UseProv
   const [saveStatus, setSaveStatus] = useState<'success' | 'error' | null>(null);
   const activeLoadIdRef = useRef(0);
 
-  const projectTargets = useMemo(() => createProjectTargets(currentProjects), [currentProjects]);
+  const serializedProjectTargets = JSON.stringify(createProjectTargets(currentProjects));
+  const projectTargets = useMemo<ProjectTarget[]>(
+    () => JSON.parse(serializedProjectTargets) as ProjectTarget[],
+    [serializedProjectTargets],
+  );
   const cacheKey = useMemo(() => getCacheKey(selectedProvider, projectTargets), [projectTargets, selectedProvider]);
 
   const refreshSkills = useCallback(async (options: { force?: boolean } = {}) => {
@@ -240,13 +246,13 @@ export function useProviderSkills({ selectedProvider, currentProjects }: UseProv
       return;
     }
 
-    if (cachedEntry && !options.force) {
+    if (cachedEntry) {
       setSkills(cachedEntry.skills);
     } else {
       setSkills([]);
     }
 
-    setIsLoading(!cachedEntry);
+    setIsLoading(Boolean(options.force) || !cachedEntry);
     setIsLoadingProjectScopes(false);
     setLoadError(null);
 
@@ -321,6 +327,10 @@ export function useProviderSkills({ selectedProvider, currentProjects }: UseProv
 
   useEffect(() => {
     void refreshSkills();
+
+    return () => {
+      activeLoadIdRef.current += 1;
+    };
   }, [refreshSkills]);
 
   useEffect(() => {

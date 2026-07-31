@@ -1,4 +1,4 @@
-import { api } from '../../../utils/api';
+import { api, getStoredAuthToken } from '../../../utils/api';
 import type {
   BrowseFilesystemResponse,
   CloneProgressEvent,
@@ -75,7 +75,7 @@ export const fetchGithubTokenCredentials = async () => {
 };
 
 export const browseFilesystemFolders = async (pathToBrowse: string) => {
-  const endpoint = `/browse-filesystem?path=${encodeURIComponent(pathToBrowse)}`;
+  const endpoint = `/file-tree/browse-filesystem?path=${encodeURIComponent(pathToBrowse)}`;
   const response = await api.get(endpoint);
   const data = await parseJson<BrowseFilesystemResponse>(response);
 
@@ -132,7 +132,7 @@ const buildCloneProgressQuery = ({
   }
 
   // EventSource cannot send custom headers, so the auth token is passed as query.
-  const authToken = localStorage.getItem('auth-token');
+  const authToken = getStoredAuthToken();
   if (authToken) {
     query.set('token', authToken);
   }
