@@ -562,6 +562,12 @@
       "description": "Kanban board for GitHub Issues with bidirectional TaskMaster sync and /github-task CLI skill auto-install",
       "install": "Install"
     },
+    "claudeUsagePlugin": {
+      "name": "Claude Usage",
+      "badge": "unofficial",
+      "description": "Track live Claude Code plan limits and explore 30-day token and cost history.",
+      "install": "Install"
+    },
     "morePlugins": "More",
     "enable": "Enable",
     "disable": "Disable",

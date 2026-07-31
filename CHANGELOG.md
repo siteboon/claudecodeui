@@ -3,6 +3,16 @@
 All notable changes to CloudCLI UI will be documented in this file.
 
 
+## [1.37.0](https://github.com/siteboon/claudecodeui/compare/v1.36.3...v1.37.0) (2026-07-29)
+
+### New Features
+
+* numerous bugfixes and features ([#1037](https://github.com/siteboon/claudecodeui/issues/1037)) ([06e7ee9](https://github.com/siteboon/claudecodeui/commit/06e7ee9fb8c6afd1066566e8dc0e2c0c853a4990))
+
+### Bug Fixes
+
+* check CLAUDE_CODE_OAUTH_TOKEN in checkCredentials() ([#979](https://github.com/siteboon/claudecodeui/issues/979)) ([75ff8a5](https://github.com/siteboon/claudecodeui/commit/75ff8a5dcd0d63dced4c662bbf9433d7515d09da))
+
 ## [1.36.3](https://github.com/siteboon/claudecodeui/compare/v1.36.2...v1.36.3) (2026-07-15)
 
 ### Bug Fixes

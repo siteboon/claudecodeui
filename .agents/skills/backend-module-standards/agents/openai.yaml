@@ -1,0 +1,4 @@
+interface:
+  display_name: "Backend Module Standards"
+  short_description: "Enforce repository backend architecture rules"
+  default_prompt: "Use $backend-module-standards when creating or modifying backend code in this repository."

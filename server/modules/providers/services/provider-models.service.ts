@@ -2,27 +2,32 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
+import { sessionsDb } from '@/modules/database/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import type { IProvider } from '@/shared/interfaces.js';
 import type {
   LLMProvider,
-  ProviderChangeActiveModelInput,
   ProviderCurrentActiveModel,
   ProviderModelsCacheInfo,
   ProviderModelsDefinition,
   ProviderModelsResult,
-  ProviderSessionActiveModelChange,
+  ProviderSessionModel,
 } from '@/shared/types.js';
-import { readProviderSessionActiveModelChange } from '@/shared/utils.js';
 
 export const PROVIDER_MODELS_CACHE_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 const PROVIDER_MODELS_CACHE_VERSION = 2;
 const UNCACHED_PROVIDERS = new Set<LLMProvider>(['claude']);
 
+/** Session-row access the service needs, narrowed so tests can stub it. */
+type ProviderModelsSessionStore = {
+  getSessionById(sessionId: string): { model: string | null } | null;
+  setSessionModel(sessionId: string, model: string): void;
+};
+
 type ProviderModelsServiceDependencies = {
   resolveProvider?: (provider: LLMProvider) => Pick<IProvider, 'models'>;
   cachePath?: string;
-  activeModelChangesPath?: string;
+  sessions?: ProviderModelsSessionStore;
   now?: () => number;
 };
 
@@ -137,7 +142,7 @@ const writeProviderModelsCacheFile = async (
 export const createProviderModelsService = (dependencies: ProviderModelsServiceDependencies = {}) => {
   const resolveProvider = dependencies.resolveProvider ?? providerRegistry.resolveProvider;
   const cachePath = dependencies.cachePath ?? getProviderModelsCachePath();
-  const activeModelChangesPath = dependencies.activeModelChangesPath;
+  const sessions = dependencies.sessions ?? sessionsDb;
   const now = dependencies.now ?? (() => Date.now());
   const memoryCache = new Map<LLMProvider, ProviderModelsCacheEntry>();
   const pendingRequests = new Map<LLMProvider, Promise<ProviderModelsResult>>();
@@ -308,34 +313,138 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     sessionId?: string,
   ): Promise<ProviderCurrentActiveModel> => resolveProvider(provider).models.getCurrentActiveModel(sessionId);
 
-  const changeActiveModel = async (
-    provider: LLMProvider,
-    input: ProviderChangeActiveModelInput,
-  ): Promise<ProviderSessionActiveModelChange> => resolveProvider(provider).models.changeActiveModel(input);
+  const readRecordedSessionModel = (sessionId: string): string | null => {
+    const session = sessions.getSessionById(sessionId);
+    return session?.model?.trim() || null;
+  };
 
-  const getChangedActiveModel = async (
+  /**
+   * Records the model one session runs with.
+   *
+   * Called from the active-model route when the user picks a model and from
+   * `chat.send` on every turn, so the row always matches what the session last
+   * ran with. Sessions the app has not created yet (no row) are ignored rather
+   * than treated as an error: the client keeps its own pending selection and
+   * the value lands on the row with the first send.
+   */
+  const setSessionModel = (
     provider: LLMProvider,
     sessionId: string,
-  ): Promise<ProviderSessionActiveModelChange> => readProviderSessionActiveModelChange(provider, sessionId, {
-    filePath: activeModelChangesPath,
-  });
+    model: string,
+  ): ProviderSessionModel | null => {
+    const normalizedSessionId = sessionId.trim();
+    const normalizedModel = model.trim();
+    if (!normalizedSessionId || !normalizedModel) {
+      return null;
+    }
 
+    if (!sessions.getSessionById(normalizedSessionId)) {
+      return null;
+    }
+
+    sessions.setSessionModel(normalizedSessionId, normalizedModel);
+    return {
+      provider,
+      sessionId: normalizedSessionId,
+      model: normalizedModel,
+      source: 'session',
+    };
+  };
+
+  /**
+   * Answers "which model is this session using?" for every display surface.
+   *
+   * Precedence, highest first:
+   *   1. the model recorded on the session row — the user's pick, or whatever
+   *      the last send used;
+   *   2. the provider's own session state, for sessions started outside the app
+   *      that we have never recorded a model for;
+   *   3. `requestedModel`, the client's current default, for a chat that has no
+   *      session yet;
+   *   4. the provider catalog default.
+   */
+  const resolveSessionModel = async (
+    provider: LLMProvider,
+    options: { sessionId?: string | null; requestedModel?: string | null } = {},
+  ): Promise<ProviderSessionModel> => {
+    const normalizedSessionId = typeof options.sessionId === 'string' ? options.sessionId.trim() : '';
+    const normalizedRequestedModel = typeof options.requestedModel === 'string'
+      ? options.requestedModel.trim()
+      : '';
+
+    if (normalizedSessionId) {
+      const recordedModel = readRecordedSessionModel(normalizedSessionId);
+      if (recordedModel) {
+        return {
+          provider,
+          sessionId: normalizedSessionId,
+          model: recordedModel,
+          source: 'session',
+        };
+      }
+
+      // Never sent on through the app. Ask the provider what its own session
+      // state says before falling back to anything client-supplied.
+      const catalog = (await getProviderModels(provider)).models;
+      const providerModel = await getCurrentActiveModel(provider, normalizedSessionId);
+      const resolvedProviderModel = providerModel.model?.trim();
+      if (resolvedProviderModel && resolvedProviderModel !== catalog.DEFAULT) {
+        return {
+          provider,
+          sessionId: normalizedSessionId,
+          model: resolvedProviderModel,
+          source: 'provider',
+        };
+      }
+
+      return {
+        provider,
+        sessionId: normalizedSessionId,
+        model: normalizedRequestedModel || catalog.DEFAULT,
+        source: normalizedRequestedModel ? 'session' : 'default',
+      };
+    }
+
+    if (normalizedRequestedModel) {
+      return {
+        provider,
+        sessionId: null,
+        model: normalizedRequestedModel,
+        source: 'session',
+      };
+    }
+
+    const catalog = (await getProviderModels(provider)).models;
+    return {
+      provider,
+      sessionId: null,
+      model: catalog.DEFAULT,
+      source: 'default',
+    };
+  };
+
+  /**
+   * Picks the model one run should use, for provider runtime adapters.
+   *
+   * Deliberately narrower than `resolveSessionModel`: the provider's own
+   * session state is not consulted here. Codex reports a global config value
+   * from `getCurrentActiveModel`, which would silently override the model the
+   * user picked in the composer on every single run.
+   */
   const resolveResumeModel = async (
     provider: LLMProvider,
     sessionId: string | undefined,
     requestedModel?: string | null,
   ): Promise<string | undefined> => {
+    void provider;
     const normalizedRequestedModel = typeof requestedModel === 'string' ? requestedModel.trim() : '';
-    if (!sessionId?.trim()) {
+    const normalizedSessionId = sessionId?.trim();
+    if (!normalizedSessionId) {
       return normalizedRequestedModel || undefined;
     }
 
-    const changedModel = await getChangedActiveModel(provider, sessionId);
-    if (changedModel.supported && changedModel.changed && changedModel.model?.trim()) {
-      return changedModel.model.trim();
-    }
-
-    return normalizedRequestedModel || undefined;
+    const recordedModel = readRecordedSessionModel(normalizedSessionId);
+    return recordedModel || normalizedRequestedModel || undefined;
   };
 
   const clearCache = (): void => {
@@ -347,9 +456,8 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
 
   return {
     getProviderModels,
-    getCurrentActiveModel,
-    getChangedActiveModel,
-    changeActiveModel,
+    setSessionModel,
+    resolveSessionModel,
     resolveResumeModel,
     clearCache,
   };
