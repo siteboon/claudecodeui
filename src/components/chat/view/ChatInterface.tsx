@@ -5,8 +5,7 @@ import { ArrowDownIcon } from 'lucide-react';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useWebSocket } from '../../../contexts/WebSocketContext';
 import PermissionContext from '../../../contexts/PermissionContext';
-import { QuickSettingsPanel } from '../../quick-settings-panel';
-import type { ChatInterfaceProps, Provider  } from '../types/types';
+import type { ChatInterfaceProps, PermissionMode, Provider  } from '../types/types';
 import { useChatProviderState } from '../hooks/useChatProviderState';
 import { useChatSessionState } from '../hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '../hooks/useChatRealtimeHandlers';
@@ -71,11 +70,15 @@ function ChatInterface({
     setCodexModel,
     currentProviderEffort,
     currentProviderEffortOptions,
+    currentProviderModel,
+    currentProviderModelOptions,
     opencodeModel,
     setOpenCodeModel,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
+    availablePermissionModes,
+    selectPermissionMode,
     cyclePermissionMode,
     providerModelCatalog,
     providerModelCacheCatalog,
@@ -163,14 +166,14 @@ function ChatInterface({
     selectedFileIndex,
     renderInputWithMentions,
     selectFile,
-    attachedImages,
-    setAttachedImages,
-    uploadingImages,
-    imageErrors,
+    attachedFiles,
+    setAttachedFiles,
+    uploadingFiles,
+    fileErrors,
     getRootProps,
     getInputProps,
     isDragActive,
-    openImagePicker,
+    openAttachmentPicker,
     handleSubmit,
     queuedDraft,
     editQueuedDraft,
@@ -198,12 +201,10 @@ function ChatInterface({
     provider,
     permissionMode,
     cyclePermissionMode,
-    cursorModel,
-    claudeModel,
-    codexModel,
+    currentProviderModel,
     currentProviderEffort,
-    opencodeModel,
     isLoading: isProcessing,
+    processingSessions,
     canAbortSession,
     tokenBudget,
     sendMessage,
@@ -286,21 +287,31 @@ function ChatInterface({
     handlePermissionDecision,
   }), [pendingPermissionRequests, handlePermissionDecision]);
 
+  // A composer pick becomes the default for new chats and, when a session is
+  // open, is recorded against that session so reopening it restores this model.
+  const handleSelectComposerModel = useCallback(async (model: string) => {
+    try {
+      await selectProviderModel(provider, model, currentSessionId || selectedSession?.id || null);
+    } catch (error) {
+      console.error('Error changing the active session model:', error);
+    }
+  }, [currentSessionId, provider, selectProviderModel, selectedSession?.id]);
+
   // Mirrors ChatComposer's own visibility check so the message pane can
   // reserve enough bottom space to keep the floating status tab from
   // overlapping the last message.
   const hasActivityIndicator = Boolean(sessionActivity && pendingPermissionRequests.length === 0);
 
-  if (!selectedProject) {
-    const selectedProviderLabel =
-      provider === 'cursor'
-        ? t('messageTypes.cursor')
-        : provider === 'codex'
-          ? t('messageTypes.codex')
-          : provider === 'opencode'
-              ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
-            : t('messageTypes.claude');
+  const selectedProviderLabel =
+    provider === 'cursor'
+      ? t('messageTypes.cursor')
+      : provider === 'codex'
+        ? t('messageTypes.codex')
+        : provider === 'opencode'
+            ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
+          : t('messageTypes.claude');
 
+  if (!selectedProject) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-center text-muted-foreground">
@@ -389,10 +400,16 @@ function ChatInterface({
           isLoading={isProcessing}
           onAbortSession={handleAbortSession}
           permissionMode={permissionMode}
-          onModeSwitch={cyclePermissionMode}
+          availablePermissionModes={availablePermissionModes}
+          onSelectPermissionMode={(mode) => selectPermissionMode(mode as PermissionMode)}
+          providerLabel={selectedProviderLabel}
           effort={currentProviderEffort}
           availableEffortOptions={currentProviderEffortOptions}
           onSelectEffort={(nextEffort) => setStoredProviderEffort(provider, nextEffort)}
+          model={currentProviderModel}
+          availableModelOptions={currentProviderModelOptions}
+          onSelectModel={handleSelectComposerModel}
+          modelsLoading={providerModelsLoading}
           tokenBudget={tokenBudget}
           onShowTokenUsage={showCostModal}
           slashCommandsCount={slashCommandsCount}
@@ -404,14 +421,14 @@ function ChatInterface({
           queuedDraft={queuedDraft}
           onEditQueuedDraft={editQueuedDraft}
           onDeleteQueuedDraft={deleteQueuedDraft}
-          attachedImages={attachedImages}
-          onRemoveImage={(index) =>
-            setAttachedImages((previous) =>
+          attachedFiles={attachedFiles}
+          onRemoveAttachment={(index) =>
+            setAttachedFiles((previous) =>
               previous.filter((_, currentIndex) => currentIndex !== index),
             )
           }
-          uploadingImages={uploadingImages}
-          imageErrors={imageErrors}
+          uploadingFiles={uploadingFiles}
+          fileErrors={fileErrors}
           showFileDropdown={showFileDropdown}
           filteredFiles={filteredFiles}
           selectedFileIndex={selectedFileIndex}
@@ -424,7 +441,7 @@ function ChatInterface({
           frequentCommands={commandQuery ? [] : frequentCommands}
           getRootProps={getRootProps as (...args: unknown[]) => Record<string, unknown>}
           getInputProps={getInputProps as (...args: unknown[]) => Record<string, unknown>}
-          openImagePicker={openImagePicker}
+          openAttachmentPicker={openAttachmentPicker}
           inputHighlightRef={inputHighlightRef}
           renderInputWithMentions={renderInputWithMentions}
           textareaRef={textareaRef}
@@ -438,23 +455,12 @@ function ChatInterface({
           onTextareaInput={handleTextareaInput}
           isInputFocused={isInputFocused}
           onInputFocusChange={handleInputFocusChange}
-          placeholder={t('input.placeholder', {
-            provider:
-              provider === 'cursor'
-                ? t('messageTypes.cursor')
-                : provider === 'codex'
-                  ? t('messageTypes.codex')
-                  : provider === 'opencode'
-                      ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
-                    : t('messageTypes.claude'),
-          })}
+          placeholder={t('input.placeholder', { provider: selectedProviderLabel })}
           isTextareaExpanded={isTextareaExpanded}
           sendByCtrlEnter={sendByCtrlEnter}
         />
         </div>
       </div>
-
-      <QuickSettingsPanel />
 
       <CommandResultModal
         payload={commandModalPayload}

@@ -57,6 +57,10 @@ export type MainContentProps = {
   onShowSettings: (tab?: SettingsMainTab) => void;
   externalMessageUpdate: number;
   newSessionTrigger: number;
+  /** Switches the app to another project — used by the git panel's Worktrees view. */
+  onProjectSelect: (project: Project) => void;
+  /** Silently re-syncs the sidebar project list after worktree projects change. */
+  onProjectsRefresh: () => void;
 };
 
 export type MainContentHeaderProps = {

@@ -30,7 +30,7 @@ export const useEditorSidebar = ({
         name: fileName,
         path: filePath,
         // DB projectId is forwarded to the editor so it can read/save files
-        // via `/api/projects/:projectId/file` endpoints.
+        // via `/api/file-tree/projects/:projectId/file` endpoints.
         projectId: selectedProject?.projectId,
         diffInfo,
       });

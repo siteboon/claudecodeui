@@ -3,12 +3,17 @@ import { PencilIcon, XIcon } from 'lucide-react';
 
 interface QueuedMessageCardProps {
   content: string;
-  imageCount?: number;
+  attachmentCount?: number;
   onEdit: () => void;
   onDelete: () => void;
 }
 
-export default function QueuedMessageCard({ content, imageCount = 0, onEdit, onDelete }: QueuedMessageCardProps) {
+export default function QueuedMessageCard({
+  content,
+  attachmentCount = 0,
+  onEdit,
+  onDelete,
+}: QueuedMessageCardProps) {
   const { t } = useTranslation('chat');
 
   return (
@@ -24,9 +29,9 @@ export default function QueuedMessageCard({ content, imageCount = 0, onEdit, onD
             </span>
           </div>
           <p className="mt-0.5 line-clamp-2 break-words text-sm text-foreground/90">{content}</p>
-          {imageCount > 0 && (
+          {attachmentCount > 0 && (
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {imageCount} {imageCount === 1 ? 'image' : 'images'} attached
+              {attachmentCount} {attachmentCount === 1 ? 'file' : 'files'} attached
             </p>
           )}
         </div>
