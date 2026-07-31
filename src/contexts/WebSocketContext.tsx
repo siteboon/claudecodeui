@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../components/auth/context/AuthContext';
 import { IS_PLATFORM } from '../constants/config';
+import { expireAuthSession, isAuthTokenExpired } from '../utils/api';
 
 /**
  * One frame received from the chat websocket. The server guarantees every
@@ -55,6 +56,10 @@ const buildWebSocketUrl = (token: string | null) => {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   if (IS_PLATFORM) return `${protocol}//${window.location.host}/ws`; // Platform mode: Use same domain as the page (goes through proxy)
   if (!token) return null;
+  if (isAuthTokenExpired(token)) {
+    expireAuthSession();
+    return null;
+  }
   return `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}`; // OSS mode: Use same host:port that served the page
 };
 
@@ -71,7 +76,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   const [latestMessage, setLatestMessage] = useState<ServerEvent | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const { token } = useAuth();
+  const { isLoading: isAuthLoading, token, user } = useAuth();
 
   const dispatch = useCallback((event: ServerEvent) => {
     for (const listener of listenersRef.current) {
@@ -89,6 +94,9 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     // re-run of the effect (e.g. on token refresh) would short-circuit connect()
     // at its unmounted guard and leave the socket permanently disconnected.
     unmountedRef.current = false;
+    if (!IS_PLATFORM && (isAuthLoading || !user)) {
+      return undefined;
+    }
     connect();
 
     return () => {
@@ -96,14 +104,23 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
-      if (wsRef.current) {
-        wsRef.current.close();
+      const activeSocket = wsRef.current;
+      if (activeSocket) {
+        // Prevent the intentionally closed, old-token socket from scheduling
+        // a reconnect after the refreshed-token effect has already started.
+        activeSocket.onopen = null;
+        activeSocket.onmessage = null;
+        activeSocket.onclose = null;
+        activeSocket.onerror = null;
+        activeSocket.close();
+        wsRef.current = null;
       }
     };
-  }, [token]); // everytime token changes, we reconnect
+  }, [isAuthLoading, token, user]); // reconnect after authentication or token refresh
 
   const connect = useCallback(() => {
     if (unmountedRef.current) return; // Prevent connection if unmounted
+    if (!IS_PLATFORM && (isAuthLoading || !user)) return;
     try {
       // Construct WebSocket URL
       const wsUrl = buildWebSocketUrl(token);
@@ -111,10 +128,12 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       if (!wsUrl) return console.warn('No authentication token found for WebSocket connection');
 
       const websocket = new WebSocket(wsUrl);
+      // Store connecting sockets too, so a token refresh can close them before
+      // their handshake completes with stale credentials.
+      wsRef.current = websocket;
 
       websocket.onopen = () => {
         setIsConnected(true);
-        wsRef.current = websocket;
         if (hasConnectedRef.current) {
           // This is a reconnect — signal so components can catch up on missed messages
           dispatch({ kind: 'websocket_reconnected', timestamp: Date.now() });
@@ -132,6 +151,9 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       };
 
       websocket.onclose = () => {
+        if (wsRef.current !== websocket) {
+          return;
+        }
         setIsConnected(false);
         wsRef.current = null;
 
@@ -149,7 +171,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     } catch (error) {
       console.error('Error creating WebSocket connection:', error);
     }
-  }, [token, dispatch]); // everytime token changes, we reconnect
+  }, [dispatch, isAuthLoading, token, user]); // reconnect with current authentication state
 
   const sendMessage = useCallback((message: unknown) => {
     const socket = wsRef.current;
