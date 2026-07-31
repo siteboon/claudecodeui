@@ -9,13 +9,10 @@ import {
   PROVIDER_MODELS_CACHE_TTL_MS,
 } from '@/modules/providers/services/provider-models.service.js';
 import type {
-  ProviderChangeActiveModelInput,
   LLMProvider,
   ProviderCurrentActiveModel,
   ProviderModelsDefinition,
-  ProviderSessionActiveModelChange,
 } from '@/shared/types.js';
-import { writeProviderSessionActiveModelChange } from '@/shared/utils.js';
 
 const createModels = (value: string): ProviderModelsDefinition => ({
   OPTIONS: [{ value, label: value }],
@@ -26,16 +23,18 @@ const createCurrentActiveModel = (model: string): ProviderCurrentActiveModel => 
   model,
 });
 
-const createSessionActiveModelChange = (
-  provider: LLMProvider,
-  input: ProviderChangeActiveModelInput,
-): ProviderSessionActiveModelChange => ({
-  provider,
-  sessionId: input.sessionId,
-  supported: true,
-  changed: true,
-  model: input.model,
-});
+/** In-memory stand-in for the `sessions` table rows the service reads and writes. */
+const createSessionStore = (rows: Record<string, string | null> = {}) => {
+  const sessions = new Map(Object.entries(rows));
+  return {
+    sessions,
+    getSessionById: (sessionId: string) =>
+      (sessions.has(sessionId) ? { model: sessions.get(sessionId) ?? null } : null),
+    setSessionModel: (sessionId: string, model: string) => {
+      sessions.set(sessionId, model);
+    },
+  };
+};
 
 const createEphemeralCachePath = (): string => path.join(
   os.tmpdir(),
@@ -52,7 +51,6 @@ test('provider models service delegates to the resolved provider model adapter',
         models: {
           getSupportedModels: async () => createModels(`${provider}-models`),
           getCurrentActiveModel: async () => createCurrentActiveModel(`${provider}-active`),
-          changeActiveModel: async (input) => createSessionActiveModelChange(provider, input),
         },
       };
     },
@@ -80,7 +78,6 @@ test('provider models service returns each provider adapter result without rewri
       models: {
         getSupportedModels: async () => expectedModels,
         getCurrentActiveModel: async () => createCurrentActiveModel('cursor-active'),
-        changeActiveModel: async (input) => createSessionActiveModelChange('cursor', input),
       },
     }),
   });
@@ -106,7 +103,6 @@ test('provider models are cached for the three-day ttl', async () => {
             return createModels(`${provider}-${loadCount}`);
           },
           getCurrentActiveModel: async () => createCurrentActiveModel(`${provider}-active`),
-          changeActiveModel: async (input) => createSessionActiveModelChange(provider, input),
         },
       }),
     });
@@ -144,7 +140,6 @@ test('claude provider models are always loaded directly from the provider', asyn
             return createModels(`${provider}-${loadCount}`);
           },
           getCurrentActiveModel: async () => createCurrentActiveModel(`${provider}-active`),
-          changeActiveModel: async (input) => createSessionActiveModelChange(provider, input),
         },
       }),
     });
@@ -172,7 +167,6 @@ test('provider model cache is persisted across service instances', async () => {
         models: {
           getSupportedModels: async () => createModels('cursor-cached'),
           getCurrentActiveModel: async () => createCurrentActiveModel('cursor-active'),
-          changeActiveModel: async (input) => createSessionActiveModelChange('cursor', input),
         },
       }),
     });
@@ -186,7 +180,6 @@ test('provider model cache is persisted across service instances', async () => {
             throw new Error('loader should not be called for persisted cache hits');
           },
           getCurrentActiveModel: async () => createCurrentActiveModel('cursor-active'),
-          changeActiveModel: async (input) => createSessionActiveModelChange('cursor', input),
         },
       }),
     });
@@ -213,7 +206,6 @@ test('concurrent provider model requests share one load operation', async () => 
             return createModels('claude-cached');
           },
           getCurrentActiveModel: async () => createCurrentActiveModel('claude-active'),
-          changeActiveModel: async (input) => createSessionActiveModelChange('claude', input),
         },
       }),
     });
@@ -247,7 +239,6 @@ test('bypassCache forces a fresh provider fetch and updates cache metadata', asy
             return createModels(`${provider}-${loadCount}`);
           },
           getCurrentActiveModel: async () => createCurrentActiveModel(`${provider}-active-${loadCount}`),
-          changeActiveModel: async (input) => createSessionActiveModelChange(provider, input),
         },
       }),
     });
@@ -266,9 +257,10 @@ test('bypassCache forces a fresh provider fetch and updates cache metadata', asy
   }
 });
 
-test('provider models service delegates current active model lookups to the provider adapter', async () => {
+test('resolveSessionModel asks the provider adapter for the session it was given', async () => {
   const calls: Array<{ provider: LLMProvider; sessionId?: string }> = [];
   const service = createProviderModelsService({
+    sessions: createSessionStore({ 'session-123': null }),
     resolveProvider: (provider) => ({
       models: {
         getSupportedModels: async () => createModels(`${provider}-models`),
@@ -276,74 +268,183 @@ test('provider models service delegates current active model lookups to the prov
           calls.push({ provider, sessionId });
           return createCurrentActiveModel(`${provider}-${sessionId}`);
         },
-        changeActiveModel: async (input) => createSessionActiveModelChange(provider, input),
       },
     }),
   });
 
-  const activeModel = await service.getCurrentActiveModel('opencode', 'session-123');
+  const resolved = await service.resolveSessionModel('opencode', { sessionId: 'session-123' });
 
   assert.deepEqual(calls, [{ provider: 'opencode', sessionId: 'session-123' }]);
-  assert.equal(activeModel.model, 'opencode-session-123');
+  assert.equal(resolved.model, 'opencode-session-123');
 });
-
-test('provider models service delegates active model change requests to the provider adapter', async () => {
-  const calls: Array<{ provider: LLMProvider; input: ProviderChangeActiveModelInput }> = [];
+test('setSessionModel records the model on the session row', async () => {
+  const sessions = createSessionStore({ 'session-1': null });
   const service = createProviderModelsService({
+    sessions,
     resolveProvider: (provider) => ({
       models: {
         getSupportedModels: async () => createModels(`${provider}-models`),
         getCurrentActiveModel: async () => createCurrentActiveModel(`${provider}-active`),
-        changeActiveModel: async (input) => {
-          calls.push({ provider, input });
-          return createSessionActiveModelChange(provider, input);
+      },
+    }),
+  });
+
+  const stored = service.setSessionModel('claude', 'session-1', 'opus');
+
+  assert.deepEqual(stored, {
+    provider: 'claude',
+    sessionId: 'session-1',
+    model: 'opus',
+    source: 'session',
+  });
+  assert.equal(sessions.sessions.get('session-1'), 'opus');
+});
+
+test('setSessionModel ignores sessions that have no row yet', async () => {
+  const sessions = createSessionStore();
+  const service = createProviderModelsService({
+    sessions,
+    resolveProvider: (provider) => ({
+      models: {
+        getSupportedModels: async () => createModels(`${provider}-models`),
+        getCurrentActiveModel: async () => createCurrentActiveModel(`${provider}-active`),
+      },
+    }),
+  });
+
+  assert.equal(service.setSessionModel('claude', 'missing-session', 'opus'), null);
+  assert.equal(sessions.sessions.size, 0);
+});
+
+test('resolveSessionModel prefers the recorded session model over everything else', async () => {
+  const service = createProviderModelsService({
+    sessions: createSessionStore({ 'session-1': 'haiku' }),
+    resolveProvider: (provider) => ({
+      models: {
+        getSupportedModels: async () => createModels(`${provider}-models`),
+        getCurrentActiveModel: async () => createCurrentActiveModel('provider-reported'),
+      },
+    }),
+  });
+
+  const resolved = await service.resolveSessionModel('claude', {
+    sessionId: 'session-1',
+    requestedModel: 'sonnet',
+  });
+
+  assert.equal(resolved.model, 'haiku');
+  assert.equal(resolved.source, 'session');
+});
+
+test('resolveSessionModel falls back to provider session state for sessions the app never recorded', async () => {
+  const service = createProviderModelsService({
+    sessions: createSessionStore({ 'session-1': null }),
+    resolveProvider: (provider) => ({
+      models: {
+        getSupportedModels: async () => createModels(`${provider}-models`),
+        getCurrentActiveModel: async () => createCurrentActiveModel('provider-reported'),
+      },
+    }),
+  });
+
+  const resolved = await service.resolveSessionModel('opencode', {
+    sessionId: 'session-1',
+    requestedModel: 'requested',
+  });
+
+  assert.equal(resolved.model, 'provider-reported');
+  assert.equal(resolved.source, 'provider');
+});
+
+test('resolveSessionModel uses the requested model when the provider only reports its catalog default', async () => {
+  const service = createProviderModelsService({
+    cachePath: createEphemeralCachePath(),
+    sessions: createSessionStore({ 'session-1': null }),
+    resolveProvider: () => ({
+      models: {
+        getSupportedModels: async () => createModels('default'),
+        getCurrentActiveModel: async () => createCurrentActiveModel('default'),
+      },
+    }),
+  });
+
+  const resolved = await service.resolveSessionModel('claude', {
+    sessionId: 'session-1',
+    requestedModel: 'haiku',
+  });
+
+  assert.equal(resolved.model, 'haiku');
+  assert.equal(resolved.source, 'session');
+});
+
+test('resolveSessionModel answers with the requested model for a chat that has no session yet', async () => {
+  const service = createProviderModelsService({
+    sessions: createSessionStore(),
+    resolveProvider: (provider) => ({
+      models: {
+        getSupportedModels: async () => createModels(`${provider}-models`),
+        getCurrentActiveModel: async () => createCurrentActiveModel('provider-reported'),
+      },
+    }),
+  });
+
+  const resolved = await service.resolveSessionModel('codex', { requestedModel: 'gpt-5.5' });
+
+  assert.equal(resolved.model, 'gpt-5.5');
+  assert.equal(resolved.sessionId, null);
+  assert.equal(resolved.source, 'session');
+});
+
+test('resolveSessionModel falls back to the catalog default with nothing else to go on', async () => {
+  const service = createProviderModelsService({
+    cachePath: createEphemeralCachePath(),
+    sessions: createSessionStore(),
+    resolveProvider: (provider) => ({
+      models: {
+        getSupportedModels: async () => createModels(`${provider}-models`),
+        getCurrentActiveModel: async () => createCurrentActiveModel('provider-reported'),
+      },
+    }),
+  });
+
+  const resolved = await service.resolveSessionModel('codex');
+
+  assert.equal(resolved.model, 'codex-models');
+  assert.equal(resolved.source, 'default');
+});
+
+test('resolveResumeModel prefers the recorded session model over the requested one', async () => {
+  const service = createProviderModelsService({
+    sessions: createSessionStore({ 'session-456': 'composer-2' }),
+    resolveProvider: (provider) => ({
+      models: {
+        getSupportedModels: async () => createModels(`${provider}-models`),
+        getCurrentActiveModel: async () => createCurrentActiveModel(`${provider}-active`),
+      },
+    }),
+  });
+
+  const model = await service.resolveResumeModel('cursor', 'session-456', 'composer-2-fast');
+  assert.equal(model, 'composer-2');
+});
+
+test('resolveResumeModel never lets provider session state override the requested model', async () => {
+  let providerLookups = 0;
+  const service = createProviderModelsService({
+    sessions: createSessionStore({ 'session-456': null }),
+    resolveProvider: (provider) => ({
+      models: {
+        getSupportedModels: async () => createModels(`${provider}-models`),
+        getCurrentActiveModel: async () => {
+          providerLookups += 1;
+          return createCurrentActiveModel('global-config-model');
         },
       },
     }),
   });
 
-  const changedModel = await service.changeActiveModel('claude', {
-    sessionId: 'session-123',
-    model: 'opus',
-  });
+  const model = await service.resolveResumeModel('codex', 'session-456', 'gpt-5.5');
 
-  assert.deepEqual(calls, [{
-    provider: 'claude',
-    input: {
-      sessionId: 'session-123',
-      model: 'opus',
-    },
-  }]);
-  assert.equal(changedModel.changed, true);
-  assert.equal(changedModel.model, 'opus');
-});
-
-test('resolveResumeModel prefers a stored changed model over the requested one', async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'provider-model-change-'));
-  const activeModelChangesPath = path.join(tempRoot, 'session-model-changes.json');
-
-  try {
-    const service = createProviderModelsService({
-      activeModelChangesPath,
-      resolveProvider: (provider) => ({
-        models: {
-          getSupportedModels: async () => createModels(`${provider}-models`),
-          getCurrentActiveModel: async () => createCurrentActiveModel(`${provider}-active`),
-          changeActiveModel: async (input) => createSessionActiveModelChange(provider, input),
-        },
-      }),
-    });
-
-    await writeProviderSessionActiveModelChange('cursor', {
-      sessionId: 'session-456',
-      model: 'composer-2',
-    }, {
-      filePath: activeModelChangesPath,
-    });
-
-    const model = await service.resolveResumeModel('cursor', 'session-456', 'composer-2-fast');
-    assert.equal(model, 'composer-2');
-  } finally {
-    await rm(tempRoot, { recursive: true, force: true });
-  }
+  assert.equal(model, 'gpt-5.5');
+  assert.equal(providerLookups, 0);
 });

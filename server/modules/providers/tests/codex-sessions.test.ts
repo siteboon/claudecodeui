@@ -6,6 +6,7 @@ import test from 'node:test';
 
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import { CodexSessionSynchronizer } from '@/modules/providers/list/codex/codex-session-synchronizer.provider.js';
+import { CodexSessionsProvider } from '@/modules/providers/list/codex/codex-sessions.provider.js';
 
 const patchHomeDir = (nextHomeDir: string) => {
   const original = os.homedir;
@@ -144,6 +145,45 @@ test('Codex synchronizer leaves indexed sessions untitled when no name is availa
       await synchronizer.synchronize();
 
       assert.equal(sessionsDb.getSessionById('codex-indexed-1')?.custom_name, 'Untitled Codex Session');
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('Codex history renders Promise.all shell wrappers as Bash activity', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-exec-history-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tempRoot);
+
+  try {
+    const providerSessionId = 'codex-exec-1';
+    const transcriptPath = await writeCodexTranscript(tempRoot, providerSessionId, workspacePath);
+    const execInput = 'const cmds = ["echo one", "echo two"]; await Promise.all(cmds.map(command => tools.shell_command({ command })));';
+    const planInput = 'await tools.update_plan({ plan: [] });';
+    await writeFile(transcriptPath, [
+      JSON.stringify({ type: 'session_meta', payload: { id: providerSessionId, cwd: workspacePath } }),
+      JSON.stringify({ type: 'response_item', payload: { type: 'custom_tool_call', name: 'exec', call_id: 'exec-1', input: execInput } }),
+      JSON.stringify({ type: 'response_item', payload: { type: 'custom_tool_call_output', call_id: 'exec-1', output: 'done' } }),
+      JSON.stringify({ type: 'response_item', payload: { type: 'custom_tool_call', name: 'exec', call_id: 'plan-1', input: planInput } }),
+      JSON.stringify({ type: 'response_item', payload: { type: 'custom_tool_call_output', call_id: 'plan-1', output: 'done' } }),
+    ].join('\n') + '\n', 'utf8');
+
+    await withIsolatedDatabase(async () => {
+      sessionsDb.createAppSession('app-exec-1', 'codex', workspacePath);
+      sessionsDb.assignProviderSessionId('app-exec-1', providerSessionId);
+      await new CodexSessionSynchronizer().synchronize();
+
+      const history = await new CodexSessionsProvider().fetchHistory('app-exec-1');
+      const toolUses = history.messages.filter((message) => message.kind === 'tool_use');
+      const toolResults = history.messages.filter((message) => message.kind === 'tool_result');
+
+      assert.equal(toolUses.length, 1);
+      assert.equal(toolUses[0].toolName, 'Bash');
+      assert.equal(toolUses[0].toolInput, JSON.stringify({ command: 'echo one\necho two' }));
+      assert.equal(toolResults.some((message) => message.toolCallId === 'plan-1'), false);
     });
   } finally {
     restoreHomeDir();
