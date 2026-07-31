@@ -209,7 +209,13 @@ function mapCliOptionsToSDK(options = {}) {
 
   sdkOptions.disallowedTools = settings.disallowedTools || [];
 
-  sdkOptions.model = options.model || CLAUDE_FALLBACK_MODELS.DEFAULT;
+  // Prefer the locally configured model (ANTHROPIC_MODEL from Claude Code
+  // settings) so the app always matches the host CLI. When it is unset, fall
+  // back to the model picked in the web UI, then the provider catalog default.
+  sdkOptions.model =
+    process.env.ANTHROPIC_MODEL?.trim() ||
+    options.model ||
+    CLAUDE_FALLBACK_MODELS.DEFAULT;
 
   const resolvedEffort = resolveClaudeEffort(
     sdkOptions.model,

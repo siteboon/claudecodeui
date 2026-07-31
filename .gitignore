@@ -128,10 +128,6 @@ dev-debug.log
 *.sw?
 # OS specific
 
-# Task files
-tasks.json
-tasks/ 
-
 # Translations
 !src/i18n/locales/en/tasks.json
 !src/i18n/locales/fr/tasks.json
@@ -151,3 +147,7 @@ tasks/
 cloudcli-sidebar-app-source.tar.gz
 cloudcli-sidebar.html
 electron/*.tar.gz
+
+# Task files
+# tasks.json
+# tasks/ 
