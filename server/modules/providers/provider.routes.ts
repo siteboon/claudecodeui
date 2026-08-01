@@ -607,6 +607,15 @@ router.get(
 );
 
 router.get(
+  '/sessions/:sessionId/provider-id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const providerSessionId = sessionsService.getProviderSessionId(sessionId);
+    res.json(createApiSuccessResponse({ sessionId: providerSessionId }));
+  }),
+);
+
+router.get(
   '/sessions/:sessionId/token-usage',
   asyncHandler(async (req: Request, res: Response) => {
     const sessionId = parseSessionId(req.params.sessionId);
@@ -615,8 +624,8 @@ router.get(
   }),
 );
 
-// Must stay registered after the static `/sessions/running` and
-// `/sessions/archived` routes so those literals never match `:sessionId`.
+// Must stay registered after the static and session-specific routes so their
+// literals never match the generic `:sessionId` parameter.
 router.get(
   '/sessions/:sessionId',
   asyncHandler(async (req: Request, res: Response) => {
