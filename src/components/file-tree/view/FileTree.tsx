@@ -106,7 +106,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
           path: item.path,
           projectPath: selectedProject.path,
           // Image URL uses the DB projectId so ImageViewer can hit the
-          // /api/projects/:projectId/files/content endpoint directly.
+          // /api/file-tree/projects/:projectId/files/content endpoint directly.
           projectId: selectedProject.projectId,
         });
         return;
