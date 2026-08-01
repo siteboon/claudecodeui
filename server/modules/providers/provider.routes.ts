@@ -552,7 +552,8 @@ router.post(
     const body = (req.body ?? {}) as Record<string, unknown>;
     const provider = parseProvider(body.provider);
     const projectPath = typeof body.projectPath === 'string' ? body.projectPath : '';
-    const result = sessionsService.createAppSession(provider, projectPath);
+    const initialMessage = typeof body.initialMessage === 'string' ? body.initialMessage : '';
+    const result = sessionsService.createAppSession(provider, projectPath, initialMessage);
     res.status(201).json(createApiSuccessResponse(result));
   }),
 );

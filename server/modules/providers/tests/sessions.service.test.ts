@@ -37,6 +37,31 @@ test('provider session id returns the mapped native id', { concurrency: false },
   });
 });
 
+test('app session names use at most four whole words from the initial message', { concurrency: false }, async () => {
+  await withIsolatedDatabase(() => {
+    const result = sessionsService.createAppSession(
+      'codex',
+      '/tmp/session-name-project',
+      '  supercalifragilisticexpialidocious\nsecond   third fourth fifth  ',
+    );
+
+    assert.equal(result.sessionName, 'supercalifragilisticexpialidocious second third fourth');
+    assert.equal(
+      sessionsDb.getSessionById(result.sessionId)?.custom_name,
+      'supercalifragilisticexpialidocious second third fourth',
+    );
+  });
+});
+
+test('app sessions without message text receive a stable fallback name', { concurrency: false }, async () => {
+  await withIsolatedDatabase(() => {
+    const result = sessionsService.createAppSession('claude', '/tmp/attachment-only-project', '  \n ');
+
+    assert.equal(result.sessionName, 'Untitled Session');
+    assert.equal(sessionsDb.getSessionById(result.sessionId)?.custom_name, 'Untitled Session');
+  });
+});
+
 test('provider session id is unavailable until the provider assigns one', { concurrency: false }, async () => {
   await withIsolatedDatabase(() => {
     sessionsDb.createAppSession('pending-app-session', 'claude', '/tmp/session-id-copy-project');

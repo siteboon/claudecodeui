@@ -837,12 +837,14 @@ export function useChatComposerState({
       // handoff later — this id stays valid for the conversation's lifetime.
       let targetSessionId = selectedSession?.id || currentSessionId || null;
       if (!targetSessionId) {
+        let createdSessionName = sessionSummary;
         try {
           const response = await authenticatedFetch('/api/providers/sessions', {
             method: 'POST',
             body: JSON.stringify({
               provider,
               projectPath: resolvedProjectPath,
+              initialMessage: messageContent,
             }),
           });
           if (!response.ok) {
@@ -850,6 +852,9 @@ export function useChatComposerState({
           }
           const body = await response.json();
           targetSessionId = body?.data?.sessionId || null;
+          if (typeof body?.data?.sessionName === 'string') {
+            createdSessionName = body.data.sessionName;
+          }
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
           console.error('Session creation failed:', error);
@@ -873,7 +878,7 @@ export function useChatComposerState({
         onSessionEstablished?.(targetSessionId, {
           provider,
           project: selectedProject,
-          summary: sessionSummary,
+          summary: createdSessionName,
         });
       }
 

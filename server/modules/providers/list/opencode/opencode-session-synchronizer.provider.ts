@@ -130,22 +130,9 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
       ?? sessionsDb.getSessionById(sessionId);
     const existingName = existingSession?.custom_name;
 
-    // Sessions started by sending a message from cloudcli carry a distinct
-    // app-allocated session_id mapped to the provider id. For these we title the
-    // conversation from the first user message the user typed, matching how the
-    // app titles a brand-new conversation. Sessions discovered purely by
-    // indexing (session_id === provider_session_id) keep OpenCode's own stored
-    // title.
-    const isAppCreated =
-      existingSession != null &&
-      existingSession.provider_session_id != null &&
-      existingSession.session_id !== existingSession.provider_session_id;
-
     let nextName: string | undefined;
     if (existingName && existingName !== fallbackTitle) {
       nextName = existingName;
-    } else if (isAppCreated) {
-      nextName = this.readFirstUserText(db, sessionId) ?? readOptionalString(row.title);
     } else {
       nextName = readOptionalString(row.title) ?? this.readFirstUserText(db, sessionId);
     }

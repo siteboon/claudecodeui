@@ -64,24 +64,24 @@ const writeCodexTranscript = async (
   return filePath;
 };
 
-test('Codex synchronizer titles app-created sessions from the first user message', { concurrency: false }, async () => {
+test('Codex synchronizer preserves the title assigned when CloudCLI creates a session', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-session-sync-app-'));
   const workspacePath = path.join(tempRoot, 'workspace');
   await mkdir(workspacePath, { recursive: true });
   const restoreHomeDir = patchHomeDir(tempRoot);
 
   try {
-    await writeCodexTranscript(tempRoot, 'codex-app-1', workspacePath, 'Fix the login redirect bug');
+    await writeCodexTranscript(tempRoot, 'codex-app-1', workspacePath, 'Provider transcript title must not win');
     await withIsolatedDatabase(async () => {
       // The app allocates its own id and later maps the provider id onto it,
       // exactly as a message sent from cloudcli does.
-      sessionsDb.createAppSession('app-1', 'codex', workspacePath);
+      sessionsDb.createAppSession('app-1', 'codex', workspacePath, 'Fix the login redirect');
       sessionsDb.assignProviderSessionId('app-1', 'codex-app-1');
 
       const synchronizer = new CodexSessionSynchronizer();
       await synchronizer.synchronize();
 
-      assert.equal(sessionsDb.getSessionById('app-1')?.custom_name, 'Fix the login redirect bug');
+      assert.equal(sessionsDb.getSessionById('app-1')?.custom_name, 'Fix the login redirect');
     });
   } finally {
     restoreHomeDir();
