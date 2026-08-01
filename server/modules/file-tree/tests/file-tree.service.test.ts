@@ -172,6 +172,59 @@ test('listProjectFiles returns the normal tree when no gitignore exists', async 
   assert.deepEqual(tree.map((entry) => entry.name), ['debug.log']);
 });
 
+test('listProjectFiles rejects a tree that exceeds the server entry limit', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const fileSystem = createFakeFileSystem({
+    access: async () => undefined,
+    readdir: async (directoryPath) => directoryPath === projectRoot
+      ? Array.from({ length: 10_001 }, (_, index) => createDirectoryEntry(`file-${index}.txt`, false))
+      : [],
+    lstat: async () => createStats(false, 0o644),
+  });
+  const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
+
+  await assert.rejects(
+    service.listProjectFiles('project-1'),
+    (error: unknown) => error instanceof AppError
+      && error.code === 'FILE_TREE_TOO_LARGE'
+      && error.statusCode === 413,
+  );
+});
+
+test('listProjectFiles shares the entry limit across nested directories', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const firstDirectory = path.join(projectRoot, 'first');
+  const secondDirectory = path.join(projectRoot, 'second');
+  const directoryPaths = new Set([firstDirectory, secondDirectory]);
+  const fileSystem = createFakeFileSystem({
+    access: async () => undefined,
+    readdir: async (directoryPath) => {
+      if (directoryPath === projectRoot) {
+        return [
+          createDirectoryEntry('first', true),
+          createDirectoryEntry('second', true),
+        ];
+      }
+      if (directoryPaths.has(directoryPath)) {
+        return Array.from(
+          { length: 5_000 },
+          (_, index) => createDirectoryEntry(`${path.basename(directoryPath)}-${index}.txt`, false),
+        );
+      }
+      return [];
+    },
+    lstat: async (candidatePath) => createStats(directoryPaths.has(candidatePath), 0o644),
+  });
+  const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
+
+  await assert.rejects(
+    service.listProjectFiles('project-1'),
+    (error: unknown) => error instanceof AppError
+      && error.code === 'FILE_TREE_TOO_LARGE'
+      && error.statusCode === 413,
+  );
+});
+
 test('readTextFile rejects traversal before invoking the filesystem adapter', async () => {
   const projectRoot = path.resolve('file-tree-test-project');
   const readPaths: string[] = [];

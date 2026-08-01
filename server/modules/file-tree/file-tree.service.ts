@@ -28,6 +28,11 @@ const COMMON_WORKSPACE_DIRECTORY_NAMES = [
   'workspace',
 ];
 
+// File Tree consumes this guard when recursively listing a project so a very
+// broad workspace (for example, a user's home directory) cannot exhaust the
+// server heap before the browser has a chance to switch to a narrower project.
+const MAXIMUM_FILE_TREE_ENTRIES = 10_000;
+
 type FileTreeEntryFilter = (entryPath: string, isDirectory: boolean) => boolean;
 
 function createFileTreeError(message: string, statusCode: number, code: string): AppError {
@@ -172,6 +177,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
     maximumDepth: number,
     currentDepth = 0,
     includeEntry: FileTreeEntryFilter = () => true,
+    remainingEntries = { value: MAXIMUM_FILE_TREE_ENTRIES },
   ): Promise<FileTreeNode[]> {
     let entries;
     try {
@@ -197,7 +203,20 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       return includeEntry(path.join(directoryPath, entry.name), isDirectory);
     });
 
-    const items = await Promise.all(visibleEntries.map(async (entry): Promise<FileTreeNode> => {
+    if (visibleEntries.length > remainingEntries.value) {
+      throw createFileTreeError(
+        `Project file tree exceeds the ${MAXIMUM_FILE_TREE_ENTRIES.toLocaleString()} entry limit. Choose a narrower project directory or add ignore rules.`,
+        413,
+        'FILE_TREE_TOO_LARGE',
+      );
+    }
+    remainingEntries.value -= visibleEntries.length;
+
+    const items: FileTreeNode[] = [];
+    // Walk one directory branch at a time. A recursive Promise.all here creates
+    // every pending filesystem operation up front and can retain gigabytes of
+    // promises/tree nodes for broad project roots even when I/O is limited.
+    for (const entry of visibleEntries) {
       const itemPath = path.join(directoryPath, entry.name);
       const item: FileTreeNode = {
         name: entry.name,
@@ -245,11 +264,12 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
           maximumDepth,
           currentDepth + 1,
           includeEntry,
+          remainingEntries,
         );
       }
 
-      return item;
-    }));
+      items.push(item);
+    }
 
     return items.sort((left, right) => {
       if (left.type !== right.type) {
