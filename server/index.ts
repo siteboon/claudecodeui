@@ -174,12 +174,19 @@ app.use(express.json({
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Public health check endpoint (no authentication required)
+// DIAGNOSTIC ONLY - lets us confirm from outside the container that a
+// running pod is actually serving this exact commit's code, since a stale
+// build would otherwise look identical from the outside.
+const DEBUG_BUILD_MARKER = 'shell-bandwidth-diag-v3-unbounded-request-logging';
+console.log(`[DIAG build] ${DEBUG_BUILD_MARKER}`);
+
 app.get('/health', (req, res) => {
     res.json({
         status: 'ok',
         timestamp: new Date().toISOString(),
         installMode,
-        version: RUNNING_VERSION
+        version: RUNNING_VERSION,
+        debugBuildMarker: DEBUG_BUILD_MARKER
     });
 });
 

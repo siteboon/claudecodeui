@@ -666,6 +666,23 @@ router.get(
       offset = parsedOffset;
     }
 
+    // DIAGNOSTIC ONLY - identify every caller of the unbounded (limit=null)
+    // path, since static analysis of the frontend found no remaining
+    // in-repo caller but the endpoint keeps getting hit unbounded in
+    // production. Logs enough of the request to fingerprint the source:
+    // headers a real browser sends vs. an internal/loopback caller.
+    if (limit === null) {
+      console.log(
+        `[DIAG messages] UNBOUNDED hit sessionId=${sessionId} ` +
+          `ua=${JSON.stringify(req.headers['user-agent'] ?? null)} ` +
+          `referer=${JSON.stringify(req.headers['referer'] ?? req.headers['origin'] ?? null)} ` +
+          `remoteAddr=${req.socket.remoteAddress ?? 'unknown'} ` +
+          `xForwardedFor=${JSON.stringify(req.headers['x-forwarded-for'] ?? null)} ` +
+          `authHeaderPresent=${Boolean(req.headers['authorization'])} ` +
+          `stack=${new Error('trace').stack?.split('\n').slice(1, 5).join(' <- ')}`
+      );
+    }
+
     const result = await sessionsService.fetchHistory(sessionId, {
       limit,
       offset,
