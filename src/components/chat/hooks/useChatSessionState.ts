@@ -4,13 +4,12 @@ import type { MutableRefObject } from 'react';
 import { authenticatedFetch } from '../../../utils/api';
 import type { MarkSessionIdle, SessionActivityMap } from '../../../hooks/useSessionProtection';
 import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
-import type { SessionStore, NormalizedMessage } from '../../../stores/useSessionStore';
+import { MESSAGES_PER_PAGE, type SessionStore, type NormalizedMessage } from '../../../stores/useSessionStore';
 import type { ChatMessage } from '../types/types';
 import { createCachedDiffCalculator, type DiffCalculator } from '../utils/messageTransforms';
 
 import { normalizedToChatMessages } from './useChatMessages';
 
-const MESSAGES_PER_PAGE = 20;
 const INITIAL_VISIBLE_MESSAGES = 100;
 
 interface UseChatSessionStateArgs {
