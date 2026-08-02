@@ -40,6 +40,8 @@ interface UseChatRealtimeHandlersArgs {
   onSessionIdle?: MarkSessionIdle;
   onWebSocketReconnect?: () => void;
   sessionStore: SessionStore;
+  /** Whether the chat tab is the currently visible tab. Defaults to true. */
+  isActiveTab?: boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -71,6 +73,7 @@ export function useChatRealtimeHandlers({
   onSessionIdle,
   onWebSocketReconnect,
   sessionStore,
+  isActiveTab = true,
 }: UseChatRealtimeHandlersArgs) {
   // Session switches can send `chat.subscribe` before this effect has a chance
   // to rebind the websocket listener. Read the visible session id from a ref
@@ -258,7 +261,7 @@ export function useChatRealtimeHandlers({
           // before the first send), so the only follow-up is syncing the
           // viewed conversation with the now-persisted transcript.
           if (sid && sid === activeViewSessionId) {
-            void sessionStore.refreshFromServer(sid);
+            void sessionStore.requestRefreshFromServer(sid, { visible: isActiveTab });
           }
 
           break;
@@ -344,5 +347,6 @@ export function useChatRealtimeHandlers({
     onSessionIdle,
     onWebSocketReconnect,
     sessionStore,
+    isActiveTab,
   ]);
 }

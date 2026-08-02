@@ -123,6 +123,14 @@ export type SessionEstablishedContext = {
 };
 
 export interface ChatInterfaceProps {
+  /**
+   * Whether the chat tab is the currently visible tab. ChatInterface stays
+   * mounted (CSS-hidden) when another tab like Shell is active, so this is
+   * the only signal for whether its background refresh work is worth doing
+   * right now. Defaults to true when omitted so existing callers/tests are
+   * unaffected.
+   */
+  isActiveTab?: boolean;
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
   ws: WebSocket | null;
