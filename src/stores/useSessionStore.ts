@@ -514,7 +514,7 @@ export function useSessionStore() {
 
     const fetchTicket = ++slot._fetchSeq;
     const params = new URLSearchParams();
-    const limit = opts.limit ?? 20;
+    const limit = opts.limit ?? MESSAGES_PER_PAGE;
     params.append('limit', String(limit));
     params.append('offset', String(slot.offset));
 
