@@ -16,6 +16,7 @@ import {
     providerRuntimeService,
 } from '@/modules/providers/index.js';
 import { createWebSocketServer } from '@/modules/websocket/index.js';
+import { estimateByteLength, recordBandwidth } from '@/modules/websocket/services/network-diagnostics.service.js';
 
 import { getConnectableHost } from '../shared/networkHosts.js';
 
@@ -118,6 +119,45 @@ const wss = createWebSocketServer(server, {
 
 // Make WebSocket server available to routes
 app.locals.wss = wss;
+
+// DIAGNOSTIC ONLY - temporary bandwidth instrumentation, remove after investigation.
+// Mounted first so it wraps res.write/res.end before any other middleware or
+// static file handler touches them, capturing every byte this server sends
+// over HTTP (API responses, the SPA shell, and static assets alike).
+app.use((req, res, next) => {
+    let bytesSent = 0;
+    const originalWrite = res.write.bind(res);
+    const originalEnd = res.end.bind(res);
+
+    res.write = ((chunk?: unknown, ...rest: unknown[]) => {
+        if (chunk !== undefined) {
+            bytesSent += estimateByteLength(chunk);
+        }
+        // @ts-expect-error - forwarding res.write's overloaded variadic signature as-is
+        return originalWrite(chunk, ...rest);
+    }) as typeof res.write;
+
+    res.end = ((chunk?: unknown, ...rest: unknown[]) => {
+        if (chunk !== undefined) {
+            bytesSent += estimateByteLength(chunk);
+        }
+        // @ts-expect-error - forwarding res.end's overloaded variadic signature as-is
+        return originalEnd(chunk, ...rest);
+    }) as typeof res.end;
+
+    res.on('finish', () => {
+        const ext = path.extname(req.path);
+        const segments = req.path.split('/').filter(Boolean);
+        const bucketKey = ext
+            ? `http:static:${ext}`
+            : segments[0] === 'api'
+                ? `http:api:${segments.slice(0, 2).join('/')}`
+                : `http:page:${segments[0] || '/'}`;
+        recordBandwidth(bucketKey, bytesSent);
+    });
+
+    next();
+});
 
 app.use(cors({ exposedHeaders: ['X-Refreshed-Token', 'X-Auth-Error'] }));
 app.use(express.json({
