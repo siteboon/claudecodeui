@@ -583,9 +583,9 @@ export function useSessionStore() {
   /**
    * Re-fetch serverMessages from the provider sessions endpoint.
    */
-  const refreshFromServer = useCallback(async (
+  const performRefreshFromServer = useCallback(async (
     sessionId: string,
-  ) => {
+  ): Promise<void> => {
     const slot = getSlot(sessionId);
     const fetchTicket = ++slot._fetchSeq;
     try {
@@ -621,6 +621,30 @@ export function useSessionStore() {
       console.error(`[SessionStore] refresh failed for ${sessionId}:`, error);
     }
   }, [getSlot, notify]);
+
+  /**
+   * Multiple independent signals (a `complete` websocket event and a
+   * `session_upserted`-driven `externalMessageUpdate` effect, for example)
+   * can both react to the same underlying turn and call `refreshFromServer`
+   * within milliseconds of each other. Since that fetch is unbounded (the
+   * full transcript, by design), sharing one in-flight request instead of
+   * firing a second one avoids doubling an already-expensive full-history
+   * download for no benefit - both callers only care that the store ends up
+   * current, not which of them triggered it.
+   */
+  const inFlightRefreshRef = useRef(new Map<string, Promise<void>>());
+  const refreshFromServer = useCallback((sessionId: string): Promise<void> => {
+    const existing = inFlightRefreshRef.current.get(sessionId);
+    if (existing) {
+      return existing;
+    }
+
+    const promise = performRefreshFromServer(sessionId).finally(() => {
+      inFlightRefreshRef.current.delete(sessionId);
+    });
+    inFlightRefreshRef.current.set(sessionId, promise);
+    return promise;
+  }, [performRefreshFromServer]);
 
   /**
    * Same full-transcript re-sync as `refreshFromServer`, but skips the fetch
