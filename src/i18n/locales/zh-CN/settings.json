@@ -107,12 +107,29 @@
     "appearance": "外观",
     "git": "Git",
     "apiTokens": "API 和令牌",
+    "machines": "机器",
     "voice": "语音",
     "tasks": "任务",
     "browser": "浏览器",
     "notifications": "通知",
     "plugins": "插件",
     "about": "关于"
+  },
+  "machines": {
+    "title": "机器",
+    "description": "注册主动连到本 Server 的 Worker 机器。令牌只显示一次。",
+    "listHint": "Worker：cloudcli worker start --server <url> --token <mw_...>",
+    "newButton": "新建机器",
+    "form": {
+      "placeholder": "机器名称",
+      "createButton": "创建",
+      "cancelButton": "取消"
+    },
+    "tokenOnce": "请立即复制此令牌，之后不会再显示。",
+    "loading": "正在加载机器…",
+    "empty": "还没有注册机器。",
+    "ping": "Ping",
+    "pingSuccess": "Ping 成功 — {{latency}} ms"
   },
   "notifications": {
     "title": "通知",

@@ -109,6 +109,9 @@ CREATE TABLE IF NOT EXISTS sessions (
     custom_name TEXT,
     project_path TEXT,
     jsonl_path TEXT,
+    -- Control-plane worker that owns native execution for this session.
+    -- NULL means legacy/local in-process execution on the Server host.
+    machine_id TEXT,
     -- Model this session runs with. Written when the user picks a model for the
     -- session and on every send, so reopening a session restores the model it
     -- was last used with instead of falling back to the catalog default.
@@ -135,6 +138,32 @@ CREATE TABLE IF NOT EXISTS app_config (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+`;
+
+export const MACHINES_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS machines (
+    id TEXT PRIMARY KEY NOT NULL,
+    name TEXT NOT NULL,
+    token_hash TEXT UNIQUE NOT NULL,
+    token_prefix TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'offline',
+    last_seen_at DATETIME,
+    hostname TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    revoked_at DATETIME
+);
+`;
+
+export const SESSION_MESSAGES_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS session_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    seq INTEGER,
+    kind TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
 );
 `;
 
@@ -181,4 +210,12 @@ CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id);
 ${LAST_SCANNED_AT_SQL}
 
 ${APP_CONFIG_TABLE_SCHEMA_SQL}
+
+${MACHINES_TABLE_SCHEMA_SQL}
+CREATE INDEX IF NOT EXISTS idx_machines_token_hash ON machines(token_hash);
+CREATE INDEX IF NOT EXISTS idx_machines_status ON machines(status);
+
+${SESSION_MESSAGES_TABLE_SCHEMA_SQL}
+CREATE INDEX IF NOT EXISTS idx_session_messages_session_id ON session_messages(session_id);
+CREATE INDEX IF NOT EXISTS idx_session_messages_session_seq ON session_messages(session_id, seq);
 `;

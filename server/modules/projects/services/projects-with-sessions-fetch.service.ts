@@ -5,7 +5,7 @@ import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { sessionSynchronizerService } from '@/modules/providers/index.js';
 import { WS_OPEN_STATE, connectedClients } from '@/modules/websocket/index.js';
 import type { RealtimeClientConnection } from '@/shared/types.js';
-import { AppError } from '@/shared/utils.js';
+import { AppError, isControlPlaneMode } from '@/shared/utils.js';
 
 type SessionSummary = {
   id: string;
@@ -75,6 +75,17 @@ export type ProjectSessionsPageApiView = {
 
 const DEFAULT_PROJECT_SESSIONS_PAGE_SIZE = 20;
 const MAX_PROJECT_SESSIONS_PAGE_SIZE = 200;
+
+/**
+ * Local-disk session sync is a monolith leftover. Control-plane Servers keep
+ * session truth in SQLite (fed by Worker reports / web creates) instead.
+ */
+function shouldSynchronizeFromLocalDisk(skipSynchronization?: boolean): boolean {
+  if (skipSynchronization || isControlPlaneMode()) {
+    return false;
+  }
+  return true;
+}
 
 /**
  * Generate better display name from path.
@@ -180,7 +191,7 @@ function broadcastProgress(progress: ProgressUpdate) {
 export async function getProjectsWithSessions(
   options: GetProjectsWithSessionsOptions = {}
 ): Promise<ProjectListItem[]> {
-  if (!options.skipSynchronization) {
+  if (shouldSynchronizeFromLocalDisk(options.skipSynchronization)) {
     await sessionSynchronizerService.synchronizeSessions();
   }
 
@@ -248,7 +259,7 @@ export async function getProjectsWithSessions(
 export async function getArchivedProjectsWithSessions(
   options: Pick<GetProjectsWithSessionsOptions, 'skipSynchronization'> = {},
 ): Promise<ArchivedProjectListItem[]> {
-  if (!options.skipSynchronization) {
+  if (shouldSynchronizeFromLocalDisk(options.skipSynchronization)) {
     await sessionSynchronizerService.synchronizeSessions();
   }
 

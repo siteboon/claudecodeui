@@ -49,13 +49,112 @@ export type AuthenticatedWebSocketUser = {
 };
 
 /**
+ * Authenticated worker machine attached to `/worker` websocket upgrades.
+ *
+ * Populated by `verifyClient` after a machine token is validated. Chat and shell
+ * sockets continue to use `user` instead.
+ */
+export type AuthenticatedWorkerMachine = {
+  id: string;
+  name: string;
+};
+
+/**
  * HTTP upgrade request shape after websocket authentication succeeds.
  *
- * `verifyClient` populates `request.user` with the authenticated payload, and
- * downstream websocket handlers rely on this extended request type.
+ * `verifyClient` populates `request.user` for browser sockets or
+ * `request.machine` for worker sockets. Downstream handlers rely on this
+ * extended request type.
  */
 export type AuthenticatedWebSocketRequest = IncomingMessage & {
   user?: AuthenticatedWebSocketUser;
+  machine?: AuthenticatedWorkerMachine;
+};
+
+//----------------- WORKER CONTROL-PLANE PROTOCOL ------------
+/**
+ * Machine presence status stored by the control-plane machines table and shown
+ * in the web UI machine list.
+ */
+export type MachineConnectionStatus = 'online' | 'offline';
+
+/**
+ * Public machine record returned by control-plane machine APIs.
+ *
+ * Never includes the plaintext worker token. `tokenPrefix` is only a display
+ * hint so operators can recognize which token was issued.
+ */
+export type ControlPlaneMachine = {
+  id: string;
+  name: string;
+  tokenPrefix: string;
+  status: MachineConnectionStatus;
+  lastSeenAt: string | null;
+  hostname: string | null;
+  createdAt: string;
+  revokedAt: string | null;
+};
+
+/**
+ * Worker websocket envelope used between the cloud Server and each Worker.
+ *
+ * Phase 1 supports hello/heartbeat/welcome plus ping/pong echo for connectivity
+ * checks. Chat run routing is added in a later phase.
+ */
+export type WorkerProtocolMessageType =
+  | 'worker.hello'
+  | 'worker.welcome'
+  | 'worker.heartbeat'
+  | 'worker.ping'
+  | 'worker.pong'
+  | 'worker.error'
+  | 'chat.run'
+  | 'chat.abort'
+  | 'chat.permission_response'
+  | 'worker.event'
+  | 'worker.run_complete'
+  | 'session.ensure_native'
+  | 'session.native_ready';
+
+/**
+ * JSON envelope exchanged on the `/worker` websocket.
+ *
+ * `type` selects the handler. `requestId` correlates ping/pong, ensure_native,
+ * and chat runs. Chat routing fields (`sessionId`, `provider`, `command`,
+ * `options`, `event`) are used when the control plane dispatches runs to Workers.
+ */
+export type WorkerProtocolMessage = {
+  type: WorkerProtocolMessageType;
+  requestId?: string;
+  hostname?: string;
+  name?: string;
+  machineId?: string;
+  error?: string;
+  payload?: string;
+  sessionId?: string;
+  provider?: LLMProvider;
+  providerSessionId?: string | null;
+  projectPath?: string | null;
+  command?: string;
+  options?: AnyRecord;
+  event?: NormalizedMessage;
+  /** Cloud-normalized history used by `session.ensure_native` write-back. */
+  messages?: NormalizedMessage[];
+  jsonlPath?: string | null;
+  success?: boolean;
+  /** True when ensure_native rewrote missing local provider artifacts. */
+  restored?: boolean;
+  /**
+   * When true, local artifacts could not be restored for this provider and the
+   * Server should drop `provider_session_id` so the next run starts fresh.
+   */
+  dropProviderSessionId?: boolean;
+  exitCode?: number;
+  aborted?: boolean;
+  allow?: boolean;
+  updatedInput?: unknown;
+  message?: string;
+  rememberEntry?: unknown;
 };
 
 // ---------------------------

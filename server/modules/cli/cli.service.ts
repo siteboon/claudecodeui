@@ -23,6 +23,11 @@ type CliServiceDependencies = {
   updateGlobalPackage(): void;
   startServer(): Promise<void>;
   startBrowserUseMcp(): Promise<void>;
+  startWorker(options: {
+    serverUrl?: string;
+    token?: string;
+    name?: string;
+  }): Promise<number>;
 };
 
 type ParsedCliArguments = {
@@ -30,6 +35,9 @@ type ParsedCliArguments = {
   options: {
     serverPort?: string;
     databasePath?: string;
+    serverUrl?: string;
+    token?: string;
+    name?: string;
   };
   remainingArguments: string[];
 };
@@ -41,6 +49,8 @@ function parseCliArguments(argumentsList: string[]): ParsedCliArguments {
     remainingArguments: [],
   };
 
+  let commandLocked = false;
+
   for (let argumentIndex = 0; argumentIndex < argumentsList.length; argumentIndex += 1) {
     const argument = argumentsList[argumentIndex];
     if (argument === '--port' || argument === '-p') {
@@ -51,15 +61,46 @@ function parseCliArguments(argumentsList: string[]): ParsedCliArguments {
       parsedArguments.options.databasePath = argumentsList[++argumentIndex];
     } else if (argument.startsWith('--database-path=')) {
       parsedArguments.options.databasePath = argument.slice('--database-path='.length);
+    } else if (argument === '--server') {
+      parsedArguments.options.serverUrl = argumentsList[++argumentIndex];
+    } else if (argument.startsWith('--server=')) {
+      parsedArguments.options.serverUrl = argument.slice('--server='.length);
+    } else if (argument === '--token') {
+      parsedArguments.options.token = argumentsList[++argumentIndex];
+    } else if (argument.startsWith('--token=')) {
+      parsedArguments.options.token = argument.slice('--token='.length);
+    } else if (argument === '--name') {
+      parsedArguments.options.name = argumentsList[++argumentIndex];
+    } else if (argument.startsWith('--name=')) {
+      parsedArguments.options.name = argument.slice('--name='.length);
     } else if (argument === '--help' || argument === '-h') {
       parsedArguments.command = 'help';
+      commandLocked = true;
     } else if (argument === '--version' || argument === '-v') {
       parsedArguments.command = 'version';
+      commandLocked = true;
     } else if (!argument.startsWith('-')) {
-      parsedArguments.command = argument;
       if (argument === 'sandbox') {
+        parsedArguments.command = 'sandbox';
         parsedArguments.remainingArguments = argumentsList.slice(argumentIndex + 1);
         break;
+      }
+
+      if (argument === 'worker') {
+        const subcommand = argumentsList[argumentIndex + 1];
+        if (subcommand && !subcommand.startsWith('-')) {
+          parsedArguments.command = `worker:${subcommand}`;
+          argumentIndex += 1;
+        } else {
+          parsedArguments.command = 'worker:help';
+        }
+        commandLocked = true;
+        continue;
+      }
+
+      if (!commandLocked) {
+        parsedArguments.command = argument;
+        commandLocked = true;
       }
     }
   }
@@ -156,6 +197,7 @@ Usage:
 
 Commands:
   start            Start the CloudCLI server (default)
+  worker start     Connect this machine as a control-plane worker
   sandbox          Manage Docker sandbox environments
   browser-use-mcp  Run Browser MCP stdio server
   status           Show configuration and data locations
@@ -166,12 +208,16 @@ Commands:
 Options:
   -p, --port <port>           Set server port (default: 3001)
   --database-path <path>      Set custom database location
+  --server <url>              Worker control-plane URL (https:// or wss://)
+  --token <token>             Worker machine token (mw_...)
+  --name <name>               Optional worker display name
   -h, --help                  Show this help information
   -v, --version               Show version information
 
 Examples:
   $ cloudcli                        # Start with defaults
   $ cloudcli --port 8080            # Start on port 8080
+  $ cloudcli worker start --server wss://agents.example.com --token mw_xxx
   $ cloudcli sandbox ~/my-project   # Run in a Docker sandbox
   $ cloudcli status                 # Show configuration
 
@@ -252,6 +298,24 @@ export function createCliService(dependencies: CliServiceDependencies): CliAppli
         case 'start':
           void checkForUpdates(true);
           await dependencies.startServer();
+          return 0;
+        case 'worker:start':
+          return dependencies.startWorker({
+            serverUrl: parsedArguments.options.serverUrl,
+            token: parsedArguments.options.token,
+            name: parsedArguments.options.name,
+          });
+        case 'worker:help':
+        case 'worker':
+          dependencies.output.log(`
+Usage:
+  cloudcli worker start --server <url> --token <mw_...> [--name <name>]
+
+Environment:
+  WORKER_SERVER_URL / CLOUDCLI_SERVER_URL
+  WORKER_TOKEN / CLOUDCLI_WORKER_TOKEN
+  WORKER_NAME
+`);
           return 0;
         case 'sandbox':
           return dependencies.sandboxService.execute(parsedArguments.remainingArguments);

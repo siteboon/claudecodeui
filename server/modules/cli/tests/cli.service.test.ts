@@ -45,6 +45,7 @@ function createHarness() {
       serverStarts += 1;
     },
     startBrowserUseMcp: async () => undefined,
+    startWorker: async () => 0,
   });
 
   return {
@@ -88,4 +89,60 @@ test('returns a failure code for an unknown command without exiting the process'
 
   assert.equal(exitCode, 1);
   assert.match(harness.errorMessages[0], /Unknown command: unknown/);
+});
+
+test('routes worker start to the injected worker starter with server and token options', async () => {
+  const harness = createHarness();
+  let workerOptions: { serverUrl?: string; token?: string; name?: string } | null = null;
+  const service = createCliService({
+    applicationRoot: '/application',
+    defaultDatabasePath: '/home/user/.cloudcli/auth.db',
+    homeDirectory: '/home/user',
+    packageMetadata: {
+      version: '1.2.3',
+      homepage: 'https://cloudcli.example',
+      bugsUrl: 'https://cloudcli.example/issues',
+    },
+    environment: harness.environment,
+    fileSystem: {
+      readTextFile: () => {
+        throw new Error('missing');
+      },
+      pathExists: () => false,
+      getFileStats: () => ({ size: 0, modifiedAt: new Date(0) }),
+    },
+    output: {
+      log: (message = '') => harness.logMessages.push(message),
+      error: (message = '') => harness.errorMessages.push(message),
+    },
+    sandboxService: {
+      execute: async () => 0,
+    },
+    getLatestPackageVersion: async () => '1.2.3',
+    updateGlobalPackage: () => undefined,
+    startServer: async () => undefined,
+    startBrowserUseMcp: async () => undefined,
+    startWorker: async (options) => {
+      workerOptions = options;
+      return 0;
+    },
+  });
+
+  const exitCode = await service.run([
+    'worker',
+    'start',
+    '--server',
+    'wss://agents.example.com',
+    '--token',
+    'mw_abc',
+    '--name',
+    'dev-box',
+  ]);
+
+  assert.equal(exitCode, 0);
+  assert.deepEqual(workerOptions, {
+    serverUrl: 'wss://agents.example.com',
+    token: 'mw_abc',
+    name: 'dev-box',
+  });
 });

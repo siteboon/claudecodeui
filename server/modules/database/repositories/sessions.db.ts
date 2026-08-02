@@ -9,6 +9,8 @@ type SessionRow = {
   project_path: string | null;
   jsonl_path: string | null;
   custom_name: string | null;
+  /** Control-plane worker id; null means Server-local execution. */
+  machine_id: string | null;
   /** Model this session runs with; NULL until the app records one for it. */
   model: string | null;
   isArchived: number;
@@ -17,7 +19,7 @@ type SessionRow = {
 };
 
 const SESSION_ROW_COLUMNS =
-  'session_id, provider, provider_session_id, project_path, jsonl_path, custom_name, model, isArchived, created_at, updated_at';
+  'session_id, provider, provider_session_id, project_path, jsonl_path, custom_name, machine_id, model, isArchived, created_at, updated_at';
 
 const SQLITE_UTC_TIMESTAMP_REGEX = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 
@@ -153,18 +155,38 @@ export const sessionsDb = {
    * stays NULL until the provider runtime announces its own id and
    * `assignProviderSessionId` records the mapping.
    */
-  createAppSession(sessionId: string, provider: string, projectPath: string): string {
+  createAppSession(
+    sessionId: string,
+    provider: string,
+    projectPath: string,
+    machineId: string | null = null,
+  ): string {
     const db = getConnection();
     const normalizedProjectPath = normalizeProjectPathForProvider(provider, projectPath);
 
     projectsDb.createProjectPath(normalizedProjectPath);
 
     db.prepare(
-      `INSERT INTO sessions (session_id, provider, provider_session_id, custom_name, project_path, jsonl_path, isArchived, created_at, updated_at)
-       VALUES (?, ?, NULL, NULL, ?, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
-    ).run(sessionId, provider, normalizedProjectPath);
+      `INSERT INTO sessions (session_id, provider, provider_session_id, custom_name, project_path, jsonl_path, machine_id, isArchived, created_at, updated_at)
+       VALUES (?, ?, NULL, NULL, ?, NULL, ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+    ).run(sessionId, provider, normalizedProjectPath, machineId);
 
     return sessionId;
+  },
+
+  /**
+   * Clears the provider-native session id when Worker-local artifacts cannot be
+   * restored (e.g. Cursor store.db). The next run starts a fresh native session.
+   */
+  clearProviderSessionId(sessionId: string): void {
+    const db = getConnection();
+    db.prepare(
+      `UPDATE sessions SET
+         provider_session_id = NULL,
+         jsonl_path = NULL,
+         updated_at = CURRENT_TIMESTAMP
+       WHERE session_id = ?`,
+    ).run(sessionId);
   },
 
   /**
@@ -227,6 +249,26 @@ export const sessionsDb = {
        SET model = ?
        WHERE session_id = ?`
     ).run(model, sessionId);
+  },
+
+  /** Binds a session to a control-plane worker machine. */
+  setSessionMachineId(sessionId: string, machineId: string | null): void {
+    const db = getConnection();
+    db.prepare(
+      `UPDATE sessions
+       SET machine_id = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE session_id = ?`
+    ).run(machineId, sessionId);
+  },
+
+  /** Updates the on-disk transcript path reported by a Worker after a run. */
+  setSessionJsonlPath(sessionId: string, jsonlPath: string | null): void {
+    const db = getConnection();
+    db.prepare(
+      `UPDATE sessions
+       SET jsonl_path = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE session_id = ?`
+    ).run(jsonlPath, sessionId);
   },
 
   updateSessionCustomName(sessionId: string, customName: string): void {

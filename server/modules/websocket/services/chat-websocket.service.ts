@@ -2,7 +2,8 @@ import path from 'node:path';
 
 import type { WebSocket } from 'ws';
 
-import { sessionsDb } from '@/modules/database/index.js';
+import { sessionMessagesDb, sessionsDb } from '@/modules/database/index.js';
+import { workerConnectionRegistry } from '@/modules/machines/index.js';
 import { providerModelsService } from '@/modules/providers/index.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
 import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
@@ -16,10 +17,11 @@ import type {
   AnyRecord,
   AuthenticatedWebSocketRequest,
   LLMProvider,
+  NormalizedMessage,
   ProviderPermissionDecision,
   ProviderRuntimeWriter,
 } from '@/shared/types.js';
-import { parseIncomingJsonObject } from '@/shared/utils.js';
+import { createNormalizedMessage, isControlPlaneMode, parseIncomingJsonObject } from '@/shared/utils.js';
 
 /**
  * Trust boundary for client-supplied image attachments: chat.send options come
@@ -167,7 +169,21 @@ async function handleChatSend(
   }
 
   const provider = session.provider as LLMProvider;
-  if (!dependencies.runtime.hasRuntime(provider)) {
+
+  // Control-plane Servers never run provider CLIs locally. Legacy sessions
+  // without a machine binding must be rebound or recreated on a Worker.
+  if (isControlPlaneMode() && !session.machine_id) {
+    sendProtocolError(
+      ws,
+      'MACHINE_REQUIRED',
+      `Session "${sessionId}" has no machine binding. Create a new chat after selecting a Worker machine.`,
+      sessionId,
+    );
+    return;
+  }
+
+  // Worker-bound sessions do not need a Server-local provider install.
+  if (!session.machine_id && !dependencies.runtime.hasRuntime(provider)) {
     sendProtocolError(ws, 'UNSUPPORTED_PROVIDER', `Provider "${provider}" is not available.`, sessionId);
     return;
   }
@@ -227,6 +243,129 @@ async function handleChatSend(
     projectPath: session.project_path ?? clientOptions.projectPath,
   };
 
+  const persistLatestOutbound = () => {
+    const outbound = run.events[run.events.length - 1];
+    if (!outbound || typeof outbound.kind !== 'string') {
+      return;
+    }
+    sessionMessagesDb.appendMessage({
+      sessionId,
+      seq: typeof outbound.seq === 'number' ? outbound.seq : null,
+      kind: outbound.kind,
+      payload: outbound,
+    });
+  };
+
+  // Persist the user turn into the cloud copy before dispatch so web history
+  // and ensure_native write-back both see the prompt even if the Worker dies.
+  if (session.machine_id && command.trim()) {
+    sessionMessagesDb.appendMessage({
+      sessionId,
+      kind: 'text',
+      payload: createNormalizedMessage({
+        kind: 'text',
+        provider,
+        sessionId,
+        role: 'user',
+        content: command,
+      }),
+    });
+  }
+
+  // Control-plane sessions are bound to a Worker. Never fall back to the
+  // Server-local runtime — that would create the same-box testing illusion.
+  if (session.machine_id) {
+    let providerSessionId = session.provider_session_id;
+    try {
+      // Before resume, ask the Worker to ensure native artifacts exist (and
+      // best-effort restore Claude/Codex transcripts from the cloud copy).
+      if (providerSessionId && sessionMessagesDb.countMessages(sessionId) > 0) {
+        const cloudRows = sessionMessagesDb.listMessages(sessionId);
+        const cloudMessages = cloudRows
+          .map((row) => {
+            try {
+              return JSON.parse(row.payload_json) as NormalizedMessage;
+            } catch {
+              return null;
+            }
+          })
+          .filter((message): message is NormalizedMessage => Boolean(message?.kind));
+
+        const ensureResult = await workerConnectionRegistry.ensureNativeSession({
+          machineId: session.machine_id,
+          sessionId,
+          provider,
+          providerSessionId,
+          projectPath: session.project_path,
+          messages: cloudMessages,
+        });
+
+        if (ensureResult.jsonlPath) {
+          sessionsDb.setSessionJsonlPath(sessionId, ensureResult.jsonlPath);
+        }
+        if (ensureResult.dropProviderSessionId) {
+          sessionsDb.clearProviderSessionId(sessionId);
+          providerSessionId = null;
+        } else if (!ensureResult.success) {
+          throw new Error(ensureResult.error || 'Failed to ensure native session on Worker');
+        }
+      }
+
+      workerConnectionRegistry.dispatchChatRun({
+        machineId: session.machine_id,
+        sessionId,
+        provider,
+        providerSessionId,
+        command,
+        options: runtimeOptions,
+        onEvent: (event) => {
+          run.writer.send(event);
+          persistLatestOutbound();
+        },
+        onComplete: (result) => {
+          if (result.providerSessionId) {
+            sessionsDb.assignProviderSessionId(sessionId, result.providerSessionId);
+          }
+          if (typeof result.jsonlPath === 'string' && result.jsonlPath) {
+            sessionsDb.setSessionJsonlPath(sessionId, result.jsonlPath);
+          }
+          chatRunRegistry.completeRunIfCurrent(run, {
+            exitCode: result.exitCode ?? (result.success === false ? 1 : 0),
+            aborted: Boolean(result.aborted),
+          });
+        },
+        onError: (error) => {
+          run.writer.send(createNormalizedMessage({
+            kind: 'error',
+            provider,
+            sessionId,
+            content: error,
+          }));
+          persistLatestOutbound();
+          chatRunRegistry.completeRunIfCurrent(run, { exitCode: 1 });
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('[Chat] Worker dispatch failed', { sessionId, error: message });
+      run.writer.send(createNormalizedMessage({
+        kind: 'error',
+        provider,
+        sessionId,
+        content: message,
+      }));
+      persistLatestOutbound();
+      chatRunRegistry.completeRunIfCurrent(run, { exitCode: 1 });
+    }
+    return;
+  }
+
+  if (isControlPlaneMode()) {
+    // Defensive: MACHINE_REQUIRED is checked earlier; never reach local runtime.
+    chatRunRegistry.completeRunIfCurrent(run, { exitCode: 1 });
+    return;
+  }
+
   try {
     await dependencies.runtime.run(provider, command, runtimeOptions, run.writer);
   } catch (error) {
@@ -264,10 +403,21 @@ async function handleChatAbort(
     return;
   }
 
-  const success = await dependencies.runtime.abort(run.provider, sessionId);
+  const session = sessionsDb.getSessionById(sessionId);
+  if (session?.machine_id) {
+    try {
+      workerConnectionRegistry.abortChatRun(session.machine_id, sessionId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      sendProtocolError(ws, 'MACHINE_OFFLINE', message, sessionId);
+      return;
+    }
+  } else {
+    await dependencies.runtime.abort(run.provider, sessionId);
+  }
 
   chatRunRegistry.completeRun(sessionId, {
-    exitCode: success ? 0 : 1,
+    exitCode: 0,
     aborted: true,
   });
 }
@@ -340,11 +490,33 @@ function handleChatSubscribe(
 
 /**
  * Handles `chat.permission-response`: forwards a tool-approval decision to the
- * pending approval resolver (Claude is the only provider with interactive
- * approvals today, but the message is intentionally provider-neutral).
+ * pending approval resolver. Worker-bound sessions route the decision to the
+ * machine that owns the live runtime; local sessions resolve in-process.
  */
 function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDependencies): void {
   if (typeof data.requestId !== 'string' || data.requestId.length === 0) {
+    return;
+  }
+
+  const sessionId = typeof data.sessionId === 'string' ? data.sessionId : '';
+  const session = sessionId ? sessionsDb.getSessionById(sessionId) : null;
+  if (session?.machine_id) {
+    try {
+      workerConnectionRegistry.dispatchPermissionResponse({
+        machineId: session.machine_id,
+        requestId: data.requestId,
+        allow: Boolean(data.allow),
+        updatedInput: data.updatedInput,
+        message: typeof data.message === 'string' ? data.message : undefined,
+        rememberEntry: data.rememberEntry,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('[Chat] Failed to route permission response to Worker', {
+        sessionId,
+        error: message,
+      });
+    }
     return;
   }
 

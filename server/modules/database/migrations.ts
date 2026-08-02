@@ -3,9 +3,11 @@ import { Database } from 'better-sqlite3';
 import {
   APP_CONFIG_TABLE_SCHEMA_SQL,
   LAST_SCANNED_AT_SQL,
+  MACHINES_TABLE_SCHEMA_SQL,
   NOTIFICATION_CHANNEL_ENDPOINTS_TABLE_SCHEMA_SQL,
   PROJECTS_TABLE_SCHEMA_SQL,
   PUSH_SUBSCRIPTIONS_TABLE_SCHEMA_SQL,
+  SESSION_MESSAGES_TABLE_SCHEMA_SQL,
   SESSIONS_TABLE_SCHEMA_SQL,
   USER_NOTIFICATION_PREFERENCES_TABLE_SCHEMA_SQL,
   VAPID_KEYS_TABLE_SCHEMA_SQL,
@@ -487,6 +489,24 @@ export const runMigrations = (db: Database) => {
     }
 
     db.exec(LAST_SCANNED_AT_SQL);
+
+    db.exec(MACHINES_TABLE_SCHEMA_SQL);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_machines_token_hash ON machines(token_hash)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_machines_status ON machines(status)');
+
+    addColumnToTableIfNotExists(
+      db,
+      'sessions',
+      getTableInfo(db, 'sessions').map((column) => column.name),
+      'machine_id',
+      'TEXT'
+    );
+    db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_machine_id ON sessions(machine_id)');
+
+    db.exec(SESSION_MESSAGES_TABLE_SCHEMA_SQL);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_session_messages_session_id ON session_messages(session_id)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_session_messages_session_seq ON session_messages(session_id, seq)');
+
     console.log('Database migrations completed successfully');
   } catch (error: any) {
     console.error('Error running migrations:', error.message);

@@ -1,6 +1,9 @@
 import type { VerifyClientCallbackSync } from 'ws';
 
-import type { AuthenticatedWebSocketRequest } from '@/shared/types.js';
+import type {
+  AuthenticatedWebSocketRequest,
+  AuthenticatedWorkerMachine,
+} from '@/shared/types.js';
 
 type WebSocketAuthDependencies = {
   isPlatform: boolean;
@@ -10,6 +13,11 @@ type WebSocketAuthDependencies = {
     username?: string;
     [key: string]: unknown;
   } | null;
+  /**
+   * Validates a worker machine token for `/worker` upgrades. When omitted,
+   * worker connections are rejected.
+   */
+  authenticateWorkerWebSocket?: (token: string | null) => AuthenticatedWorkerMachine | null;
 };
 
 /**
@@ -27,6 +35,23 @@ export function verifyWebSocketClient(
   }
 
   console.log('WebSocket connection attempt to:', `${loggedUrl.pathname}${loggedUrl.search}`);
+
+  // Worker sockets authenticate with a machine token, not a user JWT.
+  if (upgradeUrl.pathname === '/worker') {
+    const token =
+      upgradeUrl.searchParams.get('token') ??
+      request.headers.authorization?.split(' ')[1] ??
+      null;
+    const machine = dependencies.authenticateWorkerWebSocket?.(token) ?? null;
+    if (!machine) {
+      console.log('[WARN] Worker WebSocket authentication failed');
+      return false;
+    }
+
+    request.machine = machine;
+    console.log('[OK] Worker WebSocket authenticated for machine:', machine.id);
+    return true;
+  }
 
   // Platform mode: use the first DB user and skip token checks.
   if (dependencies.isPlatform) {

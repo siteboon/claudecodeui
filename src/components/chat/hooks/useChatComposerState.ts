@@ -837,16 +837,38 @@ export function useChatComposerState({
       // handoff later — this id stays valid for the conversation's lifetime.
       let targetSessionId = selectedSession?.id || currentSessionId || null;
       if (!targetSessionId) {
+        const selectedMachineId = localStorage.getItem('selected-machine-id') || '';
+        if (!selectedMachineId) {
+          addMessage({
+            type: 'error',
+            content: 'Select a Worker machine in Settings → Machines (“Use for chat”) before starting a new chat.',
+            timestamp: new Date(),
+          });
+          return;
+        }
+
         try {
           const response = await authenticatedFetch('/api/providers/sessions', {
             method: 'POST',
             body: JSON.stringify({
               provider,
               projectPath: resolvedProjectPath,
+              machineId: selectedMachineId,
             }),
           });
           if (!response.ok) {
-            throw new Error(`Failed to create session (${response.status})`);
+            let detail = `Failed to create session (${response.status})`;
+            try {
+              const errorBody = await response.json();
+              if (errorBody?.error?.message) {
+                detail = errorBody.error.message;
+              } else if (typeof errorBody?.error === 'string') {
+                detail = errorBody.error;
+              }
+            } catch {
+              // Keep the status-based message when the body is not JSON.
+            }
+            throw new Error(detail);
           }
           const body = await response.json();
           targetSessionId = body?.data?.sessionId || null;
@@ -1232,10 +1254,12 @@ export function useChatComposerState({
         return;
       }
 
+      const targetSessionId = selectedSession?.id || currentSessionId || null;
       validIds.forEach((requestId) => {
         sendMessage({
           type: 'chat.permission-response',
           requestId,
+          sessionId: targetSessionId,
           allow: Boolean(decision?.allow),
           updatedInput: decision?.updatedInput,
           message: decision?.message,
@@ -1247,7 +1271,7 @@ export function useChatComposerState({
         previous.filter((request) => !validIds.includes(request.requestId)),
       );
     },
-    [sendMessage, setPendingPermissionRequests],
+    [currentSessionId, selectedSession?.id, sendMessage, setPendingPermissionRequests],
   );
 
   const [isInputFocused, setIsInputFocused] = useState(false);

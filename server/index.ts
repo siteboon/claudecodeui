@@ -9,7 +9,7 @@ import http from 'http';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import cors from 'cors';
 
-import { AppError, findApplicationRoot, getModuleDirectory, terminalTextStyles } from '@/shared/utils.js';
+import { AppError, findApplicationRoot, getModuleDirectory, isControlPlaneMode, terminalTextStyles } from '@/shared/utils.js';
 import {
     closeSessionsWatcher,
     initializeSessionsWatcher,
@@ -50,6 +50,7 @@ import browserUseMcpRoutes from './modules/browser-use/browser-use-mcp.routes.js
 import { browserUseService } from './modules/browser-use/browser-use.service.js';
 import { initializeDatabase, sessionsDb } from './modules/database/index.js';
 import { configureWebPush } from './modules/notifications/index.js';
+import { machinesRoutes, machinesService, workerConnectionRegistry } from './modules/machines/index.js';
 import { IS_PLATFORM } from './constants/config.js';
 
 const __dirname = getModuleDirectory(import.meta.url);
@@ -99,6 +100,7 @@ const wss = createWebSocketServer(server, {
     verifyClient: {
         isPlatform: IS_PLATFORM,
         authenticateWebSocket,
+        authenticateWorkerWebSocket: (token) => machinesService.authenticateWorkerToken(token),
     },
     chat: {
         runtime: providerRuntimeService,
@@ -114,6 +116,9 @@ const wss = createWebSocketServer(server, {
         },
     },
     getPluginPort,
+    handleWorkerConnection: (ws, request) => {
+        workerConnectionRegistry.handleConnection(ws, request);
+    },
 });
 
 // Make WebSocket server available to routes
@@ -172,6 +177,9 @@ app.use('/api/commands', authenticateToken, commandsRoutes);
 
 // Settings API Routes (protected)
 app.use('/api/settings', authenticateToken, settingsRoutes);
+
+// Control-plane machines (protected)
+app.use('/api/machines', authenticateToken, machinesRoutes);
 
 app.use('/api/system', authenticateToken, systemRoutes);
 
@@ -361,8 +369,14 @@ async function startServer() {
             console.log(`${terminalTextStyles.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
             console.log('');
 
-            // Start watching the projects folder for changes
-            await initializeSessionsWatcher();
+            // Control-plane Servers must not index local provider homes — that
+            // couples the cloud host to whatever CLI history happens to live
+            // on the same box (and was the OOM source during same-box tests).
+            if (isControlPlaneMode()) {
+                console.log(`${terminalTextStyles.info('[INFO]')} Control-plane mode: session watchers disabled`);
+            } else {
+                await initializeSessionsWatcher();
+            }
 
             // Start server-side plugin processes for enabled plugins
             startEnabledPluginServers().catch(err => {

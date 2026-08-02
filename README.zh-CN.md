@@ -91,6 +91,79 @@ cloudcli
 
 更多配置选项、PM2、远程服务器设置等，请参阅 **[文档 →](https://cloudcli.ai/docs)**。
 
+#### 多机控制面（本分支实验功能）
+
+本分支 `feat/cloud-control-plane-workers` 支持把 **Server（网页/控制面）** 和 **Worker（各机执行端）** 分开跑：
+
+- Server 部署在云机器上（建议前面挂 HTTPS / WSS 反代）
+- 每台开发机只跑 Worker，主动连出到 Server
+- **不必发布到 npm 公共仓库**；直接从 Git 安装即可
+
+当前仍是同一仓库、两个命令（尚未拆成两个 npm 包）：
+
+| 角色 | 命令 |
+|------|------|
+| Server | `cloudcli start`（默认） |
+| Worker | `cloudcli worker start --server <url> --token <mw_...>` |
+
+**从 Git 安装（推荐）**
+
+```bash
+git clone -b feat/cloud-control-plane-workers https://github.com/Aaronlll/claudecodeui.git
+cd claudecodeui
+npm install
+npm run build
+```
+
+也可用 npm 直接装 Git 分支（装完后仍建议在仓库目录执行一次 `npm run build`）：
+
+```bash
+npm install -g git+https://github.com/Aaronlll/claudecodeui.git#feat/cloud-control-plane-workers
+```
+
+**云上启动 Server**
+
+```bash
+# 在仓库目录
+npm run server
+# 或
+node dist-server/server/modules/cli/cli.js start --port 3001
+```
+
+浏览器打开 `http://服务器IP:3001`（生产请用 HTTPS 反代，例如 Caddy/Nginx，并把 `:3001` 仅绑定本机）。
+
+**注册 Worker 机器**
+
+1. 打开网页 → 设置 → **机器**
+2. 新建机器，**立即复制** 显示的 `mw_` 令牌（只显示一次）
+3. 在各台开发机启动 Worker：
+
+```bash
+# 开发调试（未 build 也可用）
+npx tsx --tsconfig server/tsconfig.json server/modules/cli/cli.ts worker start \
+  --server ws://127.0.0.1:3001 \
+  --token mw_你的令牌
+
+# 生产 / 远端 Server（务必用 wss）
+node dist-server/server/modules/cli/cli.js worker start \
+  --server wss://agents.example.com \
+  --token mw_你的令牌 \
+  --name my-laptop
+```
+
+也可用环境变量：
+
+```bash
+export WORKER_SERVER_URL=wss://agents.example.com
+export WORKER_TOKEN=mw_你的令牌
+export WORKER_NAME=my-laptop
+node dist-server/server/modules/cli/cli.js worker start
+```
+
+网页机器列表应显示 **online**；可点 **Ping** 做连通性检查。
+
+> **Phase 1 现状（勿测错）：** Worker 只做上线 / 心跳 / Ping。网页对话仍是 `Browser → Server /ws → Server 本机 CLI`。若 Server 与 Worker 同机，网页能聊只是本地一体机在答，**不代表**已走 Worker。后续 Phase 3 会改成经 Worker 执行，并**强制**与原生 CLI 会话文件同步，以便在该 Worker 上 `resume`。
+
 #### Docker Sandboxes（实验性）
 
 在隔离的沙箱中运行代理，具有虚拟机管理程序级别的隔离。默认启动 Claude Code。需要 [`sbx` CLI](https://docs.docker.com/ai/sandboxes/get-started/)。

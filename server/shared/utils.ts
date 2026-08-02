@@ -110,6 +110,28 @@ export class AppError extends Error {
  */
 export const WORKSPACES_ROOT = process.env.WORKSPACES_ROOT || os.homedir();
 
+// ---------------------------
+//----------------- DEPLOYMENT MODE ------------
+/**
+ * Returns true when this Node process is running as a cloud control plane.
+ *
+ * Control-plane rules:
+ * - Never execute local Claude/Cursor/Codex/OpenCode runtimes
+ * - Never watch or synchronize local provider transcript directories
+ * - Chat requires a bound Worker (`sessions.machine_id`)
+ * - Web history comes from `session_messages`, not Server-local files
+ *
+ * Set `CONTROL_PLANE=1`. `DISABLE_SESSION_WATCHERS=1` remains accepted as a
+ * temporary alias used during the multi-machine rollout.
+ *
+ * Used by `server/index.ts`, chat websocket routing, sessions service, and
+ * projects list fetching.
+ */
+export function isControlPlaneMode(): boolean {
+  return process.env.CONTROL_PLANE === '1'
+    || process.env.DISABLE_SESSION_WATCHERS === '1';
+}
+
 /**
  * System-critical paths that must never be used as workspace roots.
  *

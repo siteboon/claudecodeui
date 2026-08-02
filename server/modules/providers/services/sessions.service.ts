@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 
-import { projectsDb, sessionsDb } from '@/modules/database/index.js';
+import { machinesDb, projectsDb, sessionMessagesDb, sessionsDb } from '@/modules/database/index.js';
 import { chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import type {
@@ -11,12 +11,13 @@ import type {
   LLMProvider,
   NormalizedMessage,
 } from '@/shared/types.js';
-import { AppError } from '@/shared/utils.js';
+import { AppError, isControlPlaneMode } from '@/shared/utils.js';
 
 type CreateAppSessionResult = {
   sessionId: string;
   provider: LLMProvider;
   projectPath: string;
+  machineId: string | null;
 };
 
 type ArchivedSessionListItem = {
@@ -156,7 +157,11 @@ export const sessionsService = {
    * for the lifetime of the conversation. The provider-native id is mapped to
    * this row later, when the provider runtime announces it mid-run.
    */
-  createAppSession(provider: LLMProvider, projectPath: string): CreateAppSessionResult {
+  createAppSession(
+    provider: LLMProvider,
+    projectPath: string,
+    machineId: string | null = null,
+  ): CreateAppSessionResult {
     const normalizedProjectPath = projectPath.trim();
     if (!normalizedProjectPath) {
       throw new AppError('projectPath is required.', {
@@ -165,13 +170,39 @@ export const sessionsService = {
       });
     }
 
+    const normalizedMachineId =
+      typeof machineId === 'string' && machineId.trim() ? machineId.trim() : null;
+
+    if (isControlPlaneMode() && !normalizedMachineId) {
+      throw new AppError('machineId is required in control-plane mode. Select a Worker machine first.', {
+        code: 'MACHINE_REQUIRED',
+        statusCode: 400,
+      });
+    }
+
+    if (normalizedMachineId) {
+      const machine = machinesDb.getMachineById(normalizedMachineId);
+      if (!machine || machine.revokedAt) {
+        throw new AppError(`Machine "${normalizedMachineId}" was not found.`, {
+          code: 'MACHINE_NOT_FOUND',
+          statusCode: 404,
+        });
+      }
+    }
+
     const sessionId = randomUUID();
-    sessionsDb.createAppSession(sessionId, provider, normalizedProjectPath);
+    sessionsDb.createAppSession(
+      sessionId,
+      provider,
+      normalizedProjectPath,
+      normalizedMachineId,
+    );
 
     return {
       sessionId,
       provider,
       projectPath: normalizedProjectPath,
+      machineId: normalizedMachineId,
     };
   },
 
@@ -219,6 +250,42 @@ export const sessionsService = {
       });
     }
 
+    const offset = options.offset ?? 0;
+    const limit = options.limit ?? null;
+
+    // Prefer the cloud copy for Worker-bound chats and any session that already
+    // has dual-written messages. Do NOT force this path for every session in
+    // control-plane mode: legacy rows were indexed from local provider files
+    // and have no `session_messages` yet — blocking disk reads made the web UI
+    // look like all history vanished.
+    const cloudCount = sessionMessagesDb.countMessages(sessionId);
+    if (session.machine_id || cloudCount > 0) {
+      const rows = sessionMessagesDb.listMessages(sessionId, {
+        limit: typeof limit === 'number' ? limit : undefined,
+        offset,
+      });
+      const messages = rows
+        .map((row) => {
+          try {
+            return {
+              ...(JSON.parse(row.payload_json) as NormalizedMessage),
+              sessionId,
+            };
+          } catch {
+            return null;
+          }
+        })
+        .filter((message): message is NormalizedMessage => Boolean(message));
+
+      return {
+        messages,
+        total: cloudCount,
+        hasMore: typeof limit === 'number' ? offset + messages.length < cloudCount : false,
+        offset,
+        limit,
+      };
+    }
+
     // App-created sessions that never produced a provider transcript yet
     // (e.g. first message still streaming) simply have no history.
     if (!session.provider_session_id) {
@@ -226,15 +293,18 @@ export const sessionsService = {
         messages: [],
         total: 0,
         hasMore: false,
-        offset: options.offset ?? 0,
-        limit: options.limit ?? null,
+        offset,
+        limit,
       };
     }
 
+    // Legacy / unbound sessions: hydrate from provider-native files when they
+    // exist on this host. Control-plane Servers still refuse to *run* these
+    // locally; remote Worker history fetch is a later RPC.
     const provider = session.provider as LLMProvider;
     const result = await providerRegistry.resolveProvider(provider).sessions.fetchHistory(sessionId, {
-      limit: options.limit ?? null,
-      offset: options.offset ?? 0,
+      limit,
+      offset,
       projectPath: session.project_path ?? '',
       providerSessionId: session.provider_session_id,
     });

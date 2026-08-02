@@ -107,12 +107,29 @@
     "appearance": "Appearance",
     "git": "Git",
     "apiTokens": "API & Tokens",
+    "machines": "Machines",
     "voice": "Voice",
     "tasks": "Tasks",
     "browser": "Browser",
     "notifications": "Notifications",
     "plugins": "Plugins",
     "about": "About"
+  },
+  "machines": {
+    "title": "Machines",
+    "description": "Register worker machines that connect outbound to this server. Tokens are shown once.",
+    "listHint": "Workers: cloudcli worker start --server <url> --token <mw_...>",
+    "newButton": "New machine",
+    "form": {
+      "placeholder": "Machine name",
+      "createButton": "Create",
+      "cancelButton": "Cancel"
+    },
+    "tokenOnce": "Copy this token now. It will not be shown again.",
+    "loading": "Loading machines…",
+    "empty": "No machines registered yet.",
+    "ping": "Ping",
+    "pingSuccess": "Ping ok — {{latency}} ms"
   },
   "notifications": {
     "title": "Notifications",

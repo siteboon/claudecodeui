@@ -95,6 +95,71 @@ Open `http://localhost:3001` — all your existing sessions are discovered autom
 
 Visit the **[documentation →](https://cloudcli.ai/docs)** for full configuration options, PM2, remote server setup and more.
 
+#### Multi-machine control plane (experimental on this branch)
+
+Branch `feat/cloud-control-plane-workers` splits **Server** (web UI / control plane) from **Worker** (per-machine agent runner):
+
+- Run Server on a cloud host (put HTTPS/WSS reverse proxy in front)
+- Run Worker on each developer machine; workers dial out to Server
+- **No public npm publish required** — install from Git
+
+Today this is still one repo with two commands (not separate packages yet):
+
+| Role | Command |
+|------|---------|
+| Server | `cloudcli start` (default) |
+| Worker | `cloudcli worker start --server <url> --token <mw_...>` |
+
+**Install from Git (recommended)**
+
+```bash
+git clone -b feat/cloud-control-plane-workers https://github.com/Aaronlll/claudecodeui.git
+cd claudecodeui
+npm install
+npm run build
+```
+
+Or install the branch with npm (still run `npm run build` in the checkout if needed):
+
+```bash
+npm install -g git+https://github.com/Aaronlll/claudecodeui.git#feat/cloud-control-plane-workers
+```
+
+**Start Server (cloud)**
+
+```bash
+npm run server
+# or
+node dist-server/server/modules/cli/cli.js start --port 3001
+```
+
+Open `http://SERVER_IP:3001` (use HTTPS reverse proxy in production; keep `:3001` private).
+
+**Register a Worker**
+
+1. Web UI → Settings → **Machines**
+2. Create a machine and **copy the `mw_` token immediately** (shown once)
+3. On each developer machine:
+
+```bash
+# Local debug without a prior build
+npx tsx --tsconfig server/tsconfig.json server/modules/cli/cli.ts worker start \
+  --server ws://127.0.0.1:3001 \
+  --token mw_YOUR_TOKEN
+
+# Remote Server (use wss)
+node dist-server/server/modules/cli/cli.js worker start \
+  --server wss://agents.example.com \
+  --token mw_YOUR_TOKEN \
+  --name my-laptop
+```
+
+Env vars also work: `WORKER_SERVER_URL`, `WORKER_TOKEN`, `WORKER_NAME`.
+
+The Machines list should show **online**; use **Ping** to verify connectivity.
+
+> **Phase 1 reality (do not mis-test):** Worker only does online / heartbeat / Ping. Web chat is still `Browser → Server /ws → Server-local CLI`. If Server and Worker share one host, a working web chat only proves the old monolith — **not** Worker routing. Phase 3 will route chat through Worker and **require** native CLI transcript sync so `resume` works on that Worker.
+
 #### Docker Sandboxes (Experimental)
 
 Run agents in isolated sandboxes with hypervisor-level isolation. Starts Claude Code by default. Requires the [`sbx` CLI](https://docs.docker.com/ai/sandboxes/get-started/).

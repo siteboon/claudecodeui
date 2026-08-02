@@ -14,6 +14,14 @@ type WebSocketServerDependencies = {
   chat: Parameters<typeof handleChatConnection>[2];
   shell: Parameters<typeof handleShellConnection>[1];
   getPluginPort: Parameters<typeof handlePluginWsProxy>[2];
+  /**
+   * Optional worker gateway handler for `/worker` sockets. When omitted, worker
+   * paths are closed immediately after upgrade.
+   */
+  handleWorkerConnection?: (
+    ws: WebSocket,
+    request: AuthenticatedWebSocketRequest,
+  ) => void;
 };
 
 /**
@@ -110,6 +118,17 @@ export function createWebSocketServer(
 
     if (pathname === '/desktop-notifications') {
       handleDesktopNotificationsConnection(ws, incomingRequest);
+      return;
+    }
+
+    if (pathname === '/worker') {
+      if (dependencies.handleWorkerConnection) {
+        dependencies.handleWorkerConnection(ws, incomingRequest);
+        return;
+      }
+
+      console.log('[WARN] Worker WebSocket path is not configured');
+      ws.close();
       return;
     }
 

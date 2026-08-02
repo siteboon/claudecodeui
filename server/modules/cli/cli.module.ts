@@ -92,5 +92,13 @@ export function createCliApplication(): CliApplication {
       const { startBrowserUseMcp } = await import('../browser-use/index.js');
       await startBrowserUseMcp();
     },
+    startWorker: async (options) => {
+      const { createWorkerAgentService } = await import('../worker-agent/index.js');
+      const workerAgent = createWorkerAgentService({
+        environment: process.env,
+        output,
+      });
+      return workerAgent.start(options);
+    },
   });
 }
