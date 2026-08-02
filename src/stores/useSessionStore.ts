@@ -110,6 +110,14 @@ export interface SessionSlot {
    */
   _fetchSeq: number;
   _appliedFetchSeq: number;
+  /**
+   * @internal Set when a `refreshFromServer` was requested while the chat
+   * view for this session wasn't visible (e.g. user parked on the Shell
+   * tab). The full-transcript refetch is deferred rather than dropped, and
+   * runs once the chat view becomes visible again - see
+   * `requestRefreshFromServer` / `flushPendingRefresh`.
+   */
+  _refreshPending: boolean;
   status: SessionStatus;
   fetchedAt: number;
   total: number;
@@ -135,6 +143,7 @@ function createEmptySlot(): SessionSlot {
     tokenUsage: null,
     _fetchSeq: 0,
     _appliedFetchSeq: 0,
+    _refreshPending: false,
   };
 }
 
@@ -614,6 +623,39 @@ export function useSessionStore() {
   }, [getSlot, notify]);
 
   /**
+   * Same full-transcript re-sync as `refreshFromServer`, but skips the fetch
+   * (marking it pending instead) when the caller reports its view isn't
+   * currently visible. Callers that always run while visible (e.g. the chat
+   * view refreshing itself) see identical behavior to calling
+   * `refreshFromServer` directly - this only changes what happens while
+   * nothing is actually rendering the transcript.
+   */
+  const requestRefreshFromServer = useCallback((
+    sessionId: string,
+    options: { visible: boolean },
+  ): Promise<void> => {
+    if (!options.visible) {
+      getSlot(sessionId)._refreshPending = true;
+      return Promise.resolve();
+    }
+    getSlot(sessionId)._refreshPending = false;
+    return refreshFromServer(sessionId);
+  }, [getSlot, refreshFromServer]);
+
+  /**
+   * Runs the deferred refresh from `requestRefreshFromServer`, if one is
+   * pending, once the caller's view becomes visible again. No-op otherwise.
+   */
+  const flushPendingRefresh = useCallback((sessionId: string) => {
+    const slot = getSlot(sessionId);
+    if (!slot._refreshPending) {
+      return;
+    }
+    slot._refreshPending = false;
+    void refreshFromServer(sessionId);
+  }, [getSlot, refreshFromServer]);
+
+  /**
    * Update session status.
    */
   const setStatus = useCallback((sessionId: string, status: SessionStatus) => {
@@ -714,6 +756,8 @@ export function useSessionStore() {
     appendRealtime,
     appendRealtimeBatch,
     refreshFromServer,
+    requestRefreshFromServer,
+    flushPendingRefresh,
     setActiveSession,
     setStatus,
     isStale,
@@ -725,6 +769,7 @@ export function useSessionStore() {
   }), [
     getSlot, has, fetchFromServer, fetchMore,
     appendRealtime, appendRealtimeBatch, refreshFromServer,
+    requestRefreshFromServer, flushPendingRefresh,
     setActiveSession, setStatus, isStale, updateStreaming, finalizeStreaming,
     clearRealtime, getMessages, getSessionSlot,
   ]);

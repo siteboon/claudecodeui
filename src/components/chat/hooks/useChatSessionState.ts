@@ -28,6 +28,8 @@ interface UseChatSessionStateArgs {
   /** Highest live seq observed per session; sent as `lastSeq` on subscribe. */
   lastSeqRef: MutableRefObject<Map<string, number>>;
   sessionStore: SessionStore;
+  /** Whether the chat tab is the currently visible tab. Defaults to true. */
+  isActiveTab?: boolean;
 }
 
 interface ScrollRestoreState {
@@ -107,6 +109,7 @@ export function useChatSessionState({
   statusCheckSentAtRef,
   lastSeqRef,
   sessionStore,
+  isActiveTab = true,
 }: UseChatSessionStateArgs) {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(selectedSession?.id || null);
   const [isLoadingSessionMessages, setIsLoadingSessionMessages] = useState(false);
@@ -589,9 +592,9 @@ export function useChatSessionState({
       try {
         // Skip store refresh during active streaming
         if (!isProcessing) {
-          await sessionStore.refreshFromServer(selectedSession.id);
+          await sessionStore.requestRefreshFromServer(selectedSession.id, { visible: isActiveTab });
 
-          if (isNearBottom()) {
+          if (isActiveTab && isNearBottom()) {
             setTimeout(() => scrollToBottom(), 200);
           }
         }
@@ -609,7 +612,16 @@ export function useChatSessionState({
     selectedSession,
     sessionStore,
     isProcessing,
+    isActiveTab,
   ]);
+
+  // Chat became the visible tab again: run any full-transcript refresh that
+  // was deferred (via requestRefreshFromServer) while it was hidden. No-op if
+  // nothing is pending.
+  useEffect(() => {
+    if (!isActiveTab || !selectedSession) return;
+    sessionStore.flushPendingRefresh(selectedSession.id);
+  }, [isActiveTab, selectedSession, sessionStore]);
 
   // Search navigation target
   useEffect(() => {
