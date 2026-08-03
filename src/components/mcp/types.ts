@@ -1,6 +1,7 @@
 import type { LLMProvider } from '../../types/app';
 
-export type McpProvider = LLMProvider;
+// Pi does not support MCP, so it is excluded from the configurable providers.
+export type McpProvider = Exclude<LLMProvider, 'pi'>;
 export type McpScope = 'user' | 'local' | 'project';
 export type McpTransport = 'stdio' | 'http' | 'sse';
 export type McpImportMode = 'form' | 'json';

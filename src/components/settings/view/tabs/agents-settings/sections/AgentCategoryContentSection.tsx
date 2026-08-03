@@ -73,7 +73,7 @@ export default function AgentCategoryContentSection({
         />
       )}
 
-      {selectedCategory === 'mcp' && (
+      {selectedCategory === 'mcp' && selectedAgent !== 'pi' && (
         // SettingsProject.name is populated from the DB projectId by
         // normalizeProjectForSettings, so we can map it straight through.
         <McpServers

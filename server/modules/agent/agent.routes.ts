@@ -22,6 +22,7 @@ type AgentRouterDependencies = {
   queryCursor: ProviderRunFunction;
   queryCodex: ProviderRunFunction;
   queryOpenCode: ProviderRunFunction;
+  queryPi: ProviderRunFunction;
   GithubClient: typeof import('@octokit/rest').Octokit;
 };
 
@@ -44,6 +45,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
   const spawnCursor = dependencies.queryCursor;
   const queryCodex = dependencies.queryCodex;
   const spawnOpenCode = dependencies.queryOpenCode;
+  const queryPi = dependencies.queryPi;
   const Octokit = dependencies.GithubClient;
   const router = express.Router();
 
@@ -896,8 +898,8 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       return res.status(400).json({ error: 'message is required' });
     }
 
-    if (!['claude', 'cursor', 'codex', 'opencode'].includes(provider)) {
-      return res.status(400).json({ error: 'provider must be "claude", "cursor", "codex", or "opencode"' });
+    if (!['claude', 'cursor', 'codex', 'opencode', 'pi'].includes(provider)) {
+      return res.status(400).json({ error: 'provider must be "claude", "cursor", "codex", "opencode", or "pi"' });
     }
 
     // Validate GitHub branch/PR creation requirements
@@ -1025,6 +1027,18 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
           model: model || opencodeModels.DEFAULT,
           effort,
           permissionMode: 'bypassPermissions' // Agent runs are non-interactive, like the other providers above
+        }, writer);
+      } else if (provider === 'pi') {
+        console.log('Starting Pi CLI session');
+
+        const piModels = (await providerModelsService.getProviderModels('pi')).models;
+        await queryPi(message.trim(), {
+          projectPath: finalProjectPath,
+          cwd: finalProjectPath,
+          sessionId: sessionId || null,
+          model: model || piModels.DEFAULT,
+          effort,
+          permissionMode: 'bypassPermissions'
         }, writer);
       }
 

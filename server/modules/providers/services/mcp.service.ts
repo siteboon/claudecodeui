@@ -70,6 +70,9 @@ export const providerMcpService = {
         await provider.mcp.upsertServer({ ...input, scope });
         results.push({ provider: provider.id, created: true });
       } catch (error) {
+        if (error instanceof AppError && error.code === 'PROVIDER_CAPABILITY_UNSUPPORTED') {
+          continue;
+        }
         results.push({
           provider: provider.id,
           created: false,
@@ -96,6 +99,9 @@ export const providerMcpService = {
         const result = await provider.mcp.removeServer(input);
         results.push({ provider: provider.id, removed: result.removed });
       } catch (error) {
+        if (error instanceof AppError && error.code === 'PROVIDER_CAPABILITY_UNSUPPORTED') {
+          continue;
+        }
         results.push({
           provider: provider.id,
           removed: false,

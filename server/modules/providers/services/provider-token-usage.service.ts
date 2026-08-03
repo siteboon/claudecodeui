@@ -6,6 +6,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import { PiTokenUsageProvider } from '@/modules/providers/list/pi/pi-token-usage.provider.js';
 import type { AnyRecord } from '@/shared/types.js';
 import { AppError, getOpenCodeDatabasePath } from '@/shared/utils.js';
 
@@ -309,6 +310,28 @@ export function createProviderTokenUsageService(
 
         const fileContent = await dependencies.readTextFile(sessionFilePath);
         return readCodexTokenUsage(fileContent);
+      }
+
+      if (session.provider === 'pi') {
+        if (!session.jsonl_path) {
+          throw new AppError(`Pi session file for "${sessionId}" was not found.`, {
+            code: 'SESSION_FILE_NOT_FOUND',
+            statusCode: 404,
+          });
+        }
+
+        const usage = new PiTokenUsageProvider().getTokenUsage(session.jsonl_path);
+        if (!usage) {
+          return {
+            used: 0,
+            inputTokens: 0,
+            outputTokens: 0,
+            breakdown: { input: 0, output: 0 },
+            message: 'No token usage recorded for this Pi session',
+          };
+        }
+
+        return usage;
       }
 
       let sessionFilePath = session.jsonl_path;

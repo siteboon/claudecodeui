@@ -351,6 +351,9 @@
       },
       "opencode": {
         "description": "OpenCode CLI assistant"
+      },
+      "pi": {
+        "description": "Pi CLI assistant"
       }
     },
     "connectionStatus": "Connection Status",

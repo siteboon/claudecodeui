@@ -635,7 +635,9 @@ export function useChatComposerState({
               ? 'codex-settings'
               : provider === 'opencode'
                   ? 'opencode-settings'
-                : 'claude-settings';
+                : provider === 'pi'
+                    ? 'pi-settings'
+                  : 'claude-settings';
         const savedSettings = safeLocalStorage.getItem(settingsKey);
         if (savedSettings) {
           return JSON.parse(savedSettings);

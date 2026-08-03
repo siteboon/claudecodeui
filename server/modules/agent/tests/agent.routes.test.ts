@@ -34,6 +34,7 @@ function createDependencies(
     queryCursor: unexpectedProviderCall as AgentDependencies['queryCursor'],
     queryCodex: unexpectedProviderCall as AgentDependencies['queryCodex'],
     queryOpenCode: unexpectedProviderCall as AgentDependencies['queryOpenCode'],
+    queryPi: unexpectedProviderCall as AgentDependencies['queryPi'],
     GithubClient: class {} as unknown as AgentDependencies['GithubClient'],
     ...overrides,
   };
@@ -202,4 +203,35 @@ test('Agent route reuses a matching checkout without cloning or deleting it', as
 
   assert.deepEqual(spawnedArguments, [['config', '--get', 'remote.origin.url']]);
   assert.deepEqual(removedPaths, []);
+});
+
+test('Agent route dispatches to the Pi provider runner with its default model', async () => {
+  const piCalls: Array<{ command: string; model: string }> = [];
+
+  await withAgentServer(createDependencies({
+    fileSystem: {
+      access: async () => undefined,
+      rm: async () => undefined,
+    } as unknown as AgentDependencies['fileSystem'],
+    models: {
+      getProviderModels: async () => ({ models: { DEFAULT: 'pi-default-model' } }),
+    } as unknown as AgentDependencies['models'],
+    queryPi: (async (command: string, options: { model: string }) => {
+      piCalls.push({ command, model: options.model });
+    }) as unknown as AgentDependencies['queryPi'],
+  }), async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/agent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectPath: '/home/test/.claude/external-projects/pi-project',
+        message: 'Run Pi',
+        provider: 'pi',
+        stream: false,
+      }),
+    });
+    assert.equal(response.status, 200);
+  });
+
+  assert.deepEqual(piCalls, [{ command: 'Run Pi', model: 'pi-default-model' }]);
 });

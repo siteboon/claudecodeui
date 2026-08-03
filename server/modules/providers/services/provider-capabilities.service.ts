@@ -81,6 +81,17 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsTokenUsage: true,
     supportsEffort: true,
   },
+  pi: {
+    provider: 'pi',
+    permissionModes: ['plan', 'bypassPermissions'],
+    defaultPermissionMode: 'bypassPermissions',
+    supportsImages: true,
+    supportsFiles: true,
+    supportsAbort: true,
+    supportsPermissionRequests: false,
+    supportsTokenUsage: true,
+    supportsEffort: true,
+  },
 };
 
 /**
