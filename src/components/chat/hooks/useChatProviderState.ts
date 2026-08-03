@@ -6,8 +6,9 @@ import type {
   ProjectSession,
   LLMProvider,
   Project,
+  CustomProviderModelInput,
+  ProviderModelActions,
   ProviderModelOption,
-  ProviderModelsCacheInfo,
   ProviderModelsDefinition,
 } from '../../../types/app';
 import {
@@ -73,7 +74,17 @@ type ProviderModelsApiResponse = {
   success?: boolean;
   data?: {
     models?: ProviderModelsDefinition;
-    cache?: ProviderModelsCacheInfo;
+  };
+};
+
+type ProviderModelMutationApiResponse = {
+  success?: boolean;
+  data?: {
+    model?: ProviderModelOption;
+    models?: ProviderModelsDefinition;
+  };
+  error?: {
+    message?: string;
   };
 };
 
@@ -129,11 +140,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   const [providerModelCatalog, setProviderModelCatalog] = useState<
     Partial<Record<LLMProvider, ProviderModelsDefinition>>
   >({});
-  const [providerModelCacheCatalog, setProviderModelCacheCatalog] = useState<
-    Partial<Record<LLMProvider, ProviderModelsCacheInfo>>
-  >({});
   const [providerModelsLoading, setProviderModelsLoading] = useState(true);
-  const [providerModelsRefreshing, setProviderModelsRefreshing] = useState(false);
 
   const providerModelsRequestIdRef = useRef(0);
 
@@ -169,33 +176,21 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     localStorage.setItem(`${targetProvider}-effort`, effort);
   }, []);
 
-  const loadProviderModels = useCallback(async (options: { bypassCache?: boolean } = {}) => {
+  const loadProviderModels = useCallback(async () => {
     const requestId = providerModelsRequestIdRef.current + 1;
     providerModelsRequestIdRef.current = requestId;
-    const isHardRefresh = options.bypassCache === true;
-
-    if (isHardRefresh) {
-      setProviderModelsRefreshing(true);
-    } else {
-      setProviderModelsLoading(true);
-    }
+    setProviderModelsLoading(true);
 
     try {
       const results = await Promise.all(
         PROVIDERS.map(async (p) => {
-          const params = new URLSearchParams();
-          if (options.bypassCache) {
-            params.set('bypassCache', 'true');
-          }
-
-          const queryString = params.toString();
-          const response = await authenticatedFetch(`/api/providers/${p}/models${queryString ? `?${queryString}` : ''}`);
+          const response = await authenticatedFetch(`/api/providers/${p}/models`);
           const body = (await response.json()) as ProviderModelsApiResponse;
-          if (!body.success || !body.data?.models || !body.data?.cache) {
+          if (!body.success || !body.data?.models) {
             return null;
           }
 
-          return body.data;
+          return body.data.models;
         }),
       );
 
@@ -204,7 +199,6 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       }
 
       const nextCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>> = {};
-      const nextCacheCatalog: Partial<Record<LLMProvider, ProviderModelsCacheInfo>> = {};
 
       PROVIDERS.forEach((p, i) => {
         const entry = results[i];
@@ -212,18 +206,15 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
           return;
         }
 
-        nextCatalog[p] = entry.models;
-        nextCacheCatalog[p] = entry.cache;
+        nextCatalog[p] = entry;
       });
 
       setProviderModelCatalog(nextCatalog);
-      setProviderModelCacheCatalog(nextCacheCatalog);
     } catch (error) {
       console.error('Error loading provider models:', error);
     } finally {
       if (providerModelsRequestIdRef.current === requestId) {
         setProviderModelsLoading(false);
-        setProviderModelsRefreshing(false);
       }
     }
   }, []);
@@ -603,6 +594,112 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     [provider, providerModelCatalog],
   );
 
+  const applyProviderCatalog = useCallback((
+    targetProvider: LLMProvider,
+    models: ProviderModelsDefinition,
+  ) => {
+    setProviderModelCatalog((previous) => ({
+      ...previous,
+      [targetProvider]: models,
+    }));
+  }, []);
+
+  const readModelMutationResponse = useCallback(async (
+    response: Response,
+  ): Promise<Required<Pick<NonNullable<ProviderModelMutationApiResponse['data']>, 'model' | 'models'>>> => {
+    const body = (await response.json()) as ProviderModelMutationApiResponse;
+    if (!response.ok || !body.success || !body.data?.model || !body.data.models) {
+      throw new Error(body.error?.message || 'Unable to save this model.');
+    }
+
+    return {
+      model: body.data.model,
+      models: body.data.models,
+    };
+  }, []);
+
+  const createCustomModel = useCallback(async (
+    targetProvider: LLMProvider,
+    input: CustomProviderModelInput,
+  ) => {
+    const response = await authenticatedFetch(`/api/providers/${targetProvider}/models`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+    const result = await readModelMutationResponse(response);
+    applyProviderCatalog(targetProvider, result.models);
+  }, [applyProviderCatalog, readModelMutationResponse]);
+
+  const updateCustomModel = useCallback(async (
+    targetProvider: LLMProvider,
+    existing: ProviderModelOption,
+    input: CustomProviderModelInput,
+  ) => {
+    if (!existing.recordId) {
+      throw new Error('This model cannot be edited.');
+    }
+
+    const response = await authenticatedFetch(
+      `/api/providers/${targetProvider}/models/${existing.recordId}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(input),
+      },
+    );
+    const result = await readModelMutationResponse(response);
+    applyProviderCatalog(targetProvider, result.models);
+
+    if (providerModels[targetProvider] === existing.value) {
+      setStoredProviderModel(targetProvider, result.model.value);
+    }
+    if (provider === targetProvider && sessionModel === existing.value) {
+      setSessionModel(result.model.value);
+    }
+  }, [
+    applyProviderCatalog,
+    provider,
+    providerModels,
+    readModelMutationResponse,
+    sessionModel,
+    setStoredProviderModel,
+  ]);
+
+  const removeCustomModel = useCallback(async (
+    targetProvider: LLMProvider,
+    existing: ProviderModelOption,
+  ) => {
+    if (!existing.recordId) {
+      throw new Error('This model cannot be deleted.');
+    }
+
+    const response = await authenticatedFetch(
+      `/api/providers/${targetProvider}/models/${existing.recordId}`,
+      { method: 'DELETE' },
+    );
+    const result = await readModelMutationResponse(response);
+    applyProviderCatalog(targetProvider, result.models);
+
+    if (providerModels[targetProvider] === existing.value) {
+      setStoredProviderModel(targetProvider, result.models.DEFAULT);
+    }
+    if (provider === targetProvider && sessionModel === existing.value) {
+      setSessionModel(result.models.DEFAULT);
+    }
+  }, [
+    applyProviderCatalog,
+    provider,
+    providerModels,
+    readModelMutationResponse,
+    sessionModel,
+    setStoredProviderModel,
+  ]);
+
+  const providerModelActions = useMemo<ProviderModelActions>(() => ({
+    create: createCustomModel,
+    update: updateCustomModel,
+    remove: removeCustomModel,
+  }), [createCustomModel, removeCustomModel, updateCustomModel]);
+
   return {
     provider,
     setProvider,
@@ -626,10 +723,8 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     selectPermissionMode,
     cyclePermissionMode,
     providerModelCatalog,
-    providerModelCacheCatalog,
     providerModelsLoading,
-    providerModelsRefreshing,
-    hardRefreshProviderModels: () => loadProviderModels({ bypassCache: true }),
+    providerModelActions,
     selectProviderModel,
     setStoredProviderEffort,
     resolvePermissionModeForProvider,

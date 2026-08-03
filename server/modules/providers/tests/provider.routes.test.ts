@@ -1,15 +1,16 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import express from 'express';
+import express, { type NextFunction, type Request, type Response } from 'express';
 
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import providerRouter from '@/modules/providers/provider.routes.js';
+import { AppError } from '@/shared/utils.js';
 
 async function withProviderServer(
   run: (baseUrl: string, workspacePath: string) => Promise<void>,
@@ -19,9 +20,20 @@ async function withProviderServer(
 
   closeConnection();
   process.env.DATABASE_PATH = path.join(tempDirectory, 'auth.db');
+  await writeFile(process.env.DATABASE_PATH, '');
   await initializeDatabase();
 
   const app = express().use(express.json()).use('/api/providers', providerRouter);
+  app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    if (error instanceof AppError) {
+      res.status(error.statusCode).json({
+        success: false,
+        error: { code: error.code, message: error.message },
+      });
+      return;
+    }
+    res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR' } });
+  });
   const server = app.listen(0, '127.0.0.1');
   await once(server, 'listening');
 
@@ -62,6 +74,77 @@ test('session creation route names a CloudCLI session from the initial message',
     assert.equal(
       sessionsDb.getSessionById(payload.data.sessionId)?.custom_name,
       'abcd efg hij klm',
+    );
+  });
+});
+
+test('model routes expose immutable defaults and full custom model CRUD', async () => {
+  await withProviderServer(async (baseUrl) => {
+    const initialResponse = await fetch(`${baseUrl}/api/providers/codex/models`);
+    const initialPayload = await initialResponse.json() as {
+      data: {
+        cache?: unknown;
+        models: {
+          OPTIONS: Array<{ recordId?: number; value: string; isCustom: boolean }>;
+        };
+      };
+    };
+    assert.equal(initialResponse.status, 200);
+    assert.equal('cache' in initialPayload.data, false);
+    const predefined = initialPayload.data.models.OPTIONS[0];
+    assert.equal(predefined.isCustom, false);
+    assert.equal(predefined.recordId, undefined);
+
+    const createResponse = await fetch(`${baseUrl}/api/providers/codex/models`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'Gateway GPT', id: 'gateway/gpt' }),
+    });
+    const createPayload = await createResponse.json() as {
+      data: { model: { recordId: number; value: string; label: string; isCustom: boolean } };
+    };
+    assert.equal(createResponse.status, 201);
+    assert.equal(createPayload.data.model.isCustom, true);
+    const customRecordId = createPayload.data.model.recordId;
+
+    const updateResponse = await fetch(
+      `${baseUrl}/api/providers/codex/models/${customRecordId}`,
+      {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ model: 'Gateway GPT Updated', id: 'gateway/gpt-v2' }),
+      },
+    );
+    const updatePayload = await updateResponse.json() as {
+      data: { model: { value: string; label: string } };
+    };
+    assert.equal(updateResponse.status, 200);
+    assert.equal(updatePayload.data.model.value, 'gateway/gpt-v2');
+    assert.equal(updatePayload.data.model.label, 'Gateway GPT Updated');
+
+    const immutableResponse = await fetch(
+      `${baseUrl}/api/providers/codex/models/999999`,
+      {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ model: 'Changed', id: 'changed' }),
+      },
+    );
+    const immutablePayload = await immutableResponse.json() as { error: { code: string } };
+    assert.equal(immutableResponse.status, 404);
+    assert.equal(immutablePayload.error.code, 'MODEL_NOT_FOUND');
+
+    const deleteResponse = await fetch(
+      `${baseUrl}/api/providers/codex/models/${customRecordId}`,
+      { method: 'DELETE' },
+    );
+    const deletePayload = await deleteResponse.json() as {
+      data: { models: { OPTIONS: Array<{ recordId: number }> } };
+    };
+    assert.equal(deleteResponse.status, 200);
+    assert.equal(
+      deletePayload.data.models.OPTIONS.some((option) => option.recordId === customRecordId),
+      false,
     );
   });
 });

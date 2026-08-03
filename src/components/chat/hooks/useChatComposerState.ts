@@ -28,7 +28,7 @@ import type {
   PermissionMode,
   SessionEstablishedContext,
 } from '../types/types';
-import type { Project, ProjectSession, LLMProvider, ProviderModelsCacheInfo } from '../../../types/app';
+import type { Project, ProjectSession, LLMProvider, ProviderModelOption } from '../../../types/app';
 import { escapeRegExp } from '../utils/chatFormatting';
 
 import { useFileMentions } from './useFileMentions';
@@ -94,13 +94,8 @@ export type ModelCommandData = {
   };
   available?: Partial<Record<LLMProvider, string[]>>;
   availableModels?: string[];
-  availableOptions?: Array<{
-    value: string;
-    label?: string;
-    description?: string;
-  }>;
+  availableOptions?: ProviderModelOption[];
   defaultModel?: string;
-  cache?: ProviderModelsCacheInfo;
 };
 
 export type CostCommandData = {

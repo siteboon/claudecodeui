@@ -138,6 +138,27 @@ CREATE TABLE IF NOT EXISTS app_config (
 );
 `;
 
+/**
+ * Persistent custom-model library used by the Providers module.
+ *
+ * Only user-created models are stored here. Predefined models remain source-
+ * controlled in each provider's `-models.provider.ts` adapter so they can be
+ * updated without migrating application data. `model_id` is unique only within
+ * a provider because different CLIs can accept the same identifier.
+ */
+export const PROVIDER_MODELS_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS provider_models (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider TEXT NOT NULL CHECK (provider IN ('claude', 'cursor', 'codex', 'opencode')),
+    model_id TEXT NOT NULL,
+    model_name TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(provider, model_id)
+);
+`;
+
 export const INIT_SCHEMA_SQL = `
 -- Initialize authentication database
 PRAGMA foreign_keys = ON;
@@ -181,4 +202,8 @@ CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id);
 ${LAST_SCANNED_AT_SQL}
 
 ${APP_CONFIG_TABLE_SCHEMA_SQL}
+
+${PROVIDER_MODELS_TABLE_SCHEMA_SQL}
+CREATE INDEX IF NOT EXISTS idx_provider_models_provider_order
+ON provider_models(provider, sort_order, id);
 `;

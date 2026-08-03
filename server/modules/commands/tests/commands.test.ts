@@ -16,12 +16,8 @@ import { createCommandsRouter } from '../commands.routes.js';
 function createModelsService(sessionModels: Record<string, string> = {}) {
   return {
     getProviderModels: async () => ({
-      models: { OPTIONS: [{ value: 'default', label: 'Default' }], DEFAULT: 'default' },
-      cache: {
-        updatedAt: '2026-01-01T00:00:00.000Z',
-        expiresAt: '2026-01-02T00:00:00.000Z',
-        source: 'fresh' as const,
-      },
+      OPTIONS: [{ value: 'default', label: 'Default' }],
+      DEFAULT: 'default',
     }),
     getCurrentActiveModel: async () => ({ model: 'default' }),
     setSessionModel: () => null,
@@ -39,7 +35,6 @@ function createModelsService(sessionModels: Record<string, string> = {}) {
       };
     },
     resolveResumeModel: async () => undefined,
-    clearCache: () => undefined,
   };
 }
 

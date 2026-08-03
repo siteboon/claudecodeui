@@ -9,6 +9,7 @@ import { providerSkillsService } from '@/modules/providers/services/skills.servi
 import { sessionConversationsSearchService } from '@/modules/providers/services/session-conversations-search.service.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
 import type {
+  CustomProviderModelInput,
   LLMProvider,
   McpScope,
   McpTransport,
@@ -372,6 +373,65 @@ const parseSessionModelPayload = (payload: unknown): string => {
   return model;
 };
 
+const parseModelRecordId = (value: unknown): number => {
+  const rawRecordId = readPathParam(value, 'recordId').trim();
+  if (!/^\d+$/.test(rawRecordId)) {
+    throw new AppError('recordId must be a positive integer.', {
+      code: 'INVALID_MODEL_RECORD_ID',
+      statusCode: 400,
+    });
+  }
+
+  const recordId = Number.parseInt(rawRecordId, 10);
+  if (!Number.isSafeInteger(recordId) || recordId < 1) {
+    throw new AppError('recordId must be a positive integer.', {
+      code: 'INVALID_MODEL_RECORD_ID',
+      statusCode: 400,
+    });
+  }
+
+  return recordId;
+};
+
+const parseCustomProviderModelPayload = (payload: unknown): CustomProviderModelInput => {
+  if (!payload || typeof payload !== 'object') {
+    throw new AppError('Request body must be an object.', {
+      code: 'INVALID_REQUEST_BODY',
+      statusCode: 400,
+    });
+  }
+
+  const body = payload as Record<string, unknown>;
+  const model = readOptionalQueryString(body.model);
+  const id = readOptionalQueryString(body.id);
+  if (!model) {
+    throw new AppError('model is required.', {
+      code: 'MODEL_NAME_REQUIRED',
+      statusCode: 400,
+    });
+  }
+  if (!id) {
+    throw new AppError('id is required.', {
+      code: 'MODEL_ID_REQUIRED',
+      statusCode: 400,
+    });
+  }
+  if (model.length > 80) {
+    throw new AppError('model must be 80 characters or fewer.', {
+      code: 'MODEL_NAME_TOO_LONG',
+      statusCode: 400,
+    });
+  }
+  if (id.length > 200 || /\s/.test(id)) {
+    throw new AppError('id must be 200 characters or fewer and cannot contain whitespace.', {
+      code: 'INVALID_MODEL_ID',
+      statusCode: 400,
+    });
+  }
+
+  return { model, id };
+};
+
 router.get(
   '/:provider/auth/status',
   asyncHandler(async (req: Request, res: Response) => {
@@ -385,9 +445,39 @@ router.get(
   '/:provider/models',
   asyncHandler(async (req: Request, res: Response) => {
     const provider = parseProvider(req.params.provider);
-    const bypassCache = parseOptionalBooleanQuery(req.query.bypassCache, 'bypassCache') ?? false;
-    const result = await providerModelsService.getProviderModels(provider, { bypassCache });
-    res.json(createApiSuccessResponse({ provider, models: result.models, cache: result.cache }));
+    const models = await providerModelsService.getProviderModels(provider);
+    res.json(createApiSuccessResponse({ provider, models }));
+  }),
+);
+
+router.post(
+  '/:provider/models',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const input = parseCustomProviderModelPayload(req.body);
+    const result = await providerModelsService.createCustomModel(provider, input);
+    res.status(201).json(createApiSuccessResponse({ provider, ...result }));
+  }),
+);
+
+router.patch(
+  '/:provider/models/:recordId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const recordId = parseModelRecordId(req.params.recordId);
+    const input = parseCustomProviderModelPayload(req.body);
+    const result = await providerModelsService.updateCustomModel(provider, recordId, input);
+    res.json(createApiSuccessResponse({ provider, ...result }));
+  }),
+);
+
+router.delete(
+  '/:provider/models/:recordId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const recordId = parseModelRecordId(req.params.recordId);
+    const result = await providerModelsService.deleteCustomModel(provider, recordId);
+    res.json(createApiSuccessResponse({ provider, ...result }));
   }),
 );
 
