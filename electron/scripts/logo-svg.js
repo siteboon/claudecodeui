@@ -17,6 +17,7 @@ export function renderSvg(entrySize) {
 </svg>`;
 }
 
+/** Rasterises the logo to a square PNG buffer of the given edge length. */
 export async function renderPng(entrySize) {
   return sharp(Buffer.from(renderSvg(entrySize)))
     .png()
