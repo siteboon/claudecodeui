@@ -8,7 +8,7 @@ import type {
   FileTreeServices,
   FileTreeUploadedFile,
 } from '@/shared/types.js';
-import { AppError } from '@/shared/utils.js';
+import { AppError, FORBIDDEN_WORKSPACE_PATHS, normalizeProjectPath } from '@/shared/utils.js';
 
 const IGNORED_DIRECTORY_NAMES = new Set([
   'node_modules', 'dist', 'build', '.next', '.nuxt', '.cache', '.parcel-cache',
@@ -233,7 +233,13 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
         // Metadata failures should not hide an otherwise readable tree entry.
       }
 
-      if (entry.isDirectory() && currentDepth < maximumDepth) {
+      // Skip recursing into pseudo-filesystems and other system-critical
+      // directories (e.g. /proc, /sys) — they're never valid project roots,
+      // and /proc in particular can contain thousands of virtual entries
+      // that make traversal from a broad root (e.g. "/") pathologically slow.
+      const isForbiddenSystemDir = FORBIDDEN_WORKSPACE_PATHS.includes(normalizeProjectPath(itemPath));
+
+      if (entry.isDirectory() && currentDepth < maximumDepth && !isForbiddenSystemDir) {
         item.children = await buildFileTree(
           itemPath,
           maximumDepth,

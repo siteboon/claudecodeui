@@ -1,10 +1,12 @@
-import { useEffect, useRef } from 'react';
-import { Check, Edit2, Loader2, Trash2, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Check, Copy, Edit2, Loader2, MoreHorizontal, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
-import { Badge, Tooltip, buttonVariants } from '../../../../shared/view/ui';
+import { ActionMenu, Badge, Dialog, DialogContent, DialogTitle, Tooltip, buttonVariants } from '../../../../shared/view/ui';
 import { cn } from '../../../../lib/utils';
 import type { Project, ProjectSession, LLMProvider } from '../../../../types/app';
+import { api } from '../../../../utils/api';
+import { copyTextToClipboard } from '../../../../utils/clipboard';
 import type { SessionWithProvider } from '../../types/types';
 import { createSessionViewModel } from '../../utils/utils';
 import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
@@ -61,6 +63,15 @@ const formatCompactSessionAge = (dateString: string, currentTime: Date): string 
   return `${diffInDays}d`;
 };
 
+const PROVIDER_LABELS: Record<LLMProvider, string> = {
+  claude: 'Claude',
+  codex: 'Codex',
+  cursor: 'Cursor',
+  opencode: 'OpenCode',
+};
+
+type CopyState = 'loading' | 'idle' | 'copying' | 'copied' | 'error';
+
 export default function SidebarSessionItem({
   project,
   session,
@@ -84,12 +95,16 @@ export default function SidebarSessionItem({
   const isEditing = editingSession === session.id;
   const compactSessionAge = formatCompactSessionAge(sessionView.sessionTime, currentTime);
   const editingContainerRef = useRef<HTMLDivElement>(null);
+  const [isMobileOptionsOpen, setIsMobileOptionsOpen] = useState(false);
+  const [copyState, setCopyState] = useState<CopyState>('idle');
+  const [providerSessionId, setProviderSessionId] = useState<string | null>(null);
+  const providerIdRequestRef = useRef(0);
   const showAttentionIndicator = needsAttention && !isSelected;
   const showRecentIndicator = !showAttentionIndicator && !isProcessing && sessionView.isActive;
+  const providerLabel = PROVIDER_LABELS[session.__provider];
 
-  // The rename panel sits inside a group-hover opacity wrapper, so leaving the row
-  // would visually hide it. While editing, dismiss only when the user clicks outside
-  // the panel (matches Escape / cancel-button behaviour).
+  // While editing, dismiss only when the user clicks outside the inline rename panel
+  // (matches Escape / cancel-button behaviour).
   useEffect(() => {
     if (!isEditing) {
       return;
@@ -120,6 +135,78 @@ export default function SidebarSessionItem({
   const requestDeleteSession = () => {
     onDeleteSession(project.projectId, session.id, sessionView.sessionName, session.__provider);
   };
+
+  const loadProviderSessionId = async () => {
+    const requestId = ++providerIdRequestRef.current;
+    setCopyState('loading');
+    try {
+      const response = await api.providerSessionId(session.id);
+      const payload = await response.json();
+      const loadedSessionId = payload?.data?.sessionId;
+      if (!response.ok || typeof loadedSessionId !== 'string' || !loadedSessionId) {
+        throw new Error('Provider session ID is unavailable');
+      }
+
+      if (requestId !== providerIdRequestRef.current) return;
+      setProviderSessionId(loadedSessionId);
+      setCopyState('idle');
+    } catch {
+      if (requestId !== providerIdRequestRef.current) return;
+      setProviderSessionId(null);
+      setCopyState('error');
+    }
+  };
+
+  const resetCopyState = () => {
+    providerIdRequestRef.current += 1;
+    setCopyState('idle');
+    setProviderSessionId(null);
+  };
+
+  const setOptionsOpen = (open: boolean) => {
+    if (open) {
+      setProviderSessionId(null);
+      void loadProviderSessionId();
+    } else {
+      resetCopyState();
+    }
+  };
+
+  const setMobileOptionsOpen = (open: boolean) => {
+    setIsMobileOptionsOpen(open);
+    setOptionsOpen(open);
+  };
+
+  const copyProviderSessionId = async () => {
+    if (!providerSessionId) {
+      setCopyState('error');
+      return;
+    }
+
+    setCopyState('copying');
+    const didCopy = await copyTextToClipboard(providerSessionId);
+    setCopyState(didCopy ? 'copied' : 'error');
+  };
+
+  const handleCopyAction = () => {
+    if (copyState === 'error' && !providerSessionId) {
+      void loadProviderSessionId();
+    } else {
+      void copyProviderSessionId();
+    }
+  };
+
+  const isCopyPending = copyState === 'loading' || copyState === 'copying';
+  const CopyStateIcon = copyState === 'copied' ? Check : Copy;
+  const copyLabel = copyState === 'loading'
+    ? `Loading ${providerLabel} session ID…`
+    : copyState === 'copied'
+      ? `${providerLabel} session ID copied`
+      : copyState === 'error'
+        ? providerSessionId
+          ? `Couldn't copy ${providerLabel} session ID`
+          : `${providerLabel} session ID unavailable`
+        : `Copy ${providerLabel} session ID`;
 
   return (
     <div className="group relative">
@@ -192,19 +279,95 @@ export default function SidebarSessionItem({
               </div>
             </div>
 
-            {!isProcessing && (
-              <button
-                className="ml-1 flex h-5 w-5 items-center justify-center rounded-md bg-red-50 opacity-70 transition-transform active:scale-95 dark:bg-red-900/20"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  requestDeleteSession();
-                }}
-              >
-                <Trash2 className="h-2.5 w-2.5 text-red-600 dark:text-red-400" />
-              </button>
-            )}
+            <button
+              type="button"
+              aria-label={`Session options for ${sessionView.sessionName}`}
+              aria-haspopup="dialog"
+              aria-expanded={isMobileOptionsOpen}
+              className="ml-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted active:scale-95"
+              onClick={(event) => {
+                event.stopPropagation();
+                setMobileOptionsOpen(true);
+              }}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
           </div>
         </div>
+
+        <Dialog open={isMobileOptionsOpen} onOpenChange={setMobileOptionsOpen}>
+          <DialogContent
+            aria-describedby="mobile-session-options-description"
+            wrapperClassName="md:hidden"
+            animationClassName="animate-bottom-sheet-content-show motion-reduce:animate-none"
+            className="bottom-0 left-0 top-auto max-w-none translate-x-0 translate-y-0 rounded-b-none rounded-t-2xl border-x-0 border-b-0 px-4 pb-safe-area-inset-bottom pt-3"
+          >
+            <DialogTitle>Session options</DialogTitle>
+            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30" aria-hidden="true" />
+
+            <div className="mb-4 flex items-center gap-3 px-1">
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-muted">
+                <SessionProviderLogo provider={session.__provider} className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-foreground">{sessionView.sessionName}</p>
+                <p id="mobile-session-options-description" className="text-xs text-muted-foreground">
+                  {providerLabel} session
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={handleCopyAction}
+                disabled={isCopyPending}
+                className={cn(
+                  'flex min-h-12 w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors',
+                  copyState === 'copied'
+                    ? 'border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-300'
+                    : copyState === 'error'
+                      ? 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300'
+                      : 'border-border bg-muted/35 text-foreground active:bg-muted',
+                )}
+              >
+                {isCopyPending ? (
+                  <Loader2 className="h-5 w-5 flex-shrink-0 animate-spin" />
+                ) : (
+                  <CopyStateIcon className="h-5 w-5 flex-shrink-0" />
+                )}
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium">{copyLabel}</span>
+                  {copyState === 'error' && (
+                    <span className="mt-0.5 block text-xs">Tap to try again.</span>
+                  )}
+                </span>
+              </button>
+
+              {!isProcessing && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileOptionsOpen(false);
+                    requestDeleteSession();
+                  }}
+                  className="flex min-h-12 w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-red-600 transition-colors active:bg-red-500/10 dark:text-red-400"
+                >
+                  <Trash2 className="h-5 w-5 flex-shrink-0" />
+                  <span className="text-sm font-medium">Archive or delete session</span>
+                </button>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setMobileOptionsOpen(false)}
+              className="mb-3 mt-2 min-h-11 w-full rounded-xl text-sm font-medium text-muted-foreground transition-colors active:bg-muted"
+            >
+              Cancel
+            </button>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="hidden md:block">
@@ -212,7 +375,7 @@ export default function SidebarSessionItem({
           href={`/session/${session.id}`}
           className={cn(
             buttonVariants({ variant: 'ghost' }),
-            'h-auto w-full justify-start rounded-md border bg-card p-2 text-left font-normal transition-all duration-150',
+            'h-auto w-full justify-start rounded-md border bg-card p-2 pr-11 text-left font-normal transition-all duration-150',
             isSelected ? 'border-primary/20 bg-primary/5' : 'border-border/30',
             !isSelected && isProcessing
               ? 'border-border/60 bg-muted/20 hover:bg-muted/25'
@@ -273,10 +436,7 @@ export default function SidebarSessionItem({
 
         <div
           ref={editingContainerRef}
-          className={cn(
-            'absolute right-2 top-1/2 flex -translate-y-1/2 transform items-center gap-1 transition-all duration-200',
-            isEditing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
-          )}
+          className="absolute right-2 top-1/2 flex -translate-y-1/2 transform items-center gap-1 opacity-100 transition-all duration-200"
         >
             {isEditing ? (
               <>
@@ -318,30 +478,49 @@ export default function SidebarSessionItem({
                 </button>
               </>
             ) : (
-              <>
-                <button
-                  className="flex h-6 w-6 items-center justify-center rounded bg-gray-50 hover:bg-gray-100 dark:bg-gray-900/20 dark:hover:bg-gray-900/40"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onStartEditingSession(session.id, sessionView.sessionName);
-                  }}
-                  title={t('tooltips.editSessionName')}
-                >
-                  <Edit2 className="h-3 w-3 text-gray-600 dark:text-gray-400" />
-                </button>
-                {!isProcessing && (
-                  <button
-                    className="flex h-6 w-6 items-center justify-center rounded bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      requestDeleteSession();
-                    }}
-                    title={t('tooltips.deleteSessionOptions', 'Archive or permanently delete this session')}
-                  >
-                    <Trash2 className="h-3 w-3 text-red-600 dark:text-red-400" />
-                  </button>
+              <ActionMenu
+                label="Session options"
+                ariaLabel={`Session options for ${sessionView.sessionName}`}
+                icon={MoreHorizontal}
+                iconOnly
+                portal
+                variant="ghost"
+                size="icon"
+                onOpenChange={setOptionsOpen}
+                triggerClassName="h-7 w-7 text-muted-foreground opacity-70 hover:bg-muted hover:opacity-100"
+                menuClassName="w-[260px] rounded-xl p-1.5 shadow-xl"
+                header={(
+                  <div className="mb-1 border-b border-border px-3 py-2">
+                    <p className="truncate text-xs font-medium text-foreground">{sessionView.sessionName}</p>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">{providerLabel} session</p>
+                  </div>
                 )}
-              </>
+                items={[
+                  {
+                    key: 'copy',
+                    label: copyLabel,
+                    description: copyState === 'error' ? 'Click to try again.' : undefined,
+                    icon: CopyStateIcon,
+                    loading: isCopyPending,
+                    closeOnSelect: false,
+                    onSelect: handleCopyAction,
+                  },
+                  {
+                    key: 'rename',
+                    label: 'Rename session',
+                    icon: Edit2,
+                    onSelect: () => onStartEditingSession(session.id, sessionView.sessionName),
+                  },
+                  ...(!isProcessing ? [{
+                    key: 'delete',
+                    label: 'Archive or delete session',
+                    icon: Trash2,
+                    isDanger: true,
+                    showDividerBefore: true,
+                    onSelect: requestDeleteSession,
+                  }] : []),
+                ]}
+              />
             )}
           </div>
       </div>
