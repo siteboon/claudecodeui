@@ -88,12 +88,13 @@ type ProviderModelMutationApiResponse = {
   };
 };
 
-type SessionModelApiResponse = {
+type SessionSelectionApiResponse = {
   success?: boolean;
   data?: {
     provider?: LLMProvider;
     sessionId?: string | null;
     model?: string | null;
+    effort?: string | null;
     /**
      * `session` and `provider` are real answers for this session; `default`
      * means the backend had nothing recorded and returned the catalog default,
@@ -102,6 +103,17 @@ type SessionModelApiResponse = {
     source?: 'session' | 'provider' | 'default';
   };
 };
+
+type SessionProviderSelection = {
+  provider: LLMProvider;
+  sessionId: string;
+  model: string | null;
+  effort: string | null;
+};
+
+const getSessionSelectionKey = (provider: LLMProvider, sessionId: string): string => (
+  `${provider}:${sessionId}`
+);
 
 export function useChatProviderState({ selectedSession, selectedProject: _selectedProject }: UseChatProviderStateArgs) {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('default');
@@ -143,6 +155,9 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   const [providerModelsLoading, setProviderModelsLoading] = useState(true);
 
   const providerModelsRequestIdRef = useRef(0);
+  const sessionSelectionLoadRequestIdRef = useRef(0);
+  const sessionModelMutationIdRef = useRef(0);
+  const sessionEffortMutationIdRef = useRef(0);
 
   const setStoredProviderModel = useCallback((targetProvider: LLMProvider, model: string) => {
     if (targetProvider === 'claude') {
@@ -494,50 +509,81 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       : getDefaultPermissionModeForProvider(targetProvider);
   }, [getDefaultPermissionModeForProvider, getPermissionModesForProvider]);
 
-  /**
-   * Model the open session runs with, as reported by the backend. Null while no
-   * session is open, or when the backend has nothing recorded for it and only
-   * offered the catalog default — the per-provider selection covers that case.
-   */
-  const [sessionModel, setSessionModel] = useState<string | null>(null);
+  /** Model and reasoning effort recorded for the open session by the backend. */
+  const [sessionSelection, setSessionSelection] = useState<SessionProviderSelection | null>(null);
+  const selectedSessionId = selectedSession?.id?.trim() || null;
+  const selectedSessionProvider = selectedSession?.__provider ?? provider;
+  const selectedSessionKey = selectedSessionId
+    ? getSessionSelectionKey(selectedSessionProvider, selectedSessionId)
+    : null;
+  const selectedSessionKeyRef = useRef<string | null>(selectedSessionKey);
+  selectedSessionKeyRef.current = selectedSessionKey;
+
+  const activeSessionSelection = sessionSelection
+    && selectedSessionId
+    && sessionSelection.sessionId === selectedSessionId
+    && sessionSelection.provider === selectedSessionProvider
+    ? sessionSelection
+    : null;
+  const sessionModel = activeSessionSelection?.model ?? null;
 
   useEffect(() => {
-    const sessionId = selectedSession?.id;
-    if (!sessionId) {
-      setSessionModel(null);
+    const requestId = sessionSelectionLoadRequestIdRef.current + 1;
+    sessionSelectionLoadRequestIdRef.current = requestId;
+
+    if (!selectedSessionId) {
+      setSessionSelection(null);
       return;
     }
 
     let cancelled = false;
-    const targetProvider = selectedSession?.__provider ?? provider;
+    const targetProvider = selectedSessionProvider;
+    const targetSessionKey = getSessionSelectionKey(targetProvider, selectedSessionId);
 
-    const loadSessionModel = async () => {
+    const loadSessionSelection = async () => {
       try {
         const response = await authenticatedFetch(
-          `/api/providers/${targetProvider}/sessions/${encodeURIComponent(sessionId)}/active-model`,
+          `/api/providers/${targetProvider}/sessions/${encodeURIComponent(selectedSessionId)}/active-model`,
         );
-        const body = (await response.json()) as SessionModelApiResponse;
-        if (cancelled) {
+        const body = (await response.json()) as SessionSelectionApiResponse;
+        if (
+          cancelled
+          || sessionSelectionLoadRequestIdRef.current !== requestId
+          || selectedSessionKeyRef.current !== targetSessionKey
+        ) {
           return;
         }
 
         const resolvedModel = body.data?.model?.trim();
-        setSessionModel(
-          body.success && resolvedModel && body.data?.source !== 'default' ? resolvedModel : null,
-        );
+        const resolvedEffort = body.data?.effort?.trim() || null;
+        setSessionSelection({
+          provider: targetProvider,
+          sessionId: selectedSessionId,
+          model: body.success && resolvedModel && body.data?.source !== 'default' ? resolvedModel : null,
+          effort: body.success ? resolvedEffort : null,
+        });
       } catch (error) {
-        if (!cancelled) {
-          console.error('Error loading the session model:', error);
-          setSessionModel(null);
+        if (
+          !cancelled
+          && sessionSelectionLoadRequestIdRef.current === requestId
+          && selectedSessionKeyRef.current === targetSessionKey
+        ) {
+          console.error('Error loading the session model and reasoning effort:', error);
+          setSessionSelection({
+            provider: targetProvider,
+            sessionId: selectedSessionId,
+            model: null,
+            effort: null,
+          });
         }
       }
     };
 
-    void loadSessionModel();
+    void loadSessionSelection();
     return () => {
       cancelled = true;
     };
-  }, [provider, selectedSession?.__provider, selectedSession?.id]);
+  }, [selectedSessionId, selectedSessionProvider]);
 
   /**
    * Applies a model choice.
@@ -558,6 +604,13 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       return { scope: 'default' as const, model };
     }
 
+    // A pending GET represents the state before this click and must not win
+    // if it resolves after the mutation.
+    sessionSelectionLoadRequestIdRef.current += 1;
+    const mutationId = sessionModelMutationIdRef.current + 1;
+    sessionModelMutationIdRef.current = mutationId;
+    const targetSessionKey = getSessionSelectionKey(targetProvider, normalizedSessionId);
+
     const response = await authenticatedFetch(
       `/api/providers/${targetProvider}/sessions/${encodeURIComponent(normalizedSessionId)}/active-model`,
       {
@@ -566,15 +619,106 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       },
     );
 
-    const body = (await response.json()) as SessionModelApiResponse;
+    const body = (await response.json()) as SessionSelectionApiResponse;
     if (!response.ok || !body.success) {
       throw new Error('Unable to change the active model for this session.');
     }
 
     const storedModel = body.data?.model?.trim() || model;
-    setSessionModel(storedModel);
+    if (
+      sessionModelMutationIdRef.current === mutationId
+      && selectedSessionKeyRef.current === targetSessionKey
+    ) {
+      setSessionSelection((current) => ({
+        provider: targetProvider,
+        sessionId: normalizedSessionId,
+        model: storedModel,
+        effort: current?.provider === targetProvider && current.sessionId === normalizedSessionId
+          ? current.effort
+          : body.data?.effort?.trim() || null,
+      }));
+    }
     return { scope: 'session' as const, model: storedModel };
   }, [setStoredProviderModel]);
+
+  /**
+   * Applies an effort choice optimistically and persists it for the open
+   * session. Mutation counters keep slower earlier requests from overwriting
+   * the latest click.
+   */
+  const selectProviderEffort = useCallback(async (
+    targetProvider: LLMProvider,
+    effort: string,
+    sessionId?: string | null,
+  ) => {
+    setStoredProviderEffort(targetProvider, effort);
+
+    const normalizedSessionId = typeof sessionId === 'string' ? sessionId.trim() : '';
+    if (!normalizedSessionId) {
+      return { scope: 'default' as const, effort };
+    }
+
+    sessionSelectionLoadRequestIdRef.current += 1;
+    const mutationId = sessionEffortMutationIdRef.current + 1;
+    sessionEffortMutationIdRef.current = mutationId;
+    const targetSessionKey = getSessionSelectionKey(targetProvider, normalizedSessionId);
+    const previousSelection = sessionSelection?.provider === targetProvider
+      && sessionSelection.sessionId === normalizedSessionId
+      ? sessionSelection
+      : null;
+
+    setSessionSelection({
+      provider: targetProvider,
+      sessionId: normalizedSessionId,
+      model: previousSelection?.model ?? null,
+      effort,
+    });
+
+    try {
+      const response = await authenticatedFetch(
+        `/api/providers/${targetProvider}/sessions/${encodeURIComponent(normalizedSessionId)}/active-effort`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ effort }),
+        },
+      );
+      const body = (await response.json()) as SessionSelectionApiResponse;
+      if (!response.ok || !body.success) {
+        throw new Error('Unable to change the reasoning effort for this session.');
+      }
+
+      const storedEffort = body.data?.effort?.trim() || effort;
+      if (
+        sessionEffortMutationIdRef.current === mutationId
+        && selectedSessionKeyRef.current === targetSessionKey
+      ) {
+        setSessionSelection((current) => ({
+          provider: targetProvider,
+          sessionId: normalizedSessionId,
+          model: current?.provider === targetProvider && current.sessionId === normalizedSessionId
+            ? current.model
+            : previousSelection?.model ?? null,
+          effort: storedEffort,
+        }));
+      }
+
+      return { scope: 'session' as const, effort: storedEffort };
+    } catch (error) {
+      if (
+        sessionEffortMutationIdRef.current === mutationId
+        && selectedSessionKeyRef.current === targetSessionKey
+      ) {
+        setSessionSelection((current) => (
+          current?.provider === targetProvider
+          && current.sessionId === normalizedSessionId
+          && current.effort === effort
+            ? previousSelection
+            : current
+        ));
+      }
+      throw error;
+    }
+  }, [sessionSelection, setStoredProviderEffort]);
 
   // The open session's model wins over the per-provider default, so switching
   // sessions shows (and sends) what each session actually runs with.
@@ -586,9 +730,11 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     return reconcileStoredEffort(
       provider,
       currentProviderModel,
-      providerEfforts[provider] ?? DEFAULT_EFFORT_VALUE,
+      activeSessionSelection?.effort
+        ?? providerEfforts[provider]
+        ?? DEFAULT_EFFORT_VALUE,
     );
-  }, [currentProviderModel, provider, providerEfforts, reconcileStoredEffort]);
+  }, [activeSessionSelection?.effort, currentProviderModel, provider, providerEfforts, reconcileStoredEffort]);
   const currentProviderModelOptions = useMemo(
     () => providerModelCatalog[provider]?.OPTIONS ?? [],
     [provider, providerModelCatalog],
@@ -653,7 +799,10 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       setStoredProviderModel(targetProvider, result.model.value);
     }
     if (provider === targetProvider && sessionModel === existing.value) {
-      setSessionModel(result.model.value);
+      setSessionSelection((current) => current ? {
+        ...current,
+        model: result.model.value,
+      } : current);
     }
   }, [
     applyProviderCatalog,
@@ -683,7 +832,10 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       setStoredProviderModel(targetProvider, result.models.DEFAULT);
     }
     if (provider === targetProvider && sessionModel === existing.value) {
-      setSessionModel(result.models.DEFAULT);
+      setSessionSelection((current) => current ? {
+        ...current,
+        model: result.models.DEFAULT,
+      } : current);
     }
   }, [
     applyProviderCatalog,
@@ -726,7 +878,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     providerModelsLoading,
     providerModelActions,
     selectProviderModel,
-    setStoredProviderEffort,
+    selectProviderEffort,
     resolvePermissionModeForProvider,
   };
 }

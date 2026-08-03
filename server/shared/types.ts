@@ -154,7 +154,8 @@ export type ProviderCurrentActiveModel = {
 export type ProviderSessionModelSource = 'session' | 'provider' | 'default';
 
 /**
- * The model one session runs with, plus where that answer came from.
+ * The model one session runs with, its persisted reasoning effort when one has
+ * been recorded, and where the model answer came from.
  *
  * Returned by `providerModelsService.resolveSessionModel` and used by the
  * `/models`, `/cost` and `/status` commands, the active-model route, and the
@@ -164,6 +165,8 @@ export type ProviderSessionModel = {
   provider: LLMProvider;
   sessionId: string | null;
   model: string;
+  /** NULL means this session has not recorded an effort choice yet. */
+  effort: string | null;
   source: ProviderSessionModelSource;
 };
 

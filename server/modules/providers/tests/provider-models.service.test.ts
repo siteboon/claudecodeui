@@ -19,14 +19,29 @@ const createModels = (value: string): ProviderModelsDefinition => ({
 const createCurrentActiveModel = (model: string): ProviderCurrentActiveModel => ({ model });
 
 /** In-memory stand-in for the `sessions` table rows the service reads and writes. */
-const createSessionStore = (rows: Record<string, string | null> = {}) => {
-  const sessions = new Map(Object.entries(rows));
+const createSessionStore = (
+  rows: Record<string, string | null> = {},
+  efforts: Record<string, string | null> = {},
+) => {
+  const sessions = new Map(Object.entries(rows).map(([sessionId, model]) => [
+    sessionId,
+    { model, effort: efforts[sessionId] ?? null },
+  ]));
   return {
     sessions,
     getSessionById: (sessionId: string) =>
-      (sessions.has(sessionId) ? { model: sessions.get(sessionId) ?? null } : null),
+      sessions.get(sessionId) ?? null,
     setSessionModel: (sessionId: string, model: string) => {
-      sessions.set(sessionId, model);
+      const session = sessions.get(sessionId);
+      if (session) {
+        session.model = model;
+      }
+    },
+    setSessionEffort: (sessionId: string, effort: string) => {
+      const session = sessions.get(sessionId);
+      if (session) {
+        session.effort = effort;
+      }
     },
   };
 };
@@ -211,9 +226,10 @@ test('setSessionModel records the model on the session row', () => {
     provider: 'claude',
     sessionId: 'session-1',
     model: 'opus',
+    effort: null,
     source: 'session',
   });
-  assert.equal(sessions.sessions.get('session-1'), 'opus');
+  assert.equal(sessions.sessions.get('session-1')?.model, 'opus');
 });
 
 test('setSessionModel ignores sessions that have no row yet', () => {
@@ -224,9 +240,32 @@ test('setSessionModel ignores sessions that have no row yet', () => {
   assert.equal(sessions.sessions.size, 0);
 });
 
+test('setSessionEffort records an explicit effort on the session row', () => {
+  const sessions = createSessionStore({ 'session-1': 'gpt-5.6-sol' });
+  const { service } = createTestService({ sessions });
+
+  const stored = service.setSessionEffort('codex', 'session-1', 'ultra');
+
+  assert.deepEqual(stored, {
+    provider: 'codex',
+    sessionId: 'session-1',
+    effort: 'ultra',
+    source: 'session',
+  });
+  assert.equal(sessions.sessions.get('session-1')?.effort, 'ultra');
+});
+
+test('setSessionEffort ignores sessions that have no row yet', () => {
+  const sessions = createSessionStore();
+  const { service } = createTestService({ sessions });
+
+  assert.equal(service.setSessionEffort('codex', 'missing-session', 'high'), null);
+  assert.equal(sessions.sessions.size, 0);
+});
+
 test('resolveSessionModel prefers the recorded session model', async () => {
   const { service } = createTestService({
-    sessions: createSessionStore({ 'session-1': 'haiku' }),
+    sessions: createSessionStore({ 'session-1': 'haiku' }, { 'session-1': 'high' }),
     activeModel: () => 'provider-reported',
   });
 
@@ -236,6 +275,7 @@ test('resolveSessionModel prefers the recorded session model', async () => {
   });
 
   assert.equal(resolved.model, 'haiku');
+  assert.equal(resolved.effort, 'high');
   assert.equal(resolved.source, 'session');
 });
 

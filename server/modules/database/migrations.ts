@@ -417,6 +417,19 @@ const addSessionModelColumn = (db: Database): void => {
   addColumnToTableIfNotExists(db, 'sessions', columnNames, 'model', 'TEXT');
 };
 
+/**
+ * Adds the `effort` column that records a session's reasoning-effort choice.
+ *
+ * Existing rows stay NULL so clients can continue falling back to their
+ * per-provider preference until the user selects an effort or sends a turn.
+ */
+const addSessionEffortColumn = (db: Database): void => {
+  const sessionsTableInfo = getTableInfo(db, 'sessions');
+  const columnNames = sessionsTableInfo.map((column) => column.name);
+
+  addColumnToTableIfNotExists(db, 'sessions', columnNames, 'effort', 'TEXT');
+};
+
 const ensureProjectsForSessionPaths = (db: Database): void => {
   if (!tableExists(db, 'sessions')) {
     return;
@@ -473,6 +486,7 @@ export const runMigrations = (db: Database) => {
     migrateLegacySessionNames(db);
     addProviderSessionIdMapping(db);
     addSessionModelColumn(db);
+    addSessionEffortColumn(db);
     ensureProjectsForSessionPaths(db);
 
     db.exec('CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id)');

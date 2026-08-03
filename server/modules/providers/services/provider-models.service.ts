@@ -14,8 +14,9 @@ import { AppError } from '@/shared/utils.js';
 
 /** Session-row access the service needs, narrowed so tests can stub it. */
 type ProviderModelsSessionStore = {
-  getSessionById(sessionId: string): { model: string | null } | null;
+  getSessionById(sessionId: string): { model: string | null; effort: string | null } | null;
   setSessionModel(sessionId: string, model: string): void;
+  setSessionEffort(sessionId: string, effort: string): void;
 };
 
 /** SQLite catalog operations used by the Providers service and its unit fakes. */
@@ -210,9 +211,18 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     };
   };
 
-  const readRecordedSessionModel = (sessionId: string): string | null => {
+  const readRecordedSessionSelection = (
+    sessionId: string,
+  ): { model: string | null; effort: string | null } | null => {
     const session = sessions.getSessionById(sessionId);
-    return session?.model?.trim() || null;
+    if (!session) {
+      return null;
+    }
+
+    return {
+      model: session.model?.trim() || null,
+      effort: session.effort?.trim() || null,
+    };
   };
 
   /**
@@ -235,7 +245,8 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
       return null;
     }
 
-    if (!sessions.getSessionById(normalizedSessionId)) {
+    const recordedSelection = readRecordedSessionSelection(normalizedSessionId);
+    if (!recordedSelection) {
       return null;
     }
 
@@ -244,6 +255,38 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
       provider,
       sessionId: normalizedSessionId,
       model: normalizedModel,
+      effort: recordedSelection.effort,
+      source: 'session',
+    };
+  };
+
+  /**
+   * Records the reasoning effort one session runs with.
+   *
+   * Like `setSessionModel`, this ignores an id that has not been allocated by
+   * the session gateway yet. The websocket send path records it once the row
+   * exists, so a pre-session composer choice is not lost.
+   */
+  const setSessionEffort = (
+    provider: LLMProvider,
+    sessionId: string,
+    effort: string,
+  ): { provider: LLMProvider; sessionId: string; effort: string; source: 'session' } | null => {
+    const normalizedSessionId = sessionId.trim();
+    const normalizedEffort = effort.trim();
+    if (!normalizedSessionId || !normalizedEffort) {
+      return null;
+    }
+
+    if (!readRecordedSessionSelection(normalizedSessionId)) {
+      return null;
+    }
+
+    sessions.setSessionEffort(normalizedSessionId, normalizedEffort);
+    return {
+      provider,
+      sessionId: normalizedSessionId,
+      effort: normalizedEffort,
       source: 'session',
     };
   };
@@ -267,12 +310,13 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
       : '';
 
     if (normalizedSessionId) {
-      const recordedModel = readRecordedSessionModel(normalizedSessionId);
-      if (recordedModel) {
+      const recordedSelection = readRecordedSessionSelection(normalizedSessionId);
+      if (recordedSelection?.model) {
         return {
           provider,
           sessionId: normalizedSessionId,
-          model: recordedModel,
+          model: recordedSelection.model,
+          effort: recordedSelection.effort,
           source: 'session',
         };
       }
@@ -285,6 +329,7 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
           provider,
           sessionId: normalizedSessionId,
           model: resolvedProviderModel,
+          effort: recordedSelection?.effort ?? null,
           source: 'provider',
         };
       }
@@ -293,6 +338,7 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
         provider,
         sessionId: normalizedSessionId,
         model: normalizedRequestedModel || providerCatalog.DEFAULT,
+        effort: recordedSelection?.effort ?? null,
         source: normalizedRequestedModel ? 'session' : 'default',
       };
     }
@@ -302,6 +348,7 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
         provider,
         sessionId: null,
         model: normalizedRequestedModel,
+        effort: null,
         source: 'session',
       };
     }
@@ -311,6 +358,7 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
       provider,
       sessionId: null,
       model: providerCatalog.DEFAULT,
+      effort: null,
       source: 'default',
     };
   };
@@ -333,7 +381,7 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
       return normalizedRequestedModel || undefined;
     }
 
-    const recordedModel = readRecordedSessionModel(normalizedSessionId);
+    const recordedModel = readRecordedSessionSelection(normalizedSessionId)?.model;
     return recordedModel || normalizedRequestedModel || undefined;
   };
 
@@ -343,6 +391,7 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     updateCustomModel,
     deleteCustomModel,
     setSessionModel,
+    setSessionEffort,
     resolveSessionModel,
     resolveResumeModel,
   };

@@ -109,10 +109,11 @@ CREATE TABLE IF NOT EXISTS sessions (
     custom_name TEXT,
     project_path TEXT,
     jsonl_path TEXT,
-    -- Model this session runs with. Written when the user picks a model for the
-    -- session and on every send, so reopening a session restores the model it
-    -- was last used with instead of falling back to the catalog default.
+    -- Model and reasoning effort this session runs with. Written when the user
+    -- changes either selection and on every send, so reopening a session
+    -- restores its exact runtime configuration instead of provider defaults.
     model TEXT,
+    effort TEXT,
     isArchived BOOLEAN DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,

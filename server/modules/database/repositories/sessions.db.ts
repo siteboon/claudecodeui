@@ -11,13 +11,15 @@ type SessionRow = {
   custom_name: string | null;
   /** Model this session runs with; NULL until the app records one for it. */
   model: string | null;
+  /** Reasoning effort this session runs with; NULL until the app records one. */
+  effort: string | null;
   isArchived: number;
   created_at: string;
   updated_at: string;
 };
 
 const SESSION_ROW_COLUMNS =
-  'session_id, provider, provider_session_id, project_path, jsonl_path, custom_name, model, isArchived, created_at, updated_at';
+  'session_id, provider, provider_session_id, project_path, jsonl_path, custom_name, model, effort, isArchived, created_at, updated_at';
 
 const SQLITE_UTC_TIMESTAMP_REGEX = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 
@@ -242,6 +244,21 @@ export const sessionsDb = {
        SET model = ?
        WHERE session_id = ?`
     ).run(model, sessionId);
+  },
+
+  /**
+   * Records the reasoning effort one session runs with.
+   *
+   * `default` is stored as an explicit choice rather than NULL so reopening
+   * the session does not inherit a later per-provider effort preference.
+   */
+  setSessionEffort(sessionId: string, effort: string): void {
+    const db = getConnection();
+    db.prepare(
+      `UPDATE sessions
+       SET effort = ?
+       WHERE session_id = ?`
+    ).run(effort, sessionId);
   },
 
   updateSessionCustomName(sessionId: string, customName: string): void {

@@ -78,6 +78,39 @@ test('session creation route names a CloudCLI session from the initial message',
   });
 });
 
+test('reasoning effort is persisted and returned with the active session model', async () => {
+  await withProviderServer(async (baseUrl, workspacePath) => {
+    sessionsDb.createAppSession('effort-session', 'codex', workspacePath);
+
+    const updateResponse = await fetch(
+      `${baseUrl}/api/providers/codex/sessions/effort-session/active-effort`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ effort: 'ultra' }),
+      },
+    );
+    const updatePayload = await updateResponse.json() as {
+      data: { effort: string; sessionId: string };
+    };
+
+    assert.equal(updateResponse.status, 200);
+    assert.equal(updatePayload.data.effort, 'ultra');
+    assert.equal(sessionsDb.getSessionById('effort-session')?.effort, 'ultra');
+
+    const readResponse = await fetch(
+      `${baseUrl}/api/providers/codex/sessions/effort-session/active-model`,
+    );
+    const readPayload = await readResponse.json() as {
+      data: { effort: string | null; sessionId: string };
+    };
+
+    assert.equal(readResponse.status, 200);
+    assert.equal(readPayload.data.sessionId, 'effort-session');
+    assert.equal(readPayload.data.effort, 'ultra');
+  });
+});
+
 test('model routes expose immutable defaults and full custom model CRUD', async () => {
   await withProviderServer(async (baseUrl) => {
     const initialResponse = await fetch(`${baseUrl}/api/providers/codex/models`);

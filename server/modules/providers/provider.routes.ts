@@ -373,6 +373,33 @@ const parseSessionModelPayload = (payload: unknown): string => {
   return model;
 };
 
+const parseSessionEffortPayload = (payload: unknown): string => {
+  if (!payload || typeof payload !== 'object') {
+    throw new AppError('Request body must be an object.', {
+      code: 'INVALID_REQUEST_BODY',
+      statusCode: 400,
+    });
+  }
+
+  const body = payload as Record<string, unknown>;
+  const effort = readOptionalQueryString(body.effort);
+  if (!effort) {
+    throw new AppError('effort is required.', {
+      code: 'EFFORT_REQUIRED',
+      statusCode: 400,
+    });
+  }
+
+  if (effort.length > 32) {
+    throw new AppError('effort must be 32 characters or fewer.', {
+      code: 'INVALID_EFFORT',
+      statusCode: 400,
+    });
+  }
+
+  return effort;
+};
+
 const parseModelRecordId = (value: unknown): number => {
   const rawRecordId = readPathParam(value, 'recordId').trim();
   if (!/^\d+$/.test(rawRecordId)) {
@@ -510,7 +537,23 @@ router.post(
     // A session row only exists once the gateway has allocated one. Report the
     // selection back either way so the client can hold it until the first send.
     res.json(createApiSuccessResponse(
-      stored ?? { provider, sessionId, model, source: 'session' as const },
+      stored ?? { provider, sessionId, model, effort: null, source: 'session' as const },
+    ));
+  }),
+);
+
+/** Records the reasoning-effort choice for one app session. */
+router.post(
+  '/:provider/sessions/:sessionId/active-effort',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const sessionId = parseSessionId(req.params.sessionId);
+    const effort = parseSessionEffortPayload(req.body);
+    const stored = providerModelsService.setSessionEffort(provider, sessionId, effort);
+    // Mirror active-model behavior for a composer that picked an effort just
+    // before the session gateway created its row.
+    res.json(createApiSuccessResponse(
+      stored ?? { provider, sessionId, effort, source: 'session' as const },
     ));
   }),
 );
