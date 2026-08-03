@@ -16,7 +16,11 @@ import {
     providerRuntimeService,
 } from '@/modules/providers/index.js';
 import { createWebSocketServer } from '@/modules/websocket/index.js';
-import { estimateByteLength, recordBandwidth } from '@/modules/websocket/services/network-diagnostics.service.js';
+import {
+    estimateByteLength,
+    isBandwidthMonitorEnabled,
+    recordBandwidth,
+} from '@/modules/websocket/services/bandwidth-monitor.service.js';
 
 import { getConnectableHost } from '../shared/networkHosts.js';
 
@@ -120,44 +124,46 @@ const wss = createWebSocketServer(server, {
 // Make WebSocket server available to routes
 app.locals.wss = wss;
 
-// DIAGNOSTIC ONLY - temporary bandwidth instrumentation, remove after investigation.
+// Optional, opt-in bandwidth monitoring (BANDWIDTH_MONITOR_ENABLED=true).
 // Mounted first so it wraps res.write/res.end before any other middleware or
 // static file handler touches them, capturing every byte this server sends
 // over HTTP (API responses, the SPA shell, and static assets alike).
-app.use((req, res, next) => {
-    let bytesSent = 0;
-    const originalWrite = res.write.bind(res);
-    const originalEnd = res.end.bind(res);
+if (isBandwidthMonitorEnabled()) {
+    app.use((req, res, next) => {
+        let bytesSent = 0;
+        const originalWrite = res.write.bind(res);
+        const originalEnd = res.end.bind(res);
 
-    res.write = ((chunk?: unknown, ...rest: unknown[]) => {
-        if (chunk !== undefined) {
-            bytesSent += estimateByteLength(chunk);
-        }
-        // @ts-expect-error - forwarding res.write's overloaded variadic signature as-is
-        return originalWrite(chunk, ...rest);
-    }) as typeof res.write;
+        res.write = ((chunk?: unknown, ...rest: unknown[]) => {
+            if (chunk !== undefined) {
+                bytesSent += estimateByteLength(chunk);
+            }
+            // @ts-expect-error - forwarding res.write's overloaded variadic signature as-is
+            return originalWrite(chunk, ...rest);
+        }) as typeof res.write;
 
-    res.end = ((chunk?: unknown, ...rest: unknown[]) => {
-        if (chunk !== undefined) {
-            bytesSent += estimateByteLength(chunk);
-        }
-        // @ts-expect-error - forwarding res.end's overloaded variadic signature as-is
-        return originalEnd(chunk, ...rest);
-    }) as typeof res.end;
+        res.end = ((chunk?: unknown, ...rest: unknown[]) => {
+            if (chunk !== undefined) {
+                bytesSent += estimateByteLength(chunk);
+            }
+            // @ts-expect-error - forwarding res.end's overloaded variadic signature as-is
+            return originalEnd(chunk, ...rest);
+        }) as typeof res.end;
 
-    res.on('finish', () => {
-        const ext = path.extname(req.path);
-        const segments = req.path.split('/').filter(Boolean);
-        const bucketKey = ext
-            ? `http:static:${ext}`
-            : segments[0] === 'api'
-                ? `http:api:${segments.slice(0, 2).join('/')}`
-                : `http:page:${segments[0] || '/'}`;
-        recordBandwidth(bucketKey, bytesSent);
+        res.on('finish', () => {
+            const ext = path.extname(req.path);
+            const segments = req.path.split('/').filter(Boolean);
+            const bucketKey = ext
+                ? `http:static:${ext}`
+                : segments[0] === 'api'
+                    ? `http:api:${segments.slice(0, 2).join('/')}`
+                    : `http:page:${segments[0] || '/'}`;
+            recordBandwidth(bucketKey, bytesSent);
+        });
+
+        next();
     });
-
-    next();
-});
+}
 
 app.use(cors({ exposedHeaders: ['X-Refreshed-Token', 'X-Auth-Error'] }));
 app.use(express.json({
@@ -174,19 +180,12 @@ app.use(express.json({
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Public health check endpoint (no authentication required)
-// DIAGNOSTIC ONLY - lets us confirm from outside the container that a
-// running pod is actually serving this exact commit's code, since a stale
-// build would otherwise look identical from the outside.
-const DEBUG_BUILD_MARKER = 'shell-bandwidth-diag-v3-unbounded-request-logging';
-console.log(`[DIAG build] ${DEBUG_BUILD_MARKER}`);
-
 app.get('/health', (req, res) => {
     res.json({
         status: 'ok',
         timestamp: new Date().toISOString(),
         installMode,
-        version: RUNNING_VERSION,
-        debugBuildMarker: DEBUG_BUILD_MARKER
+        version: RUNNING_VERSION
     });
 });
 

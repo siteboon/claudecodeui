@@ -10,7 +10,7 @@ import {
   patchWebSocketBandwidthTracking,
   startBandwidthLogging,
   tagWebSocketRoute,
-} from '@/modules/websocket/services/network-diagnostics.service.js';
+} from '@/modules/websocket/services/bandwidth-monitor.service.js';
 import { handleDesktopNotificationsConnection } from '@/modules/notifications/index.js';
 import type { AuthenticatedWebSocketRequest } from '@/shared/types.js';
 

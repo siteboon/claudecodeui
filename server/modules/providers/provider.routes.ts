@@ -17,6 +17,7 @@ import type {
   UpsertProviderMcpServerInput,
 } from '@/shared/types.js';
 import { AppError, asyncHandler, createApiSuccessResponse } from '@/shared/utils.js';
+import { isBandwidthMonitorEnabled } from '@/modules/websocket/services/bandwidth-monitor.service.js';
 
 const router = express.Router();
 
@@ -666,14 +667,13 @@ router.get(
       offset = parsedOffset;
     }
 
-    // DIAGNOSTIC ONLY - identify every caller of the unbounded (limit=null)
-    // path, since static analysis of the frontend found no remaining
-    // in-repo caller but the endpoint keeps getting hit unbounded in
-    // production. Logs enough of the request to fingerprint the source:
-    // headers a real browser sends vs. an internal/loopback caller.
-    if (limit === null) {
+    // Optional, opt-in bandwidth monitoring (BANDWIDTH_MONITOR_ENABLED=true).
+    // Identifies callers of the unbounded (limit=null) path, useful for
+    // catching bandwidth regressions where a full-history fetch slips back in.
+    // Logs enough of the request to fingerprint the source.
+    if (limit === null && isBandwidthMonitorEnabled()) {
       console.log(
-        `[DIAG messages] UNBOUNDED hit sessionId=${sessionId} ` +
+        `[bandwidth-monitor messages] UNBOUNDED hit sessionId=${sessionId} ` +
           `ua=${JSON.stringify(req.headers['user-agent'] ?? null)} ` +
           `referer=${JSON.stringify(req.headers['referer'] ?? req.headers['origin'] ?? null)} ` +
           `remoteAddr=${req.socket.remoteAddress ?? 'unknown'} ` +

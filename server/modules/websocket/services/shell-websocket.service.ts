@@ -6,6 +6,7 @@ import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
 import { parseIncomingJsonObject } from '@/shared/utils.js';
+import { isBandwidthMonitorEnabled } from '@/modules/websocket/services/bandwidth-monitor.service.js';
 
 type ShellIncomingMessage = {
   type?: string;
@@ -297,7 +298,8 @@ export function handleShellConnection(
   let urlDetectionBuffer = '';
   const announcedAuthUrls = new Set<string>();
 
-  // DIAGNOSTIC: temporary bandwidth instrumentation, remove after investigation.
+  // Optional, opt-in bandwidth monitoring (BANDWIDTH_MONITOR_ENABLED=true).
+  // Counters are always tracked (cheap); only the periodic/close logging is gated.
   const diag = {
     outputMessages: 0,
     outputBytes: 0,
@@ -308,28 +310,30 @@ export function handleShellConnection(
     inputBytes: 0,
     startedAt: Date.now(),
   };
-  const diagLogInterval = setInterval(() => {
-    const elapsedSec = ((Date.now() - diag.startedAt) / 1000).toFixed(1);
-    console.log(
-      `[DIAG shell] key=${ptySessionKey} elapsed=${elapsedSec}s ` +
-        `output: ${diag.outputMessages} msgs / ${(diag.outputBytes / 1024).toFixed(1)}KB | ` +
-        `replay: ${diag.replayMessages} msgs / ${(diag.replayBytes / 1024).toFixed(1)}KB | ` +
-        `resize: ${diag.resizeMessages} msgs | ` +
-        `input: ${diag.inputMessages} msgs / ${diag.inputBytes}B`
-    );
-  }, 5000);
-  ws.on('close', () => {
-    clearInterval(diagLogInterval);
-    const elapsedSec = ((Date.now() - diag.startedAt) / 1000).toFixed(1);
-    console.log(
-      `[DIAG shell] FINAL key=${ptySessionKey} elapsed=${elapsedSec}s ` +
-        `output: ${diag.outputMessages} msgs / ${(diag.outputBytes / 1024).toFixed(1)}KB | ` +
-        `replay: ${diag.replayMessages} msgs / ${(diag.replayBytes / 1024).toFixed(1)}KB | ` +
-        `resize: ${diag.resizeMessages} msgs | ` +
-        `input: ${diag.inputMessages} msgs / ${diag.inputBytes}B | ` +
-        `TOTAL SENT: ${((diag.outputBytes + diag.replayBytes) / 1024).toFixed(1)}KB`
-    );
-  });
+  if (isBandwidthMonitorEnabled()) {
+    const diagLogInterval = setInterval(() => {
+      const elapsedSec = ((Date.now() - diag.startedAt) / 1000).toFixed(1);
+      console.log(
+        `[bandwidth-monitor shell] key=${ptySessionKey} elapsed=${elapsedSec}s ` +
+          `output: ${diag.outputMessages} msgs / ${(diag.outputBytes / 1024).toFixed(1)}KB | ` +
+          `replay: ${diag.replayMessages} msgs / ${(diag.replayBytes / 1024).toFixed(1)}KB | ` +
+          `resize: ${diag.resizeMessages} msgs | ` +
+          `input: ${diag.inputMessages} msgs / ${diag.inputBytes}B`
+      );
+    }, 5000);
+    ws.on('close', () => {
+      clearInterval(diagLogInterval);
+      const elapsedSec = ((Date.now() - diag.startedAt) / 1000).toFixed(1);
+      console.log(
+        `[bandwidth-monitor shell] FINAL key=${ptySessionKey} elapsed=${elapsedSec}s ` +
+          `output: ${diag.outputMessages} msgs / ${(diag.outputBytes / 1024).toFixed(1)}KB | ` +
+          `replay: ${diag.replayMessages} msgs / ${(diag.replayBytes / 1024).toFixed(1)}KB | ` +
+          `resize: ${diag.resizeMessages} msgs | ` +
+          `input: ${diag.inputMessages} msgs / ${diag.inputBytes}B | ` +
+          `TOTAL SENT: ${((diag.outputBytes + diag.replayBytes) / 1024).toFixed(1)}KB`
+      );
+    });
+  }
 
   ws.on('message', async (rawMessage) => {
     try {
