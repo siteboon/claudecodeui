@@ -11,6 +11,7 @@ export default function MainContentHeader({
   selectedSession,
   shouldShowTasksTab,
   shouldShowBrowserTab,
+  shouldLabelBrowserTabAsCobrowse,
   isMobile,
   onMenuClick,
 }: MainContentHeaderProps) {
@@ -44,6 +45,7 @@ export default function MainContentHeader({
             selectedProject={selectedProject}
             selectedSession={selectedSession}
             shouldShowTasksTab={shouldShowTasksTab}
+            shouldLabelBrowserTabAsCobrowse={shouldLabelBrowserTabAsCobrowse}
           />
         </div>
 
@@ -61,6 +63,7 @@ export default function MainContentHeader({
               setActiveTab={setActiveTab}
               shouldShowTasksTab={shouldShowTasksTab}
               shouldShowBrowserTab={shouldShowBrowserTab}
+              shouldLabelBrowserTabAsCobrowse={shouldLabelBrowserTabAsCobrowse}
             />
           </div>
           {canScrollRight && (

@@ -70,6 +70,7 @@ export type MainContentHeaderProps = {
   selectedSession: ProjectSession | null;
   shouldShowTasksTab: boolean;
   shouldShowBrowserTab: boolean;
+  shouldLabelBrowserTabAsCobrowse: boolean;
   isMobile: boolean;
   onMenuClick: () => void;
 };

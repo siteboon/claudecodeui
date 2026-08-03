@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import path from 'node:path';
 import test from 'node:test';
 
 import { createProject } from '@/modules/projects/services/project-management.service.js';
@@ -62,7 +63,10 @@ test('createProject throws conflict when active project path already exists', as
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'PROJECT_ALREADY_EXISTS');
       assert.equal(error.statusCode, 409);
-      assert.equal(error.details, 'Project path already exists: /workspace/my-project');
+      assert.equal(
+        error.details,
+        `Project path already exists: ${path.normalize('/workspace/my-project')}`,
+      );
       return true;
     },
   );

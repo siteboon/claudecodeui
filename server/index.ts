@@ -47,7 +47,12 @@ import { assetsRoutes } from './modules/assets/index.js';
 import { fileTreeRoutes } from './modules/file-tree/index.js';
 import { worktreesRoutes } from './modules/worktrees/index.js';
 import browserUseMcpRoutes from './modules/browser-use/browser-use-mcp.routes.js';
-import { browserUseService } from './modules/browser-use/browser-use.service.js';
+import {
+    browserUseService,
+    createBrowserUseApiAuthentication,
+    createBrowserUseViewerWebSocketAuthentication,
+    VIEWER_COOKIE_NAME,
+} from './modules/browser-use/index.js';
 import { initializeDatabase, sessionsDb } from './modules/database/index.js';
 import { configureWebPush } from './modules/notifications/index.js';
 import { IS_PLATFORM } from './constants/config.js';
@@ -93,6 +98,14 @@ const agentRoutes = createAgentModule({
     queryCodex,
     queryOpenCode,
 });
+const authenticateBrowserUseViewer = createBrowserUseViewerWebSocketAuthentication(
+    (sessionId, token) => browserUseService.validateViewerToken(sessionId, token),
+);
+const authenticateBrowserUse = createBrowserUseApiAuthentication(
+    authenticateToken,
+    (sessionId, token) => browserUseService.validateViewerToken(sessionId, token),
+    VIEWER_COOKIE_NAME,
+);
 
 // Single WebSocket server that handles chat, shell, and plugin proxy paths.
 const wss = createWebSocketServer(server, {
@@ -114,6 +127,8 @@ const wss = createWebSocketServer(server, {
         },
     },
     getPluginPort,
+    browserUseViewer: (ws, pathname) => browserUseService.handleViewerWebSocket(ws, pathname),
+    authenticateBrowserUseViewer,
 });
 
 // Make WebSocket server available to routes
@@ -187,7 +202,7 @@ app.use('/api/plugins', authenticateToken, pluginsRoutes);
 app.use('/api/browser-use-mcp', browserUseMcpRoutes);
 
 // Browser API Routes (protected)
-app.use('/api/browser-use', authenticateToken, browserUseRoutes);
+app.use('/api/browser-use', authenticateBrowserUse, browserUseRoutes);
 
 // Unified provider MCP routes (protected)
 app.use('/api/providers', authenticateToken, providerRoutes);

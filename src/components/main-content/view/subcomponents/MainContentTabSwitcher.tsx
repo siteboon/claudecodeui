@@ -12,6 +12,7 @@ type MainContentTabSwitcherProps = {
   setActiveTab: Dispatch<SetStateAction<AppTab>>;
   shouldShowTasksTab: boolean;
   shouldShowBrowserTab: boolean;
+  shouldLabelBrowserTabAsCobrowse: boolean;
 };
 
 type BuiltInTab = {
@@ -57,9 +58,11 @@ export default function MainContentTabSwitcher({
   setActiveTab,
   shouldShowTasksTab,
   shouldShowBrowserTab,
+  shouldLabelBrowserTabAsCobrowse,
 }: MainContentTabSwitcherProps) {
   const { t } = useTranslation();
   const { plugins } = usePlugins();
+  const coBrowseLabel = t('tabs.coBrowse', { defaultValue: 'Co-browse' });
 
   const builtInTabs: BuiltInTab[] = [
     ...BASE_TABS,
@@ -83,7 +86,11 @@ export default function MainContentTabSwitcher({
     <PillBar>
       {tabs.map((tab) => {
         const isActive = tab.id === activeTab;
-        const displayLabel = tab.kind === 'builtin' ? t(tab.labelKey) : tab.label;
+        const displayLabel = tab.kind === 'plugin'
+          ? tab.label
+          : tab.id === 'browser' && shouldLabelBrowserTabAsCobrowse
+            ? coBrowseLabel
+            : t(tab.labelKey);
 
         return (
           <Tooltip key={tab.id} content={displayLabel} position="bottom">
