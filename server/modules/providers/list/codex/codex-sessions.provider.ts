@@ -143,7 +143,7 @@ function decodeJavaScriptStringLiteral(literal: string): string {
 
 function extractNestedCodexCommands(source: string): string[] {
   const commands: string[] = [];
-  const commandPattern = /\bcommand\s*:\s*("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)/gs;
+  const commandPattern = /(?:["']command["']|\bcommand)\s*:\s*("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)/gs;
   for (const match of source.matchAll(commandPattern)) {
     commands.push(decodeJavaScriptStringLiteral(match[1]));
   }
@@ -173,7 +173,7 @@ function extractNestedCodexCommands(source: string): string[] {
  */
 function translateCodexExecInput(input: unknown): { toolName: string; toolInput: string } | null {
   const source = typeof input === 'string' ? input : String(input || '');
-  if (/\btools\.shell_command\s*\(/.test(source)) {
+  if (/\btools\.(?:shell_command|exec_command)\s*\(/.test(source)) {
     const commands = extractNestedCodexCommands(source);
     if (commands.length > 0) {
       return {
@@ -506,19 +506,19 @@ async function getCodexSessionMessages(
         if (entry.type === 'response_item' && entry.payload?.type === 'custom_tool_call') {
           let toolName = entry.payload.name || 'custom_tool';
           const input = entry.payload.input || '';
+          let toolInput = input;
 
           if (toolName === 'exec') {
             const translated = translateCodexExecInput(input);
-            if (!translated) {
-              ignoredToolCallIds.add(entry.payload.call_id);
-              continue;
+            if (translated) {
+              toolName = translated.toolName;
+              toolInput = translated.toolInput;
             }
-            toolName = translated.toolName;
             messages.push({
               type: 'tool_use',
               timestamp: entry.timestamp,
               toolName,
-              toolInput: translated.toolInput,
+              toolInput,
               toolCallId: entry.payload.call_id,
             });
             execToolCallIds.add(entry.payload.call_id);
