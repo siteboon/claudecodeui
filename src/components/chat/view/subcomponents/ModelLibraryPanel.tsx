@@ -195,7 +195,7 @@ export default function ModelLibraryPanel({
         })}
       </div>
 
-      <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto pr-1 lg:grid-cols-[minmax(16rem,0.8fr)_minmax(20rem,1.2fr)] lg:overflow-hidden lg:pr-0">
+      <div className="scrollbar-thin grid min-h-0 flex-1 items-start gap-4 overflow-y-auto pr-1 lg:grid-cols-[minmax(16rem,0.8fr)_minmax(20rem,1.2fr)]">
         <form
           onSubmit={handleSubmit}
           className="h-fit rounded-2xl border border-border/70 bg-muted/20 p-4 shadow-sm"
@@ -271,7 +271,7 @@ export default function ModelLibraryPanel({
           </Button>
         </form>
 
-        <div className="min-h-0 space-y-4 lg:overflow-y-auto lg:pr-1">
+        <div className="min-h-0 space-y-4">
           <section>
             <div className="mb-2 flex items-center justify-between gap-3 px-1">
               <div>
