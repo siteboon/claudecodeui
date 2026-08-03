@@ -41,7 +41,6 @@ type CommandResultModalProps = {
     options?: { custom?: boolean },
   ) => Promise<{
     scope: 'default' | 'session';
-    changed: boolean;
     model: string;
   }>;
 };
@@ -299,7 +298,7 @@ function ModelsContent({
       );
       if (result.scope === 'session') {
         setPendingSessionModel(result.model);
-        setSelectionNotice(`Next response will resume with ${result.model}.`);
+        setSelectionNotice(`This session now uses ${result.model}.`);
         return;
       }
 
@@ -416,7 +415,7 @@ function ModelsContent({
                   )}
                   {isPendingSelection && !isCurrent && (
                     <span className="mt-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-500 dark:text-emerald-400">
-                      Applies next response
+                      Session model
                     </span>
                   )}
                 </button>
@@ -435,9 +434,9 @@ function ModelsContent({
         {selectionNotice ? (
           <span className="text-foreground">{selectionNotice}</span>
         ) : hasConcreteSessionId ? (
-          'Your choice applies to this session on the next response.'
+          'Your choice is saved for this session and becomes the default for new chats.'
         ) : (
-          'Your choice becomes the default model for new turns.'
+          'Your choice becomes the default model for new chats.'
         )}
       </p>
     </div>

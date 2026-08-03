@@ -9,13 +9,17 @@ export type Provider = LLMProvider;
 
 export type PermissionMode = 'default' | 'acceptEdits' | 'auto' | 'bypassPermissions' | 'plan';
 
-export interface ChatImage {
-  /** Inline data URL (Claude history stores attachments as base64). */
-  data?: string;
-  /** Project-relative path under `.cloudcli/assets` served via the files API. */
+export interface ChatAttachment {
+  /** Absolute path inside the server-managed chat attachment store. */
   path?: string;
   name?: string;
   mimeType?: string;
+  size?: number;
+}
+
+export interface ChatImage extends ChatAttachment {
+  /** Inline data URL (Claude history stores image attachments as base64). */
+  data?: string;
 }
 
 export interface ToolResult {
@@ -40,6 +44,7 @@ export interface ChatMessage {
   displayText?: string;
   timestamp: string | number | Date;
   images?: ChatImage[];
+  files?: ChatAttachment[];
   reasoning?: string;
   isThinking?: boolean;
   isStreaming?: boolean;

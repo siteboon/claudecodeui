@@ -15,6 +15,8 @@ type ProviderCapabilities = {
   defaultPermissionMode: string;
   /** Whether image attachments can be included in a chat.send. */
   supportsImages: boolean;
+  /** Whether general file attachments can be included in a chat.send. */
+  supportsFiles: boolean;
   /** Whether an in-flight run can be cancelled via chat.abort. */
   supportsAbort: boolean;
   /** Whether interactive tool permission prompts can reach the UI. */
@@ -37,6 +39,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     permissionModes: ['default', 'auto', 'acceptEdits', 'bypassPermissions', 'plan'],
     defaultPermissionMode: 'default',
     supportsImages: true,
+    supportsFiles: true,
     supportsAbort: true,
     supportsPermissionRequests: true,
     supportsTokenUsage: true,
@@ -47,6 +50,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     permissionModes: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
     defaultPermissionMode: 'default',
     supportsImages: true,
+    supportsFiles: true,
     supportsAbort: true,
     supportsPermissionRequests: false,
     supportsTokenUsage: false,
@@ -57,6 +61,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     permissionModes: ['default', 'acceptEdits', 'bypassPermissions'],
     defaultPermissionMode: 'default',
     supportsImages: true,
+    supportsFiles: true,
     supportsAbort: true,
     supportsPermissionRequests: false,
     supportsTokenUsage: true,
@@ -66,10 +71,11 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     provider: 'opencode',
     // Mapped by the runtime onto OpenCode's controls: `--agent plan` (plan),
     // `--auto` (bypassPermissions) and the OPENCODE_PERMISSION env var
-    // (acceptEdits). See resolveOpenCodePermissionOptions in opencode-cli.js.
+    // (acceptEdits). See resolveOpenCodePermissionOptions in the OpenCode runtime adapter.
     permissionModes: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
     defaultPermissionMode: 'default',
     supportsImages: true,
+    supportsFiles: true,
     supportsAbort: true,
     supportsPermissionRequests: false,
     supportsTokenUsage: true,
