@@ -475,7 +475,7 @@ export const runMigrations = (db: Database) => {
     db.exec(PROVIDER_MODELS_TABLE_SCHEMA_SQL);
     db.exec(`
       CREATE INDEX IF NOT EXISTS idx_provider_models_provider_order
-      ON provider_models(provider, is_custom, sort_order, id)
+      ON provider_models(provider, sort_order, id)
     `);
 
     db.exec(PROJECTS_TABLE_SCHEMA_SQL);

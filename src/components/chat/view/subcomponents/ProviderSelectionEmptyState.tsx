@@ -252,8 +252,16 @@ export default function ProviderSelectionEmptyState({
               <DialogTitle>Model Selector</DialogTitle>
               <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-muted/20 px-4 py-3">
                 <div>
-                  <p className="text-sm font-semibold text-foreground">Choose a model</p>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">Built-in and custom models in one list</p>
+                  <p className="text-sm font-semibold text-foreground">
+                    {t("providerSelection.chooseModel", {
+                      defaultValue: "Choose a model",
+                    })}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    {t("providerSelection.chooseModelDescription", {
+                      defaultValue: "Built-in and custom models in one list",
+                    })}
+                  </p>
                 </div>
                 <Button
                   type="button"
@@ -263,7 +271,7 @@ export default function ProviderSelectionEmptyState({
                   className="h-8 shrink-0 rounded-lg px-2.5 text-xs"
                 >
                   <Plus className="h-3.5 w-3.5" />
-                  Add model
+                  {t("providerSelection.addModel", { defaultValue: "Add model" })}
                 </Button>
               </div>
               <Command filter={modelSearchFilter}>
@@ -344,7 +352,11 @@ export default function ProviderSelectionEmptyState({
             }}
           >
             <DialogContent className="flex h-[min(90dvh,46rem)] w-[calc(100vw-1rem)] max-w-4xl flex-col overflow-hidden rounded-3xl p-4 sm:p-5">
-              <DialogTitle>Manage models</DialogTitle>
+              <DialogTitle>
+                {t("providerSelection.manageModels", {
+                  defaultValue: "Manage models",
+                })}
+              </DialogTitle>
               <ModelLibraryPanel
                 initialProvider={provider}
                 providerModelCatalog={providerModelCatalog}

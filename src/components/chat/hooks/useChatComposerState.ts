@@ -847,8 +847,13 @@ export function useChatComposerState({
           }
           const body = await response.json();
           targetSessionId = body?.data?.sessionId || null;
-          if (typeof body?.data?.sessionName === 'string') {
-            createdSessionName = body.data.sessionName;
+          // A blank server name would leave the session unlabeled, so the local
+          // summary stays the fallback unless a real name comes back.
+          const returnedSessionName = typeof body?.data?.sessionName === 'string'
+            ? body.data.sessionName.trim()
+            : '';
+          if (returnedSessionName) {
+            createdSessionName = returnedSessionName;
           }
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';

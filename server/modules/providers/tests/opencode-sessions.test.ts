@@ -477,12 +477,12 @@ test('OpenCode synchronizer preserves the title assigned when CloudCLI creates a
   const restoreHomeDir = patchHomeDir(tempRoot);
 
   try {
-    // Provider-owned values differ from the CloudCLI title so the persisted
-    // app-created name is proven to remain authoritative.
+    // Both provider-owned values differ from the CloudCLI title so either one
+    // leaking through would change the assertion below.
     await seedOpenCodeSession(tempRoot, workspacePath, {
       sessionId: 'oc-app-1',
       title: 'OpenCode generated title',
-      firstUserText: 'Fix the checkout crash',
+      firstUserText: 'OpenCode first user prompt',
     });
     await withIsolatedDatabase(async () => {
       sessionsDb.createAppSession('app-1', 'opencode', workspacePath, 'Fix the checkout crash');

@@ -19,6 +19,18 @@ function createDirectoryEntry(name: string, directory: boolean): FileTreeDirecto
   };
 }
 
+/**
+ * Adapts a path-keyed listing to the streaming directory contract so tests keep
+ * describing directories as plain arrays.
+ */
+function createDirectoryReader(
+  listDirectory: (directoryPath: string) => FileTreeDirectoryEntry[],
+): FileTreeFileSystem['openDirectory'] {
+  return async function* openDirectory(directoryPath) {
+    yield* listDirectory(directoryPath);
+  };
+}
+
 function createStats(directory: boolean, mode: number): FileTreeStats {
   return {
     size: directory ? 0 : 24,
@@ -40,7 +52,9 @@ function createFakeFileSystem(
     access: unexpectedOperation,
     stat: unexpectedOperation,
     lstat: unexpectedOperation,
-    readdir: unexpectedOperation,
+    openDirectory: () => ({
+      [Symbol.asyncIterator]: () => ({ next: unexpectedOperation }),
+    }),
     realpath: unexpectedOperation,
     readTextFile: unexpectedOperation,
     writeTextFile: unexpectedOperation,
@@ -78,7 +92,7 @@ test('listProjectFiles builds a sorted tree and skips generated directories', as
   const sourceDirectory = path.join(projectRoot, 'src');
   const fileSystem = createFakeFileSystem({
     access: async () => undefined,
-    readdir: async (directoryPath) => {
+    openDirectory: createDirectoryReader((directoryPath) => {
       if (directoryPath === projectRoot) {
         return [
           createDirectoryEntry('node_modules', true),
@@ -90,7 +104,7 @@ test('listProjectFiles builds a sorted tree and skips generated directories', as
         return [createDirectoryEntry('index.ts', false)];
       }
       return [];
-    },
+    }),
     lstat: async (candidatePath) => createStats(candidatePath === sourceDirectory, 0o754),
   });
   const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
@@ -117,7 +131,7 @@ test('listProjectFiles excludes gitignored entries only when requested', async (
       assert.equal(filePath, path.join(projectRoot, '.gitignore'));
       return ['*.log', '!keep.log', 'cache/', 'src/generated.ts'].join('\n');
     },
-    readdir: async (directoryPath) => {
+    openDirectory: createDirectoryReader((directoryPath) => {
       readDirectories.push(directoryPath);
       if (directoryPath === projectRoot) {
         return [
@@ -138,7 +152,7 @@ test('listProjectFiles excludes gitignored entries only when requested', async (
         ];
       }
       return [];
-    },
+    }),
     lstat: async (candidatePath) => createStats(
       candidatePath === cacheDirectory || candidatePath === sourceDirectory,
       0o644,
@@ -160,9 +174,9 @@ test('listProjectFiles returns the normal tree when no gitignore exists', async 
     readTextFile: async () => {
       throw Object.assign(new Error('missing'), { code: 'ENOENT' });
     },
-    readdir: async (directoryPath) => directoryPath === projectRoot
+    openDirectory: createDirectoryReader((directoryPath) => directoryPath === projectRoot
       ? [createDirectoryEntry('debug.log', false)]
-      : [],
+      : []),
     lstat: async () => createStats(false, 0o644),
   });
   const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
@@ -176,9 +190,9 @@ test('listProjectFiles rejects a tree that exceeds the server entry limit', asyn
   const projectRoot = path.resolve('file-tree-test-project');
   const fileSystem = createFakeFileSystem({
     access: async () => undefined,
-    readdir: async (directoryPath) => directoryPath === projectRoot
+    openDirectory: createDirectoryReader((directoryPath) => directoryPath === projectRoot
       ? Array.from({ length: 10_001 }, (_, index) => createDirectoryEntry(`file-${index}.txt`, false))
-      : [],
+      : []),
     lstat: async () => createStats(false, 0o644),
   });
   const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
@@ -191,6 +205,36 @@ test('listProjectFiles rejects a tree that exceeds the server entry limit', asyn
   );
 });
 
+test('listProjectFiles abandons a directory stream as soon as the entry limit is passed', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  let streamedEntries = 0;
+  const fileSystem = createFakeFileSystem({
+    access: async () => undefined,
+    // Endless on purpose: the walk has to stop consuming the stream itself
+    // instead of waiting for the directory listing to be materialized.
+    openDirectory: async function* (directoryPath) {
+      if (directoryPath !== projectRoot) {
+        return;
+      }
+      for (let index = 0; ; index += 1) {
+        streamedEntries += 1;
+        yield createDirectoryEntry(`file-${index}.txt`, false);
+      }
+    },
+    lstat: async () => createStats(false, 0o644),
+  });
+  const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
+
+  await assert.rejects(
+    service.listProjectFiles('project-1'),
+    (error: unknown) => error instanceof AppError
+      && error.code === 'FILE_TREE_TOO_LARGE'
+      && error.statusCode === 413,
+  );
+  // The budget plus the single entry that proves it was exceeded.
+  assert.equal(streamedEntries, 10_001);
+});
+
 test('listProjectFiles shares the entry limit across nested directories', async () => {
   const projectRoot = path.resolve('file-tree-test-project');
   const firstDirectory = path.join(projectRoot, 'first');
@@ -198,7 +242,7 @@ test('listProjectFiles shares the entry limit across nested directories', async 
   const directoryPaths = new Set([firstDirectory, secondDirectory]);
   const fileSystem = createFakeFileSystem({
     access: async () => undefined,
-    readdir: async (directoryPath) => {
+    openDirectory: createDirectoryReader((directoryPath) => {
       if (directoryPath === projectRoot) {
         return [
           createDirectoryEntry('first', true),
@@ -212,7 +256,7 @@ test('listProjectFiles shares the entry limit across nested directories', async 
         );
       }
       return [];
-    },
+    }),
     lstat: async (candidatePath) => createStats(directoryPaths.has(candidatePath), 0o644),
   });
   const service = createFileTreeService(createDependencies(fileSystem, projectRoot));

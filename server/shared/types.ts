@@ -954,7 +954,9 @@ export type FileTreeFileSystem = {
   access(candidatePath: string): Promise<void>;
   stat(candidatePath: string): Promise<FileTreeStats>;
   lstat(candidatePath: string): Promise<FileTreeStats>;
-  readdir(directoryPath: string): Promise<FileTreeDirectoryEntry[]>;
+  // Streamed rather than returned as an array so a directory with millions of
+  // children is abandoned at the entry limit instead of being materialized.
+  openDirectory(directoryPath: string): AsyncIterable<FileTreeDirectoryEntry>;
   realpath(candidatePath: string): Promise<string>;
   readTextFile(filePath: string): Promise<string>;
   writeTextFile(filePath: string, content: string): Promise<void>;
