@@ -24,6 +24,15 @@ import enCodeEditor from './locales/en/codeEditor.json';
 // eslint-disable-next-line import-x/order
 import enTasks from './locales/en/tasks.json';
 
+import esCommon from './locales/es/common.json';
+import esSettings from './locales/es/settings.json';
+import esAuth from './locales/es/auth.json';
+import esSidebar from './locales/es/sidebar.json';
+import esChat from './locales/es/chat.json';
+import esCodeEditor from './locales/es/codeEditor.json';
+// eslint-disable-next-line import-x/order
+import esTasks from './locales/es/tasks.json';
+
 import koCommon from './locales/ko/common.json';
 import koSettings from './locales/ko/settings.json';
 import koAuth from './locales/ko/auth.json';
@@ -127,6 +136,15 @@ i18n
         chat: enChat,
         codeEditor: enCodeEditor,
         tasks: enTasks,
+      },
+      es: {
+        common: esCommon,
+        settings: esSettings,
+        auth: esAuth,
+        sidebar: esSidebar,
+        chat: esChat,
+        codeEditor: esCodeEditor,
+        tasks: esTasks,
       },
       ko: {
         common: koCommon,
