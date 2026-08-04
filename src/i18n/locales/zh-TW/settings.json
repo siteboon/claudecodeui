@@ -341,6 +341,7 @@
     "skipPermissions": {
       "label": "略過權限提示（請謹慎使用）",
       "claudeDescription": "等同於 --dangerously-skip-permissions 旗標",
+      "qoderDescription": "等同於 --permission-mode bypass_permissions 旗標",
       "cursorDescription": "等同於 Cursor CLI 中的 -f 旗標"
     },
     "allowedTools": {

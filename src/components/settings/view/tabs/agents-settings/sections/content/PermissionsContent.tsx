@@ -57,6 +57,8 @@ type ClaudePermissionsProps = {
   onAllowedToolsChange: (value: string[]) => void;
   disallowedTools: string[];
   onDisallowedToolsChange: (value: string[]) => void;
+  /** i18n suffix under permissions.skipPermissions.* describing the bypass flag. */
+  descriptionKey?: 'claudeDescription' | 'qoderDescription';
 };
 
 function ClaudePermissions({
@@ -66,6 +68,7 @@ function ClaudePermissions({
   onAllowedToolsChange,
   disallowedTools,
   onDisallowedToolsChange,
+  descriptionKey = 'claudeDescription',
 }: Omit<ClaudePermissionsProps, 'agent'>) {
   const { t } = useTranslation('settings');
   const [newAllowedTool, setNewAllowedTool] = useState('');
@@ -111,7 +114,7 @@ function ClaudePermissions({
                 {t('permissions.skipPermissions.label')}
               </div>
               <div className="text-sm text-orange-700 dark:text-orange-300">
-                {t('permissions.skipPermissions.claudeDescription')}
+                {t(`permissions.skipPermissions.${descriptionKey}`)}
               </div>
             </div>
           </label>
@@ -476,6 +479,16 @@ type CodexPermissionsProps = {
   onPermissionModeChange: (value: CodexPermissionMode) => void;
 };
 
+type QoderPermissionsProps = {
+  agent: 'qoder';
+  skipPermissions: boolean;
+  onSkipPermissionsChange: (value: boolean) => void;
+  allowedTools: string[];
+  onAllowedToolsChange: (value: string[]) => void;
+  disallowedTools: string[];
+  onDisallowedToolsChange: (value: string[]) => void;
+};
+
 function CodexPermissions({ permissionMode, onPermissionModeChange }: Omit<CodexPermissionsProps, 'agent'>) {
   const { t } = useTranslation('settings');
 
@@ -579,7 +592,7 @@ function CodexPermissions({ permissionMode, onPermissionModeChange }: Omit<Codex
   );
 }
 
-type PermissionsContentProps = ClaudePermissionsProps | CursorPermissionsProps | CodexPermissionsProps;
+type PermissionsContentProps = ClaudePermissionsProps | CursorPermissionsProps | CodexPermissionsProps | QoderPermissionsProps;
 
 export default function PermissionsContent(props: PermissionsContentProps) {
   if (props.agent === 'claude') {
@@ -588,6 +601,20 @@ export default function PermissionsContent(props: PermissionsContentProps) {
 
   if (props.agent === 'cursor') {
     return <CursorPermissions {...props} />;
+  }
+
+  if (props.agent === 'qoder') {
+    return (
+      <ClaudePermissions
+        skipPermissions={props.skipPermissions}
+        onSkipPermissionsChange={props.onSkipPermissionsChange}
+        allowedTools={props.allowedTools}
+        onAllowedToolsChange={props.onAllowedToolsChange}
+        disallowedTools={props.disallowedTools}
+        onDisallowedToolsChange={props.onDisallowedToolsChange}
+        descriptionKey="qoderDescription"
+      />
+    );
   }
 
   return <CodexPermissions {...props} />;

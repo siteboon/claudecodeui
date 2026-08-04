@@ -14,6 +14,8 @@ export default function AgentsSettingsTab({
   onClaudePermissionsChange,
   cursorPermissions,
   onCursorPermissionsChange,
+  qoderPermissions,
+  onQoderPermissionsChange,
   codexPermissionMode,
   onCodexPermissionModeChange,
   projects,
@@ -91,6 +93,8 @@ export default function AgentsSettingsTab({
           onClaudePermissionsChange={onClaudePermissionsChange}
           cursorPermissions={cursorPermissions}
           onCursorPermissionsChange={onCursorPermissionsChange}
+          qoderPermissions={qoderPermissions}
+          onQoderPermissionsChange={onQoderPermissionsChange}
           codexPermissionMode={codexPermissionMode}
           onCodexPermissionModeChange={onCodexPermissionModeChange}
           projects={projects}

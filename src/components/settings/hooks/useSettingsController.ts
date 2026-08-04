@@ -16,6 +16,7 @@ import type {
   CursorPermissionsState,
   NotificationPreferencesState,
   ProjectSortOrder,
+  QoderPermissionsState,
   SettingsMainTab,
 } from '../types/types';
 
@@ -39,6 +40,12 @@ type ClaudeSettingsStorage = {
 type CursorSettingsStorage = {
   allowedCommands?: string[];
   disallowedCommands?: string[];
+  skipPermissions?: boolean;
+};
+
+type QoderSettingsStorage = {
+  allowedTools?: string[];
+  disallowedTools?: string[];
   skipPermissions?: boolean;
 };
 
@@ -103,6 +110,12 @@ const createEmptyCursorPermissions = (): CursorPermissionsState => ({
   ...DEFAULT_CURSOR_PERMISSIONS,
 });
 
+const createEmptyQoderPermissions = (): QoderPermissionsState => ({
+  allowedTools: [],
+  disallowedTools: [],
+  skipPermissions: false,
+});
+
 const createDefaultNotificationPreferences = (): NotificationPreferencesState => ({
   channels: {
     inApp: true,
@@ -154,6 +167,9 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
   const [cursorPermissions, setCursorPermissions] = useState<CursorPermissionsState>(() => (
     createEmptyCursorPermissions()
   ));
+  const [qoderPermissions, setQoderPermissions] = useState<QoderPermissionsState>(() => (
+    createEmptyQoderPermissions()
+  ));
   const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferencesState>(() => (
     createDefaultNotificationPreferences()
   ));
@@ -190,6 +206,16 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
         skipPermissions: Boolean(savedCursorSettings.skipPermissions),
       });
 
+      const savedQoderSettings = parseJson<QoderSettingsStorage>(
+        localStorage.getItem('qoder-settings'),
+        {},
+      );
+      setQoderPermissions({
+        allowedTools: savedQoderSettings.allowedTools || [],
+        disallowedTools: savedQoderSettings.disallowedTools || [],
+        skipPermissions: Boolean(savedQoderSettings.skipPermissions),
+      });
+
       const savedCodexSettings = parseJson<CodexSettingsStorage>(
         localStorage.getItem('codex-settings'),
         {},
@@ -216,6 +242,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
       console.error('Error loading settings:', error);
       setClaudePermissions(createEmptyClaudePermissions());
       setCursorPermissions(createEmptyCursorPermissions());
+      setQoderPermissions(createEmptyQoderPermissions());
       setNotificationPreferences(createDefaultNotificationPreferences());
       setCodexPermissionMode('default');
       setProjectSortOrder('name');
@@ -263,6 +290,13 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
         lastUpdated: now,
       }));
 
+      localStorage.setItem('qoder-settings', JSON.stringify({
+        allowedTools: qoderPermissions.allowedTools,
+        disallowedTools: qoderPermissions.disallowedTools,
+        skipPermissions: qoderPermissions.skipPermissions,
+        lastUpdated: now,
+      }));
+
       localStorage.setItem('codex-settings', JSON.stringify({
         permissionMode: codexPermissionMode,
         lastUpdated: now,
@@ -289,6 +323,9 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     cursorPermissions.allowedCommands,
     cursorPermissions.disallowedCommands,
     cursorPermissions.skipPermissions,
+    qoderPermissions.allowedTools,
+    qoderPermissions.disallowedTools,
+    qoderPermissions.skipPermissions,
     notificationPreferences,
     projectSortOrder,
   ]);
@@ -390,6 +427,8 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     setClaudePermissions,
     cursorPermissions,
     setCursorPermissions,
+    qoderPermissions,
+    setQoderPermissions,
     notificationPreferences,
     setNotificationPreferences,
     codexPermissionMode,

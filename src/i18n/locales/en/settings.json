@@ -372,6 +372,7 @@
     "skipPermissions": {
       "label": "Skip permission prompts (use with caution)",
       "claudeDescription": "Equivalent to --dangerously-skip-permissions flag",
+      "qoderDescription": "Equivalent to --permission-mode bypass_permissions flag",
       "cursorDescription": "Equivalent to -f flag in Cursor CLI"
     },
     "allowedTools": {

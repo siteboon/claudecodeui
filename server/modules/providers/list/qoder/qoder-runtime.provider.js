@@ -10,35 +10,13 @@ import {
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
 import { createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell, getQoderProjectsDir } from '@/shared/utils.js';
 
+import { resolveQoderPermissionOptions } from './qoder-permissions.provider.js';
+
 // cross-spawn resolves .cmd shims/PATHEXT on Windows and delegates to
 // child_process.spawn everywhere else.
 const spawnFunction = crossSpawn;
 
 const activeQoderProcesses = new Map();
-
-/**
- * Maps the UI permission mode onto qodercli's non-interactive controls
- * (verified against qodercli v1.1.13):
- * - bypassPermissions → `--permission-mode bypass_permissions`, auto-approves
- *                       every permission prompt.
- * - acceptEdits       → `--permission-mode accept_edits`, auto-accepts file
- *                       edits while still prompting for other tools.
- * - plan              → qodercli has no read-only plan mode; falls through to
- *                       the default (no extra flags).
- * - default           → nothing; qoder's own settings.json governs.
- *
- * Exported for tests only.
- */
-export function resolveQoderPermissionOptions(permissionMode) {
-  switch (permissionMode) {
-    case 'bypassPermissions':
-      return { args: ['--permission-mode', 'bypass_permissions'], env: {} };
-    case 'acceptEdits':
-      return { args: ['--permission-mode', 'accept_edits'], env: {} };
-    default:
-      return { args: [], env: {} };
-  }
-}
 
 function resolveQoderEffort(model, effort, modelsDefinition) {
   const selectedModel = modelsDefinition?.OPTIONS?.find((option) => option.value === model);
@@ -138,7 +116,8 @@ async function spawnQoder(command, options = {}, ws, context) {
       sessionSummary,
       images,
       files,
-      permissionMode
+      permissionMode,
+      toolsSettings
     } = options;
     // Callers pass the stable app session id; the CLI resumes with the
     // provider-native id recorded on the session row.
@@ -280,7 +259,7 @@ async function spawnQoder(command, options = {}, ws, context) {
       if (resolvedEffort) {
         args.push('--reasoning-effort', resolvedEffort);
       }
-      const permissionOptions = resolveQoderPermissionOptions(permissionMode);
+      const permissionOptions = resolveQoderPermissionOptions(permissionMode, toolsSettings);
       args.push(...permissionOptions.args);
       const fileDescriptors = normalizeAttachmentDescriptors(files);
       // qoder's CLI takes one --attachment per file; images are not supported

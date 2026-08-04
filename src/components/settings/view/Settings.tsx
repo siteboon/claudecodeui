@@ -49,6 +49,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     setNotificationPreferences,
     cursorPermissions,
     setCursorPermissions,
+    qoderPermissions,
+    setQoderPermissions,
     codexPermissionMode,
     setCodexPermissionMode,
     providerAuthStatus,
@@ -183,6 +185,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
                   onClaudePermissionsChange={setClaudePermissions}
                   cursorPermissions={cursorPermissions}
                   onCursorPermissionsChange={setCursorPermissions}
+                  qoderPermissions={qoderPermissions}
+                  onQoderPermissionsChange={setQoderPermissions}
                   codexPermissionMode={codexPermissionMode}
                   onCodexPermissionModeChange={setCodexPermissionMode}
                   projects={projects}

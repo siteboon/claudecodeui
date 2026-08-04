@@ -45,6 +45,12 @@ export type CursorPermissionsState = {
   skipPermissions: boolean;
 };
 
+export type QoderPermissionsState = {
+  allowedTools: string[];
+  disallowedTools: string[];
+  skipPermissions: boolean;
+};
+
 export type CodeEditorSettingsState = {
   wordWrap: boolean;
   showMinimap: boolean;
