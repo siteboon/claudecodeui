@@ -1,5 +1,6 @@
 import express, { type Request, type Response } from 'express';
 
+import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { providerAuthService } from '@/modules/providers/services/provider-auth.service.js';
 import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
 import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
@@ -281,19 +282,7 @@ const parseProviderSkillCreatePayload = (payload: unknown): ProviderSkillCreateI
 
 const parseProvider = (value: unknown): LLMProvider => {
   const normalized = normalizeProviderParam(value);
-  if (
-    normalized === 'claude'
-    || normalized === 'codex'
-    || normalized === 'cursor'
-    || normalized === 'opencode'
-  ) {
-    return normalized;
-  }
-
-  throw new AppError(`Unsupported provider "${normalized}".`, {
-    code: 'UNSUPPORTED_PROVIDER',
-    statusCode: 400,
-  });
+  return providerRegistry.resolveProvider(normalized).id;
 };
 
 const parseSessionRenameSummary = (payload: unknown): string => {

@@ -8,9 +8,18 @@ type AgentConnectionsStepProps = {
   onOpenProviderLogin: (provider: LLMProvider) => void;
 };
 
-const providerCards = [
+type ProviderCard = {
+  provider: LLMProvider;
+  title: string;
+  connectedClassName: string;
+  iconContainerClassName: string;
+  loginButtonClassName: string;
+  hideLogin?: boolean;
+};
+
+const providerCards: ProviderCard[] = [
   {
-    provider: 'claude' as const,
+    provider: 'claude',
     title: 'Claude Code',
     connectedClassName: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800',
     iconContainerClassName: 'bg-blue-100 dark:bg-blue-900/30',
@@ -43,6 +52,7 @@ const providerCards = [
     connectedClassName: 'bg-zinc-100 dark:bg-zinc-800/50 border-zinc-300 dark:border-zinc-600',
     iconContainerClassName: 'bg-zinc-100 dark:bg-zinc-800',
     loginButtonClassName: 'bg-zinc-800 hover:bg-zinc-900 dark:bg-zinc-700 dark:hover:bg-zinc-600',
+    hideLogin: true,
   },
 ];
 
@@ -69,6 +79,7 @@ export default function AgentConnectionsStep({
             connectedClassName={providerCard.connectedClassName}
             iconContainerClassName={providerCard.iconContainerClassName}
             loginButtonClassName={providerCard.loginButtonClassName}
+            hideLogin={providerCard.hideLogin}
             onLogin={() => onOpenProviderLogin(providerCard.provider)}
           />
         ))}

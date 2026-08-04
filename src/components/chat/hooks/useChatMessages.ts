@@ -8,7 +8,20 @@ import type { ChatMessage, SubagentChildTool } from '../types/types';
 import { decodeHtmlEntities, unescapeWithMathProtection, formatUsageLimitText } from '../utils/chatFormatting';
 
 function formatToolResultContent(content: unknown): string {
-  const text = typeof content === 'string' ? content : JSON.stringify(content);
+  let text: string;
+  if (typeof content === 'string') {
+    text = content;
+  } else {
+    try {
+      text = JSON.stringify(content) ?? '';
+    } catch {
+      try {
+        text = String(content ?? '');
+      } catch {
+        text = '';
+      }
+    }
+  }
   const toolUseErrorMatch = /^<tool_use_error>([\s\S]*)<\/tool_use_error>$/.exec(text.trim());
   return toolUseErrorMatch ? toolUseErrorMatch[1] : text;
 }
@@ -81,6 +94,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
 
   for (const msg of messages) {
     const sharedMetadata = {
+      id: msg.id,
       displayText: msg.displayText,
       commandName: msg.commandName,
       commandMessage: msg.commandMessage,
@@ -144,7 +158,8 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
       }
 
       case 'tool_use': {
-        const tr = msg.toolResult || (msg.toolId ? toolResultMap.get(msg.toolId) : null);
+        const linkedResult = msg.toolId ? toolResultMap.get(msg.toolId) : undefined;
+        const hasToolResult = msg.toolResult != null || linkedResult != null;
         const isSubagentContainer = msg.toolName === 'Task';
 
         // Build child tools from subagentTools
@@ -161,11 +176,18 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           }
         }
 
-        const toolResult = tr
+        const toolResult = hasToolResult
           ? {
-              content: formatToolResultContent(tr.content),
-              isError: Boolean(tr.isError),
-              toolUseResult: (tr as any).toolUseResult,
+              content: formatToolResultContent(
+                msg.toolResult?.content ?? linkedResult?.content ?? linkedResult?.toolResult?.content,
+              ),
+              isError: Boolean(
+                msg.toolResult?.isError ?? linkedResult?.isError ?? linkedResult?.toolResult?.isError,
+              ),
+              toolUseResult:
+                msg.toolResult?.toolUseResult ??
+                linkedResult?.toolUseResult ??
+                linkedResult?.toolResult?.toolUseResult,
             }
           : null;
 
@@ -198,6 +220,8 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
             content: unescapeWithMathProtection(msg.content),
             timestamp: msg.timestamp,
             isThinking: true,
+            isStreaming: Boolean(msg.isStreaming),
+            duration: typeof msg.duration === 'number' ? msg.duration : undefined,
             ...sharedMetadata,
           });
         }
@@ -271,13 +295,13 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           break;
         }
 
-        const content = formatToolResultContent(msg.content || '');
+        const content = formatToolResultContent(msg.content ?? msg.toolResult?.content);
         if (!content.trim()) {
           break;
         }
 
         converted.push({
-          type: msg.isError ? 'error' : 'assistant',
+          type: (msg.isError ?? msg.toolResult?.isError) ? 'error' : 'assistant',
           content,
           timestamp: msg.timestamp,
           toolId: msg.toolId,

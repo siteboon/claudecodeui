@@ -10,6 +10,44 @@ type UserTurnFingerprint = {
   fileCount: number;
 };
 
+/**
+ * Applies realtime snapshots by logical message id while preserving their
+ * original list position. A lower sequence number is stale replay data and
+ * cannot replace a newer snapshot already rendered by the client.
+ */
+export function upsertRealtimeMessages(
+  currentMessages: NormalizedMessage[],
+  incomingMessages: NormalizedMessage[],
+): NormalizedMessage[] {
+  if (incomingMessages.length === 0) {
+    return currentMessages;
+  }
+
+  const updated = [...currentMessages];
+  const indexById = new Map(updated.map((message, index) => [message.id, index]));
+
+  for (const incoming of incomingMessages) {
+    const existingIndex = indexById.get(incoming.id);
+    if (existingIndex === undefined) {
+      indexById.set(incoming.id, updated.length);
+      updated.push(incoming);
+      continue;
+    }
+
+    const existing = updated[existingIndex];
+    if (
+      typeof existing.seq === 'number'
+      && typeof incoming.seq === 'number'
+      && incoming.seq < existing.seq
+    ) {
+      continue;
+    }
+    updated[existingIndex] = incoming;
+  }
+
+  return updated;
+}
+
 function userTurnFingerprint(message: NormalizedMessage): UserTurnFingerprint | null {
   if (message.kind !== 'text' || message.role !== 'user') return null;
 

@@ -9,7 +9,6 @@
  * Normal "not installed" / "not authenticated" states return without throwing.
  */
 import spawn from 'cross-spawn';
-
 import type { RpcClientOptions } from '@earendil-works/pi-coding-agent';
 
 import type { IProviderAuth } from '@/shared/interfaces.js';
@@ -91,7 +90,10 @@ export class PiAuthProvider implements IProviderAuth {
    * model is returned. Any failure is treated as "not authenticated".
    */
   private async probeAuthenticated(): Promise<boolean> {
-    const client = this.deps.createRpcClient({ cliPath: this.deps.paths.getCliPath() });
+    // cliPath is intentionally omitted: PiRpcClient defaults to the JS entry
+    // (dist/cli.js) via PiPaths.getRpcCliEntry(). Passing getCliPath() here
+    // would spawn `node pi` and crash.
+    const client = this.deps.createRpcClient({});
     try {
       await client.start();
       const models = await client.getAvailableModels();

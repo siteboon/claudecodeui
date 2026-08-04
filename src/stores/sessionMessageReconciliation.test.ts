@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { NormalizedMessage } from './useSessionStore';
-import { removeOptimisticUserEchoes } from './sessionMessageReconciliation';
+import {
+  removeOptimisticUserEchoes,
+  upsertRealtimeMessages,
+} from './sessionMessageReconciliation';
 
 const createUserMessage = (
   id: string,
@@ -67,4 +70,54 @@ test('keeps the existing optimistic text reconciliation behavior', () => {
   });
 
   assert.deepEqual(removeOptimisticUserEchoes([persisted], [local]), []);
+});
+
+test('replaces repeated realtime snapshots with the same logical message id', () => {
+  const base = createUserMessage('thinking-1', '2026-08-04T00:00:00.000Z', {
+    provider: 'pi',
+    kind: 'thinking',
+    role: 'assistant',
+    content: 'The',
+    isStreaming: true,
+    seq: 1,
+  });
+  const updated = {
+    ...base,
+    content: 'The answer',
+    seq: 2,
+  };
+  const finalized = {
+    ...updated,
+    content: 'The authoritative answer',
+    isStreaming: false,
+    duration: 2,
+    seq: 3,
+  };
+
+  const messages = upsertRealtimeMessages([], [base, updated, finalized]);
+
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0]?.id, 'thinking-1');
+  assert.equal(messages[0]?.content, 'The authoritative answer');
+  assert.equal(messages[0]?.isStreaming, false);
+  assert.equal(messages[0]?.duration, 2);
+});
+
+test('ignores an older sequenced snapshot for an existing realtime message', () => {
+  const finalized = createUserMessage('thinking-1', '2026-08-04T00:00:00.000Z', {
+    provider: 'pi',
+    kind: 'thinking',
+    role: 'assistant',
+    content: 'complete',
+    isStreaming: false,
+    seq: 9,
+  });
+  const stale = {
+    ...finalized,
+    content: 'partial',
+    isStreaming: true,
+    seq: 8,
+  };
+
+  assert.deepEqual(upsertRealtimeMessages([finalized], [stale]), [finalized]);
 });

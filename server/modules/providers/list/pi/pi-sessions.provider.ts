@@ -39,26 +39,32 @@ function toRole(role: string): 'user' | 'assistant' | undefined {
   return role === 'user' || role === 'assistant' ? role : undefined;
 }
 
+type PiDisplayContentBlock = {
+  index: number;
+  kind: 'text' | 'thinking';
+  content: string;
+};
+
 /**
- * Extracts ordered text content blocks from a Pi message. A string `content`
- * yields a single block; an array yields one block per `{ type: 'text' }`
- * element. The returned index is the block's position within `content` so the
- * message id stays stable across reads.
+ * Extracts ordered user-visible content from a Pi message. The original array
+ * index is retained so REST message ids remain stable across repeated reads.
  */
-function extractContentBlocks(message: Record<string, unknown>): Array<{ index: number; text: string }> {
+function extractContentBlocks(message: Record<string, unknown>): PiDisplayContentBlock[] {
   const content = message.content;
 
   if (typeof content === 'string') {
-    return [{ index: 0, text: content }];
+    return [{ index: 0, kind: 'text', content }];
   }
 
   if (Array.isArray(content)) {
-    const blocks: Array<{ index: number; text: string }> = [];
+    const blocks: PiDisplayContentBlock[] = [];
     content.forEach((block, index) => {
       if (typeof block === 'object' && block !== null) {
         const record = block as Record<string, unknown>;
         if (record.type === 'text' && typeof record.text === 'string') {
-          blocks.push({ index, text: record.text });
+          blocks.push({ index, kind: 'text', content: record.text });
+        } else if (record.type === 'thinking' && typeof record.thinking === 'string') {
+          blocks.push({ index, kind: 'thinking', content: record.thinking });
         }
       }
     });
@@ -66,6 +72,19 @@ function extractContentBlocks(message: Record<string, unknown>): Array<{ index: 
   }
 
   return [];
+}
+
+function normalizeMessageTimestamp(timestamp: unknown): string | undefined {
+  if (typeof timestamp === 'string') {
+    return timestamp;
+  }
+  if (typeof timestamp === 'number' && Number.isFinite(timestamp)) {
+    const date = new Date(timestamp);
+    if (Number.isFinite(date.getTime())) {
+      return date.toISOString();
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -85,17 +104,17 @@ export class PiSessionsProvider implements IProviderSessions {
     }
 
     const { entryId, role, message } = raw;
-    const timestamp = typeof message.timestamp === 'string' ? message.timestamp : undefined;
+    const timestamp = normalizeMessageTimestamp(message.timestamp);
     const normalizedRole = toRole(role);
 
-    return extractContentBlocks(message).map(({ index, text }) => createNormalizedMessage({
+    return extractContentBlocks(message).map(({ index, kind, content }) => createNormalizedMessage({
       id: `${entryId}:${index}`,
       sessionId: sessionId ?? '',
       timestamp,
       provider: PROVIDER,
-      kind: 'text',
-      role: normalizedRole,
-      content: text,
+      kind,
+      content,
+      ...(kind === 'text' ? { role: normalizedRole } : {}),
     }));
   }
 
@@ -106,7 +125,10 @@ export class PiSessionsProvider implements IProviderSessions {
     const { limit = null, offset = 0 } = options;
     const providerSessionId = options.providerSessionId ?? sessionId;
 
-    const filePath = this.resolveSessionFile(providerSessionId);
+    const indexedFilePath = options.sessionFilePath;
+    const filePath = indexedFilePath && fsSync.existsSync(indexedFilePath)
+      ? indexedFilePath
+      : this.resolveSessionFile(providerSessionId);
     if (!filePath) {
       return { messages: [], total: 0, hasMore: false, offset: 0, limit: null, currentModel: null };
     }

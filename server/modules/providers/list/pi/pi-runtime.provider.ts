@@ -29,6 +29,8 @@ import { PiRpcClient, type PiRpcClientDeps } from './pi-rpc-client.provider.js';
 
 /** Bounded graceful-abort window before the process is force-killed. */
 const DEFAULT_ABORT_GRACE_MS = 5000;
+const RUN_CLOSE_GRACE_MS = 1000;
+const DEFAULT_THINKING_FLUSH_MS = 100;
 
 /** Runtime states (progress markers; terminal handling is guarded separately). */
 export type PiRuntimeState =
@@ -39,17 +41,30 @@ export type PiRuntimeState =
   | 'STREAMING'
   | 'SETTLED';
 
-/** Normalized event produced by {@link mapPiEvent} (transport-agnostic). */
-export interface NormalizedPiEvent {
-  kind: 'stream_delta' | 'thinking' | 'tool_use' | 'tool_result' | 'status';
-  content?: string;
-  toolId?: string;
-  toolName?: string;
-  toolInput?: unknown;
-  toolResult?: { content?: string; isError?: boolean };
-  isError?: boolean;
-  status?: string;
-}
+/**
+ * Provider-local event produced by {@link mapPiEvent} and consumed by the Pi
+ * runtime. Thinking lifecycle variants stay private to this adapter; the
+ * runtime turns them into stable `kind: "thinking"` message snapshots before
+ * anything crosses the provider boundary.
+ */
+export type NormalizedPiEvent =
+  | { kind: 'stream_delta'; content: string }
+  | { kind: 'thinking_start'; contentIndex: number }
+  | { kind: 'thinking_delta'; contentIndex: number; content: string }
+  | { kind: 'thinking_end'; contentIndex: number; content: string }
+  | { kind: 'tool_use'; toolId: string; toolName: string; toolInput: unknown }
+  | { kind: 'tool_result'; toolId: string; toolName: string; content: string; isError: boolean }
+  | { kind: 'status'; status: string };
+
+type ActiveThinkingBlock = {
+  id: string;
+  contentIndex: number;
+  content: string;
+  lastSentContent: string;
+  startedAtMs: number;
+  timestamp: string;
+  flushTimer?: NodeJS.Timeout;
+};
 
 /** Minimal RPC surface the runtime depends on (satisfied by {@link PiRpcClient}). */
 export interface PiRuntimeRpc {
@@ -98,6 +113,43 @@ function protocolError(message: string): AppError {
   return new AppError(message, { code: 'ERR-PI-RPC-PROTOCOL' });
 }
 
+function formatPiToolResultContent(result: unknown): string {
+  if (typeof result === 'string') {
+    return result;
+  }
+
+  if (isRecord(result)) {
+    if (typeof result.content === 'string') {
+      return result.content;
+    }
+
+    if (Array.isArray(result.content)) {
+      const textBlocks = result.content.flatMap((block) =>
+        isRecord(block) && block.type === 'text' && typeof block.text === 'string'
+          ? [block.text]
+          : [],
+      );
+      if (textBlocks.length > 0) {
+        return textBlocks.join('\n');
+      }
+    }
+  }
+
+  if (result === undefined) {
+    return '';
+  }
+
+  try {
+    return JSON.stringify(result) ?? '';
+  } catch {
+    try {
+      return String(result);
+    } catch {
+      return '';
+    }
+  }
+}
+
 /**
  * Pure mapping from a native `AgentSessionEvent` to a normalized event.
  *
@@ -124,11 +176,39 @@ export function mapPiEvent(event: unknown): NormalizedPiEvent | null {
         }
         return { kind: 'stream_delta', content: inner.delta };
       }
-      if (inner.type === 'thinking_delta') {
-        if (typeof inner.delta !== 'string') {
-          throw protocolError('thinking_delta missing string delta');
+      if (inner.type === 'thinking_start') {
+        if (!Number.isInteger(inner.contentIndex) || (inner.contentIndex as number) < 0) {
+          throw protocolError('thinking_start missing valid contentIndex');
         }
-        return { kind: 'thinking', content: inner.delta };
+        return { kind: 'thinking_start', contentIndex: inner.contentIndex as number };
+      }
+      if (inner.type === 'thinking_delta') {
+        if (
+          !Number.isInteger(inner.contentIndex)
+          || (inner.contentIndex as number) < 0
+          || typeof inner.delta !== 'string'
+        ) {
+          throw protocolError('thinking_delta missing valid contentIndex/string delta');
+        }
+        return {
+          kind: 'thinking_delta',
+          contentIndex: inner.contentIndex as number,
+          content: inner.delta,
+        };
+      }
+      if (inner.type === 'thinking_end') {
+        if (
+          !Number.isInteger(inner.contentIndex)
+          || (inner.contentIndex as number) < 0
+          || typeof inner.content !== 'string'
+        ) {
+          throw protocolError('thinking_end missing valid contentIndex/string content');
+        }
+        return {
+          kind: 'thinking_end',
+          contentIndex: inner.contentIndex as number,
+          content: inner.content,
+        };
       }
       return null;
     }
@@ -154,10 +234,7 @@ export function mapPiEvent(event: unknown): NormalizedPiEvent | null {
         kind: 'tool_result',
         toolId: event.toolCallId,
         toolName: event.toolName,
-        toolResult: {
-          content: typeof event.result === 'string' ? event.result : undefined,
-          isError,
-        },
+        content: formatPiToolResultContent(event.result),
         isError,
       };
     }
@@ -186,9 +263,42 @@ export function isSettledEvent(event: unknown): boolean {
   return isRecord(event) && event.type === 'agent_settled';
 }
 
+function buildRpcClientOptions(
+  options: AnyRecord,
+  nativeSessionId: string | null,
+): RpcClientOptions {
+  const rpcOptions: RpcClientOptions = {
+    cwd: typeof options.cwd === 'string' ? options.cwd : undefined,
+  };
+  const model = typeof options.model === 'string' ? options.model.trim() : '';
+  const separatorIndex = model.indexOf('/');
+  if (separatorIndex > 0 && separatorIndex < model.length - 1) {
+    rpcOptions.provider = model.slice(0, separatorIndex);
+    rpcOptions.model = model.slice(separatorIndex + 1);
+  } else if (model) {
+    rpcOptions.model = model;
+  }
+
+  const args: string[] = [];
+  if (nativeSessionId) {
+    args.push('--session-id', nativeSessionId);
+  }
+  const effort = typeof options.effort === 'string' ? options.effort.trim() : '';
+  if (effort && effort !== 'default') {
+    args.push('--thinking', effort);
+  }
+  if (args.length > 0) {
+    rpcOptions.args = args;
+  }
+
+  return rpcOptions;
+}
+
 export interface PiRuntimeDeps {
   createRpcClient?: CreatePiRuntimeRpc;
   abortGraceMs?: number;
+  /** Snapshot throttle for streamed thinking; tests set zero for determinism. */
+  thinkingFlushMs?: number;
 }
 
 /**
@@ -198,6 +308,7 @@ export interface PiRuntimeDeps {
 export function createPiRuntime(deps: PiRuntimeDeps = {}) {
   const createRpcClient = deps.createRpcClient ?? defaultCreatePiRuntimeRpc;
   const abortGraceMs = deps.abortGraceMs ?? DEFAULT_ABORT_GRACE_MS;
+  const thinkingFlushMs = Math.max(0, deps.thinkingFlushMs ?? DEFAULT_THINKING_FLUSH_MS);
   const activeRuns = new Map<string, ActiveRun>();
 
   async function run(
@@ -210,22 +321,118 @@ export function createPiRuntime(deps: PiRuntimeDeps = {}) {
     const appSessionId: string | null =
       typeof options.sessionId === 'string' ? options.sessionId : null;
     const images = Array.isArray(options.images) ? (options.images as unknown[]) : undefined;
+    const existingNativeSessionId = context.resolveProviderSessionId(appSessionId);
+    const requestedNativeSessionId = existingNativeSessionId ?? appSessionId;
 
     let state: PiRuntimeState = 'SPAWNING';
     let settled = false;
     let aborting = false;
     let boundSessionId: string | null = appSessionId;
     let firstLiveEventSent = false;
+    const activeThinkingBlocks = new Map<number, ActiveThinkingBlock>();
 
-    const rpc = createRpcClient({
-      cwd: typeof options.cwd === 'string' ? options.cwd : undefined,
-    });
+    const rpc = createRpcClient(buildRpcClientOptions(options, requestedNativeSessionId));
 
     return new Promise<PiRunOutcome>((resolve) => {
       let abortTimer: NodeJS.Timeout | undefined;
 
-      const finish = (outcome: PiRunOutcome): void => {
+      const createThinkingBlock = (contentIndex: number): ActiveThinkingBlock => {
+        const existing = activeThinkingBlocks.get(contentIndex);
+        if (existing) {
+          return existing;
+        }
+
+        const startedAtMs = Date.now();
+        const block: ActiveThinkingBlock = {
+          id: `thinking_${randomUUID()}`,
+          contentIndex,
+          content: '',
+          lastSentContent: '',
+          startedAtMs,
+          timestamp: new Date(startedAtMs).toISOString(),
+        };
+        activeThinkingBlocks.set(contentIndex, block);
+        return block;
+      };
+
+      const sendThinkingSnapshot = (
+        block: ActiveThinkingBlock,
+        isStreaming: boolean,
+      ): void => {
+        if (block.flushTimer) {
+          clearTimeout(block.flushTimer);
+          block.flushTimer = undefined;
+        }
+        if (
+          (!block.content && (isStreaming || !block.lastSentContent))
+          || (isStreaming && block.content === block.lastSentContent)
+        ) {
+          return;
+        }
+
+        state = 'STREAMING';
+        firstLiveEventSent = true;
+        writer.send(
+          createNormalizedMessage({
+            id: block.id,
+            kind: 'thinking',
+            provider: 'pi',
+            sessionId: boundSessionId ?? null,
+            timestamp: block.timestamp,
+            content: block.content,
+            isStreaming,
+            duration: isStreaming
+              ? undefined
+              : Math.max(1, Math.ceil((Date.now() - block.startedAtMs) / 1000)),
+          }),
+        );
+        block.lastSentContent = block.content;
+      };
+
+      const scheduleThinkingSnapshot = (block: ActiveThinkingBlock): void => {
+        if (!block.lastSentContent || thinkingFlushMs === 0) {
+          sendThinkingSnapshot(block, true);
+          return;
+        }
+        if (!block.flushTimer) {
+          block.flushTimer = setTimeout(() => {
+            block.flushTimer = undefined;
+            sendThinkingSnapshot(block, true);
+          }, thinkingFlushMs);
+        }
+      };
+
+      const finalizeThinkingBlock = (
+        contentIndex: number,
+        authoritativeContent?: string,
+      ): void => {
+        const block = activeThinkingBlocks.get(contentIndex);
+        if (!block) {
+          if (authoritativeContent) {
+            const recovered = createThinkingBlock(contentIndex);
+            recovered.content = authoritativeContent;
+            sendThinkingSnapshot(recovered, false);
+            activeThinkingBlocks.delete(contentIndex);
+          }
+          return;
+        }
+
+        if (authoritativeContent !== undefined) {
+          block.content = authoritativeContent;
+        }
+        sendThinkingSnapshot(block, false);
+        activeThinkingBlocks.delete(contentIndex);
+      };
+
+      const finalizeAllThinkingBlocks = (): void => {
+        for (const contentIndex of [...activeThinkingBlocks.keys()]) {
+          finalizeThinkingBlock(contentIndex);
+        }
+      };
+
+      const finish = (outcome: PiRunOutcome, closeRpc = true): void => {
         if (settled) return;
+        finalizeAllThinkingBlocks();
         settled = true;
         state = 'SETTLED';
         if (abortTimer) clearTimeout(abortTimer);
@@ -266,7 +473,11 @@ export function createPiRuntime(deps: PiRuntimeDeps = {}) {
             }),
           );
         }
-        resolve(outcome);
+        if (closeRpc) {
+          void rpc.close(RUN_CLOSE_GRACE_MS).finally(() => resolve(outcome));
+        } else {
+          resolve(outcome);
+        }
       };
 
       const beginAbort = (): void => {
@@ -276,7 +487,9 @@ export function createPiRuntime(deps: PiRuntimeDeps = {}) {
         // force-kill. Either path settles the run as aborted exactly once.
         void rpc.abort().catch(() => undefined);
         abortTimer = setTimeout(() => {
-          void rpc.close(0).finally(() => finish({ status: 'aborted', sessionId: boundSessionId }));
+          void rpc.close(0).finally(() => {
+            finish({ status: 'aborted', sessionId: boundSessionId }, false);
+          });
         }, abortGraceMs);
       };
 
@@ -322,6 +535,31 @@ export function createPiRuntime(deps: PiRuntimeDeps = {}) {
           console.debug('[Pi] ignoring unmapped event', type);
           return;
         }
+
+        if (normalized.kind === 'thinking_start') {
+          const existing = activeThinkingBlocks.get(normalized.contentIndex);
+          if (existing) {
+            finalizeThinkingBlock(normalized.contentIndex);
+          }
+          createThinkingBlock(normalized.contentIndex);
+          return;
+        }
+
+        if (normalized.kind === 'thinking_delta') {
+          const block = createThinkingBlock(normalized.contentIndex);
+          block.content += normalized.content;
+          scheduleThinkingSnapshot(block);
+          return;
+        }
+
+        if (normalized.kind === 'thinking_end') {
+          finalizeThinkingBlock(normalized.contentIndex, normalized.content);
+          return;
+        }
+
+        // Native thinking_end should arrive first. This fallback prevents a
+        // malformed or provider-specific sequence from leaving the UI active.
+        finalizeAllThinkingBlocks();
 
         state = 'STREAMING';
         firstLiveEventSent = true;
@@ -373,14 +611,13 @@ export function createPiRuntime(deps: PiRuntimeDeps = {}) {
         const nativeId = typeof rpcState?.sessionId === 'string' ? rpcState.sessionId : null;
         if (!nativeId) return;
 
-        const existing = context.resolveProviderSessionId(appSessionId);
         boundSessionId = nativeId;
 
         if (writer.setSessionId) writer.setSessionId(nativeId);
 
         // Only emit a fresh binding when the app session was not already mapped
         // to a native id (avoids a duplicate bind on the second turn).
-        if (!existing && !firstLiveEventSent) {
+        if (!existingNativeSessionId && !firstLiveEventSent) {
           writer.send(
             createNormalizedMessage({
               kind: 'session_created',

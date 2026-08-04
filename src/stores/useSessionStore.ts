@@ -12,7 +12,10 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { authenticatedFetch } from '../utils/api';
 import type { LLMProvider } from '../types/app';
 
-import { removeOptimisticUserEchoes } from './sessionMessageReconciliation';
+import {
+  removeOptimisticUserEchoes,
+  upsertRealtimeMessages,
+} from './sessionMessageReconciliation';
 
 // ─── NormalizedMessage (mirrors server/adapters/types.js) ────────────────────
 
@@ -48,6 +51,10 @@ export interface NormalizedMessage {
   // kind-specific fields (flat for simplicity)
   role?: 'user' | 'assistant';
   content?: string;
+  /** True while a logical message is still receiving live snapshot updates. */
+  isStreaming?: boolean;
+  /** Completed reasoning duration in whole seconds. */
+  duration?: number;
   /**
    * Mirrors optional transcript metadata from the server.
    *
@@ -67,8 +74,9 @@ export interface NormalizedMessage {
   toolName?: string;
   toolInput?: unknown;
   toolId?: string;
-  toolResult?: { content: string; isError: boolean; toolUseResult?: unknown } | null;
+  toolResult?: { content?: string; isError?: boolean; toolUseResult?: unknown } | null;
   isError?: boolean;
+  toolUseResult?: unknown;
   text?: string;
   tokens?: number;
   canInterrupt?: boolean;
@@ -250,6 +258,34 @@ function isAssistantTextEchoedInSameTurnOnServer(
     );
 }
 
+function isThinkingEchoedInSameTurnOnServer(
+  message: NormalizedMessage,
+  serverMessages: NormalizedMessage[],
+  realtimeMessages: NormalizedMessage[],
+): boolean {
+  if (message.isStreaming) {
+    return false;
+  }
+
+  const thinkingContent = (message.content || '').trim();
+  if (!thinkingContent) {
+    return false;
+  }
+
+  const turnOrdinal = getUserTurnOrdinalBefore(message, serverMessages, realtimeMessages);
+  const turnRange = findServerTurnRangeByOrdinal(serverMessages, turnOrdinal);
+  if (!turnRange) {
+    return false;
+  }
+
+  return serverMessages
+    .slice(turnRange.start + 1, turnRange.end)
+    .some((serverMessage) =>
+      serverMessage.kind === 'thinking'
+      && (serverMessage.content || '').trim() === thinkingContent,
+    );
+}
+
 /**
  * After `finalizeStreaming`, the client holds a synthetic assistant `text` row
  * while the sessions API soon returns the same reply with a different id.
@@ -278,6 +314,18 @@ function dedupeAdjacentAssistantEchoes(merged: NormalizedMessage[]): NormalizedM
       ) {
         const ms = (m.content || '').trim();
         if (ms.length > 0 && ms === (prev.content || '').trim()) {
+          continue;
+        }
+      }
+      if (prev.kind === 'thinking' && m.kind === 'thinking') {
+        const content = (m.content || '').trim();
+        if (
+          content.length > 0
+          && content === (prev.content || '').trim()
+          && !prev.isStreaming
+          && !m.isStreaming
+        ) {
+          out[out.length - 1] = m;
           continue;
         }
       }
@@ -318,6 +366,13 @@ function pruneRealtimeSupersededByServer(
 
     if (message.kind === 'text' && message.role === 'assistant') {
       if (isAssistantTextEchoedInSameTurnOnServer(message, serverMessages, realtimeMessages)) {
+        return false;
+      }
+      return true;
+    }
+
+    if (message.kind === 'thinking') {
+      if (isThinkingEchoedInSameTurnOnServer(message, serverMessages, realtimeMessages)) {
         return false;
       }
       return true;
@@ -461,6 +516,10 @@ export function useSessionStore() {
       slot._appliedFetchSeq = fetchTicket;
 
       slot.serverMessages = messages;
+      slot.realtimeMessages = pruneRealtimeSupersededByServer(
+        slot.serverMessages,
+        slot.realtimeMessages,
+      );
       slot.total = data.total ?? messages.length;
       slot.hasMore = Boolean(data.hasMore);
       slot.offset = (opts.offset ?? 0) + messages.length;
@@ -542,7 +601,7 @@ export function useSessionStore() {
       msg.sessionId === sessionId
         ? msg
         : { ...msg, sessionId };
-    let updated = [...slot.realtimeMessages, normalizedMessage];
+    let updated = upsertRealtimeMessages(slot.realtimeMessages, [normalizedMessage]);
     if (updated.length > MAX_REALTIME_MESSAGES) {
       updated = updated.slice(-MAX_REALTIME_MESSAGES);
     }
@@ -562,7 +621,7 @@ export function useSessionStore() {
         ? msg
         : { ...msg, sessionId },
     );
-    let updated = [...slot.realtimeMessages, ...normalizedMessages];
+    let updated = upsertRealtimeMessages(slot.realtimeMessages, normalizedMessages);
     if (updated.length > MAX_REALTIME_MESSAGES) {
       updated = updated.slice(-MAX_REALTIME_MESSAGES);
     }

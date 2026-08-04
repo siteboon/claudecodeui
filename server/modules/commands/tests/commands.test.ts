@@ -83,6 +83,17 @@ test('models command returns models only for the active provider using injected 
   assert.deepEqual(Object.keys(data.available as object), ['codex']);
 });
 
+test('models command keeps Pi as the active provider', async () => {
+  const result = await executeCommand('/models', { provider: 'pi' });
+  const data = result.data as {
+    current: { provider: string; providerLabel: string };
+    available: Record<string, unknown>;
+  };
+
+  assert.deepEqual(data.current, { provider: 'pi', providerLabel: 'Pi', model: 'default' });
+  assert.deepEqual(Object.keys(data.available), ['pi']);
+});
+
 test('models command falls back to claude for unsupported providers', async () => {
   const result = await executeCommand('/models', { provider: 'unknown-provider' });
   const data = result.data as { current: { provider: string } };

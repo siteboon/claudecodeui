@@ -39,6 +39,7 @@ export interface SubagentChildTool {
 }
 
 export interface ChatMessage {
+  id?: string;
   type: string;
   content?: string;
   displayText?: string;
@@ -48,6 +49,8 @@ export interface ChatMessage {
   reasoning?: string;
   isThinking?: boolean;
   isStreaming?: boolean;
+  /** Completed reasoning duration in whole seconds. */
+  duration?: number;
   isInteractivePrompt?: boolean;
   isToolUse?: boolean;
   toolName?: string;

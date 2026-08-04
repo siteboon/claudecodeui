@@ -227,6 +227,13 @@ export type NormalizedMessage = {
   role?: 'user' | 'assistant';
   content?: string;
   /**
+   * Whether this message is a mutable live snapshot. Pi thinking snapshots use
+   * this to drive the Reasoning progress state; the final snapshot sets false.
+   */
+  isStreaming?: boolean;
+  /** Completed reasoning duration in whole seconds. Omitted while streaming. */
+  duration?: number;
+  /**
    * Optional display-oriented metadata used by providers that need to expose
    * richer transcript artifacts without introducing a brand-new message kind.
    *
@@ -331,12 +338,18 @@ export type ProviderRunFunction = (
  * must use it — never the app-facing session id they were called with — when
  * matching transcript rows on disk, because app-created sessions use an
  * app-allocated id that the provider has never seen.
+ *
+ * `sessionFilePath` is the authoritative transcript path recorded by the
+ * session synchronizer. File-backed providers should prefer it over deriving
+ * a path from `providerSessionId`, because providers may nest or rename their
+ * transcript files independently of the native session id.
  */
 export type FetchHistoryOptions = {
   projectPath?: string;
   limit?: number | null;
   offset?: number;
   providerSessionId?: string;
+  sessionFilePath?: string;
 };
 
 /**

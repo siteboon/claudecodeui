@@ -10,6 +10,7 @@ const PI_ENV_KEYS = [
   'PI_CLI_PATH',
   'PI_CODING_AGENT_DIR',
   'PI_CODING_AGENT_SESSION_DIR',
+  'PI_RPC_CLI_ENTRY',
 ] as const;
 
 function withEnv(overrides: Record<string, string | undefined>, run: () => void): void {
@@ -52,6 +53,28 @@ test('getCliPath resolves PI_CLI_PATH', () => {
   withEnv({ PI_CLI_PATH: '/opt/tools/../tools/pi' }, () => {
     assert.equal(new PiPaths().getCliPath(), path.resolve('/opt/tools/pi'));
   });
+});
+
+test('getRpcCliEntry resolves the pi package dist/cli.js entry', () => {
+  withEnv({}, () => {
+    const entry = new PiPaths().getRpcCliEntry();
+    assert.ok(entry.endsWith('cli.js'), `expected a cli.js path, got ${entry}`);
+    assert.ok(path.isAbsolute(entry), `expected an absolute path, got ${entry}`);
+    assert.ok(fs.existsSync(entry), `expected ${entry} to exist on disk`);
+  });
+});
+
+test('getRpcCliEntry honours PI_RPC_CLI_ENTRY when it points to a .js file', () => {
+  const dir = makeTempDir();
+  try {
+    const entry = path.join(dir, 'my-cli.js');
+    fs.writeFileSync(entry, '');
+    withEnv({ PI_RPC_CLI_ENTRY: entry }, () => {
+      assert.equal(new PiPaths().getRpcCliEntry(), path.resolve(entry));
+    });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('getAgentDir defaults to ~/.pi/agent', () => {

@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+
 import { authenticatedFetch } from '../../../utils/api';
 import type { LLMProvider } from '../../../types/app';
 import {
@@ -23,12 +24,38 @@ type ProviderAuthStatusApiResponse = {
   data: ProviderAuthStatusPayload;
 };
 
+type ProviderAuthStatusErrorResponse = {
+  error?: string | { message?: string };
+};
+
 const FALLBACK_STATUS_ERROR = 'Failed to check authentication status';
 const FALLBACK_UNKNOWN_ERROR = 'Unknown error';
 
 const toErrorMessage = (error: unknown): string => (
   error instanceof Error ? error.message : FALLBACK_UNKNOWN_ERROR
 );
+
+const readStatusError = async (response: Response): Promise<string> => {
+  try {
+    const payload = (await response.json()) as ProviderAuthStatusErrorResponse;
+    const payloadError = payload.error;
+
+    if (typeof payloadError === 'string' && payloadError) {
+      return payloadError;
+    }
+    if (
+      payloadError
+      && typeof payloadError === 'object'
+      && typeof payloadError.message === 'string'
+      && payloadError.message
+    ) {
+      return payloadError.message;
+    }
+  } catch {
+    // Keep the stable fallback when the server did not return JSON.
+  }
+  return `${FALLBACK_STATUS_ERROR} (HTTP ${response.status})`;
+};
 
 const toProviderAuthStatus = (
   payload: ProviderAuthStatusPayload,
@@ -77,12 +104,13 @@ export function useProviderAuthStatus(
       const response = await authenticatedFetch(PROVIDER_AUTH_STATUS_ENDPOINTS[provider]);
 
       if (!response.ok) {
+        const error = await readStatusError(response);
         const status: ProviderAuthStatus = {
           authenticated: false,
           email: null,
           method: null,
           loading: false,
-          error: FALLBACK_STATUS_ERROR,
+          error,
         };
         setProviderStatus(provider, status);
         return status;

@@ -1,4 +1,5 @@
 import { Check } from 'lucide-react';
+
 import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
 import type { LLMProvider } from '../../../../types/app';
 import type { ProviderAuthStatus } from '../../../provider-auth/types';
@@ -11,6 +12,7 @@ type AgentConnectionCardProps = {
   iconContainerClassName: string;
   loginButtonClassName: string;
   onLogin: () => void;
+  hideLogin?: boolean;
 };
 
 export default function AgentConnectionCard({
@@ -21,6 +23,7 @@ export default function AgentConnectionCard({
   iconContainerClassName,
   loginButtonClassName,
   onLogin,
+  hideLogin = false,
 }: AgentConnectionCardProps) {
   const containerClassName = status.authenticated ? connectedClassName : 'border-border bg-card';
 
@@ -47,7 +50,7 @@ export default function AgentConnectionCard({
           </div>
         </div>
 
-        {!status.authenticated && !status.loading && (
+        {!hideLogin && !status.authenticated && !status.loading && (
           <button
             onClick={onLogin}
             className={`${loginButtonClassName} flex-shrink-0 rounded-lg px-4 py-1.5 text-sm font-medium text-white transition-colors`}

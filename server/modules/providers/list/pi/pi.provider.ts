@@ -26,7 +26,6 @@ import {
   type PiModelsRpc,
 } from './pi-models.provider.js';
 import { PiMcpProvider } from './pi-mcp.provider.js';
-import { PiPaths } from './pi-paths.provider.js';
 import { PiRpcClient } from './pi-rpc-client.provider.js';
 import { piRuntime } from './pi-runtime.provider.js';
 import { PiSessionSynchronizer } from './pi-session-synchronizer.provider.js';
@@ -41,7 +40,7 @@ const MODELS_PROBE_GRACE_MS = 5000;
  */
 const piModelsRpc: PiModelsRpc = {
   async withProbe(fn) {
-    const client = new PiRpcClient({ cliPath: new PiPaths().getCliPath() });
+    const client = new PiRpcClient();
     await client.start();
     try {
       return await fn(client as unknown as PiModelsProbe);

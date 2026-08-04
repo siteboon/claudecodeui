@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import type { RpcClientOptions } from '@earendil-works/pi-coding-agent';
+
 import {
   createPiRuntime,
   mapPiEvent,
@@ -73,11 +75,15 @@ class FakeRpc implements PiRuntimeRpc {
 }
 
 interface CapturedMessage {
+  id?: string;
   kind: string;
   content?: string;
   code?: string;
   success?: boolean;
   aborted?: boolean;
+  isStreaming?: boolean;
+  duration?: number;
+  timestamp?: string;
   newSessionId?: string;
   sessionId?: string;
   [key: string]: unknown;
@@ -113,7 +119,7 @@ const tick = () => new Promise((resolve) => setImmediate(resolve));
 // Pure event mapping (T1 stream shape, T3 protocol, T4 unknown)
 // ---------------------------------------------------------------------------
 
-test('mapPiEvent maps text_delta and thinking_delta to normalized stream events', () => {
+test('mapPiEvent maps text and thinking lifecycle events without losing block identity', () => {
   assert.deepEqual(
     mapPiEvent({
       type: 'message_update',
@@ -124,9 +130,23 @@ test('mapPiEvent maps text_delta and thinking_delta to normalized stream events'
   assert.deepEqual(
     mapPiEvent({
       type: 'message_update',
-      assistantMessageEvent: { type: 'thinking_delta', delta: 'ponder' },
+      assistantMessageEvent: { type: 'thinking_start', contentIndex: 2 },
     }),
-    { kind: 'thinking', content: 'ponder' },
+    { kind: 'thinking_start', contentIndex: 2 },
+  );
+  assert.deepEqual(
+    mapPiEvent({
+      type: 'message_update',
+      assistantMessageEvent: { type: 'thinking_delta', contentIndex: 2, delta: 'ponder' },
+    }),
+    { kind: 'thinking_delta', contentIndex: 2, content: 'ponder' },
+  );
+  assert.deepEqual(
+    mapPiEvent({
+      type: 'message_update',
+      assistantMessageEvent: { type: 'thinking_end', contentIndex: 2, content: 'ponder fully' },
+    }),
+    { kind: 'thinking_end', contentIndex: 2, content: 'ponder fully' },
   );
 });
 
@@ -137,12 +157,85 @@ test('mapPiEvent maps tool execution start/end and retry/turn_end to status', ()
   );
   assert.deepEqual(
     mapPiEvent({ type: 'tool_execution_end', toolCallId: 't1', toolName: 'bash', result: 'ok', isError: false }),
-    { kind: 'tool_result', toolId: 't1', toolName: 'bash', toolResult: { content: 'ok', isError: false }, isError: false },
+    { kind: 'tool_result', toolId: 't1', toolName: 'bash', content: 'ok', isError: false },
   );
-  assert.equal(mapPiEvent({ type: 'turn_end', turnIndex: 0 })?.status, 'turn_end');
-  assert.equal(
-    mapPiEvent({ type: 'auto_retry_start', attempt: 1, maxAttempts: 3, delayMs: 10, errorMessage: 'x' })?.status,
-    'retry',
+  assert.deepEqual(
+    mapPiEvent({
+      type: 'tool_execution_end',
+      toolCallId: 't2',
+      toolName: 'read',
+      result: {
+        content: [
+          { type: 'text', text: 'first line' },
+          { type: 'text', text: 'second line' },
+        ],
+        details: { path: 'README.md' },
+      },
+      isError: false,
+    }),
+    {
+      kind: 'tool_result',
+      toolId: 't2',
+      toolName: 'read',
+      content: 'first line\nsecond line',
+      isError: false,
+    },
+  );
+  assert.deepEqual(
+    mapPiEvent({
+      type: 'tool_execution_end',
+      toolCallId: 't3',
+      toolName: 'write',
+      result: { content: 'nested string result' },
+      isError: true,
+    }),
+    {
+      kind: 'tool_result',
+      toolId: 't3',
+      toolName: 'write',
+      content: 'nested string result',
+      isError: true,
+    },
+  );
+  assert.deepEqual(
+    mapPiEvent({
+      type: 'tool_execution_end',
+      toolCallId: 't4',
+      toolName: 'read',
+      result: undefined,
+      isError: false,
+    }),
+    {
+      kind: 'tool_result',
+      toolId: 't4',
+      toolName: 'read',
+      content: '',
+      isError: false,
+    },
+  );
+  assert.deepEqual(
+    mapPiEvent({
+      type: 'tool_execution_end',
+      toolCallId: 't5',
+      toolName: 'calculate',
+      result: 42n,
+      isError: false,
+    }),
+    {
+      kind: 'tool_result',
+      toolId: 't5',
+      toolName: 'calculate',
+      content: '42',
+      isError: false,
+    },
+  );
+  assert.deepEqual(
+    mapPiEvent({ type: 'turn_end', turnIndex: 0 }),
+    { kind: 'status', status: 'turn_end' },
+  );
+  assert.deepEqual(
+    mapPiEvent({ type: 'auto_retry_start', attempt: 1, maxAttempts: 3, delayMs: 10, errorMessage: 'x' }),
+    { kind: 'status', status: 'retry' },
   );
 });
 
@@ -185,7 +278,9 @@ test('T1: streams normalized text/thinking then completes once on agent_settled'
   await tick();
 
   fake.emit({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'Hel' } });
-  fake.emit({ type: 'message_update', assistantMessageEvent: { type: 'thinking_delta', delta: 'hmm' } });
+  fake.emit({ type: 'message_update', assistantMessageEvent: { type: 'thinking_start', contentIndex: 0 } });
+  fake.emit({ type: 'message_update', assistantMessageEvent: { type: 'thinking_delta', contentIndex: 0, delta: 'hmm' } });
+  fake.emit({ type: 'message_update', assistantMessageEvent: { type: 'thinking_end', contentIndex: 0, content: 'hmm' } });
   fake.emit({ type: 'agent_settled' });
 
   const outcome = await runPromise;
@@ -196,9 +291,138 @@ test('T1: streams normalized text/thinking then completes once on agent_settled'
   const completes = sent.filter((m) => m.kind === 'complete');
   assert.equal(streamDeltas.length, 1);
   assert.equal(streamDeltas[0].content, 'Hel');
-  assert.equal(thinking.length, 1);
+  assert.equal(new Set(thinking.map((message) => message.id)).size, 1);
+  assert.equal(thinking.at(-1)?.content, 'hmm');
+  assert.equal(thinking.at(-1)?.isStreaming, false);
   assert.equal(completes.length, 1);
   assert.equal(completes[0].success, true);
+});
+
+test('Pi thinking deltas update one stable logical message and finish with authoritative content', async () => {
+  const fake = new FakeRpc();
+  const runtime = createPiRuntime({ createRpcClient: () => fake, thinkingFlushMs: 0 });
+  const { writer, sent } = makeWriter();
+
+  const runPromise = runtime.run('hi', { sessionId: 'app-1' }, writer, makeContext());
+  await tick();
+
+  fake.emit({ type: 'message_update', assistantMessageEvent: { type: 'thinking_start', contentIndex: 0 } });
+  fake.emit({ type: 'message_update', assistantMessageEvent: { type: 'thinking_delta', contentIndex: 0, delta: 'The' } });
+  fake.emit({ type: 'message_update', assistantMessageEvent: { type: 'thinking_delta', contentIndex: 0, delta: ' answer' } });
+  fake.emit({
+    type: 'message_update',
+    assistantMessageEvent: { type: 'thinking_end', contentIndex: 0, content: 'The authoritative answer' },
+  });
+  fake.emit({ type: 'agent_settled' });
+
+  await runPromise;
+
+  const thinking = sent.filter((message) => message.kind === 'thinking');
+  assert.deepEqual(thinking.map((message) => message.content), [
+    'The',
+    'The answer',
+    'The authoritative answer',
+  ]);
+  assert.equal(new Set(thinking.map((message) => message.id)).size, 1);
+  assert.equal(new Set(thinking.map((message) => message.timestamp)).size, 1);
+  assert.deepEqual(thinking.map((message) => message.isStreaming), [true, true, false]);
+  assert.equal(typeof thinking.at(-1)?.duration, 'number');
+});
+
+test('agent settlement finalizes a thinking block even when Pi omits thinking_end', async () => {
+  const fake = new FakeRpc();
+  const runtime = createPiRuntime({ createRpcClient: () => fake, thinkingFlushMs: 0 });
+  const { writer, sent } = makeWriter();
+
+  const runPromise = runtime.run('hi', { sessionId: 'app-1' }, writer, makeContext());
+  await tick();
+
+  fake.emit({ type: 'message_update', assistantMessageEvent: { type: 'thinking_start', contentIndex: 0 } });
+  fake.emit({ type: 'message_update', assistantMessageEvent: { type: 'thinking_delta', contentIndex: 0, delta: 'unfinished' } });
+  fake.emit({ type: 'agent_settled' });
+
+  await runPromise;
+
+  const thinking = sent.filter((message) => message.kind === 'thinking');
+  assert.equal(thinking.at(-1)?.content, 'unfinished');
+  assert.equal(thinking.at(-1)?.isStreaming, false);
+  assert.ok(sent.findIndex((message) => message.kind === 'thinking' && message.isStreaming === false)
+    < sent.findIndex((message) => message.kind === 'complete'));
+});
+
+test('separate Pi thinking lifecycles keep distinct logical message ids', async () => {
+  const fake = new FakeRpc();
+  const runtime = createPiRuntime({ createRpcClient: () => fake, thinkingFlushMs: 0 });
+  const { writer, sent } = makeWriter();
+
+  const runPromise = runtime.run('hi', { sessionId: 'app-1' }, writer, makeContext());
+  await tick();
+
+  fake.emit({ type: 'message_update', assistantMessageEvent: { type: 'thinking_start', contentIndex: 0 } });
+  fake.emit({ type: 'message_update', assistantMessageEvent: { type: 'thinking_delta', contentIndex: 0, delta: 'first' } });
+  fake.emit({ type: 'message_update', assistantMessageEvent: { type: 'thinking_end', contentIndex: 0, content: 'first' } });
+  fake.emit({ type: 'tool_execution_start', toolCallId: 'tool-1', toolName: 'read', args: {} });
+  fake.emit({ type: 'tool_execution_end', toolCallId: 'tool-1', toolName: 'read', result: 'ok', isError: false });
+  fake.emit({ type: 'message_update', assistantMessageEvent: { type: 'thinking_start', contentIndex: 0 } });
+  fake.emit({ type: 'message_update', assistantMessageEvent: { type: 'thinking_delta', contentIndex: 0, delta: 'second' } });
+  fake.emit({ type: 'message_update', assistantMessageEvent: { type: 'thinking_end', contentIndex: 0, content: 'second' } });
+  fake.emit({ type: 'agent_settled' });
+
+  await runPromise;
+
+  const finalizedThinking = sent.filter(
+    (message) => message.kind === 'thinking' && message.isStreaming === false,
+  );
+  assert.deepEqual(finalizedThinking.map((message) => message.content), ['first', 'second']);
+  assert.equal(new Set(finalizedThinking.map((message) => message.id)).size, 2);
+});
+
+test('runtime forwards the selected model, existing native session, and thinking level', async () => {
+  const fake = new FakeRpc();
+  let capturedOptions: RpcClientOptions | undefined;
+  const runtime = createPiRuntime({
+    createRpcClient: (options) => {
+      capturedOptions = options;
+      return fake;
+    },
+  });
+  const { writer } = makeWriter();
+
+  const runPromise = runtime.run(
+    'hi',
+    {
+      sessionId: 'app-1',
+      cwd: '/tmp/pi-project',
+      model: 'tcredit/deepseek-r1',
+      effort: 'high',
+    },
+    writer,
+    makeContext('native-existing'),
+  );
+  await tick();
+
+  assert.deepEqual(capturedOptions, {
+    cwd: '/tmp/pi-project',
+    provider: 'tcredit',
+    model: 'deepseek-r1',
+    args: ['--session-id', 'native-existing', '--thinking', 'high'],
+  });
+
+  fake.emit({ type: 'agent_settled' });
+  await runPromise;
+});
+
+test('runtime closes the RPC subprocess after a settled run', async () => {
+  const fake = new FakeRpc();
+  const runtime = createPiRuntime({ createRpcClient: () => fake });
+  const { writer } = makeWriter();
+
+  const runPromise = runtime.run('hi', { sessionId: 'app-1' }, writer, makeContext());
+  await tick();
+  fake.emit({ type: 'agent_settled' });
+  await runPromise;
+
+  assert.equal(fake.closeCalls.length, 1);
 });
 
 // T2: process close before agent_settled → ERR-PI-RUN-FAILED failure complete

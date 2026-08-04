@@ -1,9 +1,9 @@
 /**
  * PiRpcClient - thin wrapper around the official Pi rpc-client.
  *
- * Spawns `pi --mode rpc --no-extensions` (via the official RpcClient) and adds
+ * Spawns Pi in RPC mode with extensions disabled (via the official RpcClient) and adds
  * a small layer the runtime relies on:
- * - fixed args injection (--mode rpc --no-extensions), merged with caller args,
+ * - fixed additional args injection (--no-extensions), merged with caller args,
  * - event dispatch fan-out (onEvent),
  * - stderr pass-through (getStderr),
  * - graceful close with a bounded window before giving up.
@@ -21,6 +21,8 @@ import {
   type ModelInfo,
   type RpcSessionState,
 } from '@earendil-works/pi-coding-agent';
+
+import { PiPaths } from './pi-paths.provider.js';
 
 /**
  * Local equivalent of the official `RpcSlashCommand` (returned by
@@ -62,7 +64,8 @@ export interface PiRpcClientDeps {
   createClient(options: RpcClientOptions): UnderlyingRpcClient;
 }
 
-const FIXED_ARGS = ['--mode', 'rpc', '--no-extensions'];
+// RpcClient itself always adds `--mode rpc`; only wrapper-owned flags belong here.
+const FIXED_ADDITIONAL_ARGS = ['--no-extensions'];
 
 /** Default adapter wiring the official RpcClient to {@link UnderlyingRpcClient}. */
 const defaultDeps: PiRpcClientDeps = {
@@ -107,10 +110,14 @@ export class PiRpcClient {
   }
 
   async start(): Promise<void> {
-    const { args, ...rest } = this.options;
+    const { args, cliPath, ...rest } = this.options;
     const client = this.deps.createClient({
       ...rest,
-      args: [...FIXED_ARGS, ...(args ?? [])],
+      // The official RpcClient runs `node <cliPath> ...`, so cliPath MUST be a
+      // JS entry (dist/cli.js), never the bare `pi` command. Default to the
+      // resolved package entry unless a caller explicitly overrides it.
+      cliPath: cliPath ?? new PiPaths().getRpcCliEntry(),
+      args: [...FIXED_ADDITIONAL_ARGS, ...(args ?? [])],
     });
     this.client = client;
     await client.start();
@@ -157,15 +164,18 @@ export class PiRpcClient {
   async close(graceMs: number): Promise<void> {
     const client = this.client;
     if (!client) return;
+    this.client = null;
 
     let timer: NodeJS.Timeout | undefined;
     const timeout = new Promise<void>((resolve) => {
       timer = setTimeout(resolve, graceMs);
     });
-    const stopped = client.stop().then(
-      () => undefined,
-      () => undefined,
-    );
+    const stopped = Promise.resolve()
+      .then(() => client.stop())
+      .then(
+        () => undefined,
+        () => undefined,
+      );
 
     await Promise.race([stopped, timeout]);
     if (timer) clearTimeout(timer);

@@ -89,7 +89,7 @@ const makeClient = (fake: FakeUnderlyingClient, options: Record<string, unknown>
   return { client, captured };
 };
 
-test('start injects --mode rpc --no-extensions and merges caller options', async () => {
+test('start injects --no-extensions and merges caller options', async () => {
   const fake = new FakeUnderlyingClient();
   const { client, captured } = makeClient(fake, { cwd: '/tmp/work', env: { FOO: 'bar' } });
 
@@ -97,7 +97,7 @@ test('start injects --mode rpc --no-extensions and merges caller options', async
 
   assert.equal(fake.startCalls, 1);
   const args = (captured.options?.args as string[]) ?? [];
-  assert.deepEqual(args, ['--mode', 'rpc', '--no-extensions']);
+  assert.deepEqual(args, ['--no-extensions']);
   assert.equal(captured.options?.cwd, '/tmp/work');
   assert.deepEqual(captured.options?.env, { FOO: 'bar' });
 });
@@ -108,7 +108,7 @@ test('start merges caller args after the fixed args', async () => {
 
   await client.start();
 
-  assert.deepEqual(captured.options?.args, ['--mode', 'rpc', '--no-extensions', '--extra']);
+  assert.deepEqual(captured.options?.args, ['--no-extensions', '--extra']);
 });
 
 test('onEvent forwards events in dispatch order', async () => {
@@ -218,4 +218,18 @@ test('onClose fires when the underlying process exits', async () => {
   unsubscribe();
   fake.emitClose();
   assert.equal(closed, 1);
+});
+
+// Real-spawn integration test for the original failure: PiRpcClient must spawn
+// `node <absolute dist/cli.js>`, not `node pi`. An empty array is valid when CI
+// has no Pi credentials; receiving the RPC response is the pass condition.
+test('real spawn: default PiRpcClient resolves cli.js and receives an RPC response', async () => {
+  const client = new PiRpcClient({});
+  try {
+    await client.start();
+    const models = await client.getAvailableModels();
+    assert.ok(Array.isArray(models));
+  } finally {
+    await client.close(2000);
+  }
 });

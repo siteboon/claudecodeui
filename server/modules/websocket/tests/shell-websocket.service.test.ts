@@ -117,3 +117,34 @@ test('shell output detects and normalizes a wrapped authentication URL', () => {
 
   pty.emitExit();
 });
+
+test('Pi agent terminals start Pi instead of falling back to Claude', () => {
+  const pty = createFakePty();
+  const socket = createFakeSocket();
+  let spawnedArguments: string[] = [];
+  const dependencies = {
+    resolveProviderSessionId: () => null,
+    spawnPty: (_shell: string, args: string | string[]) => {
+      spawnedArguments = typeof args === 'string' ? [args] : args;
+      return pty as never;
+    },
+  };
+
+  handleShellConnection(socket as never, dependencies);
+  socket.emit(
+    'message',
+    JSON.stringify({
+      type: 'init',
+      projectPath: process.cwd(),
+      sessionId: `pi-shell-${Date.now()}`,
+      hasSession: false,
+      provider: 'pi',
+    }),
+  );
+
+  assert.match(spawnedArguments.join(' '), /\bpi\b/);
+  assert.doesNotMatch(spawnedArguments.join(' '), /\bclaude\b/);
+  assert.ok(socket.frames.some((frame) => frame.includes('Starting new Pi session')));
+
+  pty.emitExit();
+});
