@@ -29,6 +29,10 @@ const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> =
     provider: 'opencode',
     rootPath: path.join(os.homedir(), '.local', 'share', 'opencode'),
   },
+  {
+    provider: 'qoder',
+    rootPath: path.join(os.homedir(), '.qoder', 'projects'),
+  },
 ];
 
 const WATCHER_IGNORED_PATTERNS = [

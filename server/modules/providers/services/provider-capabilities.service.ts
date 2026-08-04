@@ -81,6 +81,24 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsTokenUsage: true,
     supportsEffort: true,
   },
+  qoder: {
+    provider: 'qoder',
+    // Mapped by the runtime onto Qoder's `--permission-mode` flag. `qodercli
+    // --help` accepts default / accept_edits / bypass_permissions / dont_ask /
+    // auto; accept_edits and bypass_permissions map 1:1 onto the canonical
+    // acceptEdits / bypassPermissions modes, while dont_ask has no canonical
+    // equivalent in this repo's cycle and Qoder exposes no plan mode.
+    permissionModes: ['default', 'acceptEdits', 'bypassPermissions'],
+    defaultPermissionMode: 'default',
+    supportsImages: false,
+    supportsFiles: true,
+    supportsAbort: true,
+    supportsPermissionRequests: false,
+    supportsTokenUsage: true,
+    // `qodercli --help` exposes `--reasoning-effort <level>`, so the runtime
+    // can accept model-level reasoning effort.
+    supportsEffort: true,
+  },
 };
 
 /**

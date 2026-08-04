@@ -74,6 +74,8 @@ function ChatInterface({
     currentProviderModelOptions,
     opencodeModel,
     setOpenCodeModel,
+    qoderModel,
+    setQoderModel,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
@@ -309,7 +311,9 @@ function ChatInterface({
         ? t('messageTypes.codex')
         : provider === 'opencode'
             ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
-          : t('messageTypes.claude');
+            : provider === 'qoder'
+              ? t('messageTypes.qoder', { defaultValue: 'Qoder' })
+              : t('messageTypes.claude');
 
   if (!selectedProject) {
     return (
@@ -350,6 +354,8 @@ function ChatInterface({
           setCodexModel={setCodexModel}
           opencodeModel={opencodeModel}
           setOpenCodeModel={setOpenCodeModel}
+          qoderModel={qoderModel}
+          setQoderModel={setQoderModel}
           providerModelCatalog={providerModelCatalog}
           providerModelsLoading={providerModelsLoading}
           tasksEnabled={tasksEnabled}

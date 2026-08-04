@@ -882,6 +882,31 @@ export function unwrapJsonStringLiteral(value: string): string {
 }
 
 // ---------------------------
+//----------------- QODER SESSION STORAGE UTILITIES ------------
+/**
+ * Resolves the Qoder user configuration home directory.
+ *
+ * Qoder keeps user-level state (credentials, transcripts, and config) under
+ * `~/.qoder`. Provider readers and synchronizers should resolve it through
+ * this helper instead of hardcoding the home-relative path.
+ */
+export function getQoderHome(): string {
+  return path.join(os.homedir(), '.qoder');
+}
+
+/**
+ * Resolves the Qoder session transcript root directory.
+ *
+ * Qoder stores one JSONL transcript per session under
+ * `~/.qoder/projects/<cwd with '/' -> '-'>/<sessionId>.jsonl`. Provider
+ * readers, synchronizers, and watchers should use this path for read-only
+ * access to live session transcripts.
+ */
+export function getQoderProjectsDir(): string {
+  return path.join(getQoderHome(), 'projects');
+}
+
+// ---------------------------
 //----------------- SAFE DIRECTORY NAME UTILITIES ------------
 /**
  * Validates that a user or provider supplied identifier can safely be treated

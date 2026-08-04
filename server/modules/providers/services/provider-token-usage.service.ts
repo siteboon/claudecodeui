@@ -290,6 +290,53 @@ export function createProviderTokenUsageService(
         return readOpenCodeTokenUsage(databasePath, providerSessionId);
       }
 
+      if (session.provider === 'qoder') {
+        let sessionFilePath = session.jsonl_path;
+        if (!sessionFilePath) {
+          if (!session.project_path) {
+            throw new AppError(`Session file for "${sessionId}" was not found.`, {
+              code: 'SESSION_FILE_NOT_FOUND',
+              statusCode: 404,
+            });
+          }
+
+          // Qoder stores transcripts under
+          // `~/.qoder/projects/<cwd with '/' -> '-'>/<sessionId>.jsonl`. The
+          // cwd encoding collapses '/' to '-' (a subset of the generic
+          // non-alphanumeric replacement below), so the same derivation used
+          // for Claude applies with a Qoder-specific root.
+          const encodedProjectPath = session.project_path.replace(/[^a-zA-Z0-9-]/g, '-');
+          const projectDirectory = path.join(
+            dependencies.getHomeDirectory(),
+            '.qoder',
+            'projects',
+            encodedProjectPath,
+          );
+          sessionFilePath = path.join(projectDirectory, `${providerSessionId}.jsonl`);
+
+          const relativePath = path.relative(path.resolve(projectDirectory), path.resolve(sessionFilePath));
+          if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+            throw new AppError('Resolved session path is invalid.', {
+              code: 'INVALID_SESSION_PATH',
+              statusCode: 400,
+            });
+          }
+        }
+
+        if (!dependencies.fileExists(sessionFilePath)) {
+          throw new AppError(`Session file for "${sessionId}" was not found.`, {
+            code: 'SESSION_FILE_NOT_FOUND',
+            statusCode: 404,
+          });
+        }
+
+        const fileContent = await dependencies.readTextFile(sessionFilePath);
+        // Qoder transcripts carry the same usage fields as Claude
+        // (input_tokens/output_tokens), so the Claude calculator applies
+        // unchanged.
+        return readClaudeTokenUsage(fileContent, dependencies.getClaudeContextWindow());
+      }
+
       if (session.provider === 'codex') {
         const indexedFilePath = session.jsonl_path && dependencies.fileExists(session.jsonl_path)
           ? session.jsonl_path
