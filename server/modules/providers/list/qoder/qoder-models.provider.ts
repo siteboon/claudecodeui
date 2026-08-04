@@ -11,6 +11,7 @@ import type {
 } from '@/shared/types.js';
 import {
   buildDefaultProviderCurrentActiveModel,
+  encodeQoderCwd,
   getQoderProjectsDir,
   readJsonRecord,
   readOptionalString,
@@ -208,7 +209,7 @@ const resolveQoderJsonlPath = (providerSessionId: string, projectPath?: string):
 
   // Fall back to the canonical layout when the row is not indexed yet:
   // ~/.qoder/projects/<cwd with '/' -> '-'>/<sessionId>.jsonl
-  const encodedCwd = path.resolve(projectPath).replace(/\//g, '-');
+  const encodedCwd = encodeQoderCwd(path.resolve(projectPath));
   return path.join(getQoderProjectsDir(), encodedCwd, `${providerSessionId}.jsonl`);
 };
 

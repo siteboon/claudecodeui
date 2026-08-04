@@ -7,7 +7,7 @@ import Database from 'better-sqlite3';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import type { AnyRecord } from '@/shared/types.js';
-import { AppError, getOpenCodeDatabasePath } from '@/shared/utils.js';
+import { AppError, encodeQoderCwd, getOpenCodeDatabasePath } from '@/shared/utils.js';
 
 type SessionRow = NonNullable<ReturnType<typeof sessionsDb.getSessionById>>;
 
@@ -301,11 +301,14 @@ export function createProviderTokenUsageService(
           }
 
           // Qoder stores transcripts under
-          // `~/.qoder/projects/<cwd with '/' -> '-'>/<sessionId>.jsonl`. The
-          // cwd encoding collapses '/' to '-' (a subset of the generic
-          // non-alphanumeric replacement below), so the same derivation used
-          // for Claude applies with a Qoder-specific root.
-          const encodedProjectPath = session.project_path.replace(/[^a-zA-Z0-9-]/g, '-');
+          // `~/.qoder/projects/<cwd with '/' -> '-'>/<sessionId>.jsonl`.
+          // Qoder only folds slashes (unlike Claude's broader
+          // non-alphanumeric replacement), so the encoding must go through
+          // the shared `encodeQoderCwd` to match what the CLI wrote on disk
+          // — paths containing dots or other non-alphanumerics would
+          // otherwise resolve to a nonexistent directory. The home root is
+          // still resolved through the injected home directory for tests.
+          const encodedProjectPath = encodeQoderCwd(session.project_path);
           const projectDirectory = path.join(
             dependencies.getHomeDirectory(),
             '.qoder',

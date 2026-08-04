@@ -906,6 +906,23 @@ export function getQoderProjectsDir(): string {
   return path.join(getQoderHome(), 'projects');
 }
 
+/**
+ * Encodes a working directory the way qodercli does when naming its
+ * transcript directory: every `/` is replaced by `-` and nothing else
+ * changes (`/home/admin/my.app` → `-home-admin-my.app`).
+ *
+ * All code that derives a Qoder transcript path from a cwd — the runtime's
+ * token usage reader, the models provider's fallback, and the token usage
+ * service — must go through this single encoder so the derivation stays
+ * consistent with what the CLI actually writes on disk. Do NOT reuse the
+ * Claude-style `replace(/[^a-zA-Z0-9-]/g, '-')` here: Qoder only folds
+ * slashes, so a stricter replacement breaks paths containing dots or other
+ * non-alphanumerics.
+ */
+export function encodeQoderCwd(cwd: string): string {
+  return cwd.replace(/\//g, '-');
+}
+
 // ---------------------------
 //----------------- SAFE DIRECTORY NAME UTILITIES ------------
 /**
