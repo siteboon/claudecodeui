@@ -269,7 +269,10 @@ async function spawnQoder(command, options = {}, ws, context) {
         args.push('-w', workingDir);
       }
       if (providerSessionId) {
-        args.push('--session-id', providerSessionId);
+        // Resume the existing qoder transcript instead of asking qodercli to
+        // create a session with an id that already exists on disk, which it
+        // rejects with "Session ID ... is already in use."
+        args.push('--resume', providerSessionId);
       }
       if (resolvedModelArg) {
         args.push('-m', resolvedModelArg);
