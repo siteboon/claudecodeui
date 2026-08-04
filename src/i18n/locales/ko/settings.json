@@ -4,6 +4,7 @@
     "account": "계정",
     "permissions": "권한",
     "mcpServers": "MCP 서버",
+    "skills": "스킬",
     "appearance": "외관"
   },
   "account": {
@@ -49,6 +50,21 @@
     "resetToDefaults": "기본값으로 초기화",
     "cancelChanges": "변경 취소"
   },
+  "voiceSettings": {
+    "title": "음성",
+    "description": "OpenAI 호환 오디오 백엔드를 통한 음성-텍스트 입력 및 소리 내어 읽기 기능입니다.",
+    "enable": "음성 활성화",
+    "enableDescription": "메시지에 마이크 버튼과 소리 내어 읽기 버튼을 표시합니다.",
+    "backendTitle": "백엔드",
+    "backendDescription": "OpenAI, Groq 또는 로컬 서버(LocalAI, Speaches, Kokoro-FastAPI)를 지정하세요. 비워두면 서버 기본값을 사용합니다.",
+    "baseUrl": "기본 URL",
+    "apiKey": "API 키",
+    "sttModel": "음성-텍스트 변환 모델",
+    "ttsModel": "텍스트-음성 변환 모델",
+    "voice": "음성",
+    "format": "오디오 형식",
+    "note": "사용자 지정 기본 URL은 브라우저에서 직접 호출되므로 브라우저 CORS 요청을 허용해야 합니다. 비워두면 서버에 설정된 백엔드를 사용합니다."
+  },
   "quickSettings": {
     "title": "빠른 설정",
     "sections": {
@@ -60,6 +76,7 @@
     "showRawParameters": "Raw 파라미터 표시",
     "showThinking": "생각 과정 표시",
     "sendByCtrlEnter": "Ctrl+Enter로 전송",
+    "voiceEnabled": "음성 (마이크 + 소리 내어 읽기)",
     "sendByCtrlEnterDescription": "활성화하면 Enter 대신 Ctrl+Enter로 메시지를 전송합니다. IME 사용자가 실수로 전송하는 것을 방지하는 데 유용합니다.",
     "dragHandle": {
       "dragging": "드래그 핸들",
@@ -90,7 +107,9 @@
     "appearance": "외관",
     "git": "Git",
     "apiTokens": "API & 토큰",
+    "voice": "음성",
     "tasks": "작업",
+    "browser": "브라우저",
     "notifications": "알림",
     "plugins": "플러그인",
     "about": "정보"
@@ -106,6 +125,13 @@
       "loading": "업데이트 중...",
       "unsupported": "이 브라우저에서는 푸시 알림이 지원되지 않습니다.",
       "denied": "푸시 알림이 차단되었습니다. 브라우저 설정에서 허용해 주세요."
+    },
+    "desktop": {
+      "title": "데스크톱 앱 알림",
+      "enable": "알림 활성화",
+      "disable": "알림 비활성화",
+      "enabled": "이 데스크톱 앱에 대한 알림이 활성화되었습니다",
+      "unsupported": "이 시스템에서는 데스크톱 알림이 지원되지 않습니다."
     },
     "sound": {
       "title": "소리",
@@ -322,6 +348,9 @@
       },
       "codex": {
         "description": "OpenAI Codex AI 어시스턴트"
+      },
+      "opencode": {
+        "description": "OpenCode CLI 어시스턴트"
       }
     },
     "connectionStatus": "연결 상태",
@@ -416,7 +445,8 @@
     "description": {
       "claude": "Model Context Protocol 서버는 Claude에 추가 도구와 데이터 소스를 제공합니다",
       "cursor": "Model Context Protocol 서버는 Cursor에 추가 도구와 데이터 소스를 제공합니다",
-      "codex": "Model Context Protocol 서버는 Codex에 추가 도구와 데이터 소스를 제공합니다"
+      "codex": "Model Context Protocol 서버는 Codex에 추가 도구와 데이터 소스를 제공합니다",
+      "opencode": "Model Context Protocol 서버는 OpenCode에 추가 도구와 데이터 소스를 제공합니다"
     },
     "addButton": "MCP 서버 추가",
     "empty": "설정된 MCP 서버 없음",
@@ -439,6 +469,10 @@
     "actions": {
       "edit": "서버 편집",
       "delete": "서버 삭제"
+    },
+    "managed": {
+      "badge": "관리됨",
+      "hint": "CloudCLI가 관리합니다."
     },
     "help": {
       "title": "Codex MCP 정보",
@@ -465,13 +499,67 @@
     "installFailed": "설치 실패",
     "uninstallFailed": "삭제 실패",
     "toggleFailed": "토글 실패",
-    "buildYourOwn": "나만의 플러그인 만들기",
+    "starterPluginLabel": "스타터 플러그인",
     "starter": "스타터",
     "docs": "문서",
+    "sections": {
+      "officialTitle": "공식 플러그인",
+      "officialDescription": "CloudCLI 팀이 관리하며 바로 설치할 수 있습니다.",
+      "unofficialTitle": "기타 플러그인",
+      "unofficialDescription": "다른 사용자가 만든 비공식 플러그인과 통합입니다. 설치 전에 소스 코드를 검토하세요."
+    },
     "starterPlugin": {
       "name": "프로젝트 통계",
       "badge": "스타터",
       "description": "프로젝트의 파일 수, 코드 라인 수, 파일 유형별 분석 및 최근 활동을 확인합니다.",
+      "install": "설치"
+    },
+    "terminalPlugin": {
+      "name": "터미널",
+      "badge": "공식",
+      "description": "인터페이스 내에서 전체 셸 접근 권한을 가진 통합 터미널입니다.",
+      "install": "설치"
+    },
+    "scheduledPromptPlugin": {
+      "name": "예약 프롬프트",
+      "badge": "비공식",
+      "description": "워크스페이스 프롬프트를 예약하고, 실행 기록을 확인하고, 반복되는 로컬 작업을 관리합니다.",
+      "install": "설치"
+    },
+    "claudeWatchPlugin": {
+      "name": "Claude Watch",
+      "badge": "비공식",
+      "description": "장시간 실행되는 Claude Code 세션의 멈춤 현상을 감시하고 프로세스 제어 기능을 제공합니다.",
+      "install": "설치"
+    },
+    "prismCloudCLI": {
+      "name": "PRISM CloudCLI",
+      "badge": "비공식",
+      "description": "CloudCLI 안에서 제공되는 Claude Code용 세션 인텔리전스입니다. 브라우저를 벗어나지 않고도 세션에서 토큰이 왜 소모되는지 확인하세요.",
+      "install": "설치"
+    },
+    "sessionManagerPlugin": {
+      "name": "세션",
+      "badge": "비공식",
+      "description": "활성 Claude Code 세션을 보고, 관리하고, 종료합니다.",
+      "install": "설치"
+    },
+    "tokenCostCalculatorPlugin": {
+      "name": "토큰 비용 계산기",
+      "badge": "비공식",
+      "description": "모델 가격과 토큰 사용량으로 API 비용을 계산합니다. 사전 설정된 모델 가격을 지원합니다.",
+      "install": "설치"
+    },
+    "taskQueuePlugin": {
+      "name": "작업 큐",
+      "badge": "비공식",
+      "description": "에이전트 작업을 보고, 필터링하고, 실행할 수 있는 작업 큐 대시보드입니다.",
+      "install": "설치"
+    },
+    "githubIssuesBoardPlugin": {
+      "name": "GitHub 이슈 보드",
+      "badge": "비공식",
+      "description": "양방향 TaskMaster 동기화와 /github-task CLI 스킬 자동 설치를 지원하는 GitHub 이슈용 칸반 보드입니다.",
       "install": "설치"
     },
     "morePlugins": "더 보기",
