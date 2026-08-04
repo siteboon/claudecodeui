@@ -17,6 +17,7 @@ function createSessionRow(overrides: Record<string, unknown> = {}) {
     project_path: null,
     jsonl_path: null,
     custom_name: null,
+    custom_name_source: null,
     model: null,
     isArchived: 0,
     created_at: '2026-01-01T00:00:00.000Z',

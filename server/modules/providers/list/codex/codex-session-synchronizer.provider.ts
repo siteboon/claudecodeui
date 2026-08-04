@@ -1,16 +1,22 @@
+import { createReadStream } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
+import readline from 'node:readline';
+
+import Database from 'better-sqlite3';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import {
-  buildLookupMap,
   extractFirstValidJsonlData,
   findFilesRecursivelyCreatedAfter,
   normalizeSessionName,
   readFileTimestamps,
 } from '@/shared/utils.js';
-import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
+import type {
+  IProviderSessionSynchronizer,
+  SessionSynchronizeOptions,
+} from '@/shared/interfaces.js';
 
 type ParsedSession = {
   sessionId: string;
@@ -24,12 +30,27 @@ type ParsedSession = {
 export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
   private readonly provider = 'codex' as const;
   private readonly codexHome = path.join(os.homedir(), '.codex');
+  private indexedNameCache: { mtimeMs: number; names: Map<string, string> } | null = null;
+  private synchronizationQueue: Promise<void> = Promise.resolve();
 
   /**
    * Scans ~/.codex/sessions and upserts discovered sessions into DB.
    */
-  async synchronize(since?: Date): Promise<number> {
-    const nameMap = await buildLookupMap(path.join(this.codexHome, 'session_index.jsonl'), 'id', 'thread_name');
+  async synchronize(
+    since?: Date,
+    options: SessionSynchronizeOptions = {},
+  ): Promise<number> {
+    return this.enqueueSynchronization(() => this.synchronizeInternal(since, options));
+  }
+
+  private async synchronizeInternal(
+    since?: Date,
+    options: SessionSynchronizeOptions = {},
+  ): Promise<number> {
+    const nameMap = options.initializing
+      ? await this.buildSessionNameMap()
+      : await this.readIndexedNameMap();
+    this.updateProviderSessionNames(nameMap);
     const files = await findFilesRecursivelyCreatedAfter(
       path.join(this.codexHome, 'sessions'),
       '.jsonl',
@@ -48,7 +69,7 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
       if (existingSession) {
         // If session name is untitled and we now have a name, update it
         if (existingSession.custom_name === 'Untitled Codex Session' && parsed.sessionName && parsed.sessionName !== 'Untitled Codex Session') {
-          sessionsDb.updateSessionCustomName(existingSession.session_id, parsed.sessionName);
+          sessionsDb.updateSessionProviderName(existingSession.session_id, parsed.sessionName);
         }
       }
 
@@ -72,11 +93,15 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
    * Parses and upserts one Codex session JSONL file.
    */
   async synchronizeFile(filePath: string): Promise<string | null> {
+    return this.enqueueSynchronization(() => this.synchronizeFileInternal(filePath));
+  }
+
+  private async synchronizeFileInternal(filePath: string): Promise<string | null> {
     if (!filePath.endsWith('.jsonl')) {
       return null;
     }
 
-    const nameMap = await buildLookupMap(path.join(this.codexHome, 'session_index.jsonl'), 'id', 'thread_name');
+    const nameMap = await this.readIndexedNameMap();
     const parsed = await this.processSessionFile(filePath, nameMap);
     if (!parsed) {
       return null;
@@ -92,6 +117,127 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
       timestamps.updatedAt,
       filePath
     );
+  }
+
+  private enqueueSynchronization<T>(operation: () => Promise<T>): Promise<T> {
+    const previous = this.synchronizationQueue;
+    let release!: () => void;
+    this.synchronizationQueue = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    return previous.then(operation).finally(release);
+  }
+
+  private async buildSessionNameMap(): Promise<Map<string, string>> {
+    const nameMap = await this.readStateTitleMap();
+    const indexedNames = await this.readIndexedNameMap();
+    for (const [sessionId, name] of indexedNames) {
+      if (name.trim()) {
+        nameMap.set(sessionId, name);
+      }
+    }
+    return nameMap;
+  }
+
+  private async readIndexedNameMap(): Promise<Map<string, string>> {
+    const indexPath = path.join(this.codexHome, 'session_index.jsonl');
+    const mtimeMs = await this.readIndexedNameMtime();
+    if (mtimeMs === null) {
+      return new Map();
+    }
+
+    if (this.indexedNameCache?.mtimeMs === mtimeMs) {
+      return this.indexedNameCache.names;
+    }
+
+    const names = await this.loadIndexedNameMap(indexPath);
+    this.indexedNameCache = { mtimeMs, names };
+    return names;
+  }
+
+  private async readIndexedNameMtime(): Promise<number | null> {
+    try {
+      return (await stat(path.join(this.codexHome, 'session_index.jsonl'))).mtimeMs;
+    } catch {
+      return null;
+    }
+  }
+
+  private async loadIndexedNameMap(indexPath: string): Promise<Map<string, string>> {
+    const names = new Map<string, string>();
+    try {
+      const lines = readline.createInterface({
+        input: createReadStream(indexPath),
+        crlfDelay: Infinity,
+      });
+      for await (const line of lines) {
+        try {
+          const entry = JSON.parse(line) as Record<string, unknown>;
+          if (typeof entry.id === 'string' && typeof entry.thread_name === 'string') {
+            names.set(entry.id, entry.thread_name);
+          }
+        } catch {
+          // A malformed entry must not hide newer names later in the append-only index.
+        }
+      }
+    } catch {
+      // The index is optional; state titles and transcript fallbacks remain available.
+    }
+    return names;
+  }
+
+  private updateProviderSessionNames(nameMap: Map<string, string>): void {
+    const sessions = sessionsDb.getSessionsByProvider(this.provider);
+    const sessionsByLookupId = new Map<string, (typeof sessions)[number]>();
+    for (const session of sessions) {
+      if (session.provider_session_id) {
+        sessionsByLookupId.set(session.provider_session_id, session);
+      }
+    }
+    for (const session of sessions) {
+      if (!sessionsByLookupId.has(session.session_id)) {
+        sessionsByLookupId.set(session.session_id, session);
+      }
+    }
+
+    for (const [providerSessionId, name] of nameMap) {
+      const existingSession = sessionsByLookupId.get(providerSessionId);
+      if (!existingSession) {
+        continue;
+      }
+
+      const normalizedName = normalizeSessionName(name, 'Untitled Codex Session');
+      if (normalizedName !== existingSession.custom_name) {
+        sessionsDb.updateSessionProviderName(existingSession.session_id, normalizedName);
+      }
+    }
+  }
+
+  private async readStateTitleMap(): Promise<Map<string, string>> {
+    try {
+      const stateFile = (await readdir(this.codexHome))
+        .map((fileName) => ({ fileName, match: /^state_(\d+)\.sqlite$/.exec(fileName) }))
+        .filter((entry): entry is { fileName: string; match: RegExpExecArray } => entry.match !== null)
+        .sort((a, b) => Number(b.match[1]) - Number(a.match[1]))[0]?.fileName;
+      if (!stateFile) {
+        return new Map();
+      }
+
+      const db = new Database(path.join(this.codexHome, stateFile), {
+        readonly: true,
+        fileMustExist: true,
+      });
+      try {
+        const rows = db.prepare('SELECT id, title FROM threads WHERE trim(title) <> \'\'')
+          .all() as Array<{ id: string; title: string }>;
+        return new Map(rows.map((row) => [row.id, row.title]));
+      } finally {
+        db.close();
+      }
+    } catch {
+      return new Map();
+    }
   }
 
   /**
@@ -126,6 +272,21 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
     // ids must be resolved through the provider-id mapping first.
     const existingSession = sessionsDb.getSessionByProviderSessionId(parsed.sessionId)
       ?? sessionsDb.getSessionById(parsed.sessionId);
+    if (existingSession?.custom_name_source === 'manual' && existingSession.custom_name?.trim()) {
+      return {
+        ...parsed,
+        sessionName: normalizeSessionName(existingSession.custom_name, 'Untitled Codex Session'),
+      };
+    }
+
+    const indexedSessionName = nameMap.get(parsed.sessionId);
+    if (indexedSessionName?.trim()) {
+      return {
+        ...parsed,
+        sessionName: normalizeSessionName(indexedSessionName, 'Untitled Codex Session'),
+      };
+    }
+
     const existingSessionName = existingSession?.custom_name;
     if (existingSessionName && existingSessionName !== 'Untitled Codex Session') {
       return {
@@ -135,11 +296,8 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
     }
 
     // Sessions started by sending a message from cloudcli carry a distinct
-    // app-allocated session_id mapped to the provider id. For these we title the
-    // conversation from the first user message the user typed, instead of the
-    // generic "Untitled Codex Session" placeholder. Sessions discovered purely
-    // by indexing (session_id === provider_session_id) keep the existing
-    // thread_name/last-agent-message setup below.
+    // app-allocated session_id mapped to the provider id. When Codex has not
+    // assigned a thread name yet, use the first user message as the fallback.
     const isAppCreated =
       existingSession != null &&
       existingSession.provider_session_id != null &&
@@ -148,9 +306,6 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
     let sessionName = isAppCreated
       ? await this.extractFirstUserMessageFromStart(filePath)
       : undefined;
-    if (!sessionName) {
-      sessionName = nameMap.get(parsed.sessionId);
-    }
     if (!sessionName) {
       sessionName = await this.extractLastAgentMessageFromEnd(filePath);
     }

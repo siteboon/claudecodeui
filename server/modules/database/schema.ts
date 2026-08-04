@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     -- id mid-run, or equals \`session_id\` for sessions discovered on disk.
     provider_session_id TEXT,
     custom_name TEXT,
+    custom_name_source TEXT,
     project_path TEXT,
     jsonl_path TEXT,
     -- Model this session runs with. Written when the user picks a model for the
