@@ -53,7 +53,12 @@ function readQoderSessionId(event) {
     return null;
   }
 
-  return event.sessionID || event.sessionId || null;
+  // Qoder emits the provider-native session id under camelCase on transcript
+  // rows, but the live `system/init` control event may carry it as snake_case
+  // `session_id` (Claude-style). Read every spelling so the runtime — the
+  // single owner of `session_created` — captures the id on whichever event
+  // arrives first, preventing a duplicate emission downstream.
+  return event.sessionID || event.sessionId || event.session_id || null;
 }
 
 /**

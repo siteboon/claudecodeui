@@ -117,17 +117,12 @@ export class QoderSessionsProvider implements IProviderSessions {
     const baseId = typeof raw.uuid === 'string' ? raw.uuid : generateMessageId('qoder');
     const messages: NormalizedMessage[] = [];
 
-    // Live stream events.
+    // Live stream events. `session_created` is intentionally NOT emitted here:
+    // the qoder runtime (readQoderSessionId) is the single owner of that event
+    // and reads the provider session id under every spelling (sessionID /
+    // sessionId / session_id). Emitting it here too would double-notify the
+    // client. The init control row carries no renderable content.
     if (raw.type === 'system' && raw.subtype === 'init') {
-      const streamSessionId = typeof raw.session_id === 'string' ? raw.session_id : null;
-      if (streamSessionId && streamSessionId !== sessionId) {
-        messages.push(createNormalizedMessage({
-          kind: 'session_created',
-          newSessionId: streamSessionId,
-          sessionId: streamSessionId,
-          provider: PROVIDER,
-        }));
-      }
       return messages;
     }
 

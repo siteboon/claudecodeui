@@ -116,7 +116,15 @@ export const parseQoderModelsStdout = (stdout: string): string[] => {
 
   for (const rawLine of stdout.split(/\r?\n/)) {
     const line = rawLine.trim();
-    if (!line || line.startsWith('{') || line.startsWith('[')) {
+    // `qodercli --list-models` prints a literal `MODEL` header row before the
+    // model ids. It must not surface as a selectable model — picking it would
+    // pass `-m MODEL` and qodercli rejects it with exit 42 ("Invalid model").
+    if (
+      !line
+      || line === 'MODEL'
+      || line.startsWith('{')
+      || line.startsWith('[')
+    ) {
       continue;
     }
 
