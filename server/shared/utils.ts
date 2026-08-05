@@ -221,7 +221,8 @@ export function normalizeProjectPath(inputPath: string): string {
  */
 function isPathWithinRoot(root: string, target: string): boolean {
   const relative = path.relative(root, target);
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+  const isParentTraversal = relative === '..' || relative.startsWith(`..${path.sep}`);
+  return relative === '' || (!isParentTraversal && !path.isAbsolute(relative));
 }
 
 /**
