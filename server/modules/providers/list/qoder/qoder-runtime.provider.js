@@ -30,6 +30,75 @@ function resolveQoderEffort(model, effort, modelsDefinition) {
     : undefined;
 }
 
+/**
+ * Builds the qodercli argv array from resolved model/effort/session inputs.
+ *
+ * Extracted from spawnQoder so the ordering invariant — `--attachment` flags
+ * before the permission block (which may end with the variadic `--tools`),
+ * then `--` separator, then the prompt — can be pinned by tests without
+ * spawning the CLI. Consumed by spawnQoder below and by
+ * tests/qoder-args.test.ts.
+ */
+export function buildQoderArgs(options) {
+  const {
+    resolvedModel,
+    resolvedEffort,
+    workingDir,
+    providerSessionId,
+    files,
+    command,
+    permissionMode,
+    toolsSettings,
+  } = options;
+
+  // qodercli rejects the literal model name 'default' with
+  // "Invalid model 'default'" (exit 42), so the fallback only kicks in
+  // when the caller did not resolve a real model name.
+  const resolvedModelArg = resolvedModel && resolvedModel !== 'default' ? resolvedModel : undefined;
+  const args = ['-p', '--output-format', 'stream-json'];
+  if (workingDir) {
+    args.push('-w', workingDir);
+  }
+  if (providerSessionId) {
+    // Resume the existing qoder transcript instead of asking qodercli to
+    // create a session with an id that already exists on disk, which it
+    // rejects with "Session ID ... is already in use."
+    args.push('--resume', providerSessionId);
+  }
+  if (resolvedModelArg) {
+    args.push('-m', resolvedModelArg);
+  }
+  if (resolvedEffort) {
+    args.push('--reasoning-effort', resolvedEffort);
+  }
+
+  // Attachments come before the permission block on purpose: that block can
+  // end with the variadic `--tools`, which keeps consuming bare arguments.
+  // Emitting every other flag first means the only thing that can follow
+  // `--tools` is the `--` separator, so correctness does not depend on the
+  // CLI's "stop at the next dash-prefixed token" parsing detail.
+  const fileDescriptors = normalizeAttachmentDescriptors(files);
+  for (const descriptor of fileDescriptors) {
+    if (descriptor.path) {
+      args.push('--attachment', descriptor.path);
+    }
+  }
+  const permissionOptions = resolveQoderPermissionOptions(permissionMode, toolsSettings);
+  args.push(...permissionOptions.args);
+  if ((command && command.trim()) || fileDescriptors.length > 0) {
+    // Files still ride along as an <files_input> path list appended to the
+    // prompt (the session history reader strips the tag back out), so the
+    // attachment list and the transcript stay consistent.
+    const promptWithAttachments = appendFilesInputTag(command?.trim() || '', files);
+    if (permissionOptions.requiresPromptSeparator) {
+      args.push('--');
+    }
+    args.push(flattenPromptForWindowsShell(promptWithAttachments));
+  }
+
+  return args;
+}
+
 function readQoderSessionId(event) {
   if (!event || typeof event !== 'object') {
     return null;
@@ -200,26 +269,6 @@ async function spawnQoder(command, options = {}, ws, context) {
       }
 
       const resolvedEffort = resolveQoderEffort(resolvedModel, effort, effortModels);
-      // qodercli rejects the literal model name 'default' with
-      // "Invalid model 'default'" (exit 42), so the fallback only kicks in
-      // when the caller did not resolve a real model name.
-      const resolvedModelArg = resolvedModel && resolvedModel !== 'default' ? resolvedModel : undefined;
-      const args = ['-p', '--output-format', 'stream-json'];
-      if (workingDir) {
-        args.push('-w', workingDir);
-      }
-      if (providerSessionId) {
-        // Resume the existing qoder transcript instead of asking qodercli to
-        // create a session with an id that already exists on disk, which it
-        // rejects with "Session ID ... is already in use."
-        args.push('--resume', providerSessionId);
-      }
-      if (resolvedModelArg) {
-        args.push('-m', resolvedModelArg);
-      }
-      if (resolvedEffort) {
-        args.push('--reasoning-effort', resolvedEffort);
-      }
       // qoder's CLI has no image entry point (supportsImages=false). Tell the
       // user instead of dropping them silently, otherwise the model just looks
       // like it ignored the picture.
@@ -233,29 +282,16 @@ async function spawnQoder(command, options = {}, ws, context) {
         }));
       }
 
-      // Attachments come before the permission block on purpose: that block can
-      // end with the variadic `--tools`, which keeps consuming bare arguments.
-      // Emitting every other flag first means the only thing that can follow
-      // `--tools` is the `--` separator, so correctness does not depend on the
-      // CLI's "stop at the next dash-prefixed token" parsing detail.
-      const fileDescriptors = normalizeAttachmentDescriptors(files);
-      for (const descriptor of fileDescriptors) {
-        if (descriptor.path) {
-          args.push('--attachment', descriptor.path);
-        }
-      }
-      const permissionOptions = resolveQoderPermissionOptions(permissionMode, toolsSettings);
-      args.push(...permissionOptions.args);
-      if ((command && command.trim()) || fileDescriptors.length > 0) {
-        // Files still ride along as an <files_input> path list appended to the
-        // prompt (the session history reader strips the tag back out), so the
-        // attachment list and the transcript stay consistent.
-        const promptWithAttachments = appendFilesInputTag(command?.trim() || '', files);
-        if (permissionOptions.requiresPromptSeparator) {
-          args.push('--');
-        }
-        args.push(flattenPromptForWindowsShell(promptWithAttachments));
-      }
+      const args = buildQoderArgs({
+        resolvedModel,
+        resolvedEffort,
+        workingDir,
+        providerSessionId,
+        files,
+        command,
+        permissionMode,
+        toolsSettings,
+      });
 
       qoderProcess = spawnFunction('qodercli', args, {
         cwd: workingDir,
