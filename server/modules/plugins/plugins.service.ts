@@ -117,9 +117,19 @@ export function createPluginsService(dependencies: PluginDependencies) {
       validatePluginName(pluginName);
       const wasRunning = dependencies.isServerRunning(pluginName);
       if (wasRunning) await dependencies.stopServer(pluginName);
-      const plugin = normalizePluginManifest(await dependencies.update(pluginName, options));
-      if (wasRunning) await startServerIfAvailable(plugin);
-      return { success: true, plugin };
+      try {
+        const plugin = normalizePluginManifest(await dependencies.update(pluginName, options));
+        if (wasRunning) await startServerIfAvailable(plugin);
+        return { success: true, plugin };
+      } catch (error) {
+        // The registry stages updates into a temp directory and only swaps
+        // them into the live plugin directory once every step (manifest
+        // validation, npm install, optional build policy) has succeeded. If
+        // any step rejects, the live directory is untouched, so we can
+        // safely bring the previously running server back up.
+        if (wasRunning) await startServerIfAvailable(this.getManifest(pluginName));
+        throw error;
+      }
     },
     async prepareRpc(pluginName: string) {
       validatePluginName(pluginName);
