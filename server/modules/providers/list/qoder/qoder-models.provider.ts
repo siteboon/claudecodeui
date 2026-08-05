@@ -157,7 +157,26 @@ export const parseQoderModelsStdout = (stdout: string): string[] => {
  * model on `message.model`. The last non-empty value wins so a model switch
  * mid-session is reflected.
  */
+type SessionModelCacheEntry = { model: string | null; expiresAt: number };
+const sessionModelCache = new Map<string, SessionModelCacheEntry>();
+const SESSION_MODEL_CACHE_TTL_MS = 30_000;
+
+const cleanupExpiredSessionModelCache = (): void => {
+  const now = Date.now();
+  for (const [key, entry] of sessionModelCache) {
+    if (entry.expiresAt <= now) {
+      sessionModelCache.delete(key);
+    }
+  }
+};
+
 const readQoderSessionModel = async (jsonlPath: string): Promise<string | null> => {
+  cleanupExpiredSessionModelCache();
+  const cached = sessionModelCache.get(jsonlPath);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.model;
+  }
+
   let model: string | null = null;
 
   // Streamed rather than read whole: transcripts grow without bound, and this
@@ -181,7 +200,56 @@ const readQoderSessionModel = async (jsonlPath: string): Promise<string | null> 
     }
   }
 
+  sessionModelCache.set(jsonlPath, {
+    model,
+    expiresAt: Date.now() + SESSION_MODEL_CACHE_TTL_MS,
+  });
   return model;
+};
+
+/**
+ * Normalize a model name read from a Qoder transcript against the supported
+ * model catalog.
+ *
+ * Transcripts may record names with different casing (`auto`) or with a
+ * parenthesized alias (`Peach-07-17-DogFooding (qwen3.8-max-preview)`). This
+ * returns the canonical catalog value when a match is found, or `null` when
+ * the name cannot be reconciled so the caller can fall back to the default.
+ */
+const normalizeQoderModelName = (
+  rawModel: string,
+  supportedModels: ProviderModelsDefinition,
+): string | null => {
+  const options = supportedModels.OPTIONS;
+  if (options.length === 0) {
+    return rawModel;
+  }
+
+  const candidate = rawModel.replace(/\s+\([^)]*\)\s*$/, '').trim();
+  if (!candidate) {
+    return null;
+  }
+
+  // Exact match.
+  const exact = options.find((option) => option.value === candidate);
+  if (exact) {
+    return exact.value;
+  }
+
+  // Case-insensitive value match.
+  const lowerCandidate = candidate.toLowerCase();
+  const byValue = options.find((option) => option.value.toLowerCase() === lowerCandidate);
+  if (byValue) {
+    return byValue.value;
+  }
+
+  // Case-insensitive label match.
+  const byLabel = options.find((option) => option.label.toLowerCase() === lowerCandidate);
+  if (byLabel) {
+    return byLabel.value;
+  }
+
+  return null;
 };
 
 const resolveQoderJsonlPath = (providerSessionId: string, projectPath?: string): string | null => {
@@ -254,11 +322,13 @@ export class QoderProviderModels implements IProviderModels {
     const jsonlPath = resolveQoderJsonlPath(providerSessionId, sessionRow?.project_path ?? undefined);
 
     if (jsonlPath) {
-      const model = await readQoderSessionModel(jsonlPath);
-      if (model) {
-        return {
-          model,
-        };
+      const rawModel = await readQoderSessionModel(jsonlPath);
+      if (rawModel) {
+        const supportedModels = await this.getSupportedModels();
+        const model = normalizeQoderModelName(rawModel, supportedModels);
+        if (model) {
+          return { model };
+        }
       }
     }
 

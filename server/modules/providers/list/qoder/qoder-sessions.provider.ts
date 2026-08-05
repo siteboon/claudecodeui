@@ -120,10 +120,11 @@ export class QoderSessionsProvider implements IProviderSessions {
       }
 
       if (Array.isArray(raw.result?.content)) {
+        let partIndex = 0;
         for (const part of raw.result.content) {
           if (part?.type === 'text' && part.text) {
             messages.push(createNormalizedMessage({
-              id: `${baseId}_result`,
+              id: `${baseId}_result_${partIndex++}`,
               sessionId,
               timestamp: ts,
               provider: PROVIDER,

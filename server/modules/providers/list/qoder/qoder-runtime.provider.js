@@ -312,18 +312,10 @@ async function spawnQoder(command, options = {}, ws, context) {
         });
       });
 
-      qoderProcess.stderr.on('data', (data) => {
-        const stderrText = data.toString();
-        if (!stderrText.trim()) {
-          return;
-        }
+      let stderrBuffer = '';
 
-        ws.send(createNormalizedMessage({
-          kind: 'error',
-          content: stderrText,
-          sessionId: capturedSessionId || sessionId || null,
-          provider: 'qoder',
-        }));
+      qoderProcess.stderr.on('data', (data) => {
+        stderrBuffer += data.toString();
       });
 
       qoderProcess.on('close', async (code) => {
@@ -335,6 +327,16 @@ async function spawnQoder(command, options = {}, ws, context) {
           processQoderOutputLine(stdoutLineBuffer.trim());
           stdoutLineBuffer = '';
         }
+
+        if (code !== 0 && stderrBuffer.trim()) {
+          ws.send(createNormalizedMessage({
+            kind: 'error',
+            content: stderrBuffer.trim(),
+            sessionId: finalSessionId,
+            provider: 'qoder',
+          }));
+        }
+        stderrBuffer = '';
 
         // Qoder's own transcript is keyed by the provider-native id under the
         // encoded working directory.

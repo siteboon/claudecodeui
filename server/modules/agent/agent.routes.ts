@@ -982,7 +982,6 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
 
       const codexModels = (await providerModelsService.getProviderModels('codex')).models;
       const opencodeModels = (await providerModelsService.getProviderModels('opencode')).models;
-      const qoderModels = (await providerModelsService.getProviderModels('qoder')).models;
 
       // Start the appropriate session
       if (provider === 'claude') {
@@ -1032,6 +1031,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       } else if (provider === 'qoder') {
         console.log('Starting Qoder CLI session');
 
+        const qoderModels = (await providerModelsService.getProviderModels('qoder')).models;
         await spawnQoder(message.trim(), {
           projectPath: finalProjectPath,
           cwd: finalProjectPath,
