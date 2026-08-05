@@ -97,15 +97,41 @@ export function validateManifest(manifest) {
 
 const BUILD_TIMEOUT_MS = 60_000;
 
+/**
+ * Whether `npm run build` should execute after `npm install` for newly cloned
+ * plugins. Plugin build scripts run with the host Node process's privileges,
+ * so they are a remote code execution vector for any party who can supply a
+ * malicious plugin URL. The default is OFF: only the install/update caller's
+ * explicit opt-in (via the {@link PluginInstallOptions.allowBuild} flag) will
+ * permit build scripts to run.
+ */
+let ALLOW_PLUGIN_BUILD_SCRIPT = false;
+
+/** Process-wide override used by tests and callers that have vetted the plugin. */
+export function setAllowPluginBuildScript(allowed) {
+  ALLOW_PLUGIN_BUILD_SCRIPT = allowed === true;
+}
+
 /** Run `npm run build` if the plugin's package.json declares a build script. */
-function runBuildIfNeeded(dir, packageJsonPath, onSuccess, onError) {
+function runBuildIfNeeded(dir, packageJsonPath, options, onSuccess, onError) {
+  let pkg;
   try {
-    const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-    if (!pkg.scripts?.build) {
-      return onSuccess();
-    }
+    pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
   } catch {
     return onSuccess(); // Unreadable package.json — skip build
+  }
+
+  if (!pkg.scripts?.build) {
+    return onSuccess();
+  }
+
+  if (!ALLOW_PLUGIN_BUILD_SCRIPT && !options?.allowBuild) {
+    return onError(new Error(
+      'Plugin declares a "build" script but plugin builds are disabled by default. ' +
+      'Plugin build scripts run arbitrary code with the server process privileges. ' +
+      'To install this plugin, ship a pre-built artifact and remove the build script, ' +
+      'or set `allowBuild: true` after manually inspecting the build script.',
+    ));
   }
 
   const buildProcess = spawn('npm', ['run', 'build'], {
@@ -249,7 +275,7 @@ export function resolvePluginAssetPath(name, assetPath) {
   return realResolved;
 }
 
-export function installPluginFromGit(url) {
+export function installPluginFromGit(url, options) {
   return new Promise((resolve, reject) => {
     if (typeof url !== 'string' || !url.trim()) {
       return reject(new Error('Invalid URL: must be a non-empty string'));
@@ -350,7 +376,7 @@ export function installPluginFromGit(url) {
             cleanupTemp();
             return reject(new Error(`npm install for ${repoName} failed (exit code ${npmCode})`));
           }
-          runBuildIfNeeded(tempDir, packageJsonPath, () => finalize(manifest), (err) => { cleanupTemp(); reject(err); });
+          runBuildIfNeeded(tempDir, packageJsonPath, options, () => finalize(manifest), (err) => { cleanupTemp(); reject(err); });
         });
 
         npmProcess.on('error', (err) => {
@@ -369,7 +395,7 @@ export function installPluginFromGit(url) {
   });
 }
 
-export function updatePluginFromGit(name) {
+export function updatePluginFromGit(name, options) {
   return new Promise((resolve, reject) => {
     const pluginDir = getPluginDir(name);
     if (!pluginDir) {
@@ -415,7 +441,7 @@ export function updatePluginFromGit(name) {
           if (npmCode !== 0) {
             return reject(new Error(`npm install for ${name} failed (exit code ${npmCode})`));
           }
-          runBuildIfNeeded(pluginDir, packageJsonPath, () => resolve(manifest), (err) => reject(err));
+          runBuildIfNeeded(pluginDir, packageJsonPath, options, () => resolve(manifest), (err) => reject(err));
         });
         npmProcess.on('error', (err) => reject(err));
       } else {
