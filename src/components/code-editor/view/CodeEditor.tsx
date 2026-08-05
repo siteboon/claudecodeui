@@ -276,6 +276,8 @@ export default function CodeEditor({
               fullscreen: t('actions.fullscreen'),
               exitFullscreen: t('actions.exitFullscreen'),
               close: t('actions.close'),
+              copyPath: t('actions.copyPath', 'Copy path'),
+              pathCopied: t('actions.pathCopied', 'Copied!'),
             }}
           />
 

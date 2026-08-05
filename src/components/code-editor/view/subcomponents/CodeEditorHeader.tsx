@@ -1,6 +1,36 @@
-import { Code2, Download, Eye, Maximize2, Minimize2, Save, Settings as SettingsIcon, X } from 'lucide-react';
+import { useState } from 'react';
+import { Check, Code2, Copy, Download, Eye, Maximize2, Minimize2, Save, Settings as SettingsIcon, X } from 'lucide-react';
 
 import type { CodeEditorFile } from '../../types/types';
+
+// navigator.clipboard is only defined in secure contexts (HTTPS or localhost);
+// this app is often accessed over plain http on a LAN/Tailscale IP, so we need
+// the old execCommand fallback or the copy button silently no-ops.
+function copyTextToClipboard(text: string): boolean {
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).catch(() => copyTextViaTextarea(text));
+    return true;
+  }
+  return copyTextViaTextarea(text);
+}
+
+function copyTextViaTextarea(text: string): boolean {
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  let succeeded = false;
+  try {
+    succeeded = document.execCommand('copy');
+  } catch {
+    succeeded = false;
+  }
+  document.body.removeChild(textarea);
+  return succeeded;
+}
 
 type CodeEditorHeaderProps = {
   file: CodeEditorFile;
@@ -31,6 +61,8 @@ type CodeEditorHeaderProps = {
     fullscreen: string;
     exitFullscreen: string;
     close: string;
+    copyPath: string;
+    pathCopied: string;
   };
 };
 
@@ -54,6 +86,15 @@ export default function CodeEditorHeader({
 }: CodeEditorHeaderProps) {
   const saveTitle = saveSuccess ? labels.saved : saving ? labels.saving : labels.save;
 
+  const [pathCopied, setPathCopied] = useState(false);
+
+  const handleCopyPath = () => {
+    if (copyTextToClipboard(file.path)) {
+      setPathCopied(true);
+      setTimeout(() => setPathCopied(false), 2000);
+    }
+  };
+
   return (
     <div className="flex min-w-0 flex-shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
       {/* File info - can shrink */}
@@ -67,7 +108,19 @@ export default function CodeEditorHeader({
               </span>
             )}
           </div>
-          <p className="truncate text-xs text-gray-500 dark:text-gray-400">{file.path}</p>
+          <div className="flex min-w-0 items-center gap-1">
+            <p className="truncate text-xs text-gray-500 dark:text-gray-400" title={file.path}>
+              {file.path}
+            </p>
+            <button
+              type="button"
+              onClick={handleCopyPath}
+              className="flex shrink-0 items-center justify-center rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+              title={pathCopied ? labels.pathCopied : labels.copyPath}
+            >
+              {pathCopied ? <Check className="h-3 w-3 text-green-600 dark:text-green-400" /> : <Copy className="h-3 w-3" />}
+            </button>
+          </div>
         </div>
       </div>
 

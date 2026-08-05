@@ -22,7 +22,9 @@
     "fullscreen": "Fullscreen",
     "close": "Close",
     "previewMarkdown": "Preview markdown",
-    "editMarkdown": "Edit markdown"
+    "editMarkdown": "Edit markdown",
+    "copyPath": "Copy path",
+    "pathCopied": "Copied!"
   },
   "footer": {
     "lines": "Lines:",
