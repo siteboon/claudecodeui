@@ -243,17 +243,19 @@ export async function startCloneProject(
 
   gitProcess.stdout?.on('data', (data: Buffer | string) => {
     const message = data.toString().trim();
-    if (message) {
-      handlers.onProgress(message);
-    }
+    if (!message) return;
+    // `git` echoes the clone URL (with the embedded auth token) in progress
+    // messages. Always sanitize before forwarding to the SSE stream so the
+    // token is not exposed to anyone watching the clone-progress feed.
+    handlers.onProgress(sanitizeGitError(message, githubToken));
   });
 
   gitProcess.stderr?.on('data', (data: Buffer | string) => {
     const message = data.toString().trim();
     lastError = message;
-    if (message) {
-      handlers.onProgress(message);
-    }
+    if (!message) return;
+    // Same token-leak risk on stderr. Sanitize before relaying as progress.
+    handlers.onProgress(sanitizeGitError(message, githubToken));
   });
 
   const waitForCompletion = new Promise<void>((resolve, reject) => {
