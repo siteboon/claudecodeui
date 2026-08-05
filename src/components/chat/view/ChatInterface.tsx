@@ -17,6 +17,7 @@ import ChatComposer from './subcomponents/ChatComposer';
 import CommandResultModal from './subcomponents/CommandResultModal';
 
 function ChatInterface({
+  isActive,
   selectedProject,
   selectedSession,
   ws,
@@ -120,7 +121,9 @@ function ChatInterface({
     scrollToBottom,
     scrollToBottomAndReset,
     handleScroll,
+    requestLatestMessages,
   } = useChatSessionState({
+    isActive,
     selectedProject,
     selectedSession,
     ws,
@@ -219,13 +222,13 @@ function ChatInterface({
     resolvePermissionModeForProvider,
   });
 
-  // On WebSocket reconnect, re-fetch the current session's messages from the
-  // server so missed streaming events are shown, then re-subscribe — the
+  // On WebSocket reconnect, request a bounded persisted-tail sync (deferred
+  // while Chat is hidden), then re-subscribe — the
   // `chat_subscribed` ack restores or clears the activity indicator, replays
   // missed live events, and re-attaches a still-running stream to this socket.
   const handleWebSocketReconnect = useCallback(async () => {
     if (!selectedProject || !selectedSession) return;
-    await sessionStore.refreshFromServer(selectedSession.id);
+    await requestLatestMessages(selectedSession.id, isActive);
     statusCheckSentAtRef.current.set(selectedSession.id, Date.now());
     sendMessage({
       type: 'chat.subscribe',
@@ -234,9 +237,10 @@ function ChatInterface({
         lastSeq: lastSeqRef.current.get(selectedSession.id) ?? 0,
       }],
     });
-  }, [selectedProject, selectedSession, sendMessage, sessionStore]);
+  }, [isActive, requestLatestMessages, selectedProject, selectedSession, sendMessage]);
 
   useChatRealtimeHandlers({
+    isActive,
     subscribe,
     provider,
     selectedSession,
@@ -251,6 +255,7 @@ function ChatInterface({
     onSessionProcessing,
     onSessionIdle,
     onWebSocketReconnect: handleWebSocketReconnect,
+    requestLatestMessages,
     sessionStore,
   });
 
