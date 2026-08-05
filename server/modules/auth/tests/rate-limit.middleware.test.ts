@@ -112,13 +112,46 @@ test('lockout does not extend when the client keeps hammering', () => {
   limiter.middleware(createMockRequest('203.0.113.3') as never, response as never, next);
   const firstBlockEnd = response.headers['Retry-After'];
 
-  // Advance time by half a second — still inside the lockout — and verify the
-  // block window does NOT extend (would happen if we kept consuming slots).
-  currentTime += 500;
+  // Advance time past one second — past the original lockout boundary — and
+  // verify the block window does NOT reset/extend (would happen if we kept
+  // consuming slots). Advancing by 1100 ms puts us 100 ms past the original
+  // `now + lockoutMs` of 3000 but still inside `timestamps[0] + windowMs`
+  // (1000 + 1000 = 2000), so the preserved lockout is observable in the
+  // updated `Retry-After` header.
+  currentTime += 1100;
   limiter.middleware(createMockRequest('203.0.113.3') as never, response as never, next);
 
   assert.equal(firstBlockEnd, '2');
   assert.equal(response.statusCode, 429);
+  assert.equal(response.headers['Retry-After'], '1');
+});
+
+test('Retry-After reflects the rolling window when it outlives lockoutMs', () => {
+  let currentTime = 1000;
+  const limiter = createRateLimiter({
+    maxAttempts: 1,
+    windowMs: 5000,
+    lockoutMs: 1000,
+    now: () => currentTime,
+  });
+  const next = () => undefined;
+  const response = {
+    statusCode: 0,
+    body: undefined as unknown,
+    headers: {} as Record<string, string>,
+    status(code: number) { this.statusCode = code; return this; },
+    setHeader(name: string, value: string) { this.headers[name] = value; },
+    json(body: unknown) { this.body = body; return this; },
+  };
+
+  // Consume the only slot and trip the limit.
+  limiter.middleware(createMockRequest('203.0.113.7') as never, response as never, next);
+  limiter.middleware(createMockRequest('203.0.113.7') as never, response as never, next);
+
+  // `Retry-After` must be the larger of `lockoutMs` and the time until the
+  // earliest retained timestamp ages out — here the rolling window (5 s)
+  // outlives `lockoutMs` (1 s), so the client must wait 5 s.
+  assert.equal(response.headers['Retry-After'], '5');
 });
 
 test('rolling window lets the client through once old attempts age out', () => {

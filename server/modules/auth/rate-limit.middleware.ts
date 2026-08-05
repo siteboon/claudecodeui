@@ -91,8 +91,19 @@ export function createRateLimiter(options: RateLimiterOptions): {
     record.timestamps = record.timestamps.filter((timestamp) => timestamp > cutoff);
 
     if (record.timestamps.length >= maxAttempts) {
-      record.blockedUntil = now + lockoutMs;
-      const retryAfterSeconds = Math.max(1, Math.ceil(lockoutMs / 1000));
+      // `lockoutMs` is the minimum backoff, but `Retry-After` must reflect
+      // the *next* time a request can succeed — i.e. when at least one of
+      // the retained timestamps ages out of the rolling window. If the
+      // operator configured `lockoutMs < windowMs`, the rolling window
+      // outlives the lockout, so blocking for only `lockoutMs` would let a
+      // client come back and immediately trigger another lockout despite the
+      // previous response telling it to wait.
+      const earliestExpiry = record.timestamps.length > 0
+        ? record.timestamps[0]! + windowMs
+        : now + windowMs;
+      const nextAvailableAt = Math.max(now + lockoutMs, earliestExpiry);
+      record.blockedUntil = nextAvailableAt;
+      const retryAfterSeconds = Math.max(1, Math.ceil((nextAvailableAt - now) / 1000));
       res.setHeader('Retry-After', String(retryAfterSeconds));
       res.status(429).json({
         success: false,
