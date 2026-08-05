@@ -181,3 +181,59 @@ test('startCloneProject completes and emits complete payload when git exits succ
   assert.equal(resolvedCompletePayload.message, 'Repository cloned successfully');
   assert.equal((resolvedCompletePayload.project.projectId as string) || '', 'project-1');
 });
+
+test('startCloneProject redacts GitHub tokens even when split across stream chunks', async () => {
+  const gitProcess = createMockGitProcess();
+  const progressMessages: string[] = [];
+  const token = 'ghp_supersecrettoken1234567890';
+
+  const operation = await startCloneProject(
+    {
+      workspacePath: '/workspace/root',
+      githubUrl: 'https://github.com/example/repo.git',
+      newGithubToken: token,
+      userId: 1,
+    },
+    {
+      onProgress: (message) => {
+        progressMessages.push(message);
+      },
+      onComplete: () => undefined,
+    },
+    buildDependencies({
+      spawnGitClone: () => gitProcess as any,
+    }),
+  );
+
+  // Simulate `git` echoing the clone URL with the token split across two
+  // `data` events. A naive `replace` would let both halves through.
+  gitProcess.stdout.write(`Cloning into 'repo'...\nremote: Enumerating objects: 12, done.\nremote: Counting objects: 100% (12/12), done.\nremote: Total 12 (delta 0), reused 12 (delta 0), pack-reused 0\nReceiving objects: 100% (12/12), done.\nResolving deltas: 100% (0/0), done.\npost https://github.com/example/repo.git/info/refs?service=git-receive-pack token=ghp_supersecrettoke`);
+  gitProcess.stdout.write(`n1234567890 was 401\n`);
+  gitProcess.stdout.end();
+
+  gitProcess.stderr.write(`POST git-receive-pack: ghp_supersecrettoken12`);
+  gitProcess.stderr.write(`34567890 returned 401\n`);
+  gitProcess.stderr.end();
+
+  // Allow stream `end` handlers to fire.
+  await new Promise((resolve) => setImmediate(resolve));
+
+  gitProcess.emit('close', 0);
+  await operation.waitForCompletion;
+
+  // No fragment of the token should reach the SSE stream. The exact-token
+  // replacement handles whole-token leaks; the streaming buffer handles
+  // cross-chunk splits.
+  for (const message of progressMessages) {
+    assert.equal(
+      message.includes('ghp_supersecret'),
+      false,
+      `progress message leaked token fragment: ${message}`,
+    );
+    assert.equal(
+      message.includes('token1234567890'),
+      false,
+      `progress message leaked token tail: ${message}`,
+    );
+  }
+});

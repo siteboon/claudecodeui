@@ -76,6 +76,64 @@ function sanitizeGitError(message: string, token: string | null): string {
   return message.replace(new RegExp(escapedToken, 'g'), '***');
 }
 
+/**
+ * Streaming wrapper around {@link sanitizeGitError} that buffers a token's
+ * worth of trailing characters across consecutive chunks. `git`'s `data`
+ * events are arbitrary byte slices, not full messages, so a credential can
+ * be split across two events: e.g. `https://ghp_abc` in one chunk and
+ * `def...@github.com/...` in the next. A naive per-chunk `replace` lets both
+ * fragments through.
+ *
+ * `feed(chunk)` consumes one chunk and returns the redacted portion that is
+ * safe to forward. Up to `token.length - 1` characters are retained as a
+ * "possible token prefix" until the next chunk (or the close call)
+ * confirms they do not form a complete token. `flush()` returns whatever
+ * remains in the buffer after the stream ends — redacted like any other
+ * output, with any unmatched prefix replaced by `***` so a half-token at
+ * EOF still does not leak.
+ */
+function createStreamingRedactor(token: string | null) {
+  if (!token) {
+    return {
+      feed(chunk: string): string {
+        return chunk;
+      },
+      flush(): string {
+        return '';
+      },
+    };
+  }
+
+  const maxPrefix = token.length - 1;
+  let buffer = '';
+
+  return {
+    feed(chunk: string): string {
+      if (!chunk) return '';
+
+      buffer += chunk;
+      if (buffer.length <= maxPrefix) {
+        // Not enough characters yet for even a full token to exist; hold
+        // the whole buffer until the next chunk (or close) and emit nothing.
+        return '';
+      }
+
+      const safeEnd = buffer.length - maxPrefix;
+      const safeSlice = buffer.slice(0, safeEnd);
+      buffer = buffer.slice(safeEnd);
+      return sanitizeGitError(safeSlice, token);
+    },
+    flush(): string {
+      if (!buffer) return '';
+      // Any remaining buffer at EOF is a half-token at worst; redact it
+      // wholesale so no credential fragment survives the stream close.
+      const remainder = buffer;
+      buffer = '';
+      return sanitizeGitError(remainder, token);
+    },
+  };
+}
+
 function resolveCloneFailureMessage(lastError: string, sanitizedError: string): string {
   if (lastError.includes('Authentication failed') || lastError.includes('could not read Username')) {
     return 'Authentication failed. Please check your credentials.';
@@ -241,21 +299,35 @@ export async function startCloneProject(
   const gitProcess = dependencies.spawnGitClone(cloneUrl, clonePath);
   let lastError = '';
 
+  // Buffer up to `token.length - 1` characters across chunks so a credential
+  // that is split across two `data` events is still redacted before it
+  // reaches the SSE stream. See {@link createStreamingRedactor}.
+  const stdoutRedactor = createStreamingRedactor(githubToken);
+  const stderrRedactor = createStreamingRedactor(githubToken);
+
+  const forwardTrimmed = (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    handlers.onProgress(trimmed);
+  };
+
   gitProcess.stdout?.on('data', (data: Buffer | string) => {
-    const message = data.toString().trim();
-    if (!message) return;
-    // `git` echoes the clone URL (with the embedded auth token) in progress
-    // messages. Always sanitize before forwarding to the SSE stream so the
-    // token is not exposed to anyone watching the clone-progress feed.
-    handlers.onProgress(sanitizeGitError(message, githubToken));
+    forwardTrimmed(stdoutRedactor.feed(data.toString()));
   });
 
   gitProcess.stderr?.on('data', (data: Buffer | string) => {
-    const message = data.toString().trim();
-    lastError = message;
-    if (!message) return;
-    // Same token-leak risk on stderr. Sanitize before relaying as progress.
-    handlers.onProgress(sanitizeGitError(message, githubToken));
+    const raw = data.toString();
+    lastError = raw;
+    forwardTrimmed(stderrRedactor.feed(raw));
+  });
+
+  // Flush any remaining buffered characters when the streams close so a
+  // half-token that straddles the end of the stream is also redacted.
+  gitProcess.stdout?.on('end', () => {
+    forwardTrimmed(stdoutRedactor.flush());
+  });
+  gitProcess.stderr?.on('end', () => {
+    forwardTrimmed(stderrRedactor.flush());
   });
 
   const waitForCompletion = new Promise<void>((resolve, reject) => {
