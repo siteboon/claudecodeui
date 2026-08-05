@@ -1,5 +1,4 @@
 import fsSync from 'node:fs';
-import path from 'node:path';
 
 import crossSpawn from 'cross-spawn';
 
@@ -11,10 +10,9 @@ import type {
 } from '@/shared/types.js';
 import {
   buildDefaultProviderCurrentActiveModel,
-  encodeQoderCwd,
-  getQoderProjectsDir,
   readJsonRecord,
   readOptionalString,
+  resolveQoderTranscriptPath,
   unwrapJsonStringLiteral,
 } from '@/shared/utils.js';
 
@@ -220,14 +218,10 @@ const resolveQoderJsonlPath = (providerSessionId: string, projectPath?: string):
     return storedPath;
   }
 
-  if (!projectPath) {
-    return null;
-  }
-
-  // Fall back to the canonical layout when the row is not indexed yet:
-  // ~/.qoder/projects/<cwd with '/' -> '-'>/<sessionId>.jsonl
-  const encodedCwd = encodeQoderCwd(path.resolve(projectPath));
-  return path.join(getQoderProjectsDir(), encodedCwd, `${providerSessionId}.jsonl`);
+  // Fall back to the canonical layout when the row is not indexed yet. The
+  // shared resolver owns the cwd encoding and rejects session ids that could
+  // traverse out of the projects directory.
+  return resolveQoderTranscriptPath({ cwd: projectPath, sessionId: providerSessionId });
 };
 
 export class QoderProviderModels implements IProviderModels {

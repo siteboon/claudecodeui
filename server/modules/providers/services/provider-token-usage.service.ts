@@ -7,7 +7,7 @@ import Database from 'better-sqlite3';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import type { AnyRecord } from '@/shared/types.js';
-import { AppError, encodeQoderCwd, getOpenCodeDatabasePath } from '@/shared/utils.js';
+import { AppError, getOpenCodeDatabasePath, resolveQoderTranscriptPath } from '@/shared/utils.js';
 
 type SessionRow = NonNullable<ReturnType<typeof sessionsDb.getSessionById>>;
 
@@ -291,42 +291,17 @@ export function createProviderTokenUsageService(
       }
 
       if (session.provider === 'qoder') {
-        let sessionFilePath = session.jsonl_path;
-        if (!sessionFilePath) {
-          if (!session.project_path) {
-            throw new AppError(`Session file for "${sessionId}" was not found.`, {
-              code: 'SESSION_FILE_NOT_FOUND',
-              statusCode: 404,
-            });
-          }
+        // The shared resolver owns Qoder's cwd encoding (only `/` is folded,
+        // unlike Claude's broader replacement) and rejects session ids that
+        // could traverse out of the projects directory. The home root comes from
+        // the injected dependency so tests can point it at a temp folder.
+        const sessionFilePath = session.jsonl_path ?? resolveQoderTranscriptPath({
+          cwd: session.project_path,
+          sessionId: providerSessionId,
+          homeDirectory: dependencies.getHomeDirectory(),
+        });
 
-          // Qoder stores transcripts under
-          // `~/.qoder/projects/<cwd with '/' -> '-'>/<sessionId>.jsonl`.
-          // Qoder only folds slashes (unlike Claude's broader
-          // non-alphanumeric replacement), so the encoding must go through
-          // the shared `encodeQoderCwd` to match what the CLI wrote on disk
-          // — paths containing dots or other non-alphanumerics would
-          // otherwise resolve to a nonexistent directory. The home root is
-          // still resolved through the injected home directory for tests.
-          const encodedProjectPath = encodeQoderCwd(session.project_path);
-          const projectDirectory = path.join(
-            dependencies.getHomeDirectory(),
-            '.qoder',
-            'projects',
-            encodedProjectPath,
-          );
-          sessionFilePath = path.join(projectDirectory, `${providerSessionId}.jsonl`);
-
-          const relativePath = path.relative(path.resolve(projectDirectory), path.resolve(sessionFilePath));
-          if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
-            throw new AppError('Resolved session path is invalid.', {
-              code: 'INVALID_SESSION_PATH',
-              statusCode: 400,
-            });
-          }
-        }
-
-        if (!dependencies.fileExists(sessionFilePath)) {
+        if (!sessionFilePath || !dependencies.fileExists(sessionFilePath)) {
           throw new AppError(`Session file for "${sessionId}" was not found.`, {
             code: 'SESSION_FILE_NOT_FOUND',
             statusCode: 404,
@@ -334,9 +309,12 @@ export function createProviderTokenUsageService(
         }
 
         const fileContent = await dependencies.readTextFile(sessionFilePath);
-        // Qoder transcripts carry the same usage fields as Claude
-        // (input_tokens/output_tokens), so the Claude calculator applies
-        // unchanged.
+        // Qoder transcripts carry Claude's usage field names, so the Claude
+        // calculator applies unchanged. Note qodercli 1.1.13 writes zeros into
+        // those fields (it measures `credits` and `context_usage_ratio`
+        // instead), which is why `supportsTokenUsage` is false for this
+        // provider; this branch starts reporting real numbers only once the CLI
+        // populates them.
         return readClaudeTokenUsage(fileContent, dependencies.getClaudeContextWindow());
       }
 

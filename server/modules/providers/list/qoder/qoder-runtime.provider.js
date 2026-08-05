@@ -1,6 +1,3 @@
-import fsSync from 'node:fs';
-import path from 'node:path';
-
 import crossSpawn from 'cross-spawn';
 
 import {
@@ -8,7 +5,14 @@ import {
   normalizeAttachmentDescriptors
 } from '@/shared/image-attachments.js';
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
-import { createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell, getQoderProjectsDir } from '@/shared/utils.js';
+import {
+  aggregateQoderTranscriptTokenUsage,
+  createCompleteMessage,
+  createNormalizedMessage,
+  flattenPromptForWindowsShell,
+  readJsonlEntries,
+  resolveQoderTranscriptPath
+} from '@/shared/utils.js';
 
 import { resolveQoderPermissionOptions } from './qoder-permissions.provider.js';
 
@@ -41,68 +45,25 @@ function readQoderSessionId(event) {
 
 /**
  * Qoder persists every run to `~/.qoder/projects/<encoded-cwd>/<sessionId>.jsonl`
- * (Claude-style JSONL; each line carries a `sessionId`). Assistant rows carry
- * a `usage` object with input/output/cache token counts, so token accounting
- * is read straight from the transcript after the process exits.
+ * (Claude-style JSONL; each line carries a `sessionId`). Assistant rows carry a
+ * `usage` object, so token accounting is read straight from the transcript after
+ * the process exits.
+ *
+ * qodercli 1.1.13 leaves every token field at 0 and measures spend as `credits`
+ * plus a `context_usage_ratio`, which is why `supportsTokenUsage` is declared
+ * false for this provider. The reader is kept because it costs one streamed pass
+ * and starts producing real numbers the moment the CLI populates those fields.
  */
-function readQoderTokenUsage(sessionId, workingDir) {
-  if (!sessionId) {
+async function readQoderTokenUsage(sessionId, workingDir) {
+  const jsonlPath = resolveQoderTranscriptPath({
+    cwd: workingDir || process.cwd(),
+    sessionId,
+  });
+  if (!jsonlPath) {
     return null;
   }
 
-  const encodedCwd = (workingDir || process.cwd()).replace(/\//g, '-');
-  const jsonlPath = path.join(getQoderProjectsDir(), encodedCwd, `${sessionId}.jsonl`);
-  if (!fsSync.existsSync(jsonlPath)) {
-    return null;
-  }
-
-  let inputTokens = 0;
-  let outputTokens = 0;
-  let cacheReadTokens = 0;
-  let cacheCreationTokens = 0;
-  try {
-    const content = fsSync.readFileSync(jsonlPath, 'utf8');
-    for (const rawLine of content.split(/\r?\n/)) {
-      const line = rawLine.trim();
-      if (!line) {
-        continue;
-      }
-
-      let entry;
-      try {
-        entry = JSON.parse(line);
-      } catch {
-        continue;
-      }
-      if (entry?.type !== 'assistant' || !entry?.message?.usage) {
-        continue;
-      }
-
-      const usage = entry.message.usage;
-      inputTokens += Number(usage.input_tokens || 0);
-      outputTokens += Number(usage.output_tokens || 0);
-      cacheReadTokens += Number(usage.cache_read_input_tokens || 0);
-      cacheCreationTokens += Number(usage.cache_creation_input_tokens || 0);
-    }
-  } catch {
-    return null;
-  }
-
-  const used = inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
-  if (used <= 0) {
-    return null;
-  }
-
-  const computedInput = inputTokens + cacheReadTokens;
-  return {
-    used,
-    inputTokens: computedInput,
-    outputTokens,
-    breakdown: {
-      input: computedInput,
-      output: outputTokens,
-    },
-  };
+  return aggregateQoderTranscriptTokenUsage(readJsonlEntries(jsonlPath));
 }
 
 async function spawnQoder(command, options = {}, ws, context) {
@@ -259,8 +220,11 @@ async function spawnQoder(command, options = {}, ws, context) {
       if (resolvedEffort) {
         args.push('--reasoning-effort', resolvedEffort);
       }
-      const permissionOptions = resolveQoderPermissionOptions(permissionMode, toolsSettings);
-      args.push(...permissionOptions.args);
+      // Attachments come before the permission block on purpose: that block can
+      // end with the variadic `--tools`, which keeps consuming bare arguments.
+      // Emitting every other flag first means the only thing that can follow
+      // `--tools` is the `--` separator, so correctness does not depend on the
+      // CLI's "stop at the next dash-prefixed token" parsing detail.
       const fileDescriptors = normalizeAttachmentDescriptors(files);
       // qoder's CLI takes one --attachment per file; images are not supported
       // (supportsImages=false), so image descriptors are skipped.
@@ -269,6 +233,8 @@ async function spawnQoder(command, options = {}, ws, context) {
           args.push('--attachment', descriptor.path);
         }
       }
+      const permissionOptions = resolveQoderPermissionOptions(permissionMode, toolsSettings);
+      args.push(...permissionOptions.args);
       if ((command && command.trim()) || fileDescriptors.length > 0) {
         // Files still ride along as an <files_input> path list appended to the
         // prompt (the session history reader strips the tag back out), so the
@@ -326,7 +292,7 @@ async function spawnQoder(command, options = {}, ws, context) {
 
         // Qoder's own transcript is keyed by the provider-native id under the
         // encoded working directory.
-        const tokenBudget = readQoderTokenUsage(capturedSessionId, workingDir);
+        const tokenBudget = await readQoderTokenUsage(capturedSessionId, workingDir);
         if (tokenBudget) {
           ws.send(createNormalizedMessage({
             kind: 'status',

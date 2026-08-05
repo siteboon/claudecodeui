@@ -137,20 +137,40 @@ export class QoderSessionsProvider implements IProviderSessions {
     if (raw.type === 'content_block_stop') {
       return [createNormalizedMessage({ kind: 'stream_end', sessionId, provider: PROVIDER })];
     }
-    if (raw.type === 'result' && Array.isArray(raw.result?.content)) {
-      for (const part of raw.result.content) {
-        if (part?.type === 'text' && part.text) {
-          messages.push(createNormalizedMessage({
-            id: `${baseId}_result`,
-            sessionId,
-            timestamp: ts,
-            provider: PROVIDER,
-            kind: 'text',
-            role: 'assistant',
-            content: part.text,
-          }));
+    if (raw.type === 'result') {
+      // qodercli 1.1.13 emits the final answer as a plain string
+      // (`{"type":"result","subtype":"success","result":"OK"}`). Claude-style
+      // payloads carry a `content` part array instead, so both shapes are read:
+      // dropping either one loses the entire answer while the run still reports
+      // success.
+      if (typeof raw.result === 'string' && raw.result.trim()) {
+        return [createNormalizedMessage({
+          id: `${baseId}_result`,
+          sessionId,
+          timestamp: ts,
+          provider: PROVIDER,
+          kind: 'text',
+          role: 'assistant',
+          content: raw.result,
+        })];
+      }
+
+      if (Array.isArray(raw.result?.content)) {
+        for (const part of raw.result.content) {
+          if (part?.type === 'text' && part.text) {
+            messages.push(createNormalizedMessage({
+              id: `${baseId}_result`,
+              sessionId,
+              timestamp: ts,
+              provider: PROVIDER,
+              kind: 'text',
+              role: 'assistant',
+              content: part.text,
+            }));
+          }
         }
       }
+
       return messages;
     }
 

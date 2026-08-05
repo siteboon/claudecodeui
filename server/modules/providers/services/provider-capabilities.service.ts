@@ -94,7 +94,13 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsFiles: true,
     supportsAbort: true,
     supportsPermissionRequests: false,
-    supportsTokenUsage: true,
+    // qodercli 1.1.13 does not report token counts: every assistant row in its
+    // transcript carries `input_tokens`/`output_tokens`/`cache_*` as 0 and
+    // measures spend as `credits` plus a `context_usage_ratio` instead. Reading
+    // token usage would therefore always report zero, so the capability is
+    // declared unsupported rather than silently wrong. The readers stay in place
+    // and will start producing numbers if the CLI ever populates those fields.
+    supportsTokenUsage: false,
     // `qodercli --help` exposes `--reasoning-effort <level>`, so the runtime
     // can accept model-level reasoning effort.
     supportsEffort: true,
