@@ -42,9 +42,15 @@ const readTokenClaims = (token) => {
   }
 };
 
+// Tolerance for client/server clock skew. The server's own jwt.verify is the
+// real authority; this check only decides whether the client should discard a
+// token locally. Without an allowance, a browser clock running slightly ahead
+// reads a still-server-valid token as expired and drops the session.
+export const TOKEN_EXPIRY_SKEW_MS = 60_000;
+
 export const isAuthTokenExpired = (token) => {
   const claims = readTokenClaims(token);
-  return claims ? Date.now() >= claims.expiresAt : false;
+  return claims ? Date.now() >= claims.expiresAt + TOKEN_EXPIRY_SKEW_MS : false;
 };
 
 export const getAuthTokenRefreshDelay = (token) => {
