@@ -8,6 +8,7 @@ import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { sessionSynchronizerService } from '@/modules/providers/services/session-synchronizer.service.js';
 import { WS_OPEN_STATE, connectedClients } from '@/modules/websocket/index.js';
 import type { LLMProvider } from '@/shared/types.js';
+import { getQoderProjectsDir } from '@/shared/utils.js';
 import { generateDisplayName } from '@/modules/projects/index.js';
 
 type WatcherEventType = 'add' | 'change';
@@ -31,7 +32,7 @@ const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> =
   },
   {
     provider: 'qoder',
-    rootPath: path.join(os.homedir(), '.qoder', 'projects'),
+    rootPath: getQoderProjectsDir(),
   },
 ];
 

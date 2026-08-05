@@ -1,59 +1,24 @@
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 
 import { McpProvider } from '@/modules/providers/shared/mcp/mcp.provider.js';
 import type { McpScope, ProviderMcpServer, UpsertProviderMcpServerInput } from '@/shared/types.js';
 import {
   AppError,
+  getQoderHome,
+  readJsonConfig,
   readObjectRecord,
   readOptionalString,
   readStringArray,
   readStringRecord,
+  writeJsonConfig,
 } from '@/shared/utils.js';
 
-type QoderConfigPath = {
-  filePath: string;
-  exists: boolean;
-};
-
-const fileExists = async (filePath: string): Promise<boolean> => {
-  try {
-    await access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-const readQoderConfig = async (filePath: string): Promise<Record<string, unknown>> => {
-  try {
-    const content = await readFile(filePath, 'utf8');
-    const parsed = JSON.parse(content) as unknown;
-    return readObjectRecord(parsed) ?? {};
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT') {
-      return {};
-    }
-
-    throw error;
-  }
-};
-
-const writeQoderConfig = async (filePath: string, data: Record<string, unknown>): Promise<void> => {
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
-};
-
-const resolveQoderConfigPath = async (scope: McpScope, workspacePath: string): Promise<QoderConfigPath> => {
+const resolveQoderConfigPath = (scope: McpScope, workspacePath: string): string => {
   // Qoder reads MCP servers from the user-level settings.json (Claude-style
   // `mcpServers` key) and from a project-level `.mcp.json`.
-  const filePath = scope === 'user'
-    ? path.join(os.homedir(), '.qoder', 'settings.json')
+  return scope === 'user'
+    ? path.join(getQoderHome(), 'settings.json')
     : path.join(workspacePath, '.mcp.json');
-
-  return { filePath, exists: await fileExists(filePath) };
 };
 
 export class QoderMcpProvider extends McpProvider {
@@ -64,8 +29,7 @@ export class QoderMcpProvider extends McpProvider {
   }
 
   protected async readScopedServers(scope: McpScope, workspacePath: string): Promise<Record<string, unknown>> {
-    const { filePath } = await resolveQoderConfigPath(scope, workspacePath);
-    const config = await readQoderConfig(filePath);
+    const config = await readJsonConfig(resolveQoderConfigPath(scope, workspacePath));
     return readObjectRecord(config.mcpServers) ?? {};
   }
 
@@ -74,10 +38,10 @@ export class QoderMcpProvider extends McpProvider {
     workspacePath: string,
     servers: Record<string, unknown>,
   ): Promise<void> {
-    const { filePath } = await resolveQoderConfigPath(scope, workspacePath);
-    const config = await readQoderConfig(filePath);
+    const filePath = resolveQoderConfigPath(scope, workspacePath);
+    const config = await readJsonConfig(filePath);
     config.mcpServers = servers;
-    await writeQoderConfig(filePath, config);
+    await writeJsonConfig(filePath, config);
   }
 
   protected buildServerConfig(input: UpsertProviderMcpServerInput): Record<string, unknown> {

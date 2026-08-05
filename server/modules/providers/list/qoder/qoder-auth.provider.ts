@@ -1,11 +1,11 @@
-import { access, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import spawn from 'cross-spawn';
 
 import type { IProviderAuth } from '@/shared/interfaces.js';
 import type { ProviderAuthStatus } from '@/shared/types.js';
-import { getQoderHome } from '@/shared/utils.js';
+import { fileExists, getQoderHome } from '@/shared/utils.js';
 
 /**
  * Qoder persists its auth state as an encrypted blob under `~/.qoder/.auth/user`
@@ -14,15 +14,6 @@ import { getQoderHome } from '@/shared/utils.js';
  * opaque to the server, so only existence is checked.
  */
 const QODER_AUTH_FILE = '.auth/user';
-
-const fileExists = async (filePath: string): Promise<boolean> => {
-  try {
-    await access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-};
 
 export class QoderProviderAuth implements IProviderAuth {
   /**

@@ -1,4 +1,4 @@
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -6,6 +6,7 @@ import { McpProvider } from '@/modules/providers/shared/mcp/mcp.provider.js';
 import type { McpScope, ProviderMcpServer, UpsertProviderMcpServerInput } from '@/shared/types.js';
 import {
   AppError,
+  fileExists,
   readObjectRecord,
   readOptionalString,
   readStringArray,
@@ -15,15 +16,6 @@ import {
 type OpenCodeConfigPath = {
   filePath: string;
   exists: boolean;
-};
-
-const fileExists = async (filePath: string): Promise<boolean> => {
-  try {
-    await access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
 };
 
 /**

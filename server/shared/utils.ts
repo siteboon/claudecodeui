@@ -605,6 +605,26 @@ export const writeJsonConfig = async (filePath: string, data: Record<string, unk
 };
 
 // ---------------------------
+//----------------- FILESYSTEM EXISTENCE UTILITIES ------------
+/**
+ * Reports whether a path is reachable by the server process.
+ *
+ * Consumed by the provider auth and MCP readers (claude/opencode/qoder), which
+ * need a plain existence probe rather than a read: MCP readers decide whether a
+ * scoped config file is present, and auth readers decide whether a credential
+ * blob was ever written. Any access error (missing file, no permission) reports
+ * `false` so first-run environments behave like "not configured".
+ */
+export const fileExists = async (filePath: string): Promise<boolean> => {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+// ---------------------------
 //----------------- PROVIDER SKILL FILE UTILITIES ------------
 async function hasGitMarker(dirPath: string): Promise<boolean> {
   try {
@@ -923,6 +943,121 @@ export function encodeQoderCwd(cwd: string): string {
   return cwd.replace(/\//g, '-');
 }
 
+/**
+ * Validates a provider-native session id before it is used to build a
+ * filesystem path.
+ *
+ * Session ids arrive from WebSocket and HTTP payloads, so an unvalidated id such
+ * as `../../../etc/passwd` would escape the provider's transcript directory.
+ * Every path builder that interpolates a session id must reject ids that fail
+ * this whitelist. The character set matches the ids qodercli and Claude write on
+ * disk (UUIDs plus the `.`/`:` separators some providers use).
+ */
+export function isSafeSessionId(value: string | null | undefined): boolean {
+  return typeof value === 'string' && /^[a-zA-Z0-9_.\-:]+$/.test(value);
+}
+
+/**
+ * Resolves the Qoder transcript path for one session, or `null` when the inputs
+ * cannot produce a safe path.
+ *
+ * This is the single derivation used by the qoder runtime, models provider,
+ * sessions provider, and the provider token usage service. It guarantees three
+ * things those callers previously each had to remember:
+ * - the cwd is absolute before it is encoded (a relative cwd would otherwise
+ *   encode to a different directory than the one qodercli wrote),
+ * - the encoding goes through `encodeQoderCwd` rather than a hand-rolled
+ *   `replace`,
+ * - the session id is whitelisted, so it cannot traverse out of the projects
+ *   directory.
+ *
+ * `homeDirectory` exists for the token usage service, which resolves the home
+ * root through an injected dependency so tests can point it at a temp folder.
+ */
+export function resolveQoderTranscriptPath(options: {
+  cwd: string | null | undefined;
+  sessionId: string | null | undefined;
+  homeDirectory?: string;
+}): string | null {
+  const { cwd, sessionId, homeDirectory } = options;
+  if (!cwd || !isSafeSessionId(sessionId)) {
+    return null;
+  }
+
+  const projectsDir = homeDirectory
+    ? path.join(homeDirectory, '.qoder', 'projects')
+    : getQoderProjectsDir();
+  const encodedCwd = encodeQoderCwd(path.resolve(cwd));
+  return path.join(projectsDir, encodedCwd, `${sessionId}.jsonl`);
+}
+
+/**
+ * Cumulative token usage read from a Qoder transcript.
+ *
+ * `inputTokens` folds cache reads into the input figure because that is what the
+ * chat UI displays as "input"; `used` is the true total of every counted field.
+ */
+export type QoderTranscriptTokenUsage = {
+  used: number;
+  inputTokens: number;
+  outputTokens: number;
+  breakdown: { input: number; output: number };
+};
+
+/**
+ * Sums the `usage` objects on every assistant row of a Qoder transcript.
+ *
+ * Consumed by the qoder runtime (post-run `token_budget` status event) and by
+ * the qoder sessions provider (`fetchHistory`), which previously carried two
+ * copies of this arithmetic. Returns `null` when the transcript contains no
+ * usage data so callers can skip emitting an empty budget.
+ *
+ * Note the deliberate difference from the provider token usage service, which
+ * reports the *latest* assistant row plus a context window instead of a
+ * cumulative sum: this helper answers "how many tokens did this session spend",
+ * not "how full is the context window".
+ *
+ * Accepts sync or async iterables so callers can stream a transcript instead of
+ * buffering it.
+ */
+export async function aggregateQoderTranscriptTokenUsage(
+  entries: Iterable<AnyRecord> | AsyncIterable<AnyRecord>,
+): Promise<QoderTranscriptTokenUsage | null> {
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let cacheReadTokens = 0;
+  let cacheCreationTokens = 0;
+
+  for await (const entry of entries) {
+    if (entry?.type !== 'assistant') {
+      continue;
+    }
+
+    const usage = readJsonRecord(readJsonRecord(entry.message)?.usage);
+    if (!usage) {
+      continue;
+    }
+
+    inputTokens += Number(usage.input_tokens ?? 0);
+    outputTokens += Number(usage.output_tokens ?? 0);
+    cacheReadTokens += Number(usage.cache_read_input_tokens ?? 0);
+    cacheCreationTokens += Number(usage.cache_creation_input_tokens ?? 0);
+  }
+
+  const used = inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
+  if (used <= 0) {
+    return null;
+  }
+
+  const displayInput = inputTokens + cacheReadTokens;
+  return {
+    used,
+    inputTokens: displayInput,
+    outputTokens,
+    breakdown: { input: displayInput, output: outputTokens },
+  };
+}
+
 // ---------------------------
 //----------------- SAFE DIRECTORY NAME UTILITIES ------------
 /**
@@ -1058,6 +1193,47 @@ export async function buildLookupMap(
   }
 
   return lookup;
+}
+
+/**
+ * Streams the parsed JSON objects of a JSONL artifact, one row at a time.
+ *
+ * Consumed by the qoder runtime, models provider, and session synchronizer.
+ * Transcripts grow without bound, so those readers must never buffer a whole
+ * file: this helper keeps memory flat and yields control to the event loop
+ * between chunks. Blank lines, malformed rows, and non-object rows are skipped
+ * (a provider may be appending while this read happens); a missing or unreadable
+ * file yields nothing instead of throwing.
+ */
+export async function* readJsonlEntries(filePath: string): AsyncGenerator<AnyRecord> {
+  let lineReader: readline.Interface | null = null;
+  try {
+    const fileStream = fs.createReadStream(filePath);
+    lineReader = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
+
+    for await (const line of lineReader) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        continue;
+      }
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        continue;
+      }
+
+      const record = readJsonRecord(parsed);
+      if (record) {
+        yield record;
+      }
+    }
+  } catch {
+    // Ignore missing or unreadable artifacts so scans keep progressing.
+  } finally {
+    lineReader?.close();
+  }
 }
 
 /**
