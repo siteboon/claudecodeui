@@ -70,7 +70,7 @@ export default function SidebarRecentConversations({
           {t('recent.loadFailed', 'Could not load recent conversations')}
         </p>
         <Button variant="ghost" size="sm" className="mt-2" onClick={onRetry}>
-          {t('actions.retry', 'Try again')}
+          {t('buttons.retry', { ns: 'common', defaultValue: 'Try again' })}
         </Button>
       </div>
     );

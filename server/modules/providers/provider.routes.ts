@@ -364,8 +364,8 @@ const parseBoundedIntegerQuery = <T extends number | null>(
     return fallback;
   }
 
-  const parsed = Number.parseInt(raw, 10);
-  if (Number.isNaN(parsed) || parsed < minimum || parsed > maximum) {
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < minimum || parsed > maximum) {
     throw new AppError(`${name} must be an integer between ${minimum} and ${maximum}.`, {
       code: 'INVALID_QUERY_PARAMETER',
       statusCode: 400,
