@@ -2,6 +2,7 @@ import crossSpawn from 'cross-spawn';
 
 import {
   appendFilesInputTag,
+  appendImagesInputTag,
   normalizeAttachmentDescriptors
 } from '@/shared/image-attachments.js';
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
@@ -45,6 +46,7 @@ export function buildQoderArgs(options) {
     resolvedEffort,
     workingDir,
     providerSessionId,
+    images,
     files,
     command,
     permissionMode,
@@ -77,6 +79,12 @@ export function buildQoderArgs(options) {
   // Emitting every other flag first means the only thing that can follow
   // `--tools` is the `--` separator, so correctness does not depend on the
   // CLI's "stop at the next dash-prefixed token" parsing detail.
+  const imageDescriptors = normalizeAttachmentDescriptors(images);
+  for (const descriptor of imageDescriptors) {
+    if (descriptor.path) {
+      args.push('--attachment', descriptor.path);
+    }
+  }
   const fileDescriptors = normalizeAttachmentDescriptors(files);
   for (const descriptor of fileDescriptors) {
     if (descriptor.path) {
@@ -85,11 +93,13 @@ export function buildQoderArgs(options) {
   }
   const permissionOptions = resolveQoderPermissionOptions(permissionMode, toolsSettings);
   args.push(...permissionOptions.args);
-  if ((command && command.trim()) || fileDescriptors.length > 0) {
-    // Files still ride along as an <files_input> path list appended to the
-    // prompt (the session history reader strips the tag back out), so the
-    // attachment list and the transcript stay consistent.
-    const promptWithAttachments = appendFilesInputTag(command?.trim() || '', files);
+  if ((command && command.trim()) || imageDescriptors.length > 0 || fileDescriptors.length > 0) {
+    // Images ride along as an <images_input> path list appended to the prompt
+    // (the session history reader strips the tag back out), so the attachment
+    // list and the transcript stay consistent. Files use the same pattern via
+    // appendFilesInputTag.
+    const promptWithImages = appendImagesInputTag(command?.trim() || '', images);
+    const promptWithAttachments = appendFilesInputTag(promptWithImages, files);
     if (permissionOptions.requiresPromptSeparator) {
       args.push('--');
     }
@@ -269,24 +279,13 @@ async function spawnQoder(command, options = {}, ws, context) {
       }
 
       const resolvedEffort = resolveQoderEffort(resolvedModel, effort, effortModels);
-      // qoder's CLI has no image entry point (supportsImages=false). Tell the
-      // user instead of dropping them silently, otherwise the model just looks
-      // like it ignored the picture.
-      const ignoredImageCount = Array.isArray(images) ? images.length : 0;
-      if (ignoredImageCount > 0) {
-        ws.send(createNormalizedMessage({
-          kind: 'status',
-          text: `Ignored ${ignoredImageCount} image attachment(s): Qoder CLI does not accept images.`,
-          sessionId: capturedSessionId || sessionId || null,
-          provider: 'qoder',
-        }));
-      }
 
       const args = buildQoderArgs({
         resolvedModel,
         resolvedEffort,
         workingDir,
         providerSessionId,
+        images,
         files,
         command,
         permissionMode,

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
-import { parseFilesInputTag } from '@/shared/image-attachments.js';
+import { parseFilesInputTag, parseImagesInputTag } from '@/shared/image-attachments.js';
 import {
   aggregateQoderTranscriptTokenUsage,
   createNormalizedMessage,
@@ -161,8 +161,11 @@ export class QoderSessionsProvider implements IProviderSessions {
               isError: Boolean(part.is_error),
             }));
           } else if (part.type === 'text' && part.text) {
-            const parsedFiles = parseFilesInputTag(part.text);
-            if (parsedFiles.text.trim() || parsedFiles.attachments.length > 0) {
+            const parsedImages = parseImagesInputTag(part.text);
+            const parsedFiles = parseFilesInputTag(parsedImages.text);
+            const cleanText = parsedFiles.text;
+            const hasContent = cleanText.trim() || parsedImages.attachments.length > 0 || parsedFiles.attachments.length > 0;
+            if (hasContent) {
               messages.push(createNormalizedMessage({
                 id: `${baseId}_text_${partIndex}`,
                 sessionId,
@@ -170,12 +173,15 @@ export class QoderSessionsProvider implements IProviderSessions {
                 provider: PROVIDER,
                 kind: 'text',
                 role: 'user',
-                content: parsedFiles.text,
+                content: cleanText,
+                images: !filesAttached && parsedImages.attachments.length > 0
+                  ? parsedImages.attachments
+                  : undefined,
                 files: !filesAttached && parsedFiles.attachments.length > 0
                   ? parsedFiles.attachments
                   : undefined,
               }));
-              filesAttached = filesAttached || parsedFiles.attachments.length > 0;
+              filesAttached = filesAttached || parsedImages.attachments.length > 0 || parsedFiles.attachments.length > 0;
             }
           }
         }

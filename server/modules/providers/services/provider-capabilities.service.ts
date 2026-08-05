@@ -90,7 +90,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     // equivalent in this repo's cycle and Qoder exposes no plan mode.
     permissionModes: ['default', 'acceptEdits', 'bypassPermissions'],
     defaultPermissionMode: 'default',
-    supportsImages: false,
+    supportsImages: true,
     supportsFiles: true,
     supportsAbort: true,
     supportsPermissionRequests: false,
