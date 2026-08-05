@@ -44,7 +44,9 @@ const FALLBACK_PERMISSION_MODES: Record<LLMProvider, PermissionMode[]> = {
   cursor: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
   codex: ['default', 'acceptEdits', 'bypassPermissions'],
   opencode: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
-  qoder: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
+  // Qoder exposes no plan mode; see the qoder entry in
+  // provider-capabilities.service.ts.
+  qoder: ['default', 'acceptEdits', 'bypassPermissions'],
 };
 
 type ProviderCapabilities = {

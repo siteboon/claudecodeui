@@ -21,14 +21,6 @@ type QoderToolResult = {
   isError: boolean;
 };
 
-const QODER_META_ROW_TYPES = new Set([
-  'workspace-directories',
-  'runtime-config',
-  'ai-title',
-  'last-prompt',
-  'system',
-]);
-
 /**
  * Resolves the on-disk transcript for a session.
  *
@@ -150,7 +142,6 @@ export class QoderSessionsProvider implements IProviderSessions {
 
     if (role === 'user' && raw.message?.content && raw.isMeta !== true) {
       if (Array.isArray(raw.message.content)) {
-        let imagesAttached = false;
         let filesAttached = false;
 
         for (let partIndex = 0; partIndex < raw.message.content.length; partIndex++) {
@@ -206,7 +197,6 @@ export class QoderSessionsProvider implements IProviderSessions {
             }));
           }
         }
-        void imagesAttached;
       } else if (typeof raw.message.content === 'string') {
         const parsedFiles = parseFilesInputTag(raw.message.content);
         if (parsedFiles.text.trim() || parsedFiles.attachments.length > 0) {
@@ -305,7 +295,8 @@ export class QoderSessionsProvider implements IProviderSessions {
       })];
     }
 
-    void QODER_META_ROW_TYPES;
+    // Anything left is an internal meta row (workspace-directories,
+    // runtime-config, ai-title, last-prompt) with no renderable content.
     return messages;
   }
 

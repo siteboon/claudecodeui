@@ -220,14 +220,25 @@ async function spawnQoder(command, options = {}, ws, context) {
       if (resolvedEffort) {
         args.push('--reasoning-effort', resolvedEffort);
       }
+      // qoder's CLI has no image entry point (supportsImages=false). Tell the
+      // user instead of dropping them silently, otherwise the model just looks
+      // like it ignored the picture.
+      const ignoredImageCount = Array.isArray(images) ? images.length : 0;
+      if (ignoredImageCount > 0) {
+        ws.send(createNormalizedMessage({
+          kind: 'status',
+          text: `Ignored ${ignoredImageCount} image attachment(s): Qoder CLI does not accept images.`,
+          sessionId: capturedSessionId || sessionId || null,
+          provider: 'qoder',
+        }));
+      }
+
       // Attachments come before the permission block on purpose: that block can
       // end with the variadic `--tools`, which keeps consuming bare arguments.
       // Emitting every other flag first means the only thing that can follow
       // `--tools` is the `--` separator, so correctness does not depend on the
       // CLI's "stop at the next dash-prefixed token" parsing detail.
       const fileDescriptors = normalizeAttachmentDescriptors(files);
-      // qoder's CLI takes one --attachment per file; images are not supported
-      // (supportsImages=false), so image descriptors are skipped.
       for (const descriptor of fileDescriptors) {
         if (descriptor.path) {
           args.push('--attachment', descriptor.path);
@@ -249,7 +260,7 @@ async function spawnQoder(command, options = {}, ws, context) {
       qoderProcess = spawnFunction('qodercli', args, {
         cwd: workingDir,
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env, ...permissionOptions.env },
+        env: { ...process.env },
       });
 
       activeQoderProcesses.set(processKey, qoderProcess);
@@ -360,35 +371,23 @@ async function spawnQoder(command, options = {}, ws, context) {
 }
 
 function abortQoderSession(sessionId) {
-  const process = activeQoderProcesses.get(sessionId);
-  if (!process) {
+  // Named `qoderProcess` rather than `process` so it cannot shadow the global.
+  const qoderProcess = activeQoderProcesses.get(sessionId);
+  if (!qoderProcess) {
     return false;
   }
 
   // The abort handler sends the terminal complete (aborted: true); flag the
   // process so its close handler does not emit a second one.
-  process.aborted = true;
-  process.kill('SIGTERM');
+  qoderProcess.aborted = true;
+  qoderProcess.kill('SIGTERM');
   activeQoderProcesses.delete(sessionId);
   return true;
 }
 
-function isQoderSessionActive(sessionId) {
-  return activeQoderProcesses.has(sessionId);
-}
-
-function getActiveQoderSessions() {
-  return Array.from(activeQoderProcesses.keys());
-}
-
+// The provider's only runtime contract, consumed by qoder.provider.ts and
+// resolved through providerRegistry by providerRuntimeService.
 export const qoderRuntime = {
   run: spawnQoder,
   abort: abortQoderSession,
-};
-
-export {
-  spawnQoder,
-  abortQoderSession,
-  isQoderSessionActive,
-  getActiveQoderSessions,
 };

@@ -351,6 +351,9 @@
       },
       "opencode": {
         "description": "OpenCode CLI 助手"
+      },
+      "qoder": {
+        "description": "Qoder CLI 助手"
       }
     },
     "connectionStatus": "连接状态",
@@ -472,7 +475,8 @@
       "claude": "Model Context Protocol 服务器为 Claude 提供额外的工具和数据源",
       "cursor": "Model Context Protocol 服务器为 Cursor 提供额外的工具和数据源",
       "codex": "Model Context Protocol 服务器为 Codex 提供额外的工具和数据源",
-      "opencode": "Model Context Protocol 服务器为 OpenCode 提供额外的工具和数据源"
+      "opencode": "Model Context Protocol 服务器为 OpenCode 提供额外的工具和数据源",
+      "qoder": "Model Context Protocol 服务器为 Qoder 提供额外的工具和数据源"
     },
     "addButton": "添加 MCP 服务器",
     "empty": "未配置 MCP 服务器",

@@ -323,6 +323,9 @@
       },
       "codex": {
         "description": "OpenAI Codex AI 助手"
+      },
+      "qoder": {
+        "description": "Qoder CLI 助手"
       }
     },
     "connectionStatus": "連線狀態",
@@ -443,7 +446,8 @@
     "description": {
       "claude": "Model Context Protocol 伺服器為 Claude 提供額外的工具和資料來源",
       "cursor": "Model Context Protocol 伺服器為 Cursor 提供額外的工具和資料來源",
-      "codex": "Model Context Protocol 伺服器為 Codex 提供額外的工具和資料來源"
+      "codex": "Model Context Protocol 伺服器為 Codex 提供額外的工具和資料來源",
+      "qoder": "Model Context Protocol 伺服器為 Qoder 提供額外的工具和資料來源"
     },
     "addButton": "新增 MCP 伺服器",
     "empty": "未設定 MCP 伺服器",

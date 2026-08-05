@@ -18,10 +18,9 @@ export type QoderToolsSettings = {
   restrictedTools?: string[];
 };
 
-/** CLI arguments and env additions to apply to the spawned qodercli process. */
+/** CLI arguments to apply to the spawned qodercli process. */
 export type QoderPermissionOptions = {
   args: string[];
-  env: Record<string, string>;
   /**
    * Set once `--tools` is emitted. qodercli declares it variadic
    * (`--tools <tools...>`), so it keeps consuming bare arguments and swallows
@@ -81,5 +80,5 @@ export function resolveQoderPermissionOptions(
     args.push('--tools', ...restrictedTools);
   }
 
-  return { args, env: {}, requiresPromptSeparator: restrictedTools.length > 0 };
+  return { args, requiresPromptSeparator: restrictedTools.length > 0 };
 }

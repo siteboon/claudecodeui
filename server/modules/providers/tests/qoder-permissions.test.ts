@@ -4,7 +4,7 @@ import test from 'node:test';
 import { resolveQoderPermissionOptions } from '@/modules/providers/list/qoder/qoder-permissions.provider.js';
 
 test('default mode without tools settings produces no permission flags', () => {
-  const noFlags = { args: [], env: {}, requiresPromptSeparator: false };
+  const noFlags = { args: [], requiresPromptSeparator: false };
   assert.deepEqual(resolveQoderPermissionOptions('default'), noFlags);
   assert.deepEqual(resolveQoderPermissionOptions(null), noFlags);
   assert.deepEqual(resolveQoderPermissionOptions(undefined, undefined), noFlags);
