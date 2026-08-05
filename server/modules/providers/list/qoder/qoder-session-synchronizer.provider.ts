@@ -1,5 +1,3 @@
-import { readFile } from 'node:fs/promises';
-
 import { sessionsDb } from '@/modules/database/index.js';
 import {
   extractFirstValidJsonlData,
@@ -7,8 +5,14 @@ import {
   getQoderProjectsDir,
   normalizeSessionName,
   readFileTimestamps,
+  readJsonlEntries,
+  readObjectRecord,
 } from '@/shared/utils.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
+import type { AnyRecord } from '@/shared/types.js';
+
+/** Placeholder title for transcripts that carry no usable name yet. */
+const UNTITLED_SESSION_NAME = 'Untitled Qoder Session';
 
 type ParsedSession = {
   sessionId: string;
@@ -46,15 +50,9 @@ export class QoderSessionSynchronizer implements IProviderSessionSynchronizer {
         continue;
       }
 
-      const existingSession = sessionsDb.getSessionByProviderSessionId(parsed.sessionId)
-        ?? sessionsDb.getSessionById(parsed.sessionId);
-      if (existingSession) {
-        // If session name is untitled and we now have a name, update it
-        if (existingSession.custom_name === 'Untitled Qoder Session' && parsed.sessionName && parsed.sessionName !== 'Untitled Qoder Session') {
-          sessionsDb.updateSessionCustomName(existingSession.session_id, parsed.sessionName);
-        }
-      }
-
+      // createSession upserts and writes `parsed.sessionName` over the existing
+      // custom_name, and processSessionFile already preserves a user-assigned
+      // name, so no separate rename step is needed here.
       const timestamps = await readFileTimestamps(filePath);
       sessionsDb.createSession(
         parsed.sessionId,
@@ -101,7 +99,11 @@ export class QoderSessionSynchronizer implements IProviderSessionSynchronizer {
    */
   private async processSessionFile(filePath: string): Promise<ParsedSession | null> {
     const parsed = await extractFirstValidJsonlData(filePath, (rawData) => {
-      const data = rawData as Record<string, unknown>;
+      const data = readObjectRecord(rawData);
+      if (!data) {
+        return null;
+      }
+
       // Every Qoder JSONL row carries the provider-native session id.
       const sessionId = typeof data.sessionId === 'string' ? data.sessionId : undefined;
       // Sidechain (sub-agent) conversations are tagged on their rows; they
@@ -129,24 +131,23 @@ export class QoderSessionSynchronizer implements IProviderSessionSynchronizer {
     const existingSession = sessionsDb.getSessionByProviderSessionId(parsed.sessionId)
       ?? sessionsDb.getSessionById(parsed.sessionId);
     const existingSessionName = existingSession?.custom_name;
-    if (existingSessionName && existingSessionName !== 'Untitled Qoder Session') {
+    if (existingSessionName && existingSessionName !== UNTITLED_SESSION_NAME) {
       return {
         ...parsed,
-        sessionName: normalizeSessionName(existingSessionName, 'Untitled Qoder Session'),
+        sessionName: normalizeSessionName(existingSessionName, UNTITLED_SESSION_NAME),
       };
     }
 
-    let sessionName = await this.extractLatestTitleFromEnd(filePath);
-    if (!sessionName) {
-      sessionName = await this.extractFirstUserMessageFromStart(filePath);
-    }
-    if (!sessionName) {
-      sessionName = await this.extractLastAssistantMessageFromEnd(filePath);
-    }
+    // Freshest AI-assigned title first, then the prompt the user typed, then
+    // whatever the assistant last said.
+    const candidates = await this.collectSessionTitleCandidates(filePath);
+    const sessionName = candidates.aiTitle
+      ?? candidates.firstUserText
+      ?? candidates.lastAssistantText;
 
     return {
       ...parsed,
-      sessionName: normalizeSessionName(sessionName, 'Untitled Qoder Session'),
+      sessionName: normalizeSessionName(sessionName, UNTITLED_SESSION_NAME),
     };
   }
 
@@ -155,7 +156,7 @@ export class QoderSessionSynchronizer implements IProviderSessionSynchronizer {
    * - `workspace-directories` rows carry the canonical `directories` array.
    * - `user` rows carry the `cwd` the CLI was launched from.
    */
-  private extractProjectPath(data: Record<string, unknown>): string | undefined {
+  private extractProjectPath(data: AnyRecord): string | undefined {
     if (data.type === 'workspace-directories' && Array.isArray(data.directories)) {
       for (const dir of data.directories) {
         if (typeof dir === 'string' && dir.trim()) {
@@ -172,154 +173,78 @@ export class QoderSessionSynchronizer implements IProviderSessionSynchronizer {
   }
 
   /**
-   * Returns the most recent `ai-title` row's title. Qoder writes an
-   * `ai-title` row each time it renames the conversation, so the last one in
-   * the file is the freshest.
+   * Collects every title candidate in one streamed pass.
+   *
+   * Reading the transcript once matters on the watcher's hot path: this was
+   * previously three separate whole-file reads per session.
    */
-  private async extractLatestTitleFromEnd(filePath: string): Promise<string | undefined> {
-    try {
-      const content = await readFile(filePath, 'utf8');
-      const lines = content.split(/\r?\n/);
+  private async collectSessionTitleCandidates(filePath: string): Promise<{
+    aiTitle?: string;
+    firstUserText?: string;
+    lastAssistantText?: string;
+  }> {
+    let aiTitle: string | undefined;
+    let firstUserText: string | undefined;
+    let lastAssistantText: string | undefined;
 
-      for (let index = lines.length - 1; index >= 0; index -= 1) {
-        const line = lines[index]?.trim();
-        if (!line) {
+    for await (const data of readJsonlEntries(filePath)) {
+      // Qoder writes an `ai-title` row each time it renames the conversation, so
+      // the last one in the file is the freshest.
+      if (data.type === 'ai-title' && typeof data.aiTitle === 'string' && data.aiTitle.trim()) {
+        aiTitle = data.aiTitle;
+        continue;
+      }
+
+      if (!firstUserText) {
+        firstUserText = this.extractUserText(data);
+        if (firstUserText) {
           continue;
-        }
-
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(line);
-        } catch {
-          continue;
-        }
-
-        const data = parsed as Record<string, unknown>;
-        if (data.type === 'ai-title' && typeof data.aiTitle === 'string' && data.aiTitle.trim()) {
-          return data.aiTitle;
         }
       }
-    } catch {
-      // Ignore missing/unreadable files so sync can continue.
+
+      lastAssistantText = this.extractAssistantText(data) ?? lastAssistantText;
     }
 
-    return undefined;
+    return { aiTitle, firstUserText, lastAssistantText };
   }
 
   /**
-   * Returns the first user-typed text in the transcript, used to title
-   * app-created sessions from the prompt the user sent from cloudcli.
+   * Extracts the plain text payload of a `user` row.
    */
-  private async extractFirstUserMessageFromStart(filePath: string): Promise<string | undefined> {
-    try {
-      const content = await readFile(filePath, 'utf8');
-      const lines = content.split(/\r?\n/);
-
-      for (const rawLine of lines) {
-        const line = rawLine.trim();
-        if (!line) {
-          continue;
-        }
-
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(line);
-        } catch {
-          continue;
-        }
-
-        const text = this.extractUserText(parsed);
-        if (text) {
-          return text;
-        }
-      }
-    } catch {
-      // Ignore missing/unreadable files so sync can continue.
-    }
-
-    return undefined;
-  }
-
-  private async extractLastAssistantMessageFromEnd(filePath: string): Promise<string | undefined> {
-    try {
-      const content = await readFile(filePath, 'utf8');
-      const lines = content.split(/\r?\n/);
-
-      for (let index = lines.length - 1; index >= 0; index -= 1) {
-        const line = lines[index]?.trim();
-        if (!line) {
-          continue;
-        }
-
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(line);
-        } catch {
-          continue;
-        }
-
-        const text = this.extractAssistantText(parsed);
-        if (text) {
-          return text;
-        }
-      }
-    } catch {
-      // Ignore missing/unreadable files so sync can continue.
-    }
-
-    return undefined;
-  }
-
-  /**
-   * Extracts the plain text payload of a `user` row (string content or an
-   * array of `text` parts; `tool_result` blocks are skipped).
-   */
-  private extractUserText(parsed: unknown): string | undefined {
-    const data = parsed as Record<string, unknown>;
+  private extractUserText(data: AnyRecord): string | undefined {
     if (data.type !== 'user') {
       return undefined;
     }
-    const message = data.message as Record<string, unknown> | undefined;
-    if (message?.role !== 'user') {
-      return undefined;
-    }
 
-    if (typeof message.content === 'string' && message.content.trim()) {
-      return message.content;
-    }
-
-    if (Array.isArray(message.content)) {
-      for (const part of message.content) {
-        const block = part as Record<string, unknown> | undefined;
-        if (block?.type === 'text' && typeof block.text === 'string' && block.text.trim()) {
-          return block.text;
-        }
-      }
-    }
-
-    return undefined;
+    const message = readObjectRecord(data.message);
+    return message?.role === 'user' ? this.extractMessageText(message) : undefined;
   }
 
   /**
-   * Extracts the first plain `text` part of an `assistant` row.
+   * Extracts the plain text payload of an `assistant` row.
    */
-  private extractAssistantText(parsed: unknown): string | undefined {
-    const data = parsed as Record<string, unknown>;
+  private extractAssistantText(data: AnyRecord): string | undefined {
     if (data.type !== 'assistant') {
       return undefined;
     }
-    const message = data.message as Record<string, unknown> | undefined;
-    if (message?.role !== 'assistant') {
-      return undefined;
-    }
 
+    const message = readObjectRecord(data.message);
+    return message?.role === 'assistant' ? this.extractMessageText(message) : undefined;
+  }
+
+  /**
+   * Reads a Claude-style `message.content`, which is either a plain string or an
+   * array of typed parts. Only `text` parts carry titleable content, so
+   * `tool_result` and `thinking` blocks are skipped.
+   */
+  private extractMessageText(message: AnyRecord): string | undefined {
     if (typeof message.content === 'string' && message.content.trim()) {
       return message.content;
     }
 
     if (Array.isArray(message.content)) {
       for (const part of message.content) {
-        const block = part as Record<string, unknown> | undefined;
+        const block = readObjectRecord(part);
         if (block?.type === 'text' && typeof block.text === 'string' && block.text.trim()) {
           return block.text;
         }

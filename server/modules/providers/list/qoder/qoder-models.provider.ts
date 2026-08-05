@@ -1,5 +1,3 @@
-import fsSync from 'node:fs';
-
 import crossSpawn from 'cross-spawn';
 
 import { sessionsDb } from '@/modules/database/index.js';
@@ -11,6 +9,7 @@ import type {
 import {
   buildDefaultProviderCurrentActiveModel,
   readJsonRecord,
+  readJsonlEntries,
   readOptionalString,
   resolveQoderTranscriptPath,
   unwrapJsonStringLiteral,
@@ -158,55 +157,31 @@ export const parseQoderModelsStdout = (stdout: string): string[] => {
  * model on `message.model`. The last non-empty value wins so a model switch
  * mid-session is reflected.
  */
-const readQoderSessionModel = (jsonlPath: string): string | null => {
-  if (!fsSync.existsSync(jsonlPath)) {
-    return null;
-  }
+const readQoderSessionModel = async (jsonlPath: string): Promise<string | null> => {
+  let model: string | null = null;
 
-  try {
-    const content = fsSync.readFileSync(jsonlPath, 'utf8');
-    let model: string | null = null;
-
-    for (const rawLine of content.split(/\r?\n/)) {
-      const line = rawLine.trim();
-      if (!line) {
-        continue;
+  // Streamed rather than read whole: transcripts grow without bound, and this
+  // runs on every active-model query.
+  for await (const data of readJsonlEntries(jsonlPath)) {
+    const entryType = readOptionalString(data.type);
+    if (entryType === 'runtime-config') {
+      const runtimeModel = readOptionalString(data.model);
+      if (runtimeModel) {
+        model = unwrapJsonStringLiteral(runtimeModel);
       }
-
-      let entry: unknown;
-      try {
-        entry = JSON.parse(line);
-      } catch {
-        continue;
-      }
-
-      const data = readJsonRecord(entry);
-      if (!data) {
-        continue;
-      }
-
-      const entryType = readOptionalString(data.type);
-      if (entryType === 'runtime-config') {
-        const runtimeModel = readOptionalString(data.model);
-        if (runtimeModel) {
-          model = unwrapJsonStringLiteral(runtimeModel);
-        }
-        continue;
-      }
-
-      if (entryType === 'assistant') {
-        const message = readJsonRecord(data.message);
-        const messageModel = readOptionalString(message?.model);
-        if (messageModel) {
-          model = unwrapJsonStringLiteral(messageModel);
-        }
-      }
+      continue;
     }
 
-    return model;
-  } catch {
-    return null;
+    if (entryType === 'assistant') {
+      const message = readJsonRecord(data.message);
+      const messageModel = readOptionalString(message?.model);
+      if (messageModel) {
+        model = unwrapJsonStringLiteral(messageModel);
+      }
+    }
   }
+
+  return model;
 };
 
 const resolveQoderJsonlPath = (providerSessionId: string, projectPath?: string): string | null => {
@@ -224,8 +199,25 @@ const resolveQoderJsonlPath = (providerSessionId: string, projectPath?: string):
   return resolveQoderTranscriptPath({ cwd: projectPath, sessionId: providerSessionId });
 };
 
+const QODER_MODELS_MEMO_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * Process-local memo for the catalog.
+ *
+ * `getSupportedModels` spawns `qodercli --list-models`, and
+ * `getCurrentActiveModel` falls back to it whenever a session has no recorded
+ * model — that path bypasses providerModelsService's on-disk cache, so without
+ * this memo a burst of active-model queries becomes a burst of CLI spawns, each
+ * with a 20s timeout. Failures are not memoized so the next call retries.
+ */
+let cachedModels: { models: ProviderModelsDefinition; expiresAt: number } | null = null;
+
 export class QoderProviderModels implements IProviderModels {
   async getSupportedModels(): Promise<ProviderModelsDefinition> {
+    if (cachedModels && cachedModels.expiresAt > Date.now()) {
+      return cachedModels.models;
+    }
+
     try {
       const stdout = await runQoderModelsCommand();
       const ids = parseQoderModelsStdout(stdout);
@@ -233,7 +225,7 @@ export class QoderProviderModels implements IProviderModels {
         return QODER_FALLBACK_MODELS;
       }
 
-      return {
+      const models: ProviderModelsDefinition = {
         OPTIONS: ids.map((value) => ({
           value,
           label: value,
@@ -243,6 +235,8 @@ export class QoderProviderModels implements IProviderModels {
           ? QODER_FALLBACK_MODELS.DEFAULT
           : (ids[0] ?? QODER_FALLBACK_MODELS.DEFAULT),
       };
+      cachedModels = { models, expiresAt: Date.now() + QODER_MODELS_MEMO_TTL_MS };
+      return models;
     } catch {
       return QODER_FALLBACK_MODELS;
     }
@@ -260,7 +254,7 @@ export class QoderProviderModels implements IProviderModels {
     const jsonlPath = resolveQoderJsonlPath(providerSessionId, sessionRow?.project_path ?? undefined);
 
     if (jsonlPath) {
-      const model = readQoderSessionModel(jsonlPath);
+      const model = await readQoderSessionModel(jsonlPath);
       if (model) {
         return {
           model,

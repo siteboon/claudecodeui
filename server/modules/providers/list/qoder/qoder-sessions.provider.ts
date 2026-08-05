@@ -1,16 +1,15 @@
 import fs from 'node:fs';
-import fsp from 'node:fs/promises';
-import path from 'node:path';
-import readline from 'node:readline';
 
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
 import { parseFilesInputTag } from '@/shared/image-attachments.js';
 import {
+  aggregateQoderTranscriptTokenUsage,
   createNormalizedMessage,
   generateMessageId,
-  getQoderProjectsDir,
+  readJsonlEntries,
   readObjectRecord,
+  resolveQoderTranscriptPath,
   sliceTailPage,
 } from '@/shared/utils.js';
 import { sessionsDb } from '@/modules/database/index.js';
@@ -36,51 +35,24 @@ const QODER_META_ROW_TYPES = new Set([
  * Qoder persists every conversation to
  * `~/.qoder/projects/<cwd with '/' → '-'>/<sessionId>.jsonl`; the app-side
  * sessions row records the exact path in `jsonl_path` when the synchronizer
- * imported the session. Falling back to a recursive scan keeps history working
- * for sessions that were never imported (e.g. created live via the runtime).
+ * imported the session. Sessions created live by the runtime are not indexed
+ * yet, so their path is derived from the row's `project_path` through the shared
+ * resolver — the same derivation the models provider uses.
  */
-async function resolveQoderJsonlPath(
+function resolveQoderJsonlPath(
   sessionId: string,
   providerSessionId: string,
-): Promise<string | null> {
-  const known = sessionsDb.getSessionById(sessionId)?.jsonl_path;
+): string | null {
+  const sessionRow = sessionsDb.getSessionById(sessionId);
+  const known = sessionRow?.jsonl_path;
   if (known && fs.existsSync(known)) {
     return known;
   }
 
-  const projectsDir = getQoderProjectsDir();
-  if (!fs.existsSync(projectsDir)) {
-    return null;
-  }
-
-  const targetFile = `${providerSessionId}.jsonl`;
-  const queue = [projectsDir];
-  let guard = 0;
-  while (queue.length > 0 && guard < 2000) {
-    guard += 1;
-    const dir = queue.shift();
-    if (!dir) {
-      continue;
-    }
-
-    let entries;
-    try {
-      entries = await fsp.readdir(dir, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        queue.push(fullPath);
-      } else if (entry.name === targetFile) {
-        return fullPath;
-      }
-    }
-  }
-
-  return null;
+  return resolveQoderTranscriptPath({
+    cwd: sessionRow?.project_path,
+    sessionId: providerSessionId,
+  });
 }
 
 function formatToolContent(value: unknown): string {
@@ -349,40 +321,16 @@ export class QoderSessionsProvider implements IProviderSessions {
     const { limit = null, offset = 0 } = options;
     const providerSessionId = options.providerSessionId ?? sessionId;
 
-    let jsonlPath: string | null = null;
-    try {
-      jsonlPath = await resolveQoderJsonlPath(sessionId, providerSessionId);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.warn(`[QoderProvider] Failed to resolve transcript for session ${sessionId}:`, message);
-      return { messages: [], total: 0, hasMore: false, offset: 0, limit: null };
-    }
-
+    const jsonlPath = resolveQoderJsonlPath(sessionId, providerSessionId);
     if (!jsonlPath) {
       return { messages: [], total: 0, hasMore: false, offset: 0, limit: null };
     }
 
     const rawMessages: AnyRecord[] = [];
-    try {
-      const fileStream = fs.createReadStream(jsonlPath);
-      const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
-      for await (const line of rl) {
-        if (!line.trim()) {
-          continue;
-        }
-        try {
-          const entry = JSON.parse(line) as AnyRecord;
-          if (entry?.sessionId === providerSessionId) {
-            rawMessages.push(entry);
-          }
-        } catch {
-          // Skip malformed JSONL lines that can happen during concurrent writes.
-        }
+    for await (const entry of readJsonlEntries(jsonlPath)) {
+      if (entry.sessionId === providerSessionId) {
+        rawMessages.push(entry);
       }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.warn(`[QoderProvider] Failed to load session ${sessionId}:`, message);
-      return { messages: [], total: 0, hasMore: false, offset: 0, limit: null };
     }
 
     rawMessages.sort(
@@ -423,32 +371,10 @@ export class QoderSessionsProvider implements IProviderSessions {
       }
     }
 
-    // Token usage: aggregate the usage objects on assistant rows.
-    let inputTokens = 0;
-    let outputTokens = 0;
-    let cacheReadTokens = 0;
-    let cacheCreationTokens = 0;
-    for (const raw of rawMessages) {
-      if (raw.type !== 'assistant' || raw.message?.role !== 'assistant') {
-        continue;
-      }
-      const usage = readObjectRecord(raw.message?.usage);
-      if (!usage) {
-        continue;
-      }
-      inputTokens += Number(usage.input_tokens ?? 0);
-      outputTokens += Number(usage.output_tokens ?? 0);
-      cacheReadTokens += Number(usage.cache_read_input_tokens ?? 0);
-      cacheCreationTokens += Number(usage.cache_creation_input_tokens ?? 0);
-    }
-    const displayInput = inputTokens + cacheReadTokens;
-    const used = inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
-    const tokenUsage = used > 0 ? {
-      used,
-      inputTokens: displayInput,
-      outputTokens,
-      breakdown: { input: displayInput, output: outputTokens },
-    } : undefined;
+    // Cumulative usage across assistant rows. qodercli 1.1.13 writes zeros into
+    // those fields (it measures `credits` and a `context_usage_ratio`), so this
+    // is normally undefined — see `supportsTokenUsage` for this provider.
+    const tokenUsage = await aggregateQoderTranscriptTokenUsage(rawMessages) ?? undefined;
 
     let total = 0;
     for (const msg of normalized) {
