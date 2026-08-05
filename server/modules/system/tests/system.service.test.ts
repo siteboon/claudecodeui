@@ -24,8 +24,8 @@ function createDependencies(
 test('git installations update from the application root', async () => {
   const calls: unknown[][] = [];
   const dependencies = createDependencies({
-    runShellCommand: async (command, workingDirectory, environment) => {
-      calls.push([command, workingDirectory, environment]);
+    runShellCommand: async (command, args, workingDirectory, environment) => {
+      calls.push([command, args, workingDirectory, environment]);
       return { exitCode: 0, output: 'git update complete', errorOutput: '' };
     },
   });
@@ -34,7 +34,8 @@ test('git installations update from the application root', async () => {
   const result = await service.updateSystem();
 
   assert.deepEqual(calls, [[
-    'git checkout main && git pull && npm install',
+    'sh',
+    ['-c', 'git checkout main && git pull && npm install'],
     '/app/cloudcli',
     dependencies.environment,
   ]]);
@@ -49,8 +50,8 @@ test('global npm installations update from the user home directory', async () =>
   const calls: unknown[][] = [];
   const dependencies = createDependencies({
     installMode: 'npm',
-    runShellCommand: async (command, workingDirectory, environment) => {
-      calls.push([command, workingDirectory, environment]);
+    runShellCommand: async (command, args, workingDirectory, environment) => {
+      calls.push([command, args, workingDirectory, environment]);
       return { exitCode: 0, output: '', errorOutput: '' };
     },
   });
@@ -59,7 +60,8 @@ test('global npm installations update from the user home directory', async () =>
   const result = await service.updateSystem();
 
   assert.deepEqual(calls, [[
-    'npm install -g @cloudcli-ai/cloudcli@latest',
+    'npm',
+    ['install', '-g', '@cloudcli-ai/cloudcli@latest'],
     '/home/cloudcli',
     dependencies.environment,
   ]]);
@@ -71,8 +73,8 @@ test('platform installations use the platform workflow regardless of install mod
   const dependencies = createDependencies({
     installMode: 'npm',
     isPlatform: true,
-    runShellCommand: async (command, workingDirectory, environment) => {
-      calls.push([command, workingDirectory, environment]);
+    runShellCommand: async (command, args, workingDirectory, environment) => {
+      calls.push([command, args, workingDirectory, environment]);
       return { exitCode: 0, output: 'platform update complete', errorOutput: '' };
     },
   });
@@ -81,7 +83,8 @@ test('platform installations use the platform workflow regardless of install mod
   await service.updateSystem();
 
   assert.deepEqual(calls, [[
-    'npm run update:platform',
+    'npm',
+    ['run', 'update:platform'],
     '/app/cloudcli',
     dependencies.environment,
   ]]);
