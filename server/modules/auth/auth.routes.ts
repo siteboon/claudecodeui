@@ -2,8 +2,23 @@ import express from 'express';
 import type { RequestHandler } from 'express';
 
 import type { createAuthService } from './auth.service.js';
+import { createRateLimiter } from './rate-limit.middleware.js';
 
 type AuthenticatedRequest = express.Request & { user?: unknown };
+
+// 10 attempts per IP per minute is generous for legitimate use (the only
+// registered user is the local admin) but tight enough to slow down online
+// credential stuffing. Lockouts extend the window by an additional minute so
+// a misconfigured client cannot hammer the endpoint forever.
+const AUTH_RATE_LIMIT_MAX = 10;
+const AUTH_RATE_LIMIT_WINDOW_MS = 60_000;
+const AUTH_RATE_LIMIT_LOCKOUT_MS = 60_000;
+
+const authRateLimit = createRateLimiter({
+  maxAttempts: AUTH_RATE_LIMIT_MAX,
+  windowMs: AUTH_RATE_LIMIT_WINDOW_MS,
+  lockoutMs: AUTH_RATE_LIMIT_LOCKOUT_MS,
+});
 
 /**
  * Creates the Auth transport adapter. Handlers only parse request data and
@@ -23,7 +38,7 @@ export function createAuthRouter(
     }
   });
 
-  router.post('/register', async (req, res, next) => {
+  router.post('/register', authRateLimit.middleware, async (req, res, next) => {
     try {
       const body = req.body as { username?: unknown; password?: unknown };
       res.json(await service.register(body.username, body.password));
@@ -32,7 +47,7 @@ export function createAuthRouter(
     }
   });
 
-  router.post('/login', async (req, res, next) => {
+  router.post('/login', authRateLimit.middleware, async (req, res, next) => {
     try {
       const body = req.body as { username?: unknown; password?: unknown };
       res.json(await service.login(body.username, body.password));
