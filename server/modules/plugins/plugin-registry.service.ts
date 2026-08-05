@@ -402,54 +402,117 @@ export function updatePluginFromGit(name, options) {
       return reject(new Error(`Plugin "${name}" not found`));
     }
 
-    // Only fast-forward to avoid silent divergence
-    const gitProcess = spawn('git', ['pull', '--ff-only', '--'], {
-      cwd: pluginDir,
+    const pluginsDir = getPluginsDir();
+    // Clone the updated tree into a sibling temp directory and only swap it
+    // into place after every side-effectful step (manifest validation,
+    // npm install, optional build policy) has succeeded. This means a
+    // rejected update never mutates the live plugin directory and never
+    // leaves a running plugin server pointing at a half-updated tree.
+    const tempDir = fs.mkdtempSync(path.join(pluginsDir, `.tmp-update-${name}-`));
+
+    const cleanupTemp = () => {
+      try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch {}
+    };
+
+    const finalize = (manifest) => {
+      // Atomically replace the live directory with the validated temp dir.
+      // `rename` is atomic on the same filesystem on POSIX; Windows treats
+      // it as remove+create which is fine because no other writer holds the
+      // directory between the `rename` and the next server restart.
+      try {
+        if (fs.existsSync(pluginDir)) {
+          fs.rmSync(pluginDir, { recursive: true, force: true });
+        }
+        fs.renameSync(tempDir, pluginDir);
+      } catch (err) {
+        cleanupTemp();
+        return reject(new Error(`Failed to move updated plugin into place: ${err.message}`));
+      }
+      resolve(manifest);
+    };
+
+    // Clone the live plugin's current remote URL into the temp dir. We
+    // intentionally re-clone (rather than `git pull` against the live
+    // directory) so a failure or a rejected build leaves the live tree
+    // untouched.
+    const configPath = path.join(pluginDir, '.git', 'config');
+    let remoteUrl = null;
+    try {
+      const gitConfig = fs.readFileSync(configPath, 'utf-8');
+      const match = gitConfig.match(/\[remote "origin"\][^[]*url\s*=\s*(.+)/);
+      if (match) remoteUrl = match[1].trim();
+    } catch (err) {
+      cleanupTemp();
+      return reject(new Error(`Failed to read git remote for "${name}": ${err.message}`));
+    }
+    if (!remoteUrl) {
+      cleanupTemp();
+      return reject(new Error(`Plugin "${name}" has no git remote URL`));
+    }
+
+    const cloneProcess = spawn('git', ['clone', '--depth', '1', '--', remoteUrl, tempDir], {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
-    let stderr = '';
-    gitProcess.stderr.on('data', (data) => { stderr += data.toString(); });
+    let cloneStderr = '';
+    cloneProcess.stderr.on('data', (data) => { cloneStderr += data.toString(); });
 
-    gitProcess.on('close', (code) => {
+    cloneProcess.on('close', (code) => {
       if (code !== 0) {
-        return reject(new Error(`git pull failed (exit code ${code}): ${stderr.trim()}`));
+        cleanupTemp();
+        return reject(new Error(`git clone failed (exit code ${code}): ${cloneStderr.trim()}`));
       }
 
-      // Re-validate manifest after update
-      const manifestPath = path.join(pluginDir, 'manifest.json');
+      // Validate manifest exists and is well-formed before any further work.
+      const manifestPath = path.join(tempDir, 'manifest.json');
+      if (!fs.existsSync(manifestPath)) {
+        cleanupTemp();
+        return reject(new Error('Cloned repository does not contain a manifest.json'));
+      }
+
       let manifest;
       try {
         manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
       } catch {
+        cleanupTemp();
         return reject(new Error('manifest.json is not valid JSON after update'));
       }
 
       const validation = validateManifest(manifest);
       if (!validation.valid) {
+        cleanupTemp();
         return reject(new Error(`Invalid manifest after update: ${validation.error}`));
       }
 
-      // Re-run npm install if package.json exists
-      const packageJsonPath = path.join(pluginDir, 'package.json');
+      // Re-run npm install if package.json exists.
+      const packageJsonPath = path.join(tempDir, 'package.json');
       if (fs.existsSync(packageJsonPath)) {
         const npmProcess = spawn('npm', ['install', '--ignore-scripts'], {
-          cwd: pluginDir,
+          cwd: tempDir,
           stdio: ['ignore', 'pipe', 'pipe'],
         });
+
         npmProcess.on('close', (npmCode) => {
           if (npmCode !== 0) {
+            cleanupTemp();
             return reject(new Error(`npm install for ${name} failed (exit code ${npmCode})`));
           }
-          runBuildIfNeeded(pluginDir, packageJsonPath, options, () => resolve(manifest), (err) => reject(err));
+          // Build-policy rejection leaves the live plugin directory untouched
+          // because we have not swapped `tempDir` into place yet.
+          runBuildIfNeeded(tempDir, packageJsonPath, options, () => finalize(manifest), (err) => { cleanupTemp(); reject(err); });
         });
-        npmProcess.on('error', (err) => reject(err));
+
+        npmProcess.on('error', (err) => {
+          cleanupTemp();
+          reject(err);
+        });
       } else {
-        resolve(manifest);
+        finalize(manifest);
       }
     });
 
-    gitProcess.on('error', (err) => {
+    cloneProcess.on('error', (err) => {
+      cleanupTemp();
       reject(new Error(`Failed to spawn git: ${err.message}`));
     });
   });
