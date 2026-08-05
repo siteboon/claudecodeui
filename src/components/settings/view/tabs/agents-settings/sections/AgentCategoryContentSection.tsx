@@ -90,6 +90,10 @@ export default function AgentCategoryContentSection({
           onDisallowedToolsChange={(value) => {
             onQoderPermissionsChange({ ...qoderPermissions, disallowedTools: value });
           }}
+          restrictedTools={qoderPermissions.restrictedTools}
+          onRestrictedToolsChange={(value) => {
+            onQoderPermissionsChange({ ...qoderPermissions, restrictedTools: value });
+          }}
         />
       )}
 

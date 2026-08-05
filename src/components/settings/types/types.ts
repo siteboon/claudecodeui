@@ -49,6 +49,8 @@ export type QoderPermissionsState = {
   allowedTools: string[];
   disallowedTools: string[];
   skipPermissions: boolean;
+  /** Empty means no `--tools` flag, so every built-in tool stays available. */
+  restrictedTools: string[];
 };
 
 export type CodeEditorSettingsState = {

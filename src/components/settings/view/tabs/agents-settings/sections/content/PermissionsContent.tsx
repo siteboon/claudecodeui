@@ -36,6 +36,51 @@ const COMMON_CURSOR_COMMANDS = [
   'Shell(node)',
 ];
 
+/**
+ * Quick-add shortcuts for Qoder, grouped by purpose. Bare tool names only:
+ * qodercli 1.1.13 ignores `Bash(cmd:*)` style sub-command scopes.
+ */
+const QODER_TOOL_GROUPS = [
+  { labelKey: 'read', tools: ['Read', 'Glob', 'Grep'] },
+  { labelKey: 'write', tools: ['Write', 'Edit', 'NotebookEdit'] },
+  { labelKey: 'exec', tools: ['Bash', 'Monitor'] },
+  { labelKey: 'network', tools: ['WebFetch', 'WebSearch'] },
+  { labelKey: 'orchestration', tools: ['Agent', 'Skill', 'Workflow', 'TaskCreate'] },
+] as const;
+
+/** Every built-in tool qodercli 1.1.13 exposes, for the `--tools` allowlist. */
+const QODER_ALL_TOOLS = [
+  'Agent',
+  'Bash',
+  'CreateGoal',
+  'CronCreate',
+  'CronDelete',
+  'CronList',
+  'Edit',
+  'EnterWorktree',
+  'ExitWorktree',
+  'GetGoal',
+  'Glob',
+  'Grep',
+  'ImageGen',
+  'ImageSearch',
+  'Monitor',
+  'NotebookEdit',
+  'Read',
+  'ScheduleWakeup',
+  'Skill',
+  'TaskCreate',
+  'TaskGet',
+  'TaskList',
+  'TaskStop',
+  'TaskUpdate',
+  'UpdateGoal',
+  'WebFetch',
+  'WebSearch',
+  'Workflow',
+  'Write',
+];
+
 const addUnique = (items: string[], value: string): string[] => {
   const normalizedValue = value.trim();
   if (!normalizedValue || items.includes(normalizedValue)) {
@@ -57,8 +102,6 @@ type ClaudePermissionsProps = {
   onAllowedToolsChange: (value: string[]) => void;
   disallowedTools: string[];
   onDisallowedToolsChange: (value: string[]) => void;
-  /** i18n suffix under permissions.skipPermissions.* describing the bypass flag. */
-  descriptionKey?: 'claudeDescription' | 'qoderDescription';
 };
 
 function ClaudePermissions({
@@ -68,7 +111,6 @@ function ClaudePermissions({
   onAllowedToolsChange,
   disallowedTools,
   onDisallowedToolsChange,
-  descriptionKey = 'claudeDescription',
 }: Omit<ClaudePermissionsProps, 'agent'>) {
   const { t } = useTranslation('settings');
   const [newAllowedTool, setNewAllowedTool] = useState('');
@@ -114,7 +156,7 @@ function ClaudePermissions({
                 {t('permissions.skipPermissions.label')}
               </div>
               <div className="text-sm text-orange-700 dark:text-orange-300">
-                {t(`permissions.skipPermissions.${descriptionKey}`)}
+                {t('permissions.skipPermissions.claudeDescription')}
               </div>
             </div>
           </label>
@@ -487,6 +529,8 @@ type QoderPermissionsProps = {
   onAllowedToolsChange: (value: string[]) => void;
   disallowedTools: string[];
   onDisallowedToolsChange: (value: string[]) => void;
+  restrictedTools: string[];
+  onRestrictedToolsChange: (value: string[]) => void;
 };
 
 function CodexPermissions({ permissionMode, onPermissionModeChange }: Omit<CodexPermissionsProps, 'agent'>) {
@@ -592,6 +636,277 @@ function CodexPermissions({ permissionMode, onPermissionModeChange }: Omit<Codex
   );
 }
 
+function QoderPermissions({
+  skipPermissions,
+  onSkipPermissionsChange,
+  allowedTools,
+  onAllowedToolsChange,
+  disallowedTools,
+  onDisallowedToolsChange,
+  restrictedTools,
+  onRestrictedToolsChange,
+}: Omit<QoderPermissionsProps, 'agent'>) {
+  const { t } = useTranslation('settings');
+  const [newAllowedTool, setNewAllowedTool] = useState('');
+  const [newDisallowedTool, setNewDisallowedTool] = useState('');
+
+  const handleAddAllowedTool = (tool: string) => {
+    const updated = addUnique(allowedTools, tool);
+    if (updated.length === allowedTools.length) {
+      return;
+    }
+
+    onAllowedToolsChange(updated);
+    setNewAllowedTool('');
+  };
+
+  const handleAddDisallowedTool = (tool: string) => {
+    const updated = addUnique(disallowedTools, tool);
+    if (updated.length === disallowedTools.length) {
+      return;
+    }
+
+    onDisallowedToolsChange(updated);
+    setNewDisallowedTool('');
+  };
+
+  const toggleRestrictedTool = (tool: string) => {
+    onRestrictedToolsChange(
+      restrictedTools.includes(tool)
+        ? removeValue(restrictedTools, tool)
+        : addUnique(restrictedTools, tool),
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <AlertTriangle className="h-5 w-5 text-orange-500" />
+          <h3 className="text-lg font-medium text-foreground">{t('permissions.title')}</h3>
+        </div>
+        <div className="rounded-lg border border-orange-200 bg-orange-50 p-4 dark:border-orange-800 dark:bg-orange-900/20">
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={skipPermissions}
+              onChange={(event) => onSkipPermissionsChange(event.target.checked)}
+              className="h-4 w-4 rounded border-input bg-card text-primary focus:ring-2 focus:ring-primary"
+            />
+            <div>
+              <div className="font-medium text-orange-900 dark:text-orange-100">
+                {t('permissions.skipPermissions.label')}
+              </div>
+              <div className="text-sm text-orange-700 dark:text-orange-300">
+                {t('permissions.skipPermissions.qoderDescription')}
+              </div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <Shield className="h-5 w-5 text-green-500" />
+          <h3 className="text-lg font-medium text-foreground">{t('permissions.allowedTools.title')}</h3>
+        </div>
+        <p className="text-sm text-muted-foreground">{t('permissions.allowedTools.description')}</p>
+
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Input
+            value={newAllowedTool}
+            onChange={(event) => setNewAllowedTool(event.target.value)}
+            placeholder={t('permissions.qoder.allowedPlaceholder')}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                handleAddAllowedTool(newAllowedTool);
+              }
+            }}
+            className="h-10 flex-1"
+          />
+          <Button
+            onClick={() => handleAddAllowedTool(newAllowedTool)}
+            disabled={!newAllowedTool.trim()}
+            size="sm"
+            className="h-10 px-4"
+          >
+            <Plus className="mr-2 h-4 w-4 sm:mr-0" />
+            <span className="sm:hidden">{t('permissions.actions.add')}</span>
+          </Button>
+        </div>
+
+        <div className="space-y-3">
+          <p className="text-sm font-medium text-muted-foreground">
+            {t('permissions.allowedTools.quickAdd')}
+          </p>
+          {QODER_TOOL_GROUPS.map((group) => (
+            <div key={group.labelKey} className="space-y-1.5">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                {t(`permissions.qoder.groups.${group.labelKey}`)}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {group.tools.map((tool) => (
+                  <Button
+                    key={tool}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleAddAllowedTool(tool)}
+                    disabled={allowedTools.includes(tool)}
+                    className="h-8 text-xs"
+                  >
+                    {tool}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="space-y-2">
+          {allowedTools.map((tool) => (
+            <div key={tool} className="flex items-center justify-between rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-900/20">
+              <span className="font-mono text-sm text-green-800 dark:text-green-200">{tool}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onAllowedToolsChange(removeValue(allowedTools, tool))}
+                className="text-green-600 hover:text-green-700"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+          {allowedTools.length === 0 && (
+            <div className="py-6 text-center text-muted-foreground">
+              {t('permissions.allowedTools.empty')}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <AlertTriangle className="h-5 w-5 text-red-500" />
+          <h3 className="text-lg font-medium text-foreground">{t('permissions.blockedTools.title')}</h3>
+        </div>
+        <p className="text-sm text-muted-foreground">{t('permissions.blockedTools.description')}</p>
+
+        {skipPermissions && disallowedTools.length > 0 && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-100">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{t('permissions.qoder.bypassWarning')}</span>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Input
+            value={newDisallowedTool}
+            onChange={(event) => setNewDisallowedTool(event.target.value)}
+            placeholder={t('permissions.qoder.blockedPlaceholder')}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                handleAddDisallowedTool(newDisallowedTool);
+              }
+            }}
+            className="h-10 flex-1"
+          />
+          <Button
+            onClick={() => handleAddDisallowedTool(newDisallowedTool)}
+            disabled={!newDisallowedTool.trim()}
+            size="sm"
+            className="h-10 px-4"
+          >
+            <Plus className="mr-2 h-4 w-4 sm:mr-0" />
+            <span className="sm:hidden">{t('permissions.actions.add')}</span>
+          </Button>
+        </div>
+
+        <div className="space-y-2">
+          {disallowedTools.map((tool) => (
+            <div key={tool} className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20">
+              <span className="font-mono text-sm text-red-800 dark:text-red-200">{tool}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onDisallowedToolsChange(removeValue(disallowedTools, tool))}
+                className="text-red-600 hover:text-red-700"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+          {disallowedTools.length === 0 && (
+            <div className="py-6 text-center text-muted-foreground">
+              {t('permissions.blockedTools.empty')}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <Shield className="h-5 w-5 text-blue-500" />
+          <h3 className="text-lg font-medium text-foreground">
+            {t('permissions.qoder.restrictedTools.title')}
+          </h3>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {t('permissions.qoder.restrictedTools.description')}
+        </p>
+
+        <details className="rounded-lg border border-border bg-card/50 p-3">
+          <summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground">
+            {t('permissions.qoder.restrictedTools.summary', { count: restrictedTools.length })}
+          </summary>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {QODER_ALL_TOOLS.map((tool) => {
+              const selected = restrictedTools.includes(tool);
+              return (
+                <Button
+                  key={tool}
+                  variant={selected ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => toggleRestrictedTool(tool)}
+                  className="h-8 text-xs"
+                >
+                  {tool}
+                </Button>
+              );
+            })}
+          </div>
+          {restrictedTools.length === 0 ? (
+            <p className="mt-3 text-xs text-muted-foreground">
+              {t('permissions.qoder.restrictedTools.empty')}
+            </p>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onRestrictedToolsChange([])}
+              className="mt-3 h-8 text-xs"
+            >
+              {t('permissions.qoder.restrictedTools.clear')}
+            </Button>
+          )}
+        </details>
+      </div>
+
+      <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
+        <h4 className="mb-2 font-medium text-blue-900 dark:text-blue-100">
+          {t('permissions.qoder.notes.title')}
+        </h4>
+        <ul className="list-disc space-y-1 pl-5 text-sm text-blue-800 dark:text-blue-200">
+          <li>{t('permissions.qoder.notes.allowlistOnly')}</li>
+          <li>{t('permissions.qoder.notes.denyWins')}</li>
+          <li>{t('permissions.qoder.notes.scopeUnsupported')}</li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 type PermissionsContentProps = ClaudePermissionsProps | CursorPermissionsProps | CodexPermissionsProps | QoderPermissionsProps;
 
 export default function PermissionsContent(props: PermissionsContentProps) {
@@ -604,17 +919,7 @@ export default function PermissionsContent(props: PermissionsContentProps) {
   }
 
   if (props.agent === 'qoder') {
-    return (
-      <ClaudePermissions
-        skipPermissions={props.skipPermissions}
-        onSkipPermissionsChange={props.onSkipPermissionsChange}
-        allowedTools={props.allowedTools}
-        onAllowedToolsChange={props.onAllowedToolsChange}
-        disallowedTools={props.disallowedTools}
-        onDisallowedToolsChange={props.onDisallowedToolsChange}
-        descriptionKey="qoderDescription"
-      />
-    );
+    return <QoderPermissions {...props} />;
   }
 
   return <CodexPermissions {...props} />;

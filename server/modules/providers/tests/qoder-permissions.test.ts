@@ -4,9 +4,10 @@ import test from 'node:test';
 import { resolveQoderPermissionOptions } from '@/modules/providers/list/qoder/qoder-permissions.provider.js';
 
 test('default mode without tools settings produces no permission flags', () => {
-  assert.deepEqual(resolveQoderPermissionOptions('default'), { args: [], env: {} });
-  assert.deepEqual(resolveQoderPermissionOptions(null), { args: [], env: {} });
-  assert.deepEqual(resolveQoderPermissionOptions(undefined, undefined), { args: [], env: {} });
+  const noFlags = { args: [], env: {}, requiresPromptSeparator: false };
+  assert.deepEqual(resolveQoderPermissionOptions('default'), noFlags);
+  assert.deepEqual(resolveQoderPermissionOptions(null), noFlags);
+  assert.deepEqual(resolveQoderPermissionOptions(undefined, undefined), noFlags);
 });
 
 test('bypassPermissions maps onto qodercli bypass_permissions mode', () => {
@@ -50,4 +51,39 @@ test('blank tool entries are skipped', () => {
   });
 
   assert.deepEqual(args, []);
+});
+
+test('restrictedTools collapse into a single variadic --tools flag', () => {
+  const { args, requiresPromptSeparator } = resolveQoderPermissionOptions('default', {
+    restrictedTools: ['Read', 'Grep', 'Glob'],
+  });
+
+  assert.deepEqual(args, ['--tools', 'Read', 'Grep', 'Glob']);
+  assert.equal(requiresPromptSeparator, true);
+});
+
+test('--tools trails the other permission flags so the variadic list stays intact', () => {
+  const { args } = resolveQoderPermissionOptions('acceptEdits', {
+    allowedTools: ['Bash'],
+    disallowedTools: ['Write'],
+    restrictedTools: ['Read'],
+  });
+
+  assert.deepEqual(args, [
+    '--permission-mode', 'accept_edits',
+    '--allowed-tools', 'Bash',
+    '--disallowed-tools', 'Write',
+    '--tools', 'Read',
+  ]);
+});
+
+test('blank or empty restrictedTools produce no --tools flag and no prompt separator', () => {
+  for (const restrictedTools of [[], ['', '   ']]) {
+    const { args, requiresPromptSeparator } = resolveQoderPermissionOptions('default', {
+      restrictedTools,
+    });
+
+    assert.deepEqual(args, []);
+    assert.equal(requiresPromptSeparator, false);
+  }
 });

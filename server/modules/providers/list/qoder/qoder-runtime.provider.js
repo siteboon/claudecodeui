@@ -274,6 +274,9 @@ async function spawnQoder(command, options = {}, ws, context) {
         // prompt (the session history reader strips the tag back out), so the
         // attachment list and the transcript stay consistent.
         const promptWithAttachments = appendFilesInputTag(command?.trim() || '', files);
+        if (permissionOptions.requiresPromptSeparator) {
+          args.push('--');
+        }
         args.push(flattenPromptForWindowsShell(promptWithAttachments));
       }
 

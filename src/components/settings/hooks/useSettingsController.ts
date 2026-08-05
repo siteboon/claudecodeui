@@ -47,6 +47,7 @@ type QoderSettingsStorage = {
   allowedTools?: string[];
   disallowedTools?: string[];
   skipPermissions?: boolean;
+  restrictedTools?: string[];
 };
 
 type CodexSettingsStorage = {
@@ -114,6 +115,7 @@ const createEmptyQoderPermissions = (): QoderPermissionsState => ({
   allowedTools: [],
   disallowedTools: [],
   skipPermissions: false,
+  restrictedTools: [],
 });
 
 const createDefaultNotificationPreferences = (): NotificationPreferencesState => ({
@@ -214,6 +216,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
         allowedTools: savedQoderSettings.allowedTools || [],
         disallowedTools: savedQoderSettings.disallowedTools || [],
         skipPermissions: Boolean(savedQoderSettings.skipPermissions),
+        restrictedTools: savedQoderSettings.restrictedTools || [],
       });
 
       const savedCodexSettings = parseJson<CodexSettingsStorage>(
@@ -294,6 +297,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
         allowedTools: qoderPermissions.allowedTools,
         disallowedTools: qoderPermissions.disallowedTools,
         skipPermissions: qoderPermissions.skipPermissions,
+        restrictedTools: qoderPermissions.restrictedTools,
         lastUpdated: now,
       }));
 
@@ -326,6 +330,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     qoderPermissions.allowedTools,
     qoderPermissions.disallowedTools,
     qoderPermissions.skipPermissions,
+    qoderPermissions.restrictedTools,
     notificationPreferences,
     projectSortOrder,
   ]);

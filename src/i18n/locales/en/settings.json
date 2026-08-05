@@ -415,6 +415,31 @@
       "npmInstall": "- Allow npm install",
       "rmRf": "- Block recursive delete"
     },
+    "qoder": {
+      "allowedPlaceholder": "e.g., \"Read\" or \"Bash\"",
+      "blockedPlaceholder": "e.g., \"Bash\" or \"Write\"",
+      "groups": {
+        "read": "Read",
+        "write": "Write",
+        "exec": "Execute",
+        "network": "Network",
+        "orchestration": "Orchestration"
+      },
+      "bypassWarning": "Skip permission prompts is on, so bypass_permissions can override this list and run blocked tools anyway. Use Restrict tool set below for a hard limit.",
+      "restrictedTools": {
+        "title": "Restrict Tool Set",
+        "description": "Removes every unselected tool from the session. This is the only hard limit — allow and block lists above only affect confirmation prompts.",
+        "summary": "Choose the tools Qoder may use ({{count}} selected)",
+        "empty": "Nothing selected: all built-in tools stay available.",
+        "clear": "Clear selection"
+      },
+      "notes": {
+        "title": "How Qoder applies these settings:",
+        "allowlistOnly": "Allowed tools only skip the confirmation prompt. They do not restrict what Qoder can reach.",
+        "denyWins": "When a tool appears in both lists, the block list wins.",
+        "scopeUnsupported": "Sub-command scopes such as \"Bash(git log:*)\" are not enforced by qodercli — use bare tool names like \"Bash\"."
+      }
+    },
     "codex": {
       "permissionMode": "Permission Mode",
       "description": "Controls how Codex handles file modifications and command execution",
