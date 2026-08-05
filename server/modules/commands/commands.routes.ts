@@ -582,7 +582,12 @@ router.post("/execute", async (req, res) => {
       content: processedContent,
       metadata,
       hasFileIncludes: processedContent.includes("@"),
-      hasBashCommands: processedContent.includes("!"),
+      // Match the documented `!command` syntax (a bang starting a line), not any
+      // bang anywhere in the file. A bare `includes("!")` fires on ordinary prose
+      // and on markdown image embeds, so command files that never invoke bash still
+      // triggered the "contains bash commands" confirmation. `(?!\[)` keeps
+      // line-leading `![alt](src)` image syntax from counting as a bash directive.
+      hasBashCommands: /^\s*!(?!\[)\S/m.test(processedContent),
     });
   } catch (error) {
     if (error.code === "ENOENT") {
