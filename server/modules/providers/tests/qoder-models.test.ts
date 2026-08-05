@@ -35,6 +35,26 @@ test('Qoder models parser skips the MODEL header row from real CLI output', () =
   assert.equal(ids.length, 16);
 });
 
+test('Qoder models parser strips the alias suffix printed for preview models', () => {
+  const ids = parseQoderModelsStdout(REAL_LIST_MODELS_OUTPUT);
+
+  // `qodercli -m "Peach-07-17-DogFooding (qwen3.8-max-preview)"` fails with
+  // `Invalid model`; only the leading token is a usable id.
+  assert.equal(ids.includes('Peach-07-17-DogFooding (qwen3.8-max-preview)'), false);
+  assert.equal(ids.at(-1), 'Peach-07-17-DogFooding');
+});
+
+test('Qoder models parser drops free-form banner and warning rows', () => {
+  const ids = parseQoderModelsStdout(`MODEL
+Auto
+Warning: your CLI is out of date, run npm i -g @qoder-ai/qodercli
+Available models:
+Ultimate
+`);
+
+  assert.deepEqual(ids, ['Auto', 'Ultimate']);
+});
+
 test('Qoder models parser removes duplicates and ignores JSON fragments', () => {
   const ids = parseQoderModelsStdout(`MODEL
 Auto

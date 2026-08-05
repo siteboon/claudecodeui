@@ -112,6 +112,18 @@ const runQoderModelsCommand = (): Promise<string> => new Promise((resolve, rejec
   });
 });
 
+/**
+ * A row of `qodercli --list-models` output that names a usable model.
+ *
+ * Verified against v1.1.13, rows come in exactly two shapes: a bare id, or an
+ * id followed by a parenthesized alias (`Peach-07-17-DogFooding
+ * (qwen3.8-max-preview)`). Matching the whole line — rather than just its first
+ * token — is what lets free-form output such as `Available models:` be rejected.
+ */
+const QODER_MODEL_ROW_PATTERN = /^([A-Za-z0-9][A-Za-z0-9._-]*)(?:\s+\([^)]*\))?$/;
+
+// Consumed by getSupportedModels below and by tests/qoder-models.test.ts, which
+// pins the parser against captured `qodercli --list-models` output.
 export const parseQoderModelsStdout = (stdout: string): string[] => {
   const ids: string[] = [];
 
@@ -120,16 +132,21 @@ export const parseQoderModelsStdout = (stdout: string): string[] => {
     // `qodercli --list-models` prints a literal `MODEL` header row before the
     // model ids. It must not surface as a selectable model — picking it would
     // pass `-m MODEL` and qodercli rejects it with exit 42 ("Invalid model").
-    if (
-      !line
-      || line === 'MODEL'
-      || line.startsWith('{')
-      || line.startsWith('[')
-    ) {
+    if (!line || line === 'MODEL') {
       continue;
     }
 
-    ids.push(line);
+    // Only the id is usable: `-m "Peach-07-17-DogFooding (qwen3.8-max-preview)"`
+    // fails with `Invalid model "..."`.
+    const id = line.match(QODER_MODEL_ROW_PATTERN)?.[1];
+    if (!id) {
+      // Banners, warnings and JSON diagnostics land here. Offering them as
+      // models would give the user a selection that can only fail.
+      console.warn(`[Qoder] Ignoring unrecognized --list-models row: ${line}`);
+      continue;
+    }
+
+    ids.push(id);
   }
 
   return [...new Set(ids)];
