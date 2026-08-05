@@ -70,6 +70,10 @@ const RUNNING_VERSION = (() => {
         return null;
     }
 })();
+const SERVER_PORT = Number.parseInt(process.env.SERVER_PORT || '3001', 10);
+const HOST = process.env.HOST || '0.0.0.0';
+const DISPLAY_HOST = getConnectableHost(HOST);
+const VITE_PORT = process.env.VITE_PORT || 5173;
 const systemRoutes = createSystemModule({
     appRoot: APP_ROOT,
     installMode,
@@ -119,7 +123,43 @@ const wss = createWebSocketServer(server, {
 // Make WebSocket server available to routes
 app.locals.wss = wss;
 
-app.use(cors({ exposedHeaders: ['X-Refreshed-Token', 'X-Auth-Error'] }));
+// CORS — only reflect origins that share a host:port with the server. The
+// default `cors()` configuration reflects any Origin header, which lets any
+// malicious site make authenticated cross-origin requests against this server
+// when a victim visits it in the same browser session. Limiting the
+// reflected origin to the server's own loopback / LAN addresses keeps the
+// browser same-origin policy intact without breaking the local Electron app
+// or LAN-hosted deployments.
+const corsOriginReflector = (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    // No Origin header → same-origin request (e.g. server-to-server, curl);
+    // these are not subject to CORS and should always be allowed through.
+    if (!origin) {
+        callback(null, true);
+        return;
+    }
+
+    try {
+        const parsed = new URL(origin);
+        const requestHost = parsed.hostname;
+        const requestPort = parsed.port || (parsed.protocol === 'https:' ? '443' : '80');
+        const serverHost = HOST === '0.0.0.0' || HOST === '::' ? requestHost : HOST;
+        const serverPort = String(SERVER_PORT);
+
+        if (requestHost === serverHost && requestPort === serverPort) {
+            callback(null, true);
+            return;
+        }
+    } catch {
+        // Malformed Origin header — refuse.
+    }
+
+    callback(null, false);
+};
+
+app.use(cors({
+    origin: corsOriginReflector,
+    exposedHeaders: ['X-Refreshed-Token', 'X-Auth-Error'],
+}));
 app.use(express.json({
     limit: '50mb',
     type: (req) => {
@@ -272,10 +312,6 @@ app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
   });
 });
 
-const SERVER_PORT = Number.parseInt(process.env.SERVER_PORT || '3001', 10);
-const HOST = process.env.HOST || '0.0.0.0';
-const DISPLAY_HOST = getConnectableHost(HOST);
-const VITE_PORT = process.env.VITE_PORT || 5173;
 const LOCAL_SERVER_MARKER_PATH = path.join(os.homedir(), '.cloudcli', 'local-server.json');
 
 function getErrorCode(error: unknown): string | undefined {
