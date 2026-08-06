@@ -163,6 +163,28 @@ To use Claude Code's full functionality, you'll need to manually enable tools:
 
 **Recommended approach**: Start with basic tools enabled and add more as needed. You can always adjust these settings later.
 
+### Web shell: skipping Claude Code permission prompts (opt-in)
+
+By default the web shell launches `claude` normally, so Claude Code still asks
+for approval before running tools. If you fully trust a project and want the web
+shell to skip those prompts, you can opt into launching Claude Code with
+`--dangerously-skip-permissions`. **This is a deliberate security downgrade and is
+off by default** — enable it only for projects you fully control.
+
+There are two ways to turn it on:
+
+- **From the UI** — enable **Skip Permissions** under **Settings → Agents →
+  Permissions → Claude**. This is the same toggle that controls permission
+  bypass in chat, and it now also applies to the web shell. Off by default.
+- **Server-wide (env)** — set `SHELL_DANGEROUSLY_SKIP_PERMISSIONS=true` for the
+  server. This is useful for headless / no-UI deployments. Accepted truthy
+  values: `1`, `true`, `yes`, `on`.
+
+Precedence: an explicit per-session choice from the UI overrides the server
+default. When neither is set, permission prompts stay on. The flag only applies
+to the `claude` provider; other providers (Codex, Cursor, opencode, plain shell)
+are never affected.
+
 ---
 
 ## Plugins
