@@ -319,8 +319,8 @@ test('providerSkillsService lists claude user, project, and enabled plugin skill
 });
 
 /**
- * This test covers Codex repository/user/system skill folders and verifies that
- * repository lookup includes cwd, parent, and git root skill locations.
+ * This test covers Codex repository/user/system skill folders, including both
+ * supported user roots, and verifies repository lookup across cwd, parent, and git root.
  */
 test('providerSkillsService lists codex repository, user, and system skills', { concurrency: false }, async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-skills-codex-'));
@@ -356,6 +356,12 @@ test('providerSkillsService lists codex repository, user, and system skills', { 
       'Codex user skill',
     );
     await writeSkill(
+      path.join(tempRoot, '.codex', 'skills'),
+      'codex-home-user-dir',
+      'codex-home-user',
+      'Codex home user skill',
+    );
+    await writeSkill(
       path.join(tempRoot, '.codex', 'skills', '.system'),
       'codex-system-dir',
       'codex-system',
@@ -369,6 +375,7 @@ test('providerSkillsService lists codex repository, user, and system skills', { 
     assert.equal(byName.get('codex-parent')?.scope, 'repo');
     assert.equal(byName.get('codex-root')?.scope, 'repo');
     assert.equal(byName.get('codex-user')?.scope, 'user');
+    assert.equal(byName.get('codex-home-user')?.scope, 'user');
     assert.equal(byName.get('codex-system')?.scope, 'system');
     assert.equal(byName.get('codex-root')?.command, '$codex-root');
   } finally {
