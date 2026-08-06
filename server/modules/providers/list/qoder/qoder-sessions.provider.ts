@@ -143,6 +143,7 @@ export class QoderSessionsProvider implements IProviderSessions {
 
     if (role === 'user' && raw.message?.content && raw.isMeta !== true) {
       if (Array.isArray(raw.message.content)) {
+        let imagesAttached = false;
         let filesAttached = false;
 
         for (let partIndex = 0; partIndex < raw.message.content.length; partIndex++) {
@@ -175,14 +176,15 @@ export class QoderSessionsProvider implements IProviderSessions {
                 kind: 'text',
                 role: 'user',
                 content: cleanText,
-                images: !filesAttached && parsedImages.attachments.length > 0
+                images: !imagesAttached && parsedImages.attachments.length > 0
                   ? parsedImages.attachments
                   : undefined,
                 files: !filesAttached && parsedFiles.attachments.length > 0
                   ? parsedFiles.attachments
                   : undefined,
               }));
-              filesAttached = filesAttached || parsedImages.attachments.length > 0 || parsedFiles.attachments.length > 0;
+              imagesAttached = imagesAttached || parsedImages.attachments.length > 0;
+              filesAttached = filesAttached || parsedFiles.attachments.length > 0;
             }
           }
         }

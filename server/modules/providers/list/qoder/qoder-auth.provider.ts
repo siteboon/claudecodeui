@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import spawn from 'cross-spawn';
+import { spawn } from 'node:child_process';
 
 import type { IProviderAuth } from '@/shared/interfaces.js';
 import type { ProviderAuthStatus } from '@/shared/types.js';
@@ -18,21 +18,22 @@ const QODER_AUTH_FILE = '.auth/user';
 export class QoderProviderAuth implements IProviderAuth {
   /**
    * Checks whether the Qoder CLI is available to the server process.
+   * Uses a non-blocking spawn with a 5 s timeout to avoid stalling the event loop.
    */
-  private checkInstalled(): boolean {
-    try {
-      const result = spawn.sync('qodercli', ['--version'], { stdio: 'ignore', timeout: 5000 });
-      return !result.error && result.status === 0;
-    } catch {
-      return false;
-    }
+  private checkInstalled(): Promise<boolean> {
+    return new Promise((resolve) => {
+      const proc = spawn('qodercli', ['--version'], { stdio: 'ignore' });
+      const timer = setTimeout(() => { proc.kill(); resolve(false); }, 5000);
+      proc.on('close', (code) => { clearTimeout(timer); resolve(code === 0); });
+      proc.on('error', () => { clearTimeout(timer); resolve(false); });
+    });
   }
 
   /**
    * Returns Qoder CLI installation and credential status.
    */
   async getStatus(): Promise<ProviderAuthStatus> {
-    const installed = this.checkInstalled();
+    const installed = await this.checkInstalled();
     const authenticated = await this.checkCredentials();
 
     return {

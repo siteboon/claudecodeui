@@ -364,6 +364,12 @@ async function spawnQoder(command, options = {}, ws, context) {
           return;
         }
 
+        if (qoderProcess.aborted) {
+          notifyTerminalState({ code });
+          resolve();
+          return;
+        }
+
         if (code === 127 || code === null) {
           const installed = await context.isProviderInstalled();
           if (!installed) {

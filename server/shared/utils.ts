@@ -987,7 +987,7 @@ export function resolveQoderTranscriptPath(options: {
   const projectsDir = homeDirectory
     ? path.join(homeDirectory, '.qoder', 'projects')
     : getQoderProjectsDir();
-  const encodedCwd = encodeQoderCwd(path.resolve(cwd));
+  const encodedCwd = encodeQoderCwd(path.resolve(cwd).replace(/\\/g, '/'));
   return path.join(projectsDir, encodedCwd, `${sessionId}.jsonl`);
 }
 
@@ -1038,10 +1038,11 @@ export async function aggregateQoderTranscriptTokenUsage(
       continue;
     }
 
-    inputTokens += Number(usage.input_tokens ?? 0);
-    outputTokens += Number(usage.output_tokens ?? 0);
-    cacheReadTokens += Number(usage.cache_read_input_tokens ?? 0);
-    cacheCreationTokens += Number(usage.cache_creation_input_tokens ?? 0);
+    const safeCount = (v: unknown): number => { const n = Number(v ?? 0); return Number.isFinite(n) && n >= 0 ? n : 0; };
+    inputTokens += safeCount(usage.input_tokens);
+    outputTokens += safeCount(usage.output_tokens);
+    cacheReadTokens += safeCount(usage.cache_read_input_tokens);
+    cacheCreationTokens += safeCount(usage.cache_creation_input_tokens);
   }
 
   const used = inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;

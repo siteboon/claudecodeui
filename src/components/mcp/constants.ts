@@ -21,7 +21,7 @@ export const MCP_SUPPORTED_TRANSPORTS: Record<McpProvider, McpTransport[]> = {
   cursor: ['stdio', 'http'],
   codex: ['stdio', 'http'],
   opencode: ['stdio', 'http'],
-  qoder: ['stdio', 'http'],
+  qoder: ['stdio'],
 };
 
 export const MCP_GLOBAL_SUPPORTED_SCOPES: McpScope[] = ['user', 'project'];
