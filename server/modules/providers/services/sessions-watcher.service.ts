@@ -145,8 +145,17 @@ export async function reconcileMissingSessionFiles(): Promise<{ removedCount: nu
     try {
       await fsPromises.access(session.jsonl_path);
     } catch {
-      sessionsDb.deleteSessionById(session.session_id);
-      removedCount += 1;
+      try {
+        sessionsDb.deleteSessionById(session.session_id);
+        removedCount += 1;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error('Session reconcile sweep failed to delete session with missing transcript', {
+          sessionId: session.session_id,
+          jsonlPath: session.jsonl_path,
+          error: message,
+        });
+      }
     }
   }
 

@@ -125,6 +125,41 @@ test('reconcileMissingSessionFiles deletes rows whose transcript no longer exist
   });
 });
 
+test('reconcileMissingSessionFiles continues past a row whose delete throws', async () => {
+  await withIsolatedDatabase(async () => {
+    await withTempDir('sessions-watcher-fs-', async (dir) => {
+      const missingPathA = path.join(dir, 'missing-a.jsonl');
+      const missingPathB = path.join(dir, 'missing-b.jsonl');
+      // Both paths are intentionally never created.
+
+      sessionsDb.createSession('missing-a', 'claude', '/workspace/demo-project', 'Missing A', undefined, undefined, missingPathA);
+      sessionsDb.createSession('missing-b', 'claude', '/workspace/demo-project', 'Missing B', undefined, undefined, missingPathB);
+
+      const originalDeleteSessionById = sessionsDb.deleteSessionById;
+      sessionsDb.deleteSessionById = (sessionId: string) => {
+        if (sessionId === 'missing-a') {
+          throw new Error('simulated delete failure');
+        }
+        return originalDeleteSessionById(sessionId);
+      };
+
+      try {
+        const result = await reconcileMissingSessionFiles();
+
+        // The throwing row must not abort the sweep: the remaining candidate
+        // is still checked and removed, and the promise resolves rather than
+        // rejecting out of reconcileMissingSessionFiles.
+        assert.equal(result.checkedCount, 2);
+        assert.equal(result.removedCount, 1);
+        assert.equal(sessionsDb.getSessionById('missing-a')?.isArchived, 0);
+        assert.equal(sessionsDb.getSessionById('missing-b'), null);
+      } finally {
+        sessionsDb.deleteSessionById = originalDeleteSessionById;
+      }
+    });
+  });
+});
+
 test('unarchiveSessionForRealActivity clears isArchived for a session touched by a watcher add/change event', async () => {
   await withIsolatedDatabase(async () => {
     sessionsDb.createSession('claude-1', 'claude', '/workspace/demo-project', 'Session One');
