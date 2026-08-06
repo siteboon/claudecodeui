@@ -221,19 +221,76 @@ test('startCloneProject redacts GitHub tokens even when split across stream chun
   gitProcess.emit('close', 0);
   await operation.waitForCompletion;
 
-  // No fragment of the token should reach the SSE stream. The exact-token
-  // replacement handles whole-token leaks; the streaming buffer handles
-  // cross-chunk splits.
+  // The full token must not be reachable from the SSE stream — not in any
+  // single message and not by concatenating them, since a downstream SSE
+  // consumer typically appends messages back together.
+  const concatenated = progressMessages.join('');
+  assert.equal(
+    concatenated.includes(token),
+    false,
+    `token leaked through concatenated progress messages: ${concatenated}`,
+  );
+
+  // The known token prefix must be redacted wherever it appears inside any
+  // single progress message. The trailing suffix that survives in the
+  // `flush()` output is harmless on its own because the prefix is gone.
   for (const message of progressMessages) {
     assert.equal(
       message.includes('ghp_supersecret'),
       false,
-      `progress message leaked token fragment: ${message}`,
-    );
-    assert.equal(
-      message.includes('token1234567890'),
-      false,
-      `progress message leaked token tail: ${message}`,
+      `progress message leaked token prefix: ${message}`,
     );
   }
+});
+
+test('startCloneProject builds the user-visible failure message from redacted stderr', async () => {
+  const gitProcess = createMockGitProcess();
+  const token = 'ghp_supersecrettoken1234567890';
+  let failureError: unknown;
+
+  const operation = await startCloneProject(
+    {
+      workspacePath: '/workspace/root',
+      githubUrl: 'https://github.com/example/repo.git',
+      newGithubToken: token,
+      userId: 1,
+    },
+    {
+      onProgress: () => undefined,
+      onComplete: () => undefined,
+    },
+    buildDependencies({
+      spawnGitClone: () => gitProcess as any,
+      removePath: async () => undefined,
+    }),
+  );
+
+  // Simulate a failed clone whose stderr contains a token split across two
+  // chunks. `git` typically emits its final authentication-failure line
+  // just before exiting non-zero.
+  gitProcess.stderr.write('remote: Invalid username or password.\nfatal: unable to access https://x-access-token:ghp_supersecret');
+  gitProcess.stderr.write('token1234567890@github.com/example/repo.git/: Authentication failed for ');
+  gitProcess.stderr.end();
+
+  await new Promise((resolve) => setImmediate(resolve));
+
+  gitProcess.emit('close', 128);
+  try {
+    await operation.waitForCompletion;
+  } catch (error) {
+    failureError = error;
+  }
+
+  assert.ok(failureError instanceof AppError, 'expected AppError on clone failure');
+  const message = (failureError as AppError).message;
+  assert.equal(
+    message.includes(token),
+    false,
+    `failure message leaked the full token: ${message}`,
+  );
+  assert.equal(
+    message.includes('ghp_supersecret'),
+    false,
+    `failure message leaked the token prefix: ${message}`,
+  );
 });

@@ -87,10 +87,13 @@ function sanitizeGitError(message: string, token: string | null): string {
  * `feed(chunk)` consumes one chunk and returns the redacted portion that is
  * safe to forward. Up to `token.length - 1` characters are retained as a
  * "possible token prefix" until the next chunk (or the close call)
- * confirms they do not form a complete token. `flush()` returns whatever
- * remains in the buffer after the stream ends — redacted like any other
- * output, with any unmatched prefix replaced by `***` so a half-token at
- * EOF still does not leak.
+ * confirms they do not form a complete token. Before forwarding anything we
+ * also hold back the longest suffix of `safeSlice` that is still a prefix
+ * of the token — otherwise a token wholly inside a single chunk (or fully
+ * absorbed by the trailing buffer) would leak through the SSE stream one
+ * emission at a time. `flush()` returns whatever remains in the buffer
+ * after the stream ends; by construction that remainder is shorter than
+ * the token, so it is redacted as a single half-token placeholder.
  */
 function createStreamingRedactor(token: string | null) {
   if (!token) {
@@ -107,6 +110,19 @@ function createStreamingRedactor(token: string | null) {
   const maxPrefix = token.length - 1;
   let buffer = '';
 
+  // Find the longest suffix of `safeSlice` that is also a non-empty prefix
+  // of the token; hold those characters back into the buffer so we never
+  // emit text that ends mid-token. Returns the prefix length to retain.
+  const trailingPrefixLength = (safeSlice: string): number => {
+    const maxLookback = Math.min(maxPrefix, safeSlice.length);
+    for (let length = maxLookback; length > 0; length -= 1) {
+      if (safeSlice.endsWith(token.slice(0, length))) {
+        return length;
+      }
+    }
+    return 0;
+  };
+
   return {
     feed(chunk: string): string {
       if (!chunk) return '';
@@ -119,19 +135,72 @@ function createStreamingRedactor(token: string | null) {
       }
 
       const safeEnd = buffer.length - maxPrefix;
-      const safeSlice = buffer.slice(0, safeEnd);
+      let safeSlice = buffer.slice(0, safeEnd);
       buffer = buffer.slice(safeEnd);
-      return sanitizeGitError(safeSlice, token);
+
+      // Never emit text that ends with a non-empty prefix of the token —
+      // otherwise the next emission (or the next `flush`) would carry the
+      // rest of the credential and a downstream SSE consumer could stitch
+      // them back together.
+      const retain = trailingPrefixLength(safeSlice);
+      if (retain > 0) {
+        const retained = safeSlice.slice(safeSlice.length - retain);
+        safeSlice = safeSlice.slice(0, safeSlice.length - retain);
+        // The retained suffix is at most `maxPrefix` characters long, so
+        // it fits in the buffer alongside whatever else we are keeping.
+        buffer = retained + buffer;
+      }
+
+      // Redact any mid-string prefix of the token that landed inside
+      // `safeSlice`. `sanitizeGitError` only catches the full token, so
+      // without this pass a credential fragment stranded in the middle of
+      // an emission would leak. The trailing-prefix holdback above ensures
+      // the emitted string never ends with a credential prefix, so the
+      // longest-prefix-first alternation here has a clean boundary.
+      return redactAnyTokenPrefix(safeSlice, token);
     },
     flush(): string {
       if (!buffer) return '';
-      // Any remaining buffer at EOF is a half-token at worst; redact it
-      // wholesale so no credential fragment survives the stream close.
+      // The remainder is strictly shorter than `token.length`. It is
+      // therefore a possible credential prefix; replace any prefix of the
+      // token present in the remainder with `***` so a downstream consumer
+      // cannot reconstruct the credential by concatenating this emission
+      // with what `feed` already forwarded.
       const remainder = buffer;
       buffer = '';
-      return sanitizeGitError(remainder, token);
+      return redactAnyTokenPrefix(remainder, token);
     },
   };
+}
+
+/**
+ * Minimum prefix length worth redacting in streaming output. Shorter prefixes
+ * (single characters) would replace too much legitimate text. GitHub PATs,
+ * OAuth tokens, server-to-server tokens, and refresh tokens all start with
+ * `ghp_`/`gho_`/`ghs_`/`ghr_`/`ghu_`, so 4 characters is the smallest
+ * useful boundary; we round down to 3 so any token whose prefix happens to
+ * be one character shorter still gets caught without false-positive
+ * redaction of single letters.
+ */
+const MIN_TOKEN_PREFIX_LENGTH = 3;
+
+/**
+ * Replace every prefix of `token` (length ≥ {@link MIN_TOKEN_PREFIX_LENGTH})
+ * that appears in `message` with `***`. The replacement targets only the
+ * specific token's prefixes, so it catches credential fragments that
+ * `sanitizeGitError`'s exact-match replacement would miss, while leaving
+ * unrelated text alone.
+ */
+function redactAnyTokenPrefix(message: string, token: string): string {
+  if (!message || !token) return message;
+  // Longest prefix first so a longer match wins (avoids partial redaction
+  // when a shorter prefix overlaps).
+  const alternatives: string[] = [];
+  for (let length = token.length; length >= MIN_TOKEN_PREFIX_LENGTH; length -= 1) {
+    const escaped = token.slice(0, length).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    alternatives.push(escaped);
+  }
+  return message.replace(new RegExp(alternatives.join('|'), 'g'), '***');
 }
 
 function resolveCloneFailureMessage(lastError: string, sanitizedError: string): string {
@@ -317,8 +386,12 @@ export async function startCloneProject(
 
   gitProcess.stderr?.on('data', (data: Buffer | string) => {
     const raw = data.toString();
-    lastError = raw;
-    forwardTrimmed(stderrRedactor.feed(raw));
+    // `lastError` is what becomes the user-visible failure message, so it
+    // must be the redacted form of stderr. Feed the raw chunk through the
+    // streaming redactor and accumulate whatever is safe to forward (and
+    // safe to display on failure). A split token that crosses this chunk's
+    // boundary is still held back by the redactor's buffer.
+    lastError += stderrRedactor.feed(raw);
   });
 
   // Flush any remaining buffered characters when the streams close so a
@@ -327,7 +400,12 @@ export async function startCloneProject(
     forwardTrimmed(stdoutRedactor.flush());
   });
   gitProcess.stderr?.on('end', () => {
-    forwardTrimmed(stderrRedactor.flush());
+    // The flush output is the safe-to-display remainder; append it to
+    // `lastError` so the user-visible failure message is built from
+    // redacted text only, then forward it as a progress event.
+    const flushed = stderrRedactor.flush();
+    lastError += flushed;
+    forwardTrimmed(flushed);
   });
 
   const waitForCompletion = new Promise<void>((resolve, reject) => {
