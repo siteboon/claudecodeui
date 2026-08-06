@@ -68,6 +68,11 @@ export const sessionsDb = {
    * `provider_session_id` so a session that was first created by the app
    * (with an app-allocated `session_id`) is updated in place once its
    * transcript shows up on disk, instead of producing a duplicate row.
+   *
+   * `isArchived` is deliberately left untouched on both update paths: this
+   * runs on every full sync, not just on real activity, so forcing it back to
+   * 0 would silently un-archive anything the user archived in the UI. Fresh
+   * rows still insert as active (0); only reactivation is preserved.
    */
   createSession(
     providerSessionId: string,
@@ -102,7 +107,6 @@ export const sessionsDb = {
            updated_at = COALESCE(?, CURRENT_TIMESTAMP),
            project_path = ?,
            jsonl_path = ?,
-           isArchived = 0,
            custom_name = COALESCE(?, custom_name)
          WHERE session_id = ?`
       ).run(
@@ -129,7 +133,7 @@ export const sessionsDb = {
          updated_at = excluded.updated_at,
          project_path = excluded.project_path,
          jsonl_path = excluded.jsonl_path,
-         isArchived = 0,
+         isArchived = sessions.isArchived,
          custom_name = COALESCE(excluded.custom_name, sessions.custom_name)`
     ).run(
       providerSessionId,
@@ -425,6 +429,55 @@ export const sessionsDb = {
       .get(sessionId, provider) as { custom_name: string | null } | undefined;
 
     return row?.custom_name ?? null;
+  },
+
+  /**
+   * Resolves the session row backing one transcript file, regardless of its
+   * archive state.
+   *
+   * The filesystem watcher's `unlink` handler only knows the deleted file's
+   * path, so it uses this lookup to translate that back to an app-facing
+   * session row before deleting it. Disk is the source of truth for a
+   * session's existence — `isArchived` is purely a GUI-side hide, so an
+   * unlink must remove the row even if the user had archived it in the UI.
+   */
+  getSessionByJsonlPath(jsonlPath: string): SessionRow | null {
+    const db = getConnection();
+    const row = db
+      .prepare(
+        `SELECT ${SESSION_ROW_COLUMNS}
+         FROM sessions
+         WHERE jsonl_path = ?
+         LIMIT 1`
+      )
+      .get(jsonlPath) as SessionRow | undefined;
+
+    return normalizeSessionRow(row) ?? null;
+  },
+
+  /**
+   * File-backed session rows eligible for the startup disk-existence
+   * reconcile sweep, archived or not.
+   *
+   * Archived rows are included: disk is the source of truth for a session's
+   * existence, so an orphan row whose transcript is gone must not hide from
+   * the sweep just because it was archived in the GUI. `opencode` is
+   * excluded: its sessions live in a shared `opencode.db` rather than one
+   * file per session, so "does the path still exist" is not a meaningful
+   * test for that provider.
+   */
+  getReconcilableSessions(): SessionRow[] {
+    const db = getConnection();
+    const rows = db
+      .prepare(
+        `SELECT ${SESSION_ROW_COLUMNS}
+         FROM sessions
+         WHERE jsonl_path IS NOT NULL
+           AND provider <> 'opencode'`
+      )
+      .all() as SessionRow[];
+
+    return normalizeSessionRows(rows);
   },
 
   /**

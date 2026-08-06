@@ -677,6 +677,34 @@ export function useProjectsState({
         return;
       }
 
+      if (event.kind === 'session_removed') {
+        // The backend watcher deletes a session's row when its transcript is
+        // removed from disk (deleted from another client, the CLI, etc).
+        // Disk is the source of truth for a session's existence, so this is
+        // a real removal, not an archive — drop it from the sidebar.
+        const removedSessionId = typeof event.sessionId === 'string' && event.sessionId
+          ? event.sessionId
+          : null;
+        if (!removedSessionId) {
+          return;
+        }
+
+        clearSessionAttention(removedSessionId);
+        setProjects((previousProjects) =>
+          previousProjects.map((project) => removeSessionFromProject(project, removedSessionId)),
+        );
+        setSelectedProject((previousProject) =>
+          previousProject ? removeSessionFromProject(previousProject, removedSessionId) : previousProject,
+        );
+
+        if (selectedSessionRef.current?.id === removedSessionId) {
+          setSelectedSession(null);
+          navigate('/');
+        }
+
+        return;
+      }
+
       const eventSessionId = typeof event.sessionId === 'string' && event.sessionId
         ? event.sessionId
         : null;
@@ -802,7 +830,7 @@ export function useProjectsState({
     };
 
     return subscribe(handleEvent);
-  }, [markSessionAttention, navigate, sessionId, subscribe]);
+  }, [clearSessionAttention, markSessionAttention, navigate, sessionId, subscribe]);
 
   useEffect(() => {
     return () => {

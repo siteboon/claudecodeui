@@ -76,6 +76,92 @@ function isWatcherTargetFile(provider: LLMProvider, filePath: string): boolean {
   return filePath.endsWith('.jsonl');
 }
 
+/**
+ * Mirrors `ClaudeSessionSynchronizer.isSubagentTranscript`: subagent
+ * transcripts live under a `subagents/` directory and repeat their parent
+ * session's id, so an unlink of one must never be mistaken for the parent
+ * session's transcript disappearing.
+ */
+function isSubagentTranscriptPath(filePath: string): boolean {
+  return path.normalize(filePath).split(path.sep).includes('subagents');
+}
+
+/**
+ * Removes the session row backing an unlinked transcript file, if any.
+ *
+ * Disk is the source of truth for a session's existence: `isArchived` is
+ * purely a GUI-side hide for sessions that still exist on disk, so once the
+ * transcript is gone the row is deleted outright, even if it was archived in
+ * the UI — the Claude TUI's own delete unlinks the transcript, and this
+ * mirrors that.
+ *
+ * `opencode` is skipped entirely: its sessions are rows in a shared
+ * `opencode.db`, not one file per session, so a single unlink of that file
+ * does not mean any particular session disappeared. Subagent transcripts are
+ * skipped because they share their parent session's id and are not indexed
+ * as sessions in the first place.
+ *
+ * Exported (rather than only reachable through the chokidar callback) so it
+ * can be unit tested directly.
+ */
+export function removeSessionForUnlinkedFile(
+  provider: LLMProvider,
+  filePath: string
+): { sessionId: string; provider: LLMProvider } | null {
+  if (provider === 'opencode' || isSubagentTranscriptPath(filePath)) {
+    return null;
+  }
+
+  const session = sessionsDb.getSessionByJsonlPath(filePath);
+  if (!session) {
+    return null;
+  }
+
+  sessionsDb.deleteSessionById(session.session_id);
+  return { sessionId: session.session_id, provider };
+}
+
+/**
+ * Sweeps file-backed session rows and deletes any whose transcript no longer
+ * exists on disk.
+ *
+ * Considers archived rows too: disk is the source of truth for a session's
+ * existence, so an orphan row must not be able to hide from this sweep in
+ * the archive view.
+ *
+ * Runs once at startup so deletions that happened while the server was down
+ * (chokidar only reports changes while it is watching) are still noticed.
+ * Exported for direct testing and reuse.
+ */
+export async function reconcileMissingSessionFiles(): Promise<{ removedCount: number; checkedCount: number }> {
+  const candidates = sessionsDb.getReconcilableSessions();
+  let removedCount = 0;
+
+  for (const session of candidates) {
+    if (!session.jsonl_path) {
+      continue;
+    }
+
+    try {
+      await fsPromises.access(session.jsonl_path);
+    } catch {
+      try {
+        sessionsDb.deleteSessionById(session.session_id);
+        removedCount += 1;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error('Session reconcile sweep failed to delete session with missing transcript', {
+          sessionId: session.session_id,
+          jsonlPath: session.jsonl_path,
+          error: message,
+        });
+      }
+    }
+  }
+
+  return { removedCount, checkedCount: candidates.length };
+}
+
 function clearPendingWatcherFlushTimer(): void {
   if (pendingWatcherFlushTimer) {
     clearTimeout(pendingWatcherFlushTimer);
@@ -169,6 +255,58 @@ async function buildSessionUpsertedEvent(updatedProviderSessionId: string): Prom
   });
 }
 
+/**
+ * Broadcasts a `session_removed` event so the sidebar drops the session
+ * live, without waiting for a full project refetch.
+ *
+ * Follows the same envelope pattern as `session_upserted` (`kind`,
+ * `sessionId`, `provider`, `timestamp`) but only carries what the frontend
+ * needs to remove a row: no session/project payload, since a deleted
+ * session no longer needs to be rendered.
+ */
+function broadcastSessionRemoved(sessionId: string, provider: LLMProvider): void {
+  const event = JSON.stringify({
+    kind: 'session_removed',
+    sessionId,
+    provider,
+    timestamp: new Date().toISOString(),
+  });
+
+  connectedClients.forEach(client => {
+    if (client.readyState === WS_OPEN_STATE) {
+      client.send(event);
+    }
+  });
+}
+
+/**
+ * Handles a chokidar `unlink` event for one provider's watched transcript.
+ */
+async function onUnlink(filePath: string, provider: LLMProvider): Promise<void> {
+  if (!isWatcherTargetFile(provider, filePath)) {
+    return;
+  }
+
+  try {
+    const removed = removeSessionForUnlinkedFile(provider, filePath);
+    if (!removed) {
+      return;
+    }
+
+    console.log(`Session removed after transcript deletion for provider "${provider}"`, {
+      filePath,
+      sessionId: removed.sessionId,
+    });
+    broadcastSessionRemoved(removed.sessionId, removed.provider);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`Session watcher unlink handling failed for provider "${provider}"`, {
+      filePath,
+      error: message,
+    });
+  }
+}
+
 async function flushPendingWatcherUpdate(): Promise<void> {
   clearPendingWatcherFlushTimer();
 
@@ -221,6 +359,29 @@ async function flushPendingWatcherUpdate(): Promise<void> {
 }
 
 /**
+ * Unarchives the session row for a provider-native id touched by real watcher
+ * activity (an `add`/`change` event), if it was hidden in the GUI.
+ *
+ * A watcher event means something happened on disk for this specific
+ * session, unlike a full sync (`createSession`), which runs for reasons
+ * unrelated to any one session and must never un-hide everything. Must run
+ * before `buildSessionUpsertedEvent` resolves the row, since that helper
+ * returns null for archived rows.
+ *
+ * Exported for direct testing.
+ */
+export function unarchiveSessionForRealActivity(providerSessionId: string): boolean {
+  const row = sessionsDb.getSessionByProviderSessionId(providerSessionId)
+    ?? sessionsDb.getSessionById(providerSessionId);
+  if (!row?.isArchived) {
+    return false;
+  }
+
+  sessionsDb.updateSessionIsArchived(row.session_id, false);
+  return true;
+}
+
+/**
  * Handles file watcher updates and triggers provider file-level synchronization.
  */
 async function onUpdate(
@@ -236,6 +397,10 @@ async function onUpdate(
     const result = await sessionSynchronizerService.synchronizeProviderFile(provider, filePath);
     if (!result.indexed) {
       return;
+    }
+
+    if (result.sessionId) {
+      unarchiveSessionForRealActivity(result.sessionId);
     }
 
     console.log(`Session synchronization triggered by ${eventType} event for provider "${provider}"`, {
@@ -265,6 +430,11 @@ export async function initializeSessionsWatcher(): Promise<void> {
     failures: initialSync.failures,
   });
 
+  const reconcileResult = await reconcileMissingSessionFiles();
+  console.log(
+    `Session reconcile sweep removed ${reconcileResult.removedCount} of ${reconcileResult.checkedCount} checked session(s) with missing transcripts`
+  );
+
   for (const { provider, rootPath } of PROVIDER_WATCH_PATHS) {
     try {
       await fsPromises.mkdir(rootPath, { recursive: true });
@@ -286,6 +456,9 @@ export async function initializeSessionsWatcher(): Promise<void> {
         })
         .on('change', (filePath: string) => {
           void onUpdate('change', filePath, provider);
+        })
+        .on('unlink', (filePath: string) => {
+          void onUnlink(filePath, provider);
         })
         .on('error', (error: unknown) => {
           const message = error instanceof Error ? error.message : String(error);
