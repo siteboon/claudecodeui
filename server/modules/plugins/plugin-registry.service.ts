@@ -415,18 +415,31 @@ export function updatePluginFromGit(name, options) {
     };
 
     const finalize = (manifest) => {
-      // Atomically replace the live directory with the validated temp dir.
-      // `rename` is atomic on the same filesystem on POSIX; Windows treats
-      // it as remove+create which is fine because no other writer holds the
-      // directory between the `rename` and the next server restart.
+      // Replace the live directory with the validated temp dir while keeping
+      // the previous tree in a sibling backup. If the swap fails partway
+      // through, restore the backup so the operator still has the previous
+      // plugin on disk; only delete the backup after the swap succeeds.
+      const backupDir = fs.existsSync(pluginDir)
+        ? `${pluginDir}.previous-${process.pid}-${Date.now()}`
+        : null;
       try {
-        if (fs.existsSync(pluginDir)) {
-          fs.rmSync(pluginDir, { recursive: true, force: true });
+        if (backupDir) {
+          fs.renameSync(pluginDir, backupDir);
         }
         fs.renameSync(tempDir, pluginDir);
       } catch (err) {
-        cleanupTemp();
+        // Roll back: remove the partially-installed temp dir (if the second
+        // rename succeeded we have nothing to restore) and put the backup
+        // back in place of the live directory (if one existed).
+        try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch {}
+        if (backupDir && fs.existsSync(backupDir) && !fs.existsSync(pluginDir)) {
+          try { fs.renameSync(backupDir, pluginDir); } catch {}
+        }
         return reject(new Error(`Failed to move updated plugin into place: ${err.message}`));
+      }
+
+      if (backupDir) {
+        try { fs.rmSync(backupDir, { recursive: true, force: true }); } catch {}
       }
       resolve(manifest);
     };
