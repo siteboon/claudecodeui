@@ -8,6 +8,7 @@ const baseOptions = {
   resolvedEffort: undefined,
   workingDir: '/home/user/project',
   providerSessionId: undefined,
+  images: undefined,
   files: undefined,
   command: 'hello world',
   permissionMode: 'default',
@@ -115,6 +116,23 @@ test('buildQoderArgs: files without command still produce a prompt with files_in
   assert.ok(lastArg, 'expected a prompt argument');
   assert.ok(lastArg.includes('<files_input>'), 'prompt must contain files_input tag');
   assert.ok(lastArg.includes('/path/to/file.ts'), 'prompt must contain the file path');
+});
+
+test('buildQoderArgs: images produce --attachment and an images_input tag', () => {
+  const args = buildQoderArgs({
+    ...baseOptions,
+    command: undefined,
+    images: ['/path/to/image.png'],
+  });
+
+  const attachmentIndex = args.indexOf('--attachment');
+  assert.ok(attachmentIndex > -1, 'expected --attachment');
+  assert.equal(args[attachmentIndex + 1], '/path/to/image.png');
+
+  const lastArg = args.at(-1);
+  assert.ok(lastArg, 'expected a prompt argument');
+  assert.ok(lastArg.includes('<images_input>'), 'prompt must contain images_input tag');
+  assert.ok(lastArg.includes('/path/to/image.png'), 'prompt must contain the image path');
 });
 
 test('buildQoderArgs: no prompt and no files means no -- separator and no prompt arg', () => {

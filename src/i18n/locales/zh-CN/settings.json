@@ -5,6 +5,7 @@
     "permissions": "权限",
     "mcpServers": "MCP 服务器",
     "skills": "技能",
+    "sharedSkills": "共享技能",
     "appearance": "外观"
   },
   "account": {
@@ -483,7 +484,8 @@
     "serverType": "类型",
     "scope": {
       "local": "本地",
-      "user": "用户"
+      "user": "用户",
+      "project": "项目"
     },
     "config": {
       "command": "命令",

@@ -4,13 +4,14 @@ import type { IProviderSessions } from '@/shared/interfaces.js';
 import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
 import { parseFilesInputTag, parseImagesInputTag } from '@/shared/image-attachments.js';
 import {
-  aggregateQoderTranscriptTokenUsage,
   createNormalizedMessage,
   generateMessageId,
   readJsonlEntries,
+  readJsonRecord,
   readObjectRecord,
   resolveQoderTranscriptPath,
   sliceTailPage,
+  type QoderTranscriptTokenUsage,
 } from '@/shared/utils.js';
 import { sessionsDb } from '@/modules/database/index.js';
 
@@ -59,6 +60,11 @@ function formatToolContent(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+function safeCount(value: unknown): number {
+  const n = Number(value ?? 0);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
 }
 
 /**
@@ -353,9 +359,28 @@ export class QoderSessionsProvider implements IProviderSessions {
       }
     }
 
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let cacheReadTokens = 0;
+    let cacheCreationTokens = 0;
+
     const normalized: NormalizedMessage[] = [];
     for (const raw of rawMessages) {
       normalized.push(...this.normalizeMessage(raw, sessionId));
+
+      // Accumulate token usage during the same pass so we do not iterate the
+      // buffered transcript again. qodercli 1.1.13 writes zeros into these
+      // fields (it measures `credits` and a `context_usage_ratio`), so this is
+      // normally undefined — see `supportsTokenUsage` for this provider.
+      if (raw.type === 'assistant') {
+        const usage = readJsonRecord(readJsonRecord(raw.message)?.usage);
+        if (usage) {
+          inputTokens += safeCount(usage.input_tokens);
+          outputTokens += safeCount(usage.output_tokens);
+          cacheReadTokens += safeCount(usage.cache_read_input_tokens);
+          cacheCreationTokens += safeCount(usage.cache_creation_input_tokens);
+        }
+      }
     }
 
     for (const msg of normalized) {
@@ -371,10 +396,15 @@ export class QoderSessionsProvider implements IProviderSessions {
       }
     }
 
-    // Cumulative usage across assistant rows. qodercli 1.1.13 writes zeros into
-    // those fields (it measures `credits` and a `context_usage_ratio`), so this
-    // is normally undefined — see `supportsTokenUsage` for this provider.
-    const tokenUsage = await aggregateQoderTranscriptTokenUsage(rawMessages) ?? undefined;
+    const used = inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
+    const tokenUsage: QoderTranscriptTokenUsage | undefined = used > 0
+      ? {
+          used,
+          inputTokens: inputTokens + cacheReadTokens,
+          outputTokens,
+          breakdown: { input: inputTokens + cacheReadTokens, output: outputTokens },
+        }
+      : undefined;
 
     let total = 0;
     for (const msg of normalized) {

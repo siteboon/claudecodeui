@@ -5,6 +5,7 @@
     "permissions": "Permissions",
     "mcpServers": "MCP Servers",
     "skills": "Skills",
+    "sharedSkills": "Shared Skills",
     "appearance": "Appearance"
   },
   "account": {
@@ -483,7 +484,8 @@
     "serverType": "Type",
     "scope": {
       "local": "local",
-      "user": "user"
+      "user": "user",
+      "project": "project"
     },
     "config": {
       "command": "Command",

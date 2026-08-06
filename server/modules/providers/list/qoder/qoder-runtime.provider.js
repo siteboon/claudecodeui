@@ -365,7 +365,7 @@ async function spawnQoder(command, options = {}, ws, context) {
         }
 
         if (qoderProcess.aborted) {
-          notifyTerminalState({ code });
+          // The abort handler already sent the terminal state; do not report failure.
           resolve();
           return;
         }

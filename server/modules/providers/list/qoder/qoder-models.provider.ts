@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+
 import crossSpawn from 'cross-spawn';
 
 import { sessionsDb } from '@/modules/database/index.js';
@@ -252,12 +254,16 @@ const normalizeQoderModelName = (
   return null;
 };
 
-const resolveQoderJsonlPath = (providerSessionId: string, projectPath?: string): string | null => {
+const resolveQoderJsonlPath = (
+  sessionId: string,
+  providerSessionId: string,
+  projectPath?: string,
+): string | null => {
   // Prefer the transcript path recorded by the synchronizer so cwd encoding
-  // stays consistent with what the CLI actually wrote on disk.
-  const storedPath = sessionsDb.getSessionByProviderSessionId(providerSessionId)?.jsonl_path
-    ?? sessionsDb.getSessionById(providerSessionId)?.jsonl_path;
-  if (storedPath) {
+  // stays consistent with what the CLI actually wrote on disk. Look up by the
+  // app session id, and verify the path still exists before trusting it.
+  const storedPath = sessionsDb.getSessionById(sessionId)?.jsonl_path;
+  if (storedPath && fs.existsSync(storedPath)) {
     return storedPath;
   }
 
@@ -319,7 +325,7 @@ export class QoderProviderModels implements IProviderModels {
     // sessions must be translated through the mapping first.
     const sessionRow = sessionsDb.getSessionById(sessionId);
     const providerSessionId = sessionRow?.provider_session_id ?? sessionId;
-    const jsonlPath = resolveQoderJsonlPath(providerSessionId, sessionRow?.project_path ?? undefined);
+    const jsonlPath = resolveQoderJsonlPath(sessionId, providerSessionId, sessionRow?.project_path ?? undefined);
 
     if (jsonlPath) {
       const rawModel = await readQoderSessionModel(jsonlPath);
