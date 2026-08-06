@@ -112,12 +112,14 @@ test('lockout does not extend when the client keeps hammering', () => {
   limiter.middleware(createMockRequest('203.0.113.3') as never, response as never, next);
   const firstBlockEnd = response.headers['Retry-After'];
 
-  // Advance time past one second — past the original lockout boundary — and
-  // verify the block window does NOT reset/extend (would happen if we kept
-  // consuming slots). Advancing by 1100 ms puts us 100 ms past the original
-  // `now + lockoutMs` of 3000 but still inside `timestamps[0] + windowMs`
-  // (1000 + 1000 = 2000), so the preserved lockout is observable in the
-  // updated `Retry-After` header.
+  // Advance simulated time by 1100 ms. The original lockout expires at
+  // `now + lockoutMs` = 1000 + 2000 = 3000, so 2100 ms is still inside it.
+  // The rolling-window timestamp at 1000 expires at 1000 + 1000 = 2000, so
+  // 2100 ms is 100 ms past that expiry. A preserved lockout therefore
+  // returns the remaining `Retry-After` duration; a reset lockout would
+  // also return the same number. Advance far enough that the next request
+  // would only succeed if the lockout was preserved — the next call sits
+  // at `now = 2100`, so the preserved lockout returns 1 (`3000 - 2100`).
   currentTime += 1100;
   limiter.middleware(createMockRequest('203.0.113.3') as never, response as never, next);
 
