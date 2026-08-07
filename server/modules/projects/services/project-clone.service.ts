@@ -77,6 +77,25 @@ function sanitizeGitError(message: string, token: string | null): string {
 }
 
 /**
+ * Minimum prefix length worth redacting in streaming output. Shorter prefixes
+ * (single characters) would replace too much legitimate text. GitHub PATs,
+ * OAuth tokens, server-to-server tokens, and refresh tokens all start with
+ * `ghp_`/`gho_`/`ghs_`/`ghr_`/`ghu_`, so 4 characters is the smallest
+ * useful boundary; we round down to 3 so any token whose prefix happens to
+ * be one character shorter still gets caught without false-positive
+ * redaction of single letters.
+ */
+const MIN_TOKEN_PREFIX_LENGTH = 3;
+
+/**
+ * Cap on the work performed per `redactAnyTokenPrefix` call. A truly
+ * malicious token could be megabytes long; without a cap the linear scanner
+ * below would spend that many bytes per chunk. GitHub PATs are at most 255
+ * characters; the cap is one order of magnitude above that for safety.
+ */
+const MAX_TOKEN_LENGTH_FOR_REDACTION = 2048;
+
+/**
  * Streaming wrapper around {@link sanitizeGitError} that buffers a token's
  * worth of trailing characters across consecutive chunks. `git`'s `data`
  * events are arbitrary byte slices, not full messages, so a credential can
@@ -85,15 +104,19 @@ function sanitizeGitError(message: string, token: string | null): string {
  * fragments through.
  *
  * `feed(chunk)` consumes one chunk and returns the redacted portion that is
- * safe to forward. Up to `token.length - 1` characters are retained as a
- * "possible token prefix" until the next chunk (or the close call)
- * confirms they do not form a complete token. Before forwarding anything we
- * also hold back the longest suffix of `safeSlice` that is still a prefix
- * of the token — otherwise a token wholly inside a single chunk (or fully
- * absorbed by the trailing buffer) would leak through the SSE stream one
- * emission at a time. `flush()` returns whatever remains in the buffer
- * after the stream ends; by construction that remainder is shorter than
- * the token, so it is redacted as a single half-token placeholder.
+ * safe to forward. Up to {@link MAX_TOKEN_LENGTH_FOR_REDACTION} characters
+ * are retained as a "possible token prefix" until the next chunk (or the
+ * close call) confirms they do not form a complete token. Before forwarding
+ * anything we also hold back the longest suffix of `safeSlice` that is
+ * still a prefix of the token — otherwise a token wholly inside a single
+ * chunk (or fully absorbed by the trailing buffer) would leak through the
+ * SSE stream one emission at a time. `flush()` returns whatever remains in
+ * the buffer after the stream ends; by construction that remainder is
+ * shorter than the (capped) token, so it is redacted as a single
+ * half-token placeholder.
+ *
+ * The cap on the effective token length is a defense against a malicious or
+ * accidentally-huge token causing unbounded memory use per clone.
  */
 function createStreamingRedactor(token: string | null) {
   if (!token) {
@@ -107,8 +130,26 @@ function createStreamingRedactor(token: string | null) {
     };
   }
 
-  const maxPrefix = token.length - 1;
+  // Cap the work by truncating the effective token. We do NOT modify the
+  // caller's token, only the prefix we search for and the buffer we keep.
+  const effectiveToken = token.length > MAX_TOKEN_LENGTH_FOR_REDACTION
+    ? token.slice(0, MAX_TOKEN_LENGTH_FOR_REDACTION)
+    : token;
+  const maxPrefix = effectiveToken.length - 1;
   let buffer = '';
+
+  // Find the longest suffix of `safeSlice` that is also a non-empty prefix
+  // of the token; hold those characters back into the buffer so we never
+  // emit text that ends mid-token. Returns the prefix length to retain.
+  const trailingPrefixLength = (safeSlice: string): number => {
+    const maxLookback = Math.min(maxPrefix, safeSlice.length);
+    for (let length = maxLookback; length > 0; length -= 1) {
+      if (safeSlice.endsWith(effectiveToken.slice(0, length))) {
+        return length;
+      }
+    }
+    return 0;
+  };
 
   // Find the longest suffix of `safeSlice` that is also a non-empty prefix
   // of the token; hold those characters back into the buffer so we never
@@ -157,32 +198,21 @@ function createStreamingRedactor(token: string | null) {
       // an emission would leak. The trailing-prefix holdback above ensures
       // the emitted string never ends with a credential prefix, so the
       // longest-prefix-first alternation here has a clean boundary.
-      return redactAnyTokenPrefix(safeSlice, token);
+      return redactAnyTokenPrefix(safeSlice, effectiveToken);
     },
     flush(): string {
       if (!buffer) return '';
-      // The remainder is strictly shorter than `token.length`. It is
-      // therefore a possible credential prefix; replace any prefix of the
-      // token present in the remainder with `***` so a downstream consumer
-      // cannot reconstruct the credential by concatenating this emission
-      // with what `feed` already forwarded.
+      // The remainder is strictly shorter than `effectiveToken.length`. It
+      // is therefore a possible credential prefix; replace any prefix of
+      // the token present in the remainder with `***` so a downstream
+      // consumer cannot reconstruct the credential by concatenating this
+      // emission with what `feed` already forwarded.
       const remainder = buffer;
       buffer = '';
-      return redactAnyTokenPrefix(remainder, token);
+      return redactAnyTokenPrefix(remainder, effectiveToken);
     },
   };
 }
-
-/**
- * Minimum prefix length worth redacting in streaming output. Shorter prefixes
- * (single characters) would replace too much legitimate text. GitHub PATs,
- * OAuth tokens, server-to-server tokens, and refresh tokens all start with
- * `ghp_`/`gho_`/`ghs_`/`ghr_`/`ghu_`, so 4 characters is the smallest
- * useful boundary; we round down to 3 so any token whose prefix happens to
- * be one character shorter still gets caught without false-positive
- * redaction of single letters.
- */
-const MIN_TOKEN_PREFIX_LENGTH = 3;
 
 /**
  * Replace every prefix of `token` (length ≥ {@link MIN_TOKEN_PREFIX_LENGTH})
@@ -190,17 +220,54 @@ const MIN_TOKEN_PREFIX_LENGTH = 3;
  * specific token's prefixes, so it catches credential fragments that
  * `sanitizeGitError`'s exact-match replacement would miss, while leaving
  * unrelated text alone.
+ *
+ * Uses a linear scanner rather than a regex of O(N) alternations so the
+ * cost is bounded by the cap on the token length and the message size —
+ * never quadratic. For each position we try the longest possible match
+ * first so a longer prefix wins when shorter prefixes overlap.
  */
 function redactAnyTokenPrefix(message: string, token: string): string {
   if (!message || !token) return message;
-  // Longest prefix first so a longer match wins (avoids partial redaction
-  // when a shorter prefix overlaps).
-  const alternatives: string[] = [];
-  for (let length = token.length; length >= MIN_TOKEN_PREFIX_LENGTH; length -= 1) {
-    const escaped = token.slice(0, length).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    alternatives.push(escaped);
+
+  // Cap the work by truncating the effective token. We do NOT modify the
+  // caller's token, only the prefix we search for.
+  const effectiveToken = token.length > MAX_TOKEN_LENGTH_FOR_REDACTION
+    ? token.slice(0, MAX_TOKEN_LENGTH_FOR_REDACTION)
+    : token;
+  if (effectiveToken.length < MIN_TOKEN_PREFIX_LENGTH) return message;
+
+  const firstChar = effectiveToken[0];
+  let result = '';
+  let cursor = 0;
+  while (cursor < message.length) {
+    // Fast path: most positions in `message` do not start a token prefix,
+    // so check the first character first to avoid entering the inner loop.
+    if (message[cursor] !== firstChar) {
+      result += message[cursor];
+      cursor += 1;
+      continue;
+    }
+
+    const remaining = message.length - cursor;
+    const maxMatch = Math.min(effectiveToken.length, remaining);
+    let matchedLength = 0;
+    // Try longest prefix first so a longer match wins when shorter
+    // prefixes of the token would also match at this position.
+    for (let length = maxMatch; length >= MIN_TOKEN_PREFIX_LENGTH; length -= 1) {
+      if (message.startsWith(effectiveToken.slice(0, length), cursor)) {
+        matchedLength = length;
+        break;
+      }
+    }
+    if (matchedLength > 0) {
+      result += '***';
+      cursor += matchedLength;
+    } else {
+      result += message[cursor];
+      cursor += 1;
+    }
   }
-  return message.replace(new RegExp(alternatives.join('|'), 'g'), '***');
+  return result;
 }
 
 function resolveCloneFailureMessage(lastError: string, sanitizedError: string): string {
