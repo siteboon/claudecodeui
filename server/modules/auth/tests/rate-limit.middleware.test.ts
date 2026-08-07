@@ -335,11 +335,14 @@ test('trusted proxy chain selects the nearest untrusted client address', () => {
   };
 
   // Real client "198.51.100.7" sits behind two trusted proxies
-  // (10.0.0.1 → 10.0.0.2). The trusted outer proxy appends the real client
-  // address, but the attacker forged the leftmost value.
+  // (10.0.0.1 → 10.0.0.2). The trusted outer proxy appends the inner
+  // trusted proxy (10.0.0.1) on the right, which itself appended the real
+  // client address. An attacker forged the leftmost value. The parser
+  // must walk right-to-left, skip 10.0.0.2 (TCP peer / trusted), skip
+  // 10.0.0.1 (configured trusted hop), and stop at 198.51.100.7.
   const realClientRequest = {
     socket: { remoteAddress: '10.0.0.2' },
-    headers: { 'x-forwarded-for': '198.51.100.99, 198.51.100.7' },
+    headers: { 'x-forwarded-for': '198.51.100.99, 10.0.0.1, 198.51.100.7' },
   };
   limiter.middleware(realClientRequest as never, response as never, next);
   assert.equal(calls.length, 1);
@@ -363,7 +366,7 @@ test('trusted proxy chain with only trusted hops falls back to TCP peer', () => 
     maxAttempts: 1,
     windowMs: 1000,
     now: () => 1000,
-    trustedProxyAddresses: ['10.0.0.1'],
+    trustedProxyAddresses: ['10.0.0.1', '10.0.0.2', '10.0.0.3'],
   });
   const next = (() => { calls.push(1); }) as () => void;
   const calls: number[] = [];
@@ -376,15 +379,25 @@ test('trusted proxy chain with only trusted hops falls back to TCP peer', () => 
     json(body: unknown) { this.body = body; return this; },
   };
 
-  // Header contains only trusted hops — parser walks right-to-left, all
-  // entries are trusted, so the function falls back to the TCP peer. The
+  // Header contains only trusted hops — parser walks right-to-left, every
+  // entry is trusted, so the function falls back to the TCP peer. The
   // attacker cannot force the limiter into a different bucket by chaining
   // trusted addresses.
-  const request = {
-    socket: { remoteAddress: '10.0.0.1' },
-    headers: { 'x-forwarded-for': '10.0.0.2, 10.0.0.3, 10.0.0.1' },
+  const requestWithHeader = {
+    socket: { remoteAddress: '10.0.0.2' },
+    headers: { 'x-forwarded-for': '10.0.0.1, 10.0.0.3, 10.0.0.2' },
   };
-  limiter.middleware(request as never, response as never, next);
-  limiter.middleware(request as never, response as never, next);
+  limiter.middleware(requestWithHeader as never, response as never, next);
   assert.equal(calls.length, 1);
+
+  // Second request arrives from the same TCP peer but without the header.
+  // It must be bucketed under the same key (the TCP peer fallback) and
+  // rejected with 429, proving the fallback path is observable.
+  const requestWithoutHeader = {
+    socket: { remoteAddress: '10.0.0.2' },
+    headers: {},
+  };
+  limiter.middleware(requestWithoutHeader as never, response as never, next);
+  assert.equal(calls.length, 1);
+  assert.equal(response.statusCode, 429);
 });
