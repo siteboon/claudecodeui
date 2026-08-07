@@ -17,7 +17,7 @@ import {
 } from '@/modules/providers/index.js';
 import { createWebSocketServer } from '@/modules/websocket/index.js';
 
-import { getConnectableHost } from '../shared/networkHosts.js';
+import { getConnectableHost, isLoopbackHost, isWildcardHost, normalizeLoopbackHost } from '../shared/networkHosts.js';
 
 import { createGitModule } from './modules/git/index.js';
 import {
@@ -126,10 +126,27 @@ app.locals.wss = wss;
 // CORS — only reflect origins that share a host:port with the server. The
 // default `cors()` configuration reflects any Origin header, which lets any
 // malicious site make authenticated cross-origin requests against this server
-// when a victim visits it in the same browser session. Limiting the
-// reflected origin to the server's own loopback / LAN addresses keeps the
-// browser same-origin policy intact without breaking the local Electron app
-// or LAN-hosted deployments.
+// when a victim visits it in the same browser session. Build an explicit
+// trusted-origin allowlist from the configured listen address (canonicalizing
+// loopback aliases such as `127.0.0.1` ↔ `localhost`) and compare the
+// request's origin against that list — never against `HOST` directly, because
+// `HOST` only controls binding and `0.0.0.0` / `::` would otherwise be
+// interpreted as "any host on this port".
+const trustedOriginHosts = (() => {
+    const advertised = getConnectableHost(HOST);
+    const hosts = new Set<string>();
+    hosts.add(normalizeLoopbackHost(advertised));
+    if (isLoopbackHost(HOST) || isWildcardHost(HOST)) {
+        hosts.add('localhost');
+        hosts.add('127.0.0.1');
+        hosts.add('::1');
+    } else {
+        hosts.add(HOST);
+    }
+    return hosts;
+})();
+const trustedOriginPort = String(SERVER_PORT);
+
 const corsOriginReflector = (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
     // No Origin header → same-origin request (e.g. server-to-server, curl);
     // these are not subject to CORS and should always be allowed through.
@@ -140,12 +157,10 @@ const corsOriginReflector = (origin: string | undefined, callback: (err: Error |
 
     try {
         const parsed = new URL(origin);
-        const requestHost = parsed.hostname;
+        const requestHost = normalizeLoopbackHost(parsed.hostname);
         const requestPort = parsed.port || (parsed.protocol === 'https:' ? '443' : '80');
-        const serverHost = HOST === '0.0.0.0' || HOST === '::' ? requestHost : HOST;
-        const serverPort = String(SERVER_PORT);
 
-        if (requestHost === serverHost && requestPort === serverPort) {
+        if (trustedOriginHosts.has(requestHost) && requestPort === trustedOriginPort) {
             callback(null, true);
             return;
         }
@@ -158,6 +173,7 @@ const corsOriginReflector = (origin: string | undefined, callback: (err: Error |
 
 app.use(cors({
     origin: corsOriginReflector,
+    credentials: true,
     exposedHeaders: ['X-Refreshed-Token', 'X-Auth-Error'],
 }));
 app.use(express.json({
