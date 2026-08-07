@@ -203,3 +203,116 @@ test('different client keys are tracked independently', () => {
 
   assert.equal(calls.length, 2);
 });
+
+test('X-Forwarded-For is honoured only when the TCP peer is a trusted proxy', () => {
+  let currentTime = 1000;
+  const limiter = createRateLimiter({
+    maxAttempts: 1,
+    windowMs: 1000,
+    now: () => currentTime,
+    trustedProxyAddresses: ['10.0.0.1'],
+  });
+  const next = (() => { calls.push(1); }) as () => void;
+  const calls: number[] = [];
+  const response = {
+    statusCode: 0,
+    body: undefined as unknown,
+    headers: {} as Record<string, string>,
+    status(code: number) { this.statusCode = code; return this; },
+    setHeader(name: string, value: string) { this.headers[name] = value; },
+    json(body: unknown) { this.body = body; return this; },
+  };
+
+  // Trusted proxy → forwarded address is the client key.
+  const reqFromProxiedVictim = {
+    socket: { remoteAddress: '10.0.0.1' },
+    headers: { 'x-forwarded-for': '198.51.100.7' },
+  };
+  // Untrusted peer claiming to be a victim via X-Forwarded-For → ignored,
+  // the TCP peer is the client key.
+  const reqFromSpoofer = {
+    socket: { remoteAddress: '203.0.113.99' },
+    headers: { 'x-forwarded-for': '198.51.100.8' },
+  };
+
+  // Each unique forwarded address gets its own slot, so two calls succeed.
+  limiter.middleware(reqFromProxiedVictim as never, response as never, next);
+  limiter.middleware(reqFromSpoofer as never, response as never, next);
+  assert.equal(calls.length, 2);
+
+  // Replay the proxied victim → that key is now exhausted; the spoofer
+  // key is exhausted separately. The spoofer cannot bypass by reusing the
+  // same TCP peer.
+  limiter.middleware(reqFromProxiedVictim as never, response as never, next);
+  limiter.middleware(reqFromSpoofer as never, response as never, next);
+  assert.equal(calls.length, 2);
+  assert.equal(response.statusCode, 429);
+
+  // A different proxied victim starts fresh because the key comes from the
+  // header, not the proxy.
+  const reqFromProxiedVictim2 = {
+    socket: { remoteAddress: '10.0.0.1' },
+    headers: { 'x-forwarded-for': '198.51.100.9' },
+  };
+  limiter.middleware(reqFromProxiedVictim2 as never, response as never, next);
+  assert.equal(calls.length, 3);
+});
+
+test('untrusted loopback peers cannot spoof X-Forwarded-For', () => {
+  const limiter = createRateLimiter({ maxAttempts: 1, windowMs: 1000, now: () => 1000 });
+  const next = (() => { calls.push(1); }) as () => void;
+  const calls: number[] = [];
+  const response = {
+    statusCode: 0,
+    body: undefined as unknown,
+    headers: {} as Record<string, string>,
+    status(code: number) { this.statusCode = code; return this; },
+    setHeader(name: string, value: string) { this.headers[name] = value; },
+    json(body: unknown) { this.body = body; return this; },
+  };
+
+  // No trustedProxyAddresses → loopback peer with X-Forwarded-For must be
+  // bucketed under the TCP peer, not the spoofed forwarded address.
+  const reqA = {
+    socket: { remoteAddress: '127.0.0.1' },
+    headers: { 'x-forwarded-for': '198.51.100.10' },
+  };
+  const reqB = {
+    socket: { remoteAddress: '127.0.0.1' },
+    headers: { 'x-forwarded-for': '198.51.100.11' },
+  };
+  limiter.middleware(reqA as never, response as never, next);
+  limiter.middleware(reqB as never, response as never, next);
+  // Both calls share the TCP peer bucket, so the second is rate-limited.
+  assert.equal(calls.length, 1);
+  assert.equal(response.statusCode, 429);
+});
+
+test('records map is bounded by expiring entries after the window passes', () => {
+  let currentTime = 1000;
+  const limiter = createRateLimiter({ maxAttempts: 1, windowMs: 1000, now: () => currentTime });
+  const next = () => undefined;
+  const response = {
+    statusCode: 0,
+    body: undefined as unknown,
+    headers: {} as Record<string, string>,
+    status(code: number) { this.statusCode = code; return this; },
+    setHeader(name: string, value: string) { this.headers[name] = value; },
+    json(body: unknown) { this.body = body; return this; },
+  };
+
+  // Push 50 distinct addresses through the limiter.
+  for (let i = 0; i < 50; i += 1) {
+    limiter.middleware(createMockRequest(`198.51.100.${i}`) as never, response as never, next);
+  }
+  const sizeAfterBurst = (limiter as unknown as { records: Map<string, unknown> }).records.size;
+  assert.equal(sizeAfterBurst, 50);
+
+  // Advance well past the window so all timestamps age out, then a single
+  // request triggers the periodic sweep.
+  currentTime += 5000;
+  limiter.middleware(createMockRequest('198.51.100.0') as never, response as never, next);
+  const sizeAfterSweep = (limiter as unknown as { records: Map<string, unknown> }).records.size;
+  // Only the just-touched record remains; the other 49 were evicted.
+  assert.equal(sizeAfterSweep, 1);
+});
