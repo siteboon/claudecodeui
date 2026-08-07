@@ -283,6 +283,13 @@ export function installPluginFromGit(url, options) {
     if (url.startsWith('-')) {
       return reject(new Error('Invalid URL: must not start with "-"'));
     }
+    // Only allow the supported remote transports. The HTTP layer in
+    // plugins.service.ts already enforces this for incoming requests, but
+    // validating here too prevents any internal caller (tests, future
+    // programmatic install paths) from bypassing the scheme check.
+    if (!url.startsWith('https://') && !url.startsWith('git@')) {
+      return reject(new Error('Invalid URL: only https:// and git@ remotes are supported'));
+    }
 
     // Extract repo name from URL for directory name
     const urlClean = url.replace(/\.git$/, '').replace(/\/$/, '');
