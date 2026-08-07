@@ -139,25 +139,13 @@ function createStreamingRedactor(token: string | null) {
   let buffer = '';
 
   // Find the longest suffix of `safeSlice` that is also a non-empty prefix
-  // of the token; hold those characters back into the buffer so we never
-  // emit text that ends mid-token. Returns the prefix length to retain.
+  // of `effectiveToken` (the cap-bounded token used by the redactor); hold
+  // those characters back into the buffer so we never emit text that ends
+  // mid-token. Returns the prefix length to retain.
   const trailingPrefixLength = (safeSlice: string): number => {
     const maxLookback = Math.min(maxPrefix, safeSlice.length);
     for (let length = maxLookback; length > 0; length -= 1) {
       if (safeSlice.endsWith(effectiveToken.slice(0, length))) {
-        return length;
-      }
-    }
-    return 0;
-  };
-
-  // Find the longest suffix of `safeSlice` that is also a non-empty prefix
-  // of the token; hold those characters back into the buffer so we never
-  // emit text that ends mid-token. Returns the prefix length to retain.
-  const trailingPrefixLength = (safeSlice: string): number => {
-    const maxLookback = Math.min(maxPrefix, safeSlice.length);
-    for (let length = maxLookback; length > 0; length -= 1) {
-      if (safeSlice.endsWith(token.slice(0, length))) {
         return length;
       }
     }
