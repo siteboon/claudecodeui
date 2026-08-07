@@ -34,12 +34,26 @@ function readClientKey(req: Request, trustedProxyAddresses: Set<string>): string
   const socketAddress = req.socket?.remoteAddress || 'unknown';
 
   if (trustedProxyAddresses.has(socketAddress)) {
+    // `X-Forwarded-For` is a comma-separated list where each proxy appends
+    // the address it observed. The leftmost value is the most distant and
+    // therefore the easiest for an attacker to forge; the rightmost value
+    // before any trusted hop is the closest honest client observation.
+    // Walk the chain from right to left, skipping any trusted hops, and
+    // take the first remaining (untrusted) address.
     const forwarded = req.headers['x-forwarded-for'];
+    const chain: string[] = [];
     if (typeof forwarded === 'string' && forwarded.trim()) {
-      return forwarded.split(',')[0]!.trim();
+      chain.push(...forwarded.split(','));
+    } else if (Array.isArray(forwarded) && forwarded.length > 0) {
+      for (const header of forwarded) {
+        if (typeof header === 'string') chain.push(...header.split(','));
+      }
     }
-    if (Array.isArray(forwarded) && forwarded.length > 0) {
-      return forwarded[0]!.split(',')[0]!.trim();
+    for (let i = chain.length - 1; i >= 0; i -= 1) {
+      const candidate = chain[i]!.trim();
+      if (candidate && !trustedProxyAddresses.has(candidate)) {
+        return candidate;
+      }
     }
   }
 
@@ -58,6 +72,8 @@ function readClientKey(req: Request, trustedProxyAddresses: Set<string>): string
 export function createRateLimiter(options: RateLimiterOptions): {
   middleware: RequestHandler;
   reset: () => void;
+  /** Number of client keys currently tracked. Exposed for tests. */
+  size: () => number;
 } {
   const maxAttempts = options.maxAttempts;
   const windowMs = options.windowMs;
@@ -151,5 +167,6 @@ export function createRateLimiter(options: RateLimiterOptions): {
   return {
     middleware,
     reset: () => records.clear(),
+    size: () => records.size,
   };
 }

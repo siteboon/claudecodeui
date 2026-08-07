@@ -305,14 +305,86 @@ test('records map is bounded by expiring entries after the window passes', () =>
   for (let i = 0; i < 50; i += 1) {
     limiter.middleware(createMockRequest(`198.51.100.${i}`) as never, response as never, next);
   }
-  const sizeAfterBurst = (limiter as unknown as { records: Map<string, unknown> }).records.size;
-  assert.equal(sizeAfterBurst, 50);
+  assert.equal(limiter.size(), 50);
 
   // Advance well past the window so all timestamps age out, then a single
   // request triggers the periodic sweep.
   currentTime += 5000;
   limiter.middleware(createMockRequest('198.51.100.0') as never, response as never, next);
-  const sizeAfterSweep = (limiter as unknown as { records: Map<string, unknown> }).records.size;
   // Only the just-touched record remains; the other 49 were evicted.
-  assert.equal(sizeAfterSweep, 1);
+  assert.equal(limiter.size(), 1);
+});
+
+test('trusted proxy chain selects the nearest untrusted client address', () => {
+  let currentTime = 1000;
+  const limiter = createRateLimiter({
+    maxAttempts: 1,
+    windowMs: 1000,
+    now: () => currentTime,
+    trustedProxyAddresses: ['10.0.0.1', '10.0.0.2'],
+  });
+  const next = (() => { calls.push(1); }) as () => void;
+  const calls: number[] = [];
+  const response = {
+    statusCode: 0,
+    body: undefined as unknown,
+    headers: {} as Record<string, string>,
+    status(code: number) { this.statusCode = code; return this; },
+    setHeader(name: string, value: string) { this.headers[name] = value; },
+    json(body: unknown) { this.body = body; return this; },
+  };
+
+  // Real client "198.51.100.7" sits behind two trusted proxies
+  // (10.0.0.1 → 10.0.0.2). The trusted outer proxy appends the real client
+  // address, but the attacker forged the leftmost value.
+  const realClientRequest = {
+    socket: { remoteAddress: '10.0.0.2' },
+    headers: { 'x-forwarded-for': '198.51.100.99, 198.51.100.7' },
+  };
+  limiter.middleware(realClientRequest as never, response as never, next);
+  assert.equal(calls.length, 1);
+
+  // A spoofed request that tries to reuse the same forged value with no
+  // real client behind it: the spoofed "198.51.100.99" is treated as its
+  // own key (after the legitimate 198.51.100.7 consumed its slot). The
+  // attacker cannot land in the real client's bucket because the parser
+  // walks the chain from right to left and stops at the first non-proxy
+  // hop (198.51.100.7), not the attacker-supplied leftmost value.
+  const spoofRequest = {
+    socket: { remoteAddress: '10.0.0.2' },
+    headers: { 'x-forwarded-for': '198.51.100.99' },
+  };
+  limiter.middleware(spoofRequest as never, response as never, next);
+  assert.equal(calls.length, 2);
+});
+
+test('trusted proxy chain with only trusted hops falls back to TCP peer', () => {
+  const limiter = createRateLimiter({
+    maxAttempts: 1,
+    windowMs: 1000,
+    now: () => 1000,
+    trustedProxyAddresses: ['10.0.0.1'],
+  });
+  const next = (() => { calls.push(1); }) as () => void;
+  const calls: number[] = [];
+  const response = {
+    statusCode: 0,
+    body: undefined as unknown,
+    headers: {} as Record<string, string>,
+    status(code: number) { this.statusCode = code; return this; },
+    setHeader(name: string, value: string) { this.headers[name] = value; },
+    json(body: unknown) { this.body = body; return this; },
+  };
+
+  // Header contains only trusted hops — parser walks right-to-left, all
+  // entries are trusted, so the function falls back to the TCP peer. The
+  // attacker cannot force the limiter into a different bucket by chaining
+  // trusted addresses.
+  const request = {
+    socket: { remoteAddress: '10.0.0.1' },
+    headers: { 'x-forwarded-for': '10.0.0.2, 10.0.0.3, 10.0.0.1' },
+  };
+  limiter.middleware(request as never, response as never, next);
+  limiter.middleware(request as never, response as never, next);
+  assert.equal(calls.length, 1);
 });
