@@ -11,6 +11,14 @@ type RateLimiterOptions = {
   windowMs: number;
   /** How long a locked-out client should be told to wait before retrying. */
   lockoutMs?: number;
+  /**
+   * TCP peer addresses whose `X-Forwarded-For` header is honoured. Defaults
+   * to none; loopback is NOT implicitly trusted because a local process can
+   * still inject arbitrary client addresses through the header. Operators
+   * running behind a reverse proxy must enumerate the proxy's addresses
+   * here. Values are matched against `req.socket.remoteAddress`.
+   */
+  trustedProxyAddresses?: string[];
   /** Optional clock for tests. */
   now?: () => number;
 };
@@ -22,23 +30,20 @@ type AttemptRecord = {
   blockedUntil: number;
 };
 
-function readClientKey(req: Request): string {
-  // Prefer the address of the TCP peer; fall back to a header chain that
-  // includes the most common reverse-proxy forwarded-for conventions.
-  const socketAddress = req.socket?.remoteAddress;
-  if (socketAddress && socketAddress !== '::1' && socketAddress !== '127.0.0.1') {
-    return socketAddress;
+function readClientKey(req: Request, trustedProxyAddresses: Set<string>): string {
+  const socketAddress = req.socket?.remoteAddress || 'unknown';
+
+  if (trustedProxyAddresses.has(socketAddress)) {
+    const forwarded = req.headers['x-forwarded-for'];
+    if (typeof forwarded === 'string' && forwarded.trim()) {
+      return forwarded.split(',')[0]!.trim();
+    }
+    if (Array.isArray(forwarded) && forwarded.length > 0) {
+      return forwarded[0]!.split(',')[0]!.trim();
+    }
   }
 
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string' && forwarded.trim()) {
-    return forwarded.split(',')[0]!.trim();
-  }
-  if (Array.isArray(forwarded) && forwarded.length > 0) {
-    return forwarded[0]!.split(',')[0]!.trim();
-  }
-
-  return socketAddress || 'unknown';
+  return socketAddress;
 }
 
 /**
@@ -58,11 +63,34 @@ export function createRateLimiter(options: RateLimiterOptions): {
   const windowMs = options.windowMs;
   const lockoutMs = options.lockoutMs ?? windowMs;
   const clock = options.now ?? (() => Date.now());
+  const trustedProxyAddresses = new Set(options.trustedProxyAddresses ?? []);
 
   const records = new Map<string, AttemptRecord>();
 
+  const isRecordExpired = (record: AttemptRecord, cutoff: number): boolean =>
+    record.timestamps.length === 0 && record.blockedUntil <= cutoff;
+
+  // Sweep expired records periodically so the map cannot grow without bound
+  // regardless of how many distinct client keys we see. The sweep runs at
+  // most once per `windowMs`; an `unref`'d timer would let the Node process
+  // exit cleanly, but since this is an Express middleware tied to a long-
+  // lived HTTP server we keep the timer referenced.
+  let lastSweepAt = clock();
+  const sweepExpiredRecords = () => {
+    const now = clock();
+    if (now - lastSweepAt < windowMs) return;
+    lastSweepAt = now;
+    const cutoff = now - windowMs;
+    for (const [key, record] of records) {
+      if (isRecordExpired(record, cutoff)) {
+        records.delete(key);
+      }
+    }
+  };
+
   const middleware: RequestHandler = (req: Request, res: Response, next) => {
-    const clientKey = readClientKey(req);
+    sweepExpiredRecords();
+    const clientKey = readClientKey(req, trustedProxyAddresses);
     const now = clock();
     let record = records.get(clientKey);
     if (!record) {
