@@ -127,7 +127,13 @@ export function createPluginsService(dependencies: PluginDependencies) {
         // validation, npm install, optional build policy) has succeeded. If
         // any step rejects, the live directory is untouched, so we can
         // safely bring the previously running server back up.
-        if (wasRunning) await startServerIfAvailable(this.getManifest(pluginName));
+        if (wasRunning) {
+          try {
+            await startServerIfAvailable(this.getManifest(pluginName));
+          } catch (restoreError) {
+            dependencies.logError(`Failed to restart plugin server for ${pluginName} after a failed update`, restoreError);
+          }
+        }
         throw error;
       }
     },

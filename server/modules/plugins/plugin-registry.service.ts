@@ -427,7 +427,7 @@ export function updatePluginFromGit(name, options) {
       // through, restore the backup so the operator still has the previous
       // plugin on disk; only delete the backup after the swap succeeds.
       const backupDir = fs.existsSync(pluginDir)
-        ? `${pluginDir}.previous-${process.pid}-${Date.now()}`
+        ? path.join(pluginsDir, `.tmp-previous-${path.basename(pluginDir)}-${process.pid}-${Date.now()}`)
         : null;
       try {
         if (backupDir) {
@@ -468,6 +468,14 @@ export function updatePluginFromGit(name, options) {
     if (!remoteUrl) {
       cleanupTemp();
       return reject(new Error(`Plugin "${name}" has no git remote URL`));
+    }
+    // Only allow the supported remote transports. `installPluginFromGit`
+    // enforces the same scheme; a plugin's stored remote could otherwise
+    // be `ext::` or `file://`, both of which `git clone` accepts and the
+    // first of which executes a shell command.
+    if (!remoteUrl.startsWith('https://') && !remoteUrl.startsWith('git@')) {
+      cleanupTemp();
+      return reject(new Error(`Plugin "${name}" has an unsupported git remote: only https:// and git@ remotes are supported`));
     }
 
     const cloneProcess = spawn('git', ['clone', '--depth', '1', '--', remoteUrl, tempDir], {
