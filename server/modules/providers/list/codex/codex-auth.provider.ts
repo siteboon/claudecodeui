@@ -21,7 +21,8 @@ export class CodexProviderAuth implements IProviderAuth {
    */
   private checkInstalled(): boolean {
     try {
-      spawn.sync('codex', ['--version'], { stdio: 'ignore', timeout: 5000 });
+      const codexCommand = process.env.CODEX_CLI_PATH?.trim() || 'codex';
+      spawn.sync(codexCommand, ['--version'], { stdio: 'ignore', timeout: 5000 });
       return true;
     } catch {
       return false;
