@@ -158,7 +158,8 @@ function matchesToolPermission(entry, toolName, input) {
   return false;
 }
 
-function mapCliOptionsToSDK(options = {}) {
+// Exported for server/modules/providers/tests/claude-ultracode.test.ts.
+export function mapCliOptionsToSDK(options = {}) {
   const { providerSessionId, cwd, toolsSettings, permissionMode, effort } = options;
 
   const sdkOptions = {};
@@ -216,7 +217,13 @@ function mapCliOptionsToSDK(options = {}) {
     effort,
     options.effortModels || CLAUDE_FALLBACK_MODELS,
   );
-  if (resolvedEffort) {
+  if (resolvedEffort === 'ultracode') {
+    // Ultracode is xhigh reasoning plus standing dynamic-workflow orchestration.
+    // The SDK's EffortLevel union has no 'ultracode' member; the mode is enabled
+    // through the session-scoped `ultracode` settings key instead.
+    sdkOptions.effort = 'xhigh';
+    sdkOptions.settings = { ultracode: true };
+  } else if (resolvedEffort) {
     sdkOptions.effort = resolvedEffort;
   }
 

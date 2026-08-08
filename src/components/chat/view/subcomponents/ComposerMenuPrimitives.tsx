@@ -83,7 +83,7 @@ export function ComposerMenuItem({
       <span className="min-w-0 flex-1">
         <span className="block truncate leading-5">{label}</span>
         {description && (
-          <span className="mt-0.5 block text-xs leading-4 text-muted-foreground">{description}</span>
+          <span className="mt-0.5 block text-xs normal-case leading-4 text-muted-foreground">{description}</span>
         )}
       </span>
       <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">

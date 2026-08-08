@@ -37,6 +37,10 @@ export const CLAUDE_FALLBACK_MODELS: ProviderModelsDefinition = {
           { value: 'high' },
           { value: 'xhigh' },
           { value: 'max' },
+          {
+            value: 'ultracode',
+            description: 'xhigh reasoning + multi-agent workflow orchestration · Uses significantly more tokens',
+          },
         ],
       },
     },
@@ -80,6 +84,10 @@ export const CLAUDE_FALLBACK_MODELS: ProviderModelsDefinition = {
           { value: 'high' },
           { value: 'xhigh' },
           { value: 'max' },
+          {
+            value: 'ultracode',
+            description: 'xhigh reasoning + multi-agent workflow orchestration · Uses significantly more tokens',
+          },
         ],
       },
     },
@@ -95,6 +103,10 @@ export const CLAUDE_FALLBACK_MODELS: ProviderModelsDefinition = {
           { value: 'high' },
           { value: 'xhigh' },
           { value: 'max' },
+          {
+            value: 'ultracode',
+            description: 'xhigh reasoning + multi-agent workflow orchestration · Uses significantly more tokens',
+          },
         ],
       },
     },
