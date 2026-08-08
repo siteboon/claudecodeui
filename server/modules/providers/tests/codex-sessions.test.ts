@@ -7,6 +7,17 @@ import test from 'node:test';
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import { CodexSessionSynchronizer } from '@/modules/providers/list/codex/codex-session-synchronizer.provider.js';
 import { CodexSessionsProvider } from '@/modules/providers/list/codex/codex-sessions.provider.js';
+import { searchConversations } from '@/modules/providers/services/session-conversations-search.service.js';
+import { stripCodexMemoryCitation } from '@/shared/utils.js';
+
+const MEMORY_CITATION_BLOCK = `<oai-mem-citation>
+<citation_entries>
+MEMORY.md:1-2|note=[internal source]
+</citation_entries>
+<rollout_ids>
+memoryonlytoken
+</rollout_ids>
+</oai-mem-citation>`;
 
 const patchHomeDir = (nextHomeDir: string) => {
   const original = os.homedir;
@@ -63,6 +74,42 @@ const writeCodexTranscript = async (
   await writeFile(filePath, `${lines.join('\n')}\n`, 'utf8');
   return filePath;
 };
+
+test('Codex memory citations are removed only from canonical trailing metadata', () => {
+  assert.equal(
+    stripCodexMemoryCitation(`Visible answer\n\n${MEMORY_CITATION_BLOCK}\n`),
+    'Visible answer',
+  );
+  assert.equal(stripCodexMemoryCitation(MEMORY_CITATION_BLOCK), '');
+  assert.equal(
+    stripCodexMemoryCitation('<oai-mem-citation> <citation_entries>source</citation_entries> <rollout_ids>id</rollout_ids> </oai-mem-citation>'),
+    '',
+  );
+
+  const inlineExample = `Example: ${MEMORY_CITATION_BLOCK}`;
+  assert.equal(stripCodexMemoryCitation(inlineExample), inlineExample);
+
+  const incomplete = 'Visible answer\n<oai-mem-citation>\n<citation_entries>';
+  assert.equal(stripCodexMemoryCitation(incomplete), incomplete);
+
+  const ordinary = 'Ordinary assistant text\n';
+  assert.equal(stripCodexMemoryCitation(ordinary), ordinary);
+
+  const provider = new CodexSessionsProvider();
+  const liveMessages = provider.normalizeMessage({
+    type: 'item',
+    itemType: 'agent_message',
+    message: { role: 'assistant', content: `Visible live answer\n\n${MEMORY_CITATION_BLOCK}` },
+  }, 'live-session');
+  assert.equal(liveMessages[0]?.content, 'Visible live answer');
+
+  const metadataOnly = provider.normalizeMessage({
+    type: 'item',
+    itemType: 'agent_message',
+    message: { role: 'assistant', content: MEMORY_CITATION_BLOCK },
+  }, 'live-session');
+  assert.deepEqual(metadataOnly, []);
+});
 
 test('Codex synchronizer titles app-created sessions from the first user message', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-session-sync-app-'));
@@ -184,6 +231,81 @@ test('Codex history renders Promise.all shell wrappers as Bash activity', { conc
       assert.equal(toolUses[0].toolName, 'Bash');
       assert.equal(toolUses[0].toolInput, JSON.stringify({ command: 'echo one\necho two' }));
       assert.equal(toolResults.some((message) => message.toolCallId === 'plan-1'), false);
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('Codex history hides trailing memory citation metadata', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-memory-citation-history-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tempRoot);
+
+  try {
+    const providerSessionId = 'codex-memory-history-1';
+    const transcriptPath = await writeCodexTranscript(tempRoot, providerSessionId, workspacePath);
+    await writeFile(transcriptPath, [
+      JSON.stringify({ type: 'session_meta', payload: { id: providerSessionId, cwd: workspacePath } }),
+      JSON.stringify({
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: `Visible history answer\n\n${MEMORY_CITATION_BLOCK}` }],
+        },
+      }),
+    ].join('\n') + '\n', 'utf8');
+
+    await withIsolatedDatabase(async () => {
+      sessionsDb.createAppSession('app-memory-history-1', 'codex', workspacePath);
+      sessionsDb.assignProviderSessionId('app-memory-history-1', providerSessionId);
+      await new CodexSessionSynchronizer().synchronize();
+
+      const history = await new CodexSessionsProvider().fetchHistory('app-memory-history-1');
+      const assistant = history.messages.find((message) => message.role === 'assistant' && message.kind === 'text');
+      assert.equal(assistant?.content, 'Visible history answer');
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('Codex conversation search excludes memory citation metadata', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-memory-citation-search-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tempRoot);
+
+  try {
+    const providerSessionId = 'codex-memory-search-1';
+    const transcriptPath = await writeCodexTranscript(tempRoot, providerSessionId, workspacePath);
+    await writeFile(transcriptPath, [
+      JSON.stringify({ type: 'session_meta', payload: { id: providerSessionId, cwd: workspacePath } }),
+      JSON.stringify({
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: `Visible searchable answer\n\n${MEMORY_CITATION_BLOCK}` }],
+        },
+      }),
+    ].join('\n') + '\n', 'utf8');
+
+    await withIsolatedDatabase(async () => {
+      sessionsDb.createAppSession('app-memory-search-1', 'codex', workspacePath);
+      sessionsDb.assignProviderSessionId('app-memory-search-1', providerSessionId);
+      await new CodexSessionSynchronizer().synchronize();
+
+      const visible = await searchConversations('searchable');
+      assert.equal(visible.totalMatches, 1);
+      assert.equal(visible.results[0]?.sessions[0]?.matches[0]?.snippet.includes('memoryonlytoken'), false);
+
+      const hidden = await searchConversations('memoryonlytoken');
+      assert.equal(hidden.totalMatches, 0);
     });
   } finally {
     restoreHomeDir();
