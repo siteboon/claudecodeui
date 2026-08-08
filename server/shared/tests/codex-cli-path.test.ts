@@ -4,7 +4,7 @@ import test from 'node:test';
 import { resolveCodexExecutablePath } from '@/shared/codex-cli-path.js';
 
 test('resolveCodexExecutablePath returns undefined when no override is configured', () => {
-  assert.equal(resolveCodexExecutablePath(undefined), undefined);
+  assert.equal(resolveCodexExecutablePath(''), undefined);
   assert.equal(resolveCodexExecutablePath('   '), undefined);
 });
 
