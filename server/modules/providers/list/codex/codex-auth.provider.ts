@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import spawn from 'cross-spawn';
 
+import { resolveCodexExecutablePath } from '@/shared/codex-cli-path.js';
 import type { IProviderAuth } from '@/shared/interfaces.js';
 import type { ProviderAuthStatus } from '@/shared/types.js';
 import { readObjectRecord, readOptionalString } from '@/shared/utils.js';
@@ -20,8 +21,16 @@ export class CodexProviderAuth implements IProviderAuth {
    * Checks whether Codex is available to the server runtime.
    */
   private checkInstalled(): boolean {
+    const codexCommand = resolveCodexExecutablePath();
+
+    // Without an override, the SDK resolves its own bundled platform binary.
+    // Preserve the existing behavior instead of requiring a separate global
+    // `codex` executable on PATH just for the availability check.
+    if (!codexCommand) {
+      return true;
+    }
+
     try {
-      const codexCommand = process.env.CODEX_CLI_PATH?.trim() || 'codex';
       const result = spawn.sync(codexCommand, ['--version'], { stdio: 'ignore', timeout: 5000 });
       return !result.error && result.status === 0;
     } catch {
