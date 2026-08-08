@@ -65,6 +65,84 @@ test('token usage lookup requires only the app-facing session id for Claude', as
   }
 });
 
+test('a trailing synthetic all-zero usage entry falls back to the last real turn', async () => {
+  const tempDirectory = await mkdtemp(path.join(tmpdir(), 'provider-token-usage-claude-zero-'));
+  const sessionFilePath = path.join(tempDirectory, 'provider-session.jsonl');
+
+  try {
+    await writeFile(sessionFilePath, [
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          usage: {
+            input_tokens: 4,
+            cache_read_input_tokens: 41_318,
+            cache_creation_input_tokens: 1_204,
+            output_tokens: 612,
+          },
+        },
+      }),
+      JSON.stringify({ type: 'user', isMeta: true, message: { content: 'Continue from where you left off.' } }),
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          model: '<synthetic>',
+          usage: {
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+            iterations: null,
+          },
+        },
+      }),
+    ].join('\n'));
+
+    const service = createProviderTokenUsageService({
+      getSessionById: () => createSessionRow({ jsonl_path: sessionFilePath }),
+      getClaudeContextWindow: () => '160000',
+    });
+
+    assert.deepEqual(await service.getSessionTokenUsage('app-session'), {
+      used: 43_138,
+      total: 160_000,
+      inputTokens: 42_526,
+      outputTokens: 612,
+      cacheReadTokens: 41_318,
+      cacheCreationTokens: 1_204,
+      cacheTokens: 42_522,
+      breakdown: { input: 42_526, output: 612 },
+    });
+  } finally {
+    await rm(tempDirectory, { recursive: true, force: true });
+  }
+});
+
+test('a transcript with no assistant usage entry still reports zero usage', async () => {
+  const tempDirectory = await mkdtemp(path.join(tmpdir(), 'provider-token-usage-claude-stub-'));
+  const sessionFilePath = path.join(tempDirectory, 'provider-session.jsonl');
+
+  try {
+    await writeFile(sessionFilePath, [
+      JSON.stringify({ type: 'summary', summary: 'Resume cancelled' }),
+      JSON.stringify({ type: 'user', message: { content: '/login' } }),
+    ].join('\n'));
+
+    const service = createProviderTokenUsageService({
+      getSessionById: () => createSessionRow({ jsonl_path: sessionFilePath }),
+      getClaudeContextWindow: () => '160000',
+    });
+
+    const result = await service.getSessionTokenUsage('app-session');
+
+    assert.equal(result.used, 0);
+    assert.equal(result.inputTokens, 0);
+    assert.equal(result.outputTokens, 0);
+  } finally {
+    await rm(tempDirectory, { recursive: true, force: true });
+  }
+});
+
 test('Codex token usage uses the latest token_count snapshot', async () => {
   const tempDirectory = await mkdtemp(path.join(tmpdir(), 'provider-token-usage-codex-'));
   const sessionFilePath = path.join(tempDirectory, 'rollout-provider-session.jsonl');

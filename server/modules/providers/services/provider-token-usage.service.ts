@@ -147,16 +147,28 @@ function readClaudeTokenUsage(fileContent: string, configuredContextWindow: stri
       }
 
       const directInputTokens = readUsageNumber(usage.input_tokens ?? usage.inputTokens);
-      cacheReadTokens = readUsageNumber(
+      const entryCacheReadTokens = readUsageNumber(
         usage.cache_read_input_tokens ?? usage.cacheReadInputTokens ?? usage.cacheReadTokens,
       );
-      cacheCreationTokens = readUsageNumber(
+      const entryCacheCreationTokens = readUsageNumber(
         usage.cache_creation_input_tokens
           ?? usage.cacheCreationInputTokens
           ?? usage.cacheCreationTokens,
       );
-      inputTokens = directInputTokens + cacheReadTokens + cacheCreationTokens;
-      outputTokens = readUsageNumber(usage.output_tokens ?? usage.outputTokens);
+      const entryInputTokens = directInputTokens + entryCacheReadTokens + entryCacheCreationTokens;
+      const entryOutputTokens = readUsageNumber(usage.output_tokens ?? usage.outputTokens);
+      // Zero total usage marks a synthetic entry (the queued-prompt flush writes one with
+      // `"model": "<synthetic>"`), not a measurement, so keep scanning back to the last turn that
+      // really spent tokens. Figures stay in locals until the entry is accepted so a skipped one
+      // cannot half-overwrite the outer values.
+      if (entryInputTokens + entryOutputTokens <= 0) {
+        continue;
+      }
+
+      cacheReadTokens = entryCacheReadTokens;
+      cacheCreationTokens = entryCacheCreationTokens;
+      inputTokens = entryInputTokens;
+      outputTokens = entryOutputTokens;
       break;
     } catch {
       // Skip malformed lines without discarding usage from earlier messages.
