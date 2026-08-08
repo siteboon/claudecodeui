@@ -263,9 +263,9 @@ export async function queryCodex(command, options = {}, ws, context) {
   // Session-map key: the app session id when the caller supplied one, else
   // the provider-native thread id once captured (legacy/direct API callers).
   const sessionKey = () => sessionId || capturedSessionId || null;
+  const codexPathOverride = resolveCodexExecutablePath();
 
   try {
-    const codexPathOverride = resolveCodexExecutablePath();
     codex = new Codex(codexPathOverride ? { codexPathOverride } : {});
 
     const threadOptions = {
@@ -405,10 +405,12 @@ export async function queryCodex(command, options = {}, ws, context) {
     if (!wasAborted) {
       console.error('[Codex] Error:', error);
 
-      // Check if Codex SDK is available for a clearer error message
+      // Check if Codex SDK is available for a clearer error message.
       const installed = await context.isProviderInstalled();
       const errorContent = !installed
-        ? 'Codex CLI is not configured. Please set up authentication first.'
+        ? codexPathOverride
+          ? 'Configured Codex CLI could not be executed. Verify CODEX_CLI_PATH and that the executable is runnable.'
+          : 'Codex CLI is not configured. Please set up authentication first.'
         : error.message;
 
       sendMessage(ws, createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider: 'codex' }));
