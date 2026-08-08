@@ -264,7 +264,8 @@ export async function queryCodex(command, options = {}, ws, context) {
   const sessionKey = () => sessionId || capturedSessionId || null;
 
   try {
-    codex = new Codex();
+    const codexPathOverride = process.env.CODEX_CLI_PATH?.trim();
+    codex = new Codex(codexPathOverride ? { codexPathOverride } : {});
 
     const threadOptions = {
       workingDirectory,
@@ -412,7 +413,7 @@ export async function queryCodex(command, options = {}, ws, context) {
       sendMessage(ws, createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider: 'codex' }));
       sendMessage(ws, createCompleteMessage({
         provider: 'codex',
-        sessionId: capturedSessionId || sessionId || null,
+        sessionId: sessionId || capturedSessionId || null,
         exitCode: 1,
       }));
       if (!terminalFailure) {
@@ -496,7 +497,7 @@ export const codexRuntime = {
 
 /**
  * Helper to send message via WebSocket or writer
- * @param {WebSocket|object} ws - WebSocket or response writer
+ * @param {WebSocket|object} ws - WebSocket connection or response writer
  * @param {object} data - Data to send
  */
 function sendMessage(ws, data) {
