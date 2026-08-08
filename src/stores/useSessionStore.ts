@@ -623,6 +623,15 @@ export function useSessionStore() {
   }, [getSlot, notify]);
 
   /**
+   * Record the latest token-budget snapshot for a session.
+   * Deliberately does not notify: nothing renders off `slot.tokenUsage`, and it is written on
+   * every usage-bearing SDK message.
+   */
+  const setTokenUsage = useCallback((sessionId: string, usage: unknown) => {
+    getSlot(sessionId).tokenUsage = usage;
+  }, [getSlot]);
+
+  /**
    * Check if a session's data is stale (>30s old).
    */
   const isStale = useCallback((sessionId: string) => {
@@ -716,6 +725,7 @@ export function useSessionStore() {
     refreshFromServer,
     setActiveSession,
     setStatus,
+    setTokenUsage,
     isStale,
     updateStreaming,
     finalizeStreaming,
@@ -725,7 +735,7 @@ export function useSessionStore() {
   }), [
     getSlot, has, fetchFromServer, fetchMore,
     appendRealtime, appendRealtimeBatch, refreshFromServer,
-    setActiveSession, setStatus, isStale, updateStreaming, finalizeStreaming,
+    setActiveSession, setStatus, setTokenUsage, isStale, updateStreaming, finalizeStreaming,
     clearRealtime, getMessages, getSessionSlot,
   ]);
 }
