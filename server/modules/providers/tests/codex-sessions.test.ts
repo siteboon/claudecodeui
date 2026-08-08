@@ -80,6 +80,10 @@ test('Codex memory citations are removed only from canonical trailing metadata',
     stripCodexMemoryCitation(`Visible answer\n\n${MEMORY_CITATION_BLOCK}\n`),
     'Visible answer',
   );
+  assert.equal(
+    stripCodexMemoryCitation(`Visible answer\n\n${MEMORY_CITATION_BLOCK}\n   `),
+    'Visible answer',
+  );
   assert.equal(stripCodexMemoryCitation(MEMORY_CITATION_BLOCK), '');
   assert.equal(
     stripCodexMemoryCitation('<oai-mem-citation> <citation_entries>source</citation_entries> <rollout_ids>id</rollout_ids> </oai-mem-citation>'),

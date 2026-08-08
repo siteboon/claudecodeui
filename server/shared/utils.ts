@@ -59,7 +59,7 @@ type NormalizedMessageInput =
  * inline example, an incomplete tag, or otherwise ordinary text is preserved.
  */
 export function stripCodexMemoryCitation(content: string): string {
-  const trailingCitation = /(?:^|(?:\r?\n[ \t]*)+)<oai-mem-citation>\s*<citation_entries>[\s\S]*?<\/citation_entries>\s*<rollout_ids>[\s\S]*?<\/rollout_ids>\s*<\/oai-mem-citation>[ \t]*(?:\r?\n)*$/;
+  const trailingCitation = /(?:^|(?:\r?\n[ \t]*)+)<oai-mem-citation>\s*<citation_entries>[\s\S]*?<\/citation_entries>\s*<rollout_ids>[\s\S]*?<\/rollout_ids>\s*<\/oai-mem-citation>\s*$/;
   const match = trailingCitation.exec(content);
 
   if (!match) {
