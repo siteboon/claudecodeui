@@ -179,6 +179,13 @@
         "label": "Font Size",
         "description": "Editor font size in pixels"
       }
+    },
+    "mobileNavigation": {
+      "title": "Mobile Navigation",
+      "backOpensSessionList": {
+        "label": "Back Opens Session List",
+        "description": "On phone-sized screens, the back gesture opens the session list instead of navigating away. Back again closes the list, and one more back navigates as usual."
+      }
     }
   },
   "mcpForm": {

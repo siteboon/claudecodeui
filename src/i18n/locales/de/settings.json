@@ -153,6 +153,13 @@
         "label": "Schriftgröße",
         "description": "Editor-Schriftgröße in Pixeln"
       }
+    },
+    "mobileNavigation": {
+      "title": "Mobile Navigation",
+      "backOpensSessionList": {
+        "label": "Zurück öffnet die Sitzungsliste",
+        "description": "Auf Bildschirmen in Telefongröße öffnet die Zurück-Geste die Sitzungsliste, anstatt die Seite zu verlassen. Erneut Zurück schließt die Liste, ein weiteres Zurück navigiert wie gewohnt."
+      }
     }
   },
   "mcpForm": {

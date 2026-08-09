@@ -6,6 +6,7 @@ import SettingsCard from '../SettingsCard';
 import SettingsRow from '../SettingsRow';
 import SettingsSection from '../SettingsSection';
 import SettingsToggle from '../SettingsToggle';
+import { useUiPreferences } from '../../../../hooks/useUiPreferences';
 
 type AppearanceSettingsTabProps = {
   projectSortOrder: ProjectSortOrder;
@@ -27,6 +28,7 @@ export default function AppearanceSettingsTab({
   onCodeEditorFontSizeChange,
 }: AppearanceSettingsTabProps) {
   const { t } = useTranslation('settings');
+  const { preferences, setPreference } = useUiPreferences();
 
   return (
     <div className="space-y-8">
@@ -119,6 +121,21 @@ export default function AppearanceSettingsTab({
               <option value="18">18px</option>
               <option value="20">20px</option>
             </select>
+          </SettingsRow>
+        </SettingsCard>
+      </SettingsSection>
+
+      <SettingsSection title={t('appearanceSettings.mobileNavigation.title')}>
+        <SettingsCard>
+          <SettingsRow
+            label={t('appearanceSettings.mobileNavigation.backOpensSessionList.label')}
+            description={t('appearanceSettings.mobileNavigation.backOpensSessionList.description')}
+          >
+            <SettingsToggle
+              checked={preferences.backOpensSessionList}
+              onChange={(value) => setPreference('backOpensSessionList', value)}
+              ariaLabel={t('appearanceSettings.mobileNavigation.backOpensSessionList.label')}
+            />
           </SettingsRow>
         </SettingsCard>
       </SettingsSection>
