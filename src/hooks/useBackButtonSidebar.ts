@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 
 const GUARD_STATE_KEY = '__sessionListBackGuard';
+// Generous upper bound for a same-document history traversal to report back.
+const SKIP_TIMEOUT_MS = 500;
 
 type UseBackButtonSidebarArgs = {
   enabled: boolean;
@@ -60,6 +62,10 @@ export function useBackButtonSidebar({
   // is indistinguishable from a user press otherwise, and mistaking it for one
   // makes a single press both navigate and open the list.
   const skippingRef = useRef(false);
+  // Watchdog for a `history.back()` that cannot traverse (first entry in this
+  // tab's session): the call is a silent no-op and no popstate follows, which
+  // would leave `skippingRef` true and disarm the hook for good.
+  const skipWatchdogRef = useRef(0);
   // Bumped when a skip finishes, so the arming effect re-runs even though the
   // landing entry may carry the router key we started from.
   const [skipCompleted, setSkipCompleted] = useState(0);
@@ -128,9 +134,21 @@ export function useBackButtonSidebar({
   }, [enabled, locationKey, sidebarOpen, skipCompleted]);
 
   useEffect(() => {
+    const endSkip = () => {
+      window.clearTimeout(skipWatchdogRef.current);
+      skippingRef.current = false;
+      setSkipCompleted((previous) => previous + 1);
+    };
+
     const skipBack = () => {
       armedRef.current = false;
       skippingRef.current = true;
+      window.clearTimeout(skipWatchdogRef.current);
+      skipWatchdogRef.current = window.setTimeout(() => {
+        if (skippingRef.current) {
+          endSkip();
+        }
+      }, SKIP_TIMEOUT_MS);
       window.history.back();
     };
 
@@ -144,14 +162,13 @@ export function useBackButtonSidebar({
       if (skippingRef.current) {
         if (landedOnStrandedSentinel) {
           // More than one sentinel stacked up here; keep skipping.
-          window.history.back();
+          skipBack();
           return;
         }
 
         // The navigation the user asked for is complete. Re-arming is left to
         // the effect so it happens after React has caught up.
-        skippingRef.current = false;
-        setSkipCompleted((previous) => previous + 1);
+        endSkip();
         return;
       }
 
@@ -197,4 +214,10 @@ export function useBackButtonSidebar({
       window.removeEventListener('popstate', handlePopState);
     };
   }, [enabled, sidebarOpen, setSidebarOpen]);
+
+  // Mount-scoped, so the skip watchdog survives this hook's other effects
+  // re-subscribing. Tearing it down alongside the popstate listener would
+  // cancel it exactly when the setting is toggled or the breakpoint is
+  // crossed — the cases it exists to recover from.
+  useEffect(() => () => window.clearTimeout(skipWatchdogRef.current), []);
 }
