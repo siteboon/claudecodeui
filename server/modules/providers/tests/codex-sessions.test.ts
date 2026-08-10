@@ -180,6 +180,12 @@ test('Codex history preserves wrapped exec tool calls and results', { concurrenc
         expectedToolName: 'Bash',
         expectedToolInput: JSON.stringify({ command: 'echo current' }),
       },
+      {
+        callId: 'exec-command-cmd-1',
+        input: 'await tools.exec_command({"cmd":"git diff --check","workdir":"/workspace"});',
+        expectedToolName: 'Bash',
+        expectedToolInput: JSON.stringify({ command: 'git diff --check' }),
+      },
       { callId: 'apply-patch-1', input: 'await tools.apply_patch("*** Begin Patch\\n*** End Patch");' },
       { callId: 'web-run-1', input: 'await tools.web__run({ search_query: [{ q: "Codex" }] });' },
       { callId: 'update-plan-1', input: 'await tools.update_plan({ plan: [] });' },
