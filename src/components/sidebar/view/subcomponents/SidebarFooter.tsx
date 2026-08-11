@@ -187,7 +187,7 @@ export default function SidebarFooter({
       </div>
 
       {/* Mobile Discord */}
-      <div className="px-3 pt-2 md:hidden">
+      <div className={IS_PLATFORM ? 'px-3 pb-3 pt-2 md:hidden' : 'px-3 pt-2 md:hidden'}>
         <a
           href={DISCORD_INVITE_URL}
           target="_blank"
