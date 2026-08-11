@@ -22,7 +22,8 @@ interface UseChatSessionStateArgs {
   newSessionTrigger?: number;
   processingSessions?: SessionActivityMap;
   onSessionIdle?: MarkSessionIdle;
-  resetStreamingState: () => void;
+  /** Drops buffered deltas for one session, or for every session when called without an id. */
+  resetStreamingState: (sessionId?: string) => void;
   /** When each session's `chat.subscribe` was last sent; guards stale idle acks. */
   statusCheckSentAtRef: MutableRefObject<Map<string, number>>;
   /** Highest live seq observed per session; sent as `lastSeq` on subscribe. */
@@ -109,6 +110,10 @@ export function useChatSessionState({
   sessionStore,
 }: UseChatSessionStateArgs) {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(selectedSession?.id || null);
+  // Read by the New Session effect, which must not depend on `currentSessionId`:
+  // it has to run once per trigger, not again whenever the session id changes.
+  const currentSessionIdRef = useRef(currentSessionId);
+  currentSessionIdRef.current = currentSessionId;
   const [isLoadingSessionMessages, setIsLoadingSessionMessages] = useState(false);
   const [isLoadingMoreMessages, setIsLoadingMoreMessages] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
@@ -172,7 +177,9 @@ export function useChatSessionState({
      * - No dependence on route/tab/session-object identity changes.
      * - No coupling to unrelated external update signals.
      */
-    resetStreamingState();
+    if (currentSessionIdRef.current) {
+      resetStreamingState(currentSessionIdRef.current);
+    }
     setCurrentSessionId(null);
     setPendingUserMessage(null);
     messagesOffsetRef.current = 0;
@@ -486,7 +493,9 @@ export function useChatSessionState({
         return;
       }
 
-      resetStreamingState();
+      if (currentSessionId) {
+        resetStreamingState(currentSessionId);
+      }
       setCurrentSessionId(null);
       messagesOffsetRef.current = 0;
       setHasMoreMessages(false);
@@ -522,7 +531,7 @@ export function useChatSessionState({
 
     const sessionChanged = currentSessionId !== null && currentSessionId !== selectedSessionId;
     if (sessionChanged) {
-      resetStreamingState();
+      resetStreamingState(currentSessionId);
     }
 
     // Reset pagination/scroll state

@@ -9,6 +9,14 @@ import type { PendingPermissionRequest } from '../types/types';
 import type { ProjectSession, LLMProvider } from '../../../types/app';
 import type { SessionStore, NormalizedMessage } from '../../../stores/useSessionStore';
 
+import type { StreamBuffers, StreamRowSink } from './streamBuffers';
+import {
+  appendStreamDelta,
+  closeStreamBuffer,
+  isStreamBoundaryKind,
+  windowStreamFlushScheduler,
+} from './streamBuffers';
+
 const isActionablePermissionRequest = (request: { toolName?: unknown } | null | undefined): boolean => {
   return request?.toolName !== 'ExitPlanMode' && request?.toolName !== 'exit_plan_mode';
 };
@@ -25,8 +33,13 @@ interface UseChatRealtimeHandlersArgs {
   setTokenBudget: (budget: Record<string, unknown> | null) => void;
   pendingPermissionRequests: PendingPermissionRequest[];
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
-  streamTimerRef: MutableRefObject<number | null>;
-  accumulatedStreamRef: MutableRefObject<string>;
+  /**
+   * Open streaming rows, keyed by app session id. Keyed per session because the
+   * row each buffer writes to already is (`__streaming_${sessionId}`): a single
+   * accumulator flushed a background session's text into whichever session the
+   * current frame named.
+   */
+  streamBuffersRef: MutableRefObject<StreamBuffers>;
   /**
    * Highest live `seq` observed per session. Essential for reconnect catch-up:
    * `chat.subscribe` sends this value as `lastSeq` so the server replays only
@@ -63,8 +76,7 @@ export function useChatRealtimeHandlers({
   setTokenBudget,
   pendingPermissionRequests,
   setPendingPermissionRequests,
-  streamTimerRef,
-  accumulatedStreamRef,
+  streamBuffersRef,
   lastSeqRef,
   statusCheckSentAtRef,
   onSessionProcessing,
@@ -89,6 +101,11 @@ export function useChatRealtimeHandlers({
   }, [pendingPermissionRequests]);
 
   useEffect(() => {
+    const streamRowSink: StreamRowSink = {
+      update: (sessionId, text) => sessionStore.updateStreaming(sessionId, text, provider),
+      finalize: (sessionId) => sessionStore.finalizeStreaming(sessionId),
+    };
+
     const handleEvent = (msg: ServerEvent) => {
       if (!msg.kind) {
         return;
@@ -176,14 +193,8 @@ export function useChatRealtimeHandlers({
       if (msg.kind === 'stream_delta') {
         const text = (msg.content as string) || '';
         if (!text) return;
-        accumulatedStreamRef.current += text;
-        if (!streamTimerRef.current) {
-          streamTimerRef.current = window.setTimeout(() => {
-            streamTimerRef.current = null;
-            if (sid) {
-              sessionStore.updateStreaming(sid, accumulatedStreamRef.current, provider);
-            }
-          }, 100);
+        if (sid) {
+          appendStreamDelta(streamBuffersRef.current, sid, text, streamRowSink, windowStreamFlushScheduler);
         }
         // Also route to store for non-active sessions
         if (sid && sid !== activeViewSessionId) {
@@ -193,18 +204,18 @@ export function useChatRealtimeHandlers({
       }
 
       if (msg.kind === 'stream_end') {
-        if (streamTimerRef.current) {
-          clearTimeout(streamTimerRef.current);
-          streamTimerRef.current = null;
-        }
         if (sid) {
-          if (accumulatedStreamRef.current) {
-            sessionStore.updateStreaming(sid, accumulatedStreamRef.current, provider);
-          }
-          sessionStore.finalizeStreaming(sid);
+          closeStreamBuffer(streamBuffersRef.current, sid, streamRowSink, windowStreamFlushScheduler);
         }
-        accumulatedStreamRef.current = '';
         return;
+      }
+
+      // A frame that carries a row of its own ends the message being streamed.
+      // Closing before the row is appended keeps the finalized text ahead of it:
+      // `updateStreaming` re-stamps `timestamp` on every write, so an unclosed
+      // row outlives and sorts past the tool rows it was interleaved with.
+      if (sid && isStreamBoundaryKind(msg.kind)) {
+        closeStreamBuffer(streamBuffersRef.current, sid, streamRowSink, windowStreamFlushScheduler);
       }
 
       // --- All other messages: route to store ---
@@ -222,15 +233,9 @@ export function useChatRealtimeHandlers({
       switch (msg.kind) {
         case 'complete': {
           // Flush any remaining streaming state
-          if (streamTimerRef.current) {
-            clearTimeout(streamTimerRef.current);
-            streamTimerRef.current = null;
+          if (sid) {
+            closeStreamBuffer(streamBuffersRef.current, sid, streamRowSink, windowStreamFlushScheduler);
           }
-          if (sid && accumulatedStreamRef.current) {
-            sessionStore.updateStreaming(sid, accumulatedStreamRef.current, provider);
-            sessionStore.finalizeStreaming(sid);
-          }
-          accumulatedStreamRef.current = '';
 
           // `complete` is the unified terminal event — every provider run ends
           // with exactly one, regardless of success, failure, or abort. The
@@ -336,8 +341,7 @@ export function useChatRealtimeHandlers({
     setTokenBudget,
     pendingPermissionRequests,
     setPendingPermissionRequests,
-    streamTimerRef,
-    accumulatedStreamRef,
+    streamBuffersRef,
     lastSeqRef,
     statusCheckSentAtRef,
     onSessionProcessing,
