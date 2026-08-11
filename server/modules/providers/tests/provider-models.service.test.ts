@@ -126,8 +126,12 @@ test('provider models are cached for the three-day ttl', async () => {
   }
 });
 
-test('claude provider models are always loaded directly from the provider', async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'provider-model-cache-claude-direct-'));
+// Claude used to bypass the cache entirely: its catalog was a hardcoded
+// constant, so re-reading it cost nothing. It is now read from the CLI (a
+// spawned process), which makes it exactly the kind of lookup this cache
+// exists for.
+test('claude provider models are served from cache like every other provider', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'provider-model-cache-claude-'));
   let loadCount = 0;
 
   try {
@@ -146,11 +150,13 @@ test('claude provider models are always loaded directly from the provider', asyn
 
     const first = await service.getProviderModels('claude');
     const second = await service.getProviderModels('claude');
+    const refreshed = await service.getProviderModels('claude', { bypassCache: true });
 
     assert.equal(loadCount, 2);
     assert.equal(first.models.DEFAULT, 'claude-1');
-    assert.equal(second.models.DEFAULT, 'claude-2');
-    assert.equal(second.cache.source, 'fresh');
+    assert.equal(second.models.DEFAULT, 'claude-1');
+    assert.equal(second.cache.source, 'memory');
+    assert.equal(refreshed.models.DEFAULT, 'claude-2');
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
