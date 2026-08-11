@@ -24,7 +24,7 @@ const normalizeServerName = (name: string): string => {
  */
 export abstract class McpProvider implements IProviderMcp {
   protected readonly provider: LLMProvider;
-  protected readonly supportedScopes: McpScope[];
+  readonly supportedScopes: McpScope[];
   protected readonly supportedTransports: McpTransport[];
 
   protected constructor(

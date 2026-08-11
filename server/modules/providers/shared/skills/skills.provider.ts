@@ -94,9 +94,18 @@ export abstract class SkillsProvider implements IProviderSkills {
 
   async listSkills(options?: ProviderSkillListOptions): Promise<ProviderSkill[]> {
     const workspacePath = resolveWorkspacePath(options?.workspacePath);
-    const sources = await this.getSkillSources(workspacePath);
-    const skills: ProviderSkill[] = [];
+    return this.scanSkillSources(await this.getSkillSources(workspacePath));
+  }
 
+  /**
+   * Reads every skill markdown under `sources`, keeping the order they arrive in.
+   *
+   * Split out of `listSkills` so a provider whose ranking interleaves scanned
+   * roots with skills that do not come from a root (omp ranks Claude plugin
+   * skills between two of its own root tiers) can compose the groups itself.
+   */
+  protected async scanSkillSources(sources: ProviderSkillSource[]): Promise<ProviderSkill[]> {
+    const skills: ProviderSkill[] = [];
     for (const source of sources) {
       const skillFiles = await findProviderSkillMarkdownFiles(source.rootDir, {
         recursive: source.recursive,

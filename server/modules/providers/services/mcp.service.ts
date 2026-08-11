@@ -66,6 +66,11 @@ export const providerMcpService = {
     const results: Array<{ provider: LLMProvider; created: boolean; error?: string }> = [];
     const providers = providerRegistry.listProviders();
     for (const provider of providers) {
+      // Skip providers that can't write MCP (e.g. omp stub) — they are not
+      // failures, so a global add still succeeds for the providers that support it.
+      if (provider.mcp.supportedScopes.length === 0) {
+        continue;
+      }
       try {
         await provider.mcp.upsertServer({ ...input, scope });
         results.push({ provider: provider.id, created: true });
@@ -92,6 +97,9 @@ export const providerMcpService = {
     const results: Array<{ provider: LLMProvider; removed: boolean; error?: string }> = [];
     const providers = providerRegistry.listProviders();
     for (const provider of providers) {
+      if (provider.mcp.supportedScopes.length === 0) {
+        continue;
+      }
       try {
         const result = await provider.mcp.removeServer(input);
         results.push({ provider: provider.id, removed: result.removed });

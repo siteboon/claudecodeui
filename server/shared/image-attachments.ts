@@ -433,3 +433,57 @@ export function buildCodexInputItems(prompt: string, images: unknown, cwd?: stri
   }
   return items;
 }
+
+type AcpPromptBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image'; mimeType: string; data: string };
+
+/**
+ * Builds the ACP `session/prompt` content list (used by omp): the prompt text
+ * followed by one base64 `image` block per attachment.
+ *
+ * ACP reuses MCP's `ContentBlock`, so an image block is
+ * `{type:'image', mimeType, data}` with base64 `data`
+ * (https://agentclientprotocol.com/protocol/v1/content). Image blocks are only
+ * appended when the prompt actually carries attachments, and only after the same
+ * allowed-root and symlink checks the other providers' builders apply.
+ *
+ * Consumed by the omp runtime provider when it sends a prompt, and by the
+ * providers module's capability service to report image support.
+ */
+export async function buildAcpPromptBlocks(
+  prompt: string,
+  images: unknown,
+  cwd?: string,
+): Promise<AcpPromptBlock[]> {
+  const blocks: AcpPromptBlock[] = [{ type: 'text', text: prompt }];
+
+  for (const descriptor of normalizeImageDescriptors(images)) {
+    const mediaType = resolveImageMediaType(descriptor);
+    if (!mediaType || !mediaType.startsWith('image/')) {
+      console.warn(`[Images] Skipping non-image attachment for omp: ${descriptor.path}`);
+      continue;
+    }
+
+    const resolvedPath = resolveImageAbsolutePath(cwd, descriptor.path);
+    if (!isAllowedImageSourcePath(resolvedPath, cwd)) {
+      console.warn(`[Images] Refusing to read image outside allowed roots: ${descriptor.path}`);
+      continue;
+    }
+
+    try {
+      const canonicalPath = await fs.realpath(resolvedPath);
+      if (!isAllowedImageSourcePath(canonicalPath, cwd)) {
+        console.warn(`[Images] Refusing to read symlinked image outside allowed roots: ${descriptor.path}`);
+        continue;
+      }
+      const bytes = await fs.readFile(canonicalPath);
+      blocks.push({ type: 'image', mimeType: mediaType, data: bytes.toString('base64') });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[Images] Failed to read image ${descriptor.path}: ${message}`);
+    }
+  }
+
+  return blocks;
+}
