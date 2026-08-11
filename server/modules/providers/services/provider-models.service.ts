@@ -15,6 +15,13 @@ import type {
 } from '@/shared/types.js';
 
 export const PROVIDER_MODELS_CACHE_TTL_MS = 3 * 24 * 60 * 60 * 1000;
+/**
+ * TTL for a catalog probe that fell back to the static built-in table
+ * (`isFallback: true`) instead of reading the provider. Kept short so a
+ * transient probe failure retries again soon rather than pinning the picker
+ * to the fallback table for the full 3-day TTL of a real result.
+ */
+export const PROVIDER_MODELS_FALLBACK_CACHE_TTL_MS = 60 * 1000;
 const PROVIDER_MODELS_CACHE_VERSION = 2;
 
 /** Session-row access the service needs, narrowed so tests can stub it. */
@@ -120,7 +127,7 @@ const writeProviderModelsCacheFile = async (
   now: number,
 ): Promise<void> => {
   const serializableEntries = Object.fromEntries(
-    [...entries.entries()].filter(([, entry]) => entry.expiresAt > now),
+    [...entries.entries()].filter(([, entry]) => entry.expiresAt > now && !entry.models.isFallback),
   );
   const payload: ProviderModelsCacheFile = {
     version: PROVIDER_MODELS_CACHE_VERSION,
@@ -207,14 +214,19 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     models: ProviderModelsDefinition,
   ): Promise<ProviderModelsCacheEntry> => {
     const currentTime = now();
+    const ttl = models.isFallback ? PROVIDER_MODELS_FALLBACK_CACHE_TTL_MS : PROVIDER_MODELS_CACHE_TTL_MS;
     const entry: ProviderModelsCacheEntry = {
       updatedAt: currentTime,
-      expiresAt: currentTime + PROVIDER_MODELS_CACHE_TTL_MS,
+      expiresAt: currentTime + ttl,
       models,
     };
 
     memoryCache.set(provider, entry);
-    await persistCache();
+    // Fallback catalogs are memory-only: persisting one would let a
+    // transient probe failure survive a restart and outlive its short TTL.
+    if (!models.isFallback) {
+      await persistCache();
+    }
     return entry;
   };
 

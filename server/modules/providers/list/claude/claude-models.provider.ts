@@ -220,14 +220,14 @@ const probeClaudeSupportedModels = async (): Promise<ProviderModelsDefinition> =
 
     if (options.length === 0) {
       console.warn('[Claude models] CLI reported no models; using the built-in catalog');
-      return CLAUDE_FALLBACK_MODELS;
+      return { ...CLAUDE_FALLBACK_MODELS, isFallback: true };
     }
 
     return mergeWithFallbackModels(options);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.warn(`[Claude models] Unable to read the CLI catalog (${message}); using the built-in catalog`);
-    return CLAUDE_FALLBACK_MODELS;
+    return { ...CLAUDE_FALLBACK_MODELS, isFallback: true };
   } finally {
     clearTimeout(timeout);
     try {

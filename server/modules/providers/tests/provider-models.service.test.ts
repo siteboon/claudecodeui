@@ -7,6 +7,7 @@ import test from 'node:test';
 import {
   createProviderModelsService,
   PROVIDER_MODELS_CACHE_TTL_MS,
+  PROVIDER_MODELS_FALLBACK_CACHE_TTL_MS,
 } from '@/modules/providers/services/provider-models.service.js';
 import type {
   LLMProvider,
@@ -121,6 +122,81 @@ test('provider models are cached for the three-day ttl', async () => {
     const refreshed = await service.getProviderModels('codex');
     assert.equal(loadCount, 2);
     assert.equal(refreshed.models.DEFAULT, 'codex-2');
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('a fallback catalog expires on the short fallback ttl, not the three-day ttl', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'provider-model-cache-fallback-ttl-'));
+  let currentTime = 1_000;
+  let loadCount = 0;
+
+  try {
+    const service = createProviderModelsService({
+      cachePath: path.join(tempRoot, 'models-cache.json'),
+      now: () => currentTime,
+      resolveProvider: (provider) => ({
+        models: {
+          getSupportedModels: async () => {
+            loadCount += 1;
+            return { ...createModels(`${provider}-${loadCount}`), isFallback: true };
+          },
+          getCurrentActiveModel: async () => createCurrentActiveModel(`${provider}-active`),
+        },
+      }),
+    });
+
+    await service.getProviderModels('claude');
+    assert.equal(loadCount, 1);
+
+    currentTime += PROVIDER_MODELS_FALLBACK_CACHE_TTL_MS - 1;
+    await service.getProviderModels('claude');
+    assert.equal(loadCount, 1);
+
+    currentTime += 2;
+    const refreshed = await service.getProviderModels('claude');
+    assert.equal(loadCount, 2);
+    assert.equal(refreshed.models.DEFAULT, 'claude-2');
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('a fallback catalog is not written to the persisted cache', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'provider-model-cache-fallback-disk-'));
+  const cachePath = path.join(tempRoot, 'models-cache.json');
+
+  try {
+    const writer = createProviderModelsService({
+      cachePath,
+      resolveProvider: () => ({
+        models: {
+          getSupportedModels: async () => ({ ...createModels('claude-fallback'), isFallback: true }),
+          getCurrentActiveModel: async () => createCurrentActiveModel('claude-active'),
+        },
+      }),
+    });
+    await writer.getProviderModels('claude');
+
+    let readerLoadCount = 0;
+    const reader = createProviderModelsService({
+      cachePath,
+      resolveProvider: () => ({
+        models: {
+          getSupportedModels: async () => {
+            readerLoadCount += 1;
+            return createModels('claude-fresh');
+          },
+          getCurrentActiveModel: async () => createCurrentActiveModel('claude-active'),
+        },
+      }),
+    });
+    const models = await reader.getProviderModels('claude');
+
+    assert.equal(readerLoadCount, 1);
+    assert.equal(models.models.DEFAULT, 'claude-fresh');
+    assert.equal(models.cache.source, 'fresh');
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }

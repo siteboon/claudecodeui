@@ -90,6 +90,13 @@ export type ProviderModelOption = {
 export type ProviderModelsDefinition = {
   OPTIONS: ProviderModelOption[];
   DEFAULT: string;
+  /**
+   * Set when this catalog is the static built-in table returned because the
+   * provider could not be probed, rather than a catalog read from the
+   * provider itself. Callers that cache catalogs should give a fallback a
+   * much shorter lifetime than a real one.
+   */
+  isFallback?: boolean;
 };
 
 /**
