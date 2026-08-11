@@ -75,6 +75,10 @@ export type ProviderModelOption = {
   value: string;
   label: string;
   description?: string;
+  /** Stable SQLite row id used only by model-management actions. */
+  recordId?: number;
+  /** True for user-created rows; false for immutable CloudCLI defaults. */
+  isCustom?: boolean;
   effort?: {
     default?: string;
     values: {
@@ -93,28 +97,31 @@ export type ProviderModelsDefinition = {
 };
 
 /**
- * Cache metadata returned alongside one provider model catalog.
+ * One persisted custom-model row in the provider model library.
  *
- * `updatedAt` is when the current cached snapshot was last refreshed from the
- * provider itself. `expiresAt` is the backend cache expiry timestamp, and
- * `source` tells callers whether the current response came from in-memory cache,
- * persisted disk cache, or a fresh provider fetch.
+ * Provider modules use this shape at the database boundary. Predefined models
+ * never use this type because they remain source-controlled in provider
+ * adapters. `modelId` is sent to the provider runtime, while `model` is the
+ * user-supplied display name shown in pickers.
  */
-export type ProviderModelsCacheInfo = {
-  updatedAt: string;
-  expiresAt: string;
-  source: 'memory' | 'disk' | 'fresh';
+export type CustomProviderModelRecord = {
+  recordId: number;
+  provider: LLMProvider;
+  modelId: string;
+  model: string;
+  sortOrder: number;
 };
 
 /**
- * Full provider model lookup result returned by the backend service layer.
+ * User-editable values accepted when creating or changing a custom model.
  *
- * Use this shape when a caller needs both the selectable model catalog and the
- * cache metadata that explains how current the catalog is.
+ * `id` must be the exact provider-facing model identifier and cannot contain
+ * whitespace. `model` is a concise display name. The provider is supplied by
+ * the route path so a row can never be moved across providers accidentally.
  */
-export type ProviderModelsResult = {
-  models: ProviderModelsDefinition;
-  cache: ProviderModelsCacheInfo;
+export type CustomProviderModelInput = {
+  id: string;
+  model: string;
 };
 
 // ---------------------------
@@ -147,7 +154,8 @@ export type ProviderCurrentActiveModel = {
 export type ProviderSessionModelSource = 'session' | 'provider' | 'default';
 
 /**
- * The model one session runs with, plus where that answer came from.
+ * The model one session runs with, its persisted reasoning effort when one has
+ * been recorded, and where the model answer came from.
  *
  * Returned by `providerModelsService.resolveSessionModel` and used by the
  * `/models`, `/cost` and `/status` commands, the active-model route, and the
@@ -157,6 +165,8 @@ export type ProviderSessionModel = {
   provider: LLMProvider;
   sessionId: string | null;
   model: string;
+  /** NULL means this session has not recorded an effort choice yet. */
+  effort: string | null;
   source: ProviderSessionModelSource;
 };
 
@@ -944,7 +954,9 @@ export type FileTreeFileSystem = {
   access(candidatePath: string): Promise<void>;
   stat(candidatePath: string): Promise<FileTreeStats>;
   lstat(candidatePath: string): Promise<FileTreeStats>;
-  readdir(directoryPath: string): Promise<FileTreeDirectoryEntry[]>;
+  // Streamed rather than returned as an array so a directory with millions of
+  // children is abandoned at the entry limit instead of being materialized.
+  openDirectory(directoryPath: string): AsyncIterable<FileTreeDirectoryEntry>;
   realpath(candidatePath: string): Promise<string>;
   readTextFile(filePath: string): Promise<string>;
   writeTextFile(filePath: string, content: string): Promise<void>;

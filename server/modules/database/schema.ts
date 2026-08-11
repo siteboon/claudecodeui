@@ -109,10 +109,11 @@ CREATE TABLE IF NOT EXISTS sessions (
     custom_name TEXT,
     project_path TEXT,
     jsonl_path TEXT,
-    -- Model this session runs with. Written when the user picks a model for the
-    -- session and on every send, so reopening a session restores the model it
-    -- was last used with instead of falling back to the catalog default.
+    -- Model and reasoning effort this session runs with. Written when the user
+    -- changes either selection and on every send, so reopening a session
+    -- restores its exact runtime configuration instead of provider defaults.
     model TEXT,
+    effort TEXT,
     isArchived BOOLEAN DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -135,6 +136,27 @@ CREATE TABLE IF NOT EXISTS app_config (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+`;
+
+/**
+ * Persistent custom-model library used by the Providers module.
+ *
+ * Only user-created models are stored here. Predefined models remain source-
+ * controlled in each provider's `-models.provider.ts` adapter so they can be
+ * updated without migrating application data. `model_id` is unique only within
+ * a provider because different CLIs can accept the same identifier.
+ */
+export const PROVIDER_MODELS_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS provider_models (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider TEXT NOT NULL CHECK (provider IN ('claude', 'cursor', 'codex', 'opencode')),
+    model_id TEXT NOT NULL,
+    model_name TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(provider, model_id)
 );
 `;
 
@@ -181,4 +203,8 @@ CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id);
 ${LAST_SCANNED_AT_SQL}
 
 ${APP_CONFIG_TABLE_SCHEMA_SQL}
+
+${PROVIDER_MODELS_TABLE_SCHEMA_SQL}
+CREATE INDEX IF NOT EXISTS idx_provider_models_provider_order
+ON provider_models(provider, sort_order, id);
 `;

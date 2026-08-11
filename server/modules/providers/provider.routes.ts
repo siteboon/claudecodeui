@@ -9,6 +9,7 @@ import { providerSkillsService } from '@/modules/providers/services/skills.servi
 import { sessionConversationsSearchService } from '@/modules/providers/services/session-conversations-search.service.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
 import type {
+  CustomProviderModelInput,
   LLMProvider,
   McpScope,
   McpTransport,
@@ -395,6 +396,92 @@ const parseSessionModelPayload = (payload: unknown): string => {
   return model;
 };
 
+const parseSessionEffortPayload = (payload: unknown): string => {
+  if (!payload || typeof payload !== 'object') {
+    throw new AppError('Request body must be an object.', {
+      code: 'INVALID_REQUEST_BODY',
+      statusCode: 400,
+    });
+  }
+
+  const body = payload as Record<string, unknown>;
+  const effort = readOptionalQueryString(body.effort);
+  if (!effort) {
+    throw new AppError('effort is required.', {
+      code: 'EFFORT_REQUIRED',
+      statusCode: 400,
+    });
+  }
+
+  if (effort.length > 32) {
+    throw new AppError('effort must be 32 characters or fewer.', {
+      code: 'INVALID_EFFORT',
+      statusCode: 400,
+    });
+  }
+
+  return effort;
+};
+
+const parseModelRecordId = (value: unknown): number => {
+  const rawRecordId = readPathParam(value, 'recordId').trim();
+  if (!/^\d+$/.test(rawRecordId)) {
+    throw new AppError('recordId must be a positive integer.', {
+      code: 'INVALID_MODEL_RECORD_ID',
+      statusCode: 400,
+    });
+  }
+
+  const recordId = Number.parseInt(rawRecordId, 10);
+  if (!Number.isSafeInteger(recordId) || recordId < 1) {
+    throw new AppError('recordId must be a positive integer.', {
+      code: 'INVALID_MODEL_RECORD_ID',
+      statusCode: 400,
+    });
+  }
+
+  return recordId;
+};
+
+const parseCustomProviderModelPayload = (payload: unknown): CustomProviderModelInput => {
+  if (!payload || typeof payload !== 'object') {
+    throw new AppError('Request body must be an object.', {
+      code: 'INVALID_REQUEST_BODY',
+      statusCode: 400,
+    });
+  }
+
+  const body = payload as Record<string, unknown>;
+  const model = readOptionalQueryString(body.model);
+  const id = readOptionalQueryString(body.id);
+  if (!model) {
+    throw new AppError('model is required.', {
+      code: 'MODEL_NAME_REQUIRED',
+      statusCode: 400,
+    });
+  }
+  if (!id) {
+    throw new AppError('id is required.', {
+      code: 'MODEL_ID_REQUIRED',
+      statusCode: 400,
+    });
+  }
+  if (model.length > 80) {
+    throw new AppError('model must be 80 characters or fewer.', {
+      code: 'MODEL_NAME_TOO_LONG',
+      statusCode: 400,
+    });
+  }
+  if (id.length > 200 || /\s/.test(id)) {
+    throw new AppError('id must be 200 characters or fewer and cannot contain whitespace.', {
+      code: 'INVALID_MODEL_ID',
+      statusCode: 400,
+    });
+  }
+
+  return { model, id };
+};
+
 router.get(
   '/:provider/auth/status',
   asyncHandler(async (req: Request, res: Response) => {
@@ -408,9 +495,39 @@ router.get(
   '/:provider/models',
   asyncHandler(async (req: Request, res: Response) => {
     const provider = parseProvider(req.params.provider);
-    const bypassCache = parseOptionalBooleanQuery(req.query.bypassCache, 'bypassCache') ?? false;
-    const result = await providerModelsService.getProviderModels(provider, { bypassCache });
-    res.json(createApiSuccessResponse({ provider, models: result.models, cache: result.cache }));
+    const models = await providerModelsService.getProviderModels(provider);
+    res.json(createApiSuccessResponse({ provider, models }));
+  }),
+);
+
+router.post(
+  '/:provider/models',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const input = parseCustomProviderModelPayload(req.body);
+    const result = await providerModelsService.createCustomModel(provider, input);
+    res.status(201).json(createApiSuccessResponse({ provider, ...result }));
+  }),
+);
+
+router.patch(
+  '/:provider/models/:recordId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const recordId = parseModelRecordId(req.params.recordId);
+    const input = parseCustomProviderModelPayload(req.body);
+    const result = await providerModelsService.updateCustomModel(provider, recordId, input);
+    res.json(createApiSuccessResponse({ provider, ...result }));
+  }),
+);
+
+router.delete(
+  '/:provider/models/:recordId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const recordId = parseModelRecordId(req.params.recordId);
+    const result = await providerModelsService.deleteCustomModel(provider, recordId);
+    res.json(createApiSuccessResponse({ provider, ...result }));
   }),
 );
 
@@ -443,7 +560,23 @@ router.post(
     // A session row only exists once the gateway has allocated one. Report the
     // selection back either way so the client can hold it until the first send.
     res.json(createApiSuccessResponse(
-      stored ?? { provider, sessionId, model, source: 'session' as const },
+      stored ?? { provider, sessionId, model, effort: null, source: 'session' as const },
+    ));
+  }),
+);
+
+/** Records the reasoning-effort choice for one app session. */
+router.post(
+  '/:provider/sessions/:sessionId/active-effort',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const sessionId = parseSessionId(req.params.sessionId);
+    const effort = parseSessionEffortPayload(req.body);
+    const stored = providerModelsService.setSessionEffort(provider, sessionId, effort);
+    // Mirror active-model behavior for a composer that picked an effort just
+    // before the session gateway created its row.
+    res.json(createApiSuccessResponse(
+      stored ?? { provider, sessionId, effort, source: 'session' as const },
     ));
   }),
 );
@@ -575,7 +708,8 @@ router.post(
     const body = (req.body ?? {}) as Record<string, unknown>;
     const provider = parseProvider(body.provider);
     const projectPath = typeof body.projectPath === 'string' ? body.projectPath : '';
-    const result = sessionsService.createAppSession(provider, projectPath);
+    const initialMessage = typeof body.initialMessage === 'string' ? body.initialMessage : '';
+    const result = sessionsService.createAppSession(provider, projectPath, initialMessage);
     res.status(201).json(createApiSuccessResponse(result));
   }),
 );

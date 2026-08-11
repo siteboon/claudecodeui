@@ -7,17 +7,23 @@ import {
   Cpu,
   Gauge,
   Package,
+  Plus,
   Search,
   Server,
   Sparkles,
   TerminalSquare,
   Timer,
-  RefreshCw,
+  Loader2,
   X,
 } from 'lucide-react';
 
 import { Badge, Button, Dialog, DialogContent, DialogTitle, Input } from '../../../../shared/view/ui';
-import type { LLMProvider, ProviderModelsCacheInfo, ProviderModelsDefinition } from '../../../../types/app';
+import type {
+  LLMProvider,
+  ProviderModelActions,
+  ProviderModelOption,
+  ProviderModelsDefinition,
+} from '../../../../types/app';
 import type {
   CommandModalPayload,
   CostCommandData,
@@ -26,13 +32,15 @@ import type {
   StatusCommandData,
 } from '../../hooks/useChatComposerState';
 
+import ModelLibraryPanel from './ModelLibraryPanel';
+
 type CommandResultModalProps = {
   payload: CommandModalPayload | null;
   onClose: () => void;
   providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
-  providerModelCacheCatalog: Partial<Record<LLMProvider, ProviderModelsCacheInfo>>;
-  providerModelsRefreshing: boolean;
-  onHardRefreshProviderModels: () => void;
+  providerModelActions: ProviderModelActions;
+  activeProvider: LLMProvider;
+  activeProviderModel: string;
   currentSessionId: string | null;
   onSelectProviderModel: (
     provider: LLMProvider,
@@ -48,12 +56,6 @@ type CommandEntry = {
   name: string;
   description?: string;
   namespace?: string;
-};
-
-type ModelOption = {
-  value: string;
-  label?: string;
-  description?: string;
 };
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -229,15 +231,17 @@ function HelpContent({ data }: { data: HelpCommandData }) {
 function ModelsContent({
   data,
   providerModelCatalog,
-  providerModelsRefreshing,
-  onHardRefreshProviderModels,
+  providerModelActions,
+  activeProvider,
+  activeProviderModel,
   currentSessionId,
   onSelectProviderModel,
 }: {
   data: ModelCommandData;
   providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
-  providerModelsRefreshing: boolean;
-  onHardRefreshProviderModels: () => void;
+  providerModelActions: ProviderModelActions;
+  activeProvider: LLMProvider;
+  activeProviderModel: string;
   currentSessionId: string | null;
   onSelectProviderModel: CommandResultModalProps['onSelectProviderModel'];
 }) {
@@ -245,11 +249,14 @@ function ModelsContent({
   const [changingModel, setChangingModel] = useState<string | null>(null);
   const [pendingSessionModel, setPendingSessionModel] = useState<string | null>(null);
   const [selectionNotice, setSelectionNotice] = useState<string | null>(null);
+  const [managingModels, setManagingModels] = useState(false);
   const currentProvider = (data?.current?.provider || 'claude') as LLMProvider;
-  const currentModel = data?.current?.model || 'Unknown';
+  const currentModel = activeProvider === currentProvider
+    ? activeProviderModel
+    : pendingSessionModel ?? data?.current?.model ?? 'Unknown';
   const providerLabel = data?.current?.providerLabel || getProviderLabel(currentProvider);
   const liveDefinition = providerModelCatalog[currentProvider];
-  const availableOptions = useMemo<ModelOption[]>(() => {
+  const availableOptions = useMemo<ProviderModelOption[]>(() => {
     if (liveDefinition?.OPTIONS && liveDefinition.OPTIONS.length > 0) {
       return liveDefinition.OPTIONS;
     }
@@ -296,9 +303,19 @@ function ModelsContent({
     }
   };
 
+  if (managingModels) {
+    return (
+      <ModelLibraryPanel
+        initialProvider={currentProvider}
+        providerModelCatalog={providerModelCatalog}
+        actions={providerModelActions}
+        onDone={() => setManagingModels(false)}
+      />
+    );
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      {/* Compact context bar: active model + refresh, no clutter */}
       <div className="flex items-center justify-between gap-3 rounded-2xl border border-border/70 bg-muted/20 px-3.5 py-2.5">
         <div className="min-w-0">
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
@@ -315,15 +332,13 @@ function ModelsContent({
         </div>
         <Button
           type="button"
-          variant="ghost"
-          size="icon"
-          onClick={onHardRefreshProviderModels}
-          disabled={providerModelsRefreshing}
-          title="Refresh model list from providers"
-          aria-label="Refresh model list from providers"
-          className="h-9 w-9 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
+          variant="outline"
+          size="sm"
+          onClick={() => setManagingModels(true)}
+          className="h-9 shrink-0 rounded-xl bg-background px-3 text-xs"
         >
-          <RefreshCw className={`h-4 w-4 ${providerModelsRefreshing ? 'animate-spin' : ''}`} />
+          <Plus className="h-3.5 w-3.5" />
+          Manage models
         </Button>
       </div>
 
@@ -345,7 +360,7 @@ function ModelsContent({
                   onClick={() => handleSelectModel(option.value)}
                   disabled={Boolean(changingModel)}
                   aria-label={`Select model ${option.value}`}
-                  className={`settings-content-enter group flex min-h-[4rem] flex-col rounded-2xl border p-3 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-60 ${
+                  className={`settings-content-enter group flex min-h-16 flex-col rounded-2xl border p-3 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-60 ${
                     isCurrent
                       ? 'border-primary/45 bg-primary/10'
                       : isPendingSelection
@@ -355,15 +370,18 @@ function ModelsContent({
                   style={{ animationDelay: `${Math.min(index * 14, 180)}ms` }}
                 >
                   <span className="flex items-center justify-between gap-2">
-                    <span className="break-all font-mono text-sm font-semibold text-foreground">{option.value}</span>
-                    {isCurrent ? (
-                      <BadgeCheck className="h-4 w-4 shrink-0 text-primary" />
-                    ) : isChanging ? (
-                      <RefreshCw className="h-4 w-4 shrink-0 animate-spin text-primary" />
-                    ) : null}
+                    <span className="break-words text-sm font-semibold text-foreground">{option.label || option.value}</span>
+                    <span className="flex shrink-0 items-center gap-2">
+                      {option.isCustom && <Badge className="rounded-full px-2 py-0 text-[9px]">Custom</Badge>}
+                      {isCurrent ? (
+                        <BadgeCheck className="h-4 w-4 shrink-0 text-primary" />
+                      ) : isChanging ? (
+                        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
+                      ) : null}
+                    </span>
                   </span>
-                  {option.label && option.label !== option.value && (
-                    <span className="mt-1 text-xs font-medium text-foreground/85">{option.label}</span>
+                  {option.label !== option.value && (
+                    <span className="mt-1 break-all font-mono text-[11px] text-muted-foreground">{option.value}</span>
                   )}
                   {option.description && (
                     <span className="mt-1 text-xs leading-5 text-muted-foreground">{option.description}</span>
@@ -517,8 +535,9 @@ export default function CommandResultModal({
   payload,
   onClose,
   providerModelCatalog,
-  providerModelsRefreshing,
-  onHardRefreshProviderModels,
+  providerModelActions,
+  activeProvider,
+  activeProviderModel,
   currentSessionId,
   onSelectProviderModel,
 }: CommandResultModalProps) {
@@ -605,8 +624,9 @@ export default function CommandResultModal({
             <ModelsContent
               data={payload.data as ModelCommandData}
               providerModelCatalog={providerModelCatalog}
-              providerModelsRefreshing={providerModelsRefreshing}
-              onHardRefreshProviderModels={onHardRefreshProviderModels}
+              providerModelActions={providerModelActions}
+              activeProvider={activeProvider}
+              activeProviderModel={activeProviderModel}
               currentSessionId={currentSessionId}
               onSelectProviderModel={onSelectProviderModel}
             />

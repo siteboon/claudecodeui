@@ -28,7 +28,7 @@ import type {
   PermissionMode,
   SessionEstablishedContext,
 } from '../types/types';
-import type { Project, ProjectSession, LLMProvider, ProviderModelsCacheInfo } from '../../../types/app';
+import type { Project, ProjectSession, LLMProvider, ProviderModelOption } from '../../../types/app';
 import { escapeRegExp } from '../utils/chatFormatting';
 
 import { useFileMentions } from './useFileMentions';
@@ -94,13 +94,8 @@ export type ModelCommandData = {
   };
   available?: Partial<Record<LLMProvider, string[]>>;
   availableModels?: string[];
-  availableOptions?: Array<{
-    value: string;
-    label?: string;
-    description?: string;
-  }>;
+  availableOptions?: ProviderModelOption[];
   defaultModel?: string;
-  cache?: ProviderModelsCacheInfo;
 };
 
 export type CostCommandData = {
@@ -837,12 +832,14 @@ export function useChatComposerState({
       // handoff later — this id stays valid for the conversation's lifetime.
       let targetSessionId = selectedSession?.id || currentSessionId || null;
       if (!targetSessionId) {
+        let createdSessionName = sessionSummary;
         try {
           const response = await authenticatedFetch('/api/providers/sessions', {
             method: 'POST',
             body: JSON.stringify({
               provider,
               projectPath: resolvedProjectPath,
+              initialMessage: messageContent,
             }),
           });
           if (!response.ok) {
@@ -850,6 +847,14 @@ export function useChatComposerState({
           }
           const body = await response.json();
           targetSessionId = body?.data?.sessionId || null;
+          // A blank server name would leave the session unlabeled, so the local
+          // summary stays the fallback unless a real name comes back.
+          const returnedSessionName = typeof body?.data?.sessionName === 'string'
+            ? body.data.sessionName.trim()
+            : '';
+          if (returnedSessionName) {
+            createdSessionName = returnedSessionName;
+          }
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
           console.error('Session creation failed:', error);
@@ -873,7 +878,7 @@ export function useChatComposerState({
         onSessionEstablished?.(targetSessionId, {
           provider,
           project: selectedProject,
-          summary: sessionSummary,
+          summary: createdSessionName,
         });
       }
 
