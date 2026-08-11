@@ -850,13 +850,11 @@ export class CodexSessionsProvider implements IProviderSessions {
     }
 
     if (raw.type === 'turn_complete') {
-      return [createNormalizedMessage({
-        id: baseId,
-        sessionId,
-        timestamp: ts,
-        provider: PROVIDER,
-        kind: 'complete',
-      })];
+      // The runtime emits one authoritative createCompleteMessage after the
+      // SDK stream closes, including success and exitCode. Emitting this
+      // intermediate transform would win terminal deduplication without those
+      // fields and make a successful turn appear failed to clients.
+      return [];
     }
     if (raw.type === 'turn_failed') {
       return [createNormalizedMessage({
