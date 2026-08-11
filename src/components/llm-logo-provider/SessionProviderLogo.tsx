@@ -3,6 +3,7 @@ import ClaudeLogo from './ClaudeLogo';
 import CodexLogo from './CodexLogo';
 import CursorLogo from './CursorLogo';
 import OpenCodeLogo from './OpenCodeLogo';
+import OmpLogo from './OmpLogo';
 
 type SessionProviderLogoProps = {
   provider?: LLMProvider | string | null;
@@ -23,6 +24,10 @@ export default function SessionProviderLogo({
 
   if (provider === 'opencode') {
     return <OpenCodeLogo className={className} />;
+  }
+
+  if (provider === 'omp') {
+    return <OmpLogo className={className} />;
   }
 
   return <ClaudeLogo className={className} />;

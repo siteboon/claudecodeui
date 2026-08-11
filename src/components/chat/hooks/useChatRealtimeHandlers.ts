@@ -312,8 +312,24 @@ export function useChatRealtimeHandlers({
           if (msg.text === 'token_budget' && msg.tokenBudget) {
             setTokenBudget(msg.tokenBudget as Record<string, unknown>);
           } else if (msg.text && sid) {
+            // Friendly-label the internal status tokens (omp emits these for live
+            // model/thinking/mode changes; 'plan' from plan-mode) so the activity
+            // pill shows readable text, not the raw token.
+            const rawText = msg.text as string;
+            const value = typeof msg.status === 'string' ? msg.status : undefined;
+            // configId disambiguates a config_option_update (model vs thinking vs mode)
+            // so a thinking change doesn't render as "Model: high".
+            const configId = typeof (msg as { configId?: unknown }).configId === 'string'
+              ? (msg as { configId: string }).configId
+              : undefined;
+            const configLabel = configId === 'thinking' ? 'Thinking' : configId === 'mode' ? 'Mode' : 'Model';
+            const statusText =
+              rawText === 'plan' ? 'Planning'
+              : rawText === 'config_option_update' ? (value ? `${configLabel}: ${value}` : `${configLabel} updated`)
+              : rawText === 'current_mode_update' ? (value ? `Mode: ${value}` : 'Mode changed')
+              : rawText;
             onSessionProcessing?.(sid, {
-              statusText: msg.text as string,
+              statusText,
               canInterrupt: msg.canInterrupt !== false,
             });
           }

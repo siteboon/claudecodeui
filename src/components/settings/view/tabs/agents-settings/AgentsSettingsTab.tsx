@@ -20,14 +20,21 @@ export default function AgentsSettingsTab({
 }: AgentsSettingsTabProps) {
   const [selectedAgent, setSelectedAgent] = useState<AgentProvider>('claude');
   const [selectedCategory, setSelectedCategory] = useState<AgentCategory>('account');
-  const visibleCategories = useMemo<AgentCategory[]>(() => (
-    selectedAgent === 'opencode'
-      ? ['account', 'permissions', 'mcp']
-      : ['account', 'permissions', 'mcp', 'skills']
-  ), [selectedAgent]);
+  const visibleCategories = useMemo<AgentCategory[]>(() => {
+    // omp permission modes are chosen per-chat in the composer, not persisted in
+    // settings, so there's no Permissions content to show — hide the tab.
+    if (selectedAgent === 'omp') {
+      return ['account', 'mcp', 'skills'];
+    }
+    // opencode: skills stubbed; its Permissions tab is empty upstream (left as-is).
+    if (selectedAgent === 'opencode') {
+      return ['account', 'permissions', 'mcp'];
+    }
+    return ['account', 'permissions', 'mcp', 'skills'];
+  }, [selectedAgent]);
 
   const visibleAgents = useMemo<AgentProvider[]>(() => {
-    return ['claude', 'cursor', 'codex', 'opencode'];
+    return ['claude', 'cursor', 'codex', 'opencode', 'omp'];
   }, []);
 
   const agentContextById = useMemo<Record<AgentProvider, AgentContext>>(() => ({
@@ -47,12 +54,17 @@ export default function AgentsSettingsTab({
       authStatus: providerAuthStatus.opencode,
       onLogin: () => onProviderLogin('opencode'),
     },
+    omp: {
+      authStatus: providerAuthStatus.omp,
+      onLogin: () => onProviderLogin('omp'),
+    },
   }), [
     onProviderLogin,
     providerAuthStatus.claude,
     providerAuthStatus.codex,
     providerAuthStatus.cursor,
     providerAuthStatus.opencode,
+    providerAuthStatus.omp,
   ]);
 
   useEffect(() => {
