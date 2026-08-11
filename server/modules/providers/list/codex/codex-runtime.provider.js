@@ -25,6 +25,16 @@ import { createCompleteMessage, createNormalizedMessage } from '@/shared/utils.j
 
 const activeCodexSessions = new Map();
 
+export function getCodexClientOptions() {
+  return {
+    config: {
+      // `codex exec` does not request summaries by default, unlike the TUI.
+      // Detailed summaries expose useful progress without revealing raw chain of thought.
+      model_reasoning_summary: 'detailed',
+    },
+  };
+}
+
 function readUsageNumber(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -264,7 +274,7 @@ export async function queryCodex(command, options = {}, ws, context) {
   const sessionKey = () => sessionId || capturedSessionId || null;
 
   try {
-    codex = new Codex();
+    codex = new Codex(getCodexClientOptions());
 
     const threadOptions = {
       workingDirectory,
