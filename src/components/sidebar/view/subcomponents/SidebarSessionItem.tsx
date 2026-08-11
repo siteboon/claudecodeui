@@ -8,7 +8,7 @@ import type { Project, ProjectSession, LLMProvider } from '../../../../types/app
 import { api } from '../../../../utils/api';
 import { copyTextToClipboard } from '../../../../utils/clipboard';
 import type { SessionWithProvider } from '../../types/types';
-import { createSessionViewModel } from '../../utils/utils';
+import { createSessionViewModel, formatCompactAge } from '../../utils/utils';
 import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
 
 type SidebarSessionItemProps = {
@@ -35,34 +35,6 @@ type SidebarSessionItemProps = {
   t: TFunction;
 };
 
-/**
- * Compact relative time for sidebar rows:
- * <1m, Xm, Xhr, Xd.
- */
-const formatCompactSessionAge = (dateString: string, currentTime: Date): string => {
-  const date = new Date(dateString);
-  if (Number.isNaN(date.getTime())) {
-    return '';
-  }
-
-  const diffInMinutes = Math.floor(Math.max(0, currentTime.getTime() - date.getTime()) / (1000 * 60));
-  if (diffInMinutes < 1) {
-    return '<1m';
-  }
-
-  if (diffInMinutes < 60) {
-    return `${diffInMinutes}m`;
-  }
-
-  const diffInHours = Math.floor(diffInMinutes / 60);
-  if (diffInHours < 24) {
-    return `${diffInHours}hr`;
-  }
-
-  const diffInDays = Math.floor(diffInHours / 24);
-  return `${diffInDays}d`;
-};
-
 const PROVIDER_LABELS: Record<LLMProvider, string> = {
   claude: 'Claude',
   codex: 'Codex',
@@ -71,7 +43,6 @@ const PROVIDER_LABELS: Record<LLMProvider, string> = {
 };
 
 type CopyState = 'loading' | 'idle' | 'copying' | 'copied' | 'error';
-
 export default function SidebarSessionItem({
   project,
   session,
@@ -93,7 +64,7 @@ export default function SidebarSessionItem({
   const sessionView = createSessionViewModel(session, currentTime, t);
   const isSelected = selectedSession?.id === session.id;
   const isEditing = editingSession === session.id;
-  const compactSessionAge = formatCompactSessionAge(sessionView.sessionTime, currentTime);
+  const compactSessionAge = formatCompactAge(sessionView.sessionTime, currentTime);
   const editingContainerRef = useRef<HTMLDivElement>(null);
   const [isMobileOptionsOpen, setIsMobileOptionsOpen] = useState(false);
   const [copyState, setCopyState] = useState<CopyState>('idle');
@@ -104,9 +75,10 @@ export default function SidebarSessionItem({
   const providerLabel = PROVIDER_LABELS[session.__provider];
 
   // While editing, dismiss only when the user clicks outside the inline rename panel
-  // (matches Escape / cancel-button behaviour).
+  // (matches Escape / cancel-button behaviour). The mobile rename lives inside the
+  // bottom sheet, which owns its own dismissal, so the listener stays off there.
   useEffect(() => {
-    if (!isEditing) {
+    if (!isEditing || isMobileOptionsOpen) {
       return;
     }
 
@@ -119,7 +91,7 @@ export default function SidebarSessionItem({
 
     document.addEventListener('mousedown', handlePointerDown);
     return () => document.removeEventListener('mousedown', handlePointerDown);
-  }, [isEditing, onCancelEditingSession]);
+  }, [isEditing, isMobileOptionsOpen, onCancelEditingSession]);
 
   // Sessions are owned by a project identified by `projectId` (DB primary key)
   // after the projectName → projectId migration.
@@ -175,6 +147,18 @@ export default function SidebarSessionItem({
   const setMobileOptionsOpen = (open: boolean) => {
     setIsMobileOptionsOpen(open);
     setOptionsOpen(open);
+    if (!open && isEditing) {
+      onCancelEditingSession();
+    }
+  };
+
+  const startMobileRename = () => {
+    onStartEditingSession(session.id, sessionView.sessionName);
+  };
+
+  const saveMobileRename = () => {
+    saveEditedSession();
+    setMobileOptionsOpen(false);
   };
 
   const copyProviderSessionId = async () => {
@@ -257,7 +241,12 @@ export default function SidebarSessionItem({
 
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <div className="min-w-0 flex-1 truncate text-sm font-normal text-foreground">{sessionView.sessionName}</div>
+                <div
+                  className="min-w-0 flex-1 truncate text-sm font-normal text-foreground"
+                  title={sessionView.sessionName}
+                >
+                  {sessionView.sessionName}
+                </div>
                 {isProcessing ? (
                   <span className="ml-auto flex-shrink-0">
                     <Tooltip content={t('tooltips.processingSessionIndicator', 'Processing session')} position="top">
@@ -310,62 +299,118 @@ export default function SidebarSessionItem({
                 <SessionProviderLogo provider={session.__provider} className="h-5 w-5" />
               </div>
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-foreground">{sessionView.sessionName}</p>
+                <p className="truncate text-sm font-medium text-foreground" title={sessionView.sessionName}>
+                  {sessionView.sessionName}
+                </p>
                 <p id="mobile-session-options-description" className="text-xs text-muted-foreground">
                   {providerLabel} session
                 </p>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={handleCopyAction}
-                disabled={isCopyPending}
-                className={cn(
-                  'flex min-h-12 w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors',
-                  copyState === 'copied'
-                    ? 'border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-300'
-                    : copyState === 'error'
-                      ? 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300'
-                      : 'border-border bg-muted/35 text-foreground active:bg-muted',
-                )}
-              >
-                {isCopyPending ? (
-                  <Loader2 className="h-5 w-5 flex-shrink-0 animate-spin" />
-                ) : (
-                  <CopyStateIcon className="h-5 w-5 flex-shrink-0" />
-                )}
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium">{copyLabel}</span>
-                  {copyState === 'error' && (
-                    <span className="mt-0.5 block text-xs">Tap to try again.</span>
-                  )}
-                </span>
-              </button>
-
-              {!isProcessing && (
+            {isEditing ? (
+              <div className="mb-3 space-y-2">
+                <label htmlFor={`mobile-session-rename-${session.id}`} className="block px-1 text-xs font-medium text-muted-foreground">
+                  Session name
+                </label>
+                <input
+                  id={`mobile-session-rename-${session.id}`}
+                  type="text"
+                  value={editingSessionName}
+                  onChange={(event) => onEditingSessionNameChange(event.target.value)}
+                  onKeyDown={(event) => {
+                    event.stopPropagation();
+                    if (event.key === 'Enter') {
+                      saveMobileRename();
+                    }
+                  }}
+                  className="w-full rounded-xl border-2 border-primary/40 bg-background px-3 py-3 text-foreground shadow-sm focus:border-primary focus:outline-none"
+                  autoFocus
+                  autoComplete="off"
+                  // 16px keeps iOS Safari from zooming the viewport on focus.
+                  style={{ fontSize: '16px' }}
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={saveMobileRename}
+                    className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-medium text-primary-foreground transition-transform active:scale-95"
+                  >
+                    <Check className="h-5 w-5 flex-shrink-0" />
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onCancelEditingSession}
+                    className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-border bg-muted/35 px-4 py-3 text-sm font-medium text-foreground transition-colors active:bg-muted"
+                  >
+                    <X className="h-5 w-5 flex-shrink-0" />
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    setMobileOptionsOpen(false);
-                    requestDeleteSession();
-                  }}
-                  className="flex min-h-12 w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-red-600 transition-colors active:bg-red-500/10 dark:text-red-400"
+                  onClick={startMobileRename}
+                  className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-border bg-muted/35 px-4 py-3 text-left text-foreground transition-colors active:bg-muted"
                 >
-                  <Trash2 className="h-5 w-5 flex-shrink-0" />
-                  <span className="text-sm font-medium">Archive or delete session</span>
+                  <Edit2 className="h-5 w-5 flex-shrink-0" />
+                  <span className="text-sm font-medium">Rename session</span>
                 </button>
-              )}
-            </div>
 
-            <button
-              type="button"
-              onClick={() => setMobileOptionsOpen(false)}
-              className="mb-3 mt-2 min-h-11 w-full rounded-xl text-sm font-medium text-muted-foreground transition-colors active:bg-muted"
-            >
-              Cancel
-            </button>
+                <button
+                  type="button"
+                  onClick={handleCopyAction}
+                  disabled={isCopyPending}
+                  className={cn(
+                    'flex min-h-12 w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors',
+                    copyState === 'copied'
+                      ? 'border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-300'
+                      : copyState === 'error'
+                        ? 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300'
+                        : 'border-border bg-muted/35 text-foreground active:bg-muted',
+                  )}
+                >
+                  {isCopyPending ? (
+                    <Loader2 className="h-5 w-5 flex-shrink-0 animate-spin" />
+                  ) : (
+                    <CopyStateIcon className="h-5 w-5 flex-shrink-0" />
+                  )}
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium">{copyLabel}</span>
+                    {copyState === 'error' && (
+                      <span className="mt-0.5 block text-xs">Tap to try again.</span>
+                    )}
+                  </span>
+                </button>
+
+                {!isProcessing && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileOptionsOpen(false);
+                      requestDeleteSession();
+                    }}
+                    className="flex min-h-12 w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-red-600 transition-colors active:bg-red-500/10 dark:text-red-400"
+                  >
+                    <Trash2 className="h-5 w-5 flex-shrink-0" />
+                    <span className="text-sm font-medium">Archive or delete session</span>
+                  </button>
+                )}
+              </div>
+            )}
+
+            {!isEditing && (
+              <button
+                type="button"
+                onClick={() => setMobileOptionsOpen(false)}
+                className="mb-3 mt-2 min-h-11 w-full rounded-xl text-sm font-medium text-muted-foreground transition-colors active:bg-muted"
+              >
+                Cancel
+              </button>
+            )}
           </DialogContent>
         </Dialog>
       </div>
@@ -402,7 +447,12 @@ export default function SidebarSessionItem({
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <div className="min-w-0 flex-1 truncate text-sm font-normal text-foreground">{sessionView.sessionName}</div>
+                <div
+                  className="min-w-0 flex-1 truncate text-sm font-normal text-foreground"
+                  title={sessionView.sessionName}
+                >
+                  {sessionView.sessionName}
+                </div>
                 {isProcessing ? (
                   <span
                     className={cn(
@@ -491,11 +541,19 @@ export default function SidebarSessionItem({
                 menuClassName="w-[260px] rounded-xl p-1.5 shadow-xl"
                 header={(
                   <div className="mb-1 border-b border-border px-3 py-2">
-                    <p className="truncate text-xs font-medium text-foreground">{sessionView.sessionName}</p>
+                    <p className="truncate text-xs font-medium text-foreground" title={sessionView.sessionName}>
+                      {sessionView.sessionName}
+                    </p>
                     <p className="mt-0.5 text-[11px] text-muted-foreground">{providerLabel} session</p>
                   </div>
                 )}
                 items={[
+                  {
+                    key: 'rename',
+                    label: 'Rename session',
+                    icon: Edit2,
+                    onSelect: () => onStartEditingSession(session.id, sessionView.sessionName),
+                  },
                   {
                     key: 'copy',
                     label: copyLabel,
@@ -504,12 +562,6 @@ export default function SidebarSessionItem({
                     loading: isCopyPending,
                     closeOnSelect: false,
                     onSelect: handleCopyAction,
-                  },
-                  {
-                    key: 'rename',
-                    label: 'Rename session',
-                    icon: Edit2,
-                    onSelect: () => onStartEditingSession(session.id, sessionView.sessionName),
                   },
                   ...(!isProcessing ? [{
                     key: 'delete',

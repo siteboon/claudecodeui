@@ -568,6 +568,12 @@
       "description": "Track live Claude Code plan limits and explore 30-day token and cost history.",
       "install": "Install"
     },
+    "codexUsagePlugin": {
+      "name": "Codex Usage",
+      "badge": "unofficial",
+      "description": "Track live Codex plan limits, reset timing, and 30-day account token activity.",
+      "install": "Install"
+    },
     "morePlugins": "More",
     "enable": "Enable",
     "disable": "Disable",

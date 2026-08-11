@@ -24,7 +24,7 @@ import {
   buildClaudeUserContent,
   normalizeImageDescriptors
 } from '@/shared/image-attachments.js';
-import { CLAUDE_FALLBACK_MODELS } from '@/modules/providers/list/claude/claude-models.provider.js';
+import { CLAUDE_PREDEFINED_MODELS } from '@/modules/providers/list/claude/claude-models.provider.js';
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
 import {
   createNotificationEvent,
@@ -45,7 +45,7 @@ const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEO
 
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
-function resolveClaudeEffort(model, effort, modelsDefinition = CLAUDE_FALLBACK_MODELS) {
+function resolveClaudeEffort(model, effort, modelsDefinition = CLAUDE_PREDEFINED_MODELS) {
   const selectedModel = modelsDefinition?.OPTIONS?.find((option) => option.value === model) || null;
   const allowedEfforts = selectedModel?.effort?.values
     ?.map((value) => value.value) || [];
@@ -165,6 +165,9 @@ function mapCliOptionsToSDK(options = {}) {
 
   // Forward all host env vars (e.g. ANTHROPIC_BASE_URL) to the subprocess.
   // Since SDK 0.2.113, options.env replaces process.env instead of overlaying it.
+  // This snapshot is also how CLI-side knobs reach the child: e.g. how long the CLI waits for
+  // still-running background agents after a turn ends is set by CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS
+  // (default 600000 ms; 0 = wait indefinitely) on this server's own environment.
   sdkOptions.env = { ...process.env };
 
   // Resolve the executable eagerly on Windows because the SDK uses raw child_process.spawn,
@@ -209,12 +212,12 @@ function mapCliOptionsToSDK(options = {}) {
 
   sdkOptions.disallowedTools = settings.disallowedTools || [];
 
-  sdkOptions.model = options.model || CLAUDE_FALLBACK_MODELS.DEFAULT;
+  sdkOptions.model = options.model || CLAUDE_PREDEFINED_MODELS.DEFAULT;
 
   const resolvedEffort = resolveClaudeEffort(
     sdkOptions.model,
     effort,
-    options.effortModels || CLAUDE_FALLBACK_MODELS,
+    options.effortModels || CLAUDE_PREDEFINED_MODELS,
   );
   if (resolvedEffort) {
     sdkOptions.effort = resolvedEffort;
@@ -485,7 +488,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
 
   try {
     const resolvedModel = await context.resolveResumeModel(sessionId, options.model);
-    let effortModels = CLAUDE_FALLBACK_MODELS;
+    let effortModels = CLAUDE_PREDEFINED_MODELS;
     try {
       effortModels = await context.getProviderModels();
     } catch (error) {
@@ -610,10 +613,6 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       return { behavior: 'deny', message: decision.message ?? 'User denied tool use' };
     };
 
-    // Query constructor reads this synchronously.
-    const prevStreamTimeout = process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT;
-    process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT = '300000';
-
     let queryInstance;
     try {
       queryInstance = query({
@@ -629,13 +628,6 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         prompt: await createPrompt(),
         options: sdkOptions
       });
-    }
-
-    // Restore immediately — Query constructor already captured the value
-    if (prevStreamTimeout !== undefined) {
-      process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT = prevStreamTimeout;
-    } else {
-      delete process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT;
     }
 
     // Track the query instance for abort capability

@@ -64,24 +64,24 @@ const writeCodexTranscript = async (
   return filePath;
 };
 
-test('Codex synchronizer titles app-created sessions from the first user message', { concurrency: false }, async () => {
+test('Codex synchronizer preserves the title assigned when CloudCLI creates a session', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-session-sync-app-'));
   const workspacePath = path.join(tempRoot, 'workspace');
   await mkdir(workspacePath, { recursive: true });
   const restoreHomeDir = patchHomeDir(tempRoot);
 
   try {
-    await writeCodexTranscript(tempRoot, 'codex-app-1', workspacePath, 'Fix the login redirect bug');
+    await writeCodexTranscript(tempRoot, 'codex-app-1', workspacePath, 'Provider transcript title must not win');
     await withIsolatedDatabase(async () => {
       // The app allocates its own id and later maps the provider id onto it,
       // exactly as a message sent from cloudcli does.
-      sessionsDb.createAppSession('app-1', 'codex', workspacePath);
+      sessionsDb.createAppSession('app-1', 'codex', workspacePath, 'Fix the login redirect');
       sessionsDb.assignProviderSessionId('app-1', 'codex-app-1');
 
       const synchronizer = new CodexSessionSynchronizer();
       await synchronizer.synchronize();
 
-      assert.equal(sessionsDb.getSessionById('app-1')?.custom_name, 'Fix the login redirect bug');
+      assert.equal(sessionsDb.getSessionById('app-1')?.custom_name, 'Fix the login redirect');
     });
   } finally {
     restoreHomeDir();
@@ -152,7 +152,7 @@ test('Codex synchronizer leaves indexed sessions untitled when no name is availa
   }
 });
 
-test('Codex history renders Promise.all shell wrappers as Bash activity', { concurrency: false }, async () => {
+test('Codex history preserves wrapped exec tool calls and results', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-exec-history-'));
   const workspacePath = path.join(tempRoot, 'workspace');
   await mkdir(workspacePath, { recursive: true });
@@ -161,15 +161,46 @@ test('Codex history renders Promise.all shell wrappers as Bash activity', { conc
   try {
     const providerSessionId = 'codex-exec-1';
     const transcriptPath = await writeCodexTranscript(tempRoot, providerSessionId, workspacePath);
-    const execInput = 'const cmds = ["echo one", "echo two"]; await Promise.all(cmds.map(command => tools.shell_command({ command })));';
-    const planInput = 'await tools.update_plan({ plan: [] });';
-    await writeFile(transcriptPath, [
+    const wrappedCalls = [
+      {
+        callId: 'shell-command-1',
+        input: 'const cmds = ["echo one", "echo two"]; await Promise.all(cmds.map(command => tools.shell_command({ command })));',
+        expectedToolName: 'Bash',
+        expectedToolInput: JSON.stringify({ command: 'echo one\necho two' }),
+      },
+      {
+        callId: 'json-shell-command-1',
+        input: 'const r = await tools.shell_command({"command":"Get-Content -Raw README.md","workdir":"C:\\\\workspace","timeout_ms":10000}); text(r)',
+        expectedToolName: 'Bash',
+        expectedToolInput: JSON.stringify({ command: 'Get-Content -Raw README.md' }),
+      },
+      {
+        callId: 'exec-command-1',
+        input: 'await tools.exec_command({"command":"echo current"});',
+        expectedToolName: 'Bash',
+        expectedToolInput: JSON.stringify({ command: 'echo current' }),
+      },
+      { callId: 'apply-patch-1', input: 'await tools.apply_patch("*** Begin Patch\\n*** End Patch");' },
+      { callId: 'web-run-1', input: 'await tools.web__run({ search_query: [{ q: "Codex" }] });' },
+      { callId: 'update-plan-1', input: 'await tools.update_plan({ plan: [] });' },
+      { callId: 'unknown-1', input: 'await tools.unknown_wrapper({ value: true });' },
+    ];
+    const transcriptLines = [
       JSON.stringify({ type: 'session_meta', payload: { id: providerSessionId, cwd: workspacePath } }),
-      JSON.stringify({ type: 'response_item', payload: { type: 'custom_tool_call', name: 'exec', call_id: 'exec-1', input: execInput } }),
-      JSON.stringify({ type: 'response_item', payload: { type: 'custom_tool_call_output', call_id: 'exec-1', output: 'done' } }),
-      JSON.stringify({ type: 'response_item', payload: { type: 'custom_tool_call', name: 'exec', call_id: 'plan-1', input: planInput } }),
-      JSON.stringify({ type: 'response_item', payload: { type: 'custom_tool_call_output', call_id: 'plan-1', output: 'done' } }),
-    ].join('\n') + '\n', 'utf8');
+    ];
+    for (const call of wrappedCalls) {
+      transcriptLines.push(
+        JSON.stringify({
+          type: 'response_item',
+          payload: { type: 'custom_tool_call', name: 'exec', call_id: call.callId, input: call.input },
+        }),
+        JSON.stringify({
+          type: 'response_item',
+          payload: { type: 'custom_tool_call_output', call_id: call.callId, output: `result:${call.callId}` },
+        }),
+      );
+    }
+    await writeFile(transcriptPath, `${transcriptLines.join('\n')}\n`, 'utf8');
 
     await withIsolatedDatabase(async () => {
       sessionsDb.createAppSession('app-exec-1', 'codex', workspacePath);
@@ -179,11 +210,19 @@ test('Codex history renders Promise.all shell wrappers as Bash activity', { conc
       const history = await new CodexSessionsProvider().fetchHistory('app-exec-1');
       const toolUses = history.messages.filter((message) => message.kind === 'tool_use');
       const toolResults = history.messages.filter((message) => message.kind === 'tool_result');
+      const toolUsesById = new Map(toolUses.map((message) => [message.toolId, message]));
+      const toolResultsById = new Map(toolResults.map((message) => [message.toolId, message]));
 
-      assert.equal(toolUses.length, 1);
-      assert.equal(toolUses[0].toolName, 'Bash');
-      assert.equal(toolUses[0].toolInput, JSON.stringify({ command: 'echo one\necho two' }));
-      assert.equal(toolResults.some((message) => message.toolCallId === 'plan-1'), false);
+      assert.equal(toolUses.length, wrappedCalls.length);
+      assert.equal(toolResults.length, wrappedCalls.length);
+      for (const call of wrappedCalls) {
+        const toolUse = toolUsesById.get(call.callId);
+        assert.ok(toolUse);
+        assert.equal(toolUse.toolName, call.expectedToolName || 'exec');
+        assert.equal(toolUse.toolInput, call.expectedToolInput || call.input);
+        assert.equal(toolUse.toolResult?.content, `result:${call.callId}`);
+        assert.equal(toolResultsById.get(call.callId)?.content, `result:${call.callId}`);
+      }
     });
   } finally {
     restoreHomeDir();

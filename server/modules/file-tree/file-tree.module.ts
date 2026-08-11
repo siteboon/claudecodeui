@@ -36,7 +36,11 @@ const fileTreeFileSystem: FileTreeFileSystem = {
   access: (candidatePath) => fsPromises.access(candidatePath),
   stat: (candidatePath) => fsPromises.stat(candidatePath),
   lstat: (candidatePath) => fsPromises.lstat(candidatePath),
-  readdir: (directoryPath) => fsPromises.readdir(directoryPath, { withFileTypes: true }),
+  // `opendir` streams entries in batches and the handle is closed by the
+  // iterator protocol, including when the caller stops early at the entry cap.
+  openDirectory: async function* (directoryPath) {
+    yield* await fsPromises.opendir(directoryPath);
+  },
   realpath: (candidatePath) => fsPromises.realpath(candidatePath),
   readTextFile: (filePath) => fsPromises.readFile(filePath, 'utf8'),
   writeTextFile: (filePath, content) => fsPromises.writeFile(filePath, content, 'utf8'),
