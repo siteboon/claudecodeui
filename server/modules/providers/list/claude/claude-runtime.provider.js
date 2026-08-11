@@ -43,6 +43,11 @@ const abortedSessionIds = new Set();
 
 const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEOUT_MS, 10) || 55000;
 
+// How long the spawned CLI waits for still-running background agents after a turn ends before
+// killing them (0 = wait indefinitely). The CLI's own default is 10 minutes, which cuts long
+// agents short, so default to 30 minutes; the server's environment still overrides it.
+const BG_WAIT_CEILING_MS = process.env.CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS || String(30 * 60 * 1000);
+
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
 function resolveClaudeEffort(model, effort, modelsDefinition = CLAUDE_PREDEFINED_MODELS) {
@@ -165,10 +170,7 @@ function mapCliOptionsToSDK(options = {}) {
 
   // Forward all host env vars (e.g. ANTHROPIC_BASE_URL) to the subprocess.
   // Since SDK 0.2.113, options.env replaces process.env instead of overlaying it.
-  // This snapshot is also how CLI-side knobs reach the child: e.g. how long the CLI waits for
-  // still-running background agents after a turn ends is set by CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS
-  // (default 600000 ms; 0 = wait indefinitely) on this server's own environment.
-  sdkOptions.env = { ...process.env };
+  sdkOptions.env = { ...process.env, CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: BG_WAIT_CEILING_MS };
 
   // Resolve the executable eagerly on Windows because the SDK uses raw child_process.spawn,
   // which does not reliably follow npm's shell wrappers like cross-spawn does.
