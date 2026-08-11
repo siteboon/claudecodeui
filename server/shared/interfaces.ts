@@ -135,6 +135,11 @@ export interface IProviderSkills {
  * `ProviderMcpServer` records used by routes and frontend state.
  */
 export interface IProviderMcp {
+  /**
+   * MCP scopes this provider can write. Empty = MCP management unsupported
+   * (the global add/remove-to-all-providers helpers skip such providers).
+   */
+  readonly supportedScopes: McpScope[];
   listServers(options?: { workspacePath?: string }): Promise<Record<McpScope, ProviderMcpServer[]>>;
   listServersForScope(scope: McpScope, options?: { workspacePath?: string }): Promise<ProviderMcpServer[]>;
   upsertServer(input: UpsertProviderMcpServerInput): Promise<ProviderMcpServer>;

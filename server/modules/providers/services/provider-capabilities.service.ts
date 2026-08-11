@@ -1,3 +1,7 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import type { LLMProvider } from '@/shared/types.js';
 
 /**
@@ -81,17 +85,71 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsTokenUsage: true,
     supportsEffort: true,
   },
+  omp: {
+    provider: 'omp',
+    // omp (ACP) supports interactive per-tool approvals (`session/request_permission`),
+    // a `plan` mode and `bypassPermissions` (auto-allow), thinking levels mapped
+    // onto reasoning effort, images in the prompt, abort via `session/cancel`, and
+    // post-turn token usage read from the session jsonl.
+    permissionModes: ['default', 'plan', 'bypassPermissions'],
+    defaultPermissionMode: 'default',
+    supportsImages: true,
+    // buildAcpPromptBlocks skips non-image attachments, so general files would
+    // silently vanish from the prompt — don't advertise what we drop.
+    supportsFiles: false,
+    supportsAbort: true,
+    supportsPermissionRequests: true,
+    supportsTokenUsage: true,
+    supportsEffort: true,
+  },
 };
+
+/**
+ * omp's configured approval mode → the web composer's default permission mode.
+ * omp `config.yml` has `tools.approvalMode: yolo|write|always-ask`; `yolo` means
+ * "never ask" ⇒ our `bypassPermissions` (which auto-allows the ACP gate), while
+ * `write`/`always-ask` map to interactive `default`. Read from the file directly
+ * (approvalMode is unique in the config) to avoid a YAML dependency. This is only
+ * a first-time default — a mode the user picks in the UI is persisted and wins.
+ * Memoized per-process (approvalMode changes rarely; a restart re-reads) so this
+ * stays off the disk on the capabilities request path.
+ */
+let cachedOmpDefaultMode: string | null = null;
+function readOmpDefaultPermissionMode(): string {
+  if (cachedOmpDefaultMode !== null) {
+    return cachedOmpDefaultMode;
+  }
+  let mode = 'default';
+  try {
+    const cfg = fs.readFileSync(path.join(os.homedir(), '.omp', 'agent', 'config.yml'), 'utf8');
+    const match = cfg.match(/^\s*approvalMode:\s*(\S+)/m);
+    // Strip surrounding quotes so `approvalMode: "yolo"` still maps correctly.
+    if (match?.[1]?.replace(/['"]/g, '') === 'yolo') {
+      mode = 'bypassPermissions';
+    }
+  } catch {
+    // no config → default
+  }
+  cachedOmpDefaultMode = mode;
+  return mode;
+}
+
+function withDynamicDefaults(caps: ProviderCapabilities): ProviderCapabilities {
+  if (caps.provider === 'omp') {
+    return { ...caps, defaultPermissionMode: readOmpDefaultPermissionMode() };
+  }
+  return caps;
+}
 
 /**
  * Application service exposing the provider capability matrix.
  */
 export const providerCapabilitiesService = {
   getProviderCapabilities(provider: LLMProvider): ProviderCapabilities {
-    return PROVIDER_CAPABILITIES[provider];
+    return withDynamicDefaults(PROVIDER_CAPABILITIES[provider]);
   },
 
   listAllProviderCapabilities(): ProviderCapabilities[] {
-    return Object.values(PROVIDER_CAPABILITIES);
+    return Object.values(PROVIDER_CAPABILITIES).map(withDynamicDefaults);
   },
 };

@@ -34,7 +34,7 @@ export type ImageAttachmentDescriptor = {
 export type ChatAttachmentDescriptor = ImageAttachmentDescriptor;
 
 /** Media types the Claude Messages API accepts for base64 image blocks. */
-const CLAUDE_IMAGE_MEDIA_TYPES = new Set([
+const SUPPORTED_IMAGE_MEDIA_TYPES = new Set([
   'image/jpeg',
   'image/png',
   'image/gif',
@@ -100,7 +100,7 @@ const IMAGE_FILE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp']
  * provider-native image input instead of the general file reference channel.
  */
 export function isImageAttachmentDescriptor(descriptor: ChatAttachmentDescriptor): boolean {
-  if (descriptor.mimeType && CLAUDE_IMAGE_MEDIA_TYPES.has(descriptor.mimeType)) {
+  if (descriptor.mimeType && SUPPORTED_IMAGE_MEDIA_TYPES.has(descriptor.mimeType)) {
     return true;
   }
   return IMAGE_FILE_EXTENSIONS.has(path.extname(descriptor.path).toLowerCase());
@@ -371,7 +371,7 @@ export async function buildClaudeUserContent(
 
   for (const descriptor of normalizeImageDescriptors(images)) {
     const mediaType = resolveImageMediaType(descriptor);
-    if (!mediaType || !CLAUDE_IMAGE_MEDIA_TYPES.has(mediaType)) {
+    if (!mediaType || !SUPPORTED_IMAGE_MEDIA_TYPES.has(mediaType)) {
       console.warn(`[Images] Skipping unsupported Claude image type for ${descriptor.path}`);
       continue;
     }
@@ -432,4 +432,62 @@ export function buildCodexInputItems(prompt: string, images: unknown, cwd?: stri
     });
   }
   return items;
+}
+
+type AcpPromptBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image'; mimeType: string; data: string };
+
+/**
+ * Builds the ACP `session/prompt` content list (used by omp): the prompt text
+ * followed by one base64 `image` block per attachment.
+ *
+ * ACP reuses MCP's `ContentBlock`, so an image block is
+ * `{type:'image', mimeType, data}` with base64 `data`
+ * (https://agentclientprotocol.com/protocol/v1/content). Image blocks are only
+ * appended when the prompt actually carries attachments, and only after the same
+ * allowed-root and symlink checks the other providers' builders apply.
+ *
+ * Consumed by the omp runtime provider when it sends a prompt, and by the
+ * providers module's capability service to report image support.
+ */
+export async function buildAcpPromptBlocks(
+  prompt: string,
+  images: unknown,
+  cwd?: string,
+): Promise<AcpPromptBlock[]> {
+  const blocks: AcpPromptBlock[] = [{ type: 'text', text: prompt }];
+
+  for (const descriptor of normalizeImageDescriptors(images)) {
+    // `resolveImageMediaType` prefers the CLIENT-DECLARED mimeType, so a bare
+    // `image/*` test would let a caller label any readable file `image/png` and
+    // have it base64'd into the prompt. Intersect with the fixed set instead,
+    // exactly as buildClaudeUserContent does.
+    const mediaType = resolveImageMediaType(descriptor);
+    if (!mediaType || !SUPPORTED_IMAGE_MEDIA_TYPES.has(mediaType)) {
+      console.warn(`[Images] Skipping unsupported omp image type for ${descriptor.path}`);
+      continue;
+    }
+
+    const resolvedPath = resolveImageAbsolutePath(cwd, descriptor.path);
+    if (!isAllowedImageSourcePath(resolvedPath, cwd)) {
+      console.warn(`[Images] Refusing to read image outside allowed roots: ${descriptor.path}`);
+      continue;
+    }
+
+    try {
+      const canonicalPath = await fs.realpath(resolvedPath);
+      if (!isAllowedImageSourcePath(canonicalPath, cwd)) {
+        console.warn(`[Images] Refusing to read symlinked image outside allowed roots: ${descriptor.path}`);
+        continue;
+      }
+      const bytes = await fs.readFile(canonicalPath);
+      blocks.push({ type: 'image', mimeType: mediaType, data: bytes.toString('base64') });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[Images] Failed to read image ${descriptor.path}: ${message}`);
+    }
+  }
+
+  return blocks;
 }

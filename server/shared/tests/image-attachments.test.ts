@@ -7,6 +7,7 @@ import test from 'node:test';
 import {
   appendFilesInputTag,
   appendImagesInputTag,
+  buildAcpPromptBlocks,
   buildClaudeUserContent,
   buildCodexInputItems,
   isImageAttachmentDescriptor,
@@ -350,4 +351,32 @@ test('provider builders refuse descriptors outside the allowed roots', async () 
     cwd,
   );
   assert.deepEqual(claudeContent, [{ type: 'text', text: 'prompt' }]);
+});
+
+test('the omp builder ignores a client-declared image type for a non-image file', async () => {
+  const cwd = await mkdtemp(path.join(os.tmpdir(), 'omp-image-gate-'));
+  try {
+    // Inside an allowed root, so the path checks pass — only the media-type gate
+    // stands between a declared mimeType and the file's bytes reaching the prompt.
+    const secretPath = path.join(cwd, 'id_rsa');
+    await writeFile(secretPath, 'PRIVATE KEY', 'utf8');
+
+    const mislabelled = await buildAcpPromptBlocks(
+      'prompt',
+      [{ path: secretPath, mimeType: 'image/x-anything' }],
+      cwd,
+    );
+    assert.deepEqual(mislabelled, [{ type: 'text', text: 'prompt' }],
+      'a type outside the supported set must not be read into the prompt');
+
+    // A real image still goes through, so the gate is not simply refusing everything.
+    const imagePath = path.join(cwd, 'shot.png');
+    await writeFile(imagePath, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    const allowed = await buildAcpPromptBlocks('prompt', [{ path: imagePath, mimeType: 'image/png' }], cwd);
+    assert.equal(allowed.length, 2, 'a supported image type is still appended');
+    assert.equal(allowed[1].type, 'image');
+    assert.equal(allowed[1].mimeType, 'image/png');
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
 });
