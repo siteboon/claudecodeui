@@ -9,6 +9,7 @@ import {
   MCP_GLOBAL_SUPPORTED_TRANSPORTS,
   MCP_PROVIDER_BUTTON_CLASSES,
   MCP_PROVIDER_NAMES,
+  MCP_SUPPORTED_SCOPES,
 } from '../constants';
 import { useMcpServers } from '../hooks/useMcpServers';
 import { maskSecret } from '../utils/mcpFormatting';
@@ -142,6 +143,10 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
             <p className="text-sm text-muted-foreground">{description}</p>
           </div>
         </div>
+        {/* A provider with no writable scopes (e.g. omp — MCP stubbed) can't take a
+            provider-specific server, so that entry is hidden instead of opening a
+            form that 501s. The global add stays: the service skips unwritable
+            providers and still applies the config to the ones that support it. */}
         <ActionMenu
           label="Add MCP Server"
           icon={Plus}
@@ -155,13 +160,15 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
               icon: Globe,
               onSelect: openGlobalForm,
             },
-            {
-              key: 'provider',
-              label: providerButtonLabel,
-              description: providerAddDescription,
-              icon: Server,
-              onSelect: () => openForm(),
-            },
+            ...(MCP_SUPPORTED_SCOPES[selectedProvider].length > 0
+              ? [{
+                key: 'provider',
+                label: providerButtonLabel,
+                description: providerAddDescription,
+                icon: Server,
+                onSelect: () => openForm(),
+              }]
+              : []),
           ]}
         />
 

@@ -74,6 +74,8 @@ function ChatInterface({
     currentProviderModelOptions,
     opencodeModel,
     setOpenCodeModel,
+    ompModel,
+    setOmpModel,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
@@ -315,6 +317,8 @@ function ChatInterface({
         ? t('messageTypes.codex')
         : provider === 'opencode'
             ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
+          : provider === 'omp'
+            ? t('messageTypes.omp', { defaultValue: 'omp' })
           : t('messageTypes.claude');
 
   if (!selectedProject) {
@@ -356,6 +360,8 @@ function ChatInterface({
           setCodexModel={setCodexModel}
           opencodeModel={opencodeModel}
           setOpenCodeModel={setOpenCodeModel}
+          ompModel={ompModel}
+          setOmpModel={setOmpModel}
           providerModelCatalog={providerModelCatalog}
           providerModelActions={providerModelActions}
           providerModelsLoading={providerModelsLoading}
