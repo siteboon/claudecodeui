@@ -6,6 +6,7 @@ import { spawn } from 'cross-spawn';
 import { rgPath } from '@vscode/ripgrep';
 
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
+import { stripCodexMemoryCitation } from '@/shared/utils.js';
 
 type AnyRecord = Record<string, any>;
 type SearchableProvider = 'claude' | 'codex';
@@ -988,7 +989,7 @@ async function parseCodexSessionMatches(
           text = extractCodexText(payload.content);
           role = 'user';
         } else if (payload.role === 'assistant') {
-          text = extractCodexText(payload.content);
+          text = stripCodexMemoryCitation(extractCodexText(payload.content));
           role = 'assistant';
         }
       } else if (entry.type === 'response_item' && entry.payload?.type === 'reasoning') {

@@ -48,6 +48,28 @@ type NormalizedMessageInput =
   } & Record<string, unknown>;
 
 // ---------------------------
+//----------------- CODEX OUTPUT UTILITIES ------------
+/**
+ * Removes the internal memory-citation envelope that Codex can append to an
+ * assistant response. The providers module uses this at both the normalized
+ * message boundary and the conversation-search boundary so internal source
+ * metadata never becomes user-facing content.
+ *
+ * Only a complete, canonical block on its own trailing lines is removed. An
+ * inline example, an incomplete tag, or otherwise ordinary text is preserved.
+ */
+export function stripCodexMemoryCitation(content: string): string {
+  const trailingCitation = /(?:^|(?:\r?\n[ \t]*)+)<oai-mem-citation>\s*<citation_entries>[\s\S]*?<\/citation_entries>\s*<rollout_ids>[\s\S]*?<\/rollout_ids>\s*<\/oai-mem-citation>\s*$/;
+  const match = trailingCitation.exec(content);
+
+  if (!match) {
+    return content;
+  }
+
+  return content.slice(0, match.index).trimEnd();
+}
+
+// ---------------------------
 //----------------- HTTP HANDLER UTILITIES ------------
 /**
  * Wraps arbitrary data in the standard API success envelope.

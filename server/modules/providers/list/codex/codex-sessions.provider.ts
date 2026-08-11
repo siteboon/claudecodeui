@@ -5,7 +5,13 @@ import { sessionsDb } from '@/modules/database/index.js';
 import { parseFilesInputTag, toImageAttachments } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
-import { createNormalizedMessage, generateMessageId, readObjectRecord, sliceTailPage } from '@/shared/utils.js';
+import {
+  createNormalizedMessage,
+  generateMessageId,
+  readObjectRecord,
+  sliceTailPage,
+  stripCodexMemoryCitation,
+} from '@/shared/utils.js';
 
 const PROVIDER = 'codex';
 
@@ -675,7 +681,7 @@ export class CodexSessionsProvider implements IProviderSessions {
     }
 
     if (raw.message?.role === 'assistant') {
-      const content = typeof raw.message.content === 'string'
+      const rawContent = typeof raw.message.content === 'string'
         ? raw.message.content
         : Array.isArray(raw.message.content)
           ? raw.message.content
@@ -683,6 +689,7 @@ export class CodexSessionsProvider implements IProviderSessions {
               .filter(Boolean)
               .join('\n')
           : '';
+      const content = stripCodexMemoryCitation(rawContent);
       if (!content.trim()) {
         return [];
       }
@@ -744,7 +751,13 @@ export class CodexSessionsProvider implements IProviderSessions {
 
     if (raw.type === 'item') {
       switch (raw.itemType) {
-        case 'agent_message':
+        case 'agent_message': {
+          const content = stripCodexMemoryCitation(
+            typeof raw.message?.content === 'string' ? raw.message.content : '',
+          );
+          if (!content.trim()) {
+            return [];
+          }
           return [createNormalizedMessage({
             id: baseId,
             sessionId,
@@ -752,8 +765,9 @@ export class CodexSessionsProvider implements IProviderSessions {
             provider: PROVIDER,
             kind: 'text',
             role: 'assistant',
-            content: raw.message?.content || '',
+            content,
           })];
+        }
         case 'reasoning':
           return [createNormalizedMessage({
             id: baseId,
