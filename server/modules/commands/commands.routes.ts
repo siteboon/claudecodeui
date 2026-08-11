@@ -28,13 +28,14 @@ const providerModelsService = dependencies.models;
 const process = dependencies.runtime;
 const router = express.Router();
 
-const MODEL_PROVIDERS = ["claude", "cursor", "codex", "opencode"];
+const MODEL_PROVIDERS = ["claude", "cursor", "codex", "opencode", "omp"];
 
 const MODEL_PROVIDER_LABELS = {
   claude: "Claude",
   cursor: "Cursor",
   codex: "Codex",
   opencode: "OpenCode",
+  omp: "omp",
 };
 
 const readModelProvider = (value) => {
@@ -59,6 +60,40 @@ const resolveCommandModel = async (modelsService, provider, context) => {
     requestedModel: context?.model,
   });
   return resolved.model;
+};
+
+/**
+ * Resolves the model `/cost` reports.
+ *
+ * The panel answers "what did this session's last turn actually run on", and
+ * the transcript already knows: the client reads it out of the token-usage
+ * payload and sends it back in `tokenUsage.model`. The session's recorded
+ * model cannot answer that question - omp records a "use my own configured
+ * model" sentinel there, and the sentinel outranks everything else in
+ * `resolveSessionModel` - so it is only the fallback. A fallback that lands
+ * back on the catalog default is reported by its catalog label, because that
+ * default is a placeholder value the user never chose by name.
+ */
+const resolveCostModel = async (modelsService, provider, context) => {
+  const turnModel = typeof context?.tokenUsage?.model === 'string'
+    ? context.tokenUsage.model.trim()
+    : '';
+  if (turnModel) {
+    return turnModel;
+  }
+
+  // Both reads are needed and neither depends on the other, and the models service
+  // keeps no cache or in-flight dedupe — so overlap them instead of paying twice in
+  // sequence.
+  const [resolved, catalog] = await Promise.all([
+    resolveCommandModel(modelsService, provider, context),
+    modelsService.getProviderModels(provider),
+  ]);
+  if (resolved !== catalog.DEFAULT) {
+    return resolved;
+  }
+
+  return catalog.OPTIONS.find((option) => option.value === resolved)?.label || resolved;
 };
 
 const executeModelsCommand = async (args, context, modelsService) => {
@@ -263,7 +298,7 @@ Custom commands can be created in:
   "/cost": async (args, context) => {
     const tokenUsage = context?.tokenUsage || {};
     const provider = readModelProvider(context?.provider);
-    const model = await resolveCommandModel(providerModelsService, provider, context);
+    const model = await resolveCostModel(providerModelsService, provider, context);
 
     const reportedUsed =
       Number(

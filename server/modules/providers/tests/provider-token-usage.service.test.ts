@@ -113,6 +113,57 @@ test('Codex token usage uses the latest token_count snapshot', async () => {
   }
 });
 
+test('omp token usage reports the model the last turn ran on', async () => {
+  const tempDirectory = await mkdtemp(path.join(tmpdir(), 'provider-token-usage-omp-'));
+  const sessionFilePath = path.join(tempDirectory, 'provider-session.jsonl');
+
+  try {
+    // Two assistant turns: the LAST one wins, so a mid-session model switch is
+    // reported rather than the model the session opened on. The provider/model
+    // pair is absent from every catalog and the context-window read is stubbed
+    // below, which pins `total` to the fallback.
+    await writeFile(sessionFilePath, [
+      JSON.stringify({
+        type: 'message',
+        message: {
+          role: 'assistant',
+          provider: 'acme',
+          model: 'first-model',
+          usage: { input: 1, output: 1, cacheRead: 0, totalTokens: 2 },
+        },
+      }),
+      JSON.stringify({
+        type: 'message',
+        message: {
+          role: 'assistant',
+          provider: 'acme',
+          model: 'no-such-model',
+          usage: { input: 100, output: 30, cacheRead: 20, totalTokens: 150 },
+        },
+      }),
+    ].join('\n'));
+
+    const service = createProviderTokenUsageService({
+      getSessionById: () => createSessionRow({ provider: 'omp', jsonl_path: sessionFilePath }),
+      // The real reader spawns `omp` behind a module-level cache, so leaving it
+      // in place made this test pay the models timeout and leak its resolved
+      // catalog into every later test in the process.
+      getOmpContextWindow: async () => null,
+    });
+
+    assert.deepEqual(await service.getSessionTokenUsage('app-session'), {
+      used: 150,
+      total: 200_000,
+      model: 'no-such-model',
+      inputTokens: 120,
+      outputTokens: 30,
+      breakdown: { input: 120, output: 30 },
+    });
+  } finally {
+    await rm(tempDirectory, { recursive: true, force: true });
+  }
+});
+
 test('OpenCode token usage resolves its provider-native id from the session row', async () => {
   const tempDirectory = await mkdtemp(path.join(tmpdir(), 'provider-token-usage-opencode-'));
   const databasePath = path.join(tempDirectory, 'opencode.db');
