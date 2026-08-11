@@ -83,12 +83,10 @@ function ChatInterface({
     selectPermissionMode,
     cyclePermissionMode,
     providerModelCatalog,
-    providerModelCacheCatalog,
     providerModelsLoading,
-    providerModelsRefreshing,
-    hardRefreshProviderModels,
+    providerModelActions,
     selectProviderModel,
-    setStoredProviderEffort,
+    selectProviderEffort,
     resolvePermissionModeForProvider,
   } = useChatProviderState({
     selectedSession,
@@ -299,6 +297,14 @@ function ChatInterface({
     }
   }, [currentSessionId, provider, selectProviderModel, selectedSession?.id]);
 
+  const handleSelectComposerEffort = useCallback(async (effort: string) => {
+    try {
+      await selectProviderEffort(provider, effort, currentSessionId || selectedSession?.id || null);
+    } catch (error) {
+      console.error('Error changing the active session reasoning effort:', error);
+    }
+  }, [currentSessionId, provider, selectProviderEffort, selectedSession?.id]);
+
   // Mirrors ChatComposer's own visibility check so the message pane can
   // reserve enough bottom space to keep the floating status tab from
   // overlapping the last message.
@@ -357,6 +363,7 @@ function ChatInterface({
           qoderModel={qoderModel}
           setQoderModel={setQoderModel}
           providerModelCatalog={providerModelCatalog}
+          providerModelActions={providerModelActions}
           providerModelsLoading={providerModelsLoading}
           tasksEnabled={tasksEnabled}
           isTaskMasterInstalled={isTaskMasterInstalled}
@@ -411,7 +418,7 @@ function ChatInterface({
           providerLabel={selectedProviderLabel}
           effort={currentProviderEffort}
           availableEffortOptions={currentProviderEffortOptions}
-          onSelectEffort={(nextEffort) => setStoredProviderEffort(provider, nextEffort)}
+          onSelectEffort={handleSelectComposerEffort}
           model={currentProviderModel}
           availableModelOptions={currentProviderModelOptions}
           onSelectModel={handleSelectComposerModel}
@@ -472,9 +479,9 @@ function ChatInterface({
         payload={commandModalPayload}
         onClose={closeCommandModal}
         providerModelCatalog={providerModelCatalog}
-        providerModelCacheCatalog={providerModelCacheCatalog}
-        providerModelsRefreshing={providerModelsRefreshing}
-        onHardRefreshProviderModels={hardRefreshProviderModels}
+        providerModelActions={providerModelActions}
+        activeProvider={provider}
+        activeProviderModel={currentProviderModel}
         currentSessionId={currentSessionId || selectedSession?.id || null}
         onSelectProviderModel={selectProviderModel}
       />

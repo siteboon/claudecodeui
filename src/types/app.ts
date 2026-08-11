@@ -4,6 +4,8 @@ export type ProviderModelOption = {
   value: string;
   label: string;
   description?: string;
+  recordId?: number;
+  isCustom?: boolean;
   effort?: {
     default?: string;
     values: {
@@ -18,10 +20,19 @@ export type ProviderModelsDefinition = {
   DEFAULT: string;
 };
 
-export type ProviderModelsCacheInfo = {
-  updatedAt: string;
-  expiresAt: string;
-  source: 'memory' | 'disk' | 'fresh';
+export type CustomProviderModelInput = {
+  model: string;
+  id: string;
+};
+
+export type ProviderModelActions = {
+  create(provider: LLMProvider, input: CustomProviderModelInput): Promise<void>;
+  update(
+    provider: LLMProvider,
+    existing: ProviderModelOption,
+    input: CustomProviderModelInput,
+  ): Promise<void>;
+  remove(provider: LLMProvider, existing: ProviderModelOption): Promise<void>;
 };
 
 export type AppTab = 'chat' | 'files' | 'shell' | 'git' | 'tasks' | 'browser' | `plugin:${string}`;

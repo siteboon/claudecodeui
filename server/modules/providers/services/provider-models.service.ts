@@ -1,311 +1,93 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-
-import { sessionsDb } from '@/modules/database/index.js';
+import { providerModelsDb, sessionsDb } from '@/modules/database/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import type { IProvider } from '@/shared/interfaces.js';
 import type {
+  CustomProviderModelInput,
+  CustomProviderModelRecord,
   LLMProvider,
   ProviderCurrentActiveModel,
-  ProviderModelsCacheInfo,
+  ProviderModelOption,
   ProviderModelsDefinition,
-  ProviderModelsResult,
   ProviderSessionModel,
 } from '@/shared/types.js';
-
-export const PROVIDER_MODELS_CACHE_TTL_MS = 3 * 24 * 60 * 60 * 1000;
-const PROVIDER_MODELS_CACHE_VERSION = 2;
-const UNCACHED_PROVIDERS = new Set<LLMProvider>(['claude']);
+import { AppError } from '@/shared/utils.js';
 
 /** Session-row access the service needs, narrowed so tests can stub it. */
 type ProviderModelsSessionStore = {
-  getSessionById(sessionId: string): { model: string | null } | null;
+  getSessionById(sessionId: string): { model: string | null; effort: string | null } | null;
   setSessionModel(sessionId: string, model: string): void;
+  setSessionEffort(sessionId: string, effort: string): void;
 };
+
+/** SQLite catalog operations used by the Providers service and its unit fakes. */
+type ProviderModelsCatalogStore = Pick<
+  typeof providerModelsDb,
+  | 'listCustomProviderModels'
+  | 'getCustomProviderModel'
+  | 'findCustomProviderModelByModelId'
+  | 'createCustomProviderModel'
+  | 'updateCustomProviderModel'
+  | 'deleteCustomProviderModel'
+>;
 
 type ProviderModelsServiceDependencies = {
   resolveProvider?: (provider: LLMProvider) => Pick<IProvider, 'models'>;
-  cachePath?: string;
+  catalog?: ProviderModelsCatalogStore;
   sessions?: ProviderModelsSessionStore;
-  now?: () => number;
 };
 
-type ProviderModelsOptions = {
-  bypassCache?: boolean;
-};
-
-type ProviderModelsCacheEntry = {
-  updatedAt: number;
-  expiresAt: number;
-  models: ProviderModelsDefinition;
-};
-
-type ProviderModelsCacheFile = {
-  version: number;
-  entries: Record<string, ProviderModelsCacheEntry>;
-};
-
-const getProviderModelsCachePath = (): string => path.join(
-  os.homedir(),
-  '.cloudcli',
-  'provider-models-cache.json',
-);
-
-const toProviderModelsCacheInfo = (
-  entry: ProviderModelsCacheEntry,
-  source: ProviderModelsCacheInfo['source'],
-): ProviderModelsCacheInfo => ({
-  updatedAt: new Date(entry.updatedAt).toISOString(),
-  expiresAt: new Date(entry.expiresAt).toISOString(),
-  source,
+const toCustomProviderModelOption = (
+  record: CustomProviderModelRecord,
+): ProviderModelOption => ({
+  value: record.modelId,
+  label: record.model,
+  recordId: record.recordId,
+  isCustom: true,
 });
 
-const isProviderModelOption = (
-  value: unknown,
-): value is ProviderModelsDefinition['OPTIONS'][number] => (
-  Boolean(value)
-  && typeof value === 'object'
-  && typeof (value as ProviderModelsDefinition['OPTIONS'][number]).value === 'string'
-  && typeof (value as ProviderModelsDefinition['OPTIONS'][number]).label === 'string'
-  && (
-    typeof (value as ProviderModelsDefinition['OPTIONS'][number]).description === 'undefined'
-    || typeof (value as ProviderModelsDefinition['OPTIONS'][number]).description === 'string'
-  )
-);
-
-const isProviderModelsDefinition = (value: unknown): value is ProviderModelsDefinition => (
-  Boolean(value)
-  && typeof value === 'object'
-  && Array.isArray((value as ProviderModelsDefinition).OPTIONS)
-  && (value as ProviderModelsDefinition).OPTIONS.every(isProviderModelOption)
-  && typeof (value as ProviderModelsDefinition).DEFAULT === 'string'
-);
-
-const isProviderModelsCacheEntry = (value: unknown): value is ProviderModelsCacheEntry => (
-  Boolean(value)
-  && typeof value === 'object'
-  && typeof (value as ProviderModelsCacheEntry).updatedAt === 'number'
-  && typeof (value as ProviderModelsCacheEntry).expiresAt === 'number'
-  && isProviderModelsDefinition((value as ProviderModelsCacheEntry).models)
-);
-
-const readProviderModelsCacheFile = async (
-  cachePath: string,
-): Promise<ProviderModelsCacheFile | null> => {
-  try {
-    const raw = await readFile(cachePath, 'utf8');
-    const parsed = JSON.parse(raw) as Partial<ProviderModelsCacheFile>;
-    if (parsed.version !== PROVIDER_MODELS_CACHE_VERSION || !parsed.entries || typeof parsed.entries !== 'object') {
-      return null;
-    }
-
-    const entries = Object.fromEntries(
-      Object.entries(parsed.entries).filter((entry): entry is [string, ProviderModelsCacheEntry] =>
-        isProviderModelsCacheEntry(entry[1]),
-      ),
-    );
-
-    return {
-      version: PROVIDER_MODELS_CACHE_VERSION,
-      entries,
-    };
-  } catch {
-    return null;
-  }
-};
-
-const writeProviderModelsCacheFile = async (
-  cachePath: string,
-  entries: Map<LLMProvider, ProviderModelsCacheEntry>,
-  now: number,
-): Promise<void> => {
-  const serializableEntries = Object.fromEntries(
-    [...entries.entries()].filter(([, entry]) => entry.expiresAt > now),
-  );
-  const payload: ProviderModelsCacheFile = {
-    version: PROVIDER_MODELS_CACHE_VERSION,
-    entries: serializableEntries,
+const mergeProviderModels = (
+  predefined: ProviderModelsDefinition,
+  custom: CustomProviderModelRecord[],
+): ProviderModelsDefinition => {
+  return {
+    OPTIONS: [
+      ...predefined.OPTIONS.map((option) => ({ ...option, isCustom: false })),
+      ...custom.map(toCustomProviderModelOption),
+    ],
+    DEFAULT: predefined.DEFAULT,
   };
-
-  await mkdir(path.dirname(cachePath), { recursive: true });
-  await writeFile(cachePath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
 };
+
+const normalizeCustomModelInput = (input: CustomProviderModelInput): CustomProviderModelInput => ({
+  id: input.id.trim(),
+  model: input.model.trim(),
+});
+
+const isUniqueConstraintError = (error: unknown): boolean => (
+  error !== null
+  && error !== undefined
+  && typeof error === 'object'
+  && 'code' in error
+  && String(error.code).startsWith('SQLITE_CONSTRAINT')
+);
 
 /**
- * Provider model lookup service.
+ * Creates the provider model application service used by Providers routes,
+ * Commands, and provider runtimes.
  *
- * Routes and other service callers use this layer instead of resolving provider
- * classes directly so the provider-registry dependency stays centralized in one
- * place.
+ * Curated adapter definitions stay source-controlled and are merged at read
+ * time with custom SQLite rows. This deliberately has no predefined-model
+ * persistence, memory cache, disk cache, TTL, or provider-native discovery.
+ * Tests inject a small custom-model store through the same boundary.
  */
 export const createProviderModelsService = (dependencies: ProviderModelsServiceDependencies = {}) => {
   const resolveProvider = dependencies.resolveProvider ?? providerRegistry.resolveProvider;
-  const cachePath = dependencies.cachePath ?? getProviderModelsCachePath();
+  const catalog = dependencies.catalog ?? providerModelsDb;
   const sessions = dependencies.sessions ?? sessionsDb;
-  const now = dependencies.now ?? (() => Date.now());
-  const memoryCache = new Map<LLMProvider, ProviderModelsCacheEntry>();
-  const pendingRequests = new Map<LLMProvider, Promise<ProviderModelsResult>>();
-  let persistedCacheLoaded = false;
-  let persistedCacheLoadPromise: Promise<void> | null = null;
 
-  const pruneExpiredMemoryEntry = (
-    provider: LLMProvider,
-    currentTime: number,
-    source: ProviderModelsCacheInfo['source'],
-  ): ProviderModelsResult | null => {
-    const cachedEntry = memoryCache.get(provider);
-    if (!cachedEntry) {
-      return null;
-    }
-
-    if (cachedEntry.expiresAt > currentTime) {
-      return {
-        models: cachedEntry.models,
-        cache: toProviderModelsCacheInfo(cachedEntry, source),
-      };
-    }
-
-    memoryCache.delete(provider);
-    return null;
-  };
-
-  const loadPersistedCache = async (): Promise<void> => {
-    if (persistedCacheLoaded) {
-      return;
-    }
-
-    if (!persistedCacheLoadPromise) {
-      persistedCacheLoadPromise = (async () => {
-        const cacheFile = await readProviderModelsCacheFile(cachePath);
-        const currentTime = now();
-
-        for (const [provider, entry] of Object.entries(cacheFile?.entries ?? {})) {
-          if (entry.expiresAt > currentTime) {
-            memoryCache.set(provider as LLMProvider, entry);
-          }
-        }
-
-        persistedCacheLoaded = true;
-      })().finally(() => {
-        persistedCacheLoadPromise = null;
-      });
-    }
-
-    await persistedCacheLoadPromise;
-  };
-
-  const persistCache = async (): Promise<void> => {
-    try {
-      await writeProviderModelsCacheFile(cachePath, memoryCache, now());
-    } catch (error) {
-      console.warn('Unable to persist provider models cache:', error);
-    }
-  };
-
-  const setCacheEntry = async (
-    provider: LLMProvider,
-    models: ProviderModelsDefinition,
-  ): Promise<ProviderModelsCacheEntry> => {
-    const currentTime = now();
-    const entry: ProviderModelsCacheEntry = {
-      updatedAt: currentTime,
-      expiresAt: currentTime + PROVIDER_MODELS_CACHE_TTL_MS,
-      models,
-    };
-
-    memoryCache.set(provider, entry);
-    await persistCache();
-    return entry;
-  };
-
-  const loadAndCacheModels = (
-    provider: LLMProvider,
-  ): Promise<ProviderModelsResult> => {
-    const request = resolveProvider(provider).models.getSupportedModels()
-      .then(async (models) => {
-        const entry = await setCacheEntry(provider, models);
-        return {
-          models,
-          cache: toProviderModelsCacheInfo(entry, 'fresh'),
-        };
-      })
-      .finally(() => {
-        pendingRequests.delete(provider);
-      });
-
-    pendingRequests.set(provider, request);
-    return request;
-  };
-
-  const loadDirectModels = (
-    provider: LLMProvider,
-  ): Promise<ProviderModelsResult> => {
-    const request = resolveProvider(provider).models.getSupportedModels()
-      .then((models) => {
-        const currentTime = now();
-        return {
-          models,
-          cache: {
-            updatedAt: new Date(currentTime).toISOString(),
-            expiresAt: new Date(currentTime).toISOString(),
-            source: 'fresh' as const,
-          },
-        };
-      })
-      .finally(() => {
-        pendingRequests.delete(provider);
-      });
-
-    pendingRequests.set(provider, request);
-    return request;
-  };
-
-  const getProviderModels = async (
-    provider: LLMProvider,
-    options: ProviderModelsOptions = {},
-  ): Promise<ProviderModelsResult> => {
-    if (UNCACHED_PROVIDERS.has(provider)) {
-      const pendingRequest = pendingRequests.get(provider);
-      if (pendingRequest) {
-        return pendingRequest;
-      }
-
-      return loadDirectModels(provider);
-    }
-
-    if (options.bypassCache) {
-      const pendingRequest = pendingRequests.get(provider);
-      if (pendingRequest) {
-        return pendingRequest;
-      }
-
-      return loadAndCacheModels(provider);
-    }
-
-    const cachedModels = pruneExpiredMemoryEntry(provider, now(), 'memory');
-    if (cachedModels) {
-      return cachedModels;
-    }
-
-    const pendingRequest = pendingRequests.get(provider);
-    if (pendingRequest) {
-      return pendingRequest;
-    }
-
-    await loadPersistedCache();
-
-    const persistedModels = pruneExpiredMemoryEntry(provider, now(), 'disk');
-    if (persistedModels) {
-      return persistedModels;
-    }
-
-    const postLoadPendingRequest = pendingRequests.get(provider);
-    if (postLoadPendingRequest) {
-      return postLoadPendingRequest;
-    }
-
-    return loadAndCacheModels(provider);
+  const getProviderModels = async (provider: LLMProvider): Promise<ProviderModelsDefinition> => {
+    const predefined = await resolveProvider(provider).models.getSupportedModels();
+    return mergeProviderModels(predefined, catalog.listCustomProviderModels(provider));
   };
 
   const getCurrentActiveModel = async (
@@ -313,9 +95,134 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     sessionId?: string,
   ): Promise<ProviderCurrentActiveModel> => resolveProvider(provider).models.getCurrentActiveModel(sessionId);
 
-  const readRecordedSessionModel = (sessionId: string): string | null => {
+  const readCustomModel = (
+    provider: LLMProvider,
+    recordId: number,
+  ): CustomProviderModelRecord => {
+    const existing = catalog.getCustomProviderModel(provider, recordId);
+    if (!existing) {
+      throw new AppError('Model not found.', {
+        code: 'MODEL_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    return existing;
+  };
+
+  const assertModelIdAvailable = (
+    provider: LLMProvider,
+    predefined: ProviderModelsDefinition,
+    modelId: string,
+    currentRecordId?: number,
+  ): void => {
+    if (predefined.OPTIONS.some((option) => option.value === modelId)) {
+      throw new AppError(`A ${provider} model with this ID already exists.`, {
+        code: 'MODEL_ID_ALREADY_EXISTS',
+        statusCode: 409,
+      });
+    }
+
+    const duplicate = catalog.findCustomProviderModelByModelId(provider, modelId);
+    if (duplicate && duplicate.recordId !== currentRecordId) {
+      throw new AppError(`A ${provider} model with this ID already exists.`, {
+        code: 'MODEL_ID_ALREADY_EXISTS',
+        statusCode: 409,
+      });
+    }
+  };
+
+  const createCustomModel = async (
+    provider: LLMProvider,
+    input: CustomProviderModelInput,
+  ): Promise<{ model: ProviderModelOption; models: ProviderModelsDefinition }> => {
+    const predefined = await resolveProvider(provider).models.getSupportedModels();
+    const normalized = normalizeCustomModelInput(input);
+    assertModelIdAvailable(provider, predefined, normalized.id);
+
+    try {
+      const created = catalog.createCustomProviderModel(provider, normalized);
+      return {
+        model: toCustomProviderModelOption(created),
+        models: mergeProviderModels(predefined, catalog.listCustomProviderModels(provider)),
+      };
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        throw new AppError(`A ${provider} model with this ID already exists.`, {
+          code: 'MODEL_ID_ALREADY_EXISTS',
+          statusCode: 409,
+        });
+      }
+      throw error;
+    }
+  };
+
+  const updateCustomModel = async (
+    provider: LLMProvider,
+    recordId: number,
+    input: CustomProviderModelInput,
+  ): Promise<{ model: ProviderModelOption; models: ProviderModelsDefinition }> => {
+    const predefined = await resolveProvider(provider).models.getSupportedModels();
+    readCustomModel(provider, recordId);
+    const normalized = normalizeCustomModelInput(input);
+    assertModelIdAvailable(provider, predefined, normalized.id, recordId);
+
+    try {
+      const updated = catalog.updateCustomProviderModel(provider, recordId, normalized);
+      if (!updated) {
+        throw new AppError('Model not found.', {
+          code: 'MODEL_NOT_FOUND',
+          statusCode: 404,
+        });
+      }
+
+      return {
+        model: toCustomProviderModelOption(updated),
+        models: mergeProviderModels(predefined, catalog.listCustomProviderModels(provider)),
+      };
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        throw new AppError(`A ${provider} model with this ID already exists.`, {
+          code: 'MODEL_ID_ALREADY_EXISTS',
+          statusCode: 409,
+        });
+      }
+      throw error;
+    }
+  };
+
+  const deleteCustomModel = async (
+    provider: LLMProvider,
+    recordId: number,
+  ): Promise<{ model: ProviderModelOption; models: ProviderModelsDefinition }> => {
+    const predefined = await resolveProvider(provider).models.getSupportedModels();
+    readCustomModel(provider, recordId);
+    const removed = catalog.deleteCustomProviderModel(provider, recordId, predefined.DEFAULT);
+    if (!removed) {
+      throw new AppError('Model not found.', {
+        code: 'MODEL_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    return {
+      model: toCustomProviderModelOption(removed),
+      models: mergeProviderModels(predefined, catalog.listCustomProviderModels(provider)),
+    };
+  };
+
+  const readRecordedSessionSelection = (
+    sessionId: string,
+  ): { model: string | null; effort: string | null } | null => {
     const session = sessions.getSessionById(sessionId);
-    return session?.model?.trim() || null;
+    if (!session) {
+      return null;
+    }
+
+    return {
+      model: session.model?.trim() || null,
+      effort: session.effort?.trim() || null,
+    };
   };
 
   /**
@@ -338,7 +245,8 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
       return null;
     }
 
-    if (!sessions.getSessionById(normalizedSessionId)) {
+    const recordedSelection = readRecordedSessionSelection(normalizedSessionId);
+    if (!recordedSelection) {
       return null;
     }
 
@@ -347,6 +255,38 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
       provider,
       sessionId: normalizedSessionId,
       model: normalizedModel,
+      effort: recordedSelection.effort,
+      source: 'session',
+    };
+  };
+
+  /**
+   * Records the reasoning effort one session runs with.
+   *
+   * Like `setSessionModel`, this ignores an id that has not been allocated by
+   * the session gateway yet. The websocket send path records it once the row
+   * exists, so a pre-session composer choice is not lost.
+   */
+  const setSessionEffort = (
+    provider: LLMProvider,
+    sessionId: string,
+    effort: string,
+  ): { provider: LLMProvider; sessionId: string; effort: string; source: 'session' } | null => {
+    const normalizedSessionId = sessionId.trim();
+    const normalizedEffort = effort.trim();
+    if (!normalizedSessionId || !normalizedEffort) {
+      return null;
+    }
+
+    if (!readRecordedSessionSelection(normalizedSessionId)) {
+      return null;
+    }
+
+    sessions.setSessionEffort(normalizedSessionId, normalizedEffort);
+    return {
+      provider,
+      sessionId: normalizedSessionId,
+      effort: normalizedEffort,
       source: 'session',
     };
   };
@@ -355,13 +295,10 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
    * Answers "which model is this session using?" for every display surface.
    *
    * Precedence, highest first:
-   *   1. the model recorded on the session row — the user's pick, or whatever
-   *      the last send used;
-   *   2. the provider's own session state, for sessions started outside the app
-   *      that we have never recorded a model for;
-   *   3. `requestedModel`, the client's current default, for a chat that has no
-   *      session yet;
-   *   4. the provider catalog default.
+   *   1. the model recorded on the session row;
+   *   2. the provider's own session state for externally-created sessions;
+   *   3. `requestedModel`, the client's current default;
+   *   4. the source-controlled provider catalog default.
    */
   const resolveSessionModel = async (
     provider: LLMProvider,
@@ -373,26 +310,26 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
       : '';
 
     if (normalizedSessionId) {
-      const recordedModel = readRecordedSessionModel(normalizedSessionId);
-      if (recordedModel) {
+      const recordedSelection = readRecordedSessionSelection(normalizedSessionId);
+      if (recordedSelection?.model) {
         return {
           provider,
           sessionId: normalizedSessionId,
-          model: recordedModel,
+          model: recordedSelection.model,
+          effort: recordedSelection.effort,
           source: 'session',
         };
       }
 
-      // Never sent on through the app. Ask the provider what its own session
-      // state says before falling back to anything client-supplied.
-      const catalog = (await getProviderModels(provider)).models;
+      const providerCatalog = await getProviderModels(provider);
       const providerModel = await getCurrentActiveModel(provider, normalizedSessionId);
       const resolvedProviderModel = providerModel.model?.trim();
-      if (resolvedProviderModel && resolvedProviderModel !== catalog.DEFAULT) {
+      if (resolvedProviderModel && resolvedProviderModel !== providerCatalog.DEFAULT) {
         return {
           provider,
           sessionId: normalizedSessionId,
           model: resolvedProviderModel,
+          effort: recordedSelection?.effort ?? null,
           source: 'provider',
         };
       }
@@ -400,7 +337,8 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
       return {
         provider,
         sessionId: normalizedSessionId,
-        model: normalizedRequestedModel || catalog.DEFAULT,
+        model: normalizedRequestedModel || providerCatalog.DEFAULT,
+        effort: recordedSelection?.effort ?? null,
         source: normalizedRequestedModel ? 'session' : 'default',
       };
     }
@@ -410,26 +348,26 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
         provider,
         sessionId: null,
         model: normalizedRequestedModel,
+        effort: null,
         source: 'session',
       };
     }
 
-    const catalog = (await getProviderModels(provider)).models;
+    const providerCatalog = await getProviderModels(provider);
     return {
       provider,
       sessionId: null,
-      model: catalog.DEFAULT,
+      model: providerCatalog.DEFAULT,
+      effort: null,
       source: 'default',
     };
   };
 
   /**
-   * Picks the model one run should use, for provider runtime adapters.
+   * Picks the model one resumed provider run should use.
    *
-   * Deliberately narrower than `resolveSessionModel`: the provider's own
-   * session state is not consulted here. Codex reports a global config value
-   * from `getCurrentActiveModel`, which would silently override the model the
-   * user picked in the composer on every single run.
+   * Provider-global state is deliberately ignored because it must never
+   * override the model explicitly selected in the composer.
    */
   const resolveResumeModel = async (
     provider: LLMProvider,
@@ -443,24 +381,21 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
       return normalizedRequestedModel || undefined;
     }
 
-    const recordedModel = readRecordedSessionModel(normalizedSessionId);
+    const recordedModel = readRecordedSessionSelection(normalizedSessionId)?.model;
     return recordedModel || normalizedRequestedModel || undefined;
-  };
-
-  const clearCache = (): void => {
-    memoryCache.clear();
-    pendingRequests.clear();
-    persistedCacheLoaded = false;
-    persistedCacheLoadPromise = null;
   };
 
   return {
     getProviderModels,
+    createCustomModel,
+    updateCustomModel,
+    deleteCustomModel,
     setSessionModel,
+    setSessionEffort,
     resolveSessionModel,
     resolveResumeModel,
-    clearCache,
   };
 };
 
+/** Shared Providers service used by routes, Commands, and provider runtimes. */
 export const providerModelsService = createProviderModelsService();

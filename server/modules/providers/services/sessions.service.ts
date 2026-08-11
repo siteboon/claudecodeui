@@ -17,6 +17,7 @@ type CreateAppSessionResult = {
   sessionId: string;
   provider: LLMProvider;
   projectPath: string;
+  sessionName: string;
 };
 
 type ArchivedSessionListItem = {
@@ -61,6 +62,13 @@ type SessionDetails = {
     isArchived: boolean;
   } | null;
 };
+
+const MAX_CLOUDCLI_SESSION_NAME_WORDS = 4;
+
+function buildCloudCliSessionName(initialMessage: string): string {
+  const words = initialMessage.trim().split(/\s+/).filter(Boolean);
+  return words.slice(0, MAX_CLOUDCLI_SESSION_NAME_WORDS).join(' ') || 'Untitled Session';
+}
 
 /**
  * Removes one file if it exists.
@@ -199,9 +207,15 @@ export const sessionsService = {
    * (via `POST /api/providers/sessions`) when the user starts a brand-new
    * chat, navigates to the returned id immediately, and the id never changes
    * for the lifetime of the conversation. The provider-native id is mapped to
-   * this row later, when the provider runtime announces it mid-run.
+   * this row later, when the provider runtime announces it mid-run. Its title
+   * comes directly from the first visible CloudCLI message and is limited to
+   * four whole words before any provider-owned storage exists.
    */
-  createAppSession(provider: LLMProvider, projectPath: string): CreateAppSessionResult {
+  createAppSession(
+    provider: LLMProvider,
+    projectPath: string,
+    initialMessage: string,
+  ): CreateAppSessionResult {
     const normalizedProjectPath = projectPath.trim();
     if (!normalizedProjectPath) {
       throw new AppError('projectPath is required.', {
@@ -211,12 +225,14 @@ export const sessionsService = {
     }
 
     const sessionId = randomUUID();
-    sessionsDb.createAppSession(sessionId, provider, normalizedProjectPath);
+    const sessionName = buildCloudCliSessionName(initialMessage);
+    sessionsDb.createAppSession(sessionId, provider, normalizedProjectPath, sessionName);
 
     return {
       sessionId,
       provider,
       projectPath: normalizedProjectPath,
+      sessionName,
     };
   },
 
