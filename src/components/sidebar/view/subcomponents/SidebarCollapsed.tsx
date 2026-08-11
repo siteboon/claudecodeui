@@ -1,5 +1,6 @@
-import { Settings, Sparkles, PanelLeftOpen, Bug, AlertTriangle } from 'lucide-react';
+import { Settings, Sparkles, PanelLeftOpen, Bug, AlertTriangle, LogOut } from 'lucide-react';
 import type { TFunction } from 'i18next';
+import { IS_PLATFORM } from '../../../../constants/config';
 
 const DISCORD_INVITE_URL = 'https://discord.gg/buxwujPNRE';
 const GITHUB_ISSUES_URL = 'https://github.com/siteboon/claudecodeui/issues/new';
@@ -15,6 +16,7 @@ function DiscordIcon({ className }: { className?: string }) {
 type SidebarCollapsedProps = {
   onExpand: () => void;
   onShowSettings: () => void;
+  onLogout: () => void;
   updateAvailable: boolean;
   restartRequired: boolean;
   onShowVersionModal: () => void;
@@ -24,6 +26,7 @@ type SidebarCollapsedProps = {
 export default function SidebarCollapsed({
   onExpand,
   onShowSettings,
+  onLogout,
   updateAvailable,
   restartRequired,
   onShowVersionModal,
@@ -52,6 +55,17 @@ export default function SidebarCollapsed({
       >
         <Settings className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground" />
       </button>
+
+      {!IS_PLATFORM && (
+        <button
+          onClick={onLogout}
+          className="group flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-destructive/10"
+          aria-label={t('common:navigation.logout')}
+          title={t('common:navigation.logout')}
+        >
+          <LogOut className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-destructive" />
+        </button>
+      )}
 
       {/* Report Issue */}
       <a
