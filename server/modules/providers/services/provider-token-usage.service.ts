@@ -6,6 +6,8 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import { OMP_FALLBACK_CONTEXT_WINDOW, readOmpContextWindow } from '@/modules/providers/list/omp/omp-models.provider.js';
+import { readOmpSessionUsage } from '@/modules/providers/list/omp/omp-runtime.provider.js';
 import type { AnyRecord } from '@/shared/types.js';
 import { AppError, getOpenCodeDatabasePath } from '@/shared/utils.js';
 
@@ -19,6 +21,10 @@ type ProviderTokenUsageServiceDependencies = {
   readDirectory: (directoryPath: string) => Promise<Dirent[]>;
   readTextFile: (filePath: string) => Promise<string>;
   getClaudeContextWindow: () => string | undefined;
+  // Injected because the real reader spawns the `omp` binary through a
+  // module-level cache: a test that reached it paid the models timeout and
+  // then leaked the resolved catalog into every later test in the process.
+  getOmpContextWindow: (provider: string | null, model: string | null) => Promise<number | null>;
 };
 
 type TokenUsageResult = {
@@ -26,6 +32,12 @@ type TokenUsageResult = {
   total?: number;
   inputTokens: number;
   outputTokens: number;
+  /**
+   * Identifier of the model the latest turn ran on, when the transcript
+   * records it. Providers whose session-level model is a "use my own config"
+   * sentinel (omp) can only answer per turn, so this is optional everywhere.
+   */
+  model?: string;
   cacheReadTokens?: number;
   cacheCreationTokens?: number;
   cacheTokens?: number;
@@ -53,6 +65,7 @@ const defaultDependencies: ProviderTokenUsageServiceDependencies = {
   readDirectory: (directoryPath) => fsp.readdir(directoryPath, { withFileTypes: true }),
   readTextFile: (filePath) => fsp.readFile(filePath, 'utf8'),
   getClaudeContextWindow: () => process.env.CONTEXT_WINDOW,
+  getOmpContextWindow: readOmpContextWindow,
 };
 
 function readUsageNumber(value: unknown): number {
@@ -288,6 +301,32 @@ export function createProviderTokenUsageService(
         }
 
         return readOpenCodeTokenUsage(databasePath, providerSessionId);
+      }
+
+      if (session.provider === 'omp') {
+        // omp's jsonl entries are `type:'message'` with `.message.usage` (camelCase),
+        // so the Claude reader below (which scans `type:'assistant'` + snake_case)
+        // would report zeros. Read it the way the omp adapter does.
+        const record = await readOmpSessionUsage(providerSessionId, session.jsonl_path);
+        if (!record) {
+          return { used: 0, total: 0, inputTokens: 0, outputTokens: 0, breakdown: { input: 0, output: 0 } };
+        }
+        const { usage } = record;
+        const inputTokens = Number(usage.input || 0) + Number(usage.cacheRead || 0);
+        const outputTokens = Number(usage.output || 0);
+        return {
+          used: Number(usage.totalTokens || inputTokens + outputTokens),
+          // The window belongs to the model the turn actually ran on, which the
+          // transcript records per message — the session's configured model is
+          // usually the "use omp default" sentinel and says nothing. Reporting a
+          // flat 200k understated Opus 5 by 5x.
+          total: await dependencies.getOmpContextWindow(record.provider, record.model)
+            ?? OMP_FALLBACK_CONTEXT_WINDOW,
+          model: record.model ?? undefined,
+          inputTokens,
+          outputTokens,
+          breakdown: { input: inputTokens, output: outputTokens },
+        };
       }
 
       if (session.provider === 'codex') {

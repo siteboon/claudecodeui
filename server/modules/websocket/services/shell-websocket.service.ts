@@ -216,6 +216,13 @@ function buildShellCommand(
     return initialCommand || 'opencode';
   }
 
+  if (provider === 'omp') {
+    if (resumeSessionId) {
+      return `omp -r "${resumeSessionId}"`;
+    }
+    return initialCommand || 'omp';
+  }
+
   const command = initialCommand || 'claude';
   if (resumeSessionId) {
     if (os.platform() === 'win32') {
@@ -536,6 +543,8 @@ export function handleShellConnection(
                 ? 'Codex'
                 : provider === 'opencode'
                     ? 'OpenCode'
+                : provider === 'omp'
+                    ? 'omp'
                   : 'Claude';
           welcomeMsg = hasSession && resumeSessionId
             ? `\x1b[36mResuming ${providerName} session ${resumeSessionId} in: ${projectPath}\x1b[0m\r\n`
