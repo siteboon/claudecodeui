@@ -1,11 +1,11 @@
 <div align="center">
- <img src="public/logo.svg" alt="CloudCLI UI" width="64" height="64">
+ <img src="../public/logo.svg" alt="CloudCLI UI" width="64" height="64">
  <h1>Cloud CLI (aka Claude Code UI)</h1>
  <p>Десктопный и мобильный UI для <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>, <a href="https://docs.cursor.com/en/cli/overview">Cursor CLI</a>, <a href="https://developers.openai.com/codex">Codex</a>.<br>Используйте локально или удалённо, чтобы просматривать активные проекты и сессии отовсюду.</p>
 </div>
 
 <p align="center">
- <a href="https://cloudcli.ai">CloudCLI Cloud</a> · <a href="https://cloudcli.ai/docs">Документация</a> · <a href="https://discord.gg/buxwujPNRE">Discord</a> · <a href="https://github.com/siteboon/claudecodeui/issues">Сообщить об ошибке</a> · <a href="CONTRIBUTING.md">Участие в разработке</a>
+ <a href="https://cloudcli.ai">CloudCLI Cloud</a> · <a href="https://cloudcli.ai/docs">Документация</a> · <a href="https://discord.gg/buxwujPNRE">Discord</a> · <a href="https://github.com/siteboon/claudecodeui/issues">Сообщить об ошибке</a> · <a href="../CONTRIBUTING.md">Участие в разработке</a>
 </p>
 
 <p align="center">
@@ -27,13 +27,13 @@
 <tr>
 <td align="center">
 <h3>Версия для десктопа</h3>
-<img src="public/screenshots/desktop-main.png" alt="Desktop Interface" width="400">
+<img src="../public/screenshots/desktop-main.png" alt="Desktop Interface" width="400">
 <br>
 <em>Основной интерфейс с обзором проекта и чатом</em>
 </td>
 <td align="center">
 <h3>Мобильный режим</h3>
-<img src="public/screenshots/mobile-chat.png" alt="Mobile Interface" width="250">
+<img src="../public/screenshots/mobile-chat.png" alt="Mobile Interface" width="250">
 <br>
 <em>Адаптивный мобильный дизайн с сенсорной навигацией</em>
 </td>
@@ -41,7 +41,7 @@
 <tr>
 <td align="center" colspan="2">
 <h3>Выбор CLI</h3>
-<img src="public/screenshots/cli-selection.png" alt="CLI Selection" width="400">
+<img src="../public/screenshots/cli-selection.png" alt="CLI Selection" width="400">
 <br>
 <em>Выбирайте между Claude Code, Cursor CLI и Codex</em>
 </td>
@@ -103,7 +103,7 @@ cloudcli
 npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
 ```
 
-Поддерживаются Claude Code и Codex. Подробнее в [документации sandbox](docker/).
+Поддерживаются Claude Code и Codex. Подробнее в [документации sandbox](../docker/).
 
 ---
 
@@ -146,7 +146,7 @@ CloudCLI UI — это open source UI-слой, на котором постро
 
 <div align="center">
 
-![Tools Settings Modal](public/screenshots/tools-modal.png)
+![Tools Settings Modal](../public/screenshots/tools-modal.png)
 *Интерфейс настройки инструментов — включайте только то, что вам нужно*
 
 </div>
@@ -227,11 +227,11 @@ CloudCLI UI и CloudCLI Cloud расширяют Claude Code, а не работ
 - **[Документация](https://cloudcli.ai/docs)** — установка, настройка, возможности и устранение неполадок
 - **[Discord](https://discord.gg/buxwujPNRE)** — помощь и общение с другими пользователями
 - **[GitHub Issues](https://github.com/siteboon/claudecodeui/issues)** — сообщения об ошибках и запросы новых функций
-- **[Руководство для контрибьюторов](CONTRIBUTING.md)** — как участвовать в развитии проекта
+- **[Руководство для контрибьюторов](../CONTRIBUTING.md)** — как участвовать в развитии проекта
 
 ## Лицензия
 
-GNU General Public License v3.0 - подробности в файле [LICENSE](LICENSE).
+GNU General Public License v3.0 - подробности в файле [LICENSE](../LICENSE).
 
 Этот проект open source и бесплатен для использования, модификации и распространения в рамках лицензии GPL v3.
 
