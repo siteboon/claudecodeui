@@ -111,6 +111,7 @@
     "permissions": "Permissions",
     "noFilesFound": "No files found",
     "checkProjectPath": "Check if the project path is accessible",
+    "loadFailed": "Unable to load files",
     "noMatchesFound": "No matches found",
     "tryDifferentSearch": "Try a different search term or clear the search",
     "justNow": "just now",

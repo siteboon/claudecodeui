@@ -3,6 +3,7 @@ import path from 'node:path';
 import ignore from 'ignore';
 
 import type {
+  FileTreeDirectoryEntry,
   FileTreeNode,
   FileTreeServiceDependencies,
   FileTreeServices,
@@ -27,6 +28,11 @@ const COMMON_WORKSPACE_DIRECTORY_NAMES = [
   'Code',
   'workspace',
 ];
+
+// File Tree consumes this guard when recursively listing a project so a very
+// broad workspace (for example, a user's home directory) cannot exhaust the
+// server heap before the browser has a chance to switch to a narrower project.
+const MAXIMUM_FILE_TREE_ENTRIES = 10_000;
 
 type FileTreeEntryFilter = (entryPath: string, isDirectory: boolean) => boolean;
 
@@ -167,35 +173,70 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
     return projectRoot;
   }
 
-  async function buildFileTree(
+  /**
+   * Streams one directory and keeps only the entries the tree will show.
+   *
+   * Entries are filtered and charged against the shared budget one at a time,
+   * so a pathologically large directory stops the walk at the cap instead of
+   * being read into memory in full first.
+   */
+  async function collectVisibleEntries(
     directoryPath: string,
-    maximumDepth: number,
-    currentDepth = 0,
-    includeEntry: FileTreeEntryFilter = () => true,
-  ): Promise<FileTreeNode[]> {
-    let entries;
+    includeEntry: FileTreeEntryFilter,
+    remainingEntries: { value: number },
+  ): Promise<FileTreeDirectoryEntry[]> {
+    const visibleEntries: FileTreeDirectoryEntry[] = [];
+
+    await acquire();
     try {
-      await acquire();
-      try {
-        entries = await fileSystem.readdir(directoryPath);
-      } finally {
-        release();
+      for await (const entry of fileSystem.openDirectory(directoryPath)) {
+        const isDirectory = entry.isDirectory();
+        if (isDirectory && IGNORED_DIRECTORY_NAMES.has(entry.name)) {
+          continue;
+        }
+        if (!includeEntry(path.join(directoryPath, entry.name), isDirectory)) {
+          continue;
+        }
+
+        // Charged after ignore filtering so generated directories and
+        // .gitignore exclusions never consume the budget. Every recursive
+        // branch shares one counter, so the cap applies to the whole tree
+        // rather than per directory.
+        if (remainingEntries.value <= 0) {
+          throw createFileTreeError(
+            `Project file tree exceeds the ${MAXIMUM_FILE_TREE_ENTRIES.toLocaleString()} entry limit. Choose a narrower project directory or add ignore rules.`,
+            413,
+            'FILE_TREE_TOO_LARGE',
+          );
+        }
+        remainingEntries.value -= 1;
+        visibleEntries.push(entry);
       }
     } catch (error) {
+      // The entry cap is a caller-visible outcome, not an unreadable directory.
+      if (error instanceof AppError) {
+        throw error;
+      }
       const errorCode = readErrorCode(error);
       if (errorCode !== 'EACCES' && errorCode !== 'EPERM') {
         dependencies.logger.error(`Error reading directory "${directoryPath}"`, error);
       }
       return [];
+    } finally {
+      release();
     }
 
-    const visibleEntries = entries.filter((entry) => {
-      const isDirectory = entry.isDirectory();
-      if (isDirectory && IGNORED_DIRECTORY_NAMES.has(entry.name)) {
-        return false;
-      }
-      return includeEntry(path.join(directoryPath, entry.name), isDirectory);
-    });
+    return visibleEntries;
+  }
+
+  async function buildFileTree(
+    directoryPath: string,
+    maximumDepth: number,
+    currentDepth = 0,
+    includeEntry: FileTreeEntryFilter = () => true,
+    remainingEntries = { value: MAXIMUM_FILE_TREE_ENTRIES },
+  ): Promise<FileTreeNode[]> {
+    const visibleEntries = await collectVisibleEntries(directoryPath, includeEntry, remainingEntries);
 
     const items = await Promise.all(visibleEntries.map(async (entry): Promise<FileTreeNode> => {
       const itemPath = path.join(directoryPath, entry.name);
@@ -245,6 +286,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
           maximumDepth,
           currentDepth + 1,
           includeEntry,
+          remainingEntries,
         );
       }
 

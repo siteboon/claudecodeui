@@ -60,15 +60,13 @@ export interface IProvider {
 /**
  * Model catalog contract for one provider.
  *
- * Implementations are responsible for resolving the provider's currently
- * supported models and converting them into the shared
- * `ProviderModelsDefinition` shape used by backend routes and frontend model
- * pickers. The `DEFAULT` field should be the most appropriate default selection
- * for that provider at the time the catalog is read.
+ * Implementations supply CloudCLI's curated predefined models and can inspect
+ * provider-native session state. The Providers service merges these immutable
+ * source-controlled definitions with user-created SQLite rows at read time.
  */
 export interface IProviderModels {
   /**
-   * Returns the provider's currently supported model catalog.
+   * Returns the curated predefined catalog owned by this provider adapter.
    */
   getSupportedModels(): Promise<ProviderModelsDefinition>;
 
