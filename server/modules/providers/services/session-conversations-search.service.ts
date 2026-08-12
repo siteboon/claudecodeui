@@ -787,11 +787,18 @@ async function parseClaudeSessionMatches(
       ? matchedSessionsForFile
       : [session];
 
-    const targetSessionIds = new Set(targetSessions.map((candidate) => candidate.session_id));
+    // Transcript lines are tagged with the provider session id (e.g. Claude's own
+    // conversation UUID), which is not necessarily the app-facing `session_id`.
+    // Match and attribute by the provider id, but map results back to the
+    // internal `session_id` the rest of the app uses to identify sessions.
+    const providerToInternalId = new Map<string, string>();
     const customNameBySessionId = new Map<string, string | null>();
     for (const candidate of targetSessions) {
-      customNameBySessionId.set(candidate.session_id, candidate.custom_name ?? null);
+      const providerId = candidate.provider_session_id || candidate.session_id;
+      providerToInternalId.set(providerId, candidate.session_id);
+      customNameBySessionId.set(providerId, candidate.custom_name ?? null);
     }
+    const targetSessionIds = new Set(providerToInternalId.keys());
 
     type ClaudeSessionSearchState = {
       matches: SessionConversationMatch[];
@@ -912,8 +919,9 @@ async function parseClaudeSessionMatches(
         continue;
       }
 
-      fileResults.set(sessionId, {
-        sessionId,
+      const internalSessionId = providerToInternalId.get(sessionId) ?? sessionId;
+      fileResults.set(internalSessionId, {
+        sessionId: internalSessionId,
         provider: 'claude',
         sessionSummary: toSummaryText(
           customNameBySessionId.get(sessionId) ?? null,
