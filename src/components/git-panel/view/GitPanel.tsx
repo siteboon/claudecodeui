@@ -75,12 +75,15 @@ export default function GitPanel({
     onSuccess: refreshAll,
   });
 
-  const executeConfirmedAction = useCallback(async () => {
+  const executeConfirmedAction = useCallback(async (useAlternateConfirmation = false) => {
     if (!confirmAction) return;
     const actionToExecute = confirmAction;
     setConfirmAction(null);
     try {
-      await actionToExecute.onConfirm();
+      const confirmationHandler = useAlternateConfirmation
+        ? actionToExecute.alternateConfirmation?.onConfirm ?? actionToExecute.onConfirm
+        : actionToExecute.onConfirm;
+      await confirmationHandler();
     } catch (error) {
       console.error('Error executing confirmation action:', error);
     }
@@ -218,8 +221,8 @@ export default function GitPanel({
       <ConfirmActionModal
         action={confirmAction}
         onCancel={() => setConfirmAction(null)}
-        onConfirm={() => {
-          void executeConfirmedAction();
+        onConfirm={(useAlternateConfirmation) => {
+          void executeConfirmedAction(useAlternateConfirmation);
         }}
       />
     </div>

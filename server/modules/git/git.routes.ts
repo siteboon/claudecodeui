@@ -8,6 +8,7 @@ import { AppError } from '@/shared/utils.js';
 
 // cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
 import { parseGitLogWithStats, parseGitStatusOutput } from './git-parsing.service.js';
+import { deleteLocalBranch } from './git-branch.service.js';
 
 type GitRouterDependencies = {
   fileSystem: typeof import('node:fs/promises');
@@ -839,26 +840,32 @@ router.post('/create-branch', async (req, res) => {
 
 // Delete a local branch
 router.post('/delete-branch', async (req, res) => {
-  const { project, branch } = req.body;
+  const { project, branch, force = false } = req.body;
 
   if (!project || !branch) {
     return res.status(400).json({ error: 'Project id and branch name are required' });
   }
 
+  if (typeof force !== 'boolean') {
+    return res.status(400).json({ error: 'force must be a boolean' });
+  }
+
   try {
     const projectPath = await getActualProjectPath(project);
     await validateGitRepository(projectPath);
-
-    // Safety: cannot delete the currently checked-out branch
-    const { stdout: currentBranch } = await spawnAsync('git', ['branch', '--show-current'], { cwd: projectPath });
-    if (currentBranch.trim() === branch) {
-      return res.status(400).json({ error: 'Cannot delete the currently checked-out branch' });
-    }
-
-    const { stdout } = await spawnAsync('git', ['branch', '-d', branch], { cwd: projectPath });
+    validateBranchName(branch);
+    const stdout = await deleteLocalBranch({
+      projectPath,
+      branch,
+      force,
+      runCommand: spawnAsync,
+    });
     res.json({ success: true, output: stdout });
   } catch (error) {
     console.error('Git delete branch error:', error);
+    if (error instanceof AppError) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
     res.status(500).json({ error: error.message });
   }
 });

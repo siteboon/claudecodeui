@@ -13,7 +13,7 @@ type BranchesViewProps = {
   isCreatingBranch: boolean;
   onSwitchBranch: (branchName: string) => Promise<boolean>;
   onCreateBranch: (branchName: string) => Promise<boolean>;
-  onDeleteBranch: (branchName: string) => Promise<boolean>;
+  onDeleteBranch: (branchName: string, force?: boolean) => Promise<boolean>;
   onRequestConfirmation: (request: ConfirmationRequest) => void;
 };
 
@@ -164,8 +164,14 @@ export default function BranchesView({
   const requestDelete = (branch: string) => {
     onRequestConfirmation({
       type: 'deleteBranch',
-      message: `Delete branch "${branch}"? This cannot be undone.`,
+      message: `Delete branch "${branch}"? A normal delete only succeeds when the branch is fully merged. This cannot be undone.`,
       onConfirm: () => void onDeleteBranch(branch),
+      alternateConfirmation: {
+        label: 'Force delete this unmerged branch',
+        description: 'Permanently removes the branch even when it contains commits that have not been merged elsewhere.',
+        actionLabel: 'Force delete',
+        onConfirm: () => void onDeleteBranch(branch, true),
+      },
     });
   };
 
