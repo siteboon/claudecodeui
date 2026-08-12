@@ -256,7 +256,7 @@ export const api = {
       body: JSON.stringify({ filePath, content }),
     }),
   getFiles: (projectId, options = {}) =>
-    authenticatedFetch(`/api/file-tree/projects/${projectId}/files`, options),
+    authenticatedFetch(`/api/file-tree/projects/${projectId}/files?respectGitignore=true`, options),
   getMentionableFiles: (projectId, options = {}) =>
     authenticatedFetch(`/api/file-tree/projects/${projectId}/files?respectGitignore=true`, options),
 

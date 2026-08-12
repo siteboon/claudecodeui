@@ -36,6 +36,10 @@ const MAXIMUM_FILE_TREE_ENTRIES = 10_000;
 
 type FileTreeEntryFilter = (entryPath: string, isDirectory: boolean) => boolean;
 
+function includeEntryByFallbackDirectoryNames(entryPath: string, isDirectory: boolean): boolean {
+  return !isDirectory || !IGNORED_DIRECTORY_NAMES.has(path.basename(entryPath));
+}
+
 function createFileTreeError(message: string, statusCode: number, code: string): AppError {
   return new AppError(message, { statusCode, code });
 }
@@ -191,17 +195,13 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
     try {
       for await (const entry of fileSystem.openDirectory(directoryPath)) {
         const isDirectory = entry.isDirectory();
-        if (isDirectory && IGNORED_DIRECTORY_NAMES.has(entry.name)) {
-          continue;
-        }
         if (!includeEntry(path.join(directoryPath, entry.name), isDirectory)) {
           continue;
         }
 
-        // Charged after ignore filtering so generated directories and
-        // .gitignore exclusions never consume the budget. Every recursive
-        // branch shares one counter, so the cap applies to the whole tree
-        // rather than per directory.
+        // Charged after visibility filtering so ignored entries never consume
+        // the budget. Every recursive branch shares one counter, so the cap
+        // applies to the whole tree rather than per directory.
         if (remainingEntries.value <= 0) {
           throw createFileTreeError(
             `Project file tree exceeds the ${MAXIMUM_FILE_TREE_ENTRIES.toLocaleString()} entry limit. Choose a narrower project directory or add ignore rules.`,
@@ -233,7 +233,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
     directoryPath: string,
     maximumDepth: number,
     currentDepth = 0,
-    includeEntry: FileTreeEntryFilter = () => true,
+    includeEntry: FileTreeEntryFilter = includeEntryByFallbackDirectoryNames,
     remainingEntries = { value: MAXIMUM_FILE_TREE_ENTRIES },
   ): Promise<FileTreeNode[]> {
     const visibleEntries = await collectVisibleEntries(directoryPath, includeEntry, remainingEntries);
