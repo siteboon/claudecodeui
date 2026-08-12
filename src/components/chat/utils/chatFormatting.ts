@@ -46,6 +46,18 @@ export function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/**
+ * Removes Codex's outer plan transport envelope while preserving its Markdown.
+ * The closing tag is optional because streamed plans expose the opening tag
+ * before the complete response arrives.
+ */
+export function stripProposedPlanEnvelope(text: string) {
+  if (!text || typeof text !== 'string') return text;
+
+  const withoutOpeningTag = text.replace(/^\s*<proposed_plan>[ \t]*(?:\r?\n)?/i, '');
+  return withoutOpeningTag.replace(/(?:\r?\n)?[ \t]*<\/proposed_plan>\s*$/i, '');
+}
+
 export function formatUsageLimitText(text: string) {
   try {
     if (typeof text !== 'string') return text;
