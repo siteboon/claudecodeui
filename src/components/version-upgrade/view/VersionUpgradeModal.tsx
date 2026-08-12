@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useTranslation } from "react-i18next";
 import { authenticatedFetch } from "../../../utils/api";
-import { ReleaseInfo } from "../../../types/sharedTypes";
+import { ReleaseInfo } from "../../../shared/types";
 import { copyTextToClipboard } from "../../../utils/clipboard";
 import type { InstallMode } from "../../../hooks/useVersionCheck";
 import { IS_PLATFORM } from "../../../constants/config";
