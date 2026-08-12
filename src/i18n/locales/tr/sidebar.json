@@ -124,6 +124,8 @@
     "modeConversations": "Konuşmalar",
     "conversationsPlaceholder": "Konuşmalarda ara...",
     "searching": "Aranıyor...",
+    "sessionTitles": "Oturum başlıkları",
+    "conversationContents": "Konuşma içerikleri",
     "noResults": "Sonuç bulunamadı",
     "tryDifferentQuery": "Farklı bir arama sorgusu dene",
     "matches_one": "{{count}} eşleşme",
