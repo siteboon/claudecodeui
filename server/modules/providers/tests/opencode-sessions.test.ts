@@ -470,22 +470,22 @@ const seedOpenCodeSession = async (
   }
 };
 
-test('OpenCode synchronizer titles app-created sessions from the first user message', { concurrency: false }, async () => {
+test('OpenCode synchronizer preserves the title assigned when CloudCLI creates a session', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'opencode-session-sync-app-'));
   const workspacePath = path.join(tempRoot, 'workspace');
   await mkdir(workspacePath, { recursive: true });
   const restoreHomeDir = patchHomeDir(tempRoot);
 
   try {
-    // Stored title differs from the first message so we can prove the first
-    // message wins for sessions started from cloudcli.
+    // Both provider-owned values differ from the CloudCLI title so either one
+    // leaking through would change the assertion below.
     await seedOpenCodeSession(tempRoot, workspacePath, {
       sessionId: 'oc-app-1',
       title: 'OpenCode generated title',
-      firstUserText: 'Fix the checkout crash',
+      firstUserText: 'OpenCode first user prompt',
     });
     await withIsolatedDatabase(async () => {
-      sessionsDb.createAppSession('app-1', 'opencode', workspacePath);
+      sessionsDb.createAppSession('app-1', 'opencode', workspacePath, 'Fix the checkout crash');
       sessionsDb.assignProviderSessionId('app-1', 'oc-app-1');
 
       await new OpenCodeSessionSynchronizer().synchronize();

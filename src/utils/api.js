@@ -199,6 +199,13 @@ export const api = {
     authenticatedFetch(`/api/providers/sessions/${encodeURIComponent(sessionId)}`),
   runningSessions: () =>
     authenticatedFetch('/api/providers/sessions/running'),
+  recentConversations: ({ limit = 40, offset = 0 } = {}) => {
+    const params = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+    });
+    return authenticatedFetch(`/api/providers/sessions/recent?${params.toString()}`);
+  },
   providerSessionId: (sessionId) =>
     authenticatedFetch(`/api/providers/sessions/${encodeURIComponent(sessionId)}/provider-id`),
   restoreSession: (sessionId) =>
