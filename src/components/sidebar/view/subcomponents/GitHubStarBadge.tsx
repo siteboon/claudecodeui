@@ -1,6 +1,7 @@
 import { Star, X } from 'lucide-react';
+
 import { useGitHubStars } from '../../../../hooks/useGitHubStars';
-import { IS_PLATFORM } from '../../../../constants/config';
+import { IS_PLATFORM } from '../../../../shared/utils';
 
 const GITHUB_REPO_URL = 'https://github.com/siteboon/claudecodeui';
 

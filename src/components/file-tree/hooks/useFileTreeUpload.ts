@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
 
-import { IS_PLATFORM } from '../../../constants/config';
+import { IS_PLATFORM } from '../../../shared/utils';
 import type { Project } from '../../../types/app';
 import {
   expireAuthSession,

@@ -1,4 +1,4 @@
-import { IS_PLATFORM } from "../constants/config";
+import { IS_PLATFORM } from "../shared/utils";
 
 export const AUTH_TOKEN_REFRESHED_EVENT = 'auth-token-refreshed';
 export const AUTH_SESSION_EXPIRED_EVENT = 'auth-session-expired';
