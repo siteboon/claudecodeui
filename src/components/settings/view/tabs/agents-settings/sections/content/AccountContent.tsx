@@ -1,7 +1,7 @@
 import { LogIn } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Badge, Button } from '../../../../../../../shared/view/ui';
-import SessionProviderLogo from '../../../../../../llm-logo-provider/SessionProviderLogo';
+import LLMProviderLogo from '../../../../../../llm-provider-logo/LLMProviderLogo';
 import type { AgentProvider, AuthStatus } from '../../../../../types/types';
 
 type AccountContentProps = {
@@ -63,7 +63,7 @@ export default function AccountContent({ agent, authStatus, onLogin }: AccountCo
   return (
     <div className="space-y-6">
       <div className="mb-4 flex items-center gap-3">
-        <SessionProviderLogo provider={agent} className="h-6 w-6" />
+        <LLMProviderLogo provider={agent} className="h-6 w-6" />
         <div>
           <h3 className="text-lg font-medium text-foreground">{config.name}</h3>
           <p className="text-sm text-muted-foreground">

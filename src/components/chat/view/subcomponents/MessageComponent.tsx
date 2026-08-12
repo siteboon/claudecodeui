@@ -1,7 +1,7 @@
 import { memo, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
+import LLMProviderLogo from '../../../llm-provider-logo/LLMProviderLogo';
 import type {
   ChatMessage,
   ClaudePermissionSuggestion,
@@ -151,7 +151,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                 </div>
               ) : (
                 <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full p-1 text-sm text-foreground">
-                  <SessionProviderLogo provider={provider} className="h-full w-full" />
+                  <LLMProviderLogo provider={provider} className="h-full w-full" />
                 </div>
               )}
               <div className="text-sm font-medium text-gray-900 dark:text-white">

@@ -7,7 +7,7 @@ import type { Project } from '../../../../types/app';
 import type { ReleaseInfo } from '../../../../types/sharedTypes';
 import type { ConversationSearchResults, SearchProgress } from '../../hooks/useSidebarController';
 import type { ArchivedProjectListItem, ArchivedSessionListItem, RecentConversationListItem, SidebarSearchMode } from '../../types/types';
-import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
+import LLMProviderLogo from '../../../llm-provider-logo/LLMProviderLogo';
 import { formatCompactAge, getAllSessions } from '../../utils/utils';
 
 import SidebarFooter from './SidebarFooter';
@@ -499,7 +499,7 @@ export default function SidebarContent({
                             })}
                           >
                             <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-background/70">
-                              <SessionProviderLogo provider={session.__provider} className="h-3.5 w-3.5" />
+                              <LLMProviderLogo provider={session.__provider} className="h-3.5 w-3.5" />
                             </span>
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-xs text-foreground">
@@ -569,7 +569,7 @@ export default function SidebarContent({
                           onClick={() => onArchivedSessionClick(session)}
                         >
                           <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-background/70">
-                            <SessionProviderLogo provider={session.provider} className="h-3.5 w-3.5" />
+                            <LLMProviderLogo provider={session.provider} className="h-3.5 w-3.5" />
                           </span>
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-xs text-foreground">

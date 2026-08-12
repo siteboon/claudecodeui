@@ -1,5 +1,5 @@
 import { Check } from 'lucide-react';
-import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
+import LLMProviderLogo from '../../../llm-provider-logo/LLMProviderLogo';
 import type { LLMProvider } from '../../../../types/app';
 import type { ProviderAuthStatus } from '../../../provider-auth/types';
 
@@ -35,7 +35,7 @@ export default function AgentConnectionCard({
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full ${iconContainerClassName}`}>
-            <SessionProviderLogo provider={provider} className="h-5 w-5" />
+            <LLMProviderLogo provider={provider} className="h-5 w-5" />
           </div>
 
           <div className="min-w-0">
