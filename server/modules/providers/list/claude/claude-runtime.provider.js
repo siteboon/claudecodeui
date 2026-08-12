@@ -28,6 +28,7 @@ import { CLAUDE_PREDEFINED_MODELS } from '@/modules/providers/list/claude/claude
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
 import {
   createNotificationEvent,
+  notifyBackgroundWorkCompleted,
   notifyRunFailed,
   notifyRunStopped,
   notifyUserIfEnabled
@@ -43,10 +44,24 @@ const abortedSessionIds = new Set();
 
 const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEOUT_MS, 10) || 55000;
 
-// How long the spawned CLI waits for still-running background agents after a turn ends before
-// killing them (0 = wait indefinitely). The CLI's own default is 10 minutes, which cuts long
-// agents short, so default to 30 minutes; the server's environment still overrides it.
-const BG_WAIT_CEILING_MS = process.env.CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS || String(30 * 60 * 1000);
+// How long background work is allowed to keep running after a turn ends. This drives
+// two halves of the same behaviour:
+//
+//  1. Passed to the spawned CLI as CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS, which is how
+//     long it waits for still-running background *agents* before killing them.
+//  2. A backstop on how long we hold the SDK's stdin open after a turn's `result`.
+//     The SDK closes stdin as soon as a turn ends, and the CLI reads that EOF as
+//     "print wind-down" — killing background *shells* after a short grace period,
+//     which the ceiling above does not cover. Holding stdin open also lets the CLI
+//     push follow-up turns (background-task completions, Monitor notifications,
+//     scheduled wake-ups).
+//
+// The hold normally ends long before this: a turn with nothing outstanding closes
+// stdin immediately, background work releases it as soon as it reports back, and a
+// new turn supersedes the previous hold. This ceiling only catches background work
+// that never reports at all, so an abandoned session cannot leak a CLI process
+// forever. The timer resets on every message, so it measures silence, not total time.
+const BG_WAIT_CEILING_MS = 30 * 60 * 1000;
 
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
@@ -170,7 +185,7 @@ function mapCliOptionsToSDK(options = {}) {
 
   // Forward all host env vars (e.g. ANTHROPIC_BASE_URL) to the subprocess.
   // Since SDK 0.2.113, options.env replaces process.env instead of overlaying it.
-  sdkOptions.env = { ...process.env, CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: BG_WAIT_CEILING_MS };
+  sdkOptions.env = { ...process.env, CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: String(BG_WAIT_CEILING_MS) };
 
   // Resolve the executable eagerly on Windows because the SDK uses raw child_process.spawn,
   // which does not reliably follow npm's shell wrappers like cross-spawn does.
@@ -245,13 +260,17 @@ function mapCliOptionsToSDK(options = {}) {
  * @param {string} sessionId - Session identifier
  * @param {Object} queryInstance - SDK query instance
  * @param {Object} writer - WebSocket writer for reconnect support
+ * @param {Function} releaseInput - Closes the held stdin stream so the CLI can exit
  */
-function addSession(sessionId, queryInstance, writer = null) {
+function addSession(sessionId, queryInstance, writer = null, releaseInput = null) {
+  const existing = activeSessions.get(sessionId);
   activeSessions.set(sessionId, {
     instance: queryInstance,
-    startTime: Date.now(),
+    startTime: existing?.startTime || Date.now(),
     status: 'active',
-    writer
+    writer,
+    // Re-registered mid-run once the provider session id lands; keep the closer.
+    releaseInput: releaseInput || existing?.releaseInput || null
   });
 }
 
@@ -368,38 +387,93 @@ function extractTokenBudget(sdkMessage) {
   };
 }
 
+// Tool calls that leave work running past the end of a turn. Bash only counts
+// when it is explicitly backgrounded; the rest defer or watch work by nature.
+const DEFERRED_WORK_TOOLS = new Set(['Monitor', 'ScheduleWakeup', 'CronCreate', 'TaskCreate']);
+
 /**
- * Builds the SDK `prompt` payload for one turn.
+ * Detects tool calls that keep working after the turn's `result` arrives.
  *
- * Plain text turns pass the string through unchanged. Turns with image
- * attachments use the SDK's streaming-input mode: a single SDKUserMessage
- * whose content carries the prompt text plus one base64 `image` block per
- * attachment (read from the global `~/.cloudcli/assets` folder).
+ * Only turns that start background work need their CLI process held open; every
+ * other turn can let it exit immediately, as it did before the hold existed.
+ *
+ * @param {Object} sdkMessage - SDK stream message
+ * @returns {boolean} True when the message launches work that outlives the turn
+ */
+function startsBackgroundWork(sdkMessage) {
+  const content = sdkMessage?.message?.content;
+  if (!Array.isArray(content)) {
+    return false;
+  }
+
+  return content.some((block) => {
+    if (block?.type !== 'tool_use') {
+      return false;
+    }
+    if (block.name === 'Bash') {
+      return block.input?.run_in_background === true;
+    }
+    return DEFERRED_WORK_TOOLS.has(block.name);
+  });
+}
+
+/**
+ * Builds the SDK user messages for one turn.
+ *
+ * Always returns SDKUserMessage records rather than a bare string: a string
+ * prompt makes the SDK flag the query as single-turn and close stdin the moment
+ * the turn's `result` arrives, which kills the CLI's background tasks. Plain
+ * text turns carry string content; turns with image attachments carry the
+ * prompt text plus one base64 `image` block per attachment (read from the
+ * global `~/.cloudcli/assets` folder).
  *
  * @param {string} command - User prompt
  * @param {Array} images - Image descriptors ({ path, name?, mimeType? })
  * @param {Array} files - Non-image attachment descriptors
  * @param {string} cwd - Project working directory attachment paths resolve against
- * @returns {Promise<string|AsyncIterable>} SDK prompt payload
+ * @returns {Promise<Array<Object>>} SDKUserMessage records for the turn
  */
-async function buildPromptPayload(command, images, files, cwd) {
+async function buildPromptMessages(command, images, files, cwd) {
   const promptWithFiles = appendFilesInputTag(command, files);
-  if (normalizeImageDescriptors(images).length === 0) {
-    return promptWithFiles;
-  }
+  const content = normalizeImageDescriptors(images).length === 0
+    ? promptWithFiles
+    : await buildClaudeUserContent(promptWithFiles, images, cwd);
 
-  const content = await buildClaudeUserContent(promptWithFiles, images, cwd);
-  return (async function* () {
-    yield {
-      type: 'user',
-      message: {
-        role: 'user',
-        content
-      },
-      parent_tool_use_id: null,
-      timestamp: new Date().toISOString()
-    };
+  return [{
+    type: 'user',
+    message: {
+      role: 'user',
+      content
+    },
+    parent_tool_use_id: null,
+    timestamp: new Date().toISOString()
+  }];
+}
+
+/**
+ * Wraps prompt messages in an async iterable that yields them and then parks.
+ *
+ * The SDK closes the CLI's stdin as soon as its input iterable is exhausted (and
+ * immediately on `result` for string prompts). The CLI reads that EOF as the end
+ * of the run and kills anything still going in the background, so the iterable
+ * has to stay pending until we actually want the process gone.
+ *
+ * @param {Array<Object>} messages - SDKUserMessage records to send
+ * @returns {{ stream: AsyncIterable, release: () => void }} Stream plus its closer
+ */
+function createHeldPromptStream(messages) {
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+
+  const stream = (async function* () {
+    for (const message of messages) {
+      yield message;
+    }
+    // Keeps stdin open — the CLI stays alive until release() is called.
+    await held;
   })();
+
+  return { stream, release };
 }
 
 /**
@@ -488,6 +562,40 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     });
   };
 
+  // Closes the held stdin stream so the CLI can wind down. Replaced once the
+  // stream exists; the finally block calls it no matter how the run ends.
+  let releasePromptStream = () => {};
+  let idleReleaseTimer = null;
+  // The client is told the turn is over as soon as `result` lands, even though
+  // the process lingers, so the UI never waits out the idle hold.
+  let turnCompleteSent = false;
+  // Set when a turn starts background work, cleared when the next `result`
+  // arrives — only turns with work still outstanding hold their process open.
+  let backgroundWorkPending = false;
+  // True while the process is being held open for background work, so a later
+  // `result` can be recognised as that work reporting back.
+  let heldForBackgroundWork = false;
+
+  // A new turn supersedes any earlier one still holding this session's process
+  // open, so held runs cannot stack up across a conversation.
+  if (sessionKey()) {
+    getSession(sessionKey())?.releaseInput?.();
+  }
+
+  // Arms (or re-arms) the idle countdown that eventually closes stdin.
+  const scheduleRelease = () => {
+    if (idleReleaseTimer) {
+      clearTimeout(idleReleaseTimer);
+      idleReleaseTimer = null;
+    }
+    idleReleaseTimer = setTimeout(() => {
+      idleReleaseTimer = null;
+      releasePromptStream();
+    }, BG_WAIT_CEILING_MS);
+    // Never let the hold keep the server process alive on its own.
+    idleReleaseTimer.unref?.();
+  };
+
   try {
     const resolvedModel = await context.resolveResumeModel(sessionId, options.model);
     let effortModels = CLAUDE_PREDEFINED_MODELS;
@@ -509,10 +617,10 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       sdkOptions.mcpServers = mcpServers;
     }
 
-    // Turns with image attachments switch to streaming input so the images
-    // ride along as real content blocks. Built per query attempt because an
-    // async generator cannot be replayed once consumed.
-    const createPrompt = () => buildPromptPayload(command, options.images, options.files, options.cwd);
+    // Every turn uses streaming input so stdin stays open past the turn's
+    // `result`. The message list is reusable, but each query attempt needs its
+    // own stream because an async generator cannot be replayed once consumed.
+    const promptMessages = await buildPromptMessages(command, options.images, options.files, options.cwd);
 
     sdkOptions.hooks = {
       Notification: [{
@@ -616,9 +724,11 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     };
 
     let queryInstance;
+    let heldPrompt = createHeldPromptStream(promptMessages);
+    releasePromptStream = heldPrompt.release;
     try {
       queryInstance = query({
-        prompt: await createPrompt(),
+        prompt: heldPrompt.stream,
         options: sdkOptions
       });
     } catch (hookError) {
@@ -626,15 +736,19 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       // Keep notification behavior operational via runtime events even if hook registration fails.
       console.warn('Failed to initialize Claude query with hooks, retrying without hooks:', hookError?.message || hookError);
       delete sdkOptions.hooks;
+      // Discard the abandoned stream and build a fresh one for the retry.
+      heldPrompt.release();
+      heldPrompt = createHeldPromptStream(promptMessages);
+      releasePromptStream = heldPrompt.release;
       queryInstance = query({
-        prompt: await createPrompt(),
+        prompt: heldPrompt.stream,
         options: sdkOptions
       });
     }
 
     // Track the query instance for abort capability
     if (sessionKey()) {
-      addSession(sessionKey(), queryInstance, ws);
+      addSession(sessionKey(), queryInstance, ws, releasePromptStream);
     }
 
     // Process streaming messages
@@ -644,7 +758,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       if (message.session_id && !capturedSessionId) {
 
         capturedSessionId = message.session_id;
-        addSession(sessionKey(), queryInstance, ws);
+        addSession(sessionKey(), queryInstance, ws, releasePromptStream);
 
         // Set session ID on writer
         if (ws.setSessionId && typeof ws.setSessionId === 'function') {
@@ -679,6 +793,51 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       if (tokenBudgetData) {
         ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
       }
+
+      if (startsBackgroundWork(message)) {
+        backgroundWorkPending = true;
+      }
+
+      if (message.type === 'result') {
+        // The turn is done as far as the client is concerned.
+        const abortPending = sessionKey() ? abortedSessionIds.has(sessionKey()) : false;
+        if (!turnCompleteSent && !abortPending) {
+          turnCompleteSent = true;
+          ws.send(createCompleteMessage({ provider: 'claude', sessionId: capturedSessionId || sessionId || null, exitCode: 0 }));
+          notifyRunStopped({
+            userId: ws?.userId || null,
+            provider: 'claude',
+            sessionId: sessionId || capturedSessionId || null,
+            sessionName: sessionSummary,
+            stopReason: 'completed'
+          });
+        } else if (heldForBackgroundWork && !abortPending) {
+          // A result after the turn already reported complete means the work we
+          // held the process open for has finished and pushed a follow-up turn.
+          notifyBackgroundWorkCompleted({
+            userId: ws?.userId || null,
+            provider: 'claude',
+            sessionId: sessionId || capturedSessionId || null,
+            sessionName: sessionSummary
+          });
+        }
+        if (backgroundWorkPending) {
+          // Work started during this turn is still running. Hold the process
+          // open so it can finish and report back in a follow-up turn; the
+          // ceiling is only a backstop for work that never reports.
+          backgroundWorkPending = false;
+          heldForBackgroundWork = true;
+          scheduleRelease();
+        } else {
+          // Either nothing was backgrounded, or the background work just
+          // reported in — let the CLI exit now, as it always has.
+          heldForBackgroundWork = false;
+          releasePromptStream();
+        }
+      } else if (idleReleaseTimer) {
+        // Background activity after the turn — push the countdown back out.
+        scheduleRelease();
+      }
     }
 
     // Clean up session on completion
@@ -687,18 +846,22 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     }
 
     // Send the terminal completion event — skipped for aborted runs, whose
-    // terminal `complete` (aborted: true) was already sent by abort-session.
+    // terminal `complete` (aborted: true) was already sent by abort-session, and
+    // for runs that already reported completion when their `result` arrived.
     const wasAborted = sessionKey() ? abortedSessionIds.delete(sessionKey()) : false;
-    if (!wasAborted) {
-      ws.send(createCompleteMessage({ provider: 'claude', sessionId: capturedSessionId || sessionId || null, exitCode: 0 }));
+    if (!turnCompleteSent) {
+      turnCompleteSent = true;
+      if (!wasAborted) {
+        ws.send(createCompleteMessage({ provider: 'claude', sessionId: capturedSessionId || sessionId || null, exitCode: 0 }));
+      }
+      notifyRunStopped({
+        userId: ws?.userId || null,
+        provider: 'claude',
+        sessionId: sessionId || capturedSessionId || null,
+        sessionName: sessionSummary,
+        stopReason: wasAborted ? 'aborted' : 'completed'
+      });
     }
-    notifyRunStopped({
-      userId: ws?.userId || null,
-      provider: 'claude',
-      sessionId: sessionId || capturedSessionId || null,
-      sessionName: sessionSummary,
-      stopReason: wasAborted ? 'aborted' : 'completed'
-    });
     // Complete
 
   } catch (error) {
@@ -722,9 +885,14 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       ? 'Claude Code is not installed. Please install it first: https://docs.anthropic.com/en/docs/claude-code'
       : error.message;
 
-    // Send error to WebSocket, then the terminal complete
+    // Send error to WebSocket, then the terminal complete. A run that already
+    // reported completion and then failed during its post-turn hold still
+    // surfaces the error, but must not emit a second terminal complete.
     ws.send(createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
-    ws.send(createCompleteMessage({ provider: 'claude', sessionId: capturedSessionId || sessionId || null, exitCode: 1 }));
+    if (!turnCompleteSent) {
+      turnCompleteSent = true;
+      ws.send(createCompleteMessage({ provider: 'claude', sessionId: capturedSessionId || sessionId || null, exitCode: 1 }));
+    }
     notifyRunFailed({
       userId: ws?.userId || null,
       provider: 'claude',
@@ -732,6 +900,14 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       sessionName: sessionSummary,
       error
     });
+  } finally {
+    // Always close stdin — otherwise an aborted or failed run leaves the CLI
+    // process (and its MCP servers) alive until the server exits.
+    if (idleReleaseTimer) {
+      clearTimeout(idleReleaseTimer);
+      idleReleaseTimer = null;
+    }
+    releasePromptStream();
   }
 }
 
@@ -757,6 +933,10 @@ async function abortClaudeSDKSession(sessionId) {
 
     // Call interrupt() on the query instance
     await session.instance.interrupt();
+
+    // Release the held stdin stream; without this the CLI stays up for the rest
+    // of the post-turn hold even though the user cancelled.
+    session.releaseInput?.();
 
     // Update session status
     session.status = 'aborted';
