@@ -28,6 +28,7 @@
   },
   "scripts": {
     "dev": "concurrently --kill-others \"npm run server:dev\" \"npm run client\"",
+    "preserver": "node scripts/promote-dist-server.mjs recover",
     "server": "node dist-server/server/index.js",
     "server:dev": "tsx --tsconfig server/tsconfig.json server/index.ts",
     "server:dev-watch": "tsx watch --tsconfig server/tsconfig.json server/index.ts",
@@ -42,8 +43,9 @@
     "desktop:icon:mac": "node electron/scripts/generate-macos-icon.js",
     "build": "npm run build:client && npm run build:server",
     "build:client": "vite build",
-    "prebuild:server": "node -e \"require('node:fs').rmSync('dist-server', { recursive: true, force: true })\"",
+    "prebuild:server": "node -e \"require('node:fs').rmSync('dist-server.next', { recursive: true, force: true })\"",
     "build:server": "tsc -p server/tsconfig.json && tsc-alias -p server/tsconfig.json",
+    "postbuild:server": "node scripts/promote-dist-server.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p server/tsconfig.json",
     "test": "tsx --tsconfig server/tsconfig.json --test \"server/**/*.test.ts\" \"server/**/*.test.js\"",
