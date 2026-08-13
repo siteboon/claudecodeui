@@ -3,6 +3,25 @@
 All notable changes to CloudCLI UI will be documented in this file.
 
 
+## [1.37.1](https://github.com/siteboon/claudecodeui/compare/v1.37.0...v1.37.1) (2026-08-13)
+
+### New Features
+
+* add provider session ID copy actions ([#1040](https://github.com/siteboon/claudecodeui/issues/1040)) ([428b105](https://github.com/siteboon/claudecodeui/commit/428b1052be3bb28611d2ef3fcd29cec5a9ca1397))
+* **i18n:** add complete Spanish (es) translation ([#1090](https://github.com/siteboon/claudecodeui/issues/1090)) ([5fa87dd](https://github.com/siteboon/claudecodeui/commit/5fa87ddaf7c1c06c33c34f48a462743aa3877edf))
+* **i18n:** complete Korean (ko) translation ([#997](https://github.com/siteboon/claudecodeui/issues/997)) ([59472c0](https://github.com/siteboon/claudecodeui/commit/59472c075eb2f28a48df9d9eff659ad823d31bd2))
+* **plugins:** recommend Codex Usage plugin ([#1114](https://github.com/siteboon/claudecodeui/issues/1114)) ([ca92373](https://github.com/siteboon/claudecodeui/commit/ca92373dfead92f7f777093e72e9a118a97ff97a))
+* **sidebar:** add recent conversation feed ([#1041](https://github.com/siteboon/claudecodeui/issues/1041)) ([015e892](https://github.com/siteboon/claudecodeui/commit/015e892c75e29b1771399691dbca3c8b466fa0b1))
+
+### Bug Fixes
+
+* **claude:** remove dead CLAUDE_CODE_STREAM_CLOSE_TIMEOUT workaround ([#1115](https://github.com/siteboon/claudecodeui/issues/1115)) ([ef3f798](https://github.com/siteboon/claudecodeui/commit/ef3f7980db15c89761c3a1aad8b608fff33789ad))
+* don't recurse into system directories when building file trees ([#1074](https://github.com/siteboon/claudecodeui/issues/1074)) ([753a8c0](https://github.com/siteboon/claudecodeui/commit/753a8c0422685bafd4e878c44726f727357a3fb5))
+* resolve @/ path aliases so the server test suite can load ([#1084](https://github.com/siteboon/claudecodeui/issues/1084)) ([74d3f8f](https://github.com/siteboon/claudecodeui/commit/74d3f8ffff6f315d2f2ceb240512aeb2d8b40464))
+* **search:** match Claude transcripts by provider_session_id ([#1078](https://github.com/siteboon/claudecodeui/issues/1078)) ([9507694](https://github.com/siteboon/claudecodeui/commit/95076941533dc14f04d83917e1e7c04229e664c1))
+* tolerate client clock skew before treating an auth token as expired ([#1085](https://github.com/siteboon/claudecodeui/issues/1085)) ([f0dca2d](https://github.com/siteboon/claudecodeui/commit/f0dca2d5e79c225f599e697bf9b55e839b152b78))
+* update stale Sonnet 4.6 labels to Sonnet 5 in the Claude model picker ([#1036](https://github.com/siteboon/claudecodeui/issues/1036)) ([c2408f0](https://github.com/siteboon/claudecodeui/commit/c2408f0fc331fb267fdc9def954e55f71d019302))
+
 ## [1.37.0](https://github.com/siteboon/claudecodeui/compare/v1.36.3...v1.37.0) (2026-07-29)
 
 ### New Features
