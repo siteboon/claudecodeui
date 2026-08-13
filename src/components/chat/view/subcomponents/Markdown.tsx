@@ -8,6 +8,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useTranslation } from 'react-i18next';
 
+import MermaidDiagram from '../../../code-editor/view/subcomponents/markdown/MermaidDiagram';
 import { normalizeInlineCodeFences } from '../../utils/chatFormatting';
 import { copyTextToClipboard } from '../../../../utils/clipboard';
 import { usePaletteOps } from '../../../../contexts/PaletteOpsContext';
@@ -90,6 +91,10 @@ const CodeBlock = ({ node: _node, className, children, forceBlock, ...props }: C
   const match = /language-(\w+)/.exec(className || '');
   const language = match ? match[1] : 'text';
   const languageLabel = language.charAt(0).toUpperCase() + language.slice(1);
+
+  if (language === 'mermaid') {
+    return <MermaidDiagram code={raw} />;
+  }
 
   return (
     <div className="group my-3 overflow-hidden rounded-xl border border-border bg-muted/50 shadow-sm dark:bg-zinc-900">
