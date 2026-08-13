@@ -111,6 +111,7 @@ CloudCLI Desktop is an optional native companion for CloudCLI Cloud and Local Cl
 
 - **[macOS](https://cloudcli.ai/download/macos)**
 - **[Windows](https://cloudcli.ai/download/windows)**
+- **Linux** — `.deb` (Debian/Ubuntu) from [GitHub Releases](https://github.com/siteboon/claudecodeui/releases)
 - **[Download page](https://cloudcli.ai/download)** · **[GitHub Releases and checksums](https://github.com/siteboon/claudecodeui/releases)**
 
 Use it to open CloudCLI Cloud environments, switch between local and remote workspaces, and copy mobile/browser URLs. To work locally, choose **Local CloudCLI** in the desktop app; it will use your running local server or start one for you.
