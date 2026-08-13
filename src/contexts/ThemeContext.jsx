@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+
+import { getLocalStorageItem, setLocalStorageItem } from '../utils/localStorage.js';
 
 const ThemeContext = createContext();
 
@@ -14,7 +16,7 @@ export const ThemeProvider = ({ children }) => {
   // Check for saved theme preference or default to system preference
   const [isDarkMode, setIsDarkMode] = useState(() => {
     // Check localStorage first
-    const savedTheme = localStorage.getItem('theme');
+    const savedTheme = getLocalStorageItem('theme');
     if (savedTheme) {
       return savedTheme === 'dark';
     }
@@ -27,11 +29,15 @@ export const ThemeProvider = ({ children }) => {
     return false;
   });
 
+  const [useSystemFont, setUseSystemFont] = useState(
+    () => getLocalStorageItem('useSystemFont') === 'true',
+  );
+
   // Update document class and localStorage when theme changes
   useEffect(() => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
+      setLocalStorageItem('theme', 'dark');
       
       // Update iOS status bar style and theme color for dark mode
       const statusBarMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
@@ -45,7 +51,7 @@ export const ThemeProvider = ({ children }) => {
       }
     } else {
       document.documentElement.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
+      setLocalStorageItem('theme', 'light');
       
       // Update iOS status bar style and theme color for light mode
       const statusBarMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
@@ -60,6 +66,11 @@ export const ThemeProvider = ({ children }) => {
     }
   }, [isDarkMode]);
 
+  useEffect(() => {
+    document.documentElement.classList.toggle('system-font', useSystemFont);
+    setLocalStorageItem('useSystemFont', String(useSystemFont));
+  }, [useSystemFont]);
+
   // Listen for system theme changes
   useEffect(() => {
     if (!window.matchMedia) return;
@@ -67,7 +78,7 @@ export const ThemeProvider = ({ children }) => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = (e) => {
       // Only update if user hasn't manually set a preference
-      const savedTheme = localStorage.getItem('theme');
+      const savedTheme = getLocalStorageItem('theme');
       if (!savedTheme) {
         setIsDarkMode(e.matches);
       }
@@ -77,14 +88,19 @@ export const ThemeProvider = ({ children }) => {
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, []);
 
-  const toggleDarkMode = () => {
+  const toggleDarkMode = useCallback(() => {
     setIsDarkMode(prev => !prev);
-  };
+  }, []);
 
-  const value = {
-    isDarkMode,
-    toggleDarkMode,
-  };
+  const value = useMemo(
+    () => ({
+      isDarkMode,
+      toggleDarkMode,
+      useSystemFont,
+      setUseSystemFont,
+    }),
+    [isDarkMode, toggleDarkMode, useSystemFont],
+  );
 
   return (
     <ThemeContext.Provider value={value}>

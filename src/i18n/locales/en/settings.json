@@ -157,6 +157,13 @@
       "alphabetical": "Alphabetical",
       "recentActivity": "Recent Activity"
     },
+    "typography": {
+      "title": "Typography",
+      "systemFont": {
+        "label": "Use system font",
+        "description": "Use your device's default font throughout the interface"
+      }
+    },
     "codeEditor": {
       "title": "Code Editor",
       "theme": {
