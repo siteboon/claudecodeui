@@ -54,6 +54,7 @@ interface UseChatComposerStateArgs {
   tokenBudget: Record<string, unknown> | null;
   sendMessage: (message: unknown) => void;
   sendByCtrlEnter?: boolean;
+  isMobile?: boolean;
   onSessionProcessing?: MarkSessionProcessing;
   /**
    * Invoked with the freshly allocated session id when the user sends the
@@ -244,6 +245,7 @@ export function useChatComposerState({
   tokenBudget,
   sendMessage,
   sendByCtrlEnter,
+  isMobile,
   onSessionProcessing,
   onSessionEstablished,
   onInputFocusChange,
@@ -1152,7 +1154,17 @@ export function useChatComposerState({
         if ((event.ctrlKey || event.metaKey) && !event.shiftKey) {
           event.preventDefault();
           handleSubmit(event);
-        } else if (!event.shiftKey && !event.ctrlKey && !event.metaKey && !sendByCtrlEnter) {
+          return;
+        }
+
+        if (isMobile) {
+          // Virtual keyboards rarely offer a reachable Shift+Enter, so on
+          // mobile plain Enter always inserts a newline; sending happens via
+          // the composer's Send button instead.
+          return;
+        }
+
+        if (!event.shiftKey && !event.ctrlKey && !event.metaKey && !sendByCtrlEnter) {
           event.preventDefault();
           handleSubmit(event);
         }
@@ -1163,6 +1175,7 @@ export function useChatComposerState({
       handleCommandMenuKeyDown,
       handleFileMentionsKeyDown,
       handleSubmit,
+      isMobile,
       sendByCtrlEnter,
       showCommandMenu,
       showFileDropdown,
