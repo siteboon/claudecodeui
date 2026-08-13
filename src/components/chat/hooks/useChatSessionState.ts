@@ -35,6 +35,17 @@ interface ScrollRestoreState {
   top: number;
 }
 
+/**
+ * A usage read is empty when it is absent or reports zero used tokens: no real API turn spends
+ * zero, so the endpoint answers `used: 0` for transcripts holding no assistant turn yet. Only a
+ * numeric `used` counts, so other providers' budget shapes pass through.
+ */
+function isEmptyTokenUsage(usage: Record<string, unknown> | null): boolean {
+  if (!usage) return true;
+  const used = Number(usage.used);
+  return Number.isFinite(used) && used <= 0;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Helper: Convert a ChatMessage to a NormalizedMessage for the store */
 /* ------------------------------------------------------------------ */
@@ -516,6 +527,8 @@ export function useChatSessionState({
 
     // Skip if already loaded and fresh
     if (lastLoadedSessionKeyRef.current === sessionKey && sessionStore.has(selectedSessionId) && !sessionStore.isStale(selectedSessionId)) {
+      const cachedSlot = sessionStore.getSessionSlot(selectedSessionId);
+      if (cachedSlot?.tokenUsage) setTokenBudget(cachedSlot.tokenUsage as Record<string, unknown>);
       subscribeToSelectedSession();
       return;
     }
@@ -540,7 +553,13 @@ export function useChatSessionState({
     if (loadAllOverlayTimerRef.current) clearTimeout(loadAllOverlayTimerRef.current);
     if (loadAllFinishedTimerRef.current) clearTimeout(loadAllFinishedTimerRef.current);
 
-    if (sessionChanged) {
+    // Blank only on a real session switch (including from a new-session draft, where
+    // currentSessionId is null). Same-session reruns of this effect, such as selectedProject
+    // identity churn after session_upserted, must not clear a live badge.
+    const cachedUsage = sessionStore.getSessionSlot(selectedSessionId)?.tokenUsage;
+    if (cachedUsage) {
+      setTokenBudget(cachedUsage as Record<string, unknown>);
+    } else if (sessionChanged || currentSessionId === null) {
       setTokenBudget(null);
     }
 
@@ -704,29 +723,54 @@ export function useChatSessionState({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatMessages.length, isLoadingSessionMessages, searchTarget]);
 
-  // Initial token usage fetch for providers with file-backed usage data.
+  // Only the newest of these reads may write the badge, so a response arriving after a session
+  // switch cannot overwrite the badge of the session now on screen.
+  const tokenUsageRequestRef = useRef(0);
+
+  // Token usage for providers with file-backed usage data, read from the transcript.
+  // `allowBlank` decides what an empty read does, and the two callers want opposite things: on
+  // mount this is the only evidence about the session on screen, so it may clear a stale figure;
+  // after a completed run the badge already holds this session's live figure and a routine 404 or
+  // a not-yet-flushed assistant entry must not wipe it.
+  const refreshTokenUsage = useCallback(async (sessionId: string, { allowBlank = false } = {}) => {
+    if (!sessionId) return;
+    const requestId = ++tokenUsageRequestRef.current;
+    const isNewest = () => requestId === tokenUsageRequestRef.current;
+    try {
+      // The provider module resolves storage and provider details from the session id.
+      const url = `/api/providers/sessions/${encodeURIComponent(sessionId)}/token-usage`;
+      const response = await authenticatedFetch(url);
+      if (!isNewest()) return;
+      if (!response.ok) {
+        if (allowBlank) setTokenBudget(null);
+        return;
+      }
+      const payload = await response.json();
+      if (!isNewest()) return;
+      const usage = (payload.data ?? null) as Record<string, unknown> | null;
+      if (isEmptyTokenUsage(usage)) {
+        if (allowBlank) setTokenBudget(null);
+        return;
+      }
+      setTokenBudget(usage);
+      // Keep the cache in step with the badge; the slot still holds the older live frame that a
+      // switch back would otherwise restore.
+      sessionStore.setTokenUsage(sessionId, usage);
+    } catch (error) {
+      console.error('Failed to fetch token usage:', error);
+      if (allowBlank && isNewest()) setTokenBudget(null);
+    }
+  }, [sessionStore]);
+
   useEffect(() => {
     if (!selectedSession?.id) {
+      // Invalidate any in-flight request; its session is no longer on screen.
+      tokenUsageRequestRef.current += 1;
       setTokenBudget(null);
       return;
     }
-    const fetchInitialTokenUsage = async () => {
-      try {
-        // The provider module resolves storage and provider details from the session id.
-        const url = `/api/providers/sessions/${encodeURIComponent(selectedSession.id)}/token-usage`;
-        const response = await authenticatedFetch(url);
-        if (response.ok) {
-          const payload = await response.json();
-          setTokenBudget(payload.data ?? null);
-        } else {
-          setTokenBudget(null);
-        }
-      } catch (error) {
-        console.error('Failed to fetch initial token usage:', error);
-      }
-    };
-    fetchInitialTokenUsage();
-  }, [selectedSession?.id]);
+    void refreshTokenUsage(selectedSession.id, { allowBlank: true });
+  }, [selectedSession?.id, refreshTokenUsage]);
 
   const visibleMessages = useMemo(() => {
     if (chatMessages.length <= visibleMessageCount) return chatMessages;
@@ -846,6 +890,7 @@ export function useChatSessionState({
     setIsUserScrolledUp,
     tokenBudget,
     setTokenBudget,
+    refreshTokenUsage,
     visibleMessageCount,
     visibleMessages,
     loadEarlierMessages,

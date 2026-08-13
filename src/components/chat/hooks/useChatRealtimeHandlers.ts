@@ -23,6 +23,8 @@ interface UseChatRealtimeHandlersArgs {
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
   setTokenBudget: (budget: Record<string, unknown> | null) => void;
+  /** Re-reads the transcript-backed token usage for a session. */
+  refreshTokenUsage?: (sessionId: string) => Promise<void>;
   pendingPermissionRequests: PendingPermissionRequest[];
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
   streamTimerRef: MutableRefObject<number | null>;
@@ -61,6 +63,7 @@ export function useChatRealtimeHandlers({
   selectedSession,
   currentSessionId,
   setTokenBudget,
+  refreshTokenUsage,
   pendingPermissionRequests,
   setPendingPermissionRequests,
   streamTimerRef,
@@ -259,6 +262,11 @@ export function useChatRealtimeHandlers({
           // viewed conversation with the now-persisted transcript.
           if (sid && sid === activeViewSessionId) {
             void sessionStore.refreshFromServer(sid);
+            // Converge the badge on the persisted transcript, which is what a
+            // page refresh would show. No `allowBlank`: the badge already holds
+            // this session's live figure, and the transcript is often on disk
+            // before the assistant entry has been flushed into it.
+            void refreshTokenUsage?.(sid);
           }
 
           break;
@@ -309,9 +317,25 @@ export function useChatRealtimeHandlers({
         }
 
         case 'status': {
-          if (msg.text === 'token_budget' && msg.tokenBudget) {
-            setTokenBudget(msg.tokenBudget as Record<string, unknown>);
-          } else if (msg.text && sid) {
+          // Runs for sessions the user is not viewing stream over this socket too,
+          // so record usage per session and let only the viewed one paint the badge.
+          if (msg.text === 'token_budget') {
+            if (msg.tokenBudget && sid) {
+              // A zero-used frame is not a real API turn; caching it would stick a 0
+              // badge on the session. A non-numeric `used` passes through untouched.
+              const used = Number((msg.tokenBudget as Record<string, unknown>).used);
+              if (!(Number.isFinite(used) && used <= 0)) {
+                sessionStore.setTokenUsage(sid, msg.tokenBudget);
+                if (sid === activeViewSessionId) {
+                  setTokenBudget(msg.tokenBudget as Record<string, unknown>);
+                }
+              }
+            }
+            // Not human-readable status text, so it must not become the activity label.
+            break;
+          }
+
+          if (msg.text && sid) {
             onSessionProcessing?.(sid, {
               statusText: msg.text as string,
               canInterrupt: msg.canInterrupt !== false,
@@ -334,6 +358,7 @@ export function useChatRealtimeHandlers({
     selectedSession,
     currentSessionId,
     setTokenBudget,
+    refreshTokenUsage,
     pendingPermissionRequests,
     setPendingPermissionRequests,
     streamTimerRef,

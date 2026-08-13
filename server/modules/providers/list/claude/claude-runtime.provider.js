@@ -300,9 +300,67 @@ function readNumber(value) {
 }
 
 /**
+ * Resolves the per-API-call usage payload a token budget is built from.
+ *
+ * An assistant frame's `message.usage` is already per-call. A top-level `usage`
+ * belongs to the terminal `result` and is summed over every API call in the turn
+ * (subagents included), so it overstates context occupancy several times over;
+ * its `iterations` array holds the per-call figures it was summed from. Older
+ * SDK versions leave `iterations` unpopulated, so it is feature-detected.
+ *
+ * @param {Object} sdkMessage - SDK stream message
+ * @returns {Object|null} Per-call usage payload or null
+ */
+function resolvePerCallUsage(sdkMessage) {
+  const perStepUsage = sdkMessage.message?.usage;
+  if (perStepUsage && typeof perStepUsage === 'object') {
+    return perStepUsage;
+  }
+
+  const aggregateUsage = sdkMessage.usage;
+  if (!aggregateUsage || typeof aggregateUsage !== 'object') {
+    return null;
+  }
+
+  const iterations = aggregateUsage.iterations;
+  if (!Array.isArray(iterations) || iterations.length === 0) {
+    return null;
+  }
+
+  const lastIteration = resolveMainThreadIteration(iterations);
+  return lastIteration && typeof lastIteration === 'object' ? lastIteration : null;
+}
+
+/**
+ * Picks the iteration whose usage is main-thread context occupancy.
+ *
+ * Iterations also carry `'compaction'` and `'advisor_message'` sub-inferences,
+ * whose usage is that auxiliary call's rather than the conversation's, so the
+ * newest `'message'` entry wins over the last entry. Entries with no `type`
+ * predate the discriminated union and are taken at face value.
+ *
+ * @param {Array} iterations - Per-call usage entries, oldest first
+ * @returns {Object|null} Main-thread iteration or null
+ */
+function resolveMainThreadIteration(iterations) {
+  let sawTypedEntry = false;
+
+  for (let index = iterations.length - 1; index >= 0; index -= 1) {
+    const iteration = iterations[index];
+    if (!iteration || typeof iteration !== 'object' || typeof iteration.type !== 'string') {
+      continue;
+    }
+    sawTypedEntry = true;
+    if (iteration.type === 'message') {
+      return iteration;
+    }
+  }
+
+  return sawTypedEntry ? null : iterations[iterations.length - 1];
+}
+
+/**
  * Extracts token usage from SDK messages.
- * Prefers per-step `message.usage` (Claude message payload), then falls back
- * to result-level usage/modelUsage for compatibility across SDK versions.
  * @param {Object} sdkMessage - SDK stream message
  * @returns {Object|null} Token budget object or null
  */
@@ -311,47 +369,24 @@ function extractTokenBudget(sdkMessage) {
     return null;
   }
 
-  const messageUsage = sdkMessage.message?.usage || sdkMessage.usage;
-  if (messageUsage && typeof messageUsage === 'object') {
-    const directInputTokens = readNumber(messageUsage.input_tokens ?? messageUsage.inputTokens);
-    const cacheCreationTokens = readNumber(messageUsage.cache_creation_input_tokens ?? messageUsage.cacheCreationInputTokens ?? messageUsage.cacheCreationTokens);
-    const cacheReadTokens = readNumber(messageUsage.cache_read_input_tokens ?? messageUsage.cacheReadInputTokens ?? messageUsage.cacheReadTokens);
-    const cacheTokens = cacheCreationTokens + cacheReadTokens;
-    const inputTokens = directInputTokens + cacheTokens;
-    const outputTokens = readNumber(messageUsage.output_tokens ?? messageUsage.outputTokens);
-    const totalUsed = inputTokens + outputTokens;
-    const contextWindow = parseInt(process.env.CONTEXT_WINDOW, 10) || 160000;
-
-    return {
-      used: totalUsed,
-      total: contextWindow,
-      inputTokens,
-      outputTokens,
-      cacheReadTokens,
-      cacheCreationTokens,
-      cacheTokens,
-      breakdown: {
-        input: inputTokens,
-        output: outputTokens,
-      },
-    };
-  }
-
-  if (!sdkMessage.modelUsage || typeof sdkMessage.modelUsage !== 'object') {
+  const messageUsage = resolvePerCallUsage(sdkMessage);
+  if (!messageUsage) {
     return null;
   }
 
-  // Fallback for older SDK messages with only modelUsage
-  const modelKey = Object.keys(sdkMessage.modelUsage)[0];
-  const modelData = sdkMessage.modelUsage[modelKey];
-
-  if (!modelData || typeof modelData !== 'object') {
-    return null;
-  }
-
-  const inputTokens = readNumber(modelData.cumulativeInputTokens ?? modelData.inputTokens);
-  const outputTokens = readNumber(modelData.cumulativeOutputTokens ?? modelData.outputTokens);
+  const directInputTokens = readNumber(messageUsage.input_tokens ?? messageUsage.inputTokens);
+  const cacheCreationTokens = readNumber(messageUsage.cache_creation_input_tokens ?? messageUsage.cacheCreationInputTokens ?? messageUsage.cacheCreationTokens);
+  const cacheReadTokens = readNumber(messageUsage.cache_read_input_tokens ?? messageUsage.cacheReadInputTokens ?? messageUsage.cacheReadTokens);
+  const cacheTokens = cacheCreationTokens + cacheReadTokens;
+  const inputTokens = directInputTokens + cacheTokens;
+  const outputTokens = readNumber(messageUsage.output_tokens ?? messageUsage.outputTokens);
   const totalUsed = inputTokens + outputTokens;
+  // No real API turn has zero total usage (the system prompt alone guarantees
+  // input tokens), so a zeroed budget is noise: task-progress frames carry a
+  // differently shaped usage object, and error placeholders carry all zeros.
+  if (totalUsed <= 0) {
+    return null;
+  }
   const contextWindow = parseInt(process.env.CONTEXT_WINDOW, 10) || 160000;
 
   return {
@@ -359,6 +394,9 @@ function extractTokenBudget(sdkMessage) {
     total: contextWindow,
     inputTokens,
     outputTokens,
+    cacheReadTokens,
+    cacheCreationTokens,
+    cacheTokens,
     breakdown: {
       input: inputTokens,
       output: outputTokens,
@@ -672,10 +710,14 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         ws.send(msg);
       }
 
-      // Extract and send token budget updates from assistant/result usage payloads
-      const tokenBudgetData = extractTokenBudget(message);
-      if (tokenBudgetData) {
-        ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+      // Extract and send token budget updates from assistant/result usage payloads.
+      // Sidechain (subagent) frames carry the subagent's own context, not the
+      // parent thread's, so they would make the badge jitter.
+      if (!transformedMessage.parentToolUseId) {
+        const tokenBudgetData = extractTokenBudget(message);
+        if (tokenBudgetData) {
+          ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+        }
       }
     }
 
@@ -843,5 +885,6 @@ export {
   getActiveClaudeSDKSessions,
   resolveToolApproval,
   getPendingApprovalsForSession,
-  reconnectSessionWriter
+  reconnectSessionWriter,
+  extractTokenBudget
 };
