@@ -34,8 +34,18 @@ export function createPluginsRouter(service: ReturnType<typeof createPluginsServ
     } catch (error) { next(error); }
   });
   router.put('/:name/enable', respond((req) => service.setEnabled(routeParameter(req.params.name), req.body?.enabled)));
-  router.post('/install', respond((req) => service.install(req.body?.url)));
-  router.post('/:name/update', respond((req) => service.update(routeParameter(req.params.name))));
+  router.post('/install', respond((req) => {
+    const body = (req.body ?? {}) as { url?: unknown; allowBuild?: unknown };
+    // Build scripts run arbitrary code with server privileges. Only opt in when the
+    // operator has manually vetted the plugin's build script.
+    const allowBuild = body.allowBuild === true;
+    return service.install(body.url, { allowBuild });
+  }));
+  router.post('/:name/update', respond((req) => {
+    const body = (req.body ?? {}) as { allowBuild?: unknown };
+    const allowBuild = body.allowBuild === true;
+    return service.update(routeParameter(req.params.name), { allowBuild });
+  }));
   router.all('/:name/rpc/*', async (req, res, next) => {
     try {
       const { port, secrets } = await service.prepareRpc(routeParameter(req.params.name));

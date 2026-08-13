@@ -97,15 +97,41 @@ export function validateManifest(manifest) {
 
 const BUILD_TIMEOUT_MS = 60_000;
 
+/**
+ * Whether `npm run build` should execute after `npm install` for newly cloned
+ * plugins. Plugin build scripts run with the host Node process's privileges,
+ * so they are a remote code execution vector for any party who can supply a
+ * malicious plugin URL. The default is OFF: only the install/update caller's
+ * explicit opt-in (via the {@link PluginInstallOptions.allowBuild} flag) will
+ * permit build scripts to run.
+ */
+let ALLOW_PLUGIN_BUILD_SCRIPT = false;
+
+/** Process-wide override used by tests and callers that have vetted the plugin. */
+export function setAllowPluginBuildScript(allowed) {
+  ALLOW_PLUGIN_BUILD_SCRIPT = allowed === true;
+}
+
 /** Run `npm run build` if the plugin's package.json declares a build script. */
-function runBuildIfNeeded(dir, packageJsonPath, onSuccess, onError) {
+function runBuildIfNeeded(dir, packageJsonPath, options, onSuccess, onError) {
+  let pkg;
   try {
-    const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-    if (!pkg.scripts?.build) {
-      return onSuccess();
-    }
+    pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
   } catch {
     return onSuccess(); // Unreadable package.json — skip build
+  }
+
+  if (!pkg.scripts?.build) {
+    return onSuccess();
+  }
+
+  if (!ALLOW_PLUGIN_BUILD_SCRIPT && !options?.allowBuild) {
+    return onError(new Error(
+      'Plugin declares a "build" script but plugin builds are disabled by default. ' +
+      'Plugin build scripts run arbitrary code with the server process privileges. ' +
+      'To install this plugin, ship a pre-built artifact and remove the build script, ' +
+      'or set `allowBuild: true` after manually inspecting the build script.',
+    ));
   }
 
   const buildProcess = spawn('npm', ['run', 'build'], {
@@ -249,13 +275,20 @@ export function resolvePluginAssetPath(name, assetPath) {
   return realResolved;
 }
 
-export function installPluginFromGit(url) {
+export function installPluginFromGit(url, options) {
   return new Promise((resolve, reject) => {
     if (typeof url !== 'string' || !url.trim()) {
       return reject(new Error('Invalid URL: must be a non-empty string'));
     }
     if (url.startsWith('-')) {
       return reject(new Error('Invalid URL: must not start with "-"'));
+    }
+    // Only allow the supported remote transports. The HTTP layer in
+    // plugins.service.ts already enforces this for incoming requests, but
+    // validating here too prevents any internal caller (tests, future
+    // programmatic install paths) from bypassing the scheme check.
+    if (!url.startsWith('https://') && !url.startsWith('git@')) {
+      return reject(new Error('Invalid URL: only https:// and git@ remotes are supported'));
     }
 
     // Extract repo name from URL for directory name
@@ -350,7 +383,7 @@ export function installPluginFromGit(url) {
             cleanupTemp();
             return reject(new Error(`npm install for ${repoName} failed (exit code ${npmCode})`));
           }
-          runBuildIfNeeded(tempDir, packageJsonPath, () => finalize(manifest), (err) => { cleanupTemp(); reject(err); });
+          runBuildIfNeeded(tempDir, packageJsonPath, options, () => finalize(manifest), (err) => { cleanupTemp(); reject(err); });
         });
 
         npmProcess.on('error', (err) => {
@@ -369,61 +402,145 @@ export function installPluginFromGit(url) {
   });
 }
 
-export function updatePluginFromGit(name) {
+export function updatePluginFromGit(name, options) {
   return new Promise((resolve, reject) => {
     const pluginDir = getPluginDir(name);
     if (!pluginDir) {
       return reject(new Error(`Plugin "${name}" not found`));
     }
 
-    // Only fast-forward to avoid silent divergence
-    const gitProcess = spawn('git', ['pull', '--ff-only', '--'], {
-      cwd: pluginDir,
+    const pluginsDir = getPluginsDir();
+    // Clone the updated tree into a sibling temp directory and only swap it
+    // into place after every side-effectful step (manifest validation,
+    // npm install, optional build policy) has succeeded. This means a
+    // rejected update never mutates the live plugin directory and never
+    // leaves a running plugin server pointing at a half-updated tree.
+    const tempDir = fs.mkdtempSync(path.join(pluginsDir, `.tmp-update-${name}-`));
+
+    const cleanupTemp = () => {
+      try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch {}
+    };
+
+    const finalize = (manifest) => {
+      // Replace the live directory with the validated temp dir while keeping
+      // the previous tree in a sibling backup. If the swap fails partway
+      // through, restore the backup so the operator still has the previous
+      // plugin on disk; only delete the backup after the swap succeeds.
+      const backupDir = fs.existsSync(pluginDir)
+        ? path.join(pluginsDir, `.tmp-previous-${path.basename(pluginDir)}-${process.pid}-${Date.now()}`)
+        : null;
+      try {
+        if (backupDir) {
+          fs.renameSync(pluginDir, backupDir);
+        }
+        fs.renameSync(tempDir, pluginDir);
+      } catch (err) {
+        // Roll back: remove the partially-installed temp dir (if the second
+        // rename succeeded we have nothing to restore) and put the backup
+        // back in place of the live directory (if one existed).
+        try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch {}
+        if (backupDir && fs.existsSync(backupDir) && !fs.existsSync(pluginDir)) {
+          try { fs.renameSync(backupDir, pluginDir); } catch {}
+        }
+        return reject(new Error(`Failed to move updated plugin into place: ${err.message}`));
+      }
+
+      if (backupDir) {
+        try { fs.rmSync(backupDir, { recursive: true, force: true }); } catch {}
+      }
+      resolve(manifest);
+    };
+
+    // Clone the live plugin's current remote URL into the temp dir. We
+    // intentionally re-clone (rather than `git pull` against the live
+    // directory) so a failure or a rejected build leaves the live tree
+    // untouched.
+    const configPath = path.join(pluginDir, '.git', 'config');
+    let remoteUrl = null;
+    try {
+      const gitConfig = fs.readFileSync(configPath, 'utf-8');
+      const match = gitConfig.match(/\[remote "origin"\][^[]*url\s*=\s*(.+)/);
+      if (match) remoteUrl = match[1].trim();
+    } catch (err) {
+      cleanupTemp();
+      return reject(new Error(`Failed to read git remote for "${name}": ${err.message}`));
+    }
+    if (!remoteUrl) {
+      cleanupTemp();
+      return reject(new Error(`Plugin "${name}" has no git remote URL`));
+    }
+    // Only allow the supported remote transports. `installPluginFromGit`
+    // enforces the same scheme; a plugin's stored remote could otherwise
+    // be `ext::` or `file://`, both of which `git clone` accepts and the
+    // first of which executes a shell command.
+    if (!remoteUrl.startsWith('https://') && !remoteUrl.startsWith('git@')) {
+      cleanupTemp();
+      return reject(new Error(`Plugin "${name}" has an unsupported git remote: only https:// and git@ remotes are supported`));
+    }
+
+    const cloneProcess = spawn('git', ['clone', '--depth', '1', '--', remoteUrl, tempDir], {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
-    let stderr = '';
-    gitProcess.stderr.on('data', (data) => { stderr += data.toString(); });
+    let cloneStderr = '';
+    cloneProcess.stderr.on('data', (data) => { cloneStderr += data.toString(); });
 
-    gitProcess.on('close', (code) => {
+    cloneProcess.on('close', (code) => {
       if (code !== 0) {
-        return reject(new Error(`git pull failed (exit code ${code}): ${stderr.trim()}`));
+        cleanupTemp();
+        return reject(new Error(`git clone failed (exit code ${code}): ${cloneStderr.trim()}`));
       }
 
-      // Re-validate manifest after update
-      const manifestPath = path.join(pluginDir, 'manifest.json');
+      // Validate manifest exists and is well-formed before any further work.
+      const manifestPath = path.join(tempDir, 'manifest.json');
+      if (!fs.existsSync(manifestPath)) {
+        cleanupTemp();
+        return reject(new Error('Cloned repository does not contain a manifest.json'));
+      }
+
       let manifest;
       try {
         manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
       } catch {
+        cleanupTemp();
         return reject(new Error('manifest.json is not valid JSON after update'));
       }
 
       const validation = validateManifest(manifest);
       if (!validation.valid) {
+        cleanupTemp();
         return reject(new Error(`Invalid manifest after update: ${validation.error}`));
       }
 
-      // Re-run npm install if package.json exists
-      const packageJsonPath = path.join(pluginDir, 'package.json');
+      // Re-run npm install if package.json exists.
+      const packageJsonPath = path.join(tempDir, 'package.json');
       if (fs.existsSync(packageJsonPath)) {
         const npmProcess = spawn('npm', ['install', '--ignore-scripts'], {
-          cwd: pluginDir,
+          cwd: tempDir,
           stdio: ['ignore', 'pipe', 'pipe'],
         });
+
         npmProcess.on('close', (npmCode) => {
           if (npmCode !== 0) {
+            cleanupTemp();
             return reject(new Error(`npm install for ${name} failed (exit code ${npmCode})`));
           }
-          runBuildIfNeeded(pluginDir, packageJsonPath, () => resolve(manifest), (err) => reject(err));
+          // Build-policy rejection leaves the live plugin directory untouched
+          // because we have not swapped `tempDir` into place yet.
+          runBuildIfNeeded(tempDir, packageJsonPath, options, () => finalize(manifest), (err) => { cleanupTemp(); reject(err); });
         });
-        npmProcess.on('error', (err) => reject(err));
+
+        npmProcess.on('error', (err) => {
+          cleanupTemp();
+          reject(err);
+        });
       } else {
-        resolve(manifest);
+        finalize(manifest);
       }
     });
 
-    gitProcess.on('error', (err) => {
+    cloneProcess.on('error', (err) => {
+      cleanupTemp();
       reject(new Error(`Failed to spawn git: ${err.message}`));
     });
   });
