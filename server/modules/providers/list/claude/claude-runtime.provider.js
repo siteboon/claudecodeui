@@ -41,6 +41,10 @@ const pendingToolApprovals = new Map();
 // terminal `complete` (aborted: true) to the client, so the run loop must not
 // emit a second one when its generator winds down.
 const abortedSessionIds = new Set();
+// Query instances interrupted because a newer run took over their session id
+// (see addSession). Their run loops must stay silent on wind-down: the map
+// entry, the abort flag, and all client-facing events belong to the new run.
+const supersededInstances = new WeakSet();
 
 const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEOUT_MS, 10) || 55000;
 
@@ -264,13 +268,33 @@ function mapCliOptionsToSDK(options = {}) {
  */
 function addSession(sessionId, queryInstance, writer = null, releaseInput = null) {
   const existing = activeSessions.get(sessionId);
+  // A different live instance under the same key means an earlier run was
+  // superseded without being stopped (e.g. an abort that raced run setup and
+  // found nothing to interrupt). Overwriting it here would strand its
+  // generator forever — this map entry is the only handle for interrupting
+  // it. Stop it directly rather than via abortClaudeSDKSession, whose
+  // session-keyed abortedSessionIds flag would be consumed by the new run
+  // and suppress its terminal `complete`.
+  const superseding = Boolean(
+    existing && existing.status === 'active' && existing.instance && existing.instance !== queryInstance
+  );
+  if (superseding) {
+    supersededInstances.add(existing.instance);
+    Promise.resolve()
+      .then(() => existing.instance.interrupt())
+      .catch((error) => {
+        console.error(`Error interrupting superseded run for session ${sessionId}:`, error?.message || error);
+      });
+    existing.releaseInput?.();
+  }
+  const carried = superseding ? null : existing;
   activeSessions.set(sessionId, {
     instance: queryInstance,
-    startTime: existing?.startTime || Date.now(),
+    startTime: carried?.startTime || Date.now(),
     status: 'active',
     writer,
     // Re-registered mid-run once the provider session id lands; keep the closer.
-    releaseInput: releaseInput || existing?.releaseInput || null
+    releaseInput: releaseInput || carried?.releaseInput || null
   });
 }
 
@@ -596,6 +620,10 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     idleReleaseTimer.unref?.();
   };
 
+  // Hoisted above the try so the catch's cleanup can tell whether this run
+  // still owns the activeSessions entry (or was superseded by a newer run).
+  let queryInstance = null;
+
   try {
     const resolvedModel = await context.resolveResumeModel(sessionId, options.model);
     let effortModels = CLAUDE_PREDEFINED_MODELS;
@@ -723,7 +751,6 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       return { behavior: 'deny', message: decision.message ?? 'User denied tool use' };
     };
 
-    let queryInstance;
     let heldPrompt = createHeldPromptStream(promptMessages);
     releasePromptStream = heldPrompt.release;
     try {
@@ -840,16 +867,22 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       }
     }
 
-    // Clean up session on completion
-    if (sessionKey()) {
+    // Clean up session on completion — only while this run still owns the map
+    // entry. A superseding run may have replaced it, and deleting here would
+    // strand that run.
+    if (sessionKey() && getSession(sessionKey())?.instance === queryInstance) {
       removeSession(sessionKey());
     }
+
+    // A superseded run winds down silently: the map entry, the abort flag,
+    // and all client-facing events belong to the run that replaced it.
+    const superseded = supersededInstances.has(queryInstance);
 
     // Send the terminal completion event — skipped for aborted runs, whose
     // terminal `complete` (aborted: true) was already sent by abort-session, and
     // for runs that already reported completion when their `result` arrived.
-    const wasAborted = sessionKey() ? abortedSessionIds.delete(sessionKey()) : false;
-    if (!turnCompleteSent) {
+    const wasAborted = !superseded && sessionKey() ? abortedSessionIds.delete(sessionKey()) : false;
+    if (!turnCompleteSent && !superseded) {
       turnCompleteSent = true;
       if (!wasAborted) {
         ws.send(createCompleteMessage({ provider: 'claude', sessionId: capturedSessionId || sessionId || null, exitCode: 0 }));
@@ -867,9 +900,16 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   } catch (error) {
     console.error('SDK query error:', error);
 
-    // Clean up session on error
-    if (sessionKey()) {
+    // Clean up session on error — only while this run still owns the map entry
+    // (a superseding run may have replaced it).
+    if (sessionKey() && getSession(sessionKey())?.instance === queryInstance) {
       removeSession(sessionKey());
+    }
+
+    if (supersededInstances.has(queryInstance)) {
+      // Interrupted because a newer run took over this session id; that run
+      // owns the abort flag and all further client-facing events.
+      return;
     }
 
     const wasAborted = sessionKey() ? abortedSessionIds.delete(sessionKey()) : false;
