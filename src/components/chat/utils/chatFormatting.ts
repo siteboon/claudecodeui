@@ -1,13 +1,3 @@
-export function decodeHtmlEntities(text: string) {
-  if (!text) return text;
-  return text
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, '&');
-}
-
 export function normalizeInlineCodeFences(text: string) {
   if (!text || typeof text !== 'string') return text;
   try {
@@ -15,31 +5,6 @@ export function normalizeInlineCodeFences(text: string) {
   } catch {
     return text;
   }
-}
-
-export function unescapeWithMathProtection(text: string) {
-  if (!text || typeof text !== 'string') return text;
-
-  const mathBlocks: string[] = [];
-  const placeholderPrefix = '__MATH_BLOCK_';
-  const placeholderSuffix = '__';
-
-  let processedText = text.replace(/\$\$([\s\S]*?)\$\$|\$([^\$\n]+?)\$/g, (match) => {
-    const index = mathBlocks.length;
-    mathBlocks.push(match);
-    return `${placeholderPrefix}${index}${placeholderSuffix}`;
-  });
-
-  processedText = processedText.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r');
-
-  processedText = processedText.replace(
-    new RegExp(`${placeholderPrefix}(\\d+)${placeholderSuffix}`, 'g'),
-    (match, index) => {
-      return mathBlocks[parseInt(index, 10)];
-    },
-  );
-
-  return processedText;
 }
 
 export function escapeRegExp(value: string) {
