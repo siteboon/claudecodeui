@@ -12,6 +12,7 @@ type SystemUpdateDependencies = {
   environment: NodeJS.ProcessEnv;
   runShellCommand(
     command: string,
+    args: string[],
     workingDirectory: string,
     environment: NodeJS.ProcessEnv,
     onOutput: (output: string) => void,
@@ -29,11 +30,14 @@ export function createSystemUpdateService(dependencies: SystemUpdateDependencies
   return {
     /** Selects and executes the correct update workflow for this installation. */
     async updateSystem() {
-      const updateCommand = dependencies.isPlatform
-        ? 'npm run update:platform'
+      // Each branch passes the executable and its arguments as separate argv
+      // entries (no shell, no string concatenation) so no caller-controlled
+      // value can become a shell metacharacter.
+      const updatePlan = dependencies.isPlatform
+        ? { command: 'npm', args: ['run', 'update:platform'] }
         : dependencies.installMode === 'git'
-          ? 'git checkout main && git pull && npm install'
-          : 'npm install -g @cloudcli-ai/cloudcli@latest';
+          ? { command: 'sh', args: ['-c', 'git checkout main && git pull && npm install'] }
+          : { command: 'npm', args: ['install', '-g', '@cloudcli-ai/cloudcli@latest'] };
       const workingDirectory = dependencies.isPlatform || dependencies.installMode === 'git'
         ? dependencies.appRoot
         : dependencies.homeDirectory;
@@ -42,7 +46,8 @@ export function createSystemUpdateService(dependencies: SystemUpdateDependencies
 
       try {
         const result = await dependencies.runShellCommand(
-          updateCommand,
+          updatePlan.command,
+          updatePlan.args,
           workingDirectory,
           dependencies.environment,
           (output) => dependencies.logInfo('Update output:', output),

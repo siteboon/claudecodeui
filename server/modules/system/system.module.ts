@@ -12,17 +12,28 @@ type SystemModuleOptions = {
   isPlatform: boolean;
 };
 
+/**
+ * Run a single command without involving a shell. Passing the executable and
+ * each argument as separate `argv` entries prevents shell metacharacter
+ * injection from any future caller that splices user-controlled values into
+ * the command path or working directory. The previous implementation used
+ * `sh -c <full command string>`, which would let a poisoned `$PATH`, a
+ * hostile `appRoot`, or a future `homeDirectory` override execute arbitrary
+ * code with the server process's privileges.
+ */
 function runShellCommand(
   command: string,
+  args: string[],
   workingDirectory: string,
   environment: NodeJS.ProcessEnv,
   onOutput: (output: string) => void,
   onErrorOutput: (errorOutput: string) => void,
 ): Promise<{ exitCode: number | null; output: string; errorOutput: string }> {
   return new Promise((resolve, reject) => {
-    const childProcess = spawn('sh', ['-c', command], {
+    const childProcess = spawn(command, args, {
       cwd: workingDirectory,
       env: environment,
+      shell: false,
     });
     let output = '';
     let errorOutput = '';
