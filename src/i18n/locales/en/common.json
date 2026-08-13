@@ -175,7 +175,14 @@
       "publicRepoInfo": "Public repositories don't require authentication. You can skip providing a token if cloning a public repo.",
       "noTokensHelp": "No stored tokens available. You can add tokens in Settings → API Keys for easier reuse.",
       "optionalTokenPublic": "GitHub Token (Optional for Public Repos)",
-      "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (leave empty for public repos)"
+      "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (leave empty for public repos)",
+      "searchRepositories": "Search my repositories",
+      "editUrlManually": "Paste a URL instead",
+      "searchPlaceholder": "Search your GitHub repositories...",
+      "noRepositoriesFound": "No repositories found",
+      "searchingRepositories": "Searching...",
+      "repoSearchError": "Couldn't load repositories: {{message}}",
+      "privateRepo": "Private"
     },
     "step3": {
       "reviewConfig": "Review Your Configuration",

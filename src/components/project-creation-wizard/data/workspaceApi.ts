@@ -7,6 +7,7 @@ import type {
   CreateProjectResponse,
   CredentialsResponse,
   FolderSuggestion,
+  GithubReposResponse,
   TokenMode,
 } from '../types';
 
@@ -72,6 +73,26 @@ export const fetchGithubTokenCredentials = async () => {
   }
 
   return (data.credentials || []).filter((credential) => credential.is_active);
+};
+
+export const searchGithubRepositories = async (params: {
+  tokenId: string;
+  query: string;
+  limit?: number;
+}) => {
+  const search = new URLSearchParams({ tokenId: params.tokenId, q: params.query });
+  if (params.limit) {
+    search.set('limit', String(params.limit));
+  }
+
+  const response = await api.get(`/github/repos?${search.toString()}`);
+  const data = await parseJson<GithubReposResponse>(response);
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to load GitHub repositories');
+  }
+
+  return data.repos || [];
 };
 
 export const browseFilesystemFolders = async (pathToBrowse: string) => {

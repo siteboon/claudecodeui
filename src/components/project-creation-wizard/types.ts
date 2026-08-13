@@ -19,6 +19,23 @@ export type CredentialsResponse = {
   error?: string;
 };
 
+export type GithubRepoSummary = {
+  id: number;
+  fullName: string;
+  name: string;
+  owner: string;
+  private: boolean;
+  cloneUrl: string;
+  htmlUrl: string;
+  description: string | null;
+  updatedAt: string | null;
+};
+
+export type GithubReposResponse = {
+  repos?: GithubRepoSummary[];
+  error?: string;
+};
+
 export type BrowseFilesystemResponse = {
   path?: string;
   suggestions?: FolderSuggestion[];

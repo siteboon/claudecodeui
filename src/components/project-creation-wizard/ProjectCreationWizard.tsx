@@ -8,7 +8,7 @@ import WizardFooter from './components/WizardFooter';
 import WizardProgress from './components/WizardProgress';
 import { useGithubTokens } from './hooks/useGithubTokens';
 import { cloneWorkspaceWithProgress, createProjectRequest } from './data/workspaceApi';
-import { isCloneWorkflow, shouldShowGithubAuthentication } from './utils/pathUtils';
+import { isCloneWorkflow } from './utils/pathUtils';
 import type { TokenMode, WizardFormState, WizardStep } from './types';
 
 type ProjectCreationWizardProps = {
@@ -34,9 +34,11 @@ export default function ProjectCreationWizard({
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cloneProgress, setCloneProgress] = useState('');
+  const [useManualGithubUrlEntry, setUseManualGithubUrlEntry] = useState(false);
 
-  const shouldLoadTokens =
-    step === 1 && shouldShowGithubAuthentication(formState.githubUrl);
+  // Tokens must be known before a URL exists so the repo picker can replace
+  // the plain URL input as soon as Step 1 renders.
+  const shouldLoadTokens = step === 1;
 
   const autoSelectToken = useCallback((tokenId: string) => {
     setFormState((previous) => ({ ...previous, selectedGithubToken: tokenId }));
@@ -166,6 +168,7 @@ export default function ProjectCreationWizard({
               loadingTokens={loadingTokens}
               tokenLoadError={tokenLoadError}
               isCreating={isCreating}
+              useManualGithubUrlEntry={useManualGithubUrlEntry}
               onWorkspacePathChange={(workspacePath) => updateField('workspacePath', workspacePath)}
               onGithubUrlChange={(githubUrl) => updateField('githubUrl', githubUrl)}
               onTokenModeChange={updateTokenMode}
@@ -175,6 +178,7 @@ export default function ProjectCreationWizard({
               onNewGithubTokenChange={(newGithubToken) =>
                 updateField('newGithubToken', newGithubToken)
               }
+              onUseManualGithubUrlEntryChange={setUseManualGithubUrlEntry}
               onAdvanceToConfirm={() => setStep(2)}
             />
           )}
