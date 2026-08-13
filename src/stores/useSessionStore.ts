@@ -118,6 +118,13 @@ export interface SessionSlot {
   tokenUsage: unknown;
 }
 
+/**
+ * Page size for the initial session load and for refreshFromServer's
+ * bounded tail refetch - see performRefreshFromServer. Shared with
+ * useChatSessionState's own pagination so both agree on what "a page" means.
+ */
+export const MESSAGES_PER_PAGE = 20;
+
 const EMPTY: NormalizedMessage[] = [];
 
 function createEmptySlot(): SessionSlot {
@@ -498,7 +505,7 @@ export function useSessionStore() {
 
     const fetchTicket = ++slot._fetchSeq;
     const params = new URLSearchParams();
-    const limit = opts.limit ?? 20;
+    const limit = opts.limit ?? MESSAGES_PER_PAGE;
     params.append('limit', String(limit));
     params.append('offset', String(slot.offset));
 
@@ -572,7 +579,16 @@ export function useSessionStore() {
   }, [getSlot, notify]);
 
   /**
-   * Re-fetch serverMessages from the provider sessions endpoint.
+   * Re-sync serverMessages with the provider sessions endpoint.
+   *
+   * Fetches only the most recent MESSAGES_PER_PAGE messages (a `complete`
+   * event or external update can only plausibly have changed the tail of
+   * the conversation, never history further back) and merges it into
+   * whatever is already loaded, rather than replacing the whole array. For
+   * a session with tens of thousands of messages, refetching everything on
+   * every turn is both a severe bandwidth cost and pointless: older pages
+   * the user already scrolled through, or loaded in full via "Load all
+   * messages", aren't going to change underneath them.
    */
   const refreshFromServer = useCallback(async (
     sessionId: string,
@@ -580,12 +596,16 @@ export function useSessionStore() {
     const slot = getSlot(sessionId);
     const fetchTicket = ++slot._fetchSeq;
     try {
-      const url = `/api/providers/sessions/${encodeURIComponent(sessionId)}/messages`;
+      const params = new URLSearchParams();
+      params.append('limit', String(MESSAGES_PER_PAGE));
+      params.append('offset', '0');
+      const url = `/api/providers/sessions/${encodeURIComponent(sessionId)}/messages?${params.toString()}`;
       const response = await authenticatedFetch(url);
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const body = await response.json();
       const data = body?.data ?? body;
+      const freshTail: NormalizedMessage[] = data.messages || [];
 
       // A later-started fetch already applied: applying this stale transcript
       // would erase rows the user has already seen (and re-prune realtime
@@ -595,9 +615,27 @@ export function useSessionStore() {
       }
       slot._appliedFetchSeq = fetchTicket;
 
-      slot.serverMessages = data.messages || [];
-      slot.total = data.total ?? slot.serverMessages.length;
-      slot.hasMore = Boolean(data.hasMore);
+      // Drop whichever previously-loaded rows the fresh tail supersedes
+      // (matched by id, stable across fetches - see raw.uuid in the Claude
+      // provider), then append the fresh tail. Anything older than the tail
+      // - already-loaded pages, or a full "Load all messages" history - is
+      // left untouched.
+      const freshIds = new Set(freshTail.map((message) => message.id));
+      const previousMessages = slot.serverMessages.filter((message) => !freshIds.has(message.id));
+      slot.serverMessages = [...previousMessages, ...freshTail];
+      slot.total = data.total ?? slot.total;
+
+      // A bounded tail page's own hasMore only describes that one page. Once
+      // everything has actually been loaded locally (hasMore already false -
+      // e.g. after "Load all messages", or a short session that fit in one
+      // page), merging in a fresher tail can't make the rest of the history
+      // disappear, so leave hasMore/offset alone. Otherwise keep tracking
+      // how much is actually loaded, same as the initial paginated load.
+      const hadLoadedAnything = slot.fetchedAt > 0;
+      if (!hadLoadedAnything || slot.hasMore) {
+        slot.hasMore = Boolean(data.hasMore);
+        slot.offset = slot.serverMessages.length;
+      }
       slot.fetchedAt = Date.now();
       // Only drop realtime rows the server transcript now owns. A blind clear
       // here caused the chat pane to flash "Continue your conversation" after
