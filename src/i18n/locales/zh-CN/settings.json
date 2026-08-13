@@ -5,6 +5,7 @@
     "permissions": "权限",
     "mcpServers": "MCP 服务器",
     "skills": "技能",
+    "sharedSkills": "共享技能",
     "appearance": "外观"
   },
   "account": {
@@ -351,6 +352,9 @@
       },
       "opencode": {
         "description": "OpenCode CLI 助手"
+      },
+      "qoder": {
+        "description": "Qoder CLI 助手"
       }
     },
     "connectionStatus": "连接状态",
@@ -369,6 +373,7 @@
     "skipPermissions": {
       "label": "跳过权限提示（请谨慎使用）",
       "claudeDescription": "等同于 --dangerously-skip-permissions 标志",
+      "qoderDescription": "等同于 --permission-mode bypass_permissions 标志",
       "cursorDescription": "等同于 Cursor CLI 中的 -f 标志"
     },
     "allowedTools": {
@@ -411,6 +416,31 @@
       "npmInstall": "- 允许 npm install",
       "rmRf": "- 阻止递归删除"
     },
+    "qoder": {
+      "allowedPlaceholder": "例如 \"Read\" 或 \"Bash\"",
+      "blockedPlaceholder": "例如 \"Bash\" 或 \"Write\"",
+      "groups": {
+        "read": "读取",
+        "write": "写入",
+        "exec": "执行",
+        "network": "网络",
+        "orchestration": "编排"
+      },
+      "bypassWarning": "已开启跳过权限提示，bypass_permissions 会覆盖此列表，被阻止的工具仍可能执行。需要硬限制请使用下方的“限制工具集”。",
+      "restrictedTools": {
+        "title": "限制工具集",
+        "description": "未勾选的工具会从会话中移除。这是唯一的硬限制——上方的允许和阻止列表只影响确认提示。",
+        "summary": "选择 Qoder 可以使用的工具（已选 {{count}} 个）",
+        "empty": "未勾选任何工具：全部内置工具保持可用。",
+        "clear": "清空选择"
+      },
+      "notes": {
+        "title": "Qoder 对这些设置的实际处理方式：",
+        "allowlistOnly": "允许列表只是免确认，并不会限制 Qoder 能访问的范围。",
+        "denyWins": "同一个工具同时出现在两个列表时，阻止列表优先。",
+        "scopeUnsupported": "qodercli 不支持 \"Bash(git log:*)\" 这类子命令作用域，请使用 \"Bash\" 这样的裸工具名。"
+      }
+    },
     "codex": {
       "permissionMode": "权限模式",
       "description": "控制 Codex 如何处理文件修改和命令执行",
@@ -446,14 +476,16 @@
       "claude": "Model Context Protocol 服务器为 Claude 提供额外的工具和数据源",
       "cursor": "Model Context Protocol 服务器为 Cursor 提供额外的工具和数据源",
       "codex": "Model Context Protocol 服务器为 Codex 提供额外的工具和数据源",
-      "opencode": "Model Context Protocol 服务器为 OpenCode 提供额外的工具和数据源"
+      "opencode": "Model Context Protocol 服务器为 OpenCode 提供额外的工具和数据源",
+      "qoder": "Model Context Protocol 服务器为 Qoder 提供额外的工具和数据源"
     },
     "addButton": "添加 MCP 服务器",
     "empty": "未配置 MCP 服务器",
     "serverType": "类型",
     "scope": {
       "local": "本地",
-      "user": "用户"
+      "user": "用户",
+      "project": "项目"
     },
     "config": {
       "command": "命令",

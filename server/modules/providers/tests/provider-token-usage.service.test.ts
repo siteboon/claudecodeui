@@ -172,6 +172,69 @@ test('Cursor returns an explicit unsupported token usage result', async () => {
   assert.equal(result.total, 0);
 });
 
+test('Qoder token usage reads Claude-compatible usage fields from the transcript', async () => {
+  const tempDirectory = await mkdtemp(path.join(tmpdir(), 'provider-token-usage-qoder-'));
+  const sessionFilePath = path.join(tempDirectory, 'provider-session.jsonl');
+
+  try {
+    await writeFile(sessionFilePath, [
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          usage: {
+            input_tokens: 200,
+            cache_read_input_tokens: 50,
+            cache_creation_input_tokens: 10,
+            output_tokens: 80,
+          },
+        },
+      }),
+      '{incomplete',
+    ].join('\n'));
+
+    const service = createProviderTokenUsageService({
+      getSessionById: () => createSessionRow({
+        provider: 'qoder',
+        jsonl_path: sessionFilePath,
+      }),
+    });
+
+    assert.deepEqual(await service.getSessionTokenUsage('app-session'), {
+      used: 340,
+      total: 160_000,
+      inputTokens: 260,
+      outputTokens: 80,
+      cacheReadTokens: 50,
+      cacheCreationTokens: 10,
+      cacheTokens: 60,
+      breakdown: { input: 260, output: 80 },
+    });
+  } finally {
+    await rm(tempDirectory, { recursive: true, force: true });
+  }
+});
+
+test('Qoder token usage throws SESSION_FILE_NOT_FOUND when the transcript is missing', async () => {
+  const service = createProviderTokenUsageService({
+    getSessionById: () => createSessionRow({
+      provider: 'qoder',
+      jsonl_path: null,
+      project_path: '/nonexistent',
+      provider_session_id: 'missing-session',
+    }),
+    getHomeDirectory: () => '/nonexistent-home',
+  });
+
+  await assert.rejects(
+    () => service.getSessionTokenUsage('app-session'),
+    (error: unknown) => (
+      error instanceof AppError
+      && error.code === 'SESSION_FILE_NOT_FOUND'
+      && error.statusCode === 404
+    ),
+  );
+});
+
 test('token usage reports SESSION_NOT_FOUND for an unknown app session id', async () => {
   const service = createProviderTokenUsageService({ getSessionById: () => null });
 

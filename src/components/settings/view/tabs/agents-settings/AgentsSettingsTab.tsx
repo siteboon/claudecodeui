@@ -14,6 +14,8 @@ export default function AgentsSettingsTab({
   onClaudePermissionsChange,
   cursorPermissions,
   onCursorPermissionsChange,
+  qoderPermissions,
+  onQoderPermissionsChange,
   codexPermissionMode,
   onCodexPermissionModeChange,
   projects,
@@ -27,7 +29,7 @@ export default function AgentsSettingsTab({
   ), [selectedAgent]);
 
   const visibleAgents = useMemo<AgentProvider[]>(() => {
-    return ['claude', 'cursor', 'codex', 'opencode'];
+    return ['claude', 'cursor', 'codex', 'opencode', 'qoder'];
   }, []);
 
   const agentContextById = useMemo<Record<AgentProvider, AgentContext>>(() => ({
@@ -47,12 +49,17 @@ export default function AgentsSettingsTab({
       authStatus: providerAuthStatus.opencode,
       onLogin: () => onProviderLogin('opencode'),
     },
+    qoder: {
+      authStatus: providerAuthStatus.qoder,
+      onLogin: () => onProviderLogin('qoder'),
+    },
   }), [
     onProviderLogin,
     providerAuthStatus.claude,
     providerAuthStatus.codex,
     providerAuthStatus.cursor,
     providerAuthStatus.opencode,
+    providerAuthStatus.qoder,
   ]);
 
   useEffect(() => {
@@ -86,6 +93,8 @@ export default function AgentsSettingsTab({
           onClaudePermissionsChange={onClaudePermissionsChange}
           cursorPermissions={cursorPermissions}
           onCursorPermissionsChange={onCursorPermissionsChange}
+          qoderPermissions={qoderPermissions}
+          onQoderPermissionsChange={onQoderPermissionsChange}
           codexPermissionMode={codexPermissionMode}
           onCodexPermissionModeChange={onCodexPermissionModeChange}
           projects={projects}

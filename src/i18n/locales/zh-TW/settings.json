@@ -323,6 +323,9 @@
       },
       "codex": {
         "description": "OpenAI Codex AI 助手"
+      },
+      "qoder": {
+        "description": "Qoder CLI 助手"
       }
     },
     "connectionStatus": "連線狀態",
@@ -341,6 +344,7 @@
     "skipPermissions": {
       "label": "略過權限提示（請謹慎使用）",
       "claudeDescription": "等同於 --dangerously-skip-permissions 旗標",
+      "qoderDescription": "等同於 --permission-mode bypass_permissions 旗標",
       "cursorDescription": "等同於 Cursor CLI 中的 -f 旗標"
     },
     "allowedTools": {
@@ -383,6 +387,31 @@
       "npmInstall": "- 允許 npm install",
       "rmRf": "- 封鎖遞迴刪除"
     },
+    "qoder": {
+      "allowedPlaceholder": "例如 \"Read\" 或 \"Bash\"",
+      "blockedPlaceholder": "例如 \"Bash\" 或 \"Write\"",
+      "groups": {
+        "read": "讀取",
+        "write": "寫入",
+        "exec": "執行",
+        "network": "網路",
+        "orchestration": "編排"
+      },
+      "bypassWarning": "已開啟略過權限提示，bypass_permissions 會覆蓋此清單，被封鎖的工具仍可能執行。需要硬限制請使用下方的「限制工具集」。",
+      "restrictedTools": {
+        "title": "限制工具集",
+        "description": "未勾選的工具會從工作階段中移除。這是唯一的硬限制——上方的允許與封鎖清單只影響確認提示。",
+        "summary": "選擇 Qoder 可以使用的工具（已選 {{count}} 個）",
+        "empty": "未勾選任何工具：全部內建工具保持可用。",
+        "clear": "清除選擇"
+      },
+      "notes": {
+        "title": "Qoder 對這些設定的實際處理方式：",
+        "allowlistOnly": "允許清單只是免確認，並不會限制 Qoder 能存取的範圍。",
+        "denyWins": "同一個工具同時出現在兩個清單時，封鎖清單優先。",
+        "scopeUnsupported": "qodercli 不支援 \"Bash(git log:*)\" 這類子指令作用域，請使用 \"Bash\" 這樣的裸工具名稱。"
+      }
+    },
     "codex": {
       "permissionMode": "權限模式",
       "description": "控制 Codex 如何處理檔案修改和指令執行",
@@ -417,7 +446,8 @@
     "description": {
       "claude": "Model Context Protocol 伺服器為 Claude 提供額外的工具和資料來源",
       "cursor": "Model Context Protocol 伺服器為 Cursor 提供額外的工具和資料來源",
-      "codex": "Model Context Protocol 伺服器為 Codex 提供額外的工具和資料來源"
+      "codex": "Model Context Protocol 伺服器為 Codex 提供額外的工具和資料來源",
+      "qoder": "Model Context Protocol 伺服器為 Qoder 提供額外的工具和資料來源"
     },
     "addButton": "新增 MCP 伺服器",
     "empty": "未設定 MCP 伺服器",

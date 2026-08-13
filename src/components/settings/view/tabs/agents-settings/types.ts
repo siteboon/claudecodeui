@@ -4,6 +4,7 @@ import type {
   AgentCategory,
   ClaudePermissionsState,
   CursorPermissionsState,
+  QoderPermissionsState,
   CodexPermissionMode,
   SettingsProject,
 } from '../../../types/types';
@@ -23,6 +24,8 @@ export type AgentsSettingsTabProps = {
   onClaudePermissionsChange: (value: ClaudePermissionsState) => void;
   cursorPermissions: CursorPermissionsState;
   onCursorPermissionsChange: (value: CursorPermissionsState) => void;
+  qoderPermissions: QoderPermissionsState;
+  onQoderPermissionsChange: (value: QoderPermissionsState) => void;
   codexPermissionMode: CodexPermissionMode;
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
   projects: SettingsProject[];
@@ -50,6 +53,8 @@ export type AgentCategoryContentSectionProps = {
   onClaudePermissionsChange: (value: ClaudePermissionsState) => void;
   cursorPermissions: CursorPermissionsState;
   onCursorPermissionsChange: (value: CursorPermissionsState) => void;
+  qoderPermissions: QoderPermissionsState;
+  onQoderPermissionsChange: (value: QoderPermissionsState) => void;
   codexPermissionMode: CodexPermissionMode;
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
   projects: SettingsProject[];

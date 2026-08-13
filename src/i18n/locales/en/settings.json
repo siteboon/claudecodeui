@@ -5,6 +5,7 @@
     "permissions": "Permissions",
     "mcpServers": "MCP Servers",
     "skills": "Skills",
+    "sharedSkills": "Shared Skills",
     "appearance": "Appearance"
   },
   "account": {
@@ -351,6 +352,9 @@
       },
       "opencode": {
         "description": "OpenCode CLI assistant"
+      },
+      "qoder": {
+        "description": "Qoder CLI assistant"
       }
     },
     "connectionStatus": "Connection Status",
@@ -369,6 +373,7 @@
     "skipPermissions": {
       "label": "Skip permission prompts (use with caution)",
       "claudeDescription": "Equivalent to --dangerously-skip-permissions flag",
+      "qoderDescription": "Equivalent to --permission-mode bypass_permissions flag",
       "cursorDescription": "Equivalent to -f flag in Cursor CLI"
     },
     "allowedTools": {
@@ -411,6 +416,31 @@
       "npmInstall": "- Allow npm install",
       "rmRf": "- Block recursive delete"
     },
+    "qoder": {
+      "allowedPlaceholder": "e.g., \"Read\" or \"Bash\"",
+      "blockedPlaceholder": "e.g., \"Bash\" or \"Write\"",
+      "groups": {
+        "read": "Read",
+        "write": "Write",
+        "exec": "Execute",
+        "network": "Network",
+        "orchestration": "Orchestration"
+      },
+      "bypassWarning": "Skip permission prompts is on, so bypass_permissions can override this list and run blocked tools anyway. Use Restrict tool set below for a hard limit.",
+      "restrictedTools": {
+        "title": "Restrict Tool Set",
+        "description": "Removes every unselected tool from the session. This is the only hard limit — allow and block lists above only affect confirmation prompts.",
+        "summary": "Choose the tools Qoder may use ({{count}} selected)",
+        "empty": "Nothing selected: all built-in tools stay available.",
+        "clear": "Clear selection"
+      },
+      "notes": {
+        "title": "How Qoder applies these settings:",
+        "allowlistOnly": "Allowed tools only skip the confirmation prompt. They do not restrict what Qoder can reach.",
+        "denyWins": "When a tool appears in both lists, the block list wins.",
+        "scopeUnsupported": "Sub-command scopes such as \"Bash(git log:*)\" are not enforced by qodercli — use bare tool names like \"Bash\"."
+      }
+    },
     "codex": {
       "permissionMode": "Permission Mode",
       "description": "Controls how Codex handles file modifications and command execution",
@@ -446,14 +476,16 @@
       "claude": "Model Context Protocol servers provide additional tools and data sources to Claude",
       "cursor": "Model Context Protocol servers provide additional tools and data sources to Cursor",
       "codex": "Model Context Protocol servers provide additional tools and data sources to Codex",
-      "opencode": "Model Context Protocol servers provide additional tools and data sources to OpenCode"
+      "opencode": "Model Context Protocol servers provide additional tools and data sources to OpenCode",
+      "qoder": "Model Context Protocol servers provide additional tools and data sources to Qoder"
     },
     "addButton": "Add MCP Server",
     "empty": "No MCP servers configured",
     "serverType": "Type",
     "scope": {
       "local": "local",
-      "user": "user"
+      "user": "user",
+      "project": "project"
     },
     "config": {
       "command": "Command",

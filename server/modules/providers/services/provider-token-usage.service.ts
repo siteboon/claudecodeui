@@ -7,7 +7,7 @@ import Database from 'better-sqlite3';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import type { AnyRecord } from '@/shared/types.js';
-import { AppError, getOpenCodeDatabasePath } from '@/shared/utils.js';
+import { AppError, getOpenCodeDatabasePath, resolveQoderTranscriptPath } from '@/shared/utils.js';
 
 type SessionRow = NonNullable<ReturnType<typeof sessionsDb.getSessionById>>;
 
@@ -288,6 +288,34 @@ export function createProviderTokenUsageService(
         }
 
         return readOpenCodeTokenUsage(databasePath, providerSessionId);
+      }
+
+      if (session.provider === 'qoder') {
+        // The shared resolver owns Qoder's cwd encoding (only `/` is folded,
+        // unlike Claude's broader replacement) and rejects session ids that
+        // could traverse out of the projects directory. The home root comes from
+        // the injected dependency so tests can point it at a temp folder.
+        const sessionFilePath = session.jsonl_path ?? resolveQoderTranscriptPath({
+          cwd: session.project_path,
+          sessionId: providerSessionId,
+          homeDirectory: dependencies.getHomeDirectory(),
+        });
+
+        if (!sessionFilePath || !dependencies.fileExists(sessionFilePath)) {
+          throw new AppError(`Session file for "${sessionId}" was not found.`, {
+            code: 'SESSION_FILE_NOT_FOUND',
+            statusCode: 404,
+          });
+        }
+
+        const fileContent = await dependencies.readTextFile(sessionFilePath);
+        // Qoder transcripts carry Claude's usage field names, so the Claude
+        // calculator applies unchanged. Note qodercli 1.1.13 writes zeros into
+        // those fields (it measures `credits` and `context_usage_ratio`
+        // instead), which is why `supportsTokenUsage` is false for this
+        // provider; this branch starts reporting real numbers only once the CLI
+        // populates them.
+        return readClaudeTokenUsage(fileContent, dependencies.getClaudeContextWindow());
       }
 
       if (session.provider === 'codex') {

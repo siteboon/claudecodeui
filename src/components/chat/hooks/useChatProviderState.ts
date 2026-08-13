@@ -22,9 +22,10 @@ const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   cursor: 'gpt-5.3-codex',
   codex: 'gpt-5.4',
   opencode: 'anthropic/claude-sonnet-4-5',
+  qoder: 'Auto',
 };
 
-const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode'];
+const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode', 'qoder'];
 
 const readStoredProvider = (): LLMProvider => {
   const storedProvider = localStorage.getItem('selected-provider');
@@ -44,6 +45,9 @@ const FALLBACK_PERMISSION_MODES: Record<LLMProvider, PermissionMode[]> = {
   cursor: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
   codex: ['default', 'acceptEdits', 'bypassPermissions'],
   opencode: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
+  // Qoder exposes no plan mode; see the qoder entry in
+  // provider-capabilities.service.ts.
+  qoder: ['default', 'acceptEdits', 'bypassPermissions'],
 };
 
 type ProviderCapabilities = {
@@ -137,6 +141,9 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   const [opencodeModel, setOpenCodeModel] = useState<string>(() => {
     return localStorage.getItem('opencode-model') || FALLBACK_DEFAULT_MODEL.opencode;
   });
+  const [qoderModel, setQoderModel] = useState<string>(() => {
+    return localStorage.getItem('qoder-model') || FALLBACK_DEFAULT_MODEL.qoder;
+  });
 
   /**
    * Backend-owned capability matrix keyed by provider. Drives the permission
@@ -175,6 +182,12 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     if (targetProvider === 'codex') {
       setCodexModel(model);
       localStorage.setItem('codex-model', model);
+      return;
+    }
+
+    if (targetProvider === 'qoder') {
+      setQoderModel(model);
+      localStorage.setItem('qoder-model', model);
       return;
     }
 
@@ -366,7 +379,8 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     cursor: cursorModel,
     codex: codexModel,
     opencode: opencodeModel,
-  }), [claudeModel, cursorModel, codexModel, opencodeModel]);
+    qoder: qoderModel,
+  }), [claudeModel, cursorModel, codexModel, opencodeModel, qoderModel]);
 
   useEffect(() => {
     const claude = providerModelCatalog.claude;
@@ -419,6 +433,19 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       }
     }
   }, [providerModelCatalog.opencode, opencodeModel]);
+
+  useEffect(() => {
+    const qoder = providerModelCatalog.qoder;
+    if (qoder) {
+      const next = pickStoredOrCurrent('qoder-model', qoderModel, qoder);
+      if (next !== qoderModel) {
+        setQoderModel(next);
+      }
+      if (localStorage.getItem('qoder-model') !== next) {
+        localStorage.setItem('qoder-model', next);
+      }
+    }
+  }, [providerModelCatalog.qoder, qoderModel]);
 
   useEffect(() => {
     const nextEfforts: Partial<Record<LLMProvider, string>> = {};
@@ -867,6 +894,8 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     currentProviderModelOptions,
     opencodeModel,
     setOpenCodeModel,
+    qoderModel,
+    setQoderModel,
     permissionMode,
     setPermissionMode,
     pendingPermissionRequests,

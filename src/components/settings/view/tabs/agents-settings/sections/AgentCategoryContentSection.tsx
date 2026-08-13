@@ -15,6 +15,8 @@ export default function AgentCategoryContentSection({
   onClaudePermissionsChange,
   cursorPermissions,
   onCursorPermissionsChange,
+  qoderPermissions,
+  onQoderPermissionsChange,
   codexPermissionMode,
   onCodexPermissionModeChange,
   projects,
@@ -70,6 +72,28 @@ export default function AgentCategoryContentSection({
           agent="codex"
           permissionMode={codexPermissionMode}
           onPermissionModeChange={onCodexPermissionModeChange}
+        />
+      )}
+
+      {selectedCategory === 'permissions' && selectedAgent === 'qoder' && (
+        <PermissionsContent
+          agent="qoder"
+          skipPermissions={qoderPermissions.skipPermissions}
+          onSkipPermissionsChange={(value) => {
+            onQoderPermissionsChange({ ...qoderPermissions, skipPermissions: value });
+          }}
+          allowedTools={qoderPermissions.allowedTools}
+          onAllowedToolsChange={(value) => {
+            onQoderPermissionsChange({ ...qoderPermissions, allowedTools: value });
+          }}
+          disallowedTools={qoderPermissions.disallowedTools}
+          onDisallowedToolsChange={(value) => {
+            onQoderPermissionsChange({ ...qoderPermissions, disallowedTools: value });
+          }}
+          restrictedTools={qoderPermissions.restrictedTools}
+          onRestrictedToolsChange={(value) => {
+            onQoderPermissionsChange({ ...qoderPermissions, restrictedTools: value });
+          }}
         />
       )}
 
