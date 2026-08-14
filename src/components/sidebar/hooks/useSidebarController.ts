@@ -524,8 +524,10 @@ export function useSidebarController({
   // `projectId` as their identifier after the migration.
   const toggleProject = useCallback((projectId: string) => {
     setExpandedProjects((prev) => {
-      const next = new Set<string>();
-      if (!prev.has(projectId)) {
+      const next = new Set(prev);
+      if (next.has(projectId)) {
+        next.delete(projectId);
+      } else {
         next.add(projectId);
       }
       return next;
