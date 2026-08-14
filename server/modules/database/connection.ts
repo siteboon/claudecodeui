@@ -16,6 +16,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 import { APP_CONFIG_TABLE_SCHEMA_SQL } from '@/modules/database/schema.js';
+import { DEFAULT_DATABASE_PATH, readConfiguredDatabasePath } from '@/shared/database-path.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,16 +26,21 @@ const __dirname = path.dirname(__filename);
 // ---------------------------------------------------------------------------
 
 /**
- * Resolves the database file path from environment or falls back
- * to the legacy location inside the server/database/ folder.
+ * Resolves the database file path.
  *
  * Priority:
- *   1. DATABASE_PATH environment variable (set by cli.js or load-env-vars.js)
- *   2. Legacy path: server/database/auth.db
+ *   1. DATABASE_PATH, when explicitly set (.env, CLI `--db-path`, or the
+ *      deployment environment)
+ *   2. The default user-level location (~/.cloudcli/auth.db)
+ *
+ * A legacy server/database/auth.db is not selected here — it is copied into the
+ * resolved path by migrateLegacyDatabase() instead.
+ *
+ * The default is applied here rather than written into process.env so it is not
+ * inherited by spawned child processes.
  */
 function resolveDatabasePath(): string {
-    // process.env.DATABASE_PATH is set by load-env-vars.js to either the .env value or a default(~/.cloudcli/auth.db) in the user's home directory. 
-    return process.env.DATABASE_PATH || resolveLegacyDatabasePath();
+  return readConfiguredDatabasePath() ?? DEFAULT_DATABASE_PATH;
 }
 
 /**
@@ -93,6 +99,92 @@ function migrateLegacyDatabase(targetPath: string): void {
 // ---------------------------------------------------------------------------
 
 let instance: Database.Database | null = null;
+let openedPath: string | null = null;
+let lastExistenceCheckAt = 0;
+
+// Checking the file on every getConnection() would add a stat() to every query,
+// so the check is throttled: a deleted database recovers within this window.
+const STALE_CHECK_INTERVAL_MS = 1000;
+
+/**
+ * SQLite error codes that mean the open handle can never succeed again, so the
+ * only recovery is to reopen. DBMOVED is raised once SQLite notices the file it
+ * opened was renamed or unlinked — which latches the connection read-only for
+ * the rest of the process lifetime.
+ */
+const UNRECOVERABLE_SQLITE_CODES = new Set([
+  'SQLITE_READONLY_DBMOVED',
+  'SQLITE_READONLY_DIRECTORY',
+]);
+
+/**
+ * True when an error means the cached handle is permanently unusable.
+ *
+ * Note this cannot be detected by comparing inodes: deleting and recreating a
+ * file in the same directory routinely reuses the inode number *and* reports an
+ * unchanged birthtime, so only the error itself is a reliable signal.
+ */
+export function isDatabaseMovedError(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === 'string' && UNRECOVERABLE_SQLITE_CODES.has(code);
+}
+
+function discardConnection(reason: string): void {
+  if (!instance) return;
+
+  console.warn(`[Database] Reopening connection: ${reason}`, { path: openedPath });
+
+  try {
+    instance.close();
+  } catch {
+    // The handle is already unusable; closing is best-effort.
+  }
+
+  instance = null;
+  openedPath = null;
+}
+
+/**
+ * Drops the cached connection when it can no longer serve queries: the handle
+ * was closed, the configured path changed, or the file was deleted outright.
+ * Safe because no repository caches prepared statements across calls.
+ */
+function discardConnectionIfUnusable(): void {
+  if (!instance) return;
+
+  if (!instance.open) {
+    discardConnection('the handle was closed');
+    return;
+  }
+
+  const dbPath = resolveDatabasePath();
+  if (dbPath !== openedPath) {
+    discardConnection(`the configured path changed to ${dbPath}`);
+    return;
+  }
+
+  const now = Date.now();
+  if (now - lastExistenceCheckAt < STALE_CHECK_INTERVAL_MS) return;
+  lastExistenceCheckAt = now;
+
+  if (!fs.existsSync(dbPath)) {
+    discardConnection('the database file no longer exists');
+  }
+}
+
+/**
+ * Reopens the connection when `error` indicates the database file was moved or
+ * deleted. Returns true when a retry is worth attempting.
+ *
+ * Without this a single replaced file leaves every subsequent write failing
+ * until the process restarts.
+ */
+export function recoverFromDatabaseError(error: unknown): boolean {
+  if (!isDatabaseMovedError(error)) return false;
+
+  discardConnection('a query reported the database file was moved or deleted');
+  return true;
+}
 
 /**
  * Returns the shared database connection, creating it on first call.
@@ -106,7 +198,10 @@ let instance: Database.Database | null = null;
  *   6. Logs the database location
  */
 export function getConnection(): Database.Database {
-  if (instance) return instance;
+  if (instance) {
+    discardConnectionIfUnusable();
+    if (instance) return instance;
+  }
 
   const dbPath = resolveDatabasePath();
 
@@ -118,6 +213,9 @@ export function getConnection(): Database.Database {
   // app_config must exist immediately — the auth middleware reads
   // the JWT secret at module-load time, before initializeDatabase() runs.
   instance.exec(APP_CONFIG_TABLE_SCHEMA_SQL);
+
+  openedPath = dbPath;
+  lastExistenceCheckAt = Date.now();
 
   return instance;
 }
@@ -138,6 +236,8 @@ export function closeConnection(): void {
   if (instance) {
     instance.close();
     instance = null;
+    openedPath = null;
+    lastExistenceCheckAt = 0;
     console.log('Database connection closed');
   }
 }

@@ -1,4 +1,4 @@
-import { scanStateDb } from '@/modules/database/index.js';
+import { recoverFromDatabaseError, scanStateDb } from '@/modules/database/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import type { LLMProvider } from '@/shared/types.js';
 
@@ -43,7 +43,21 @@ export const sessionSynchronizerService = {
     }
 
     if (failures.length === 0) {
-      scanStateDb.updateLastScannedAt(scanBoundary);
+      // Advancing the cursor is bookkeeping: callers only read sessions. A
+      // failure here (a read-only or moved database, a locked file) must be
+      // reported like a provider failure rather than thrown, otherwise it takes
+      // down every endpoint that lists projects.
+      try {
+        scanStateDb.updateLastScannedAt(scanBoundary);
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        console.warn(`[Sessions] Failed to advance scan_state cursor: ${reason}`);
+        failures.push(`scan_state cursor update failed: ${reason}`);
+
+        // If the database file was replaced underneath us the handle is latched
+        // read-only forever; drop it so the next request opens a fresh one.
+        recoverFromDatabaseError(error);
+      }
     } else {
       console.warn(
         `[Sessions] Skipping scan_state cursor advance because ${failures.length} provider sync(s) failed.`,

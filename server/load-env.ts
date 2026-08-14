@@ -1,6 +1,5 @@
 // Load environment variables from .env before other imports execute.
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -29,8 +28,24 @@ try {
     const trimmedLine = line.trim();
     if (trimmedLine && !trimmedLine.startsWith('#')) {
       const [key, ...valueParts] = trimmedLine.split('=');
-      if (key && valueParts.length > 0 && !process.env[key]) {
-        process.env[key] = valueParts.join('=').trim();
+      if (key && valueParts.length > 0) {
+        const value = valueParts.join('=').trim();
+
+        // A real environment variable outranks `.env`, but silently ignoring a
+        // DATABASE_PATH the user wrote in `.env` is how a checkout ends up
+        // attached to another instance's database. Say so instead.
+        if (process.env[key] !== undefined) {
+          if (key === 'DATABASE_PATH' && process.env[key] !== value) {
+            console.warn(
+              `[env] Ignoring DATABASE_PATH=${value} from ${envPath}: the inherited ` +
+              `environment already sets DATABASE_PATH=${process.env[key]}, which takes ` +
+              'precedence. Unset it in the parent process to use the .env value.',
+            );
+          }
+          return;
+        }
+
+        process.env[key] = value;
       }
     }
   });
@@ -38,10 +53,8 @@ try {
   console.error('No .env file found or error reading it:', e.message);
 }
 
-// Keep the default database in a stable user-level location so rebuilding dist-server
-// never changes where the backend stores auth.db when DATABASE_PATH is not set explicitly.
-const DEFAULT_DATABASE_PATH = path.join(os.homedir(), '.cloudcli', 'auth.db');
-
-if (!process.env.DATABASE_PATH) {
-  process.env.DATABASE_PATH = DEFAULT_DATABASE_PATH;
-}
+// The default database path is intentionally NOT written back to process.env.
+// It lives in server/shared/database-path.ts and is applied when the connection
+// is opened: writing it here would leak it to every spawned child process, so a
+// dev server launched from an in-app terminal would attach to the running
+// production database.

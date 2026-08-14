@@ -5,6 +5,7 @@ import path from 'node:path';
 
 import spawn from 'cross-spawn';
 
+import { DEFAULT_DATABASE_PATH } from '@/shared/database-path.js';
 import type { CliApplication, CliPackageMetadata } from '@/shared/types.js';
 import { findApplicationRoot, getModuleDirectory } from '@/shared/utils.js';
 
@@ -63,7 +64,7 @@ export function createCliApplication(): CliApplication {
 
   return createCliService({
     applicationRoot,
-    defaultDatabasePath: path.join(homeDirectory, '.cloudcli', 'auth.db'),
+    defaultDatabasePath: DEFAULT_DATABASE_PATH,
     homeDirectory,
     packageMetadata,
     environment: process.env,

@@ -3,6 +3,7 @@ import path from 'path';
 
 import express from 'express';
 
+import { buildChildProcessEnv } from '@/shared/child-process-env.js';
 import type { ProviderRunFunction } from '@/shared/types.js';
 
 import { normalizeProjectPath } from '../../shared/utils.js';
@@ -385,7 +386,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
         console.log('📁 Destination:', cloneDir);
 
         // Execute git clone
-        const gitEnvironment = githubToken ? {
+        const gitEnvironment = buildChildProcessEnv(githubToken ? {
           ...process.env,
           GIT_CONFIG_COUNT: '2',
           GIT_CONFIG_KEY_0: 'credential.helper',
@@ -394,7 +395,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
           GIT_CONFIG_VALUE_1: '!f() { echo username=x-access-token; echo "password=$CLOUDCLI_GITHUB_TOKEN"; }; f',
           CLOUDCLI_GITHUB_TOKEN: githubToken,
           GIT_TERMINAL_PROMPT: '0'
-        } : process.env;
+        } : process.env);
         const gitProcess = spawn('git', ['clone', '--depth', '1', '--', cloneUrl, cloneDir], {
           stdio: ['pipe', 'pipe', 'pipe'],
           env: gitEnvironment

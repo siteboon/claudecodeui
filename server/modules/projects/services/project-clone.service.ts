@@ -6,6 +6,7 @@ import spawn from 'cross-spawn';
 
 import { githubTokensDb } from '@/modules/database/index.js';
 import { createProject } from '@/modules/projects/services/project-management.service.js';
+import { buildChildProcessEnv } from '@/shared/child-process-env.js';
 import type { WorkspacePathValidationResult } from '@/shared/types.js';
 import { AppError, validateWorkspacePath } from '@/shared/utils.js';
 
@@ -129,10 +130,10 @@ const defaultDependencies: CloneProjectDependencies = {
   spawnGitClone: (cloneUrl: string, clonePath: string): GitCloneProcess =>
     spawn('git', ['clone', '--progress', '--', cloneUrl, clonePath], {
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: {
+      env: buildChildProcessEnv({
         ...process.env,
         GIT_TERMINAL_PROMPT: '0',
-      },
+      }),
     }) as unknown as GitCloneProcess,
   registerProject: async (
     projectPath: string,
