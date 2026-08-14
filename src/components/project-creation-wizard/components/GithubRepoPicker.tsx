@@ -13,31 +13,33 @@ import { useGithubRepoSearch } from '../hooks/useGithubRepoSearch';
 import type { GithubTokenCredential } from '../types';
 
 type GithubRepoPickerProps = {
+  value: string;
   tokenId: string;
   availableTokens: GithubTokenCredential[];
   disabled?: boolean;
-  onSelectRepo: (cloneUrl: string) => void;
+  onChange: (value: string) => void;
   onTokenChange: (tokenId: string) => void;
-  onUseManualUrl: () => void;
 };
 
+// One field for both: free text (paste a URL, used as-is) and a live search
+// dropdown of matching repos (selecting one overwrites the field). No mode
+// switch — whatever is typed is always the value the wizard uses.
 export default function GithubRepoPicker({
+  value,
   tokenId,
   availableTokens,
   disabled = false,
-  onSelectRepo,
+  onChange,
   onTokenChange,
-  onUseManualUrl,
 }: GithubRepoPickerProps) {
   const { t } = useTranslation();
-  const [query, setQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const { repos, loading, error } = useGithubRepoSearch({
     tokenId,
-    query,
-    enabled: Boolean(tokenId),
+    query: value,
+    enabled: Boolean(tokenId) && isOpen,
   });
 
   useEffect(() => {
@@ -59,9 +61,11 @@ export default function GithubRepoPicker({
   }, [isOpen]);
 
   const handleSelectRepo = (cloneUrl: string) => {
-    onSelectRepo(cloneUrl);
+    onChange(cloneUrl);
     setIsOpen(false);
   };
+
+  const showDropdown = isOpen && (loading || Boolean(error) || repos.length > 0 || value.trim().length === 0);
 
   return (
     <div ref={containerRef} className="relative">
@@ -82,14 +86,14 @@ export default function GithubRepoPicker({
 
       <Command shouldFilter={false} className="overflow-visible rounded-lg border border-gray-300 dark:border-gray-600">
         <CommandInput
-          value={query}
-          onValueChange={setQuery}
+          value={value}
+          onValueChange={onChange}
           onFocus={() => setIsOpen(true)}
           placeholder={t('projectWizard.step2.searchPlaceholder')}
           disabled={disabled}
         />
 
-        {isOpen && (
+        {showDropdown && (
           <CommandList className="max-h-60 border-t border-gray-200 dark:border-gray-700">
             {loading && (
               <div className="flex items-center gap-2 px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
@@ -135,14 +139,6 @@ export default function GithubRepoPicker({
           </CommandList>
         )}
       </Command>
-
-      <button
-        type="button"
-        onClick={onUseManualUrl}
-        className="mt-1 text-xs text-blue-600 hover:underline dark:text-blue-400"
-      >
-        {t('projectWizard.step2.editUrlManually')}
-      </button>
     </div>
   );
 }

@@ -34,7 +34,6 @@ export default function ProjectCreationWizard({
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cloneProgress, setCloneProgress] = useState('');
-  const [useManualGithubUrlEntry, setUseManualGithubUrlEntry] = useState(false);
 
   // Tokens must be known before a URL exists so the repo picker can replace
   // the plain URL input as soon as Step 1 renders.
@@ -168,7 +167,6 @@ export default function ProjectCreationWizard({
               loadingTokens={loadingTokens}
               tokenLoadError={tokenLoadError}
               isCreating={isCreating}
-              useManualGithubUrlEntry={useManualGithubUrlEntry}
               onWorkspacePathChange={(workspacePath) => updateField('workspacePath', workspacePath)}
               onGithubUrlChange={(githubUrl) => updateField('githubUrl', githubUrl)}
               onTokenModeChange={updateTokenMode}
@@ -178,7 +176,6 @@ export default function ProjectCreationWizard({
               onNewGithubTokenChange={(newGithubToken) =>
                 updateField('newGithubToken', newGithubToken)
               }
-              onUseManualGithubUrlEntryChange={setUseManualGithubUrlEntry}
               onAdvanceToConfirm={() => setStep(2)}
             />
           )}
