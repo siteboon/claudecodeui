@@ -313,6 +313,11 @@ test('searchRepositories reports a SAML SSO authorization requirement with its U
     (error: unknown) => {
       assert.equal((error as { code?: string }).code, 'GITHUB_SSO_REQUIRED');
       assert.equal((error as { statusCode?: number }).statusCode, 403);
+      // The authorization URL is the only actionable part of this failure, so
+      // it has to survive as far as the client.
+      assert.deepEqual((error as { details?: unknown }).details, {
+        ssoUrl: 'https://github.com/orgs/acme/sso?authorization_request=x',
+      });
       return true;
     },
   );

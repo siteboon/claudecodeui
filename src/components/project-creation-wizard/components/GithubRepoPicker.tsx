@@ -137,6 +137,9 @@ export default function GithubRepoPicker({
   }, [isOpen]);
 
   const handleSelectRepo = (cloneUrl: string) => {
+    if (disabled) {
+      return;
+    }
     (onSelectRepo ?? onChange)(cloneUrl);
     setIsOpen(false);
   };
@@ -147,7 +150,13 @@ export default function GithubRepoPicker({
   // The panel stays mounted for as long as the field is focused. Hiding it when
   // a search returns nothing looked exactly like a broken search: the list
   // vanished mid-typing with no explanation.
-  const showDropdown = isOpen;
+  //
+  // `disabled` closes it, though: the panel is portaled to document.body, so a
+  // disabled input would otherwise sit under a list that still takes clicks.
+  // The wizard unmounts this whole step before it starts creating, so that
+  // can't happen today — but honouring the prop for the input and not the list
+  // is the kind of gap that only stays harmless by accident.
+  const showDropdown = isOpen && !disabled;
 
   return (
     <div ref={anchorRef} className="relative">
