@@ -8,15 +8,15 @@ import type {
   GithubCredentialsResponse,
 } from '../view/tabs/api-settings/types';
 import { copyTextToClipboard } from '../../../utils/clipboard';
+import { getApiErrorMessage } from '../../../utils/apiError';
+import type { ApiErrorPayload } from '../../../utils/apiError';
 
 type UseCredentialsSettingsArgs = {
   confirmDeleteApiKeyText: string;
   confirmDeleteGithubCredentialText: string;
 };
 
-const getApiError = (payload: { error?: string } | undefined, fallback: string) => (
-  payload?.error || fallback
-);
+const getApiError = getApiErrorMessage;
 
 export type GithubTokenCheck =
   | { status: 'idle' }
@@ -24,7 +24,7 @@ export type GithubTokenCheck =
   | { status: 'valid'; login: string; scopes: string[] }
   | { status: 'invalid'; message: string };
 
-type VerifyTokenResponse = { login?: string; scopes?: string[]; error?: string };
+type VerifyTokenResponse = ApiErrorPayload & { login?: string; scopes?: string[] };
 
 export function useCredentialsSettings({
   confirmDeleteApiKeyText,

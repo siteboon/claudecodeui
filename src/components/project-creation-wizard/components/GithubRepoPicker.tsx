@@ -77,24 +77,36 @@ export default function GithubRepoPicker({
     enabled: Boolean(tokenId) && isOpen,
   });
 
+  // The panel is positioned off the input's viewport rect, so it has to follow
+  // that rect for as long as it's open. Watching resize/scroll isn't enough:
+  // typing reveals the GitHub authentication card below, which grows the
+  // vertically-centred wizard modal and slides the input up by ~90px. No event
+  // reports that, so the panel would stay pinned where it opened and drift far
+  // from the field. Re-reading the rect each frame (what floating-ui's
+  // autoUpdate does in animationFrame mode) covers every cause of movement;
+  // state only changes when the computed position actually does.
   useLayoutEffect(() => {
-    if (!isOpen || !anchorRef.current) {
+    if (!isOpen) {
       return;
     }
 
-    const updatePosition = () => {
+    let frame = 0;
+    let lastPosition = '';
+
+    const syncPosition = () => {
       if (anchorRef.current) {
-        setDropdownPosition(getDropdownPosition(anchorRef.current.getBoundingClientRect()));
+        const nextPosition = getDropdownPosition(anchorRef.current.getBoundingClientRect());
+        const signature = JSON.stringify(nextPosition);
+        if (signature !== lastPosition) {
+          lastPosition = signature;
+          setDropdownPosition(nextPosition);
+        }
       }
+      frame = window.requestAnimationFrame(syncPosition);
     };
 
-    updatePosition();
-    window.addEventListener('resize', updatePosition);
-    window.addEventListener('scroll', updatePosition, true);
-    return () => {
-      window.removeEventListener('resize', updatePosition);
-      window.removeEventListener('scroll', updatePosition, true);
-    };
+    syncPosition();
+    return () => window.cancelAnimationFrame(frame);
   }, [isOpen]);
 
   useEffect(() => {

@@ -1,4 +1,5 @@
 import { api, getStoredAuthToken } from '../../../utils/api';
+import { getApiErrorMessage } from '../../../utils/apiError';
 import type {
   BrowseFilesystemResponse,
   CloneProgressEvent,
@@ -89,7 +90,9 @@ export const searchGithubRepositories = async (params: {
   const data = await parseJson<GithubReposResponse>(response);
 
   if (!response.ok) {
-    throw new Error(data.error || 'Failed to load GitHub repositories');
+    // This route reports failures through AppError, so `error` is an object
+    // here, not the plain string the older endpoints in this file return.
+    throw new Error(getApiErrorMessage(data, 'Failed to load GitHub repositories'));
   }
 
   return data.repos || [];

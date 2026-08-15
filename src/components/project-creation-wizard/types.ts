@@ -1,3 +1,5 @@
+import type { ApiErrorPayload } from '../../utils/apiError';
+
 export type WizardStep = 1 | 2;
 
 export type TokenMode = 'stored' | 'new' | 'none';
@@ -31,9 +33,8 @@ export type GithubRepoSummary = {
   updatedAt: string | null;
 };
 
-export type GithubReposResponse = {
+export type GithubReposResponse = ApiErrorPayload & {
   repos?: GithubRepoSummary[];
-  error?: string;
 };
 
 export type BrowseFilesystemResponse = {
