@@ -22,26 +22,35 @@ type GithubRepoPickerProps = {
   onTokenChange: (tokenId: string) => void;
 };
 
-const EDGE_GAP = 8;
+// Breathing room kept against the viewport edge when measuring how much room
+// the panel has. Not a visual gap.
+const VIEWPORT_EDGE_GAP = 8;
+// Visual gap between the input and the panel. Small on purpose: the panel is
+// its own bordered box, so a large offset reads as an unrelated floating card.
+const ANCHOR_OFFSET = 4;
 const MAX_LIST_HEIGHT = 240;
 
 // Popover-style positioning: portal-rendered and `position: fixed` off the
 // input's own rect, so it escapes the wizard modal's clipped/scrollable
 // container instead of being laid out in-flow underneath it.
-const getDropdownPosition = (anchor: DOMRect): CSSProperties => {
-  const spaceBelow = window.innerHeight - anchor.bottom - EDGE_GAP;
-  const spaceAbove = anchor.top - EDGE_GAP;
+const getDropdownPosition = (anchor: DOMRect) => {
+  const spaceBelow = window.innerHeight - anchor.bottom - ANCHOR_OFFSET - VIEWPORT_EDGE_GAP;
+  const spaceAbove = anchor.top - ANCHOR_OFFSET - VIEWPORT_EDGE_GAP;
   const openUpward = spaceBelow < MAX_LIST_HEIGHT && spaceAbove > spaceBelow;
+  const availableHeight = Math.max(openUpward ? spaceAbove : spaceBelow, 0);
 
-  return {
+  const panelStyle: CSSProperties = {
     position: 'fixed',
     left: anchor.left,
     width: anchor.width,
-    maxHeight: Math.min(MAX_LIST_HEIGHT, Math.max(spaceBelow, spaceAbove)),
     ...(openUpward
-      ? { bottom: window.innerHeight - anchor.top + EDGE_GAP }
-      : { top: anchor.bottom + EDGE_GAP }),
+      ? { bottom: window.innerHeight - anchor.top + ANCHOR_OFFSET }
+      : { top: anchor.bottom + ANCHOR_OFFSET }),
   };
+
+  // The height cap belongs to the scrolling element (the list), not to this
+  // wrapper — capping both is what produced two nested scrollbars.
+  return { panelStyle, listMaxHeight: Math.min(MAX_LIST_HEIGHT, availableHeight) };
 };
 
 // One field for both: free text (paste a URL, used as-is) and a live search
@@ -57,7 +66,8 @@ export default function GithubRepoPicker({
 }: GithubRepoPickerProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
-  const [dropdownStyle, setDropdownStyle] = useState<CSSProperties | null>(null);
+  const [dropdownPosition, setDropdownPosition] =
+    useState<ReturnType<typeof getDropdownPosition> | null>(null);
   const anchorRef = useRef<HTMLDivElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
@@ -74,7 +84,7 @@ export default function GithubRepoPicker({
 
     const updatePosition = () => {
       if (anchorRef.current) {
-        setDropdownStyle(getDropdownPosition(anchorRef.current.getBoundingClientRect()));
+        setDropdownPosition(getDropdownPosition(anchorRef.current.getBoundingClientRect()));
       }
     };
 
@@ -141,7 +151,15 @@ export default function GithubRepoPicker({
           context that wires the input's value to keyboard nav/selection in
           the list. createPortal keeps that React context even though the
           list mounts on a different DOM node. */}
-      <Command shouldFilter={false} className="rounded-lg border border-gray-300 dark:border-gray-600">
+      {/* [&>div]:border-b-0 drops the input's built-in bottom rule. It exists to
+          separate the input from a list rendered directly beneath it inside the
+          same box; with the list portaled away it just doubles up with this
+          element's own border and reads as dead space. The input wrapper is the
+          only DOM child here — the portal mounts on document.body. */}
+      <Command
+        shouldFilter={false}
+        className="rounded-lg border border-gray-300 dark:border-gray-600 [&>div]:border-b-0"
+      >
         <CommandInput
           value={value}
           onValueChange={onChange}
@@ -150,16 +168,16 @@ export default function GithubRepoPicker({
           disabled={disabled}
         />
 
-        {showDropdown && dropdownStyle && createPortal(
+        {showDropdown && dropdownPosition && createPortal(
           <div
             ref={dropdownRef}
-            style={dropdownStyle}
+            style={dropdownPosition.panelStyle}
             // z-[70] because the wizard modal itself sits at z-[60]: this panel
             // is portaled to document.body, so a lower value paints it behind
             // the modal and the list is invisible even though it rendered.
-            className="z-[70] overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800"
+            className="z-[70] overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800"
           >
-            <CommandList>
+            <CommandList style={{ maxHeight: dropdownPosition.listMaxHeight }}>
               {loading && (
                 <div className="flex items-center gap-2 px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
                   <Loader2 className="h-4 w-4 animate-spin" />
