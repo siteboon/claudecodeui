@@ -177,7 +177,8 @@
       "optionalTokenPublic": "GitHub Token (Optional for Public Repos)",
       "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (leave empty for public repos)",
       "searchPlaceholder": "Paste a GitHub URL or search your repositories...",
-      "noRepositoriesFound": "No repositories found",
+      "noRepositoriesFound": "No repositories found for this token",
+      "noRepositoryMatches": "No repository matches \"{{query}}\" — you can also paste a GitHub URL here",
       "searchingRepositories": "Searching...",
       "repoSearchError": "Couldn't load repositories: {{message}}",
       "privateRepo": "Private"

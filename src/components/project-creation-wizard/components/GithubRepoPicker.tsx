@@ -6,7 +6,6 @@ import { useTranslation } from 'react-i18next';
 import {
   Badge,
   Command,
-  CommandEmpty,
   CommandInput,
   CommandItem,
   CommandList,
@@ -112,7 +111,13 @@ export default function GithubRepoPicker({
     setIsOpen(false);
   };
 
-  const showDropdown = isOpen && (loading || Boolean(error) || repos.length > 0 || value.trim().length === 0);
+  const trimmedQuery = value.trim();
+  const hasNoMatches = !loading && !error && repos.length === 0;
+
+  // The panel stays mounted for as long as the field is focused. Hiding it when
+  // a search returns nothing looked exactly like a broken search: the list
+  // vanished mid-typing with no explanation.
+  const showDropdown = isOpen;
 
   return (
     <div ref={anchorRef} className="relative">
@@ -149,7 +154,10 @@ export default function GithubRepoPicker({
           <div
             ref={dropdownRef}
             style={dropdownStyle}
-            className="z-50 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800"
+            // z-[70] because the wizard modal itself sits at z-[60]: this panel
+            // is portaled to document.body, so a lower value paints it behind
+            // the modal and the list is invisible even though it rendered.
+            className="z-[70] overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800"
           >
             <CommandList>
               {loading && (
@@ -165,10 +173,12 @@ export default function GithubRepoPicker({
                 </p>
               )}
 
-              {!loading && !error && (
-                <CommandEmpty className="px-3 py-2 text-left text-sm text-gray-500 dark:text-gray-400">
-                  {t('projectWizard.step2.noRepositoriesFound')}
-                </CommandEmpty>
+              {hasNoMatches && (
+                <p className="px-3 py-2 text-left text-sm text-gray-500 dark:text-gray-400">
+                  {trimmedQuery
+                    ? t('projectWizard.step2.noRepositoryMatches', { query: trimmedQuery })
+                    : t('projectWizard.step2.noRepositoriesFound')}
+                </p>
               )}
 
               {!loading && !error && repos.map((repo) => (

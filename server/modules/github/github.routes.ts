@@ -24,6 +24,13 @@ export function createGithubRouter(
       try { res.json(await operation(req)); } catch (error) { next(error); }
     };
 
+  // POST, not GET: the raw token travels in the body so it never lands in a
+  // query string, access log, or browser history.
+  router.post('/verify-token', respond((req) => {
+    const token = typeof req.body?.token === 'string' ? req.body.token : '';
+    return service.verifyToken(token);
+  }));
+
   router.get('/repos', respond((req) => {
     const tokenId = Number(req.query.tokenId);
     if (!Number.isFinite(tokenId) || tokenId <= 0) {

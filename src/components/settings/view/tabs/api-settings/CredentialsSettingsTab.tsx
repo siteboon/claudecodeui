@@ -29,6 +29,8 @@ export default function CredentialsSettingsTab() {
     deleteApiKey,
     toggleApiKey,
     createGithubCredential,
+    githubTokenCheck,
+    verifyGithubToken,
     deleteGithubCredential,
     toggleGithubCredential,
     copyToClipboard,
@@ -80,6 +82,8 @@ export default function CredentialsSettingsTab() {
         onNewGithubTokenChange={setNewGithubToken}
         onNewGithubDescriptionChange={setNewGithubDescription}
         onToggleNewTokenVisibility={toggleNewGithubTokenVisibility}
+        githubTokenCheck={githubTokenCheck}
+        onVerifyGithubToken={verifyGithubToken}
         onCreateGithubCredential={createGithubCredential}
         onCancelCreateGithubCredential={cancelNewGithubForm}
         onToggleGithubCredential={toggleGithubCredential}

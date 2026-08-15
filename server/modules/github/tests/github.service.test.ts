@@ -189,3 +189,76 @@ test('searchRepositories surfaces other upstream failures as a 502 AppError', as
     },
   );
 });
+
+function makeVerifyClient(result: { login?: string; scopes?: string; status?: number }) {
+  return class {
+    users: { getAuthenticated: () => Promise<{ data: { login: string }; headers: Record<string, string> }> };
+
+    constructor(_options: { auth: string }) {
+      this.users = {
+        getAuthenticated: async () => {
+          if (result.status) {
+            throw Object.assign(new Error('github error'), { status: result.status });
+          }
+          const headers: Record<string, string> = {};
+          if (result.scopes !== undefined) {
+            headers['x-oauth-scopes'] = result.scopes;
+          }
+          return { data: { login: result.login ?? 'octocat' }, headers };
+        },
+      };
+    }
+  } as unknown as Dependencies['GithubClient'];
+}
+
+test('verifyToken returns the authenticated account and its scopes', async () => {
+  const service = createGithubService({
+    githubTokens: { getGithubTokenById: () => null },
+    GithubClient: makeVerifyClient({ login: 'Tourniercy', scopes: 'repo, read:org' }),
+  });
+
+  assert.deepEqual(await service.verifyToken('ghp_valid'), {
+    login: 'Tourniercy',
+    scopes: ['repo', 'read:org'],
+  });
+});
+
+test('verifyToken tolerates fine-grained tokens that report no scopes header', async () => {
+  const service = createGithubService({
+    githubTokens: { getGithubTokenById: () => null },
+    GithubClient: makeVerifyClient({ login: 'octocat' }),
+  });
+
+  assert.deepEqual(await service.verifyToken('github_pat_x'), { login: 'octocat', scopes: [] });
+});
+
+test('verifyToken rejects a blank token without calling GitHub', async () => {
+  let constructed = false;
+  const service = createGithubService({
+    githubTokens: { getGithubTokenById: () => null },
+    GithubClient: class {
+      constructor() { constructed = true; }
+    } as unknown as Dependencies['GithubClient'],
+  });
+
+  await assert.rejects(() => service.verifyToken('   '), /token is required/i);
+  assert.equal(constructed, false);
+});
+
+test('verifyToken surfaces a rejected token as an invalid-token error', async () => {
+  const service = createGithubService({
+    githubTokens: { getGithubTokenById: () => null },
+    GithubClient: makeVerifyClient({ status: 401 }),
+  });
+
+  await assert.rejects(() => service.verifyToken('ghp_revoked'), /GitHub rejected this token/);
+});
+
+test('verifyToken reports an unreachable GitHub separately from a bad token', async () => {
+  const service = createGithubService({
+    githubTokens: { getGithubTokenById: () => null },
+    GithubClient: makeVerifyClient({ status: 500 }),
+  });
+
+  await assert.rejects(() => service.verifyToken('ghp_valid'), /Could not reach GitHub/);
+});

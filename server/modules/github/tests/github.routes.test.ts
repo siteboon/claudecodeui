@@ -12,6 +12,7 @@ type GithubService = Parameters<typeof createGithubRouter>[0];
 
 function fakeService(overrides: Partial<GithubService> = {}): GithubService {
   return {
+    verifyToken: async () => ({ login: 'octocat', scopes: [] }),
     searchRepositories: async () => ({ repos: [] }),
     ...overrides,
   };
@@ -22,6 +23,7 @@ async function withGithubServer(
   run: (baseUrl: string) => Promise<void>,
 ): Promise<void> {
   const app = express();
+  app.use(express.json());
   app.use((req, _res, next) => {
     (req as express.Request & { user?: { id: number } }).user = { id: 1 };
     next();
@@ -74,4 +76,40 @@ test('GET /repos returns the service result with the parsed query params', async
     assert.equal(body.repos[0]?.fullName, 'octo-org/octo-repo');
     assert.deepEqual(receivedArgs, [[1, 42, 'octo', 10]]);
   });
+});
+
+test('POST /verify-token returns the account the token belongs to', async () => {
+  await withGithubServer(fakeService({
+    verifyToken: async (token) => {
+      assert.equal(token, 'ghp_secret');
+      return { login: 'Tourniercy', scopes: ['repo'] };
+    },
+  }), async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/github/verify-token`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: 'ghp_secret' }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { login: 'Tourniercy', scopes: ['repo'] });
+  });
+});
+
+test('POST /verify-token passes a missing token through to the service for rejection', async () => {
+  let received: string | undefined;
+  await withGithubServer(fakeService({
+    verifyToken: async (token) => {
+      received = token;
+      return { login: 'octocat', scopes: [] };
+    },
+  }), async (baseUrl) => {
+    await fetch(`${baseUrl}/api/github/verify-token`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+  });
+
+  assert.equal(received, '');
 });
