@@ -26,10 +26,13 @@ export const useGithubRepoSearch = ({ tokenId, query, enabled }: UseGithubRepoSe
     // an empty query still fires (no delay) to show recent repos on open.
     const debounceMs = query.trim() ? 300 : 0;
 
-    const timerId = window.setTimeout(async () => {
-      setLoading(true);
-      setError(null);
+    // Enter the loading state now, not when the timer fires. The picker turns
+    // off cmdk's own filtering, so anything left on screen during the debounce
+    // is a result for the previous query — and still selectable.
+    setLoading(true);
+    setError(null);
 
+    const timerId = window.setTimeout(async () => {
       try {
         const result = await searchGithubRepositories({ tokenId, query: query.trim(), limit: 20 });
         if (!isDisposed) {

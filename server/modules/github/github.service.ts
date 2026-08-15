@@ -3,6 +3,10 @@ import { AppError } from '@/shared/utils.js';
 const MAX_PAGES = 5;
 const PAGE_SIZE = 100;
 const CACHE_TTL_MS = 3 * 60 * 1000;
+// One entry per (user, stored token) pair, each holding up to MAX_PAGES *
+// PAGE_SIZE summaries. The cap is far above any realistic self-hosted install
+// and only exists so the map can't grow without limit.
+const MAX_CACHE_ENTRIES = 50;
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
 
@@ -34,6 +38,59 @@ type CacheEntry = { fetchedAt: number; repos: GithubRepoSummary[] };
 function isOctokitStatusError(error: unknown): error is { status: number } {
   return typeof error === 'object' && error !== null
     && typeof (error as { status?: unknown }).status === 'number';
+}
+
+function responseHeader(error: unknown, name: string): string | undefined {
+  const headers = (error as { response?: { headers?: Record<string, unknown> } })?.response?.headers;
+  const value = headers?.[name];
+  return typeof value === 'string' ? value : undefined;
+}
+
+/**
+ * GitHub answers 403 for several unrelated situations, only one of which means
+ * the token is bad. Reporting them all as "invalid or expired" sends people off
+ * to regenerate a token that was fine — so each cause gets its own message.
+ */
+function toGithubAppError(
+  error: unknown,
+  messages: { invalidToken: string; unreachable: string },
+): AppError {
+  if (!isOctokitStatusError(error)) {
+    return new AppError(messages.unreachable, { code: 'GITHUB_API_ERROR', statusCode: 502 });
+  }
+
+  if (error.status === 401) {
+    return new AppError(messages.invalidToken, { code: 'GITHUB_TOKEN_INVALID', statusCode: 401 });
+  }
+
+  if (error.status === 403) {
+    // A spent quota is reported as 403 with the remaining count at zero, or
+    // with retry-after on a secondary limit.
+    if (responseHeader(error, 'x-ratelimit-remaining') === '0' || responseHeader(error, 'retry-after')) {
+      const resetAt = responseHeader(error, 'x-ratelimit-reset');
+      return new AppError(
+        'GitHub rate limit reached. Wait for the limit to reset and try again.',
+        { code: 'GITHUB_RATE_LIMITED', statusCode: 429, details: resetAt ? { resetAt } : undefined },
+      );
+    }
+
+    // Present only when a classic token has not been authorized for a
+    // SAML-protected organization; the header carries the authorization URL.
+    const ssoUrl = responseHeader(error, 'x-github-sso');
+    if (ssoUrl) {
+      return new AppError(
+        'This token is not authorized for the organization’s SAML single sign-on.',
+        { code: 'GITHUB_SSO_REQUIRED', statusCode: 403, details: { ssoUrl } },
+      );
+    }
+
+    return new AppError(
+      'This token is missing the permissions GitHub requires for this request.',
+      { code: 'GITHUB_TOKEN_FORBIDDEN', statusCode: 403 },
+    );
+  }
+
+  return new AppError(messages.unreachable, { code: 'GITHUB_API_ERROR', statusCode: 502 });
 }
 
 /** Creates GitHub repository search workflows around a stored token and an injected Octokit client. */
@@ -70,17 +127,42 @@ export function createGithubService(dependencies: GithubServiceDependencies) {
         }
       }
     } catch (error) {
-      if (isOctokitStatusError(error) && (error.status === 401 || error.status === 403)) {
-        throw new AppError('GitHub token is invalid or expired', {
-          code: 'GITHUB_TOKEN_INVALID',
-          statusCode: 401,
-        });
-      }
-
-      throw new AppError('Failed to reach GitHub', { code: 'GITHUB_API_ERROR', statusCode: 502 });
+      throw toGithubAppError(error, {
+        invalidToken: 'GitHub token is invalid or expired',
+        unreachable: 'Failed to reach GitHub',
+      });
     }
 
     return repos;
+  }
+
+  /**
+   * The TTL stops a stale entry being *read*, but nothing dropped it, so a
+   * token used once held its repositories for the life of the process. Expired
+   * entries are cleared on each write, and the oldest are evicted if the map
+   * still exceeds its cap.
+   */
+  function rememberRepos(cacheKey: string, repos: GithubRepoSummary[]): void {
+    const currentTime = now();
+
+    for (const [key, entry] of cache) {
+      if (currentTime - entry.fetchedAt >= CACHE_TTL_MS) {
+        cache.delete(key);
+      }
+    }
+
+    // Delete first so the re-insert moves the key to the end: Map iterates in
+    // insertion order, which makes the eviction below least-recently-written.
+    cache.delete(cacheKey);
+    cache.set(cacheKey, { fetchedAt: currentTime, repos });
+
+    while (cache.size > MAX_CACHE_ENTRIES) {
+      const oldestKey = cache.keys().next().value;
+      if (oldestKey === undefined) {
+        break;
+      }
+      cache.delete(oldestKey);
+    }
   }
 
   async function getAccessibleRepos(userId: number, tokenId: number): Promise<GithubRepoSummary[]> {
@@ -97,7 +179,7 @@ export function createGithubService(dependencies: GithubServiceDependencies) {
 
     const octokit = new dependencies.GithubClient({ auth: tokenRow.github_token });
     const repos = await fetchAccessibleRepos(octokit);
-    cache.set(cacheKey, { fetchedAt: now(), repos });
+    rememberRepos(cacheKey, repos);
     return repos;
   }
 
@@ -132,16 +214,9 @@ export function createGithubService(dependencies: GithubServiceDependencies) {
 
         return { login: data.login, scopes };
       } catch (error) {
-        if (isOctokitStatusError(error) && (error.status === 401 || error.status === 403)) {
-          throw new AppError('GitHub rejected this token. Check it has not expired or been revoked.', {
-            code: 'GITHUB_TOKEN_INVALID',
-            statusCode: 401,
-          });
-        }
-
-        throw new AppError('Could not reach GitHub to verify the token', {
-          code: 'GITHUB_API_ERROR',
-          statusCode: 502,
+        throw toGithubAppError(error, {
+          invalidToken: 'GitHub rejected this token. Check it has not expired or been revoked.',
+          unreachable: 'Could not reach GitHub to verify the token',
         });
       }
     },

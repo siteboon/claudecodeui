@@ -113,3 +113,42 @@ test('POST /verify-token passes a missing token through to the service for rejec
 
   assert.equal(received, '');
 });
+
+test('GET /repos rejects a fractional tokenId', async () => {
+  let reached = false;
+  await withGithubServer(fakeService({
+    searchRepositories: async () => {
+      reached = true;
+      return { repos: [] };
+    },
+  }), async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/github/repos?tokenId=1.5`);
+    assert.equal(response.status, 400);
+  });
+
+  assert.equal(reached, false, 'a fractional tokenId should not reach the service');
+});
+
+test('GET /repos rejects a repeated tokenId', async () => {
+  await withGithubServer(fakeService(), async (baseUrl) => {
+    // Express turns a repeated parameter into an array, which Number() would
+    // happily coerce when it holds a single element.
+    const single = await fetch(`${baseUrl}/api/github/repos?tokenId=42&tokenId=43`);
+    assert.equal(single.status, 400);
+  });
+});
+
+test('GET /repos ignores a fractional limit instead of forwarding it', async () => {
+  const received: (number | undefined)[] = [];
+  await withGithubServer(fakeService({
+    searchRepositories: async (_userId, _tokenId, _query, limit) => {
+      received.push(limit);
+      return { repos: [] };
+    },
+  }), async (baseUrl) => {
+    await fetch(`${baseUrl}/api/github/repos?tokenId=1&limit=1.5`);
+    await fetch(`${baseUrl}/api/github/repos?tokenId=1&limit=5`);
+  });
+
+  assert.deepEqual(received, [undefined, 5]);
+});

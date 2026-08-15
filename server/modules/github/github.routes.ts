@@ -14,6 +14,20 @@ function queryString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+/**
+ * Express hands back a string, or an array when a parameter is repeated.
+ * `Number` would accept both a fractional value and a single-element array, so
+ * only a scalar whole number counts.
+ */
+function positiveIntegerQuery(value: unknown): number | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const parsed = Number(value.trim());
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
 /** Creates thin GitHub transport handlers around the application service. */
 export function createGithubRouter(
   service: ReturnType<typeof createGithubService>,
@@ -32,14 +46,13 @@ export function createGithubRouter(
   }));
 
   router.get('/repos', respond((req) => {
-    const tokenId = Number(req.query.tokenId);
-    if (!Number.isFinite(tokenId) || tokenId <= 0) {
+    const tokenId = positiveIntegerQuery(req.query.tokenId);
+    if (tokenId === undefined) {
       throw new AppError('tokenId is required', { code: 'GITHUB_TOKEN_ID_REQUIRED', statusCode: 400 });
     }
 
     const query = queryString(req.query.q);
-    const limitInput = Number(req.query.limit);
-    const limit = Number.isFinite(limitInput) && limitInput > 0 ? limitInput : undefined;
+    const limit = positiveIntegerQuery(req.query.limit);
 
     return service.searchRepositories(userId(req), tokenId, query, limit);
   }));

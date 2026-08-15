@@ -262,3 +262,120 @@ test('verifyToken reports an unreachable GitHub separately from a bad token', as
 
   await assert.rejects(() => service.verifyToken('ghp_valid'), /Could not reach GitHub/);
 });
+
+function makeFailingClient(status: number, headers: Record<string, string> = {}) {
+  return class {
+    repos = {
+      listForAuthenticatedUser: async () => {
+        throw Object.assign(new Error('github error'), { status, response: { headers } });
+      },
+    };
+  } as unknown as Dependencies['GithubClient'];
+}
+
+test('searchRepositories reports a spent rate limit separately from a bad token', async () => {
+  const service = createGithubService(dependencies({
+    GithubClient: makeFailingClient(403, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': '1760000000' }),
+  }));
+
+  await assert.rejects(
+    () => service.searchRepositories(1, 1, ''),
+    (error: unknown) => {
+      assert.equal((error as { code?: string }).code, 'GITHUB_RATE_LIMITED');
+      assert.equal((error as { statusCode?: number }).statusCode, 429);
+      assert.deepEqual((error as { details?: unknown }).details, { resetAt: '1760000000' });
+      return true;
+    },
+  );
+});
+
+test('searchRepositories reports a secondary rate limit signalled by retry-after', async () => {
+  const service = createGithubService(dependencies({
+    GithubClient: makeFailingClient(403, { 'retry-after': '60' }),
+  }));
+
+  await assert.rejects(
+    () => service.searchRepositories(1, 1, ''),
+    (error: unknown) => {
+      assert.equal((error as { code?: string }).code, 'GITHUB_RATE_LIMITED');
+      return true;
+    },
+  );
+});
+
+test('searchRepositories reports a SAML SSO authorization requirement with its URL', async () => {
+  const service = createGithubService(dependencies({
+    GithubClient: makeFailingClient(403, { 'x-github-sso': 'https://github.com/orgs/acme/sso?authorization_request=x' }),
+  }));
+
+  await assert.rejects(
+    () => service.searchRepositories(1, 1, ''),
+    (error: unknown) => {
+      assert.equal((error as { code?: string }).code, 'GITHUB_SSO_REQUIRED');
+      assert.equal((error as { statusCode?: number }).statusCode, 403);
+      return true;
+    },
+  );
+});
+
+test('searchRepositories reports a plain 403 as missing permissions, not an invalid token', async () => {
+  const service = createGithubService(dependencies({
+    GithubClient: makeFailingClient(403),
+  }));
+
+  await assert.rejects(
+    () => service.searchRepositories(1, 1, ''),
+    (error: unknown) => {
+      assert.equal((error as { code?: string }).code, 'GITHUB_TOKEN_FORBIDDEN');
+      assert.equal((error as { statusCode?: number }).statusCode, 403);
+      return true;
+    },
+  );
+});
+
+test('verifyToken distinguishes a rate limit from a rejected token', async () => {
+  const client = class {
+    users = {
+      getAuthenticated: async () => {
+        throw Object.assign(new Error('github error'), {
+          status: 403,
+          response: { headers: { 'x-ratelimit-remaining': '0' } },
+        });
+      },
+    };
+  } as unknown as Dependencies['GithubClient'];
+
+  const service = createGithubService({
+    githubTokens: { getGithubTokenById: () => null },
+    GithubClient: client,
+  });
+
+  await assert.rejects(() => service.verifyToken('ghp_fine'), /rate limit/i);
+});
+
+test('getAccessibleRepos drops cache entries once their TTL has passed', async () => {
+  let fetchCount = 0;
+  const client = class {
+    repos = {
+      listForAuthenticatedUser: async () => {
+        fetchCount += 1;
+        return { data: [makeRepo()] };
+      },
+    };
+  } as unknown as Dependencies['GithubClient'];
+
+  let currentTime = 0;
+  const service = createGithubService(dependencies({ GithubClient: client, now: () => currentTime }));
+
+  await service.searchRepositories(1, 1, '');
+  assert.equal(fetchCount, 1);
+
+  // A second token expires the first entry on write; the first token must then
+  // re-fetch rather than serve a retained-but-stale list.
+  currentTime += 4 * 60 * 1000;
+  await service.searchRepositories(1, 2, '');
+  assert.equal(fetchCount, 2);
+
+  await service.searchRepositories(1, 1, '');
+  assert.equal(fetchCount, 3, 'the expired entry should have been evicted, forcing a refetch');
+});

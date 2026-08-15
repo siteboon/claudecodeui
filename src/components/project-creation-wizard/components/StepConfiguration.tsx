@@ -45,6 +45,22 @@ export default function StepConfiguration({
   const showGithubAuth = shouldShowGithubAuthentication(githubUrl);
   const showRepoPicker = !loadingTokens && availableTokens.length > 0;
 
+  // Searching and cloning are different jobs. Picking "None (Public)" clears
+  // the selected token, which is right for the clone but left the search with
+  // no credentials at all — the list went dead and claimed "No repositories
+  // found for this token". The search falls back to any stored token instead.
+  const searchTokenId = selectedGithubToken || String(availableTokens[0]?.id ?? '');
+
+  // The repo was found through an authenticated search, so that same token is
+  // the one that can clone it. Without this, picking a repo badged Private
+  // while the card sits on "New" or "None (Public)" produces a clone with no
+  // usable credentials.
+  const handleSelectRepo = (cloneUrl: string) => {
+    onGithubUrlChange(cloneUrl);
+    onSelectedGithubTokenChange(searchTokenId);
+    onTokenModeChange('stored');
+  };
+
   return (
     <div className="space-y-4">
       <div>
@@ -72,10 +88,11 @@ export default function StepConfiguration({
         {showRepoPicker ? (
           <GithubRepoPicker
             value={githubUrl}
-            tokenId={selectedGithubToken}
+            tokenId={searchTokenId}
             availableTokens={availableTokens}
             disabled={isCreating}
             onChange={onGithubUrlChange}
+            onSelectRepo={handleSelectRepo}
             onTokenChange={onSelectedGithubTokenChange}
           />
         ) : (

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { authenticatedFetch } from '../../../utils/api';
 import type {
   ApiKeyItem,
@@ -44,6 +44,11 @@ export function useCredentialsSettings({
 
   // Result of checking the pasted token against GitHub before storing it.
   const [githubTokenCheck, setGithubTokenCheck] = useState<GithubTokenCheck>({ status: 'idle' });
+  // Identifies the verification a response belongs to. A check is a network
+  // round trip the user can outrun by editing the token or closing the form;
+  // without this, a late reply would paint a verdict for a token that is no
+  // longer in the field. Bumping it abandons whatever is in flight.
+  const verificationRequestId = useRef(0);
 
   const [showToken, setShowToken] = useState<Record<string, boolean>>({});
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -152,6 +157,10 @@ export function useCredentialsSettings({
       return false;
     }
 
+    verificationRequestId.current += 1;
+    const requestId = verificationRequestId.current;
+    const isCurrentRequest = () => verificationRequestId.current === requestId;
+
     setGithubTokenCheck({ status: 'checking' });
 
     try {
@@ -160,6 +169,10 @@ export function useCredentialsSettings({
         body: JSON.stringify({ token }),
       });
       const payload = await response.json() as VerifyTokenResponse;
+
+      if (!isCurrentRequest()) {
+        return false;
+      }
 
       if (!response.ok || !payload.login) {
         setGithubTokenCheck({
@@ -176,6 +189,10 @@ export function useCredentialsSettings({
       });
       return true;
     } catch (error) {
+      if (!isCurrentRequest()) {
+        return false;
+      }
+
       setGithubTokenCheck({
         status: 'invalid',
         message: error instanceof Error ? error.message : 'Could not reach the server',
@@ -285,6 +302,7 @@ export function useCredentialsSettings({
   }, []);
 
   const cancelNewGithubForm = useCallback(() => {
+    verificationRequestId.current += 1;
     setShowNewGithubForm(false);
     setNewGithubName('');
     setNewGithubToken('');
@@ -294,6 +312,7 @@ export function useCredentialsSettings({
   }, []);
 
   const changeNewGithubToken = useCallback((token: string) => {
+    verificationRequestId.current += 1;
     setNewGithubToken(token);
     setGithubTokenCheck({ status: 'idle' });
   }, []);

@@ -19,6 +19,13 @@ type GithubRepoPickerProps = {
   availableTokens: GithubTokenCredential[];
   disabled?: boolean;
   onChange: (value: string) => void;
+  /**
+   * Called instead of onChange when the value comes from picking a repo out of
+   * the list rather than typing. Selection carries more meaning than a
+   * keystroke: the repo was found through an authenticated search, so the
+   * caller may want to line the clone up with the same token.
+   */
+  onSelectRepo?: (cloneUrl: string) => void;
   onTokenChange: (tokenId: string) => void;
 };
 
@@ -62,6 +69,7 @@ export default function GithubRepoPicker({
   availableTokens,
   disabled = false,
   onChange,
+  onSelectRepo,
   onTokenChange,
 }: GithubRepoPickerProps) {
   const { t } = useTranslation();
@@ -129,7 +137,7 @@ export default function GithubRepoPicker({
   }, [isOpen]);
 
   const handleSelectRepo = (cloneUrl: string) => {
-    onChange(cloneUrl);
+    (onSelectRepo ?? onChange)(cloneUrl);
     setIsOpen(false);
   };
 
