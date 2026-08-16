@@ -1,14 +1,16 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, ChevronDown, Plus } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 
 import type {
+  Project,
   ProjectSession,
   LLMProvider,
   ProviderModelActions,
   ProviderModelOption,
   ProviderModelsDefinition,
 } from "../../../../types/app";
+import { api } from "../../../../utils/api";
 import SessionProviderLogo from "../../../llm-logo-provider/SessionProviderLogo";
 import { NextTaskBanner } from "../../../task-master";
 import {
@@ -28,6 +30,7 @@ import {
 } from "../../../../shared/view/ui";
 
 import ModelLibraryPanel from "./ModelLibraryPanel";
+import { parseReadmeSummary, type ReadmeSummary } from "./readmeSummary";
 
 const PROVIDER_META: { id: LLMProvider; name: string }[] = [
   { id: "claude", name: "Anthropic" },
@@ -51,6 +54,7 @@ function modelSearchFilter(value: string, search: string): number {
 }
 
 type ProviderSelectionEmptyStateProps = {
+  selectedProject: Project | null;
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
   provider: LLMProvider;
@@ -109,6 +113,7 @@ function getProviderDisplayName(p: LLMProvider) {
 }
 
 export default function ProviderSelectionEmptyState({
+  selectedProject,
   selectedSession,
   currentSessionId,
   provider,
@@ -133,6 +138,48 @@ export default function ProviderSelectionEmptyState({
   const { t } = useTranslation("chat");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [modelLibraryOpen, setModelLibraryOpen] = useState(false);
+
+  // Summary of the current project's README.md (first title + first paragraph),
+  // shown only on the brand-new-conversation empty state as lightweight context.
+  // `"missing"` means the project has no usable README — the pane then nudges
+  // the user to add one; `null` means "unknown yet / render nothing".
+  const [readmeState, setReadmeState] = useState<ReadmeSummary | "missing" | null>(null);
+  const [creatingReadme, setCreatingReadme] = useState(false);
+  const isNewConversation = !selectedSession && !currentSessionId;
+  const projectId = selectedProject?.projectId ?? null;
+
+  useEffect(() => {
+    if (!isNewConversation || !projectId) {
+      setReadmeState(null);
+      return;
+    }
+
+    let cancelled = false;
+    setReadmeState(null);
+
+    (async () => {
+      try {
+        const response = await api.readFile(projectId, "README.md");
+        if (cancelled) return;
+        if (!response.ok) {
+          // 404 = no README to read; other errors are transient, show nothing.
+          setReadmeState(response.status === 404 ? "missing" : null);
+          return;
+        }
+        const { content } = await response.json();
+        if (cancelled) return;
+        const summary = parseReadmeSummary(content ?? "");
+        setReadmeState(summary.title || summary.paragraph ? summary : "missing");
+      } catch {
+        // Offline / unexpected error: don't claim the README is missing.
+        if (!cancelled) setReadmeState(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isNewConversation, projectId]);
 
   const visibleProviderGroups = useMemo<ProviderGroup[]>(() => {
     return PROVIDER_META.map((p) => ({
@@ -202,10 +249,55 @@ export default function ProviderSelectionEmptyState({
     setDialogOpen(true);
   };
 
+  // Seed a starter README.md (titled with the project name) and swap the
+  // "add" prompt for the freshly parsed summary on success.
+  const handleAddReadme = useCallback(async () => {
+    if (!projectId || creatingReadme) return;
+    const heading = selectedProject?.displayName?.trim() || "Project";
+    const content = `# ${heading}\n\n`;
+    setCreatingReadme(true);
+    try {
+      const response = await api.saveFile(projectId, "README.md", content);
+      if (response.ok) setReadmeState(parseReadmeSummary(content));
+    } catch {
+      // Leave the prompt in place so the user can retry.
+    } finally {
+      setCreatingReadme(false);
+    }
+  }, [projectId, creatingReadme, selectedProject]);
+
   if (!selectedSession && !currentSessionId) {
     return (
       <div className="flex h-full items-center justify-center px-4">
         <div className="w-full max-w-[34.25rem]">
+          {readmeState === "missing" ? (
+            <div className="mb-6 text-center">
+              <button
+                type="button"
+                onClick={handleAddReadme}
+                disabled={creatingReadme}
+                className="text-lg font-semibold tracking-tight text-muted-foreground/50 underline-offset-4 transition-colors hover:text-muted-foreground hover:underline disabled:opacity-60 sm:text-xl"
+              >
+                {t("providerSelection.addReadme", {
+                  defaultValue: "Add README.md to project",
+                })}
+              </button>
+            </div>
+          ) : readmeState ? (
+            <div className="mb-6 text-center">
+              {readmeState.title && (
+                <h2 className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+                  {readmeState.title}
+                </h2>
+              )}
+              {readmeState.paragraph && (
+                <p className="mt-1 line-clamp-4 text-[13px] text-muted-foreground">
+                  {readmeState.paragraph}
+                </p>
+              )}
+            </div>
+          ) : null}
+
           <div className="mb-8 text-center">
             <h2 className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">
               {t("providerSelection.title")}
