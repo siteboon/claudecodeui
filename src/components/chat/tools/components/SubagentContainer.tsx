@@ -1,7 +1,10 @@
 import React from 'react';
+
 import type { SubagentChildTool } from '../../types/types';
-import { CollapsibleSection } from './CollapsibleSection';
+import { canonicalToolName } from '../toolAliases';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../../../../shared/view/ui';
+
+import { CollapsibleSection } from './CollapsibleSection';
 
 interface SubagentContainerProps {
   toolInput: unknown;
@@ -18,7 +21,10 @@ const getCompactToolDisplay = (toolName: string, toolInput: unknown): string => 
     try { return JSON.parse(toolInput); } catch { return {}; }
   })() : (toolInput || {});
 
-  switch (toolName) {
+  // Child tools carry the same rename risk as the parent, so the compact
+  // one-liner is matched on the canonical name too — otherwise a nested
+  // subagent shows a blank label instead of its description.
+  switch (canonicalToolName(toolName)) {
     case 'Read':
     case 'Write':
     case 'Edit':

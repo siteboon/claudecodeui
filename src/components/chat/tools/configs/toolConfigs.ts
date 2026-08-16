@@ -1,7 +1,9 @@
 /**
  * Centralized tool configuration registry
- * Defines display behavior for all tool types 
+ * Defines display behavior for all tool types
  */
+
+import { canonicalToolName } from '../toolAliases';
 
 export interface ToolDisplayConfig {
   input: {
@@ -585,7 +587,9 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
  * Get configuration for a tool, with fallback to default
  */
 export function getToolConfig(toolName: string): ToolDisplayConfig {
-  return TOOL_CONFIGS[toolName] || TOOL_CONFIGS.Default;
+  // Resolved through the alias map so a renamed tool keeps its rich rendering
+  // instead of silently degrading to Default's raw JSON dump.
+  return TOOL_CONFIGS[canonicalToolName(toolName)] || TOOL_CONFIGS.Default;
 }
 
 /**
