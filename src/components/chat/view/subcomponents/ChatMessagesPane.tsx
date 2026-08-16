@@ -185,6 +185,7 @@ function ChatMessagesPane({
         </div>
       ) : chatMessages.length === 0 ? (
         <ProviderSelectionEmptyState
+          selectedProject={selectedProject}
           selectedSession={selectedSession}
           currentSessionId={currentSessionId}
           provider={provider}

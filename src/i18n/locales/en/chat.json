@@ -163,7 +163,8 @@
       "opencode": "Ready to use OpenCode with {{model}}. Start typing your message below.",
       "default": "Select a provider above to begin"
     },
-    "pressToSearch": "Press <kbd>{{shortcut}}</kbd> to search sessions, files, and commits"
+    "pressToSearch": "Press <kbd>{{shortcut}}</kbd> to search sessions, files, and commits",
+    "addReadme": "Add README.md to project"
   },
   "session": {
     "continue": {
