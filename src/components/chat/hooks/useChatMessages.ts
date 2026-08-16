@@ -5,6 +5,7 @@
 
 import type { NormalizedMessage } from '../../../stores/useSessionStore';
 import type { ChatMessage, SubagentChildTool } from '../types/types';
+import { isSubagentTool } from '../tools/toolAliases';
 import { decodeHtmlEntities, unescapeWithMathProtection, formatUsageLimitText } from '../utils/chatFormatting';
 
 function formatToolResultContent(content: unknown): string {
@@ -145,7 +146,10 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
 
       case 'tool_use': {
         const tr = msg.toolResult || (msg.toolId ? toolResultMap.get(msg.toolId) : null);
-        const isSubagentContainer = msg.toolName === 'Task';
+        // Alias-aware: the subagent tool is 'Agent' in current Claude Code and
+        // 'Task' in older transcripts. Missing this is what made a spawned
+        // agent render as a raw parameter dump instead of a tidy container.
+        const isSubagentContainer = isSubagentTool(msg.toolName);
 
         // Build child tools from subagentTools
         const childTools: SubagentChildTool[] = [];
