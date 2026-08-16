@@ -391,6 +391,9 @@ export default function SidebarContent({
             hasError={recentConversationsError}
             selectedSession={projectListProps.selectedSession}
             currentTime={projectListProps.currentTime}
+            // The projects list props are a superset of what a session row acts
+            // through, so the same object serves both lists.
+            sessionActions={projectListProps}
             onConversationSelect={onConversationResultClick}
             onLoadMore={onLoadMoreRecentConversations}
             onRetry={onRetryRecentConversations}
