@@ -13,11 +13,14 @@ import {
   writeJsonConfig,
 } from '@/shared/utils.js';
 
+/** Antigravity MCP configuration adapter used by the provider registry. */
 export class AntigravityMcpProvider extends McpProvider {
+  /** Declares the scopes and transports supported by AGY configuration files. */
   constructor() {
     super('antigravity', ['user', 'project'], ['stdio', 'http']);
   }
 
+  /** Reads the native MCP server map for one AGY scope. */
   protected async readScopedServers(scope: McpScope, workspacePath: string): Promise<Record<string, unknown>> {
     const filePath = scope === 'user'
       ? path.join(os.homedir(), '.antigravity', 'mcp.json')
@@ -26,6 +29,7 @@ export class AntigravityMcpProvider extends McpProvider {
     return readObjectRecord(config.mcpServers) ?? {};
   }
 
+  /** Persists the native MCP server map for one AGY scope. */
   protected async writeScopedServers(
     scope: McpScope,
     workspacePath: string,
@@ -39,6 +43,7 @@ export class AntigravityMcpProvider extends McpProvider {
     await writeJsonConfig(filePath, config);
   }
 
+  /** Converts a validated shared MCP input into AGY's JSON representation. */
   protected buildServerConfig(input: UpsertProviderMcpServerInput): Record<string, unknown> {
     if (input.transport === 'stdio') {
       if (!input.command?.trim()) {
@@ -69,6 +74,7 @@ export class AntigravityMcpProvider extends McpProvider {
     };
   }
 
+  /** Normalizes a valid native AGY MCP entry and rejects empty transports. */
   protected normalizeServerConfig(
     scope: McpScope,
     name: string,
@@ -79,26 +85,28 @@ export class AntigravityMcpProvider extends McpProvider {
       return null;
     }
 
-    if (typeof config.command === 'string') {
+    const command = readOptionalString(config.command);
+    if (command) {
       return {
         provider: 'antigravity',
         name,
         scope,
         transport: 'stdio',
-        command: config.command,
+        command,
         args: readStringArray(config.args),
         env: readStringRecord(config.env),
         cwd: readOptionalString(config.cwd),
       };
     }
 
-    if (typeof config.url === 'string') {
+    const url = readOptionalString(config.url);
+    if (url) {
       return {
         provider: 'antigravity',
         name,
         scope,
         transport: 'http',
-        url: config.url,
+        url,
         headers: readStringRecord(config.headers),
       };
     }

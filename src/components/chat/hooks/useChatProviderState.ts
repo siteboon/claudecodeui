@@ -189,8 +189,10 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       return;
     }
 
-    setAntigravityModel(model);
-    localStorage.setItem('antigravity-model', model);
+    if (targetProvider === 'antigravity') {
+      setAntigravityModel(model);
+      localStorage.setItem('antigravity-model', model);
+    }
   }, []);
 
   const setStoredProviderEffort = useCallback((targetProvider: LLMProvider, effort: string) => {

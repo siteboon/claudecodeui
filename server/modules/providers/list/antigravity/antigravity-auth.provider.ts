@@ -1,27 +1,18 @@
-import crossSpawn from 'cross-spawn';
-
 import type { IProviderAuth } from '@/shared/interfaces.js';
 import type { ProviderAuthStatus } from '@/shared/types.js';
-import { buildProviderCliEnv } from '@/shared/utils.js';
+import { runProviderCliCommand } from '@/shared/utils.js';
 
-const spawnFunction = crossSpawn;
-
+/** Antigravity installation and authentication probe used by provider routes. */
 export class AntigravityProviderAuth implements IProviderAuth {
-  private checkInstalled(): boolean {
-    try {
-      const result = spawnFunction.sync('agy', ['--version'], {
-        env: buildProviderCliEnv(),
-        stdio: 'ignore',
-        timeout: 5000,
-      });
-      return !result.error && result.status === 0;
-    } catch {
-      return false;
-    }
+  /** Checks whether the AGY executable can be invoked without blocking Node.js. */
+  private async checkInstalled(): Promise<boolean> {
+    const result = await runProviderCliCommand('agy', ['--version'], { timeoutMs: 5_000 });
+    return !result.error && result.exitCode === 0;
   }
 
+  /** Reports installation and login state through lightweight AGY probes. */
   async getStatus(): Promise<ProviderAuthStatus> {
-    const installed = this.checkInstalled();
+    const installed = await this.checkInstalled();
     if (!installed) {
       return {
         installed: false,
@@ -33,12 +24,8 @@ export class AntigravityProviderAuth implements IProviderAuth {
       };
     }
 
-    const modelsResult = spawnFunction.sync('agy', ['models'], {
-      encoding: 'utf8',
-      env: buildProviderCliEnv(),
-      timeout: 10_000,
-    });
-    const authenticated = !modelsResult.error && modelsResult.status === 0;
+    const modelsResult = await runProviderCliCommand('agy', ['models'], { timeoutMs: 10_000 });
+    const authenticated = !modelsResult.error && modelsResult.exitCode === 0;
 
     return {
       installed,

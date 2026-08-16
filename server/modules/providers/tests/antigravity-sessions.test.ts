@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -132,6 +132,30 @@ test('Antigravity history reader normalizes transcript messages', async () => {
     assert.equal(history.messages[1]?.kind, 'text');
     assert.equal(history.messages[1]?.role, 'assistant');
     assert.equal(history.messages[1]?.content, 'History is visible now.');
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('Antigravity history reader skips a partially written JSONL line', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'antigravity-partial-history-'));
+  try {
+    const transcriptPath = await writeAntigravityTranscript(tempRoot, 'agy-session-partial');
+    await appendFile(transcriptPath, '{"step_index":2,"source":"MODEL"', 'utf8');
+    const provider = new AntigravitySessionsProvider();
+
+    const history = await provider.fetchHistory('app-session-partial', {
+      providerSessionId: 'agy-session-partial',
+      jsonlPath: transcriptPath,
+      offset: 1,
+      limit: 1,
+    });
+
+    assert.equal(history.total, 2);
+    assert.equal(history.messages.length, 1);
+    assert.equal(history.messages[0]?.content, 'Fix Antigravity history');
+    assert.equal(history.offset, 1);
+    assert.equal(history.limit, 1);
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }

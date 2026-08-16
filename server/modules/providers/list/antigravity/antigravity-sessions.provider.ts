@@ -12,6 +12,7 @@ import {
 
 const PROVIDER = 'antigravity';
 
+/** Removes provider metadata tags from user-facing transcript content. */
 function stripAntigravityTags(content: string): string {
   return content
     .replace(/<ADDITIONAL_METADATA>[\s\S]*?<\/ADDITIONAL_METADATA>/g, '')
@@ -20,6 +21,7 @@ function stripAntigravityTags(content: string): string {
     .trim();
 }
 
+/** Converts a provider timestamp into the normalized ISO representation. */
 function parseAntigravityTimestamp(value: unknown): string | undefined {
   const raw = readOptionalString(value);
   if (!raw) {
@@ -30,6 +32,7 @@ function parseAntigravityTimestamp(value: unknown): string | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
+/** Maps one AGY JSONL step into zero or more shared history messages. */
 function normalizeAntigravityHistoryStep(rawStep: unknown, sessionId: string | null): NormalizedMessage[] {
   const raw = readObjectRecord(rawStep);
   if (!raw) {
@@ -101,7 +104,9 @@ function normalizeAntigravityHistoryStep(rawStep: unknown, sessionId: string | n
   return [];
 }
 
+/** Antigravity transcript reader and message normalizer used by session services. */
 export class AntigravitySessionsProvider implements IProviderSessions {
+  /** Normalizes a live AGY output chunk for websocket and SSE consumers. */
   normalizeMessage(rawMessage: unknown, sessionId: string | null): NormalizedMessage[] {
     const raw = readObjectRecord(rawMessage);
     const content = typeof rawMessage === 'string'
@@ -121,19 +126,22 @@ export class AntigravitySessionsProvider implements IProviderSessions {
     })];
   }
 
+  /** Loads a resilient, tail-paginated view of an AGY transcript. */
   async fetchHistory(
     sessionId: string,
     options: FetchHistoryOptions = {},
   ): Promise<FetchHistoryResult> {
     const { limit = null, offset = 0 } = options;
+    const normalizedOffset = Math.max(0, offset);
+    const normalizedLimit = limit === null ? null : Math.max(0, limit);
     const transcriptPath = readOptionalString(options.jsonlPath) ?? null;
     if (!transcriptPath) {
       return {
         messages: [],
         total: 0,
         hasMore: false,
-        offset: Math.max(0, offset),
-        limit: limit === null ? null : Math.max(0, limit),
+        offset: normalizedOffset,
+        limit: normalizedLimit,
       };
     }
 
@@ -146,16 +154,27 @@ export class AntigravitySessionsProvider implements IProviderSessions {
           continue;
         }
 
-        normalized.push(...normalizeAntigravityHistoryStep(JSON.parse(trimmed), sessionId));
+        try {
+          normalized.push(...normalizeAntigravityHistoryStep(JSON.parse(trimmed), sessionId));
+        } catch {
+          // A live transcript can end with a partially written JSONL record.
+          // Preserve every complete entry instead of hiding the whole history.
+        }
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.warn(`[AntigravityProvider] Failed to load session ${sessionId}:`, message);
-      return { messages: [], total: 0, hasMore: false, offset: 0, limit: null };
+      console.warn(
+        '[AntigravityProvider] Failed to read session transcript:',
+        error instanceof Error ? error.name : 'UnknownError',
+      );
+      return {
+        messages: [],
+        total: 0,
+        hasMore: false,
+        offset: normalizedOffset,
+        limit: normalizedLimit,
+      };
     }
 
-    const normalizedOffset = Math.max(0, offset);
-    const normalizedLimit = limit === null ? null : Math.max(0, limit);
     const { page, hasMore } = sliceTailPage(normalized, normalizedLimit, normalizedOffset);
 
     return {

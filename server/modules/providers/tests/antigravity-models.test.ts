@@ -4,7 +4,7 @@ import test from 'node:test';
 import {
   ANTIGRAVITY_FALLBACK_MODELS,
   parseAntigravityModelsStdout,
-} from './antigravity-models.provider.js';
+} from '@/modules/providers/list/antigravity/antigravity-models.provider.js';
 
 test('parseAntigravityModelsStdout converts agy model lines to model options', () => {
   const models = parseAntigravityModelsStdout(`

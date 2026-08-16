@@ -1,18 +1,14 @@
-import crossSpawn from 'cross-spawn';
-
 import type { IProviderModels } from '@/shared/interfaces.js';
 import type {
-  ProviderChangeActiveModelInput,
   ProviderCurrentActiveModel,
   ProviderModelsDefinition,
-  ProviderSessionActiveModelChange,
 } from '@/shared/types.js';
 import {
-  buildProviderCliEnv,
   buildDefaultProviderCurrentActiveModel,
-  writeProviderSessionActiveModelChange,
+  runProviderCliCommand,
 } from '@/shared/utils.js';
 
+/** Fallback model catalog returned when the Antigravity CLI cannot be queried. */
 export const ANTIGRAVITY_FALLBACK_MODELS: ProviderModelsDefinition = {
   OPTIONS: [
     {
@@ -61,8 +57,7 @@ export const ANTIGRAVITY_FALLBACK_MODELS: ProviderModelsDefinition = {
 
 const MODELS_TIMEOUT_MS = 20_000;
 
-const spawnFunction = crossSpawn;
-
+/** Parses the line-oriented model list returned by `agy models`. */
 export const parseAntigravityModelsStdout = (stdout: string): ProviderModelsDefinition => {
   const models = stdout
     .split(/\r?\n/)
@@ -84,28 +79,23 @@ export const parseAntigravityModelsStdout = (stdout: string): ProviderModelsDefi
   };
 };
 
+/** Antigravity model discovery adapter used by provider model services. */
 export class AntigravityProviderModels implements IProviderModels {
+  /** Queries `agy models`, falling back to a stable catalog on probe failures. */
   async getSupportedModels(): Promise<ProviderModelsDefinition> {
-    const result = spawnFunction.sync('agy', ['models'], {
-      encoding: 'utf8',
-      env: buildProviderCliEnv(),
-      timeout: MODELS_TIMEOUT_MS,
+    const result = await runProviderCliCommand('agy', ['models'], {
+      timeoutMs: MODELS_TIMEOUT_MS,
     });
 
-    if (result.error || result.status !== 0) {
+    if (result.error || result.exitCode !== 0) {
       return ANTIGRAVITY_FALLBACK_MODELS;
     }
 
     return parseAntigravityModelsStdout(result.stdout || '');
   }
 
+  /** Resolves the default active model from the current AGY catalog. */
   async getCurrentActiveModel(): Promise<ProviderCurrentActiveModel> {
     return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());
-  }
-
-  async changeActiveModel(
-    input: ProviderChangeActiveModelInput,
-  ): Promise<ProviderSessionActiveModelChange> {
-    return writeProviderSessionActiveModelChange('antigravity', input, { supported: true });
   }
 }

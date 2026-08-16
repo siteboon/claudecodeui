@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { AntigravityProviderAuth } from './antigravity-auth.provider.js';
+import { AntigravityProviderAuth } from '@/modules/providers/list/antigravity/antigravity-auth.provider.js';
 
 const findEnvKey = (name: string) =>
   Object.keys(process.env).find((key) => key.toLowerCase() === name.toLowerCase()) || name;
@@ -34,7 +34,7 @@ process.exit(1);
   await chmod(commandPath, 0o755);
 }
 
-test('Antigravity auth finds agy in npm global prefix bin even when PATH omits it', async () => {
+test('Antigravity auth finds agy in npm global prefix bin even when PATH omits it', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'antigravity-auth-'));
   const binDir = path.join(tempRoot, 'bin');
   const pathKey = findEnvKey('PATH');

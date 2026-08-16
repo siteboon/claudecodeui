@@ -21,10 +21,12 @@ type ParsedAntigravitySession = {
   sessionName?: string;
 };
 
+/** Identifies provider-native transcript artifacts inside the brain directory. */
 function isAntigravityTranscript(filePath: string): boolean {
   return path.basename(filePath) === 'transcript.jsonl';
 }
 
+/** Derives the AGY session id from a transcript path. */
 function getSessionIdFromTranscriptPath(filePath: string): string | null {
   const parts = filePath.split(path.sep);
   const brainIndex = parts.lastIndexOf('brain');
@@ -32,6 +34,7 @@ function getSessionIdFromTranscriptPath(filePath: string): string | null {
   return sessionId?.trim() || null;
 }
 
+/** Removes AGY metadata wrappers before using text as a session title. */
 function stripAntigravityTags(content: string): string {
   return content
     .replace(/<ADDITIONAL_METADATA>[\s\S]*?<\/ADDITIONAL_METADATA>/g, '')
@@ -40,6 +43,7 @@ function stripAntigravityTags(content: string): string {
     .trim();
 }
 
+/** Extracts workspace and first-user-message metadata from one transcript line. */
 function extractAntigravityStepContent(rawLine: string): { projectPath?: string; firstUserMessage?: string } | null {
   try {
     const parsed = readObjectRecord(JSON.parse(rawLine));
@@ -69,10 +73,12 @@ function extractAntigravityStepContent(rawLine: string): { projectPath?: string;
   }
 }
 
+/** Imports Antigravity transcript metadata into the shared sessions database. */
 export class AntigravitySessionSynchronizer implements IProviderSessionSynchronizer {
   private readonly brainDir = path.join(os.homedir(), '.gemini', 'antigravity-cli', 'brain');
   private readonly historyPath = path.join(os.homedir(), '.gemini', 'antigravity-cli', 'history.jsonl');
 
+  /** Scans changed AGY transcripts and upserts their shared session records. */
   async synchronize(since?: Date): Promise<number> {
     const files = await findFilesRecursivelyCreatedAfter(this.brainDir, 'transcript.jsonl', since ?? null);
 
@@ -91,6 +97,7 @@ export class AntigravitySessionSynchronizer implements IProviderSessionSynchroni
     return processed;
   }
 
+  /** Synchronizes one provider transcript and returns its session id when valid. */
   async synchronizeFile(filePath: string): Promise<string | null> {
     if (!isAntigravityTranscript(filePath)) {
       return null;

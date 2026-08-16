@@ -430,6 +430,69 @@ const addSessionEffortColumn = (db: Database): void => {
   addColumnToTableIfNotExists(db, 'sessions', columnNames, 'effort', 'TEXT');
 };
 
+/**
+ * Extends the provider-model table constraint for newly registered providers.
+ *
+ * SQLite cannot alter a CHECK constraint in place, so databases created
+ * before Antigravity support need a one-time table rebuild. Existing model
+ * rows and their stable ids are preserved verbatim.
+ */
+const ensureAntigravityProviderModelsConstraint = (db: Database): void => {
+  const table = db.prepare(`
+    SELECT sql
+    FROM sqlite_master
+    WHERE type = 'table' AND name = 'provider_models'
+  `).get() as { sql?: string } | undefined;
+
+  if (!table?.sql || table.sql.includes("'antigravity'")) {
+    return;
+  }
+
+  console.log('Running migration: Adding Antigravity provider model support');
+  db.exec('BEGIN TRANSACTION');
+  try {
+    db.exec('DROP TABLE IF EXISTS provider_models__new');
+    db.exec(`
+      CREATE TABLE provider_models__new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        provider TEXT NOT NULL CHECK (provider IN ('claude', 'cursor', 'codex', 'opencode', 'antigravity')),
+        model_id TEXT NOT NULL,
+        model_name TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(provider, model_id)
+      )
+    `);
+    db.exec(`
+      INSERT INTO provider_models__new (
+        id,
+        provider,
+        model_id,
+        model_name,
+        sort_order,
+        created_at,
+        updated_at
+      )
+      SELECT
+        id,
+        provider,
+        model_id,
+        model_name,
+        sort_order,
+        created_at,
+        updated_at
+      FROM provider_models
+    `);
+    db.exec('DROP TABLE provider_models');
+    db.exec('ALTER TABLE provider_models__new RENAME TO provider_models');
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+};
+
 const ensureProjectsForSessionPaths = (db: Database): void => {
   if (!tableExists(db, 'sessions')) {
     return;
@@ -473,6 +536,7 @@ export const runMigrations = (db: Database) => {
     db.exec('CREATE INDEX IF NOT EXISTS idx_notification_channel_endpoints_user_channel ON notification_channel_endpoints(user_id, channel)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_notification_channel_endpoints_enabled ON notification_channel_endpoints(enabled)');
     db.exec(PROVIDER_MODELS_TABLE_SCHEMA_SQL);
+    ensureAntigravityProviderModelsConstraint(db);
     db.exec(`
       CREATE INDEX IF NOT EXISTS idx_provider_models_provider_order
       ON provider_models(provider, sort_order, id)
