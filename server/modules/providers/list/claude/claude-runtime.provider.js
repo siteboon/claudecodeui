@@ -25,6 +25,7 @@ import {
   normalizeImageDescriptors
 } from '@/shared/image-attachments.js';
 import { CLAUDE_PREDEFINED_MODELS } from '@/modules/providers/list/claude/claude-models.provider.js';
+import { resolveClaudePermissionMode } from '@/modules/providers/list/claude/claude-permission-mode.js';
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
 import {
   createNotificationEvent,
@@ -178,18 +179,18 @@ function mapCliOptionsToSDK(options = {}) {
     sdkOptions.cwd = cwd;
   }
 
-  if (permissionMode && permissionMode !== 'default') {
-    sdkOptions.permissionMode = permissionMode;
-  }
-
   const settings = toolsSettings || {
     allowedTools: [],
     disallowedTools: [],
     skipPermissions: false
   };
 
-  if (settings.skipPermissions && permissionMode !== 'plan') {
-    sdkOptions.permissionMode = 'bypassPermissions';
+  const resolvedPermissionMode = resolveClaudePermissionMode(
+    permissionMode,
+    Boolean(settings.skipPermissions),
+  );
+  if (resolvedPermissionMode) {
+    sdkOptions.permissionMode = resolvedPermissionMode;
   }
 
   let allowedTools = [...(settings.allowedTools || [])];
