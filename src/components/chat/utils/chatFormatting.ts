@@ -17,29 +17,49 @@ export function normalizeInlineCodeFences(text: string) {
   }
 }
 
+// Regions the escape-sequence pass below must not touch: code (a literal `\t`
+// there is content, not markup) and math (where `\text`/`\theta`/`\rho` would be
+// shredded into control characters). Single-`$` spans are deliberately NOT math —
+// `$200k … $100k` prose would otherwise be swallowed as one equation.
+const PROTECTED_BLOCK = /```[\s\S]*?```|`[^`\n]*`|\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)/g;
+
 export function unescapeWithMathProtection(text: string) {
   if (!text || typeof text !== 'string') return text;
 
-  const mathBlocks: string[] = [];
-  const placeholderPrefix = '__MATH_BLOCK_';
-  const placeholderSuffix = '__';
+  const blocks: string[] = [];
+  // Literal `__PROTECTED_BLOCK_0__` in the message would otherwise be restored as
+  // block 0, replacing the user's own words. NUL can't occur in typed markdown, and
+  // the loop covers even that pathological case.
+  const placeholderSuffix = '\u0000';
+  let placeholderPrefix = '\u0000PROTECTED_BLOCK_';
+  while (text.includes(placeholderPrefix)) {
+    placeholderPrefix += '_';
+  }
 
-  let processedText = text.replace(/\$\$([\s\S]*?)\$\$|\$([^\$\n]+?)\$/g, (match) => {
-    const index = mathBlocks.length;
-    mathBlocks.push(match);
+  let processedText = text.replace(PROTECTED_BLOCK, (match) => {
+    const index = blocks.length;
+    if (match.startsWith('\\[') || match.startsWith('\\(')) {
+      // remark-math only understands dollar delimiters, so rewrite the LaTeX ones;
+      // otherwise the equation leaks onto the page as literal text.
+      blocks.push('$$' + match.slice(2, -2) + '$$');
+    } else if (match.startsWith('$$')) {
+      blocks.push(match);
+    } else {
+      // Code: keep the legacy `\n` expansion (JSON-ish output relies on it).
+      blocks.push(match.replace(/\\n/g, '\n'));
+    }
     return `${placeholderPrefix}${index}${placeholderSuffix}`;
   });
 
-  processedText = processedText.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r');
+  // Only `\n`. `\t`/`\r` collided with real LaTeX commands (`\text`, `\times`,
+  // `\rho`, `\right`) and Windows paths (`C:\temp`), corrupting far more than they
+  // fixed — a leading TAB even turned an equation into an indented code block.
+  processedText = processedText.replace(/\\n/g, '\n');
 
-  processedText = processedText.replace(
+  return processedText.replace(
     new RegExp(`${placeholderPrefix}(\\d+)${placeholderSuffix}`, 'g'),
-    (match, index) => {
-      return mathBlocks[parseInt(index, 10)];
-    },
+    (match, index) => blocks[parseInt(index, 10)] ?? match,
   );
-
-  return processedText;
 }
 
 export function escapeRegExp(value: string) {

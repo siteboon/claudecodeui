@@ -196,6 +196,9 @@ const markdownComponents = {
 
 export function Markdown({ children, className, breaks = false }: MarkdownProps) {
   const content = normalizeInlineCodeFences(String(children ?? ''));
+  // singleDollarTextMath: false — in a coding/finance chat `$200k … $100k` is prose,
+  // not an equation; the default would render the span between two currency amounts
+  // as inline math. `$$…$$`, `\[…\]` and `\(…\)` still render (see chatFormatting).
   const remarkPlugins = useMemo(
     () => (breaks
       ? [remarkGfm, [remarkMath, { singleDollarTextMath: false }], remarkBreaks]
