@@ -86,7 +86,7 @@ export default function MainContentTabSwitcher({
 
     const tabButtons = Array.from(tabList.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
     const currentIndex = tabButtons.indexOf(event.currentTarget);
-    let nextIndex = currentIndex;
+    let nextIndex: number;
 
     if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % tabButtons.length;
     else if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + tabButtons.length) % tabButtons.length;

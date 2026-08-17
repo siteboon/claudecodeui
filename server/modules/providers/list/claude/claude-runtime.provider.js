@@ -930,7 +930,6 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     // surfaces the error, but must not emit a second terminal complete.
     ws.send(createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
     if (!turnCompleteSent) {
-      turnCompleteSent = true;
       ws.send(createCompleteMessage({ provider: 'claude', sessionId: capturedSessionId || sessionId || null, exitCode: 1 }));
     }
     notifyRunFailed({
