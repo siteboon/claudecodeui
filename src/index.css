@@ -588,20 +588,20 @@
     clip-path: inset(-8px -8px 0 -8px);
   }
 
+  /*
+   * Paint/layout isolation per message, but NOT `content-visibility: auto`.
+   *
+   * That property sizes an off-screen element by `contain-intrinsic-size`
+   * instead of its content, and every value here was a guess: a collapsed tool
+   * row is ~32px and was reserving 240px, so scrolled-away messages rendered as
+   * tall empty boxes with their text floating inside. The `auto` keyword makes
+   * it worse rather than better — the browser then remembers the last rendered
+   * height, so a row that was expanded once (a diff, a long tool output) keeps
+   * that height forever while skipped. Messages are already paginated, so the
+   * DOM stays small and skipping off-screen work buys little.
+   */
   .chat-message {
     contain: layout style paint;
-    content-visibility: auto;
-    contain-intrinsic-size: auto 180px;
-  }
-
-  .chat-message.assistant {
-    contain-intrinsic-size: auto 240px;
-  }
-
-  .chat-message.user,
-  .chat-message.tool,
-  .chat-message.error {
-    contain-intrinsic-size: auto 96px;
   }
 
   /* Mobile touch optimization and safe areas */
