@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import LLMProviderLogo from '../../../llm-provider-logo/LLMProviderLogo';
 import type { AppTab, Project, ProjectSession } from '../../../../types/app';
 import { usePlugins } from '../../../../contexts/PluginsContext';
+import { getSessionTitle } from '../../../../utils/pageTitle';
 
 type MainContentTitleProps = {
   activeTab: AppTab;
@@ -33,14 +34,6 @@ function getTabTitle(activeTab: AppTab, shouldShowTasksTab: boolean, t: (key: st
   }
 
   return 'Project';
-}
-
-function getSessionTitle(session: ProjectSession): string {
-  if (session.__provider === 'cursor') {
-    return (session.name as string) || 'Untitled Session';
-  }
-
-  return (session.summary as string) || 'New Session';
 }
 
 export default function MainContentTitle({
