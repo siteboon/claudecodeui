@@ -446,7 +446,8 @@
       "claude": "Model Context Protocol servers provide additional tools and data sources to Claude",
       "cursor": "Model Context Protocol servers provide additional tools and data sources to Cursor",
       "codex": "Model Context Protocol servers provide additional tools and data sources to Codex",
-      "opencode": "Model Context Protocol servers provide additional tools and data sources to OpenCode"
+      "opencode": "Model Context Protocol servers provide additional tools and data sources to OpenCode",
+      "zcode": "Model Context Protocol servers provide additional tools and data sources to ZCode. Native config files: ~/.zcode/cli/config.json (user) and zcode.json in the project root (project)."
     },
     "addButton": "Add MCP Server",
     "empty": "No MCP servers configured",

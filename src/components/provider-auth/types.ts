@@ -5,23 +5,31 @@ export type ProviderAuthStatus = {
   email: string | null;
   method: string | null;
   error: string | null;
+  /**
+   * Backend-suggested login command for the terminal login modal. Only
+   * providers needing a resolved engine path (zcode) provide it; the modal
+   * falls back to its static per-provider command when null.
+   */
+  loginCommand: string | null;
   loading: boolean;
 };
 
 export type ProviderAuthStatusMap = Record<LLMProvider, ProviderAuthStatus>;
 
-export const CLI_PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode'];
+export const CLI_PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode', 'zcode'];
 
 export const PROVIDER_AUTH_STATUS_ENDPOINTS: Record<LLMProvider, string> = {
   claude: '/api/providers/claude/auth/status',
   cursor: '/api/providers/cursor/auth/status',
   codex: '/api/providers/codex/auth/status',
   opencode: '/api/providers/opencode/auth/status',
+  zcode: '/api/providers/zcode/auth/status',
 };
 
 export const createInitialProviderAuthStatusMap = (loading = true): ProviderAuthStatusMap => ({
-  claude: { authenticated: false, email: null, method: null, error: null, loading },
-  cursor: { authenticated: false, email: null, method: null, error: null, loading },
-  codex: { authenticated: false, email: null, method: null, error: null, loading },
-  opencode: { authenticated: false, email: null, method: null, error: null, loading },
+  claude: { authenticated: false, email: null, method: null, error: null, loginCommand: null, loading },
+  cursor: { authenticated: false, email: null, method: null, error: null, loginCommand: null, loading },
+  codex: { authenticated: false, email: null, method: null, error: null, loginCommand: null, loading },
+  opencode: { authenticated: false, email: null, method: null, error: null, loginCommand: null, loading },
+  zcode: { authenticated: false, email: null, method: null, error: null, loginCommand: null, loading },
 });

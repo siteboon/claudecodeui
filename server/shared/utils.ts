@@ -1149,3 +1149,32 @@ export function findApplicationRoot(startDirectory: string): string {
     ? path.dirname(parentDirectory)
     : parentDirectory;
 }
+
+// ---------------------------
+//----------------- ZCODE STORAGE PATH UTILITIES ------------
+/**
+ * Resolves the ZCode data root (`ZCODE_STORAGE_DIR` when set, `~/.zcode`
+ * otherwise).
+ *
+ * ZCode redirects every data file (credentials, v2 config, SQLite database)
+ * under this root, so all ZCode providers and tests must derive their paths
+ * from this function instead of hard-coding the default. Consumers:
+ * zcode auth (credentials), zcode models (v2 config), zcode sessions and
+ * session synchronizer (database path).
+ */
+export function getZCodeStorageDir(): string {
+  const override = process.env.ZCODE_STORAGE_DIR?.trim();
+  return override || path.join(os.homedir(), '.zcode');
+}
+
+/**
+ * Resolves the path of ZCode's SQLite session database
+ * (`<storage>/cli/db/db.sqlite`).
+ *
+ * Consumers: zcode sessions provider (history reads) and zcode session
+ * synchronizer (incremental scans). Both open it strictly read-only and in
+ * short-lived connections, so the path itself is the only shared fact.
+ */
+export function getZCodeDatabasePath(): string {
+  return path.join(getZCodeStorageDir(), 'cli', 'db', 'db.sqlite');
+}

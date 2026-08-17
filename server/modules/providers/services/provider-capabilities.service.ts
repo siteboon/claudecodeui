@@ -81,6 +81,22 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsTokenUsage: true,
     supportsEffort: true,
   },
+  zcode: {
+    provider: 'zcode',
+    // Mapped by the runtime onto ZCode's session/setMode modes: build
+    // (default), edit, plan and yolo. See PERMISSION_MODE_MAP in the
+    // zcode runtime adapter.
+    permissionModes: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
+    defaultPermissionMode: 'default',
+    // Attachment parameters are not confirmed by the Phase 0 spike yet.
+    supportsImages: false,
+    supportsFiles: false,
+    supportsAbort: true,
+    // First version maps permission modes instead of per-tool approval.
+    supportsPermissionRequests: false,
+    supportsTokenUsage: true,
+    supportsEffort: true,
+  },
 };
 
 /**

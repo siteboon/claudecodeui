@@ -9,6 +9,7 @@ import { sessionSynchronizerService } from '@/modules/providers/services/session
 import { WS_OPEN_STATE, connectedClients } from '@/modules/websocket/index.js';
 import type { LLMProvider } from '@/shared/types.js';
 import { generateDisplayName } from '@/modules/projects/index.js';
+import { getZCodeStorageDir } from '@/shared/utils.js';
 
 type WatcherEventType = 'add' | 'change';
 
@@ -28,6 +29,11 @@ const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> =
   {
     provider: 'opencode',
     rootPath: path.join(os.homedir(), '.local', 'share', 'opencode'),
+  },
+  {
+    provider: 'zcode',
+    // ZCodeStorageDir-aware so an isolated ZCODE_STORAGE_DIR is watched too.
+    rootPath: path.join(getZCodeStorageDir(), 'cli', 'db'),
   },
 ];
 
@@ -71,6 +77,11 @@ let watcherRescheduleAfterRefresh = false;
 function isWatcherTargetFile(provider: LLMProvider, filePath: string): boolean {
   if (provider === 'opencode') {
     return path.basename(filePath) === 'opencode.db';
+  }
+
+  if (provider === 'zcode') {
+    const fileName = path.basename(filePath);
+    return fileName === 'db.sqlite' || fileName === 'db.sqlite-wal';
   }
 
   return filePath.endsWith('.jsonl');

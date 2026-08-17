@@ -66,7 +66,7 @@ export type AuthenticatedWebSocketRequest = IncomingMessage & {
  * Use this as the source of truth whenever a function or payload needs to identify
  * a specific LLM integration.
  */
-export type LLMProvider = 'claude' | 'codex' | 'cursor' | 'opencode';
+export type LLMProvider = 'claude' | 'codex' | 'cursor' | 'opencode' | 'zcode';
 
 /**
  * One selectable model row in a provider model catalog.
@@ -559,6 +559,14 @@ export type ProviderAuthStatus = {
   email: string | null;
   method: string | null;
   error?: string;
+  /**
+   * Provider-suggested login command for the terminal-based login modal.
+   *
+   * Only providers whose login requires a resolved absolute engine path
+   * (zcode: `node <engine-path> login`) populate it; the frontend falls back
+   * to its own static per-provider command when absent.
+   */
+  loginCommand?: string | null;
 };
 
 // ---------------------------

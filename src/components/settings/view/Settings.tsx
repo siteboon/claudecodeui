@@ -226,6 +226,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
         isOpen={showLoginModal}
         onClose={() => setShowLoginModal(false)}
         provider={loginProvider || 'claude'}
+        customCommand={loginProvider ? providerAuthStatus[loginProvider].loginCommand ?? undefined : undefined}
         onComplete={handleLoginComplete}
         isAuthenticated={isAuthenticated}
       />

@@ -8,3 +8,7 @@ export { providerModelsService } from './services/provider-models.service.js';
 
 export { initializeSessionsWatcher } from './services/sessions-watcher.service.js';
 export { closeSessionsWatcher } from './services/sessions-watcher.service.js';
+
+// shutdownZCodeRuntime: used by the server entrypoint (server/index.ts) to stop
+// the shared ZCode app-server subprocess during the shutdown flow.
+export { shutdownZCodeRuntime } from './list/zcode/index.js';

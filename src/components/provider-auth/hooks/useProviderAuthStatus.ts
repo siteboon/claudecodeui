@@ -16,6 +16,7 @@ type ProviderAuthStatusPayload = {
   email?: string | null;
   method?: string | null;
   error?: string | null;
+  loginCommand?: string | null;
 };
 
 type ProviderAuthStatusApiResponse = {
@@ -38,6 +39,7 @@ const toProviderAuthStatus = (
   email: payload.email ?? null,
   method: payload.method ?? null,
   error: payload.error ?? fallbackError,
+  loginCommand: payload.loginCommand ?? null,
   loading: false,
 });
 
@@ -81,6 +83,7 @@ export function useProviderAuthStatus(
           authenticated: false,
           email: null,
           method: null,
+          loginCommand: null,
           loading: false,
           error: FALLBACK_STATUS_ERROR,
         };
@@ -98,6 +101,7 @@ export function useProviderAuthStatus(
         authenticated: false,
         email: null,
         method: null,
+        loginCommand: null,
         loading: false,
         error: toErrorMessage(caughtError),
       };

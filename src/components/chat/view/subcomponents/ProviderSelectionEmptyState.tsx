@@ -34,6 +34,7 @@ const PROVIDER_META: { id: LLMProvider; name: string }[] = [
   { id: "codex", name: "OpenAI" },
   { id: "cursor", name: "Cursor" },
   { id: "opencode", name: "OpenCode" },
+  { id: "zcode", name: "ZCode" },
 ];
 
 const MOD_KEY =
@@ -64,6 +65,8 @@ type ProviderSelectionEmptyStateProps = {
   setCodexModel: (model: string) => void;
   opencodeModel: string;
   setOpenCodeModel: (model: string) => void;
+  zcodeModel: string;
+  setZcodeModel: (model: string) => void;
   providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
   providerModelActions: ProviderModelActions;
   providerModelsLoading: boolean;
@@ -93,10 +96,12 @@ function getCurrentModel(
   cu: string,
   co: string,
   o: string,
+  z: string,
 ) {
   if (p === "claude") return c;
   if (p === "codex") return co;
   if (p === "opencode") return o;
+  if (p === "zcode") return z;
   return cu;
 }
 
@@ -105,6 +110,7 @@ function getProviderDisplayName(p: LLMProvider) {
   if (p === "cursor") return "Cursor";
   if (p === "codex") return "Codex";
   if (p === "opencode") return "OpenCode";
+  if (p === "zcode") return "ZCode";
   return "Claude";
 }
 
@@ -122,6 +128,8 @@ export default function ProviderSelectionEmptyState({
   setCodexModel,
   opencodeModel,
   setOpenCodeModel,
+  zcodeModel,
+  setZcodeModel,
   providerModelCatalog,
   providerModelActions,
   providerModelsLoading,
@@ -152,6 +160,7 @@ export default function ProviderSelectionEmptyState({
     cursorModel,
     codexModel,
     opencodeModel,
+    zcodeModel,
   );
 
   const currentModelLabel = useMemo(() => {
@@ -173,12 +182,15 @@ export default function ProviderSelectionEmptyState({
       } else if (providerId === "opencode") {
         setOpenCodeModel(modelValue);
         localStorage.setItem("opencode-model", modelValue);
+      } else if (providerId === "zcode") {
+        setZcodeModel(modelValue);
+        localStorage.setItem("zcode-model", modelValue);
       } else {
         setCursorModel(modelValue);
         localStorage.setItem("cursor-model", modelValue);
       }
     },
-    [setClaudeModel, setCursorModel, setCodexModel, setOpenCodeModel],
+    [setClaudeModel, setCursorModel, setCodexModel, setOpenCodeModel, setZcodeModel],
   );
 
   const handleModelSelect = useCallback(
@@ -381,6 +393,10 @@ export default function ProviderSelectionEmptyState({
                 opencode: t("providerSelection.readyPrompt.opencode", {
                   model: opencodeModel,
                   defaultValue: "Ready with OpenCode {{model}}",
+                }),
+                zcode: t("providerSelection.readyPrompt.zcode", {
+                  model: zcodeModel,
+                  defaultValue: "Ready with ZCode {{model}}",
                 }),
               }[provider]
             }

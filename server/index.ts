@@ -14,6 +14,7 @@ import {
     closeSessionsWatcher,
     initializeSessionsWatcher,
     providerRuntimeService,
+    shutdownZCodeRuntime,
 } from '@/modules/providers/index.js';
 import { createWebSocketServer } from '@/modules/websocket/index.js';
 
@@ -387,6 +388,11 @@ async function startServer() {
                 await removeLocalServerMarker();
             } catch (err) {
                 console.error('[Local Server] Error removing server marker during shutdown:', getErrorMessage(err));
+            }
+            try {
+                await shutdownZCodeRuntime();
+            } catch (err) {
+                console.error('[ZCode] Error during protocol client shutdown:', getErrorMessage(err));
             }
             process.exit(0);
         };
