@@ -16,7 +16,7 @@ import { AppError, FORBIDDEN_WORKSPACE_PATHS, normalizeProjectPath } from '@/sha
  * Every entry is generated output that a project can rebuild, so hiding it by
  * default keeps large workspaces inside the entry budget below.
  */
-export const DEFAULT_IGNORED_DIRECTORY_NAMES: readonly string[] = [
+const DEFAULT_IGNORED_DIRECTORY_NAMES: readonly string[] = [
   'node_modules', 'dist', 'build', '.next', '.nuxt', '.cache', '.parcel-cache',
   '.git', '.svn', '.hg',
   '__pycache__', '.pytest_cache', '.mypy_cache', '.tox', 'venv', '.venv',

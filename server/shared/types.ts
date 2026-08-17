@@ -1014,13 +1014,6 @@ export type FileTreeLogger = {
 };
 
 /**
- * Required production dependencies for the File Tree application service.
- *
- * Filesystem, project lookup, workspace policy, MIME detection, concurrency,
- * and logging are all explicit so service construction has no hidden process,
- * repository, or machine-wide defaults.
- */
-/**
  * Persistence boundary for the user-configured ignored-directory names.
  *
  * `read` returns null when nothing has been stored yet, which keeps "never
@@ -1032,6 +1025,13 @@ export type FileTreeIgnoredDirectoriesGateway = {
   write(directoryNames: readonly string[]): void;
 };
 
+/**
+ * Required production dependencies for the File Tree application service.
+ *
+ * Filesystem, project lookup, workspace policy, ignored-directory persistence,
+ * MIME detection, concurrency, and logging are all explicit so service
+ * construction has no hidden process, repository, or machine-wide defaults.
+ */
 export type FileTreeServiceDependencies = {
   fileSystem: FileTreeFileSystem;
   projects: FileTreeProjectGateway;

@@ -25,6 +25,7 @@ export default function FilesSettingsTab() {
   const [defaults, setDefaults] = useState<string[]>([]);
   const [newDirectory, setNewDirectory] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoaded, setIsLoaded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,6 +33,7 @@ export default function FilesSettingsTab() {
   const applySettings = useCallback((settings: IgnoredDirectoriesSettings) => {
     setIgnoredDirectories(settings.ignoredDirectories);
     setDefaults(settings.defaults);
+    setIsLoaded(true);
   }, []);
 
   useEffect(() => {
@@ -107,6 +109,13 @@ export default function FilesSettingsTab() {
     );
   }
 
+  // Saving an editor that never loaded would overwrite the stored list with
+  // the empty one this component started with, so the editor stays hidden
+  // until the current settings are known.
+  if (!isLoaded) {
+    return <p className="text-sm text-destructive">{error ?? t('filesSettings.loadError')}</p>;
+  }
+
   return (
     <div className="space-y-8">
       <SettingsSection
@@ -145,6 +154,12 @@ export default function FilesSettingsTab() {
               onChange={(event) => setNewDirectory(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
+                  // An IME commit also arrives as Enter, so adding here would
+                  // store a half-typed directory name.
+                  if (event.nativeEvent.isComposing) {
+                    return;
+                  }
+
                   event.preventDefault();
                   addDirectory();
                 }

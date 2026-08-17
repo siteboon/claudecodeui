@@ -3,10 +3,7 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import test from 'node:test';
 
-import {
-  DEFAULT_IGNORED_DIRECTORY_NAMES,
-  createFileTreeService,
-} from '@/modules/file-tree/file-tree.service.js';
+import { createFileTreeService } from '@/modules/file-tree/file-tree.service.js';
 import type {
   FileTreeDirectoryEntry,
   FileTreeFileSystem,
@@ -394,10 +391,12 @@ test('getIgnoredDirectories reports the stored names alongside the defaults', as
     createIgnoredDirectoriesGateway(['cache']),
   ));
 
-  assert.deepEqual(service.getIgnoredDirectories(), {
-    ignoredDirectories: ['cache'],
-    defaults: [...DEFAULT_IGNORED_DIRECTORY_NAMES],
-  });
+  const settings = service.getIgnoredDirectories();
+
+  assert.deepEqual(settings.ignoredDirectories, ['cache']);
+  assert.ok(settings.defaults.includes('node_modules'));
+  assert.ok(settings.defaults.includes('bin'));
+  assert.ok(settings.defaults.includes('obj'));
 });
 
 test('getIgnoredDirectories falls back to the defaults when nothing is stored', async () => {
@@ -409,9 +408,34 @@ test('getIgnoredDirectories falls back to the defaults when nothing is stored', 
 
   const settings = service.getIgnoredDirectories();
 
-  assert.deepEqual(settings.ignoredDirectories, [...DEFAULT_IGNORED_DIRECTORY_NAMES]);
+  assert.deepEqual(settings.ignoredDirectories, settings.defaults);
   assert.ok(settings.ignoredDirectories.includes('bin'));
   assert.ok(settings.ignoredDirectories.includes('obj'));
+});
+
+test('an explicitly empty list hides nothing instead of falling back to the defaults', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const fileSystem = createFakeFileSystem({
+    access: async () => undefined,
+    openDirectory: createDirectoryReader((directoryPath) => directoryPath === projectRoot
+      ? [
+          createDirectoryEntry('bin', true),
+          createDirectoryEntry('node_modules', true),
+          createDirectoryEntry('src', true),
+        ]
+      : []),
+    lstat: async () => createStats(true, 0o755),
+  });
+  const service = createFileTreeService(createDependencies(
+    fileSystem,
+    projectRoot,
+    createIgnoredDirectoriesGateway([]),
+  ));
+
+  const tree = await service.listProjectFiles('project-1');
+
+  assert.deepEqual(service.getIgnoredDirectories().ignoredDirectories, []);
+  assert.deepEqual(tree.map((entry) => entry.name), ['bin', 'node_modules', 'src']);
 });
 
 test('updateIgnoredDirectories trims, drops blanks and deduplicates before persisting', async () => {
