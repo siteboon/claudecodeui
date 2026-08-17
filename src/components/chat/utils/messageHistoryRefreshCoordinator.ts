@@ -28,14 +28,18 @@ export function createMessageHistoryRefreshCoordinator(
     }
 
     const request = (async () => {
-      do {
-        pendingSessions.delete(sessionId);
-        const completed = await executeRefresh(sessionId);
-        if (completed === false) {
-          pendingSessions.add(sessionId);
-          break;
-        }
-      } while (pendingSessions.has(sessionId) && canRefreshNow(sessionId));
+      try {
+        do {
+          pendingSessions.delete(sessionId);
+          const completed = await executeRefresh(sessionId);
+          if (completed === false) {
+            pendingSessions.add(sessionId);
+            break;
+          }
+        } while (pendingSessions.has(sessionId) && canRefreshNow(sessionId));
+      } catch {
+        pendingSessions.add(sessionId);
+      }
     })().finally(() => {
       inFlightBySession.delete(sessionId);
     });

@@ -1,10 +1,16 @@
 #!/usr/bin/env node
 
-import { createCliApplication } from './index.js';
+// The CLI can reach shared environment constants through its composition root,
+// so finish the root environment bootstrap before loading that import graph.
+// eslint-disable-next-line boundaries/no-unknown
+import '../../load-env.js';
 
-const cliApplication = createCliApplication();
+async function runCli(): Promise<number> {
+  const { createCliApplication } = await import('./index.js');
+  return createCliApplication().run(process.argv.slice(2));
+}
 
-cliApplication.run(process.argv.slice(2)).then((exitCode) => {
+runCli().then((exitCode) => {
   process.exitCode = exitCode;
 }).catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);

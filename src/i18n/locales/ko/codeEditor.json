@@ -14,6 +14,8 @@
     "showingChanges": "변경사항 표시"
   },
   "actions": {
+    "copyPath": "파일 경로 복사",
+    "pathCopied": "파일 경로를 복사했습니다",
     "download": "파일 다운로드",
     "save": "저장",
     "saving": "저장 중...",

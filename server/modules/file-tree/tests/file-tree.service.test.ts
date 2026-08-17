@@ -87,11 +87,14 @@ function createDependencies(
   };
 }
 
-test('listProjectFiles uses gitignore instead of conventional directory names when it exists', async () => {
+test('listProjectFiles applies gitignore alongside hard directory exclusions', async () => {
   const projectRoot = path.resolve('file-tree-test-project');
   const documentationDirectory = path.join(projectRoot, 'docs');
   const buildDocumentationDirectory = path.join(documentationDirectory, 'build');
+  const gitDirectory = path.join(projectRoot, '.git');
+  const nodeModulesDirectory = path.join(projectRoot, 'node_modules');
   const sourceDirectory = path.join(projectRoot, 'src');
+  const readDirectories: string[] = [];
   const fileSystem = createFakeFileSystem({
     access: async () => undefined,
     readTextFile: async (filePath) => {
@@ -99,8 +102,10 @@ test('listProjectFiles uses gitignore instead of conventional directory names wh
       return '*.log';
     },
     openDirectory: createDirectoryReader((directoryPath) => {
+      readDirectories.push(directoryPath);
       if (directoryPath === projectRoot) {
         return [
+          createDirectoryEntry('.git', true),
           createDirectoryEntry('node_modules', true),
           createDirectoryEntry('README.md', false),
           createDirectoryEntry('docs', true),
@@ -122,7 +127,8 @@ test('listProjectFiles uses gitignore instead of conventional directory names wh
       candidatePath === documentationDirectory
         || candidatePath === buildDocumentationDirectory
         || candidatePath === sourceDirectory
-        || candidatePath === path.join(projectRoot, 'node_modules'),
+        || candidatePath === gitDirectory
+        || candidatePath === nodeModulesDirectory,
       0o754,
     ),
   });
@@ -130,16 +136,18 @@ test('listProjectFiles uses gitignore instead of conventional directory names wh
 
   const tree = await service.listProjectFiles('project-1', { respectGitignore: true });
 
-  assert.deepEqual(tree.map((entry) => entry.name), ['docs', 'node_modules', 'src', 'README.md']);
+  assert.deepEqual(tree.map((entry) => entry.name), ['docs', 'src', 'README.md']);
   const documentationEntry = tree[0];
   assert.deepEqual(documentationEntry?.children?.map((entry) => entry.name), ['build']);
   assert.deepEqual(documentationEntry?.children?.[0]?.children?.map((entry) => entry.name), ['foo.md']);
-  const sourceEntry = tree[2];
+  const sourceEntry = tree[1];
   assert.ok(sourceEntry);
   assert.equal(sourceEntry.type, 'directory');
   assert.equal(sourceEntry.permissions, '754');
   assert.equal(sourceEntry.permissionsRwx, 'rwxr-xr--');
   assert.deepEqual(sourceEntry.children?.map((entry) => entry.name), ['index.ts']);
+  assert.equal(readDirectories.includes(gitDirectory), false);
+  assert.equal(readDirectories.includes(nodeModulesDirectory), false);
 });
 
 test('listProjectFiles excludes gitignored entries only when requested', async () => {

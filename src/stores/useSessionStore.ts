@@ -124,6 +124,7 @@ export interface SessionSlot {
 }
 
 const EMPTY: NormalizedMessage[] = [];
+const SESSION_HISTORY_REQUEST_TIMEOUT_MS = 30_000;
 
 function createEmptySlot(): SessionSlot {
   return {
@@ -165,7 +166,9 @@ async function requestSessionHistoryPage(
   sessionId: string,
   options: SessionMessagesRequestOptions,
 ): Promise<SessionHistoryPage> {
-  const response = await authenticatedFetch(buildSessionMessagesUrl(sessionId, options));
+  const response = await authenticatedFetch(buildSessionMessagesUrl(sessionId, options), {
+    signal: AbortSignal.timeout(SESSION_HISTORY_REQUEST_TIMEOUT_MS),
+  });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
   const body = await response.json();
@@ -433,6 +436,12 @@ type LatestHistoryRefreshResult = {
 
 type CanRequestHistory = () => boolean;
 
+// Token usage is JSON response data, so compare its serialized value instead
+// of treating each freshly parsed response object as a state change.
+function hasEquivalentTokenUsage(left: unknown, right: unknown): boolean {
+  return Object.is(left, right) || JSON.stringify(left) === JSON.stringify(right);
+}
+
 function olderPagePrecedesCachedHistory(
   olderMessages: NormalizedMessage[],
   cachedMessages: NormalizedMessage[],
@@ -545,7 +554,10 @@ async function refreshLatestSlotFromServer(
   }
 
   let changed = false;
-  if (latestPage.tokenUsage !== undefined && latestPage.tokenUsage !== slot.tokenUsage) {
+  if (
+    latestPage.tokenUsage !== undefined
+    && !hasEquivalentTokenUsage(latestPage.tokenUsage, slot.tokenUsage)
+  ) {
     slot.tokenUsage = latestPage.tokenUsage;
     changed = true;
   }

@@ -14,6 +14,8 @@
     "showingChanges": "変更を表示中"
   },
   "actions": {
+    "copyPath": "ファイルパスをコピー",
+    "pathCopied": "ファイルパスをコピーしました",
     "download": "ファイルをダウンロード",
     "save": "保存",
     "saving": "保存中...",

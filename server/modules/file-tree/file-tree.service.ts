@@ -11,9 +11,13 @@ import type {
 } from '@/shared/types.js';
 import { AppError, FORBIDDEN_WORKSPACE_PATHS, normalizeProjectPath } from '@/shared/utils.js';
 
+const HARD_EXCLUDED_DIRECTORY_NAMES = new Set([
+  'node_modules', '.git', '.svn', '.hg',
+]);
+
 const IGNORED_DIRECTORY_NAMES = new Set([
-  'node_modules', 'dist', 'build', '.next', '.nuxt', '.cache', '.parcel-cache',
-  '.git', '.svn', '.hg',
+  ...HARD_EXCLUDED_DIRECTORY_NAMES,
+  'dist', 'build', '.next', '.nuxt', '.cache', '.parcel-cache',
   '__pycache__', '.pytest_cache', '.mypy_cache', '.tox', 'venv', '.venv',
   'target', 'vendor',
   '.gradle', '.idea', 'coverage', '.nyc_output',
@@ -36,8 +40,13 @@ const MAXIMUM_FILE_TREE_ENTRIES = 10_000;
 
 type FileTreeEntryFilter = (entryPath: string, isDirectory: boolean) => boolean;
 
+function includeEntryByHardExclusions(entryPath: string, isDirectory: boolean): boolean {
+  return !isDirectory || !HARD_EXCLUDED_DIRECTORY_NAMES.has(path.basename(entryPath));
+}
+
 function includeEntryByFallbackDirectoryNames(entryPath: string, isDirectory: boolean): boolean {
-  return !isDirectory || !IGNORED_DIRECTORY_NAMES.has(path.basename(entryPath));
+  return includeEntryByHardExclusions(entryPath, isDirectory)
+    && (!isDirectory || !IGNORED_DIRECTORY_NAMES.has(path.basename(entryPath)));
 }
 
 function createFileTreeError(message: string, statusCode: number, code: string): AppError {
@@ -150,6 +159,8 @@ function createGitignoreEntryFilter(
   const gitignore = ignore().add(gitignoreContent);
 
   return (entryPath, isDirectory) => {
+    if (!includeEntryByHardExclusions(entryPath, isDirectory)) return false;
+
     const relativePath = path.relative(projectRoot, entryPath).split(path.sep).join('/');
     const matchPath = isDirectory ? `${relativePath}/` : relativePath;
     return !gitignore.ignores(matchPath);

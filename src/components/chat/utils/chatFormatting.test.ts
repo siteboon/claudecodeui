@@ -21,3 +21,8 @@ test('stripProposedPlanEnvelope preserves tags that are not the outer envelope',
   const content = 'Use `<proposed_plan>` only for plans.';
   assert.equal(stripProposedPlanEnvelope(content), content);
 });
+
+test('stripProposedPlanEnvelope preserves an unmatched terminal closing tag', () => {
+  const content = 'Ordinary text that mentions a terminal tag.\n</proposed_plan>';
+  assert.equal(stripProposedPlanEnvelope(content), content);
+});

@@ -224,9 +224,9 @@ CloudCLI UI 与 CloudCLI Cloud 是对 Claude Code 的扩展，而非旁观 — M
 
 ## 许可证
 
-GNU 通用公共许可证 v3.0 - 详见 [LICENSE](../LICENSE) 文件。
+GNU Affero 通用公共许可证 v3.0 或更高版本 (AGPL-3.0-or-later) - 详见 [LICENSE](../LICENSE) 文件。
 
-该项目为开源软件，在 GPL v3 许可证下可自由使用、修改与分发。
+该项目为开源软件，在 GNU Affero 通用公共许可证 v3.0 或更高版本 (AGPL-3.0-or-later) 下可自由使用、修改与分发。
 
 ## 致谢
 

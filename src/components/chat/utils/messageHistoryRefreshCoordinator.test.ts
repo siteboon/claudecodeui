@@ -103,7 +103,7 @@ test('an unhydrated session can discard a pending refresh in favor of initial lo
   assert.equal(callCount, 0);
 });
 
-test('a failed refresh does not wedge subsequent requests', async () => {
+test('a failed refresh remains pending without rejecting and can be retried', async () => {
   let callCount = 0;
   const coordinator = createMessageHistoryRefreshCoordinator(
     async () => {
@@ -113,9 +113,12 @@ test('a failed refresh does not wedge subsequent requests', async () => {
     () => true,
   );
 
-  await assert.rejects(coordinator.request('session-1'), /temporary failure/);
   await coordinator.request('session-1');
+  assert.equal(coordinator.hasPending('session-1'), true);
+
+  await coordinator.flushPending('session-1');
   assert.equal(callCount, 2);
+  assert.equal(coordinator.hasPending('session-1'), false);
 });
 
 test('a refresh deferred after visibility changes remains pending', async () => {

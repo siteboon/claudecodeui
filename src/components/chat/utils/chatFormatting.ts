@@ -19,7 +19,10 @@ export function escapeRegExp(value: string) {
 export function stripProposedPlanEnvelope(text: string) {
   if (!text || typeof text !== 'string') return text;
 
-  const withoutOpeningTag = text.replace(/^\s*<proposed_plan>[ \t]*(?:\r?\n)?/i, '');
+  const openingTag = /^\s*<proposed_plan>[ \t]*(?:\r?\n)?/i;
+  if (!openingTag.test(text)) return text;
+
+  const withoutOpeningTag = text.replace(openingTag, '');
   return withoutOpeningTag.replace(/(?:\r?\n)?[ \t]*<\/proposed_plan>\s*$/i, '');
 }
 
