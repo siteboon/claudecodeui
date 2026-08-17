@@ -9,6 +9,8 @@ import type { ChatInterfaceProps, PermissionMode, Provider  } from '../types/typ
 import { useChatProviderState } from '../hooks/useChatProviderState';
 import { useChatSessionState } from '../hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '../hooks/useChatRealtimeHandlers';
+import type { StreamBuffers } from '../hooks/streamBuffers';
+import { dropStreamBuffers, windowStreamFlushScheduler } from '../hooks/streamBuffers';
 import { useChatComposerState } from '../hooks/useChatComposerState';
 import { useSessionStore } from '../../../stores/useSessionStore';
 
@@ -41,8 +43,7 @@ function ChatInterface({
   const { t } = useTranslation('chat');
 
   const sessionStore = useSessionStore();
-  const streamTimerRef = useRef<number | null>(null);
-  const accumulatedStreamRef = useRef('');
+  const streamBuffersRef = useRef<StreamBuffers>(new Map());
   // When each session's `chat.subscribe` was last sent; idle acks older than
   // a later local request are discarded as stale.
   const statusCheckSentAtRef = useRef(new Map<string, number>());
@@ -51,12 +52,12 @@ function ChatInterface({
   // server replays only the events this client actually missed.
   const lastSeqRef = useRef(new Map<string, number>());
 
-  const resetStreamingState = useCallback(() => {
-    if (streamTimerRef.current) {
-      clearTimeout(streamTimerRef.current);
-      streamTimerRef.current = null;
-    }
-    accumulatedStreamRef.current = '';
+  /**
+   * Abandons buffered deltas. Pass the session being torn down so a live
+   * background run keeps its pending flush; omit it to drop every buffer.
+   */
+  const resetStreamingState = useCallback((sessionId?: string) => {
+    dropStreamBuffers(streamBuffersRef.current, windowStreamFlushScheduler, sessionId);
   }, []);
 
   const {
@@ -244,8 +245,7 @@ function ChatInterface({
     setTokenBudget,
     pendingPermissionRequests,
     setPendingPermissionRequests,
-    streamTimerRef,
-    accumulatedStreamRef,
+    streamBuffersRef,
     lastSeqRef,
     statusCheckSentAtRef,
     onSessionProcessing,
