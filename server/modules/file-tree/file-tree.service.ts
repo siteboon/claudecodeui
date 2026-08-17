@@ -11,13 +11,19 @@ import type {
 } from '@/shared/types.js';
 import { AppError, FORBIDDEN_WORKSPACE_PATHS, normalizeProjectPath } from '@/shared/utils.js';
 
-const IGNORED_DIRECTORY_NAMES = new Set([
+/**
+ * Directory names hidden from the tree until a user stores their own list.
+ * Every entry is generated output that a project can rebuild, so hiding it by
+ * default keeps large workspaces inside the entry budget below.
+ */
+export const DEFAULT_IGNORED_DIRECTORY_NAMES: readonly string[] = [
   'node_modules', 'dist', 'build', '.next', '.nuxt', '.cache', '.parcel-cache',
   '.git', '.svn', '.hg',
   '__pycache__', '.pytest_cache', '.mypy_cache', '.tox', 'venv', '.venv',
   'target', 'vendor',
+  'bin', 'obj',
   '.gradle', '.idea', 'coverage', '.nyc_output',
-]);
+];
 
 const COMMON_WORKSPACE_DIRECTORY_NAMES = [
   'Desktop',
@@ -55,6 +61,48 @@ function permissionBitsToRwx(permissionBits: number): string {
   const write = permissionBits & 2 ? 'w' : '-';
   const execute = permissionBits & 1 ? 'x' : '-';
   return read + write + execute;
+}
+
+/**
+ * Accepts only plain directory names so a stored list stays a name-by-name
+ * comparison against directory entries and can never be read as a path pattern.
+ */
+function normalizeIgnoredDirectoryNames(input: unknown): string[] {
+  if (!Array.isArray(input)) {
+    throw createFileTreeError(
+      'Ignored directories must be an array of directory names',
+      400,
+      'INVALID_IGNORED_DIRECTORIES',
+    );
+  }
+
+  const normalizedNames: string[] = [];
+  for (const entry of input) {
+    if (typeof entry !== 'string') {
+      throw createFileTreeError(
+        'Ignored directory names must be strings',
+        400,
+        'INVALID_IGNORED_DIRECTORY_NAME',
+      );
+    }
+
+    const name = entry.trim();
+    if (!name) {
+      continue;
+    }
+    if (/[/\\]/.test(name)) {
+      throw createFileTreeError(
+        `"${name}" is a path, not a directory name`,
+        400,
+        'INVALID_IGNORED_DIRECTORY_NAME',
+      );
+    }
+    if (!normalizedNames.includes(name)) {
+      normalizedNames.push(name);
+    }
+  }
+
+  return normalizedNames;
 }
 
 function validateFilename(name: string): void {
@@ -165,6 +213,14 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
     : 1;
   const { acquire, release } = createConcurrencyLimiter(concurrencyLimit);
 
+  /**
+   * Read per walk rather than per service instance so an updated list applies
+   * to the next request without restarting the server.
+   */
+  function resolveIgnoredDirectoryNames(): ReadonlySet<string> {
+    return new Set(dependencies.ignoredDirectories.read() ?? DEFAULT_IGNORED_DIRECTORY_NAMES);
+  }
+
   async function resolveProjectRoot(projectId: string): Promise<string> {
     const projectRoot = await dependencies.projects.getProjectPathById(projectId);
     if (!projectRoot) {
@@ -182,6 +238,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
    */
   async function collectVisibleEntries(
     directoryPath: string,
+    ignoredDirectoryNames: ReadonlySet<string>,
     includeEntry: FileTreeEntryFilter,
     remainingEntries: { value: number },
   ): Promise<FileTreeDirectoryEntry[]> {
@@ -191,7 +248,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
     try {
       for await (const entry of fileSystem.openDirectory(directoryPath)) {
         const isDirectory = entry.isDirectory();
-        if (isDirectory && IGNORED_DIRECTORY_NAMES.has(entry.name)) {
+        if (isDirectory && ignoredDirectoryNames.has(entry.name)) {
           continue;
         }
         if (!includeEntry(path.join(directoryPath, entry.name), isDirectory)) {
@@ -232,11 +289,17 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
   async function buildFileTree(
     directoryPath: string,
     maximumDepth: number,
+    ignoredDirectoryNames: ReadonlySet<string>,
     currentDepth = 0,
     includeEntry: FileTreeEntryFilter = () => true,
     remainingEntries = { value: MAXIMUM_FILE_TREE_ENTRIES },
   ): Promise<FileTreeNode[]> {
-    const visibleEntries = await collectVisibleEntries(directoryPath, includeEntry, remainingEntries);
+    const visibleEntries = await collectVisibleEntries(
+      directoryPath,
+      ignoredDirectoryNames,
+      includeEntry,
+      remainingEntries,
+    );
 
     const items = await Promise.all(visibleEntries.map(async (entry): Promise<FileTreeNode> => {
       const itemPath = path.join(directoryPath, entry.name);
@@ -284,6 +347,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
         item.children = await buildFileTree(
           itemPath,
           maximumDepth,
+          ignoredDirectoryNames,
           currentDepth + 1,
           includeEntry,
           remainingEntries,
@@ -334,7 +398,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
         throw createFileTreeError('Directory not accessible', 404, 'DIRECTORY_NOT_ACCESSIBLE');
       }
 
-      const fileTree = await buildFileTree(resolvedPath, 1);
+      const fileTree = await buildFileTree(resolvedPath, 1, resolveIgnoredDirectoryNames());
       const directories = fileTree
         .filter((item) => item.type === 'directory')
         .map((item) => ({ path: item.path, name: item.name, type: 'directory' as const }))
@@ -460,7 +524,21 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
         }
       }
 
-      return buildFileTree(projectRoot, 10, 0, includeEntry);
+      return buildFileTree(projectRoot, 10, resolveIgnoredDirectoryNames(), 0, includeEntry);
+    },
+
+    getIgnoredDirectories() {
+      const storedNames = dependencies.ignoredDirectories.read();
+      return {
+        ignoredDirectories: [...(storedNames ?? DEFAULT_IGNORED_DIRECTORY_NAMES)],
+        defaults: [...DEFAULT_IGNORED_DIRECTORY_NAMES],
+      };
+    },
+
+    updateIgnoredDirectories(input) {
+      const ignoredDirectories = normalizeIgnoredDirectoryNames(input);
+      dependencies.ignoredDirectories.write(ignoredDirectories);
+      return { success: true as const, ignoredDirectories };
     },
 
     async createEntry(input) {

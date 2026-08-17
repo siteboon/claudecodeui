@@ -88,6 +88,7 @@
     "label": "Impostazioni",
     "agents": "Agenti",
     "appearance": "Aspetto",
+    "files": "File",
     "git": "Git",
     "apiTokens": "API e Token",
     "tasks": "Attività",
@@ -486,5 +487,20 @@
     "installAriaLabel": "URL repository git del plugin",
     "tab": "scheda",
     "runningStatus": "in esecuzione"
+  },
+  "filesSettings": {
+    "ignoredTitle": "Directory ignorate",
+    "ignoredDescription": "Nomi di directory nascosti nell'albero dei file del progetto. Gli output generati come node_modules, bin e obj sono nascosti per impostazione predefinita.",
+    "empty": "Nessuna directory è nascosta.",
+    "addPlaceholder": "Nome della directory (es. bin)",
+    "add": "Aggiungi",
+    "remove": "Rimuovi {{name}}",
+    "save": "Salva",
+    "saving": "Salvataggio…",
+    "saved": "Salvato",
+    "reset": "Ripristina i valori predefiniti",
+    "loading": "Caricamento delle impostazioni dei file…",
+    "loadError": "Impossibile caricare le impostazioni dei file",
+    "saveError": "Impossibile salvare le impostazioni dei file"
   }
 }

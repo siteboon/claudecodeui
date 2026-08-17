@@ -105,6 +105,7 @@
     "label": "설정",
     "agents": "에이전트",
     "appearance": "외관",
+    "files": "파일",
     "git": "Git",
     "apiTokens": "API & 토큰",
     "voice": "음성",
@@ -568,5 +569,20 @@
     "installAriaLabel": "플러그인 git 저장소 URL",
     "tab": "탭",
     "runningStatus": "실행 중"
+  },
+  "filesSettings": {
+    "ignoredTitle": "무시할 디렉터리",
+    "ignoredDescription": "프로젝트 파일 트리에서 숨길 디렉터리 이름입니다. node_modules, bin, obj 같은 생성된 출력은 기본적으로 숨겨집니다.",
+    "empty": "숨겨진 디렉터리가 없습니다.",
+    "addPlaceholder": "디렉터리 이름 (예: bin)",
+    "add": "추가",
+    "remove": "{{name}} 제거",
+    "save": "저장",
+    "saving": "저장 중…",
+    "saved": "저장됨",
+    "reset": "기본값으로 재설정",
+    "loading": "파일 설정을 불러오는 중…",
+    "loadError": "파일 설정을 불러오지 못했습니다",
+    "saveError": "파일 설정을 저장하지 못했습니다"
   }
 }

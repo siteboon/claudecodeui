@@ -7,9 +7,14 @@ import express, { type RequestHandler } from 'express';
 
 import { createFileTreeRouter } from '@/modules/file-tree/file-tree.routes.js';
 import type { FileTreeServices } from '@/shared/types.js';
+import { AppError } from '@/shared/utils.js';
 
 function createFakeServices(overrides: Partial<FileTreeServices> = {}): FileTreeServices {
   const unexpectedOperation = async (): Promise<never> => {
+    throw new Error('Unexpected File Tree service call');
+  };
+
+  const unexpectedSyncOperation = (): never => {
     throw new Error('Unexpected File Tree service call');
   };
 
@@ -20,6 +25,8 @@ function createFakeServices(overrides: Partial<FileTreeServices> = {}): FileTree
     openFile: unexpectedOperation,
     saveTextFile: unexpectedOperation,
     listProjectFiles: unexpectedOperation,
+    getIgnoredDirectories: unexpectedSyncOperation,
+    updateIgnoredDirectories: unexpectedSyncOperation,
     createEntry: unexpectedOperation,
     renameEntry: unexpectedOperation,
     deleteEntry: unexpectedOperation,
@@ -154,4 +161,70 @@ test('create route rejects invalid entry types without calling the service', asy
   });
 
   assert.equal(createCalled, false);
+});
+
+test('ignored directories route returns the stored names and the defaults', async () => {
+  const services = createFakeServices({
+    getIgnoredDirectories: () => ({
+      ignoredDirectories: ['bin', 'obj'],
+      defaults: ['node_modules', 'bin', 'obj'],
+    }),
+  });
+
+  await withFileTreeServer(services, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/file-tree/settings/ignored-directories`);
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      ignoredDirectories: ['bin', 'obj'],
+      defaults: ['node_modules', 'bin', 'obj'],
+    });
+  });
+});
+
+test('ignored directories route forwards the submitted list to the service', async () => {
+  const inputs: unknown[] = [];
+  const services = createFakeServices({
+    updateIgnoredDirectories: (input) => {
+      inputs.push(input);
+      return { success: true, ignoredDirectories: ['bin', 'obj'] };
+    },
+  });
+
+  await withFileTreeServer(services, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/file-tree/settings/ignored-directories`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ignoredDirectories: ['bin', 'obj'] }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { success: true, ignoredDirectories: ['bin', 'obj'] });
+  });
+
+  assert.deepEqual(inputs, [['bin', 'obj']]);
+});
+
+test('ignored directories route reports a rejected payload as a client error', async () => {
+  const services = createFakeServices({
+    updateIgnoredDirectories: () => {
+      throw new AppError('Ignored directories must be an array of directory names', {
+        code: 'INVALID_IGNORED_DIRECTORIES',
+        statusCode: 400,
+      });
+    },
+  });
+
+  await withFileTreeServer(services, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/file-tree/settings/ignored-directories`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ignoredDirectories: 'bin' }),
+    });
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), {
+      error: 'Ignored directories must be an array of directory names',
+    });
+  });
 });

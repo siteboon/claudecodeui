@@ -3,10 +3,14 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import test from 'node:test';
 
-import { createFileTreeService } from '@/modules/file-tree/file-tree.service.js';
+import {
+  DEFAULT_IGNORED_DIRECTORY_NAMES,
+  createFileTreeService,
+} from '@/modules/file-tree/file-tree.service.js';
 import type {
   FileTreeDirectoryEntry,
   FileTreeFileSystem,
+  FileTreeIgnoredDirectoriesGateway,
   FileTreeServiceDependencies,
   FileTreeStats,
 } from '@/shared/types.js';
@@ -68,9 +72,30 @@ function createFakeFileSystem(
   };
 }
 
+/**
+ * Stores the ignored-directory names in memory so tests can assert both what
+ * the service reads and what it persists without touching the database.
+ */
+function createIgnoredDirectoriesGateway(
+  storedNames: readonly string[] | null = null,
+): FileTreeIgnoredDirectoriesGateway & { written: string[][] } {
+  const written: string[][] = [];
+  let currentNames = storedNames;
+
+  return {
+    written,
+    read: () => currentNames,
+    write: (directoryNames) => {
+      currentNames = [...directoryNames];
+      written.push([...directoryNames]);
+    },
+  };
+}
+
 function createDependencies(
   fileSystem: FileTreeFileSystem,
   projectRoot: string,
+  ignoredDirectories: FileTreeIgnoredDirectoriesGateway = createIgnoredDirectoriesGateway(),
 ): FileTreeServiceDependencies {
   return {
     fileSystem,
@@ -81,6 +106,7 @@ function createDependencies(
       rootPath: projectRoot,
       validatePath: async (candidatePath) => ({ valid: true, resolvedPath: candidatePath }),
     },
+    ignoredDirectories,
     resolveMimeType: () => 'text/plain',
     fileSystemConcurrency: 4,
     logger: { error: () => undefined },
@@ -314,4 +340,127 @@ test('createEntry performs filesystem mutation only through the injected adapter
 
   assert.equal(result.path, targetPath);
   assert.deepEqual(writtenFiles, [{ filePath: targetPath, content: '' }]);
+});
+
+test('listProjectFiles hides .NET build output directories by default', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const fileSystem = createFakeFileSystem({
+    access: async () => undefined,
+    openDirectory: createDirectoryReader((directoryPath) => directoryPath === projectRoot
+      ? [
+          createDirectoryEntry('bin', true),
+          createDirectoryEntry('obj', true),
+          createDirectoryEntry('src', true),
+        ]
+      : []),
+    lstat: async () => createStats(true, 0o755),
+  });
+  const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
+
+  const tree = await service.listProjectFiles('project-1');
+
+  assert.deepEqual(tree.map((entry) => entry.name), ['src']);
+});
+
+test('listProjectFiles hides only the configured directory names', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const fileSystem = createFakeFileSystem({
+    access: async () => undefined,
+    openDirectory: createDirectoryReader((directoryPath) => directoryPath === projectRoot
+      ? [
+          createDirectoryEntry('cache', true),
+          createDirectoryEntry('node_modules', true),
+          createDirectoryEntry('src', true),
+        ]
+      : []),
+    lstat: async () => createStats(true, 0o755),
+  });
+  const service = createFileTreeService(createDependencies(
+    fileSystem,
+    projectRoot,
+    createIgnoredDirectoriesGateway(['cache']),
+  ));
+
+  const tree = await service.listProjectFiles('project-1');
+
+  assert.deepEqual(tree.map((entry) => entry.name), ['node_modules', 'src']);
+});
+
+test('getIgnoredDirectories reports the stored names alongside the defaults', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const service = createFileTreeService(createDependencies(
+    createFakeFileSystem(),
+    projectRoot,
+    createIgnoredDirectoriesGateway(['cache']),
+  ));
+
+  assert.deepEqual(service.getIgnoredDirectories(), {
+    ignoredDirectories: ['cache'],
+    defaults: [...DEFAULT_IGNORED_DIRECTORY_NAMES],
+  });
+});
+
+test('getIgnoredDirectories falls back to the defaults when nothing is stored', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const service = createFileTreeService(createDependencies(
+    createFakeFileSystem(),
+    projectRoot,
+  ));
+
+  const settings = service.getIgnoredDirectories();
+
+  assert.deepEqual(settings.ignoredDirectories, [...DEFAULT_IGNORED_DIRECTORY_NAMES]);
+  assert.ok(settings.ignoredDirectories.includes('bin'));
+  assert.ok(settings.ignoredDirectories.includes('obj'));
+});
+
+test('updateIgnoredDirectories trims, drops blanks and deduplicates before persisting', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const ignoredDirectories = createIgnoredDirectoriesGateway();
+  const service = createFileTreeService(createDependencies(
+    createFakeFileSystem(),
+    projectRoot,
+    ignoredDirectories,
+  ));
+
+  const result = service.updateIgnoredDirectories(['  bin  ', 'obj', '', 'bin']);
+
+  assert.deepEqual(result, { success: true, ignoredDirectories: ['bin', 'obj'] });
+  assert.deepEqual(ignoredDirectories.written, [['bin', 'obj']]);
+});
+
+test('updateIgnoredDirectories rejects names containing a path separator', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const ignoredDirectories = createIgnoredDirectoriesGateway();
+  const service = createFileTreeService(createDependencies(
+    createFakeFileSystem(),
+    projectRoot,
+    ignoredDirectories,
+  ));
+
+  assert.throws(
+    () => service.updateIgnoredDirectories(['src/generated']),
+    (error: unknown) => error instanceof AppError
+      && error.code === 'INVALID_IGNORED_DIRECTORY_NAME'
+      && error.statusCode === 400,
+  );
+  assert.deepEqual(ignoredDirectories.written, []);
+});
+
+test('updateIgnoredDirectories rejects a payload that is not an array', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const ignoredDirectories = createIgnoredDirectoriesGateway();
+  const service = createFileTreeService(createDependencies(
+    createFakeFileSystem(),
+    projectRoot,
+    ignoredDirectories,
+  ));
+
+  assert.throws(
+    () => service.updateIgnoredDirectories('bin'),
+    (error: unknown) => error instanceof AppError
+      && error.code === 'INVALID_IGNORED_DIRECTORIES'
+      && error.statusCode === 400,
+  );
+  assert.deepEqual(ignoredDirectories.written, []);
 });

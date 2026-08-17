@@ -105,6 +105,7 @@
     "label": "Ajustes",
     "agents": "Agentes",
     "appearance": "Apariencia",
+    "files": "Archivos",
     "git": "Git",
     "apiTokens": "API y tokens",
     "voice": "Voz",
@@ -574,5 +575,20 @@
     "installAriaLabel": "URL del repositorio git del plugin",
     "tab": "pestaña",
     "runningStatus": "en ejecución"
+  },
+  "filesSettings": {
+    "ignoredTitle": "Directorios ignorados",
+    "ignoredDescription": "Nombres de directorios ocultos en el árbol de archivos del proyecto. La salida generada como node_modules, bin y obj se oculta de forma predeterminada.",
+    "empty": "No hay directorios ocultos.",
+    "addPlaceholder": "Nombre del directorio (p. ej. bin)",
+    "add": "Añadir",
+    "remove": "Eliminar {{name}}",
+    "save": "Guardar",
+    "saving": "Guardando…",
+    "saved": "Guardado",
+    "reset": "Restablecer valores predeterminados",
+    "loading": "Cargando ajustes de archivos…",
+    "loadError": "No se pudieron cargar los ajustes de archivos",
+    "saveError": "No se pudieron guardar los ajustes de archivos"
   }
 }

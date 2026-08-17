@@ -5,11 +5,12 @@ import os from 'node:os';
 import mime from 'mime-types';
 import multer from 'multer';
 
-import { projectsDb } from '@/modules/database/index.js';
+import { appConfigDb, projectsDb } from '@/modules/database/index.js';
 import { createFileTreeRouter } from '@/modules/file-tree/file-tree.routes.js';
 import { createFileTreeService } from '@/modules/file-tree/file-tree.service.js';
 import type {
   FileTreeFileSystem,
+  FileTreeIgnoredDirectoriesGateway,
   FileTreeLogger,
   FileTreeProjectGateway,
   FileTreeWorkspaceGateway,
@@ -19,6 +20,7 @@ import { WORKSPACES_ROOT, validateWorkspacePath } from '@/shared/utils.js';
 const MAXIMUM_UPLOAD_SIZE_MEGABYTES = 200;
 const MAXIMUM_UPLOAD_SIZE_BYTES = MAXIMUM_UPLOAD_SIZE_MEGABYTES * 1024 * 1024;
 const MAXIMUM_UPLOAD_FILE_COUNT = 20;
+const IGNORED_DIRECTORIES_CONFIG_KEY = 'file_tree_ignored_directories';
 
 function readFileSystemConcurrency(): number {
   const configuredConcurrency = Number.parseInt(process.env.FS_CONCURRENCY ?? '', 10);
@@ -75,6 +77,32 @@ const fileTreeWorkspace: FileTreeWorkspaceGateway = {
   validatePath: (candidatePath) => validateWorkspacePath(candidatePath),
 };
 
+/**
+ * Persistence boundary for the user-configured ignored-directory names.
+ * A missing or unreadable row reads as "never configured" so the service falls
+ * back to its defaults instead of showing an unfiltered tree.
+ */
+const fileTreeIgnoredDirectories: FileTreeIgnoredDirectoriesGateway = {
+  read() {
+    const storedValue = appConfigDb.get(IGNORED_DIRECTORIES_CONFIG_KEY);
+    if (!storedValue) {
+      return null;
+    }
+
+    try {
+      const parsedValue = JSON.parse(storedValue) as unknown;
+      return Array.isArray(parsedValue)
+        ? parsedValue.filter((name): name is string => typeof name === 'string')
+        : null;
+    } catch {
+      return null;
+    }
+  },
+  write(directoryNames) {
+    appConfigDb.set(IGNORED_DIRECTORIES_CONFIG_KEY, JSON.stringify(directoryNames));
+  },
+};
+
 const fileTreeLogger: FileTreeLogger = {
   error: (message, error) => console.error(message, error),
 };
@@ -83,6 +111,7 @@ const fileTreeServices = createFileTreeService({
   fileSystem: fileTreeFileSystem,
   projects: fileTreeProjects,
   workspace: fileTreeWorkspace,
+  ignoredDirectories: fileTreeIgnoredDirectories,
   resolveMimeType: (filePath) => mime.lookup(filePath) || 'application/octet-stream',
   fileSystemConcurrency: readFileSystemConcurrency(),
   logger: fileTreeLogger,

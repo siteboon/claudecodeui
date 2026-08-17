@@ -88,6 +88,7 @@
     "label": "設定",
     "agents": "エージェント",
     "appearance": "外観",
+    "files": "ファイル",
     "git": "Git",
     "apiTokens": "API & トークン",
     "tasks": "タスク",
@@ -480,5 +481,20 @@
     "installAriaLabel": "プラグインのgitリポジトリURL",
     "tab": "タブ",
     "runningStatus": "実行中"
+  },
+  "filesSettings": {
+    "ignoredTitle": "無視するディレクトリ",
+    "ignoredDescription": "プロジェクトのファイルツリーで非表示にするディレクトリ名です。node_modules、bin、obj などの生成物は既定で非表示になります。",
+    "empty": "非表示のディレクトリはありません。",
+    "addPlaceholder": "ディレクトリ名（例: bin）",
+    "add": "追加",
+    "remove": "{{name}} を削除",
+    "save": "保存",
+    "saving": "保存中…",
+    "saved": "保存しました",
+    "reset": "既定値に戻す",
+    "loading": "ファイル設定を読み込み中…",
+    "loadError": "ファイル設定の読み込みに失敗しました",
+    "saveError": "ファイル設定の保存に失敗しました"
   }
 }

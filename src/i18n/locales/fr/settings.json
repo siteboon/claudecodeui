@@ -88,6 +88,7 @@
     "label": "Paramètres",
     "agents": "Agents",
     "appearance": "Apparence",
+    "files": "Fichiers",
     "git": "Git",
     "apiTokens": "API & Tokens",
     "tasks": "Tâches",
@@ -538,5 +539,20 @@
     "installAriaLabel": "URL du dépôt git du plugin",
     "tab": "onglet",
     "runningStatus": "en cours"
+  },
+  "filesSettings": {
+    "ignoredTitle": "Répertoires ignorés",
+    "ignoredDescription": "Noms de répertoires masqués dans l'arborescence des fichiers du projet. Les sorties générées comme node_modules, bin et obj sont masquées par défaut.",
+    "empty": "Aucun répertoire n'est masqué.",
+    "addPlaceholder": "Nom du répertoire (ex. bin)",
+    "add": "Ajouter",
+    "remove": "Supprimer {{name}}",
+    "save": "Enregistrer",
+    "saving": "Enregistrement…",
+    "saved": "Enregistré",
+    "reset": "Rétablir les valeurs par défaut",
+    "loading": "Chargement des paramètres de fichiers…",
+    "loadError": "Échec du chargement des paramètres de fichiers",
+    "saveError": "Échec de l'enregistrement des paramètres de fichiers"
   }
 }

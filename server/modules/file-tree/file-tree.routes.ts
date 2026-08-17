@@ -125,6 +125,14 @@ export function createFileTreeRouter(
     response.json(await services.createWorkspaceFolder(folderPath));
   }, logger));
 
+  router.get('/settings/ignored-directories', createRouteHandler(async (_request, response) => {
+    response.json(services.getIgnoredDirectories());
+  }, logger));
+
+  router.put('/settings/ignored-directories', createRouteHandler(async (request, response) => {
+    response.json(services.updateIgnoredDirectories(readBody(request).ignoredDirectories));
+  }, logger));
+
   router.get('/projects/:projectId/file', createRouteHandler(async (request, response) => {
     const filePath = readRequiredString(request.query.filePath, 'filePath', 'Invalid file path');
     response.json(await services.readTextFile(readProjectId(request), filePath));

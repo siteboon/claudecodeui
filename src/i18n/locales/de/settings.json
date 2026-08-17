@@ -88,6 +88,7 @@
     "label": "Einstellungen",
     "agents": "Agenten",
     "appearance": "Darstellung",
+    "files": "Dateien",
     "git": "Git",
     "apiTokens": "API & Token",
     "tasks": "Aufgaben",
@@ -480,5 +481,20 @@
     "installAriaLabel": "Git-Repository-URL des Plugins",
     "tab": "Tab",
     "runningStatus": "läuft"
+  },
+  "filesSettings": {
+    "ignoredTitle": "Ignorierte Verzeichnisse",
+    "ignoredDescription": "Verzeichnisnamen, die im Dateibaum des Projekts ausgeblendet werden. Generierte Ausgaben wie node_modules, bin und obj sind standardmäßig ausgeblendet.",
+    "empty": "Es werden keine Verzeichnisse ausgeblendet.",
+    "addPlaceholder": "Verzeichnisname (z. B. bin)",
+    "add": "Hinzufügen",
+    "remove": "{{name}} entfernen",
+    "save": "Speichern",
+    "saving": "Wird gespeichert …",
+    "saved": "Gespeichert",
+    "reset": "Auf Standard zurücksetzen",
+    "loading": "Dateieinstellungen werden geladen …",
+    "loadError": "Dateieinstellungen konnten nicht geladen werden",
+    "saveError": "Dateieinstellungen konnten nicht gespeichert werden"
   }
 }

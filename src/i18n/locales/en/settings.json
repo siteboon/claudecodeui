@@ -105,6 +105,7 @@
     "label": "Settings",
     "agents": "Agents",
     "appearance": "Appearance",
+    "files": "Files",
     "git": "Git",
     "apiTokens": "API & Tokens",
     "voice": "Voice",
@@ -580,5 +581,20 @@
     "installAriaLabel": "Plugin git repository URL",
     "tab": "tab",
     "runningStatus": "running"
+  },
+  "filesSettings": {
+    "ignoredTitle": "Ignored directories",
+    "ignoredDescription": "Directory names hidden from the project file tree. Generated output such as node_modules, bin and obj is hidden by default.",
+    "empty": "No directories are hidden.",
+    "addPlaceholder": "Directory name (e.g. bin)",
+    "add": "Add",
+    "remove": "Remove {{name}}",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "reset": "Reset to defaults",
+    "loading": "Loading file settings…",
+    "loadError": "Failed to load file settings",
+    "saveError": "Failed to save file settings"
   }
 }

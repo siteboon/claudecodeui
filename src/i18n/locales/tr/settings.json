@@ -88,6 +88,7 @@
     "label": "Ayarlar",
     "agents": "Ajanlar",
     "appearance": "Görünüm",
+    "files": "Dosyalar",
     "git": "Git",
     "apiTokens": "API ve Token'lar",
     "tasks": "Görevler",
@@ -487,5 +488,20 @@
     "installAriaLabel": "Eklenti git deposu URL'si",
     "tab": "sekme",
     "runningStatus": "çalışıyor"
+  },
+  "filesSettings": {
+    "ignoredTitle": "Yok sayılan dizinler",
+    "ignoredDescription": "Proje dosya ağacında gizlenen dizin adları. node_modules, bin ve obj gibi üretilen çıktılar varsayılan olarak gizlenir.",
+    "empty": "Gizlenen dizin yok.",
+    "addPlaceholder": "Dizin adı (örn. bin)",
+    "add": "Ekle",
+    "remove": "{{name}} öğesini kaldır",
+    "save": "Kaydet",
+    "saving": "Kaydediliyor…",
+    "saved": "Kaydedildi",
+    "reset": "Varsayılanlara sıfırla",
+    "loading": "Dosya ayarları yükleniyor…",
+    "loadError": "Dosya ayarları yüklenemedi",
+    "saveError": "Dosya ayarları kaydedilemedi"
   }
 }

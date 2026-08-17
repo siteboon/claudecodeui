@@ -105,6 +105,7 @@
     "label": "设置",
     "agents": "智能体",
     "appearance": "外观",
+    "files": "文件",
     "git": "Git",
     "apiTokens": "API 和令牌",
     "voice": "语音",
@@ -568,5 +569,20 @@
     "installAriaLabel": "插件 git 仓库 URL",
     "tab": "标签",
     "runningStatus": "运行中"
+  },
+  "filesSettings": {
+    "ignoredTitle": "忽略的目录",
+    "ignoredDescription": "在项目文件树中隐藏的目录名称。node_modules、bin 和 obj 等生成产物默认隐藏。",
+    "empty": "没有隐藏的目录。",
+    "addPlaceholder": "目录名称（例如 bin）",
+    "add": "添加",
+    "remove": "移除 {{name}}",
+    "save": "保存",
+    "saving": "正在保存…",
+    "saved": "已保存",
+    "reset": "恢复默认值",
+    "loading": "正在加载文件设置…",
+    "loadError": "加载文件设置失败",
+    "saveError": "保存文件设置失败"
   }
 }

@@ -1020,10 +1020,23 @@ export type FileTreeLogger = {
  * and logging are all explicit so service construction has no hidden process,
  * repository, or machine-wide defaults.
  */
+/**
+ * Persistence boundary for the user-configured ignored-directory names.
+ *
+ * `read` returns null when nothing has been stored yet, which keeps "never
+ * configured" distinct from "configured as an empty list" so the defaults are
+ * only applied to the former.
+ */
+export type FileTreeIgnoredDirectoriesGateway = {
+  read(): readonly string[] | null;
+  write(directoryNames: readonly string[]): void;
+};
+
 export type FileTreeServiceDependencies = {
   fileSystem: FileTreeFileSystem;
   projects: FileTreeProjectGateway;
   workspace: FileTreeWorkspaceGateway;
+  ignoredDirectories: FileTreeIgnoredDirectoriesGateway;
   resolveMimeType(filePath: string): string;
   fileSystemConcurrency: number;
   logger: FileTreeLogger;
@@ -1053,6 +1066,8 @@ export type FileTreeServices = {
     projectId: string,
     options?: { respectGitignore: boolean },
   ): Promise<FileTreeNode[]>;
+  getIgnoredDirectories(): { ignoredDirectories: string[]; defaults: string[] };
+  updateIgnoredDirectories(input: unknown): { success: true; ignoredDirectories: string[] };
   createEntry(input: {
     projectId: string;
     parentPath: string;

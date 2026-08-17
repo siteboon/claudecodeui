@@ -38,6 +38,15 @@ export function useFileTreeData(selectedProject: Project | null): UseFileTreeDat
     setRefreshKey((prev) => prev + 1);
   }, []);
 
+  // Ignored directories are applied server-side, so a settings change only
+  // reaches an open tree by refetching it.
+  useEffect(() => {
+    window.addEventListener('fileTreeIgnoredDirectoriesChanged', refreshFiles);
+    return () => {
+      window.removeEventListener('fileTreeIgnoredDirectoriesChanged', refreshFiles);
+    };
+  }, [refreshFiles]);
+
   useEffect(() => {
     // File-tree requests use the DB projectId; the backend resolves it to the
     // project's absolute path through the projects table.
