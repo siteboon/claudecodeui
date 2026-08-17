@@ -628,8 +628,10 @@ export function useChatComposerState({
             ? 'cursor-tools-settings'
             : provider === 'codex'
               ? 'codex-settings'
-              : provider === 'opencode'
-                  ? 'opencode-settings'
+          : provider === 'opencode'
+              ? 'opencode-settings'
+              : provider === 'antigravity'
+                ? 'antigravity-settings'
                 : 'claude-settings';
         const savedSettings = safeLocalStorage.getItem(settingsKey);
         if (savedSettings) {
