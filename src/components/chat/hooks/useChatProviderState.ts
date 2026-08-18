@@ -23,9 +23,10 @@ const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   codex: 'gpt-5.4',
   opencode: 'anthropic/claude-sonnet-4-5',
   zcode: 'GLM-5.3',
+  antigravity: 'gemini-3.7-flash-high',
 };
 
-const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode', 'zcode'];
+const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode', 'zcode', 'antigravity'];
 
 const readStoredProvider = (): LLMProvider => {
   const storedProvider = localStorage.getItem('selected-provider');
@@ -46,6 +47,7 @@ const FALLBACK_PERMISSION_MODES: Record<LLMProvider, PermissionMode[]> = {
   codex: ['default', 'acceptEdits', 'bypassPermissions'],
   opencode: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
   zcode: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
+  antigravity: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
 };
 
 type ProviderCapabilities = {
@@ -142,6 +144,9 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   const [zcodeModel, setZcodeModel] = useState<string>(() => {
     return localStorage.getItem('zcode-model') || FALLBACK_DEFAULT_MODEL.zcode;
   });
+  const [antigravityModel, setAntigravityModel] = useState<string>(() => {
+    return localStorage.getItem('antigravity-model') || FALLBACK_DEFAULT_MODEL.antigravity;
+  });
 
   /**
    * Backend-owned capability matrix keyed by provider. Drives the permission
@@ -186,6 +191,12 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     if (targetProvider === 'zcode') {
       setZcodeModel(model);
       localStorage.setItem('zcode-model', model);
+      return;
+    }
+
+    if (targetProvider === 'antigravity') {
+      setAntigravityModel(model);
+      localStorage.setItem('antigravity-model', model);
       return;
     }
 
@@ -378,7 +389,8 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     codex: codexModel,
     opencode: opencodeModel,
     zcode: zcodeModel,
-  }), [claudeModel, cursorModel, codexModel, opencodeModel, zcodeModel]);
+    antigravity: antigravityModel,
+  }), [claudeModel, cursorModel, codexModel, opencodeModel, zcodeModel, antigravityModel]);
 
   useEffect(() => {
     const claude = providerModelCatalog.claude;
@@ -444,6 +456,19 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       }
     }
   }, [providerModelCatalog.zcode, zcodeModel]);
+
+  useEffect(() => {
+    const antigravity = providerModelCatalog.antigravity;
+    if (antigravity) {
+      const next = pickStoredOrCurrent('antigravity-model', antigravityModel, antigravity);
+      if (next !== antigravityModel) {
+        setAntigravityModel(next);
+      }
+      if (localStorage.getItem('antigravity-model') !== next) {
+        localStorage.setItem('antigravity-model', next);
+      }
+    }
+  }, [providerModelCatalog.antigravity, antigravityModel]);
 
   useEffect(() => {
     const nextEfforts: Partial<Record<LLMProvider, string>> = {};
@@ -894,6 +919,8 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     setOpenCodeModel,
     zcodeModel,
     setZcodeModel,
+    antigravityModel,
+    setAntigravityModel,
     permissionMode,
     setPermissionMode,
     pendingPermissionRequests,

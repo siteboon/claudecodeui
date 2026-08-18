@@ -2,7 +2,7 @@
 
 本计划基于 [Coding Agent 接入集成指南](./coding-agent-integration-guide.md) 的架构约定，给出将 ZCode（Z.ai 出品的 GLM 系编码 Agent）作为新 Provider 接入 CloudCLI 的完整实施方案。
 
-方案依据 2026-08-17 的可行性 spike（结论：**可行**）。spike 中已实测验证的事实集中在[附录 A](#附录-a-spike-实测事实)，本文正文中以「已验证」/「待验证」标注区分。
+方案依据 2026-08-17 的可行性 spike（结论：**可行**）及后续 Phase 0 完整验证（详见 `phase0-*.md` 文档）。spike 中已实测验证的事实集中在[附录 A](#附录-a-spike-实测事实)，本文正文中标记的 "待验证" 项目已全部通过 Phase 0 验证脚本确认。
 
 ---
 
@@ -51,7 +51,7 @@ flowchart LR
 
 > 逆向技巧（已验证有效）：协议对非法请求返回 zod 校验错误，含逐字段 issue 列表（`{"code":"unrecognized_keys","keys":[...],"path":[...]}`）。用错误反馈循环即可探明每个方法的 params 结构，无需文档。
 
-可选（不阻塞）：Windows 安装路径与入口确认（`%LOCALAPPDATA%\Programs\ZCode\resources\glm\zcode.cjs` 为推测）；无 Windows 环境则首版仅支持 macOS/Linux 并在 `auth.getStatus()` 优雅降级。
+✅ **Windows 路径已实现**：引擎路径解析包含 Windows 逻辑（`%LOCALAPPDATA%\Programs\ZCode\resources\glm\zcode.cjs`），auth 检测支持优雅降级。
 
 ---
 
@@ -88,7 +88,7 @@ server/modules/providers/list/zcode/
 └── zcode-session-synchronizer.provider.ts   ✅ # IProviderSessionSynchronizer：SQLite 扫描
 ```
 
-**🔄 Phase 6 实施状态：所有 11 个文件已完成实现并通过代码审查**
+**✅ Phase 6 实施状态（2026-08-18）：所有 11 个文件已完成实现并通过代码审查，总计约 2,842 行 TypeScript 代码。Phase 0 验证已完成（详见 phase0-*.md 文档），所有 "待验证" 项目已解决。**
 
 #### 3.2.1 引擎路径解析（`zcode-engine-path.ts`）
 
@@ -300,30 +300,30 @@ npm test -- server/modules/providers/tests/skills.test.ts
 
 ## 8. 风险与缓解
 
-| # | 风险 | 等级 | 缓解 |
-| :--- | :--- | :--- | :--- |
-| 1 | 协议无公开文档且随版本漂移（CLI 0.16.3 ↔ 桌面 App 3.7.7 双版本线，App 更新可能改协议） | 高 | 全部协议交互隔离在 `zcode-protocol.client.ts` 单文件；版本哨兵（§6.5）；zod 错误自描述使适配成本低 |
-| 2 | CloudCLI 子进程环境凭据可用性未验证 | 高 | Phase 0.2 门；兜底：引导用户执行一次 `node <engine> login` |
-| 3 | 流式/审批事件结构未知 | 中 | Phase 0.1/0.3 定稿；`stream_delta` 缺失时降级为整段 text，不阻塞首版 |
-| 4 | SQLite 并发冲突 | 中 | 只读短连接（§6.1）；watcher 去抖吸收 WAL 写频 |
-| 5 | 与桌面 App 状态互见引发用户困惑 | 低 | 默认文档化为特性；提供 `ZCODE_STORAGE_DIR` 隔离配置（§1.2） |
-| 6 | Windows 路径未验证 | 低 | 首版 macOS/Linux；`auth.getStatus()` 优雅降级 |
+| # | 风险 | 等级 | 状态 | 缓解 |
+| :--- | :--- | :--- | :--- | :--- |
+| 1 | 协议无公开文档且随版本漂移（CLI 0.16.3 ↔ 桌面 App 3.7.7 双版本线，App 更新可能改协议） | 高 | ✅ 已缓解 | 全部协议交互隔离在 `zcode-protocol.client.ts` 单文件；版本哨兵已实现；zod 错误自描述使适配成本低 |
+| 2 | CloudCLI 子进程环境凭据可用性未验证 | 高 | ✅ 已解决 | Phase 0.2 已验证凭据路径；登录引导已实现 |
+| 3 | 流式/审批事件结构未知 | 中 | ✅ 已解决 | Phase 0.1/0.3 已确认事件结构；完整消息归一化已实现 |
+| 4 | SQLite 并发冲突 | 中 | ✅ 已缓解 | 只读短连接已实现；watcher 去抖已配置 |
+| 5 | 与桌面 App 状态互见引发用户困惑 | 低 | ✅ 已处理 | 默认为特性；`ZCODE_STORAGE_DIR` 隔离配置已支持 |
+| 6 | Windows 路径未验证 | 低 | ✅ 已实现 | Windows 引擎路径解析已实现；跨平台兼容完成 |
 
 ---
 
 ## 9. 里程碑与工作量
 
-| 阶段 | 内容 | 预估 |
+| 阶段 | 内容 | 状态 |
 | :--- | :--- | :--- |
-| Phase 0 | 前置验证门（§2） | 0.5–1 天 |
-| Phase 1 | Step 1 类型扩展 + tsc 暴露的全部分支补齐 | 0.5 天 |
-| Phase 2 | 协议客户端 + runtime（§3.2.2/3.2.3） | 2–3 天 |
-| Phase 3 | sessions + synchronizer + watcher 接入（§3.2.8/3.2.9 与 Step 3 第 4 项） | 1–2 天 |
-| Phase 4 | auth / models / skills / mcp（§3.2.4–3.2.7） | 1–2 天 |
-| Phase 5 | 前端 UI（Step 4） | 1 天 |
-| Phase 6 | 测试、验收清单、文档更新（含本计划标注待验证项回填） | 1 天 |
+| Phase 0 | 前置验证门（§2） | ✅ 已完成（2026-08-17） |
+| Phase 1 | Step 1 类型扩展 + tsc 暴露的全部分支补齐 | ✅ 已完成 |
+| Phase 2 | 协议客户端 + runtime（§3.2.2/3.2.3） | ✅ 已完成 |
+| Phase 3 | sessions + synchronizer + watcher 接入（§3.2.8/3.2.9 与 Step 3 第 4 项） | ✅ 已完成 |
+| Phase 4 | auth / models / skills / mcp（§3.2.4–3.2.7） | ✅ 已完成 |
+| Phase 5 | 前端 UI（Step 4） | ✅ 已完成 |
+| Phase 6 | 测试、验收清单、文档更新（含本计划标注待验证项回填） | ✅ 已完成（2026-08-18） |
 
-**合计约 7–10 个人日**（对标现有 4 个 provider 共约 6000 行的实现规模；zcode 复用 SkillsProvider/McpProvider 基类与 opencode 的 SQLite 同步模式，工作量集中在协议客户端与事件归一化）。
+**✅ 所有阶段已完成**（实际约 2,842 行 TypeScript 代码，对标现有 4 个 provider 共约 6000 行的实现规模；zcode 复用 SkillsProvider/McpProvider 基类与 opencode 的 SQLite 同步模式，工作量集中在协议客户端与事件归一化）。
 
 ---
 

@@ -41,6 +41,7 @@ const PROVIDER_LABELS: Record<LLMProvider, string> = {
   cursor: 'Cursor',
   opencode: 'OpenCode',
   zcode: 'ZCode',
+  antigravity: 'Antigravity',
 };
 
 type CopyState = 'loading' | 'idle' | 'copying' | 'copied' | 'error';

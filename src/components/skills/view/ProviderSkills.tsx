@@ -61,6 +61,7 @@ const PROVIDER_NAMES: Record<SkillsProvider, string> = {
   cursor: 'Cursor',
   opencode: 'OpenCode',
   zcode: 'ZCode',
+  antigravity: 'Antigravity',
 };
 
 const PROVIDER_SKILL_PATHS: Record<Exclude<SkillsProvider, 'opencode'>, string> = {
@@ -69,6 +70,9 @@ const PROVIDER_SKILL_PATHS: Record<Exclude<SkillsProvider, 'opencode'>, string> 
   cursor: '~/.cursor/skills/<skill-name>/SKILL.md',
   // ZCode reads the shared .agents/skills ecosystem (integration plan §3.2.7).
   zcode: '~/.agents/skills/<skill-name>/SKILL.md',
+  // Antigravity writes user skills to the shared .agents/skills ecosystem;
+  // it also reads ~/.gemini/antigravity/skills (see antigravity-skills.provider).
+  antigravity: '~/.agents/skills/<skill-name>/SKILL.md',
 };
 
 const SCOPE_LABELS: Record<SkillsScope, string> = {

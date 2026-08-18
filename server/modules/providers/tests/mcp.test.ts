@@ -313,7 +313,7 @@ test('providerMcpService global adder writes to all providers and rejects unsupp
       workspacePath,
     });
 
-    assert.equal(globalResult.length, 5);
+    assert.equal(globalResult.length, 6);
     assert.ok(globalResult.every((entry) => entry.created === true));
 
     const claudeProject = await readJson(path.join(workspacePath, '.mcp.json'));
@@ -330,6 +330,9 @@ test('providerMcpService global adder writes to all providers and rejects unsupp
 
     const zcodeProject = await readJson(path.join(workspacePath, 'zcode.json'));
     assert.ok(((zcodeProject.mcp as Record<string, unknown>).servers as Record<string, unknown>)['global-http']);
+
+    const antigravityProject = await readJson(path.join(workspacePath, '.gemini', 'mcp_config.json'));
+    assert.ok((antigravityProject.mcpServers as Record<string, unknown>)['global-http']);
 
     await assert.rejects(
       providerMcpService.addMcpServerToAllProviders({

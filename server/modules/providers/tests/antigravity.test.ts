@@ -1,0 +1,253 @@
+/**
+ * Antigravity Provider Unit Tests
+ *
+ * Covers auth, models, mcp, skills, sessions normalization, and synchronizer facets.
+ */
+
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import test from 'node:test';
+
+import { AntigravityProviderAuth } from '../list/antigravity/antigravity-auth.provider.js';
+import { AntigravityProviderModels } from '../list/antigravity/antigravity-models.provider.js';
+import { AntigravityMcpProvider } from '../list/antigravity/antigravity-mcp.provider.js';
+import { AntigravitySkillsProvider } from '../list/antigravity/antigravity-skills.provider.js';
+import { AntigravitySessionsProvider } from '../list/antigravity/antigravity-sessions.provider.js';
+import { providerRegistry } from '../provider.registry.js';
+import { providerCapabilitiesService } from '../services/provider-capabilities.service.js';
+
+test('AntigravityProvider is registered in providerRegistry', () => {
+  const provider = providerRegistry.resolveProvider('antigravity');
+  assert.equal(provider.id, 'antigravity');
+  assert.ok(provider.runtime);
+  assert.ok(provider.models);
+  assert.ok(provider.auth);
+  assert.ok(provider.mcp);
+  assert.ok(provider.skills);
+  assert.ok(provider.sessions);
+  assert.ok(provider.sessionSynchronizer);
+});
+
+test('providerCapabilitiesService reports correct antigravity capabilities', () => {
+  const caps = providerCapabilitiesService.getProviderCapabilities('antigravity');
+  assert.equal(caps.provider, 'antigravity');
+  assert.equal(caps.supportsImages, true);
+  assert.equal(caps.supportsFiles, true);
+  assert.equal(caps.supportsAbort, true);
+  assert.equal(caps.supportsTokenUsage, true);
+  assert.equal(caps.supportsEffort, true);
+  assert.deepEqual(caps.permissionModes, ['default', 'acceptEdits', 'bypassPermissions', 'plan']);
+});
+
+test('AntigravityProviderAuth reports valid status object without throwing', async () => {
+  const auth = new AntigravityProviderAuth();
+  const status = await auth.getStatus();
+  assert.equal(status.provider, 'antigravity');
+  assert.equal(typeof status.installed, 'boolean');
+  assert.equal(typeof status.authenticated, 'boolean');
+  assert.equal(status.loginCommand, 'agy');
+});
+
+test('AntigravityProviderModels returns builtin models fallback', async () => {
+  const models = new AntigravityProviderModels();
+  const definition = await models.getSupportedModels();
+  assert.ok(definition.OPTIONS.length > 0);
+  assert.ok(definition.DEFAULT);
+  assert.ok(definition.OPTIONS.some((m) => m.value.includes('gemini')));
+});
+
+test('AntigravitySkillsProvider returns correct skill roots', async () => {
+  const skills = new AntigravitySkillsProvider();
+  const list = await skills.listSkills({ workspacePath: '/mock/workspace' });
+  assert.ok(Array.isArray(list));
+});
+
+test('AntigravityMcpProvider handles project-level mcp_config.json', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agy-mcp-test-'));
+  const mcp = new AntigravityMcpProvider();
+
+  try {
+    // 1. Add server
+    await mcp.upsertServer({
+      scope: 'project',
+      workspacePath: tempDir,
+      name: 'test-mcp',
+      transport: 'stdio',
+      command: 'node',
+      args: ['test.js'],
+      env: { KEY: 'VALUE' },
+    });
+
+    // 2. Read back
+    const servers = await mcp.listServersForScope('project', { workspacePath: tempDir });
+    assert.equal(servers.length, 1);
+    assert.equal(servers[0]?.name, 'test-mcp');
+    assert.equal(servers[0]?.transport, 'stdio');
+    assert.equal(servers[0]?.command, 'node');
+
+    // 3. Remove server
+    await mcp.removeServer({ scope: 'project', workspacePath: tempDir, name: 'test-mcp' });
+    const remaining = await mcp.listServersForScope('project', { workspacePath: tempDir });
+    assert.equal(remaining.length, 0);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('AntigravitySessionsProvider normalizes stream-json events', () => {
+  const sessions = new AntigravitySessionsProvider();
+
+  // Test init event
+  const initMsg = sessions.normalizeMessage({
+    event: 'init',
+    conversation_id: 'test-conv-123',
+    init: { cwd: '/test', tools: ['view_file'], permission_mode: 'always-proceed' },
+  }, 'test-conv-123');
+  assert.equal(initMsg.length, 1);
+  assert.equal(initMsg[0]?.kind, 'session_created');
+
+  // Test agent response delta
+  const deltaMsg = sessions.normalizeMessage({
+    event: 'step_update',
+    step_update: {
+      step_index: 2,
+      state: 'ACTIVE',
+      step_type: 'agent_response',
+      text_delta: 'Hello World',
+    },
+  }, 'test-conv-123');
+  assert.equal(deltaMsg.length, 1);
+  assert.equal(deltaMsg[0]?.kind, 'stream_delta');
+  assert.equal(deltaMsg[0]?.content, 'Hello World');
+
+  // Test tool call
+  const toolUseMsg = sessions.normalizeMessage({
+    event: 'step_update',
+    step_update: {
+      step_index: 3,
+      state: 'ACTIVE',
+      step_type: 'tool',
+      tool_name: 'view_file',
+      tool_info: {
+        parameters: { AbsolutePath: '/test/file.ts' },
+      },
+    },
+  }, 'test-conv-123');
+  assert.equal(toolUseMsg.length, 1);
+  assert.equal(toolUseMsg[0]?.kind, 'tool_use');
+  assert.equal(toolUseMsg[0]?.toolName, 'view_file');
+
+  // Test tool result
+  const toolResultMsg = sessions.normalizeMessage({
+    event: 'step_update',
+    step_update: {
+      step_index: 3,
+      state: 'DONE',
+      step_type: 'tool',
+      tool_name: 'view_file',
+      tool_info: {
+        output: 'file content here',
+      },
+    },
+  }, 'test-conv-123');
+  assert.equal(toolResultMsg.length, 1);
+  assert.equal(toolResultMsg[0]?.kind, 'tool_result');
+  assert.equal(toolResultMsg[0]?.content, 'file content here');
+  assert.equal(toolResultMsg[0]?.isError, false);
+
+  // Test result completion
+  const completeMsg = sessions.normalizeMessage({
+    event: 'result',
+    result: {
+      status: 'SUCCESS',
+      usage: { total_tokens: 12345 },
+    },
+  }, 'test-conv-123');
+  assert.equal(completeMsg.length, 1);
+  assert.equal(completeMsg[0]?.kind, 'complete');
+  assert.equal(completeMsg[0]?.tokens, 12345);
+});
+
+test('AntigravitySessionsProvider fetchHistory renders replies and tool results from transcript fixtures', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agy-data-'));
+  const sessionId = 'hist-sess-1';
+  const transcriptDir = path.join(tempRoot, 'brain', sessionId, '.system_generated', 'logs');
+  await fs.mkdir(transcriptDir, { recursive: true });
+
+  // Entry shapes mirror real transcripts: assistant replies arrive as
+  // PLANNER_RESPONSE content, tool results as standalone MODEL entries typed
+  // by the tool name.
+  const entries = [
+    { step_index: 0, source: 'USER_EXPLICIT', type: 'USER_INPUT', status: 'DONE', created_at: '2026-08-18T03:55:18Z', content: '<USER_REQUEST>\nlist files\n</USER_REQUEST>\n<ADDITIONAL_METADATA>\nmeta\n</ADDITIONAL_METADATA>' },
+    { step_index: 2, source: 'MODEL', type: 'PLANNER_RESPONSE', status: 'DONE', created_at: '2026-08-18T03:55:20Z', tool_calls: [{ name: 'run_command', args: { CommandLine: 'ls' } }] },
+    { step_index: 3, source: 'MODEL', type: 'RUN_COMMAND', status: 'DONE', exit_code: 0, created_at: '2026-08-18T03:55:21Z', content: 'file-a\nfile-b' },
+    { step_index: 4, source: 'MODEL', type: 'PLANNER_RESPONSE', status: 'DONE', created_at: '2026-08-18T03:55:22Z', content: 'Done listing.' },
+    { step_index: 5, source: 'SYSTEM', type: 'CHECKPOINT', status: 'DONE', created_at: '2026-08-18T03:55:23Z', content: '{{ CHECKPOINT 0 }}' },
+    { step_index: 6, source: 'MODEL', type: 'PLANNER_RESPONSE', status: 'DONE', created_at: '2026-08-18T03:55:24Z', tool_calls: [{ name: 'grep_search', args: { Query: 'foo' } }, { name: 'view_file', args: { AbsolutePath: '/tmp/x' } }] },
+    { step_index: 7, source: 'MODEL', type: 'GREP_SEARCH', status: 'ERROR', created_at: '2026-08-18T03:55:25Z', content: 'not found' },
+    { step_index: 8, source: 'MODEL', type: 'VIEW_FILE', status: 'DONE', exit_code: 0, created_at: '2026-08-18T03:55:26Z', content: 'file body' },
+  ];
+  await fs.writeFile(
+    path.join(transcriptDir, 'transcript.jsonl'),
+    entries.map((entry) => JSON.stringify(entry)).join('\n') + '\n',
+  );
+
+  const previousDataDir = process.env.CLOUDCLI_ANTIGRAVITY_DATA_DIR;
+  process.env.CLOUDCLI_ANTIGRAVITY_DATA_DIR = tempRoot;
+  try {
+    const sessions = new AntigravitySessionsProvider();
+    const result = await sessions.fetchHistory(sessionId, {});
+
+    assert.equal(result.total, 5);
+
+    const [userMsg, toolMsg, assistantMsg, failedToolMsg, okToolMsg] = result.messages;
+    assert.equal(userMsg?.kind, 'text');
+    assert.equal(userMsg?.role, 'user');
+    assert.equal(userMsg?.content, 'list files');
+
+    assert.equal(toolMsg?.kind, 'tool_use');
+    assert.equal(toolMsg?.toolName, 'run_command');
+    assert.equal(toolMsg?.toolResult?.content, 'file-a\nfile-b');
+    assert.equal(toolMsg?.toolResult?.isError, false);
+
+    assert.equal(assistantMsg?.kind, 'text');
+    assert.equal(assistantMsg?.role, 'assistant');
+    assert.equal(assistantMsg?.content, 'Done listing.');
+
+    // Result entries pair with pending tool_uses in call order.
+    assert.equal(failedToolMsg?.toolName, 'grep_search');
+    assert.equal(failedToolMsg?.toolResult?.content, 'not found');
+    assert.equal(failedToolMsg?.toolResult?.isError, true);
+    assert.equal(okToolMsg?.toolName, 'view_file');
+    assert.equal(okToolMsg?.toolResult?.content, 'file body');
+    assert.equal(okToolMsg?.toolResult?.isError, false);
+  } finally {
+    if (previousDataDir === undefined) {
+      delete process.env.CLOUDCLI_ANTIGRAVITY_DATA_DIR;
+    } else {
+      process.env.CLOUDCLI_ANTIGRAVITY_DATA_DIR = previousDataDir;
+    }
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('AntigravitySessionsProvider fetchHistory returns empty for unknown sessions', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agy-data-empty-'));
+  const previousDataDir = process.env.CLOUDCLI_ANTIGRAVITY_DATA_DIR;
+  process.env.CLOUDCLI_ANTIGRAVITY_DATA_DIR = tempRoot;
+  try {
+    const sessions = new AntigravitySessionsProvider();
+    const result = await sessions.fetchHistory('missing-session', {});
+    assert.equal(result.total, 0);
+    assert.deepEqual(result.messages, []);
+  } finally {
+    if (previousDataDir === undefined) {
+      delete process.env.CLOUDCLI_ANTIGRAVITY_DATA_DIR;
+    } else {
+      process.env.CLOUDCLI_ANTIGRAVITY_DATA_DIR = previousDataDir;
+    }
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});

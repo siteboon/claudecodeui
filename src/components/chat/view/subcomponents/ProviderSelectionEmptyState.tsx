@@ -35,6 +35,7 @@ const PROVIDER_META: { id: LLMProvider; name: string }[] = [
   { id: "cursor", name: "Cursor" },
   { id: "opencode", name: "OpenCode" },
   { id: "zcode", name: "ZCode" },
+  { id: "antigravity", name: "Antigravity" },
 ];
 
 const MOD_KEY =
@@ -67,6 +68,8 @@ type ProviderSelectionEmptyStateProps = {
   setOpenCodeModel: (model: string) => void;
   zcodeModel: string;
   setZcodeModel: (model: string) => void;
+  antigravityModel?: string;
+  setAntigravityModel?: (model: string) => void;
   providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
   providerModelActions: ProviderModelActions;
   providerModelsLoading: boolean;
@@ -97,11 +100,13 @@ function getCurrentModel(
   co: string,
   o: string,
   z: string,
+  ag: string = "",
 ) {
   if (p === "claude") return c;
   if (p === "codex") return co;
   if (p === "opencode") return o;
   if (p === "zcode") return z;
+  if (p === "antigravity") return ag;
   return cu;
 }
 
@@ -111,6 +116,7 @@ function getProviderDisplayName(p: LLMProvider) {
   if (p === "codex") return "Codex";
   if (p === "opencode") return "OpenCode";
   if (p === "zcode") return "ZCode";
+  if (p === "antigravity") return "Antigravity";
   return "Claude";
 }
 
@@ -130,6 +136,8 @@ export default function ProviderSelectionEmptyState({
   setOpenCodeModel,
   zcodeModel,
   setZcodeModel,
+  antigravityModel = "",
+  setAntigravityModel,
   providerModelCatalog,
   providerModelActions,
   providerModelsLoading,
@@ -161,6 +169,7 @@ export default function ProviderSelectionEmptyState({
     codexModel,
     opencodeModel,
     zcodeModel,
+    antigravityModel,
   );
 
   const currentModelLabel = useMemo(() => {
@@ -185,12 +194,15 @@ export default function ProviderSelectionEmptyState({
       } else if (providerId === "zcode") {
         setZcodeModel(modelValue);
         localStorage.setItem("zcode-model", modelValue);
+      } else if (providerId === "antigravity") {
+        setAntigravityModel?.(modelValue);
+        localStorage.setItem("antigravity-model", modelValue);
       } else {
         setCursorModel(modelValue);
         localStorage.setItem("cursor-model", modelValue);
       }
     },
-    [setClaudeModel, setCursorModel, setCodexModel, setOpenCodeModel, setZcodeModel],
+    [setClaudeModel, setCursorModel, setCodexModel, setOpenCodeModel, setZcodeModel, setAntigravityModel],
   );
 
   const handleModelSelect = useCallback(
@@ -397,6 +409,10 @@ export default function ProviderSelectionEmptyState({
                 zcode: t("providerSelection.readyPrompt.zcode", {
                   model: zcodeModel,
                   defaultValue: "Ready with ZCode {{model}}",
+                }),
+                antigravity: t("providerSelection.readyPrompt.antigravity", {
+                  model: antigravityModel,
+                  defaultValue: "Ready with Antigravity {{model}}",
                 }),
               }[provider]
             }

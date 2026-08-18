@@ -1,0 +1,369 @@
+/**
+ * Antigravity Runtime Provider
+ *
+ * Implements IProviderRuntime for Google Antigravity CLI (`agy`).
+ * Spawns `agy` in print/stream-json mode and maps stdout events into CloudCLI NormalizedMessage stream.
+ *
+ * @module antigravity-runtime.provider
+ */
+
+import type { ChildProcess } from 'node:child_process';
+
+import crossSpawn from 'cross-spawn';
+
+import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
+import {
+  appendFilesInputTag,
+  appendImagesInputTag,
+  normalizeAttachmentDescriptors,
+} from '@/shared/image-attachments.js';
+import type { IProviderRuntime } from '@/shared/interfaces.js';
+import type {
+  AnyRecord,
+  ProviderRuntimeContext,
+  ProviderRuntimeWriter,
+} from '@/shared/types.js';
+import {
+  createCompleteMessage,
+  createNormalizedMessage,
+  flattenPromptForWindowsShell,
+  generateMessageId,
+  readObjectRecord,
+  readOptionalString,
+} from '@/shared/utils.js';
+
+import { tryResolveEnginePath } from './antigravity-engine-path.js';
+
+const PROVIDER = 'antigravity';
+
+/**
+ * Maps CloudCLI permission modes onto `agy` CLI flags. `default` maps to no
+ * flags and relies on the CLI's own permission prompting; every other mode
+ * maps to the native flag combination verified against `agy --help`.
+ */
+const PERMISSION_MODE_ARGS: Record<string, string[]> = {
+  acceptEdits: ['--mode', 'accept-edits'],
+  plan: ['--mode', 'plan'],
+  bypassPermissions: ['--dangerously-skip-permissions'],
+};
+
+/**
+ * Active process map keyed by session ID.
+ */
+const activeProcesses = new Map<string, ChildProcess>();
+
+/**
+ * Process keys killed by `abort()`. Their `close` event resolves the run
+ * quietly and notifies with `stopReason: 'aborted'` instead of completed.
+ */
+const abortedProcessKeys = new Set<string>();
+
+export class AntigravityRuntimeProvider implements IProviderRuntime {
+  /**
+   * Executes a command using the Antigravity CLI.
+   */
+  async run(
+    command: string,
+    options: AnyRecord = {},
+    writer: ProviderRuntimeWriter,
+    context: ProviderRuntimeContext,
+  ): Promise<unknown> {
+    return new Promise((resolve, reject) => {
+      const sessionId = readOptionalString(options.sessionId);
+      const cwd = readOptionalString(options.cwd)
+        ?? readOptionalString(options.projectPath)
+        ?? process.cwd();
+      const model = readOptionalString(options.model);
+      const effort = readOptionalString(options.effort);
+      const permissionMode = readOptionalString(options.permissionMode);
+      const skipPermissions = Boolean(options.skipPermissions || options.toolsSettings?.skipPermissions);
+      const sessionSummary = readOptionalString(options.sessionSummary);
+
+      const providerSessionId = sessionId
+        ? context.resolveProviderSessionId(sessionId)
+        : null;
+
+      let capturedSessionId = providerSessionId;
+      let sessionCreatedSent = false;
+      let completeSent = false;
+      let settled = false;
+
+      const processKey = sessionId || capturedSessionId || `agy_${Date.now()}`;
+
+      const settleOnce = (callback: () => void) => {
+        if (settled) return;
+        settled = true;
+        callback();
+      };
+
+      const notifyTerminalState = ({ code = null, error = null }: { code?: number | null; error?: string | Error | null } = {}) => {
+        const finalSessionId = sessionId || capturedSessionId || processKey;
+        const normalizedUserId = writer.userId != null ? String(writer.userId) : null;
+        if (code === 0 && !error) {
+          notifyRunStopped({
+            userId: normalizedUserId,
+            provider: PROVIDER,
+            sessionId: finalSessionId,
+            sessionName: sessionSummary,
+            stopReason: 'completed',
+          });
+        } else {
+          notifyRunFailed({
+            userId: normalizedUserId,
+            provider: PROVIDER,
+            sessionId: finalSessionId,
+            sessionName: sessionSummary,
+            error: error || (code === null
+              ? 'Antigravity CLI terminated by signal.'
+              : `Antigravity CLI exited with code ${code}`),
+          });
+        }
+      };
+
+      const enginePath = tryResolveEnginePath();
+      if (!enginePath) {
+        const notInstalledMsg = createNormalizedMessage({
+          id: generateMessageId(PROVIDER),
+          kind: 'error',
+          content: 'Antigravity CLI (agy) is not installed. Please install it first.',
+          sessionId: processKey,
+          provider: PROVIDER,
+          isError: true,
+        });
+        writer.send(notInstalledMsg);
+        settleOnce(() => reject(new Error('Antigravity CLI is not installed.')));
+        return;
+      }
+
+      // Build CLI arguments
+      const args: string[] = [];
+
+      // Prompt with attachments
+      const hasAttachments =
+        normalizeAttachmentDescriptors(options.images).length > 0
+        || normalizeAttachmentDescriptors(options.files).length > 0;
+
+      if ((command && command.trim()) || hasAttachments) {
+        const promptWithAttachments = appendFilesInputTag(
+          appendImagesInputTag(command || '', options.images),
+          options.files,
+        );
+        args.push('-p', flattenPromptForWindowsShell(promptWithAttachments));
+        args.push('--output-format', 'stream-json');
+      }
+
+      // Resume existing conversation
+      if (providerSessionId) {
+        args.push('--conversation', providerSessionId);
+      }
+
+      // Model configuration
+      if (model) {
+        args.push('--model', model);
+      }
+
+      // Reasoning effort
+      if (effort && ['low', 'medium', 'high'].includes(effort)) {
+        args.push('--effort', effort);
+      }
+
+      // Permission mode (acceptEdits / plan / bypassPermissions); 'default'
+      // adds no flags. Chat and headless callers both pass `permissionMode`.
+      const permissionModeArgs = permissionMode ? PERMISSION_MODE_ARGS[permissionMode] : undefined;
+      if (permissionModeArgs) {
+        args.push(...permissionModeArgs);
+      }
+
+      // The independent tools-settings toggle forces skip-permissions even
+      // when the selected permission mode would not.
+      if (skipPermissions && !args.includes('--dangerously-skip-permissions')) {
+        args.push('--dangerously-skip-permissions');
+      }
+
+      console.debug(`[AntigravityRuntime] Spawning agy with args:`, args);
+
+      let stdoutBuffer = '';
+
+      const processLine = (line: string) => {
+        if (!line || !line.trim()) return;
+
+        try {
+          const raw = JSON.parse(line);
+          const rawRecord = readObjectRecord(raw);
+
+          // Handle init event for session ID capture. Fully handled here:
+          // normalizeMessage's init branch would emit a second session_created
+          // for the same event (both flat conversation_id and nested init
+          // coexist in real agy output), so return instead of falling through.
+          if (rawRecord?.event === 'init' && rawRecord?.conversation_id) {
+            const convId = readOptionalString(rawRecord.conversation_id);
+            if (convId && !capturedSessionId) {
+              capturedSessionId = convId;
+              writer.setSessionId?.(capturedSessionId);
+
+              if (!providerSessionId && !sessionCreatedSent) {
+                sessionCreatedSent = true;
+                writer.send(createNormalizedMessage({
+                  id: generateMessageId(PROVIDER),
+                  kind: 'session_created',
+                  newSessionId: capturedSessionId,
+                  sessionId: capturedSessionId,
+                  provider: PROVIDER,
+                  content: `Antigravity session created: ${capturedSessionId}`,
+                }));
+              }
+            }
+            return;
+          }
+
+          // Handle result event (terminal)
+          if (rawRecord?.event === 'result') {
+            const resultData = readObjectRecord(rawRecord.result);
+            const usageData = readObjectRecord(resultData?.usage);
+            const totalTokens = typeof usageData?.total_tokens === 'number' ? usageData.total_tokens : undefined;
+
+            if (!completeSent) {
+              completeSent = true;
+              const completeMsg = createCompleteMessage({
+                provider: PROVIDER,
+                sessionId: capturedSessionId || sessionId || null,
+                exitCode: resultData?.status === 'SUCCESS' ? 0 : 1,
+              });
+              if (totalTokens !== undefined) {
+                completeMsg.tokens = totalTokens;
+              }
+              writer.send(completeMsg);
+            }
+            return;
+          }
+
+          // Normalize message and send to writer
+          const normalized = context.normalizeMessage(raw, capturedSessionId || sessionId || null);
+          for (const msg of normalized) {
+            writer.send(msg);
+          }
+        } catch {
+          // If not JSON, treat as text stream delta
+          const deltaMsg = createNormalizedMessage({
+            id: generateMessageId(PROVIDER),
+            kind: 'stream_delta',
+            content: line,
+            sessionId: capturedSessionId || sessionId || null,
+            provider: PROVIDER,
+          });
+          writer.send(deltaMsg);
+        }
+      };
+
+      const agyProcess = crossSpawn(enginePath, args, {
+        cwd,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env },
+      });
+
+      activeProcesses.set(processKey, agyProcess);
+
+      agyProcess.stdout?.on('data', (data: Buffer) => {
+        stdoutBuffer += data.toString('utf8');
+        const lines = stdoutBuffer.split(/\r?\n/);
+        stdoutBuffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          processLine(line.trim());
+        }
+      });
+
+      agyProcess.stderr?.on('data', (data: Buffer) => {
+        const text = data.toString('utf8');
+        console.warn('[Antigravity CLI stderr]:', text);
+      });
+
+      agyProcess.on('close', (code: number | null) => {
+        activeProcesses.delete(processKey);
+
+        if (stdoutBuffer.trim()) {
+          processLine(stdoutBuffer.trim());
+          stdoutBuffer = '';
+        }
+
+        if (!completeSent) {
+          completeSent = true;
+          writer.send(createCompleteMessage({
+            provider: PROVIDER,
+            sessionId: capturedSessionId || sessionId || null,
+            exitCode: code ?? 0,
+          }));
+        }
+
+        // A SIGTERM from abort() closes with code null after the chat gateway
+        // already completed the run: resolve quietly and notify 'aborted'
+        // instead of reporting a failure or a completion.
+        const wasAborted = abortedProcessKeys.delete(processKey);
+        if (wasAborted) {
+          notifyRunStopped({
+            userId: writer.userId != null ? String(writer.userId) : null,
+            provider: PROVIDER,
+            sessionId: sessionId || capturedSessionId || processKey,
+            sessionName: sessionSummary,
+            stopReason: 'aborted',
+          });
+          settleOnce(() => resolve({ sessionId: capturedSessionId || sessionId, success: true, aborted: true }));
+          return;
+        }
+
+        notifyTerminalState({ code });
+        if (code === 0) {
+          settleOnce(() => resolve({ sessionId: capturedSessionId || sessionId, success: true }));
+        } else {
+          settleOnce(() => reject(new Error(`Antigravity CLI exited with code ${code ?? 'signal'}`)));
+        }
+      });
+
+      agyProcess.on('error', (err: Error) => {
+        activeProcesses.delete(processKey);
+        console.error('[Antigravity CLI error]:', err);
+
+        writer.send(createNormalizedMessage({
+          id: generateMessageId(PROVIDER),
+          kind: 'error',
+          content: err.message,
+          sessionId: capturedSessionId || sessionId || null,
+          provider: PROVIDER,
+          isError: true,
+        }));
+
+        if (!completeSent) {
+          completeSent = true;
+          writer.send(createCompleteMessage({
+            provider: PROVIDER,
+            sessionId: capturedSessionId || sessionId || null,
+            exitCode: 1,
+          }));
+        }
+
+        notifyTerminalState({ error: err });
+        settleOnce(() => reject(err));
+      });
+
+      // Close stdin
+      agyProcess.stdin?.end();
+    });
+  }
+
+  /**
+   * Aborts an active Antigravity session.
+   */
+  async abort(sessionId: string): Promise<boolean> {
+    const process = activeProcesses.get(sessionId);
+    if (process) {
+      console.info(`[AntigravityRuntime] Aborting session: ${sessionId}`);
+      abortedProcessKeys.add(sessionId);
+      process.kill('SIGTERM');
+      activeProcesses.delete(sessionId);
+      return true;
+    }
+    return false;
+  }
+}
+
+export const antigravityRuntime = new AntigravityRuntimeProvider();

@@ -35,6 +35,10 @@ const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> =
     // ZCodeStorageDir-aware so an isolated ZCODE_STORAGE_DIR is watched too.
     rootPath: path.join(getZCodeStorageDir(), 'cli', 'db'),
   },
+  {
+    provider: 'antigravity',
+    rootPath: path.join(os.homedir(), '.gemini', 'antigravity-cli'),
+  },
 ];
 
 const WATCHER_IGNORED_PATTERNS = [
@@ -82,6 +86,11 @@ function isWatcherTargetFile(provider: LLMProvider, filePath: string): boolean {
   if (provider === 'zcode') {
     const fileName = path.basename(filePath);
     return fileName === 'db.sqlite' || fileName === 'db.sqlite-wal';
+  }
+
+  if (provider === 'antigravity') {
+    const fileName = path.basename(filePath);
+    return fileName === 'conversation_summaries.db' || fileName === 'conversation_summaries.db-wal';
   }
 
   return filePath.endsWith('.jsonl');

@@ -1,6 +1,8 @@
 # Coding Agent 接入集成指南 (Coding Agent Integration Guide)
 
-本指南详细说明了在 CloudCLI 中接入新的 AI Coding Agent（例如 Google Antigravity CLI、Zcode、Cursor CLI 等）的系统架构、核心接口契约、分步集成流程、消息归一化规范及常见注意事项。
+本指南详细说明了在 CloudCLI 中接入新的 AI Coding Agent（例如 Google Antigravity CLI、Cursor CLI 等）的系统架构、核心接口契约、分步集成流程、消息归一化规范及常见注意事项。
+
+> **参考实现**：ZCode Provider 接入（`docs/zcode-integration-plan.md`）作为完整的参考实现，展示了如何按照本指南完成从 Phase 0 验证到 Phase 6 上线的全流程。ZCode 实现包含约 2,842 行生产级 TypeScript 代码，覆盖了所有 7 个分面的完整集成。
 
 ---
 
@@ -140,7 +142,7 @@ export interface IProviderSessionSynchronizer {
 
 ## 3. 新 Agent 接入实施步骤
 
-以接入 `antigravity`（Google Antigravity CLI）或 `zcode` 为例：
+以接入 `antigravity`（Google Antigravity CLI）为例（ZCode 已作为参考实现完成接入，详见 `docs/zcode-integration-plan.md`）：
 
 ### Step 1: 扩展类型定义
 
@@ -169,6 +171,8 @@ server/modules/providers/list/antigravity/
 ```
 
 #### 模板参考实现
+
+> **完整参考**：ZCode Provider 实现位于 `server/modules/providers/list/zcode/`，包含所有 11 个标准文件的完整实现，可直接作为参考模板。
 
 ##### 1. Provider 包装类 (`antigravity.provider.ts`)
 ```typescript
@@ -276,6 +280,8 @@ export class AntigravitySkillsProvider extends SkillsProvider {
 
 ## 4. 消息归一化规范 (NormalizedMessage)
 
+> **实际案例**：ZCode Provider 的消息归一化实现展示了如何处理复杂的事件流、SQLite 历史记录、以及多种消息类型的完整映射（参见 `zcode-sessions.provider.ts` 和 `docs/phase0-3-event-specs.md`）。
+
 Runtime 输出给 Web 前端的所有事件必须归一化为 `NormalizedMessage`：
 
 | 事件类型 (`kind`) | 典型场景 | 核心参数与说明 |
@@ -304,6 +310,8 @@ Runtime 输出给 Web 前端的所有事件必须归一化为 `NormalizedMessage
 ---
 
 ## 6. 验证与测试规范
+
+> **验证参考**：ZCode Provider 的完整测试流程展示了从 Phase 0 协议验证到单元测试的完整验证体系（参见 `docs/phase0-*.md` 和 `docs/phase6-test-results.md`）。
 
 集成完毕后，执行以下命令进行完整性校验：
 

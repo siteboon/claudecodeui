@@ -76,6 +76,8 @@ function ChatInterface({
     setOpenCodeModel,
     zcodeModel,
     setZcodeModel,
+    antigravityModel,
+    setAntigravityModel,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
@@ -360,6 +362,8 @@ function ChatInterface({
           setOpenCodeModel={setOpenCodeModel}
           zcodeModel={zcodeModel}
           setZcodeModel={setZcodeModel}
+          antigravityModel={antigravityModel}
+          setAntigravityModel={setAntigravityModel}
           providerModelCatalog={providerModelCatalog}
           providerModelActions={providerModelActions}
           providerModelsLoading={providerModelsLoading}
