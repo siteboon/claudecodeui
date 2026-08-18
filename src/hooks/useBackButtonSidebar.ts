@@ -269,11 +269,25 @@ export function useBackButtonSidebar({
       const remaining = landedIndex + 1;
       guardIdsRef.current = guardIds.slice(0, remaining);
 
+      if (guardIds.length - remaining > 1) {
+        // A back press pops exactly one entry, and our guards are never
+        // skippable, so more than one disappearing at once means a jump — the
+        // back-button long-press menu, or history.go(). The user picked the entry
+        // they are on, so leave them there rather than reading it as a press.
+        return;
+      }
+
       if (!enabled) {
         // Guards left over from before the option was switched off, or from
-        // before a resize crossed the mobile breakpoint. The pop consumed the
-        // press without moving, so complete the navigation the user asked for.
-        skipBack();
+        // before a resize crossed the mobile breakpoint.
+        if (remaining > 0) {
+          // Standing on one of our own guards, an invisible duplicate of the
+          // entry below it, so the press moved nothing: complete it. Landing
+          // anywhere else means the press already moved the user, and skipping
+          // would eat an entry they asked to see.
+          skipBack();
+        }
+
         return;
       }
 
