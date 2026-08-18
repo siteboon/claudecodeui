@@ -15,7 +15,7 @@ export type SidebarProjectListProps = {
   selectedSession: ProjectSession | null;
   isLoading: boolean;
   loadingProgress: LoadingProgress | null;
-  expandedProjects: Set<string>;
+  isProjectExpanded: (projectId: string) => boolean;
   editingProject: string | null;
   editingName: string;
   initialSessionsLoaded: Set<string>;
@@ -30,12 +30,11 @@ export type SidebarProjectListProps = {
   loadingMoreProjects: Set<string>;
   activeSessions: SessionActivityMap;
   attentionSessionIds: ReadonlySet<string>;
-  forceExpanded?: boolean;
-  isProjectStarred: (projectName: string) => boolean;
+  isProjectStarred: (projectId: string) => boolean;
   onEditingNameChange: (value: string) => void;
-  onToggleProject: (projectName: string) => void;
+  onToggleProject: (projectId: string) => void;
   onProjectSelect: (project: Project) => void;
-  onToggleStarProject: (projectName: string) => void;
+  onToggleStarProject: (projectId: string) => void;
   onStartEditingProject: (project: Project) => void;
   onCancelEditingProject: () => void;
   onSaveProjectName: (projectName: string) => void;
@@ -62,7 +61,7 @@ export default function SidebarProjectList({
   selectedSession,
   isLoading,
   loadingProgress,
-  expandedProjects,
+  isProjectExpanded,
   editingProject,
   editingName,
   initialSessionsLoaded,
@@ -77,7 +76,6 @@ export default function SidebarProjectList({
   loadingMoreProjects,
   activeSessions,
   attentionSessionIds,
-  forceExpanded = false,
   isProjectStarred,
   onEditingNameChange,
   onToggleProject,
@@ -129,7 +127,7 @@ export default function SidebarProjectList({
               project={project}
               selectedProject={selectedProject}
               selectedSession={selectedSession}
-              isExpanded={forceExpanded || expandedProjects.has(project.projectId)}
+              isExpanded={isProjectExpanded(project.projectId)}
               isDeleting={deletingProjects.has(project.projectId)}
               isStarred={isProjectStarred(project.projectId)}
               editingProject={editingProject}
