@@ -137,6 +137,11 @@
     "sessionCount_one": "此專案包含 {{count}} 個對話。",
     "sessionCount_other": "此專案包含 {{count}} 個對話。",
     "removeFromSidebar": "僅從側邊欄移除",
+    "archiveProject": "封存專案",
+    "archiveSession": "封存工作階段",
+    "archiveSessionNotice": "封存會將工作階段移出使用中清單，但保留其歷史記錄。",
+    "archivedSessionNotice": "此工作階段已封存。您可以將其保持隱藏，或永久刪除。",
+    "deleteSessionPermanently": "永久刪除",
     "deleteAllData": "永久刪除所有資料",
     "allConversationsDeleted": "專案將從側邊欄中移除。您的檔案、記憶和工作階段資料將會保留。",
     "cannotUndo": "您可以稍後重新新增此專案。"

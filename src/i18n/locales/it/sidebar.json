@@ -138,6 +138,11 @@
     "sessionCount_one": "Questo progetto contiene {{count}} conversazione.",
     "sessionCount_other": "Questo progetto contiene {{count}} conversazioni.",
     "removeFromSidebar": "Rimuovi solo dalla barra laterale",
+    "archiveProject": "Archivia progetto",
+    "archiveSession": "Archivia sessione",
+    "archiveSessionNotice": "L'archiviazione rimuove la sessione dall'elenco attivo mantenendone la cronologia.",
+    "archivedSessionNotice": "Questa sessione è già archiviata. Puoi mantenerla nascosta o eliminarla definitivamente.",
+    "deleteSessionPermanently": "Elimina definitivamente",
     "deleteAllData": "Elimina tutti i dati permanentemente",
     "allConversationsDeleted": "Il progetto verrà rimosso dalla barra laterale. I tuoi file, memorie e dati delle sessioni verranno preservati.",
     "cannotUndo": "Puoi riaggiungerlo in seguito."

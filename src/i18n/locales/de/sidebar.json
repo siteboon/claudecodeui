@@ -138,6 +138,11 @@
     "sessionCount_one": "Dieses Projekt enthält {{count}} Unterhaltung.",
     "sessionCount_other": "Dieses Projekt enthält {{count}} Unterhaltungen.",
     "removeFromSidebar": "Nur aus der Seitenleiste entfernen",
+    "archiveProject": "Projekt archivieren",
+    "archiveSession": "Sitzung archivieren",
+    "archiveSessionNotice": "Beim Archivieren verschwindet die Sitzung aus der aktiven Liste, ihr Verlauf bleibt erhalten.",
+    "archivedSessionNotice": "Diese Sitzung ist bereits archiviert. Du kannst sie ausgeblendet lassen oder endgültig löschen.",
+    "deleteSessionPermanently": "Endgültig löschen",
     "deleteAllData": "Alle Daten dauerhaft löschen",
     "allConversationsDeleted": "Das Projekt wird aus der Seitenleiste entfernt. Deine Dateien, Erinnerungen und Sitzungsdaten bleiben erhalten.",
     "cannotUndo": "Du kannst das Projekt später erneut hinzufügen."

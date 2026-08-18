@@ -124,6 +124,11 @@
     "confirmDelete": "このプロジェクトをどうしますか：",
     "sessionCount": "このプロジェクトには{{count}}件の会話があります。",
     "removeFromSidebar": "サイドバーからのみ除去",
+    "archiveProject": "プロジェクトをアーカイブ",
+    "archiveSession": "セッションをアーカイブ",
+    "archiveSessionNotice": "アーカイブすると、セッションはアクティブな一覧から外れますが、履歴は保持されます。",
+    "archivedSessionNotice": "このセッションはすでにアーカイブされています。非表示のままにするか、完全に削除できます。",
+    "deleteSessionPermanently": "完全に削除",
     "deleteAllData": "すべてのデータを完全に削除",
     "allConversationsDeleted": "プロジェクトはサイドバーから除去されます。ファイル、メモリ、セッションデータは保持されます。",
     "cannotUndo": "後からプロジェクトを再追加できます。"
