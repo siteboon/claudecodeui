@@ -184,7 +184,6 @@ export default function ActionMenu({
       id={menuId}
       role="menu"
       tabIndex={-1}
-      // Closes itself on Escape, so modals below must leave that keypress alone.
       data-escape-layer
       className={cn(
         portal ? 'fixed z-[70]' : 'absolute top-full z-50 mt-2',
