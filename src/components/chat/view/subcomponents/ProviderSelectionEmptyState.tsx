@@ -26,6 +26,7 @@ import {
   Badge,
   Button,
 } from "../../../../shared/view/ui";
+import { SENTINEL_MODEL_LABELS } from "../../hooks/useChatProviderState";
 
 import ModelLibraryPanel from "./ModelLibraryPanel";
 
@@ -34,6 +35,7 @@ const PROVIDER_META: { id: LLMProvider; name: string }[] = [
   { id: "codex", name: "OpenAI" },
   { id: "cursor", name: "Cursor" },
   { id: "opencode", name: "OpenCode" },
+  { id: "omp", name: "omp" },
 ];
 
 const MOD_KEY =
@@ -64,6 +66,8 @@ type ProviderSelectionEmptyStateProps = {
   setCodexModel: (model: string) => void;
   opencodeModel: string;
   setOpenCodeModel: (model: string) => void;
+  ompModel: string;
+  setOmpModel: (model: string) => void;
   providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
   providerModelActions: ProviderModelActions;
   providerModelsLoading: boolean;
@@ -93,10 +97,12 @@ function getCurrentModel(
   cu: string,
   co: string,
   o: string,
+  omp: string,
 ) {
   if (p === "claude") return c;
   if (p === "codex") return co;
   if (p === "opencode") return o;
+  if (p === "omp") return omp;
   return cu;
 }
 
@@ -105,6 +111,7 @@ function getProviderDisplayName(p: LLMProvider) {
   if (p === "cursor") return "Cursor";
   if (p === "codex") return "Codex";
   if (p === "opencode") return "OpenCode";
+  if (p === "omp") return "omp";
   return "Claude";
 }
 
@@ -122,6 +129,8 @@ export default function ProviderSelectionEmptyState({
   setCodexModel,
   opencodeModel,
   setOpenCodeModel,
+  ompModel,
+  setOmpModel,
   providerModelCatalog,
   providerModelActions,
   providerModelsLoading,
@@ -152,6 +161,7 @@ export default function ProviderSelectionEmptyState({
     cursorModel,
     codexModel,
     opencodeModel,
+    ompModel,
   );
 
   const currentModelLabel = useMemo(() => {
@@ -159,7 +169,10 @@ export default function ProviderSelectionEmptyState({
     const found = config.OPTIONS.find(
       (o: { value: string; label: string }) => o.value === currentModel,
     );
-    return found?.label || currentModel;
+    // The catalog normally carries the label, but it is fetched from the
+    // provider CLI — fall back to the static map so a sentinel value never
+    // renders as its raw token when that fetch is unavailable.
+    return found?.label || SENTINEL_MODEL_LABELS[currentModel] || currentModel;
   }, [provider, currentModel, providerModelCatalog]);
 
   const setModelForProvider = useCallback(
@@ -173,12 +186,15 @@ export default function ProviderSelectionEmptyState({
       } else if (providerId === "opencode") {
         setOpenCodeModel(modelValue);
         localStorage.setItem("opencode-model", modelValue);
+      } else if (providerId === "omp") {
+        setOmpModel(modelValue);
+        localStorage.setItem("omp-model", modelValue);
       } else {
         setCursorModel(modelValue);
         localStorage.setItem("cursor-model", modelValue);
       }
     },
-    [setClaudeModel, setCursorModel, setCodexModel, setOpenCodeModel],
+    [setClaudeModel, setCursorModel, setCodexModel, setOpenCodeModel, setOmpModel],
   );
 
   const handleModelSelect = useCallback(
@@ -381,6 +397,12 @@ export default function ProviderSelectionEmptyState({
                 opencode: t("providerSelection.readyPrompt.opencode", {
                   model: opencodeModel,
                   defaultValue: "Ready with OpenCode {{model}}",
+                }),
+                omp: t("providerSelection.readyPrompt.omp", {
+                  // currentModelLabel maps the sentinel → "Use omp default" so the
+                  // tagline never shows the raw __omp_configured_model__ token.
+                  model: currentModelLabel,
+                  defaultValue: "Ready with omp {{model}}",
                 }),
               }[provider]
             }

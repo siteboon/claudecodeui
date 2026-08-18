@@ -112,3 +112,23 @@ test('cost and status commands report the same resolved model as /models', async
   assert.equal((cost.data as { model: string }).model, 'haiku');
   assert.equal((status.data as { model: string }).model, 'haiku');
 });
+
+test('cost command reports the model the last turn ran on, not the recorded sentinel', async () => {
+  // omp records a "use my own configured model" sentinel against the session,
+  // so the recorded value can never name the model a turn ran on. The client
+  // reads that out of the transcript and sends it back in `tokenUsage.model`.
+  const result = await executeCommand('/cost', {
+    provider: 'omp',
+    sessionId: 'session-1',
+    model: '__omp_configured_model__',
+    tokenUsage: { used: 100, total: 1000, model: 'claude-opus-5' },
+  }, { 'session-1': '__omp_configured_model__' });
+
+  assert.equal((result.data as { model: string }).model, 'claude-opus-5');
+});
+
+test('cost command labels a catalog default rather than reporting its raw value', async () => {
+  const result = await executeCommand('/cost', { provider: 'omp', sessionId: 'session-2' });
+
+  assert.equal((result.data as { model: string }).model, 'Default');
+});

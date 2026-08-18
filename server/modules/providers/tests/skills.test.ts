@@ -119,7 +119,7 @@ test('providerSkillsService lists claude user, project, and enabled plugin skill
     'at',
     '000',
   );
-  const siblingSkillPluginPath = path.join(path.dirname(skillPluginInstallPath), 'legacy777');
+  const legacySkillPluginPath = path.join(path.dirname(skillPluginInstallPath), 'legacy777');
   await fs.mkdir(workspacePath, { recursive: true });
 
   const restoreHomeDir = patchHomeDir(tempRoot);
@@ -168,10 +168,10 @@ test('providerSkillsService lists claude user, project, and enabled plugin skill
       'Nested Claude plugin skill',
     );
     await writeSkill(
-      path.join(siblingSkillPluginPath, 'skills'),
-      'claude-plugin-sibling-dir',
-      'claude-plugin-sibling',
-      'Sibling Claude plugin skill',
+      path.join(legacySkillPluginPath, 'skills'),
+      'legacy-cached-plugin-skill-dir',
+      'legacy-cached-plugin-skill',
+      'Stale cached plugin skill',
     );
     await writeClaudePluginManifest(disabledPluginInstallPath, 'DisabledSkills');
     await writeClaudePluginCommand(
@@ -302,11 +302,7 @@ test('providerSkillsService lists claude user, project, and enabled plugin skill
     assert.equal(nestedPluginSkill?.command, '/ExampleSkills:claude-plugin-nested');
     assert.equal(nestedPluginSkill?.description, 'Nested Claude plugin skill');
 
-    const siblingPluginSkill = byName.get('claude-plugin-sibling');
-    assert.equal(siblingPluginSkill?.scope, 'plugin');
-    assert.equal(siblingPluginSkill?.pluginName, 'example-skills');
-    assert.equal(siblingPluginSkill?.command, '/example-skills:claude-plugin-sibling');
-    assert.equal(siblingPluginSkill?.description, 'Sibling Claude plugin skill');
+    assert.equal(byName.has('legacy-cached-plugin-skill'), false);
     assert.equal(byName.has('disabled-command'), false);
     assert.equal(byName.has('disabled-plugin'), false);
     assert.equal(byName.has('invalid-empty-command'), false);
@@ -689,4 +685,128 @@ test('providerSkillsService rejects managed skill creation for opencode', { conc
     }),
     /does not support managed global skills/i,
   );
+});
+
+/**
+ * This test covers omp skill ranking: its own `.omp` roots outrank the Claude and
+ * compatibility roots it also reads, one name reached through two roots is listed
+ * once, and `skills.ignoredSkills` in omp's config hides a skill everywhere.
+ */
+test('providerSkillsService ranks and de-duplicates omp skill sources', { concurrency: false }, async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-skills-omp-'));
+  const repoRoot = path.join(tempRoot, 'repo');
+  const workspacePath = path.join(repoRoot, 'packages', 'app');
+  await fs.mkdir(path.join(repoRoot, '.git'), { recursive: true });
+  await fs.mkdir(workspacePath, { recursive: true });
+
+  const restoreHomeDir = patchHomeDir(tempRoot);
+  try {
+    await fs.mkdir(path.join(tempRoot, '.omp', 'agent'), { recursive: true });
+    await fs.writeFile(
+      path.join(tempRoot, '.omp', 'agent', 'config.yml'),
+      'skills: \n  ignoredSkills: \n    - omp-hidden\nmemories: \n  enabled: true\n',
+      'utf8',
+    );
+
+    await writeSkill(
+      path.join(workspacePath, '.omp', 'skills'),
+      'omp-native-dir',
+      'omp-native',
+      'omp native project skill',
+    );
+    await writeSkill(
+      path.join(tempRoot, '.omp', 'agent', 'skills'),
+      'omp-user-dir',
+      'omp-user',
+      'omp native user skill',
+    );
+    await writeSkill(
+      path.join(tempRoot, '.omp', 'agent', 'managed-skills'),
+      'omp-managed-dir',
+      'omp-managed',
+      'omp managed skill',
+    );
+    await writeSkill(
+      path.join(repoRoot, '.github', 'skills'),
+      'omp-github-dir',
+      'omp-github',
+      'omp github skill',
+    );
+    await writeSkill(
+      path.join(tempRoot, '.claude', 'skills'),
+      'omp-shared-dir',
+      'omp-shared',
+      'Claude copy outranks the compatibility copy',
+    );
+    await writeSkill(
+      path.join(tempRoot, '.agents', 'skills'),
+      'omp-shared-dir',
+      'omp-shared',
+      'Agents copy is shadowed',
+    );
+    await writeSkill(
+      path.join(tempRoot, '.claude', 'skills'),
+      'omp-hidden-dir',
+      'omp-hidden',
+      'Suppressed by omp config',
+    );
+
+    const skills = await providerSkillsService.listProviderSkills('omp', { workspacePath });
+    const byName = new Map(skills.map((skill) => [skill.name, skill]));
+
+    assert.equal(byName.get('omp-native')?.scope, 'project');
+    assert.equal(byName.get('omp-native')?.command, '/omp-native');
+    assert.equal(byName.get('omp-user')?.scope, 'user');
+    assert.equal(byName.get('omp-managed')?.scope, 'user');
+    assert.equal(byName.get('omp-github')?.scope, 'project');
+    assert.equal(byName.has('omp-hidden'), false);
+
+    assert.equal(skills.filter((skill) => skill.name === 'omp-shared').length, 1);
+    assert.equal(
+      byName.get('omp-shared')?.sourcePath,
+      path.join(tempRoot, '.claude', 'skills', 'omp-shared-dir', 'SKILL.md'),
+    );
+  } finally {
+    restoreHomeDir();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+/**
+ * This test covers omp global skill writes, which land in omp's own user root so
+ * they outrank every borrowed source and stay out of the auto-learn directory.
+ */
+test('providerSkillsService writes omp global skills into omp native user root', { concurrency: false }, async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-skills-omp-write-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  await fs.mkdir(workspacePath, { recursive: true });
+
+  const restoreHomeDir = patchHomeDir(tempRoot);
+  try {
+    const [created] = await providerSkillsService.addProviderSkills('omp', {
+      entries: [{
+        content: '---\nname: omp-written\ndescription: Written through the adapter\n---\n\nBody.',
+      }],
+    });
+
+    assert.equal(created.scope, 'user');
+    assert.equal(
+      created.sourcePath,
+      path.join(tempRoot, '.omp', 'agent', 'skills', 'omp-written', 'SKILL.md'),
+    );
+
+    const listed = await providerSkillsService.listProviderSkills('omp', { workspacePath });
+    assert.equal(listed.some((skill) => skill.name === 'omp-written'), true);
+
+    const removal = await providerSkillsService.removeProviderSkill('omp', {
+      directoryName: 'omp-written',
+    });
+    assert.equal(removal.removed, true);
+
+    const remaining = await providerSkillsService.listProviderSkills('omp', { workspacePath });
+    assert.equal(remaining.some((skill) => skill.name === 'omp-written'), false);
+  } finally {
+    restoreHomeDir();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
 });

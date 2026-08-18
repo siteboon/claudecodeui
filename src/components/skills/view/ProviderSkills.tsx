@@ -60,12 +60,17 @@ const PROVIDER_NAMES: Record<SkillsProvider, string> = {
   codex: 'Codex',
   cursor: 'Cursor',
   opencode: 'OpenCode',
+  omp: 'omp',
 };
 
+// Where each provider installs a managed skill, mirroring its backend
+// `getGlobalSkillSource`. opencode is the only one that does not override it, so
+// it alone has no write target and no install path to advertise.
 const PROVIDER_SKILL_PATHS: Record<Exclude<SkillsProvider, 'opencode'>, string> = {
   claude: '~/.claude/skills/<skill-name>/SKILL.md',
   codex: '~/.agents/skills/<skill-name>/SKILL.md',
   cursor: '~/.cursor/skills/<skill-name>/SKILL.md',
+  omp: '~/.omp/agent/skills/<skill-name>/SKILL.md',
 };
 
 const SCOPE_LABELS: Record<SkillsScope, string> = {
@@ -220,7 +225,9 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
   const folderInputRef = useRef<HTMLInputElement | null>(null);
 
   const providerName = PROVIDER_NAMES[selectedProvider];
-  const providerPath = selectedProvider === 'opencode' ? null : PROVIDER_SKILL_PATHS[selectedProvider];
+  const providerPath = selectedProvider === 'opencode'
+    ? null
+    : PROVIDER_SKILL_PATHS[selectedProvider];
 
   useEffect(() => {
     setQueuedFiles([]);

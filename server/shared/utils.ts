@@ -665,6 +665,38 @@ export function addUniqueProviderSkillSource(
   sources.push({ ...source, rootDir: normalizedRootDir });
 }
 
+/**
+ * Lists the project directories a skill lookup walks, nearest first.
+ *
+ * Providers that support per-project skills read them from the working
+ * directory and from every parent up to the repository root, so a skill placed
+ * at the top of a monorepo stays visible inside its packages.
+ */
+export function getProjectSkillSearchRoots(
+  workspacePath: string,
+  repoRoot: string | null,
+): string[] {
+  const roots: string[] = [];
+  const normalizedRepoRoot = repoRoot ? path.resolve(repoRoot) : null;
+  let currentPath = path.resolve(workspacePath);
+
+  while (true) {
+    roots.push(currentPath);
+    if (!normalizedRepoRoot || currentPath === normalizedRepoRoot) {
+      break;
+    }
+
+    const parentPath = path.dirname(currentPath);
+    if (parentPath === currentPath) {
+      break;
+    }
+
+    currentPath = parentPath;
+  }
+
+  return roots;
+}
+
 // ---------------------------
 //----------------- PROVIDER SKILL MARKDOWN UTILITIES ------------
 /**

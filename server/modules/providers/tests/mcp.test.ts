@@ -313,8 +313,13 @@ test('providerMcpService global adder writes to all providers and rejects unsupp
       workspacePath,
     });
 
+    // omp declares no supported scopes (MCP stubbed), so it is SKIPPED — the
+    // global add succeeds for the 4 file-backed providers and omp never appears
+    // as a failure (regression fix: one unsupported provider must not fail the
+    // whole global add for everyone else).
     assert.equal(globalResult.length, 4);
     assert.ok(globalResult.every((entry) => entry.created === true));
+    assert.ok(!globalResult.some((entry) => entry.provider === 'omp'));
 
     const claudeProject = await readJson(path.join(workspacePath, '.mcp.json'));
     assert.ok((claudeProject.mcpServers as Record<string, unknown>)['global-http']);

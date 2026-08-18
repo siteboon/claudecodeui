@@ -8,6 +8,7 @@ const AGENT_NAMES: Record<AgentProvider, string> = {
   cursor: 'Cursor',
   codex: 'Codex',
   opencode: 'OpenCode',
+  omp: 'omp',
 };
 
 export default function AgentSelectorSection({
@@ -20,10 +21,12 @@ export default function AgentSelectorSection({
     <div className="flex-shrink-0 border-b border-border px-3 py-2 md:px-4 md:py-3">
       <PillBar className="w-full md:w-auto">
         {agents.map((agent) => {
+          // Keep these in step with agentConfig in AgentListItem.tsx.
           const dotColor =
             agent === 'claude' ? 'bg-blue-500' :
             agent === 'cursor' ? 'bg-purple-500' :
-            agent === 'opencode' ? 'bg-zinc-500' : 'bg-foreground/60';
+            agent === 'opencode' ? 'bg-zinc-500' :
+            agent === 'omp' ? 'bg-emerald-500' : 'bg-foreground/60';
 
           return (
             <Pill
