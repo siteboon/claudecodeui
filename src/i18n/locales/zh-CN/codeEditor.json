@@ -14,6 +14,8 @@
     "showingChanges": "显示更改"
   },
   "actions": {
+    "copyPath": "复制文件路径",
+    "pathCopied": "文件路径已复制",
     "download": "下载文件",
     "save": "保存",
     "saving": "保存中...",

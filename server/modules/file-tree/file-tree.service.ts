@@ -11,9 +11,13 @@ import type {
 } from '@/shared/types.js';
 import { AppError, FORBIDDEN_WORKSPACE_PATHS, normalizeProjectPath } from '@/shared/utils.js';
 
+const HARD_EXCLUDED_DIRECTORY_NAMES = new Set([
+  'node_modules', '.git', '.svn', '.hg',
+]);
+
 const IGNORED_DIRECTORY_NAMES = new Set([
-  'node_modules', 'dist', 'build', '.next', '.nuxt', '.cache', '.parcel-cache',
-  '.git', '.svn', '.hg',
+  ...HARD_EXCLUDED_DIRECTORY_NAMES,
+  'dist', 'build', '.next', '.nuxt', '.cache', '.parcel-cache',
   '__pycache__', '.pytest_cache', '.mypy_cache', '.tox', 'venv', '.venv',
   'target', 'vendor',
   '.gradle', '.idea', 'coverage', '.nyc_output',
@@ -35,6 +39,15 @@ const COMMON_WORKSPACE_DIRECTORY_NAMES = [
 const MAXIMUM_FILE_TREE_ENTRIES = 10_000;
 
 type FileTreeEntryFilter = (entryPath: string, isDirectory: boolean) => boolean;
+
+function includeEntryByHardExclusions(entryPath: string, isDirectory: boolean): boolean {
+  return !isDirectory || !HARD_EXCLUDED_DIRECTORY_NAMES.has(path.basename(entryPath));
+}
+
+function includeEntryByFallbackDirectoryNames(entryPath: string, isDirectory: boolean): boolean {
+  return includeEntryByHardExclusions(entryPath, isDirectory)
+    && (!isDirectory || !IGNORED_DIRECTORY_NAMES.has(path.basename(entryPath)));
+}
 
 function createFileTreeError(message: string, statusCode: number, code: string): AppError {
   return new AppError(message, { statusCode, code });
@@ -146,6 +159,8 @@ function createGitignoreEntryFilter(
   const gitignore = ignore().add(gitignoreContent);
 
   return (entryPath, isDirectory) => {
+    if (!includeEntryByHardExclusions(entryPath, isDirectory)) return false;
+
     const relativePath = path.relative(projectRoot, entryPath).split(path.sep).join('/');
     const matchPath = isDirectory ? `${relativePath}/` : relativePath;
     return !gitignore.ignores(matchPath);
@@ -191,17 +206,13 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
     try {
       for await (const entry of fileSystem.openDirectory(directoryPath)) {
         const isDirectory = entry.isDirectory();
-        if (isDirectory && IGNORED_DIRECTORY_NAMES.has(entry.name)) {
-          continue;
-        }
         if (!includeEntry(path.join(directoryPath, entry.name), isDirectory)) {
           continue;
         }
 
-        // Charged after ignore filtering so generated directories and
-        // .gitignore exclusions never consume the budget. Every recursive
-        // branch shares one counter, so the cap applies to the whole tree
-        // rather than per directory.
+        // Charged after visibility filtering so ignored entries never consume
+        // the budget. Every recursive branch shares one counter, so the cap
+        // applies to the whole tree rather than per directory.
         if (remainingEntries.value <= 0) {
           throw createFileTreeError(
             `Project file tree exceeds the ${MAXIMUM_FILE_TREE_ENTRIES.toLocaleString()} entry limit. Choose a narrower project directory or add ignore rules.`,
@@ -233,7 +244,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
     directoryPath: string,
     maximumDepth: number,
     currentDepth = 0,
-    includeEntry: FileTreeEntryFilter = () => true,
+    includeEntry: FileTreeEntryFilter = includeEntryByFallbackDirectoryNames,
     remainingEntries = { value: MAXIMUM_FILE_TREE_ENTRIES },
   ): Promise<FileTreeNode[]> {
     const visibleEntries = await collectVisibleEntries(directoryPath, includeEntry, remainingEntries);

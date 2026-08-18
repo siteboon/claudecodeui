@@ -30,6 +30,16 @@ import type {
   WorkspacePathValidationResult,
 } from '@/shared/types.js';
 
+//----------------- ENVIRONMENT UTILITIES ------------
+/**
+ * Indicates whether the backend is running in hosted Platform mode rather than
+ * self-hosted OSS mode. The server bootstrap, Agent, Auth, and Browser Use
+ * modules use this shared flag to keep environment-dependent behavior aligned.
+ * Environment variables must be loaded before this module is evaluated.
+ */
+export const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
+
+// ---------------------------
 //----------------- NORMALIZED MESSAGE HELPER INPUT TYPES ------------
 /**
  * Input payload accepted by `createNormalizedMessage`.

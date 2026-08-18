@@ -2,8 +2,8 @@ import { Activity, Archive, Folder, FolderPlus, MessageSquare, Plus, RefreshCw, 
 import type { TFunction } from 'i18next';
 
 import { Button, Input, Tooltip } from '../../../../shared/view/ui';
-import { CLOUDCLI_WORDMARK_FONT_FAMILY } from '../../../../constants/branding';
-import { IS_PLATFORM } from '../../../../constants/config';
+import { CLOUDCLI_WORDMARK_FONT_FAMILY } from '../../../../shared/constants';
+import { IS_PLATFORM } from '../../../../shared/utils';
 import { cn } from '../../../../lib/utils';
 import type { SidebarSearchMode } from '../../types/types';
 

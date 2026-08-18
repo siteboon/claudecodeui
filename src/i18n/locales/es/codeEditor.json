@@ -14,6 +14,8 @@
     "showingChanges": "Mostrando cambios"
   },
   "actions": {
+    "copyPath": "Copiar ruta del archivo",
+    "pathCopied": "Ruta del archivo copiada",
     "download": "Descargar archivo",
     "save": "Guardar",
     "saving": "Guardando...",

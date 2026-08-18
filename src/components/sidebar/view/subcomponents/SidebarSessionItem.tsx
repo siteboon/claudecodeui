@@ -9,7 +9,7 @@ import { api } from '../../../../utils/api';
 import { copyTextToClipboard } from '../../../../utils/clipboard';
 import type { SessionWithProvider } from '../../types/types';
 import { createSessionViewModel, formatCompactAge } from '../../utils/utils';
-import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
+import LLMProviderLogo from '../../../llm-provider-logo/LLMProviderLogo';
 
 type SidebarSessionItemProps = {
   project: Project;
@@ -236,7 +236,7 @@ export default function SidebarSessionItem({
                 isSelected ? 'bg-primary/10' : 'bg-muted/50',
               )}
             >
-              <SessionProviderLogo provider={session.__provider} className="h-3 w-3" />
+              <LLMProviderLogo provider={session.__provider} className="h-3 w-3" />
             </div>
 
             <div className="min-w-0 flex-1">
@@ -296,7 +296,7 @@ export default function SidebarSessionItem({
 
             <div className="mb-4 flex items-center gap-3 px-1">
               <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-muted">
-                <SessionProviderLogo provider={session.__provider} className="h-5 w-5" />
+                <LLMProviderLogo provider={session.__provider} className="h-5 w-5" />
               </div>
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-foreground" title={sessionView.sessionName}>
@@ -443,7 +443,7 @@ export default function SidebarSessionItem({
                 isSelected ? 'bg-primary/10' : 'bg-muted/50',
               )}
             >
-              <SessionProviderLogo provider={session.__provider} className="h-3 w-3" />
+              <LLMProviderLogo provider={session.__provider} className="h-3 w-3" />
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">

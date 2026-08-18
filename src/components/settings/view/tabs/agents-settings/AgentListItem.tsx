@@ -1,5 +1,5 @@
 import { cn } from '../../../../../lib/utils';
-import SessionProviderLogo from '../../../../llm-logo-provider/SessionProviderLogo';
+import LLMProviderLogo from '../../../../llm-provider-logo/LLMProviderLogo';
 import type { AgentProvider, AuthStatus } from '../../../types/types';
 
 type AgentListItemProps = {
@@ -71,7 +71,7 @@ export default function AgentListItem({
         )}
       >
         <div className="flex items-center justify-center gap-1.5">
-          <SessionProviderLogo provider={agentId} className="h-4 w-4 flex-shrink-0" />
+          <LLMProviderLogo provider={agentId} className="h-4 w-4 flex-shrink-0" />
           <span className="truncate text-xs font-medium">{config.name}</span>
           {authStatus.authenticated && (
             <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${colors.dot}`} />
@@ -91,7 +91,7 @@ export default function AgentListItem({
           : 'text-muted-foreground active:bg-background/50',
       )}
     >
-      <SessionProviderLogo provider={agentId} className="h-4 w-4 flex-shrink-0" />
+      <LLMProviderLogo provider={agentId} className="h-4 w-4 flex-shrink-0" />
       <span>{config.name}</span>
       {authStatus.authenticated ? (
         <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${colors.dot}`} />

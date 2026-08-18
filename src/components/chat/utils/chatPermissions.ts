@@ -1,13 +1,23 @@
-import { safeJsonParse } from '../../../lib/utils.js';
 import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult } from '../types/types.js';
+
 import { CLAUDE_SETTINGS_KEY, getClaudeSettings, safeLocalStorage } from './chatStorage';
 
 export function buildClaudeToolPermissionEntry(toolName?: string, toolInput?: unknown) {
   if (!toolName) return null;
   if (toolName !== 'Bash') return toolName;
 
-  const parsed = safeJsonParse(toolInput);
-  const command = typeof parsed?.command === 'string' ? parsed.command.trim() : '';
+  let parsed: unknown = toolInput;
+  if (typeof toolInput === 'string') {
+    try {
+      parsed = JSON.parse(toolInput) as unknown;
+    } catch {
+      return toolName;
+    }
+  }
+
+  const command = parsed && typeof parsed === 'object' && 'command' in parsed && typeof parsed.command === 'string'
+    ? parsed.command.trim()
+    : '';
   if (!command) return toolName;
 
   const tokens = command.split(/\s+/);

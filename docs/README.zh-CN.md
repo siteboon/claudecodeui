@@ -1,11 +1,11 @@
 <div align="center">
- <img src="public/logo.svg" alt="CloudCLI UI" width="64" height="64">
+ <img src="../public/logo.svg" alt="CloudCLI UI" width="64" height="64">
  <h1>Cloud CLI（又名 Claude Code UI）</h1>
  <p><a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>、<a href="https://docs.cursor.com/en/cli/overview">Cursor CLI</a>、<a href="https://developers.openai.com/codex">Codex</a> 的桌面和移动端 UI。可在本地或远程使用，从任何地方查看激活的项目与会话。</p>
 </div>
 
 <p align="center">
- <a href="https://cloudcli.ai">CloudCLI Cloud</a> · <a href="https://cloudcli.ai/docs">文档</a> · <a href="https://discord.gg/buxwujPNRE">Discord</a> · <a href="https://github.com/siteboon/claudecodeui/issues">Bug 报告</a> · <a href="CONTRIBUTING.md">贡献指南</a>
+ <a href="https://cloudcli.ai">CloudCLI Cloud</a> · <a href="https://cloudcli.ai/docs">文档</a> · <a href="https://discord.gg/buxwujPNRE">Discord</a> · <a href="https://github.com/siteboon/claudecodeui/issues">Bug 报告</a> · <a href="../CONTRIBUTING.md">贡献指南</a>
 </p>
 
 <p align="center">
@@ -27,13 +27,13 @@
 <tr>
 <td align="center">
 <h3>桌面视图</h3>
-<img src="public/screenshots/desktop-main.png" alt="桌面界面" width="400">
+<img src="../public/screenshots/desktop-main.png" alt="桌面界面" width="400">
 <br>
 <em>显示项目概览和聊天的主界面</em>
 </td>
 <td align="center">
 <h3>移动体验</h3>
-<img src="public/screenshots/mobile-chat.png" alt="移动界面" width="250">
+<img src="../public/screenshots/mobile-chat.png" alt="移动界面" width="250">
 <br>
 <em>具有触控导航的响应式移动设计</em>
 </td>
@@ -41,7 +41,7 @@
 <tr>
 <td align="center" colspan="2">
 <h3>CLI 选择</h3>
-<img src="public/screenshots/cli-selection.png" alt="CLI 选择" width="400">
+<img src="../public/screenshots/cli-selection.png" alt="CLI 选择" width="400">
 <br>
 <em>在 Claude Code、Cursor CLI 与 Codex 之间进行选择</em>
 </td>
@@ -99,7 +99,7 @@ cloudcli
 npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
 ```
 
-支持 Claude Code 和 Codex。详情请参阅 [沙箱文档](docker/)。
+支持 Claude Code 和 Codex。详情请参阅 [沙箱文档](../docker/)。
 
 ---
 
@@ -140,7 +140,7 @@ CloudCLI UI 是 CloudCLI Cloud 的开源 UI 层。你可以在本地机器上自
 
 <div align="center">
 
-![工具设置弹窗](public/screenshots/tools-modal.png)
+![工具设置弹窗](../public/screenshots/tools-modal.png)
 *工具设置界面 - 只启用你需要的内容*
 
 </div>
@@ -220,13 +220,13 @@ CloudCLI UI 与 CloudCLI Cloud 是对 Claude Code 的扩展，而非旁观 — M
 - **[文档](https://cloudcli.ai/docs)** — 安装、配置、功能与故障排除指南
 - **[Discord](https://discord.gg/buxwujPNRE)** — 获取帮助并与社区交流
 - **[GitHub Issues](https://github.com/siteboon/claudecodeui/issues)** — 报告 Bug 与建议功能
-- **[贡献指南](CONTRIBUTING.md)** — 如何参与项目贡献
+- **[贡献指南](../CONTRIBUTING.md)** — 如何参与项目贡献
 
 ## 许可证
 
-GNU 通用公共许可证 v3.0 - 详见 [LICENSE](LICENSE) 文件。
+GNU Affero 通用公共许可证 v3.0 或更高版本 (AGPL-3.0-or-later) - 详见 [LICENSE](../LICENSE) 文件。
 
-该项目为开源软件，在 GPL v3 许可证下可自由使用、修改与分发。
+该项目为开源软件，在 GNU Affero 通用公共许可证 v3.0 或更高版本 (AGPL-3.0-or-later) 下可自由使用、修改与分发。
 
 ## 致谢
 

@@ -9,7 +9,7 @@ import type {
   ProviderModelOption,
   ProviderModelsDefinition,
 } from "../../../../types/app";
-import SessionProviderLogo from "../../../llm-logo-provider/SessionProviderLogo";
+import LLMProviderLogo from "../../../llm-provider-logo/LLMProviderLogo";
 import { NextTaskBanner } from "../../../task-master";
 import {
   Dialog,
@@ -223,7 +223,7 @@ export default function ProviderSelectionEmptyState({
                 tabIndex={0}
               >
                 <div className="flex items-center gap-2 p-3">
-                  <SessionProviderLogo
+                  <LLMProviderLogo
                     provider={provider}
                     className="h-5 w-5 shrink-0"
                   />
@@ -296,7 +296,7 @@ export default function ProviderSelectionEmptyState({
                       }
                       heading={
                         <span className="flex items-center gap-1.5">
-                          <SessionProviderLogo provider={group.id} className="h-3.5 w-3.5 shrink-0" />
+                          <LLMProviderLogo provider={group.id} className="h-3.5 w-3.5 shrink-0" />
                           {group.name}
                         </span>
                       }

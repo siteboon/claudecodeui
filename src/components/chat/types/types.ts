@@ -123,6 +123,7 @@ export type SessionEstablishedContext = {
 };
 
 export interface ChatInterfaceProps {
+  isActive: boolean;
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
   ws: WebSocket | null;

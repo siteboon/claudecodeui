@@ -1,9 +1,9 @@
 import { ExternalLink, Star, MessageSquare } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { CLOUDCLI_WORDMARK_FONT_FAMILY } from '../../../../../../constants/branding';
-import { IS_PLATFORM } from '../../../../../../constants/config';
-import type { ReleaseInfo } from '../../../../../../types/sharedTypes';
+import { CLOUDCLI_WORDMARK_FONT_FAMILY } from '../../../../../../shared/constants';
+import { IS_PLATFORM } from '../../../../../../shared/utils';
+import type { ReleaseInfo } from '../../../../../../shared/types';
 
 const GITHUB_REPO_URL = 'https://github.com/siteboon/claudecodeui';
 const DISCORD_URL = 'https://discord.gg/buxwujPNRE';

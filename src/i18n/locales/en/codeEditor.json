@@ -14,6 +14,8 @@
     "showingChanges": "Showing changes"
   },
   "actions": {
+    "copyPath": "Copy file path",
+    "pathCopied": "File path copied",
     "download": "Download file",
     "save": "Save",
     "saving": "Saving...",

@@ -17,7 +17,7 @@ import type {
   ProviderModelOption,
   ProviderModelsDefinition,
 } from '../../../../types/app';
-import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
+import LLMProviderLogo from '../../../llm-provider-logo/LLMProviderLogo';
 
 const PROVIDERS: Array<{ id: LLMProvider; label: string }> = [
   { id: 'claude', label: 'Claude' },
@@ -188,7 +188,7 @@ export default function ModelLibraryPanel({
                   : 'text-muted-foreground hover:bg-background/60 hover:text-foreground'
               }`}
             >
-              <SessionProviderLogo provider={provider.id} className="h-4 w-4" />
+              <LLMProviderLogo provider={provider.id} className="h-4 w-4" />
               {provider.label}
             </button>
           );

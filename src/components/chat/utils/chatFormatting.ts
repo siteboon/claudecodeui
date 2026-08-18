@@ -1,13 +1,3 @@
-export function decodeHtmlEntities(text: string) {
-  if (!text) return text;
-  return text
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, '&');
-}
-
 export function normalizeInlineCodeFences(text: string) {
   if (!text || typeof text !== 'string') return text;
   try {
@@ -17,33 +7,23 @@ export function normalizeInlineCodeFences(text: string) {
   }
 }
 
-export function unescapeWithMathProtection(text: string) {
-  if (!text || typeof text !== 'string') return text;
-
-  const mathBlocks: string[] = [];
-  const placeholderPrefix = '__MATH_BLOCK_';
-  const placeholderSuffix = '__';
-
-  let processedText = text.replace(/\$\$([\s\S]*?)\$\$|\$([^\$\n]+?)\$/g, (match) => {
-    const index = mathBlocks.length;
-    mathBlocks.push(match);
-    return `${placeholderPrefix}${index}${placeholderSuffix}`;
-  });
-
-  processedText = processedText.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r');
-
-  processedText = processedText.replace(
-    new RegExp(`${placeholderPrefix}(\\d+)${placeholderSuffix}`, 'g'),
-    (match, index) => {
-      return mathBlocks[parseInt(index, 10)];
-    },
-  );
-
-  return processedText;
-}
-
 export function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Removes Codex's outer plan transport envelope while preserving its Markdown.
+ * The closing tag is optional because streamed plans expose the opening tag
+ * before the complete response arrives.
+ */
+export function stripProposedPlanEnvelope(text: string) {
+  if (!text || typeof text !== 'string') return text;
+
+  const openingTag = /^\s*<proposed_plan>[ \t]*(?:\r?\n)?/i;
+  if (!openingTag.test(text)) return text;
+
+  const withoutOpeningTag = text.replace(openingTag, '');
+  return withoutOpeningTag.replace(/(?:\r?\n)?[ \t]*<\/proposed_plan>\s*$/i, '');
 }
 
 export function formatUsageLimitText(text: string) {

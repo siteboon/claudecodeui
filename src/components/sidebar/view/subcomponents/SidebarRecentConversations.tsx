@@ -7,7 +7,7 @@ import { cn } from '../../../../lib/utils';
 import type { ProjectSession } from '../../../../types/app';
 import type { RecentConversationListItem } from '../../types/types';
 import { formatCompactAge } from '../../utils/utils';
-import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
+import LLMProviderLogo from '../../../llm-provider-logo/LLMProviderLogo';
 
 type SidebarRecentConversationsProps = {
   conversations: RecentConversationListItem[];
@@ -133,7 +133,7 @@ export default function SidebarRecentConversations({
                 'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md',
                 isSelected ? 'bg-primary/10' : 'bg-muted/60',
               )}>
-                <SessionProviderLogo provider={conversation.provider} className="h-3.5 w-3.5" />
+                <LLMProviderLogo provider={conversation.provider} className="h-3.5 w-3.5" />
               </span>
 
               <span className="min-w-0 flex-1">

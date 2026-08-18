@@ -1,5 +1,5 @@
 import { PillBar, Pill } from '../../../../../../shared/view/ui';
-import SessionProviderLogo from '../../../../../llm-logo-provider/SessionProviderLogo';
+import LLMProviderLogo from '../../../../../llm-provider-logo/LLMProviderLogo';
 import type { AgentProvider } from '../../../../types/types';
 import type { AgentSelectorSectionProps } from '../types';
 
@@ -32,7 +32,7 @@ export default function AgentSelectorSection({
               onClick={() => onSelectAgent(agent)}
               className="min-w-0 flex-1 justify-center md:flex-initial"
             >
-              <SessionProviderLogo provider={agent} className="h-4 w-4 flex-shrink-0" />
+              <LLMProviderLogo provider={agent} className="h-4 w-4 flex-shrink-0" />
               <span className="truncate">{AGENT_NAMES[agent]}</span>
               {agentContextById[agent].authStatus.authenticated && (
                 <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${dotColor}`} />
