@@ -58,12 +58,31 @@ test('Markdown leaves currency prose outside math', () => {
 test('Markdown keeps LaTeX-looking delimiters inside fenced and inline code literal', () => {
   const fenced = String.raw`\[ \theta \]`;
   const inline = String.raw`\( \rho \)`;
-  const { container } = renderMarkdown(`\`\`\`\n${fenced}\n\`\`\`\n\nUse \`${inline}\` literally.`);
+  const tildeFenced = String.raw`\[ \times \]`;
+  const unfinishedFenced = String.raw`\( \sigma \)`;
+  const content = [
+    '````',
+    '```',
+    fenced,
+    '```',
+    '````',
+    '',
+    `Use \`\`${inline}\`\` literally.`,
+    '',
+    '~~~',
+    tildeFenced,
+    '~~~~',
+    '',
+    '`````',
+    unfinishedFenced,
+  ].join('\n');
+  const { container } = renderMarkdown(content);
   const code = Array.from(container.querySelectorAll('code'), (element) => element.textContent);
 
   assert.equal(container.querySelector('.katex'), null);
-  assert.ok(code.some((value) => value?.includes(fenced)));
-  assert.ok(code.some((value) => value?.includes(inline)));
+  for (const literal of [fenced, inline, tildeFenced, unfinishedFenced]) {
+    assert.ok(code.some((value) => value?.includes(literal)), `${literal} must stay literal`);
+  }
 });
 
 test('completed replies render normalized LaTeX through MarkdownBody', () => {

@@ -63,12 +63,12 @@ const MATH_DELIMITER = /\$\$/;
 // Match code before LaTeX so delimiter-like text in code stays literal. The fence
 // branch also covers an unfinished streamed fence by consuming through the end.
 const CODE_OR_LATEX_MATH =
-  /^ {0,3}([`~])\1{2,}[^\r\n]*(?:\r?\n|$)[\s\S]*?(?:^ {0,3}\1{2,}[ \t]*(?=\r?$)|$(?![\s\S]))|(`+)[\s\S]*?\2|\$\$[\s\S]*?\$\$|\\\[([\s\S]*?)\\\]|\\\(([\s\S]*?)\\\)/gm;
+  /^ {0,3}((`|~)\2{2,})(?!\2)[^\r\n]*(?:\r?\n|$)[\s\S]*?(?:^ {0,3}\1\2*[ \t]*(?=\r?$)|$(?![\s\S]))|(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\3(?!`)|\$\$[\s\S]*?\$\$|\\\[([\s\S]*?)\\\]|\\\(([\s\S]*?)\\\)/gm;
 
 const normalizeLatexDelimiters = (text: string): string =>
   text.replace(
     CODE_OR_LATEX_MATH,
-    (match, _fenceMarker, _codeDelimiter, blockMath, inlineMath) => {
+    (match, _fence, _fenceMarker, _codeDelimiter, blockMath, inlineMath) => {
       if (blockMath !== undefined) return `$$${blockMath}$$`;
       if (inlineMath !== undefined) return `$$${inlineMath}$$`;
       return match;
