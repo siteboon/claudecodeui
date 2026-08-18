@@ -112,6 +112,10 @@ export function useBackButtonSidebar({
   // tab's session): the call is a silent no-op and no popstate follows, which
   // would leave `skippingRef` true and disarm the hook for good.
   const skipWatchdogRef = useRef(0);
+  // The guard the current entry is, or null when the entry is not one of ours.
+  // A pop compares it against where it lands, which is the only way to tell a
+  // single back press from a jump: popstate reports no distance.
+  const standingOnRef = useRef<number | null>(null);
   // Bumped when a skip finishes, so the arming effect re-runs even though the
   // landing entry may carry the router key we started from.
   const [skipCompleted, setSkipCompleted] = useState(0);
@@ -143,6 +147,7 @@ export function useBackButtonSidebar({
 
       nextGuardId += 1;
       guardIdsRef.current = [...guardIdsRef.current, id];
+      standingOnRef.current = id;
 
       return true;
     };
@@ -160,11 +165,15 @@ export function useBackButtonSidebar({
         return;
       }
 
+      const topGuardId = readGuardId(window.history.state);
+      // A router push or replace moves the top entry without a popstate, so the
+      // entry we are standing on is re-read here and not only after a traversal.
+      standingOnRef.current = topGuardId;
+
       if (!enabled) {
         return;
       }
 
-      const topGuardId = readGuardId(window.history.state);
       const liveDepth = topGuardId === null
         ? 0
         : guardIdsRef.current.indexOf(topGuardId) + 1;
@@ -228,6 +237,12 @@ export function useBackButtonSidebar({
       const guardIds = guardIdsRef.current;
       const landedGuardId = readGuardId(window.history.state);
       const landedIndex = landedGuardId === null ? -1 : guardIds.indexOf(landedGuardId);
+      // The entry this traversal left behind, which is what decides whether the
+      // hook owns the press: only leaving one of its own guards, one entry at a
+      // time, is a press it may read as "open the list" or "close the list".
+      const leftGuardId = standingOnRef.current;
+      const leftIndex = leftGuardId === null ? -1 : guardIds.indexOf(leftGuardId);
+      standingOnRef.current = landedGuardId;
       // A guard entry we no longer count on, because a router push buried it.
       // It duplicates the entry below it (same URL, same router key), so landing
       // on one changes nothing on screen — skip it instead of burning the press.
@@ -269,25 +284,21 @@ export function useBackButtonSidebar({
       const remaining = landedIndex + 1;
       guardIdsRef.current = guardIds.slice(0, remaining);
 
-      if (guardIds.length - remaining > 1) {
-        // A back press pops exactly one entry, and our guards are never
-        // skippable, so more than one disappearing at once means a jump — the
-        // back-button long-press menu, or history.go(). The user picked the entry
-        // they are on, so leave them there rather than reading it as a press.
+      if (leftIndex - landedIndex !== 1) {
+        // Either the traversal started somewhere the hook does not own — a router
+        // entry pushed over the guards, so this press is a real navigation that
+        // has already moved the user — or it crossed more than one entry, which a
+        // back press cannot do since these guards are never skippable. Both are
+        // the user's own navigation: leave them where they landed.
         return;
       }
 
       if (!enabled) {
         // Guards left over from before the option was switched off, or from
-        // before a resize crossed the mobile breakpoint.
-        if (remaining > 0) {
-          // Standing on one of our own guards, an invisible duplicate of the
-          // entry below it, so the press moved nothing: complete it. Landing
-          // anywhere else means the press already moved the user, and skipping
-          // would eat an entry they asked to see.
-          skipBack();
-        }
-
+        // before a resize crossed the mobile breakpoint. The press left one of
+        // them, an invisible duplicate of the entry below it, so it moved
+        // nothing: complete the navigation the user asked for.
+        skipBack();
         return;
       }
 
