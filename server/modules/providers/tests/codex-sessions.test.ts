@@ -152,6 +152,17 @@ test('Codex synchronizer leaves indexed sessions untitled when no name is availa
   }
 });
 
+test('Codex live turn completion is emitted only by the runtime terminal message', () => {
+  const provider = new CodexSessionsProvider();
+
+  const normalized = provider.normalizeMessage(
+    { type: 'turn_complete', timestamp: '2026-08-11T02:50:33.960Z' },
+    'codex-session-1',
+  );
+
+  assert.deepEqual(normalized, []);
+});
+
 test('Codex history preserves wrapped exec tool calls and results', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-exec-history-'));
   const workspacePath = path.join(tempRoot, 'workspace');
