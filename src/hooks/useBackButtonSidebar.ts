@@ -170,13 +170,20 @@ export function useBackButtonSidebar({
       // entry we are standing on is re-read here and not only after a traversal.
       standingOnRef.current = topGuardId;
 
-      if (!enabled) {
-        return;
-      }
-
       const liveDepth = topGuardId === null
         ? 0
         : guardIdsRef.current.indexOf(topGuardId) + 1;
+
+      // Anything above the entry we can still account for is gone: either
+      // popped, or buried by a router push that now owns the top of the stack.
+      // Dropping it is not conditional on arming — a buried guard the hook still
+      // claims is one that a pop onto it will not skip, and since it duplicates
+      // the entry below it, that press would change nothing on screen.
+      guardIdsRef.current = guardIdsRef.current.slice(0, liveDepth);
+
+      if (!enabled) {
+        return;
+      }
 
       if (liveDepth === GUARD_DEPTH) {
         armedHrefRef.current = window.location.href;
@@ -191,10 +198,6 @@ export function useBackButtonSidebar({
         // list is worth less than the app staying reachable by back.
         return;
       }
-
-      // Anything above the entry we can still account for is gone: either
-      // popped, or buried by a router push that now owns the top of the stack.
-      guardIdsRef.current = guardIdsRef.current.slice(0, liveDepth);
 
       while (guardIdsRef.current.length < GUARD_DEPTH && pushGuard()) {
         // Each push is checked by the loop condition; a throttled one stops it.
