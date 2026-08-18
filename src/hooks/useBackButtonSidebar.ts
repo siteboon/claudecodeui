@@ -3,6 +3,11 @@ import { useEffect, useRef, useState } from 'react';
 const GUARD_STATE_KEY = '__sessionListBackGuard';
 // Generous upper bound for a same-document history traversal to report back.
 const SKIP_TIMEOUT_MS = 500;
+// Events worth re-checking activation on. The list only has to be a superset of
+// the ones Chrome grants an activation for, because each is verified against
+// `navigator.userActivation` before it counts; `touchend` and `click` are listed
+// so a tap still counts if Chrome withholds the activation on `pointerdown`.
+const ACTIVATION_EVENTS = ['pointerdown', 'touchend', 'click', 'keydown'] as const;
 
 type UseBackButtonSidebarArgs = {
   enabled: boolean;
@@ -17,6 +22,18 @@ const isSentinelState = (state: unknown): boolean => (
   && state !== null
   && (state as Record<string, unknown>)[GUARD_STATE_KEY] === true
 );
+
+// Whether the event being handled left the document holding an activation. Asked
+// of the browser rather than inferred from the event, because the answer is not
+// guessable: measured in Chrome 141, `Escape`, `CapsLock` and a bare `Shift`
+// grant nothing while `Tab` and a right-button press both do. Where the API is
+// missing the browser has no such intervention, so any of the events counts.
+const grantedActivation = (): boolean => navigator.userActivation?.isActive !== false;
+
+// Whether this document has traversed history yet. Module scope on purpose: the
+// fact it records belongs to the document, like the intervention's own
+// bookkeeping, so it must not be reset by a remount of the hook.
+let traversedSinceLoad = false;
 
 /**
  * Turns the device back gesture into "show the session list", so sessions can
@@ -41,6 +58,24 @@ const isSentinelState = (state: unknown): boolean => (
  * `location.key`: pushing sentinels behind react-router's back makes its `idx`
  * bookkeeping drift, so it mints a fresh key when our own sentinel is popped,
  * which would release the latch immediately and trap the user in the app.
+ *
+ * The sentinel is only ever pushed while the document holds a user activation,
+ * because Chrome's history manipulation intervention marks *every* same-document
+ * entry skippable when a document adds a history entry without one — and once
+ * every entry is skippable, `CanGoBack()` is false and the Android back button
+ * closes the tab instead of popping the sentinel. That is why a freshly loaded
+ * page cannot arm at mount: back would hide the app rather than open the list.
+ * Activation is latched from input events, each confirmed with
+ * `navigator.userActivation.isActive` while the event is being handled, and
+ * cleared on every pop — because the intervention keys on *sticky* activation
+ * yet stops honouring it after a same-document back/forward
+ * (crbug.com/1248529). Neither reading alone is enough at push time:
+ * `hasBeenActive` never reflects that reset, and `isActive`'s transient window
+ * expires long before an arming pass triggered by a later render. The one place
+ * `hasBeenActive` is trusted is the seed at mount, before the first traversal,
+ * for the activation a hook that was not mounted cannot have seen — signing in
+ * swaps ProtectedRoute's children without reloading, so that click is this
+ * document's. See docs/history_manipulation_intervention.md in chromium/src.
  *
  * Two limitations are inherent to the sentinel approach and accepted:
  * `pushState` drops forward history, so the forward gesture stops working
@@ -69,7 +104,13 @@ export function useBackButtonSidebar({
   // Bumped when a skip finishes, so the arming effect re-runs even though the
   // landing entry may carry the router key we started from.
   const [skipCompleted, setSkipCompleted] = useState(0);
-
+  // Whether the document has been interacted with since load or the last history
+  // traversal — i.e. whether a `pushState` now would be honoured by Chrome's
+  // history manipulation intervention rather than making every same-document
+  // entry skippable. Without it there is nothing for back to pop.
+  const activationRef = useRef(false);
+  // Bumped on the first activation after load or a pop, so arming retries then.
+  const [activationTick, setActivationTick] = useState(0);
 
   useEffect(() => {
     // Arming is deferred by a task rather than done inline. React-router
@@ -110,6 +151,13 @@ export function useBackButtonSidebar({
         return;
       }
 
+      if (!activationRef.current) {
+        // No activation to spend: pushing now would mark this entry and the one
+        // below it skippable, so back would leave the app instead of popping the
+        // sentinel. Wait for the user's first interaction, which re-runs this.
+        return;
+      }
+
       // Clone the current state so react-router's own bookkeeping (`key`, `idx`)
       // survives onto the sentinel entry and popping it stays a no-op navigation.
       try {
@@ -131,7 +179,7 @@ export function useBackButtonSidebar({
     const timer = window.setTimeout(armSentinel, 0);
 
     return () => window.clearTimeout(timer);
-  }, [enabled, locationKey, sidebarOpen, skipCompleted]);
+  }, [activationTick, enabled, locationKey, sidebarOpen, skipCompleted]);
 
   useEffect(() => {
     const endSkip = () => {
@@ -153,6 +201,12 @@ export function useBackButtonSidebar({
     };
 
     const handlePopState = () => {
+      // A same-document traversal stops the intervention honouring any earlier
+      // activation, so the next sentinel needs a fresh one — and `hasBeenActive`
+      // stops being evidence of one for the rest of the document's life.
+      activationRef.current = false;
+      traversedSinceLoad = true;
+
       // Each router push strands the sentinel it was pushed over. Such a buried
       // sentinel duplicates the entry below it (same URL, same router key), so
       // landing on one changes nothing on screen — skip it instead of burning
@@ -214,6 +268,48 @@ export function useBackButtonSidebar({
       window.removeEventListener('popstate', handlePopState);
     };
   }, [enabled, sidebarOpen, setSidebarOpen]);
+
+  // Mount-scoped: the arming effect resubscribes constantly, and these listeners
+  // must not miss the interaction that happens between two of its runs.
+  useEffect(() => {
+    if (!traversedSinceLoad && navigator.userActivation?.hasBeenActive) {
+      // The document can hold an activation this hook never saw: signing in
+      // swaps ProtectedRoute's children instead of reloading, so the click that
+      // submitted the login form belongs to this very document, and the hook
+      // mounts after it. Sticky activation is what the intervention honours, so
+      // seed the flag from it — but only before the first traversal, after which
+      // `hasBeenActive` still reports an activation the intervention has stopped
+      // honouring. Arming is deferred by a task, so this lands before the first
+      // attempt to push.
+      activationRef.current = true;
+    }
+
+    const noteActivation = () => {
+      if (activationRef.current) {
+        return;
+      }
+
+      if (!grantedActivation()) {
+        // An event the browser does not treat as an interaction. Counting it
+        // would push a sentinel that makes every entry skippable — the bug this
+        // gate exists for — so wait for one the browser does honour.
+        return;
+      }
+
+      activationRef.current = true;
+      setActivationTick((previous) => previous + 1);
+    };
+
+    for (const type of ACTIVATION_EVENTS) {
+      window.addEventListener(type, noteActivation, { capture: true, passive: true });
+    }
+
+    return () => {
+      for (const type of ACTIVATION_EVENTS) {
+        window.removeEventListener(type, noteActivation, { capture: true });
+      }
+    };
+  }, []);
 
   // Mount-scoped, so the skip watchdog survives this hook's other effects
   // re-subscribing. Tearing it down alongside the popstate listener would
