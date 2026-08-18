@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { authenticatedFetch } from '../../../utils/api';
 import type {
   ApiKeyItem,
@@ -8,15 +8,23 @@ import type {
   GithubCredentialsResponse,
 } from '../view/tabs/api-settings/types';
 import { copyTextToClipboard } from '../../../utils/clipboard';
+import { getApiErrorMessage } from '../../../utils/apiError';
+import type { ApiErrorPayload } from '../../../utils/apiError';
 
 type UseCredentialsSettingsArgs = {
   confirmDeleteApiKeyText: string;
   confirmDeleteGithubCredentialText: string;
 };
 
-const getApiError = (payload: { error?: string } | undefined, fallback: string) => (
-  payload?.error || fallback
-);
+const getApiError = getApiErrorMessage;
+
+export type GithubTokenCheck =
+  | { status: 'idle' }
+  | { status: 'checking' }
+  | { status: 'valid'; login: string; scopes: string[] }
+  | { status: 'invalid'; message: string };
+
+type VerifyTokenResponse = ApiErrorPayload & { login?: string; scopes?: string[] };
 
 export function useCredentialsSettings({
   confirmDeleteApiKeyText,
@@ -33,6 +41,14 @@ export function useCredentialsSettings({
   const [newGithubName, setNewGithubName] = useState('');
   const [newGithubToken, setNewGithubToken] = useState('');
   const [newGithubDescription, setNewGithubDescription] = useState('');
+
+  // Result of checking the pasted token against GitHub before storing it.
+  const [githubTokenCheck, setGithubTokenCheck] = useState<GithubTokenCheck>({ status: 'idle' });
+  // Identifies the verification a response belongs to. A check is a network
+  // round trip the user can outrun by editing the token or closing the form;
+  // without this, a late reply would paint a verdict for a token that is no
+  // longer in the field. Bumping it abandons whatever is in flight.
+  const verificationRequestId = useRef(0);
 
   const [showToken, setShowToken] = useState<Record<string, boolean>>({});
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -130,8 +146,69 @@ export function useCredentialsSettings({
     }
   }, [fetchData]);
 
+  /**
+   * Asks the server to authenticate the pasted token against GitHub.
+   * Returns true when GitHub accepts it, so callers can gate on the result.
+   */
+  const verifyGithubToken = useCallback(async (): Promise<boolean> => {
+    const token = newGithubToken.trim();
+    if (!token) {
+      setGithubTokenCheck({ status: 'invalid', message: 'Enter a token first' });
+      return false;
+    }
+
+    verificationRequestId.current += 1;
+    const requestId = verificationRequestId.current;
+    const isCurrentRequest = () => verificationRequestId.current === requestId;
+
+    setGithubTokenCheck({ status: 'checking' });
+
+    try {
+      const response = await authenticatedFetch('/api/github/verify-token', {
+        method: 'POST',
+        body: JSON.stringify({ token }),
+      });
+      const payload = await response.json() as VerifyTokenResponse;
+
+      if (!isCurrentRequest()) {
+        return false;
+      }
+
+      if (!response.ok || !payload.login) {
+        setGithubTokenCheck({
+          status: 'invalid',
+          message: getApiError(payload, 'GitHub rejected this token'),
+        });
+        return false;
+      }
+
+      setGithubTokenCheck({
+        status: 'valid',
+        login: payload.login,
+        scopes: payload.scopes ?? [],
+      });
+      return true;
+    } catch (error) {
+      if (!isCurrentRequest()) {
+        return false;
+      }
+
+      setGithubTokenCheck({
+        status: 'invalid',
+        message: error instanceof Error ? error.message : 'Could not reach the server',
+      });
+      return false;
+    }
+  }, [newGithubToken]);
+
   const createGithubCredential = useCallback(async () => {
     if (!newGithubName.trim() || !newGithubToken.trim()) {
+      return;
+    }
+
+    // Storing a token GitHub already refuses only defers the failure to the
+    // repo picker, where it surfaces as a confusing empty list.
+    if (!(await verifyGithubToken())) {
       return;
     }
 
@@ -155,13 +232,14 @@ export function useCredentialsSettings({
       setNewGithubName('');
       setNewGithubToken('');
       setNewGithubDescription('');
+      setGithubTokenCheck({ status: 'idle' });
       setShowNewGithubForm(false);
       setShowToken((prev) => ({ ...prev, new: false }));
       await fetchData();
     } catch (error) {
       console.error('Error creating GitHub credential:', error);
     }
-  }, [fetchData, newGithubDescription, newGithubName, newGithubToken]);
+  }, [fetchData, newGithubDescription, newGithubName, newGithubToken, verifyGithubToken]);
 
   const deleteGithubCredential = useCallback(async (credentialId: string) => {
     if (!window.confirm(confirmDeleteGithubCredentialText)) {
@@ -224,11 +302,19 @@ export function useCredentialsSettings({
   }, []);
 
   const cancelNewGithubForm = useCallback(() => {
+    verificationRequestId.current += 1;
     setShowNewGithubForm(false);
     setNewGithubName('');
     setNewGithubToken('');
     setNewGithubDescription('');
+    setGithubTokenCheck({ status: 'idle' });
     setShowToken((prev) => ({ ...prev, new: false }));
+  }, []);
+
+  const changeNewGithubToken = useCallback((token: string) => {
+    verificationRequestId.current += 1;
+    setNewGithubToken(token);
+    setGithubTokenCheck({ status: 'idle' });
   }, []);
 
   const toggleNewGithubTokenVisibility = useCallback(() => {
@@ -252,7 +338,7 @@ export function useCredentialsSettings({
     newGithubName,
     setNewGithubName,
     newGithubToken,
-    setNewGithubToken,
+    setNewGithubToken: changeNewGithubToken,
     newGithubDescription,
     setNewGithubDescription,
     showToken,
@@ -262,6 +348,8 @@ export function useCredentialsSettings({
     deleteApiKey,
     toggleApiKey,
     createGithubCredential,
+    githubTokenCheck,
+    verifyGithubToken,
     deleteGithubCredential,
     toggleGithubCredential,
     copyToClipboard,

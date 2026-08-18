@@ -1,3 +1,5 @@
+import type { ApiErrorPayload } from '../../utils/apiError';
+
 export type WizardStep = 1 | 2;
 
 export type TokenMode = 'stored' | 'new' | 'none';
@@ -17,6 +19,22 @@ export type GithubTokenCredential = {
 export type CredentialsResponse = {
   credentials?: GithubTokenCredential[];
   error?: string;
+};
+
+export type GithubRepoSummary = {
+  id: number;
+  fullName: string;
+  name: string;
+  owner: string;
+  private: boolean;
+  cloneUrl: string;
+  htmlUrl: string;
+  description: string | null;
+  updatedAt: string | null;
+};
+
+export type GithubReposResponse = ApiErrorPayload & {
+  repos?: GithubRepoSummary[];
 };
 
 export type BrowseFilesystemResponse = {

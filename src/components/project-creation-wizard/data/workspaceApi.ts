@@ -1,4 +1,5 @@
 import { api, getStoredAuthToken } from '../../../utils/api';
+import { getApiErrorMessage } from '../../../utils/apiError';
 import type {
   BrowseFilesystemResponse,
   CloneProgressEvent,
@@ -7,6 +8,7 @@ import type {
   CreateProjectResponse,
   CredentialsResponse,
   FolderSuggestion,
+  GithubReposResponse,
   TokenMode,
 } from '../types';
 
@@ -72,6 +74,28 @@ export const fetchGithubTokenCredentials = async () => {
   }
 
   return (data.credentials || []).filter((credential) => credential.is_active);
+};
+
+export const searchGithubRepositories = async (params: {
+  tokenId: string;
+  query: string;
+  limit?: number;
+}) => {
+  const search = new URLSearchParams({ tokenId: params.tokenId, q: params.query });
+  if (params.limit) {
+    search.set('limit', String(params.limit));
+  }
+
+  const response = await api.get(`/github/repos?${search.toString()}`);
+  const data = await parseJson<GithubReposResponse>(response);
+
+  if (!response.ok) {
+    // This route reports failures through AppError, so `error` is an object
+    // here, not the plain string the older endpoints in this file return.
+    throw new Error(getApiErrorMessage(data, 'Failed to load GitHub repositories'));
+  }
+
+  return data.repos || [];
 };
 
 export const browseFilesystemFolders = async (pathToBrowse: string) => {

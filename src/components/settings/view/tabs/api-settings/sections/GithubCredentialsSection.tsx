@@ -1,6 +1,7 @@
-import { Eye, EyeOff, Github, Plus, Trash2 } from 'lucide-react';
+import { CheckCircle2, Eye, EyeOff, Github, Loader2, Plus, Trash2, XCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button, Input } from '../../../../../../shared/view/ui';
+import type { GithubTokenCheck } from '../../../../hooks/useCredentialsSettings';
 import type { GithubCredentialItem } from '../types';
 
 type GithubCredentialsSectionProps = {
@@ -15,6 +16,8 @@ type GithubCredentialsSectionProps = {
   onNewGithubTokenChange: (value: string) => void;
   onNewGithubDescriptionChange: (value: string) => void;
   onToggleNewTokenVisibility: () => void;
+  githubTokenCheck: GithubTokenCheck;
+  onVerifyGithubToken: () => void;
   onCreateGithubCredential: () => void;
   onCancelCreateGithubCredential: () => void;
   onToggleGithubCredential: (credentialId: string, isActive: boolean) => void;
@@ -33,6 +36,8 @@ export default function GithubCredentialsSection({
   onNewGithubTokenChange,
   onNewGithubDescriptionChange,
   onToggleNewTokenVisibility,
+  githubTokenCheck,
+  onVerifyGithubToken,
   onCreateGithubCredential,
   onCancelCreateGithubCredential,
   onToggleGithubCredential,
@@ -87,8 +92,60 @@ export default function GithubCredentialsSection({
             onChange={(event) => onNewGithubDescriptionChange(event.target.value)}
           />
 
-          <div className="flex gap-2">
-            <Button onClick={onCreateGithubCredential}>{t('apiKeys.github.form.addButton')}</Button>
+          {githubTokenCheck.status !== 'idle' && (
+            <div
+              role="status"
+              className={`flex items-start gap-2 rounded-md border p-2 text-xs ${
+                githubTokenCheck.status === 'valid'
+                  ? 'border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-400'
+                  : githubTokenCheck.status === 'invalid'
+                    ? 'border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-400'
+                    : 'border-border bg-muted/40 text-muted-foreground'
+              }`}
+            >
+              {githubTokenCheck.status === 'checking' && (
+                <>
+                  <Loader2 className="mt-px h-3.5 w-3.5 shrink-0 animate-spin" />
+                  <span>{t('apiKeys.github.form.checking')}</span>
+                </>
+              )}
+
+              {githubTokenCheck.status === 'valid' && (
+                <>
+                  <CheckCircle2 className="mt-px h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    {t('apiKeys.github.form.tokenValid', { login: githubTokenCheck.login })}
+                    {githubTokenCheck.scopes.length > 0 && (
+                      <span className="block opacity-80">
+                        {t('apiKeys.github.form.tokenScopes', {
+                          scopes: githubTokenCheck.scopes.join(', '),
+                        })}
+                      </span>
+                    )}
+                  </span>
+                </>
+              )}
+
+              {githubTokenCheck.status === 'invalid' && (
+                <>
+                  <XCircle className="mt-px h-3.5 w-3.5 shrink-0" />
+                  <span>{githubTokenCheck.message}</span>
+                </>
+              )}
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={onCreateGithubCredential} disabled={githubTokenCheck.status === 'checking'}>
+              {t('apiKeys.github.form.addButton')}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={onVerifyGithubToken}
+              disabled={githubTokenCheck.status === 'checking' || !newGithubToken.trim()}
+            >
+              {t('apiKeys.github.form.checkButton')}
+            </Button>
             <Button variant="outline" onClick={onCancelCreateGithubCredential}>
               {t('apiKeys.github.form.cancelButton')}
             </Button>

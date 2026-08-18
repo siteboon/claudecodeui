@@ -293,7 +293,11 @@
         "descriptionPlaceholder": "Description (optional)",
         "addButton": "Add Token",
         "cancelButton": "Cancel",
-        "howToCreate": "How to create a GitHub Personal Access Token →"
+        "howToCreate": "How to create a GitHub Personal Access Token →",
+        "checkButton": "Check token",
+        "checking": "Checking with GitHub...",
+        "tokenValid": "Valid — authenticated as {{login}}",
+        "tokenScopes": "Scopes: {{scopes}}"
       },
       "empty": "No GitHub tokens added yet.",
       "added": "Added:",
