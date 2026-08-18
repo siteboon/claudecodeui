@@ -8,6 +8,7 @@ import { useSidebarController } from '../hooks/useSidebarController';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
+import { useAuth } from '../../auth';
 import type { Project, LLMProvider } from '../../../types/app';
 import type { MCPServerStatus, SidebarProps } from '../types/types';
 
@@ -52,6 +53,7 @@ function Sidebar({
   const { sidebarVisible } = preferences;
   const { setCurrentProject, mcpServerStatus } = useTaskMaster() as TaskMasterSidebarContext;
   const { tasksEnabled } = useTasksSettings();
+  const { logout } = useAuth();
   const paletteOps = usePaletteOps();
 
   const {
@@ -233,6 +235,7 @@ function Sidebar({
         <SidebarCollapsed
           onExpand={handleExpandSidebar}
           onShowSettings={onShowSettings}
+          onLogout={logout}
           updateAvailable={updateAvailable}
           restartRequired={restartRequired}
           onShowVersionModal={() => setShowVersionModal(true)}
@@ -321,6 +324,7 @@ function Sidebar({
             currentVersion={currentVersion}
             onShowVersionModal={() => setShowVersionModal(true)}
             onShowSettings={onShowSettings}
+            onLogout={logout}
             projectListProps={projectListProps}
             t={t}
           />

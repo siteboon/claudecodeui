@@ -1,4 +1,4 @@
-import { Settings, ArrowUpCircle, Bug, AlertTriangle } from 'lucide-react';
+import { Settings, ArrowUpCircle, Bug, AlertTriangle, LogOut } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { IS_PLATFORM } from '../../../../shared/utils';
@@ -25,6 +25,7 @@ type SidebarFooterProps = {
   currentVersion: string;
   onShowVersionModal: () => void;
   onShowSettings: () => void;
+  onLogout: () => void;
   t: TFunction;
 };
 
@@ -36,6 +37,7 @@ export default function SidebarFooter({
   currentVersion,
   onShowVersionModal,
   onShowSettings,
+  onLogout,
   t,
 }: SidebarFooterProps) {
   return (
@@ -144,6 +146,18 @@ export default function SidebarFooter({
         </button>
       </div>
 
+      {!IS_PLATFORM && (
+        <div className="hidden px-2 pb-1.5 md:block">
+          <button
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+            onClick={onLogout}
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            <span className="text-sm">{t('common:navigation.logout')}</span>
+          </button>
+        </div>
+      )}
+
       {/* Desktop version brand line (OSS mode only) */}
       {!IS_PLATFORM && (
         <div className="hidden px-3 py-2 text-center md:block">
@@ -174,7 +188,7 @@ export default function SidebarFooter({
       </div>
 
       {/* Mobile Discord */}
-      <div className="px-3 pt-2 md:hidden">
+      <div className={IS_PLATFORM ? 'px-3 pb-3 pt-2 md:hidden' : 'px-3 pt-2 md:hidden'}>
         <a
           href={DISCORD_INVITE_URL}
           target="_blank"
@@ -189,7 +203,7 @@ export default function SidebarFooter({
       </div>
 
       {/* Mobile settings */}
-      <div className="px-3 pb-3 pt-2 md:hidden">
+      <div className="px-3 pt-2 md:hidden">
         <button
           className="flex h-10 w-full items-center gap-3 rounded-xl bg-muted/40 px-3.5 transition-all hover:bg-muted/60 active:scale-[0.98]"
           onClick={onShowSettings}
@@ -200,6 +214,20 @@ export default function SidebarFooter({
           <span className="text-sm font-normal text-foreground">{t('actions.settings')}</span>
         </button>
       </div>
+
+      {!IS_PLATFORM && (
+        <div className="px-3 pb-3 pt-2 md:hidden">
+          <button
+            className="flex h-10 w-full items-center gap-3 rounded-xl bg-muted/40 px-3.5 transition-all hover:bg-destructive/10 active:scale-[0.98]"
+            onClick={onLogout}
+          >
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-background/80">
+              <LogOut className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <span className="text-sm font-normal text-foreground">{t('common:navigation.logout')}</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
