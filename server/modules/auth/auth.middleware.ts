@@ -5,8 +5,20 @@ import { IS_PLATFORM } from '@/shared/utils.js';
 
 import { userDb, appConfigDb } from '../database/index.js';
 
+export const AUTH_TOKEN_GENERATION_KEY = 'auth_token_generation';
+
 // Use env var if set, otherwise auto-generate a unique secret per installation
 const JWT_SECRET = process.env.JWT_SECRET || appConfigDb.getOrCreateJwtSecret();
+
+const getCurrentAuthTokenGeneration = () => appConfigDb.getStrict(AUTH_TOKEN_GENERATION_KEY);
+
+const isTokenGenerationValid = (decoded) => {
+  const currentGeneration = getCurrentAuthTokenGeneration();
+  if (!currentGeneration) {
+    return true;
+  }
+  return decoded.authTokenGeneration === currentGeneration;
+};
 
 // Optional API key middleware
 const validateApiKey = (req, res, next) => {
@@ -59,6 +71,14 @@ const authenticateToken = async (req, res, next) => {
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
 
+    if (!isTokenGenerationValid(decoded)) {
+      res.setHeader('X-Auth-Error', 'invalid-token');
+      return res.status(401).json({
+        error: 'Invalid token. Please sign in again.',
+        code: 'AUTH_TOKEN_INVALID',
+      });
+    }
+
     // Verify user still exists and is active
     const user = userDb.getUserById(decoded.userId);
     if (!user) {
@@ -104,14 +124,16 @@ const authenticateToken = async (req, res, next) => {
 
 // Generate JWT token
 const generateToken = (user) => {
-  return jwt.sign(
-    {
-      userId: user.id,
-      username: user.username
-    },
-    JWT_SECRET,
-    { expiresIn: '7d' }
-  );
+  const payload = {
+    userId: user.id,
+    username: user.username
+  };
+  const currentGeneration = getCurrentAuthTokenGeneration();
+  if (currentGeneration) {
+    payload.authTokenGeneration = currentGeneration;
+  }
+
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
 };
 
 // WebSocket authentication function
@@ -137,6 +159,10 @@ const authenticateWebSocket = (token) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
+    if (!isTokenGenerationValid(decoded)) {
+      return null;
+    }
+
     // Verify user actually exists in database (matches REST authenticateToken behavior)
     const user = userDb.getUserById(decoded.userId);
     if (!user) {

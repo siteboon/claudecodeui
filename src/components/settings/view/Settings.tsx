@@ -6,6 +6,7 @@ import ProviderLoginModal from '../../provider-auth/view/ProviderLoginModal';
 import { Button } from '../../../shared/view/ui';
 import SettingsSidebar from '../view/SettingsSidebar';
 import AgentsSettingsTab from '../view/tabs/agents-settings/AgentsSettingsTab';
+import AccountSettingsTab from '../view/tabs/AccountSettingsTab';
 import AppearanceSettingsTab from '../view/tabs/AppearanceSettingsTab';
 import CredentialsSettingsTab from '../view/tabs/api-settings/CredentialsSettingsTab';
 import VoiceSettingsTab from '../view/tabs/VoiceSettingsTab';
@@ -161,6 +162,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
           {/* Content */}
           <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
             <div key={activeTab} className="settings-content-enter min-w-0 space-y-6 overflow-x-hidden p-4 pb-safe-area-inset-bottom md:space-y-8 md:p-6">
+              {activeTab === 'account' && <AccountSettingsTab />}
+
               {activeTab === 'appearance' && (
                 <AppearanceSettingsTab
                   projectSortOrder={projectSortOrder}

@@ -42,6 +42,7 @@ export type AuthContextValue = {
   login: (username: string, password: string) => Promise<AuthActionResult>;
   register: (username: string, password: string) => Promise<AuthActionResult>;
   logout: () => void;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<AuthActionResult>;
   refreshOnboardingStatus: () => Promise<void>;
 };
 
