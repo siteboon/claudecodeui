@@ -41,6 +41,28 @@ const SUPPORTED_IMAGE_MEDIA_TYPES = new Set([
   'image/webp',
 ]);
 
+function hasMatchingImageSignature(bytes: Buffer, mediaType: string): boolean {
+  switch (mediaType) {
+    case 'image/jpeg':
+      return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+    case 'image/png':
+      return bytes.length >= 8
+        && bytes.readUInt32BE(0) === 0x89504e47
+        && bytes.readUInt32BE(4) === 0x0d0a1a0a;
+    case 'image/gif':
+      return bytes.length >= 6
+        && bytes.readUInt32BE(0) === 0x47494638
+        && (bytes[4] === 0x37 || bytes[4] === 0x39)
+        && bytes[5] === 0x61;
+    case 'image/webp':
+      return bytes.length >= 12
+        && bytes.readUInt32BE(0) === 0x52494646
+        && bytes.readUInt32BE(8) === 0x57454250;
+    default:
+      return false;
+  }
+}
+
 const EXTENSION_TO_MEDIA_TYPE: Record<string, string> = {
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
@@ -459,10 +481,8 @@ export async function buildAcpPromptBlocks(
   const blocks: AcpPromptBlock[] = [{ type: 'text', text: prompt }];
 
   for (const descriptor of normalizeImageDescriptors(images)) {
-    // `resolveImageMediaType` prefers the CLIENT-DECLARED mimeType, so a bare
-    // `image/*` test would let a caller label any readable file `image/png` and
-    // have it base64'd into the prompt. Intersect with the fixed set instead,
-    // exactly as buildClaudeUserContent does.
+    // Client-declared MIME types are preferred, so accept only types whose
+    // signatures this builder can verify after reading the file.
     const mediaType = resolveImageMediaType(descriptor);
     if (!mediaType || !SUPPORTED_IMAGE_MEDIA_TYPES.has(mediaType)) {
       console.warn(`[Images] Skipping unsupported omp image type for ${descriptor.path}`);
@@ -482,6 +502,10 @@ export async function buildAcpPromptBlocks(
         continue;
       }
       const bytes = await fs.readFile(canonicalPath);
+      if (!hasMatchingImageSignature(bytes, mediaType)) {
+        console.warn(`[Images] Skipping omp image with mismatched file signature: ${descriptor.path}`);
+        continue;
+      }
       blocks.push({ type: 'image', mimeType: mediaType, data: bytes.toString('base64') });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

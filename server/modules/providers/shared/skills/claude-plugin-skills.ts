@@ -36,18 +36,6 @@ const pathExistsAsDirectory = async (directoryPath: string): Promise<boolean> =>
   }
 };
 
-const listChildDirectories = async (directoryPath: string): Promise<string[]> => {
-  try {
-    const entries = await readdir(directoryPath, { withFileTypes: true });
-    return entries
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => path.join(directoryPath, entry.name))
-      .sort((left, right) => left.localeCompare(right));
-  } catch {
-    return [];
-  }
-};
-
 const readClaudePluginName = async (
   installPath: string,
   pluginId: string,
@@ -209,44 +197,43 @@ export async function listClaudePluginSkills(
         continue;
       }
 
-      // Claude's installed path points at one version folder; the usable
-      // plugin payloads live in the direct child folders beside it.
-      const pluginFolders = await listChildDirectories(path.dirname(installPath));
-      for (const pluginFolder of pluginFolders) {
-        const pluginFolderKey = `${pluginId}:${path.resolve(pluginFolder)}`;
-        if (visitedPluginFolders.has(pluginFolderKey)) {
-          continue;
-        }
-        visitedPluginFolders.add(pluginFolderKey);
-
-        const pluginName = await readClaudePluginName(pluginFolder, pluginId);
-        if (!pluginName) {
-          continue;
-        }
-
-        const commandsPath = path.join(pluginFolder, 'commands');
-        const commandSkills = (await pathExistsAsDirectory(commandsPath))
-          ? await listPluginCommandSkills(provider, commandsPath, pluginId, pluginName)
-          : [];
-
-        // A plugin that ships commands wraps its own skills in them, so the
-        // commands are the user-facing surface and the skill files are noise.
-        // A commands folder holding nothing this agent can read is not: several
-        // plugins keep `.toml` command files there for other harnesses and put
-        // the real payload in `skills/`.
-        if (commandSkills.length > 0) {
-          skills.push(...commandSkills);
-          continue;
-        }
-
-        if (!(await pathExistsAsDirectory(path.join(pluginFolder, 'skills')))) {
-          continue;
-        }
-
-        skills.push(
-          ...(await listPluginSkillMarkdowns(provider, pluginFolder, pluginId, pluginName)),
-        );
+      if (!(await pathExistsAsDirectory(installPath))) {
+        continue;
       }
+
+      const pluginFolderKey = `${pluginId}:${path.resolve(installPath)}`;
+      if (visitedPluginFolders.has(pluginFolderKey)) {
+        continue;
+      }
+      visitedPluginFolders.add(pluginFolderKey);
+
+      const pluginName = await readClaudePluginName(installPath, pluginId);
+      if (!pluginName) {
+        continue;
+      }
+
+      const commandsPath = path.join(installPath, 'commands');
+      const commandSkills = (await pathExistsAsDirectory(commandsPath))
+        ? await listPluginCommandSkills(provider, commandsPath, pluginId, pluginName)
+        : [];
+
+      // A plugin that ships commands wraps its own skills in them, so the
+      // commands are the user-facing surface and the skill files are noise.
+      // A commands folder holding nothing this agent can read is not: several
+      // plugins keep `.toml` command files there for other harnesses and put
+      // the real payload in `skills/`.
+      if (commandSkills.length > 0) {
+        skills.push(...commandSkills);
+        continue;
+      }
+
+      if (!(await pathExistsAsDirectory(path.join(installPath, 'skills')))) {
+        continue;
+      }
+
+      skills.push(
+        ...(await listPluginSkillMarkdowns(provider, installPath, pluginId, pluginName)),
+      );
     }
   }
 

@@ -217,7 +217,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     setProviderModelsLoading(true);
 
     try {
-      const results = await Promise.all(
+      const results = await Promise.allSettled(
         PROVIDERS.map(async (p) => {
           const response = await authenticatedFetch(`/api/providers/${p}/models`);
           const body = (await response.json()) as ProviderModelsApiResponse;
@@ -236,12 +236,15 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       const nextCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>> = {};
 
       PROVIDERS.forEach((p, i) => {
-        const entry = results[i];
-        if (!entry) {
+        const result = results[i];
+        if (result.status === 'rejected') {
+          console.error(`Error loading provider models for ${p}:`, result.reason);
           return;
         }
 
-        nextCatalog[p] = entry;
+        if (result.value) {
+          nextCatalog[p] = result.value;
+        }
       });
 
       setProviderModelCatalog(nextCatalog);

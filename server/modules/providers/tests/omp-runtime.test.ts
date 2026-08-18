@@ -100,6 +100,7 @@ function makeFakeConnection() {
 
   return {
     connection,
+    pendingLoads: () => releaseLoad.length,
     fireUpdate: (params: AnyRecord) => updateHandlerFn?.(params),
     firePermission: (params: AnyRecord) => requestHandlers.get('session/request_permission')?.(params),
     fireRequest: (method: string, params: AnyRecord) => requestHandlers.get(method)!(params),
@@ -330,6 +331,71 @@ test('resume via session/load streams and completes normally', async () => {
     assert.ok(w.sent.some((m) => m.kind === 'stream_delta' && m.content === 'resumed'), 'resumed session streams');
     assert.equal(w.sent.filter((m) => m.kind === 'complete').length, 1, 'resume completes once');
     assert.equal(w.sent.filter((m) => m.kind === 'session_created').length, 0, 'resume does not re-announce session_created');
+  } finally {
+    __setConnectionFactoryForTest(null);
+  }
+});
+
+test('a concurrent resume cannot replace the active native session owner', async () => {
+  const fake = makeFakeConnection();
+  const mappedContext = { ...TEST_CONTEXT, resolveProviderSessionId: () => 'S1' };
+  __setConnectionFactoryForTest(() => fake.connection);
+  try {
+    const firstWriter = makeWriter();
+    const firstRun = spawnOmp(
+      'first',
+      { cwd: '/concurrent-resume', projectPath: '/concurrent-resume', sessionId: 'APP-1', permissionMode: 'default' },
+      firstWriter,
+      mappedContext,
+    );
+    await fake.releaseLoads();
+    await flush(); // first prompt is pending and owns S1
+
+    const secondWriter = makeWriter();
+    let secondFinished = false;
+    const secondRun = spawnOmp(
+      'second',
+      { cwd: '/concurrent-resume', projectPath: '/concurrent-resume', sessionId: 'APP-2', permissionMode: 'default' },
+      secondWriter,
+      mappedContext,
+    ).then(() => {
+      secondFinished = true;
+    });
+
+    const deadline = Date.now() + 10_000;
+    while (!secondFinished && fake.pendingLoads() === 0 && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    assert.ok(secondFinished || fake.pendingLoads() > 0,
+      'timed out waiting for duplicate resume to finish or start session/load');
+
+    // Let the pre-fix implementation reach its prompt too, so the assertions fail
+    // without leaving either fake run pending.
+    const secondStartedLoad = fake.pendingLoads() > 0;
+    if (secondStartedLoad) {
+      await fake.releaseLoads();
+      await flush();
+    }
+
+    fake.fireUpdate({
+      sessionId: 'S1',
+      update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'first-owner' } },
+    });
+    const abortReachedFirst = await abortOmpSession('APP-1');
+    await fake.releaseAllPrompts();
+    await Promise.all([firstRun, secondRun]);
+
+    assert.equal(secondStartedLoad, false, 'duplicate resume must fail before session/load');
+    assert.ok(secondWriter.sent.some((m) => m.kind === 'error' && /already has a run in progress/i.test(m.content)),
+      'duplicate resume reports the existing active run');
+    assert.equal(secondWriter.sent.find((m) => m.kind === 'complete')?.exitCode, 1);
+    assert.ok(firstWriter.sent.some((m) => m.kind === 'stream_delta' && m.content === 'first-owner'),
+      'updates remain routed to the first run');
+    assert.equal(secondWriter.sent.some((m) => m.kind === 'stream_delta'), false,
+      'the duplicate never receives the first run updates');
+    assert.equal(abortReachedFirst, true, 'abort still finds the first run');
+    assert.equal(firstWriter.sent.some((m) => m.kind === 'complete'), false,
+      'the first run observes the abort instead of completing normally');
   } finally {
     __setConnectionFactoryForTest(null);
   }

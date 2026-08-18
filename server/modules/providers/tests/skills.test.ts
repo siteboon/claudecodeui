@@ -119,7 +119,7 @@ test('providerSkillsService lists claude user, project, and enabled plugin skill
     'at',
     '000',
   );
-  const siblingSkillPluginPath = path.join(path.dirname(skillPluginInstallPath), 'legacy777');
+  const legacySkillPluginPath = path.join(path.dirname(skillPluginInstallPath), 'legacy777');
   await fs.mkdir(workspacePath, { recursive: true });
 
   const restoreHomeDir = patchHomeDir(tempRoot);
@@ -168,10 +168,10 @@ test('providerSkillsService lists claude user, project, and enabled plugin skill
       'Nested Claude plugin skill',
     );
     await writeSkill(
-      path.join(siblingSkillPluginPath, 'skills'),
-      'claude-plugin-sibling-dir',
-      'claude-plugin-sibling',
-      'Sibling Claude plugin skill',
+      path.join(legacySkillPluginPath, 'skills'),
+      'legacy-cached-plugin-skill-dir',
+      'legacy-cached-plugin-skill',
+      'Stale cached plugin skill',
     );
     await writeClaudePluginManifest(disabledPluginInstallPath, 'DisabledSkills');
     await writeClaudePluginCommand(
@@ -302,11 +302,7 @@ test('providerSkillsService lists claude user, project, and enabled plugin skill
     assert.equal(nestedPluginSkill?.command, '/ExampleSkills:claude-plugin-nested');
     assert.equal(nestedPluginSkill?.description, 'Nested Claude plugin skill');
 
-    const siblingPluginSkill = byName.get('claude-plugin-sibling');
-    assert.equal(siblingPluginSkill?.scope, 'plugin');
-    assert.equal(siblingPluginSkill?.pluginName, 'example-skills');
-    assert.equal(siblingPluginSkill?.command, '/example-skills:claude-plugin-sibling');
-    assert.equal(siblingPluginSkill?.description, 'Sibling Claude plugin skill');
+    assert.equal(byName.has('legacy-cached-plugin-skill'), false);
     assert.equal(byName.has('disabled-command'), false);
     assert.equal(byName.has('disabled-plugin'), false);
     assert.equal(byName.has('invalid-empty-command'), false);

@@ -349,12 +349,12 @@ export async function writeFileNoFollow(
   }
 }
 
-// Active runs keyed by native session id. Value:
-// { connection, sessionId, writer, sessionSummary, permissionMode, aborted, acceptingUpdates }.
-// Abortedness lives ONLY on the per-run entry (`entry.aborted`); spawnOmp holds
-// the entry by reference so it survives map deletion. (No separate id Set — that
-// leaked ids across resumed turns and spuriously suppressed later completes.)
+// Active runs keyed by native session id. Resume reservations close the setup
+// window before a run has a connection-backed entry in activeOmpSessions.
+// Abortedness lives only on the per-run entry (`entry.aborted`); spawnOmp holds
+// the entry by reference until its finally unwinds.
 const activeOmpSessions = new Map<string, OmpSessionEntry>();
+const reservedOmpSessionIds = new Set<string>();
 
 function createRequestId() {
   return typeof crypto.randomUUID === 'function'
@@ -891,8 +891,9 @@ export async function spawnOmp(
   // Held outside the try so the finally can re-baseline this child's copy of the
   // session against the jsonl it just wrote.
   let runConnection: OmpConnection | null = null;
-  // The run's entry in activeOmpSessions (created once we have a native id).
-  let entry = null;
+  // The run's entry in activeOmpSessions (created once we have a connection).
+  let entry: OmpSessionEntry | null = null;
+  let reservedSessionId: string | null = null;
 
   const notifyTerminalState = (
     { error = null, stopReason = 'completed' }: { error?: unknown; stopReason?: string } = {},
@@ -918,6 +919,16 @@ export async function spawnOmp(
   };
 
   try {
+    // Claim a resumed native session before setup yields. The reservation remains
+    // until this invocation's finally has fully unwound, including cancellation.
+    if (providerSessionId) {
+      if (reservedOmpSessionIds.has(providerSessionId) || activeOmpSessions.has(providerSessionId)) {
+        throw new Error(`Session "${providerSessionId}" already has a run in progress.`);
+      }
+      reservedOmpSessionIds.add(providerSessionId);
+      reservedSessionId = providerSessionId;
+    }
+
     let connection = await getConnection(workingDir, approvalProfile);
     runConnection = connection; // claimed by getConnection; the finally releases it
     if (providerSessionId) {
@@ -932,9 +943,8 @@ export async function spawnOmp(
       }
     }
 
-    // Resume: register the run up front (so an abort during load can find it)
-    // but drop replayed history — ACP re-streams the whole prior conversation
-    // as `session/update` notifications BEFORE `session/load` resolves.
+    // Resume: register the connection-backed run before session/load so an abort
+    // during load can find it. The synchronous reservation already excluded peers.
     if (providerSessionId) {
       entry = {
         connection,
@@ -1010,7 +1020,9 @@ export async function spawnOmp(
         // session/fork minted a new branch id (session/load keeps the same id).
         // The branch jsonl already contains the full inherited history, so no
         // fork-parent link / display-merge is needed — fetchHistory reads it whole.
-        activeOmpSessions.delete(entry.sessionId);
+        if (activeOmpSessions.get(entry.sessionId) === entry) {
+          activeOmpSessions.delete(entry.sessionId);
+        }
         entry.sessionId = resolvedId;
         activeOmpSessions.set(resolvedId, entry);
         // SF-2: the run registry must learn the rewritten id, else handleChatAbort
@@ -1051,7 +1063,6 @@ export async function spawnOmp(
     // be resurrected into a running turn either. handleChatAbort sends the
     // terminal complete; we just notify the aborted stop for consistency.
     if (entry.aborted) {
-      activeOmpSessions.delete(entry.sessionId);
       notifyTerminalState({ stopReason: 'aborted' });
       return;
     }
@@ -1129,14 +1140,10 @@ export async function spawnOmp(
       completeSent = true;
       writer.send(createCompleteMessage({ provider: PROVIDER, sessionId: resolvedId, exitCode: 0 }));
     }
-    activeOmpSessions.delete(resolvedId);
     notifyTerminalState({ stopReason: wasAborted ? 'aborted' : stopReason });
   } catch (error) {
     const finalSessionId = capturedSessionId || providerSessionId || null;
     const aborted = Boolean(entry?.aborted);
-    if (entry) {
-      activeOmpSessions.delete(entry.sessionId);
-    }
     // A prompt failure (incl. the 30-min ceiling) leaves any pending approval
     // registered → stale replay. Cancel omp's own pending approvals so awaiting
     // handlers resolve. (abortOmpSession already did this for the abort case.)
@@ -1178,18 +1185,26 @@ export async function spawnOmp(
     // No rethrow: match sibling providers (opencode/codex). The WS gateway logs
     // + safety-nets a duplicate complete; the REST path continues to PR steps.
   } finally {
-    // This child now holds the session as of the jsonl it just wrote — record that
-    // so only a foreign writer (the terminal) counts as drift on the next turn.
-    // An ABORTED turn samples a little early (session/cancel is a notify, so omp may
-    // still flush the partial turn afterwards); the cost is one needless respawn on
-    // the next turn, never a stale one.
-    if (runConnection) {
-      if (capturedSessionId) {
+    try {
+      // This child now holds the session as of the jsonl it just wrote — record
+      // that so only a foreign writer (the terminal) counts as drift next turn.
+      // An aborted turn may sample before omp flushes after its cancel notify; the
+      // cost is one needless respawn on the next turn, never a stale one.
+      if (runConnection && capturedSessionId) {
         loadedSessionsOf(runConnection).set(capturedSessionId, await sessionFileFingerprint(capturedSessionId));
       }
-      releaseConnection(runConnection);
+    } finally {
+      if (runConnection) {
+        releaseConnection(runConnection);
+      }
+      reapRetiredConnections();
+      if (entry && activeOmpSessions.get(entry.sessionId) === entry) {
+        activeOmpSessions.delete(entry.sessionId);
+      }
+      if (reservedSessionId) {
+        reservedOmpSessionIds.delete(reservedSessionId);
+      }
     }
-    reapRetiredConnections();
   }
 }
 
@@ -1217,12 +1232,13 @@ export async function abortOmpSession(sessionId: string) {
   // the process — it hosts other sessions for this cwd; `session/cancel` stops
   // the current turn and the pending session/prompt rejects into spawnOmp's
   // catch, which skips its own complete (handleChatAbort sends the aborted one).
+  // Ownership remains registered until spawnOmp's finally has fully unwound, so
+  // a quick retry cannot overlap the cancelled run.
   try {
     entry.connection.client.notify('session/cancel', { sessionId: entry.sessionId });
   } catch {
     // Connection already gone — caller still sees the run as aborted.
   }
-  activeOmpSessions.delete(entry.sessionId);
   return true;
 }
 
