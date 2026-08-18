@@ -28,18 +28,11 @@ type WebSocketContextType = {
    * Subscribes to every websocket frame. Returns an unsubscribe function.
    *
    * This is the primary consumption API: events are dispatched synchronously
-   * to every listener, so rapid back-to-back frames can never be coalesced or
-   * dropped the way a single "latest message" state slot could.
+   * to every listener, so rapid back-to-back frames cannot be coalesced or
+   * dropped. Frames are deliberately not copied into React state; each
+   * listener updates only the state owned by the feature that handles it.
    */
   subscribe: (listener: ServerEventListener) => () => void;
-  /**
-   * Legacy state-based access to the most recent frame.
-   *
-   * Kept only for low-frequency consumers (TaskMaster broadcasts). High-rate
-   * chat streams must use `subscribe` — React may batch state updates, which
-   * makes `latestMessage` lossy under load.
-   */
-  latestMessage: ServerEvent | null;
   isConnected: boolean;
 };
 
@@ -74,7 +67,6 @@ const useWebSocketProviderState = (): WebSocketContextType => {
    * re-renders of the provider tree.
    */
   const listenersRef = useRef(new Set<ServerEventListener>());
-  const [latestMessage, setLatestMessage] = useState<ServerEvent | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { isLoading: isAuthLoading, token, user } = useAuth();
@@ -87,7 +79,6 @@ const useWebSocketProviderState = (): WebSocketContextType => {
         console.error('WebSocket listener error:', error);
       }
     }
-    setLatestMessage(event);
   }, []);
 
   useEffect(() => {
@@ -195,9 +186,8 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     ws: wsRef.current,
     sendMessage,
     subscribe,
-    latestMessage,
     isConnected
-  }), [sendMessage, subscribe, latestMessage, isConnected]);
+  }), [sendMessage, subscribe, isConnected]);
 
   return value;
 };
