@@ -8,6 +8,7 @@ import multer from 'multer';
 import { projectsDb } from '@/modules/database/index.js';
 import { createFileTreeRouter } from '@/modules/file-tree/file-tree.routes.js';
 import { createFileTreeService } from '@/modules/file-tree/file-tree.service.js';
+import { FLAT_MULTIPART_FIELD_NESTING_DEPTH } from '@/shared/multipart-upload-limits.js';
 import type {
   FileTreeFileSystem,
   FileTreeLogger,
@@ -96,6 +97,7 @@ const fileUploadMiddleware = multer({
     },
   }),
   limits: {
+    fieldNestingDepth: FLAT_MULTIPART_FIELD_NESTING_DEPTH,
     fileSize: MAXIMUM_UPLOAD_SIZE_BYTES,
     files: MAXIMUM_UPLOAD_FILE_COUNT,
   },

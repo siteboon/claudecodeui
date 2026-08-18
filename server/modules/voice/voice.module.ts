@@ -1,5 +1,7 @@
 import multer from 'multer';
 
+import { FLAT_MULTIPART_FIELD_NESTING_DEPTH } from '@/shared/multipart-upload-limits.js';
+
 import { createVoiceRouter } from './voice.routes.js';
 import { createVoiceService } from './voice.service.js';
 
@@ -37,7 +39,10 @@ const voiceService = createVoiceService({
 
 const audioUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 25 * 1024 * 1024 },
+  limits: {
+    fieldNestingDepth: FLAT_MULTIPART_FIELD_NESTING_DEPTH,
+    fileSize: 25 * 1024 * 1024,
+  },
 });
 
 /** Voice router assembled for the server entrypoint. */
