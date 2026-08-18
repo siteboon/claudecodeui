@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -127,6 +127,47 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     });
   };
 
+  // Escape closes Settings, matching the other modals in the app. Layers that open
+  // on top of it — nested modals, dropdown menus — mark themselves with
+  // `data-escape-layer` and get the Escape first, so dismissing a menu never also
+  // pulls Settings out from under the user.
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || document.querySelector('[data-escape-layer]')) {
+        return;
+      }
+      onClose();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
+  // A click only counts as "outside" when it both started and ended on the backdrop:
+  // releasing on the backdrop after selecting text inside the panel must not close it.
+  const backdropMouseDownRef = useRef(false);
+
+  const handleBackdropMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    backdropMouseDownRef.current = event.target === event.currentTarget;
+  }, []);
+
+  const handleBackdropClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      const startedOnBackdrop = backdropMouseDownRef.current;
+      backdropMouseDownRef.current = false;
+      if (startedOnBackdrop && event.target === event.currentTarget) {
+        onClose();
+      }
+    },
+    [onClose]
+  );
+
   if (!isOpen) {
     return null;
   }
@@ -134,7 +175,11 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
   const isAuthenticated = Boolean(loginProvider && providerAuthStatus[loginProvider].authenticated);
 
   return (
-    <div className="modal-backdrop fixed inset-0 z-[9999] flex items-center justify-center bg-background/80 backdrop-blur-sm md:p-4">
+    <div
+      className="modal-backdrop fixed inset-0 z-[9999] flex items-center justify-center bg-background/80 backdrop-blur-sm md:p-4"
+      onMouseDown={handleBackdropMouseDown}
+      onClick={handleBackdropClick}
+    >
       <div className="flex h-full w-full flex-col overflow-hidden border border-border bg-background shadow-2xl md:h-[90vh] md:max-w-4xl md:rounded-xl">
         {/* Header */}
         <div className="flex flex-shrink-0 items-center justify-between border-b border-border px-4 py-3 md:px-5">
