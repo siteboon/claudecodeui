@@ -6,6 +6,11 @@ import { handleChatConnection } from '@/modules/websocket/services/chat-websocke
 import { verifyWebSocketClient } from '@/modules/websocket/services/websocket-auth.service.js';
 import { handlePluginWsProxy } from '@/modules/websocket/services/plugin-websocket-proxy.service.js';
 import { handleShellConnection } from '@/modules/websocket/services/shell-websocket.service.js';
+import {
+  patchWebSocketBandwidthTracking,
+  startBandwidthLogging,
+  tagWebSocketRoute,
+} from '@/modules/websocket/services/bandwidth-monitor.service.js';
 import { handleDesktopNotificationsConnection } from '@/modules/notifications/index.js';
 import type { AuthenticatedWebSocketRequest } from '@/shared/types.js';
 
@@ -84,6 +89,9 @@ export function createWebSocketServer(
   server: HttpServer,
   dependencies: WebSocketServerDependencies
 ): WebSocketServer {
+  patchWebSocketBandwidthTracking();
+  startBandwidthLogging();
+
   const wss = new WebSocketServer({
     server,
     verifyClient: ((
@@ -97,6 +105,8 @@ export function createWebSocketServer(
     const incomingRequest = request as AuthenticatedWebSocketRequest;
     const url = incomingRequest.url ?? '/';
     const pathname = new URL(url, 'http://localhost').pathname;
+
+    tagWebSocketRoute(ws, pathname.startsWith('/plugin-ws/') ? 'plugin-ws' : pathname);
 
     if (pathname === '/shell') {
       handleShellConnection(ws, dependencies.shell);

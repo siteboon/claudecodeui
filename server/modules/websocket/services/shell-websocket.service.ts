@@ -6,6 +6,7 @@ import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
 import { parseIncomingJsonObject } from '@/shared/utils.js';
+import { isBandwidthMonitorEnabled } from '@/modules/websocket/services/bandwidth-monitor.service.js';
 
 type ShellIncomingMessage = {
   type?: string;
@@ -297,6 +298,43 @@ export function handleShellConnection(
   let urlDetectionBuffer = '';
   const announcedAuthUrls = new Set<string>();
 
+  // Optional, opt-in bandwidth monitoring (BANDWIDTH_MONITOR_ENABLED=true).
+  // Counters are always tracked (cheap); only the periodic/close logging is gated.
+  const diag = {
+    outputMessages: 0,
+    outputBytes: 0,
+    replayMessages: 0,
+    replayBytes: 0,
+    resizeMessages: 0,
+    inputMessages: 0,
+    inputBytes: 0,
+    startedAt: Date.now(),
+  };
+  if (isBandwidthMonitorEnabled()) {
+    const diagLogInterval = setInterval(() => {
+      const elapsedSec = ((Date.now() - diag.startedAt) / 1000).toFixed(1);
+      console.log(
+        `[bandwidth-monitor shell] key=${ptySessionKey} elapsed=${elapsedSec}s ` +
+          `output: ${diag.outputMessages} msgs / ${(diag.outputBytes / 1024).toFixed(1)}KB | ` +
+          `replay: ${diag.replayMessages} msgs / ${(diag.replayBytes / 1024).toFixed(1)}KB | ` +
+          `resize: ${diag.resizeMessages} msgs | ` +
+          `input: ${diag.inputMessages} msgs / ${diag.inputBytes}B`
+      );
+    }, 5000);
+    ws.on('close', () => {
+      clearInterval(diagLogInterval);
+      const elapsedSec = ((Date.now() - diag.startedAt) / 1000).toFixed(1);
+      console.log(
+        `[bandwidth-monitor shell] FINAL key=${ptySessionKey} elapsed=${elapsedSec}s ` +
+          `output: ${diag.outputMessages} msgs / ${(diag.outputBytes / 1024).toFixed(1)}KB | ` +
+          `replay: ${diag.replayMessages} msgs / ${(diag.replayBytes / 1024).toFixed(1)}KB | ` +
+          `resize: ${diag.resizeMessages} msgs | ` +
+          `input: ${diag.inputMessages} msgs / ${diag.inputBytes}B | ` +
+          `TOTAL SENT: ${((diag.outputBytes + diag.replayBytes) / 1024).toFixed(1)}KB`
+      );
+    });
+  }
+
   ws.on('message', async (rawMessage) => {
     try {
       const data = parseShellMessage(rawMessage);
@@ -360,12 +398,13 @@ export function handleShellConnection(
 
           if (existingSession.buffer.length > 0) {
             existingSession.buffer.forEach((bufferedData) => {
-              ws.send(
-                JSON.stringify({
-                  type: 'output',
-                  data: bufferedData,
-                })
-              );
+              const payload = JSON.stringify({
+                type: 'output',
+                data: bufferedData,
+              });
+              diag.replayMessages += 1;
+              diag.replayBytes += Buffer.byteLength(payload, 'utf8');
+              ws.send(payload);
             });
           }
 
@@ -489,12 +528,13 @@ export function handleShellConnection(
               emitAuthUrl(bestUrl, true);
             }
 
-            session.ws.send(
-              JSON.stringify({
-                type: 'output',
-                data: outputData,
-              })
-            );
+            const outputPayload = JSON.stringify({
+              type: 'output',
+              data: outputData,
+            });
+            diag.outputMessages += 1;
+            diag.outputBytes += Buffer.byteLength(outputPayload, 'utf8');
+            session.ws.send(outputPayload);
           }
         });
 
@@ -552,13 +592,17 @@ export function handleShellConnection(
       }
 
       if (data.type === 'input') {
+        const inputStr = readString(data.data);
+        diag.inputMessages += 1;
+        diag.inputBytes += Buffer.byteLength(inputStr, 'utf8');
         if (shellProcess) {
-          shellProcess.write(readString(data.data));
+          shellProcess.write(inputStr);
         }
         return;
       }
 
       if (data.type === 'resize') {
+        diag.resizeMessages += 1;
         if (shellProcess) {
           shellProcess.resize(readNumber(data.cols, 80), readNumber(data.rows, 24));
         }

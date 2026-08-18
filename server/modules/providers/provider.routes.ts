@@ -18,6 +18,7 @@ import type {
   UpsertProviderMcpServerInput,
 } from '@/shared/types.js';
 import { AppError, asyncHandler, createApiSuccessResponse } from '@/shared/utils.js';
+import { isBandwidthMonitorEnabled } from '@/modules/websocket/services/bandwidth-monitor.service.js';
 
 const router = express.Router();
 
@@ -808,6 +809,22 @@ router.get(
     const sessionId = parseSessionId(req.params.sessionId);
     const limit = parseBoundedIntegerQuery(req.query.limit, 'limit', null, 0);
     const offset = parseBoundedIntegerQuery(req.query.offset, 'offset', 0, 0);
+
+    // Optional, opt-in bandwidth monitoring (BANDWIDTH_MONITOR_ENABLED=true).
+    // Identifies callers of the unbounded (limit=null) path, useful for
+    // catching bandwidth regressions where a full-history fetch slips back in.
+    // Logs enough of the request to fingerprint the source.
+    if (limit === null && isBandwidthMonitorEnabled()) {
+      console.log(
+        `[bandwidth-monitor messages] UNBOUNDED hit sessionId=${sessionId} ` +
+          `ua=${JSON.stringify(req.headers['user-agent'] ?? null)} ` +
+          `referer=${JSON.stringify(req.headers['referer'] ?? req.headers['origin'] ?? null)} ` +
+          `remoteAddr=${req.socket.remoteAddress ?? 'unknown'} ` +
+          `xForwardedFor=${JSON.stringify(req.headers['x-forwarded-for'] ?? null)} ` +
+          `authHeaderPresent=${Boolean(req.headers['authorization'])} ` +
+          `stack=${new Error('trace').stack?.split('\n').slice(1, 5).join(' <- ')}`
+      );
+    }
 
     const result = await sessionsService.fetchHistory(sessionId, {
       limit,
