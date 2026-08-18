@@ -6,6 +6,7 @@ type UiPreferences = {
   sendByCtrlEnter: boolean;
   sidebarVisible: boolean;
   voiceEnabled: boolean;
+  backOpensSessionList: boolean;
 };
 
 type UiPreferenceKey = keyof UiPreferences;
@@ -37,6 +38,7 @@ const DEFAULTS: UiPreferences = {
   sendByCtrlEnter: false,
   sidebarVisible: true,
   voiceEnabled: false,
+  backOpensSessionList: false,
 };
 
 const PREFERENCE_KEYS = Object.keys(DEFAULTS) as UiPreferenceKey[];

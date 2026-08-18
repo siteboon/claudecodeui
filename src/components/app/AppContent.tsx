@@ -1,5 +1,5 @@
 import { useCallback, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 import Sidebar from '../sidebar/view/Sidebar';
@@ -12,6 +12,8 @@ import { useDeviceSettings } from '../../hooks/useDeviceSettings';
 import { useSessionProtection } from '../../hooks/useSessionProtection';
 import { useProjectsState } from '../../hooks/useProjectsState';
 import { useQueuedMessageAutoSend } from '../../hooks/useQueuedMessageAutoSend';
+import { useUiPreferences } from '../../hooks/useUiPreferences';
+import { useBackButtonSidebar } from '../../hooks/useBackButtonSidebar';
 import { api } from '../../utils/api';
 
 type RunningSessionApiItem = {
@@ -52,6 +54,7 @@ function AppContentInner() {
   const navigate = useNavigate();
   const { sessionId } = useParams<{ sessionId?: string }>();
   const { t } = useTranslation('common');
+  const location = useLocation();
   const { isMobile } = useDeviceSettings({ trackPWA: false });
   const { ws, sendMessage, subscribe } = useWebSocket();
 
@@ -85,6 +88,15 @@ function AppContentInner() {
     subscribe,
     isMobile,
     activeSessions: processingSessions,
+  });
+
+  const { preferences } = useUiPreferences();
+
+  useBackButtonSidebar({
+    enabled: isMobile && preferences.backOpensSessionList,
+    sidebarOpen,
+    setSidebarOpen,
+    locationKey: location.key,
   });
 
   // Queued messages for sessions that finish while another session (or none)
