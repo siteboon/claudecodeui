@@ -3,7 +3,15 @@ import path from 'node:path';
 import readline from 'node:readline';
 
 import { spawn } from 'cross-spawn';
-import { rgPath } from '@vscode/ripgrep';
+
+// Try to use @vscode/ripgrep, fall back to system ripgrep
+let rgPath: string;
+try {
+  rgPath = require('@vscode/ripgrep').rgPath;
+} catch {
+  // Fall back to system ripgrep
+  rgPath = 'rg';
+}
 
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 
