@@ -137,11 +137,14 @@ export default function SidebarProjectItem({
   };
 
   const selectAndToggleProject = () => {
+    // Selecting a different project expands it (via the auto-expand effect) while
+    // leaving other expanded projects open. Only toggle when it's already the
+    // selected one, so a second click collapses it.
     if (selectedProject?.projectId !== project.projectId) {
       onProjectSelect(project);
+    } else {
+      toggleProject();
     }
-
-    toggleProject();
   };
 
   return (
