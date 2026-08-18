@@ -146,6 +146,11 @@
     "sessionCount_one": "This project contains {{count}} conversation.",
     "sessionCount_other": "This project contains {{count}} conversations.",
     "removeFromSidebar": "Remove from sidebar only",
+    "archiveProject": "Archive project",
+    "archiveSession": "Archive session",
+    "archiveSessionNotice": "Archive keeps the session out of the active list while preserving its history.",
+    "archivedSessionNotice": "This session is already archived. You can keep it hidden or delete it permanently.",
+    "deleteSessionPermanently": "Delete permanently",
     "deleteAllData": "Delete all data permanently",
     "allConversationsDeleted": "The project will be removed from the sidebar. Your files, memories, and session data will be preserved.",
     "cannotUndo": "You can re-add the project later."

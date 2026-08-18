@@ -138,6 +138,11 @@
     "sessionCount_one": "此项目包含 {{count}} 个对话。",
     "sessionCount_other": "此项目包含 {{count}} 个对话。",
     "removeFromSidebar": "仅从侧边栏移除",
+    "archiveProject": "归档项目",
+    "archiveSession": "归档会话",
+    "archiveSessionNotice": "归档会将会话移出活动列表，但保留其历史记录。",
+    "archivedSessionNotice": "此会话已归档。您可以将其保持隐藏，或永久删除。",
+    "deleteSessionPermanently": "永久删除",
     "deleteAllData": "永久删除所有数据",
     "allConversationsDeleted": "项目将从侧边栏中移除。您的文件、记忆和会话数据将会保留。",
     "cannotUndo": "您可以稍后重新添加此项目。"

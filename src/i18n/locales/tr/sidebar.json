@@ -138,6 +138,11 @@
     "sessionCount_one": "Bu proje {{count}} konuşma içeriyor.",
     "sessionCount_other": "Bu proje {{count}} konuşma içeriyor.",
     "removeFromSidebar": "Yalnızca kenar çubuğundan kaldır",
+    "archiveProject": "Projeyi arşivle",
+    "archiveSession": "Oturumu arşivle",
+    "archiveSessionNotice": "Arşivleme, oturumu etkin listeden çıkarır ancak geçmişini korur.",
+    "archivedSessionNotice": "Bu oturum zaten arşivlenmiş. Gizli tutabilir veya kalıcı olarak silebilirsin.",
+    "deleteSessionPermanently": "Kalıcı olarak sil",
     "deleteAllData": "Tüm veriyi kalıcı olarak sil",
     "allConversationsDeleted": "Proje kenar çubuğundan kaldırılacak. Dosyaların, bellek verilerin ve oturum verilerin korunacak.",
     "cannotUndo": "Projeyi sonra tekrar ekleyebilirsin."
