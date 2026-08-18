@@ -9,6 +9,7 @@ import Database from 'better-sqlite3';
 import {
   ZCodeProviderModels,
   readZCodeSessionModelFromDb,
+  resolveZCodeModelRef,
 } from '@/modules/providers/list/zcode/zcode-models.provider.js';
 
 /** Redirects ZCODE_STORAGE_DIR to a temp dir for fixture isolation. */
@@ -115,3 +116,39 @@ test('readZCodeSessionModelFromDb returns null without a database', async () => 
     assert.equal(readZCodeSessionModelFromDb('sess_any'), null);
   });
 });
+
+test('resolveZCodeModelRef parses full ref and bare model key', async () => {
+  // Case 1: Full ref with slash
+  const full = resolveZCodeModelRef('builtin:zai/GLM-5.3');
+  assert.deepEqual(full, {
+    providerId: 'builtin:zai',
+    modelId: 'GLM-5.3',
+  });
+
+  // Case 2: Bare model with config
+  await withZCodeStorage(async (storageDir) => {
+    const v2Dir = path.join(storageDir, 'v2');
+    await mkdir(v2Dir, { recursive: true });
+    await writeFile(
+      path.join(v2Dir, 'config.json'),
+      JSON.stringify({
+        provider: {
+          'builtin:custom-provider': {
+            enabled: true,
+            models: {
+              'GLM-5.3': {},
+            },
+          },
+        },
+      }),
+      'utf8'
+    );
+
+    const resolved = resolveZCodeModelRef('GLM-5.3');
+    assert.deepEqual(resolved, {
+      providerId: 'builtin:custom-provider',
+      modelId: 'GLM-5.3',
+    });
+  });
+});
+

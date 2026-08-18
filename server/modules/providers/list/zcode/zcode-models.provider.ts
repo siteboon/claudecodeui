@@ -1,3 +1,4 @@
+import fsSync from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -174,6 +175,59 @@ export function readZCodeSessionModelFromDb(providerSessionId: string): string |
       db.close();
     }
   }
+}
+
+/**
+ * Resolves a model name/key string into ZCode's protocol model object `{ providerId, modelId, variant? }`.
+ *
+ * Handles:
+ * - Full model refs formatted as `providerId/modelId` (e.g. `builtin:bigmodel-coding-plan/GLM-5.3`)
+ * - Bare model keys (e.g. `GLM-5.3`), by looking up the active/enabled provider from config or defaulting
+ *
+ * Consumer: `server/modules/providers/list/zcode/zcode-runtime.provider.ts`
+ */
+export function resolveZCodeModelRef(modelKey: string): { providerId: string; modelId: string; variant?: string } {
+  const trimmed = modelKey.trim();
+  const slashIndex = trimmed.indexOf('/');
+  if (slashIndex >= 0) {
+    return {
+      providerId: trimmed.slice(0, slashIndex).trim(),
+      modelId: trimmed.slice(slashIndex + 1).trim(),
+    };
+  }
+
+  // Look up enabled provider in config if possible
+  try {
+    const configPath = path.join(getZCodeStorageDir(), 'v2', 'config.json');
+    const content = fsSync.readFileSync(configPath, 'utf8');
+    const config = readObjectRecord(JSON.parse(content));
+    const providers = readObjectRecord(config?.provider);
+    if (providers) {
+      for (const [providerId, providerConfig] of Object.entries(providers)) {
+        const providerRecord = readObjectRecord(providerConfig);
+        if (providerRecord?.enabled === false) continue;
+        const models = readObjectRecord(providerRecord?.models);
+        if (models && trimmed in models) {
+          return { providerId, modelId: trimmed };
+        }
+      }
+      // Fallback: search even disabled providers if matching model
+      for (const [providerId, providerConfig] of Object.entries(providers)) {
+        const providerRecord = readObjectRecord(providerConfig);
+        const models = readObjectRecord(providerRecord?.models);
+        if (models && trimmed in models) {
+          return { providerId, modelId: trimmed };
+        }
+      }
+    }
+  } catch {
+    // Config read failed, use default
+  }
+
+  return {
+    providerId: 'builtin:bigmodel-coding-plan',
+    modelId: trimmed,
+  };
 }
 
 /**

@@ -177,3 +177,37 @@ test('abort resolves the run quietly as aborted', async () => {
     delete process.env.AGY_STUB_MODE;
   }
 });
+
+test('runtime normalizes model with embedded effort suffix and avoids conflicting --effort flag', async () => {
+  const runtime = new AntigravityRuntimeProvider();
+
+  // Case 1: model with -high suffix and effort medium -> model becomes -medium, no --effort flag
+  await fs.rm(argsFilePath, { force: true });
+  const { writer: writer1 } = createWriter();
+  await runtime.run(
+    'hello',
+    { sessionId: 'sess-effort-1', model: 'gemini-3.7-flash-high', effort: 'medium' },
+    writer1,
+    context,
+  );
+  let args = await readRecordedArgs();
+  assert.ok(args.includes('--model'));
+  assert.equal(args[args.indexOf('--model') + 1], 'gemini-3.7-flash-medium');
+  assert.ok(!args.includes('--effort'), '--effort flag should be omitted when model encodes effort');
+
+  // Case 2: model without effort suffix (e.g. claude-sonnet-4-6) -> passes model and --effort flag
+  await fs.rm(argsFilePath, { force: true });
+  const { writer: writer2 } = createWriter();
+  await runtime.run(
+    'hello',
+    { sessionId: 'sess-effort-2', model: 'claude-sonnet-4-6', effort: 'high' },
+    writer2,
+    context,
+  );
+  args = await readRecordedArgs();
+  assert.ok(args.includes('--model'));
+  assert.equal(args[args.indexOf('--model') + 1], 'claude-sonnet-4-6');
+  assert.ok(args.includes('--effort'));
+  assert.equal(args[args.indexOf('--effort') + 1], 'high');
+});
+

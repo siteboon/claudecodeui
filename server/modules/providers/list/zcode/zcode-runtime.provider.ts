@@ -27,7 +27,7 @@ import type {
 import { createCompleteMessage, createNormalizedMessage, generateMessageId, readOptionalString } from '@/shared/utils.js';
 
 import { protocolClient } from './zcode-protocol.client.js';
-import { readZCodeSessionModelFromDb } from './zcode-models.provider.js';
+import { readZCodeSessionModelFromDb, resolveZCodeModelRef } from './zcode-models.provider.js';
 
 /**
  * Permission mode mapping from CloudCLI to ZCode (§5 of integration plan).
@@ -221,15 +221,20 @@ export class ZCodeRuntimeProvider implements IProviderRuntime {
     console.info(`[ZCodeRuntime] Creating new session for workspace: ${workspacePath}`);
 
     try {
-      const result = await protocolClient.sendRequest<{ sessionId: string }>(
+      const result = await protocolClient.sendRequest<AnyRecord>(
         'session/create',
         {
-          workspacePath,
-          deliveryKind: 'interactive',
+          workspace: {
+            workspacePath,
+            workspaceKey: workspacePath,
+          },
         }
       );
 
-      const newSessionId = readOptionalString(result?.sessionId);
+      const newSessionId = readOptionalString(result?.sessionId)
+        ?? readOptionalString((result?.session as AnyRecord)?.id)
+        ?? readOptionalString((result?.session as AnyRecord)?.sessionId);
+
       if (!newSessionId) {
         throw new Error('session/create returned no sessionId');
       }
@@ -295,13 +300,15 @@ export class ZCodeRuntimeProvider implements IProviderRuntime {
       return; // Session already runs the requested model
     }
 
+    const modelObj = resolveZCodeModelRef(requestedModel);
+
     try {
       await protocolClient.sendRequest('session/setModel', {
         sessionId,
-        model: requestedModel,
+        model: modelObj,
       });
 
-      console.debug(`[ZCodeRuntime] Set model for session ${sessionId}: ${requestedModel}`);
+      console.debug(`[ZCodeRuntime] Set model for session ${sessionId}: ${JSON.stringify(modelObj)}`);
     } catch (error) {
       console.warn(`[ZCodeRuntime] Failed to set model ${requestedModel} for session ${sessionId}:`, error);
       // Continue anyway - use session's existing model

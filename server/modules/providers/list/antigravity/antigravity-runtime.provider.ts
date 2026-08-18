@@ -157,14 +157,32 @@ export class AntigravityRuntimeProvider implements IProviderRuntime {
         args.push('--conversation', providerSessionId);
       }
 
-      // Model configuration
-      if (model) {
-        args.push('--model', model);
+      // Model configuration and reasoning effort
+      let finalModel = model;
+      let finalEffort = effort && ['low', 'medium', 'high'].includes(effort) ? effort : undefined;
+
+      if (finalModel) {
+        const effortSuffixMatch = finalModel.match(/-(low|medium|high)$/);
+        if (effortSuffixMatch) {
+          const modelEmbeddedEffort = effortSuffixMatch[1];
+          if (finalEffort && finalEffort !== modelEmbeddedEffort) {
+            // If the model name has an embedded effort suffix (e.g. gemini-3.7-flash-high)
+            // and the user requested a different effort (e.g. medium),
+            // replace the suffix to match the requested effort (e.g. gemini-3.7-flash-medium)
+            finalModel = finalModel.replace(/-(low|medium|high)$/, `-${finalEffort}`);
+          }
+          // Do not pass --effort flag when the model name already encodes the effort level,
+          // avoiding CLI conflict errors.
+          finalEffort = undefined;
+        }
       }
 
-      // Reasoning effort
-      if (effort && ['low', 'medium', 'high'].includes(effort)) {
-        args.push('--effort', effort);
+      if (finalModel) {
+        args.push('--model', finalModel);
+      }
+
+      if (finalEffort) {
+        args.push('--effort', finalEffort);
       }
 
       // Permission mode (acceptEdits / plan / bypassPermissions); 'default'
@@ -221,13 +239,26 @@ export class AntigravityRuntimeProvider implements IProviderRuntime {
             const resultData = readObjectRecord(rawRecord.result);
             const usageData = readObjectRecord(resultData?.usage);
             const totalTokens = typeof usageData?.total_tokens === 'number' ? usageData.total_tokens : undefined;
+            const isError = resultData?.status === 'ERROR' || Boolean(resultData?.error);
+            const errorMessage = readOptionalString(resultData?.error);
+
+            if (isError && errorMessage) {
+              writer.send(createNormalizedMessage({
+                id: generateMessageId(PROVIDER),
+                kind: 'error',
+                content: errorMessage,
+                sessionId: capturedSessionId || sessionId || null,
+                provider: PROVIDER,
+                isError: true,
+              }));
+            }
 
             if (!completeSent) {
               completeSent = true;
               const completeMsg = createCompleteMessage({
                 provider: PROVIDER,
                 sessionId: capturedSessionId || sessionId || null,
-                exitCode: resultData?.status === 'SUCCESS' ? 0 : 1,
+                exitCode: isError ? 1 : 0,
               });
               if (totalTokens !== undefined) {
                 completeMsg.tokens = totalTokens;
