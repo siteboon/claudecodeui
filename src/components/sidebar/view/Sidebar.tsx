@@ -56,7 +56,6 @@ function Sidebar({
 
   const {
     isSidebarCollapsed,
-    expandedProjects,
     editingProject,
     showNewProject,
     editingName,
@@ -91,6 +90,7 @@ function Sidebar({
     reloadRecentConversations,
     loadMoreRecentConversations,
     toggleProject,
+    isProjectExpanded,
     handleSessionClick,
     toggleStarProject,
     isProjectStarred,
@@ -159,7 +159,7 @@ function Sidebar({
     selectedSession,
     isLoading,
     loadingProgress,
-    expandedProjects,
+    isProjectExpanded,
     editingProject,
     editingName,
     initialSessionsLoaded,
@@ -173,7 +173,6 @@ function Sidebar({
     loadingMoreProjects,
     activeSessions,
     attentionSessionIds,
-    forceExpanded: searchMode === 'running',
     isProjectStarred,
     onEditingNameChange: setEditingName,
     onToggleProject: toggleProject,
