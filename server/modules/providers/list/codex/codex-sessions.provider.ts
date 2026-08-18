@@ -143,7 +143,7 @@ function decodeJavaScriptStringLiteral(literal: string): string {
 
 function extractNestedCodexCommands(source: string): string[] {
   const commands: string[] = [];
-  const commandPattern = /(?:["']command["']|\bcommand)\s*:\s*("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)/gs;
+  const commandPattern = /(?:["'](?:command|cmd)["']|\b(?:command|cmd))\s*:\s*("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)/gs;
   for (const match of source.matchAll(commandPattern)) {
     commands.push(decodeJavaScriptStringLiteral(match[1]));
   }
