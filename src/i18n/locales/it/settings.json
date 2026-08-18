@@ -158,7 +158,7 @@
       "title": "Navigazione mobile",
       "backOpensSessionList": {
         "label": "Indietro apre l'elenco delle sessioni",
-        "description": "Su schermi di dimensioni telefono, il gesto indietro apre l'elenco delle sessioni invece di uscire. Indietro di nuovo chiude l'elenco e un ulteriore indietro naviga normalmente."
+        "description": "Su schermi di dimensioni telefono, il gesto indietro apre l'elenco delle sessioni invece di uscire. Indietro di nuovo chiude l'elenco e un ulteriore indietro naviga normalmente. Subito dopo il caricamento della pagina, il gesto indietro resta invariato finché non si tocca lo schermo."
       }
     }
   },

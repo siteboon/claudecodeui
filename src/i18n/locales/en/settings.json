@@ -184,7 +184,7 @@
       "title": "Mobile Navigation",
       "backOpensSessionList": {
         "label": "Back Opens Session List",
-        "description": "On phone-sized screens, the back gesture opens the session list instead of navigating away. Back again closes the list, and one more back navigates as usual."
+        "description": "On phone-sized screens, the back gesture opens the session list instead of navigating away. Back again closes the list, and one more back navigates as usual. Straight after a page load, back is left alone until you touch the screen."
       }
     }
   },

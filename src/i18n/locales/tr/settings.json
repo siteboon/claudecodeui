@@ -159,7 +159,7 @@
       "title": "Mobil Gezinme",
       "backOpensSessionList": {
         "label": "Geri oturum listesini açar",
-        "description": "Telefon boyutundaki ekranlarda geri hareketi sayfadan ayrılmak yerine oturum listesini açar. Tekrar geri listeyi kapatır, bir kez daha geri ise normal şekilde gezinir."
+        "description": "Telefon boyutundaki ekranlarda geri hareketi sayfadan ayrılmak yerine oturum listesini açar. Tekrar geri listeyi kapatır, bir kez daha geri ise normal şekilde gezinir. Sayfa yüklendikten hemen sonra, ekrana dokunana kadar geri hareketi olduğu gibi kalır."
       }
     }
   },

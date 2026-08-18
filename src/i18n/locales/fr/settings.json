@@ -158,7 +158,7 @@
       "title": "Navigation mobile",
       "backOpensSessionList": {
         "label": "Retour ouvre la liste des sessions",
-        "description": "Sur les écrans de taille téléphone, le geste de retour ouvre la liste des sessions au lieu de quitter la page. Un nouveau retour ferme la liste, et un retour supplémentaire navigue normalement."
+        "description": "Sur les écrans de taille téléphone, le geste de retour ouvre la liste des sessions au lieu de quitter la page. Un nouveau retour ferme la liste, et un retour supplémentaire navigue normalement. Juste après le chargement de la page, le retour reste inchangé jusqu'à ce que vous touchiez l'écran."
       }
     }
   },

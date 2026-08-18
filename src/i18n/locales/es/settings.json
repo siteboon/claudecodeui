@@ -184,7 +184,7 @@
       "title": "Navegación móvil",
       "backOpensSessionList": {
         "label": "Atrás abre la lista de sesiones",
-        "description": "En pantallas de tamaño teléfono, el gesto de atrás abre la lista de sesiones en lugar de salir. Atrás de nuevo cierra la lista y una vez más navega con normalidad."
+        "description": "En pantallas de tamaño teléfono, el gesto de atrás abre la lista de sesiones en lugar de salir. Atrás de nuevo cierra la lista y una vez más navega con normalidad. Justo después de cargar la página, atrás no se intercepta hasta que se toque la pantalla."
       }
     }
   },
