@@ -1,6 +1,6 @@
 /**
  * Regression tests for unescapeWithMathProtection — the escape-sequence pass that
- * used to shred LaTeX. Run: npx tsx --test src/components/chat/utils/chatFormatting.test.ts
+ * Run: npm run test:client
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -31,6 +31,21 @@ describe('unescapeWithMathProtection', () => {
     const fenced = '```\ngrep -E "\\[0-9\\]" file\n```';
     assert.equal(unescapeWithMathProtection(fenced), fenced, 'fenced code is verbatim');
     assert.equal(unescapeWithMathProtection('use `\\[0-9\\]` here'), 'use `\\[0-9\\]` here');
+  });
+
+  it('protects tilde fences and variable-length backtick delimiters', () => {
+    const tildeFence = '~~~\nvalue = "\\t"\n~~~~';
+    assert.equal(unescapeWithMathProtection(tildeFence), tildeFence, 'tilde fence is verbatim');
+
+    const nestedFence = '````\n```\nvalue = "\\t"\n```\n````';
+    assert.equal(unescapeWithMathProtection(nestedFence), nestedFence, 'shorter nested fence stays content');
+
+    const codeSpans = 'use ``\\theta`` and ````\\rho```` here';
+    assert.equal(unescapeWithMathProtection(codeSpans), codeSpans, 'matching backtick runs stay verbatim');
+  });
+
+  it('normalizes serialized newlines inside protected code', () => {
+    assert.equal(unescapeWithMathProtection('```\nline one\\nline two\n```'), '```\nline one\nline two\n```');
   });
 
   it('still expands literal \\n outside protected regions', () => {
