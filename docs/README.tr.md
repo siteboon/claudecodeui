@@ -1,11 +1,11 @@
 <div align="center">
- <img src="public/logo.svg" alt="CloudCLI UI" width="64" height="64">
+ <img src="../public/logo.svg" alt="CloudCLI UI" width="64" height="64">
  <h1>Cloud CLI (Claude Code UI olarak da bilinir)</h1>
  <p><a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>, <a href="https://docs.cursor.com/en/cli/overview">Cursor CLI</a>, <a href="https://developers.openai.com/codex">Codex</a> için masaüstü ve mobil arayüz.<br>Yerel ya da uzaktan kullanarak aktif projelerine ve oturumlarına her yerden erişebilirsin.</p>
 </div>
 
 <p align="center">
- <a href="https://cloudcli.ai">CloudCLI Cloud</a> · <a href="https://cloudcli.ai/docs">Dokümantasyon</a> · <a href="https://discord.gg/buxwujPNRE">Discord</a> · <a href="https://github.com/siteboon/claudecodeui/issues">Sorun Bildir</a> · <a href="CONTRIBUTING.md">Katkıda Bulun</a>
+ <a href="https://cloudcli.ai">CloudCLI Cloud</a> · <a href="https://cloudcli.ai/docs">Dokümantasyon</a> · <a href="https://discord.gg/buxwujPNRE">Discord</a> · <a href="https://github.com/siteboon/claudecodeui/issues">Sorun Bildir</a> · <a href="../CONTRIBUTING.md">Katkıda Bulun</a>
 </p>
 
 <p align="center">
@@ -27,13 +27,13 @@
 <tr>
 <td align="center">
 <h3>Masaüstü Görünümü</h3>
-<img src="public/screenshots/desktop-main.png" alt="Masaüstü Arayüzü" width="400">
+<img src="../public/screenshots/desktop-main.png" alt="Masaüstü Arayüzü" width="400">
 <br>
 <em>Proje genel bakışı ve sohbeti gösteren ana arayüz</em>
 </td>
 <td align="center">
 <h3>Mobil Deneyim</h3>
-<img src="public/screenshots/mobile-chat.png" alt="Mobil Arayüz" width="250">
+<img src="../public/screenshots/mobile-chat.png" alt="Mobil Arayüz" width="250">
 <br>
 <em>Dokunma gezinmesiyle duyarlı mobil tasarım</em>
 </td>
@@ -41,7 +41,7 @@
 <tr>
 <td align="center" colspan="2">
 <h3>CLI Seçimi</h3>
-<img src="public/screenshots/cli-selection.png" alt="CLI Seçimi" width="400">
+<img src="../public/screenshots/cli-selection.png" alt="CLI Seçimi" width="400">
 <br>
 <em>Claude Code, Cursor CLI ve Codex arasında seçim yap</em>
 </td>
@@ -103,7 +103,7 @@ Ajanları hipervizör seviyesinde izolasyonlu sandbox'larda çalıştır. Varsay
 npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
 ```
 
-Claude Code ve Codex'i destekler. Kurulum ve gelişmiş seçenekler için [sandbox dokümantasyonuna](docker/) bak.
+Claude Code ve Codex'i destekler. Kurulum ve gelişmiş seçenekler için [sandbox dokümantasyonuna](../docker/) bak.
 
 
 ---
@@ -145,7 +145,7 @@ Claude Code'un tam işlevselliğinden yararlanmak için araçları manuel olarak
 
 <div align="center">
 
-![Araç Ayarları Modalı](public/screenshots/tools-modal.png)
+![Araç Ayarları Modalı](../public/screenshots/tools-modal.png)
 *Araç Ayarları arayüzü — yalnızca ihtiyacın olanı etkinleştir*
 
 </div>
@@ -226,11 +226,11 @@ Evet, kendin barındırdığında. CloudCLI UI, Claude Code'un yerel olarak kull
 - **[Dokümantasyon](https://cloudcli.ai/docs)** — kurulum, yapılandırma, özellikler ve sorun giderme
 - **[Discord](https://discord.gg/buxwujPNRE)** — yardım al ve diğer kullanıcılarla tanış
 - **[GitHub Issues](https://github.com/siteboon/claudecodeui/issues)** — hata raporları ve özellik istekleri
-- **[Katkı Rehberi](CONTRIBUTING.md)** — projeye nasıl katkıda bulunulur
+- **[Katkı Rehberi](../CONTRIBUTING.md)** — projeye nasıl katkıda bulunulur
 
 ## Lisans
 
-GNU Affero General Public License v3.0 veya sonrası (AGPL-3.0-or-later) — tam metin ve Bölüm 7 altındaki ek şartlar için [LICENSE](LICENSE) dosyasına bak.
+GNU Affero General Public License v3.0 veya sonrası (AGPL-3.0-or-later) — tam metin ve Bölüm 7 altındaki ek şartlar için [LICENSE](../LICENSE) dosyasına bak.
 
 Bu proje açık kaynaklıdır ve AGPL-3.0-or-later lisansı altında özgürce kullanılabilir, değiştirilebilir ve dağıtılabilir. Bu yazılımı değiştirir ve bir ağ servisi olarak çalıştırırsan, değiştirilmiş kaynak kodunu o servisin kullanıcılarına sunmak zorundasın.
 

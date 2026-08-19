@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { version } from '../../package.json';
-import { ReleaseInfo } from '../types/sharedTypes';
+import { ReleaseInfo } from '../shared/types';
 
 /**
  * Compare two semantic version strings
@@ -96,4 +96,4 @@ export const useVersionCheck = (owner: string, repo: string) => {
   }, [owner, repo]);
 
   return { updateAvailable, latestVersion, currentVersion: version, releaseInfo, installMode, runningVersion, restartRequired };
-}; 
+};

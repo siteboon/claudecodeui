@@ -1182,7 +1182,6 @@ export type CliOutput = {
  * path-keyed fakes, so service tests never inspect or modify the real machine.
  */
 export type CliFileSystem = {
-  readTextFile(filePath: string): string;
   pathExists(filePath: string): boolean;
   getFileStats(filePath: string): { size: number; modifiedAt: Date };
 };

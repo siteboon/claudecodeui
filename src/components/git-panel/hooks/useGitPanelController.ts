@@ -299,14 +299,14 @@ export function useGitPanelController({
   );
 
   const deleteBranch = useCallback(
-    async (branchName: string) => {
+    async (branchName: string, force = false) => {
       if (!selectedProject) return false;
 
       try {
         const response = await fetchWithAuth('/api/git/delete-branch', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ project: selectedProject.projectId, branch: branchName }),
+          body: JSON.stringify({ project: selectedProject.projectId, branch: branchName, force }),
         });
 
         const data = await readJson<GitOperationResponse>(response);

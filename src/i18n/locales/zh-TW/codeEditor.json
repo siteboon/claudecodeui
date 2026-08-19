@@ -14,6 +14,8 @@
     "showingChanges": "顯示變更"
   },
   "actions": {
+    "copyPath": "複製檔案路徑",
+    "pathCopied": "已複製檔案路徑",
     "download": "下載檔案",
     "save": "儲存",
     "saving": "儲存中...",

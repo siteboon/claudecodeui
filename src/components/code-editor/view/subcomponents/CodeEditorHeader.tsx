@@ -1,5 +1,7 @@
-import { Code2, Download, Eye, Maximize2, Minimize2, Save, Settings as SettingsIcon, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Check, Code2, Copy, Download, Eye, Maximize2, Minimize2, Save, Settings as SettingsIcon, X } from 'lucide-react';
 
+import { copyTextToClipboard } from '../../../../utils/clipboard';
 import type { CodeEditorFile } from '../../types/types';
 
 type CodeEditorHeaderProps = {
@@ -20,6 +22,8 @@ type CodeEditorHeaderProps = {
   onClose: () => void;
   labels: {
     showingChanges: string;
+    copyPath: string;
+    pathCopied: string;
     editMarkdown: string;
     previewMarkdown: string;
     previewHtml: string;
@@ -52,7 +56,27 @@ export default function CodeEditorHeader({
   onClose,
   labels,
 }: CodeEditorHeaderProps) {
+  const [copiedPath, setCopiedPath] = useState<string | null>(null);
+  const copyResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveTitle = saveSuccess ? labels.saved : saving ? labels.saving : labels.save;
+  const pathCopied = copiedPath === file.path;
+
+  useEffect(() => () => {
+    if (copyResetTimeoutRef.current) {
+      clearTimeout(copyResetTimeoutRef.current);
+    }
+  }, []);
+
+  const handleCopyPath = async () => {
+    const didCopy = await copyTextToClipboard(file.path);
+    if (!didCopy) return;
+
+    setCopiedPath(file.path);
+    if (copyResetTimeoutRef.current) {
+      clearTimeout(copyResetTimeoutRef.current);
+    }
+    copyResetTimeoutRef.current = setTimeout(() => setCopiedPath(null), 2000);
+  };
 
   return (
     <div className="flex min-w-0 flex-shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
@@ -67,7 +91,22 @@ export default function CodeEditorHeader({
               </span>
             )}
           </div>
-          <p className="truncate text-xs text-gray-500 dark:text-gray-400">{file.path}</p>
+          <div className="flex min-w-0 items-center gap-1">
+            <p className="truncate text-xs text-gray-500 dark:text-gray-400" title={file.path}>{file.path}</p>
+            <button
+              type="button"
+              onClick={handleCopyPath}
+              className={`flex shrink-0 items-center justify-center rounded p-0.5 transition-colors ${
+                pathCopied
+                  ? 'text-green-600 dark:text-green-400'
+                  : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-200'
+              }`}
+              title={pathCopied ? labels.pathCopied : labels.copyPath}
+              aria-label={pathCopied ? labels.pathCopied : labels.copyPath}
+            >
+              {pathCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+            </button>
+          </div>
         </div>
       </div>
 

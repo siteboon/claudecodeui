@@ -8,6 +8,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useTranslation } from 'react-i18next';
 
+import MermaidDiagram from '../../../code-editor/view/subcomponents/markdown/MermaidDiagram';
 import { normalizeInlineCodeFences } from '../../utils/chatFormatting';
 import { copyTextToClipboard } from '../../../../utils/clipboard';
 import { usePaletteOps } from '../../../../contexts/PaletteOpsContext';
@@ -57,24 +58,28 @@ const childrenToText = (children: React.ReactNode): string => {
 
 type CodeBlockProps = {
   node?: any;
-  inline?: boolean;
   className?: string;
   children?: React.ReactNode;
+  /** Set by the custom `pre` renderer: this code element is a fenced/indented block. */
+  forceBlock?: boolean;
 };
 
-const CodeBlock = ({ node, inline, className, children, ...props }: CodeBlockProps) => {
+// `node` is destructured out so react-markdown's hast node never reaches the DOM.
+const CodeBlock = ({ node: _node, className, children, forceBlock, ...props }: CodeBlockProps) => {
   const { t } = useTranslation('chat');
   const { isDarkMode } = useTheme();
   const [copied, setCopied] = useState(false);
-  const raw = Array.isArray(children) ? children.join('') : String(children ?? '');
-  const looksMultiline = /[\r\n]/.test(raw);
-  const inlineDetected = inline || (node && node.type === 'inlineCode');
-  const shouldInline = inlineDetected || !looksMultiline;
+  // Fenced blocks carry a trailing newline in the tree; trim it so the
+  // highlighter doesn't render an empty final line.
+  const raw = (Array.isArray(children) ? children.join('') : String(children ?? '')).replace(/\n$/, '');
+  // react-markdown v9+ dropped the `inline` prop: block code is whatever the
+  // `pre` renderer hands us (forceBlock). Multiline is kept as a safety net.
+  const shouldInline = !forceBlock && !/[\r\n]/.test(raw);
 
   if (shouldInline) {
     return (
       <code
-        className={`whitespace-pre-wrap break-words rounded-md border border-gray-200 bg-gray-100 px-1.5 py-0.5 font-mono text-[0.9em] text-gray-900 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-100 ${className || ''
+        className={`whitespace-pre-wrap break-words rounded-md border border-border/70 bg-muted px-1.5 py-0.5 font-mono text-[0.875em] text-foreground ${className || ''
           }`}
         {...props}
       >
@@ -85,42 +90,45 @@ const CodeBlock = ({ node, inline, className, children, ...props }: CodeBlockPro
 
   const match = /language-(\w+)/.exec(className || '');
   const language = match ? match[1] : 'text';
+  const languageLabel = language.charAt(0).toUpperCase() + language.slice(1);
+
+  if (language === 'mermaid') {
+    return <MermaidDiagram code={raw} />;
+  }
 
   return (
-    <div className="group relative my-2">
-      {language && language !== 'text' && (
-        <div className="absolute left-3 top-2 z-10 text-xs font-medium uppercase text-gray-400">{language}</div>
-      )}
-
-      <button
-        type="button"
-        onClick={() =>
-          copyTextToClipboard(raw).then((success) => {
-            if (success) {
-              setCopied(true);
-              setTimeout(() => setCopied(false), 2000);
-            }
-          })
-        }
-        className="absolute right-2 top-2 z-10 rounded-md border border-border bg-card/90 px-2 py-1 text-xs text-foreground/80 opacity-0 transition-opacity hover:bg-muted focus:opacity-100 active:opacity-100 group-hover:opacity-100"
-        title={copied ? t('codeBlock.copied') : t('codeBlock.copyCode')}
-        aria-label={copied ? t('codeBlock.copied') : t('codeBlock.copyCode')}
-      >
-        {copied ? (
-          <span className="flex items-center gap-1">
-            <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+    <div className="group my-3 overflow-hidden rounded-xl border border-border bg-muted/50 shadow-sm dark:bg-zinc-900">
+      {/* Label row shares the block's background — no divider, ChatGPT-style */}
+      <div className="flex items-center justify-between px-4 pt-2">
+        <span className="select-none text-xs text-muted-foreground">{languageLabel}</span>
+        <button
+          type="button"
+          onClick={() =>
+            copyTextToClipboard(raw).then((success) => {
+              if (success) {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }
+            })
+          }
+          className={`rounded-md p-1 transition-opacity focus-visible:opacity-100 ${copied
+            ? 'text-green-600 opacity-100 dark:text-green-500'
+            : 'text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100'
+            }`}
+          title={copied ? t('codeBlock.copied') : t('codeBlock.copyCode')}
+          aria-label={copied ? t('codeBlock.copied') : t('codeBlock.copyCode')}
+        >
+          {copied ? (
+            <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
               <path
                 fillRule="evenodd"
                 d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
                 clipRule="evenodd"
               />
             </svg>
-            {t('codeBlock.copied')}
-          </span>
-        ) : (
-          <span className="flex items-center gap-1">
+          ) : (
             <svg
-              className="h-3.5 w-3.5"
+              className="h-4 w-4"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -131,27 +139,27 @@ const CodeBlock = ({ node, inline, className, children, ...props }: CodeBlockPro
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
               <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
             </svg>
-            {t('codeBlock.copy')}
-          </span>
-        )}
-      </button>
+          )}
+        </button>
+      </div>
 
       <SyntaxHighlighter
         language={language}
         style={isDarkMode ? oneDark : oneLight}
         customStyle={{
           margin: 0,
-          borderRadius: '0.75rem',
-          fontSize: '0.875rem',
-          padding: language && language !== 'text' ? '2rem 1rem 1rem 1rem' : '1rem',
-          // ChatGPT-style soft grey block in light mode; keep oneDark's own bg in dark.
-          ...(isDarkMode ? {} : { background: 'hsl(var(--muted))' }),
+          borderRadius: 0,
+          fontSize: '0.8125rem',
+          lineHeight: 1.6,
+          padding: '0.5rem 1rem 1rem',
+          // The container owns the background so the label row and code read as one panel.
+          background: 'transparent',
         }}
         codeTagProps={{
           style: {
             fontFamily:
               'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-            ...(isDarkMode ? {} : { background: 'transparent' }),
+            background: 'transparent',
           },
         }}
       >
@@ -163,15 +171,23 @@ const CodeBlock = ({ node, inline, className, children, ...props }: CodeBlockPro
 
 const markdownComponents = {
   code: CodeBlock,
-  // CodeBlock renders its own syntax-highlighted <pre>; this passthrough stops
-  // react-markdown (and Tailwind Typography) from wrapping it in a second,
-  // dark-themed <pre> shell that would frame the block.
-  pre: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  // Fenced/indented code arrives as <pre><code>. Re-render the child CodeBlock
+  // with `forceBlock` so it always gets the block treatment (react-markdown v9+
+  // no longer passes an `inline` flag), and skip the outer <pre> so Tailwind
+  // Typography doesn't wrap the highlighter in a second dark shell.
+  pre: ({ children }: { children?: React.ReactNode }) => {
+    const child = Array.isArray(children) ? children.find(React.isValidElement) : children;
+    if (React.isValidElement(child) && child.type === CodeBlock) {
+      return <CodeBlock {...(child.props as CodeBlockProps)} forceBlock />;
+    }
+    return <>{children}</>;
+  },
   blockquote: ({ children }: { children?: React.ReactNode }) => (
-    <blockquote className="my-2 border-l-4 border-gray-300 pl-4 italic text-gray-600 dark:border-gray-600 dark:text-gray-400">
+    <blockquote className="my-3 border-l-2 border-primary/50 pl-4 italic text-muted-foreground">
       {children}
     </blockquote>
   ),
+  hr: () => <hr className="my-4 border-t border-border" />,
   p: ({ children }: { children?: React.ReactNode }) => <div className="mb-2 last:mb-0">{children}</div>,
   ul: ({ children }: { children?: React.ReactNode }) => (
     <ul className="mb-2 list-outside list-disc space-y-1 pl-5 marker:text-current last:mb-0">{children}</ul>
@@ -181,16 +197,20 @@ const markdownComponents = {
   ),
   li: ({ children }: { children?: React.ReactNode }) => <li className="[&>div:last-child]:mb-0 [&>div]:mb-1">{children}</li>,
   table: ({ children }: { children?: React.ReactNode }) => (
-    <div className="my-2 overflow-x-auto">
-      <table className="min-w-full border-collapse border border-gray-200 dark:border-gray-700">{children}</table>
+    <div className="my-3 overflow-x-auto rounded-lg border border-border">
+      {/* my-0 cancels Tailwind Typography's table margin, which would show as blank bands inside the border */}
+      <table className="my-0 min-w-full border-collapse text-sm">{children}</table>
     </div>
   ),
-  thead: ({ children }: { children?: React.ReactNode }) => <thead className="bg-gray-50 dark:bg-gray-800">{children}</thead>,
+  thead: ({ children }: { children?: React.ReactNode }) => <thead className="bg-muted/60">{children}</thead>,
+  tr: ({ children }: { children?: React.ReactNode }) => (
+    <tr className="[&:last-child>td]:border-b-0">{children}</tr>
+  ),
   th: ({ children }: { children?: React.ReactNode }) => (
-    <th className="border border-gray-200 px-3 py-2 text-left text-sm font-semibold dark:border-gray-700">{children}</th>
+    <th className="border-b border-border px-3 py-2 text-left font-semibold text-foreground">{children}</th>
   ),
   td: ({ children }: { children?: React.ReactNode }) => (
-    <td className="border border-gray-200 px-3 py-2 align-top text-sm dark:border-gray-700">{children}</td>
+    <td className="border-b border-border/60 px-3 py-2 align-top">{children}</td>
   ),
 };
 

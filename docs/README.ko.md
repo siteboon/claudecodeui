@@ -1,11 +1,11 @@
 <div align="center">
- <img src="public/logo.svg" alt="CloudCLI UI" width="64" height="64">
+ <img src="../public/logo.svg" alt="CloudCLI UI" width="64" height="64">
  <h1>Cloud CLI (일명 Claude Code UI)</h1>
  <p><a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>, <a href="https://docs.cursor.com/en/cli/overview">Cursor CLI</a>, <a href="https://developers.openai.com/codex">Codex</a>, 용 데스크톱 및 모바일 UI입니다.<br>로컬 또는 원격에서 실행하여 어디서나 활성 프로젝트와 세션을 확인하세요.</p>
 </div>
 
 <p align="center">
- <a href="https://cloudcli.ai">CloudCLI Cloud</a> · <a href="https://cloudcli.ai/docs">문서</a> · <a href="https://discord.gg/buxwujPNRE">Discord</a> · <a href="https://github.com/siteboon/claudecodeui/issues">버그 신고</a> · <a href="CONTRIBUTING.md">기여 안내</a>
+ <a href="https://cloudcli.ai">CloudCLI Cloud</a> · <a href="https://cloudcli.ai/docs">문서</a> · <a href="https://discord.gg/buxwujPNRE">Discord</a> · <a href="https://github.com/siteboon/claudecodeui/issues">버그 신고</a> · <a href="../CONTRIBUTING.md">기여 안내</a>
 </p>
 
 <p align="center">
@@ -27,13 +27,13 @@
 <tr>
 <td align="center">
 <h3>데스크톱 보기</h3>
-<img src="public/screenshots/desktop-main.png" alt="데스크톱 인터페이스" width="400">
+<img src="../public/screenshots/desktop-main.png" alt="데스크톱 인터페이스" width="400">
 <br>
 <em>프로젝트 개요와 채팅을 보여주는 메인 인터페이스</em>
 </td>
 <td align="center">
 <h3>모바일 경험</h3>
-<img src="public/screenshots/mobile-chat.png" alt="모바일 인터페이스" width="250">
+<img src="../public/screenshots/mobile-chat.png" alt="모바일 인터페이스" width="250">
 <br>
 <em>터치 내비게이션이 포함된 반응형 모바일 디자인</em>
 </td>
@@ -41,7 +41,7 @@
 <tr>
 <td align="center" colspan="2">
 <h3>CLI 선택</h3>
-<img src="public/screenshots/cli-selection.png" alt="CLI 선택" width="400">
+<img src="../public/screenshots/cli-selection.png" alt="CLI 선택" width="400">
 <br>
 <em>Claude Code, Cursor CLI 및 Codex 중 선택</em>
 </td>
@@ -99,7 +99,7 @@ cloudcli
 npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
 ```
 
-Claude Code, Codex를 지원합니다. 자세한 내용은 [샌드박스 문서](docker/)를 참고하세요.
+Claude Code, Codex를 지원합니다. 자세한 내용은 [샌드박스 문서](../docker/)를 참고하세요.
 
 ---
 
@@ -140,7 +140,7 @@ CloudCLI UI는 CloudCLI Cloud를 구동하는 오픈 소스 UI 계층입니다. 
 
 <div align="center">
 
-![도구 설정 모달](public/screenshots/tools-modal.png)
+![도구 설정 모달](../public/screenshots/tools-modal.png)
 *도구 설정 인터페이스 - 필요한 것만 켜세요*
 
 </div>
@@ -220,11 +220,11 @@ CloudCLI UI와 CloudCLI Cloud는 Claude Code를 확장하며 별도로 존재하
 - **[문서](https://cloudcli.ai/docs)** — 설치, 구성, 기능, 문제 해결 안내
 - **[Discord](https://discord.gg/buxwujPNRE)** — 도움 및 커뮤니티 참여
 - **[GitHub Issues](https://github.com/siteboon/claudecodeui/issues)** — 버그 보고 및 기능 요청
-- **[기여 안내](CONTRIBUTING.md)** — 프로젝트 참여 방법
+- **[기여 안내](../CONTRIBUTING.md)** — 프로젝트 참여 방법
 
 ## 라이선스
 
-GNU General Public License v3.0 - 자세한 내용은 [LICENSE](LICENSE) 파일 참조.
+GNU General Public License v3.0 - 자세한 내용은 [LICENSE](../LICENSE) 파일 참조.
 
 이 프로젝트는 GPL v3 라이선스 하에 오픈 소스로 공개되어 있으며 자유롭게 사용, 수정, 배포할 수 있습니다.
 

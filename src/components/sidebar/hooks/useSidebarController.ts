@@ -54,8 +54,18 @@ type ConversationProjectResult = {
   sessions: ConversationSession[];
 };
 
+export type SessionTitleSearchResult = {
+  sessionId: string;
+  provider: string;
+  projectId: string | null;
+  projectDisplayName: string;
+  sessionTitle: string;
+  lastActivity: string | null;
+};
+
 export type ConversationSearchResults = {
   results: ConversationProjectResult[];
+  titleResults: SessionTitleSearchResult[];
   totalMatches: number;
   query: string;
 };
@@ -448,6 +458,8 @@ export function useSidebarController({
     }
 
     setIsSearching(true);
+    setConversationResults(null);
+    setSearchProgress(null);
     const seq = ++searchSeqRef.current;
 
     if (seq !== searchSeqRef.current) {
@@ -459,7 +471,24 @@ export function useSidebarController({
     eventSourceRef.current = es;
 
     const accumulated: ConversationProjectResult[] = [];
+    let titleResults: SessionTitleSearchResult[] = [];
     let totalMatches = 0;
+
+    es.addEventListener('title-results', (evt) => {
+      if (seq !== searchSeqRef.current) { es.close(); return; }
+      try {
+        const data = JSON.parse(evt.data) as { titleResults: SessionTitleSearchResult[] };
+        titleResults = Array.isArray(data.titleResults) ? data.titleResults : [];
+        setConversationResults({
+          results: [...accumulated],
+          titleResults: [...titleResults],
+          totalMatches,
+          query,
+        });
+      } catch {
+        // Ignore malformed SSE data
+      }
+    });
 
     es.addEventListener('result', (evt) => {
       if (seq !== searchSeqRef.current) { es.close(); return; }
@@ -472,7 +501,12 @@ export function useSidebarController({
         };
         accumulated.push(data.projectResult);
         totalMatches = data.totalMatches;
-        setConversationResults({ results: [...accumulated], totalMatches, query });
+        setConversationResults({
+          results: [...accumulated],
+          titleResults: [...titleResults],
+          totalMatches,
+          query,
+        });
         setSearchProgress({ scannedProjects: data.scannedProjects, totalProjects: data.totalProjects });
       } catch {
         // Ignore malformed SSE data
@@ -496,9 +530,12 @@ export function useSidebarController({
       eventSourceRef.current = null;
       setIsSearching(false);
       setSearchProgress(null);
-      if (accumulated.length === 0) {
-        setConversationResults({ results: [], totalMatches: 0, query });
-      }
+      setConversationResults({
+        results: [...accumulated],
+        titleResults: [...titleResults],
+        totalMatches,
+        query,
+      });
     });
 
     es.addEventListener('error', () => {
@@ -507,9 +544,12 @@ export function useSidebarController({
       eventSourceRef.current = null;
       setIsSearching(false);
       setSearchProgress(null);
-      if (accumulated.length === 0) {
-        setConversationResults({ results: [], totalMatches: 0, query });
-      }
+      setConversationResults({
+        results: [...accumulated],
+        titleResults: [...titleResults],
+        totalMatches,
+        query,
+      });
     });
 
     return () => {

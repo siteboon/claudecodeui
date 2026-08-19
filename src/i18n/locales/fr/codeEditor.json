@@ -14,6 +14,8 @@
     "showingChanges": "Affichage des modifications"
   },
   "actions": {
+    "copyPath": "Copier le chemin du fichier",
+    "pathCopied": "Chemin du fichier copié",
     "download": "Télécharger le fichier",
     "save": "Enregistrer",
     "saving": "Enregistrement...",

@@ -1,4 +1,4 @@
-import fsSync, { promises as fs } from 'node:fs';
+import fsSync from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 
@@ -38,6 +38,15 @@ type ProjectConversationResult = {
   sessions: SessionConversationResult[];
 };
 
+type SessionTitleSearchResult = {
+  sessionId: string;
+  provider: string;
+  projectId: string | null;
+  projectDisplayName: string;
+  sessionTitle: string;
+  lastActivity: string | null;
+};
+
 export type SessionConversationSearchProgressUpdate = {
   projectResult: ProjectConversationResult | null;
   totalMatches: number;
@@ -49,6 +58,7 @@ type SearchSessionConversationsInput = {
   query: string;
   limit: number;
   signal?: AbortSignal;
+  onTitleResults?: (results: SessionTitleSearchResult[]) => void;
   onProgress?: (update: SessionConversationSearchProgressUpdate) => void;
 };
 
@@ -154,6 +164,67 @@ function toSummaryText(customName: string | null, fallback: string | null | unde
   }
 
   return trimmedFallback.length > 50 ? `${trimmedFallback.slice(0, 50)}...` : trimmedFallback;
+}
+
+/**
+ * Finds visible sessions whose displayed title contains the query. Title
+ * matches are resolved from the database before transcript scanning so the UI
+ * can always present them first, including sessions without a transcript yet.
+ */
+function findSessionTitleResults(
+  sessions: SessionRepositoryRow[],
+  query: string,
+  limit: number,
+): SessionTitleSearchResult[] {
+  const normalizedQuery = query.toLocaleLowerCase().replace(/\s+/g, ' ');
+  const projectCache = new Map<string, ReturnType<typeof projectsDb.getProjectPath>>();
+
+  return sessions
+    .flatMap((session) => {
+      const sessionTitle = toSummaryText(session.custom_name, session.session_id, session.session_id);
+      const normalizedTitle = sessionTitle.toLocaleLowerCase().replace(/\s+/g, ' ');
+      const matchIndex = normalizedTitle.indexOf(normalizedQuery);
+      if (matchIndex === -1) {
+        return [];
+      }
+
+      const projectPath = typeof session.project_path === 'string' && session.project_path.trim()
+        ? session.project_path.trim()
+        : null;
+      const projectKey = projectPath ?? UNKNOWN_PROJECT_KEY;
+      if (!projectCache.has(projectKey)) {
+        projectCache.set(
+          projectKey,
+          projectPath ? projectsDb.getProjectPath(projectPath) : null,
+        );
+      }
+
+      const project = projectCache.get(projectKey) ?? null;
+      if (project?.isArchived) {
+        return [];
+      }
+
+      return [{
+        sessionId: session.session_id,
+        provider: session.provider,
+        projectId: project?.project_id ?? null,
+        projectDisplayName: projectPath
+          ? (project?.custom_project_name?.trim() || path.basename(projectPath) || projectPath)
+          : 'Unknown Project',
+        sessionTitle,
+        lastActivity: session.updated_at || session.created_at || null,
+        matchIndex,
+      }];
+    })
+    .sort((left, right) => {
+      if (left.matchIndex !== right.matchIndex) {
+        return left.matchIndex - right.matchIndex;
+      }
+
+      return new Date(right.lastActivity ?? 0).getTime() - new Date(left.lastActivity ?? 0).getTime();
+    })
+    .slice(0, limit)
+    .map(({ matchIndex: _matchIndex, ...result }) => result);
 }
 
 function isInternalContent(content: string): boolean {
@@ -1071,28 +1142,42 @@ async function parseSessionMatches(
   return null;
 }
 
+/**
+ * Searches session titles and provider transcripts for the provider search
+ * service and its route-level integration tests.
+ */
 export async function searchConversations(
   query: string,
   limit = 50,
   onProjectResult: ((update: SessionConversationSearchProgressUpdate) => void) | null = null,
   signal: AbortSignal | null = null,
-): Promise<{ results: ProjectConversationResult[]; totalMatches: number; query: string }> {
+  onTitleResults: ((results: SessionTitleSearchResult[]) => void) | null = null,
+): Promise<{
+  results: ProjectConversationResult[];
+  titleResults: SessionTitleSearchResult[];
+  totalMatches: number;
+  query: string;
+}> {
   const safeQuery = typeof query === 'string' ? query.trim() : '';
   const safeLimit = Math.max(1, Math.min(Number.isFinite(limit) ? limit : 50, 200));
   const words = safeQuery.toLowerCase().split(/\s+/).filter((word) => word.length > 0);
 
   if (words.length === 0) {
-    return { results: [], totalMatches: 0, query: safeQuery };
+    return { results: [], titleResults: [], totalMatches: 0, query: safeQuery };
   }
 
   const isAborted = () => signal?.aborted === true;
   if (isAborted()) {
-    return { results: [], totalMatches: 0, query: safeQuery };
+    return { results: [], titleResults: [], totalMatches: 0, query: safeQuery };
   }
 
-  const searchableSessions = normalizeSearchableSessions(sessionsDb.getAllSessions());
+  const activeSessions = sessionsDb.getAllSessions();
+  const titleResults = findSessionTitleResults(activeSessions, safeQuery, safeLimit);
+  onTitleResults?.(titleResults);
+
+  const searchableSessions = normalizeSearchableSessions(activeSessions);
   if (searchableSessions.length === 0) {
-    return { results: [], totalMatches: 0, query: safeQuery };
+    return { results: [], titleResults, totalMatches: 0, query: safeQuery };
   }
 
   const sessionsByPathKey = new Map<string, SearchableSessionRow[]>();
@@ -1123,7 +1208,7 @@ export async function searchConversations(
     signal ?? undefined,
   );
   if (isAborted() || matchedFileKeys.size === 0) {
-    return { results: [], totalMatches: 0, query: safeQuery };
+    return { results: [], titleResults, totalMatches: 0, query: safeQuery };
   }
 
   const matchedSessionKeys = new Set<string>();
@@ -1207,6 +1292,7 @@ export async function searchConversations(
 
   return {
     results,
+    titleResults,
     totalMatches: runtime.totalMatches,
     query: safeQuery,
   };
@@ -1229,6 +1315,7 @@ export const sessionConversationsSearchService = {
       input.limit,
       input.onProgress ?? null,
       input.signal ?? null,
+      input.onTitleResults ?? null,
     );
   },
 };
