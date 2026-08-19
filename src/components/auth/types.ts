@@ -39,10 +39,13 @@ export type AuthContextValue = {
   needsSetup: boolean;
   hasCompletedOnboarding: boolean;
   error: string | null;
+  /** Auth state could not be determined; the stored token was kept. */
+  authUnavailable: boolean;
   login: (username: string, password: string) => Promise<AuthActionResult>;
   register: (username: string, password: string) => Promise<AuthActionResult>;
   logout: () => void;
   refreshOnboardingStatus: () => Promise<void>;
+  retryAuthCheck: () => Promise<void>;
 };
 
 export type AuthProviderProps = {

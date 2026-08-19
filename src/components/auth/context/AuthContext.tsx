@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { IS_PLATFORM } from '../../../shared/utils';
 import {
@@ -9,7 +9,7 @@ import {
   isValidRefreshedToken,
   storeAuthToken,
 } from '../../../utils/api';
-import { AUTH_ERROR_MESSAGES, AUTH_TOKEN_STORAGE_KEY } from '../constants';
+import { AUTH_ERROR_MESSAGES, AUTH_RETRY_INTERVAL_MS, AUTH_TOKEN_STORAGE_KEY } from '../constants';
 import type {
   AuthContextValue,
   AuthProviderProps,
@@ -19,7 +19,12 @@ import type {
   AuthUserPayload,
   OnboardingStatusPayload,
 } from '../types';
-import { parseJsonSafely, resolveApiErrorMessage } from '../utils';
+import {
+  classifyAuthProbe,
+  parseJsonSafely,
+  rejectionEndsSession,
+  resolveApiErrorMessage,
+} from '../utils';
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -49,16 +54,26 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [needsSetup, setNeedsSetup] = useState(false);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [authUnavailable, setAuthUnavailable] = useState(false);
+
+  // Monotonic id for the auth probe. A newer probe, a login or a logout bumps
+  // it, so an answer that arrives after the session already moved on is
+  // dropped. Without it the retry timer can overlap probes and a slow
+  // rejection lands on top of the session a later probe or login established.
+  const authProbeId = useRef(0);
 
   const setSession = useCallback((nextUser: AuthUser, nextToken: string) => {
+    authProbeId.current += 1;
     setUser(nextUser);
     setToken(nextToken);
     persistToken(nextToken);
   }, []);
 
   const clearSession = useCallback(() => {
+    authProbeId.current += 1;
     setUser(null);
     setToken(null);
+    setAuthUnavailable(false);
     clearStoredToken();
   }, []);
 
@@ -125,44 +140,100 @@ export function AuthProvider({ children }: AuthProviderProps) {
     };
   }, [clearSession]);
 
-  const checkAuthStatus = useCallback(async () => {
+  const checkAuthStatus = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
+    const probeId = (authProbeId.current += 1);
+    const superseded = () => authProbeId.current !== probeId;
+
     try {
-      setIsLoading(true);
+      if (!silent) {
+        setIsLoading(true);
+      }
       setError(null);
 
       const statusResponse = await api.auth.status();
       const statusPayload = await parseJsonSafely<AuthStatusPayload>(statusResponse);
 
-      if (statusPayload?.needsSetup) {
-        setNeedsSetup(true);
+      if (superseded()) {
         return;
       }
 
-      setNeedsSetup(false);
+      if (statusPayload?.needsSetup) {
+        setNeedsSetup(true);
+        setAuthUnavailable(false);
+        return;
+      }
+
+      if (statusResponse.ok) {
+        setNeedsSetup(false);
+      }
 
       if (!token) {
+        setAuthUnavailable(false);
         return;
       }
 
       const userResponse = await api.auth.user();
-      if (!userResponse.ok) {
-        clearSession();
+      const probe = classifyAuthProbe(userResponse);
+
+      if (superseded()) {
         return;
       }
 
-      const userPayload = await parseJsonSafely<AuthUserPayload>(userResponse);
-      if (!userPayload?.user) {
+      if (probe === 'rejected') {
+        // The probe id does not move when a refresh stores a new token, so the
+        // token itself is the discriminator here.
+        if (!rejectionEndsSession(token, readStoredToken())) {
+          return;
+        }
+
         clearSession();
+        setError(AUTH_ERROR_MESSAGES.sessionExpired);
+        return;
+      }
+
+      const userPayload = probe === 'authenticated'
+        ? await parseJsonSafely<AuthUserPayload>(userResponse)
+        : null;
+
+      if (superseded()) {
+        return;
+      }
+
+      if (!userPayload?.user) {
+        // Reachable but unverifiable. Keep the token and retry instead of
+        // dropping a session the server never actually rejected.
+        setAuthUnavailable(true);
+        setError(AUTH_ERROR_MESSAGES.authUnavailable);
         return;
       }
 
       setUser(userPayload.user);
+      setAuthUnavailable(false);
       await checkOnboardingStatus();
     } catch (caughtError) {
-      console.error('[Auth] Auth status check failed:', caughtError);
-      setError(AUTH_ERROR_MESSAGES.authStatusCheckFailed);
+      // A throw means the request never completed - DNS, TLS, or a tailnet link
+      // still coming up under a resumed PWA. Not a rejection either.
+      console.warn('[Auth] Auth status check could not complete:', caughtError);
+
+      if (superseded()) {
+        return;
+      }
+
+      if (!token) {
+        // Nothing is stored, so there is no session to keep and the retry loop
+        // stays disarmed. Telling a signed-out visitor their session is kept
+        // would be a lie printed on the login form.
+        setError(AUTH_ERROR_MESSAGES.networkError);
+        return;
+      }
+
+      setAuthUnavailable(true);
+      setError(AUTH_ERROR_MESSAGES.authUnavailable);
     } finally {
-      setIsLoading(false);
+      if (!silent) {
+        setIsLoading(false);
+      }
     }
   }, [checkOnboardingStatus, clearSession, token]);
 
@@ -178,6 +249,36 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     void checkAuthStatus();
   }, [checkAuthStatus, checkOnboardingStatus]);
+
+  // While the verdict is inconclusive the token is still on disk, so keep
+  // probing: a resumed PWA whose network arrives a moment later recovers on its
+  // own instead of stranding the user on a screen that looks logged out.
+  useEffect(() => {
+    if (IS_PLATFORM || !authUnavailable || !token || user) {
+      return undefined;
+    }
+
+    const retry = () => void checkAuthStatus({ silent: true });
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        retry();
+      }
+    };
+
+    const retryTimer = window.setInterval(retry, AUTH_RETRY_INTERVAL_MS);
+    window.addEventListener('online', retry);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(retryTimer);
+      window.removeEventListener('online', retry);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [authUnavailable, checkAuthStatus, token, user]);
+
+  const retryAuthCheck = useCallback(async () => {
+    await checkAuthStatus({ silent: true });
+  }, [checkAuthStatus]);
 
   useEffect(() => {
     if (IS_PLATFORM || !token || !user) {
@@ -279,12 +380,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
       needsSetup,
       hasCompletedOnboarding,
       error,
+      authUnavailable,
       login,
       register,
       logout,
       refreshOnboardingStatus,
+      retryAuthCheck,
     }),
     [
+      authUnavailable,
       error,
       hasCompletedOnboarding,
       isLoading,
@@ -293,6 +397,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       needsSetup,
       refreshOnboardingStatus,
       register,
+      retryAuthCheck,
       token,
       user,
     ],

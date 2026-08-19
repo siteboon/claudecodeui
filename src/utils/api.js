@@ -91,9 +91,29 @@ export const storeAuthToken = (token) => {
   return true;
 };
 
+// A rejection may only end the session it was actually issued against, and two
+// things make one stale before it lands: the stored token has moved on, or a
+// request that started later already came back authorised. Overlapping auth
+// probes produce both - the newer one signs in, the older one signs out.
+let authRequestSequence = 0;
+let lastAuthorizedRequest = 0;
+
+const rejectionStillApplies = (requestSequence, sentToken) => {
+  if (requestSequence < lastAuthorizedRequest) {
+    return false;
+  }
+
+  // Read storage raw: getStoredAuthToken() expires what it reads, and this is a
+  // comparison, not a session check. A request that carried no token has
+  // nothing of ours to invalidate, so it may only end a still-empty session.
+  const stored = localStorage.getItem('auth-token');
+  return sentToken ? stored === sentToken : stored === null;
+};
+
 // Utility function for authenticated API calls
 export const authenticatedFetch = (url, options = {}) => {
   const token = getStoredAuthToken();
+  const requestSequence = (authRequestSequence += 1);
 
   const defaultHeaders = {};
 
@@ -117,9 +137,15 @@ export const authenticatedFetch = (url, options = {}) => {
     if (refreshedToken) {
       storeAuthToken(refreshedToken);
     }
+
     if (response.headers.get('X-Auth-Error')) {
-      expireAuthSession();
+      if (rejectionStillApplies(requestSequence, token)) {
+        expireAuthSession();
+      }
+    } else if (response.ok && requestSequence > lastAuthorizedRequest) {
+      lastAuthorizedRequest = requestSequence;
     }
+
     return response;
   });
 };

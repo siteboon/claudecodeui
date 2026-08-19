@@ -3,8 +3,9 @@ import type { ReactNode } from 'react';
 import { IS_PLATFORM } from '../../../shared/utils';
 import { useAuth } from '../context/AuthContext';
 import Onboarding from '../../onboarding/view/Onboarding';
-
+import { resolveAuthView } from '../utils';
 import AuthLoadingScreen from './AuthLoadingScreen';
+import AuthUnavailableScreen from './AuthUnavailableScreen';
 import LoginForm from './LoginForm';
 import SetupForm from './SetupForm';
 
@@ -13,31 +14,46 @@ type ProtectedRouteProps = {
 };
 
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { user, isLoading, needsSetup, hasCompletedOnboarding, refreshOnboardingStatus } = useAuth();
+  const {
+    user,
+    token,
+    isLoading,
+    needsSetup,
+    hasCompletedOnboarding,
+    refreshOnboardingStatus,
+    authUnavailable,
+    retryAuthCheck,
+  } = useAuth();
 
-  if (isLoading) {
-    return <AuthLoadingScreen />;
-  }
+  const view = resolveAuthView({
+    isLoading,
+    isPlatform: IS_PLATFORM,
+    needsSetup,
+    hasToken: Boolean(token),
+    hasUser: Boolean(user),
+    authUnavailable,
+    hasCompletedOnboarding,
+  });
 
-  if (IS_PLATFORM) {
-    if (!hasCompletedOnboarding) {
+  switch (view) {
+    case 'loading':
+      return <AuthLoadingScreen />;
+    case 'setup':
+      return <SetupForm />;
+    case 'unavailable':
+      return <AuthUnavailableScreen onRetry={retryAuthCheck} />;
+    case 'login':
+      return <LoginForm />;
+    case 'onboarding':
       return <Onboarding onComplete={refreshOnboardingStatus} />;
+    case 'app':
+      return <>{children}</>;
+    default: {
+      // A view the resolver gains later must fail to compile here rather than
+      // fall through to the app: rendering the whole UI is the one outcome
+      // that must never be reached by accident.
+      const unhandled: never = view;
+      throw new Error(`Unhandled auth view: ${String(unhandled)}`);
     }
-
-    return <>{children}</>;
   }
-
-  if (needsSetup) {
-    return <SetupForm />;
-  }
-
-  if (!user) {
-    return <LoginForm />;
-  }
-
-  if (!hasCompletedOnboarding) {
-    return <Onboarding onComplete={refreshOnboardingStatus} />;
-  }
-
-  return <>{children}</>;
 }
