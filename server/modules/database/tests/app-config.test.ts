@@ -107,3 +107,15 @@ test('an empty stored secret is refused rather than treated as absent', async ()
     assert.equal(appConfigDb.get('test_secret'), '');
   });
 });
+
+test('an empty generated secret never reaches the table', async () => {
+  await withIsolatedDatabase(() => {
+    assert.throws(() => appConfigDb.getOrCreateSecret('test_secret', () => ''), /is empty/);
+
+    // The key has to stay absent. A persisted '' would be permanent, because
+    // INSERT OR IGNORE cannot replace it, so a later call must still be able
+    // to create the secret for real.
+    assert.equal(appConfigDb.get('test_secret'), null);
+    assert.equal(appConfigDb.getOrCreateSecret('test_secret', () => 'recovered'), 'recovered');
+  });
+});

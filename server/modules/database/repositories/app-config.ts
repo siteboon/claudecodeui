@@ -74,11 +74,16 @@ export const appConfigDb = {
       return requireUsableSecret(key, existing);
     }
 
+    const candidate = generateSecret();
+    if (candidate === '') {
+      // Never let an empty candidate reach the table: INSERT OR IGNORE would
+      // preserve that row for good, so every later call would fail on a key
+      // that can no longer be created.
+      throw new Error(`Generated app_config secret '${key}' is empty`);
+    }
+
     const db = getConnection();
-    db.prepare('INSERT OR IGNORE INTO app_config (key, value) VALUES (?, ?)').run(
-      key,
-      generateSecret()
-    );
+    db.prepare('INSERT OR IGNORE INTO app_config (key, value) VALUES (?, ?)').run(key, candidate);
 
     return requireUsableSecret(key, appConfigDb.get(key));
   },
