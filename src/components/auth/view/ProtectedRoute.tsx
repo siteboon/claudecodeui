@@ -46,7 +46,14 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
       return <LoginForm />;
     case 'onboarding':
       return <Onboarding onComplete={refreshOnboardingStatus} />;
-    default:
+    case 'app':
       return <>{children}</>;
+    default: {
+      // A view the resolver gains later must fail to compile here rather than
+      // fall through to the app: rendering the whole UI is the one outcome
+      // that must never be reached by accident.
+      const unhandled: never = view;
+      throw new Error(`Unhandled auth view: ${String(unhandled)}`);
+    }
   }
 }
