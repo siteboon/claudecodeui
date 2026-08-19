@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 export interface SessionActivity {
   /** Provider-supplied status line; null renders the default activity label. */
@@ -33,6 +33,8 @@ export type MarkSessionIdle = (
 export type SyncProcessingSessions = (
   sessions: readonly SessionActivitySnapshot[],
 ) => void;
+
+export type IsSessionProcessing = (sessionId?: string | null) => boolean;
 
 const LOCAL_ACTIVITY_GRACE_MS = 10_000;
 
@@ -71,6 +73,8 @@ export function useSessionProtection() {
   const [processingSessions, setProcessingSessions] = useState<Map<string, SessionActivity>>(
     new Map(),
   );
+  const processingSessionsRef = useRef<SessionActivityMap>(processingSessions);
+  processingSessionsRef.current = processingSessions;
 
   const markSessionProcessing = useCallback<MarkSessionProcessing>((sessionId, activity) => {
     if (!sessionId) {
@@ -163,10 +167,16 @@ export function useSessionProtection() {
     });
   }, []);
 
+  const isSessionProcessing = useCallback<IsSessionProcessing>(
+    (sessionId) => Boolean(sessionId && processingSessionsRef.current.has(sessionId)),
+    [],
+  );
+
   return {
     processingSessions,
     markSessionProcessing,
     markSessionIdle,
     syncProcessingSessions,
+    isSessionProcessing,
   };
 }
