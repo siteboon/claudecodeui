@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { IS_PLATFORM } from '../../../shared/utils';
 import {
@@ -51,13 +51,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [error, setError] = useState<string | null>(null);
   const [authUnavailable, setAuthUnavailable] = useState(false);
 
+  // Monotonic id for the auth probe. A newer probe, a login or a logout bumps
+  // it, so an answer that arrives after the session already moved on is
+  // dropped. Without it the retry timer can overlap probes and a slow
+  // rejection lands on top of the session a later probe or login established.
+  const authProbeId = useRef(0);
+
   const setSession = useCallback((nextUser: AuthUser, nextToken: string) => {
+    authProbeId.current += 1;
     setUser(nextUser);
     setToken(nextToken);
     persistToken(nextToken);
   }, []);
 
   const clearSession = useCallback(() => {
+    authProbeId.current += 1;
     setUser(null);
     setToken(null);
     setAuthUnavailable(false);
@@ -129,6 +137,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const checkAuthStatus = useCallback(async (options?: { silent?: boolean }) => {
     const silent = options?.silent ?? false;
+    const probeId = (authProbeId.current += 1);
+    const superseded = () => authProbeId.current !== probeId;
 
     try {
       if (!silent) {
@@ -138,6 +148,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       const statusResponse = await api.auth.status();
       const statusPayload = await parseJsonSafely<AuthStatusPayload>(statusResponse);
+
+      if (superseded()) {
+        return;
+      }
 
       if (statusPayload?.needsSetup) {
         setNeedsSetup(true);
@@ -157,6 +171,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const userResponse = await api.auth.user();
       const probe = classifyAuthProbe(userResponse);
 
+      if (superseded()) {
+        return;
+      }
+
       if (probe === 'rejected') {
         clearSession();
         setError(AUTH_ERROR_MESSAGES.sessionExpired);
@@ -166,6 +184,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const userPayload = probe === 'authenticated'
         ? await parseJsonSafely<AuthUserPayload>(userResponse)
         : null;
+
+      if (superseded()) {
+        return;
+      }
 
       if (!userPayload?.user) {
         // Reachable but unverifiable. Keep the token and retry instead of
@@ -182,6 +204,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // A throw means the request never completed - DNS, TLS, or a tailnet link
       // still coming up under a resumed PWA. Not a rejection either.
       console.warn('[Auth] Auth status check could not complete:', caughtError);
+
+      if (superseded()) {
+        return;
+      }
+
+      if (!token) {
+        // Nothing is stored, so there is no session to keep and the retry loop
+        // stays disarmed. Telling a signed-out visitor their session is kept
+        // would be a lie printed on the login form.
+        setError(AUTH_ERROR_MESSAGES.networkError);
+        return;
+      }
+
       setAuthUnavailable(true);
       setError(AUTH_ERROR_MESSAGES.authUnavailable);
     } finally {
