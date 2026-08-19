@@ -17,7 +17,7 @@ import {
 } from '@/modules/providers/index.js';
 import { createWebSocketServer } from '@/modules/websocket/index.js';
 
-import { getConnectableHost } from '../shared/networkHosts.js';
+import { getConnectableHost, isLoopbackHost, isWildcardHost, normalizeLoopbackHost } from '../shared/networkHosts.js';
 
 import { createGitModule } from './modules/git/index.js';
 import {
@@ -69,6 +69,10 @@ const RUNNING_VERSION = (() => {
         return null;
     }
 })();
+const SERVER_PORT = Number.parseInt(process.env.SERVER_PORT || '3001', 10);
+const HOST = process.env.HOST || '0.0.0.0';
+const DISPLAY_HOST = getConnectableHost(HOST);
+const VITE_PORT = process.env.VITE_PORT || 5173;
 const systemRoutes = createSystemModule({
     appRoot: APP_ROOT,
     installMode,
@@ -118,7 +122,59 @@ const wss = createWebSocketServer(server, {
 // Make WebSocket server available to routes
 app.locals.wss = wss;
 
-app.use(cors({ exposedHeaders: ['X-Refreshed-Token', 'X-Auth-Error'] }));
+// CORS — only reflect origins that share a host:port with the server. The
+// default `cors()` configuration reflects any Origin header, which lets any
+// malicious site make authenticated cross-origin requests against this server
+// when a victim visits it in the same browser session. Build an explicit
+// trusted-origin allowlist from the configured listen address (canonicalizing
+// loopback aliases such as `127.0.0.1` ↔ `localhost`) and compare the
+// request's origin against that list — never against `HOST` directly, because
+// `HOST` only controls binding and `0.0.0.0` / `::` would otherwise be
+// interpreted as "any host on this port".
+const trustedOriginHosts = (() => {
+    const advertised = getConnectableHost(HOST);
+    const hosts = new Set<string>();
+    hosts.add(normalizeLoopbackHost(advertised));
+    if (isLoopbackHost(HOST) || isWildcardHost(HOST)) {
+        hosts.add('localhost');
+        hosts.add('127.0.0.1');
+        hosts.add('::1');
+    } else {
+        hosts.add(HOST);
+    }
+    return hosts;
+})();
+const trustedOriginPort = String(SERVER_PORT);
+
+const corsOriginReflector = (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    // No Origin header → same-origin request (e.g. server-to-server, curl);
+    // these are not subject to CORS and should always be allowed through.
+    if (!origin) {
+        callback(null, true);
+        return;
+    }
+
+    try {
+        const parsed = new URL(origin);
+        const requestHost = normalizeLoopbackHost(parsed.hostname);
+        const requestPort = parsed.port || (parsed.protocol === 'https:' ? '443' : '80');
+
+        if (trustedOriginHosts.has(requestHost) && requestPort === trustedOriginPort) {
+            callback(null, true);
+            return;
+        }
+    } catch {
+        // Malformed Origin header — refuse.
+    }
+
+    callback(null, false);
+};
+
+app.use(cors({
+    origin: corsOriginReflector,
+    credentials: true,
+    exposedHeaders: ['X-Refreshed-Token', 'X-Auth-Error'],
+}));
 app.use(express.json({
     limit: '50mb',
     type: (req) => {
@@ -271,10 +327,6 @@ app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
   });
 });
 
-const SERVER_PORT = Number.parseInt(process.env.SERVER_PORT || '3001', 10);
-const HOST = process.env.HOST || '0.0.0.0';
-const DISPLAY_HOST = getConnectableHost(HOST);
-const VITE_PORT = process.env.VITE_PORT || 5173;
 const LOCAL_SERVER_MARKER_PATH = path.join(os.homedir(), '.cloudcli', 'local-server.json');
 
 function getErrorCode(error: unknown): string | undefined {
