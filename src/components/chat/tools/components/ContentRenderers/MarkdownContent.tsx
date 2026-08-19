@@ -1,4 +1,5 @@
 import React from 'react';
+
 import { Markdown } from '../../../view/subcomponents/Markdown';
 
 interface MarkdownContentProps {

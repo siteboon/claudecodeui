@@ -1,4 +1,5 @@
 import type { TFunction } from 'i18next';
+
 import type { TaskKanbanColumn, TaskMasterTask } from '../types';
 
 const KANBAN_COLUMN_CONFIG = [

@@ -2,9 +2,10 @@ import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
 
-import type { ServerEvent } from './WebSocketContext';
 import { useProjectsState } from '../hooks/useProjectsState';
 import type { IsSessionProcessing } from '../hooks/useSessionProtection';
+
+import type { ServerEvent } from './WebSocketContext';
 
 type ProjectsState = ReturnType<typeof useProjectsState>;
 

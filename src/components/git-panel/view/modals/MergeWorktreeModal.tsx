@@ -1,5 +1,6 @@
 import { ArrowRight, GitMerge, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
+
 import type { MergeWorktreeOptions, WorktreeInfo } from '../../types/types';
 
 type MergeWorktreeModalProps = {

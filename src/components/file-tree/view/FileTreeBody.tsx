@@ -1,7 +1,9 @@
 import type { DragEvent, ReactNode, RefObject } from 'react';
 import { AlertTriangle, Folder, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
 import type { FileTreeNode, FileTreeViewMode } from '../types/types';
+
 import FileTreeEmptyState from './FileTreeEmptyState';
 import FileTreeList from './FileTreeList';
 

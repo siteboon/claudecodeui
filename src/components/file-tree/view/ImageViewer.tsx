@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
+
 import { Button } from '../../../shared/view/ui';
 import { api } from '../../../shared/api';
 import type { FileTreeImageSelection } from '../types/types';

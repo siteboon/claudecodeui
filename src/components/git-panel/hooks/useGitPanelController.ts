@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+
 import { api } from '../../../shared/api';
 import { DEFAULT_BRANCH, RECENT_COMMITS_LIMIT } from '../constants/constants';
 import type {
@@ -17,6 +18,7 @@ import type {
   UseGitPanelControllerOptions,
 } from '../types/types';
 import { getAllChangedFiles } from '../utils/gitPanelUtils';
+
 import { useSelectedProvider } from './useSelectedProvider';
 
 function isAbortError(error: unknown): boolean {

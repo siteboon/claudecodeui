@@ -1,4 +1,5 @@
 import type { TFunction } from 'i18next';
+
 import { IMAGE_FILE_EXTENSIONS } from '../constants/constants';
 import type { FileTreeNode } from '../types/types';
 

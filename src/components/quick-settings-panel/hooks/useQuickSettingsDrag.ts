@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent, TouchEvent as ReactTouchEvent } from 'react';
+
 import {
   DEFAULT_HANDLE_POSITION,
   DRAG_THRESHOLD_PX,

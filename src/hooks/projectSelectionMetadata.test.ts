@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { Project } from '../types/app';
+
 import { mergeProjectSelectionMetadata } from './projectSelectionMetadata';
 
 const selectedProject: Project = {

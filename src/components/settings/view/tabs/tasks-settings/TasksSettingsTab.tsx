@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+
 import { useTasksSettings } from '../../../../../contexts/TasksSettingsContext';
 import SettingsCard from '../../SettingsCard';
 import SettingsRow from '../../SettingsRow';
