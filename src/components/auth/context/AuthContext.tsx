@@ -9,7 +9,7 @@ import {
   isValidRefreshedToken,
   storeAuthToken,
 } from '../../../utils/api';
-import { AUTH_ERROR_MESSAGES, AUTH_TOKEN_STORAGE_KEY } from '../constants';
+import { AUTH_ERROR_MESSAGES, AUTH_RETRY_INTERVAL_MS, AUTH_TOKEN_STORAGE_KEY } from '../constants';
 import type {
   AuthContextValue,
   AuthProviderProps,
@@ -19,7 +19,7 @@ import type {
   AuthUserPayload,
   OnboardingStatusPayload,
 } from '../types';
-import { parseJsonSafely, resolveApiErrorMessage } from '../utils';
+import { classifyAuthProbe, parseJsonSafely, resolveApiErrorMessage } from '../utils';
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -49,6 +49,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [needsSetup, setNeedsSetup] = useState(false);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [authUnavailable, setAuthUnavailable] = useState(false);
 
   const setSession = useCallback((nextUser: AuthUser, nextToken: string) => {
     setUser(nextUser);
@@ -59,6 +60,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const clearSession = useCallback(() => {
     setUser(null);
     setToken(null);
+    setAuthUnavailable(false);
     clearStoredToken();
   }, []);
 
@@ -125,9 +127,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
     };
   }, [clearSession]);
 
-  const checkAuthStatus = useCallback(async () => {
+  const checkAuthStatus = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
+
     try {
-      setIsLoading(true);
+      if (!silent) {
+        setIsLoading(true);
+      }
       setError(null);
 
       const statusResponse = await api.auth.status();
@@ -135,34 +141,53 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       if (statusPayload?.needsSetup) {
         setNeedsSetup(true);
+        setAuthUnavailable(false);
         return;
       }
 
-      setNeedsSetup(false);
+      if (statusResponse.ok) {
+        setNeedsSetup(false);
+      }
 
       if (!token) {
+        setAuthUnavailable(false);
         return;
       }
 
       const userResponse = await api.auth.user();
-      if (!userResponse.ok) {
+      const probe = classifyAuthProbe(userResponse);
+
+      if (probe === 'rejected') {
         clearSession();
+        setError(AUTH_ERROR_MESSAGES.sessionExpired);
         return;
       }
 
-      const userPayload = await parseJsonSafely<AuthUserPayload>(userResponse);
+      const userPayload = probe === 'authenticated'
+        ? await parseJsonSafely<AuthUserPayload>(userResponse)
+        : null;
+
       if (!userPayload?.user) {
-        clearSession();
+        // Reachable but unverifiable. Keep the token and retry instead of
+        // dropping a session the server never actually rejected.
+        setAuthUnavailable(true);
+        setError(AUTH_ERROR_MESSAGES.authUnavailable);
         return;
       }
 
       setUser(userPayload.user);
+      setAuthUnavailable(false);
       await checkOnboardingStatus();
     } catch (caughtError) {
-      console.error('[Auth] Auth status check failed:', caughtError);
-      setError(AUTH_ERROR_MESSAGES.authStatusCheckFailed);
+      // A throw means the request never completed - DNS, TLS, or a tailnet link
+      // still coming up under a resumed PWA. Not a rejection either.
+      console.warn('[Auth] Auth status check could not complete:', caughtError);
+      setAuthUnavailable(true);
+      setError(AUTH_ERROR_MESSAGES.authUnavailable);
     } finally {
-      setIsLoading(false);
+      if (!silent) {
+        setIsLoading(false);
+      }
     }
   }, [checkOnboardingStatus, clearSession, token]);
 
@@ -178,6 +203,36 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     void checkAuthStatus();
   }, [checkAuthStatus, checkOnboardingStatus]);
+
+  // While the verdict is inconclusive the token is still on disk, so keep
+  // probing: a resumed PWA whose network arrives a moment later recovers on its
+  // own instead of stranding the user on a screen that looks logged out.
+  useEffect(() => {
+    if (IS_PLATFORM || !authUnavailable || !token || user) {
+      return undefined;
+    }
+
+    const retry = () => void checkAuthStatus({ silent: true });
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        retry();
+      }
+    };
+
+    const retryTimer = window.setInterval(retry, AUTH_RETRY_INTERVAL_MS);
+    window.addEventListener('online', retry);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(retryTimer);
+      window.removeEventListener('online', retry);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [authUnavailable, checkAuthStatus, token, user]);
+
+  const retryAuthCheck = useCallback(async () => {
+    await checkAuthStatus({ silent: true });
+  }, [checkAuthStatus]);
 
   useEffect(() => {
     if (IS_PLATFORM || !token || !user) {
@@ -279,12 +334,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
       needsSetup,
       hasCompletedOnboarding,
       error,
+      authUnavailable,
       login,
       register,
       logout,
       refreshOnboardingStatus,
+      retryAuthCheck,
     }),
     [
+      authUnavailable,
       error,
       hasCompletedOnboarding,
       isLoading,
@@ -293,6 +351,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       needsSetup,
       refreshOnboardingStatus,
       register,
+      retryAuthCheck,
       token,
       user,
     ],
