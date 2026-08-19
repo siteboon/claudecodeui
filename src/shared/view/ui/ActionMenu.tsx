@@ -184,6 +184,7 @@ export default function ActionMenu({
       id={menuId}
       role="menu"
       tabIndex={-1}
+      data-escape-layer
       className={cn(
         portal ? 'fixed z-[70]' : 'absolute top-full z-50 mt-2',
         'min-w-[220px] rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg',
