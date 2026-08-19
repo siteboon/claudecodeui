@@ -140,7 +140,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       setNeedsSetup(false);
 
-      if (!token) {
+      // Read the token from storage rather than from state. `authenticatedFetch`
+      // sends whatever storage holds, so this guard now asks exactly the question
+      // the request will answer — and, critically, keeps `token` out of this
+      // callback's dependencies. See the effect below for why that matters.
+      if (!readStoredToken()) {
         return;
       }
 
@@ -164,8 +168,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [checkOnboardingStatus, clearSession, token]);
+  }, [checkOnboardingStatus, clearSession]);
 
+  // Verifies the stored session once per mount.
+  //
+  // `checkAuthStatus` must not depend on `token`. `authenticateToken()` re-issues
+  // a token through `X-Refreshed-Token` on *every* authenticated request once the
+  // current one is past half-life, and `authenticatedFetch` feeds that straight
+  // into `storeAuthToken()` -> `setToken()`. If this callback were rebuilt on each
+  // token change, this effect would re-run and re-verify the session, issuing
+  // three more authenticated requests that can themselves refresh the token —
+  // a self-sustaining loop.
+  //
+  // It stays hidden while the token only moves forward: `iat` has one-second
+  // resolution, so same-second reissues are byte-identical and `setToken` bails
+  // on equality. Once anything makes the token alternate between two values, the
+  // loop runs at request speed. Each pass also calls `setUser()` with a freshly
+  // parsed object and toggles `isLoading`, which tears down and reopens the chat
+  // WebSocket, so the visible symptom is a reconnect storm rather than the
+  // request flood underneath it.
   useEffect(() => {
     if (IS_PLATFORM) {
       setUser({ username: 'platform-user' });
