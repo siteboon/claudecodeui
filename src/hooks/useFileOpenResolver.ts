@@ -1,6 +1,6 @@
 import { useCallback, useRef } from 'react';
 
-import { api } from '../utils/api';
+import { api } from '../shared/api';
 import type { Project } from '../types/app';
 
 type FileNode = {

@@ -8,7 +8,7 @@ import {
   getAuthTokenRefreshDelay,
   isValidRefreshedToken,
   storeAuthToken,
-} from '../../../utils/api';
+} from '../../../shared/api';
 import { AUTH_ERROR_MESSAGES, AUTH_TOKEN_STORAGE_KEY } from '../constants';
 import type {
   AuthContextValue,

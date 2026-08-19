@@ -28,25 +28,9 @@ export type OlderPageMergeResult = {
   prependedCount: number;
 };
 
-/**
- * Builds the unified session-history URL. A finite limit always carries an
- * explicit offset so automatic refreshes can never accidentally become an
- * unbounded transcript request.
- */
-export function buildSessionMessagesUrl(
-  sessionId: string,
-  options: SessionMessagesRequestOptions = {},
-): string {
-  const params = new URLSearchParams();
-  if (options.limit !== null && options.limit !== undefined) {
-    params.set('limit', String(options.limit));
-    params.set('offset', String(options.offset ?? 0));
-  }
-
-  const query = params.toString();
-  const base = `/api/providers/sessions/${encodeURIComponent(sessionId)}/messages`;
-  return query ? `${base}?${query}` : base;
-}
+// The unified session-history URL is declared with the rest of the endpoints;
+// it is re-exported here because the pagination tests cover its shape.
+export { sessionMessagesUrl as buildSessionMessagesUrl } from '../shared/api';
 
 function serializedValue(value: unknown): string {
   if (value === undefined) return '';

@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { isAuthTokenExpired, TOKEN_EXPIRY_SKEW_MS } from './api.js';
+import { isAuthTokenExpired, TOKEN_EXPIRY_SKEW_MS } from '../api';
 
 // Builds a JWT-shaped string (header.payload.signature, base64url segments) without
 // needing a real signing library — isAuthTokenExpired() never verifies the signature,
 // it only decodes the payload, so the header/signature segments are placeholders.
-const makeToken = (payload) => {
-  const encode = (value) =>
+const makeToken = (payload: Record<string, unknown>) => {
+  const encode = (value: unknown) =>
     Buffer.from(JSON.stringify(value)).toString('base64url');
   return `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode(payload)}.signature`;
 };

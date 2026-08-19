@@ -1,4 +1,4 @@
-import { api, getStoredAuthToken } from '../../../utils/api';
+import { api } from '../../../shared/api';
 import type {
   BrowseFilesystemResponse,
   CloneProgressEvent,
@@ -64,7 +64,7 @@ const resolveCreateProjectErrorMessage = (responseData: CreateProjectResponse): 
 };
 
 export const fetchGithubTokenCredentials = async () => {
-  const response = await api.get('/settings/credentials?type=github_token');
+  const response = await api.settings.credentials('github_token');
   const data = await parseJson<CredentialsResponse>(response);
 
   if (!response.ok) {
@@ -75,8 +75,7 @@ export const fetchGithubTokenCredentials = async () => {
 };
 
 export const browseFilesystemFolders = async (pathToBrowse: string) => {
-  const endpoint = `/file-tree/browse-filesystem?path=${encodeURIComponent(pathToBrowse)}`;
-  const response = await api.get(endpoint);
+  const response = await api.browseFilesystem(pathToBrowse);
   const data = await parseJson<BrowseFilesystemResponse>(response);
 
   if (!response.ok) {
@@ -111,42 +110,26 @@ export const createProjectRequest = async (payload: CreateProjectPayload) => {
   return data.project;
 };
 
-const buildCloneProgressQuery = ({
+const buildCloneProgressUrl = ({
   workspacePath,
   githubUrl,
   tokenMode,
   selectedGithubToken,
   newGithubToken,
-}: CloneWorkspaceParams) => {
-  const query = new URLSearchParams({
+}: CloneWorkspaceParams) =>
+  api.cloneProjectProgressUrl({
     path: workspacePath.trim(),
     githubUrl: githubUrl.trim(),
+    githubTokenId: tokenMode === 'stored' ? selectedGithubToken : null,
+    newGithubToken: tokenMode === 'new' ? newGithubToken.trim() : null,
   });
-
-  if (tokenMode === 'stored' && selectedGithubToken) {
-    query.set('githubTokenId', selectedGithubToken);
-  }
-
-  if (tokenMode === 'new' && newGithubToken.trim()) {
-    query.set('newGithubToken', newGithubToken.trim());
-  }
-
-  // EventSource cannot send custom headers, so the auth token is passed as query.
-  const authToken = getStoredAuthToken();
-  if (authToken) {
-    query.set('token', authToken);
-  }
-
-  return query.toString();
-};
 
 export const cloneWorkspaceWithProgress = (
   params: CloneWorkspaceParams,
   handlers: CloneProgressHandlers,
 ) =>
   new Promise<Record<string, unknown> | undefined>((resolve, reject) => {
-    const query = buildCloneProgressQuery(params);
-    const eventSource = new EventSource(`/api/projects/clone-progress?${query}`);
+    const eventSource = new EventSource(buildCloneProgressUrl(params));
     let settled = false;
 
     const settle = (callback: () => void) => {

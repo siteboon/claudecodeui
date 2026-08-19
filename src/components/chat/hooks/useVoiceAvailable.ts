@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { authenticatedFetch } from '../../../utils/api';
+import { api } from '../../../shared/api';
 import { readVoiceConfig, VOICE_CONFIG_SYNC_EVENT } from '../../../hooks/useVoiceConfig';
 
 // Voice UI is gated on the `voiceEnabled` UI preference (toggled in Quick Settings /
@@ -11,7 +11,7 @@ let healthRequest: Promise<boolean> | null = null;
 
 function checkVoiceHealth(): Promise<boolean> {
   if (healthRequest) return healthRequest;
-  const request = authenticatedFetch('/api/voice/health')
+  const request = api.voice.health()
     .then(async (response) => {
       if (!response.ok) throw new Error(`Voice health check failed (${response.status})`);
       const data = await response.json();

@@ -9,12 +9,11 @@
 
 import { useCallback, useMemo, useRef, useState } from 'react';
 
-import { authenticatedFetch } from '../utils/api';
+import { api } from '../shared/api';
 import type { LLMProvider } from '../types/app';
 
 import { removeOptimisticUserEchoes } from './sessionMessageReconciliation';
 import {
-  buildSessionMessagesUrl,
   hasReachedCachedTailTimeBoundary,
   mergeLatestServerPage,
   mergeOlderServerPage,
@@ -166,7 +165,7 @@ async function requestSessionHistoryPage(
   sessionId: string,
   options: SessionMessagesRequestOptions,
 ): Promise<SessionHistoryPage> {
-  const response = await authenticatedFetch(buildSessionMessagesUrl(sessionId, options), {
+  const response = await api.providers.sessionMessages(sessionId, options, {
     signal: AbortSignal.timeout(SESSION_HISTORY_REQUEST_TIMEOUT_MS),
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);

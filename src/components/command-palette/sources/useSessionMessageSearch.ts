@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { api } from '../../../utils/api';
+import { api } from '../../../shared/api';
 import type { LLMProvider } from '../../../types/app';
 
 export type SessionMessageMatch = {

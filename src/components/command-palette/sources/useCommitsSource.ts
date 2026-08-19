@@ -1,4 +1,4 @@
-import { authenticatedFetch } from '../../../utils/api';
+import { api } from '../../../shared/api';
 
 import { useApiSource } from './useApiSource';
 
@@ -9,6 +9,8 @@ export type CommitResult = {
   author: string;
 };
 
+const COMMIT_RESULT_LIMIT = 50;
+
 interface CommitsResponse {
   commits?: Array<{ hash: string; message: string; author: string }>;
   error?: string;
@@ -18,10 +20,7 @@ export function useCommitsSource(projectId: string | undefined, enabled: boolean
   return useApiSource<CommitResult, CommitsResponse>({
     enabled: enabled && !!projectId,
     deps: [projectId],
-    fetcher: (signal) => {
-      const params = new URLSearchParams({ project: projectId!, limit: '50' });
-      return authenticatedFetch(`/api/git/commits?${params.toString()}`, { signal });
-    },
+    fetcher: (signal) => api.git.commits(projectId!, { limit: COMMIT_RESULT_LIMIT }, { signal }),
     parse: (data) => {
       if (!data.commits) return [];
       return data.commits.map<CommitResult>((c) => ({

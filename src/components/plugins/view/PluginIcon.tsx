@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import DOMPurify from 'dompurify';
 
-import { authenticatedFetch } from '../../../utils/api';
+import { api } from '../../../shared/api';
 
 type Props = {
   pluginName: string;
@@ -55,14 +55,12 @@ function sanitizeSvg(svgText: string): string | null {
 }
 
 export default function PluginIcon({ pluginName, iconFile, className }: Props) {
-  const url = iconFile
-    ? `/api/plugins/${encodeURIComponent(pluginName)}/assets/${encodeURIComponent(iconFile)}`
-    : '';
+  const url = iconFile ? api.plugins.assetUrl(pluginName, iconFile) : '';
   const [svg, setSvg] = useState<string | null>(url ? (svgCache.get(url) ?? null) : null);
 
   useEffect(() => {
-    if (!url || svgCache.has(url)) return;
-    authenticatedFetch(url)
+    if (!iconFile || !url || svgCache.has(url)) return;
+    api.plugins.asset(pluginName, iconFile)
       .then((r) => {
         if (!r.ok) return;
         return r.text();
@@ -76,7 +74,7 @@ export default function PluginIcon({ pluginName, iconFile, className }: Props) {
         }
       })
       .catch(() => {});
-  }, [url]);
+  }, [url, pluginName, iconFile]);
 
   if (!svg) return <span className={className} />;
 

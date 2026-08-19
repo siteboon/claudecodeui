@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { authenticatedFetch } from '../../../utils/api';
+import { api } from '../../../shared/api';
 
 type GitConfigResponse = {
   gitName?: string;
@@ -28,7 +28,7 @@ export function useGitSettings() {
   const loadGitConfig = useCallback(async () => {
     try {
       setIsLoading(true);
-      const response = await authenticatedFetch('/api/user/git-config');
+      const response = await api.user.gitConfig();
       if (!response.ok) {
         return;
       }
@@ -46,11 +46,7 @@ export function useGitSettings() {
   const saveGitConfig = useCallback(async () => {
     try {
       setIsSaving(true);
-      const response = await authenticatedFetch('/api/user/git-config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gitName, gitEmail }),
-      });
+      const response = await api.user.updateGitConfig(gitName, gitEmail);
 
       if (response.ok) {
         setSaveStatus('success');

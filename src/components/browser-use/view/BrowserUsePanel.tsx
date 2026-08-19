@@ -16,7 +16,7 @@ import {
 
 import { cn } from '../../../lib/utils';
 import { Badge, Button } from '../../../shared/view/ui';
-import { authenticatedFetch } from '../../../utils/api';
+import { api } from '../../../shared/api';
 import type { SettingsMainTab } from '../../settings/types/types';
 
 type BrowserUseStatus = {
@@ -160,8 +160,8 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
     setIsRefreshing(true);
     try {
       const [statusResponse, sessionsResponse] = await Promise.all([
-        authenticatedFetch('/api/browser-use/status'),
-        authenticatedFetch('/api/browser-use/sessions'),
+        api.browserUse.status(),
+        api.browserUse.sessions(),
       ]);
       const statusData = await readJson<{ data: BrowserUseStatus }>(statusResponse);
       const sessionsData = await readJson<{ data: { sessions: BrowserUseSession[] } }>(sessionsResponse);
@@ -201,13 +201,13 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
 
   const stopSession = () => runAction(async () => {
     if (!selectedSession) return;
-    const response = await authenticatedFetch(`/api/browser-use/sessions/${selectedSession.id}/stop`, { method: 'POST' });
+    const response = await api.browserUse.stopSession(selectedSession.id);
     await readJson(response);
   });
 
   const deleteSession = () => runAction(async () => {
     if (!selectedSession) return;
-    const response = await authenticatedFetch(`/api/browser-use/sessions/${selectedSession.id}`, { method: 'DELETE' });
+    const response = await api.browserUse.deleteSession(selectedSession.id);
     await readJson(response);
     setIsFullscreen(false);
   });
@@ -215,7 +215,7 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
   const installBrowserBinaries = () => runAction(async () => {
     setIsInstalling(true);
     try {
-      const response = await authenticatedFetch('/api/browser-use/runtime/install', { method: 'POST' });
+      const response = await api.browserUse.installRuntime();
       await readJson(response);
     } finally {
       setIsInstalling(false);

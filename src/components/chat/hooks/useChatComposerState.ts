@@ -11,7 +11,7 @@ import type {
 } from 'react';
 import { useDropzone } from 'react-dropzone';
 
-import { authenticatedFetch } from '../../../utils/api';
+import { api } from '../../../shared/api';
 import type { MarkSessionProcessing, SessionActivityMap } from '../../../hooks/useSessionProtection';
 import { grantClaudeToolPermission } from '../utils/chatPermissions';
 import {
@@ -165,11 +165,7 @@ const uploadAttachmentFiles = async (files: File[]): Promise<unknown[]> => {
     formData.append('files', file);
   });
 
-  const response = await authenticatedFetch('/api/assets/files', {
-    method: 'POST',
-    headers: {},
-    body: formData,
-  });
+  const response = await api.assets.uploadFiles(formData);
 
   if (!response.ok) {
     const body = await response.json().catch(() => null);
@@ -419,17 +415,11 @@ export function useChatComposerState({
           tokenUsage: tokenBudget,
         };
 
-        const response = await authenticatedFetch('/api/commands/execute', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            commandName: command.name,
-            commandPath: command.path,
-            args,
-            context,
-          }),
+        const response = await api.commands.execute({
+          commandName: command.name,
+          commandPath: command.path,
+          args,
+          context,
         });
 
         if (!response.ok) {
@@ -832,13 +822,10 @@ export function useChatComposerState({
       if (!targetSessionId) {
         let createdSessionName = sessionSummary;
         try {
-          const response = await authenticatedFetch('/api/providers/sessions', {
-            method: 'POST',
-            body: JSON.stringify({
-              provider,
-              projectPath: resolvedProjectPath,
-              initialMessage: messageContent,
-            }),
+          const response = await api.providers.createSession({
+            provider,
+            projectPath: resolvedProjectPath,
+            initialMessage: messageContent,
           });
           if (!response.ok) {
             throw new Error(`Failed to create session (${response.status})`);

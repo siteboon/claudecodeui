@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useTranslation } from "react-i18next";
 
-import { authenticatedFetch } from "../../../utils/api";
+import { api } from "../../../shared/api";
 import { ReleaseInfo } from "../../../shared/types";
 import { copyTextToClipboard } from "../../../utils/clipboard";
 import type { InstallMode } from "../../../hooks/useVersionCheck";
@@ -70,9 +70,7 @@ export function VersionUpgradeModal({
 
         try {
             // Call the backend API to run the update command
-            const response = await authenticatedFetch('/api/system/update', {
-                method: 'POST',
-            });
+            const response = await api.system.update();
 
             // The server (or a proxy in front of it) can answer with an HTML
             // page instead of JSON — e.g. while a hosted/Docker deployment

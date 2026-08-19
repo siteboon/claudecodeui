@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
-import { authenticatedFetch } from '../../../../utils/api';
+import { api } from '../../../../shared/api';
 import type { ChatImage } from '../../types/types';
 
 type ChatMessageImagesProps = {
@@ -36,21 +36,21 @@ function useChatImageSrc(image: ChatImage, projectId?: string | null): { src: st
     }
 
     const filename = imagePath.split(/[\\/]/).pop() || '';
-    const candidateUrls = [
-      `/api/assets/images/${encodeURIComponent(filename)}`,
-      ...(projectId
-        ? [`/api/file-tree/projects/${projectId}/files/content?path=${encodeURIComponent(imagePath)}`]
-        : []),
-    ];
-
     let objectUrl: string | null = null;
     const controller = new AbortController();
 
+    const candidateRequests: Array<() => Promise<Response>> = [
+      () => api.assets.image(filename, { signal: controller.signal }),
+      ...(projectId
+        ? [() => api.readFileBlob(projectId, imagePath, { signal: controller.signal })]
+        : []),
+    ];
+
     const load = async () => {
       setFailed(false);
-      for (const url of candidateUrls) {
+      for (const requestCandidate of candidateRequests) {
         try {
-          const response = await authenticatedFetch(url, { signal: controller.signal });
+          const response = await requestCandidate();
           if (!response.ok) {
             continue;
           }

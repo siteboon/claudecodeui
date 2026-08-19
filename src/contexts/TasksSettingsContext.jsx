@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { api } from '../utils/api';
+import { api } from '../shared/api';
 
 const TasksSettingsContext = createContext({
   tasksEnabled: true,
@@ -40,7 +40,7 @@ export const TasksSettingsProvider = ({ children }) => {
   useEffect(() => {
     const checkInstallation = async () => {
       try {
-        const response = await api.get('/taskmaster/installation-status');
+        const response = await api.taskmaster.installationStatus();
         if (response.ok) {
           const data = await response.json();
           setInstallationStatus(data);

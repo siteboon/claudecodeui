@@ -1,4 +1,4 @@
-import { authenticatedFetch } from '../utils/api';
+import { api } from '../shared/api';
 import { readVoiceConfig, voiceConfigHeaders } from '../hooks/useVoiceConfig';
 
 function directUrl(baseUrl: string, path: string): string {
@@ -24,11 +24,7 @@ export function transcribeVoice(blob: Blob, filename: string): Promise<Response>
   }
 
   body.append('audio', blob, filename);
-  return authenticatedFetch('/api/voice/transcribe', {
-    method: 'POST',
-    headers: voiceConfigHeaders(),
-    body,
-  });
+  return api.voice.transcribe(body, voiceConfigHeaders());
 }
 
 export function synthesizeVoice(text: string, signal: AbortSignal): Promise<Response> {
@@ -51,10 +47,5 @@ export function synthesizeVoice(text: string, signal: AbortSignal): Promise<Resp
     });
   }
 
-  return authenticatedFetch('/api/voice/tts', {
-    method: 'POST',
-    body: JSON.stringify({ text }),
-    headers: voiceConfigHeaders(),
-    signal,
-  });
+  return api.voice.tts(text, { headers: voiceConfigHeaders(), signal });
 }

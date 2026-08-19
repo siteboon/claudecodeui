@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api } from '../../../utils/api';
+import { api } from '../../../shared/api';
 import type { ExistingPrdFile, PrdListResponse } from '../types';
 
 type UsePrdRegistryArgs = {
@@ -26,7 +26,7 @@ export function usePrdRegistry({ projectId }: UsePrdRegistryArgs): UsePrdRegistr
     }
 
     try {
-      const response = await api.get(`/taskmaster/prd/${encodeURIComponent(projectId)}`);
+      const response = await api.taskmaster.prdFiles(projectId);
       if (!response.ok) {
         setExistingPrds([]);
         return;

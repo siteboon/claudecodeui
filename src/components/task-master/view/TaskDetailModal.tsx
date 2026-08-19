@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { copyTextToClipboard } from '../../../utils/clipboard';
-import { api } from '../../../utils/api';
+import { api } from '../../../shared/api';
 import { useTaskMaster } from '../context/TaskMasterContext';
 import type { TaskId, TaskMasterTask, TaskReference } from '../types';
 
@@ -83,7 +83,7 @@ export default function TaskDetailModal({
   }
 
   const handleSaveChanges = async () => {
-    if (!currentProject?.name) {
+    if (!currentProject?.projectId) {
       return;
     }
 
@@ -108,7 +108,7 @@ export default function TaskDetailModal({
 
     setIsSaving(true);
     try {
-      const response = await api.taskmaster.updateTask(currentProject.name, task.id, updates);
+      const response = await api.taskmaster.updateTask(currentProject.projectId, task.id, updates);
       if (!response.ok) {
         const errorPayload = (await response.json()) as { message?: string };
         throw new Error(errorPayload.message ?? 'Failed to update task');
@@ -126,12 +126,12 @@ export default function TaskDetailModal({
   };
 
   const handleStatusSelect = async (nextStatus: string) => {
-    if (!currentProject?.name || nextStatus === task.status) {
+    if (!currentProject?.projectId || nextStatus === task.status) {
       return;
     }
 
     try {
-      const response = await api.taskmaster.updateTask(currentProject.name, task.id, { status: nextStatus });
+      const response = await api.taskmaster.updateTask(currentProject.projectId, task.id, { status: nextStatus });
       if (!response.ok) {
         const errorPayload = (await response.json()) as { message?: string };
         throw new Error(errorPayload.message ?? 'Failed to update task status');

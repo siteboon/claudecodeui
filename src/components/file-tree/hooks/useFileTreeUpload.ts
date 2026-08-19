@@ -4,10 +4,11 @@ import type { DragEvent } from 'react';
 import { IS_PLATFORM } from '../../../shared/utils';
 import type { Project } from '../../../types/app';
 import {
+  api,
   expireAuthSession,
   getStoredAuthToken,
   storeAuthToken,
-} from '../../../utils/api';
+} from '../../../shared/api';
 import {
   MAX_FILE_UPLOAD_COUNT,
   MAX_FILE_UPLOAD_SIZE_BYTES,
@@ -117,7 +118,7 @@ const uploadFormDataWithProgress = (
   new Promise<UploadResponse>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
 
-    xhr.open('POST', `/api/file-tree/projects/${encodeURIComponent(projectId)}/files/upload`);
+    xhr.open('POST', api.uploadFilesUrl(projectId));
 
     const token = getStoredAuthToken();
     if (!IS_PLATFORM && token) {

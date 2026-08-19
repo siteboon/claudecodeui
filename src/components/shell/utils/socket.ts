@@ -1,5 +1,5 @@
 import { IS_PLATFORM } from '../../../shared/utils';
-import { getStoredAuthToken } from '../../../utils/api';
+import { getStoredAuthToken } from '../../../shared/api';
 import type { ShellIncomingMessage, ShellOutgoingMessage } from '../types/types';
 
 export function getShellWebSocketUrl(): string | null {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { authenticatedFetch } from '../../../utils/api';
+import { api } from '../../../shared/api';
 import { DEFAULT_BRANCH, RECENT_COMMITS_LIMIT } from '../constants/constants';
 import type {
   GitApiErrorResponse,
@@ -18,9 +18,6 @@ import type {
 } from '../types/types';
 import { getAllChangedFiles } from '../utils/gitPanelUtils';
 import { useSelectedProvider } from './useSelectedProvider';
-
-// ! use authenticatedFetch directly. fetchWithAuth is redundant 
-const fetchWithAuth = authenticatedFetch as (url: string, options?: RequestInit) => Promise<Response>;
 
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
@@ -89,10 +86,7 @@ export function useGitPanelController({
       const projectId = selectedProject.projectId;
 
       try {
-        const response = await fetchWithAuth(
-          `/api/git/diff?project=${encodeURIComponent(projectId)}&file=${encodeURIComponent(filePath)}`,
-          { signal },
-        );
+        const response = await api.git.diff(projectId, filePath, { signal });
         const data = await readJson<GitDiffResponse>(response, signal);
 
         if (
@@ -129,7 +123,7 @@ export function useGitPanelController({
 
     setIsLoading(true);
     try {
-      const response = await fetchWithAuth(`/api/git/status?project=${encodeURIComponent(projectId)}`, { signal });
+      const response = await api.git.status(projectId, { signal });
       const data = await readJson<GitStatusResponse>(response, signal);
 
       if (
@@ -185,7 +179,7 @@ export function useGitPanelController({
     }
 
     try {
-      const response = await fetchWithAuth(`/api/git/branches?project=${encodeURIComponent(selectedProject.projectId)}`);
+      const response = await api.git.branches(selectedProject.projectId);
       const data = await readJson<GitBranchesResponse>(response);
 
       if (!data.error && data.branches) {
@@ -212,7 +206,7 @@ export function useGitPanelController({
     }
 
     try {
-      const response = await fetchWithAuth(`/api/git/remote-status?project=${encodeURIComponent(selectedProject.projectId)}`);
+      const response = await api.git.remoteStatus(selectedProject.projectId);
       const data = await readJson<GitRemoteStatus | GitApiErrorResponse>(response);
 
       if (!data.error) {
@@ -234,14 +228,7 @@ export function useGitPanelController({
       }
 
       try {
-        const response = await fetchWithAuth('/api/git/checkout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            project: selectedProject.projectId,
-            branch: branchName,
-          }),
-        });
+        const response = await api.git.checkout(selectedProject.projectId, branchName);
 
         const data = await readJson<GitOperationResponse>(response);
         if (!data.success) {
@@ -269,14 +256,7 @@ export function useGitPanelController({
 
       setIsCreatingBranch(true);
       try {
-        const response = await fetchWithAuth('/api/git/create-branch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            project: selectedProject.projectId,
-            branch: trimmedBranchName,
-          }),
-        });
+        const response = await api.git.createBranch(selectedProject.projectId, trimmedBranchName);
 
         const data = await readJson<GitOperationResponse>(response);
         if (!data.success) {
@@ -303,11 +283,7 @@ export function useGitPanelController({
       if (!selectedProject) return false;
 
       try {
-        const response = await fetchWithAuth('/api/git/delete-branch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ project: selectedProject.projectId, branch: branchName, force }),
-        });
+        const response = await api.git.deleteBranch(selectedProject.projectId, branchName, force);
 
         const data = await readJson<GitOperationResponse>(response);
         if (!data.success) {
@@ -332,13 +308,7 @@ export function useGitPanelController({
 
     setIsFetching(true);
     try {
-      const response = await fetchWithAuth('/api/git/fetch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project: selectedProject.projectId,
-        }),
-      });
+      const response = await api.git.fetch(selectedProject.projectId);
 
       const data = await readJson<GitOperationResponse>(response);
       if (data.success) {
@@ -363,13 +333,7 @@ export function useGitPanelController({
 
     setIsPulling(true);
     try {
-      const response = await fetchWithAuth('/api/git/pull', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project: selectedProject.projectId,
-        }),
-      });
+      const response = await api.git.pull(selectedProject.projectId);
 
       const data = await readJson<GitOperationResponse>(response);
       if (data.success) {
@@ -393,13 +357,7 @@ export function useGitPanelController({
 
     setIsPushing(true);
     try {
-      const response = await fetchWithAuth('/api/git/push', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project: selectedProject.projectId,
-        }),
-      });
+      const response = await api.git.push(selectedProject.projectId);
 
       const data = await readJson<GitOperationResponse>(response);
       if (data.success) {
@@ -423,14 +381,7 @@ export function useGitPanelController({
 
     setIsPublishing(true);
     try {
-      const response = await fetchWithAuth('/api/git/publish', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project: selectedProject.projectId,
-          branch: currentBranch,
-        }),
-      });
+      const response = await api.git.publish(selectedProject.projectId, currentBranch);
 
       const data = await readJson<GitOperationResponse>(response);
       if (data.success) {
@@ -454,14 +405,7 @@ export function useGitPanelController({
       }
 
       try {
-        const response = await fetchWithAuth('/api/git/discard', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            project: selectedProject.projectId,
-            file: filePath,
-          }),
-        });
+        const response = await api.git.discard(selectedProject.projectId, filePath);
 
         const data = await readJson<GitOperationResponse>(response);
         if (data.success) {
@@ -484,14 +428,7 @@ export function useGitPanelController({
       }
 
       try {
-        const response = await fetchWithAuth('/api/git/delete-untracked', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            project: selectedProject.projectId,
-            file: filePath,
-          }),
-        });
+        const response = await api.git.deleteUntracked(selectedProject.projectId, filePath);
 
         const data = await readJson<GitOperationResponse>(response);
         if (data.success) {
@@ -514,14 +451,7 @@ export function useGitPanelController({
       }
 
       try {
-        const response = await fetchWithAuth('/api/git/stage', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            project: selectedProject.projectId,
-            files,
-          }),
-        });
+        const response = await api.git.stage(selectedProject.projectId, files);
 
         const data = await readJson<GitOperationResponse>(response);
         if (!data.success) {
@@ -547,14 +477,7 @@ export function useGitPanelController({
       }
 
       try {
-        const response = await fetchWithAuth('/api/git/unstage', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            project: selectedProject.projectId,
-            files,
-          }),
-        });
+        const response = await api.git.unstage(selectedProject.projectId, files);
 
         const data = await readJson<GitOperationResponse>(response);
         if (!data.success) {
@@ -581,9 +504,7 @@ export function useGitPanelController({
 
     setIsLoadingCommits(true);
     try {
-      const response = await fetchWithAuth(
-        `/api/git/commits?project=${encodeURIComponent(projectId)}&limit=${RECENT_COMMITS_LIMIT}`,
-      );
+      const response = await api.git.commits(projectId, { limit: RECENT_COMMITS_LIMIT });
       const data = await readJson<GitCommitsResponse>(response);
 
       if (selectedProjectIdRef.current !== projectId) {
@@ -610,9 +531,7 @@ export function useGitPanelController({
       }
 
       try {
-        const response = await fetchWithAuth(
-          `/api/git/commit-diff?project=${encodeURIComponent(selectedProject.projectId)}&commit=${commitHash}`,
-        );
+        const response = await api.git.commitDiff(selectedProject.projectId, commitHash);
         const data = await readJson<GitDiffResponse>(response);
 
         if (!data.error && data.diff) {
@@ -635,15 +554,11 @@ export function useGitPanelController({
       }
 
       try {
-        const response = await authenticatedFetch('/api/git/generate-commit-message', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            project: selectedProject.projectId,
-            files,
-            provider,
-          }),
-        });
+        const response = await api.git.generateCommitMessage(
+          selectedProject.projectId,
+          files,
+          provider,
+        );
 
         const data = await readJson<GitGenerateMessageResponse>(response);
         if (data.message) {
@@ -667,15 +582,7 @@ export function useGitPanelController({
       }
 
       try {
-        const response = await fetchWithAuth('/api/git/commit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            project: selectedProject.projectId,
-            message,
-            files,
-          }),
-        });
+        const response = await api.git.commit(selectedProject.projectId, message, files);
 
         const data = await readJson<GitOperationResponse>(response);
         if (data.success) {
@@ -701,13 +608,7 @@ export function useGitPanelController({
 
     setIsCreatingInitialCommit(true);
     try {
-      const response = await fetchWithAuth('/api/git/initial-commit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project: selectedProject.projectId,
-        }),
-      });
+      const response = await api.git.initialCommit(selectedProject.projectId);
 
       const data = await readJson<GitOperationResponse>(response);
       if (data.success) {
@@ -733,13 +634,7 @@ export function useGitPanelController({
 
     setIsInitializingRepository(true);
     try {
-      const response = await fetchWithAuth('/api/git/init', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project: projectId,
-        }),
-      });
+      const response = await api.git.init(projectId);
 
       const data = await readJson<GitOperationResponse>(response);
       if (selectedProjectIdRef.current !== projectId) {
@@ -776,9 +671,7 @@ export function useGitPanelController({
       }
 
       try {
-        const response = await fetchWithAuth(
-          `/api/git/file-with-diff?project=${encodeURIComponent(selectedProject.projectId)}&file=${encodeURIComponent(filePath)}`,
-        );
+        const response = await api.git.fileWithDiff(selectedProject.projectId, filePath);
         const data = await readJson<GitFileWithDiffResponse>(response);
 
         if (data.error) {

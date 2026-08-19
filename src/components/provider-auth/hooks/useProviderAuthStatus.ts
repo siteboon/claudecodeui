@@ -1,9 +1,8 @@
 import { useCallback, useState } from 'react';
-import { authenticatedFetch } from '../../../utils/api';
+import { api } from '../../../shared/api';
 import type { LLMProvider } from '../../../types/app';
 import {
   CLI_PROVIDERS,
-  PROVIDER_AUTH_STATUS_ENDPOINTS,
   createInitialProviderAuthStatusMap,
 } from '../types';
 import type {
@@ -74,7 +73,7 @@ export function useProviderAuthStatus(
     setProviderLoading(provider);
 
     try {
-      const response = await authenticatedFetch(PROVIDER_AUTH_STATUS_ENDPOINTS[provider]);
+      const response = await api.providers.authStatus(provider);
 
       if (!response.ok) {
         const status: ProviderAuthStatus = {

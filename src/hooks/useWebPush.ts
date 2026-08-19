@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { authenticatedFetch } from '../utils/api';
+import { api } from '../shared/api';
 
 type WebPushState = {
   permission: NotificationPermission | 'unsupported';
@@ -58,7 +58,7 @@ export function useWebPush(): WebPushState {
       setPermission(perm);
       if (perm !== 'granted') return;
 
-      const keyRes = await authenticatedFetch('/api/settings/push/vapid-public-key');
+      const keyRes = await api.settings.push.vapidPublicKey();
       const { publicKey } = await keyRes.json();
 
       const registration = await navigator.serviceWorker.ready;
@@ -68,12 +68,9 @@ export function useWebPush(): WebPushState {
       });
 
       const subJson = subscription.toJSON();
-      await authenticatedFetch('/api/settings/push/subscribe', {
-        method: 'POST',
-        body: JSON.stringify({
-          endpoint: subJson.endpoint,
-          keys: subJson.keys,
-        }),
+      await api.settings.push.subscribe({
+        endpoint: subJson.endpoint,
+        keys: subJson.keys,
       });
 
       setIsSubscribed(true);
@@ -92,10 +89,7 @@ export function useWebPush(): WebPushState {
       if (subscription) {
         const endpoint = subscription.endpoint;
         await subscription.unsubscribe();
-        await authenticatedFetch('/api/settings/push/unsubscribe', {
-          method: 'POST',
-          body: JSON.stringify({ endpoint }),
-        });
+        await api.settings.push.unsubscribe(endpoint);
       }
       setIsSubscribed(false);
     } catch (err) {

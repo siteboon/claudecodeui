@@ -17,7 +17,7 @@ import type {
   SessionActivityMap,
   SyncProcessingSessions,
 } from '../hooks/useSessionProtection';
-import { api } from '../utils/api';
+import { api } from '../shared/api';
 
 type RunningSessionApiItem = {
   sessionId?: unknown;

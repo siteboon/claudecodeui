@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { MutableRefObject } from 'react';
 
-import { authenticatedFetch } from '../../../utils/api';
+import { api } from '../../../shared/api';
 import type { MarkSessionIdle, SessionActivityMap } from '../../../hooks/useSessionProtection';
 import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
 import type { SessionStore, NormalizedMessage } from '../../../stores/useSessionStore';
@@ -844,8 +844,7 @@ export function useChatSessionState({
     const fetchInitialTokenUsage = async () => {
       try {
         // The provider module resolves storage and provider details from the session id.
-        const url = `/api/providers/sessions/${encodeURIComponent(selectedSession.id)}/token-usage`;
-        const response = await authenticatedFetch(url);
+        const response = await api.providers.sessionTokenUsage(selectedSession.id);
         if (response.ok) {
           const payload = await response.json();
           setTokenBudget(payload.data ?? null);

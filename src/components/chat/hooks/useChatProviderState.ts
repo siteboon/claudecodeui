@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { authenticatedFetch } from '../../../utils/api';
+import { api } from '../../../shared/api';
 import type { PendingPermissionRequest, PermissionMode } from '../types/types';
 import type {
   ProjectSession,
@@ -199,7 +199,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     try {
       const results = await Promise.all(
         PROVIDERS.map(async (p) => {
-          const response = await authenticatedFetch(`/api/providers/${p}/models`);
+          const response = await api.providers.models(p);
           const body = (await response.json()) as ProviderModelsApiResponse;
           if (!body.success || !body.data?.models) {
             return null;
@@ -243,7 +243,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
 
     const loadCapabilities = async () => {
       try {
-        const response = await authenticatedFetch('/api/providers/capabilities');
+        const response = await api.providers.capabilities();
         const body = (await response.json()) as ProviderCapabilitiesApiResponse;
         if (cancelled || !body.success || !Array.isArray(body.data?.providers)) {
           return;
@@ -542,9 +542,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
 
     const loadSessionSelection = async () => {
       try {
-        const response = await authenticatedFetch(
-          `/api/providers/${targetProvider}/sessions/${encodeURIComponent(selectedSessionId)}/active-model`,
-        );
+        const response = await api.providers.sessionActiveModel(targetProvider, selectedSessionId);
         const body = (await response.json()) as SessionSelectionApiResponse;
         if (
           cancelled
@@ -611,12 +609,10 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     sessionModelMutationIdRef.current = mutationId;
     const targetSessionKey = getSessionSelectionKey(targetProvider, normalizedSessionId);
 
-    const response = await authenticatedFetch(
-      `/api/providers/${targetProvider}/sessions/${encodeURIComponent(normalizedSessionId)}/active-model`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ model }),
-      },
+    const response = await api.providers.setSessionActiveModel(
+      targetProvider,
+      normalizedSessionId,
+      model,
     );
 
     const body = (await response.json()) as SessionSelectionApiResponse;
@@ -675,12 +671,10 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     });
 
     try {
-      const response = await authenticatedFetch(
-        `/api/providers/${targetProvider}/sessions/${encodeURIComponent(normalizedSessionId)}/active-effort`,
-        {
-          method: 'POST',
-          body: JSON.stringify({ effort }),
-        },
+      const response = await api.providers.setSessionActiveEffort(
+        targetProvider,
+        normalizedSessionId,
+        effort,
       );
       const body = (await response.json()) as SessionSelectionApiResponse;
       if (!response.ok || !body.success) {
@@ -768,10 +762,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     targetProvider: LLMProvider,
     input: CustomProviderModelInput,
   ) => {
-    const response = await authenticatedFetch(`/api/providers/${targetProvider}/models`, {
-      method: 'POST',
-      body: JSON.stringify(input),
-    });
+    const response = await api.providers.createModel(targetProvider, input);
     const result = await readModelMutationResponse(response);
     applyProviderCatalog(targetProvider, result.models);
   }, [applyProviderCatalog, readModelMutationResponse]);
@@ -785,13 +776,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       throw new Error('This model cannot be edited.');
     }
 
-    const response = await authenticatedFetch(
-      `/api/providers/${targetProvider}/models/${existing.recordId}`,
-      {
-        method: 'PATCH',
-        body: JSON.stringify(input),
-      },
-    );
+    const response = await api.providers.updateModel(targetProvider, existing.recordId, input);
     const result = await readModelMutationResponse(response);
     applyProviderCatalog(targetProvider, result.models);
 
@@ -821,10 +806,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       throw new Error('This model cannot be deleted.');
     }
 
-    const response = await authenticatedFetch(
-      `/api/providers/${targetProvider}/models/${existing.recordId}`,
-      { method: 'DELETE' },
-    );
+    const response = await api.providers.deleteModel(targetProvider, existing.recordId);
     const result = await readModelMutationResponse(response);
     applyProviderCatalog(targetProvider, result.models);
 

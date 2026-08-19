@@ -1,4 +1,4 @@
-import { authenticatedFetch } from '../../../utils/api';
+import { api } from '../../../shared/api';
 import type { LLMProvider, ProjectSession } from '../../../types/app';
 
 import { useApiSource } from './useApiSource';
@@ -9,6 +9,8 @@ export type SessionResult = {
   provider?: LLMProvider;
 };
 
+const SESSION_RESULT_LIMIT = 50;
+
 interface SessionsResponse {
   sessions?: ProjectSession[];
 }
@@ -17,13 +19,8 @@ export function useSessionsSource(projectId: string | undefined, enabled: boolea
   return useApiSource<SessionResult, SessionsResponse>({
     enabled: enabled && !!projectId,
     deps: [projectId],
-    fetcher: (signal) => {
-      const params = new URLSearchParams({ limit: '50', offset: '0' });
-      return authenticatedFetch(
-        `/api/projects/${encodeURIComponent(projectId!)}/sessions?${params.toString()}`,
-        { signal },
-      );
-    },
+    fetcher: (signal) =>
+      api.projectSessions(projectId!, { limit: SESSION_RESULT_LIMIT, offset: 0 }, { signal }),
     parse: (data) => {
       return (data.sessions ?? []).map<SessionResult>((s) => ({
         id: s.id,

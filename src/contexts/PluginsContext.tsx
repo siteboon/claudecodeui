@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { authenticatedFetch } from '../utils/api';
+import { api } from '../shared/api';
 
 export type Plugin = {
   name: string;
@@ -48,7 +48,7 @@ export function PluginsProvider({ children }: { children: ReactNode }) {
 
   const refreshPlugins = useCallback(async () => {
     try {
-      const res = await authenticatedFetch('/api/plugins');
+      const res = await api.plugins.list();
       if (res.ok) {
         const data = await res.json();
         setPlugins(data.plugins || []);
@@ -78,10 +78,7 @@ export function PluginsProvider({ children }: { children: ReactNode }) {
 
   const installPlugin = useCallback(async (url: string) => {
     try {
-      const res = await authenticatedFetch('/api/plugins/install', {
-        method: 'POST',
-        body: JSON.stringify({ url }),
-      });
+      const res = await api.plugins.install(url);
       const data = await res.json();
       if (res.ok) {
         await refreshPlugins();
@@ -95,9 +92,7 @@ export function PluginsProvider({ children }: { children: ReactNode }) {
 
   const uninstallPlugin = useCallback(async (name: string) => {
     try {
-      const res = await authenticatedFetch(`/api/plugins/${encodeURIComponent(name)}`, {
-        method: 'DELETE',
-      });
+      const res = await api.plugins.uninstall(name);
       const data = await res.json();
       if (res.ok) {
         await refreshPlugins();
@@ -111,9 +106,7 @@ export function PluginsProvider({ children }: { children: ReactNode }) {
 
   const updatePlugin = useCallback(async (name: string) => {
     try {
-      const res = await authenticatedFetch(`/api/plugins/${encodeURIComponent(name)}/update`, {
-        method: 'POST',
-      });
+      const res = await api.plugins.update(name);
       const data = await res.json();
       if (res.ok) {
         await refreshPlugins();
@@ -127,10 +120,7 @@ export function PluginsProvider({ children }: { children: ReactNode }) {
 
   const togglePlugin = useCallback(async (name: string, enabled: boolean): Promise<{ success: boolean; error: string | null }> => {
     try {
-      const res = await authenticatedFetch(`/api/plugins/${encodeURIComponent(name)}/enable`, {
-        method: 'PUT',
-        body: JSON.stringify({ enabled }),
-      });
+      const res = await api.plugins.toggle(name, enabled);
       if (!res.ok) {
         let errorMessage = `Toggle failed (${res.status})`;
         try {

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { cn } from '../../../lib/utils';
-import { api } from '../../../utils/api';
+import { api } from '../../../shared/api';
 import { useTaskMaster } from '../context/TaskMasterContext';
 import { useTaskBoardState } from '../hooks/useTaskBoardState';
 import type { PrdFile, TaskBoardView, TaskMasterProject, TaskMasterTask, TaskSelection } from '../types';
@@ -78,9 +78,7 @@ export default function TaskBoard({
     }
 
     try {
-      const response = await api.get(
-        `/taskmaster/prd/${encodeURIComponent(currentProject.projectId)}/${encodeURIComponent(prd.name)}`,
-      );
+      const response = await api.taskmaster.prdFile(currentProject.projectId, prd.name);
 
       if (!response.ok) {
         throw new Error(`Failed to load PRD ${prd.name}`);

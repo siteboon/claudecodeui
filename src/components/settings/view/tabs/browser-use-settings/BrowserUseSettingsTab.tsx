@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Download, Loader2 } from 'lucide-react';
 
 import { Button } from '../../../../../shared/view/ui';
-import { authenticatedFetch } from '../../../../../utils/api';
+import { api } from '../../../../../shared/api';
 import SettingsCard from '../../SettingsCard';
 import SettingsRow from '../../SettingsRow';
 import SettingsSection from '../../SettingsSection';
@@ -39,13 +39,13 @@ export default function BrowserUseSettingsTab() {
   const [error, setError] = useState<string | null>(null);
 
   const loadSettings = useCallback(async () => {
-    const settingsResponse = await authenticatedFetch('/api/browser-use/settings');
+    const settingsResponse = await api.browserUse.settings();
     const settingsData = await readJson<{ data: { settings: BrowserUseSettings } }>(settingsResponse);
     setSettings(settingsData.data.settings);
   }, []);
 
   const loadStatus = useCallback(async () => {
-    const statusResponse = await authenticatedFetch('/api/browser-use/status');
+    const statusResponse = await api.browserUse.status();
     const statusData = await readJson<{ data: BrowserUseStatus }>(statusResponse);
     setStatus(statusData.data);
   }, []);
@@ -68,10 +68,7 @@ export default function BrowserUseSettingsTab() {
     setIsSaving(true);
     setError(null);
     try {
-      const response = await authenticatedFetch('/api/browser-use/settings', {
-        method: 'PUT',
-        body: JSON.stringify(nextSettings),
-      });
+      const response = await api.browserUse.saveSettings(nextSettings);
       const data = await readJson<{ data: { settings: BrowserUseSettings } }>(response);
       setSettings(data.data.settings);
       window.dispatchEvent(new Event('browserUseSettingsChanged'));
@@ -89,7 +86,7 @@ export default function BrowserUseSettingsTab() {
     setIsInstalling(true);
     setError(null);
     try {
-      const response = await authenticatedFetch('/api/browser-use/runtime/install', { method: 'POST' });
+      const response = await api.browserUse.installRuntime();
       await readJson(response);
       setIsStatusLoading(true);
       await loadStatus();

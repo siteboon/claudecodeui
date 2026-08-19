@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import { useAuth } from '../components/auth/context/AuthContext';
 import { IS_PLATFORM } from '../shared/utils';
-import { expireAuthSession, isAuthTokenExpired } from '../utils/api';
+import { expireAuthSession, isAuthTokenExpired } from '../shared/api';
 
 /**
  * One frame received from the chat websocket. The server guarantees every

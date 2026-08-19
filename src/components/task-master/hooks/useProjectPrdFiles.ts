@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api } from '../../../utils/api';
+import { api } from '../../../shared/api';
 import type { PrdFile } from '../types';
 
 type UseProjectPrdFilesOptions = {
@@ -36,7 +36,7 @@ export function useProjectPrdFiles({ projectId }: UseProjectPrdFilesOptions) {
 
     try {
       setIsLoadingPrdFiles(true);
-      const response = await api.get(`/taskmaster/prd/${encodeURIComponent(projectId)}`);
+      const response = await api.taskmaster.prdFiles(projectId);
 
       if (!response.ok) {
         setPrdFiles([]);

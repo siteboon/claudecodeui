@@ -12,7 +12,7 @@ import { usePaletteOpsRegister } from '../../../contexts/PaletteOpsContext';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useUiPreferences } from '../../../hooks/useUiPreferences';
 import { useFileOpenResolver } from '../../../hooks/useFileOpenResolver';
-import { authenticatedFetch } from '../../../utils/api';
+import { api } from '../../../shared/api';
 import { useEditorSidebar } from '../../code-editor/hooks/useEditorSidebar';
 import EditorSidebar from '../../code-editor/view/EditorSidebar';
 import type { Project } from '../../../types/app';
@@ -99,7 +99,7 @@ function MainContent({
 
   const loadBrowserUseSettings = useCallback(async () => {
     try {
-      const response = await authenticatedFetch('/api/browser-use/settings');
+      const response = await api.browserUse.settings();
       const data = await response.json();
       setBrowserUseEnabled(Boolean(response.ok && data?.success !== false && data?.data?.settings?.enabled));
     } catch {

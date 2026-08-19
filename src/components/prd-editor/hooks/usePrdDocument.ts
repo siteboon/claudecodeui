@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api } from '../../../utils/api';
+import { api } from '../../../shared/api';
 import { PRD_TEMPLATE } from '../constants';
 import type { PrdFile } from '../types';
 import { createDefaultPrdName, sanitizeFileName, stripPrdExtension } from '../utils/fileName';

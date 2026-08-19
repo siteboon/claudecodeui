@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
-import { api } from '../../../utils/api';
+import { api } from '../../../shared/api';
 import { useAuth } from '../../auth/context/AuthContext';
 import { useWebSocket, type ServerEvent } from '../../../contexts/WebSocketContext';
 import type {
@@ -201,7 +201,7 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       setIsLoading(true);
       clearError();
 
-      const response = await api.get('/projects');
+      const response = await api.projects();
       if (!response.ok) {
         throw new Error(`Failed to fetch projects: ${response.status}`);
       }
@@ -280,7 +280,7 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       setIsLoadingTasks(true);
       clearError();
 
-      const response = await api.get(`/taskmaster/tasks/${encodeURIComponent(projectId)}`);
+      const response = await api.taskmaster.tasks(projectId);
       if (!response.ok) {
         const errorPayload = (await response.json()) as { message?: string };
         throw new Error(errorPayload.message ?? 'Failed to load tasks');
@@ -310,7 +310,7 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       setIsLoadingMCP(true);
       clearError();
 
-      const response = await api.get('/taskmaster/mcp-status');
+      const response = await api.taskmaster.mcpStatus();
       if (!response.ok) {
         throw new Error(`Failed to load MCP status: ${response.status}`);
       }

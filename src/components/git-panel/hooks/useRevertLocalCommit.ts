@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { authenticatedFetch } from '../../../utils/api';
+import { api } from '../../../shared/api';
 import type { GitOperationResponse } from '../types/types';
 
 type UseRevertLocalCommitOptions = {
@@ -23,11 +23,7 @@ export function useRevertLocalCommit({ projectId, onSuccess }: UseRevertLocalCom
 
     setIsRevertingLocalCommit(true);
     try {
-      const response = await authenticatedFetch('/api/git/revert-local-commit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project: projectId }),
-      });
+      const response = await api.git.revertLocalCommit(projectId);
       const data = await readJson<GitOperationResponse>(response);
 
       if (!data.success) {

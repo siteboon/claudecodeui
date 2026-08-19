@@ -1,4 +1,4 @@
-import { authenticatedFetch } from '../../../utils/api';
+import { api } from '../../../shared/api';
 
 import { useApiSource } from './useApiSource';
 
@@ -12,10 +12,7 @@ export function useBranchesSource(projectId: string | undefined, enabled: boolea
   return useApiSource<BranchResult, BranchesResponse>({
     enabled: enabled && !!projectId,
     deps: [projectId],
-    fetcher: (signal) => {
-      const params = new URLSearchParams({ project: projectId! });
-      return authenticatedFetch(`/api/git/branches?${params.toString()}`, { signal });
-    },
+    fetcher: (signal) => api.git.branches(projectId!, { signal }),
     parse: (data) => (data.localBranches ?? []).map((name) => ({ name })),
   });
 }

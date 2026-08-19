@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { authenticatedFetch } from '../../../utils/api';
+import { api } from '../../../shared/api';
 import type {
   ApiResponse,
   ProviderSkill,
@@ -167,14 +167,7 @@ const fetchProviderSkills = async (
   provider: SkillsProvider,
   project?: ProjectTarget,
 ): Promise<ProviderSkill[]> => {
-  const params = new URLSearchParams();
-  if (project?.path) {
-    params.set('workspacePath', project.path);
-  }
-
-  const response = await authenticatedFetch(
-    `/api/providers/${provider}/skills${params.toString() ? `?${params.toString()}` : ''}`,
-  );
+  const response = await api.providers.skills(provider, { workspacePath: project?.path });
   const data = await toResponseJson<ApiResponse<ProviderSkillsResponse>>(response);
   if (!response.ok || !data.success) {
     throw new Error(getApiErrorMessage(data, `Failed to load ${provider} skills`));
@@ -187,10 +180,7 @@ const saveProviderSkills = async (
   provider: SkillsProvider,
   payload: ProviderSkillCreatePayload,
 ): Promise<ProviderSkill[]> => {
-  const response = await authenticatedFetch(`/api/providers/${provider}/skills`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+  const response = await api.providers.saveSkills(provider, payload);
   const data = await toResponseJson<ApiResponse<ProviderSkillsResponse>>(response);
   if (!response.ok || !data.success) {
     throw new Error(getApiErrorMessage(data, 'Failed to save skills'));

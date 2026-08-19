@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
 
-import { api } from '../utils/api';
+import { api } from '../shared/api';
 import type { ServerEvent } from '../contexts/WebSocketContext';
 import type {
   AppTab,

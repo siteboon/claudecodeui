@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useTheme } from '../../../contexts/ThemeContext';
-import { authenticatedFetch } from '../../../utils/api';
+import { api } from '../../../shared/api';
 import { setNotificationSoundEnabled } from '../../../utils/notificationSound';
 import { useProviderAuthStatus } from '../../provider-auth/hooks/useProviderAuthStatus';
 import {
@@ -197,7 +197,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
       setCodexPermissionMode(toCodexPermissionMode(savedCodexSettings.permissionMode));
 
       try {
-        const notificationResponse = await authenticatedFetch('/api/settings/notification-preferences');
+        const notificationResponse = await api.settings.notificationPreferences();
         if (notificationResponse.ok) {
           const notificationData = await toResponseJson<NotificationPreferencesResponse>(notificationResponse);
           if (notificationData.success && notificationData.preferences) {
@@ -268,10 +268,9 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
         lastUpdated: now,
       }));
 
-      const notificationResponse = await authenticatedFetch('/api/settings/notification-preferences', {
-        method: 'PUT',
-        body: JSON.stringify(notificationPreferences),
-      });
+      const notificationResponse = await api.settings.saveNotificationPreferences(
+        notificationPreferences,
+      );
       if (!notificationResponse.ok) {
         throw new Error('Failed to save notification preferences');
       }

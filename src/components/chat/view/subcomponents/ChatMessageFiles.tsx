@@ -1,7 +1,7 @@
 import { DownloadIcon, FileArchiveIcon, FileCodeIcon, FileIcon, FileTextIcon } from 'lucide-react';
 import { useState } from 'react';
 
-import { authenticatedFetch } from '../../../../utils/api';
+import { api } from '../../../../shared/api';
 import type { ChatAttachment } from '../../types/types';
 
 type ChatMessageFilesProps = {
@@ -37,7 +37,7 @@ function ChatMessageFile({ file }: { file: ChatAttachment }) {
 
     setIsDownloading(true);
     try {
-      const response = await authenticatedFetch(`/api/assets/files/${encodeURIComponent(storedName)}`);
+      const response = await api.assets.file(storedName);
       if (!response.ok) return;
       const blobUrl = URL.createObjectURL(await response.blob());
       const anchor = document.createElement('a');

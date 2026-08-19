@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { authenticatedFetch } from '../../../utils/api';
+import { api } from '../../../shared/api';
 import type { Project } from '../../../types/app';
 import type {
   MergeWorktreeOptions,
@@ -64,9 +64,7 @@ export function useWorktreesController({
     const projectId = selectedProject.projectId;
     setIsLoading(true);
     try {
-      const response = await authenticatedFetch(
-        `/api/worktrees?project=${encodeURIComponent(projectId)}`,
-      );
+      const response = await api.worktrees.list(projectId);
       const payload = (await response.json()) as WorktreeApiEnvelope<WorktreeListData>;
 
       if (selectedProjectIdRef.current !== projectId) {
@@ -112,14 +110,9 @@ export function useWorktreesController({
       setIsCreatingWorktree(true);
       setActionError(null);
       try {
-        const response = await authenticatedFetch('/api/worktrees/create', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            project: projectId,
-            branch: trimmedBranch,
-            baseBranch,
-          }),
+        const response = await api.worktrees.create(projectId, {
+          branch: trimmedBranch,
+          baseBranch,
         });
         const payload = (await response.json()) as WorktreeApiEnvelope<WorktreeProjectPayload>;
 
@@ -163,14 +156,7 @@ export function useWorktreesController({
       setBusyWorktreePath(worktreePath);
       setActionError(null);
       try {
-        const response = await authenticatedFetch('/api/worktrees/open', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            project: projectId,
-            worktreePath,
-          }),
-        });
+        const response = await api.worktrees.open(projectId, worktreePath);
         const payload = (await response.json()) as WorktreeApiEnvelope<WorktreeProjectPayload>;
 
         if (selectedProjectIdRef.current !== projectId) {
@@ -211,16 +197,10 @@ export function useWorktreesController({
       setBusyWorktreePath(worktreePath);
       setActionError(null);
       try {
-        const response = await authenticatedFetch('/api/worktrees/merge', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            project: selectedProject.projectId,
-            worktreePath,
-            squash: options.squash,
-            message: options.message,
-            removeAfterMerge: options.removeAfterMerge,
-          }),
+        const response = await api.worktrees.merge(selectedProject.projectId, worktreePath, {
+          squash: options.squash,
+          message: options.message,
+          removeAfterMerge: options.removeAfterMerge,
         });
         const payload = (await response.json()) as WorktreeApiEnvelope<unknown>;
 
@@ -256,15 +236,9 @@ export function useWorktreesController({
       setBusyWorktreePath(worktreePath);
       setActionError(null);
       try {
-        const response = await authenticatedFetch('/api/worktrees/remove', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            project: selectedProject.projectId,
-            worktreePath,
-            force: options.force,
-            deleteBranch: options.deleteBranch,
-          }),
+        const response = await api.worktrees.remove(selectedProject.projectId, worktreePath, {
+          force: options.force,
+          deleteBranch: options.deleteBranch,
         });
         const payload = (await response.json()) as WorktreeApiEnvelope<unknown>;
 

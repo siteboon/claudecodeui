@@ -1,7 +1,7 @@
 import { Check, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LLMProvider } from '../../../types/app';
-import { authenticatedFetch } from '../../../utils/api';
+import { api } from '../../../shared/api';
 import { useProviderAuthStatus } from '../../provider-auth/hooks/useProviderAuthStatus';
 import ProviderLoginModal from '../../provider-auth/view/ProviderLoginModal';
 import AgentConnectionsStep from './subcomponents/AgentConnectionsStep';
@@ -33,7 +33,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
 
   const loadGitConfig = useCallback(async () => {
     try {
-      const response = await authenticatedFetch('/api/user/git-config');
+      const response = await api.user.gitConfig();
       if (!response.ok) {
         return;
       }
@@ -99,11 +99,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
 
     setIsSubmitting(true);
     try {
-      const response = await authenticatedFetch('/api/user/git-config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gitName, gitEmail }),
-      });
+      const response = await api.user.updateGitConfig(gitName, gitEmail);
 
       if (!response.ok) {
         const message = await readErrorMessageFromResponse(response, 'Failed to save git configuration');
@@ -128,7 +124,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     setErrorMessage('');
 
     try {
-      const response = await authenticatedFetch('/api/user/complete-onboarding', { method: 'POST' });
+      const response = await api.user.completeOnboarding();
       if (!response.ok) {
         const message = await readErrorMessageFromResponse(response, 'Failed to complete onboarding');
         throw new Error(message);
