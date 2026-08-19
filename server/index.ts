@@ -142,6 +142,16 @@ app.get('/health', (req, res) => {
     });
 });
 
+// API responses carry per-session headers (X-Refreshed-Token, X-Auth-Error).
+// Express sends an ETag but no Cache-Control, which made them cacheable: on
+// revalidation the 304 omits those headers, so the browser merged it with the
+// previously cached response and replayed a stale X-Refreshed-Token, silently
+// overwriting a valid session token with an expired one.
+app.use('/api', (_req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store');
+    next();
+});
+
 // Optional API key validation (if configured)
 app.use('/api', validateApiKey);
 
