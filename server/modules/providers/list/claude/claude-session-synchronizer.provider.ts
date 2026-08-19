@@ -8,9 +8,21 @@ import {
   extractFirstValidJsonlData,
   findFilesRecursivelyCreatedAfter,
   normalizeSessionName,
+  readFileTail,
   readFileTimestamps,
 } from '@/shared/utils.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
+
+/**
+ * How much of a transcript's tail to scan for a title marker.
+ *
+ * Markers are appended as the session runs, so the newest sits within the last
+ * few hundred bytes: on a 6.1 MB transcript measured here the final marker began
+ * 342 bytes from EOF. 64 KiB is ~190x that, and still covers files whose last
+ * records are unusually large, while a miss only costs the full read that this
+ * function already performed unconditionally.
+ */
+const SESSION_TITLE_TAIL_BYTES = 64 * 1024;
 
 type ParsedSession = {
   sessionId: string;
@@ -162,40 +174,65 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     filePath: string,
     sessionId: string
   ): Promise<string | undefined> {
+    // Title markers are appended as the session progresses, so the newest one
+    // sits at the very end of the transcript. Scan a bounded tail first and only
+    // fall back to the whole file if that window holds no marker at all.
+    const tail = await readFileTail(filePath, SESSION_TITLE_TAIL_BYTES);
+    if (tail) {
+      const fromTail = this.findLastSessionTitle(tail.content, sessionId);
+      if (fromTail !== undefined) {
+        return fromTail;
+      }
+
+      if (!tail.truncated) {
+        // The window already covered the whole file; a wider read cannot help.
+        return undefined;
+      }
+    }
+
     try {
       const content = await readFile(filePath, 'utf8');
-      const lines = content.split(/\r?\n/);
-
-      for (let index = lines.length - 1; index >= 0; index -= 1) {
-        const line = lines[index]?.trim();
-        if (!line) {
-          continue;
-        }
-
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(line);
-        } catch {
-          continue;
-        }
-
-        const data = parsed as Record<string, unknown>;
-        const eventType = typeof data.type === 'string' ? data.type : undefined;
-        const eventSessionId = typeof data.sessionId === 'string' ? data.sessionId : undefined;
-        const aiTitle = typeof data.aiTitle === 'string' ? data.aiTitle : undefined;
-        const lastPrompt = typeof data.lastPrompt === 'string' ? data.lastPrompt : undefined;
-        const claudeRenamedTitle = typeof data.customTitle === 'string' ? data.customTitle : undefined;
-
-        if (
-          (eventType === 'ai-title' && eventSessionId === sessionId && aiTitle?.trim()) ||
-          (eventType === 'last-prompt' && eventSessionId === sessionId && lastPrompt?.trim()) ||
-          (eventType === "custom-title" && eventSessionId === sessionId && claudeRenamedTitle?.trim())
-        ) {
-          return aiTitle || lastPrompt || claudeRenamedTitle;
-        }
-      }
+      return this.findLastSessionTitle(content, sessionId);
     } catch {
       // Ignore missing/unreadable files so sync can continue.
+      return undefined;
+    }
+  }
+
+  /**
+   * Returns the last title marker for `sessionId` in a run of JSONL text, or
+   * `undefined` if it holds none.
+   */
+  private findLastSessionTitle(content: string, sessionId: string): string | undefined {
+    const lines = content.split(/\r?\n/);
+
+    for (let index = lines.length - 1; index >= 0; index -= 1) {
+      const line = lines[index]?.trim();
+      if (!line) {
+        continue;
+      }
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(line);
+      } catch {
+        continue;
+      }
+
+      const data = parsed as Record<string, unknown>;
+      const eventType = typeof data.type === 'string' ? data.type : undefined;
+      const eventSessionId = typeof data.sessionId === 'string' ? data.sessionId : undefined;
+      const aiTitle = typeof data.aiTitle === 'string' ? data.aiTitle : undefined;
+      const lastPrompt = typeof data.lastPrompt === 'string' ? data.lastPrompt : undefined;
+      const claudeRenamedTitle = typeof data.customTitle === 'string' ? data.customTitle : undefined;
+
+      if (
+        (eventType === 'ai-title' && eventSessionId === sessionId && aiTitle?.trim()) ||
+        (eventType === 'last-prompt' && eventSessionId === sessionId && lastPrompt?.trim()) ||
+        (eventType === "custom-title" && eventSessionId === sessionId && claudeRenamedTitle?.trim())
+      ) {
+        return aiTitle || lastPrompt || claudeRenamedTitle;
+      }
     }
 
     return undefined;

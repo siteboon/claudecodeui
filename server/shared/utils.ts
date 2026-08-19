@@ -4,6 +4,7 @@ import {
   access,
   lstat,
   mkdir,
+  open,
   readFile,
   readdir,
   readlink,
@@ -11,6 +12,7 @@ import {
   stat,
   writeFile,
 } from 'node:fs/promises';
+import type { FileHandle } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
@@ -1062,6 +1064,58 @@ export async function extractFirstValidJsonlData<T>(
   }
 
   return null;
+}
+
+export type FileTail = {
+  /** Text decoded from the window. Never starts mid-line — see `truncated`. */
+  content: string;
+  /** Bytes actually read, which is `min(maxBytes, fileSize)`. */
+  bytesRead: number;
+  /** File size in bytes, so callers can tell whether the window covered it. */
+  fileSize: number;
+  /** True when the window started past the beginning of the file. */
+  truncated: boolean;
+};
+
+/**
+ * Reads at most the last `maxBytes` of a file.
+ *
+ * For append-only artifacts (JSONL transcripts) the interesting records are at
+ * the end, so a bounded tail avoids paying for the whole file on every event.
+ *
+ * A byte-offset window almost always starts mid-line. When it does, the leading
+ * partial line is dropped and `truncated` is set, so `content` is always a run
+ * of whole lines and a caller can tell that earlier lines exist.
+ */
+export async function readFileTail(filePath: string, maxBytes: number): Promise<FileTail | null> {
+  let handle: FileHandle | undefined;
+
+  try {
+    handle = await open(filePath, 'r');
+    const { size } = await handle.stat();
+    const bytesRead = Math.min(maxBytes, size);
+    const start = size - bytesRead;
+
+    const buffer = Buffer.alloc(bytesRead);
+    await handle.read(buffer, 0, bytesRead, start);
+
+    let content = buffer.toString('utf8');
+    const truncated = start > 0;
+    if (truncated) {
+      // Drop everything up to the first newline: that fragment is the tail of a
+      // line whose start lies outside the window, and a multi-byte character may
+      // also have been split at the boundary.
+      const firstBreak = content.indexOf('\n');
+      content = firstBreak === -1 ? '' : content.slice(firstBreak + 1);
+    }
+
+    return { content, bytesRead, fileSize: size, truncated };
+  } catch {
+    // Ignore missing/unreadable files so callers can fall back or skip.
+    return null;
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
 }
 
 // ---------------------------
