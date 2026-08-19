@@ -19,7 +19,12 @@ import type {
   AuthUserPayload,
   OnboardingStatusPayload,
 } from '../types';
-import { classifyAuthProbe, parseJsonSafely, resolveApiErrorMessage } from '../utils';
+import {
+  classifyAuthProbe,
+  parseJsonSafely,
+  rejectionEndsSession,
+  resolveApiErrorMessage,
+} from '../utils';
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -176,6 +181,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
 
       if (probe === 'rejected') {
+        // The probe id does not move when a refresh stores a new token, so the
+        // token itself is the discriminator here.
+        if (!rejectionEndsSession(token, readStoredToken())) {
+          return;
+        }
+
         clearSession();
         setError(AUTH_ERROR_MESSAGES.sessionExpired);
         return;

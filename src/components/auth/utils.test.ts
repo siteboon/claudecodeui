@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { AuthViewState } from './utils';
-import { classifyAuthProbe, resolveAuthView } from './utils';
+import { classifyAuthProbe, rejectionEndsSession, resolveAuthView } from './utils';
 
 const probe = (status: number, headers: Record<string, string> = {}) =>
   classifyAuthProbe(new Response(null, { status, headers }));
@@ -41,6 +41,23 @@ test('a 304 is inconclusive even though response.ok is false', () => {
 
 test('the server auth-error header is honoured on an unexpected status', () => {
   assert.equal(probe(500, { 'X-Auth-Error': 'invalid-token' }), 'rejected');
+});
+
+test('a rejection ends the session it was actually about', () => {
+  assert.equal(rejectionEndsSession('token-a', 'token-a'), true);
+});
+
+test('a rejection cannot end a session a refresh has already replaced', () => {
+  // The sliding refresh stores a new token while a probe is in flight. The 401
+  // answers the old token, so acting on it deletes a session the server never
+  // rejected - the cold-start logout, one layer in.
+  assert.equal(rejectionEndsSession('token-old', 'token-new'), false);
+});
+
+test('a rejection cannot end a session that is already gone or was never sent', () => {
+  assert.equal(rejectionEndsSession('token-a', null), false);
+  assert.equal(rejectionEndsSession(null, 'token-a'), false);
+  assert.equal(rejectionEndsSession(null, null), false);
 });
 
 const viewState = (overrides: Partial<AuthViewState> = {}): AuthViewState => ({

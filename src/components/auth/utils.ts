@@ -42,6 +42,21 @@ export function classifyAuthProbe(response: Response): AuthProbeResult {
   return response.headers.get('X-Auth-Error') ? 'rejected' : 'unavailable';
 }
 
+/**
+ * Whether a rejection may end the session.
+ *
+ * A probe carries the token it presented. When storage holds a different token
+ * by the time the answer lands - a sliding refresh stored a new one while the
+ * probe was in flight - the rejection was about the token that has already been
+ * replaced, and says nothing about the session now in place.
+ */
+export function rejectionEndsSession(
+  sentToken: string | null,
+  storedToken: string | null
+): boolean {
+  return sentToken !== null && sentToken === storedToken;
+}
+
 /** Which top-level screen the auth state resolves to. */
 export type AuthView = 'loading' | 'setup' | 'unavailable' | 'login' | 'onboarding' | 'app';
 
