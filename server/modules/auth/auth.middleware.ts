@@ -22,6 +22,15 @@ const validateApiKey = (req, res, next) => {
   next();
 };
 
+// A log line is one line: a newline, a control character or a quote coming
+// from the request would let a caller forge entries or break the `ua="..."`
+// field. Everything interpolated below goes through this first.
+const forLogLine = (value: unknown, maxLength: number): string =>
+  String(value ?? '')
+    .replace(/[\u0000-\u001F\u007F]/g, ' ')
+    .replace(/"/g, "'")
+    .slice(0, maxLength);
+
 /**
  * Records why a request was rejected with 401.
  *
@@ -34,15 +43,16 @@ const logAuthRejection = (req, reason: string, detail = ''): void => {
   // `baseUrl + path` deliberately, never `originalUrl`: SSE endpoints pass the
   // JWT as a `?token=` query parameter, which would put bearer credentials in
   // the log. `path` alone is router-relative, so it loses the endpoint.
-  const target = `${req.method} ${req.baseUrl || ''}${req.path}`;
+  const target = forLogLine(`${req.method} ${req.baseUrl || ''}${req.path}`, 200);
 
   // Every client reaches this server through the same loopback proxy, so the
   // remote address cannot tell one device from another. The user agent can,
   // which is what makes a rejection attributable to a specific browser.
-  const userAgent = String(req.headers['user-agent'] ?? 'unknown').slice(0, 120);
+  const userAgent = forLogLine(req.headers['user-agent'] ?? 'unknown', 120);
+  const safeDetail = forLogLine(detail, 200);
 
   console.warn(
-    `[Auth] 401 ${reason} ${target}${detail ? ` ${detail}` : ''} ua="${userAgent}"`
+    `[Auth] 401 ${reason} ${target}${safeDetail ? ` ${safeDetail}` : ''} ua="${userAgent}"`
   );
 };
 
