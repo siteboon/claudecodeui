@@ -14,6 +14,24 @@ import { getConnection } from '@/modules/database/connection.js';
 // Queries
 // ---------------------------------------------------------------------------
 
+/**
+ * Narrows a secret read to a value that can actually be used for signing.
+ *
+ * `null` means the row is absent; an empty string means the row exists and
+ * holds nothing, which INSERT OR IGNORE cannot replace. Neither may be handed
+ * back: an empty signing secret would reject every token already issued, and
+ * treating one as "missing" would loop over a row that never gets written.
+ */
+const requireUsableSecret = (key: string, value: string | null): string => {
+  if (value === null) {
+    throw new Error(`Failed to persist app_config secret '${key}'`);
+  }
+  if (value === '') {
+    throw new Error(`app_config secret '${key}' exists but is empty`);
+  }
+  return value;
+};
+
 export const appConfigDb = {
   /**
    * Returns the stored value for a config key, or null when the key is absent.
@@ -52,8 +70,8 @@ export const appConfigDb = {
    */
   getOrCreateSecret(key: string, generateSecret: () => string): string {
     const existing = appConfigDb.get(key);
-    if (existing) {
-      return existing;
+    if (existing !== null) {
+      return requireUsableSecret(key, existing);
     }
 
     const db = getConnection();
@@ -62,11 +80,7 @@ export const appConfigDb = {
       generateSecret()
     );
 
-    const stored = appConfigDb.get(key);
-    if (!stored) {
-      throw new Error(`Failed to persist app_config secret '${key}'`);
-    }
-    return stored;
+    return requireUsableSecret(key, appConfigDb.get(key));
   },
 
   /**

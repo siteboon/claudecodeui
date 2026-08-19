@@ -90,3 +90,20 @@ test('a failed read throws instead of reporting the key as absent', async () => 
     assert.equal(original.length, 128);
   });
 });
+
+test('an empty stored secret is refused rather than treated as absent', async () => {
+  await withIsolatedDatabase(() => {
+    getConnection()
+      .prepare('INSERT INTO app_config (key, value) VALUES (?, ?)')
+      .run('test_secret', '');
+
+    // A row holding '' is corruption, not absence: INSERT OR IGNORE cannot
+    // replace it, so calling it absent would return '' on the next read, and
+    // signing with an empty secret rejects every token already issued.
+    assert.throws(
+      () => appConfigDb.getOrCreateSecret('test_secret', () => 'replacement'),
+      /exists but is empty/
+    );
+    assert.equal(appConfigDb.get('test_secret'), '');
+  });
+});
