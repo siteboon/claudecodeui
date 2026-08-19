@@ -11,9 +11,19 @@ test('a successful probe authenticates', () => {
   assert.equal(probe(200), 'authenticated');
 });
 
-test('only an explicit rejection ends the session', () => {
-  assert.equal(probe(401), 'rejected');
-  assert.equal(probe(403), 'rejected');
+test('only the server marking the token bad ends the session', () => {
+  assert.equal(probe(401, { 'X-Auth-Error': 'invalid-token' }), 'rejected');
+  assert.equal(probe(403, { 'X-Auth-Error': 'invalid-token' }), 'rejected');
+  assert.equal(probe(401, { 'X-Auth-Error': 'session-expired' }), 'rejected');
+});
+
+test('an unmarked 401/403 is a gateway verdict, not ours', () => {
+  // authenticateToken() sets X-Auth-Error on every rejection it makes, so a
+  // bare 401/403 came from in front of the app - Cloudflare Access answering an
+  // unauthenticated fetch, a WAF, a proxy with its own auth. None of them looked
+  // at this token, so none may end the session.
+  assert.equal(probe(401), 'unavailable');
+  assert.equal(probe(403), 'unavailable');
 });
 
 test('a non-auth error status is inconclusive, not a rejection', () => {

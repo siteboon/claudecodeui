@@ -32,12 +32,13 @@ export function classifyAuthProbe(response: Response): AuthProbeResult {
     return 'authenticated';
   }
 
-  // The server marks a genuinely bad token with 401/403 plus X-Auth-Error.
-  // Only that verdict may end the session; anything else is inconclusive.
-  if (response.status === 401 || response.status === 403) {
-    return 'rejected';
-  }
-
+  // `X-Auth-Error` is the only thing that identifies OUR server's verdict:
+  // every rejection in authenticateToken() sets it, whatever the status, and
+  // index.ts exposes it through CORS. A bare 401/403 without it therefore did
+  // not come from the token check at all - it came from whatever sits in front
+  // of the tunnel (Cloudflare Access answering an unauthenticated fetch, a WAF,
+  // a proxy with its own auth), which knows nothing about this session. Ending
+  // the session on that is the same bug as ending it on a 502.
   return response.headers.get('X-Auth-Error') ? 'rejected' : 'unavailable';
 }
 
