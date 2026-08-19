@@ -11,7 +11,7 @@ import type {
   ProjectSession,
 } from '../types/app';
 
-import type { SessionActivityMap } from './useSessionProtection';
+import type { IsSessionProcessing } from './useSessionProtection';
 
 type UseProjectsStateArgs = {
   sessionId?: string;
@@ -19,7 +19,7 @@ type UseProjectsStateArgs = {
   /** Subscription to the unified websocket event stream. */
   subscribe: (listener: (event: ServerEvent) => void) => () => void;
   isMobile: boolean;
-  activeSessions: SessionActivityMap;
+  isSessionProcessing: IsSessionProcessing;
 };
 
 /**
@@ -376,7 +376,7 @@ export function useProjectsState({
   navigate,
   subscribe,
   isMobile,
-  activeSessions,
+  isSessionProcessing,
 }: UseProjectsStateArgs) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -395,7 +395,6 @@ export function useProjectsState({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [loadingProgress, setLoadingProgress] = useState<LoadingProgress | null>(null);
-  const [isInputFocused, setIsInputFocused] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState('agents');
   const [externalMessageUpdate, setExternalMessageUpdate] = useState(0);
@@ -432,8 +431,6 @@ export function useProjectsState({
    */
   const selectedSessionRef = useRef(selectedSession);
   selectedSessionRef.current = selectedSession;
-  const activeSessionsRef = useRef(activeSessions);
-  activeSessionsRef.current = activeSessions;
   const selectedProjectRef = useRef(selectedProject);
   selectedProjectRef.current = selectedProject;
   const projectsRef = useRef(projects);
@@ -712,7 +709,7 @@ export function useProjectsState({
       if (
         currentSelectedSession
         && upsert.sessionId === currentSelectedSession.id
-        && !activeSessionsRef.current.has(upsert.sessionId)
+        && !isSessionProcessing(upsert.sessionId)
       ) {
         setExternalMessageUpdate((prev) => prev + 1);
       } else {
@@ -802,7 +799,7 @@ export function useProjectsState({
     };
 
     return subscribe(handleEvent);
-  }, [markSessionAttention, navigate, sessionId, subscribe]);
+  }, [isSessionProcessing, markSessionAttention, navigate, sessionId, subscribe]);
 
   useEffect(() => {
     return () => {
@@ -1135,7 +1132,6 @@ export function useProjectsState({
       projects,
       selectedProject,
       selectedSession,
-      activeSessions,
       attentionSessionIds,
       onProjectSelect: handleProjectSelect,
       onSessionSelect: handleSessionSelect,
@@ -1164,7 +1160,6 @@ export function useProjectsState({
       isLoadingProjects,
       isMobile,
       loadingProgress,
-      activeSessions,
       projects,
       settingsInitialTab,
       selectedProject,
@@ -1181,14 +1176,12 @@ export function useProjectsState({
     sidebarOpen,
     isLoadingProjects,
     loadingProgress,
-    isInputFocused,
     showSettings,
     settingsInitialTab,
     externalMessageUpdate,
     newSessionTrigger,
     setActiveTab,
     setSidebarOpen,
-    setIsInputFocused,
     setShowSettings,
     openSettings,
     fetchProjects,

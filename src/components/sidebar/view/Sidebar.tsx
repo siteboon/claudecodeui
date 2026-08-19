@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { memo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useDeviceSettings } from '../../../hooks/useDeviceSettings';
@@ -8,6 +8,7 @@ import { useSidebarController } from '../hooks/useSidebarController';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
+import { useProcessingSessions } from '../../../contexts/SessionProtectionContext';
 import type { Project, LLMProvider } from '../../../types/app';
 import type { MCPServerStatus, SidebarProps } from '../types/types';
 
@@ -25,7 +26,6 @@ function Sidebar({
   projects,
   selectedProject,
   selectedSession,
-  activeSessions,
   attentionSessionIds,
   onProjectSelect,
   onSessionSelect,
@@ -53,6 +53,7 @@ function Sidebar({
   const { setCurrentProject, mcpServerStatus } = useTaskMaster() as TaskMasterSidebarContext;
   const { tasksEnabled } = useTasksSettings();
   const paletteOps = usePaletteOps();
+  const activeSessions = useProcessingSessions();
 
   const {
     isSidebarCollapsed,
@@ -331,4 +332,4 @@ function Sidebar({
   );
 }
 
-export default Sidebar;
+export default memo(Sidebar);

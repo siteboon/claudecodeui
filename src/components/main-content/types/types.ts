@@ -1,11 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react';
 
 import type { AppTab, Project, ProjectSession } from '../../../types/app';
-import type {
-  MarkSessionIdle,
-  MarkSessionProcessing,
-  SessionActivityMap,
-} from '../../../hooks/useSessionProtection';
 import type { SessionEstablishedContext, SessionNavigationOptions } from '../../chat/types/types';
 import type { SettingsMainTab } from '../../settings/types/types';
 
@@ -48,10 +43,6 @@ export type MainContentProps = {
   isMobile: boolean;
   onMenuClick: () => void;
   isLoading: boolean;
-  onInputFocusChange: (focused: boolean) => void;
-  onSessionProcessing: MarkSessionProcessing;
-  onSessionIdle: MarkSessionIdle;
-  processingSessions: SessionActivityMap;
   onNavigateToSession: (targetSessionId: string, options?: SessionNavigationOptions) => void;
   onSessionEstablished: (sessionId: string, context: SessionEstablishedContext) => void;
   onShowSettings: (tab?: SettingsMainTab) => void;

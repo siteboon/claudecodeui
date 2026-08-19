@@ -1,9 +1,4 @@
 import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
-import type {
-  MarkSessionIdle,
-  MarkSessionProcessing,
-  SessionActivityMap,
-} from '../../../hooks/useSessionProtection';
 
 export type Provider = LLMProvider;
 
@@ -129,10 +124,6 @@ export interface ChatInterfaceProps {
   ws: WebSocket | null;
   sendMessage: (message: unknown) => void;
   onFileOpen?: (filePath: string, diffInfo?: any) => void;
-  onInputFocusChange?: (focused: boolean) => void;
-  onSessionProcessing?: MarkSessionProcessing;
-  onSessionIdle?: MarkSessionIdle;
-  processingSessions?: SessionActivityMap;
   onNavigateToSession?: (targetSessionId: string, options?: SessionNavigationOptions) => void;
   onSessionEstablished?: (sessionId: string, context: SessionEstablishedContext) => void;
   onShowSettings?: () => void;

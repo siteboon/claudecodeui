@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { memo, useCallback, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -8,43 +8,53 @@ import CommandPalette from '../command-palette/CommandPalette';
 import { QuickSettingsPanel } from '../quick-settings-panel';
 import { useWebSocket } from '../../contexts/WebSocketContext';
 import { PaletteOpsProvider, usePaletteOpsRegister } from '../../contexts/PaletteOpsContext';
+import {
+  SessionProtectionProvider,
+  useProcessingSessions,
+  useSessionProtectionActions,
+} from '../../contexts/SessionProtectionContext';
 import { useDeviceSettings } from '../../hooks/useDeviceSettings';
-import { useSessionProtection } from '../../hooks/useSessionProtection';
 import { useProjectsState } from '../../hooks/useProjectsState';
 import { useQueuedMessageAutoSend } from '../../hooks/useQueuedMessageAutoSend';
-import { api } from '../../utils/api';
+import type {
+  SessionEstablishedContext,
+  SessionNavigationOptions,
+} from '../chat/types/types';
 
-type RunningSessionApiItem = {
-  sessionId?: unknown;
-  startedAt?: unknown;
-  statusText?: unknown;
-  canInterrupt?: unknown;
+type QueuedMessageAutoSendControllerProps = {
+  activeSessionId: string | null;
+  ws: WebSocket | null;
+  sendMessage: (message: unknown) => void;
 };
 
-type RunningSessionsApiPayload = {
-  data?: {
-    sessions?: RunningSessionApiItem[];
-  };
-};
+function QueuedMessageAutoSendController({
+  activeSessionId,
+  ws,
+  sendMessage,
+}: QueuedMessageAutoSendControllerProps) {
+  const processingSessions = useProcessingSessions();
+  const { markSessionProcessing } = useSessionProtectionActions();
 
-const parseStartedAt = (value: unknown): number | undefined => {
-  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
-    return value;
-  }
+  useQueuedMessageAutoSend({
+    processingSessions,
+    activeSessionId,
+    ws,
+    sendMessage,
+    markSessionProcessing,
+  });
 
-  if (typeof value !== 'string') {
-    return undefined;
-  }
+  return null;
+}
 
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-};
+const MemoizedAppContentInner = memo(AppContentInner);
 
 export default function AppContent() {
   return (
-    <PaletteOpsProvider>
-      <AppContentInner />
-    </PaletteOpsProvider>
+    <SessionProtectionProvider>
+      <PaletteOpsProvider>
+        <MemoizedAppContentInner />
+      </PaletteOpsProvider>
+    </SessionProtectionProvider>
   );
 }
 
@@ -54,14 +64,10 @@ function AppContentInner() {
   const { t } = useTranslation('common');
   const { isMobile } = useDeviceSettings({ trackPWA: false });
   const { ws, sendMessage, subscribe } = useWebSocket();
+  const { isSessionProcessing } = useSessionProtectionActions();
 
-  const {
-    processingSessions,
-    markSessionProcessing,
-    markSessionIdle,
-    syncProcessingSessions,
-  } = useSessionProtection();
 
+  console.count("App INNER RENDER COUNT")
   const {
     selectedProject,
     selectedSession,
@@ -72,7 +78,6 @@ function AppContentInner() {
     newSessionTrigger,
     setActiveTab,
     setSidebarOpen,
-    setIsInputFocused,
     openSettings,
     refreshProjectsSilently,
     registerOptimisticSession,
@@ -84,62 +89,30 @@ function AppContentInner() {
     navigate,
     subscribe,
     isMobile,
-    activeSessions: processingSessions,
+    isSessionProcessing,
   });
 
-  // Queued messages for sessions that finish while another session (or none)
-  // is being viewed are sent from here; the viewed session's composer handles
-  // its own queue.
-  useQueuedMessageAutoSend({
-    processingSessions,
-    activeSessionId: selectedSession?.id ?? sessionId ?? null,
-    ws,
-    sendMessage,
-    markSessionProcessing,
-  });
+  const handleOpenSidebar = useCallback(() => {
+    setSidebarOpen(true);
+  }, [setSidebarOpen]);
 
-  const refreshRunningSessions = useCallback(async () => {
-    try {
-      const response = await api.runningSessions();
-      if (!response.ok) {
-        return;
-      }
+  const handleNavigateToSession = useCallback((
+    targetSessionId: string,
+    options?: SessionNavigationOptions,
+  ) => {
+    navigate(`/session/${targetSessionId}`, { replace: Boolean(options?.replace) });
+  }, [navigate]);
 
-      const payload = (await response.json()) as RunningSessionsApiPayload;
-      const sessions = Array.isArray(payload.data?.sessions) ? payload.data.sessions : [];
+  const handleSessionEstablished = useCallback((
+    targetSessionId: string,
+    context: SessionEstablishedContext,
+  ) => {
+    registerOptimisticSession({ sessionId: targetSessionId, ...context });
+  }, [registerOptimisticSession]);
 
-      syncProcessingSessions(
-        sessions
-          .map((session) => {
-            if (typeof session.sessionId !== 'string' || !session.sessionId) {
-              return null;
-            }
-
-            return {
-              sessionId: session.sessionId,
-              startedAt: parseStartedAt(session.startedAt),
-              statusText: typeof session.statusText === 'string' ? session.statusText : undefined,
-              canInterrupt: typeof session.canInterrupt === 'boolean' ? session.canInterrupt : undefined,
-            };
-          })
-          .filter((session): session is NonNullable<typeof session> => Boolean(session)),
-      );
-    } catch (error) {
-      console.error('[AppContent] Failed to sync running sessions:', error);
-    }
-  }, [syncProcessingSessions]);
-
-  useEffect(() => {
-    void refreshRunningSessions();
-  }, [refreshRunningSessions]);
-
-  useEffect(() => {
-    const interval = window.setInterval(() => {
-      void refreshRunningSessions();
-    }, 5000);
-
-    return () => window.clearInterval(interval);
-  }, [refreshRunningSessions]);
+  const handleProjectsRefresh = useCallback(() => {
+    void refreshProjectsSilently();
+  }, [refreshProjectsSilently]);
 
   usePaletteOpsRegister({
     openSettings,
@@ -206,6 +179,12 @@ function AppContentInner() {
 
   return (
     <div className="fixed inset-0 flex bg-background" style={{ bottom: 'var(--keyboard-height, 0px)' }}>
+      <QueuedMessageAutoSendController
+        activeSessionId={selectedSession?.id ?? sessionId ?? null}
+        ws={ws}
+        sendMessage={sendMessage}
+      />
+
       {!isMobile ? (
         <div className="h-full flex-shrink-0 border-r border-border/50">
           <Sidebar {...sidebarSharedProps} />
@@ -248,30 +227,22 @@ function AppContentInner() {
           ws={ws}
           sendMessage={sendMessage}
           isMobile={isMobile}
-          onMenuClick={() => setSidebarOpen(true)}
+          onMenuClick={handleOpenSidebar}
           isLoading={isLoadingProjects}
-          onInputFocusChange={setIsInputFocused}
-          onSessionProcessing={markSessionProcessing}
-          onSessionIdle={markSessionIdle}
-          processingSessions={processingSessions}
-          onNavigateToSession={(targetSessionId: string, options) =>
-            navigate(`/session/${targetSessionId}`, { replace: Boolean(options?.replace) })
-          }
-          onSessionEstablished={(targetSessionId, context) =>
-            registerOptimisticSession({ sessionId: targetSessionId, ...context })
-          }
+          onNavigateToSession={handleNavigateToSession}
+          onSessionEstablished={handleSessionEstablished}
           onShowSettings={openSettings}
           externalMessageUpdate={externalMessageUpdate}
           newSessionTrigger={newSessionTrigger}
           onProjectSelect={handleProjectSelect}
-          onProjectsRefresh={() => void refreshProjectsSilently()}
+          onProjectsRefresh={handleProjectsRefresh}
         />
       </div>
 
       <CommandPalette
         selectedProject={selectedProject}
         onStartNewChat={handleNewSession}
-        onOpenSettings={() => openSettings()}
+        onOpenSettings={openSettings}
         onShowTab={setActiveTab}
       />
 

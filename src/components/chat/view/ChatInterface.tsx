@@ -11,6 +11,10 @@ import { useChatSessionState } from '../hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '../hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '../hooks/useChatComposerState';
 import { useSessionStore } from '../../../stores/useSessionStore';
+import {
+  useProcessingSessions,
+  useSessionProtectionActions,
+} from '../../../contexts/SessionProtectionContext';
 
 import ChatMessagesPane from './subcomponents/ChatMessagesPane';
 import ChatComposer from './subcomponents/ChatComposer';
@@ -23,10 +27,6 @@ function ChatInterface({
   ws,
   sendMessage,
   onFileOpen,
-  onInputFocusChange,
-  onSessionProcessing,
-  onSessionIdle,
-  processingSessions,
   onNavigateToSession,
   onSessionEstablished,
   onShowSettings,
@@ -40,6 +40,11 @@ function ChatInterface({
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
   const { subscribe } = useWebSocket();
   const { t } = useTranslation('chat');
+  const processingSessions = useProcessingSessions();
+  const {
+    markSessionProcessing: onSessionProcessing,
+    markSessionIdle: onSessionIdle,
+  } = useSessionProtectionActions();
 
   const sessionStore = useSessionStore();
   const streamTimerRef = useRef<number | null>(null);
@@ -212,7 +217,6 @@ function ChatInterface({
     sendByCtrlEnter,
     onSessionProcessing,
     onSessionEstablished: handleSessionEstablished,
-    onInputFocusChange,
     onFileOpen,
     onShowSettings,
     scrollToBottom,

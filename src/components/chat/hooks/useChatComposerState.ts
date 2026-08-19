@@ -63,7 +63,6 @@ interface UseChatComposerStateArgs {
    * /session/:id and records it as the current session.
    */
   onSessionEstablished?: (sessionId: string, context: SessionEstablishedContext) => void;
-  onInputFocusChange?: (focused: boolean) => void;
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
   scrollToBottom: () => void;
@@ -246,7 +245,6 @@ export function useChatComposerState({
   sendByCtrlEnter,
   onSessionProcessing,
   onSessionEstablished,
-  onInputFocusChange,
   onFileOpen,
   onShowSettings,
   scrollToBottom,
@@ -1260,9 +1258,8 @@ export function useChatComposerState({
   const handleInputFocusChange = useCallback(
     (focused: boolean) => {
       setIsInputFocused(focused);
-      onInputFocusChange?.(focused);
     },
-    [onInputFocusChange],
+    [],
   );
 
   return {

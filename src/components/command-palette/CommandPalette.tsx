@@ -63,7 +63,7 @@ const NAV_TABS: Array<{ id: AppTab; label: string; keywords: string }> = [
   { id: 'tasks', label: 'Go to Tasks', keywords: 'tasks taskmaster' },
 ];
 
-export default function CommandPalette({
+function CommandPalette({
   selectedProject,
   onStartNewChat,
   onOpenSettings,
@@ -362,6 +362,8 @@ export default function CommandPalette({
     </Dialog>
   );
 }
+
+export default React.memo(CommandPalette);
 
 function BrowseAllItem({ label, onSelect }: { label: string; onSelect: () => void }) {
   return (
