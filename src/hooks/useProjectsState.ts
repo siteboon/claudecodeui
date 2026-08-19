@@ -12,6 +12,7 @@ import type {
 } from '../types/app';
 
 import type { IsSessionProcessing } from './useSessionProtection';
+import { mergeProjectSelectionMetadata } from './projectSelectionMetadata';
 
 type UseProjectsStateArgs = {
   sessionId?: string;
@@ -568,15 +569,6 @@ export function useProjectsState({
       );
     });
 
-    setSelectedProject((previousProject) => {
-      if (!previousProject || previousProject.projectId !== project.projectId) {
-        return previousProject;
-      }
-
-      const updatedProject = upsertSessionIntoProject(previousProject, upsert);
-      return updatedProject === previousProject ? previousProject : updatedProject;
-    });
-
     setSelectedSession((previousSession) => (
       previousSession?.id === newSessionId
         ? { ...previousSession, ...optimisticSession }
@@ -752,19 +744,17 @@ export function useProjectsState({
         );
       });
 
-      // Keep the selected project reference in sync with the upsert.
+      // Session-list changes belong to the sidebar's `projects` collection.
+      // Only propagate workspace metadata changes to the selected project so
+      // a background session upsert does not wake the main content tree.
       setSelectedProject((previousProject) => {
-        if (!previousProject) {
+        if (!previousProject || !upsert.project) {
           return previousProject;
         }
-        const matches = upsert.project
-          ? previousProject.projectId === upsert.project.projectId
-          : getProjectSessions(previousProject).some((session) => session.id === upsert.sessionId);
-        if (!matches) {
+        if (previousProject.projectId !== upsert.project.projectId) {
           return previousProject;
         }
-        const updated = upsertSessionIntoProject(previousProject, upsert);
-        return updated === previousProject ? previousProject : updated;
+        return mergeProjectSelectionMetadata(previousProject, upsert.project);
       });
 
       const aliasedSelectedSessionId =
@@ -1035,9 +1025,11 @@ export function useProjectsState({
         return;
       }
 
-      if (serialize(refreshedProject) !== serialize(selectedProject)) {
-        setSelectedProject(refreshedProject);
-      }
+      setSelectedProject((previousProject) => (
+        previousProject?.projectId === refreshedProject.projectId
+          ? mergeProjectSelectionMetadata(previousProject, refreshedProject)
+          : previousProject
+      ));
 
       if (!selectedSession) {
         return;
@@ -1094,23 +1086,16 @@ export function useProjectsState({
 
     const sessionsPage = (await response.json()) as ProjectSessionPage;
 
-    let mergedProjectForSelection: Project | null = null;
     setProjects((previousProjects) =>
       previousProjects.map((candidate) => {
         if (candidate.projectId !== projectId) {
           return candidate;
         }
 
-        const mergedProject = mergeProjectSessionPage(candidate, sessionsPage);
-        mergedProjectForSelection = mergedProject;
-        return mergedProject;
+        return mergeProjectSessionPage(candidate, sessionsPage);
       }),
     );
-
-    if (selectedProject?.projectId === projectId && mergedProjectForSelection) {
-      setSelectedProject(mergedProjectForSelection);
-    }
-  }, [projects, selectedProject?.projectId]);
+  }, [projects]);
 
   // `projectId` is the DB identifier passed from the sidebar's delete flow
   // after the migration away from folder-derived project names.

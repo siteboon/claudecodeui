@@ -1,5 +1,10 @@
 import { memo, useCallback, useEffect } from 'react';
+import type {
+  MouseEvent as ReactMouseEvent,
+  TouchEvent as ReactTouchEvent,
+} from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import type { NavigateFunction } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 import Sidebar from '../sidebar/view/Sidebar';
@@ -9,29 +14,37 @@ import { QuickSettingsPanel } from '../quick-settings-panel';
 import { useWebSocket } from '../../contexts/WebSocketContext';
 import { PaletteOpsProvider, usePaletteOpsRegister } from '../../contexts/PaletteOpsContext';
 import {
+  ProjectsStateProvider,
+  useProjectActiveSessionState,
+  useProjectCommandState,
+  useProjectEffectsState,
+  useProjectMainState,
+  useProjectSidebarState,
+} from '../../contexts/ProjectsStateContext';
+import {
   SessionProtectionProvider,
   useProcessingSessions,
   useSessionProtectionActions,
 } from '../../contexts/SessionProtectionContext';
 import { useDeviceSettings } from '../../hooks/useDeviceSettings';
-import { useProjectsState } from '../../hooks/useProjectsState';
 import { useQueuedMessageAutoSend } from '../../hooks/useQueuedMessageAutoSend';
 import type {
   SessionEstablishedContext,
   SessionNavigationOptions,
 } from '../chat/types/types';
 
-type QueuedMessageAutoSendControllerProps = {
-  activeSessionId: string | null;
+type RealtimeProps = {
   ws: WebSocket | null;
   sendMessage: (message: unknown) => void;
 };
 
-function QueuedMessageAutoSendController({
-  activeSessionId,
-  ws,
-  sendMessage,
-}: QueuedMessageAutoSendControllerProps) {
+type ProjectWorkspaceProps = RealtimeProps & {
+  isMobile: boolean;
+  navigate: NavigateFunction;
+};
+
+function QueuedMessageAutoSendController({ ws, sendMessage }: RealtimeProps) {
+  const { activeSessionId } = useProjectActiveSessionState();
   const processingSessions = useProcessingSessions();
   const { markSessionProcessing } = useSessionProtectionActions();
 
@@ -46,73 +59,13 @@ function QueuedMessageAutoSendController({
   return null;
 }
 
-const MemoizedAppContentInner = memo(AppContentInner);
-
-export default function AppContent() {
-  return (
-    <SessionProtectionProvider>
-      <PaletteOpsProvider>
-        <MemoizedAppContentInner />
-      </PaletteOpsProvider>
-    </SessionProtectionProvider>
-  );
-}
-
-function AppContentInner() {
-  const navigate = useNavigate();
-  const { sessionId } = useParams<{ sessionId?: string }>();
-  const { t } = useTranslation('common');
-  const { isMobile } = useDeviceSettings({ trackPWA: false });
-  const { ws, sendMessage, subscribe } = useWebSocket();
-  const { isSessionProcessing } = useSessionProtectionActions();
-
-
-  console.count("App INNER RENDER COUNT")
+function ProjectEffects({ navigate }: Pick<ProjectWorkspaceProps, 'navigate'>) {
   const {
-    selectedProject,
-    selectedSession,
-    activeTab,
-    sidebarOpen,
-    isLoadingProjects,
-    externalMessageUpdate,
-    newSessionTrigger,
-    setActiveTab,
-    setSidebarOpen,
     openSettings,
     refreshProjectsSilently,
-    registerOptimisticSession,
-    sidebarSharedProps,
-    handleNewSession,
-    handleProjectSelect,
-  } = useProjectsState({
-    sessionId,
-    navigate,
-    subscribe,
-    isMobile,
-    isSessionProcessing,
-  });
-
-  const handleOpenSidebar = useCallback(() => {
-    setSidebarOpen(true);
-  }, [setSidebarOpen]);
-
-  const handleNavigateToSession = useCallback((
-    targetSessionId: string,
-    options?: SessionNavigationOptions,
-  ) => {
-    navigate(`/session/${targetSessionId}`, { replace: Boolean(options?.replace) });
-  }, [navigate]);
-
-  const handleSessionEstablished = useCallback((
-    targetSessionId: string,
-    context: SessionEstablishedContext,
-  ) => {
-    registerOptimisticSession({ sessionId: targetSessionId, ...context });
-  }, [registerOptimisticSession]);
-
-  const handleProjectsRefresh = useCallback(() => {
-    void refreshProjectsSilently();
-  }, [refreshProjectsSilently]);
+    setActiveTab,
+    setSidebarOpen,
+  } = useProjectEffectsState();
 
   usePaletteOpsRegister({
     openSettings,
@@ -153,100 +106,213 @@ function AppContentInner() {
     };
   }, [navigate, refreshProjectsSilently, setActiveTab, setSidebarOpen]);
 
-  // Pending tool permissions are recovered through the `chat.subscribe` flow:
-  // the `chat_subscribed` ack carries them on session open and on reconnect,
-  // so no separate permission-recovery message is needed here.
+  return null;
+}
 
-  // Adjust the app container to stay above the virtual keyboard on iOS Safari.
-  // On Chrome for Android the layout viewport already shrinks when the keyboard opens,
-  // so inset-0 adjusts automatically. On iOS the layout viewport stays full-height and
-  // the keyboard overlays it — we use the Visual Viewport API to track keyboard height
-  // and apply it as a CSS variable that shifts the container's bottom edge up.
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const update = () => {
-      // Only resize matters — keyboard open/close changes vv.height.
-      // Do NOT listen to scroll: on iOS Safari, scrolling content changes
-      // vv.offsetTop which would make --keyboard-height fluctuate during
-      // normal scrolling, causing the container to bounce up and down.
-      const kb = Math.max(0, window.innerHeight - vv.height);
-      document.documentElement.style.setProperty('--keyboard-height', `${kb}px`);
-    };
-    vv.addEventListener('resize', update);
-    return () => vv.removeEventListener('resize', update);
-  }, []);
+function ProjectSidebarRegion({ isMobile }: Pick<ProjectWorkspaceProps, 'isMobile'>) {
+  const { t } = useTranslation('common');
+  const { sidebarOpen, setSidebarOpen, sidebarSharedProps } = useProjectSidebarState();
+
+  const handleBackdropClick = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    setSidebarOpen(false);
+  }, [setSidebarOpen]);
+
+  const handleBackdropTouch = useCallback((event: ReactTouchEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setSidebarOpen(false);
+  }, [setSidebarOpen]);
+
+  if (!isMobile) {
+    return (
+      <div className="h-full flex-shrink-0 border-r border-border/50">
+        <Sidebar {...sidebarSharedProps} />
+      </div>
+    );
+  }
 
   return (
-    <div className="fixed inset-0 flex bg-background" style={{ bottom: 'var(--keyboard-height, 0px)' }}>
-      <QueuedMessageAutoSendController
-        activeSessionId={selectedSession?.id ?? sessionId ?? null}
-        ws={ws}
-        sendMessage={sendMessage}
+    <div
+      className={`fixed inset-0 z-50 flex transition-all duration-150 ease-out ${
+        sidebarOpen ? 'visible opacity-100' : 'invisible opacity-0'
+      }`}
+    >
+      <button
+        className="fixed inset-0 bg-background/60 backdrop-blur-sm transition-opacity duration-150 ease-out"
+        onClick={handleBackdropClick}
+        onTouchStart={handleBackdropTouch}
+        aria-label={t('versionUpdate.ariaLabels.closeSidebar')}
       />
+      <div
+        className={`relative h-full w-[85vw] max-w-sm transform border-r border-border/40 bg-card transition-transform duration-150 ease-out sm:w-80 ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+        onClick={(event) => event.stopPropagation()}
+        onTouchStart={(event) => event.stopPropagation()}
+      >
+        <Sidebar {...sidebarSharedProps} />
+      </div>
+    </div>
+  );
+}
 
-      {!isMobile ? (
-        <div className="h-full flex-shrink-0 border-r border-border/50">
-          <Sidebar {...sidebarSharedProps} />
-        </div>
-      ) : (
-        <div
-          className={`fixed inset-0 z-50 flex transition-all duration-150 ease-out ${sidebarOpen ? 'visible opacity-100' : 'invisible opacity-0'
-            }`}
-        >
-          <button
-            className="fixed inset-0 bg-background/60 backdrop-blur-sm transition-opacity duration-150 ease-out"
-            onClick={(event) => {
-              event.stopPropagation();
-              setSidebarOpen(false);
-            }}
-            onTouchStart={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              setSidebarOpen(false);
-            }}
-            aria-label={t('versionUpdate.ariaLabels.closeSidebar')}
-          />
-          <div
-            className={`relative h-full w-[85vw] max-w-sm transform border-r border-border/40 bg-card transition-transform duration-150 ease-out sm:w-80 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-              }`}
-            onClick={(event) => event.stopPropagation()}
-            onTouchStart={(event) => event.stopPropagation()}
-          >
-            <Sidebar {...sidebarSharedProps} />
-          </div>
-        </div>
-      )}
+function ProjectMainRegion({ isMobile, ws, sendMessage, navigate }: ProjectWorkspaceProps) {
+  const {
+    selectedProject,
+    selectedSession,
+    activeTab,
+    setActiveTab,
+    setSidebarOpen,
+    isLoadingProjects,
+    openSettings,
+    externalMessageUpdate,
+    newSessionTrigger,
+    registerOptimisticSession,
+    handleProjectSelect,
+    refreshProjectsSilently,
+  } = useProjectMainState();
+
+  const handleOpenSidebar = useCallback(() => {
+    setSidebarOpen(true);
+  }, [setSidebarOpen]);
+
+  const handleNavigateToSession = useCallback((
+    targetSessionId: string,
+    options?: SessionNavigationOptions,
+  ) => {
+    navigate(`/session/${targetSessionId}`, { replace: Boolean(options?.replace) });
+  }, [navigate]);
+
+  const handleSessionEstablished = useCallback((
+    targetSessionId: string,
+    context: SessionEstablishedContext,
+  ) => {
+    registerOptimisticSession({ sessionId: targetSessionId, ...context });
+  }, [registerOptimisticSession]);
+
+  const handleProjectsRefresh = useCallback(() => {
+    void refreshProjectsSilently();
+  }, [refreshProjectsSilently]);
+
+  return (
+    <MainContent
+      selectedProject={selectedProject}
+      selectedSession={selectedSession}
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      ws={ws}
+      sendMessage={sendMessage}
+      isMobile={isMobile}
+      onMenuClick={handleOpenSidebar}
+      isLoading={isLoadingProjects}
+      onNavigateToSession={handleNavigateToSession}
+      onSessionEstablished={handleSessionEstablished}
+      onShowSettings={openSettings}
+      externalMessageUpdate={externalMessageUpdate}
+      newSessionTrigger={newSessionTrigger}
+      onProjectSelect={handleProjectSelect}
+      onProjectsRefresh={handleProjectsRefresh}
+    />
+  );
+}
+
+function ProjectCommandPalette() {
+  const {
+    selectedProject,
+    handleNewSession,
+    openSettings,
+    setActiveTab,
+  } = useProjectCommandState();
+
+  return (
+    <CommandPalette
+      selectedProject={selectedProject}
+      onStartNewChat={handleNewSession}
+      onOpenSettings={openSettings}
+      onShowTab={setActiveTab}
+    />
+  );
+}
+
+const MemoizedProjectSidebarRegion = memo(ProjectSidebarRegion);
+const MemoizedProjectMainRegion = memo(ProjectMainRegion);
+const MemoizedProjectCommandPalette = memo(ProjectCommandPalette);
+
+function ProjectWorkspace({ isMobile, ws, sendMessage, navigate }: ProjectWorkspaceProps) {
+  return (
+    <div className="fixed inset-0 flex bg-background" style={{ bottom: 'var(--keyboard-height, 0px)' }}>
+      <ProjectEffects navigate={navigate} />
+      <QueuedMessageAutoSendController ws={ws} sendMessage={sendMessage} />
+      <MemoizedProjectSidebarRegion isMobile={isMobile} />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <MainContent
-          selectedProject={selectedProject}
-          selectedSession={selectedSession}
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
+        <MemoizedProjectMainRegion
+          isMobile={isMobile}
           ws={ws}
           sendMessage={sendMessage}
-          isMobile={isMobile}
-          onMenuClick={handleOpenSidebar}
-          isLoading={isLoadingProjects}
-          onNavigateToSession={handleNavigateToSession}
-          onSessionEstablished={handleSessionEstablished}
-          onShowSettings={openSettings}
-          externalMessageUpdate={externalMessageUpdate}
-          newSessionTrigger={newSessionTrigger}
-          onProjectSelect={handleProjectSelect}
-          onProjectsRefresh={handleProjectsRefresh}
+          navigate={navigate}
         />
       </div>
 
-      <CommandPalette
-        selectedProject={selectedProject}
-        onStartNewChat={handleNewSession}
-        onOpenSettings={openSettings}
-        onShowTab={setActiveTab}
-      />
-
+      <MemoizedProjectCommandPalette />
       <QuickSettingsPanel />
     </div>
+  );
+}
+
+const MemoizedProjectWorkspace = memo(ProjectWorkspace);
+const MemoizedAppContentInner = memo(AppContentInner);
+
+export default function AppContent() {
+  return (
+    <SessionProtectionProvider>
+      <PaletteOpsProvider>
+        <MemoizedAppContentInner />
+      </PaletteOpsProvider>
+    </SessionProtectionProvider>
+  );
+}
+
+function AppContentInner() {
+  const navigate = useNavigate();
+  const { sessionId } = useParams<{ sessionId?: string }>();
+  const { isMobile } = useDeviceSettings({ trackPWA: false });
+  const { ws, sendMessage, subscribe } = useWebSocket();
+  const { isSessionProcessing } = useSessionProtectionActions();
+
+  console.count("Asddddd")
+  // Adjust the app container to stay above the virtual keyboard on iOS Safari.
+  // Chrome for Android already shrinks the layout viewport automatically.
+  useEffect(() => {
+    const visualViewport = window.visualViewport;
+    if (!visualViewport) {
+      return undefined;
+    }
+
+    const updateKeyboardHeight = () => {
+      const keyboardHeight = Math.max(0, window.innerHeight - visualViewport.height);
+      document.documentElement.style.setProperty('--keyboard-height', `${keyboardHeight}px`);
+    };
+
+    visualViewport.addEventListener('resize', updateKeyboardHeight);
+    return () => visualViewport.removeEventListener('resize', updateKeyboardHeight);
+  }, []);
+
+  return (
+    <ProjectsStateProvider
+      sessionId={sessionId}
+      navigate={navigate}
+      subscribe={subscribe}
+      isMobile={isMobile}
+      isSessionProcessing={isSessionProcessing}
+    >
+      <MemoizedProjectWorkspace
+        isMobile={isMobile}
+        ws={ws}
+        sendMessage={sendMessage}
+        navigate={navigate}
+      />
+    </ProjectsStateProvider>
   );
 }
