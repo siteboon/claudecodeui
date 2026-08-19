@@ -101,9 +101,9 @@ let instance: Database.Database | null = null;
  *   1. Resolves the target database path
  *   2. Ensures the parent directory exists
  *   3. Migrates from the legacy install-directory path if needed
- *   4. Opens the SQLite connection
+ *   4. Opens the SQLite connection and applies concurrency pragmas
  *   5. Eagerly creates the app_config table (auth reads JWT secret at import time)
- *   6. Logs the database location
+ *   6. Publishes the singleton only once the above succeeded
  */
 export function getConnection(): Database.Database {
   if (instance) return instance;
@@ -113,12 +113,27 @@ export function getConnection(): Database.Database {
   ensureDatabaseDirectory(dbPath);
   migrateLegacyDatabase(dbPath);
 
-  instance = new Database(dbPath);
+  const connection = new Database(dbPath);
 
-  // app_config must exist immediately — the auth middleware reads
-  // the JWT secret at module-load time, before initializeDatabase() runs.
-  instance.exec(APP_CONFIG_TABLE_SCHEMA_SQL);
+  try {
+    // Several processes can hold this file open at once (server, CLI, dev
+    // watcher). WAL keeps readers from blocking the writer, and the busy
+    // timeout makes a contended statement wait rather than fail immediately.
+    connection.pragma('journal_mode = WAL');
+    connection.pragma('busy_timeout = 5000');
 
+    // app_config must exist immediately — the auth middleware reads
+    // the JWT secret at module-load time, before initializeDatabase() runs.
+    connection.exec(APP_CONFIG_TABLE_SCHEMA_SQL);
+  } catch (error) {
+    // Never publish a half-initialised handle: callers would go on to write
+    // through a connection whose schema setup had failed. Discard it so the
+    // next call retries from scratch.
+    connection.close();
+    throw error;
+  }
+
+  instance = connection;
   return instance;
 }
 
