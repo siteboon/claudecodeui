@@ -1,7 +1,28 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
+import type { Dispatch, ReactNode, SetStateAction } from 'react';
+
 import { api } from '../shared/api';
 
-const TasksSettingsContext = createContext({
+export type TaskMasterInstallationStatus = {
+  isReady?: boolean;
+  installation?: {
+    isInstalled?: boolean;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
+
+type TasksSettingsContextValue = {
+  tasksEnabled: boolean;
+  setTasksEnabled: Dispatch<SetStateAction<boolean>>;
+  toggleTasksEnabled: () => void;
+  isTaskMasterInstalled: boolean | null;
+  isTaskMasterReady: boolean | null;
+  installationStatus: TaskMasterInstallationStatus | null;
+  isCheckingInstallation: boolean;
+};
+
+const TasksSettingsContext = createContext<TasksSettingsContextValue>({
   tasksEnabled: true,
   setTasksEnabled: () => {},
   toggleTasksEnabled: () => {},
@@ -19,16 +40,16 @@ export const useTasksSettings = () => {
   return context;
 };
 
-export const TasksSettingsProvider = ({ children }) => {
-  const [tasksEnabled, setTasksEnabled] = useState(() => {
+export const TasksSettingsProvider = ({ children }: { children: ReactNode }) => {
+  const [tasksEnabled, setTasksEnabled] = useState<boolean>(() => {
     // Load from localStorage on initialization
     const saved = localStorage.getItem('tasks-enabled');
     return saved !== null ? JSON.parse(saved) : true; // Default to true
   });
-  
-  const [isTaskMasterInstalled, setIsTaskMasterInstalled] = useState(null);
-  const [isTaskMasterReady, setIsTaskMasterReady] = useState(null);
-  const [installationStatus, setInstallationStatus] = useState(null);
+
+  const [isTaskMasterInstalled, setIsTaskMasterInstalled] = useState<boolean | null>(null);
+  const [isTaskMasterReady, setIsTaskMasterReady] = useState<boolean | null>(null);
+  const [installationStatus, setInstallationStatus] = useState<TaskMasterInstallationStatus | null>(null);
   const [isCheckingInstallation, setIsCheckingInstallation] = useState(true);
 
   // Save to localStorage whenever tasksEnabled changes
@@ -42,11 +63,11 @@ export const TasksSettingsProvider = ({ children }) => {
       try {
         const response = await api.taskmaster.installationStatus();
         if (response.ok) {
-          const data = await response.json();
+          const data = (await response.json()) as TaskMasterInstallationStatus;
           setInstallationStatus(data);
           setIsTaskMasterInstalled(data.installation?.isInstalled || false);
           setIsTaskMasterReady(data.isReady || false);
-          
+
           // If TaskMaster is not installed and user hasn't explicitly enabled tasks,
           // disable tasks automatically
           const userEnabledTasks = localStorage.getItem('tasks-enabled');
@@ -75,7 +96,7 @@ export const TasksSettingsProvider = ({ children }) => {
     setTasksEnabled(prev => !prev);
   };
 
-  const contextValue = {
+  const contextValue: TasksSettingsContextValue = {
     tasksEnabled,
     setTasksEnabled,
     toggleTasksEnabled,

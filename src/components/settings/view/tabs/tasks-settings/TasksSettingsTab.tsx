@@ -5,13 +5,6 @@ import SettingsRow from '../../SettingsRow';
 import SettingsSection from '../../SettingsSection';
 import SettingsToggle from '../../SettingsToggle';
 
-type TasksSettingsContextValue = {
-  tasksEnabled: boolean;
-  setTasksEnabled: (enabled: boolean) => void;
-  isTaskMasterInstalled: boolean | null;
-  isCheckingInstallation: boolean;
-};
-
 export default function TasksSettingsTab() {
   const { t } = useTranslation('settings');
   const {
@@ -19,7 +12,7 @@ export default function TasksSettingsTab() {
     setTasksEnabled,
     isTaskMasterInstalled,
     isCheckingInstallation,
-  } = useTasksSettings() as TasksSettingsContextValue;
+  } = useTasksSettings();
 
   return (
     <div className="space-y-8">

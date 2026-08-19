@@ -8,7 +8,7 @@ import { TasksSettingsProvider } from './contexts/TasksSettingsContext';
 import { WebSocketProvider } from './contexts/WebSocketContext';
 import { PluginsProvider } from './contexts/PluginsContext';
 import AppContent from './components/app/AppContent';
-import i18n from './i18n/config.js';
+import i18n from './i18n/config';
 
 const DEPLOYMENT_ASSET_DIRECTORIES = new Set(['assets', 'static', 'icons', 'images']);
 

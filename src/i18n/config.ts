@@ -114,10 +114,10 @@ import zhTWCodeEditor from './locales/zh-TW/codeEditor.json';
 import zhTWTasks from './locales/zh-TW/tasks.json';
 
 // Import supported languages configuration
-import { languages } from './languages.js';
+import { languages } from './languages';
 
 // Get saved language preference from localStorage
-const getSavedLanguage = () => {
+const getSavedLanguage = (): string => {
   try {
     const saved = localStorage.getItem('userLanguage');
     // Validate that the saved language is supported
@@ -286,7 +286,7 @@ i18n
   });
 
 // Save language preference when it changes
-i18n.on('languageChanged', (lng) => {
+i18n.on('languageChanged', (lng: string) => {
   try {
     localStorage.setItem('userLanguage', lng);
   } catch (error) {
