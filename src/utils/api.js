@@ -84,6 +84,21 @@ export const storeAuthToken = (token) => {
     return false;
   }
 
+  // A cached or ETag-revalidated API response replays the `X-Refreshed-Token`
+  // header it was stored with: a 304 carries no such header, so the browser
+  // merges it onto the cached response and hands the app a token minted days
+  // ago. Persisting that silently replaced a valid session with an expired one
+  // on every cold start, so a write must never move the session backwards.
+  const claims = readTokenClaims(token);
+  if (!claims || Date.now() >= claims.expiresAt) {
+    return false;
+  }
+
+  const storedClaims = readTokenClaims(localStorage.getItem('auth-token'));
+  if (storedClaims && claims.issuedAt < storedClaims.issuedAt) {
+    return false;
+  }
+
   localStorage.setItem('auth-token', token);
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(AUTH_TOKEN_REFRESHED_EVENT, { detail: token }));
@@ -108,6 +123,10 @@ export const authenticatedFetch = (url, options = {}) => {
 
   return fetch(url, {
     ...options,
+    // Authenticated responses carry per-session headers and must never be
+    // served from, or revalidated against, the HTTP cache. Deliberately after
+    // the spread so no caller can opt back into caching them.
+    cache: 'no-store',
     headers: {
       ...defaultHeaders,
       ...options.headers,
