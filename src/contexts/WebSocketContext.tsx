@@ -160,8 +160,8 @@ const useWebSocketProviderState = (): WebSocketContextType => {
         setIsConnected(true);
         if (hasConnectedRef.current) {
           dispatch({ kind: 'websocket_reconnected', timestamp: Date.now() });
-          flushPendingMessages();
         }
+        flushPendingMessages();
         if (reconnectCleanupRef.current) {
           reconnectCleanupRef.current();
           reconnectCleanupRef.current = null;
@@ -193,6 +193,10 @@ const useWebSocketProviderState = (): WebSocketContextType => {
         const wake = () => {
           if (wsRef.current) return;
           if (unmountedRef.current) return;
+          if (reconnectTimeoutRef.current) {
+            clearTimeout(reconnectTimeoutRef.current);
+            reconnectTimeoutRef.current = null;
+          }
           connect();
         };
         document.addEventListener('visibilitychange', wake);
@@ -251,6 +255,7 @@ export const WebSocketProvider = ({ children }: { children: React.ReactNode }) =
   const webSocketData = useWebSocketProviderState();
   const [toast, setToast] = useState<{ message: string; bg: string } | null>(null);
   const prevConnectedRef = useRef(webSocketData.isConnected);
+  const toastTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const wasConnected = prevConnectedRef.current;
@@ -261,8 +266,14 @@ export const WebSocketProvider = ({ children }: { children: React.ReactNode }) =
       setToast({ message: 'Connection lost, reconnecting...', bg: 'rgb(82,82,91)' });
     } else if (!wasConnected && isConnected) {
       setToast({ message: 'Reconnected', bg: 'rgb(21,128,61)' });
-      setTimeout(() => setToast(null), 3000);
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = window.setTimeout(() => setToast(null), 3000);
     }
+
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    };
   }, [webSocketData.isConnected]);
 
   return (
