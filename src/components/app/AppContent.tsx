@@ -281,7 +281,6 @@ function AppContentInner() {
   const { ws, sendMessage, subscribe } = useWebSocket();
   const { isSessionProcessing } = useSessionProtectionActions();
 
-  console.count("Asddddd")
   // Adjust the app container to stay above the virtual keyboard on iOS Safari.
   // Chrome for Android already shrinks the layout viewport automatically.
   useEffect(() => {
