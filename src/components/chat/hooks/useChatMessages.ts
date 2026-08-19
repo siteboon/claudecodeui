@@ -19,6 +19,20 @@ type ParsedTaskNotification = {
   result: string;
 };
 
+type ToolResultSource = NormalizedMessage['toolResult'] | NormalizedMessage | null;
+
+interface CachedMessageProjection {
+  /** A tool-use row also depends on a separately received tool-result row. */
+  toolResultSource: ToolResultSource;
+  messages: ChatMessage[];
+}
+
+// Normalized messages are immutable store records. Reuse the UI objects made
+// from records that survived a store update so memoized message rows can skip
+// work while only the active streaming record changes. Weak keys let entries
+// disappear automatically after their source records are no longer retained.
+const projectionCache = new WeakMap<NormalizedMessage, CachedMessageProjection>();
+
 /**
  * Parses a background-agent `<task-notification>` block.
  *
@@ -80,6 +94,19 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
   }
 
   for (const msg of messages) {
+    const toolResultSource: ToolResultSource = msg.kind === 'tool_use'
+      ? msg.toolResult || (msg.toolId ? toolResultMap.get(msg.toolId) : null) || null
+      : null;
+    const cachedProjection = projectionCache.get(msg);
+
+    // A tool-use projection must be rebuilt when a matching result arrives,
+    // even though the original tool-use record itself is unchanged.
+    if (cachedProjection?.toolResultSource === toolResultSource) {
+      converted.push(...cachedProjection.messages);
+      continue;
+    }
+
+    const convertedStart = converted.length;
     const sharedMetadata = {
       displayText: msg.displayText,
       commandName: msg.commandName,
@@ -95,7 +122,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
         const content = msg.content || '';
         const images = Array.isArray(msg.images) && msg.images.length > 0 ? msg.images : undefined;
         const files = Array.isArray(msg.files) && msg.files.length > 0 ? msg.files : undefined;
-        if (!content.trim() && !images && !files) continue;
+        if (!content.trim() && !images && !files) break;
 
         if (msg.role === 'user') {
           // Parse task notifications
@@ -142,7 +169,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
       }
 
       case 'tool_use': {
-        const tr = msg.toolResult || (msg.toolId ? toolResultMap.get(msg.toolId) : null);
+        const tr = toolResultSource;
         const isSubagentContainer = msg.toolName === 'Task';
 
         // Build child tools from subagentTools
@@ -287,6 +314,13 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
       default:
         break;
     }
+
+    projectionCache.set(msg, {
+      toolResultSource,
+      // One source record can produce zero, one, or two UI messages (task
+      // notifications with a result produce two), so cache the whole slice.
+      messages: converted.slice(convertedStart),
+    });
   }
 
   return converted;

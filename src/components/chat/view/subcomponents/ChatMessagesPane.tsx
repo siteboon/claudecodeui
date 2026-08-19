@@ -126,14 +126,11 @@ function ChatMessagesPane({
 
   // Stable, deterministic keys for the messages rendered this pass.
   //
-  // `normalizedToChatMessages` rebuilds fresh ChatMessage objects on every store
-  // update, so caching keys by object identity (or via a cross-render allocation
-  // Set) minted a brand-new key for the *same* logical message on each prepend —
-  // remounting the whole list, which disconnects the scroll-restore anchor and
-  // reflows heights, jumping the viewport to the bottom. Deriving keys purely
-  // from this render's ordered messages (intrinsic key, disambiguated by
-  // occurrence index on collision) yields the same key for the same message
-  // order, so React preserves existing DOM nodes and component state on prepend.
+  // A server refresh can replace source records with equivalent new objects, so
+  // object identity is not a durable React key across pagination or hydration.
+  // Deriving keys from this render's ordered messages (intrinsic key,
+  // disambiguated by occurrence index on collision) preserves existing DOM
+  // nodes and component state when older history is prepended.
   const messageKeyMap = useMemo(() => {
     const keys = new WeakMap<ChatMessage, string>();
     const occurrences = new Map<string, number>();
