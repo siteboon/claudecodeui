@@ -182,6 +182,8 @@ const useWebSocketProviderState = (): WebSocketContextType => {
         if (wsRef.current !== websocket) {
           return;
         }
+        reconnectCleanupRef.current?.();
+        reconnectCleanupRef.current = null;
         setIsConnected(false);
         wsRef.current = null;
 
