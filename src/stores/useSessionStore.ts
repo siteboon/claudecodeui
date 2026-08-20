@@ -12,6 +12,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { authenticatedFetch } from '../utils/api';
 import type { LLMProvider } from '../types/app';
 
+import { createEmptySlot } from './sessionSlot';
 import { removeOptimisticUserEchoes } from './sessionMessageReconciliation';
 import {
   buildSessionMessagesUrl,
@@ -120,28 +121,16 @@ export interface SessionSlot {
   total: number;
   hasMore: boolean;
   offset: number;
+  /**
+   * Usage reported by the session history endpoint, or `undefined` when the
+   * provider does not report any. Callers gate on `!== undefined` before
+   * syncing UI state, so this must NOT default to `null` — that would read as
+   * "server says zero" and wipe a budget delivered over the websocket.
+   */
   tokenUsage: unknown;
 }
 
-const EMPTY: NormalizedMessage[] = [];
 const SESSION_HISTORY_REQUEST_TIMEOUT_MS = 30_000;
-
-function createEmptySlot(): SessionSlot {
-  return {
-    serverMessages: EMPTY,
-    realtimeMessages: EMPTY,
-    merged: EMPTY,
-    _lastServerRef: EMPTY,
-    _lastRealtimeRef: EMPTY,
-    status: 'idle',
-    fetchedAt: 0,
-    total: 0,
-    hasMore: false,
-    offset: 0,
-    tokenUsage: null,
-    _historyMutationQueue: Promise.resolve(),
-  };
-}
 
 type SessionHistoryPage = {
   messages: NormalizedMessage[];
