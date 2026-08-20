@@ -9,7 +9,7 @@ type ErrorFallbackProps = FallbackProps & {
   componentStack: string | null;
 };
 
-type ErrorBoundaryProps = {
+type WorkspaceErrorBoundaryProps = {
   children: ReactNode;
   showDetails?: boolean;
   onRetry?: () => void;
@@ -70,12 +70,12 @@ function ErrorFallback({
   );
 }
 
-function ErrorBoundary({
+function WorkspaceErrorBoundary({
   children,
   showDetails = false,
   onRetry = undefined,
   resetKeys = undefined,
-}: ErrorBoundaryProps) {
+}: WorkspaceErrorBoundaryProps) {
   const [componentStack, setComponentStack] = useState<string | null>(null);
 
   const handleError = useCallback((error: Error, errorInfo: ErrorInfo) => {
@@ -113,4 +113,4 @@ function ErrorBoundary({
   );
 }
 
-export default ErrorBoundary;
+export default WorkspaceErrorBoundary;

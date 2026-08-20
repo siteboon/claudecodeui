@@ -411,7 +411,7 @@ export function useProjectsState({
    * Usage across the codebase:
    * 1) Produced here in `handleNewSession` via increment (always changes).
    * 2) Returned from this hook and threaded through:
-   *    useProjectsState -> AppContent -> MainContent -> ChatInterface.
+   *    useProjectsState -> ProjectWorkspaceRoute -> WorkspaceMain -> ChatInterface.
    * 3) Consumed in `useChatSessionState` as an effect dependency to forcibly clear
    *    chat-local state (`currentSessionId`, pending draft message, streaming flags,
    *    pending session storage keys, pagination/scroll artifacts).

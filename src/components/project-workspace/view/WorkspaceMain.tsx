@@ -1,39 +1,25 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 
 import ChatInterface from '../../chat/view/ChatInterface';
 import FileTree from '../../file-tree/view/FileTree';
 import StandaloneShell from '../../standalone-shell/view/StandaloneShell';
 import GitPanel from '../../git-panel/view/GitPanel';
 import PluginTabContent from '../../plugins/view/PluginTabContent';
-import { BrowserUsePanel } from '../../browser-use';
-import type { MainContentProps } from '../types/types';
-import { useTaskMaster } from '../../../contexts/TaskMasterContext';
+import { BrowserUsePanel, useBrowserUseEnabled } from '../../browser-use';
+import type { WorkspaceMainProps } from '../types';
 import { usePaletteOpsRegister } from '../../../contexts/PaletteOpsContext';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useUiPreferences } from '../../../hooks/useUiPreferences';
 import { useFileOpenResolver } from '../../../hooks/useFileOpenResolver';
-import { api } from '../../../shared/api';
 import { useEditorSidebar } from '../../code-editor/hooks/useEditorSidebar';
 import EditorSidebar from '../../code-editor/view/EditorSidebar';
-import type { Project } from '../../../types/app';
-import { TaskMasterPanel } from '../../task-master';
+import { TaskMasterPanel, useTaskMasterProjectSync } from '../../task-master';
 
-import MainContentHeader from './subcomponents/MainContentHeader';
-import MainContentStateView from './subcomponents/MainContentStateView';
-import ErrorBoundary from './ErrorBoundary';
+import WorkspaceHeader from './subcomponents/WorkspaceHeader';
+import WorkspaceStateView from './subcomponents/WorkspaceStateView';
+import WorkspaceErrorBoundary from './WorkspaceErrorBoundary';
 
-type TaskMasterContextValue = {
-  currentProject?: Project | null;
-  setCurrentProject?: ((project: Project) => void) | null;
-};
-
-type TasksSettingsContextValue = {
-  tasksEnabled: boolean;
-  isTaskMasterInstalled: boolean | null;
-  isTaskMasterReady: boolean | null;
-};
-
-function MainContent({
+function WorkspaceMain({
   selectedProject,
   selectedSession,
   activeTab,
@@ -50,13 +36,14 @@ function MainContent({
   newSessionTrigger,
   onProjectSelect,
   onProjectsRefresh,
-}: MainContentProps) {
+}: WorkspaceMainProps) {
   const { preferences } = useUiPreferences();
   const { showRawParameters, showThinking, sendByCtrlEnter } = preferences;
 
-  const { currentProject, setCurrentProject } = useTaskMaster() as TaskMasterContextValue;
-  const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings() as TasksSettingsContextValue;
-  const [browserUseEnabled, setBrowserUseEnabled] = useState(false);
+  const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
+  const browserUseEnabled = useBrowserUseEnabled();
+
+  useTaskMasterProjectSync(selectedProject);
 
   const shouldShowTasksTab = Boolean(tasksEnabled && isTaskMasterInstalled);
   const shouldShowBrowserTab = browserUseEnabled;
@@ -81,37 +68,10 @@ function MainContent({
   const resolvedFileOpen = useFileOpenResolver(selectedProject, handleFileOpen);
 
   useEffect(() => {
-    // Identify projects by DB `projectId`; the TaskMaster context uses the
-    // same identifier to key its internal maps.
-    const selectedProjectId = selectedProject?.projectId;
-    const currentProjectId = currentProject?.projectId;
-
-    if (selectedProject && selectedProjectId !== currentProjectId) {
-      setCurrentProject?.(selectedProject);
-    }
-  }, [selectedProject, currentProject?.projectId, setCurrentProject]);
-
-  useEffect(() => {
     if (!shouldShowTasksTab && activeTab === 'tasks') {
       setActiveTab('chat');
     }
   }, [shouldShowTasksTab, activeTab, setActiveTab]);
-
-  const loadBrowserUseSettings = useCallback(async () => {
-    try {
-      const response = await api.browserUse.settings();
-      const data = await response.json();
-      setBrowserUseEnabled(Boolean(response.ok && data?.success !== false && data?.data?.settings?.enabled));
-    } catch {
-      setBrowserUseEnabled(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadBrowserUseSettings();
-    window.addEventListener('browserUseSettingsChanged', loadBrowserUseSettings);
-    return () => window.removeEventListener('browserUseSettingsChanged', loadBrowserUseSettings);
-  }, [loadBrowserUseSettings]);
 
   useEffect(() => {
     if (!shouldShowBrowserTab && activeTab === 'browser') {
@@ -131,16 +91,16 @@ function MainContent({
   });
 
   if (isLoading) {
-    return <MainContentStateView mode="loading" isMobile={isMobile} onMenuClick={onMenuClick} />;
+    return <WorkspaceStateView mode="loading" isMobile={isMobile} onMenuClick={onMenuClick} />;
   }
 
   if (!selectedProject) {
-    return <MainContentStateView mode="empty" isMobile={isMobile} onMenuClick={onMenuClick} />;
+    return <WorkspaceStateView mode="empty" isMobile={isMobile} onMenuClick={onMenuClick} />;
   }
 
   return (
     <div className="flex h-full flex-col">
-      <MainContentHeader
+      <WorkspaceHeader
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         selectedProject={selectedProject}
@@ -154,7 +114,7 @@ function MainContent({
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className={`flex min-h-0 min-w-[200px] flex-col overflow-hidden ${editorExpanded ? 'hidden' : ''} flex-1`}>
           <div className={`h-full ${activeTab === 'chat' ? 'block' : 'hidden'}`}>
-            <ErrorBoundary showDetails>
+            <WorkspaceErrorBoundary showDetails>
               <ChatInterface
                 isActive={activeTab === 'chat'}
                 selectedProject={selectedProject}
@@ -172,7 +132,7 @@ function MainContent({
                 newSessionTrigger={newSessionTrigger}
                 onShowAllTasks={tasksEnabled ? () => setActiveTab('tasks') : null}
               />
-            </ErrorBoundary>
+            </WorkspaceErrorBoundary>
           </div>
 
           {activeTab === 'files' && (
@@ -241,4 +201,4 @@ function MainContent({
   );
 }
 
-export default React.memo(MainContent);
+export default React.memo(WorkspaceMain);

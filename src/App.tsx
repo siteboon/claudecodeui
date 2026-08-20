@@ -7,7 +7,7 @@ import { TaskMasterProvider } from './contexts/TaskMasterContext';
 import { TasksSettingsProvider } from './contexts/TasksSettingsContext';
 import { WebSocketProvider } from './contexts/WebSocketContext';
 import { PluginsProvider } from './contexts/PluginsContext';
-import AppContent from './components/app/AppContent';
+import { ProjectWorkspaceRoute } from './components/project-workspace';
 import i18n from './i18n/config';
 
 const DEPLOYMENT_ASSET_DIRECTORIES = new Set(['assets', 'static', 'icons', 'images']);
@@ -114,8 +114,8 @@ export default function App() {
                 <ProtectedRoute>
                   <Router basename={routerBasename}>
                     <Routes>
-                      <Route path="/" element={<AppContent />} />
-                      <Route path="/session/:sessionId" element={<AppContent />} />
+                      <Route path="/" element={<ProjectWorkspaceRoute />} />
+                      <Route path="/session/:sessionId" element={<ProjectWorkspaceRoute />} />
                     </Routes>
                   </Router>
                 </ProtectedRoute>

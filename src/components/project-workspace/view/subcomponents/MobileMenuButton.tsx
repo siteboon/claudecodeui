@@ -1,4 +1,4 @@
-import type { MobileMenuButtonProps } from '../../types/types';
+import type { MobileMenuButtonProps } from '../../types';
 import { useMobileMenuHandlers } from '../../hooks/useMobileMenuHandlers';
 
 export default function MobileMenuButton({ onMenuClick, compact = false }: MobileMenuButtonProps) {

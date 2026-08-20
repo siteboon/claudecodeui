@@ -8,7 +8,7 @@ import type { AppTab } from '../../../../types/app';
 import { usePlugins } from '../../../../contexts/PluginsContext';
 import PluginIcon from '../../../plugins/view/PluginIcon';
 
-type MainContentTabSwitcherProps = {
+type WorkspaceTabsProps = {
   activeTab: AppTab;
   setActiveTab: Dispatch<SetStateAction<AppTab>>;
   shouldShowTasksTab: boolean;
@@ -53,12 +53,12 @@ const TASKS_TAB: BuiltInTab = {
   icon: ClipboardCheck,
 };
 
-export default function MainContentTabSwitcher({
+export default function WorkspaceTabs({
   activeTab,
   setActiveTab,
   shouldShowTasksTab,
   shouldShowBrowserTab,
-}: MainContentTabSwitcherProps) {
+}: WorkspaceTabsProps) {
   const { t } = useTranslation();
   const { plugins } = usePlugins();
 

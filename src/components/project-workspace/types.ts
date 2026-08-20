@@ -1,39 +1,21 @@
 import type { Dispatch, SetStateAction } from 'react';
+import type { NavigateFunction } from 'react-router-dom';
 
-import type { AppTab, Project, ProjectSession } from '../../../types/app';
-import type { SessionEstablishedContext, SessionNavigationOptions } from '../../chat/types/types';
-import type { SettingsMainTab } from '../../settings/types/types';
+import type { AppTab, Project, ProjectSession } from '../../types/app';
+import type { SessionEstablishedContext, SessionNavigationOptions } from '../chat/types/types';
+import type { SettingsMainTab } from '../settings/types/types';
 
-export type TaskMasterTask = {
-  id: string | number;
-  title?: string;
-  description?: string;
-  status?: string;
-  priority?: string;
-  details?: string;
-  testStrategy?: string;
-  parentId?: string | number;
-  dependencies?: Array<string | number>;
-  subtasks?: TaskMasterTask[];
-  [key: string]: unknown;
+export type RealtimeProps = {
+  ws: WebSocket | null;
+  sendMessage: (message: unknown) => void;
 };
 
-export type TaskReference = {
-  id: string | number;
-  title?: string;
-  [key: string]: unknown;
+export type ProjectWorkspaceShellProps = RealtimeProps & {
+  isMobile: boolean;
+  navigate: NavigateFunction;
 };
 
-export type TaskSelection = TaskMasterTask | TaskReference;
-
-export type PrdFile = {
-  name: string;
-  content?: string;
-  isExisting?: boolean;
-  [key: string]: unknown;
-};
-
-export type MainContentProps = {
+export type WorkspaceMainProps = {
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
   activeTab: AppTab;
@@ -54,7 +36,7 @@ export type MainContentProps = {
   onProjectsRefresh: () => void;
 };
 
-export type MainContentHeaderProps = {
+export type WorkspaceHeaderProps = {
   activeTab: AppTab;
   setActiveTab: Dispatch<SetStateAction<AppTab>>;
   selectedProject: Project;
@@ -65,7 +47,7 @@ export type MainContentHeaderProps = {
   onMenuClick: () => void;
 };
 
-export type MainContentStateViewProps = {
+export type WorkspaceStateViewProps = {
   mode: 'loading' | 'empty';
   isMobile: boolean;
   onMenuClick: () => void;
@@ -74,8 +56,4 @@ export type MainContentStateViewProps = {
 export type MobileMenuButtonProps = {
   onMenuClick: () => void;
   compact?: boolean;
-};
-
-export type TaskMasterPanelProps = {
-  isVisible: boolean;
 };

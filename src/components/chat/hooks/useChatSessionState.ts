@@ -162,7 +162,7 @@ export function useChatSessionState({
    * Tracks the last processed value from `useProjectsState.newSessionTrigger`.
    *
    * The trigger itself is intentionally increment-only and routed via:
-   * useProjectsState -> AppContent -> MainContent -> ChatInterface -> this hook.
+   * useProjectsState -> ProjectWorkspaceRoute -> WorkspaceMain -> ChatInterface -> this hook.
    * We compare values to ensure each explicit New Session click runs exactly one
    * reset pass in this local chat state domain.
    */

@@ -5,7 +5,7 @@ import type { AppTab, Project, ProjectSession } from '../../../../types/app';
 import { usePlugins } from '../../../../contexts/PluginsContext';
 import { getSessionTitle } from '../../../../utils/pageTitle';
 
-type MainContentTitleProps = {
+type WorkspaceTitleProps = {
   activeTab: AppTab;
   selectedProject: Project;
   selectedSession: ProjectSession | null;
@@ -36,12 +36,12 @@ function getTabTitle(activeTab: AppTab, shouldShowTasksTab: boolean, t: (key: st
   return 'Project';
 }
 
-export default function MainContentTitle({
+export default function WorkspaceTitle({
   activeTab,
   selectedProject,
   selectedSession,
   shouldShowTasksTab,
-}: MainContentTitleProps) {
+}: WorkspaceTitleProps) {
   const { t } = useTranslation();
   const { plugins } = usePlugins();
 

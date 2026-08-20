@@ -3,13 +3,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '../../../../lib/utils';
-import type { MainContentHeaderProps } from '../../types/types';
+import type { WorkspaceHeaderProps } from '../../types';
 
 import MobileMenuButton from './MobileMenuButton';
-import MainContentTabSwitcher from './MainContentTabSwitcher';
-import MainContentTitle from './MainContentTitle';
+import WorkspaceTabs from './WorkspaceTabs';
+import WorkspaceTitle from './WorkspaceTitle';
 
-export default function MainContentHeader({
+export default function WorkspaceHeader({
   activeTab,
   setActiveTab,
   selectedProject,
@@ -18,7 +18,7 @@ export default function MainContentHeader({
   shouldShowBrowserTab,
   isMobile,
   onMenuClick,
-}: MainContentHeaderProps) {
+}: WorkspaceHeaderProps) {
   const { t } = useTranslation();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -85,7 +85,7 @@ export default function MainContentHeader({
       <div className="flex min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
         <div className="flex min-w-0 items-center gap-2 sm:max-w-[min(34%,24rem)] sm:flex-[1_1_18rem]">
           {isMobile && <MobileMenuButton onMenuClick={onMenuClick} />}
-          <MainContentTitle
+          <WorkspaceTitle
             activeTab={activeTab}
             selectedProject={selectedProject}
             selectedSession={selectedSession}
@@ -106,7 +106,7 @@ export default function MainContentHeader({
                 hasOverflow ? 'sm:px-9' : 'sm:pl-3 sm:pr-0',
               )}
             >
-              <MainContentTabSwitcher
+              <WorkspaceTabs
                 activeTab={activeTab}
                 setActiveTab={setActiveTab}
                 shouldShowTasksTab={shouldShowTasksTab}
