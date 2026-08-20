@@ -20,7 +20,7 @@ import enAuth from './locales/en/auth.json';
 import enSidebar from './locales/en/sidebar.json';
 import enChat from './locales/en/chat.json';
 import enCodeEditor from './locales/en/codeEditor.json';
-// eslint-disable-next-line import-x/order
+// oxlint-disable-next-line importx/order
 import enTasks from './locales/en/tasks.json';
 
 import frCommon from './locales/fr/common.json';
@@ -29,7 +29,7 @@ import frAuth from './locales/fr/auth.json';
 import frSidebar from './locales/fr/sidebar.json';
 import frChat from './locales/fr/chat.json';
 import frCodeEditor from './locales/fr/codeEditor.json';
-// eslint-disable-next-line import-x/order
+// oxlint-disable-next-line importx/order
 import frTasks from './locales/fr/tasks.json';
 
 import esCommon from './locales/es/common.json';
@@ -38,7 +38,7 @@ import esAuth from './locales/es/auth.json';
 import esSidebar from './locales/es/sidebar.json';
 import esChat from './locales/es/chat.json';
 import esCodeEditor from './locales/es/codeEditor.json';
-// eslint-disable-next-line import-x/order
+// oxlint-disable-next-line importx/order
 import esTasks from './locales/es/tasks.json';
 
 import koCommon from './locales/ko/common.json';
@@ -47,7 +47,7 @@ import koAuth from './locales/ko/auth.json';
 import koSidebar from './locales/ko/sidebar.json';
 import koChat from './locales/ko/chat.json';
 import koCodeEditor from './locales/ko/codeEditor.json';
-// eslint-disable-next-line import-x/order
+// oxlint-disable-next-line importx/order
 import koTasks from './locales/ko/tasks.json';
 
 import zhCommon from './locales/zh-CN/common.json';
@@ -63,7 +63,7 @@ import jaAuth from './locales/ja/auth.json';
 import jaSidebar from './locales/ja/sidebar.json';
 import jaChat from './locales/ja/chat.json';
 import jaCodeEditor from './locales/ja/codeEditor.json';
-// eslint-disable-next-line import-x/order
+// oxlint-disable-next-line importx/order
 import jaTasks from './locales/ja/tasks.json';
 
 import ruCommon from './locales/ru/common.json';
@@ -72,7 +72,7 @@ import ruAuth from './locales/ru/auth.json';
 import ruSidebar from './locales/ru/sidebar.json';
 import ruChat from './locales/ru/chat.json';
 import ruCodeEditor from './locales/ru/codeEditor.json';
-// eslint-disable-next-line import-x/order
+// oxlint-disable-next-line importx/order
 import ruTasks from './locales/ru/tasks.json';
 
 import deCommon from './locales/de/common.json';
@@ -81,7 +81,7 @@ import deAuth from './locales/de/auth.json';
 import deSidebar from './locales/de/sidebar.json';
 import deChat from './locales/de/chat.json';
 import deCodeEditor from './locales/de/codeEditor.json';
-// eslint-disable-next-line import-x/order
+// oxlint-disable-next-line importx/order
 import deTasks from './locales/de/tasks.json';
 
 import trCommon from './locales/tr/common.json';
@@ -97,7 +97,7 @@ import itAuth from './locales/it/auth.json';
 import itSidebar from './locales/it/sidebar.json';
 import itChat from './locales/it/chat.json';
 import itCodeEditor from './locales/it/codeEditor.json';
-// eslint-disable-next-line import-x/order
+// oxlint-disable-next-line importx/order
 import itTasks from './locales/it/tasks.json';
 
 import zhTWCommon from './locales/zh-TW/common.json';
@@ -106,7 +106,7 @@ import zhTWAuth from './locales/zh-TW/auth.json';
 import zhTWSidebar from './locales/zh-TW/sidebar.json';
 import zhTWChat from './locales/zh-TW/chat.json';
 import zhTWCodeEditor from './locales/zh-TW/codeEditor.json';
-// eslint-disable-next-line import-x/order
+// oxlint-disable-next-line importx/order
 import zhTWTasks from './locales/zh-TW/tasks.json';
 
 // Import supported languages configuration
