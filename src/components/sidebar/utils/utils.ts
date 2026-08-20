@@ -3,6 +3,14 @@ import type { TFunction } from 'i18next';
 import type { LLMProvider, Project, ProjectSession } from '../../../types/app';
 import type { ProjectSortOrder, SettingsProject, SessionViewModel, SessionWithProvider } from '../types/types';
 
+/** Provider names as the UI writes them, shared by the two session rows. */
+export const PROVIDER_LABELS: Record<LLMProvider, string> = {
+  claude: 'Claude',
+  codex: 'Codex',
+  cursor: 'Cursor',
+  opencode: 'OpenCode',
+};
+
 export const formatCompactAge = (
   dateString: string | null | undefined,
   currentTime: Date,
@@ -97,16 +105,31 @@ export const getSessionTime = (session: SessionWithProvider): string => {
   return getUpdatedTimestamp(session) || getCreatedTimestamp(session);
 };
 
+const RECENT_ACTIVITY_MINUTES = 10;
+
+/**
+ * Touched recently enough that a session row marks it active. Both session
+ * lists ask this, one from a session and one from a conversation summary.
+ */
+export const isSessionRecentlyActive = (
+  timestamp: string | null | undefined,
+  currentTime: Date,
+): boolean => {
+  if (!timestamp) return false;
+
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return false;
+
+  return Math.floor((currentTime.getTime() - date.getTime()) / (1000 * 60)) < RECENT_ACTIVITY_MINUTES;
+};
+
 export const createSessionViewModel = (
   session: SessionWithProvider,
   currentTime: Date,
   t: TFunction,
 ): SessionViewModel => {
-  const sessionDate = getSessionDate(session);
-  const diffInMinutes = Math.floor((currentTime.getTime() - sessionDate.getTime()) / (1000 * 60));
-
   return {
-    isActive: diffInMinutes < 10,
+    isActive: isSessionRecentlyActive(getSessionTime(session), currentTime),
     sessionName: getSessionName(session, t),
     sessionTime: getSessionTime(session),
     messageCount: Number(session.messageCount || 0),

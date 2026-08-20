@@ -1,15 +1,16 @@
 import { useEffect } from 'react';
 import type { TFunction } from 'i18next';
 
-import type { LoadingProgress, Project, ProjectSession, LLMProvider } from '../../../../types/app';
-import type { SessionActivityMap } from '../../../../hooks/useSessionProtection';
+import type { LoadingProgress, Project, ProjectSession } from '../../../../types/app';
 import { getPageTitle } from '../../../../utils/pageTitle';
-import type { MCPServerStatus, SessionWithProvider } from '../../types/types';
+import type { MCPServerStatus, SessionRowActions, SessionWithProvider } from '../../types/types';
 
 import SidebarProjectItem from './SidebarProjectItem';
 import SidebarProjectsState from './SidebarProjectsState';
 
-export type SidebarProjectListProps = {
+// The session-row half of these props is shared with the Conversations list,
+// which takes the same object rather than restating it.
+export type SidebarProjectListProps = SessionRowActions & {
   projects: Project[];
   filteredProjects: Project[];
   selectedProject: Project | null;
@@ -21,16 +22,12 @@ export type SidebarProjectListProps = {
   editingName: string;
   initialSessionsLoaded: Set<string>;
   currentTime: Date;
-  editingSession: string | null;
-  editingSessionName: string;
   deletingProjects: Set<string>;
   tasksEnabled: boolean;
   mcpServerStatus: MCPServerStatus;
   getProjectSessions: (project: Project) => SessionWithProvider[];
   onLoadMoreSessions: (projectId: string) => void;
   loadingMoreProjects: Set<string>;
-  activeSessions: SessionActivityMap;
-  attentionSessionIds: ReadonlySet<string>;
   forceExpanded?: boolean;
   isProjectStarred: (projectName: string) => boolean;
   onEditingNameChange: (value: string) => void;
@@ -42,17 +39,7 @@ export type SidebarProjectListProps = {
   onSaveProjectName: (projectName: string) => void;
   onDeleteProject: (project: Project) => void;
   onSessionSelect: (session: SessionWithProvider, projectName: string) => void;
-  onDeleteSession: (
-    projectName: string,
-    sessionId: string,
-    sessionTitle: string,
-    provider: LLMProvider,
-  ) => void;
   onNewSession: (project: Project) => void;
-  onEditingSessionNameChange: (value: string) => void;
-  onStartEditingSession: (sessionId: string, initialName: string) => void;
-  onCancelEditingSession: () => void;
-  onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => void;
   t: TFunction;
 };
 

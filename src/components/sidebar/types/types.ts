@@ -9,6 +9,36 @@ export type SessionWithProvider = ProjectSession & {
   __provider: LLMProvider;
 };
 
+/**
+ * What a session row needs to show its state and act on it, as the sidebar
+ * controller already exposes it. Both session lists take the same object, so
+ * neither has to thread nine props of its own.
+ *
+ * Rename and delete are keyed by sessionId; the project id is accepted as null
+ * for a list that holds a session without its project.
+ */
+export type SessionRowActions = {
+  activeSessions: SessionActivityMap;
+  attentionSessionIds: ReadonlySet<string>;
+  editingSession: string | null;
+  editingSessionName: string;
+  onEditingSessionNameChange: (value: string) => void;
+  onStartEditingSession: (sessionId: string, initialName: string) => void;
+  onCancelEditingSession: () => void;
+  onSaveEditingSession: (
+    projectId: string | null,
+    sessionId: string,
+    summary: string,
+    provider: LLMProvider,
+  ) => void;
+  onDeleteSession: (
+    projectId: string | null,
+    sessionId: string,
+    sessionTitle: string,
+    provider: LLMProvider,
+  ) => void;
+};
+
 export type ArchivedSessionListItem = {
   sessionId: string;
   provider: LLMProvider;

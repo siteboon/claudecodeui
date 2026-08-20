@@ -1,13 +1,13 @@
-import { ChevronRight, MessageSquare } from 'lucide-react';
-import type { MouseEvent } from 'react';
+import { MessageSquare } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { Button } from '../../../../shared/view/ui';
-import { cn } from '../../../../lib/utils';
 import type { ProjectSession } from '../../../../types/app';
-import type { RecentConversationListItem } from '../../types/types';
-import { formatCompactAge } from '../../utils/utils';
-import LLMProviderLogo from '../../../llm-provider-logo/LLMProviderLogo';
+import type { RecentConversationListItem, SessionRowActions } from '../../types/types';
+import { formatCompactAge, isSessionRecentlyActive } from '../../utils/utils';
+
+import SessionOptions from './SessionOptions';
+import SessionRow from './SessionRow';
 
 type SidebarRecentConversationsProps = {
   conversations: RecentConversationListItem[];
@@ -18,6 +18,7 @@ type SidebarRecentConversationsProps = {
   hasError: boolean;
   selectedSession: ProjectSession | null;
   currentTime: Date;
+  sessionActions: SessionRowActions;
   onConversationSelect: (
     projectId: string | null,
     sessionId: string,
@@ -53,6 +54,7 @@ export default function SidebarRecentConversations({
   hasError,
   selectedSession,
   currentTime,
+  sessionActions,
   onConversationSelect,
   onLoadMore,
   onRetry,
@@ -101,60 +103,66 @@ export default function SidebarRecentConversations({
 
       <div className="space-y-0.5">
         {conversations.map((conversation) => {
-          const isSelected = String(selectedSession?.id ?? '') === conversation.sessionId;
-          const age = formatCompactAge(conversation.lastActivity, currentTime);
-
-          const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
-            if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-              return;
-            }
-            event.preventDefault();
-            onConversationSelect(
-              conversation.projectId,
-              conversation.sessionId,
-              conversation.provider,
-            );
-          };
+          const isProcessing = sessionActions.activeSessions.has(conversation.sessionId);
+          const isEditing = sessionActions.editingSession === conversation.sessionId;
 
           return (
-            <a
+            <SessionRow
               key={conversation.sessionId}
               href={`/session/${conversation.sessionId}`}
-              onClick={handleClick}
-              data-testid="recent-conversation-row"
-              className={cn(
-                'group flex min-w-0 items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors',
-                isSelected
-                  ? 'bg-primary/10 text-foreground'
-                  : 'text-foreground hover:bg-accent/60',
+              dataTestId="recent-conversation-row"
+              title={conversation.sessionTitle}
+              provider={conversation.provider}
+              age={formatCompactAge(conversation.lastActivity, currentTime)}
+              isSelected={String(selectedSession?.id ?? '') === conversation.sessionId}
+              isProcessing={isProcessing}
+              needsAttention={sessionActions.attentionSessionIds.has(conversation.sessionId)}
+              isRecentlyActive={isSessionRecentlyActive(conversation.lastActivity, currentTime)}
+              isEditing={isEditing}
+              // The one thing a conversation row says that a session row under a
+              // project does not have to: which project it belongs to.
+              secondLine={(
+                <span className="truncate text-[10px] leading-3 text-muted-foreground">
+                  {conversation.projectDisplayName}
+                </span>
               )}
-            >
-              <span className={cn(
-                'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md',
-                isSelected ? 'bg-primary/10' : 'bg-muted/60',
-              )}>
-                <LLMProviderLogo provider={conversation.provider} className="h-3.5 w-3.5" />
-              </span>
-
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] font-normal leading-4">
-                  {conversation.sessionTitle}
-                </span>
-                <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] leading-3 text-muted-foreground">
-                  <span className="truncate">{conversation.projectDisplayName}</span>
-                  {age && (
-                    <>
-                      <span className="flex-shrink-0 text-muted-foreground/40">·</span>
-                      <time className="flex-shrink-0 tabular-nums" dateTime={conversation.lastActivity ?? undefined}>
-                        {age}
-                      </time>
-                    </>
+              onSelect={() => onConversationSelect(
+                conversation.projectId,
+                conversation.sessionId,
+                conversation.provider,
+              )}
+              actions={(
+                <SessionOptions
+                  sessionId={conversation.sessionId}
+                  provider={conversation.provider}
+                  sessionTitle={conversation.sessionTitle}
+                  canDelete={!isProcessing}
+                  isEditing={isEditing}
+                  editingName={sessionActions.editingSessionName}
+                  onEditingNameChange={sessionActions.onEditingSessionNameChange}
+                  onStartRename={() => sessionActions.onStartEditingSession(
+                    conversation.sessionId,
+                    conversation.sessionTitle,
                   )}
-                </span>
-              </span>
-
-              <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-muted-foreground" />
-            </a>
+                  onCancelRename={sessionActions.onCancelEditingSession}
+                  onSaveRename={() => sessionActions.onSaveEditingSession(
+                    conversation.projectId,
+                    conversation.sessionId,
+                    sessionActions.editingSessionName,
+                    conversation.provider,
+                  )}
+                  onRequestDelete={() => sessionActions.onDeleteSession(
+                    conversation.projectId,
+                    conversation.sessionId,
+                    conversation.sessionTitle,
+                    conversation.provider,
+                  )}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 transform opacity-100 transition-all duration-200"
+                  t={t}
+                />
+              )}
+              t={t}
+            />
           );
         })}
       </div>

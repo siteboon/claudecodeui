@@ -198,8 +198,8 @@ function Sidebar({
       setEditingSession(null);
       setEditingSessionName('');
     },
-    onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => {
-      void updateSessionSummary(projectName, sessionId, summary, provider);
+    onSaveEditingSession: (projectId: string | null, sessionId: string, summary: string, provider: LLMProvider) => {
+      void updateSessionSummary(projectId, sessionId, summary, provider);
     },
     t,
   };

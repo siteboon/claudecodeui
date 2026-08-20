@@ -861,7 +861,7 @@ export function useSidebarController({
       return;
     }
 
-    const { sessionId } = sessionDeleteConfirmation;
+    const { sessionId, isArchived } = sessionDeleteConfirmation;
     setSessionDeleteConfirmation(null);
 
     try {
@@ -870,6 +870,17 @@ export function useSidebarController({
       if (response.ok) {
         onSessionDelete?.(sessionId);
         await fetchArchivedSessions();
+        // Whether archived or deleted, the session leaves the recent feed --
+        // a separate list, with its own fetch. Drop the row instead of
+        // refetching: a reload starts at page zero, so it would also drop
+        // every page the reader had loaded past the first. An already archived
+        // session was never counted in that feed.
+        setRecentConversations((previous) => previous.filter(
+          (conversation) => conversation.sessionId !== sessionId,
+        ));
+        if (!isArchived) {
+          setRecentConversationsTotal((previous) => Math.max(0, previous - 1));
+        }
       } else {
         const errorText = await response.text();
         console.error('[Sidebar] Failed to delete session:', {
@@ -1027,7 +1038,7 @@ export function useSidebarController({
   const updateSessionSummary = useCallback(
     // `_projectId` and `_provider` are preserved for compatibility with
     // existing sidebar callback signatures; backend rename only needs sessionId.
-    async (_projectId: string, sessionId: string, summary: string, _provider: LLMProvider) => {
+    async (_projectId: string | null, sessionId: string, summary: string, _provider: LLMProvider) => {
       const trimmed = summary.trim();
       if (!trimmed) {
         setEditingSession(null);
@@ -1038,6 +1049,15 @@ export function useSidebarController({
         const response = await api.renameSession(sessionId, trimmed);
         if (response.ok) {
           await onRefresh();
+          // The recent feed keeps its own copy of the title, and onRefresh does
+          // not reach it. A rename writes custom_name and nothing else, so
+          // patching the loaded rows says what a refetch would -- same title,
+          // same order -- without resetting the feed to its first page.
+          setRecentConversations((previous) => previous.map((conversation) => (
+            conversation.sessionId === sessionId
+              ? { ...conversation, sessionTitle: trimmed }
+              : conversation
+          )));
         } else {
           console.error('[Sidebar] Failed to rename session:', response.status);
           alert(t('messages.renameSessionFailed'));
