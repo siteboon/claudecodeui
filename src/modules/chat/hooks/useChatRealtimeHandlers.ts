@@ -1,14 +1,10 @@
 import { useEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 
-import type { ServerEvent } from '@/shared/types';
+import type { ServerEvent,MarkSessionIdle,MarkSessionProcessing,PendingPermissionRequest,ProjectSession,LLMProvider,NormalizedMessage } from '@/shared/types';
 import { showCompletionTitleIndicator } from '@/modules/chat/utils/pageTitleNotification';
 import { playChatCompletionSound, playNotificationSound } from '@/shared/utils';
-import type { MarkSessionIdle, MarkSessionProcessing } from '@/shared/types';
-import type { PendingPermissionRequest } from '@/shared/types';
-import type { ProjectSession, LLMProvider } from '@/shared/types';
 import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
-import type { NormalizedMessage } from '@/shared/types';
 
 const isActionablePermissionRequest = (request: { toolName?: unknown } | null | undefined): boolean => {
   return request?.toolName !== 'ExitPlanMode' && request?.toolName !== 'exit_plan_mode';

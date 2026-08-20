@@ -1,8 +1,7 @@
 import { ChevronDown, ChevronRight, GitBranch, Tag } from 'lucide-react';
 import { useMemo } from 'react';
 
-import type { GitCommitSummary } from '@/shared/types';
-import type { CommitGraphRow } from '@/shared/types';
+import type { GitCommitSummary,CommitGraphRow } from '@/shared/types';
 import { laneColor } from '@/modules/git-panel/utils/commitGraph';
 import { getStatusBadgeClass, parseCommitFiles } from '@/modules/git-panel/utils/gitPanelUtils';
 import GitDiffViewer from '@/modules/git-panel/GitDiffViewer';

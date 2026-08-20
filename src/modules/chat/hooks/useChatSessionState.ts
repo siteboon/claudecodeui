@@ -2,15 +2,11 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { MutableRefObject } from 'react';
 
 import { api } from '@/shared/api';
-import type { MarkSessionIdle, SessionActivityMap } from '@/shared/types';
-import type { Project, ProjectSession, LLMProvider } from '@/shared/types';
+import type { MarkSessionIdle, SessionActivityMap,Project,ProjectSession,LLMProvider,NormalizedMessage,ChatMessage,DiffCalculator } from '@/shared/types';
 import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
-import type { NormalizedMessage } from '@/shared/types';
 import { SESSION_MESSAGES_PAGE_SIZE } from '@/modules/chat/utils/sessionMessagePagination';
-import type { ChatMessage } from '@/shared/types';
 import { createMessageHistoryRefreshCoordinator } from '@/modules/chat/utils/messageHistoryRefreshCoordinator';
 import { createCachedDiffCalculator } from '@/modules/chat/utils/messageTransforms';
-import type { DiffCalculator } from '@/shared/types';
 import { normalizedToChatMessages } from '@/modules/chat/hooks/useChatMessages';
 
 const INITIAL_VISIBLE_MESSAGES = 100;

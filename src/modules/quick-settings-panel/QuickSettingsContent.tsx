@@ -5,15 +5,23 @@ import {
   Mic,
   Moon,
   Sun,
+  type LucideIcon,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { DarkModeToggle } from '@/shared/ui';
 import { LanguageSelector } from '@/modules/i18n';
 import { SETTING_ROW_CLASS } from '@/shared/constants';
-import type { PreferenceToggleItem, PreferenceToggleKey, QuickSettingsPreferences } from '@/shared/types';
+import type { PreferenceToggleKey, QuickSettingsPreferences } from '@/shared/types';
 import QuickSettingsSection from '@/modules/quick-settings-panel/QuickSettingsSection';
 import QuickSettingsToggleRow from '@/modules/quick-settings-panel/QuickSettingsToggleRow';
+
+/** Declarative description of one quick settings toggle row - its preference key, translation key and icon - so the rows can be rendered from a list instead of hand-written. */
+type PreferenceToggleItem = {
+  key: PreferenceToggleKey;
+  labelKey: string;
+  icon: LucideIcon;
+};
 
 const TOOL_DISPLAY_TOGGLES: PreferenceToggleItem[] = [
   {

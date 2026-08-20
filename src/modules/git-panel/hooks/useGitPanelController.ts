@@ -1,21 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { api } from '@/shared/api';
-import type { GitApiErrorResponse, GitCommitSummary, GitDiffMap, GitOperationResponse, GitPanelView, GitRemoteStatus, GitStatusResponse, Project } from '@/shared/types';
+import type { FileOpenHandler, GitApiErrorResponse, GitCommitSummary, GitDiffMap, GitOperationResponse, GitPanelView, GitRemoteStatus, GitStatusResponse, Project } from '@/shared/types';
 import { getAllChangedFiles } from '@/modules/git-panel/utils/gitPanelUtils';
 import { useSelectedProvider } from '@/modules/git-panel/hooks/useSelectedProvider';
 
 const DEFAULT_BRANCH = 'main';
 // High enough for the commit graph to show meaningful branch structure.
 const RECENT_COMMITS_LIMIT = 50;
-
-type FileDiffInfo = {
-  old_string: string;
-  new_string: string;
-};
-
-// Exported for `GitPanel`'s own props, which forward the handler into this hook.
-export type FileOpenHandler = (filePath: string, diffInfo?: FileDiffInfo) => void;
 
 type UseGitPanelControllerOptions = {
   selectedProject: Project | null;

@@ -3,8 +3,7 @@ import { I18nextProvider } from 'react-i18next';
 
 import { ThemeProvider } from '@/shared/context/ThemeContext';
 import { AuthProvider, ProtectedRoute } from '@/modules/auth';
-import { TaskMasterProvider } from '@/modules/task-master';
-import { TasksSettingsProvider } from '@/modules/task-master';
+import { TaskMasterProvider,TasksSettingsProvider } from '@/modules/task-master';
 import { WebSocketProvider } from '@/shared/context/WebSocketContext';
 import { PluginsProvider } from '@/modules/plugins';
 import { ProjectWorkspaceRoute } from '@/modules/project-workspace';
@@ -105,6 +104,7 @@ function detectRouterBasename() {
   return detectedBasename;
 }
 
+/** Rendered by main.tsx; mounts the shared providers, the auth gate and the project workspace routes. */
 export default function App() {
   const routerBasename = detectRouterBasename();
 

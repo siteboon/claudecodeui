@@ -1,4 +1,5 @@
 import {
+  type LucideIcon,
   Archive,
   Binary,
   Blocks,
@@ -37,7 +38,11 @@ import {
   Workflow,
 } from 'lucide-react';
 
-import type { FileIconData } from '@/shared/types';
+/** The lucide icon component and Tailwind colour class used to render one file type's icon in the file tree. */
+type FileIconData = {
+  icon: LucideIcon;
+  color: string;
+};
 
 type FileIconMap = Record<string, FileIconData>;
 

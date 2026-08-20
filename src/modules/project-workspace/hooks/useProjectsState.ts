@@ -2,15 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
 
 import { api } from '@/shared/api';
-import type { ServerEvent } from '@/shared/types';
-import type {
+import type { ServerEvent,
   AppTab,
   LLMProvider,
   LoadingProgress,
   Project,
-  ProjectSession,
-} from '@/shared/types';
-import type { IsSessionProcessing } from '@/shared/types';
+  ProjectSession,IsSessionProcessing } from '@/shared/types';
 import { mergeProjectSelectionMetadata } from '@/modules/project-workspace/utils/projectSelectionMetadata';
 
 type UseProjectsStateArgs = {

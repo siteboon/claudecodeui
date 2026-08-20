@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 
-import type { PermissionPanelProps } from '@/shared/types';
-import type { Question } from '@/shared/types';
+import type { PermissionPanelProps,Question } from '@/shared/types';
 
 /**
  * Registered by chat's PermissionRequestsBanner as the permission panel for

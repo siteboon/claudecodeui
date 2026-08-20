@@ -5,8 +5,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Tooltip, PillBar, Pill } from '@/shared/ui';
 import type { AppTab } from '@/shared/types';
-import { usePlugins } from '@/modules/plugins';
-import { PluginIcon } from '@/modules/plugins';
+import { usePlugins,PluginIcon } from '@/modules/plugins';
 
 type WorkspaceTabsProps = {
   activeTab: AppTab;

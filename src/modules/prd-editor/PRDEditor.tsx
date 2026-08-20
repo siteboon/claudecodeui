@@ -1,11 +1,10 @@
 import { useCallback, useMemo, useState } from 'react';
 
-import type { Project } from '@/shared/types';
+import type { Project,PrdEditorFile } from '@/shared/types';
 import { usePrdDocument } from '@/modules/prd-editor/hooks/usePrdDocument';
 import { usePrdKeyboardShortcuts } from '@/modules/prd-editor/hooks/usePrdKeyboardShortcuts';
 import { usePrdRegistry } from '@/modules/prd-editor/hooks/usePrdRegistry';
 import { usePrdSave } from '@/modules/prd-editor/hooks/usePrdSave';
-import type { PrdEditorFile } from '@/shared/types';
 import { ensurePrdExtension } from '@/modules/prd-editor/utils/fileName';
 import OverwriteConfirmModal from '@/modules/prd-editor/modals/OverwriteConfirmModal';
 import PrdEditorLoadingState from '@/modules/prd-editor/PrdEditorLoadingState';

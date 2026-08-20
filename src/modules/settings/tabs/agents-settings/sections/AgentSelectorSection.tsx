@@ -1,11 +1,11 @@
 import { LLMProviderLogo, PillBar, Pill } from '@/shared/ui';
-import type { AgentContext, AgentProvider } from '@/shared/types';
+import type { AgentContextByProvider, AgentProvider } from '@/shared/types';
 
 type AgentSelectorSectionProps = {
   agents: AgentProvider[];
   selectedAgent: AgentProvider;
   onSelectAgent: (agent: AgentProvider) => void;
-  agentContextById: Record<AgentProvider, AgentContext>;
+  agentContextById: AgentContextByProvider;
 };
 
 const AGENT_NAMES: Record<AgentProvider, string> = {

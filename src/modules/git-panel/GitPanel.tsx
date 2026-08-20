@@ -1,9 +1,8 @@
 import { useCallback, useState } from 'react';
 
 import { useGitPanelController } from '@/modules/git-panel/hooks/useGitPanelController';
-import type { FileOpenHandler } from '@/modules/git-panel/hooks/useGitPanelController';
 import { useRevertLocalCommit } from '@/modules/git-panel/hooks/useRevertLocalCommit';
-import type { ConfirmationRequest, GitPanelView, Project } from '@/shared/types';
+import type { ConfirmationRequest, FileOpenHandler, GitPanelView, Project } from '@/shared/types';
 import { getChangedFileCount } from '@/modules/git-panel/utils/gitPanelUtils';
 import ChangesView from '@/modules/git-panel/changes/ChangesView';
 import HistoryView from '@/modules/git-panel/history/HistoryView';

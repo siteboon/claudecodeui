@@ -1,8 +1,7 @@
 import { memo, useCallback } from 'react';
 
 import { useProjectMainState } from '@/modules/project-workspace/context/ProjectsStateContext';
-import type { SessionEstablishedContext, SessionNavigationOptions } from '@/shared/types';
-import type { ProjectWorkspaceShellProps } from '@/shared/types';
+import type { SessionEstablishedContext, SessionNavigationOptions,ProjectWorkspaceShellProps } from '@/shared/types';
 import WorkspaceMain from '@/modules/project-workspace/WorkspaceMain';
 
 /** Rendered by ProjectWorkspaceShell to bind this module's project state to WorkspaceMain. */

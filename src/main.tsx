@@ -6,7 +6,7 @@ import '@/index.css'
 import 'katex/dist/katex.min.css'
 
 // Initialize i18n
-import '@/modules/i18n/config'
+import '@/modules/i18n'
 
 // Register service worker for PWA + Web Push support
 if ('serviceWorker' in navigator) {

@@ -3,8 +3,7 @@ import { useTranslation } from 'react-i18next';
 import JSZip from 'jszip';
 
 import { api } from '@/shared/api';
-import type { FileTreeNode } from '@/shared/types';
-import type { Project } from '@/shared/types';
+import type { FileTreeNode,Project } from '@/shared/types';
 
 // Invalid filename characters
 const INVALID_FILENAME_CHARS = /[<>:"/\\|?*\x00-\x1f]/;

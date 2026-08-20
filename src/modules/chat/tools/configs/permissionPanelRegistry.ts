@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react';
 
-import type { PendingPermissionRequest, PermissionPanelProps } from '@/shared/types';
+import type { PermissionPanelProps } from '@/shared/types';
 
 
 const registry: Record<string, ComponentType<PermissionPanelProps>> = {};

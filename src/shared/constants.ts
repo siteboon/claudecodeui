@@ -9,10 +9,12 @@ import {
   Palette,
   Plug,
 } from 'lucide-react';
-
 import type { ComponentType } from 'react';
 
-import type { FileStatusCode, GitStatusFileGroup, McpProvider, McpScope, McpTransport, SettingsMainTab } from '@/shared/types';
+import type { FileStatusCode, McpProvider, McpScope, McpTransport, SettingsMainTab } from '@/shared/types';
+
+/** The four buckets the git changes view sorts working-tree files into. */
+type GitStatusFileGroup = 'modified' | 'added' | 'deleted' | 'untracked';
 
 //----------------- BRANDING ------------
 

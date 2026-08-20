@@ -14,10 +14,7 @@ import { PaperclipIcon, MessageSquareIcon, XIcon, Loader2, ArrowUpIcon } from 'l
 
 import { useVoiceInput } from '@/modules/chat/hooks/useVoiceInput';
 import { useVoiceAvailable } from '@/modules/chat/hooks/useVoiceAvailable';
-import type { QueuedDraft, SlashCommand } from '@/shared/types';
-import type { SessionActivity } from '@/shared/types';
-import type { PendingPermissionRequest, PermissionMode } from '@/shared/types';
-import type { ProviderModelOption } from '@/shared/types';
+import type { QueuedDraft, SlashCommand,SessionActivity,PendingPermissionRequest,PermissionMode,ProviderModelOption } from '@/shared/types';
 import {
   PromptInput,
   PromptInputHeader,

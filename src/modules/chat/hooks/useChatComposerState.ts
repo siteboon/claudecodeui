@@ -12,16 +12,12 @@ import type {
 import { useDropzone } from 'react-dropzone';
 
 import { api } from '@/shared/api';
-import type { CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData } from '@/shared/types';
+import type { CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
 import { grantClaudeToolPermission } from '@/modules/chat/utils/chatPermissions';
 import { clearQueuedMessage, readQueuedMessage, safeLocalStorage, writeQueuedMessage } from '@/modules/chat/utils/chatStorage';
-import type { QueuedSendOptions } from '@/shared/types';
-import type { ChatAttachment, ChatMessage, PendingPermissionRequest, PermissionMode, SessionEstablishedContext } from '@/shared/types';
-import type { Project, ProjectSession, LLMProvider, ProviderModelOption } from '@/shared/types';
 import { escapeRegExp } from '@/modules/chat/utils/chatFormatting';
 import { useFileMentions } from '@/modules/chat/hooks/useFileMentions';
 import { useSlashCommands } from '@/modules/chat/hooks/useSlashCommands';
-import type { SlashCommand } from '@/shared/types';
 
 type UseChatComposerStateArgs = {
   selectedProject: Project | null;

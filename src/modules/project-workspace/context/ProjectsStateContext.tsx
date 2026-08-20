@@ -3,8 +3,7 @@ import type { ReactNode } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
 
 import { useProjectsState } from '@/modules/project-workspace/hooks/useProjectsState';
-import type { IsSessionProcessing } from '@/shared/types';
-import type { ServerEvent } from '@/shared/types';
+import type { IsSessionProcessing,ServerEvent } from '@/shared/types';
 
 type ProjectsState = ReturnType<typeof useProjectsState>;
 

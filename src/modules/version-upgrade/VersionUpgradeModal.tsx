@@ -4,9 +4,8 @@ import remarkGfm from "remark-gfm";
 import { useTranslation } from "react-i18next";
 
 import { api } from "@/shared/api";
-import type { ReleaseInfo } from "@/shared/types";
+import type { ReleaseInfo,InstallMode } from "@/shared/types";
 import { copyTextToClipboard,IS_PLATFORM } from "@/shared/utils";
-import type { InstallMode } from '@/shared/types';
 
 type VersionUpgradeModalProps = {
     isOpen: boolean;

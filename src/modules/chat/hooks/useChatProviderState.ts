@@ -1,16 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '@/shared/api';
-import type { PendingPermissionRequest, PermissionMode } from '@/shared/types';
-import type {
+import type { PendingPermissionRequest, PermissionMode,
   ProjectSession,
   LLMProvider,
   Project,
   CustomProviderModelInput,
   ProviderModelActions,
   ProviderModelOption,
-  ProviderModelsDefinition,
-} from '@/shared/types';
+  ProviderModelsDefinition } from '@/shared/types';
 import { DEFAULT_EFFORT_VALUE } from '@/shared/constants';
 
 const FALLBACK_PROVIDER_EFFORT_VALUES: Partial<Record<LLMProvider, readonly string[]>> = {

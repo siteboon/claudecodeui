@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { api } from '@/shared/api';
-import type { Project } from '@/shared/types';
-import type { FileTreeNode } from '@/shared/types';
+import type { Project,FileTreeNode } from '@/shared/types';
 
 type UseFileTreeDataResult = {
   files: FileTreeNode[];

@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ChevronRight, Copy, Check } from 'lucide-react';
 
 import { cn,copyTextToClipboard } from '@/shared/utils';
-
 import { ToolStatusBadge } from '@/modules/chat/tools/ToolStatusBadge';
 import type { ToolStatus } from '@/shared/types';
 

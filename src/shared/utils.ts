@@ -90,8 +90,10 @@ export async function copyTextToClipboard(text: string): Promise<boolean> {
 
 //----------------- NOTIFICATION SOUND ------------
 
+/** localStorage key holding the user's completion-sound preference. Private to the sound helpers. */
 const NOTIFICATION_SOUND_ENABLED_STORAGE_KEY = 'notificationSoundEnabled';
 
+/** The browser's AudioContext constructor, including the webkit-prefixed fallback; undefined outside a browser. */
 const AudioContextConstructor =
   typeof window !== 'undefined'
     ? window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
@@ -191,6 +193,7 @@ export const playChatCompletionSound = (options = {}): Promise<void> => playNoti
 
 //----------------- DOCUMENT TITLE ------------
 
+/** Browser tab title shown when no project or session is selected. Private to the title helpers. */
 const DEFAULT_PAGE_TITLE = 'CloudCLI UI';
 
 /**

@@ -2,14 +2,12 @@ import { useTranslation } from 'react-i18next';
 import { memo, useCallback, useMemo } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 
-import type { ChatMessage } from '@/shared/types';
-import type {
+import type { ChatMessage,
   Project,
   ProjectSession,
   LLMProvider,
   ProviderModelActions,
-  ProviderModelsDefinition,
-} from '@/shared/types';
+  ProviderModelsDefinition } from '@/shared/types';
 import { getIntrinsicMessageKey } from '@/modules/chat/utils/messageKeys';
 import { groupConsecutiveTools, isToolGroupItem } from '@/modules/chat/utils/toolGrouping';
 import MessageComponent from '@/modules/chat/MessageComponent';

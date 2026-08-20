@@ -1,9 +1,8 @@
 import { memo, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LLMProvider } from '@/shared/types';
+import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LLMProvider,DiffLine,Project } from '@/shared/types';
 import { formatUsageLimitText, stripProposedPlanEnvelope } from '@/modules/chat/utils/chatFormatting';
-import type { DiffLine, Project } from '@/shared/types';
 import { ToolRenderer, ToolErrorDisplay, shouldHideToolResult } from '@/modules/chat/tools';
 import { LLMProviderLogo, Reasoning, ReasoningTrigger, ReasoningContent } from '@/shared/ui';
 import ChatMessageImages from '@/modules/chat/ChatMessageImages';

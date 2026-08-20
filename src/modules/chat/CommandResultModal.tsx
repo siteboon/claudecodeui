@@ -22,9 +22,8 @@ import type {
   LLMProvider,
   ProviderModelActions,
   ProviderModelOption,
-  ProviderModelsDefinition,
+  ProviderModelsDefinition,CommandModalPayload,CostCommandData,HelpCommandData,ModelCommandData,StatusCommandData
 } from '@/shared/types';
-import type { CommandModalPayload, CostCommandData, HelpCommandData, ModelCommandData, StatusCommandData } from '@/shared/types';
 import ModelLibraryPanel from '@/modules/chat/ModelLibraryPanel';
 
 type CommandResultModalProps = {

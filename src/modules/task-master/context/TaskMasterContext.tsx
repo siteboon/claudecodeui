@@ -3,7 +3,34 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { api } from '@/shared/api';
 import { useAuth } from '@/modules/auth';
 import { useWebSocket } from '@/shared/context/WebSocketContext';
-import type { ServerEvent, TaskMasterContextError, TaskMasterMcpStatus, TaskMasterProject, TaskMasterProjectInfo, TaskMasterProjectInput, TaskMasterTask } from '@/shared/types';
+import type { Project, ServerEvent, TaskMasterProject, TaskMasterProjectInfo, TaskMasterTask } from '@/shared/types';
+
+/** What may be handed to setCurrentProject: a TaskMaster-enriched project, a plain project, or null to clear the selection. */
+type TaskMasterProjectInput = TaskMasterProject | Project | null;
+
+/** A failed TaskMaster operation recorded for display, naming the operation that failed and when the failure happened. */
+type TaskMasterContextError = {
+  message: string;
+  context: string;
+  timestamp: string;
+};
+
+/** Detailed status of the TaskMaster MCP server, including its configuration, API-key availability and the reason it is unusable, or null while the status is unknown. */
+type TaskMasterMcpStatus = {
+  hasMCPServer?: boolean;
+  isConfigured?: boolean;
+  hasApiKeys?: boolean;
+  scope?: string;
+  config?: {
+    command?: string;
+    args?: string[];
+    url?: string;
+    envVars?: string[];
+    type?: string;
+  };
+  reason?: string;
+  [key: string]: unknown;
+} | null;
 
 type TaskMasterWebSocketMessage = {
   type?: string;

@@ -3,8 +3,7 @@
  * Converts NormalizedMessage[] from the session store into ChatMessage[] for the UI.
  */
 
-import type { NormalizedMessage } from '@/shared/types';
-import type { ChatMessage, SubagentChildTool } from '@/shared/types';
+import type { NormalizedMessage,ChatMessage,SubagentChildTool } from '@/shared/types';
 import { formatUsageLimitText } from '@/modules/chat/utils/chatFormatting';
 
 function formatToolResultContent(content: unknown): string {

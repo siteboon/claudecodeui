@@ -10,7 +10,12 @@ import {
   isValidRefreshedToken,
   storeAuthToken,
 } from '@/shared/api';
-import type { AuthUser } from '@/shared/types';
+/** The signed-in account held by AuthContext - a required `username` plus an optional id and any additional fields the auth API returns - and should be read through `useAuth()` rather than re-derived from raw auth responses. */
+type AuthUser = {
+  id?: number | string;
+  username: string;
+  [key: string]: unknown;
+};
 
 const AUTH_TOKEN_STORAGE_KEY = 'auth-token';
 

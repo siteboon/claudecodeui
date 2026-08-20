@@ -11,9 +11,8 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 
-import type { Project } from '@/shared/types';
+import type { Project,WorktreeInfo } from '@/shared/types';
 import { useWorktreesController } from '@/modules/git-panel/hooks/useWorktreesController';
-import type { WorktreeInfo } from '@/shared/types';
 import MergeWorktreeModal from '@/modules/git-panel/modals/MergeWorktreeModal';
 import NewWorktreeModal from '@/modules/git-panel/modals/NewWorktreeModal';
 import RemoveWorktreeModal from '@/modules/git-panel/modals/RemoveWorktreeModal';

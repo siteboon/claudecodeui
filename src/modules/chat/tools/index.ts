@@ -1,6 +1,5 @@
 export { ToolRenderer } from '@/modules/chat/tools/ToolRenderer';
 export { getToolConfig, shouldHideToolResult } from '@/modules/chat/tools/configs/toolConfigs';
-export { CollapsibleSection } from '@/modules/chat/tools/CollapsibleSection';
 export { ToolDiffViewer } from '@/modules/chat/tools/ToolDiffViewer';
 export { OneLineDisplay } from '@/modules/chat/tools/OneLineDisplay';
 export { BashCommandDisplay } from '@/modules/chat/tools/BashCommandDisplay';
@@ -9,5 +8,3 @@ export { CollapsibleDisplay } from '@/modules/chat/tools/CollapsibleDisplay';
 export { SubagentContainer } from '@/modules/chat/tools/SubagentContainer';
 export * from '@/modules/chat/tools/ContentRenderers';
 export * from '@/modules/chat/tools/InteractiveRenderers';
-export { ToolStatusBadge } from '@/modules/chat/tools/ToolStatusBadge';
-export type { ToolStatus } from '@/shared/types';

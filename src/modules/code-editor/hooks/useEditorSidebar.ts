@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 
-import type { Project } from '@/shared/types';
-import type { CodeEditorDiffInfo, CodeEditorFile } from '@/shared/types';
+import type { Project,CodeEditorDiffInfo,CodeEditorFile } from '@/shared/types';
 
 type UseEditorSidebarOptions = {
   selectedProject: Project | null;

@@ -1,12 +1,10 @@
 import React, { memo, useMemo, useCallback } from 'react';
 
-import type { DiffLine, Project } from '@/shared/types';
-import type { SubagentChildTool } from '@/shared/types';
+import type { DiffLine, Project,SubagentChildTool,ToolStatus } from '@/shared/types';
 import { getToolConfig } from '@/modules/chat/tools/configs/toolConfigs';
 import { OneLineDisplay, BashCommandDisplay, CollapsibleDisplay, ToolDiffViewer, MarkdownContent, FileListContent, TodoListContent, TaskListContent, TextContent, QuestionAnswerContent, SubagentContainer } from '@/modules/chat/tools';
 import { PlanDisplay } from '@/modules/chat/tools/PlanDisplay';
 import { ToolStatusBadge } from '@/modules/chat/tools/ToolStatusBadge';
-import type { ToolStatus } from '@/shared/types';
 
 type ToolRendererProps = {
   toolName: string;
