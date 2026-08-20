@@ -1,0 +1,118 @@
+import { useEffect } from 'react';
+import type { TFunction } from 'i18next';
+
+import type { LLMProvider, LoadingProgress, Project, ProjectSession, SidebarProjectListProps } from '@/shared/types';
+import type { SessionActivityMap } from '@/shared/types';
+import { getPageTitle } from '@/shared/utils';
+import type { MCPServerStatus, SessionWithProvider } from '@/shared/types';
+import SidebarProjectItem from '@/modules/sidebar/SidebarProjectItem';
+import SidebarProjectsState from '@/modules/sidebar/SidebarProjectsState';
+
+
+export default function SidebarProjectList({
+  projects,
+  filteredProjects,
+  selectedProject,
+  selectedSession,
+  isLoading,
+  loadingProgress,
+  expandedProjects,
+  editingProject,
+  editingName,
+  initialSessionsLoaded,
+  currentTime,
+  editingSession,
+  editingSessionName,
+  deletingProjects,
+  tasksEnabled,
+  mcpServerStatus,
+  getProjectSessions,
+  onLoadMoreSessions,
+  loadingMoreProjects,
+  activeSessions,
+  attentionSessionIds,
+  forceExpanded = false,
+  isProjectStarred,
+  onEditingNameChange,
+  onToggleProject,
+  onProjectSelect,
+  onToggleStarProject,
+  onStartEditingProject,
+  onCancelEditingProject,
+  onSaveProjectName,
+  onDeleteProject,
+  onSessionSelect,
+  onDeleteSession,
+  onNewSession,
+  onEditingSessionNameChange,
+  onStartEditingSession,
+  onCancelEditingSession,
+  onSaveEditingSession,
+  t,
+}: SidebarProjectListProps) {
+  const pageTitle = getPageTitle(selectedProject, selectedSession);
+  const state = (
+    <SidebarProjectsState
+      isLoading={isLoading}
+      loadingProgress={loadingProgress}
+      projectsCount={projects.length}
+      filteredProjectsCount={filteredProjects.length}
+      t={t}
+    />
+  );
+
+  useEffect(() => {
+    document.title = pageTitle;
+  }, [pageTitle]);
+
+  const showProjects = !isLoading && projects.length > 0 && filteredProjects.length > 0;
+
+  return (
+    <div className="pb-safe-area-inset-bottom md:space-y-1">
+      {!showProjects
+        ? state
+        : filteredProjects.map((project) => (
+            // React key + per-project state lookups all use the DB `projectId`
+            // so they remain stable across renames and session changes.
+            <SidebarProjectItem
+              key={project.projectId}
+              project={project}
+              selectedProject={selectedProject}
+              selectedSession={selectedSession}
+              isExpanded={forceExpanded || expandedProjects.has(project.projectId)}
+              isDeleting={deletingProjects.has(project.projectId)}
+              isStarred={isProjectStarred(project.projectId)}
+              editingProject={editingProject}
+              editingName={editingName}
+              sessions={getProjectSessions(project)}
+              initialSessionsLoaded={initialSessionsLoaded.has(project.projectId)}
+              isLoadingMoreSessions={loadingMoreProjects.has(project.projectId)}
+              currentTime={currentTime}
+              editingSession={editingSession}
+              editingSessionName={editingSessionName}
+              tasksEnabled={tasksEnabled}
+              mcpServerStatus={mcpServerStatus}
+              onEditingNameChange={onEditingNameChange}
+              onToggleProject={onToggleProject}
+              onProjectSelect={onProjectSelect}
+              onToggleStarProject={onToggleStarProject}
+              onStartEditingProject={onStartEditingProject}
+              onCancelEditingProject={onCancelEditingProject}
+              onSaveProjectName={onSaveProjectName}
+              onDeleteProject={onDeleteProject}
+              onSessionSelect={onSessionSelect}
+              onDeleteSession={onDeleteSession}
+              onLoadMoreSessions={onLoadMoreSessions}
+              activeSessions={activeSessions}
+              attentionSessionIds={attentionSessionIds}
+              onNewSession={onNewSession}
+              onEditingSessionNameChange={onEditingSessionNameChange}
+              onStartEditingSession={onStartEditingSession}
+              onCancelEditingSession={onCancelEditingSession}
+              onSaveEditingSession={onSaveEditingSession}
+              t={t}
+            />
+          ))}
+    </div>
+  );
+}

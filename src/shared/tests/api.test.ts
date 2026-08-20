@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { isAuthTokenExpired, TOKEN_EXPIRY_SKEW_MS } from '../api';
+import { isAuthTokenExpired, TOKEN_EXPIRY_SKEW_MS } from '@/shared/api';
 
 // Builds a JWT-shaped string (header.payload.signature, base64url segments) without
 // needing a real signing library — isAuthTokenExpired() never verifies the signature,

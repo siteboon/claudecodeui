@@ -1,12 +1,12 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 
-import App from './App'
-import './index.css'
+import App from '@/App'
+import '@/index.css'
 import 'katex/dist/katex.min.css'
 
 // Initialize i18n
-import './i18n/config'
+import '@/modules/i18n/config'
 
 // Register service worker for PWA + Web Push support
 if ('serviceWorker' in navigator) {
