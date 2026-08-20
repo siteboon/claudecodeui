@@ -825,7 +825,7 @@ export function useSessionStore() {
    * Get merged messages for a session (for rendering).
    */
   const getMessages = useCallback((sessionId: string): NormalizedMessage[] => {
-    return storeRef.current.get(sessionId)?.merged ?? [];
+    return storeRef.current.get(sessionId)?.merged ?? EMPTY;
   }, []);
 
   /**

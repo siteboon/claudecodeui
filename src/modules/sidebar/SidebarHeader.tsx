@@ -30,6 +30,25 @@ type SidebarHeaderProps = {
   t: TFunction;
 };
 
+/** Module-level, not a nested render function, so the wordmark is not remounted on every SidebarHeader render. */
+function LogoBlock({ t }: { t: TFunction }) {
+  return (
+    <div className="flex min-w-0 items-center gap-2.5">
+      <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-primary/90 shadow-sm">
+        <svg className="h-3.5 w-3.5 text-primary-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+      </div>
+      <h1
+        className="truncate text-sm font-bold tracking-tight text-foreground"
+        style={{ fontFamily: CLOUDCLI_WORDMARK_FONT_FAMILY }}
+      >
+        {t('app.title')}
+      </h1>
+    </div>
+  );
+}
+
 /** Rendered by SidebarContent at the top of the panel for the search box, search-mode tabs, refresh and new-project actions. */
 export default function SidebarHeader({
   isPWA,
@@ -60,22 +79,6 @@ export default function SidebarHeader({
         : t('projects.searchPlaceholder');
   const runningBadgeText = runningSessionsCount > 99 ? '99+' : String(runningSessionsCount);
 
-  const LogoBlock = () => (
-    <div className="flex min-w-0 items-center gap-2.5">
-      <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-primary/90 shadow-sm">
-        <svg className="h-3.5 w-3.5 text-primary-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-        </svg>
-      </div>
-      <h1
-        className="truncate text-sm font-bold tracking-tight text-foreground"
-        style={{ fontFamily: CLOUDCLI_WORDMARK_FONT_FAMILY }}
-      >
-        {t('app.title')}
-      </h1>
-    </div>
-  );
-
   return (
     <div className="flex-shrink-0">
       {/* Desktop header */}
@@ -90,10 +93,10 @@ export default function SidebarHeader({
               className="flex min-w-0 items-center gap-2.5 transition-opacity hover:opacity-80"
               title={t('tooltips.viewEnvironments')}
             >
-              <LogoBlock />
+              <LogoBlock t={t} />
             </a>
           ) : (
-            <LogoBlock />
+            <LogoBlock t={t} />
           )}
 
           <div className="flex flex-shrink-0 items-center gap-0.5">
@@ -252,10 +255,10 @@ export default function SidebarHeader({
               className="flex min-w-0 items-center gap-2.5 transition-opacity active:opacity-70"
               title={t('tooltips.viewEnvironments')}
             >
-              <LogoBlock />
+              <LogoBlock t={t} />
             </a>
           ) : (
-            <LogoBlock />
+            <LogoBlock t={t} />
           )}
 
           <div className="flex flex-shrink-0 gap-1.5">

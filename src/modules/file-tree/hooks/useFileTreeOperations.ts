@@ -262,26 +262,6 @@ export function useFileTreeOperations({
     URL.revokeObjectURL(url);
   }, []);
 
-  // Download file or folder
-  const handleDownload = useCallback(async (item: FileTreeNode) => {
-    if (!selectedProject) return;
-
-    setOperationLoading(true);
-    try {
-      if (item.type === 'directory') {
-        // Download folder as ZIP
-        await downloadFolderAsZip(item);
-      } else {
-        // Download single file
-        await downloadSingleFile(item);
-      }
-    } catch (err) {
-      showToast((err as Error).message, 'error');
-    } finally {
-      setOperationLoading(false);
-    }
-  }, [selectedProject, showToast]);
-
   // Download a single file
   const downloadSingleFile = useCallback(async (item: FileTreeNode) => {
     if (!selectedProject) return;
@@ -337,6 +317,29 @@ export function useFileTreeOperations({
 
     showToast(t('fileTree.toast.folderDownloaded', 'Folder downloaded as ZIP'), 'success');
   }, [selectedProject, showToast, t, triggerBrowserDownload]);
+
+  // Download file or folder. Declared after the two helpers it dispatches to so
+  // it does not read them before initialization; both are memoized on
+  // `selectedProject` plus stable values, so the dependency list is unchanged
+  // in practice.
+  const handleDownload = useCallback(async (item: FileTreeNode) => {
+    if (!selectedProject) return;
+
+    setOperationLoading(true);
+    try {
+      if (item.type === 'directory') {
+        // Download folder as ZIP
+        await downloadFolderAsZip(item);
+      } else {
+        // Download single file
+        await downloadSingleFile(item);
+      }
+    } catch (err) {
+      showToast((err as Error).message, 'error');
+    } finally {
+      setOperationLoading(false);
+    }
+  }, [downloadFolderAsZip, downloadSingleFile, selectedProject, showToast]);
 
   return {
     // Rename operations

@@ -68,36 +68,9 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     }
   }, []);
 
-  useEffect(() => {
-    // The cleanup below sets unmountedRef = true. Without this reset, every
-    // re-run of the effect (e.g. on token refresh) would short-circuit connect()
-    // at its unmounted guard and leave the socket permanently disconnected.
-    unmountedRef.current = false;
-    if (!IS_PLATFORM && (isAuthLoading || !user)) {
-      return undefined;
-    }
-    connect();
-
-    return () => {
-      unmountedRef.current = true;
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      const activeSocket = wsRef.current;
-      if (activeSocket) {
-        // Prevent the intentionally closed, old-token socket from scheduling
-        // a reconnect after the refreshed-token effect has already started.
-        activeSocket.onopen = null;
-        activeSocket.onmessage = null;
-        activeSocket.onclose = null;
-        activeSocket.onerror = null;
-        activeSocket.close();
-        wsRef.current = null;
-      }
-    };
-  }, [isAuthLoading, token, user]); // reconnect after authentication or token refresh
-
-  const connect = useCallback(() => {
+  // Named function expression so the reconnect timer below can call itself
+  // without reading the `connect` binding while it is still initializing.
+  const connect = useCallback(function connect() {
     if (unmountedRef.current) return; // Prevent connection if unmounted
     if (!IS_PLATFORM && (isAuthLoading || !user)) return;
     try {
@@ -151,6 +124,39 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       console.error('Error creating WebSocket connection:', error);
     }
   }, [dispatch, isAuthLoading, token, user]); // reconnect with current authentication state
+
+  // Declared after `connect` so the effect body does not reference it before
+  // initialization. `connect` is memoized on [dispatch, isAuthLoading, token,
+  // user] and `dispatch` is stable, so depending on it reconnects on exactly
+  // the same transitions as the previous [isAuthLoading, token, user] list.
+  useEffect(() => {
+    // The cleanup below sets unmountedRef = true. Without this reset, every
+    // re-run of the effect (e.g. on token refresh) would short-circuit connect()
+    // at its unmounted guard and leave the socket permanently disconnected.
+    unmountedRef.current = false;
+    if (!IS_PLATFORM && (isAuthLoading || !user)) {
+      return undefined;
+    }
+    connect();
+
+    return () => {
+      unmountedRef.current = true;
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      const activeSocket = wsRef.current;
+      if (activeSocket) {
+        // Prevent the intentionally closed, old-token socket from scheduling
+        // a reconnect after the refreshed-token effect has already started.
+        activeSocket.onopen = null;
+        activeSocket.onmessage = null;
+        activeSocket.onclose = null;
+        activeSocket.onerror = null;
+        activeSocket.close();
+        wsRef.current = null;
+      }
+    };
+  }, [connect, isAuthLoading, user]); // reconnect after authentication or token refresh
 
   const sendMessage = useCallback((message: unknown) => {
     const socket = wsRef.current;

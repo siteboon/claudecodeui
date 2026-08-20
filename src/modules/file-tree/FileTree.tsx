@@ -63,8 +63,9 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
     showToast,
   });
 
-  // File upload (drag and drop)
-  const upload = useFileTreeUpload({
+  // File upload (drag and drop). `treeRef` is pulled out of the returned object
+  // so the remaining plain values are not treated as render-time ref reads.
+  const { treeRef, ...upload } = useFileTreeUpload({
     selectedProject,
     onRefresh: refreshFiles,
     showToast,
@@ -150,7 +151,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
 
   return (
     <div
-      ref={upload.treeRef}
+      ref={treeRef}
       className="relative flex h-full flex-col bg-background"
       onDragEnter={upload.handleDragEnter}
       onDragOver={upload.handleDragOver}

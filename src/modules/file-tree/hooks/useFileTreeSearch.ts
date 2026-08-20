@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { collectExpandedDirectoryPaths, filterFileTree } from '@/modules/file-tree/utils/fileTreeUtils';
 import type { FileTreeNode } from '@/shared/types';
@@ -19,21 +19,22 @@ export function useFileTreeSearch({
   expandDirectories,
 }: UseFileTreeSearchArgs): UseFileTreeSearchResult {
   const [searchQuery, setSearchQuery] = useState('');
-  const [filteredFiles, setFilteredFiles] = useState<FileTreeNode[]>(files);
+
+  // Derived, not stored: mirroring the filter into state made every keystroke
+  // (and every tree refresh) cost an extra render, and left `filteredFiles` one
+  // render behind `files`.
+  const filteredFiles = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return query ? filterFileTree(files, query) : files;
+  }, [files, searchQuery]);
 
   useEffect(() => {
-    const query = searchQuery.trim().toLowerCase();
-
-    if (!query) {
-      setFilteredFiles(files);
+    if (!searchQuery.trim()) {
       return;
     }
-
-    const filtered = filterFileTree(files, query);
-    setFilteredFiles(filtered);
     // Keep search results visible by opening every matching ancestor directory once per query update.
-    expandDirectories(collectExpandedDirectoryPaths(filtered));
-  }, [files, searchQuery, expandDirectories]);
+    expandDirectories(collectExpandedDirectoryPaths(filteredFiles));
+  }, [expandDirectories, filteredFiles, searchQuery]);
 
   return {
     searchQuery,

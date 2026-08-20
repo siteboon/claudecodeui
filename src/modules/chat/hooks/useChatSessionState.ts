@@ -10,6 +10,8 @@ import { createCachedDiffCalculator } from '@/modules/chat/utils/messageTransfor
 import { normalizedToChatMessages } from '@/modules/chat/hooks/useChatMessages';
 
 const INITIAL_VISIBLE_MESSAGES = 100;
+/** Stable empty list so `chatMessages` keeps its identity while no session is selected. */
+const NO_MESSAGES: NormalizedMessage[] = [];
 
 type UseChatSessionStateArgs = {
   isActive: boolean;
@@ -144,7 +146,6 @@ export function useChatSessionState({
   const wasNearTopRef = useRef(false);
   const [searchTarget, setSearchTarget] = useState<{ timestamp?: string; uuid?: string; snippet?: string } | null>(null);
   const searchScrollActiveRef = useRef(false);
-  const isLoadingSessionRef = useRef(false);
   const isLoadingMoreRef = useRef(false);
   const allMessagesLoadedRef = useRef(false);
   const topLoadLockRef = useRef(false);
@@ -321,7 +322,7 @@ export function useChatSessionState({
     setPendingUserMessage(null);
   }, [activeSessionId, pendingUserMessage, sessionStore]);
 
-  const storeMessages = activeSessionId ? sessionStore.getMessages(activeSessionId) : [];
+  const storeMessages = activeSessionId ? sessionStore.getMessages(activeSessionId) : NO_MESSAGES;
 
   // Reset viewHiddenCount when store messages change
   const prevStoreLenRef = useRef(0);
@@ -394,6 +395,7 @@ export function useChatSessionState({
       if (!hasMoreMessages || !selectedSession || !selectedProject) return false;
 
       isLoadingMoreRef.current = true;
+      setIsLoadingMoreMessages(true);
       const scrollRestoreState = captureScrollRestoreState(container);
 
       try {
@@ -439,6 +441,7 @@ export function useChatSessionState({
         return true;
       } finally {
         isLoadingMoreRef.current = false;
+        setIsLoadingMoreMessages(false);
       }
     },
     [hasMoreMessages, isActive, isLoadingMoreMessages, selectedProject, selectedSession, sessionStore],
@@ -585,7 +588,15 @@ export function useChatSessionState({
     });
   }, [lastSeqRef, selectedProject, selectedSession, sendMessage, statusCheckSentAtRef, ws]);
 
-  // Main session loading effect — store-based
+  // Main session loading effect — store-based.
+  //
+  // The dependency list is deliberately narrower than the values the body
+  // reads. `selectedSession` is tracked by id only, so a websocket-driven list
+  // refresh that hands back a new object for the same session does not reload
+  // it; `currentSessionId` is read as the previously-loaded session (the body
+  // itself is what advances it), so listing it would re-enter the effect right
+  // after every load. Both are always current when the effect does run,
+  // because React recreates the closure on each render.
   useEffect(() => {
     if (!selectedSession || !selectedProject) {
       // A freshly created session can be mid-run before the router has a

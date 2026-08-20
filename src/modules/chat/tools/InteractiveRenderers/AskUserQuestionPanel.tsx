@@ -2,6 +2,10 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 
 import type { PermissionPanelProps,Question } from '@/shared/types';
 
+/** Stable fallback so the memoized handlers below are not invalidated on every
+ *  render by a fresh `[]` literal when a request carries no questions. */
+const NO_QUESTIONS: Question[] = [];
+
 /**
  * Registered by chat's PermissionRequestsBanner as the permission panel for
  * AskUserQuestion requests, so the user answers the model's questions inline.
@@ -11,7 +15,7 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
   onDecision,
 }) => {
   const input = request.input as { questions?: Question[] } | undefined;
-  const questions: Question[] = input?.questions || [];
+  const questions: Question[] = input?.questions ?? NO_QUESTIONS;
 
   const [currentStep, setCurrentStep] = useState(0);
   const [selections, setSelections] = useState<Map<number, Set<string>>>(() => new Map());

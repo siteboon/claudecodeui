@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef } from 'react';
+import { useEffect, useId, useReducer } from 'react';
 
 type UiPreferences = {
   showRawParameters: boolean;
@@ -145,7 +145,10 @@ function reducer(state: UiPreferences, action: UiPreferencesAction): UiPreferenc
 }
 
 export function useUiPreferences(storageKey = 'uiPreferences') {
-  const instanceIdRef = useRef(`ui-preferences-${Math.random().toString(36).slice(2)}`);
+  // Identifies this hook instance in the same-tab sync events below so a
+  // dispatching instance ignores its own echo. `useId` keeps render pure;
+  // `Math.random()` re-ran on every render and is impure during render.
+  const instanceId = useId();
   const [state, dispatch] = useReducer(
     reducer,
     storageKey,
@@ -163,12 +166,12 @@ export function useUiPreferences(storageKey = 'uiPreferences') {
       new CustomEvent<SyncEventDetail>(SYNC_EVENT, {
         detail: {
           storageKey,
-          sourceId: instanceIdRef.current,
+          sourceId: instanceId,
           value: state,
         },
       })
     );
-  }, [state, storageKey]);
+  }, [instanceId, state, storageKey]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -198,7 +201,7 @@ export function useUiPreferences(storageKey = 'uiPreferences') {
     const handleSyncEvent = (event: Event) => {
       const syncEvent = event as CustomEvent<SyncEventDetail>;
       const detail = syncEvent.detail;
-      if (!detail || detail.storageKey !== storageKey || detail.sourceId === instanceIdRef.current) {
+      if (!detail || detail.storageKey !== storageKey || detail.sourceId === instanceId) {
         return;
       }
 
@@ -212,7 +215,7 @@ export function useUiPreferences(storageKey = 'uiPreferences') {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener(SYNC_EVENT, handleSyncEvent as EventListener);
     };
-  }, [storageKey]);
+  }, [instanceId, storageKey]);
 
   const setPreference = (key: UiPreferenceKey, value: unknown) => {
     dispatch({ type: 'set', key, value });
