@@ -23,16 +23,36 @@
     // Read by the bridged eslint-plugin-import-x rules. The key must stay "import-x/..."
     // (the plugin hardcodes its own name), even though the plugin is aliased to "importx".
     "import-x/resolver": {
-      "typescript": { "project": ["server/tsconfig.json"], "alwaysTryTypes": true },
+      "typescript": {
+        "project": ["tsconfig.json", "server/tsconfig.json"],
+        "alwaysTryTypes": true,
+        "noWarnOnMultipleProjects": true
+      },
       "node": { "extensions": [".mjs", ".cjs", ".js", ".json", ".node", ".ts", ".tsx"] }
     },
     // eslint-plugin-boundaries resolves through eslint-module-utils, which reads the
     // classic "import/resolver" key instead.
     "import/resolver": {
-      "typescript": { "project": ["server/tsconfig.json"], "alwaysTryTypes": true },
+      "typescript": {
+        "project": ["tsconfig.json", "server/tsconfig.json"],
+        "alwaysTryTypes": true,
+        "noWarnOnMultipleProjects": true
+      },
       "node": { "extensions": [".mjs", ".cjs", ".js", ".json", ".node", ".ts", ".tsx"] }
     },
-    "boundaries/include": ["server/**/*.js", "server/**/*.ts"],
+    "boundaries/include": [
+      "server/**/*.js",
+      "server/**/*.ts",
+      "src/modules/**/*.ts",
+      "src/modules/**/*.tsx",
+      "src/shared/*.ts",
+      "src/shared/hooks/**/*.ts",
+      "src/shared/hooks/**/*.tsx",
+      "src/shared/context/**/*.ts",
+      "src/shared/context/**/*.tsx",
+      "src/shared/ui/**/*.ts",
+      "src/shared/ui/**/*.tsx"
+    ],
     "boundaries/elements": [
       {
         "type": "backend-shared-type-contract",
@@ -52,6 +72,27 @@
       {
         "type": "backend-module",
         "pattern": "server/modules/*",
+        "mode": "folder",
+        "capture": ["moduleName"]
+      },
+      {
+        "type": "frontend-shared-type-contract",
+        "pattern": "src/shared/types.ts",
+        "mode": "file"
+      },
+      {
+        "type": "frontend-shared-file",
+        "pattern": ["src/shared/utils.ts", "src/shared/constants.ts", "src/shared/api.ts"],
+        "mode": "file"
+      },
+      {
+        "type": "frontend-shared-folder",
+        "pattern": ["src/shared/hooks", "src/shared/context", "src/shared/ui"],
+        "mode": "folder"
+      },
+      {
+        "type": "frontend-module",
+        "pattern": "src/modules/*",
         "mode": "folder",
         "capture": ["moduleName"]
       }
@@ -126,6 +167,78 @@
         "tailwind/classnames-order": "warn",
         "tailwind/no-contradicting-classname": "warn",
         "tailwind/no-unnecessary-arbitrary-value": "warn"
+      }
+    },
+    {
+      // Strict architecture rules start applying as legacy frontend code moves into
+      // src/modules and the canonical src/shared locations.
+      "files": [
+        "src/modules/**/*.ts",
+        "src/modules/**/*.tsx",
+        "src/shared/*.ts",
+        "src/shared/hooks/**/*.ts",
+        "src/shared/hooks/**/*.tsx",
+        "src/shared/context/**/*.ts",
+        "src/shared/context/**/*.tsx",
+        "src/shared/ui/**/*.ts",
+        "src/shared/ui/**/*.tsx",
+        "src/shared/tests/**/*.ts",
+        "src/shared/tests/**/*.tsx"
+      ],
+      "rules": {
+        // --- TypeScript type hygiene (frontend modules) ---
+        "typescript/consistent-type-definitions": ["error", "type"],
+        "typescript/consistent-type-imports": [
+          "error",
+          { "prefer": "type-imports", "fixStyle": "separate-type-imports" }
+        ],
+        "typescript/consistent-type-exports": [
+          "error",
+          { "fixMixedExportsWithInlineTypeSpecifier": true }
+        ],
+
+        // --- Source-root imports ---
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.{1,2}/",
+                "message": "Use the @/ source-root alias for frontend application imports."
+              }
+            ]
+          }
+        ],
+        "importx/no-unresolved": "error",
+        "importx/no-useless-path-segments": "warn",
+        "import/no-absolute-path": "error",
+
+        // --- Architecture boundaries (frontend modules) ---
+        "boundaries/dependencies": [
+          "error",
+          {
+            "default": "allow",
+            "checkInternals": false,
+            "rules": [
+              {
+                "from": { "type": "frontend-module" },
+                "to": { "type": "frontend-shared-type-contract" },
+                "disallow": { "dependency": { "kind": ["value", "typeof"] } },
+                "message": "Frontend modules may only use `import type` when importing from src/shared/types.ts."
+              },
+              {
+                "to": { "type": "frontend-module" },
+                "disallow": { "to": { "internalPath": "**" } },
+                "message": "Cross-module imports must go through that module's barrel file (src/modules/<module>/index.ts)."
+              },
+              {
+                "to": { "type": "frontend-module" },
+                "allow": { "to": { "internalPath": ["index", "index.{ts,tsx}"] } }
+              }
+            ]
+          }
+        ],
+        "boundaries/no-unknown": "error"
       }
     },
     {

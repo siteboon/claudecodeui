@@ -51,6 +51,8 @@
     "test": "tsx --tsconfig server/tsconfig.json --test \"server/**/*.test.ts\" \"server/**/*.test.js\"",
     "test:client": "tsx --test \"src/**/*.test.ts\" \"src/**/*.test.tsx\"",
     "lint": "oxlint src/ server/",
+    "lint:server": "oxlint server/",
+    "lint:client": "oxlint src/",
     "lint:fix": "oxlint src/ server/ --fix",
     "start": "npm run build && npm run server",
     "release": "./release.sh",
