@@ -27,6 +27,9 @@ const EXIT_ANIMATION_MS = 220;
  * elapsed time, and an interrupt affordance. Rendered only while the viewed
  * session has an entry in the processing map; it disappears the instant that
  * entry is removed.
+ *
+ * Rendered by chat's ChatComposer above the input so the user can see and
+ * interrupt the in-flight turn without leaving the composer.
  */
 export default function ActivityIndicator({ activity, onAbort, isInputFocused = false }: ActivityIndicatorProps) {
   const { t } = useTranslation('chat');

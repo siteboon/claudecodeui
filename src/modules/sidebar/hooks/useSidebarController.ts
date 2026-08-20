@@ -3,17 +3,17 @@ import type { TFunction } from 'i18next';
 
 import { api } from '@/shared/api';
 import { usePaletteOps } from '@/modules/command-palette';
-import type { ConversationProjectResult, ConversationSearchResults, LLMProvider, Project, ProjectSession, SearchProgress, SessionTitleSearchResult } from '@/shared/types';
-import type { SessionActivityMap } from '@/shared/types';
-import type { ArchivedProjectListItem, ArchivedSessionListItem, DeleteProjectConfirmation, ProjectSortOrder, RecentConversationListItem, SidebarSearchMode, SessionDeleteConfirmation, SessionWithProvider } from '@/shared/types';
+import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationProjectResult, ConversationSearchResults, DeleteProjectConfirmation, LLMProvider, Project, ProjectSession, ProjectSortOrder, RecentConversationListItem, SearchProgress, SessionActivityMap, SessionDeleteConfirmation, SessionTitleSearchResult, SessionWithProvider, SidebarSearchMode } from '@/shared/types';
 import {
-  clearLegacyStarredProjectIds,
   filterProjects,
   getAllSessions,
+  sortProjects,
+} from '@/modules/sidebar/utils/sidebarProjectFormatting';
+import {
+  clearLegacyStarredProjectIds,
   readLegacyStarredProjectIds,
   readProjectSortOrder,
-  sortProjects,
-} from '@/modules/sidebar/utils/utils';
+} from '@/modules/sidebar/utils/sidebarStoredPreferences';
 
 
 type ArchivedSessionsApiPayload = {

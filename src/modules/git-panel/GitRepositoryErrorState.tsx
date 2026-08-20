@@ -11,6 +11,7 @@ type GitRepositoryErrorStateProps = {
   onInitRepository?: () => void;
 };
 
+/** Rendered by GitPanel when the git status request fails, including the missing-repository case that offers `git init`. */
 export default function GitRepositoryErrorState({
   error,
   details,

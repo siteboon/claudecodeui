@@ -39,7 +39,8 @@ type ActionMenuProps = {
   onOpenChange?: (open: boolean) => void;
 };
 
-export default function ActionMenu({
+/** Used by the mcp and sidebar modules for the "…" overflow menu on a server or session row. */
+export function ActionMenu({
   label,
   items,
   icon: TriggerIcon,

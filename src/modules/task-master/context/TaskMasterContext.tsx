@@ -3,9 +3,32 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { api } from '@/shared/api';
 import { useAuth } from '@/modules/auth';
 import { useWebSocket } from '@/shared/context/WebSocketContext';
-import type { ServerEvent } from '@/shared/types';
-import type { TaskMasterContextValue, TaskMasterWebSocketMessage } from '@/modules/task-master/types';
-import type { TaskMasterContextError, TaskMasterMcpStatus, TaskMasterProject, TaskMasterProjectInfo, TaskMasterProjectInput, TaskMasterTask } from '@/shared/types';
+import type { ServerEvent, TaskMasterContextError, TaskMasterMcpStatus, TaskMasterProject, TaskMasterProjectInfo, TaskMasterProjectInput, TaskMasterTask } from '@/shared/types';
+
+type TaskMasterWebSocketMessage = {
+  type?: string;
+  // Post-migration TaskMaster broadcasts identify projects by `projectId`.
+  projectId?: string;
+  [key: string]: unknown;
+};
+
+type TaskMasterContextValue = {
+  projects: TaskMasterProject[];
+  currentProject: TaskMasterProject | null;
+  projectTaskMaster: TaskMasterProjectInfo | null;
+  mcpServerStatus: TaskMasterMcpStatus;
+  tasks: TaskMasterTask[];
+  nextTask: TaskMasterTask | null;
+  isLoading: boolean;
+  isLoadingTasks: boolean;
+  isLoadingMCP: boolean;
+  error: TaskMasterContextError | null;
+  refreshProjects: () => Promise<void>;
+  setCurrentProject: (project: TaskMasterProjectInput) => void;
+  refreshTasks: () => Promise<void>;
+  refreshMCPStatus: () => Promise<void>;
+  clearError: () => void;
+};
 
 const TaskMasterContext = createContext<TaskMasterContextValue | null>(null);
 
@@ -50,6 +73,7 @@ export function useTaskMaster() {
   return context;
 }
 
+/** Mounted by App.tsx; supplies the TaskMaster project and task state that the sidebar module and this module's own components read through useTaskMaster. */
 export function TaskMasterProvider({ children }: { children: React.ReactNode }) {
   const { subscribe } = useWebSocket();
   const { user, token, isLoading: isAuthLoading } = useAuth();
@@ -402,5 +426,3 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
 
   return <TaskMasterContext.Provider value={contextValue}>{children}</TaskMasterContext.Provider>;
 }
-
-export default TaskMasterContext;

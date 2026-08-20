@@ -8,6 +8,7 @@ type WizardProgressProps = {
   step: WizardStep;
 };
 
+/** Rendered by ProjectCreationWizard to show which of its two steps is active. */
 export default function WizardProgress({ step }: WizardProgressProps) {
   const { t } = useTranslation();
   const steps: WizardStep[] = [1, 2];

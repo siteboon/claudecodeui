@@ -1,16 +1,45 @@
-import { Moon, Sun } from 'lucide-react';
+import {
+  Brain,
+  Eye,
+  Languages,
+  Mic,
+  Moon,
+  Sun,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { DarkModeToggle } from '@/shared/ui';
 import { LanguageSelector } from '@/modules/i18n';
-import {
-  INPUT_SETTING_TOGGLES,
-  SETTING_ROW_CLASS,
-  TOOL_DISPLAY_TOGGLES,
-} from '@/modules/quick-settings-panel/constants';
+import { SETTING_ROW_CLASS } from '@/shared/constants';
 import type { PreferenceToggleItem, PreferenceToggleKey, QuickSettingsPreferences } from '@/shared/types';
 import QuickSettingsSection from '@/modules/quick-settings-panel/QuickSettingsSection';
 import QuickSettingsToggleRow from '@/modules/quick-settings-panel/QuickSettingsToggleRow';
+
+const TOOL_DISPLAY_TOGGLES: PreferenceToggleItem[] = [
+  {
+    key: 'showRawParameters',
+    labelKey: 'quickSettings.showRawParameters',
+    icon: Eye,
+  },
+  {
+    key: 'showThinking',
+    labelKey: 'quickSettings.showThinking',
+    icon: Brain,
+  },
+];
+
+const INPUT_SETTING_TOGGLES: PreferenceToggleItem[] = [
+  {
+    key: 'sendByCtrlEnter',
+    labelKey: 'quickSettings.sendByCtrlEnter',
+    icon: Languages,
+  },
+  {
+    key: 'voiceEnabled',
+    labelKey: 'quickSettings.voiceEnabled',
+    icon: Mic,
+  },
+];
 
 type QuickSettingsContentProps = {
   isDarkMode: boolean;
@@ -18,6 +47,7 @@ type QuickSettingsContentProps = {
   onPreferenceChange: (key: PreferenceToggleKey, value: boolean) => void;
 };
 
+/** Rendered by QuickSettingsPanelView to show the drawer's appearance, tool display and input preference rows. */
 export default function QuickSettingsContent({
   isDarkMode,
   preferences,

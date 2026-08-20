@@ -6,6 +6,10 @@ import { useVoiceAvailable } from '@/modules/chat/hooks/useVoiceAvailable';
 
 // Tap-to-speak button beside the copy control on assistant messages.
 // Renders nothing unless the optional voice feature is enabled.
+/**
+ * Rendered by chat's MessageComponent to read an assistant turn aloud through
+ * the shared text-to-speech player.
+ */
 const MessageSpeakControl = ({ content }: { content: string }) => {
   const { t } = useTranslation('chat');
   const available = useVoiceAvailable();

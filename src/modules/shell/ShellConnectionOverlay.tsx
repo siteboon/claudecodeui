@@ -10,6 +10,7 @@ type ShellConnectionOverlayProps = {
   onConnect: () => void;
 };
 
+/** Rendered by Shell on top of the terminal to show connect/loading state until the shell session is live. */
 export default function ShellConnectionOverlay({
   mode,
   description,

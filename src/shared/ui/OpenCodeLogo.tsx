@@ -2,6 +2,7 @@ type OpenCodeLogoProps = {
   className?: string;
 };
 
+/** Rendered by the shared LLMProviderLogo when the provider is OpenCode. */
 const OpenCodeLogo = ({ className = 'w-5 h-5' }: OpenCodeLogoProps) => (
   <svg
     viewBox="0 0 24 24"

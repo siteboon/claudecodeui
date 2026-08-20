@@ -3,20 +3,27 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { LLMProvider } from '@/shared/types';
 import { api } from '@/shared/api';
-import { useProviderAuthStatus } from '@/modules/provider-auth';
-import { ProviderLoginModal } from '@/modules/provider-auth';
+import { ProviderLoginModal, useProviderAuthStatus } from '@/modules/provider-auth';
 import AgentConnectionsStep from '@/modules/onboarding/AgentConnectionsStep';
 import GitConfigurationStep from '@/modules/onboarding/GitConfigurationStep';
 import OnboardingStepProgress from '@/modules/onboarding/OnboardingStepProgress';
-import {
-  gitEmailPattern,
-  readErrorMessageFromResponse,
-} from '@/modules/onboarding/utils';
+
+const gitEmailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const readErrorMessageFromResponse = async (response: Response, fallback: string) => {
+  try {
+    const payload = (await response.json()) as { error?: string };
+    return payload.error || fallback;
+  } catch {
+    return fallback;
+  }
+};
 
 type OnboardingProps = {
   onComplete?: () => void | Promise<void>;
 };
 
+/** Used by the auth module's ProtectedRoute to run first-time git and agent setup before the app loads. */
 export default function Onboarding({ onComplete }: OnboardingProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [gitName, setGitName] = useState('');

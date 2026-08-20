@@ -1,4 +1,4 @@
-import { FILE_STATUS_GROUPS } from '@/modules/git-panel/constants';
+import { FILE_STATUS_GROUPS } from '@/shared/constants';
 import type { FileStatusCode, GitDiffMap, GitStatusResponse } from '@/shared/types';
 import FileChangeItem from '@/modules/git-panel/changes/FileChangeItem';
 
@@ -17,6 +17,7 @@ type FileChangeListProps = {
   onRequestFileAction: (filePath: string, status: FileStatusCode) => void;
 };
 
+/** Rendered by ChangesView to walk the modified/added/deleted/untracked groups and render a row per file. */
 export default function FileChangeList({
   gitStatus,
   gitDiff,

@@ -18,6 +18,7 @@ function getSortIcon(field: TaskBoardSortField, currentField: TaskBoardSortField
   return currentOrder === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />;
 }
 
+/** Rendered by TaskBoardToolbar to switch the board's sort field and direction from a single row of buttons. */
 export default function TaskQuickSortBar({ sortField, sortOrder, onSortChange }: TaskQuickSortBarProps) {
   const { t } = useTranslation('tasks');
 

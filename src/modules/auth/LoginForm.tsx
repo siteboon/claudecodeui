@@ -20,6 +20,7 @@ const initialState: LoginFormState = {
 
 /**
  * Login form component.
+ * Rendered by the auth module's ProtectedRoute when no user session exists.
  * Handles credential input with browser autofill support (`autocomplete`
  * attributes) so that password managers can offer to fill saved credentials.
  */

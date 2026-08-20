@@ -10,6 +10,7 @@ type Props = {
   errorMsg?: string | null;
 };
 
+// Rendered by chat's ChatComposer next to the send button.
 // Push-to-talk mic button (presentational). Recording state and the stop-and-send action
 // are owned by the composer so the main Send button can drive them too. This button just
 // starts recording and, while recording, stops and drops the transcript into the input box.

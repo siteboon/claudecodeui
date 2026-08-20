@@ -9,6 +9,8 @@ type TextContentProps = {
 /**
  * Renders plain text, JSON, or code content
  * Used by: Raw parameters, generic text results, JSON responses
+ *
+ * Rendered by chat's ToolRenderer as the default content of a tool result.
  */
 export const TextContent: React.FC<TextContentProps> = ({
   content,

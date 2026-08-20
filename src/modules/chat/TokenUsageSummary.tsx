@@ -30,6 +30,10 @@ const readUsageNumber = (value: unknown) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+/**
+ * Rendered by chat's ChatComposer to show the session's context-window usage
+ * and open the detailed token breakdown on click.
+ */
 export default function TokenUsageSummary({ usage, onClick }: TokenUsageSummaryProps) {
   const breakdown =
     usage?.breakdown && typeof usage.breakdown === 'object'

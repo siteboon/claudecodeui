@@ -1,4 +1,5 @@
-import { INVALID_FILE_NAME_CHARACTERS, PRD_EXTENSION_PATTERN } from '@/modules/prd-editor/constants';
+const INVALID_FILE_NAME_CHARACTERS = /[<>:"/\\|?*]/g;
+const PRD_EXTENSION_PATTERN = /\.(txt|md)$/i;
 
 export function sanitizeFileName(value: string): string {
   return value.replace(INVALID_FILE_NAME_CHARACTERS, '');

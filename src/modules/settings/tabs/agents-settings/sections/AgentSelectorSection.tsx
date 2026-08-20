@@ -1,7 +1,12 @@
-import { PillBar, Pill } from '@/shared/ui';
-import LLMProviderLogo from '@/shared/ui/LLMProviderLogo';
-import type { AgentProvider } from '@/shared/types';
-import type { AgentSelectorSectionProps } from '@/modules/settings/tabs/agents-settings/types';
+import { LLMProviderLogo, PillBar, Pill } from '@/shared/ui';
+import type { AgentContext, AgentProvider } from '@/shared/types';
+
+type AgentSelectorSectionProps = {
+  agents: AgentProvider[];
+  selectedAgent: AgentProvider;
+  onSelectAgent: (agent: AgentProvider) => void;
+  agentContextById: Record<AgentProvider, AgentContext>;
+};
 
 const AGENT_NAMES: Record<AgentProvider, string> = {
   claude: 'Claude',
@@ -10,6 +15,7 @@ const AGENT_NAMES: Record<AgentProvider, string> = {
   opencode: 'OpenCode',
 };
 
+/** Rendered by AgentsSettingsTab to pick which agent provider the tab is configuring. */
 export default function AgentSelectorSection({
   agents,
   selectedAgent,

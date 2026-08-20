@@ -8,6 +8,7 @@ type OverwriteConfirmModalProps = {
   onConfirm: () => void;
 };
 
+/** Opened by PRDEditor inside the prd-editor module to confirm overwriting a PRD file that already exists. */
 export default function OverwriteConfirmModal({
   isOpen,
   fileName,

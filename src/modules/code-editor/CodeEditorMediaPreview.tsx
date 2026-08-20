@@ -35,6 +35,7 @@ const looksLikePdf = async (blob: Blob): Promise<boolean> => {
   return new TextDecoder('latin1').decode(header).includes('%PDF-');
 };
 
+/** Rendered by CodeEditor inside the code-editor module to preview image and PDF files instead of opening them as text. */
 export default function CodeEditorMediaPreview({
   file,
   kind,

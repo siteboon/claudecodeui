@@ -2,9 +2,7 @@ import { Plus } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { Button } from '@/shared/ui';
-import type { SessionActivityMap } from '@/shared/types';
-import type { Project, ProjectSession, LLMProvider } from '@/shared/types';
-import type { SessionWithProvider } from '@/shared/types';
+import type { LLMProvider, Project, ProjectSession, SessionActivityMap, SessionWithProvider } from '@/shared/types';
 import SidebarSessionItem from '@/modules/sidebar/SidebarSessionItem';
 
 type SidebarProjectSessionsProps = {
@@ -55,6 +53,7 @@ function SessionListSkeleton() {
   );
 }
 
+/** Rendered by SidebarProjectItem to show an expanded project's sessions, delegating each row to SidebarSessionItem. */
 export default function SidebarProjectSessions({
   project,
   isExpanded,

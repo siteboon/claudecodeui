@@ -23,6 +23,7 @@ const MIN_LEFT_CONTENT_WIDTH = 200;
 // Minimum width for the editor sidebar
 const MIN_EDITOR_WIDTH = 280;
 
+/** Used by the project-workspace module to dock the code editor beside the workspace content, with drag-to-resize and pop-out behaviour. */
 export default function EditorSidebar({
   editingFile,
   isMobile,

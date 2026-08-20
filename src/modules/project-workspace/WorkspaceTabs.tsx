@@ -53,6 +53,7 @@ const TASKS_TAB: BuiltInTab = {
   icon: ClipboardCheck,
 };
 
+/** Rendered by WorkspaceHeader to show the built-in workspace tabs plus any enabled plugin tabs. */
 export default function WorkspaceTabs({
   activeTab,
   setActiveTab,

@@ -4,6 +4,7 @@ type StandaloneShellHeaderProps = {
   onClose?: (() => void) | null;
 };
 
+/** Rendered by StandaloneShell's non-minimal layout to show the shell title, completion state and close button. */
 export default function StandaloneShellHeader({
   title,
   isCompleted,

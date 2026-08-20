@@ -15,6 +15,8 @@ const isTodoItem = (value: unknown): value is TodoItem => {
 /**
  * Renders a todo list
  * Used by: TodoWrite, TodoRead
+ *
+ * Rendered by chat's ToolRenderer as the content of a todo tool result.
  */
 export const TodoListContent = memo(
   ({

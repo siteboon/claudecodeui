@@ -33,6 +33,7 @@ type VersionInfoSectionProps = {
   releaseInfo: ReleaseInfo | null;
 };
 
+/** Has no consumer: the about tab renders its own version and links block instead. */
 export default function VersionInfoSection({
   currentVersion,
   updateAvailable,

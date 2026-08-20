@@ -72,6 +72,7 @@ function TreeItemIcon({ item, isOpen, renderFileIcon }: TreeItemIconProps) {
   return <span className="ml-[18px] flex flex-shrink-0 items-center">{renderFileIcon(item.name)}</span>;
 }
 
+/** Rendered by FileTreeList for each file or directory row, including its context menu and inline rename input. */
 export default function FileTreeNode({
   item,
   level,

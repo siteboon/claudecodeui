@@ -30,6 +30,7 @@ type SidebarHeaderProps = {
   t: TFunction;
 };
 
+/** Rendered by SidebarContent at the top of the panel for the search box, search-mode tabs, refresh and new-project actions. */
 export default function SidebarHeader({
   isPWA,
   isMobile,

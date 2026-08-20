@@ -1,8 +1,7 @@
 import { LogIn } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { Badge, Button } from '@/shared/ui';
-import LLMProviderLogo from '@/shared/ui/LLMProviderLogo';
+import { Badge, Button, LLMProviderLogo } from '@/shared/ui';
 import type { AgentProvider, ProviderAuthStatus } from '@/shared/types';
 
 type AccountContentProps = {
@@ -57,6 +56,7 @@ const agentConfig: Record<AgentProvider, AgentVisualConfig> = {
   },
 };
 
+/** Rendered by AgentCategoryContentSection for the "account" category to show sign-in state for one provider. */
 export default function AccountContent({ agent, authStatus, onLogin }: AccountContentProps) {
   const { t } = useTranslation('settings');
   const config = agentConfig[agent];

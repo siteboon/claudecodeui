@@ -21,6 +21,10 @@ type LoadAllMessagesOverlayProps = {
   onLoadAllMessages: () => void;
 };
 
+/**
+ * Rendered by chat's ChatMessagesPane to offer loading a long session's full
+ * history when only the most recent page has been fetched.
+ */
 export default function LoadAllMessagesOverlay({
   showLoadAllOverlay,
   isLoadingAllMessages,

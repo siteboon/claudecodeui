@@ -192,6 +192,7 @@ const buildQueuedSkillFolders = (selectedFiles: File[]): QueuedSkillFile[] => {
   });
 };
 
+/** Rendered by the settings module's agents tab to list, upload and delete one provider's skills. */
 export default function ProviderSkills({ selectedProvider, currentProjects }: ProviderSkillsProps) {
   const { t } = useTranslation('settings');
   const {

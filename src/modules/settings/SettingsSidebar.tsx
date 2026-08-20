@@ -29,6 +29,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'about', labelKey: 'mainTabs.about', icon: Info },
 ];
 
+/** Rendered by Settings to switch between the settings dialog's main sections. */
 export default function SettingsSidebar({ activeTab, onChange }: SettingsSidebarProps) {
   const { t } = useTranslation('settings');
 

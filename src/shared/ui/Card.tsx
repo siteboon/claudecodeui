@@ -2,7 +2,8 @@ import * as React from 'react';
 
 import { cn } from '@/shared/utils';
 
-const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+/** Used by the chat module to frame the provider picker and plan tool output. */
+export const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
@@ -13,7 +14,8 @@ const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElemen
 );
 Card.displayName = 'Card';
 
-const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+/** Header slot of Card, used by the chat module. */
+export const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
@@ -24,7 +26,8 @@ const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
 );
 CardHeader.displayName = 'CardHeader';
 
-const CardTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTMLHeadingElement>>(
+/** Title slot of Card, used by the chat module. */
+export const CardTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTMLHeadingElement>>(
   ({ className, ...props }, ref) => (
     <h3
       ref={ref}
@@ -35,7 +38,8 @@ const CardTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTML
 );
 CardTitle.displayName = 'CardTitle';
 
-const CardDescription = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLParagraphElement>>(
+/** Description slot of Card; kept beside it so the card family stays usable as a unit. */
+export const CardDescription = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLParagraphElement>>(
   ({ className, ...props }, ref) => (
     <p
       ref={ref}
@@ -46,14 +50,16 @@ const CardDescription = React.forwardRef<HTMLParagraphElement, React.HTMLAttribu
 );
 CardDescription.displayName = 'CardDescription';
 
-const CardContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+/** Body slot of Card, used by the chat module. */
+export const CardContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div ref={ref} className={cn('p-4 pt-0', className)} {...props} />
   )
 );
 CardContent.displayName = 'CardContent';
 
-const CardFooter = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+/** Footer slot of Card, used by the chat module. */
+export const CardFooter = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div ref={ref} className={cn('flex items-center p-4 pt-0', className)} {...props} />
   )
@@ -64,7 +70,7 @@ CardFooter.displayName = 'CardFooter';
  * Use inside a CardHeader with `className="flex flex-row items-start justify-between"`.
  * Positions an action (button/icon) at the trailing edge of the header.
  */
-const CardAction = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+export const CardAction = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
@@ -75,4 +81,3 @@ const CardAction = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
 );
 CardAction.displayName = 'CardAction';
 
-export { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter, CardAction };

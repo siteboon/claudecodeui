@@ -11,6 +11,7 @@ type RemoveWorktreeModalProps = {
   onRemove: (worktreePath: string, options: RemoveWorktreeOptions) => Promise<boolean>;
 };
 
+/** Rendered by WorktreesView to confirm removing a worktree and choose whether to delete its branch. */
 export default function RemoveWorktreeModal({
   worktree,
   isRemoving,

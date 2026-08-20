@@ -17,7 +17,14 @@ import { PluginSettingsTab } from '@/modules/plugins';
 import AboutTab from '@/modules/settings/tabs/AboutTab';
 import { useSettingsController } from '@/modules/settings/hooks/useSettingsController';
 import { useWebPush } from '@/modules/settings/hooks/useWebPush';
-import type { SettingsProps } from '@/modules/settings/types';
+import type { AgentSettingsProject } from '@/shared/types';
+
+type SettingsProps = {
+  isOpen: boolean;
+  onClose: () => void;
+  projects?: AgentSettingsProject[];
+  initialTab?: string;
+};
 
 type DesktopNotificationsState = {
   enabled: boolean;
@@ -27,6 +34,7 @@ type DesktopNotificationsState = {
   lastError?: string | null;
 };
 
+/** Exported as the settings module's public entry point and rendered by the sidebar module as its settings dialog. */
 function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: SettingsProps) {
   const { t } = useTranslation('settings');
   const desktopNotificationsBridge = useMemo(() => (

@@ -7,7 +7,7 @@ import { usePrdRegistry } from '@/modules/prd-editor/hooks/usePrdRegistry';
 import { usePrdSave } from '@/modules/prd-editor/hooks/usePrdSave';
 import type { PrdEditorFile } from '@/shared/types';
 import { ensurePrdExtension } from '@/modules/prd-editor/utils/fileName';
-import OverwriteConfirmModal from '@/modules/prd-editor/OverwriteConfirmModal';
+import OverwriteConfirmModal from '@/modules/prd-editor/modals/OverwriteConfirmModal';
 import PrdEditorLoadingState from '@/modules/prd-editor/PrdEditorLoadingState';
 import PrdEditorWorkspace from '@/modules/prd-editor/PrdEditorWorkspace';
 
@@ -21,6 +21,7 @@ type PRDEditorProps = {
   onSave?: () => Promise<void> | void;
 };
 
+/** Used by the task-master module to create and edit a project's PRD documents before tasks are generated from them. */
 export default function PRDEditor({
   file,
   onClose,

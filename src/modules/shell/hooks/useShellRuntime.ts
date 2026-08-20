@@ -1,10 +1,34 @@
 import { useCallback, useEffect, useRef } from 'react';
+import type { MutableRefObject, RefObject } from 'react';
 import type { FitAddon } from '@xterm/addon-fit';
 import type { Terminal } from '@xterm/xterm';
 
-import type { UseShellRuntimeOptions, UseShellRuntimeResult } from '@/modules/shell/types';
+import type { Project, ProjectSession } from '@/shared/types';
 import { useShellConnection } from '@/modules/shell/hooks/useShellConnection';
 import { useShellTerminal } from '@/modules/shell/hooks/useShellTerminal';
+
+type UseShellRuntimeOptions = {
+  selectedProject: Project | null | undefined;
+  selectedSession: ProjectSession | null | undefined;
+  initialCommand: string | null | undefined;
+  isPlainShell: boolean;
+  minimal: boolean;
+  autoConnect: boolean;
+  isRestarting: boolean;
+  onProcessComplete?: ((exitCode: number) => void) | null;
+  onOutputRef?: MutableRefObject<(() => void) | null>;
+};
+
+type UseShellRuntimeResult = {
+  terminalContainerRef: RefObject<HTMLDivElement>;
+  terminalRef: MutableRefObject<Terminal | null>;
+  wsRef: MutableRefObject<WebSocket | null>;
+  isConnected: boolean;
+  isInitialized: boolean;
+  isConnecting: boolean;
+  connectToShell: (options?: { forceRestart?: boolean }) => void;
+  disconnectFromShell: (options?: { suppressAutoConnect?: boolean }) => void;
+};
 
 export function useShellRuntime({
   selectedProject,

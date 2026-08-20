@@ -6,6 +6,7 @@ import SettingsRow from '@/modules/settings/SettingsRow';
 import SettingsSection from '@/modules/settings/SettingsSection';
 import SettingsToggle from '@/modules/settings/SettingsToggle';
 
+/** Rendered by Settings for the "tasks" tab, configuring task tracking preferences. */
 export default function TasksSettingsTab() {
   const { t } = useTranslation('settings');
   const {

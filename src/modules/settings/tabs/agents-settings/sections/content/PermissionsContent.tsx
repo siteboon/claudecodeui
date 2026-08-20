@@ -582,6 +582,7 @@ function CodexPermissions({ permissionMode, onPermissionModeChange }: Omit<Codex
 
 type PermissionsContentProps = ClaudePermissionsProps | CursorPermissionsProps | CodexPermissionsProps;
 
+/** Rendered by AgentCategoryContentSection for the "permissions" category, one variant per agent provider. */
 export default function PermissionsContent(props: PermissionsContentProps) {
   if (props.agent === 'claude') {
     return <ClaudePermissions {...props} />;

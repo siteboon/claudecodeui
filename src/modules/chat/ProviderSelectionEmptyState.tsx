@@ -9,7 +9,6 @@ import type {
   ProviderModelOption,
   ProviderModelsDefinition,
 } from "@/shared/types";
-import LLMProviderLogo from "@/shared/ui/LLMProviderLogo";
 import { NextTaskBanner } from "@/modules/task-master";
 import {
   Dialog,
@@ -25,6 +24,7 @@ import {
   Card,
   Badge,
   Button,
+  LLMProviderLogo,
 } from "@/shared/ui";
 import ModelLibraryPanel from "@/modules/chat/ModelLibraryPanel";
 
@@ -107,6 +107,10 @@ function getProviderDisplayName(p: LLMProvider) {
   return "Claude";
 }
 
+/**
+ * Rendered by chat's ChatMessagesPane when a session has no messages yet, so
+ * the user can pick a provider, model and permission mode before their first turn.
+ */
 export default function ProviderSelectionEmptyState({
   selectedSession,
   currentSessionId,

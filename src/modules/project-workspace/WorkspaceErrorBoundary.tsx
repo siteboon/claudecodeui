@@ -70,6 +70,7 @@ function ErrorFallback({
   );
 }
 
+/** Wraps the chat view in WorkspaceMain so a render error there cannot take down the whole workspace. */
 function WorkspaceErrorBoundary({
   children,
   showDetails = false,

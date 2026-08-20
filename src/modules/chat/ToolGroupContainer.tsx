@@ -2,16 +2,10 @@ import { useMemo, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 
 import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LLMProvider } from '@/shared/types';
-import type { Project } from '@/shared/types';
+import type { DiffLine, Project } from '@/shared/types';
 import type { ToolGroupItem } from '@/shared/types';
 import { getToolConfig } from '@/modules/chat/tools';
 import MessageComponent from '@/modules/chat/MessageComponent';
-
-type DiffLine = {
-  type: string;
-  content: string;
-  lineNum: number;
-};
 
 type ToolGroupContainerProps = {
   group: ToolGroupItem;
@@ -56,6 +50,10 @@ function getToolGroupIcon(icon: string | undefined, toolName: string): string {
   return icon || toolName.slice(0, 1).toUpperCase();
 }
 
+/**
+ * Rendered by chat's ChatMessagesPane to collapse a run of consecutive tool
+ * calls into a single expandable group in the transcript.
+ */
 export default function ToolGroupContainer({
   group,
   prevMessage,

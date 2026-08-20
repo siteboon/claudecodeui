@@ -2,6 +2,7 @@ type ClaudeLogoProps = {
   className?: string;
 };
 
+/** Rendered by the shared LLMProviderLogo when the provider is Claude. */
 const ClaudeLogo = ({ className = 'w-5 h-5' }: ClaudeLogoProps) => (
   <svg
     viewBox="0 0 512 509.64"

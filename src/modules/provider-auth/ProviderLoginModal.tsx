@@ -69,6 +69,7 @@ const getProviderTitle = (provider: LLMProvider) => {
   return 'Claude CLI Login';
 };
 
+/** Used by the onboarding and settings modules to run a provider's CLI login command in an embedded shell. */
 export default function ProviderLoginModal({
   isOpen,
   onClose,

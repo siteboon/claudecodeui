@@ -16,6 +16,7 @@ type CommitGraphStripProps = {
   row: CommitGraphRow;
 };
 
+/** Rendered by CommitHistoryItem to draw the branch/merge graph rails beside one commit. */
 export default function CommitGraphStrip({ row }: CommitGraphStripProps) {
   const width = row.laneCount * LANE_WIDTH;
   const nodeX = laneX(row.nodeLane);

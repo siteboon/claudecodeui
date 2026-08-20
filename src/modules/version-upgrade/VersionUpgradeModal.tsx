@@ -19,6 +19,7 @@ type VersionUpgradeModalProps = {
 
 const RELOAD_COUNTDOWN_START = 30;
 
+/** This module's only public export: rendered by the sidebar module's modal layer to show release notes and run the app upgrade. */
 export function VersionUpgradeModal({
     isOpen,
     onClose,

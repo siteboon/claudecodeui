@@ -18,6 +18,7 @@ type ShellHeaderProps = {
   disableRestart: boolean;
 };
 
+/** Rendered by Shell above the terminal to show connection status and the restart/disconnect actions. */
 export default function ShellHeader({
   isConnected,
   isInitialized,

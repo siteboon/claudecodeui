@@ -20,6 +20,7 @@ function defaultMessage(branch: string | null, squash: boolean): string {
   return squash ? `Squash merge branch '${branch}'` : `Merge branch '${branch}'`;
 }
 
+/** Rendered by WorktreesView to confirm merging a worktree branch into the base branch. */
 export default function MergeWorktreeModal({
   worktree,
   baseBranch,

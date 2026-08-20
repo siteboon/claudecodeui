@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { DEFAULT_MCP_FORM, MCP_SUPPORTED_SCOPES, MCP_SUPPORTED_TRANSPORTS } from '@/modules/mcp/constants';
+import { MCP_SUPPORTED_SCOPES, MCP_SUPPORTED_TRANSPORTS } from '@/shared/constants';
 import type { McpFormState, McpProject, McpProvider, McpScope, McpTransport, ProviderMcpServer } from '@/shared/types';
 import {
   formatKeyValueLines,
@@ -29,6 +29,24 @@ type MultilineFieldText = {
   headers: string;
   envVars: string;
   envHttpHeaders: string;
+};
+
+const DEFAULT_MCP_FORM: McpFormState = {
+  name: '',
+  scope: 'user',
+  workspacePath: '',
+  transport: 'stdio',
+  command: '',
+  args: [],
+  env: {},
+  cwd: '',
+  url: '',
+  headers: {},
+  envVars: [],
+  bearerTokenEnvVar: '',
+  envHttpHeaders: {},
+  importMode: 'form',
+  jsonInput: '',
 };
 
 const cloneDefaultForm = (

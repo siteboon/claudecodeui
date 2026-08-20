@@ -14,6 +14,7 @@ type HistoryViewProps = {
   onFetchCommitDiff: (commitHash: string) => Promise<void>;
 };
 
+/** Rendered by GitPanel for the Commits tab, listing recent commits and their diffs. */
 export default function HistoryView({
   isMobile,
   isLoading,

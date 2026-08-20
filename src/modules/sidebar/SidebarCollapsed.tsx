@@ -21,6 +21,7 @@ type SidebarCollapsedProps = {
   t: TFunction;
 };
 
+/** Rendered by Sidebar instead of SidebarContent when the panel is collapsed to its icon rail. */
 export default function SidebarCollapsed({
   onExpand,
   onShowSettings,

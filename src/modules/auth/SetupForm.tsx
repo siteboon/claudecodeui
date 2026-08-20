@@ -46,6 +46,7 @@ function validateSetupForm(formState: SetupFormState): string | null {
 
 /**
  * Account setup / registration form.
+ * Rendered by the auth module's ProtectedRoute when the server reports that no account exists yet.
  * Uses `autoComplete="new-password"` on password fields so that password
  * managers recognise this as a registration flow and offer to save the new
  * credentials after submission.

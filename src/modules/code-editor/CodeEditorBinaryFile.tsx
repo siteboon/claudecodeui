@@ -10,6 +10,7 @@ type CodeEditorBinaryFileProps = {
   message: string;
 };
 
+/** Rendered by CodeEditor inside the code-editor module when the opened file is binary and cannot be edited as text. */
 export default function CodeEditorBinaryFile({
   file,
   isSidebar,

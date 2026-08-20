@@ -1,12 +1,25 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { AgentCategory, AgentProvider } from '@/shared/types';
-import type { AgentsSettingsTabProps } from '@/modules/settings/tabs/agents-settings/types';
-import type { AgentContext } from '@/shared/types';
+import type { AgentCategory, AgentContext, AgentProvider, AgentSettingsProject, ClaudePermissionsState, CodexPermissionMode, CursorPermissionsState, ProviderAuthStatus } from '@/shared/types';
 import AgentCategoryContentSection from '@/modules/settings/tabs/agents-settings/sections/AgentCategoryContentSection';
 import AgentCategoryTabsSection from '@/modules/settings/tabs/agents-settings/sections/AgentCategoryTabsSection';
 import AgentSelectorSection from '@/modules/settings/tabs/agents-settings/sections/AgentSelectorSection';
 
+type ProviderAuthStatusByProvider = Record<AgentProvider, ProviderAuthStatus>;
+
+type AgentsSettingsTabProps = {
+  providerAuthStatus: ProviderAuthStatusByProvider;
+  onProviderLogin: (provider: AgentProvider) => void;
+  claudePermissions: ClaudePermissionsState;
+  onClaudePermissionsChange: (value: ClaudePermissionsState) => void;
+  cursorPermissions: CursorPermissionsState;
+  onCursorPermissionsChange: (value: CursorPermissionsState) => void;
+  codexPermissionMode: CodexPermissionMode;
+  onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
+  projects: AgentSettingsProject[];
+};
+
+/** Rendered by Settings for the "agents" tab, hosting per-provider account, permission, MCP and skill settings. */
 export default function AgentsSettingsTab({
   providerAuthStatus,
   onProviderLogin,

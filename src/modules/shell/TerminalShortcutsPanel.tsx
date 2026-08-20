@@ -53,6 +53,7 @@ const KEY_BTN_ACTIVE =
 const ICON_BTN =
   'shrink-0 rounded-md border border-gray-600 bg-gray-700 p-1.5 text-gray-100 transition-colors select-none active:bg-blue-600 active:text-white active:border-blue-600 disabled:cursor-not-allowed disabled:opacity-40';
 
+/** Rendered by Shell's full and minimal views to send keys a mobile keyboard cannot produce, such as Esc, Tab, Ctrl and the arrows. */
 export default function TerminalShortcutsPanel({
   wsRef,
   terminalRef,

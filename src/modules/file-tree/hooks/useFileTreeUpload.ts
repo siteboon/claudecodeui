@@ -9,11 +9,7 @@ import {
   getStoredAuthToken,
   storeAuthToken,
 } from '@/shared/api';
-import {
-  MAX_FILE_UPLOAD_COUNT,
-  MAX_FILE_UPLOAD_SIZE_BYTES,
-  MAX_FILE_UPLOAD_SIZE_LABEL,
-} from '@/modules/file-tree/constants';
+import { MAX_FILE_UPLOAD_SIZE_BYTES, MAX_FILE_UPLOAD_SIZE_LABEL } from '@/shared/constants';
 
 type UseFileTreeUploadOptions = {
   selectedProject: Project | null;
@@ -29,6 +25,8 @@ type UploadResponse = {
   uploadedCount?: number;
   requestedFileCount?: number;
 };
+
+const MAX_FILE_UPLOAD_COUNT = 20;
 
 const COMPLETE_PROGRESS_CLEAR_DELAY_MS = 1400;
 const ERROR_PROGRESS_CLEAR_DELAY_MS = 3200;

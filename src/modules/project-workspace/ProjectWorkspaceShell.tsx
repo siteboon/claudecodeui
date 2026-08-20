@@ -8,6 +8,7 @@ import ProjectCommandPalette from '@/modules/project-workspace/ProjectCommandPal
 import ProjectMainRegion from '@/modules/project-workspace/ProjectMainRegion';
 import ProjectSidebarRegion from '@/modules/project-workspace/ProjectSidebarRegion';
 
+/** Rendered by ProjectWorkspaceRoute to lay out the workspace sidebar, main region and global overlays. */
 function ProjectWorkspaceShell({
   isMobile,
   ws,

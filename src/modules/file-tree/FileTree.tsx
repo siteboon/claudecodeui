@@ -28,6 +28,7 @@ type FileTreeProps = {
   onFileOpen?: (filePath: string) => void;
 };
 
+/** Exported through the file-tree barrel; the project-workspace module renders it as the Files sidebar tab. */
 export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps) {
   const { t } = useTranslation();
   const [selectedImage, setSelectedImage] = useState<FileTreeImageSelection | null>(null);

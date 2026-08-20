@@ -14,7 +14,7 @@ import { PaperclipIcon, MessageSquareIcon, XIcon, Loader2, ArrowUpIcon } from 'l
 
 import { useVoiceInput } from '@/modules/chat/hooks/useVoiceInput';
 import { useVoiceAvailable } from '@/modules/chat/hooks/useVoiceAvailable';
-import type { QueuedDraft } from '@/shared/types';
+import type { QueuedDraft, SlashCommand } from '@/shared/types';
 import type { SessionActivity } from '@/shared/types';
 import type { PendingPermissionRequest, PermissionMode } from '@/shared/types';
 import type { ProviderModelOption } from '@/shared/types';
@@ -41,16 +41,6 @@ import ComposerPermissionMenu from '@/modules/chat/ComposerPermissionMenu';
 type MentionableFile = {
   name: string;
   path: string;
-};
-
-type SlashCommand = {
-  name: string;
-  description?: string;
-  namespace?: string;
-  path?: string;
-  type?: string;
-  metadata?: Record<string, unknown>;
-  [key: string]: unknown;
 };
 
 type ChatComposerProps = {
@@ -120,6 +110,11 @@ type ChatComposerProps = {
   sendByCtrlEnter?: boolean;
 };
 
+/**
+ * Rendered by chat's ChatInterface as the whole input area: textarea, pending
+ * attachments, queued message, permission banner, voice input and the
+ * model/permission popovers that drive the next turn.
+ */
 export default function ChatComposer({
   pendingPermissionRequests,
   handlePermissionDecision,

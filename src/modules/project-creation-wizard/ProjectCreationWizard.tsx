@@ -25,6 +25,7 @@ const initialFormState: WizardFormState = {
   newGithubToken: '',
 };
 
+/** Rendered by the sidebar module's modal layer to create a new project or clone one from GitHub. */
 export default function ProjectCreationWizard({
   onClose,
   onProjectCreated,

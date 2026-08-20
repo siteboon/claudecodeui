@@ -18,6 +18,7 @@ function getContentStats(content: string): ContentStats {
   };
 }
 
+/** Rendered by PrdEditorWorkspace inside the prd-editor module to show PRD line, character and word counts plus the shortcut hint. */
 export default function PrdEditorFooter({ content }: PrdEditorFooterProps) {
   const stats = useMemo(() => getContentStats(content), [content]);
 

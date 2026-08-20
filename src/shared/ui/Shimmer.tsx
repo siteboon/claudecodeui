@@ -8,7 +8,8 @@ type ShimmerProps = {
   as?: React.ElementType;
 };
 
-const Shimmer = React.memo<ShimmerProps>(({ children, className, as: Component = 'span' }) => {
+/** Used by the chat module for streaming placeholder text and by the shared Reasoning primitive. */
+export const Shimmer = React.memo<ShimmerProps>(({ children, className, as: Component = 'span' }) => {
   return (
     <Component
       className={cn(
@@ -23,4 +24,3 @@ const Shimmer = React.memo<ShimmerProps>(({ children, className, as: Component =
 });
 Shimmer.displayName = 'Shimmer';
 
-export { Shimmer };

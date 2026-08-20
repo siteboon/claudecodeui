@@ -1,13 +1,25 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import type { AppTab, Project, ProjectSession } from '@/shared/types';
 import { cn } from '@/shared/utils';
-import type { WorkspaceHeaderProps } from '@/modules/project-workspace/types';
 import MobileMenuButton from '@/modules/project-workspace/MobileMenuButton';
 import WorkspaceTabs from '@/modules/project-workspace/WorkspaceTabs';
 import WorkspaceTitle from '@/modules/project-workspace/WorkspaceTitle';
 
+type WorkspaceHeaderProps = {
+  activeTab: AppTab;
+  setActiveTab: Dispatch<SetStateAction<AppTab>>;
+  selectedProject: Project;
+  selectedSession: ProjectSession | null;
+  shouldShowTasksTab: boolean;
+  shouldShowBrowserTab: boolean;
+  isMobile: boolean;
+  onMenuClick: () => void;
+};
+
+/** Rendered by WorkspaceMain to show the workspace title alongside the scrollable tab bar. */
 export default function WorkspaceHeader({
   activeTab,
   setActiveTab,

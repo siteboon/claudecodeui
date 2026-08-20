@@ -1,20 +1,33 @@
-export { Alert, AlertTitle, AlertDescription, alertVariants } from '@/shared/ui/Alert';
-export { default as ActionMenu } from '@/shared/ui/ActionMenu';
-export type { ActionMenuItem } from '@/shared/ui/ActionMenu';
-export { Badge, badgeVariants } from '@/shared/ui/Badge';
+export { ActionMenu } from '@/shared/ui/ActionMenu';
+export { Badge } from '@/shared/ui/Badge';
 export { Button, buttonVariants } from '@/shared/ui/Button';
-export { Confirmation, ConfirmationTitle, ConfirmationRequest, ConfirmationAccepted, ConfirmationRejected, ConfirmationActions, ConfirmationAction } from '@/shared/ui/Confirmation';
-export { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter, CardAction } from '@/shared/ui/Card';
+export { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/shared/ui/Card';
 export { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/shared/ui/Collapsible';
-export { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem, CommandSeparator } from '@/shared/ui/Command';
-export { default as DarkModeToggle } from '@/shared/ui/DarkModeToggle';
+export { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/shared/ui/Command';
+export {
+  Confirmation,
+  ConfirmationTitle,
+  ConfirmationRequest,
+  ConfirmationActions,
+  ConfirmationAction,
+} from '@/shared/ui/Confirmation';
+export { DarkModeToggle } from '@/shared/ui/DarkModeToggle';
 export { Dialog, DialogTrigger, DialogContent, DialogTitle } from '@/shared/ui/Dialog';
 export { Input } from '@/shared/ui/Input';
-export { ScrollArea } from '@/shared/ui/ScrollArea';
-export { Reasoning, ReasoningTrigger, ReasoningContent, useReasoning } from '@/shared/ui/Reasoning';
-export { Shimmer } from '@/shared/ui/Shimmer';
-export { default as Tooltip } from '@/shared/ui/Tooltip';
-export { PromptInput, PromptInputHeader, PromptInputBody, PromptInputTextarea, PromptInputFooter, PromptInputTools, PromptInputButton, PromptInputSubmit } from '@/shared/ui/PromptInput';
+export { LLMProviderLogo } from '@/shared/ui/LLMProviderLogo';
 export { PillBar, Pill } from '@/shared/ui/PillBar';
+export {
+  PromptInput,
+  PromptInputHeader,
+  PromptInputBody,
+  PromptInputTextarea,
+  PromptInputFooter,
+  PromptInputTools,
+  PromptInputButton,
+  PromptInputSubmit,
+} from '@/shared/ui/PromptInput';
 export { Queue, QueueItem, QueueItemIndicator, QueueItemContent } from '@/shared/ui/Queue';
-export type { QueueItemStatus } from '@/shared/types';
+export { Reasoning, ReasoningTrigger, ReasoningContent } from '@/shared/ui/Reasoning';
+export { ScrollArea } from '@/shared/ui/ScrollArea';
+export { Shimmer } from '@/shared/ui/Shimmer';
+export { Tooltip } from '@/shared/ui/Tooltip';

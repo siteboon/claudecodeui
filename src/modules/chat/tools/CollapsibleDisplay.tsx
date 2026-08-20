@@ -30,6 +30,10 @@ const borderColorMap: Record<string, string> = {
   default: 'border-l-border',
 };
 
+/**
+ * Rendered by chat's ToolRenderer for tools configured to show their input and
+ * result inside an expandable, category-coloured section.
+ */
 export const CollapsibleDisplay: React.FC<CollapsibleDisplayProps> = ({
   toolName,
   title,

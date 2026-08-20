@@ -38,6 +38,7 @@ type CodeEditorHeaderProps = {
   };
 };
 
+/** Rendered by CodeEditor inside the code-editor module to show the open file's path and the save, preview, download and window controls. */
 export default function CodeEditorHeader({
   file,
   isSidebar,

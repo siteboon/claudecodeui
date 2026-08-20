@@ -16,6 +16,7 @@ type ApiKeysSectionProps = {
   onDeleteApiKey: (keyId: string) => void;
 };
 
+/** Rendered by CredentialsSettingsTab to list, create and revoke CloudCLI API keys. */
 export default function ApiKeysSection({
   apiKeys,
   showNewKeyForm,

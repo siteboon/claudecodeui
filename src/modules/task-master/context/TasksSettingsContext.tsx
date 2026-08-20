@@ -3,7 +3,7 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react';
 
 import { api } from '@/shared/api';
 
-export type TaskMasterInstallationStatus = {
+type TaskMasterInstallationStatus = {
   isReady?: boolean;
   installation?: {
     isInstalled?: boolean;
@@ -40,6 +40,7 @@ export const useTasksSettings = () => {
   return context;
 };
 
+/** Mounted by App.tsx; supplies the tasks-enabled preference and TaskMaster installation status that the chat, sidebar, settings and project-workspace modules read through useTasksSettings. */
 export const TasksSettingsProvider = ({ children }: { children: ReactNode }) => {
   const [tasksEnabled, setTasksEnabled] = useState<boolean>(() => {
     // Load from localStorage on initialization
@@ -112,5 +113,3 @@ export const TasksSettingsProvider = ({ children }: { children: ReactNode }) => 
     </TasksSettingsContext.Provider>
   );
 };
-
-export default TasksSettingsContext;

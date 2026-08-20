@@ -20,6 +20,7 @@ type QuickSettingsHandleProps = {
   onTouchStart: (event: ReactTouchEvent<HTMLButtonElement>) => void;
 };
 
+/** Rendered by QuickSettingsPanelView as the draggable edge handle that opens and closes the drawer. */
 export default function QuickSettingsHandle({
   isOpen,
   isDragging,

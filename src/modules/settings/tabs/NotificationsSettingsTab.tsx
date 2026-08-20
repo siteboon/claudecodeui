@@ -25,6 +25,7 @@ type NotificationsSettingsTabProps = {
   onDisableDesktopNotifications?: () => void;
 };
 
+/** Rendered by Settings for the "notifications" tab, covering notification channels and events. */
 export default function NotificationsSettingsTab({
   notificationPreferences,
   onNotificationPreferencesChange,

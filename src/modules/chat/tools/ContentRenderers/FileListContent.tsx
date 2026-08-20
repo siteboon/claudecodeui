@@ -14,6 +14,8 @@ type FileListContentProps = {
 /**
  * Renders a compact comma-separated list of clickable file names
  * Used by: Grep/Glob results
+ *
+ * Rendered by chat's ToolRenderer as the content of a file-list tool result.
  */
 export const FileListContent: React.FC<FileListContentProps> = ({
   files,

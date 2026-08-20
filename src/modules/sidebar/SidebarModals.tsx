@@ -6,10 +6,8 @@ import type { TFunction } from 'i18next';
 import { Button } from '@/shared/ui';
 import { Settings } from '@/modules/settings';
 import { VersionUpgradeModal } from '@/modules/version-upgrade';
-import type { Project,ReleaseInfo } from '@/shared/types';
-import type { InstallMode } from '@/shared/types';
-import { normalizeProjectForSettings } from '@/modules/sidebar/utils/utils';
-import type { DeleteProjectConfirmation, SessionDeleteConfirmation, SettingsProject } from '@/shared/types';
+import type { DeleteProjectConfirmation, InstallMode, Project, ReleaseInfo, SessionDeleteConfirmation, SettingsProject } from '@/shared/types';
+import { normalizeProjectForSettings } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import { ProjectCreationWizard } from '@/modules/project-creation-wizard';
 
 type SidebarModalsProps = {
@@ -48,6 +46,7 @@ function TypedSettings(props: TypedSettingsProps) {
   return <SettingsComponent {...props} />;
 }
 
+/** Rendered by Sidebar to host its settings, new-project, delete-confirmation and version modals in one place. */
 export default function SidebarModals({
   projects,
   showSettings,

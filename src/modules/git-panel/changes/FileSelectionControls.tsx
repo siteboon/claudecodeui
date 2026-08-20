@@ -7,6 +7,10 @@ type FileSelectionControlsProps = {
   onDeselectAll: () => void;
 };
 
+/**
+ * Select-all / deselect-all controls for the git changes list. Not currently rendered by any
+ * module — kept as-is from before the module migration rather than removed as part of it.
+ */
 export default function FileSelectionControls({
   isMobile,
   selectedCount,

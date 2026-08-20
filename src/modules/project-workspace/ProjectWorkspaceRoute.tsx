@@ -14,6 +14,7 @@ import ProjectWorkspaceShell from '@/modules/project-workspace/ProjectWorkspaceS
 
 const MemoizedProjectWorkspaceRouteContent = memo(ProjectWorkspaceRouteContent);
 
+/** This module's only public export: rendered by App for the "/" and "/session/:sessionId" routes. */
 export default function ProjectWorkspaceRoute() {
   return (
     <SessionProtectionProvider>

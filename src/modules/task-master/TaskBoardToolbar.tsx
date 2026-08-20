@@ -46,6 +46,7 @@ type TaskBoardToolbarProps = {
   onOpenCreateTask: () => void;
 };
 
+/** Rendered by TaskBoard for the board's search box, view switch, filter toggle and create/help actions. */
 export default function TaskBoardToolbar({
   hasProject,
   hasTaskMasterConfigured,

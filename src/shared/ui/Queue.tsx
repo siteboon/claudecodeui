@@ -22,6 +22,7 @@ function useQueueItem() {
 
 /* ─── Queue ──────────────────────────────────────────────────────── */
 
+/** Used by the chat module to render a tool's todo list as a progress queue. */
 export const Queue = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div
@@ -41,6 +42,7 @@ export type QueueItemProps = {
   status?: QueueItemStatus;
 } & React.HTMLAttributes<HTMLDivElement>;
 
+/** One row of Queue, used by the chat module. */
 export const QueueItem = React.forwardRef<HTMLDivElement, QueueItemProps>(
   ({ status = 'pending', className, children, ...props }, ref) => {
     const value = React.useMemo(() => ({ status }), [status]);
@@ -65,6 +67,7 @@ QueueItem.displayName = 'QueueItem';
 
 /* ─── QueueItemIndicator ─────────────────────────────────────────── */
 
+/** Status dot of a QueueItem, used by the chat module. */
 export const QueueItemIndicator = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => {
     const { status } = useQueueItem();
@@ -98,6 +101,7 @@ QueueItemIndicator.displayName = 'QueueItemIndicator';
 
 /* ─── QueueItemContent ───────────────────────────────────────────── */
 
+/** Label of a QueueItem, used by the chat module. */
 export const QueueItemContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, children, ...props }, ref) => {
     const { status } = useQueueItem();

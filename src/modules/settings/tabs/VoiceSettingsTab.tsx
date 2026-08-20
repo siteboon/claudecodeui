@@ -18,6 +18,7 @@ function Field({ label, ...props }: { label: string } & InputHTMLAttributes<HTML
   );
 }
 
+/** Rendered by Settings for the "voice" tab, covering speech-to-text provider credentials. */
 export default function VoiceSettingsTab() {
   const { t } = useTranslation('settings');
   const { preferences, setPreference } = useUiPreferences();

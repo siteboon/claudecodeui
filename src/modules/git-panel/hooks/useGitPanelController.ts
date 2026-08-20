@@ -1,11 +1,93 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { api } from '@/shared/api';
-import { DEFAULT_BRANCH, RECENT_COMMITS_LIMIT } from '@/modules/git-panel/constants';
-import type { GitBranchesResponse, GitCommitsResponse, GitDiffResponse, GitFileWithDiffResponse, GitGenerateMessageResponse, GitPanelController, UseGitPanelControllerOptions } from '@/modules/git-panel/types';
-import type { GitApiErrorResponse, GitCommitSummary, GitDiffMap, GitOperationResponse, GitRemoteStatus, GitStatusResponse } from '@/shared/types';
+import type { GitApiErrorResponse, GitCommitSummary, GitDiffMap, GitOperationResponse, GitPanelView, GitRemoteStatus, GitStatusResponse, Project } from '@/shared/types';
 import { getAllChangedFiles } from '@/modules/git-panel/utils/gitPanelUtils';
 import { useSelectedProvider } from '@/modules/git-panel/hooks/useSelectedProvider';
+
+const DEFAULT_BRANCH = 'main';
+// High enough for the commit graph to show meaningful branch structure.
+const RECENT_COMMITS_LIMIT = 50;
+
+type FileDiffInfo = {
+  old_string: string;
+  new_string: string;
+};
+
+// Exported for `GitPanel`'s own props, which forward the handler into this hook.
+export type FileOpenHandler = (filePath: string, diffInfo?: FileDiffInfo) => void;
+
+type UseGitPanelControllerOptions = {
+  selectedProject: Project | null;
+  activeView: GitPanelView;
+  onFileOpen?: FileOpenHandler;
+};
+
+type GitPanelController = {
+  gitStatus: GitStatusResponse | null;
+  gitDiff: GitDiffMap;
+  isLoading: boolean;
+  isLoadingCommits: boolean;
+  currentBranch: string;
+  branches: string[];
+  localBranches: string[];
+  remoteBranches: string[];
+  recentCommits: GitCommitSummary[];
+  commitDiffs: GitDiffMap;
+  remoteStatus: GitRemoteStatus | null;
+  isCreatingBranch: boolean;
+  isFetching: boolean;
+  isPulling: boolean;
+  isPushing: boolean;
+  isPublishing: boolean;
+  isCreatingInitialCommit: boolean;
+  isInitializingRepository: boolean;
+  operationError: string | null;
+  clearOperationError: () => void;
+  refreshAll: () => void;
+  switchBranch: (branchName: string) => Promise<boolean>;
+  createBranch: (branchName: string) => Promise<boolean>;
+  deleteBranch: (branchName: string, force?: boolean) => Promise<boolean>;
+  handleFetch: () => Promise<void>;
+  handlePull: () => Promise<void>;
+  handlePush: () => Promise<void>;
+  handlePublish: () => Promise<void>;
+  discardChanges: (filePath: string) => Promise<void>;
+  deleteUntrackedFile: (filePath: string) => Promise<void>;
+  stageFiles: (files: string[]) => Promise<boolean>;
+  unstageFiles: (files: string[]) => Promise<boolean>;
+  fetchCommitDiff: (commitHash: string) => Promise<void>;
+  generateCommitMessage: (files: string[]) => Promise<string | null>;
+  commitChanges: (message: string, files: string[]) => Promise<boolean>;
+  createInitialCommit: () => Promise<boolean>;
+  initRepository: () => Promise<boolean>;
+  openFile: (filePath: string) => Promise<void>;
+};
+
+type GitDiffResponse = GitApiErrorResponse & {
+  diff?: string;
+};
+
+type GitBranchesResponse = GitApiErrorResponse & {
+  branches?: string[];
+  localBranches?: string[];
+  remoteBranches?: string[];
+};
+
+type GitCommitsResponse = GitApiErrorResponse & {
+  commits?: GitCommitSummary[];
+};
+
+type GitGenerateMessageResponse = GitApiErrorResponse & {
+  message?: string;
+};
+
+type GitFileWithDiffResponse = GitApiErrorResponse & {
+  oldContent?: string;
+  currentContent?: string;
+  isDeleted?: boolean;
+  isUntracked?: boolean;
+};
 
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';

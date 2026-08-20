@@ -25,6 +25,7 @@ type TaskBoardProps = {
   onRefreshPRDs?: ((showNotification?: boolean) => void) | null;
 };
 
+/** Rendered by TaskMasterPanel as the task board, wiring the toolbar, board content and this module's modals together. */
 export default function TaskBoard({
   tasks = [],
   onTaskClick = null,

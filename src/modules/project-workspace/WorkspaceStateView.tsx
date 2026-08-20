@@ -1,9 +1,15 @@
 import { Folder } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import type { WorkspaceStateViewProps } from '@/modules/project-workspace/types';
 import MobileMenuButton from '@/modules/project-workspace/MobileMenuButton';
 
+type WorkspaceStateViewProps = {
+  mode: 'loading' | 'empty';
+  isMobile: boolean;
+  onMenuClick: () => void;
+};
+
+/** Rendered by WorkspaceMain instead of the workspace while projects load or when none is selected. */
 export default function WorkspaceStateView({ mode, isMobile, onMenuClick }: WorkspaceStateViewProps) {
   const { t } = useTranslation();
 

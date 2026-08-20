@@ -148,7 +148,7 @@ MyTool: {
 ### ToolDisplayConfig
 
 ```typescript
-interface ToolDisplayConfig {
+type ToolDisplayConfig = {
   input: {
     type: 'one-line' | 'collapsible' | 'hidden';
 
@@ -186,7 +186,7 @@ interface ToolDisplayConfig {
     getMessage?: (result) => string;
     getContentProps?: (result) => any;
   };
-}
+};
 ```
 
 ---

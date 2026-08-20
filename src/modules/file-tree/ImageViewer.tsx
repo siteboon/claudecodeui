@@ -10,6 +10,7 @@ type ImageViewerProps = {
   onClose: () => void;
 };
 
+/** Rendered by FileTree to preview an image file picked in the tree. */
 export default function ImageViewer({ file, onClose }: ImageViewerProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

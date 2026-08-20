@@ -9,6 +9,7 @@ const onboardingSteps = [
   { title: 'Connect Agents', icon: LogIn, required: false },
 ];
 
+/** Rendered by Onboarding above the active step to show progress through the setup wizard. */
 export default function OnboardingStepProgress({ currentStep }: OnboardingStepProgressProps) {
   return (
     <div className="mb-5">

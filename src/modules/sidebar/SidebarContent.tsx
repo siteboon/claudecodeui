@@ -2,16 +2,12 @@ import { type ReactNode } from 'react';
 import { Activity, Archive, Folder, MessageSquare, RotateCcw, Search, Trash2 } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
-import { ScrollArea } from '@/shared/ui';
-import type { Project,ReleaseInfo } from '@/shared/types';
-import type { ConversationSearchResults, SearchProgress } from '@/shared/types';
-import type { ArchivedProjectListItem, ArchivedSessionListItem, RecentConversationListItem, SidebarSearchMode } from '@/shared/types';
-import LLMProviderLogo from '@/shared/ui/LLMProviderLogo';
-import { formatCompactAge, getAllSessions } from '@/modules/sidebar/utils/utils';
+import { LLMProviderLogo, ScrollArea } from '@/shared/ui';
+import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationSearchResults, Project, RecentConversationListItem, ReleaseInfo, SearchProgress, SidebarProjectListProps, SidebarSearchMode } from '@/shared/types';
+import { formatCompactAge, getAllSessions } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import SidebarFooter from '@/modules/sidebar/SidebarFooter';
 import SidebarHeader from '@/modules/sidebar/SidebarHeader';
 import SidebarProjectList from '@/modules/sidebar/SidebarProjectList';
-import type { SidebarProjectListProps } from '@/shared/types';
 import SidebarRecentConversations from '@/modules/sidebar/SidebarRecentConversations';
 
 function HighlightedSnippet({ snippet, highlights }: { snippet: string; highlights: { start: number; end: number }[] }) {
@@ -133,6 +129,7 @@ type SidebarContentProps = {
   t: TFunction;
 };
 
+/** Rendered by Sidebar as the expanded panel body: header, project list, conversation/archive search results, recent conversations and footer. */
 export default function SidebarContent({
   isPWA,
   isMobile,

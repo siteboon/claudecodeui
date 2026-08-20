@@ -49,6 +49,7 @@ type CommitHistoryItemProps = {
   onToggle: () => void;
 };
 
+/** Rendered by HistoryView for one commit, expanding to its changed-file summary and diff. */
 export default function CommitHistoryItem({
   commit,
   isExpanded,

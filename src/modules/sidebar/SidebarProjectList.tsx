@@ -1,14 +1,12 @@
 import { useEffect } from 'react';
-import type { TFunction } from 'i18next';
 
-import type { LLMProvider, LoadingProgress, Project, ProjectSession, SidebarProjectListProps } from '@/shared/types';
-import type { SessionActivityMap } from '@/shared/types';
+import type { SidebarProjectListProps } from '@/shared/types';
 import { getPageTitle } from '@/shared/utils';
-import type { MCPServerStatus, SessionWithProvider } from '@/shared/types';
 import SidebarProjectItem from '@/modules/sidebar/SidebarProjectItem';
 import SidebarProjectsState from '@/modules/sidebar/SidebarProjectsState';
 
 
+/** Rendered by SidebarContent to list the filtered projects, delegating each row to SidebarProjectItem. */
 export default function SidebarProjectList({
   projects,
   filteredProjects,

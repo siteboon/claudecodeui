@@ -1,6 +1,48 @@
 import { api } from '@/shared/api';
-import type { BrowseFilesystemResponse, CloneProgressEvent, CreateFolderResponse, CreateProjectPayload, CreateProjectResponse, CredentialsResponse } from '@/modules/project-creation-wizard/types';
-import type { FolderSuggestion, TokenMode } from '@/shared/types';
+import type { FolderSuggestion, GithubTokenCredential, TokenMode } from '@/shared/types';
+
+type CredentialsResponse = {
+  credentials?: GithubTokenCredential[];
+  error?: string;
+};
+
+type BrowseFilesystemResponse = {
+  path?: string;
+  suggestions?: FolderSuggestion[];
+  error?: string;
+};
+
+type CreateFolderResponse = {
+  success?: boolean;
+  path?: string;
+  error?: string;
+  details?: string;
+};
+
+type CreateProjectPayload = {
+  path: string;
+  customName?: string;
+};
+
+type CreateProjectApiError = {
+  code?: string;
+  message?: string;
+  details?: unknown;
+};
+
+type CreateProjectResponse = {
+  success?: boolean;
+  project?: Record<string, unknown>;
+  error?: string | CreateProjectApiError;
+  details?: string;
+  message?: string;
+};
+
+type CloneProgressEvent = {
+  type?: string;
+  message?: string;
+  project?: Record<string, unknown>;
+};
 
 type CloneWorkspaceParams = {
   workspacePath: string;

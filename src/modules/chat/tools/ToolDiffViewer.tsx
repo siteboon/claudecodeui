@@ -1,10 +1,6 @@
 import React, { useMemo } from 'react';
 
-type DiffLine = {
-  type: string;
-  content: string;
-  lineNum: number;
-};
+import type { DiffLine } from '@/shared/types';
 
 type ToolDiffViewerProps = {
   oldContent: string;
@@ -17,7 +13,10 @@ type ToolDiffViewerProps = {
 };
 
 /**
- * Compact diff viewer — VS Code-style
+ * Compact diff viewer — VS Code-style.
+ *
+ * Rendered by chat's ToolRenderer for edit/write tools so a turn's file changes
+ * are reviewable inline.
  */
 export const ToolDiffViewer: React.FC<ToolDiffViewerProps> = ({
   oldContent,

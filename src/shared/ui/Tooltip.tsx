@@ -28,7 +28,8 @@ function getArrowClasses(position: TooltipPosition): string {
   }
 }
 
-function Tooltip({
+/** Used by the project-workspace, sidebar and task-master modules and by the shared PromptInput primitive. */
+export function Tooltip({
   children,
   content,
   position = 'top',
@@ -196,5 +197,3 @@ function Tooltip({
     </div>
   );
 }
-
-export default Tooltip;

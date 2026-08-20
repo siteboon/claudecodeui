@@ -4,10 +4,8 @@ import type { TFunction } from 'i18next';
 
 import { Button } from '@/shared/ui';
 import { cn } from '@/shared/utils';
-import type { Project, ProjectSession, LLMProvider } from '@/shared/types';
-import type { SessionActivityMap } from '@/shared/types';
-import type { MCPServerStatus, SessionWithProvider } from '@/shared/types';
-import { getTaskIndicatorStatus } from '@/modules/sidebar/utils/utils';
+import type { LLMProvider, MCPServerStatus, Project, ProjectSession, SessionActivityMap, SessionWithProvider } from '@/shared/types';
+import { getTaskIndicatorStatus } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import TaskIndicator from '@/modules/sidebar/TaskIndicator';
 import SidebarProjectSessions from '@/modules/sidebar/SidebarProjectSessions';
 
@@ -59,6 +57,7 @@ const getSessionCountDisplay = (project: Project, sessions: SessionWithProvider[
   return String(total);
 };
 
+/** Rendered by SidebarProjectList for one project row, including its expand, rename, star and delete controls. */
 export default function SidebarProjectItem({
   project,
   selectedProject,

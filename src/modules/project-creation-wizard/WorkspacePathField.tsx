@@ -14,6 +14,7 @@ type WorkspacePathFieldProps = {
   onAdvanceToConfirm: () => void;
 };
 
+/** Rendered by StepConfiguration to enter the workspace path with folder autocompletion and a browse button. */
 export default function WorkspacePathField({
   value,
   disabled = false,

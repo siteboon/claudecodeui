@@ -2,13 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { Check, Copy, Edit2, Loader2, MoreHorizontal, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
-import { ActionMenu, Badge, Dialog, DialogContent, DialogTitle, Tooltip, buttonVariants } from '@/shared/ui';
+import { ActionMenu, Badge, Dialog, DialogContent, DialogTitle, LLMProviderLogo, Tooltip, buttonVariants } from '@/shared/ui';
 import { cn,copyTextToClipboard } from '@/shared/utils';
-import type { Project, ProjectSession, LLMProvider } from '@/shared/types';
+import type { LLMProvider, Project, ProjectSession, SessionWithProvider } from '@/shared/types';
 import { api } from '@/shared/api';
-import type { SessionWithProvider } from '@/shared/types';
-import { createSessionViewModel, formatCompactAge } from '@/modules/sidebar/utils/utils';
-import LLMProviderLogo from '@/shared/ui/LLMProviderLogo';
+import { createSessionViewModel, formatCompactAge } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 
 type SidebarSessionItemProps = {
   project: Project;
@@ -42,6 +40,7 @@ const PROVIDER_LABELS: Record<LLMProvider, string> = {
 };
 
 type CopyState = 'loading' | 'idle' | 'copying' | 'copied' | 'error';
+/** Rendered by SidebarProjectSessions for one session row, including its rename, copy and delete controls. */
 export default function SidebarSessionItem({
   project,
   session,

@@ -38,6 +38,7 @@ type FileTreeBodyProps = {
   operationLoading?: boolean;
 };
 
+/** Rendered by FileTree to choose between the empty/error states and the file list. */
 export default function FileTreeBody({
   files,
   filteredFiles,

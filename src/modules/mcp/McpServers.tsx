@@ -4,12 +4,7 @@ import { useTranslation } from 'react-i18next';
 import type { McpProject, McpProvider, McpScope, ProviderMcpServer } from '@/shared/types';
 import { IS_PLATFORM } from '@/shared/utils';
 import { ActionMenu, Badge, Button } from '@/shared/ui';
-import {
-  MCP_GLOBAL_SUPPORTED_SCOPES,
-  MCP_GLOBAL_SUPPORTED_TRANSPORTS,
-  MCP_PROVIDER_BUTTON_CLASSES,
-  MCP_PROVIDER_NAMES,
-} from '@/modules/mcp/constants';
+import { MCP_GLOBAL_SUPPORTED_TRANSPORTS, MCP_PROVIDER_NAMES } from '@/shared/constants';
 import { useMcpServers } from '@/modules/mcp/hooks/useMcpServers';
 import { maskSecret } from '@/modules/mcp/utils/mcpFormatting';
 import McpServerFormModal from '@/modules/mcp/McpServerFormModal';
@@ -17,6 +12,15 @@ import McpServerFormModal from '@/modules/mcp/McpServerFormModal';
 type McpServersProps = {
   selectedProvider: McpProvider;
   currentProjects: McpProject[];
+};
+
+const MCP_GLOBAL_SUPPORTED_SCOPES: McpScope[] = ['user', 'project'];
+
+const MCP_PROVIDER_BUTTON_CLASSES: Record<McpProvider, string> = {
+  claude: 'bg-primary text-primary-foreground hover:bg-primary/90',
+  cursor: 'bg-primary text-primary-foreground hover:bg-primary/90',
+  codex: 'bg-primary text-primary-foreground hover:bg-primary/90',
+  opencode: 'bg-primary text-primary-foreground hover:bg-primary/90',
 };
 
 const getTransportIcon = (transport: string | undefined) => {
@@ -99,6 +103,7 @@ function TeamMcpFeatureCard() {
   );
 }
 
+/** Rendered by the settings module's agents tab to list and manage one provider's MCP servers. */
 export default function McpServers({ selectedProvider, currentProjects }: McpServersProps) {
   const { t } = useTranslation('settings');
   const {

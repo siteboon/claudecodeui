@@ -15,6 +15,7 @@ type CodeEditorSurfaceProps = {
   extensions: Extension[];
 };
 
+/** Rendered by CodeEditor inside the code-editor module to show either the CodeMirror editing surface or the markdown preview. */
 export default function CodeEditorSurface({
   content,
   onChange,

@@ -1,5 +1,4 @@
-import type { LLMProvider } from '@/shared/types';
-import type { ProviderAuthStatusMap } from '@/shared/types';
+import type { LLMProvider, ProviderAuthStatusMap } from '@/shared/types';
 import AgentConnectionCard from '@/modules/onboarding/AgentConnectionCard';
 
 type AgentConnectionsStepProps = {
@@ -38,6 +37,7 @@ const providerCards = [
   },
 ];
 
+/** Rendered by Onboarding as its second step, listing every CLI provider the user can log into. */
 export default function AgentConnectionsStep({
   providerStatuses,
   onOpenProviderLogin,

@@ -49,6 +49,7 @@ const parseStartedAt = (value: unknown): number | undefined => {
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
+/** Mounted by the project-workspace route; tracks which sessions are producing a response so chat, sidebar and project-workspace agree on session activity. */
 export function SessionProtectionProvider({ children }: { children: ReactNode }) {
   const {
     processingSessions,

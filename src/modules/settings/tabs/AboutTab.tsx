@@ -27,6 +27,7 @@ function DiscordIcon({ className }: { className?: string }) {
   );
 }
 
+/** Rendered by Settings for the "about" tab, showing version, links and premium upsell cards. */
 export default function AboutTab() {
   const { t } = useTranslation('settings');
   const { updateAvailable, latestVersion, currentVersion, releaseInfo } = useVersionCheck('siteboon', 'claudecodeui');

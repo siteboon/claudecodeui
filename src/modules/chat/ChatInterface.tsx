@@ -5,8 +5,14 @@ import { ArrowDownIcon } from 'lucide-react';
 import { useTasksSettings } from '@/modules/task-master';
 import { useWebSocket } from '@/shared/context/WebSocketContext';
 import PermissionContext from '@/modules/chat/context/PermissionContext';
-import type { ChatInterfaceProps } from '@/modules/chat/types';
-import type { PermissionMode, LLMProvider } from '@/shared/types';
+import type {
+  PermissionMode,
+  LLMProvider,
+  Project,
+  ProjectSession,
+  SessionEstablishedContext,
+  SessionNavigationOptions,
+} from '@/shared/types';
 import { useChatProviderState } from '@/modules/chat/hooks/useChatProviderState';
 import { useChatSessionState } from '@/modules/chat/hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '@/modules/chat/hooks/useChatRealtimeHandlers';
@@ -20,6 +26,30 @@ import ChatMessagesPane from '@/modules/chat/ChatMessagesPane';
 import ChatComposer from '@/modules/chat/ChatComposer';
 import CommandResultModal from '@/modules/chat/CommandResultModal';
 
+type ChatInterfaceProps = {
+  isActive: boolean;
+  selectedProject: Project | null;
+  selectedSession: ProjectSession | null;
+  ws: WebSocket | null;
+  sendMessage: (message: unknown) => void;
+  onFileOpen?: (filePath: string, diffInfo?: any) => void;
+  onNavigateToSession?: (targetSessionId: string, options?: SessionNavigationOptions) => void;
+  onSessionEstablished?: (sessionId: string, context: SessionEstablishedContext) => void;
+  onShowSettings?: () => void;
+  showRawParameters?: boolean;
+  showThinking?: boolean;
+  sendByCtrlEnter?: boolean;
+  externalMessageUpdate?: number;
+  newSessionTrigger?: number;
+  onTaskClick?: (...args: unknown[]) => void;
+  onShowAllTasks?: (() => void) | null;
+};
+
+/**
+ * Used by the project-workspace module (via the chat barrel) to render a
+ * project session's chat tab; it owns the session, provider, realtime and
+ * composer state that ChatMessagesPane and ChatComposer render.
+ */
 function ChatInterface({
   isActive,
   selectedProject,

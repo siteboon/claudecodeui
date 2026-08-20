@@ -10,6 +10,9 @@ const normalizeStatus = (status: string): QueueItemStatus => {
   return 'pending';
 };
 
+/**
+ * Rendered by chat's TodoListContent to draw the todo items as a status queue.
+ */
 const TodoList = memo(
   ({
     todos,

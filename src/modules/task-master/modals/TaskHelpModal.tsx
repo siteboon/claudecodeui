@@ -14,6 +14,7 @@ type HelpStep = {
   accent: string;
 };
 
+/** Rendered by TaskBoard to walk through the PRD-to-tasks workflow. */
 export default function TaskHelpModal({ isOpen, onClose, onCreatePrd }: TaskHelpModalProps) {
   const { t } = useTranslation('tasks');
 

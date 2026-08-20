@@ -13,6 +13,7 @@ type TaskEmptyStateProps = {
   onOpenPrd: (prd: PrdFile) => void;
 };
 
+/** Rendered by TaskBoard when the project has no tasks, offering the TaskMaster setup and PRD entry points. */
 export default function TaskEmptyState({
   className = '',
   hasTaskMasterDirectory,

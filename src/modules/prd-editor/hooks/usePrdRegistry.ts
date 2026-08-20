@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { api } from '@/shared/api';
-import type { PrdListResponse } from '@/modules/prd-editor/types';
 import type { ExistingPrdFile } from '@/shared/types';
+
+type PrdListResponse = {
+  prdFiles?: ExistingPrdFile[];
+  prds?: ExistingPrdFile[];
+};
 
 type UsePrdRegistryArgs = {
   // DB primary key of the project (post migration).

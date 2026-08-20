@@ -9,6 +9,7 @@ type SettingsSectionProps = {
   className?: string;
 };
 
+/** Used by the settings module's appearance, browser-use, git, tasks and voice tabs to title a block of settings. */
 export default function SettingsSection({ title, description, children, className }: SettingsSectionProps) {
   return (
     <div className={cn('space-y-3', className)}>

@@ -13,6 +13,7 @@ type TaskMasterPanelProps = {
 
 const PRD_SAVE_MESSAGE = 'PRD saved successfully!';
 
+/** Exported through the task-master barrel; the project-workspace module renders it as the workspace's Tasks tab. */
 export default function TaskMasterPanel({ isVisible }: TaskMasterPanelProps) {
   const { tasks, currentProject, refreshTasks } = useTaskMaster();
 

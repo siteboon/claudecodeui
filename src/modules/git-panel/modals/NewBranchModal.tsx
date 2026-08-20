@@ -9,6 +9,7 @@ type NewBranchModalProps = {
   onCreateBranch: (branchName: string) => Promise<boolean>;
 };
 
+/** Rendered by GitPanelHeader and BranchesView to create a branch from the current one. */
 export default function NewBranchModal({
   isOpen,
   currentBranch,

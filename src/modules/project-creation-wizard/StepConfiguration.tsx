@@ -24,6 +24,7 @@ type StepConfigurationProps = {
   onAdvanceToConfirm: () => void;
 };
 
+/** Rendered by ProjectCreationWizard as step 1, collecting the workspace path, clone URL and GitHub authentication. */
 export default function StepConfiguration({
   workspacePath,
   githubUrl,

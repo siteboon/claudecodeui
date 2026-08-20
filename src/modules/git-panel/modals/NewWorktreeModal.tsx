@@ -25,6 +25,7 @@ function repositoryName(repositoryRoot: string): string {
   return segments[segments.length - 1] ?? repositoryRoot;
 }
 
+/** Rendered by WorktreesView to create a worktree for a branch and preview its folder name. */
 export default function NewWorktreeModal({
   isOpen,
   baseBranch,

@@ -14,7 +14,7 @@ type ConfirmationContextValue = {
 
 const ConfirmationContext = React.createContext<ConfirmationContextValue | null>(null);
 
-const useConfirmation = () => {
+export const useConfirmation = () => {
   const context = React.useContext(ConfirmationContext);
   if (!context) {
     throw new Error('Confirmation components must be used within Confirmation');
@@ -28,6 +28,7 @@ export type ConfirmationProps = {
   approval?: ApprovalState;
 } & React.HTMLAttributes<HTMLDivElement>;
 
+/** Used by the chat module to render an inline tool-permission request and its outcome. */
 export const Confirmation: React.FC<ConfirmationProps> = ({
   className,
   approval = 'pending',
@@ -50,6 +51,7 @@ Confirmation.displayName = 'Confirmation';
 
 export type ConfirmationTitleProps = React.HTMLAttributes<HTMLDivElement>;
 
+/** Title slot of Confirmation, used by the chat module. */
 export const ConfirmationTitle: React.FC<ConfirmationTitleProps> = ({
   className,
   ...props
@@ -68,6 +70,7 @@ export type ConfirmationRequestProps = {
   children?: React.ReactNode;
 };
 
+/** Pending-state slot of Confirmation, used by the chat module. */
 export const ConfirmationRequest: React.FC<ConfirmationRequestProps> = ({ children }) => {
   const { approval } = useConfirmation();
   if (approval !== 'pending') return null;
@@ -81,6 +84,7 @@ export type ConfirmationAcceptedProps = {
   children?: React.ReactNode;
 };
 
+/** Accepted-state slot of Confirmation; kept beside it so the confirmation family stays usable as a unit. */
 export const ConfirmationAccepted: React.FC<ConfirmationAcceptedProps> = ({ children }) => {
   const { approval } = useConfirmation();
   if (approval !== 'approved') return null;
@@ -94,6 +98,7 @@ export type ConfirmationRejectedProps = {
   children?: React.ReactNode;
 };
 
+/** Rejected-state slot of Confirmation; kept beside it so the confirmation family stays usable as a unit. */
 export const ConfirmationRejected: React.FC<ConfirmationRejectedProps> = ({ children }) => {
   const { approval } = useConfirmation();
   if (approval !== 'rejected') return null;
@@ -105,6 +110,7 @@ ConfirmationRejected.displayName = 'ConfirmationRejected';
 
 export type ConfirmationActionsProps = React.HTMLAttributes<HTMLDivElement>;
 
+/** Button row of Confirmation, used by the chat module. */
 export const ConfirmationActions: React.FC<ConfirmationActionsProps> = ({
   className,
   ...props
@@ -128,6 +134,7 @@ export type ConfirmationActionProps = React.ButtonHTMLAttributes<HTMLButtonEleme
   variant?: 'default' | 'outline' | 'ghost' | 'destructive';
 };
 
+/** Single allow/deny button inside ConfirmationActions, used by the chat module. */
 export const ConfirmationAction: React.FC<ConfirmationActionProps> = ({
   variant = 'default',
   ...props
@@ -136,4 +143,3 @@ export const ConfirmationAction: React.FC<ConfirmationActionProps> = ({
 );
 ConfirmationAction.displayName = 'ConfirmationAction';
 
-export { useConfirmation };

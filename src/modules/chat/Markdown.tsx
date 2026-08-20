@@ -214,6 +214,11 @@ const markdownComponents = {
   ),
 };
 
+/**
+ * Used by chat's MessageComponent, ToolErrorDisplay and MarkdownContent to
+ * render model-authored markdown with this module's shared prose styling,
+ * code highlighting and table rules.
+ */
 export function Markdown({ children, className, breaks = false }: MarkdownProps) {
   const content = normalizeInlineCodeFences(String(children ?? ''));
   const remarkPlugins = useMemo(

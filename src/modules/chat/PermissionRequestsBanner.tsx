@@ -25,6 +25,10 @@ type PermissionRequestsBannerProps = {
   handleGrantToolPermission: (suggestion: { entry: string; toolName: string }) => { success: boolean };
 };
 
+/**
+ * Rendered by chat's ChatComposer above the input to surface pending tool
+ * permission requests and their allow/deny/remember actions.
+ */
 export default function PermissionRequestsBanner({
   pendingPermissionRequests,
   handlePermissionDecision,

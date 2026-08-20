@@ -1,6 +1,7 @@
 import { Sparkles, X } from 'lucide-react';
 
-import { PRD_DOCS_URL } from '@/modules/prd-editor/constants';
+const PRD_DOCS_URL =
+  'https://github.com/eyaltoledano/claude-task-master/blob/main/docs/examples.md';
 
 type GenerateTasksModalProps = {
   isOpen: boolean;
@@ -8,6 +9,7 @@ type GenerateTasksModalProps = {
   onClose: () => void;
 };
 
+/** Opened by PrdEditorWorkspace inside the prd-editor module to explain how to turn the saved PRD into TaskMaster tasks. */
 export default function GenerateTasksModal({
   isOpen,
   fileName,

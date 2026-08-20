@@ -3,15 +3,11 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 
 import { Button, Input } from '@/shared/ui';
-import {
-  MCP_PROVIDER_NAMES,
-  MCP_SUPPORTED_SCOPES,
-  MCP_SUPPORTED_TRANSPORTS,
-  MCP_SUPPORTS_WORKING_DIRECTORY,
-} from '@/modules/mcp/constants';
+import { MCP_PROVIDER_NAMES, MCP_SUPPORTED_SCOPES, MCP_SUPPORTED_TRANSPORTS, MCP_SUPPORTS_WORKING_DIRECTORY } from '@/shared/constants';
 import { useMcpServerForm } from '@/modules/mcp/hooks/useMcpServerForm';
-import type { McpFormMode } from '@/modules/mcp/types';
 import type { McpFormState, McpProject, McpProvider, McpScope, McpTransport, ProviderMcpServer } from '@/shared/types';
+
+type McpFormMode = 'provider' | 'global';
 
 type McpServerFormModalProps = {
   provider: McpProvider;
@@ -56,6 +52,7 @@ const getScopeDescription = (scope: McpScope, mode: McpFormMode): string => {
     : 'Stored in the selected project workspace';
 };
 
+/** Rendered by McpServers to add or edit an MCP server, in both provider and global (all providers) mode. */
 export default function McpServerFormModal({
   provider,
   mode = 'provider',

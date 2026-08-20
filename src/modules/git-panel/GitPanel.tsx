@@ -1,9 +1,9 @@
 import { useCallback, useState } from 'react';
 
 import { useGitPanelController } from '@/modules/git-panel/hooks/useGitPanelController';
+import type { FileOpenHandler } from '@/modules/git-panel/hooks/useGitPanelController';
 import { useRevertLocalCommit } from '@/modules/git-panel/hooks/useRevertLocalCommit';
-import type { GitPanelProps } from '@/modules/git-panel/types';
-import type { ConfirmationRequest, GitPanelView } from '@/shared/types';
+import type { ConfirmationRequest, GitPanelView, Project } from '@/shared/types';
 import { getChangedFileCount } from '@/modules/git-panel/utils/gitPanelUtils';
 import ChangesView from '@/modules/git-panel/changes/ChangesView';
 import HistoryView from '@/modules/git-panel/history/HistoryView';
@@ -14,6 +14,17 @@ import GitRepositoryErrorState from '@/modules/git-panel/GitRepositoryErrorState
 import GitViewTabs from '@/modules/git-panel/GitViewTabs';
 import ConfirmActionModal from '@/modules/git-panel/modals/ConfirmActionModal';
 
+type GitPanelProps = {
+  selectedProject: Project | null;
+  isMobile?: boolean;
+  onFileOpen?: FileOpenHandler;
+  /** Switches the app to another project — used by the Worktrees view to jump into a worktree. */
+  onProjectSelect?: (project: Project) => void;
+  /** Silently re-syncs the sidebar project list after worktree projects are created/archived. */
+  onProjectsRefresh?: () => void;
+};
+
+/** Exported through the git-panel barrel; the project-workspace module renders it as the source-control sidebar tab. */
 export default function GitPanel({
   selectedProject,
   isMobile = false,

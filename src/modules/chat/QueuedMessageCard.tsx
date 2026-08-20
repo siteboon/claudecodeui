@@ -8,6 +8,10 @@ type QueuedMessageCardProps = {
   onDelete: () => void;
 };
 
+/**
+ * Rendered by chat's ChatComposer to show the message queued for a busy
+ * session, with edit and delete actions before it is auto-sent.
+ */
 export default function QueuedMessageCard({
   content,
   attachmentCount = 0,

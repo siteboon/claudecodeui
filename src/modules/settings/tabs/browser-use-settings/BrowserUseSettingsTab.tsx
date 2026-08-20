@@ -29,6 +29,7 @@ async function readJson<T>(response: Response): Promise<T> {
   return data as T;
 }
 
+/** Rendered by Settings for the "browser" tab, configuring the browser automation integration. */
 export default function BrowserUseSettingsTab() {
   const [settings, setSettings] = useState<BrowserUseSettings | null>(null);
   const [status, setStatus] = useState<BrowserUseStatus | null>(null);

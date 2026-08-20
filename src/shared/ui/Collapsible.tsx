@@ -9,7 +9,7 @@ type CollapsibleContextValue = {
 
 const CollapsibleContext = React.createContext<CollapsibleContextValue | null>(null);
 
-function useCollapsible() {
+export function useCollapsible() {
   const ctx = React.useContext(CollapsibleContext);
   if (!ctx) throw new Error('Collapsible components must be used within <Collapsible>');
   return ctx;
@@ -21,7 +21,8 @@ type CollapsibleProps = {
   onOpenChange?: (open: boolean) => void;
 } & React.HTMLAttributes<HTMLDivElement>;
 
-const Collapsible = React.forwardRef<HTMLDivElement, CollapsibleProps>(
+/** Used by the chat module for collapsible tool output and by the shared Reasoning primitive. */
+export const Collapsible = React.forwardRef<HTMLDivElement, CollapsibleProps>(
   ({ defaultOpen = false, open: controlledOpen, onOpenChange: controlledOnOpenChange, className, children, ...props }, ref) => {
     const [internalOpen, setInternalOpen] = React.useState(defaultOpen);
     const isControlled = controlledOpen !== undefined;
@@ -47,7 +48,8 @@ const Collapsible = React.forwardRef<HTMLDivElement, CollapsibleProps>(
 );
 Collapsible.displayName = 'Collapsible';
 
-const CollapsibleTrigger = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement>>(
+/** Toggle slot of Collapsible, used by the chat module and the shared Reasoning primitive. */
+export const CollapsibleTrigger = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement>>(
   ({ onClick, children, className, ...props }, ref) => {
     const { open, onOpenChange } = useCollapsible();
 
@@ -76,7 +78,8 @@ const CollapsibleTrigger = React.forwardRef<HTMLButtonElement, React.ButtonHTMLA
 );
 CollapsibleTrigger.displayName = 'CollapsibleTrigger';
 
-const CollapsibleContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+/** Body slot of Collapsible, used by the chat module and the shared Reasoning primitive. */
+export const CollapsibleContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, children, ...props }, ref) => {
     const { open } = useCollapsible();
 
@@ -100,4 +103,3 @@ const CollapsibleContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes
 );
 CollapsibleContent.displayName = 'CollapsibleContent';
 
-export { Collapsible, CollapsibleTrigger, CollapsibleContent, useCollapsible };

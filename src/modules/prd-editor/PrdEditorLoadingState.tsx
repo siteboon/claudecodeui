@@ -1,3 +1,4 @@
+/** Rendered by PRDEditor inside the prd-editor module while an existing PRD's contents are still loading. */
 export default function PrdEditorLoadingState() {
   return (
     <div className="fixed inset-0 z-[200] md:flex md:items-center md:justify-center md:bg-black/50">

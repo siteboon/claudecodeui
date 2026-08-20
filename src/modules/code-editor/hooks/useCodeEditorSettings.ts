@@ -1,10 +1,20 @@
 import { useEffect, useState } from 'react';
 
-import {
-  CODE_EDITOR_DEFAULTS,
-  CODE_EDITOR_SETTINGS_CHANGED_EVENT,
-  CODE_EDITOR_STORAGE_KEYS,
-} from '@/modules/code-editor/constants';
+const CODE_EDITOR_STORAGE_KEYS = {
+  wordWrap: 'codeEditorWordWrap',
+  showMinimap: 'codeEditorShowMinimap',
+  lineNumbers: 'codeEditorLineNumbers',
+  fontSize: 'codeEditorFontSize',
+} as const;
+
+const CODE_EDITOR_DEFAULTS = {
+  wordWrap: false,
+  minimapEnabled: true,
+  showLineNumbers: true,
+  fontSize: '12',
+} as const;
+
+const CODE_EDITOR_SETTINGS_CHANGED_EVENT = 'codeEditorSettingsChanged';
 
 const readBoolean = (storageKey: string, defaultValue: boolean, falseValue = 'false') => {
   const value = localStorage.getItem(storageKey);

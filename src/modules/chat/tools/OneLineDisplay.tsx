@@ -32,6 +32,8 @@ type OneLineDisplayProps = {
 /**
  * Unified one-line display for simple tool inputs and results
  * Used by: Bash, Read, Grep/Glob (minimized), TodoRead, etc.
+ *
+ * Rendered by chat's ToolRenderer for tools configured as single-line.
  */
 export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
   toolName,

@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 import { cn } from '@/shared/utils';
 import { ensurePrdExtension } from '@/modules/prd-editor/utils/fileName';
-import GenerateTasksModal from '@/modules/prd-editor/GenerateTasksModal';
+import GenerateTasksModal from '@/modules/prd-editor/modals/GenerateTasksModal';
 import PrdEditorBody from '@/modules/prd-editor/PrdEditorBody';
 import PrdEditorFooter from '@/modules/prd-editor/PrdEditorFooter';
 import PrdEditorHeader from '@/modules/prd-editor/PrdEditorHeader';
@@ -21,6 +21,7 @@ type PrdEditorWorkspaceProps = {
   loadError: string | null;
 };
 
+/** Rendered by PRDEditor inside the prd-editor module to lay out the PRD header, editing body and footer once the document has loaded. */
 export default function PrdEditorWorkspace({
   content,
   onContentChange,

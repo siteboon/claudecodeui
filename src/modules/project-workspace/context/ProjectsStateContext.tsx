@@ -58,6 +58,7 @@ const ProjectCommandContext = createContext<ProjectCommandState | null>(null);
 const ProjectEffectsContext = createContext<ProjectEffectsState | null>(null);
 const ProjectActiveSessionContext = createContext<ProjectActiveSessionState | null>(null);
 
+/** Rendered by ProjectWorkspaceRoute to own the workspace's project and session state and expose it through this module's context hooks. */
 export function ProjectsStateProvider({
   children,
   sessionId,

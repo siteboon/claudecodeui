@@ -28,6 +28,7 @@ type SidebarFooterProps = {
   t: TFunction;
 };
 
+/** Rendered by SidebarContent at the bottom of the panel for settings, update status and community links. */
 export default function SidebarFooter({
   updateAvailable,
   restartRequired,

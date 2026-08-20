@@ -15,6 +15,9 @@ type LanguageSelectorProps = {
  * A dropdown component for selecting the application language.
  * Automatically updates the i18n language and persists to localStorage.
  *
+ * Used by the settings module (appearance tab) and the quick-settings-panel module
+ * so the user can switch language from either surface.
+ *
  * Props:
  * @param {boolean} compact - If true, uses compact style (default: false)
  */

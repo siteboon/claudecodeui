@@ -16,6 +16,7 @@ const TABS: { id: GitPanelView; label: string; Icon: typeof FileText }[] = [
   { id: 'worktrees', label: 'Worktrees', Icon: GitFork },
 ];
 
+/** Rendered by GitPanel to switch between its changes, commits, branches and worktrees views. */
 export default function GitViewTabs({ activeView, isHidden, changeCount, onChange }: GitViewTabsProps) {
   return (
     <div

@@ -4,7 +4,8 @@ import { Search } from 'lucide-react';
 
 import { cn } from '@/shared/utils';
 
-const Command = React.forwardRef<
+/** Used by the command-palette module and by chat's provider picker for keyboard-driven filtered lists. */
+export const Command = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive>,
   React.ComponentPropsWithoutRef<typeof CommandPrimitive>
 >(({ className, ...props }, ref) => (
@@ -16,7 +17,8 @@ const Command = React.forwardRef<
 ));
 Command.displayName = CommandPrimitive.displayName;
 
-const CommandInput = React.forwardRef<
+/** Search input of Command, used by the command-palette and chat modules. */
+export const CommandInput = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Input>,
   React.ComponentPropsWithoutRef<typeof CommandPrimitive.Input>
 >(({ className, ...props }, ref) => (
@@ -35,7 +37,8 @@ const CommandInput = React.forwardRef<
 ));
 CommandInput.displayName = CommandPrimitive.Input.displayName;
 
-const CommandList = React.forwardRef<
+/** Scrollable result list of Command, used by the command-palette and chat modules. */
+export const CommandList = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.List>,
   React.ComponentPropsWithoutRef<typeof CommandPrimitive.List>
 >(({ className, ...props }, ref) => (
@@ -47,7 +50,8 @@ const CommandList = React.forwardRef<
 ));
 CommandList.displayName = CommandPrimitive.List.displayName;
 
-const CommandEmpty = React.forwardRef<
+/** Empty-result slot of Command, used by the command-palette and chat modules. */
+export const CommandEmpty = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Empty>,
   React.ComponentPropsWithoutRef<typeof CommandPrimitive.Empty>
 >((props, ref) => (
@@ -59,7 +63,8 @@ const CommandEmpty = React.forwardRef<
 ));
 CommandEmpty.displayName = CommandPrimitive.Empty.displayName;
 
-const CommandGroup = React.forwardRef<
+/** Section heading of Command, used by the command-palette and chat modules. */
+export const CommandGroup = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Group>,
   React.ComponentPropsWithoutRef<typeof CommandPrimitive.Group>
 >(({ className, ...props }, ref) => (
@@ -75,7 +80,8 @@ const CommandGroup = React.forwardRef<
 ));
 CommandGroup.displayName = CommandPrimitive.Group.displayName;
 
-const CommandItem = React.forwardRef<
+/** Selectable row of Command, used by the command-palette and chat modules. */
+export const CommandItem = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Item>,
   React.ComponentPropsWithoutRef<typeof CommandPrimitive.Item>
 >(({ className, ...props }, ref) => (
@@ -92,7 +98,8 @@ const CommandItem = React.forwardRef<
 ));
 CommandItem.displayName = CommandPrimitive.Item.displayName;
 
-const CommandSeparator = React.forwardRef<
+/** Divider between Command groups; kept beside them so the command family stays usable as a unit. */
+export const CommandSeparator = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Separator>,
   React.ComponentPropsWithoutRef<typeof CommandPrimitive.Separator>
 >(({ className, ...props }, ref) => (
@@ -104,4 +111,3 @@ const CommandSeparator = React.forwardRef<
 ));
 CommandSeparator.displayName = CommandPrimitive.Separator.displayName;
 
-export { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem, CommandSeparator };

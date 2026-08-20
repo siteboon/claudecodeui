@@ -1,8 +1,21 @@
 import type { TFunction } from 'i18next';
 
-import type { LLMProvider, Project, ProjectSession } from '@/shared/types';
-import type { SessionViewModel } from '@/modules/sidebar/types';
-import type { ProjectSortOrder, SettingsProject, SessionWithProvider } from '@/shared/types';
+import type {
+  LLMProvider,
+  Project,
+  ProjectSession,
+  ProjectSortOrder,
+  SessionWithProvider,
+  SettingsProject,
+} from '@/shared/types';
+
+// Presentation data the sidebar derives from a session before rendering its row.
+type SessionViewModel = {
+  isActive: boolean;
+  sessionName: string;
+  sessionTime: string;
+  messageCount: number;
+};
 
 export const formatCompactAge = (
   dateString: string | null | undefined,
@@ -21,56 +34,6 @@ export const formatCompactAge = (
   return hours < 24 ? `${hours}hr` : `${Math.floor(hours / 24)}d`;
 };
 
-export const readProjectSortOrder = (): ProjectSortOrder => {
-  try {
-    const rawSettings = localStorage.getItem('claude-settings');
-    if (!rawSettings) {
-      return 'name';
-    }
-
-    const settings = JSON.parse(rawSettings) as { projectSortOrder?: ProjectSortOrder };
-    return settings.projectSortOrder === 'date' ? 'date' : 'name';
-  } catch {
-    return 'name';
-  }
-};
-
-const LEGACY_STARRED_PROJECTS_STORAGE_KEY = 'starredProjects';
-
-/**
- * Reads legacy project stars from localStorage (used only for one-time migration to backend).
- */
-export const readLegacyStarredProjectIds = (): string[] => {
-  try {
-    const saved = localStorage.getItem(LEGACY_STARRED_PROJECTS_STORAGE_KEY);
-    if (!saved) {
-      return [];
-    }
-
-    const parsed = JSON.parse(saved) as unknown;
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-
-    return parsed
-      .map((value) => String(value).trim())
-      .filter((value) => value.length > 0);
-  } catch {
-    return [];
-  }
-};
-
-/**
- * Clears the legacy localStorage stars key after migration to backend completes.
- */
-export const clearLegacyStarredProjectIds = () => {
-  try {
-    localStorage.removeItem(LEGACY_STARRED_PROJECTS_STORAGE_KEY);
-  } catch {
-    // Keep UI responsive even if storage is unavailable.
-  }
-};
-
 const getCreatedTimestamp = (session: SessionWithProvider): string => {
   return String(session.createdAt || session.created_at || '');
 };
@@ -86,15 +49,15 @@ const getSessionProvider = (session: ProjectSession): LLMProvider => {
     : 'claude';
 };
 
-export const getSessionDate = (session: SessionWithProvider): Date => {
+const getSessionDate = (session: SessionWithProvider): Date => {
   return new Date(getUpdatedTimestamp(session) || getCreatedTimestamp(session) || 0);
 };
 
-export const getSessionName = (session: SessionWithProvider, t: TFunction): string => {
+const getSessionName = (session: SessionWithProvider, t: TFunction): string => {
   return session.summary || session.name || t('projects.newSession');
 };
 
-export const getSessionTime = (session: SessionWithProvider): string => {
+const getSessionTime = (session: SessionWithProvider): string => {
   return getUpdatedTimestamp(session) || getCreatedTimestamp(session);
 };
 
@@ -123,7 +86,7 @@ export const getAllSessions = (project: Project): SessionWithProvider[] => {
   );
 };
 
-export const getProjectLastActivity = (project: Project): Date => {
+const getProjectLastActivity = (project: Project): Date => {
   const sessions = getAllSessions(project);
   if (sessions.length === 0) {
     return new Date(0);

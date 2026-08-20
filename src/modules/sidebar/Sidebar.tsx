@@ -5,23 +5,43 @@ import { useDeviceSettings } from '@/shared/hooks/useDeviceSettings';
 import { useVersionCheck } from '@/shared/hooks/useVersionCheck';
 import { useUiPreferences } from '@/shared/hooks/useUiPreferences';
 import { useSidebarController } from '@/modules/sidebar/hooks/useSidebarController';
-import { useTaskMaster } from '@/modules/task-master';
+import { useTaskMaster, useTasksSettings } from '@/modules/task-master';
 import { usePaletteOps } from '@/modules/command-palette';
-import { useTasksSettings } from '@/modules/task-master';
 import { useProcessingSessions } from '@/shared/context/SessionProtectionContext';
-import type { Project, LLMProvider } from '@/shared/types';
-import type { SidebarProps } from '@/modules/sidebar/types';
-import type { MCPServerStatus } from '@/shared/types';
+import type { LLMProvider, LoadingProgress, MCPServerStatus, Project, ProjectSession, SidebarProjectListProps } from '@/shared/types';
 import SidebarCollapsed from '@/modules/sidebar/SidebarCollapsed';
 import SidebarContent from '@/modules/sidebar/SidebarContent';
 import SidebarModals from '@/modules/sidebar/SidebarModals';
-import type { SidebarProjectListProps } from '@/shared/types';
+
+type SidebarProps = {
+  projects: Project[];
+  selectedProject: Project | null;
+  selectedSession: ProjectSession | null;
+  attentionSessionIds: ReadonlySet<string>;
+  onProjectSelect: (project: Project) => void;
+  onSessionSelect: (session: ProjectSession) => void;
+  onNewSession: (project: Project) => void;
+  onSessionDelete?: (sessionId: string) => void;
+  onLoadMoreSessions?: (projectId: string) => Promise<void> | void;
+  // `projectId` is the DB identifier; the sidebar hands it back to the parent
+  // when the delete flow completes.
+  onProjectDelete?: (projectId: string) => void;
+  isLoading: boolean;
+  loadingProgress: LoadingProgress | null;
+  onRefresh: () => Promise<void> | void;
+  onShowSettings: () => void;
+  showSettings: boolean;
+  settingsInitialTab: string;
+  onCloseSettings: () => void;
+  isMobile: boolean;
+};
 
 type TaskMasterSidebarContext = {
   setCurrentProject: (project: Project) => void;
   mcpServerStatus: MCPServerStatus;
 };
 
+/** Exported through the sidebar barrel; the project-workspace module renders it as the app's project and session navigation panel. */
 function Sidebar({
   projects,
   selectedProject,

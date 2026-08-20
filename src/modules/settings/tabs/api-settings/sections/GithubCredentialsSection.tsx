@@ -22,6 +22,7 @@ type GithubCredentialsSectionProps = {
   onDeleteGithubCredential: (credentialId: string) => void;
 };
 
+/** Rendered by CredentialsSettingsTab to list, create and delete stored GitHub credentials. */
 export default function GithubCredentialsSection({
   githubCredentials,
   showNewGithubForm,

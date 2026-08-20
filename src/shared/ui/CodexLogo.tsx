@@ -2,6 +2,7 @@ type CodexLogoProps = {
   className?: string;
 };
 
+/** Rendered by the shared LLMProviderLogo when the provider is Codex. */
 const CodexLogo = ({ className = 'w-5 h-5' }: CodexLogoProps) => (
   <svg
     viewBox="100 100 520 520"

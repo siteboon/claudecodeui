@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 
 import { IS_PLATFORM } from '@/shared/utils';
 import {
@@ -9,10 +10,76 @@ import {
   isValidRefreshedToken,
   storeAuthToken,
 } from '@/shared/api';
-import { AUTH_ERROR_MESSAGES, AUTH_TOKEN_STORAGE_KEY } from '@/modules/auth/constants';
-import type { AuthContextValue, AuthProviderProps, AuthSessionPayload, AuthStatusPayload, AuthUserPayload, OnboardingStatusPayload } from '@/modules/auth/types';
 import type { AuthUser } from '@/shared/types';
-import { parseJsonSafely, resolveApiErrorMessage } from '@/modules/auth/utils';
+
+const AUTH_TOKEN_STORAGE_KEY = 'auth-token';
+
+const AUTH_ERROR_MESSAGES = {
+  authStatusCheckFailed: 'Failed to check authentication status',
+  loginFailed: 'Login failed',
+  registrationFailed: 'Registration failed',
+  networkError: 'Network error. Please try again.',
+  sessionExpired: 'Your session expired. Please log in again.',
+} as const;
+
+type AuthActionResult = { success: true } | { success: false; error: string };
+
+type AuthSessionPayload = {
+  token?: string;
+  user?: AuthUser;
+  error?: string;
+  message?: string;
+};
+
+type AuthStatusPayload = {
+  needsSetup?: boolean;
+};
+
+type AuthUserPayload = {
+  user?: AuthUser;
+};
+
+type OnboardingStatusPayload = {
+  hasCompletedOnboarding?: boolean;
+};
+
+type ApiErrorPayload = {
+  error?: string;
+  message?: string;
+};
+
+type AuthContextValue = {
+  user: AuthUser | null;
+  token: string | null;
+  isLoading: boolean;
+  needsSetup: boolean;
+  hasCompletedOnboarding: boolean;
+  error: string | null;
+  login: (username: string, password: string) => Promise<AuthActionResult>;
+  register: (username: string, password: string) => Promise<AuthActionResult>;
+  logout: () => void;
+  refreshOnboardingStatus: () => Promise<void>;
+};
+
+type AuthProviderProps = {
+  children: ReactNode;
+};
+
+async function parseJsonSafely<T>(response: Response): Promise<T | null> {
+  try {
+    return (await response.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+function resolveApiErrorMessage(payload: ApiErrorPayload | null, fallback: string): string {
+  if (!payload) {
+    return fallback;
+  }
+
+  return payload.error ?? payload.message ?? fallback;
+}
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -35,6 +102,7 @@ export function useAuth(): AuthContextValue {
   return context;
 }
 
+/** Used by App to expose the session, and its login/logout actions, to every module through useAuth. */
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [token, setToken] = useState<string | null>(() => readStoredToken());

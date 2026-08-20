@@ -14,6 +14,7 @@ const LEGEND_ITEMS = [
   { status: 'U', label: 'Untracked' },
 ] as const;
 
+/** Rendered by ChangesView to explain the M/A/D/U status badges used in the change list. */
 export default function FileStatusLegend({ isMobile }: FileStatusLegendProps) {
   const [isOpen, setIsOpen] = useState(false);
 

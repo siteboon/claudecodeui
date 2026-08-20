@@ -26,6 +26,7 @@ export function usePlugins() {
   return context;
 }
 
+/** Mounted by the app root so the plugins and project-workspace modules can read and mutate installed plugins through usePlugins. */
 export function PluginsProvider({ children }: { children: ReactNode }) {
   const [plugins, setPlugins] = useState<Plugin[]>([]);
   const [loading, setLoading] = useState(true);

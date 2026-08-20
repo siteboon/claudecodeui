@@ -1,5 +1,5 @@
 import { cn } from '@/shared/utils';
-import LLMProviderLogo from '@/shared/ui/LLMProviderLogo';
+import { LLMProviderLogo } from '@/shared/ui';
 import type { AgentProvider, ProviderAuthStatus } from '@/shared/types';
 
 type AgentListItemProps = {
@@ -49,6 +49,7 @@ const colorClasses = {
   },
 } as const;
 
+/** Has no consumer: the agents tab selects providers through AgentSelectorSection's pills instead. */
 export default function AgentListItem({
   agentId,
   authStatus,

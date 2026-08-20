@@ -123,6 +123,10 @@ const getMenuPosition = (position: { top: number; left: number; bottom?: number 
   };
 };
 
+/**
+ * Rendered by chat's ChatComposer as the slash-command palette that appears
+ * while the user is typing a command in the input.
+ */
 export default function CommandMenu({
   commands = [],
   selectedIndex = -1,

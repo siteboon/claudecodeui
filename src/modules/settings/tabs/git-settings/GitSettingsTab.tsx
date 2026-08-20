@@ -6,6 +6,7 @@ import { Button, Input } from '@/shared/ui';
 import SettingsCard from '@/modules/settings/SettingsCard';
 import SettingsSection from '@/modules/settings/SettingsSection';
 
+/** Rendered by Settings for the "git" tab, configuring the commit identity and git preferences. */
 export default function GitSettingsTab() {
   const { t } = useTranslation('settings');
   const {

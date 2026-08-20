@@ -17,6 +17,7 @@ type AuthInputFieldProps = {
 
 /**
  * A labelled input field for authentication forms.
+ * Used by the auth module's LoginForm and SetupForm for their credential inputs.
  * Renders a `<label>` / `<input>` pair and forwards browser autofill hints
  * (`name`, `autoComplete`) so that password managers can identify and fill
  * the field correctly. Password fields gain a show/hide visibility toggle.

@@ -1,18 +1,12 @@
 import React, { memo, useMemo, useCallback } from 'react';
 
-import type { Project } from '@/shared/types';
+import type { DiffLine, Project } from '@/shared/types';
 import type { SubagentChildTool } from '@/shared/types';
 import { getToolConfig } from '@/modules/chat/tools/configs/toolConfigs';
 import { OneLineDisplay, BashCommandDisplay, CollapsibleDisplay, ToolDiffViewer, MarkdownContent, FileListContent, TodoListContent, TaskListContent, TextContent, QuestionAnswerContent, SubagentContainer } from '@/modules/chat/tools';
 import { PlanDisplay } from '@/modules/chat/tools/PlanDisplay';
 import { ToolStatusBadge } from '@/modules/chat/tools/ToolStatusBadge';
 import type { ToolStatus } from '@/shared/types';
-
-type DiffLine = {
-  type: string;
-  content: string;
-  lineNum: number;
-};
 
 type ToolRendererProps = {
   toolName: string;
@@ -68,6 +62,9 @@ function deriveToolStatus(toolResult: any): ToolStatus {
 /**
  * Main tool renderer router
  * Routes to OneLineDisplay or CollapsibleDisplay based on tool config
+ *
+ * Rendered by chat's MessageComponent for every tool call and tool result in
+ * the transcript; it is the single entry point for tool presentation.
  */
 export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
   toolName,

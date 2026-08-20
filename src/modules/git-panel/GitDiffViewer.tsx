@@ -28,6 +28,7 @@ function buildDiffPreview(diff: string): DiffPreview {
   };
 }
 
+/** Rendered by the git panel's changes and history views to display one file's diff. */
 export default function GitDiffViewer({ diff, isMobile, wrapText }: GitDiffViewerProps) {
   // Render a bounded preview to keep huge commit diffs from freezing the UI thread.
   const preview = useMemo(() => buildDiffPreview(diff || ''), [diff]);

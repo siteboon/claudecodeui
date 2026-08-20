@@ -25,6 +25,7 @@ const getModeClassName = (mode: TokenMode, selectedMode: TokenMode) =>
       : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
   }`;
 
+/** Rendered by StepConfiguration to choose the GitHub token used when cloning a repository. */
 export default function GithubAuthenticationCard({
   tokenMode,
   selectedGithubToken,

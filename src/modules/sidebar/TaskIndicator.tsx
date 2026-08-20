@@ -82,6 +82,7 @@ const getIndicatorConfig = (status: TaskIndicatorStatus): IndicatorConfig => {
   };
 };
 
+/** Rendered by SidebarProjectItem to show whether a project has TaskMaster and its MCP server configured. */
 export default function TaskIndicator({
   status = 'not-configured',
   size = 'sm',

@@ -16,6 +16,8 @@ type ToolErrorDisplayProps = {
  * command-row (`BashCommandDisplay`) look: a compact header with a chevron
  * and a one-line preview that expands to the full error content. Errors are
  * signalled by the red styling — the details stay one click away.
+ *
+ * Rendered by chat's MessageComponent for failed tool results.
  */
 export const ToolErrorDisplay: React.FC<ToolErrorDisplayProps> = ({ content, label }) => {
   const trimmedContent = content.trim();

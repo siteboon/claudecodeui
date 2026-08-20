@@ -15,7 +15,10 @@ type CollapsibleSectionProps = {
 };
 
 /**
- * Reusable collapsible section with consistent styling
+ * Reusable collapsible section with consistent styling.
+ *
+ * Used by chat's CollapsibleDisplay and SubagentContainer so every expandable
+ * tool block shares one header, chevron and border treatment.
  */
 export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   title,

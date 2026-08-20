@@ -524,6 +524,10 @@ function StatusContent({ data }: { data: StatusCommandData }) {
   );
 }
 
+/**
+ * Rendered by chat's ChatInterface to present the result of a slash command
+ * (help, model picker, cost or status) in a modal over the transcript.
+ */
 export default function CommandResultModal({
   payload,
   onClose,

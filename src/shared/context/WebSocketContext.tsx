@@ -179,6 +179,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   return value;
 };
 
+/** Mounted once by App; owns the single chat websocket that the chat, project-workspace and task-master modules subscribe to. */
 export const WebSocketProvider = ({ children }: { children: React.ReactNode }) => {
   const webSocketData = useWebSocketProviderState();
 

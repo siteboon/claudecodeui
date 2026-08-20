@@ -11,6 +11,7 @@ type NewApiKeyAlertProps = {
   onDismiss: () => void;
 };
 
+/** Rendered by CredentialsSettingsTab to show a freshly created API key once, before it is hidden. */
 export default function NewApiKeyAlert({
   apiKey,
   copiedKey,

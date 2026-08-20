@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, type Dispatch, type SetStateAction } from 'react';
 
 import { ChatInterface } from '@/modules/chat';
 import { FileTree } from '@/modules/file-tree';
@@ -6,9 +6,9 @@ import { StandaloneShell } from '@/modules/standalone-shell';
 import { GitPanel } from '@/modules/git-panel';
 import { PluginTabContent } from '@/modules/plugins';
 import { BrowserUsePanel, useBrowserUseEnabled } from '@/modules/browser-use';
-import type { WorkspaceMainProps } from '@/modules/project-workspace/types';
 import { usePaletteOpsRegister } from '@/modules/command-palette';
 import { useTasksSettings } from '@/modules/task-master';
+import type { AppTab, Project, ProjectSession, SessionEstablishedContext, SessionNavigationOptions, SettingsMainTab } from '@/shared/types';
 import { useUiPreferences } from '@/shared/hooks/useUiPreferences';
 import { useFileOpenResolver } from '@/modules/project-workspace/hooks/useFileOpenResolver';
 import { useEditorSidebar } from '@/modules/code-editor';
@@ -18,6 +18,28 @@ import WorkspaceHeader from '@/modules/project-workspace/WorkspaceHeader';
 import WorkspaceStateView from '@/modules/project-workspace/WorkspaceStateView';
 import WorkspaceErrorBoundary from '@/modules/project-workspace/WorkspaceErrorBoundary';
 
+type WorkspaceMainProps = {
+  selectedProject: Project | null;
+  selectedSession: ProjectSession | null;
+  activeTab: AppTab;
+  setActiveTab: Dispatch<SetStateAction<AppTab>>;
+  ws: WebSocket | null;
+  sendMessage: (message: unknown) => void;
+  isMobile: boolean;
+  onMenuClick: () => void;
+  isLoading: boolean;
+  onNavigateToSession: (targetSessionId: string, options?: SessionNavigationOptions) => void;
+  onSessionEstablished: (sessionId: string, context: SessionEstablishedContext) => void;
+  onShowSettings: (tab?: SettingsMainTab) => void;
+  externalMessageUpdate: number;
+  newSessionTrigger: number;
+  /** Switches the app to another project — used by the git panel's Worktrees view. */
+  onProjectSelect: (project: Project) => void;
+  /** Silently re-syncs the sidebar project list after worktree projects change. */
+  onProjectsRefresh: () => void;
+};
+
+/** Rendered by ProjectMainRegion to show the selected project's active tab: chat, files, shell, git, tasks, browser or a plugin. */
 function WorkspaceMain({
   selectedProject,
   selectedSession,

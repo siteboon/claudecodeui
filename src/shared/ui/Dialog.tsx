@@ -11,7 +11,7 @@ type DialogContextValue = {
 
 const DialogContext = React.createContext<DialogContextValue | null>(null);
 
-function useDialog() {
+export function useDialog() {
   const ctx = React.useContext(DialogContext);
   if (!ctx) throw new Error('Dialog components must be used within <Dialog>');
   return ctx;
@@ -24,7 +24,8 @@ type DialogProps = {
   children: React.ReactNode;
 };
 
-const Dialog: React.FC<DialogProps> = ({ open: controlledOpen, onOpenChange: controlledOnOpenChange, defaultOpen = false, children }) => {
+/** Used by the chat, command-palette, sidebar and skills modules as the modal container. */
+export const Dialog: React.FC<DialogProps> = ({ open: controlledOpen, onOpenChange: controlledOnOpenChange, defaultOpen = false, children }) => {
   const [internalOpen, setInternalOpen] = React.useState(defaultOpen);
   const triggerRef = React.useRef<HTMLElement | null>(null) as React.MutableRefObject<HTMLElement | null>;
   const isControlled = controlledOpen !== undefined;
@@ -42,7 +43,8 @@ const Dialog: React.FC<DialogProps> = ({ open: controlledOpen, onOpenChange: con
   return <DialogContext.Provider value={value}>{children}</DialogContext.Provider>;
 };
 
-const DialogTrigger = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement> & { asChild?: boolean }>(
+/** Opens a Dialog from an arbitrary child element; used by the chat module. */
+export const DialogTrigger = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement> & { asChild?: boolean }>(
   ({ onClick, children, asChild, ...props }, ref) => {
     const { onOpenChange, triggerRef } = useDialog();
 
@@ -98,7 +100,8 @@ type DialogContentProps = {
 
 const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
+/** Focus-trapped panel of Dialog, used by the chat, command-palette, sidebar and skills modules. */
+export const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
   ({ className, children, onEscapeKeyDown, onPointerDownOutside, wrapperClassName, animationClassName, ...props }, ref) => {
     const { open, onOpenChange, triggerRef } = useDialog();
     const contentRef = React.useRef<HTMLDivElement | null>(null);
@@ -209,11 +212,11 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
 );
 DialogContent.displayName = 'DialogContent';
 
-const DialogTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTMLHeadingElement>>(
+/** Accessible title of Dialog, used by the chat, command-palette, sidebar and skills modules. */
+export const DialogTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTMLHeadingElement>>(
   ({ className, ...props }, ref) => (
     <h2 ref={ref} className={cn('sr-only', className)} {...props} />
   )
 );
 DialogTitle.displayName = 'DialogTitle';
 
-export { Dialog, DialogTrigger, DialogContent, DialogTitle, useDialog };

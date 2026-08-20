@@ -1,6 +1,7 @@
 import { Settings2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+/** Rendered by QuickSettingsPanelView as the drawer's title bar. */
 export default function QuickSettingsPanelHeader() {
   const { t } = useTranslation('settings');
 

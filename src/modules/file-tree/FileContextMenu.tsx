@@ -44,6 +44,7 @@ function calculateViewportSafePosition(clientX: number, clientY: number) {
   return { x: Math.max(VIEWPORT_PADDING, safeX), y: Math.max(VIEWPORT_PADDING, safeY) };
 }
 
+/** Rendered by FileTreeNode to show the right-click actions available on one file or directory row. */
 export default function FileContextMenu({
   children,
   item,

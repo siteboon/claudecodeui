@@ -18,6 +18,7 @@ type TaskFiltersPanelProps = {
   onClearFilters: () => void;
 };
 
+/** Rendered by TaskBoardToolbar as the expandable status/priority filter and sort panel. */
 export default function TaskFiltersPanel({
   showFilters,
   statusFilter,

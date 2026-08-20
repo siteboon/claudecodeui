@@ -4,11 +4,20 @@ import { useTheme } from '@/shared/context/ThemeContext';
 import { api } from '@/shared/api';
 import { setNotificationSoundEnabled } from '@/shared/utils';
 import { useProviderAuthStatus } from '@/modules/provider-auth';
-import {
-  DEFAULT_CODE_EDITOR_SETTINGS,
-  DEFAULT_CURSOR_PERMISSIONS,
-} from '@/modules/settings/constants';
 import type { AgentProvider, ClaudePermissionsState, CodeEditorSettingsState, CodexPermissionMode, CursorPermissionsState, NotificationPreferencesState, ProjectSortOrder, SettingsMainTab } from '@/shared/types';
+
+const DEFAULT_CODE_EDITOR_SETTINGS: CodeEditorSettingsState = {
+  wordWrap: false,
+  showMinimap: true,
+  lineNumbers: true,
+  fontSize: '14',
+};
+
+const DEFAULT_CURSOR_PERMISSIONS: CursorPermissionsState = {
+  allowedCommands: [],
+  disallowedCommands: [],
+  skipPermissions: false,
+};
 
 type ThemeContextValue = {
   isDarkMode: boolean;

@@ -13,6 +13,7 @@ function GitHubIcon({ className }: { className?: string }) {
   );
 }
 
+/** Rendered by SidebarHeader on self-hosted (non-platform) builds to link to the GitHub repo with its star count. */
 export default function GitHubStarBadge() {
   const { formattedCount, isDismissed, dismiss } = useGitHubStars('siteboon', 'claudecodeui');
 

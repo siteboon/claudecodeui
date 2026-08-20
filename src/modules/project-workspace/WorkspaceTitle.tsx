@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 
-import LLMProviderLogo from '@/shared/ui/LLMProviderLogo';
+import { LLMProviderLogo } from '@/shared/ui';
 import type { AppTab, Project, ProjectSession } from '@/shared/types';
 import { usePlugins } from '@/modules/plugins';
 import { getSessionTitle } from '@/shared/utils';
@@ -36,6 +36,7 @@ function getTabTitle(activeTab: AppTab, shouldShowTasksTab: boolean, t: (key: st
   return 'Project';
 }
 
+/** Rendered by WorkspaceHeader to label the workspace with the active session or tab name. */
 export default function WorkspaceTitle({
   activeTab,
   selectedProject,

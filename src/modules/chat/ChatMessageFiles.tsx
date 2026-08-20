@@ -77,6 +77,10 @@ function ChatMessageFile({ file }: { file: ChatAttachment }) {
   );
 }
 
+/**
+ * Rendered by chat's MessageComponent to list the non-image file attachments
+ * on a user turn as downloadable cards.
+ */
 export default function ChatMessageFiles({ files }: ChatMessageFilesProps) {
   if (!files?.length) return null;
 

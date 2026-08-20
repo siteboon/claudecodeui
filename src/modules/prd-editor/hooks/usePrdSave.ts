@@ -1,9 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { api } from '@/shared/api';
-import type { SavePrdInput, SavePrdResult } from '@/modules/prd-editor/types';
 import type { ExistingPrdFile } from '@/shared/types';
 import { ensurePrdExtension } from '@/modules/prd-editor/utils/fileName';
+
+type SavePrdInput = {
+  content: string;
+  fileName: string;
+  allowOverwrite?: boolean;
+};
+
+type SavePrdResult =
+  | { status: 'saved'; fileName: string }
+  | { status: 'needs-overwrite'; fileName: string }
+  | { status: 'failed'; message: string };
 
 type UsePrdSaveArgs = {
   // DB primary key of the project (post migration).

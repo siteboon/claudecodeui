@@ -4,6 +4,7 @@ type ShellMinimalViewProps = {
   terminalContainerRef: RefObject<HTMLDivElement>;
 };
 
+/** Rendered by Shell in minimal mode to show the bare terminal container without the header or overlays. */
 export default function ShellMinimalView({
   terminalContainerRef,
 }: ShellMinimalViewProps) {

@@ -10,6 +10,9 @@ type MarkdownContentProps = {
 /**
  * Renders markdown content with proper styling
  * Used by: exit_plan_mode, long text results, etc.
+ *
+ * Rendered by chat's ToolRenderer and PlanDisplay as the markdown body of a
+ * tool result.
  */
 export const MarkdownContent: React.FC<MarkdownContentProps> = ({
   content,

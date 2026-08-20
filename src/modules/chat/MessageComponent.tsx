@@ -1,23 +1,16 @@
 import { memo, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import LLMProviderLogo from '@/shared/ui/LLMProviderLogo';
 import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LLMProvider } from '@/shared/types';
 import { formatUsageLimitText, stripProposedPlanEnvelope } from '@/modules/chat/utils/chatFormatting';
-import type { Project } from '@/shared/types';
+import type { DiffLine, Project } from '@/shared/types';
 import { ToolRenderer, ToolErrorDisplay, shouldHideToolResult } from '@/modules/chat/tools';
-import { Reasoning, ReasoningTrigger, ReasoningContent } from '@/shared/ui';
+import { LLMProviderLogo, Reasoning, ReasoningTrigger, ReasoningContent } from '@/shared/ui';
 import ChatMessageImages from '@/modules/chat/ChatMessageImages';
 import ChatMessageFiles from '@/modules/chat/ChatMessageFiles';
 import { Markdown } from '@/modules/chat/Markdown';
 import MessageCopyControl from '@/modules/chat/MessageCopyControl';
 import MessageSpeakControl from '@/modules/chat/MessageSpeakControl';
-
-type DiffLine = {
-  type: string;
-  content: string;
-  lineNum: number;
-};
 
 type MessageComponentProps = {
   message: ChatMessage;
@@ -40,6 +33,10 @@ type InteractiveOption = {
 
 const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'Edit', 'Write', 'ApplyPatch']);
 
+/**
+ * Rendered by chat's ChatMessagesPane and ToolGroupContainer to draw one
+ * transcript entry — user turn, assistant turn, or a tool call and its result.
+ */
 const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, showRawParameters, showThinking, selectedProject, provider }: MessageComponentProps) => {
   const { t } = useTranslation('chat');
   const isGrouped = prevMessage && prevMessage.type === message.type &&

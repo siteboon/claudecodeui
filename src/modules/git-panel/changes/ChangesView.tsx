@@ -27,6 +27,7 @@ type ChangesViewProps = {
   onExpandedFilesChange: (hasExpandedFiles: boolean) => void;
 };
 
+/** Rendered by GitPanel for the Changes tab, listing working-tree changes and hosting the commit composer. */
 export default function ChangesView({
   isMobile,
   projectPath,

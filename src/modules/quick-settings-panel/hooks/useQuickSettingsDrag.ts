@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent, TouchEvent as ReactTouchEvent } from 'react';
 
-import {
-  DEFAULT_HANDLE_POSITION,
-  DRAG_THRESHOLD_PX,
-  HANDLE_POSITION_MAX,
-  HANDLE_POSITION_MIN,
-  HANDLE_POSITION_STORAGE_KEY,
-} from '@/modules/quick-settings-panel/constants';
 import type { QuickSettingsHandleStyle } from '@/shared/types';
+
+const HANDLE_POSITION_STORAGE_KEY = 'quickSettingsHandlePosition';
+
+const DEFAULT_HANDLE_POSITION = 50;
+const HANDLE_POSITION_MIN = 10;
+const HANDLE_POSITION_MAX = 90;
+const DRAG_THRESHOLD_PX = 5;
 
 type UseQuickSettingsDragProps = {
   isMobile: boolean;

@@ -132,6 +132,7 @@ function getSubtaskProgress(task: TaskMasterTask): { completed: number; total: n
   return { completed, total, percentage };
 }
 
+/** Rendered by TaskBoardContent for one task tile, showing its status, priority and subtask progress. */
 function TaskCard({ task, onClick = null, showParent = false, className = '' }: TaskCardProps) {
   const statusStyle = getStatusStyle(task.status);
   const progress = getSubtaskProgress(task);

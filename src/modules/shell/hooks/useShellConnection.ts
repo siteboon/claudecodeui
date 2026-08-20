@@ -4,7 +4,7 @@ import type { FitAddon } from '@xterm/addon-fit';
 import type { Terminal } from '@xterm/xterm';
 
 import type { Project, ProjectSession } from '@/shared/types';
-import { TERMINAL_INIT_DELAY_MS } from '@/modules/shell/constants';
+import { TERMINAL_INIT_DELAY_MS } from '@/shared/constants';
 import { getShellWebSocketUrl, parseShellMessage, sendSocketMessage } from '@/modules/shell/utils/socket';
 
 const ANSI_ESCAPE_REGEX =

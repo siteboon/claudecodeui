@@ -41,6 +41,10 @@ const getCompactToolDisplay = (toolName: string, toolInput: unknown): string => 
   }
 };
 
+/**
+ * Rendered by chat's ToolRenderer for Task tools, grouping a subagent's child
+ * tool calls and its final output under one expandable header.
+ */
 export const SubagentContainer: React.FC<SubagentContainerProps> = ({
   toolInput,
   toolResult,

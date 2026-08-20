@@ -1,9 +1,21 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { api } from '@/shared/api';
-import type { ApiKeysResponse, GithubCredentialsResponse } from '@/modules/settings/tabs/api-settings/types';
 import type { ApiKeyItem, CreatedApiKey, GithubCredentialItem } from '@/shared/types';
 import { copyTextToClipboard } from '@/shared/utils';
+
+type ApiKeysResponse = {
+  apiKeys?: ApiKeyItem[];
+  success?: boolean;
+  error?: string;
+  apiKey?: CreatedApiKey;
+};
+
+type GithubCredentialsResponse = {
+  credentials?: GithubCredentialItem[];
+  success?: boolean;
+  error?: string;
+};
 
 type UseCredentialsSettingsArgs = {
   confirmDeleteApiKeyText: string;

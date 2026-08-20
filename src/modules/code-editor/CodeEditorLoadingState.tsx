@@ -6,6 +6,7 @@ type CodeEditorLoadingStateProps = {
   loadingText: string;
 };
 
+/** Rendered by CodeEditor inside the code-editor module while a file's contents are still being fetched. */
 export default function CodeEditorLoadingState({
   isDarkMode,
   isSidebar,

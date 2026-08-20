@@ -1,8 +1,32 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '@/shared/api';
-import type { ApiResponse, ProviderSkillCreatePayload, ProviderSkillsResponse } from '@/modules/skills/types';
-import type { ProviderSkill, SkillsProject, SkillsProvider, SkillsScope } from '@/shared/types';
+import type { ProviderSkill, ProviderSkillCreateEntryPayload, SkillsProject, SkillsProvider, SkillsScope } from '@/shared/types';
+
+type ProviderSkillCreatePayload = {
+  entries: ProviderSkillCreateEntryPayload[];
+};
+
+type ProviderSkillsResponse = {
+  provider: SkillsProvider;
+  skills: Array<Partial<ProviderSkill>>;
+};
+
+type ApiSuccessResponse<T> = {
+  success: true;
+  data: T;
+};
+
+type ApiErrorResponse = {
+  success: false;
+  error?: {
+    code?: string;
+    message?: string;
+    details?: unknown;
+  };
+};
+
+type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
 
 type SkillsCacheEntry = {
   skills: ProviderSkill[];

@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 
+/** Rendered by FileTree in detailed view mode to label the name/size/modified/permissions columns. */
 export default function FileTreeDetailedColumns() {
   const { t } = useTranslation();
 

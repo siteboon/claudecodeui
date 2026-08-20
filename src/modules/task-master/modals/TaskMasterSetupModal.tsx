@@ -13,6 +13,7 @@ type TaskMasterSetupModalProps = {
   onAfterClose?: (() => void) | null;
 };
 
+/** Rendered by TaskBoard and NextTaskBanner to run TaskMaster initialisation for a project in an embedded shell. */
 export default function TaskMasterSetupModal({ isOpen, project, onClose, onAfterClose = null }: TaskMasterSetupModalProps) {
   const { t } = useTranslation('tasks');
   const [isTaskMasterComplete, setIsTaskMasterComplete] = useState(false);

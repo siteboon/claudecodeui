@@ -10,14 +10,13 @@ import {
   X,
 } from 'lucide-react';
 
-import { Badge, Button, Input } from '@/shared/ui';
+import { Badge, Button, Input, LLMProviderLogo } from '@/shared/ui';
 import type {
   LLMProvider,
   ProviderModelActions,
   ProviderModelOption,
   ProviderModelsDefinition,
 } from '@/shared/types';
-import LLMProviderLogo from '@/shared/ui/LLMProviderLogo';
 
 const PROVIDERS: Array<{ id: LLMProvider; label: string }> = [
   { id: 'claude', label: 'Claude' },
@@ -33,6 +32,10 @@ type ModelLibraryPanelProps = {
   onDone?: () => void;
 };
 
+/**
+ * Rendered by chat's ProviderSelectionEmptyState and CommandResultModal so the
+ * user can browse each provider's model catalog and add or remove custom models.
+ */
 export default function ModelLibraryPanel({
   initialProvider,
   providerModelCatalog,

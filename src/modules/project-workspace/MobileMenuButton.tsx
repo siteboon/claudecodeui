@@ -1,6 +1,11 @@
-import type { MobileMenuButtonProps } from '@/modules/project-workspace/types';
 import { useMobileMenuHandlers } from '@/modules/project-workspace/hooks/useMobileMenuHandlers';
 
+type MobileMenuButtonProps = {
+  onMenuClick: () => void;
+  compact?: boolean;
+};
+
+/** Rendered by WorkspaceHeader and WorkspaceStateView to open the sidebar drawer on mobile. */
 export default function MobileMenuButton({ onMenuClick, compact = false }: MobileMenuButtonProps) {
   const { handleMobileMenuClick, handleMobileMenuTouchEnd } = useMobileMenuHandlers(onMenuClick);
 

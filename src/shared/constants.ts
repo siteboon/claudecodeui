@@ -10,7 +10,9 @@ import {
   Plug,
 } from 'lucide-react';
 
-import type { SettingsMainTabMeta } from '@/shared/types';
+import type { ComponentType } from 'react';
+
+import type { FileStatusCode, GitStatusFileGroup, McpProvider, McpScope, McpTransport, SettingsMainTab } from '@/shared/types';
 
 //----------------- BRANDING ------------
 
@@ -37,6 +39,14 @@ export const APP_VERSION: string = typeof __APP_VERSION__ === 'string' ? __APP_V
 
 //----------------- SETTINGS NAVIGATION ------------
 
+/** Shape of one entry in `SETTINGS_MAIN_TABS`; only that constant needs it. */
+type SettingsMainTabMeta = {
+  id: SettingsMainTab;
+  label: string;
+  keywords: string;
+  icon: ComponentType<{ className?: string }>;
+};
+
 /**
  * The ordered list of top-level settings tabs. The settings sidebar renders it directly and
  * the command palette turns each entry into an "open settings" command, so both stay in sync.
@@ -52,3 +62,107 @@ export const SETTINGS_MAIN_TABS: SettingsMainTabMeta[] = [
   { id: 'plugins', label: 'Plugins', keywords: 'plugins extensions integrations', icon: Plug },
   { id: 'about', label: 'About', keywords: 'about version info', icon: Info },
 ];
+
+// ---------------------------
+
+//----------------- CHAT REASONING EFFORT ------------
+
+/**
+ * Sentinel effort value meaning "use whatever the model defaults to". The composer's model
+ * menu renders it as the first choice and the provider state treats it as "no explicit effort".
+ */
+export const DEFAULT_EFFORT_VALUE = 'default';
+
+// ---------------------------
+
+//----------------- FILE UPLOAD LIMITS ------------
+
+/** Largest single file the upload endpoint accepts, in megabytes. Source of truth for the two derived limits below. */
+export const MAX_FILE_UPLOAD_SIZE_MB = 200;
+
+/** `MAX_FILE_UPLOAD_SIZE_MB` in bytes, for comparing against `File.size` before uploading. */
+export const MAX_FILE_UPLOAD_SIZE_BYTES = MAX_FILE_UPLOAD_SIZE_MB * 1024 * 1024;
+
+/** Human-readable form of the size limit, shown in the file tree header and in upload errors. */
+export const MAX_FILE_UPLOAD_SIZE_LABEL = `${MAX_FILE_UPLOAD_SIZE_MB}MB`;
+
+// ---------------------------
+
+//----------------- GIT CHANGE GROUPS ------------
+
+/** Shape of one entry in `FILE_STATUS_GROUPS`; only that constant needs it. */
+type GitStatusGroupEntry = {
+  key: GitStatusFileGroup;
+  status: FileStatusCode;
+};
+
+/**
+ * The order in which the git changes view groups files, and the status code each group holds.
+ * Both the change list and the status-grouping helper iterate it so the two stay aligned.
+ */
+export const FILE_STATUS_GROUPS: GitStatusGroupEntry[] = [
+  { key: 'modified', status: 'M' },
+  { key: 'added', status: 'A' },
+  { key: 'deleted', status: 'D' },
+  { key: 'untracked', status: 'U' },
+];
+
+// ---------------------------
+
+//----------------- MCP SERVER CAPABILITIES ------------
+
+/** Display name for each provider that can host MCP servers, used in headings and buttons. */
+export const MCP_PROVIDER_NAMES: Record<McpProvider, string> = {
+  claude: 'Claude',
+  cursor: 'Cursor',
+  codex: 'Codex',
+  opencode: 'OpenCode',
+};
+
+/** Scopes each provider can install an MCP server into; drives the scope selector and validation. */
+export const MCP_SUPPORTED_SCOPES: Record<McpProvider, McpScope[]> = {
+  claude: ['user', 'project', 'local'],
+  cursor: ['user', 'project'],
+  codex: ['user', 'project'],
+  opencode: ['user', 'project'],
+};
+
+/** Transports each provider can talk to an MCP server over; drives the transport selector and validation. */
+export const MCP_SUPPORTED_TRANSPORTS: Record<McpProvider, McpTransport[]> = {
+  claude: ['stdio', 'http', 'sse'],
+  cursor: ['stdio', 'http'],
+  codex: ['stdio', 'http'],
+  opencode: ['stdio', 'http'],
+};
+
+/** Transports offered when configuring a global (provider-agnostic) MCP server. */
+export const MCP_GLOBAL_SUPPORTED_TRANSPORTS: McpTransport[] = ['stdio', 'http'];
+
+/** Whether a provider honours an MCP server's working-directory setting; the form hides the field when it does not. */
+export const MCP_SUPPORTS_WORKING_DIRECTORY: Record<McpProvider, boolean> = {
+  claude: false,
+  cursor: false,
+  codex: true,
+  opencode: false,
+};
+
+// ---------------------------
+
+//----------------- QUICK SETTINGS PANEL ROWS ------------
+
+/**
+ * Class list for one row in the quick settings panel. Shared so plain rows and the clickable
+ * toggle row (which appends `cursor-pointer`) stay visually identical.
+ */
+export const SETTING_ROW_CLASS =
+  'flex items-center justify-between p-3 rounded-lg bg-muted/60 hover:bg-accent transition-colors border border-transparent hover:border-border';
+
+// ---------------------------
+
+//----------------- TERMINAL TIMING ------------
+
+/**
+ * Delay before the terminal is measured and fitted after it is attached. Gives the browser one
+ * layout pass so the initial fit and the resize message sent to the backend use real dimensions.
+ */
+export const TERMINAL_INIT_DELAY_MS = 100;

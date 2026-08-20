@@ -16,6 +16,10 @@ const formatFileSize = (size: number) => {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+/**
+ * Rendered by chat's ChatComposer for each pending attachment, showing its
+ * thumbnail or file chip, upload progress and remove control.
+ */
 const ComposerAttachment = ({ file, onRemove, uploadProgress, error }: ComposerAttachmentProps) => {
   const [preview, setPreview] = useState<string | undefined>(undefined);
   const [expanded, setExpanded] = useState(false);

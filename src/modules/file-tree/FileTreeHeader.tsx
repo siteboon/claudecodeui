@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Button, Input } from '@/shared/ui';
 import { cn } from '@/shared/utils';
-import { MAX_FILE_UPLOAD_SIZE_LABEL } from '@/modules/file-tree/constants';
+import { MAX_FILE_UPLOAD_SIZE_LABEL } from '@/shared/constants';
 import type { FileTreeViewMode } from '@/shared/types';
 
 type FileTreeHeaderProps = {
@@ -26,6 +26,7 @@ type FileTreeHeaderProps = {
   uploadProgress?: number | null;
 };
 
+/** Rendered by FileTree to host the search box, view-mode switch and the create/upload/refresh/collapse actions. */
 export default function FileTreeHeader({
   viewMode,
   onViewModeChange,

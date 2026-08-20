@@ -5,6 +5,7 @@ import type { SessionEstablishedContext, SessionNavigationOptions } from '@/shar
 import type { ProjectWorkspaceShellProps } from '@/shared/types';
 import WorkspaceMain from '@/modules/project-workspace/WorkspaceMain';
 
+/** Rendered by ProjectWorkspaceShell to bind this module's project state to WorkspaceMain. */
 function ProjectMainRegion({
   isMobile,
   ws,

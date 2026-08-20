@@ -9,6 +9,7 @@ type SettingsRowProps = {
   className?: string;
 };
 
+/** Used by the settings module's appearance, browser-use and tasks tabs to lay out one labelled setting and its control. */
 export default function SettingsRow({ label, description, children, className }: SettingsRowProps) {
   return (
     <div className={cn('flex items-center justify-between gap-4 px-4 py-4', className)}>

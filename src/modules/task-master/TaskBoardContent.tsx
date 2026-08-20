@@ -83,6 +83,7 @@ function KanbanColumns({
   );
 }
 
+/** Rendered by TaskBoard to lay the filtered tasks out in the selected kanban or list view. */
 export default function TaskBoardContent({
   viewMode,
   filteredTaskCount,

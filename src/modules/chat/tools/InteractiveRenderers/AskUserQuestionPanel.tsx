@@ -3,6 +3,10 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import type { PermissionPanelProps } from '@/shared/types';
 import type { Question } from '@/shared/types';
 
+/**
+ * Registered by chat's PermissionRequestsBanner as the permission panel for
+ * AskUserQuestion requests, so the user answers the model's questions inline.
+ */
 export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
   request,
   onDecision,

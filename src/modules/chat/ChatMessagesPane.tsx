@@ -69,6 +69,11 @@ type ChatMessagesPaneProps = {
   selectedProject: Project;
 };
 
+/**
+ * Rendered by chat's ChatInterface as the scrolling transcript: the message
+ * list and tool groups, the export menu, the provider empty state and the
+ * load-all-history overlay.
+ */
 function ChatMessagesPane({
   scrollContainerRef,
   onWheel,

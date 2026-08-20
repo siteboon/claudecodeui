@@ -60,6 +60,7 @@ function HeaderIconButton({ title, onClick, icon, active = false }: HeaderIconBu
   );
 }
 
+/** Rendered by PrdEditorWorkspace inside the prd-editor module to hold the PRD filename field and the editor toolbar actions. */
 export default function PrdEditorHeader({
   fileName,
   onFileNameChange,

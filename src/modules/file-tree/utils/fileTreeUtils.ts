@@ -1,7 +1,17 @@
 import type { TFunction } from 'i18next';
 
-import { IMAGE_FILE_EXTENSIONS } from '@/modules/file-tree/constants';
 import type { FileTreeNode } from '@/shared/types';
+
+const IMAGE_FILE_EXTENSIONS = new Set([
+  'png',
+  'jpg',
+  'jpeg',
+  'gif',
+  'svg',
+  'webp',
+  'ico',
+  'bmp',
+]);
 
 export function filterFileTree(items: FileTreeNode[], query: string): FileTreeNode[] {
   return items.reduce<FileTreeNode[]>((filteredItems, item) => {

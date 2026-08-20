@@ -54,6 +54,7 @@ function sanitizeSvg(svgText: string): string | null {
   }
 }
 
+/** Used by the project-workspace module's tab bar and by this module's PluginSettingsTab to show a plugin's icon. */
 export default function PluginIcon({ pluginName, iconFile, className }: Props) {
   const url = iconFile ? api.plugins.assetUrl(pluginName, iconFile) : '';
   const [svg, setSvg] = useState<string | null>(url ? (svgCache.get(url) ?? null) : null);

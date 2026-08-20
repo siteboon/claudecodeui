@@ -11,6 +11,7 @@ type StepReviewProps = {
   cloneProgress: string;
 };
 
+/** Rendered by ProjectCreationWizard as step 2, summarising the chosen configuration and streaming clone progress. */
 export default function StepReview({
   formState,
   selectedTokenName,

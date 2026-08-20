@@ -1,11 +1,23 @@
-import type { AgentCategoryContentSectionProps } from '@/modules/settings/tabs/agents-settings/types';
-import type { McpProject } from '@/shared/types';
+import type { AgentCategory, AgentContext, AgentProvider, AgentSettingsProject, ClaudePermissionsState, CodexPermissionMode, CursorPermissionsState, McpProject, SkillsProject } from '@/shared/types';
 import { McpServers } from '@/modules/mcp';
-import type { SkillsProject } from '@/shared/types';
 import { ProviderSkills } from '@/modules/skills';
 import AccountContent from '@/modules/settings/tabs/agents-settings/sections/content/AccountContent';
 import PermissionsContent from '@/modules/settings/tabs/agents-settings/sections/content/PermissionsContent';
 
+type AgentCategoryContentSectionProps = {
+  selectedAgent: AgentProvider;
+  selectedCategory: AgentCategory;
+  agentContextById: Record<AgentProvider, AgentContext>;
+  claudePermissions: ClaudePermissionsState;
+  onClaudePermissionsChange: (value: ClaudePermissionsState) => void;
+  cursorPermissions: CursorPermissionsState;
+  onCursorPermissionsChange: (value: CursorPermissionsState) => void;
+  codexPermissionMode: CodexPermissionMode;
+  onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
+  projects: AgentSettingsProject[];
+};
+
+/** Rendered by AgentsSettingsTab to show the panel for the selected provider and category. */
 export default function AgentCategoryContentSection({
   selectedAgent,
   selectedCategory,
@@ -73,7 +85,7 @@ export default function AgentCategoryContentSection({
       )}
 
       {selectedCategory === 'mcp' && (
-        // SettingsProject.name is populated from the DB projectId by
+        // AgentSettingsProject.name is populated from the DB projectId by
         // normalizeProjectForSettings, so we can map it straight through.
         <McpServers
           selectedProvider={selectedAgent}

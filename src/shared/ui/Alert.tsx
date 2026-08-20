@@ -3,7 +3,7 @@ import { cva, type VariantProps } from 'class-variance-authority';
 
 import { cn } from '@/shared/utils';
 
-const alertVariants = cva(
+export const alertVariants = cva(
   'relative grid w-full grid-cols-[0_1fr] items-start gap-y-0.5 rounded-lg border px-4 py-3 text-sm has-[>svg]:grid-cols-[calc(var(--spacing)*4)_1fr] has-[>svg]:gap-x-3 [&>svg]:size-4 [&>svg]:translate-y-0.5 [&>svg]:text-current',
   {
     variants: {
@@ -21,7 +21,8 @@ const alertVariants = cva(
 
 type AlertProps = React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof alertVariants>;
 
-const Alert = React.forwardRef<HTMLDivElement, AlertProps>(
+/** Used by the shared Confirmation primitive as the tinted container around a permission request. */
+export const Alert = React.forwardRef<HTMLDivElement, AlertProps>(
   ({ className, variant, ...props }, ref) => (
     <div
       ref={ref}
@@ -34,7 +35,8 @@ const Alert = React.forwardRef<HTMLDivElement, AlertProps>(
 );
 Alert.displayName = 'Alert';
 
-const AlertTitle = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+/** Heading slot of Alert; kept beside it so the alert family stays usable as a unit. */
+export const AlertTitle = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
@@ -46,7 +48,8 @@ const AlertTitle = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
 );
 AlertTitle.displayName = 'AlertTitle';
 
-const AlertDescription = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+/** Body slot of Alert; kept beside it so the alert family stays usable as a unit. */
+export const AlertDescription = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
@@ -61,4 +64,3 @@ const AlertDescription = React.forwardRef<HTMLDivElement, React.HTMLAttributes<H
 );
 AlertDescription.displayName = 'AlertDescription';
 
-export { Alert, AlertTitle, AlertDescription, alertVariants };

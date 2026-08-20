@@ -77,6 +77,10 @@ type ComposerPermissionMenuProps = {
   providerLabel: string;
 };
 
+/**
+ * Rendered by chat's ChatComposer as the popover for choosing the permission
+ * mode the active provider runs the next turn under.
+ */
 export default function ComposerPermissionMenu({
   permissionMode,
   permissionModes,

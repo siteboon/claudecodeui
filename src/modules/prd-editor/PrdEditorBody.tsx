@@ -14,6 +14,7 @@ type PrdEditorBodyProps = {
   wordWrap: boolean;
 };
 
+/** Rendered by PrdEditorWorkspace inside the prd-editor module to switch the PRD between markdown editing and rendered preview. */
 export default function PrdEditorBody({
   content,
   onContentChange,

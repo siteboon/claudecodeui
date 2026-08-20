@@ -12,6 +12,7 @@ const clampProgress = (progress: number) => Math.min(100, Math.max(0, progress))
 
 const pluralizeFiles = (count: number) => (count === 1 ? 'file' : 'files');
 
+/** Rendered by FileTree to report upload progress, completion and failures for drag-and-drop uploads. */
 export default function FileTreeUploadProgress({ upload }: FileTreeUploadProgressProps) {
   const { t } = useTranslation();
 

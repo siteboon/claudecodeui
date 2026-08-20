@@ -2,12 +2,10 @@ import { ChevronRight, MessageSquare } from 'lucide-react';
 import type { MouseEvent } from 'react';
 import type { TFunction } from 'i18next';
 
-import { Button } from '@/shared/ui';
+import { Button, LLMProviderLogo } from '@/shared/ui';
 import { cn } from '@/shared/utils';
-import type { ProjectSession } from '@/shared/types';
-import type { RecentConversationListItem } from '@/shared/types';
-import { formatCompactAge } from '@/modules/sidebar/utils/utils';
-import LLMProviderLogo from '@/shared/ui/LLMProviderLogo';
+import type { ProjectSession, RecentConversationListItem } from '@/shared/types';
+import { formatCompactAge } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 
 type SidebarRecentConversationsProps = {
   conversations: RecentConversationListItem[];
@@ -44,6 +42,7 @@ function RecentConversationSkeleton() {
   );
 }
 
+/** Rendered by SidebarContent in the recents search mode to list recently active sessions across all projects. */
 export default function SidebarRecentConversations({
   conversations,
   total,

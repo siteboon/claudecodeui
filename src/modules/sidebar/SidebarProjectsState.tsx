@@ -11,6 +11,7 @@ type SidebarProjectsStateProps = {
   t: TFunction;
 };
 
+/** Rendered by SidebarProjectList in place of the rows while projects are loading or when none match the filter. */
 export default function SidebarProjectsState({
   isLoading,
   loadingProgress,

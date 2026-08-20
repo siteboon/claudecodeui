@@ -1,8 +1,16 @@
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/shared/utils';
-import type { AgentCategoryTabsSectionProps } from '@/modules/settings/tabs/agents-settings/types';
+import type { AgentCategory, AgentProvider } from '@/shared/types';
 
+type AgentCategoryTabsSectionProps = {
+  categories: AgentCategory[];
+  selectedAgent: AgentProvider;
+  selectedCategory: AgentCategory;
+  onSelectCategory: (category: AgentCategory) => void;
+};
+
+/** Rendered by AgentsSettingsTab to switch between the selected provider's categories. */
 export default function AgentCategoryTabsSection({
   categories,
   selectedAgent,

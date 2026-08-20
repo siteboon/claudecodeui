@@ -3,14 +3,6 @@ import { useTranslation } from 'react-i18next';
 
 import '@xterm/xterm/css/xterm.css';
 import type { Project, ProjectSession } from '@/shared/types';
-import {
-  PROMPT_BUFFER_SCAN_LINES,
-  PROMPT_DEBOUNCE_MS,
-  PROMPT_MAX_OPTIONS,
-  PROMPT_MIN_OPTIONS,
-  PROMPT_OPTION_SCAN_LINES,
-  SHELL_RESTART_DELAY_MS,
-} from '@/modules/shell/constants';
 import { useShellRuntime } from '@/modules/shell/hooks/useShellRuntime';
 import { sendSocketMessage } from '@/modules/shell/utils/socket';
 import { getSessionDisplayName } from '@/modules/shell/utils/auth';
@@ -19,6 +11,15 @@ import ShellEmptyState from '@/modules/shell/ShellEmptyState';
 import ShellHeader from '@/modules/shell/ShellHeader';
 import ShellMinimalView from '@/modules/shell/ShellMinimalView';
 import TerminalShortcutsPanel from '@/modules/shell/TerminalShortcutsPanel';
+
+const SHELL_RESTART_DELAY_MS = 200;
+
+// CLI prompt overlay detection
+const PROMPT_DEBOUNCE_MS = 500;
+const PROMPT_BUFFER_SCAN_LINES = 20;
+const PROMPT_OPTION_SCAN_LINES = 15;
+const PROMPT_MAX_OPTIONS = 5;
+const PROMPT_MIN_OPTIONS = 2;
 
 type CliPromptOption = { number: string; label: string };
 
@@ -33,6 +34,7 @@ type ShellProps = {
   isActive?: boolean;
 };
 
+/** Exported through the shell barrel: the standalone-shell module renders it as a full-page terminal and the task-master module embeds it in its setup modal to run TaskMaster's init command. */
 export default function Shell({
   selectedProject = null,
   selectedSession = null,

@@ -5,6 +5,7 @@ type CodeEditorFooterProps = {
   shortcutsLabel: string;
 };
 
+/** Rendered by CodeEditor inside the code-editor module to show the open file's line and character counts plus the shortcut hint. */
 export default function CodeEditorFooter({
   content,
   linesLabel,

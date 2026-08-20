@@ -8,6 +8,10 @@ type QuestionAnswerContentProps = {
   className?: string;
 };
 
+/**
+ * Rendered by chat's ToolRenderer to show an AskUserQuestion tool's questions
+ * and the answers the user picked.
+ */
 // Exception to the stateless ContentRenderer pattern: multi-question navigation requires local state.
 export const QuestionAnswerContent: React.FC<QuestionAnswerContentProps> = ({
   questions,

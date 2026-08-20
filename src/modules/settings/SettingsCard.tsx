@@ -8,6 +8,7 @@ type SettingsCardProps = {
   divided?: boolean;
 };
 
+/** Used by the settings module's appearance, browser-use, git and tasks tabs to group related rows in a card. */
 export default function SettingsCard({ children, className, divided }: SettingsCardProps) {
   return (
     <div

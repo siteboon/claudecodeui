@@ -21,6 +21,7 @@ type StandaloneShellProps = {
   minimal?: boolean;
 };
 
+/** This module's only public export: used by the project-workspace module for its shell tab and by provider-auth to run an interactive login command. */
 export default function StandaloneShell({
   project = null,
   session = null,

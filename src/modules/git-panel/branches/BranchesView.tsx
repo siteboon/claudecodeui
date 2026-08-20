@@ -125,6 +125,7 @@ function SectionHeader({ label, count }: { label: string; count: number }) {
 // BranchesView
 // ---------------------------------------------------------------------------
 
+/** Rendered by GitPanel for the Branches tab, listing local and remote branches with switch/create/delete actions. */
 export default function BranchesView({
   isMobile,
   isLoading,

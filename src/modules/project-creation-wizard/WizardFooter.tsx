@@ -14,6 +14,7 @@ type WizardFooterProps = {
   onCreate: () => void;
 };
 
+/** Rendered by ProjectCreationWizard to provide its cancel, back, next and create actions. */
 export default function WizardFooter({
   step,
   isCreating,

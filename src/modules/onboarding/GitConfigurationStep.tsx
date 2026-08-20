@@ -8,6 +8,7 @@ type GitConfigurationStepProps = {
   onGitEmailChange: (value: string) => void;
 };
 
+/** Rendered by Onboarding as its first step, collecting the git identity used for commits. */
 export default function GitConfigurationStep({
   gitName,
   gitEmail,

@@ -160,6 +160,7 @@ function WorktreeRow({ worktree, isMobile, isBusy, onOpen, onMerge, onRemove }: 
 // WorktreesView
 // ---------------------------------------------------------------------------
 
+/** Rendered by GitPanel for the Worktrees tab, listing worktrees with their create/open/merge/remove actions. */
 export default function WorktreesView({
   isMobile,
   selectedProject,

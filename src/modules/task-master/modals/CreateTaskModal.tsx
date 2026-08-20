@@ -5,6 +5,7 @@ type CreateTaskModalProps = {
   onClose: () => void;
 };
 
+/** Rendered by TaskBoard to explain how tasks are created through chat and the TaskMaster CLI. */
 export default function CreateTaskModal({ isOpen, onClose }: CreateTaskModalProps) {
   if (!isOpen) {
     return null;

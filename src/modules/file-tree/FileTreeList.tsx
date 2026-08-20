@@ -32,6 +32,7 @@ type FileTreeListProps = {
   operationLoading?: boolean;
 };
 
+/** Rendered by FileTreeBody to lay out the tree rows for the active view mode. */
 export default function FileTreeList({
   items,
   viewMode,

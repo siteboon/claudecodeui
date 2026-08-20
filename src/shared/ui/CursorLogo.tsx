@@ -2,6 +2,7 @@ type CursorLogoProps = {
   className?: string;
 };
 
+/** Rendered by the shared LLMProviderLogo when the provider is Cursor. */
 const CursorLogo = ({ className = 'w-5 h-5' }: CursorLogoProps) => (
   <svg
     viewBox="0 0 24 24"

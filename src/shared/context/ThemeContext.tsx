@@ -16,6 +16,7 @@ export const useTheme = () => {
   return context;
 };
 
+/** Mounted once by App so every module can read and switch the colour theme through useTheme. */
 export const ThemeProvider = ({ children }: { children: ReactNode }) => {
   // Check for saved theme preference or default to system preference
   const [isDarkMode, setIsDarkMode] = useState(() => {

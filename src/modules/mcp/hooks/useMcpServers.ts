@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '@/shared/api';
-import { MCP_GLOBAL_SUPPORTED_TRANSPORTS, MCP_PROVIDER_NAMES, MCP_SUPPORTED_SCOPES } from '@/modules/mcp/constants';
-import type { ApiResponse, GlobalMcpServerResult } from '@/modules/mcp/types';
+import { MCP_GLOBAL_SUPPORTED_TRANSPORTS, MCP_PROVIDER_NAMES, MCP_SUPPORTED_SCOPES } from '@/shared/constants';
 import type { McpFormState, McpProject, McpProvider, McpScope, McpTransport, ProviderMcpServer, UpsertProviderMcpServerPayload } from '@/shared/types';
 import {
   createMcpPayloadFromForm,
@@ -11,6 +10,28 @@ import {
   isMcpScope,
   isMcpTransport,
 } from '@/modules/mcp/utils/mcpFormatting';
+
+type GlobalMcpServerResult = {
+  provider: McpProvider;
+  created: boolean;
+  error?: string;
+};
+
+type ApiSuccessResponse<T> = {
+  success: true;
+  data: T;
+};
+
+type ApiErrorResponse = {
+  success: false;
+  error?: {
+    code?: string;
+    message?: string;
+    details?: unknown;
+  };
+};
+
+type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
 
 type ProviderMcpServerResponse = {
   provider: McpProvider;

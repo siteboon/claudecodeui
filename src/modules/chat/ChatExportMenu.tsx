@@ -9,6 +9,10 @@ type ChatExportMenuProps = {
   sessionTitle?: string;
 };
 
+/**
+ * Rendered by chat's ChatMessagesPane header so the user can download the
+ * current transcript as Markdown, HTML, Word or PDF.
+ */
 export default function ChatExportMenu({ messages, sessionTitle }: ChatExportMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
 

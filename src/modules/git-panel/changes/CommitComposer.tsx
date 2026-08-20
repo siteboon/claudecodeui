@@ -15,6 +15,7 @@ type CommitComposerProps = {
   onRequestConfirmation: (request: ConfirmationRequest) => void;
 };
 
+/** Rendered by ChangesView to compose a commit message and commit the selected files. */
 export default function CommitComposer({
   isMobile,
   projectPath,

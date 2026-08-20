@@ -4,6 +4,7 @@ import { usePaletteOpsRegister } from '@/modules/command-palette';
 import { useProjectEffectsState } from '@/modules/project-workspace/context/ProjectsStateContext';
 import type { ProjectWorkspaceShellProps } from '@/shared/types';
 
+/** Headless controller rendered by ProjectWorkspaceShell to register palette operations and handle service-worker navigation messages. */
 export default function ProjectEffects({
   navigate,
 }: Pick<ProjectWorkspaceShellProps, 'navigate'>) {

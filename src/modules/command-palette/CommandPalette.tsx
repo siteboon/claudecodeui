@@ -62,6 +62,7 @@ const NAV_TABS: Array<{ id: AppTab; label: string; keywords: string }> = [
   { id: 'tasks', label: 'Go to Tasks', keywords: 'tasks taskmaster' },
 ];
 
+/** Rendered by the project-workspace module to search projects, sessions, files, branches and commits and run their actions. */
 function CommandPalette({
   selectedProject,
   onStartNewChat,

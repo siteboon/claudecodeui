@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react';
 import { useTheme } from '@/shared/context/ThemeContext';
 import { api } from '@/shared/api';
 import { usePlugins } from '@/modules/plugins/context/PluginsContext';
-import type { Plugin, Project, ProjectSession } from '@/shared/types';
+import type { Project, ProjectSession } from '@/shared/types';
 
 type PluginTabContentProps = {
   pluginName: string;
@@ -42,6 +42,7 @@ function buildContext(
   };
 }
 
+/** Rendered by the project-workspace module to host a plugin's own UI inside its workspace tab. */
 export default function PluginTabContent({
   pluginName,
   selectedProject,

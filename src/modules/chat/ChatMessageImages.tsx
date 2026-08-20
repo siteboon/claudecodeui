@@ -84,6 +84,9 @@ function useChatImageSrc(image: ChatImage, projectId?: string | null): { src: st
 /**
  * Fullscreen image overlay in the claude.ai style: dark backdrop, centered
  * image, closes on backdrop click, close button, or Escape.
+ *
+ * Used by chat's ChatMessageImages and ComposerAttachment to expand a
+ * thumbnail to full size.
  */
 export function ImageLightbox({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
   useEffect(() => {
@@ -164,6 +167,8 @@ function ChatMessageImage({ image, projectId }: { image: ChatImage; projectId?: 
  * Image attachments for a user turn, rendered claude.ai-style: standalone
  * rounded square cards shown above the message bubble. Each thumbnail
  * expands to a fullscreen lightbox on click.
+ *
+ * Rendered by chat's MessageComponent for the images attached to a user turn.
  */
 export default function ChatMessageImages({ images, projectId }: ChatMessageImagesProps) {
   if (!images || images.length === 0) {

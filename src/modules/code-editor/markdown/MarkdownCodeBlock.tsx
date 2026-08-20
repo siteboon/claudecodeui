@@ -12,6 +12,7 @@ type MarkdownCodeBlockProps = {
   node?: unknown;
 } & ComponentProps<'code'>;
 
+/** Used by MarkdownPreview inside the code-editor module to render fenced code blocks with syntax highlighting, copy support and mermaid diagrams. */
 export default function MarkdownCodeBlock({
   inline,
   className,

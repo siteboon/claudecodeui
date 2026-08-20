@@ -21,6 +21,7 @@ const defaultOps: PaletteOps = {
   refreshProjects: () => undefined,
 };
 
+/** Mounted by the project-workspace module so CommandPalette and the chat, code-editor and sidebar modules share one set of palette operations. */
 export function PaletteOpsProvider({ children }: { children: ReactNode }) {
   const ref = useRef<Partial<PaletteOps>>({});
   return <PaletteOpsContext.Provider value={ref}>{children}</PaletteOpsContext.Provider>;

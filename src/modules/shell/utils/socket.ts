@@ -1,6 +1,37 @@
 import { IS_PLATFORM } from '@/shared/utils';
 import { getStoredAuthToken } from '@/shared/api';
-import type { ShellIncomingMessage, ShellOutgoingMessage } from '@/modules/shell/types';
+
+type ShellInitMessage = {
+  type: 'init';
+  projectPath: string;
+  sessionId: string | null;
+  hasSession: boolean;
+  provider: string;
+  cols: number;
+  rows: number;
+  initialCommand: string | null | undefined;
+  isPlainShell: boolean;
+  forceRestart?: boolean;
+};
+
+type ShellResizeMessage = {
+  type: 'resize';
+  cols: number;
+  rows: number;
+};
+
+type ShellInputMessage = {
+  type: 'input';
+  data: string;
+};
+
+type ShellOutgoingMessage = ShellInitMessage | ShellResizeMessage | ShellInputMessage;
+
+type ShellIncomingMessage =
+  | { type: 'output'; data: string }
+  | { type: 'auth_url'; url?: string }
+  | { type: 'url_open'; url?: string }
+  | { type: string; [key: string]: unknown };
 
 export function getShellWebSocketUrl(): string | null {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';

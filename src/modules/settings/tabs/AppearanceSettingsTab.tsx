@@ -18,6 +18,7 @@ type AppearanceSettingsTabProps = {
   onCodeEditorFontSizeChange: (value: string) => void;
 };
 
+/** Rendered by Settings for the "appearance" tab, covering theme, project sorting and code editor preferences. */
 export default function AppearanceSettingsTab({
   projectSortOrder,
   onProjectSortOrderChange,

@@ -69,6 +69,8 @@ const statusConfig = {
 /**
  * Renders task list results with proper status icons and compact layout
  * Parses text content from TaskList/TaskGet results
+ *
+ * Rendered by chat's ToolRenderer as the content of a task-list tool result.
  */
 export const TaskListContent: React.FC<TaskListContentProps> = ({ content }) => {
   const tasks = parseTaskContent(content);

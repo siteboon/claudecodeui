@@ -27,6 +27,10 @@ type PlanDisplayProps = {
   toolId?: string;
 };
 
+/**
+ * Rendered by chat's ToolRenderer for plan tools (ExitPlanMode), showing the
+ * proposed plan inline together with its build/revise permission decision.
+ */
 export const PlanDisplay: React.FC<PlanDisplayProps> = ({
   title,
   content,

@@ -47,6 +47,7 @@ function PriorityIndicator({ priority }: { priority?: string }) {
   );
 }
 
+/** Exported through the task-master barrel; the chat module's empty state renders it to surface the next task and prefill a prompt that starts it. */
 export default function NextTaskBanner({ onShowAllTasks = null, onStartTask = null, className = '' }: NextTaskBannerProps) {
   const {
     nextTask,

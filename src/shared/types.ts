@@ -1,6 +1,6 @@
 import type { TFunction } from 'i18next';
 import type { LucideIcon } from 'lucide-react';
-import type { ComponentType, CSSProperties } from 'react';
+import type { CSSProperties } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
 
 //----------------- LLM PROVIDER MODEL CATALOG ------------
@@ -127,12 +127,16 @@ export type ReleaseInfo = {
   publishedAt: string;
 };
 
+/** How this CloudCLI install was obtained; decides whether the UI offers a self-update action. */
+export type InstallMode = 'git' | 'npm';
+
 // ---------------------------
 
 //----------------- SESSION PROCESSING STATE ------------
 
+/** What a session that is currently producing a response is doing, as shown by the activity indicator. */
 export type SessionActivity = {
-  /** LLMProvider-supplied status line; null renders the default activity label. */
+  /** Provider-supplied status line; null renders the default activity label. */
   statusText: string | null;
   canInterrupt: boolean;
   /**
@@ -142,24 +146,30 @@ export type SessionActivity = {
   startedAt: number;
 };
 
+/** Every session currently producing a response, keyed by session id. Read it to tell whether a session is busy. */
 export type SessionActivityMap = ReadonlyMap<string, SessionActivity>;
 
+/** Marks a session as producing a response; call it as soon as a send is dispatched so the UI reacts immediately. */
 export type MarkSessionProcessing = (
   sessionId?: string | null,
   activity?: { statusText?: string | null; canInterrupt?: boolean },
 ) => void;
 
+/** Marks a session as finished; `ifStartedBefore` lets a late acknowledgement clear only a stale run. */
 export type MarkSessionIdle = (
   sessionId?: string | null,
   opts?: { ifStartedBefore?: number },
 ) => void;
 
+/** Replaces the whole processing map with the server's view, used by the periodic running-sessions poll. */
 export type SyncProcessingSessions = (
   sessions: readonly SessionActivitySnapshot[],
 ) => void;
 
+/** Reports whether one session is currently producing a response. */
 export type IsSessionProcessing = (sessionId?: string | null) => boolean;
 
+/** One running session as reported by the server, before it is folded into the client-side activity map. */
 export type SessionActivitySnapshot = {
   sessionId: string;
   statusText?: string | null;
@@ -186,16 +196,12 @@ export type ServerEvent = {
   [key: string]: unknown;
 };
 
-// ---------------------------
-
-//----------------- RELEASES ------------
-
-export type InstallMode = 'git' | 'npm';
 
 // ---------------------------
 
 //----------------- SHARED UI PRIMITIVES ------------
 
+/** Progress state of a single queue row, driving the indicator the Queue primitive renders. */
 export type QueueItemStatus = 'completed' | 'in_progress' | 'pending';
 
 // ---------------------------
@@ -628,6 +634,9 @@ export type FileTreeItemType = 'file' | 'directory';
 
 //----------------- GIT PANEL ------------
 
+/** The four buckets the git changes view sorts working-tree files into. */
+export type GitStatusFileGroup = 'modified' | 'added' | 'deleted' | 'untracked';
+
 export type GitPanelView = 'changes' | 'history' | 'branches' | 'worktrees';
 
 export type FileStatusCode = 'M' | 'A' | 'D' | 'U';
@@ -943,18 +952,6 @@ export type QuickSettingsHandleStyle = CSSProperties;
 // ---------------------------
 
 //----------------- SETTINGS ------------
-
-/**
- * Describes one top-level settings tab: its id, its English label, the words the command
- * palette matches against, and the icon rendered beside it. Used to build both the
- * settings sidebar and the palette's "open settings" commands.
- */
-export type SettingsMainTabMeta = {
-  id: SettingsMainTab;
-  label: string;
-  keywords: string;
-  icon: ComponentType<{ className?: string }>;
-};
 
 export type AgentContext = {
   authStatus: ProviderAuthStatus;

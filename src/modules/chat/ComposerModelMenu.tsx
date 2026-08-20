@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
 import type { ProviderModelOption } from '@/shared/types';
-import { DEFAULT_EFFORT_VALUE } from '@/modules/chat/constants';
+import { DEFAULT_EFFORT_VALUE } from '@/shared/constants';
 import { useComposerMenuAnchor } from '@/modules/chat/hooks/useComposerMenuAnchor';
 import {
   ComposerMenuHeading,
@@ -27,6 +27,10 @@ type ComposerModelMenuProps = {
   modelsLoading: boolean;
 };
 
+/**
+ * Rendered by chat's ChatComposer as the popover for choosing the active
+ * provider's model and reasoning effort for the next turn.
+ */
 export default function ComposerModelMenu({
   effort,
   effortOptions,

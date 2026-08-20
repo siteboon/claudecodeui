@@ -6,6 +6,7 @@ type QuickSettingsSectionProps = {
   className?: string;
 };
 
+/** Rendered by QuickSettingsContent to group related preference rows under a heading. */
 export default function QuickSettingsSection({
   title,
   children,

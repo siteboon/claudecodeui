@@ -26,6 +26,7 @@ const TAB_CONFIG: MainTabConfig[] = [
   { id: 'about', labelKey: 'mainTabs.about', icon: Info },
 ];
 
+/** Has no consumer: Settings renders SettingsSidebar instead of this horizontal tab bar. */
 export default function SettingsMainTabs({ activeTab, onChange }: SettingsMainTabsProps) {
   const { t } = useTranslation('settings');
 

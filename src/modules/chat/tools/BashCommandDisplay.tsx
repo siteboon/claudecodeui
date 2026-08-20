@@ -22,6 +22,8 @@ type BashCommandDisplayProps = {
  * dropdown that expands to reveal the output inline. Theme-integrated surfaces
  * keep it clean in both light and dark mode; consecutive commands stack tightly
  * into a clean list.
+ *
+ * Rendered by chat's ToolRenderer for shell tools (Bash and friends).
  */
 export const BashCommandDisplay: React.FC<BashCommandDisplayProps> = ({
   command,

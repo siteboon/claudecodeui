@@ -1,9 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { api } from '@/shared/api';
-import type { Project } from '@/shared/types';
-import type { WorktreeApiEnvelope, WorktreeListData } from '@/modules/git-panel/types';
-import type { MergeWorktreeOptions, RemoveWorktreeOptions } from '@/shared/types';
+import type { MergeWorktreeOptions, Project, RemoveWorktreeOptions, WorktreeInfo } from '@/shared/types';
+
+// ---------------------------------------------------------------------------
+// Worktrees — mirrors the /api/worktrees payloads (server/shared/types.ts)
+// ---------------------------------------------------------------------------
+
+type WorktreeListData = {
+  repositoryRoot: string;
+  /** Branch checked out in the main worktree — the merge target. */
+  baseBranch: string | null;
+  worktrees: WorktreeInfo[];
+};
+
+/** `/api/worktrees` uses the shared `{ success, data | error }` envelope. */
+type WorktreeApiEnvelope<TData> = {
+  success?: boolean;
+  data?: TData;
+  error?: {
+    code?: string;
+    message?: string;
+    details?: unknown;
+  };
+};
 
 type UseWorktreesControllerOptions = {
   selectedProject: Project | null;

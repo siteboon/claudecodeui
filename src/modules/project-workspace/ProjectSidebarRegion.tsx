@@ -9,6 +9,7 @@ import { useProjectSidebarState } from '@/modules/project-workspace/context/Proj
 import { Sidebar } from '@/modules/sidebar';
 import type { ProjectWorkspaceShellProps } from '@/shared/types';
 
+/** Rendered by ProjectWorkspaceShell to host the sidebar module, docked on desktop and as a drawer on mobile. */
 function ProjectSidebarRegion({
   isMobile,
 }: Pick<ProjectWorkspaceShellProps, 'isMobile'>) {

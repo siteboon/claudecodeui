@@ -19,6 +19,7 @@ type FileChangeItemProps = {
   onRequestFileAction: (filePath: string, status: FileStatusCode) => void;
 };
 
+/** Rendered by FileChangeList for one changed file, with its status badge, row actions and expandable diff. */
 export default function FileChangeItem({
   filePath,
   status,

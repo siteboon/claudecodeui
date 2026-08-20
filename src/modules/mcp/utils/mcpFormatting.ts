@@ -1,4 +1,4 @@
-import { MCP_SUPPORTED_TRANSPORTS, MCP_SUPPORTS_WORKING_DIRECTORY } from '@/modules/mcp/constants';
+import { MCP_SUPPORTED_TRANSPORTS, MCP_SUPPORTS_WORKING_DIRECTORY } from '@/shared/constants';
 import type { KeyValueMap, McpFormState, McpProvider, McpScope, McpTransport, UpsertProviderMcpServerPayload } from '@/shared/types';
 
 type CreateMcpPayloadOptions = {

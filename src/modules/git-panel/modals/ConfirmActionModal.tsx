@@ -1,13 +1,51 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, Check, Download, RotateCcw, Trash2, Upload } from 'lucide-react';
 
-import {
-  CONFIRMATION_ACTION_LABELS,
-  CONFIRMATION_BUTTON_CLASSES,
-  CONFIRMATION_ICON_CONTAINER_CLASSES,
-  CONFIRMATION_TITLES,
-} from '@/modules/git-panel/constants';
-import type { ConfirmationRequest } from '@/shared/types';
+import type { ConfirmActionType, ConfirmationRequest } from '@/shared/types';
+
+const CONFIRMATION_TITLES: Record<ConfirmActionType, string> = {
+  discard: 'Discard Changes',
+  delete: 'Delete File',
+  commit: 'Confirm Action',
+  pull: 'Confirm Pull',
+  push: 'Confirm Push',
+  publish: 'Publish Branch',
+  revertLocalCommit: 'Revert Local Commit',
+  deleteBranch: 'Delete Branch',
+};
+
+const CONFIRMATION_ACTION_LABELS: Record<ConfirmActionType, string> = {
+  discard: 'Discard',
+  delete: 'Delete',
+  commit: 'Confirm',
+  pull: 'Pull',
+  push: 'Push',
+  publish: 'Publish',
+  revertLocalCommit: 'Revert Commit',
+  deleteBranch: 'Delete',
+};
+
+const CONFIRMATION_BUTTON_CLASSES: Record<ConfirmActionType, string> = {
+  discard: 'bg-red-600 hover:bg-red-700',
+  delete: 'bg-red-600 hover:bg-red-700',
+  commit: 'bg-primary hover:bg-primary/90',
+  pull: 'bg-green-600 hover:bg-green-700',
+  push: 'bg-orange-600 hover:bg-orange-700',
+  publish: 'bg-purple-600 hover:bg-purple-700',
+  revertLocalCommit: 'bg-yellow-600 hover:bg-yellow-700',
+  deleteBranch: 'bg-red-600 hover:bg-red-700',
+};
+
+const CONFIRMATION_ICON_CONTAINER_CLASSES: Record<ConfirmActionType, string> = {
+  discard: 'bg-red-100 dark:bg-red-900/30',
+  delete: 'bg-red-100 dark:bg-red-900/30',
+  commit: 'bg-yellow-100 dark:bg-yellow-900/30',
+  pull: 'bg-yellow-100 dark:bg-yellow-900/30',
+  push: 'bg-yellow-100 dark:bg-yellow-900/30',
+  publish: 'bg-yellow-100 dark:bg-yellow-900/30',
+  revertLocalCommit: 'bg-yellow-100 dark:bg-yellow-900/30',
+  deleteBranch: 'bg-red-100 dark:bg-red-900/30',
+};
 
 type ConfirmActionModalProps = {
   action: ConfirmationRequest | null;
@@ -35,6 +73,7 @@ function renderConfirmActionIcon(actionType: ConfirmationRequest['type']) {
   return <Upload className="h-4 w-4" />;
 }
 
+/** Rendered by GitPanel to confirm destructive or remote git actions before they run. */
 export default function ConfirmActionModal({ action, onCancel, onConfirm }: ConfirmActionModalProps) {
   const [useAlternateConfirmation, setUseAlternateConfirmation] = useState(false);
   const titleId = action ? `confirmation-title-${action.type}` : undefined;

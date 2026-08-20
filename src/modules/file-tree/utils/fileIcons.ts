@@ -37,8 +37,9 @@ import {
   Workflow,
 } from 'lucide-react';
 
-import type { FileIconMap } from '@/modules/file-tree/types';
 import type { FileIconData } from '@/shared/types';
+
+type FileIconMap = Record<string, FileIconData>;
 
 export const ICON_SIZE_CLASS = 'w-4 h-4 flex-shrink-0';
 

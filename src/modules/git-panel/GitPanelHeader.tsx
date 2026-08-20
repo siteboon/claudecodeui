@@ -29,6 +29,7 @@ type GitPanelHeaderProps = {
   onRequestConfirmation: (request: ConfirmationRequest) => void;
 };
 
+/** Rendered by GitPanel to host the branch switcher and the fetch/pull/push/publish/revert actions. */
 export default function GitPanelHeader({
   isMobile,
   currentBranch,

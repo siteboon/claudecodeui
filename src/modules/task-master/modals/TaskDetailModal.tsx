@@ -54,6 +54,7 @@ function getPriorityBadgeClass(priority?: string): string {
   return 'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800';
 }
 
+/** Rendered by TaskMasterPanel and NextTaskBanner to show and edit one task's full details and subtasks. */
 export default function TaskDetailModal({
   task,
   isOpen = true,

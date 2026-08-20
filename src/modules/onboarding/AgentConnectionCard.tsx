@@ -1,8 +1,7 @@
 import { Check } from 'lucide-react';
 
-import LLMProviderLogo from '@/shared/ui/LLMProviderLogo';
-import type { LLMProvider } from '@/shared/types';
-import type { ProviderAuthStatus } from '@/shared/types';
+import { LLMProviderLogo } from '@/shared/ui';
+import type { LLMProvider, ProviderAuthStatus } from '@/shared/types';
 
 type AgentConnectionCardProps = {
   provider: LLMProvider;
@@ -14,6 +13,7 @@ type AgentConnectionCardProps = {
   onLogin: () => void;
 };
 
+/** Rendered by onboarding's AgentConnectionsStep to show one CLI provider's connection state. */
 export default function AgentConnectionCard({
   provider,
   title,

@@ -6,6 +6,7 @@ type FileTreeEmptyStateProps = {
   description: string;
 };
 
+/** Rendered by FileTreeBody for the load-failure, empty-project and no-search-match states. */
 export default function FileTreeEmptyState({ icon: Icon, title, description }: FileTreeEmptyStateProps) {
   return (
     <div className="py-8 text-center">

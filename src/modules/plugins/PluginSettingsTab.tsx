@@ -451,6 +451,7 @@ function PluginRecommendationCard({
 }
 
 /* ─── Main Component ────────────────────────────────────────────────────── */
+/** Rendered by the settings module as its Plugins tab, for installing, updating and toggling plugins. */
 export default function PluginSettingsTab() {
   const { t } = useTranslation('settings');
   const { plugins, loading, installPlugin, uninstallPlugin, updatePlugin, togglePlugin } =

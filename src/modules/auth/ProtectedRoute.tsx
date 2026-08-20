@@ -11,6 +11,7 @@ type ProtectedRouteProps = {
   children: ReactNode;
 };
 
+/** Used by App to gate the routed application behind setup, login and onboarding. */
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { user, isLoading, needsSetup, hasCompletedOnboarding, refreshOnboardingStatus } = useAuth();
 

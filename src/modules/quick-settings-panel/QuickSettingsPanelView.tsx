@@ -10,6 +10,7 @@ import QuickSettingsContent from '@/modules/quick-settings-panel/QuickSettingsCo
 import QuickSettingsHandle from '@/modules/quick-settings-panel/QuickSettingsHandle';
 import QuickSettingsPanelHeader from '@/modules/quick-settings-panel/QuickSettingsPanelHeader';
 
+/** Exported as QuickSettingsPanel and rendered by the project-workspace module as its slide-out quick settings drawer. */
 function QuickSettingsPanelView() {
   const [isOpen, setIsOpen] = useState(false);
   const { isMobile } = useDeviceSettings({ trackPWA: false });
