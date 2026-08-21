@@ -66,9 +66,23 @@ test('the dark variables reproduce oneDark exactly', () => {
   assert.deepEqual(resolved, oneDark);
 });
 
-test('the style object is identical for both themes, so the prop never changes', () => {
-  const rebuilt = buildSyntaxTheme(oneLight as PrismStyleSheet, oneDark as PrismStyleSheet);
-  assert.deepEqual(rebuilt.style, theme.style);
+test('no theme-dependent value is left as a literal colour', () => {
+  // Any literal that differs between the themes would need the style prop to be
+  // swapped again, which is what re-tokenized every block on a theme toggle.
+  for (const [selector, rule] of Object.entries(theme.style)) {
+    for (const [property, value] of Object.entries(rule)) {
+      const lightValue = (oneLight as PrismStyleSheet)[selector]?.[property];
+      const darkValue = (oneDark as PrismStyleSheet)[selector]?.[property];
+      if (lightValue === darkValue) {
+        continue;
+      }
+      assert.match(
+        value,
+        /^var\(--cc-syntax-\d+\)$/,
+        `${selector}.${property} differs between themes but is not a variable`,
+      );
+    }
+  }
 });
 
 test('properties shared by both themes stay literal instead of becoming variables', () => {

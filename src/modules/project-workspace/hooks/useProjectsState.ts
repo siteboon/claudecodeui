@@ -436,6 +436,15 @@ export function useProjectsState({
   sessionIdRef.current = sessionId;
   /** URL session id whose backend lookup already ran (or is in flight) — one attempt per id. */
   const sessionLookupRef = useRef<string | null>(null);
+  /**
+   * Generation of the newest `/api/projects` request. Several independent
+   * triggers call refreshProjectsSilently (a rename, a service-worker
+   * notification, the worktrees view), and the server re-synchronizes sessions
+   * before responding, so an older response can land last. Applying it would
+   * revert the project list and — since the selected copy is derived from the
+   * same payload — the workspace header and document title.
+   */
+  const projectsRequestIdRef = useRef(0);
 
   useEffect(() => {
     sessionLookupRef.current = null;
@@ -483,8 +492,13 @@ export function useProjectsState({
       if (showLoadingState) {
         setIsLoadingProjects(true);
       }
+      const requestId = (projectsRequestIdRef.current += 1);
       const response = await api.projects();
       const projectData = (await response.json()) as Project[];
+
+      if (projectsRequestIdRef.current !== requestId) {
+        return;
+      }
 
       setProjects((prevProjects) => {
         const projectsWithTaskMaster = mergeTaskMasterCache(projectData, prevProjects);

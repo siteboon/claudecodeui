@@ -8,7 +8,8 @@ import { SESSION_MESSAGES_PAGE_SIZE } from '@/modules/chat/utils/sessionMessageP
 import { createMessageHistoryRefreshCoordinator } from '@/modules/chat/utils/messageHistoryRefreshCoordinator';
 import { createCachedDiffCalculator } from '@/modules/chat/utils/messageTransforms';
 import { normalizedToChatMessages } from '@/modules/chat/hooks/useChatMessages';
-import { findSearchTargetIndex } from '@/modules/chat/utils/searchTargetLocator';
+import { findSearchTargetIndex, resolveSearchWindowSize } from '@/modules/chat/utils/searchTargetLocator';
+import type { SearchTarget } from '@/modules/chat/utils/searchTargetLocator';
 
 const INITIAL_VISIBLE_MESSAGES = 100;
 
@@ -16,15 +17,31 @@ const INITIAL_VISIBLE_MESSAGES = 100;
 const SEARCH_TARGET_CONTEXT_MESSAGES = 20;
 
 /**
- * Finds the rendered row for a resolved search target. Exact timestamp first;
- * the nearest one only as a tie-break, since a target inside a collapsed tool
- * group is represented by the group row.
+ * Widening the window can commit thousands of rows on an old hit, each running
+ * the markdown pipeline, so the scroll waits about three seconds for that render
+ * — the same budget the previous DOM scan used.
+ */
+const SEARCH_SCROLL_RETRIES = 20;
+const SEARCH_SCROLL_RETRY_DELAY_MS = 150;
+
+/**
+ * Finds the rendered row for a resolved search target.
+ *
+ * Only an exact timestamp match counts while retries remain: the widened window
+ * may not be committed yet, and accepting the nearest row then would scroll to
+ * an arbitrary message and flash the highlight on it — the silent wrong answer
+ * this rewrite exists to remove. `allowNearest` is used on the final attempt
+ * because a hit on the second or later call of a collapsed tool group has no row
+ * of its own; groupConsecutiveTools stamps the group with the run's FIRST
+ * timestamp, so the group row is the nearest, not an exact, match.
  */
 function findRenderedMessageElement(
   container: HTMLElement,
   timestamp: unknown,
+  allowNearest: boolean,
 ): HTMLElement | null {
-  const targetTime = new Date(String(timestamp)).getTime();
+  const targetTimestamp = String(timestamp);
+  const targetTime = new Date(targetTimestamp).getTime();
   const candidates = container.querySelectorAll<HTMLElement>('[data-message-timestamp]');
 
   let nearest: HTMLElement | null = null;
@@ -35,8 +52,12 @@ function findRenderedMessageElement(
     if (!candidateTimestamp) {
       continue;
     }
-    if (candidateTimestamp === String(timestamp)) {
+    if (candidateTimestamp === targetTimestamp) {
       return candidate;
+    }
+
+    if (!allowNearest) {
+      continue;
     }
 
     const candidateTime = new Date(candidateTimestamp).getTime();
@@ -187,7 +208,7 @@ export function useChatSessionState({
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const wasNearTopRef = useRef(false);
-  const [searchTarget, setSearchTarget] = useState<{ timestamp?: string; uuid?: string; snippet?: string } | null>(null);
+  const [searchTarget, setSearchTarget] = useState<SearchTarget | null>(null);
   const searchScrollActiveRef = useRef(false);
   const isLoadingMoreRef = useRef(false);
   const allMessagesLoadedRef = useRef(false);
@@ -852,8 +873,11 @@ export function useChatSessionState({
 
       // Widen the window so the target is rendered. `visibleMessages` is a tail
       // slice, so covering index N means rendering everything after it.
-      const requiredVisibleCount =
-        messagesForSearch.length - targetIndex + SEARCH_TARGET_CONTEXT_MESSAGES;
+      const requiredVisibleCount = resolveSearchWindowSize(
+        messagesForSearch.length,
+        targetIndex,
+        SEARCH_TARGET_CONTEXT_MESSAGES,
+      );
       setVisibleMessageCount((previous) => Math.max(previous, requiredVisibleCount));
 
       const targetTimestamp = messagesForSearch[targetIndex].timestamp;
@@ -865,7 +889,11 @@ export function useChatSessionState({
         // The target is inside the window by construction, so this only waits
         // for React to commit the widened list. A target collapsed inside a
         // tool group resolves to that group, which carries the same timestamp.
-        const targetElement = findRenderedMessageElement(container, targetTimestamp);
+        const targetElement = findRenderedMessageElement(
+          container,
+          targetTimestamp,
+          retriesLeft === 0,
+        );
 
         if (targetElement) {
           targetElement.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -876,14 +904,14 @@ export function useChatSessionState({
         }
 
         if (retriesLeft > 0) {
-          setTimeout(() => scrollToRenderedTarget(retriesLeft - 1), 100);
+          setTimeout(() => scrollToRenderedTarget(retriesLeft - 1), SEARCH_SCROLL_RETRY_DELAY_MS);
           return;
         }
 
         searchScrollActiveRef.current = false;
       };
 
-      setTimeout(() => scrollToRenderedTarget(3), 150);
+      setTimeout(() => scrollToRenderedTarget(SEARCH_SCROLL_RETRIES), 150);
     };
 
     scrollToTarget();

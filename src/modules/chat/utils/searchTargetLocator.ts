@@ -37,7 +37,7 @@ function getSearchableText(message: ChatMessage): string {
   return parts.filter(Boolean).join('\n').toLowerCase();
 }
 
-export function normalizeSearchSnippet(snippet: string): string {
+function normalizeSearchSnippet(snippet: string): string {
   return snippet
     .replace(/^\.{3}/, '')
     .replace(/\.{3}$/, '')
@@ -56,10 +56,6 @@ export function findSearchTargetIndex(
   messages: ChatMessage[],
   target: SearchTarget,
 ): number {
-  if (messages.length === 0) {
-    return -1;
-  }
-
   if (target.snippet) {
     const phrase = normalizeSearchSnippet(target.snippet);
     if (phrase.length >= MIN_SNIPPET_LENGTH) {
@@ -96,4 +92,19 @@ export function findSearchTargetIndex(
   }
 
   return -1;
+}
+
+/**
+ * How many trailing messages must be rendered for `targetIndex` to be on screen.
+ *
+ * `visibleMessages` is a tail slice, so covering an old hit means rendering
+ * everything after it. Exported for the caller and pinned by tests because an
+ * off-by-one here scrolls to the wrong row or to nothing at all.
+ */
+export function resolveSearchWindowSize(
+  messageCount: number,
+  targetIndex: number,
+  trailingContext: number,
+): number {
+  return messageCount - targetIndex + trailingContext;
 }

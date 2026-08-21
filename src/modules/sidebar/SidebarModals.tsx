@@ -6,7 +6,7 @@ import type { TFunction } from 'i18next';
 import { Button } from '@/shared/ui';
 import { Settings } from '@/modules/settings';
 import { VersionUpgradeModal } from '@/modules/version-upgrade';
-import type { DeleteProjectConfirmation, InstallMode, Project, ReleaseInfo, SessionDeleteConfirmation, SettingsProject } from '@/shared/types';
+import type { InstallMode, PendingSidebarDeletion, Project, ReleaseInfo, SettingsProject } from '@/shared/types';
 import { normalizeProjectForSettings } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import { ProjectCreationWizard } from '@/modules/project-creation-wizard';
 
@@ -18,11 +18,9 @@ type SidebarModalsProps = {
   showNewProject: boolean;
   onCloseNewProject: () => void;
   onProjectCreated: () => void;
-  deleteConfirmation: DeleteProjectConfirmation | null;
-  onCancelDeleteProject: () => void;
+  pendingDeletion: PendingSidebarDeletion | null;
+  onCancelDeletion: () => void;
   onConfirmDeleteProject: (deleteData?: boolean) => void;
-  sessionDeleteConfirmation: SessionDeleteConfirmation | null;
-  onCancelDeleteSession: () => void;
   onConfirmDeleteSession: (hardDelete?: boolean) => void;
   showVersionModal: boolean;
   onCloseVersionModal: () => void;
@@ -55,11 +53,9 @@ export default function SidebarModals({
   showNewProject,
   onCloseNewProject,
   onProjectCreated,
-  deleteConfirmation,
-  onCancelDeleteProject,
+  pendingDeletion,
+  onCancelDeletion,
   onConfirmDeleteProject,
-  sessionDeleteConfirmation,
-  onCancelDeleteSession,
   onConfirmDeleteSession,
   showVersionModal,
   onCloseVersionModal,
@@ -97,7 +93,7 @@ export default function SidebarModals({
           document.body,
         )}
 
-      {deleteConfirmation &&
+      {pendingDeletion?.kind === 'project' &&
         ReactDOM.createPortal(
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
             <div className="w-full max-w-md overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
@@ -113,13 +109,13 @@ export default function SidebarModals({
                     <p className="mb-1 text-sm text-muted-foreground">
                       {t('deleteConfirmation.confirmDelete')}{' '}
                       <span className="font-medium text-foreground">
-                        {deleteConfirmation.project.displayName || deleteConfirmation.project.projectId}
+                        {pendingDeletion.project.displayName || pendingDeletion.project.projectId}
                       </span>
                       ?
                     </p>
-                    {deleteConfirmation.sessionCount > 0 && (
+                    {pendingDeletion.sessionCount > 0 && (
                       <p className="mt-2 text-sm text-muted-foreground">
-                        {t('deleteConfirmation.sessionCount', { count: deleteConfirmation.sessionCount })}
+                        {t('deleteConfirmation.sessionCount', { count: pendingDeletion.sessionCount })}
                       </p>
                     )}
                   </div>
@@ -142,7 +138,7 @@ export default function SidebarModals({
                   <Trash2 className="mr-2 h-4 w-4" />
                   {t('deleteConfirmation.deleteAllData')}
                 </Button>
-                <Button variant="ghost" className="w-full" onClick={onCancelDeleteProject}>
+                <Button variant="ghost" className="w-full" onClick={onCancelDeletion}>
                   {t('actions.cancel')}
                 </Button>
               </div>
@@ -151,7 +147,7 @@ export default function SidebarModals({
           document.body,
         )}
 
-      {sessionDeleteConfirmation &&
+      {pendingDeletion?.kind === 'session' &&
         ReactDOM.createPortal(
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
             <div className="w-full max-w-md overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
@@ -167,12 +163,12 @@ export default function SidebarModals({
                     <p className="mb-1 text-sm text-muted-foreground">
                       {t('deleteConfirmation.confirmDelete')}{' '}
                       <span className="font-medium text-foreground">
-                        {sessionDeleteConfirmation.sessionTitle || t('sessions.unnamed')}
+                        {pendingDeletion.sessionTitle || t('sessions.unnamed')}
                       </span>
                       ?
                     </p>
                     <p className="mt-3 text-xs text-muted-foreground">
-                      {sessionDeleteConfirmation.isArchived
+                      {pendingDeletion.isArchived
                         ? t('deleteConfirmation.archivedSessionNotice', 'This session is already archived. You can keep it hidden or delete it permanently.')
                         : t('deleteConfirmation.archiveSessionNotice', 'Archive keeps the session out of the active list while preserving its history.')}
                     </p>
@@ -180,7 +176,7 @@ export default function SidebarModals({
                 </div>
               </div>
               <div className="flex flex-col gap-2 border-t border-border bg-muted/30 p-4">
-                {!sessionDeleteConfirmation.isArchived && (
+                {!pendingDeletion.isArchived && (
                   <Button
                     variant="outline"
                     className="w-full justify-start"
@@ -198,7 +194,7 @@ export default function SidebarModals({
                   <Trash2 className="mr-2 h-4 w-4" />
                   {t('deleteConfirmation.deleteSessionPermanently', 'Delete permanently')}
                 </Button>
-                <Button variant="ghost" className="w-full" onClick={onCancelDeleteSession}>
+                <Button variant="ghost" className="w-full" onClick={onCancelDeletion}>
                   {t('actions.cancel')}
                 </Button>
               </div>

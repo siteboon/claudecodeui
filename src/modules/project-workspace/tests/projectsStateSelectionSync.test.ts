@@ -130,3 +130,41 @@ test('a refresh that no longer lists the selected project leaves the selection a
 
   assert.equal(result.current.selectedProject, selectedBefore);
 });
+
+test('a superseded refresh does not revert the selection', async () => {
+  respondWith([buildProject()]);
+  const { result } = await renderProjectsState();
+  await waitFor(() => {
+    assert.equal(result.current.selectedProject?.displayName, 'Original name');
+  });
+
+  // An older in-flight request resolves after a newer one. Applying it would put
+  // the pre-rename name back in the workspace header.
+  let releaseStaleResponse: (() => void) | null = null;
+  const staleResponse = new Promise<void>((resolve) => {
+    releaseStaleResponse = resolve;
+  });
+  projectsResponse.mockImplementationOnce(async () => {
+    await staleResponse;
+    return { ok: true, json: async () => [buildProject({ displayName: 'Stale name' })] };
+  });
+
+  const stale = result.current.refreshProjectsSilently();
+
+  respondWith([buildProject({ displayName: 'Renamed' })]);
+  await act(async () => {
+    await result.current.refreshProjectsSilently();
+  });
+  assert.equal(result.current.selectedProject?.displayName, 'Renamed');
+
+  await act(async () => {
+    releaseStaleResponse?.();
+    await stale;
+  });
+
+  assert.equal(
+    result.current.selectedProject?.displayName,
+    'Renamed',
+    'a superseded response must not overwrite a newer one',
+  );
+});

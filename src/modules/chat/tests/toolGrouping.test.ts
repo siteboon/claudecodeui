@@ -37,8 +37,7 @@ test('a run of same-tool calls is grouped and carries a precomputed preview', ()
   assert.equal(items.length, 1);
   const [group] = items;
   assert.ok(isToolGroupItem(group));
-  assert.equal(typeof group.preview, 'string');
-  assert.ok(group.preview.length > 0, 'a grouped run must have a summary line');
+  assert.equal(group.preview, '/a.ts, /b.ts');
 });
 
 test('a group of more than two calls reports the remainder', () => {
@@ -51,7 +50,7 @@ test('a group of more than two calls reports the remainder', () => {
 
   const [group] = items;
   assert.ok(isToolGroupItem(group));
-  assert.match(group.preview, /\+2 more$/);
+  assert.equal(group.preview, '/a.ts, /b.ts, +2 more');
 });
 
 test('a single tool call is not grouped', () => {
@@ -93,15 +92,13 @@ test('an unparsable tool input does not throw while grouping', () => {
   assert.equal(typeof group.preview, 'string');
 });
 
-test('grouping the same messages twice yields the same preview', () => {
-  const messages = [
-    toolMessage('Read', { file_path: '/a.ts' }),
-    toolMessage('Read', { file_path: '/b.ts' }),
-  ];
+test('the group carries the run\u2019s first timestamp, which is what the search jump matches on', () => {
+  const items = groupConsecutiveTools([
+    { ...toolMessage('Read', { file_path: '/a.ts' }), timestamp: '2024-01-01T10:00:00.000Z' },
+    { ...toolMessage('Read', { file_path: '/b.ts' }), timestamp: '2024-01-01T10:00:05.000Z' },
+  ]);
 
-  const [first] = groupConsecutiveTools(messages);
-  const [second] = groupConsecutiveTools(messages);
-
-  assert.ok(isToolGroupItem(first) && isToolGroupItem(second));
-  assert.equal(first.preview, second.preview);
+  const [group] = items;
+  assert.ok(isToolGroupItem(group));
+  assert.equal(group.timestamp, '2024-01-01T10:00:00.000Z');
 });

@@ -238,7 +238,7 @@ const markdownComponents = {
  * render model-authored markdown with this module's shared prose styling,
  * code highlighting and table rules.
  */
-function MarkdownRenderer({ children, className, breaks = false }: MarkdownProps) {
+function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 'className'>) {
   const content = useMemo(
     () => normalizeInlineCodeFences(String(children ?? '')),
     [children],
@@ -292,17 +292,29 @@ function MarkdownRenderer({ children, className, breaks = false }: MarkdownProps
   );
 
   return (
-    <div className={className}>
-      <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components as any}>
-        {content}
-      </ReactMarkdown>
-    </div>
+    <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components as any}>
+      {content}
+    </ReactMarkdown>
   );
 }
 
 /**
- * Memoized so a re-render of the transcript does not re-run remark, rehype,
- * KaTeX and Prism over messages whose text has not changed. During streaming
- * only the live block's markdown is re-parsed — see StreamingMarkdown.
+ * Markdown blocks without the prose wrapper. Used by StreamingMarkdown so a
+ * streamed reply's settled and pending halves render as siblings inside ONE
+ * prose container — Tailwind Typography's `> :first-child`/`> :last-child`
+ * margin rules are per-container, so two containers would zero the gap at the
+ * seam and make it pop back when the boundary moves.
+ *
+ * Memoized so a re-render does not re-run remark, rehype, KaTeX and Prism over
+ * text that has not changed.
  */
-export const Markdown = memo(MarkdownRenderer);
+export const MarkdownBody = memo(MarkdownBodyRenderer);
+
+/** Markdown in its own prose container. The form every non-streaming caller uses. */
+export const Markdown = memo(function Markdown({ children, className, breaks }: MarkdownProps) {
+  return (
+    <div className={className}>
+      <MarkdownBody breaks={breaks}>{children}</MarkdownBody>
+    </div>
+  );
+});

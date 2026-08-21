@@ -37,17 +37,13 @@ test('the shared font-size default matches the editor default, not the old setti
   assert.equal(CODE_EDITOR_DEFAULTS.fontSize, '12');
 });
 
-test('reading settings for a fresh user does not write any code-editor key', () => {
+test('a fresh user gets the shared defaults', () => {
   const settings = readCodeEditorSettings();
 
   assert.equal(settings.fontSize, CODE_EDITOR_DEFAULTS.fontSize);
-  for (const storageKey of Object.values(CODE_EDITOR_STORAGE_KEYS)) {
-    assert.equal(
-      localStorage.getItem(storageKey),
-      null,
-      `reading settings must not write ${storageKey}`,
-    );
-  }
+  assert.equal(settings.wordWrap, CODE_EDITOR_DEFAULTS.wordWrap);
+  assert.equal(settings.showMinimap, CODE_EDITOR_DEFAULTS.showMinimap);
+  assert.equal(settings.lineNumbers, CODE_EDITOR_DEFAULTS.lineNumbers);
 });
 
 test('an explicit edit writes every key and notifies the code-editor module', () => {

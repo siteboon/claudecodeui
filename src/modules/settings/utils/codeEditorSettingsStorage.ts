@@ -11,8 +11,13 @@ import type { CodeEditorSettingsState } from '@/shared/types';
  * Reading must never write: this runs when the dialog mounts, and a write here
  * would materialize defaults over settings the user never chose.
  */
+const readStoredBoolean = (storageKey: string, defaultValue: boolean): boolean => {
+  const stored = localStorage.getItem(storageKey);
+  return stored === null ? defaultValue : stored === 'true';
+};
+
 export const readCodeEditorSettings = (): CodeEditorSettingsState => ({
-  wordWrap: localStorage.getItem(CODE_EDITOR_STORAGE_KEYS.wordWrap) === 'true',
+  wordWrap: readStoredBoolean(CODE_EDITOR_STORAGE_KEYS.wordWrap, CODE_EDITOR_DEFAULTS.wordWrap),
   showMinimap: localStorage.getItem(CODE_EDITOR_STORAGE_KEYS.showMinimap) !== 'false',
   lineNumbers: localStorage.getItem(CODE_EDITOR_STORAGE_KEYS.lineNumbers) !== 'false',
   fontSize: localStorage.getItem(CODE_EDITOR_STORAGE_KEYS.fontSize) ?? CODE_EDITOR_DEFAULTS.fontSize,

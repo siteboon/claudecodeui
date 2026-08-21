@@ -31,14 +31,8 @@ type ChatMessagesPaneProps = {
   provider: LLMProvider;
   setProvider: (provider: LLMProvider) => void;
   textareaRef: RefObject<HTMLTextAreaElement>;
-  claudeModel: string;
-  setClaudeModel: (model: string) => void;
-  cursorModel: string;
-  setCursorModel: (model: string) => void;
-  codexModel: string;
-  setCodexModel: (model: string) => void;
-  opencodeModel: string;
-  setOpenCodeModel: (model: string) => void;
+  providerModels: Record<LLMProvider, string>;
+  setProviderModel: (provider: LLMProvider, model: string) => void;
   providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
   providerModelActions: ProviderModelActions;
   providerModelsLoading: boolean;
@@ -85,14 +79,8 @@ function ChatMessagesPane({
   provider,
   setProvider,
   textareaRef,
-  claudeModel,
-  setClaudeModel,
-  cursorModel,
-  setCursorModel,
-  codexModel,
-  setCodexModel,
-  opencodeModel,
-  setOpenCodeModel,
+  providerModels,
+  setProviderModel,
   providerModelCatalog,
   providerModelActions,
   providerModelsLoading,
@@ -189,14 +177,8 @@ function ChatMessagesPane({
           provider={provider}
           setProvider={setProvider}
           textareaRef={textareaRef}
-          claudeModel={claudeModel}
-          setClaudeModel={setClaudeModel}
-          cursorModel={cursorModel}
-          setCursorModel={setCursorModel}
-          codexModel={codexModel}
-          setCodexModel={setCodexModel}
-          opencodeModel={opencodeModel}
-          setOpenCodeModel={setOpenCodeModel}
+          providerModels={providerModels}
+          setProviderModel={setProviderModel}
           providerModelCatalog={providerModelCatalog}
           providerModelActions={providerModelActions}
           providerModelsLoading={providerModelsLoading}

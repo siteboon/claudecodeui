@@ -4,7 +4,7 @@ import { test } from 'vitest';
 
 import {
   findSearchTargetIndex,
-  normalizeSearchSnippet,
+  resolveSearchWindowSize,
 } from '@/modules/chat/utils/searchTargetLocator';
 import type { ChatMessage } from '@/shared/types';
 
@@ -113,7 +113,31 @@ test('an unparsable timestamp does not crash the nearest search', () => {
   assert.equal(findSearchTargetIndex(withBadTimestamp, { timestamp: '2024-01-01T10:00:00.000Z' }), 1);
 });
 
-test('normalizeSearchSnippet caps the fragment length', () => {
-  const long = 'x'.repeat(200);
-  assert.equal(normalizeSearchSnippet(long).length, 80);
+test('only the leading part of an over-long snippet has to match', () => {
+  // The sidebar sends an elided fragment; matching is capped at 80 characters,
+  // so a hit whose first 80 characters match is found even if the tail differs.
+  const head = 'a'.repeat(80);
+  const messages: ChatMessage[] = [message(`${head}TAIL-IN-TRANSCRIPT`, '2024-01-01T10:00:00.000Z')];
+
+  assert.equal(findSearchTargetIndex(messages, { snippet: `${head}DIFFERENT-TAIL` }), 0);
+});
+
+test('the search window covers the resolved target plus trailing context', () => {
+  // visibleMessages is a tail slice, so covering index N means rendering
+  // everything after it.
+  assert.equal(resolveSearchWindowSize(100, 99, 20), 21, 'newest message needs a small window');
+  assert.equal(resolveSearchWindowSize(100, 0, 20), 120, 'oldest message needs the whole list');
+  assert.equal(resolveSearchWindowSize(100, 50, 20), 70);
+});
+
+test('the window always includes the target itself', () => {
+  const messageCount = 40;
+  for (let targetIndex = 0; targetIndex < messageCount; targetIndex++) {
+    const windowSize = resolveSearchWindowSize(messageCount, targetIndex, 0);
+    const firstRenderedIndex = messageCount - windowSize;
+    assert.ok(
+      firstRenderedIndex <= targetIndex,
+      `target ${targetIndex} fell outside a window of ${windowSize}`,
+    );
+  }
 });

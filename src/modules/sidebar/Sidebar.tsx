@@ -95,8 +95,7 @@ function Sidebar({
     clearConversationResults,
     runningSessionsCount,
     deletingProjects,
-    deleteConfirmation,
-    sessionDeleteConfirmation,
+    pendingDeletion,
     showVersionModal,
     filteredProjects,
     archivedProjects,
@@ -138,8 +137,7 @@ function Sidebar({
     setEditingSession,
     setEditingSessionName,
     setSearchFilter,
-    setDeleteConfirmation,
-    setSessionDeleteConfirmation,
+    setPendingDeletion,
     setShowVersionModal,
   } = useSidebarController({
     projects,
@@ -235,11 +233,9 @@ function Sidebar({
         showNewProject={showNewProject}
         onCloseNewProject={() => setShowNewProject(false)}
         onProjectCreated={handleProjectCreated}
-        deleteConfirmation={deleteConfirmation}
-        onCancelDeleteProject={() => setDeleteConfirmation(null)}
+        pendingDeletion={pendingDeletion}
+        onCancelDeletion={() => setPendingDeletion(null)}
         onConfirmDeleteProject={confirmDeleteProject}
-        sessionDeleteConfirmation={sessionDeleteConfirmation}
-        onCancelDeleteSession={() => setSessionDeleteConfirmation(null)}
         onConfirmDeleteSession={confirmDeleteSession}
         showVersionModal={showVersionModal}
         onCloseVersionModal={() => setShowVersionModal(false)}
@@ -295,10 +291,8 @@ function Sidebar({
             onRestoreArchivedSession={restoreArchivedSession}
             onDeleteArchivedSession={(session) => {
               showDeleteSessionConfirmation(
-                session.projectId,
                 session.sessionId,
                 session.sessionTitle,
-                session.provider,
                 { isArchived: true },
               );
             }}

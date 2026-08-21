@@ -3,7 +3,7 @@ import type { TFunction } from 'i18next';
 
 import { api } from '@/shared/api';
 import { usePaletteOps } from '@/modules/command-palette';
-import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationProjectResult, ConversationSearchResults, DeleteProjectConfirmation, LLMProvider, Project, ProjectSession, ProjectSortOrder, RecentConversationListItem, SearchProgress, SessionActivityMap, SessionDeleteConfirmation, SessionTitleSearchResult, SessionWithProvider, SidebarSearchMode } from '@/shared/types';
+import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationProjectResult, ConversationSearchResults, LLMProvider, Project, ProjectSession, ProjectSortOrder, RecentConversationListItem, SearchProgress, SessionActivityMap, PendingSidebarDeletion, SessionTitleSearchResult, SessionWithProvider, SidebarSearchMode } from '@/shared/types';
 import {
   filterProjects,
   getAllSessions,
@@ -90,8 +90,7 @@ export function useSidebarController({
   const [editingSessionName, setEditingSessionName] = useState('');
   const [searchFilter, setSearchFilter] = useState('');
   const [deletingProjects, setDeletingProjects] = useState<Set<string>>(new Set());
-  const [deleteConfirmation, setDeleteConfirmation] = useState<DeleteProjectConfirmation | null>(null);
-  const [sessionDeleteConfirmation, setSessionDeleteConfirmation] = useState<SessionDeleteConfirmation | null>(null);
+  const [pendingDeletion, setPendingDeletion] = useState<PendingSidebarDeletion | null>(null);
   const [showVersionModal, setShowVersionModal] = useState(false);
   const [searchMode, setSearchMode] = useState<SidebarSearchMode>('projects');
   const [conversationResults, setConversationResults] = useState<ConversationSearchResults | null>(null);
@@ -775,22 +774,15 @@ export function useSidebarController({
   );
 
   const showDeleteSessionConfirmation = useCallback(
-    // Kept with project/provider arguments for component wiring compatibility;
-    // deletion now uses only `sessionId` via /api/providers/sessions/:sessionId.
     (
-      projectId: string | null,
       sessionId: string,
       sessionTitle: string,
-      provider: SessionDeleteConfirmation['provider'] = 'claude',
-      options: {
-        isArchived?: boolean;
-      } = {},
+      options: { isArchived?: boolean } = {},
     ) => {
-      setSessionDeleteConfirmation({
-        projectId,
+      setPendingDeletion({
+        kind: 'session',
         sessionId,
         sessionTitle,
-        provider,
         isArchived: Boolean(options.isArchived),
       });
     },
@@ -798,12 +790,12 @@ export function useSidebarController({
   );
 
   const confirmDeleteSession = useCallback(async (hardDelete = false) => {
-    if (!sessionDeleteConfirmation) {
+    if (pendingDeletion?.kind !== 'session') {
       return;
     }
 
-    const { sessionId } = sessionDeleteConfirmation;
-    setSessionDeleteConfirmation(null);
+    const { sessionId } = pendingDeletion;
+    setPendingDeletion(null);
 
     try {
       const response = await api.deleteSession(sessionId, hardDelete);
@@ -823,11 +815,12 @@ export function useSidebarController({
       console.error('[Sidebar] Error deleting session:', error);
       alert(t('messages.deleteSessionError'));
     }
-  }, [fetchArchivedSessions, onSessionDelete, sessionDeleteConfirmation, t]);
+  }, [fetchArchivedSessions, onSessionDelete, pendingDeletion, t]);
 
   const requestProjectDelete = useCallback(
     (project: Project) => {
-      setDeleteConfirmation({
+      setPendingDeletion({
+        kind: 'project',
         project,
         sessionCount: getProjectSessions(project).length,
       });
@@ -836,13 +829,13 @@ export function useSidebarController({
   );
 
   const confirmDeleteProject = useCallback(async (deleteData = false) => {
-    if (!deleteConfirmation) {
+    if (pendingDeletion?.kind !== 'project') {
       return;
     }
 
-    const { project } = deleteConfirmation;
+    const { project } = pendingDeletion;
 
-    setDeleteConfirmation(null);
+    setPendingDeletion(null);
     // Track in-flight deletes by projectId so the UI can disable actions
     // even if the project object is rebuilt while the request is flying.
     setDeletingProjects((prev) => new Set([...prev, project.projectId]));
@@ -869,7 +862,7 @@ export function useSidebarController({
         return next;
       });
     }
-  }, [deleteConfirmation, onProjectDelete, t]);
+  }, [pendingDeletion, onProjectDelete, t]);
 
   const handleProjectSelect = useCallback(
     (project: Project) => {
@@ -1017,8 +1010,7 @@ export function useSidebarController({
     searchFilter,
     deletingProjects,
     loadingMoreProjects,
-    deleteConfirmation,
-    sessionDeleteConfirmation,
+    pendingDeletion,
     showVersionModal,
     filteredProjects,
     runningSessionsCount,
@@ -1075,8 +1067,7 @@ export function useSidebarController({
       setConversationResults(null);
     }, []),
     setSearchFilter,
-    setDeleteConfirmation,
-    setSessionDeleteConfirmation,
+    setPendingDeletion,
     setShowVersionModal,
   };
 }

@@ -1174,12 +1174,7 @@ export type SidebarProjectListProps = {
   onSaveProjectName: (projectName: string) => void;
   onDeleteProject: (project: Project) => void;
   onSessionSelect: (session: SessionWithProvider, projectName: string) => void;
-  onDeleteSession: (
-    projectName: string,
-    sessionId: string,
-    sessionTitle: string,
-    provider: LLMProvider,
-  ) => void;
+  onDeleteSession: (sessionId: string, sessionTitle: string) => void;
   onNewSession: (project: Project) => void;
   onEditingSessionNameChange: (value: string) => void;
   onStartEditingSession: (sessionId: string, initialName: string) => void;
@@ -1223,20 +1218,14 @@ export type RecentConversationListItem = Pick<
 >;
 
 /** The project queued for deletion together with its session count, used to populate the delete-confirmation dialog. */
-export type DeleteProjectConfirmation = {
-  project: Project;
-  sessionCount: number;
-};
-
-// Delete confirmation payload used by sidebar UX. `projectId`/`provider` are
-// kept for wiring compatibility, while API deletion now keys only by sessionId.
-export type SessionDeleteConfirmation = {
-  projectId: string | null;
-  sessionId: string;
-  sessionTitle: string;
-  provider: LLMProvider;
-  isArchived: boolean;
-};
+/**
+ * The sidebar's pending delete confirmation. One value rather than a pair of
+ * nullable states, so a project dialog and a session dialog cannot both be
+ * open — they are portalled at the same z-index and would stack.
+ */
+export type PendingSidebarDeletion =
+  | { kind: 'project'; project: Project; sessionCount: number }
+  | { kind: 'session'; sessionId: string; sessionTitle: string; isArchived: boolean };
 
 /** Whether a TaskMaster MCP server is present and configured for a project, or null while that status is still unknown. */
 export type MCPServerStatus = {

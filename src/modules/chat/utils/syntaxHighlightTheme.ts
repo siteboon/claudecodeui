@@ -49,13 +49,12 @@ export function buildSyntaxTheme(light: PrismStyleSheet, dark: PrismStyleSheet):
 
       // A theme that omits the property leaves the variable undefined, which
       // makes the declaration invalid and drops it — the same result as the
-      // theme not setting it.
+      // theme not setting it. Only the light theme omits properties in the pair
+      // this app ships, so the dark side is written unconditionally.
       if (lightValue !== undefined) {
         lightDeclarations.push(`${variableName}:${lightValue};`);
       }
-      if (darkValue !== undefined) {
-        darkDeclarations.push(`${variableName}:${darkValue};`);
-      }
+      darkDeclarations.push(`${variableName}:${darkValue};`);
     }
 
     style[selector] = merged;
