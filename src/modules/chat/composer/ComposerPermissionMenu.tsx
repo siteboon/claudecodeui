@@ -17,7 +17,7 @@ import {
   ComposerMenuHeading,
   ComposerMenuItem,
   ComposerMenuSurface,
-} from '@/modules/chat/ComposerMenuPrimitives';
+} from '@/modules/chat/composer/ComposerMenuPrimitives';
 
 type ModeAppearance = {
   icon: LucideIcon;

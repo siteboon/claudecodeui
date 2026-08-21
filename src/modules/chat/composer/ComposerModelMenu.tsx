@@ -11,7 +11,7 @@ import {
   ComposerMenuItem,
   ComposerMenuSeparator,
   ComposerMenuSurface,
-} from '@/modules/chat/ComposerMenuPrimitives';
+} from '@/modules/chat/composer/ComposerMenuPrimitives';
 
 type EffortOption = NonNullable<ProviderModelOption['effort']>['values'][number];
 

@@ -25,15 +25,15 @@ import {
   PromptInputButton,
   PromptInputSubmit,
 } from '@/modules/chat/composer/PromptInput';
-import CommandMenu from '@/modules/chat/CommandMenu';
-import ActivityIndicator from '@/modules/chat/ActivityIndicator';
-import ComposerAttachment from '@/modules/chat/ComposerAttachment';
-import VoiceInputButton from '@/modules/chat/VoiceInputButton';
-import PermissionRequestsBanner from '@/modules/chat/PermissionRequestsBanner';
-import TokenUsageSummary from '@/modules/chat/TokenUsageSummary';
-import QueuedMessageCard from '@/modules/chat/QueuedMessageCard';
-import ComposerModelMenu from '@/modules/chat/ComposerModelMenu';
-import ComposerPermissionMenu from '@/modules/chat/ComposerPermissionMenu';
+import CommandMenu from '@/modules/chat/composer/CommandMenu';
+import ActivityIndicator from '@/modules/chat/composer/ActivityIndicator';
+import ComposerAttachment from '@/modules/chat/composer/ComposerAttachment';
+import VoiceInputButton from '@/modules/chat/composer/VoiceInputButton';
+import PermissionRequestsBanner from '@/modules/chat/composer/PermissionRequestsBanner';
+import TokenUsageSummary from '@/modules/chat/composer/TokenUsageSummary';
+import QueuedMessageCard from '@/modules/chat/composer/QueuedMessageCard';
+import ComposerModelMenu from '@/modules/chat/composer/ComposerModelMenu';
+import ComposerPermissionMenu from '@/modules/chat/composer/ComposerPermissionMenu';
 
 type MentionableFile = {
   name: string;

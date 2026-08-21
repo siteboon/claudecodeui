@@ -26,7 +26,7 @@ import {
   Button,
   LLMProviderLogo,
 } from "@/shared/ui";
-import ModelLibraryPanel from "@/modules/chat/ModelLibraryPanel";
+import ModelLibraryPanel from "@/modules/chat/modals/ModelLibraryPanel";
 import { writeSelectedProvider } from '@/shared/selectedProvider';
 
 const PROVIDER_META: { id: LLMProvider; name: string }[] = [

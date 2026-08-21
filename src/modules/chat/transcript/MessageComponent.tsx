@@ -6,12 +6,12 @@ import { formatUsageLimitText, stripProposedPlanEnvelope } from '@/modules/chat/
 import { ToolRenderer, ToolErrorDisplay, shouldHideToolResult } from '@/modules/chat/tools';
 import { LLMProviderLogo } from '@/shared/ui';
 import { Reasoning, ReasoningContent, ReasoningTrigger } from '@/modules/chat/transcript/Reasoning';
-import ChatMessageImages from '@/modules/chat/ChatMessageImages';
-import ChatMessageFiles from '@/modules/chat/ChatMessageFiles';
-import { Markdown } from '@/modules/chat/Markdown';
-import StreamingMarkdown from '@/modules/chat/StreamingMarkdown';
-import MessageCopyControl from '@/modules/chat/MessageCopyControl';
-import MessageSpeakControl from '@/modules/chat/MessageSpeakControl';
+import ChatMessageImages from '@/modules/chat/transcript/ChatMessageImages';
+import ChatMessageFiles from '@/modules/chat/transcript/ChatMessageFiles';
+import { Markdown } from '@/modules/chat/transcript/Markdown';
+import StreamingMarkdown from '@/modules/chat/transcript/StreamingMarkdown';
+import MessageCopyControl from '@/modules/chat/transcript/MessageCopyControl';
+import MessageSpeakControl from '@/modules/chat/transcript/MessageSpeakControl';
 
 type MessageComponentProps = {
   message: ChatMessage;

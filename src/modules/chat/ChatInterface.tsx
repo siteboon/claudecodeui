@@ -20,9 +20,9 @@ import {
   useProcessingSessions,
   useSessionProtectionActions,
 } from '@/shared/context/SessionProtectionContext';
-import ChatMessagesPane from '@/modules/chat/ChatMessagesPane';
-import ChatComposer from '@/modules/chat/ChatComposer';
-import CommandResultModal from '@/modules/chat/CommandResultModal';
+import ChatMessagesPane from '@/modules/chat/transcript/ChatMessagesPane';
+import ChatComposer from '@/modules/chat/composer/ChatComposer';
+import CommandResultModal from '@/modules/chat/modals/CommandResultModal';
 
 type ChatInterfaceProps = {
   isActive: boolean;

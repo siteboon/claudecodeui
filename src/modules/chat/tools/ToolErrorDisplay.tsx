@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 
 import { cn } from '@/shared/utils';
-import { Markdown } from '@/modules/chat/Markdown';
+import { Markdown } from '@/modules/chat/transcript/Markdown';
 
 type ToolErrorDisplayProps = {
   /** Full error text; rendered as markdown when expanded. */

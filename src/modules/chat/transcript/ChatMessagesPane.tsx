@@ -10,11 +10,11 @@ import type { ChatMessage,
   ProviderModelsDefinition } from '@/shared/types';
 import { getIntrinsicMessageKey } from '@/modules/chat/utils/messageKeys';
 import { groupConsecutiveTools, isToolGroupItem } from '@/modules/chat/utils/toolGrouping';
-import MessageComponent from '@/modules/chat/MessageComponent';
-import ProviderSelectionEmptyState from '@/modules/chat/ProviderSelectionEmptyState';
-import ToolGroupContainer from '@/modules/chat/ToolGroupContainer';
-import LoadAllMessagesOverlay from '@/modules/chat/LoadAllMessagesOverlay';
-import ChatExportMenu from '@/modules/chat/ChatExportMenu';
+import MessageComponent from '@/modules/chat/transcript/MessageComponent';
+import ProviderSelectionEmptyState from '@/modules/chat/transcript/ProviderSelectionEmptyState';
+import ToolGroupContainer from '@/modules/chat/transcript/ToolGroupContainer';
+import LoadAllMessagesOverlay from '@/modules/chat/transcript/LoadAllMessagesOverlay';
+import ChatExportMenu from '@/modules/chat/transcript/ChatExportMenu';
 
 type ChatMessagesPaneProps = {
   scrollContainerRef: RefObject<HTMLDivElement>;

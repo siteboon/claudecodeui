@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { Markdown } from '@/modules/chat/Markdown';
+import { Markdown } from '@/modules/chat/transcript/Markdown';
 
 type MarkdownContentProps = {
   content: string;

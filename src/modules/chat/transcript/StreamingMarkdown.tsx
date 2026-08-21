@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 
-import { MarkdownBody } from '@/modules/chat/Markdown';
+import { MarkdownBody } from '@/modules/chat/transcript/Markdown';
 import { splitStreamingMarkdown } from '@/modules/chat/utils/streamingMarkdown';
 
 type StreamingMarkdownProps = {

@@ -3,7 +3,7 @@ import { ChevronRight } from 'lucide-react';
 
 import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LLMProvider,DiffLine,Project,ToolGroupItem } from '@/shared/types';
 import { getToolConfig } from '@/modules/chat/tools';
-import MessageComponent from '@/modules/chat/MessageComponent';
+import MessageComponent from '@/modules/chat/transcript/MessageComponent';
 
 type ToolGroupContainerProps = {
   group: ToolGroupItem;
