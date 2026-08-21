@@ -24,7 +24,7 @@ import {
   PromptInputTools,
   PromptInputButton,
   PromptInputSubmit,
-} from '@/shared/ui';
+} from '@/modules/chat/composer/PromptInput';
 import CommandMenu from '@/modules/chat/CommandMenu';
 import ActivityIndicator from '@/modules/chat/ActivityIndicator';
 import ComposerAttachment from '@/modules/chat/ComposerAttachment';

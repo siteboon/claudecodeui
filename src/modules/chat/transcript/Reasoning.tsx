@@ -1,11 +1,8 @@
-"use client";
-
 import * as React from 'react';
 import { BrainIcon, ChevronDownIcon } from 'lucide-react';
 
 import { cn } from '@/shared/utils';
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/shared/ui/Collapsible';
-import { Shimmer } from '@/shared/ui/Shimmer';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger, Shimmer } from '@/shared/ui';
 
 /* ─── Context ────────────────────────────────────────────────────── */
 
@@ -18,7 +15,7 @@ type ReasoningContextValue = {
 
 const ReasoningContext = React.createContext<ReasoningContextValue | null>(null);
 
-export const useReasoning = () => {
+const useReasoning = () => {
   const context = React.useContext(ReasoningContext);
   if (!context) {
     throw new Error('Reasoning components must be used within Reasoning');
@@ -39,7 +36,7 @@ export type ReasoningProps = {
   duration?: number;
 } & React.HTMLAttributes<HTMLDivElement>;
 
-/** Used by the chat module to disclose an assistant turn's reasoning text. */
+/** Discloses an assistant turn's reasoning text; used by MessageComponent. */
 export const Reasoning = React.memo<ReasoningProps>(
   ({
     className,
@@ -145,7 +142,7 @@ const defaultGetThinkingMessage = (isStreaming: boolean, duration?: number): Rea
   return <p>Thought for {duration} seconds</p>;
 };
 
-/** Toggle of Reasoning, used by the chat module. */
+/** Toggle of Reasoning, used by MessageComponent. */
 export const ReasoningTrigger = React.memo<ReasoningTriggerProps>(
   ({
     className,
@@ -187,7 +184,7 @@ export type ReasoningContentProps = {
   children: React.ReactNode;
 } & React.HTMLAttributes<HTMLDivElement>;
 
-/** Body of Reasoning, used by the chat module. */
+/** Body of Reasoning, used by MessageComponent. */
 export const ReasoningContent = React.memo<ReasoningContentProps>(
   ({ className, children, ...props }) => (
     <CollapsibleContent

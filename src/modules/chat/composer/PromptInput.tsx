@@ -1,11 +1,8 @@
-"use client";
-
 import * as React from 'react';
 import { SendHorizonalIcon, SquareIcon } from 'lucide-react';
 
 import { cn } from '@/shared/utils';
-import { Button } from '@/shared/ui/Button';
-import { Tooltip } from '@/shared/ui/Tooltip';
+import { Button, Tooltip } from '@/shared/ui';
 
 /* ─── Context ────────────────────────────────────────────────────── */
 
@@ -17,7 +14,8 @@ type PromptInputContextValue = {
 
 const PromptInputContext = React.createContext<PromptInputContextValue | null>(null);
 
-export const usePromptInput = () => {
+/** Read by PromptInputSubmit, which is only ever rendered inside PromptInput. */
+const usePromptInput = () => {
   const context = React.useContext(PromptInputContext);
   if (!context) {
     throw new Error('PromptInput components must be used within PromptInput');
@@ -31,7 +29,7 @@ export type PromptInputProps = {
   status?: PromptInputStatus;
 } & React.FormHTMLAttributes<HTMLFormElement>;
 
-/** Used by the chat module as the composer form shell. */
+/** Composer form shell, used by ChatComposer. */
 export const PromptInput = React.forwardRef<HTMLFormElement, PromptInputProps>(
   ({ className, status = 'ready', children, ...props }, ref) => {
     const contextValue = React.useMemo(() => ({ status }), [status]);
@@ -57,7 +55,7 @@ PromptInput.displayName = 'PromptInput';
 
 /* ─── PromptInputHeader ──────────────────────────────────────────── */
 
-/** Attachment/queue row above the composer textarea, used by the chat module. */
+/** Attachment/queue row above the composer textarea, used by ChatComposer. */
 export const PromptInputHeader = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
@@ -73,7 +71,7 @@ PromptInputHeader.displayName = 'PromptInputHeader';
 
 /* ─── PromptInputBody ────────────────────────────────────────────── */
 
-/** Wrapper around the composer textarea, used by the chat module. */
+/** Wrapper around the composer textarea, used by ChatComposer. */
 export const PromptInputBody = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
@@ -89,7 +87,7 @@ PromptInputBody.displayName = 'PromptInputBody';
 
 /* ─── PromptInputTextarea ────────────────────────────────────────── */
 
-/** Auto-growing message textarea, used by the chat module. */
+/** Auto-growing message textarea, used by ChatComposer. */
 export const PromptInputTextarea = React.forwardRef<
   HTMLTextAreaElement,
   React.TextareaHTMLAttributes<HTMLTextAreaElement>
@@ -108,7 +106,7 @@ PromptInputTextarea.displayName = 'PromptInputTextarea';
 
 /* ─── PromptInputFooter ──────────────────────────────────────────── */
 
-/** Row below the composer textarea, used by the chat module. */
+/** Row below the composer textarea, used by ChatComposer. */
 export const PromptInputFooter = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
@@ -124,7 +122,7 @@ PromptInputFooter.displayName = 'PromptInputFooter';
 
 /* ─── PromptInputTools ───────────────────────────────────────────── */
 
-/** Left-hand tool cluster in the composer footer, used by the chat module. */
+/** Left-hand tool cluster in the composer footer, used by ChatComposer. */
 export const PromptInputTools = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
@@ -150,7 +148,7 @@ export type PromptInputButtonProps = {
   tooltip?: PromptInputButtonTooltip;
 } & React.ButtonHTMLAttributes<HTMLButtonElement>;
 
-/** Icon button in the composer footer, used by the chat module. */
+/** Icon button in the composer footer, used by ChatComposer and VoiceInputButton. */
 export const PromptInputButton = React.forwardRef<HTMLButtonElement, PromptInputButtonProps>(
   ({ className, tooltip, children, ...props }, ref) => {
     const button = (
@@ -193,15 +191,13 @@ PromptInputButton.displayName = 'PromptInputButton';
 
 /* ─── PromptInputSubmit ──────────────────────────────────────────── */
 
-export type PromptInputSubmitProps = {
-  status?: PromptInputStatus;
-} & React.ButtonHTMLAttributes<HTMLButtonElement>;
+export type PromptInputSubmitProps = React.ButtonHTMLAttributes<HTMLButtonElement>;
 
-/** Send/stop button of the composer, used by the chat module. */
+/** Send/stop button of the composer, used by ChatComposer. */
 export const PromptInputSubmit = React.forwardRef<HTMLButtonElement, PromptInputSubmitProps>(
-  ({ className, status: statusProp, children, ...props }, ref) => {
-    const context = React.useContext(PromptInputContext);
-    const status = statusProp ?? context?.status ?? 'ready';
+  ({ className, children, ...props }, ref) => {
+    // The status comes from the PromptInput root, which is the only place it is set.
+    const { status } = usePromptInput();
     const isActive = status === 'submitted' || status === 'streaming';
 
     return (

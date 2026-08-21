@@ -1,6 +1,6 @@
 import { memo, useMemo } from 'react';
 
-import { Queue, QueueItem, QueueItemIndicator, QueueItemContent } from '@/shared/ui';
+import { Queue, QueueItem, QueueItemContent, QueueItemIndicator } from '@/modules/chat/tools/Queue';
 import type { QueueItemStatus, TodoItem } from '@/shared/types';
 
 

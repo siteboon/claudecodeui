@@ -3,9 +3,6 @@ import * as React from 'react';
 import { cn } from '@/shared/utils';
 import type { QueueItemStatus } from '@/shared/types';
 
-/* ─── Types ──────────────────────────────────────────────────────── */
-
-
 /* ─── Context ────────────────────────────────────────────────────── */
 
 type QueueItemContextValue = {
@@ -22,7 +19,7 @@ function useQueueItem() {
 
 /* ─── Queue ──────────────────────────────────────────────────────── */
 
-/** Used by the chat module to render a tool's todo list as a progress queue. */
+/** Renders a tool's todo list as a progress queue; used by TodoList. */
 export const Queue = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div
@@ -42,7 +39,7 @@ export type QueueItemProps = {
   status?: QueueItemStatus;
 } & React.HTMLAttributes<HTMLDivElement>;
 
-/** One row of Queue, used by the chat module. */
+/** One row of Queue, used by TodoList. */
 export const QueueItem = React.forwardRef<HTMLDivElement, QueueItemProps>(
   ({ status = 'pending', className, children, ...props }, ref) => {
     const value = React.useMemo(() => ({ status }), [status]);
@@ -67,7 +64,7 @@ QueueItem.displayName = 'QueueItem';
 
 /* ─── QueueItemIndicator ─────────────────────────────────────────── */
 
-/** Status dot of a QueueItem, used by the chat module. */
+/** Status dot of a QueueItem, used by TodoList. */
 export const QueueItemIndicator = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => {
     const { status } = useQueueItem();
@@ -101,7 +98,7 @@ QueueItemIndicator.displayName = 'QueueItemIndicator';
 
 /* ─── QueueItemContent ───────────────────────────────────────────── */
 
-/** Label of a QueueItem, used by the chat module. */
+/** Label of a QueueItem, used by TodoList. */
 export const QueueItemContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, children, ...props }, ref) => {
     const { status } = useQueueItem();
