@@ -48,7 +48,6 @@ type TaskMasterContextValue = {
   isLoadingTasks: boolean;
   isLoadingMCP: boolean;
   error: TaskMasterContextError | null;
-  refreshProjects: () => Promise<void>;
   setCurrentProject: (project: TaskMasterProjectInput) => void;
   refreshTasks: () => Promise<void>;
   refreshMCPStatus: () => Promise<void>;
@@ -215,14 +214,16 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
   );
 
   /**
-   * Re-reads TaskMaster details for the selected project.
+   * Re-reads TaskMaster details for whichever project is selected.
    *
    * This used to fetch the whole `/api/projects` list — a second copy of the
    * request the workspace already makes on boot, with its own taskmaster merge
    * — even though the only thing downstream reads is `currentProject`. The
-   * per-project endpoint answers exactly that question.
+   * per-project endpoint answers exactly that question, which also means it is
+   * now the same call setCurrentProject and the websocket handler already make,
+   * so the only caller left is the sign-in effect below.
    */
-  const refreshProjects = useCallback(async () => {
+  const refreshSelectedProjectTaskMaster = useCallback(async () => {
     const currentProjectId = currentProjectIdRef.current;
     if (!currentProjectId) {
       return;
@@ -292,10 +293,10 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     if (!isAuthLoading && user && token) {
-      void refreshProjects();
+      void refreshSelectedProjectTaskMaster();
       void refreshMCPStatus();
     }
-  }, [isAuthLoading, refreshMCPStatus, refreshProjects, token, user]);
+  }, [isAuthLoading, refreshMCPStatus, refreshSelectedProjectTaskMaster, token, user]);
 
   useEffect(() => {
     if (currentProject?.projectId && user && token) {
@@ -312,10 +313,14 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
 
       // Broadcasts identify projects by their DB `projectId`.
       if (message.type === 'taskmaster-project-updated' && message.projectId) {
+        // Only the selected project has anything to re-read. The second call
+        // here used to be refreshProjects(), which after e872a34 is this exact
+        // per-project request — so a broadcast for the selected project fired
+        // two identical fetches, and a broadcast for any other project refetched
+        // the selected one for news that said nothing about it.
         if (message.projectId === currentProjectIdRef.current) {
           void refreshCurrentProjectTaskMaster(message.projectId);
         }
-        void refreshProjects();
         return;
       }
 
@@ -333,7 +338,7 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
     };
 
     return subscribe(handleEvent);
-  }, [refreshCurrentProjectTaskMaster, refreshMCPStatus, refreshProjects, refreshTasks, subscribe]);
+  }, [refreshCurrentProjectTaskMaster, refreshMCPStatus, refreshTasks, subscribe]);
 
   const contextValue = useMemo<TaskMasterContextValue>(
     () => ({
@@ -345,7 +350,6 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       isLoadingTasks,
       isLoadingMCP,
       error,
-      refreshProjects,
       setCurrentProject,
       refreshTasks,
       refreshMCPStatus,
@@ -361,7 +365,6 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       nextTask,
       projectTaskMaster,
       refreshMCPStatus,
-      refreshProjects,
       refreshTasks,
       setCurrentProject,
       tasks,

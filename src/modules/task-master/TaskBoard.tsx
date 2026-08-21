@@ -38,7 +38,7 @@ export default function TaskBoard({
   existingPRDs = [],
   onRefreshPRDs = null,
 }: TaskBoardProps) {
-  const { projectTaskMaster, refreshProjects, refreshTasks, setCurrentProject } = useTaskMaster();
+  const { projectTaskMaster, refreshTasks, setCurrentProject } = useTaskMaster();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
@@ -98,7 +98,8 @@ export default function TaskBoard({
   };
 
   const refreshAfterSetup = () => {
-    void refreshProjects();
+    // setCurrentProject re-reads the project's TaskMaster details itself, so
+    // the refreshProjects() that used to precede it was the same request twice.
     if (currentProject) {
       setCurrentProject(currentProject);
     }

@@ -56,7 +56,6 @@ export default function NextTaskBanner({ onShowAllTasks = null, onStartTask = nu
     isLoadingTasks,
     projectTaskMaster,
     refreshTasks,
-    refreshProjects,
     setCurrentProject,
   } = useTaskMaster();
 
@@ -72,7 +71,8 @@ export default function NextTaskBanner({ onShowAllTasks = null, onStartTask = nu
   const hasTaskMaster = Boolean(projectTaskMaster?.hasTaskmaster || currentProject.taskmaster?.hasTaskmaster);
 
   const handleSetupRefresh = () => {
-    void refreshProjects();
+    // setCurrentProject re-reads the project's TaskMaster details itself, so
+    // the refreshProjects() that used to precede it was the same request twice.
     setCurrentProject(currentProject);
     void refreshTasks();
   };
