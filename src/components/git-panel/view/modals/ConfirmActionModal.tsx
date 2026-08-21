@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, Check, Download, RotateCcw, Trash2, Upload } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+
 import {
   CONFIRMATION_ACTION_LABELS,
   CONFIRMATION_BUTTON_CLASSES,
@@ -35,6 +37,7 @@ function renderConfirmActionIcon(actionType: ConfirmationRequest['type']) {
 }
 
 export default function ConfirmActionModal({ action, onCancel, onConfirm }: ConfirmActionModalProps) {
+  const { t } = useTranslation();
   const [useAlternateConfirmation, setUseAlternateConfirmation] = useState(false);
   const titleId = action ? `confirmation-title-${action.type}` : undefined;
 
@@ -90,7 +93,7 @@ export default function ConfirmActionModal({ action, onCancel, onConfirm }: Conf
             {renderConfirmActionIcon(action.type)}
           </div>
           <h3 id={titleId} className="text-lg font-semibold text-foreground">
-            {CONFIRMATION_TITLES[action.type]}
+            {t(CONFIRMATION_TITLES[action.type])}
           </h3>
         </div>
 
@@ -128,7 +131,7 @@ export default function ConfirmActionModal({ action, onCancel, onConfirm }: Conf
             onClick={handleCancel}
             className="rounded-lg px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
-            Cancel
+            {t('git:confirm.cancel')}
           </button>
           <button
             onClick={handleConfirm}
@@ -138,7 +141,7 @@ export default function ConfirmActionModal({ action, onCancel, onConfirm }: Conf
             <span>
               {useAlternateConfirmation && action.alternateConfirmation
                 ? action.alternateConfirmation.actionLabel
-                : CONFIRMATION_ACTION_LABELS[action.type]}
+                : t(CONFIRMATION_ACTION_LABELS[action.type])}
             </span>
           </button>
         </div>

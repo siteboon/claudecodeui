@@ -163,7 +163,15 @@
       "opencode": "Ready to use OpenCode with {{model}}. Start typing your message below.",
       "default": "Select a provider above to begin"
     },
-    "pressToSearch": "Press <kbd>{{shortcut}}</kbd> to search sessions, files, and commits"
+    "pressToSearch": "Press <kbd>{{shortcut}}</kbd> to search sessions, files, and commits",
+    "chooseModel": "Choose a model",
+    "chooseModelDescription": "Built-in and custom models in one list",
+    "addModel": "Add model",
+    "searchModels": "Search models...",
+    "manageModels": "Manage models",
+    "noModelsFound": "No models found.",
+    "loadingModels": "Loading models…",
+    "clickToChange": "Click to change model"
   },
   "session": {
     "continue": {
@@ -244,5 +252,59 @@
   },
   "tasks": {
     "nextTaskPrompt": "Start the next task"
+  },
+  "misc": {
+    "copyToClipboard": "Copy to clipboard",
+    "copyCommand": "Copy command",
+    "runningTask": "Running task",
+    "userAskedRevise": "User asked to revise the plan",
+    "typeAnswer": "Type your answer...",
+    "skipOne": "Skip",
+    "skipAll": "Skip all",
+    "exportChat": "Export chat",
+    "closeImagePreview": "Close image preview",
+    "availableCommands": "Available commands",
+    "filterCommands": "Filter commands...",
+    "closeModal": "Close command result modal",
+    "noDescription": "No description available.",
+    "modelChangeFailed": "Unable to change the model right now.",
+    "choiceSavedHint": "Your choice is saved for this session and becomes the default for new chats.",
+    "docsSearchSubtitle": "Search built-ins, syntax patterns, and command usage without leaving the chat.",
+    "enterModelInfo": "Enter both a model name and model ID.",
+    "modelSaveFailed": "Unable to save this model.",
+    "modelDeleteFailed": "Unable to delete this model.",
+    "cancelEditing": "Cancel editing",
+    "userDeniedTool": "User denied tool use",
+    "showTokenUsage": "Show token usage",
+    "fallbackCommands": {
+      "models": "Browse available models for the active provider.",
+      "cost": "Review token usage for the active session.",
+      "status": "Inspect runtime, version, provider, and environment status.",
+      "memory": "Open the project CLAUDE.md memory file.",
+      "config": "Open settings and configuration.",
+      "help": "Show command documentation and syntax."
+    },
+    "modalMeta": {
+      "helpEyebrow": "Command center",
+      "helpTitle": "Help & Shortcuts",
+      "helpSubtitle": "Search built-ins, syntax patterns, and command usage without leaving the chat.",
+      "modelsEyebrow": "Model selection",
+      "modelsTitle": "Choose a Model",
+      "modelsSubtitle": "Pick the model this provider should use.",
+      "costEyebrow": "Session telemetry",
+      "costTitle": "Token Usage",
+      "costSubtitle": "Input, output, and total token counts for this session.",
+      "statusEyebrow": "Runtime health",
+      "statusTitle": "System Status",
+      "statusSubtitle": "Version, provider, runtime, and environment details in one place.",
+      "commandResult": "Command Result"
+    },
+    "choiceSavedSession": "Your choice is saved for this session and becomes the default for new chats.",
+    "choiceSavedDefault": "Your choice becomes the default model for new chats.",
+    "tokensUsed_one": "{{count}} token used",
+    "tokensUsed_other": "{{count}} tokens used",
+    "expandImage": "Expand {{name}}",
+    "tokensLabel_one": "token",
+    "tokensLabel_other": "tokens"
   }
 }

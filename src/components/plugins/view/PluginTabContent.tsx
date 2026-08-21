@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { authenticatedFetch } from '../../../utils/api';
 import { usePlugins } from '../../../contexts/PluginsContext';
@@ -46,7 +47,9 @@ export default function PluginTabContent({
   selectedProject,
   selectedSession,
 }: PluginTabContentProps) {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const { isDarkMode } = useTheme();
   const { plugins } = usePlugins();
 
@@ -69,6 +72,9 @@ export default function PluginTabContent({
   }, [isDarkMode, selectedProject, selectedSession]);
 
   useEffect(() => {
+    // Drop any previous plugin's error before this load attempt starts, so a
+    // stale overlay never covers a different (or successfully loaded) plugin.
+    setLoadError(null);
     if (!containerRef.current || !plugin?.enabled) return;
 
     let active = true;
@@ -123,12 +129,7 @@ export default function PluginTabContent({
       } catch (err) {
         if (!active) return;
         console.error(`[Plugin:${pluginName}] Failed to load:`, err);
-        if (containerRef.current) {
-          const errDiv = document.createElement('div');
-          errDiv.style.cssText = 'padding:16px;font-size:13px;color:#dc2626';
-          errDiv.textContent = `Plugin failed to load: ${String(err)}`;
-          containerRef.current.replaceChildren(errDiv);
-        }
+        setLoadError(String(err));
       }
     })();
 
@@ -140,5 +141,14 @@ export default function PluginTabContent({
     };
   }, [pluginName, plugin?.entry, plugin?.enabled]); // re-mount when plugin or enabled state changes
 
-  return <div ref={containerRef} className="h-full w-full overflow-auto" />;
+  return (
+    <div className="relative h-full w-full overflow-auto">
+      <div ref={containerRef} className="h-full w-full overflow-auto" />
+      {loadError && (
+        <div className="absolute inset-0 p-4 text-[13px] text-red-600">
+          {t('common:misc.pluginLoadFailed', { error: loadError })}
+        </div>
+      )}
+    </div>
+  );
 }

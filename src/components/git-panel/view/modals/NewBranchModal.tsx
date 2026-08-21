@@ -1,5 +1,6 @@
 import { Plus, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 type NewBranchModalProps = {
   isOpen: boolean;
@@ -16,6 +17,7 @@ export default function NewBranchModal({
   onClose,
   onCreateBranch,
 }: NewBranchModalProps) {
+  const { t } = useTranslation();
   const [newBranchName, setNewBranchName] = useState('');
 
   useEffect(() => {
@@ -57,11 +59,11 @@ export default function NewBranchModal({
         aria-labelledby="new-branch-title"
       >
         <div className="p-6">
-          <h3 className="mb-4 text-lg font-semibold text-foreground">Create New Branch</h3>
+          <h3 className="mb-4 text-lg font-semibold text-foreground">{t('git:newBranch.title')}</h3>
 
           <div className="mb-4">
             <label htmlFor="git-new-branch-name" className="mb-2 block text-sm font-medium text-foreground/80">
-              Branch Name
+              {t('git:newBranch.nameLabel')}
             </label>
             <input
               id="git-new-branch-name"
@@ -89,7 +91,7 @@ export default function NewBranchModal({
           </div>
 
           <p className="mb-4 text-sm text-muted-foreground">
-            This will create a new branch from the current branch ({currentBranch})
+            {t('git:newBranch.createdFrom', { branch: currentBranch })}
           </p>
 
           <div className="flex justify-end space-x-3">
@@ -97,7 +99,7 @@ export default function NewBranchModal({
               onClick={onClose}
               className="rounded-lg px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
-              Cancel
+              {t('git:confirm.cancel')}
             </button>
             <button
               onClick={() => void handleCreateBranch()}
@@ -107,12 +109,12 @@ export default function NewBranchModal({
               {isCreatingBranch ? (
                 <>
                   <RefreshCw className="h-3 w-3 animate-spin" />
-                  <span>Creating...</span>
+                  <span>{t('git:newBranch.creating')}</span>
                 </>
               ) : (
                 <>
                   <Plus className="h-3 w-3" />
-                  <span>Create Branch</span>
+                  <span>{t('git:newBranch.create')}</span>
                 </>
               )}
             </button>

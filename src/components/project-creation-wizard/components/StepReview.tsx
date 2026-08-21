@@ -20,7 +20,7 @@ export default function StepReview({
 
   const authenticationLabel = useMemo(() => {
     if (formState.tokenMode === 'stored' && formState.selectedGithubToken) {
-      return `${t('projectWizard.step3.usingStoredToken')} ${selectedTokenName || 'Unknown'}`;
+      return `${t('projectWizard.step3.usingStoredToken')} ${selectedTokenName || t('common:misc.unknownProvider')}`;
     }
 
     if (formState.tokenMode === 'new' && formState.newGithubToken.trim()) {

@@ -11,11 +11,13 @@ export const FILE_STATUS_GROUPS: GitStatusGroupEntry[] = [
   { key: 'untracked', status: 'U' },
 ];
 
+// Values are i18n keys — resolve through t() at render time so labels follow
+// the active language.
 export const FILE_STATUS_LABELS: Record<FileStatusCode, string> = {
-  M: 'Modified',
-  A: 'Added',
-  D: 'Deleted',
-  U: 'Untracked',
+  M: 'git:status.modified',
+  A: 'git:status.added',
+  D: 'git:status.deleted',
+  U: 'git:status.untracked',
 };
 
 export const FILE_STATUS_BADGE_CLASSES: Record<FileStatusCode, string> = {
@@ -26,25 +28,25 @@ export const FILE_STATUS_BADGE_CLASSES: Record<FileStatusCode, string> = {
 };
 
 export const CONFIRMATION_TITLES: Record<ConfirmActionType, string> = {
-  discard: 'Discard Changes',
-  delete: 'Delete File',
-  commit: 'Confirm Action',
-  pull: 'Confirm Pull',
-  push: 'Confirm Push',
-  publish: 'Publish Branch',
-  revertLocalCommit: 'Revert Local Commit',
-  deleteBranch: 'Delete Branch',
+  discard: 'git:confirm.title.discard',
+  delete: 'git:confirm.title.delete',
+  commit: 'git:confirm.title.commit',
+  pull: 'git:confirm.title.pull',
+  push: 'git:confirm.title.push',
+  publish: 'git:confirm.title.publish',
+  revertLocalCommit: 'git:confirm.title.revertLocalCommit',
+  deleteBranch: 'git:confirm.title.deleteBranch',
 };
 
 export const CONFIRMATION_ACTION_LABELS: Record<ConfirmActionType, string> = {
-  discard: 'Discard',
-  delete: 'Delete',
-  commit: 'Confirm',
-  pull: 'Pull',
-  push: 'Push',
-  publish: 'Publish',
-  revertLocalCommit: 'Revert Commit',
-  deleteBranch: 'Delete',
+  discard: 'git:confirm.action.discard',
+  delete: 'git:confirm.action.delete',
+  commit: 'git:confirm.action.commit',
+  pull: 'git:confirm.action.pull',
+  push: 'git:confirm.action.push',
+  publish: 'git:confirm.action.publish',
+  revertLocalCommit: 'git:confirm.action.revertLocalCommit',
+  deleteBranch: 'git:confirm.action.deleteBranch',
 };
 
 export const CONFIRMATION_BUTTON_CLASSES: Record<ConfirmActionType, string> = {

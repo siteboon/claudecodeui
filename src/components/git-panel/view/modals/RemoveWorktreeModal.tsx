@@ -1,5 +1,7 @@
 import { RefreshCw, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+
 import type { RemoveWorktreeOptions, WorktreeInfo } from '../../types/types';
 
 type RemoveWorktreeModalProps = {
@@ -16,6 +18,7 @@ export default function RemoveWorktreeModal({
   onClose,
   onRemove,
 }: RemoveWorktreeModalProps) {
+  const { t } = useTranslation();
   const [deleteBranch, setDeleteBranch] = useState(true);
   const [force, setForce] = useState(false);
 
@@ -58,20 +61,17 @@ export default function RemoveWorktreeModal({
               <Trash2 className="h-4 w-4 text-red-600 dark:text-red-400" />
             </div>
             <h3 id="remove-worktree-title" className="text-lg font-semibold text-foreground">
-              Remove Worktree
+              {t('git:remove.title')}
             </h3>
           </div>
 
           <p className="mb-3 text-sm text-muted-foreground">
-            Remove the worktree for{' '}
-            <span className="font-mono text-foreground/80">{worktree.branch ?? 'detached HEAD'}</span>?
-            Its folder is deleted and the linked project is archived — chat sessions stay recoverable.
+            {t('git:remove.description', { branch: worktree.branch ?? t('git:remove.detachedHead') })}
           </p>
 
           {isDirty && (
             <p className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
-              This worktree has {worktree.changedFileCount} uncommitted change
-              {worktree.changedFileCount === 1 ? '' : 's'} that will be lost.
+              {t('git:remove.uncommittedWarning', { count: worktree.changedFileCount })}
             </p>
           )}
 
@@ -83,7 +83,7 @@ export default function RemoveWorktreeModal({
                 onChange={(event) => setDeleteBranch(event.target.checked)}
                 className="h-4 w-4 rounded border-border accent-primary"
               />
-              Also delete branch <span className="font-mono">{worktree.branch}</span>
+              {t('git:remove.alsoDeleteBranch')} <span className="font-mono">{worktree.branch}</span>
             </label>
           )}
 
@@ -95,7 +95,7 @@ export default function RemoveWorktreeModal({
                 onChange={(event) => setForce(event.target.checked)}
                 className="h-4 w-4 rounded border-border accent-primary"
               />
-              Discard uncommitted changes
+              {t('git:remove.discardChanges')}
             </label>
           )}
 
@@ -104,7 +104,7 @@ export default function RemoveWorktreeModal({
               onClick={onClose}
               className="rounded-lg px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
-              Cancel
+              {t('git:confirm.cancel')}
             </button>
             <button
               onClick={() => void handleRemove()}
@@ -114,12 +114,12 @@ export default function RemoveWorktreeModal({
               {isRemoving ? (
                 <>
                   <RefreshCw className="h-3 w-3 animate-spin" />
-                  <span>Removing...</span>
+                  <span>{t('git:remove.removing')}</span>
                 </>
               ) : (
                 <>
                   <Trash2 className="h-3 w-3" />
-                  <span>Remove</span>
+                  <span>{t('git:remove.remove')}</span>
                 </>
               )}
             </button>

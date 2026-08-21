@@ -64,7 +64,7 @@ export function VersionUpgradeModal({
 
     const handleUpdateNow = useCallback(async () => {
         setIsUpdating(true);
-        setUpdateOutput('Starting update...\n');
+        setUpdateOutput(t('versionUpdate.startingUpdate') + '\n');
         setReloadCountdown(IS_PLATFORM ? RELOAD_COUNTDOWN_START : null);
         setUpdateError('');
 
@@ -90,41 +90,41 @@ export function VersionUpgradeModal({
                     // On platform the update restarts the server, which often
                     // cuts the response short. Treat it as in progress and let
                     // the reload countdown pick up the new version.
-                    setUpdateOutput(prev => prev + '\nUpdate started. The server appears to be restarting to apply it.\n');
+                    setUpdateOutput(prev => prev + '\n' + t('versionUpdate.updateStartedRestarting') + '\n');
                 } else {
                     setReloadCountdown(null);
-                    const message = `The update endpoint returned an unexpected response (HTTP ${response.status}). Update manually with the command below.`;
+                    const message = t('versionUpdate.unexpectedResponse', { status: response.status });
                     setUpdateError(message);
-                    setUpdateOutput(prev => prev + '\n❌ Update failed: ' + message + '\n');
+                    setUpdateOutput(prev => prev + '\n❌ ' + t('versionUpdate.updateFailed') + ': ' + message + '\n');
                 }
                 return;
             }
 
             if (response.ok) {
                 setUpdateOutput(prev => prev + (data.output || '') + '\n');
-                setUpdateOutput(prev => prev + '\n✅ Update completed successfully!\n');
+                setUpdateOutput(prev => prev + '\n✅ ' + t('versionUpdate.updateCompleted') + '\n');
                 if (!IS_PLATFORM) {
-                    setUpdateOutput(prev => prev + 'Please restart the server to apply changes.' + '\n');
+                    setUpdateOutput(prev => prev + t('versionUpdate.restartServer') + '\n');
                 }
             } else {
                 setReloadCountdown(null);
-                setUpdateError(data.error || 'Update failed');
-                setUpdateOutput(prev => prev + '\n❌ Update failed: ' + (data.error || 'Unknown error') + '\n');
+                setUpdateError(data.error || t('versionUpdate.updateFailed'));
+                setUpdateOutput(prev => prev + '\n❌ ' + t('versionUpdate.updateFailed') + ': ' + (data.error || t('versionUpdate.unknownError')) + '\n');
             }
         } catch (error: any) {
             if (IS_PLATFORM) {
                 // Connection dropped mid-request — expected when the platform
                 // update restarts the server. Keep the countdown running.
-                setUpdateOutput(prev => prev + '\nConnection to the server was interrupted — it is likely restarting to apply the update.\n');
+                setUpdateOutput(prev => prev + '\n' + t('versionUpdate.connectionInterrupted') + '\n');
             } else {
                 setReloadCountdown(null);
                 setUpdateError(error.message);
-                setUpdateOutput(prev => prev + '\n❌ Update failed: ' + error.message + '\n');
+                setUpdateOutput(prev => prev + '\n❌ ' + t('versionUpdate.updateFailed') + ': ' + error.message + '\n');
             }
         } finally {
             setIsUpdating(false);
         }
-    }, []);
+    }, [t]);
 
     if (!isOpen) return null;
 
@@ -215,8 +215,8 @@ export function VersionUpgradeModal({
                         {IS_PLATFORM && reloadCountdown !== null && (
                             <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-200">
                                 {reloadCountdown === 0
-                                    ? 'Refreshing the window now...'
-                                    : `This will refresh the window in ${reloadCountdown} ${reloadCountdown === 1 ? 'second' : 'seconds'}. If the update doesn't apply, RESTART the environment.`}
+                                    ? t('versionUpdate.refreshNow')
+                                    : t('versionUpdate.refreshIn', { count: reloadCountdown })}
                             </div>
                         )}
                         {updateError && (

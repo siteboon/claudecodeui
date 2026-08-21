@@ -23,6 +23,7 @@ import enChat from './locales/en/chat.json';
 import enCodeEditor from './locales/en/codeEditor.json';
 // eslint-disable-next-line import-x/order
 import enTasks from './locales/en/tasks.json';
+import enGit from './locales/en/git.json';
 
 import frCommon from './locales/fr/common.json';
 import frSettings from './locales/fr/settings.json';
@@ -145,6 +146,7 @@ i18n
         chat: enChat,
         codeEditor: enCodeEditor,
         tasks: enTasks,
+        git: enGit,
       },
       fr: {
         common: frCommon,
@@ -248,7 +250,7 @@ i18n
     debug: false,
 
     // Namespaces - load only what's needed
-    ns: ['common', 'settings', 'auth', 'sidebar', 'chat', 'codeEditor', 'tasks'],
+    ns: ['common', 'settings', 'auth', 'sidebar', 'chat', 'codeEditor', 'tasks', 'git'],
     defaultNS: 'common',
 
     // Key separator for nested keys (default: '.')
