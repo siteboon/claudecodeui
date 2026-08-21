@@ -264,7 +264,8 @@
       "showSidebar": "サイドバーを表示",
       "settings": "設定",
       "updateAvailable": "アップデートあり",
-      "closeSidebar": "サイドバーを閉じる"
+      "closeSidebar": "サイドバーを閉じる",
+      "resizeSidebar": "サイドバーの幅を変更"
     }
   }
 }
