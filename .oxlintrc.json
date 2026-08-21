@@ -89,7 +89,8 @@
           "src/shared/uiPreferences.ts",
           "src/shared/selectedProvider.ts",
           "src/shared/authToken.ts",
-          "src/shared/voiceConfig.ts"
+          "src/shared/voiceConfig.ts",
+          "src/shared/codeEditorSettings.ts"
         ],
         "mode": "file"
       },

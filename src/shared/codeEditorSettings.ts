@@ -6,26 +6,36 @@ import {
 import type { CodeEditorSettingsState } from '@/shared/types';
 
 /**
- * Reads the four code-editor display settings the settings dialog edits.
+ * The single reader and writer for the four code-editor display settings.
  *
- * Reading must never write: this runs when the dialog mounts, and a write here
- * would materialize defaults over settings the user never chose.
+ * The settings dialog writes them and the code editor reads them, and each
+ * module used to decode the same four keys with its own helper — which had
+ * already drifted on the fontSize default. One reader, one writer, one place to
+ * change a key.
  */
+
 const readStoredBoolean = (storageKey: string, defaultValue: boolean): boolean => {
   const stored = localStorage.getItem(storageKey);
-  return stored === null ? defaultValue : stored === 'true';
+  return stored === null ? defaultValue : stored !== 'false';
 };
 
+/**
+ * Reading must never write: this runs when the settings dialog mounts, and a
+ * write here would materialize defaults over settings the user never chose.
+ *
+ * `fontSize` stays the stored string. The settings dialog binds it to a select;
+ * the editor turns it into a number.
+ */
 export const readCodeEditorSettings = (): CodeEditorSettingsState => ({
   wordWrap: readStoredBoolean(CODE_EDITOR_STORAGE_KEYS.wordWrap, CODE_EDITOR_DEFAULTS.wordWrap),
-  showMinimap: localStorage.getItem(CODE_EDITOR_STORAGE_KEYS.showMinimap) !== 'false',
-  lineNumbers: localStorage.getItem(CODE_EDITOR_STORAGE_KEYS.lineNumbers) !== 'false',
+  showMinimap: readStoredBoolean(CODE_EDITOR_STORAGE_KEYS.showMinimap, CODE_EDITOR_DEFAULTS.showMinimap),
+  lineNumbers: readStoredBoolean(CODE_EDITOR_STORAGE_KEYS.lineNumbers, CODE_EDITOR_DEFAULTS.lineNumbers),
   fontSize: localStorage.getItem(CODE_EDITOR_STORAGE_KEYS.fontSize) ?? CODE_EDITOR_DEFAULTS.fontSize,
 });
 
 /**
- * Writes all four keys and tells the code-editor module to re-read them, since
- * the `storage` event does not fire in the tab that performed the write.
+ * Writes all four keys and tells the code editor to re-read them, since the
+ * `storage` event does not fire in the tab that performed the write.
  * Called only from a user edit.
  */
 export const writeCodeEditorSettings = (settings: CodeEditorSettingsState) => {

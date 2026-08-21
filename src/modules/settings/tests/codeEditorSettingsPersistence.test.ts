@@ -6,7 +6,7 @@ import { CODE_EDITOR_DEFAULTS, CODE_EDITOR_STORAGE_KEYS } from '@/shared/constan
 import {
   readCodeEditorSettings,
   writeCodeEditorSettings,
-} from '@/modules/settings/utils/codeEditorSettingsStorage';
+} from '@/shared/codeEditorSettings';
 
 /**
  * Regression guard for the settings/code-editor split ownership of the four
@@ -73,4 +73,32 @@ test('a font size the user already chose survives a settings read', () => {
   localStorage.setItem(CODE_EDITOR_STORAGE_KEYS.fontSize, '16');
 
   assert.equal(readCodeEditorSettings().fontSize, '16');
+});
+
+test('reading writes nothing, so opening the dialog cannot materialize defaults', () => {
+  // This is the invariant the whole split exists for: the settings dialog reads
+  // on mount, and any write here lands on a user who never opened the editor.
+  readCodeEditorSettings();
+
+  for (const key of Object.values(CODE_EDITOR_STORAGE_KEYS)) {
+    assert.equal(localStorage.getItem(key), null, `${key} must not be written by a read`);
+  }
+});
+
+test('the editor and the dialog decode a stored value the same way', () => {
+  // Two hand-rolled readers used to decode these keys; only one of them
+  // honoured the default when the key was absent.
+  writeCodeEditorSettings({
+    wordWrap: true,
+    showMinimap: false,
+    lineNumbers: true,
+    fontSize: '20',
+  });
+
+  assert.deepEqual(readCodeEditorSettings(), {
+    wordWrap: true,
+    showMinimap: false,
+    lineNumbers: true,
+    fontSize: '20',
+  });
 });

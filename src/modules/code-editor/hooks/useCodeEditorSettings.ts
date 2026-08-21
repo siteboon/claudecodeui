@@ -1,50 +1,27 @@
 import { useEffect, useState } from 'react';
 
-import {
-  CODE_EDITOR_DEFAULTS,
-  CODE_EDITOR_SETTINGS_CHANGED_EVENT,
-  CODE_EDITOR_STORAGE_KEYS,
-} from '@/shared/constants';
+import { readCodeEditorSettings } from '@/shared/codeEditorSettings';
+import { CODE_EDITOR_SETTINGS_CHANGED_EVENT, CODE_EDITOR_STORAGE_KEYS } from '@/shared/constants';
 
-const readBoolean = (storageKey: string, defaultValue: boolean, falseValue = 'false') => {
-  const value = localStorage.getItem(storageKey);
-  if (value === null) {
-    return defaultValue;
-  }
-
-  return value !== falseValue;
-};
-
-const readWordWrap = () => {
-  return localStorage.getItem(CODE_EDITOR_STORAGE_KEYS.wordWrap) === 'true';
-};
-
-const readFontSize = () => {
-  const stored = localStorage.getItem(CODE_EDITOR_STORAGE_KEYS.fontSize);
-  return Number(stored ?? CODE_EDITOR_DEFAULTS.fontSize);
+/** Monaco wants a number; the settings dialog stores and edits a string. */
+const readEditorSettings = () => {
+  const stored = readCodeEditorSettings();
+  return { ...stored, fontSize: Number(stored.fontSize) };
 };
 
 export const useCodeEditorSettings = () => {
-  const [wordWrap, setWordWrap] = useState(readWordWrap);
-  const [minimapEnabled, setMinimapEnabled] = useState(() => (
-    readBoolean(CODE_EDITOR_STORAGE_KEYS.showMinimap, CODE_EDITOR_DEFAULTS.showMinimap)
-  ));
-  const [showLineNumbers, setShowLineNumbers] = useState(() => (
-    readBoolean(CODE_EDITOR_STORAGE_KEYS.lineNumbers, CODE_EDITOR_DEFAULTS.lineNumbers)
-  ));
-  const [fontSize, setFontSize] = useState(readFontSize);
+  // Mirrors the four persisted display settings so the editor re-renders when
+  // the settings dialog rewrites them, in this tab or another one.
+  const [settings, setSettings] = useState(readEditorSettings);
 
   // Keep legacy behavior where the editor writes wrap settings directly.
   useEffect(() => {
-    localStorage.setItem(CODE_EDITOR_STORAGE_KEYS.wordWrap, String(wordWrap));
-  }, [wordWrap]);
+    localStorage.setItem(CODE_EDITOR_STORAGE_KEYS.wordWrap, String(settings.wordWrap));
+  }, [settings.wordWrap]);
 
   useEffect(() => {
     const refreshFromStorage = () => {
-      setWordWrap(readWordWrap());
-      setMinimapEnabled(readBoolean(CODE_EDITOR_STORAGE_KEYS.showMinimap, CODE_EDITOR_DEFAULTS.showMinimap));
-      setShowLineNumbers(readBoolean(CODE_EDITOR_STORAGE_KEYS.lineNumbers, CODE_EDITOR_DEFAULTS.lineNumbers));
-      setFontSize(readFontSize());
+      setSettings(readEditorSettings());
     };
 
     window.addEventListener('storage', refreshFromStorage);
@@ -57,9 +34,9 @@ export const useCodeEditorSettings = () => {
   }, []);
 
   return {
-    wordWrap,
-    minimapEnabled,
-    showLineNumbers,
-    fontSize,
+    wordWrap: settings.wordWrap,
+    minimapEnabled: settings.showMinimap,
+    showLineNumbers: settings.lineNumbers,
+    fontSize: settings.fontSize,
   };
 };

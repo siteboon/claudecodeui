@@ -122,3 +122,21 @@ test('a second change keeps the earlier one', async () => {
   assert.equal(localStorage.getItem(CODE_EDITOR_STORAGE_KEYS.fontSize), '18');
   assert.equal(localStorage.getItem(CODE_EDITOR_STORAGE_KEYS.wordWrap), 'true');
 });
+
+test('two edits in one batch both survive', async () => {
+  // The merge base is storage, not the rendered state, so the second call in a
+  // batch cannot write a pre-first-edit snapshot back over the first.
+  const { result } = await renderSettings();
+
+  act(() => {
+    result.current.updateCodeEditorSetting('fontSize', '20');
+    result.current.updateCodeEditorSetting('wordWrap', true);
+  });
+
+  await waitFor(() => {
+    assert.equal(localStorage.getItem(CODE_EDITOR_STORAGE_KEYS.fontSize), '20');
+  });
+  assert.equal(localStorage.getItem(CODE_EDITOR_STORAGE_KEYS.wordWrap), 'true');
+  assert.equal(result.current.codeEditorSettings.fontSize, '20');
+  assert.equal(result.current.codeEditorSettings.wordWrap, true);
+});

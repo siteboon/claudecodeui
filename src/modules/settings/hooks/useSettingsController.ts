@@ -6,7 +6,7 @@ import { setNotificationSoundEnabled } from '@/shared/utils';
 import {
   readCodeEditorSettings,
   writeCodeEditorSettings,
-} from '@/modules/settings/utils/codeEditorSettingsStorage';
+} from '@/shared/codeEditorSettings';
 import { useProviderAuthStatus } from '@/modules/provider-auth';
 import type { AgentProvider, ClaudePermissionsState, CodeEditorSettingsState, CodexPermissionMode, CursorPermissionsState, NotificationPreferencesState, ProjectSortOrder, SettingsMainTab } from '@/shared/types';
 
@@ -286,13 +286,18 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
   // object. The effect form also ran on mount, so merely opening this dialog
   // rewrote all four keys — which reset the editor's font size for anyone who
   // had never changed it.
+  //
+  // The other three keys are merged from storage rather than from the rendered
+  // state, so two edits landing in one React batch cannot write the second one
+  // on top of a pre-first-edit snapshot. Every write goes through
+  // writeCodeEditorSettings, so storage is always the newest value.
   const updateCodeEditorSetting = useCallback(
     <K extends keyof CodeEditorSettingsState>(key: K, value: CodeEditorSettingsState[K]) => {
-      const next = { ...codeEditorSettings, [key]: value };
+      const next = { ...readCodeEditorSettings(), [key]: value };
       setCodeEditorSettings(next);
       writeCodeEditorSettings(next);
     },
-    [codeEditorSettings],
+    [],
   );
 
   useEffect(() => {

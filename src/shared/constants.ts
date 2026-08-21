@@ -176,7 +176,8 @@ export const TERMINAL_INIT_DELAY_MS = 100;
 /**
  * localStorage keys for the four code-editor display settings. The settings
  * module writes them and the code-editor module reads them, so both must agree
- * on the key names — they previously duplicated this map and drifted.
+ * on the key names — they previously declared the map twice. The keys matched;
+ * it was the defaults that had drifted ('14' vs '12' for fontSize).
  */
 export const CODE_EDITOR_STORAGE_KEYS = {
   wordWrap: 'codeEditorWordWrap',
@@ -187,8 +188,9 @@ export const CODE_EDITOR_STORAGE_KEYS = {
 
 /**
  * Values applied when a code-editor setting has never been written. These are
- * the editor's own historical defaults; the settings dialog must not use a
- * different set or merely opening it would rewrite the user's editor.
+ * the editor's own historical defaults; the settings dialog used to carry its
+ * own copy with a different fontSize, so merely opening it rewrote the user's
+ * editor font.
  */
 export const CODE_EDITOR_DEFAULTS = {
   wordWrap: false,
