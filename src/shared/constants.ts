@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import type { ComponentType } from 'react';
 
-import type { FileStatusCode, McpProvider, McpScope, McpTransport, SettingsMainTab } from '@/shared/types';
+import type { FileStatusCode, LLMProvider, McpProvider, McpScope, McpTransport, SettingsMainTab } from '@/shared/types';
 
 /** The four buckets the git changes view sorts working-tree files into. */
 type GitStatusFileGroup = 'modified' | 'added' | 'deleted' | 'untracked';
@@ -168,3 +168,57 @@ export const SETTING_ROW_CLASS =
  * layout pass so the initial fit and the resize message sent to the backend use real dimensions.
  */
 export const TERMINAL_INIT_DELAY_MS = 100;
+
+// ---------------------------
+
+//----------------- CODE EDITOR DISPLAY SETTINGS ------------
+
+/**
+ * localStorage keys for the four code-editor display settings. The settings
+ * module writes them and the code-editor module reads them, so both must agree
+ * on the key names — they previously duplicated this map and drifted.
+ */
+export const CODE_EDITOR_STORAGE_KEYS = {
+  wordWrap: 'codeEditorWordWrap',
+  showMinimap: 'codeEditorShowMinimap',
+  lineNumbers: 'codeEditorLineNumbers',
+  fontSize: 'codeEditorFontSize',
+} as const;
+
+/**
+ * Values applied when a code-editor setting has never been written. These are
+ * the editor's own historical defaults; the settings dialog must not use a
+ * different set or merely opening it would rewrite the user's editor.
+ */
+export const CODE_EDITOR_DEFAULTS = {
+  wordWrap: false,
+  showMinimap: true,
+  lineNumbers: true,
+  fontSize: '12',
+} as const;
+
+/**
+ * Same-tab notification that the settings dialog rewrote the code-editor keys.
+ * The `storage` event does not fire in the tab that performed the write, so the
+ * code-editor module listens for this instead.
+ */
+export const CODE_EDITOR_SETTINGS_CHANGED_EVENT = 'codeEditorSettingsChanged';
+
+// ---------------------------
+
+//----------------- PROVIDER TOOL SETTINGS STORAGE ------------
+
+/**
+ * Per-provider localStorage key holding that provider's tool-permission
+ * settings, sent with every `chat.send`.
+ *
+ * `opencode` intentionally maps to its own key even though no settings UI
+ * writes it yet: without the entry the lookup would fall through to Claude's
+ * key and OpenCode sessions would silently inherit Claude's `skipPermissions`.
+ */
+export const PROVIDER_TOOLS_SETTINGS_STORAGE_KEYS: Record<LLMProvider, string> = {
+  claude: 'claude-settings',
+  cursor: 'cursor-tools-settings',
+  codex: 'codex-settings',
+  opencode: 'opencode-settings',
+};

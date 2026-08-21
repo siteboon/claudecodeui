@@ -8,8 +8,51 @@ import { SESSION_MESSAGES_PAGE_SIZE } from '@/modules/chat/utils/sessionMessageP
 import { createMessageHistoryRefreshCoordinator } from '@/modules/chat/utils/messageHistoryRefreshCoordinator';
 import { createCachedDiffCalculator } from '@/modules/chat/utils/messageTransforms';
 import { normalizedToChatMessages } from '@/modules/chat/hooks/useChatMessages';
+import { findSearchTargetIndex } from '@/modules/chat/utils/searchTargetLocator';
 
 const INITIAL_VISIBLE_MESSAGES = 100;
+
+/** Messages kept below a search hit so it lands mid-viewport rather than at the edge. */
+const SEARCH_TARGET_CONTEXT_MESSAGES = 20;
+
+/**
+ * Finds the rendered row for a resolved search target. Exact timestamp first;
+ * the nearest one only as a tie-break, since a target inside a collapsed tool
+ * group is represented by the group row.
+ */
+function findRenderedMessageElement(
+  container: HTMLElement,
+  timestamp: unknown,
+): HTMLElement | null {
+  const targetTime = new Date(String(timestamp)).getTime();
+  const candidates = container.querySelectorAll<HTMLElement>('[data-message-timestamp]');
+
+  let nearest: HTMLElement | null = null;
+  let nearestDistance = Infinity;
+
+  for (const candidate of candidates) {
+    const candidateTimestamp = candidate.getAttribute('data-message-timestamp');
+    if (!candidateTimestamp) {
+      continue;
+    }
+    if (candidateTimestamp === String(timestamp)) {
+      return candidate;
+    }
+
+    const candidateTime = new Date(candidateTimestamp).getTime();
+    if (!Number.isFinite(candidateTime) || !Number.isFinite(targetTime)) {
+      continue;
+    }
+
+    const distance = Math.abs(candidateTime - targetTime);
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearest = candidate;
+    }
+  }
+
+  return nearest;
+}
 /** Stable empty list so `chatMessages` keeps its identity while no session is selected. */
 const NO_MESSAGES: NormalizedMessage[] = [];
 
@@ -777,13 +820,14 @@ export function useChatSessionState({
               ),
             });
             if (slot) {
+              // Fetch the whole transcript so an old hit can be found, but do
+              // not render all of it — the window below is widened to exactly
+              // what the resolved target needs.
               setHasMoreMessages(false);
               setTotalMessages(slot.total);
               messagesOffsetRef.current = slot.offset;
-              setVisibleMessageCount(Infinity);
               setAllMessagesLoaded(true);
               allMessagesLoadedRef.current = true;
-              await new Promise(resolve => setTimeout(resolve, 300));
             } else if (!isActiveRef.current) {
               setSearchTarget(target);
               return;
@@ -792,51 +836,54 @@ export function useChatSessionState({
             // Fall through and scroll in current messages
           }
       }
-      setVisibleMessageCount(Infinity);
+      // Resolve the target against the loaded transcript rather than the DOM.
+      // The store is the freshest source here: the `fetchFromServer` above has
+      // landed but `chatMessages` is from the render that scheduled this effect.
+      const messagesForSearch = activeSessionIdRef.current
+        ? normalizedToChatMessages(sessionStore.getMessages(activeSessionIdRef.current))
+        : chatMessages;
+      const targetIndex = findSearchTargetIndex(messagesForSearch, target);
+      if (targetIndex < 0) {
+        // The target is not in the transcript at all. Scrolling somewhere
+        // plausible would claim a hit that does not exist.
+        searchScrollActiveRef.current = false;
+        return;
+      }
 
-      const findAndScroll = (retriesLeft: number) => {
+      // Widen the window so the target is rendered. `visibleMessages` is a tail
+      // slice, so covering index N means rendering everything after it.
+      const requiredVisibleCount =
+        messagesForSearch.length - targetIndex + SEARCH_TARGET_CONTEXT_MESSAGES;
+      setVisibleMessageCount((previous) => Math.max(previous, requiredVisibleCount));
+
+      const targetTimestamp = messagesForSearch[targetIndex].timestamp;
+
+      const scrollToRenderedTarget = (retriesLeft: number) => {
         const container = scrollContainerRef.current;
         if (!container) return;
 
-        let targetElement: Element | null = null;
-
-        if (target.snippet) {
-          const cleanSnippet = target.snippet.replace(/^\.{3}/, '').replace(/\.{3}$/, '').trim();
-          const searchPhrase = cleanSnippet.slice(0, 80).toLowerCase().trim();
-          if (searchPhrase.length >= 10) {
-            const messageElements = container.querySelectorAll('.chat-message');
-            for (const el of messageElements) {
-              const text = (el.textContent || '').toLowerCase();
-              if (text.includes(searchPhrase)) { targetElement = el; break; }
-            }
-          }
-        }
-
-        if (!targetElement && target.timestamp) {
-          const targetDate = new Date(target.timestamp).getTime();
-          const messageElements = container.querySelectorAll('[data-message-timestamp]');
-          let closestDiff = Infinity;
-          for (const el of messageElements) {
-            const ts = el.getAttribute('data-message-timestamp');
-            if (!ts) continue;
-            const diff = Math.abs(new Date(ts).getTime() - targetDate);
-            if (diff < closestDiff) { closestDiff = diff; targetElement = el; }
-          }
-        }
+        // The target is inside the window by construction, so this only waits
+        // for React to commit the widened list. A target collapsed inside a
+        // tool group resolves to that group, which carries the same timestamp.
+        const targetElement = findRenderedMessageElement(container, targetTimestamp);
 
         if (targetElement) {
           targetElement.scrollIntoView({ block: 'center', behavior: 'smooth' });
           targetElement.classList.add('search-highlight-flash');
-          setTimeout(() => targetElement?.classList.remove('search-highlight-flash'), 4000);
+          setTimeout(() => targetElement.classList.remove('search-highlight-flash'), 4000);
           searchScrollActiveRef.current = false;
-        } else if (retriesLeft > 0) {
-          setTimeout(() => findAndScroll(retriesLeft - 1), 200);
-        } else {
-          searchScrollActiveRef.current = false;
+          return;
         }
+
+        if (retriesLeft > 0) {
+          setTimeout(() => scrollToRenderedTarget(retriesLeft - 1), 100);
+          return;
+        }
+
+        searchScrollActiveRef.current = false;
       };
 
-      setTimeout(() => findAndScroll(15), 150);
+      setTimeout(() => scrollToRenderedTarget(3), 150);
     };
 
     scrollToTarget();

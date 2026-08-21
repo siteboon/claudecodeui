@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+
+import { test } from 'vitest';
 
 import type { NormalizedMessage } from '@/shared/types';
 import { normalizedToChatMessages } from '@/modules/chat/hooks/useChatMessages';

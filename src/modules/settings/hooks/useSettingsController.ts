@@ -3,15 +3,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTheme } from '@/shared/context/ThemeContext';
 import { api } from '@/shared/api';
 import { setNotificationSoundEnabled } from '@/shared/utils';
+import {
+  readCodeEditorSettings,
+  writeCodeEditorSettings,
+} from '@/modules/settings/utils/codeEditorSettingsStorage';
 import { useProviderAuthStatus } from '@/modules/provider-auth';
 import type { AgentProvider, ClaudePermissionsState, CodeEditorSettingsState, CodexPermissionMode, CursorPermissionsState, NotificationPreferencesState, ProjectSortOrder, SettingsMainTab } from '@/shared/types';
-
-const DEFAULT_CODE_EDITOR_SETTINGS: CodeEditorSettingsState = {
-  wordWrap: false,
-  showMinimap: true,
-  lineNumbers: true,
-  fontSize: '14',
-};
 
 const DEFAULT_CURSOR_PERMISSIONS: CursorPermissionsState = {
   allowedCommands: [],
@@ -83,13 +80,6 @@ const toCodexPermissionMode = (value: unknown): CodexPermissionMode => {
 
   return 'default';
 };
-
-const readCodeEditorSettings = (): CodeEditorSettingsState => ({
-  wordWrap: localStorage.getItem('codeEditorWordWrap') === 'true',
-  showMinimap: localStorage.getItem('codeEditorShowMinimap') !== 'false',
-  lineNumbers: localStorage.getItem('codeEditorLineNumbers') !== 'false',
-  fontSize: localStorage.getItem('codeEditorFontSize') ?? DEFAULT_CODE_EDITOR_SETTINGS.fontSize,
-});
 
 const toResponseJson = async <T>(response: Response): Promise<T> => response.json() as Promise<T>;
 
@@ -292,11 +282,17 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     projectSortOrder,
   ]);
 
+  // Persist on the user's edit rather than in an effect keyed on the settings
+  // object. The effect form also ran on mount, so merely opening this dialog
+  // rewrote all four keys — which reset the editor's font size for anyone who
+  // had never changed it.
   const updateCodeEditorSetting = useCallback(
     <K extends keyof CodeEditorSettingsState>(key: K, value: CodeEditorSettingsState[K]) => {
-      setCodeEditorSettings((prev) => ({ ...prev, [key]: value }));
+      const next = { ...codeEditorSettings, [key]: value };
+      setCodeEditorSettings(next);
+      writeCodeEditorSettings(next);
     },
-    [],
+    [codeEditorSettings],
   );
 
   useEffect(() => {
@@ -312,14 +308,6 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
   useEffect(() => {
     setNotificationSoundEnabled(notificationPreferences.channels.sound);
   }, [notificationPreferences.channels.sound]);
-
-  useEffect(() => {
-    localStorage.setItem('codeEditorWordWrap', String(codeEditorSettings.wordWrap));
-    localStorage.setItem('codeEditorShowMinimap', String(codeEditorSettings.showMinimap));
-    localStorage.setItem('codeEditorLineNumbers', String(codeEditorSettings.lineNumbers));
-    localStorage.setItem('codeEditorFontSize', codeEditorSettings.fontSize);
-    window.dispatchEvent(new Event('codeEditorSettingsChanged'));
-  }, [codeEditorSettings]);
 
   // Auto-save permissions and sort order with debounce
   const autoSaveTimerRef = useRef<number | null>(null);

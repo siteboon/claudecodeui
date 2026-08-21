@@ -62,11 +62,26 @@ export const useEditorSidebar = ({
   );
 
   useEffect(() => {
-    const handleMouseMove = (event: globalThis.MouseEvent) => {
-      if (!isResizing) {
-        return;
-      }
+    if (!isResizing) {
+      return undefined;
+    }
 
+    // `editorWidth` is read by WorkspaceMain, so every commit re-renders the
+    // whole workspace including the chat transcript. A high-polling-rate mouse
+    // fires several mousemove events per frame, so the width is coalesced to one
+    // commit per frame — the same visual result for a fraction of the renders.
+    let pendingWidth: number | null = null;
+    let frameHandle: number | null = null;
+
+    const commitPendingWidth = () => {
+      frameHandle = null;
+      if (pendingWidth !== null) {
+        setEditorWidth(pendingWidth);
+        pendingWidth = null;
+      }
+    };
+
+    const handleMouseMove = (event: globalThis.MouseEvent) => {
       // Get the main container (parent of EditorSidebar's parent) that contains both left content and editor
       const editorContainer = resizeHandleRef.current?.parentElement;
       const mainContainer = editorContainer?.parentElement;
@@ -82,7 +97,10 @@ export const useEditorSidebar = ({
       const maxWidth = containerRect.width * 0.8;
 
       if (newWidth >= minWidth && newWidth <= maxWidth) {
-        setEditorWidth(newWidth);
+        pendingWidth = newWidth;
+        if (frameHandle === null) {
+          frameHandle = requestAnimationFrame(commitPendingWidth);
+        }
       }
     };
 
@@ -90,14 +108,18 @@ export const useEditorSidebar = ({
       setIsResizing(false);
     };
 
-    if (isResizing) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
-    }
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
 
     return () => {
+      if (frameHandle !== null) {
+        cancelAnimationFrame(frameHandle);
+      }
+      // Land on the last position the pointer reached rather than the last
+      // frame that happened to commit.
+      commitPendingWidth();
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
       document.body.style.cursor = '';

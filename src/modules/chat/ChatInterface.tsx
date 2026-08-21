@@ -6,8 +6,6 @@ import { useTasksSettings } from '@/modules/task-master';
 import { useWebSocket } from '@/shared/context/WebSocketContext';
 import PermissionContext from '@/modules/chat/context/PermissionContext';
 import type {
-  PermissionMode,
-  LLMProvider,
   Project,
   ProjectSession,
   SessionEstablishedContext,
@@ -385,7 +383,7 @@ function ChatInterface({
           selectedSession={selectedSession}
           currentSessionId={currentSessionId}
           provider={provider}
-          setProvider={(nextProvider) => setProvider(nextProvider as LLMProvider)}
+          setProvider={setProvider}
           textareaRef={textareaRef}
           claudeModel={claudeModel}
           setClaudeModel={setClaudeModel}
@@ -447,7 +445,7 @@ function ChatInterface({
           onAbortSession={handleAbortSession}
           permissionMode={permissionMode}
           availablePermissionModes={availablePermissionModes}
-          onSelectPermissionMode={(mode) => selectPermissionMode(mode as PermissionMode)}
+          onSelectPermissionMode={selectPermissionMode}
           providerLabel={selectedProviderLabel}
           effort={currentProviderEffort}
           availableEffortOptions={currentProviderEffortOptions}

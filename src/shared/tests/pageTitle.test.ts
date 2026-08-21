@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+
+import { test } from 'vitest';
 
 import type { Project, ProjectSession } from '@/shared/types';
 import { getPageTitle } from '@/shared/utils';

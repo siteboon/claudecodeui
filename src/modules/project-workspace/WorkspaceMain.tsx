@@ -1,4 +1,4 @@
-import React, { useEffect, type Dispatch, type SetStateAction } from 'react';
+import React, { useCallback, useEffect, type Dispatch, type SetStateAction } from 'react';
 
 import { ChatInterface } from '@/modules/chat';
 import { FileTree } from '@/modules/file-tree';
@@ -98,16 +98,26 @@ function WorkspaceMain({
     }
   }, [shouldShowBrowserTab, activeTab, setActiveTab]);
 
-  usePaletteOpsRegister({
-    openFile: (filePath: string) => {
-      setActiveTab('files');
-      handleFileOpen(filePath);
-    },
-    // Opens the editor side panel in place, keeping the current tab (e.g. chat).
-    openFileInEditor: (filePath: string) => {
-      resolvedFileOpen(filePath);
-    },
-  });
+  // Stable so React.memo(ChatInterface) can bail out: an inline arrow here made
+  // every WorkspaceMain render re-render the whole chat tree, including during
+  // an editor-divider drag.
+  const showAllTasks = useCallback(() => {
+    setActiveTab('tasks');
+  }, [setActiveTab]);
+
+  const openFile = useCallback((filePath: string) => {
+    setActiveTab('files');
+    handleFileOpen(filePath);
+  }, [handleFileOpen, setActiveTab]);
+
+  // Opens the editor side panel in place, keeping the current tab (e.g. chat).
+  const openFileInEditor = useCallback((filePath: string) => {
+    resolvedFileOpen(filePath);
+  }, [resolvedFileOpen]);
+
+  // Stable arguments keep usePaletteOpsRegister's effect from tearing down and
+  // rewriting the whole palette registry on every render.
+  usePaletteOpsRegister({ openFile, openFileInEditor });
 
   if (isLoading) {
     return <WorkspaceStateView mode="loading" isMobile={isMobile} onMenuClick={onMenuClick} />;
@@ -149,7 +159,7 @@ function WorkspaceMain({
                 sendByCtrlEnter={sendByCtrlEnter}
                 externalMessageUpdate={externalMessageUpdate}
                 newSessionTrigger={newSessionTrigger}
-                onShowAllTasks={tasksEnabled ? () => setActiveTab('tasks') : null}
+                onShowAllTasks={tasksEnabled ? showAllTasks : null}
               />
             </WorkspaceErrorBoundary>
           </div>

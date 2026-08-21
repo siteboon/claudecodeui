@@ -39,48 +39,52 @@ export default function EditorSidebar({
 }: EditorSidebarProps) {
   const [poppedOut, setPoppedOut] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [effectiveWidth, setEffectiveWidth] = useState(editorWidth);
+  // Only the ceiling is state; the applied width is derived below. Holding a
+  // second copy of the width meant every drag frame rendered twice, and keeping
+  // `editorWidth` in this effect's dependencies rebuilt the ResizeObserver on
+  // every one of those frames.
+  const [maxEditorWidth, setMaxEditorWidth] = useState<number | null>(null);
 
-  // Adjust editor width when container size changes to ensure buttons are always visible
+  // Track how much room the container can spare so the left content keeps at
+  // least MIN_LEFT_CONTENT_WIDTH as the window resizes.
   useEffect(() => {
     if (!editingFile || isMobile || poppedOut) return;
 
-    const updateWidth = () => {
+    const updateAvailableWidth = () => {
       if (!containerRef.current) return;
       const parentElement = containerRef.current.parentElement;
       if (!parentElement) return;
 
-      const containerWidth = parentElement.clientWidth;
+      const availableWidth = parentElement.clientWidth - MIN_LEFT_CONTENT_WIDTH;
 
-      // Calculate maximum allowed editor width
-      const maxEditorWidth = containerWidth - MIN_LEFT_CONTENT_WIDTH;
-
-      if (maxEditorWidth < MIN_EDITOR_WIDTH) {
+      if (availableWidth < MIN_EDITOR_WIDTH) {
         // Not enough space - pop out the editor so user can still see everything
         setPoppedOut(true);
-      } else if (editorWidth > maxEditorWidth) {
-        // Editor is too wide - constrain it to ensure left content has space
-        setEffectiveWidth(maxEditorWidth);
-      } else {
-        setEffectiveWidth(editorWidth);
+        return;
       }
+
+      setMaxEditorWidth(availableWidth);
     };
 
-    updateWidth();
-    window.addEventListener('resize', updateWidth);
+    updateAvailableWidth();
+    window.addEventListener('resize', updateAvailableWidth);
 
     // Also use ResizeObserver for more accurate detection
-    const resizeObserver = new ResizeObserver(updateWidth);
+    const resizeObserver = new ResizeObserver(updateAvailableWidth);
     const parentEl = containerRef.current?.parentElement;
     if (parentEl) {
       resizeObserver.observe(parentEl);
     }
 
     return () => {
-      window.removeEventListener('resize', updateWidth);
+      window.removeEventListener('resize', updateAvailableWidth);
       resizeObserver.disconnect();
     };
-  }, [editingFile, isMobile, poppedOut, editorWidth]);
+  }, [editingFile, isMobile, poppedOut]);
+
+  const effectiveWidth = maxEditorWidth === null
+    ? editorWidth
+    : Math.min(editorWidth, maxEditorWidth);
 
   if (!editingFile) {
     return null;
@@ -117,7 +121,7 @@ export default function EditorSidebar({
       )}
 
       <div
-        className={`h-full overflow-hidden border-l border-gray-200 dark:border-gray-700 ${useFlexLayout ? 'min-w-0 flex-1' : `min-w-[ flex-shrink-0${MIN_EDITOR_WIDTH}px]`}`}
+        className={`h-full overflow-hidden border-l border-gray-200 dark:border-gray-700 ${useFlexLayout ? 'min-w-0 flex-1' : 'flex-shrink-0'}`}
         style={useFlexLayout ? undefined : { width: `${effectiveWidth}px`, minWidth: `${MIN_EDITOR_WIDTH}px` }}
       >
         <CodeEditor

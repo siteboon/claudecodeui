@@ -498,6 +498,26 @@ export function useProjectsState({
           ? mergedProjects
           : prevProjects;
       });
+
+      // `selectedProject` is a denormalized copy of one row of `projects`, so a
+      // refresh that only writes `projects` leaves the workspace header and the
+      // document title showing stale metadata — visible after a project rename,
+      // which reaches this path via paletteOps.refreshProjects. Re-merging here
+      // keeps the copy in step; mergeProjectSelectionMetadata returns the same
+      // object when nothing workspace-visible changed, so the main region does
+      // not re-render on unrelated refreshes.
+      setSelectedProject((previousProject) => {
+        if (!previousProject) {
+          return previousProject;
+        }
+
+        const refreshedProject = projectData.find(
+          (project) => project.projectId === previousProject.projectId,
+        );
+        return refreshedProject
+          ? mergeProjectSelectionMetadata(previousProject, refreshedProject)
+          : previousProject;
+      });
     } catch (error) {
       console.error('Error fetching projects:', error);
     } finally {

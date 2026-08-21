@@ -50,9 +50,9 @@ type ChatComposerProps = {
   activity: SessionActivity | null;
   isLoading: boolean;
   onAbortSession: () => void;
-  permissionMode: PermissionMode | string;
-  availablePermissionModes: (PermissionMode | string)[];
-  onSelectPermissionMode: (mode: PermissionMode | string) => void;
+  permissionMode: PermissionMode;
+  availablePermissionModes: PermissionMode[];
+  onSelectPermissionMode: (mode: PermissionMode) => void;
   providerLabel: string;
   effort: string;
   availableEffortOptions: NonNullable<ProviderModelOption['effort']>['values'];

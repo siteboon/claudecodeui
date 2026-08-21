@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { memo, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
@@ -12,7 +12,8 @@ import { MermaidDiagram } from '@/modules/code-editor';
 import { normalizeInlineCodeFences } from '@/modules/chat/utils/chatFormatting';
 import { copyTextToClipboard } from '@/shared/utils';
 import { usePaletteOps } from '@/modules/command-palette';
-import { useTheme } from '@/shared/context/ThemeContext';
+import { buildSyntaxTheme } from '@/modules/chat/utils/syntaxHighlightTheme';
+import type { PrismStyleSheet } from '@/modules/chat/utils/syntaxHighlightTheme';
 
 type MarkdownProps = {
   children: React.ReactNode;
@@ -67,7 +68,6 @@ type CodeBlockProps = {
 // `node` is destructured out so react-markdown's hast node never reaches the DOM.
 const CodeBlock = ({ node: _node, className, children, forceBlock, ...props }: CodeBlockProps) => {
   const { t } = useTranslation('chat');
-  const { isDarkMode } = useTheme();
   const [copied, setCopied] = useState(false);
   // Fenced blocks carry a trailing newline in the tree; trim it so the
   // highlighter doesn't render an empty final line.
@@ -145,7 +145,7 @@ const CodeBlock = ({ node: _node, className, children, forceBlock, ...props }: C
 
       <SyntaxHighlighter
         language={language}
-        style={isDarkMode ? oneDark : oneLight}
+        style={syntaxTheme.style}
         customStyle={{
           margin: 0,
           borderRadius: 0,
@@ -168,6 +168,25 @@ const CodeBlock = ({ node: _node, className, children, forceBlock, ...props }: C
     </div>
   );
 };
+
+/**
+ * One style object for both themes: switching between the two Prism objects
+ * re-tokenized every mounted code block, so the theme-dependent values are CSS
+ * variables and the toggle is a style recalculation instead.
+ */
+const syntaxTheme = buildSyntaxTheme(oneLight as PrismStyleSheet, oneDark as PrismStyleSheet);
+
+// The `:root`/`.dark` declarations backing syntaxTheme.style. Injected once
+// because the values are derived from the Prism theme objects at runtime and so
+// cannot live in index.css. ThemeContext toggles `.dark` on <html>, which is
+// what repaints the tokens.
+const SYNTAX_THEME_STYLE_ELEMENT_ID = 'cc-syntax-theme';
+if (!document.getElementById(SYNTAX_THEME_STYLE_ELEMENT_ID)) {
+  const styleElement = document.createElement('style');
+  styleElement.id = SYNTAX_THEME_STYLE_ELEMENT_ID;
+  styleElement.textContent = syntaxTheme.css;
+  document.head.appendChild(styleElement);
+}
 
 const markdownComponents = {
   code: CodeBlock,
@@ -219,8 +238,11 @@ const markdownComponents = {
  * render model-authored markdown with this module's shared prose styling,
  * code highlighting and table rules.
  */
-export function Markdown({ children, className, breaks = false }: MarkdownProps) {
-  const content = normalizeInlineCodeFences(String(children ?? ''));
+function MarkdownRenderer({ children, className, breaks = false }: MarkdownProps) {
+  const content = useMemo(
+    () => normalizeInlineCodeFences(String(children ?? '')),
+    [children],
+  );
   const remarkPlugins = useMemo(
     () => (breaks
       ? [remarkGfm, [remarkMath, { singleDollarTextMath: false }], remarkBreaks]
@@ -277,3 +299,10 @@ export function Markdown({ children, className, breaks = false }: MarkdownProps)
     </div>
   );
 }
+
+/**
+ * Memoized so a re-render of the transcript does not re-run remark, rehype,
+ * KaTeX and Prism over messages whose text has not changed. During streaming
+ * only the live block's markdown is re-parsed — see StreamingMarkdown.
+ */
+export const Markdown = memo(MarkdownRenderer);

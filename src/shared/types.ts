@@ -560,6 +560,11 @@ export type ToolGroupItem = {
   toolName: string;
   messages: ChatMessage[];
   timestamp: ChatMessage['timestamp'];
+  /**
+   * Summary line for the collapsed group, built while grouping so the tool-input
+   * JSON parsing it needs never runs during render.
+   */
+  preview: string;
 };
 
 /** One line of a rendered file diff, marked 'added' or 'removed', with its text and line number. */

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { memo, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 
 import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LLMProvider,DiffLine,Project,ToolGroupItem } from '@/shared/types';
@@ -19,27 +19,6 @@ type ToolGroupContainerProps = {
   provider: LLMProvider | string;
 };
 
-function parseToolInput(toolInput: unknown): unknown {
-  if (typeof toolInput !== 'string') {
-    return toolInput;
-  }
-
-  try {
-    return JSON.parse(toolInput);
-  } catch {
-    return toolInput;
-  }
-}
-
-function getToolInputPreview(message: ChatMessage): string {
-  const config = getToolConfig(message.toolName || 'UnknownTool').input;
-  const parsedInput = parseToolInput(message.toolInput);
-  const title = typeof config.title === 'function' ? config.title(parsedInput) : config.title;
-  const value = config.getValue?.(parsedInput);
-
-  return String(value || title || message.displayText || message.content || '').trim();
-}
-
 function getToolGroupIcon(icon: string | undefined, toolName: string): string {
   if (icon === 'terminal') {
     return '$';
@@ -52,7 +31,7 @@ function getToolGroupIcon(icon: string | undefined, toolName: string): string {
  * Rendered by chat's ChatMessagesPane to collapse a run of consecutive tool
  * calls into a single expandable group in the transcript.
  */
-export default function ToolGroupContainer({
+function ToolGroupContainer({
   group,
   prevMessage,
   createDiff,
@@ -72,21 +51,7 @@ export default function ToolGroupContainer({
   const iconClass = config.colorScheme?.icon || 'text-muted-foreground';
   const icon = getToolGroupIcon(config.icon, group.toolName);
 
-  const preview = useMemo(() => {
-    const visiblePreviews = group.messages
-      .slice(0, 2)
-      .map(getToolInputPreview)
-      .filter(Boolean);
-
-    const extraCount = group.messages.length - visiblePreviews.length;
-    const previewText = visiblePreviews.join(', ');
-
-    if (!previewText) {
-      return extraCount > 0 ? `+${extraCount} more` : '';
-    }
-
-    return extraCount > 0 ? `${previewText}, +${extraCount} more` : previewText;
-  }, [group.messages]);
+  const preview = group.preview;
 
   return (
     <div className="chat-message tool px-3 sm:px-0" data-message-timestamp={group.timestamp || undefined}>
@@ -137,3 +102,10 @@ export default function ToolGroupContainer({
     </div>
   );
 }
+
+/**
+ * Memoized because a group's rendered output depends only on props that are
+ * stable between transcript re-renders — the previous useMemo could never hit,
+ * since groupConsecutiveTools allocates a fresh messages array each pass.
+ */
+export default memo(ToolGroupContainer);

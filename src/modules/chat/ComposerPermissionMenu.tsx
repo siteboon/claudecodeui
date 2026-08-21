@@ -70,10 +70,10 @@ const getAppearance = (mode: PermissionMode | string): ModeAppearance =>
   MODE_APPEARANCE[mode as PermissionMode] ?? UNKNOWN_MODE;
 
 type ComposerPermissionMenuProps = {
-  permissionMode: PermissionMode | string;
+  permissionMode: PermissionMode;
   /** Modes the active provider supports, in the order the backend reports them. */
-  permissionModes: (PermissionMode | string)[];
-  onSelectPermissionMode: (mode: PermissionMode | string) => void;
+  permissionModes: PermissionMode[];
+  onSelectPermissionMode: (mode: PermissionMode) => void;
   providerLabel: string;
 };
 

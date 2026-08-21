@@ -1,4 +1,5 @@
 import type { ChatMessage, ToolGroupItem } from '@/shared/types';
+import { getToolConfig } from '@/modules/chat/tools/configs/toolConfigs';
 
 export const TOOL_GROUP_THRESHOLD = 2;
 
@@ -18,6 +19,50 @@ function isGroupableToolMessage(message: ChatMessage): message is ChatMessage & 
 // Codex interleave hidden reasoning between consecutive tool calls.
 function rendersNothing(message: ChatMessage, showThinking: boolean): boolean {
   return Boolean(message.isThinking && !showThinking);
+}
+
+function parseToolInput(toolInput: unknown): unknown {
+  if (typeof toolInput !== 'string') {
+    return toolInput;
+  }
+
+  try {
+    return JSON.parse(toolInput);
+  } catch {
+    return toolInput;
+  }
+}
+
+function getToolInputPreview(message: ChatMessage): string {
+  const config = getToolConfig(message.toolName || 'UnknownTool').input;
+  const parsedInput = parseToolInput(message.toolInput);
+  const title = typeof config.title === 'function' ? config.title(parsedInput) : config.title;
+  const value = config.getValue?.(parsedInput);
+
+  return String(value || title || message.displayText || message.content || '').trim();
+}
+
+/**
+ * Builds the collapsed group's summary line.
+ *
+ * Computed here, while grouping, rather than in the component: it JSON.parses
+ * tool inputs that can be whole file contents, and a group's messages never
+ * change after they land, so this must not run during render.
+ */
+function buildGroupPreview(messages: ChatMessage[]): string {
+  const visiblePreviews = messages
+    .slice(0, 2)
+    .map(getToolInputPreview)
+    .filter(Boolean);
+
+  const extraCount = messages.length - visiblePreviews.length;
+  const previewText = visiblePreviews.join(', ');
+
+  if (!previewText) {
+    return extraCount > 0 ? `+${extraCount} more` : '';
+  }
+
+  return extraCount > 0 ? `${previewText}, +${extraCount} more` : previewText;
 }
 
 export function groupConsecutiveTools(
@@ -63,6 +108,7 @@ export function groupConsecutiveTools(
         toolName: message.toolName,
         messages: run,
         timestamp: message.timestamp,
+        preview: buildGroupPreview(run),
       });
     } else {
       items.push(...run);

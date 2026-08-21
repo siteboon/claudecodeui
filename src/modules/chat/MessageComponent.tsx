@@ -8,6 +8,7 @@ import { LLMProviderLogo, Reasoning, ReasoningTrigger, ReasoningContent } from '
 import ChatMessageImages from '@/modules/chat/ChatMessageImages';
 import ChatMessageFiles from '@/modules/chat/ChatMessageFiles';
 import { Markdown } from '@/modules/chat/Markdown';
+import StreamingMarkdown from '@/modules/chat/StreamingMarkdown';
 import MessageCopyControl from '@/modules/chat/MessageCopyControl';
 import MessageSpeakControl from '@/modules/chat/MessageSpeakControl';
 
@@ -364,9 +365,16 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
 
                   // Normal rendering for non-JSON content
                   return message.type === 'assistant' ? (
-                    <Markdown className="prose prose-sm prose-gray max-w-none font-serif dark:prose-invert">
-                      {content}
-                    </Markdown>
+                    message.isStreaming ? (
+                      <StreamingMarkdown
+                        content={content}
+                        className="prose prose-sm prose-gray max-w-none font-serif dark:prose-invert"
+                      />
+                    ) : (
+                      <Markdown className="prose prose-sm prose-gray max-w-none font-serif dark:prose-invert">
+                        {content}
+                      </Markdown>
+                    )
                   ) : (
                     <div className="whitespace-pre-wrap">
                       {content}
