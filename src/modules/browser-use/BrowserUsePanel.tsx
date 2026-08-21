@@ -16,7 +16,7 @@ import {
 
 import { cn } from '@/shared/utils';
 import { Badge, Button } from '@/shared/ui';
-import { api } from '@/shared/api';
+import { api, readApiJson } from '@/shared/api';
 import type { SettingsMainTab } from '@/shared/types';
 
 type BrowserUseStatus = {
@@ -56,14 +56,6 @@ type BrowserUsePanelProps = {
   isVisible: boolean;
   onShowSettings?: (tab?: SettingsMainTab) => void;
 };
-
-async function readJson<T>(response: Response): Promise<T> {
-  const data = await response.json();
-  if (!response.ok || data.success === false) {
-    throw new Error(data.error || data.details || `Request failed (${response.status})`);
-  }
-  return data as T;
-}
 
 function formatRelativeTime(value: string | null): string {
   if (!value) return 'Never';
@@ -164,8 +156,8 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
         api.browserUse.status(),
         api.browserUse.sessions(),
       ]);
-      const statusData = await readJson<{ data: BrowserUseStatus }>(statusResponse);
-      const sessionsData = await readJson<{ data: { sessions: BrowserUseSession[] } }>(sessionsResponse);
+      const statusData = await readApiJson<{ data: BrowserUseStatus }>(statusResponse);
+      const sessionsData = await readApiJson<{ data: { sessions: BrowserUseSession[] } }>(sessionsResponse);
       const nextSessions = sessionsData.data.sessions;
       setStatus(statusData.data);
       setSessions(nextSessions);
@@ -203,13 +195,13 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
   const stopSession = () => runAction(async () => {
     if (!selectedSession) return;
     const response = await api.browserUse.stopSession(selectedSession.id);
-    await readJson(response);
+    await readApiJson(response);
   });
 
   const deleteSession = () => runAction(async () => {
     if (!selectedSession) return;
     const response = await api.browserUse.deleteSession(selectedSession.id);
-    await readJson(response);
+    await readApiJson(response);
     setIsFullscreen(false);
   });
 
@@ -217,7 +209,7 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
     setIsInstalling(true);
     try {
       const response = await api.browserUse.installRuntime();
-      await readJson(response);
+      await readApiJson(response);
     } finally {
       setIsInstalling(false);
     }

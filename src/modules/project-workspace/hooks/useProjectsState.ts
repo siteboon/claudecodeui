@@ -678,6 +678,15 @@ export function useProjectsState({
   // "suppress updates while a run is active" protection is needed anymore.
   useEffect(() => {
     const handleEvent = (event: ServerEvent) => {
+      // The project list is maintained purely by incremental `session_upserted`
+      // deltas, so anything that happened while the socket was down is missing
+      // from it until something else forces a refresh. Chat re-syncs itself on
+      // this event; the sidebar has to as well.
+      if (event.kind === 'websocket_reconnected') {
+        void refreshProjectsSilently();
+        return;
+      }
+
       if (event.kind === 'loading_progress') {
         if (loadingProgressTimeoutRef.current) {
           clearTimeout(loadingProgressTimeoutRef.current);
@@ -819,7 +828,7 @@ export function useProjectsState({
     };
 
     return subscribe(handleEvent);
-  }, [isSessionProcessing, markSessionAttention, navigate, sessionId, subscribe]);
+  }, [isSessionProcessing, markSessionAttention, navigate, refreshProjectsSilently, sessionId, subscribe]);
 
   useEffect(() => {
     return () => {

@@ -40,13 +40,11 @@ type TaskMasterWebSocketMessage = {
 };
 
 type TaskMasterContextValue = {
-  projects: TaskMasterProject[];
   currentProject: TaskMasterProject | null;
   projectTaskMaster: TaskMasterProjectInfo | null;
   mcpServerStatus: TaskMasterMcpStatus;
   tasks: TaskMasterTask[];
   nextTask: TaskMasterTask | null;
-  isLoading: boolean;
   isLoadingTasks: boolean;
   isLoadingMCP: boolean;
   error: TaskMasterContextError | null;
@@ -105,7 +103,6 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
   const { subscribe } = useWebSocket();
   const { user, token, isLoading: isAuthLoading } = useAuth();
 
-  const [projects, setProjects] = useState<TaskMasterProject[]>([]);
   const [currentProject, setCurrentProjectState] = useState<TaskMasterProject | null>(null);
   const [projectTaskMaster, setProjectTaskMaster] = useState<TaskMasterProjectInfo | null>(null);
   const [mcpServerStatus, setMcpServerStatus] = useState<TaskMasterMcpStatus>(null);
@@ -113,7 +110,6 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
   const [tasks, setTasks] = useState<TaskMasterTask[]>([]);
   const [nextTask, setNextTask] = useState<TaskMasterTask | null>(null);
 
-  const [isLoading, setIsLoading] = useState(false);
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
   const [isLoadingMCP, setIsLoadingMCP] = useState(false);
   const [error, setError] = useState<TaskMasterContextError | null>(null);
@@ -145,19 +141,6 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
   // field has been removed from Project post-migration.
   const applyTaskMasterInfo = useCallback((projectId: string, taskMasterInfo: TaskMasterProjectInfo | null) => {
     setProjectTaskMaster(taskMasterInfo);
-
-    setProjects((previousProjects) =>
-      previousProjects.map((project) => {
-        if (project.projectId !== projectId) {
-          return project;
-        }
-
-        return enrichProject({
-          ...project,
-          taskmaster: taskMasterInfo ?? undefined,
-        });
-      }),
-    );
 
     setCurrentProjectState((previousProject) => {
       if (!previousProject || previousProject.projectId !== projectId) {
@@ -231,84 +214,22 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
     [refreshCurrentProjectTaskMaster],
   );
 
+  /**
+   * Re-reads TaskMaster details for the selected project.
+   *
+   * This used to fetch the whole `/api/projects` list — a second copy of the
+   * request the workspace already makes on boot, with its own taskmaster merge
+   * — even though the only thing downstream reads is `currentProject`. The
+   * per-project endpoint answers exactly that question.
+   */
   const refreshProjects = useCallback(async () => {
-    if (!user || !token) {
-      setProjects([]);
-      setCurrentProjectState(null);
-      setProjectTaskMaster(null);
-      setTasks([]);
-      setNextTask(null);
+    const currentProjectId = currentProjectIdRef.current;
+    if (!currentProjectId) {
       return;
     }
 
-    try {
-      setIsLoading(true);
-      clearError();
-
-      const response = await api.projects();
-      if (!response.ok) {
-        throw new Error(`Failed to fetch projects: ${response.status}`);
-      }
-
-      const data = (await response.json()) as unknown;
-      const loadedProjects = Array.isArray(data) ? (data as TaskMasterProject[]) : [];
-      const enrichedProjects = loadedProjects.map((project) => enrichProject(project));
-
-      setProjects((previousProjects) => {
-        // Cache is keyed by `projectId` (DB primary key) post-migration.
-        const taskMasterByProjectId = new Map(
-          previousProjects
-            .filter((project) => Boolean(project.taskmaster))
-            .map((project) => [project.projectId, project.taskmaster]),
-        );
-
-        return enrichedProjects.map((project) => {
-          const cachedTaskMasterInfo = taskMasterByProjectId.get(project.projectId);
-          if (!cachedTaskMasterInfo) {
-            return project;
-          }
-
-          return enrichProject({
-            ...project,
-            taskmaster: cachedTaskMasterInfo,
-          });
-        });
-      });
-
-      const currentProjectId = currentProjectIdRef.current;
-      if (!currentProjectId) {
-        return;
-      }
-
-      const matchingProject = enrichedProjects.find((project) => project.projectId === currentProjectId) ?? null;
-
-      if (!matchingProject) {
-        taskMasterRequestSeqRef.current += 1;
-        setCurrentProjectState(null);
-        setProjectTaskMaster(null);
-        setTasks([]);
-        setNextTask(null);
-        return;
-      }
-
-      const cachedTaskMasterInfo = matchingProject.taskmaster ?? projectTaskMasterRef.current ?? null;
-      setCurrentProjectState(
-        cachedTaskMasterInfo
-          ? enrichProject({
-              ...matchingProject,
-              taskmaster: cachedTaskMasterInfo,
-            })
-          : matchingProject,
-      );
-      setProjectTaskMaster(cachedTaskMasterInfo);
-
-      void refreshCurrentProjectTaskMaster(currentProjectId);
-    } catch (caughtError) {
-      handleError('load projects', caughtError);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [clearError, handleError, refreshCurrentProjectTaskMaster, token, user]);
+    await refreshCurrentProjectTaskMaster(currentProjectId);
+  }, [refreshCurrentProjectTaskMaster]);
 
   const refreshTasks = useCallback(async () => {
     // TaskMaster tasks endpoint now lives under /api/taskmaster/tasks/:projectId.
@@ -416,13 +337,11 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
 
   const contextValue = useMemo<TaskMasterContextValue>(
     () => ({
-      projects,
       currentProject,
       projectTaskMaster,
       mcpServerStatus,
       tasks,
       nextTask,
-      isLoading,
       isLoadingTasks,
       isLoadingMCP,
       error,
@@ -436,13 +355,11 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       clearError,
       currentProject,
       error,
-      isLoading,
       isLoadingMCP,
       isLoadingTasks,
       mcpServerStatus,
       nextTask,
       projectTaskMaster,
-      projects,
       refreshMCPStatus,
       refreshProjects,
       refreshTasks,

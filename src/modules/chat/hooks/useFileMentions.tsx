@@ -71,7 +71,7 @@ export function useFileMentions({ selectedProject, input, setInput, textareaRef 
 
 
       try {
-        const response = await api.getMentionableFiles(projectId, {
+        const response = await api.getFiles(projectId, {
           signal: abortController.signal,
         });
         if (!response.ok) {

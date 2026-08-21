@@ -44,6 +44,16 @@ const respondWith = (projects: Project[]) => {
   });
 };
 
+type ServerEventListener = (event: { kind: string }) => void;
+
+const listeners = new Set<ServerEventListener>();
+
+const emit = (event: { kind: string }) => {
+  for (const listener of listeners) {
+    listener(event);
+  }
+};
+
 const renderProjectsState = async () => {
   const { useProjectsState } = await import(
     '@/modules/project-workspace/hooks/useProjectsState'
@@ -53,7 +63,10 @@ const renderProjectsState = async () => {
     useProjectsState({
       sessionId: undefined,
       navigate: vi.fn(),
-      subscribe: () => () => undefined,
+      subscribe: (listener: ServerEventListener) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
       isMobile: false,
       isSessionProcessing: () => false,
     }),
@@ -63,6 +76,7 @@ const renderProjectsState = async () => {
 beforeEach(() => {
   localStorage.clear();
   projectsResponse.mockReset();
+  listeners.clear();
 });
 
 afterEach(() => {
@@ -167,4 +181,29 @@ test('a superseded refresh does not revert the selection', async () => {
     'Renamed',
     'a superseded response must not overwrite a newer one',
   );
+});
+
+test('a websocket reconnect re-syncs the project list', async () => {
+  respondWith([buildProject()]);
+  const { result } = await renderProjectsState();
+  await waitFor(() => {
+    assert.equal(result.current.projects.length, 1);
+  });
+
+  // A session created while the socket was down is only in the server's copy:
+  // the list is maintained by incremental deltas, so nothing else recovers it.
+  respondWith([
+    buildProject(),
+    buildProject({ projectId: 'project-2', displayName: 'Created while offline' }),
+  ]);
+
+  await act(async () => {
+    emit({ kind: 'websocket_reconnected' });
+    await Promise.resolve();
+  });
+
+  await waitFor(() => {
+    assert.equal(result.current.projects.length, 2);
+  });
+  assert.equal(result.current.projects[1].displayName, 'Created while offline');
 });

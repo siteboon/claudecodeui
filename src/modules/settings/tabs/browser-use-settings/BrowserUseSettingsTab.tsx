@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Download, Loader2 } from 'lucide-react';
 
 import { Button } from '@/shared/ui';
-import { api } from '@/shared/api';
+import { api, readApiJson } from '@/shared/api';
 import SettingsCard from '@/modules/settings/SettingsCard';
 import SettingsRow from '@/modules/settings/SettingsRow';
 import SettingsSection from '@/modules/settings/SettingsSection';
@@ -21,14 +21,6 @@ type BrowserUseStatus = {
   message: string;
 };
 
-async function readJson<T>(response: Response): Promise<T> {
-  const data = await response.json();
-  if (!response.ok || data.success === false) {
-    throw new Error(data.error || data.details || `Request failed (${response.status})`);
-  }
-  return data as T;
-}
-
 /** Rendered by Settings for the "browser" tab, configuring the browser automation integration. */
 export default function BrowserUseSettingsTab() {
   const [settings, setSettings] = useState<BrowserUseSettings | null>(null);
@@ -41,13 +33,13 @@ export default function BrowserUseSettingsTab() {
 
   const loadSettings = useCallback(async () => {
     const settingsResponse = await api.browserUse.settings();
-    const settingsData = await readJson<{ data: { settings: BrowserUseSettings } }>(settingsResponse);
+    const settingsData = await readApiJson<{ data: { settings: BrowserUseSettings } }>(settingsResponse);
     setSettings(settingsData.data.settings);
   }, []);
 
   const loadStatus = useCallback(async () => {
     const statusResponse = await api.browserUse.status();
-    const statusData = await readJson<{ data: BrowserUseStatus }>(statusResponse);
+    const statusData = await readApiJson<{ data: BrowserUseStatus }>(statusResponse);
     setStatus(statusData.data);
   }, []);
 
@@ -70,7 +62,7 @@ export default function BrowserUseSettingsTab() {
     setError(null);
     try {
       const response = await api.browserUse.saveSettings(nextSettings);
-      const data = await readJson<{ data: { settings: BrowserUseSettings } }>(response);
+      const data = await readApiJson<{ data: { settings: BrowserUseSettings } }>(response);
       setSettings(data.data.settings);
       window.dispatchEvent(new Event('browserUseSettingsChanged'));
       setIsStatusLoading(true);
@@ -88,7 +80,7 @@ export default function BrowserUseSettingsTab() {
     setError(null);
     try {
       const response = await api.browserUse.installRuntime();
-      await readJson(response);
+      await readApiJson(response);
       setIsStatusLoading(true);
       await loadStatus();
     } catch (err) {

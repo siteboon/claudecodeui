@@ -155,6 +155,23 @@ const query = (params: Record<string, QueryValue>): string => {
   return serialized ? `?${serialized}` : '';
 };
 
+/**
+ * Reads a `{ success, error, details }` envelope response, throwing the server's
+ * message when the request failed.
+ *
+ * Endpoints return a bare Response, so call sites unwrap it themselves. Most do
+ * so in ways that differ deliberately (bare casts where the caller inspects the
+ * payload, abort-aware reads in the git panel); this is the shared form for
+ * callers that want a failed request to throw.
+ */
+export async function readApiJson<T>(response: Response): Promise<T> {
+  const data = await response.json();
+  if (!response.ok || data.success === false) {
+    throw new Error(data.error || data.details || `Request failed (${response.status})`);
+  }
+  return data as T;
+}
+
 const get = (url: string, options: ApiRequestOptions = {}) => authenticatedFetch(url, options);
 
 const withBody =
@@ -290,8 +307,6 @@ export const api = {
   saveFile: (projectId: string, filePath: string, content: string) =>
     put(`/api/file-tree/projects/${projectId}/file`, { filePath, content }),
   getFiles: (projectId: string, options: ApiRequestOptions = {}) =>
-    get(`/api/file-tree/projects/${projectId}/files${query({ respectGitignore: true })}`, options),
-  getMentionableFiles: (projectId: string, options: ApiRequestOptions = {}) =>
     get(`/api/file-tree/projects/${projectId}/files${query({ respectGitignore: true })}`, options),
 
   // File operations
