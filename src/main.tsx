@@ -1,5 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { scan } from 'react-scan'
 
 import App from '@/App'
 import '@/index.css'
@@ -7,6 +8,9 @@ import 'katex/dist/katex.min.css'
 
 // Initialize i18n
 import '@/modules/i18n'
+
+// Instrument renders before mounting React, while keeping production builds unaffected.
+scan({ enabled: import.meta.env.DEV })
 
 // Register service worker for PWA + Web Push support
 if ('serviceWorker' in navigator) {
