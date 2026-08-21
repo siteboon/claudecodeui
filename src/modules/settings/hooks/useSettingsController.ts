@@ -289,8 +289,9 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
   //
   // The other three keys are merged from storage rather than from the rendered
   // state, so two edits landing in one React batch cannot write the second one
-  // on top of a pre-first-edit snapshot. Every write goes through
-  // writeCodeEditorSettings, so storage is always the newest value.
+  // on top of a pre-first-edit snapshot. Storage is the newest value because
+  // this is the only writer that can be behind — the editor's own wordWrap
+  // mirror in useCodeEditorSettings only ever writes back what it just read.
   const updateCodeEditorSetting = useCallback(
     <K extends keyof CodeEditorSettingsState>(key: K, value: CodeEditorSettingsState[K]) => {
       const next = { ...readCodeEditorSettings(), [key]: value };

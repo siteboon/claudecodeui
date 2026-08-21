@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { readCodeEditorSettings } from '@/shared/codeEditorSettings';
 import { CODE_EDITOR_SETTINGS_CHANGED_EVENT, CODE_EDITOR_STORAGE_KEYS } from '@/shared/constants';
 
-/** Monaco wants a number; the settings dialog stores and edits a string. */
+/** CodeEditorSurface's fontSize prop is a number; the settings dialog edits a string. */
 const readEditorSettings = () => {
   const stored = readCodeEditorSettings();
   return { ...stored, fontSize: Number(stored.fontSize) };
