@@ -15,6 +15,13 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    // Pinned so the suite does not silently change shape with a developer's
+    // local .env — this workspace has VITE_IS_PLATFORM=true, CI has no .env at
+    // all, and the flag decides whether the app authenticates with a bearer
+    // token. The tests that care stub it per case and assert both modes.
+    env: {
+      VITE_IS_PLATFORM: 'false',
+    },
     setupFiles: ['./vitest.setup.ts'],
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     restoreMocks: true,
