@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '@/shared/api';
 import { MCP_GLOBAL_SUPPORTED_TRANSPORTS, MCP_PROVIDER_NAMES, MCP_SUPPORTED_SCOPES } from '@/shared/constants';
-import type { McpServerFormState, McpFormState, McpProject, McpProvider, McpScope, McpTransport, ProviderMcpServer, UpsertProviderMcpServerPayload } from '@/shared/types';
+import type { McpFormState, McpProject, McpProvider, McpScope, McpTransport, ProviderMcpServer, UpsertProviderMcpServerPayload } from '@/shared/types';
 import {
   createMcpPayloadFromForm,
   getErrorMessage,
@@ -288,6 +288,16 @@ type UseMcpServersArgs = {
   selectedProvider: McpProvider;
   currentProjects: McpProject[];
 };
+
+/**
+ * Which MCP server form is open, if any. One value so the provider-scoped and
+ * global forms cannot both be open and an edit target cannot exist without an
+ * open form.
+ */
+type McpServerFormState =
+  | { scope: 'provider'; editingServer: ProviderMcpServer | null }
+  | { scope: 'global'; editingServer: null }
+  | null;
 
 export function useMcpServers({ selectedProvider, currentProjects }: UseMcpServersArgs) {
   const [servers, setServers] = useState<ProviderMcpServer[]>([]);

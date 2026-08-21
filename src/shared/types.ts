@@ -1152,7 +1152,6 @@ export type SidebarProjectListProps = {
   activeRename: ActiveSidebarRename | null;
   initialSessionsLoaded: Set<string>;
   currentTime: Date;
-
   deletingProjects: Set<string>;
   tasksEnabled: boolean;
   mcpServerStatus: MCPServerStatus;
@@ -1214,7 +1213,6 @@ export type RecentConversationListItem = Pick<
   'sessionId' | 'provider' | 'projectId' | 'projectDisplayName' | 'sessionTitle' | 'lastActivity'
 >;
 
-/** The project queued for deletion together with its session count, used to populate the delete-confirmation dialog. */
 /**
  * The rename the sidebar currently has open, if any.
  *
@@ -1231,18 +1229,9 @@ export type ActiveSidebarRename = {
 /**
  * The sidebar's pending delete confirmation. One value rather than a pair of
  * nullable states, so a project dialog and a session dialog cannot both be
- * open — they are portalled at the same z-index and would stack.
+ * open — they are portalled at the same z-index and would stack. The project
+ * variant carries the session count the dialog warns with.
  */
-/**
- * Which MCP server form is open, if any. One value so the provider-scoped and
- * global forms cannot both be open and an edit target cannot exist without an
- * open form.
- */
-export type McpServerFormState =
-  | { scope: 'provider'; editingServer: ProviderMcpServer | null }
-  | { scope: 'global'; editingServer: null }
-  | null;
-
 export type PendingSidebarDeletion =
   | { kind: 'project'; project: Project; sessionCount: number }
   | { kind: 'session'; sessionId: string; sessionTitle: string; isArchived: boolean };
