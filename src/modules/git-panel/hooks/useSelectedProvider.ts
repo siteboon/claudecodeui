@@ -9,6 +9,9 @@ import type { LLMProvider } from '@/shared/types';
 
 /** Used by the git panel to attribute a generated commit message to a provider. */
 export function useSelectedProvider(): LLMProvider {
+  // Mirrors the stored selection so the panel re-renders when it changes.
+  // Reading storage during render would not, and this value decides which
+  // provider a generated commit message is attributed to.
   const [provider, setProvider] = useState(readSelectedProvider);
 
   useEffect(() => {

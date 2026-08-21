@@ -125,7 +125,13 @@ const getSessionSelectionKey = (provider: LLMProvider, sessionId: string): strin
 export function useChatProviderState({ selectedSession, selectedProject: _selectedProject }: UseChatProviderStateArgs) {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('default');
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<PendingPermissionRequest[]>([]);
+  // The provider the composer sends under. Held here rather than read from
+  // storage per render because switching it has to reset the model menu, the
+  // permission mode and the session in one commit.
   const [provider, setProvider] = useState<LLMProvider>(readSelectedProvider);
+  // Every provider's chosen model, not just the active one: switching provider
+  // must restore the model that provider was last used with, and the catalogue
+  // that validates them arrives asynchronously per provider.
   const [providerModels, setProviderModels] = useState<Record<LLMProvider, string>>(() => {
     return PROVIDERS.reduce<Record<LLMProvider, string>>((acc, targetProvider) => {
       acc[targetProvider] = localStorage.getItem(providerModelStorageKey(targetProvider))

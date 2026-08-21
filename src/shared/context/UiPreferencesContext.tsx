@@ -27,6 +27,9 @@ const UiPreferencesActionsContext = createContext<UiPreferenceActions | null>(nu
  * carries a change to another tab.
  */
 export function UiPreferencesProvider({ children }: { children: ReactNode }) {
+  // The single copy of the preferences. Every consumer used to hold its own
+  // reducer and reconcile through an event, so one toggle wrote localStorage
+  // once per consumer and re-rendered all of them.
   const [preferences, dispatch] = useReducer(
     uiPreferencesReducer,
     undefined,

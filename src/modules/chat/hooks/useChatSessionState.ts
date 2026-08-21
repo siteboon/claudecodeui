@@ -208,6 +208,9 @@ export function useChatSessionState({
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const wasNearTopRef = useRef(false);
+  // The sidebar-search hit this transcript still owes the user a scroll to.
+  // State rather than a ref because resolving it widens the render window,
+  // and it is cleared once the row is on screen or the retries run out.
   const [searchTarget, setSearchTarget] = useState<SearchTarget | null>(null);
   const searchScrollActiveRef = useRef(false);
   const isLoadingMoreRef = useRef(false);

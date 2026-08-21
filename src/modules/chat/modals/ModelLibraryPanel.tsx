@@ -35,6 +35,10 @@ type ModelLibraryPanelProps = {
 /**
  * Rendered by chat's ProviderSelectionEmptyState and CommandResultModal so the
  * user can browse each provider's model catalog and add or remove custom models.
+ *
+ * It is dialog body rather than a dialog — it opens no overlay of its own, and
+ * each consumer supplies the Dialog around it. That is why it sits in modals/
+ * with no Dialog in the file.
  */
 export default function ModelLibraryPanel({
   initialProvider,
