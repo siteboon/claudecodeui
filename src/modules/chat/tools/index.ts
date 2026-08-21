@@ -1,10 +1,6 @@
+// Only the symbols other chat files import. A module has one barrel — its own
+// index.ts — and this directory's used to re-export ToolRenderer while
+// ToolRenderer imported its siblings back from here, which was a real cycle.
 export { ToolRenderer } from '@/modules/chat/tools/ToolRenderer';
-export { getToolConfig, shouldHideToolResult } from '@/modules/chat/tools/configs/toolConfigs';
-export { ToolDiffViewer } from '@/modules/chat/tools/ToolDiffViewer';
-export { OneLineDisplay } from '@/modules/chat/tools/OneLineDisplay';
-export { BashCommandDisplay } from '@/modules/chat/tools/BashCommandDisplay';
 export { ToolErrorDisplay } from '@/modules/chat/tools/ToolErrorDisplay';
-export { CollapsibleDisplay } from '@/modules/chat/tools/CollapsibleDisplay';
-export { SubagentContainer } from '@/modules/chat/tools/SubagentContainer';
-export * from '@/modules/chat/tools/ContentRenderers';
-export * from '@/modules/chat/tools/InteractiveRenderers';
+export { getToolConfig, shouldHideToolResult } from '@/modules/chat/tools/configs/toolConfigs';

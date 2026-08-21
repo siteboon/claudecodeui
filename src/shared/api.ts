@@ -233,7 +233,6 @@ export const api = {
     }),
     refresh: () => post('/api/auth/refresh'),
     user: () => get('/api/auth/user'),
-    logout: () => post('/api/auth/logout'),
   },
 
   // Protected endpoints
@@ -321,12 +320,6 @@ export const api = {
   deleteFile: (projectId: string, { path, type }: { path: string; type: string }) =>
     del(`/api/file-tree/projects/${projectId}/files`, { path, type }),
 
-  uploadFiles: (projectId: string, formData: FormData) =>
-    authenticatedFetch(`/api/file-tree/projects/${projectId}/files/upload`, {
-      method: 'POST',
-      body: formData,
-      headers: {}, // Let browser set Content-Type for FormData
-    }),
   // Uploads with a progress bar go through XMLHttpRequest, which needs the URL.
   uploadFilesUrl: (projectId: string) =>
     `/api/file-tree/projects/${encodeURIComponent(projectId)}/files/upload`,
@@ -487,52 +480,6 @@ export const api = {
 
   // TaskMaster endpoints — all addressed by DB projectId post-migration.
   taskmaster: {
-    // Initialize TaskMaster in a project
-    init: (projectId: string) => post(`/api/taskmaster/init/${projectId}`),
-
-    // Add a new task
-    addTask: (
-      projectId: string,
-      { prompt, title, description, priority, dependencies }: {
-        prompt?: string;
-        title?: string;
-        description?: string;
-        priority?: string;
-        dependencies?: unknown;
-      },
-    ) =>
-      post(`/api/taskmaster/add-task/${projectId}`, {
-        prompt,
-        title,
-        description,
-        priority,
-        dependencies,
-      }),
-
-    // Parse PRD to generate tasks
-    parsePRD: (
-      projectId: string,
-      { fileName, numTasks, append }: { fileName: string; numTasks?: number; append?: boolean },
-    ) => post(`/api/taskmaster/parse-prd/${projectId}`, { fileName, numTasks, append }),
-
-    // Get available PRD templates
-    getTemplates: () => get('/api/taskmaster/prd-templates'),
-
-    // Apply a PRD template
-    applyTemplate: (
-      projectId: string,
-      { templateId, fileName, customizations }: {
-        templateId: string;
-        fileName: string;
-        customizations?: unknown;
-      },
-    ) =>
-      post(`/api/taskmaster/apply-template/${projectId}`, {
-        templateId,
-        fileName,
-        customizations,
-      }),
-
     // Update a task
     updateTask: (projectId: string, taskId: string | number, updates: unknown) =>
       put(`/api/taskmaster/update-task/${projectId}/${taskId}`, updates),

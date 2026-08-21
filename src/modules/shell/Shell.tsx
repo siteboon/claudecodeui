@@ -5,7 +5,7 @@ import '@xterm/xterm/css/xterm.css';
 import type { Project, ProjectSession } from '@/shared/types';
 import { useShellRuntime } from '@/modules/shell/hooks/useShellRuntime';
 import { sendSocketMessage } from '@/modules/shell/utils/socket';
-import { getSessionDisplayName } from '@/modules/shell/utils/auth';
+import { getSessionTitle } from '@/shared/utils';
 import ShellConnectionOverlay from '@/modules/shell/ShellConnectionOverlay';
 import ShellEmptyState from '@/modules/shell/ShellEmptyState';
 import ShellHeader from '@/modules/shell/ShellHeader';
@@ -181,7 +181,11 @@ export default function Shell({
     [wsRef],
   );
 
-  const sessionDisplayName = useMemo(() => getSessionDisplayName(selectedSession), [selectedSession]);
+  // Null (not a label) when nothing is selected, which is what the header renders against.
+  const sessionDisplayName = useMemo(
+    () => (selectedSession ? getSessionTitle(selectedSession) : null),
+    [selectedSession],
+  );
   const sessionDisplayNameShort = useMemo(
     () => (sessionDisplayName ? sessionDisplayName.slice(0, 30) : null),
     [sessionDisplayName],

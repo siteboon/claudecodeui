@@ -84,27 +84,11 @@ export type ConfirmationAcceptedProps = {
   children?: React.ReactNode;
 };
 
-/** Accepted-state slot of Confirmation; kept beside it so the confirmation family stays usable as a unit. */
-export const ConfirmationAccepted: React.FC<ConfirmationAcceptedProps> = ({ children }) => {
-  const { approval } = useConfirmation();
-  if (approval !== 'approved') return null;
-  return <>{children}</>;
-};
-ConfirmationAccepted.displayName = 'ConfirmationAccepted';
-
 /* ─── ConfirmationRejected — visible only when rejected ──────────── */
 
 export type ConfirmationRejectedProps = {
   children?: React.ReactNode;
 };
-
-/** Rejected-state slot of Confirmation; kept beside it so the confirmation family stays usable as a unit. */
-export const ConfirmationRejected: React.FC<ConfirmationRejectedProps> = ({ children }) => {
-  const { approval } = useConfirmation();
-  if (approval !== 'rejected') return null;
-  return <>{children}</>;
-};
-ConfirmationRejected.displayName = 'ConfirmationRejected';
 
 /* ─── ConfirmationActions — visible only when pending ────────────── */
 
@@ -142,4 +126,3 @@ export const ConfirmationAction: React.FC<ConfirmationActionProps> = ({
   <Button className="h-8 px-3 text-sm" variant={variant} type="button" {...props} />
 );
 ConfirmationAction.displayName = 'ConfirmationAction';
-

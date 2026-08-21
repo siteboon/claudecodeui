@@ -177,7 +177,6 @@ export function useChatComposerState({
     return '';
   });
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
-  const [uploadingFiles, setUploadingFiles] = useState<Map<string, number>>(new Map());
   const [fileErrors, setFileErrors] = useState<Map<string, string>>(new Map());
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
   const [commandModalPayload, setCommandModalPayload] = useState<CommandModalPayload | null>(null);
@@ -659,7 +658,6 @@ export function useChatComposerState({
         setInput('');
         inputValueRef.current = '';
         setAttachedFiles([]);
-        setUploadingFiles(new Map());
         setFileErrors(new Map());
         resetCommandMenuState();
         setIsTextareaExpanded(false);
@@ -695,7 +693,6 @@ export function useChatComposerState({
           setInput('');
           inputValueRef.current = '';
           setAttachedFiles([]);
-          setUploadingFiles(new Map());
           setFileErrors(new Map());
           resetCommandMenuState();
           setIsTextareaExpanded(false);
@@ -818,7 +815,6 @@ export function useChatComposerState({
       inputValueRef.current = '';
       resetCommandMenuState();
       setAttachedFiles([]);
-      setUploadingFiles(new Map());
       setFileErrors(new Map());
       setIsTextareaExpanded(false);
 
@@ -1184,7 +1180,6 @@ export function useChatComposerState({
     selectFile,
     attachedFiles,
     setAttachedFiles,
-    uploadingFiles,
     fileErrors,
     getRootProps,
     getInputProps,

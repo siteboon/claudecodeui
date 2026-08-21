@@ -204,7 +204,6 @@ export function useChatSessionState({
   const [isLoadingAllMessages, setIsLoadingAllMessages] = useState(false);
   const [loadAllJustFinished, setLoadAllJustFinished] = useState(false);
   const [showLoadAllOverlay, setShowLoadAllOverlay] = useState(false);
-  const [viewHiddenCount, setViewHiddenCount] = useState(0);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const wasNearTopRef = useRef(false);
@@ -269,7 +268,6 @@ export function useChatSessionState({
     setIsLoadingAllMessages(false);
     setLoadAllJustFinished(false);
     setShowLoadAllOverlay(false);
-    setViewHiddenCount(0);
     setSearchTarget(null);
     wasNearTopRef.current = false;
     searchScrollActiveRef.current = false;
@@ -388,25 +386,17 @@ export function useChatSessionState({
 
   const storeMessages = activeSessionId ? sessionStore.getMessages(activeSessionId) : NO_MESSAGES;
 
-  // Reset viewHiddenCount when store messages change
-  const prevStoreLenRef = useRef(0);
-  if (storeMessages.length !== prevStoreLenRef.current) {
-    prevStoreLenRef.current = storeMessages.length;
-    if (viewHiddenCount > 0) setViewHiddenCount(0);
-  }
-
   const chatMessages = useMemo(() => {
     const all = normalizedToChatMessages(storeMessages);
     // Show pending user message when no session data exists yet (new session, pre-backend-response)
     if (pendingUserMessage && all.length === 0) {
       return [pendingUserMessage];
     }
-    if (viewHiddenCount > 0 && viewHiddenCount < all.length) return all.slice(0, -viewHiddenCount);
     return all;
-  }, [storeMessages, viewHiddenCount, pendingUserMessage]);
+  }, [storeMessages, pendingUserMessage]);
 
   /* ---------------------------------------------------------------- */
-  /*  addMessage / clearMessages / rewindMessages                     */
+  /*  addMessage                                                       */
   /* ---------------------------------------------------------------- */
 
   const addMessage = useCallback((msg: ChatMessage) => {
@@ -421,13 +411,6 @@ export function useChatSessionState({
       sessionStore.appendRealtime(activeSessionId, normalized);
     }
   }, [activeSessionId, sessionStore]);
-
-  const clearMessages = useCallback(() => {
-    if (!activeSessionId) return;
-    sessionStore.clearRealtime(activeSessionId);
-  }, [activeSessionId, sessionStore]);
-
-  const rewindMessages = useCallback((count: number) => setViewHiddenCount(count), []);
 
   const scrollToBottom = useCallback(() => {
     const container = scrollContainerRef.current;
@@ -717,7 +700,6 @@ export function useChatSessionState({
     setIsLoadingAllMessages(false);
     setLoadAllJustFinished(false);
     setShowLoadAllOverlay(false);
-    setViewHiddenCount(0);
     wasNearTopRef.current = false;
     if (loadAllOverlayTimerRef.current) clearTimeout(loadAllOverlayTimerRef.current);
     if (loadAllFinishedTimerRef.current) clearTimeout(loadAllFinishedTimerRef.current);
@@ -799,7 +781,6 @@ export function useChatSessionState({
     reloadExternalMessages();
   }, [
     externalMessageUpdate,
-    isNearBottom,
     requestLatestMessages,
     scrollToBottom,
     selectedProject,
@@ -1042,8 +1023,6 @@ export function useChatSessionState({
   return {
     chatMessages,
     addMessage,
-    clearMessages,
-    rewindMessages,
     sessionActivity,
     isProcessing,
     canAbortSession,
@@ -1069,7 +1048,6 @@ export function useChatSessionState({
     scrollContainerRef,
     scrollToBottom,
     scrollToBottomAndReset,
-    isNearBottom,
     handleScroll,
     requestLatestMessages,
   };

@@ -14,7 +14,7 @@ import {
   Shimmer,
 } from '@/shared/ui';
 import { usePermission } from '@/modules/chat/context/PermissionContext';
-import { MarkdownContent } from '@/modules/chat/tools/ContentRenderers';
+import { MarkdownContent } from '@/modules/chat/tools/ContentRenderers/MarkdownContent';
 
 type PlanDisplayProps = {
   title: string;

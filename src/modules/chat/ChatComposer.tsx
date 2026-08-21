@@ -74,7 +74,6 @@ type ChatComposerProps = {
   onDeleteQueuedDraft: () => void;
   attachedFiles: File[];
   onRemoveAttachment: (index: number) => void;
-  uploadingFiles: Map<string, number>;
   fileErrors: Map<string, string>;
   showFileDropdown: boolean;
   filteredFiles: MentionableFile[];
@@ -143,7 +142,6 @@ export default function ChatComposer({
   onDeleteQueuedDraft,
   attachedFiles,
   onRemoveAttachment,
-  uploadingFiles,
   fileErrors,
   showFileDropdown,
   filteredFiles,
@@ -361,7 +359,6 @@ export default function ChatComposer({
                       key={`${file.name}-${file.lastModified}-${index}`}
                       file={file}
                       onRemove={() => onRemoveAttachment(index)}
-                      uploadProgress={uploadingFiles.get(file.name)}
                       error={fileErrors.get(file.name)}
                     />
                   ))}

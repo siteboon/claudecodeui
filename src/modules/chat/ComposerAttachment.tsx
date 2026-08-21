@@ -6,7 +6,6 @@ import { ImageLightbox } from '@/modules/chat/ChatMessageImages';
 type ComposerAttachmentProps = {
   file: File;
   onRemove: () => void;
-  uploadProgress?: number;
   error?: string;
 };
 
@@ -20,7 +19,7 @@ const formatFileSize = (size: number) => {
  * Rendered by chat's ChatComposer for each pending attachment, showing its
  * thumbnail or file chip, upload progress and remove control.
  */
-const ComposerAttachment = ({ file, onRemove, uploadProgress, error }: ComposerAttachmentProps) => {
+const ComposerAttachment = ({ file, onRemove, error }: ComposerAttachmentProps) => {
   const [preview, setPreview] = useState<string | undefined>(undefined);
   const [expanded, setExpanded] = useState(false);
   const isImage = file.type.startsWith('image/');
@@ -57,11 +56,6 @@ const ComposerAttachment = ({ file, onRemove, uploadProgress, error }: ComposerA
             <p className="truncate text-sm font-medium text-foreground" title={file.name}>{file.name}</p>
             <p className="mt-0.5 text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
           </div>
-        </div>
-      )}
-      {uploadProgress !== undefined && uploadProgress < 100 && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-xl bg-black/50">
-          <div className="text-xs text-white">{uploadProgress}%</div>
         </div>
       )}
       {error && (

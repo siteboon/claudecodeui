@@ -38,18 +38,6 @@ export const CardTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttribut
 );
 CardTitle.displayName = 'CardTitle';
 
-/** Description slot of Card; kept beside it so the card family stays usable as a unit. */
-export const CardDescription = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLParagraphElement>>(
-  ({ className, ...props }, ref) => (
-    <p
-      ref={ref}
-      className={cn('text-sm text-muted-foreground', className)}
-      {...props}
-    />
-  )
-);
-CardDescription.displayName = 'CardDescription';
-
 /** Body slot of Card, used by the chat module. */
 export const CardContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
@@ -70,14 +58,3 @@ CardFooter.displayName = 'CardFooter';
  * Use inside a CardHeader with `className="flex flex-row items-start justify-between"`.
  * Positions an action (button/icon) at the trailing edge of the header.
  */
-export const CardAction = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
-    <div
-      ref={ref}
-      className={cn('ml-auto shrink-0', className)}
-      {...props}
-    />
-  )
-);
-CardAction.displayName = 'CardAction';
-

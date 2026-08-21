@@ -2,7 +2,17 @@ import React, { memo, useMemo, useCallback } from 'react';
 
 import type { DiffLine, Project,SubagentChildTool,ToolStatus } from '@/shared/types';
 import { getToolConfig } from '@/modules/chat/tools/configs/toolConfigs';
-import { OneLineDisplay, BashCommandDisplay, CollapsibleDisplay, ToolDiffViewer, MarkdownContent, FileListContent, TodoListContent, TaskListContent, TextContent, QuestionAnswerContent, SubagentContainer } from '@/modules/chat/tools';
+import { OneLineDisplay } from '@/modules/chat/tools/OneLineDisplay';
+import { BashCommandDisplay } from '@/modules/chat/tools/BashCommandDisplay';
+import { CollapsibleDisplay } from '@/modules/chat/tools/CollapsibleDisplay';
+import { ToolDiffViewer } from '@/modules/chat/tools/ToolDiffViewer';
+import { SubagentContainer } from '@/modules/chat/tools/SubagentContainer';
+import { MarkdownContent } from '@/modules/chat/tools/ContentRenderers/MarkdownContent';
+import { FileListContent } from '@/modules/chat/tools/ContentRenderers/FileListContent';
+import { TodoListContent } from '@/modules/chat/tools/ContentRenderers/TodoListContent';
+import { TaskListContent } from '@/modules/chat/tools/ContentRenderers/TaskListContent';
+import { TextContent } from '@/modules/chat/tools/ContentRenderers/TextContent';
+import { QuestionAnswerContent } from '@/modules/chat/tools/ContentRenderers/QuestionAnswerContent';
 import { PlanDisplay } from '@/modules/chat/tools/PlanDisplay';
 import { ToolStatusBadge } from '@/modules/chat/tools/ToolStatusBadge';
 

@@ -541,10 +541,6 @@ export function useSessionStore() {
     return store.get(sessionId)!;
   }, []);
 
-  const has = useCallback((sessionId: string) => {
-    return storeRef.current.has(sessionId);
-  }, []);
-
   /**
    * Fetch messages from the provider sessions endpoint and populate serverMessages.
    *
@@ -692,26 +688,6 @@ export function useSessionStore() {
   }, [getSlot, notify]);
 
   /**
-   * Append multiple realtime messages at once (batch).
-   */
-  const appendRealtimeBatch = useCallback((sessionId: string, msgs: NormalizedMessage[]) => {
-    if (msgs.length === 0) return;
-    const slot = getSlot(sessionId);
-    const normalizedMessages = msgs.map((msg) =>
-      msg.sessionId === sessionId
-        ? msg
-        : { ...msg, sessionId },
-    );
-    let updated = [...slot.realtimeMessages, ...normalizedMessages];
-    if (updated.length > MAX_REALTIME_MESSAGES) {
-      updated = updated.slice(-MAX_REALTIME_MESSAGES);
-    }
-    slot.realtimeMessages = updated;
-    recomputeMergedIfNeeded(slot);
-    notify(sessionId);
-  }, [getSlot, notify]);
-
-  /**
    * Refreshes only the persisted tail and stitches it onto the contiguous
    * cached suffix. Large turns request a small offset bridge rather than the
    * whole transcript, and the final state is applied atomically.
@@ -740,15 +716,6 @@ export function useSessionStore() {
         return { slot, applied: false, changed: false, deferred: false };
       }
     });
-  }, [getSlot, notify]);
-
-  /**
-   * Update session status.
-   */
-  const setStatus = useCallback((sessionId: string, status: SessionStatus) => {
-    const slot = getSlot(sessionId);
-    slot.status = status;
-    notify(sessionId);
   }, [getSlot, notify]);
 
   /**
@@ -810,18 +777,6 @@ export function useSessionStore() {
   }, [notify]);
 
   /**
-   * Clear realtime messages for a session (e.g., after stream completes and server fetch catches up).
-   */
-  const clearRealtime = useCallback((sessionId: string) => {
-    const slot = storeRef.current.get(sessionId);
-    if (slot) {
-      slot.realtimeMessages = [];
-      recomputeMergedIfNeeded(slot);
-      notify(sessionId);
-    }
-  }, [notify]);
-
-  /**
    * Get merged messages for a session (for rendering).
    */
   const getMessages = useCallback((sessionId: string): NormalizedMessage[] => {
@@ -836,26 +791,20 @@ export function useSessionStore() {
   }, []);
 
   return useMemo(() => ({
-    getSlot,
-    has,
     fetchFromServer,
     fetchMore,
     appendRealtime,
-    appendRealtimeBatch,
     refreshLatestFromServer,
     setActiveSession,
-    setStatus,
     isStale,
     updateStreaming,
     finalizeStreaming,
-    clearRealtime,
     getMessages,
     getSessionSlot,
   }), [
-    getSlot, has, fetchFromServer, fetchMore,
-    appendRealtime, appendRealtimeBatch, refreshLatestFromServer,
-    setActiveSession, setStatus, isStale, updateStreaming, finalizeStreaming,
-    clearRealtime, getMessages, getSessionSlot,
+    fetchFromServer, fetchMore, appendRealtime, refreshLatestFromServer,
+    setActiveSession, isStale, updateStreaming, finalizeStreaming,
+    getMessages, getSessionSlot,
   ]);
 }
 

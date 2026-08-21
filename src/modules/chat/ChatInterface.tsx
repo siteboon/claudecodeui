@@ -196,7 +196,6 @@ function ChatInterface({
     selectFile,
     attachedFiles,
     setAttachedFiles,
-    uploadingFiles,
     fileErrors,
     getRootProps,
     getInputProps,
@@ -459,7 +458,6 @@ function ChatInterface({
               previous.filter((_, currentIndex) => currentIndex !== index),
             )
           }
-          uploadingFiles={uploadingFiles}
           fileErrors={fileErrors}
           showFileDropdown={showFileDropdown}
           filteredFiles={filteredFiles}

@@ -10,7 +10,7 @@ export const alertVariants = cva(
       variant: {
         default: 'bg-card text-card-foreground',
         destructive:
-          'bg-card text-destructive *:data-[slot=alert-description]:text-destructive/90 [&>svg]:text-current',
+          'bg-card text-destructive [&>svg]:text-current',
       },
     },
     defaultVariants: {
@@ -34,33 +34,3 @@ export const Alert = React.forwardRef<HTMLDivElement, AlertProps>(
   )
 );
 Alert.displayName = 'Alert';
-
-/** Heading slot of Alert; kept beside it so the alert family stays usable as a unit. */
-export const AlertTitle = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
-    <div
-      ref={ref}
-      data-slot="alert-title"
-      className={cn('col-start-2 line-clamp-1 min-h-4 font-medium tracking-tight', className)}
-      {...props}
-    />
-  )
-);
-AlertTitle.displayName = 'AlertTitle';
-
-/** Body slot of Alert; kept beside it so the alert family stays usable as a unit. */
-export const AlertDescription = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
-    <div
-      ref={ref}
-      data-slot="alert-description"
-      className={cn(
-        'text-muted-foreground col-start-2 grid justify-items-start gap-1 text-sm [&_p]:leading-relaxed',
-        className
-      )}
-      {...props}
-    />
-  )
-);
-AlertDescription.displayName = 'AlertDescription';
-
