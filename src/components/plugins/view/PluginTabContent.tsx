@@ -61,7 +61,9 @@ export default function PluginTabContent({
   // Read through a ref for the same reason as the context: the plugin module
   // captures the api object once, on mount.
   const hostApiRef = useRef(hostApi);
-  hostApiRef.current = hostApi;
+  useEffect(() => {
+    hostApiRef.current = hostApi;
+  }, [hostApi]);
 
   // Stable refs so effects don't need context values in their dep arrays
   const contextRef = useRef<PluginContext>(buildContext(isDarkMode, selectedProject, selectedSession));
