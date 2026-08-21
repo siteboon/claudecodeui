@@ -28,6 +28,13 @@ const textMessage = (content: string): ChatMessage => ({
   timestamp: '2024-01-01T00:00:00.000Z',
 });
 
+const thinkingMessage = (): ChatMessage => ({
+  type: 'assistant',
+  content: 'deliberating',
+  timestamp: '2024-01-01T00:00:00.000Z',
+  isThinking: true,
+});
+
 test('a run of same-tool calls is grouped and carries a precomputed preview', () => {
   const items = groupConsecutiveTools([
     toolMessage('Read', { file_path: '/a.ts' }),
@@ -89,7 +96,23 @@ test('an unparsable tool input does not throw while grouping', () => {
 
   const [group] = items;
   assert.ok(isToolGroupItem(group));
-  assert.equal(typeof group.preview, 'string');
+  // Read's getValue reads .file_path off the parsed input; the unparsable input
+  // stays a string, so there is nothing to show. The group must still form, and
+  // the raw JSON must not leak into the summary line.
+  assert.equal(group.preview, '');
+});
+
+test('a tool with no getValue falls back to its config title', () => {
+  // Exercises the other half of getToolInputPreview: unknown tools resolve to
+  // the Default config, which has a title and no getValue.
+  const items = groupConsecutiveTools([
+    toolMessage('SomeUnknownTool', { a: 1 }),
+    toolMessage('SomeUnknownTool', { b: 2 }),
+  ]);
+
+  const [group] = items;
+  assert.ok(isToolGroupItem(group));
+  assert.equal(group.preview, 'Parameters, Parameters');
 });
 
 test('the group carries the run\u2019s first timestamp, which is what the search jump matches on', () => {
@@ -101,4 +124,76 @@ test('the group carries the run\u2019s first timestamp, which is what the search
   const [group] = items;
   assert.ok(isToolGroupItem(group));
   assert.equal(group.timestamp, '2024-01-01T10:00:00.000Z');
+});
+
+test('a run of two is fully shown even when one input has no preview', () => {
+  // extraCount used to be `messages.length - previews.filter(Boolean).length`,
+  // so this rendered "/a.ts, +1 more" while showing everything it had.
+  const items = groupConsecutiveTools([
+    toolMessage('Read', { file_path: '/a.ts' }),
+    toolMessage('Read', {}),
+  ]);
+
+  const [group] = items;
+  assert.ok(isToolGroupItem(group));
+  assert.equal(group.preview, '/a.ts');
+});
+
+test('the remainder counts messages the line omits, not previews that came back empty', () => {
+  const items = groupConsecutiveTools([
+    toolMessage('Read', {}),
+    toolMessage('Read', { file_path: '/b.ts' }),
+    toolMessage('Read', { file_path: '/c.ts' }),
+  ]);
+
+  const [group] = items;
+  assert.ok(isToolGroupItem(group));
+  assert.equal(group.preview, '/b.ts, +1 more');
+});
+
+test('hidden reasoning between two tool calls does not split the run', () => {
+  // Codex interleaves reasoning between consecutive tool calls; with thinking
+  // turned off those messages render nothing, so splitting on them would show
+  // two ungrouped rows with an invisible gap between them.
+  const items = groupConsecutiveTools([
+    toolMessage('Read', { file_path: '/a.ts' }),
+    thinkingMessage(),
+    toolMessage('Read', { file_path: '/b.ts' }),
+  ], false);
+
+  assert.equal(items.length, 1);
+  assert.equal(isToolGroupItem(items[0]), true);
+});
+
+test('reasoning the user can see does split the run', () => {
+  const items = groupConsecutiveTools([
+    toolMessage('Read', { file_path: '/a.ts' }),
+    thinkingMessage(),
+    toolMessage('Read', { file_path: '/b.ts' }),
+  ], true);
+
+  assert.equal(items.length, 3);
+  assert.equal(items.filter(isToolGroupItem).length, 0);
+});
+
+test('showThinking defaults to on, so a caller that omits it does not collapse a visible turn', () => {
+  const withThinkingShown = groupConsecutiveTools([
+    toolMessage('Read', { file_path: '/a.ts' }),
+    thinkingMessage(),
+    toolMessage('Read', { file_path: '/b.ts' }),
+  ]);
+
+  assert.equal(withThinkingShown.length, 3);
+});
+
+test('a subagent container is never absorbed into a group', () => {
+  // It renders its own nested transcript, so collapsing it into a one-line
+  // summary would hide the whole subagent run.
+  const items = groupConsecutiveTools([
+    toolMessage('Task', { prompt: 'a' }),
+    { ...toolMessage('Task', { prompt: 'b' }), isSubagentContainer: true },
+  ]);
+
+  assert.equal(items.length, 2);
+  assert.equal(items.filter(isToolGroupItem).length, 0);
 });
