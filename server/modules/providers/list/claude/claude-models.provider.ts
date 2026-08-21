@@ -9,6 +9,19 @@ import type {
 } from '@/shared/types.js';
 import { buildDefaultProviderCurrentActiveModel } from '@/shared/utils.js';
 
+/**
+ * Ultracode is not one of the SDK's reasoning-effort levels. Selecting it runs the turn at
+ * `xhigh` effort with standing dynamic-workflow orchestration, which the Claude runtime
+ * translates into the session-scoped `ultracode` setting. It is therefore only offered on
+ * models this catalog already marks as xhigh-capable.
+ */
+export const CLAUDE_ULTRACODE_EFFORT = 'ultracode';
+
+const ULTRACODE_EFFORT_OPTION = {
+  value: CLAUDE_ULTRACODE_EFFORT,
+  description: 'Highest effort plus standing workflow orchestration.',
+};
+
 export const CLAUDE_PREDEFINED_MODELS: ProviderModelsDefinition = {
   OPTIONS: [
     {
@@ -22,7 +35,6 @@ export const CLAUDE_PREDEFINED_MODELS: ProviderModelsDefinition = {
           { value: 'medium' },
           { value: 'high' },
           { value: 'max' },
-          { value: 'ultracode' },
         ],
       },
     },
@@ -38,7 +50,7 @@ export const CLAUDE_PREDEFINED_MODELS: ProviderModelsDefinition = {
           { value: 'high' },
           { value: 'xhigh' },
           { value: 'max' },
-          { value: 'ultracode' },
+          ULTRACODE_EFFORT_OPTION,
         ],
       },
     },
@@ -54,7 +66,7 @@ export const CLAUDE_PREDEFINED_MODELS: ProviderModelsDefinition = {
           { value: 'high' },
           { value: 'xhigh' },
           { value: 'max' },
-          { value: 'ultracode' },
+          ULTRACODE_EFFORT_OPTION,
         ],
       },
     },
@@ -70,7 +82,7 @@ export const CLAUDE_PREDEFINED_MODELS: ProviderModelsDefinition = {
           { value: 'high' },
           { value: 'xhigh' },
           { value: 'max' },
-          { value: 'ultracode' },
+          ULTRACODE_EFFORT_OPTION,
         ],
       },
     },
@@ -86,7 +98,7 @@ export const CLAUDE_PREDEFINED_MODELS: ProviderModelsDefinition = {
           { value: 'high' },
           { value: 'xhigh' },
           { value: 'max' },
-          { value: 'ultracode' },
+          ULTRACODE_EFFORT_OPTION,
         ],
       },
     },
@@ -102,7 +114,7 @@ export const CLAUDE_PREDEFINED_MODELS: ProviderModelsDefinition = {
           { value: 'high' },
           { value: 'xhigh' },
           { value: 'max' },
-          { value: 'ultracode' },
+          ULTRACODE_EFFORT_OPTION,
         ],
       },
     },
@@ -118,7 +130,7 @@ export const CLAUDE_PREDEFINED_MODELS: ProviderModelsDefinition = {
           { value: 'high' },
           { value: 'xhigh' },
           { value: 'max' },
-          { value: 'ultracode' },
+          ULTRACODE_EFFORT_OPTION,
         ],
       },
     },
@@ -139,7 +151,7 @@ export const CLAUDE_PREDEFINED_MODELS: ProviderModelsDefinition = {
           { value: 'high' },
           { value: 'xhigh' },
           { value: 'max' },
-          { value: 'ultracode' },
+          ULTRACODE_EFFORT_OPTION,
         ],
       },
     },

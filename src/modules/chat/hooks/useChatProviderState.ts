@@ -12,7 +12,10 @@ import type { PendingPermissionRequest, PermissionMode,
 import { DEFAULT_EFFORT_VALUE } from '@/shared/constants';
 
 const FALLBACK_PROVIDER_EFFORT_VALUES: Partial<Record<LLMProvider, readonly string[]>> = {
-  claude: ['low', 'medium', 'high', 'xhigh', 'max'],
+  // Superset used only before the model catalog loads; `ultracode` belongs to the
+  // xhigh-capable models alone, but listing it here keeps a stored ultracode
+  // selection from being reset during catalog hydration.
+  claude: ['low', 'medium', 'high', 'xhigh', 'max', 'ultracode'],
   // Superset used only before the model catalog loads. Per-model metadata
   // narrows this once available; including the GPT-5.6 tiers here prevents a
   // valid Max/Ultra selection from being reset during catalog hydration.
