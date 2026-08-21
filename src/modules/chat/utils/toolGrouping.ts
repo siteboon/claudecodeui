@@ -57,13 +57,19 @@ function getToolInputPreview(message: ChatMessage): string {
  * the staleness risk.
  */
 function buildGroupPreview(messages: ChatMessage[]): string {
-  const shown = messages.slice(0, PREVIEWED_TOOL_COUNT);
-  const previewText = shown.map(getToolInputPreview).filter(Boolean).join(', ');
-  // Counts the messages the line leaves out, not the ones that produced no
-  // text. Subtracting the filtered previews instead made a run of two where one
-  // input has no preview — a Read with no file_path — claim "+1 more" while
-  // showing everything it had.
-  const extraCount = messages.length - shown.length;
+  const named = messages
+    .slice(0, PREVIEWED_TOOL_COUNT)
+    .map(getToolInputPreview)
+    .filter(Boolean);
+
+  const previewText = named.join(', ');
+  // Subtracted from the previews actually printed, not from the two slots the
+  // line reserves, so that named + extraCount === messages.length for every
+  // input. A tool whose input yields no text — a Read with no file_path, an
+  // input still arriving as partial JSON — is genuinely not named, so it
+  // belongs in the remainder. Counting slots instead makes a group of three
+  // whose first preview is empty render "/b.ts, +1 more" beside an x3 badge.
+  const extraCount = messages.length - named.length;
 
   if (!previewText) {
     return extraCount > 0 ? `+${extraCount} more` : '';

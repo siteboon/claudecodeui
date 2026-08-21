@@ -47,7 +47,7 @@ for (const [name, content] of Object.entries(FIXTURES)) {
     for (let length = 1; length <= content.length; length += 1) {
       const prefix = content.slice(0, length);
 
-      const streamed = render(<StreamingMarkdown content={prefix} className={PROSE} />);
+      const streamed = render(<StreamingMarkdown content={prefix} isStreaming className={PROSE} />);
       const whole = render(<Markdown className={PROSE}>{prefix}</Markdown>);
 
       assert.equal(
@@ -63,7 +63,7 @@ for (const [name, content] of Object.entries(FIXTURES)) {
 }
 
 const renderStreaming = (content: string) =>
-  render(<StreamingMarkdown content={content} className={PROSE} />);
+  render(<StreamingMarkdown content={content} isStreaming className={PROSE} />);
 
 test('both halves live in one prose container, so block margins still collapse', () => {
   // Two prose containers put the settled and pending halves in separate
@@ -90,3 +90,13 @@ test('an empty half contributes no wrapper of its own', () => {
 
   assert.equal(container.firstElementChild?.children.length, 1);
 });
+
+test('the finished reply renders exactly what <Markdown> would', () => {
+  const content = 'A paragraph.\n\n- alpha\n- beta\n\n```ts\nconst a = 1;\n```\n';
+
+  const settled = render(<StreamingMarkdown content={content} isStreaming={false} className={PROSE} />);
+  const whole = render(<Markdown className={PROSE}>{content}</Markdown>);
+
+  assert.equal(normalize(settled.container.innerHTML), normalize(whole.container.innerHTML));
+});
+

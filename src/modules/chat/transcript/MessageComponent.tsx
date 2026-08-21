@@ -365,17 +365,14 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                   }
 
                   // Normal rendering for non-JSON content
+                  // One component for both states on purpose: swapping element
+                  // types here remounted the whole reply the instant it finished.
                   return message.type === 'assistant' ? (
-                    message.isStreaming ? (
-                      <StreamingMarkdown
-                        content={content}
-                        className="prose prose-sm prose-gray max-w-none font-serif dark:prose-invert"
-                      />
-                    ) : (
-                      <Markdown className="prose prose-sm prose-gray max-w-none font-serif dark:prose-invert">
-                        {content}
-                      </Markdown>
-                    )
+                    <StreamingMarkdown
+                      content={content}
+                      isStreaming={Boolean(message.isStreaming)}
+                      className="prose prose-sm prose-gray max-w-none font-serif dark:prose-invert"
+                    />
                   ) : (
                     <div className="whitespace-pre-wrap">
                       {content}

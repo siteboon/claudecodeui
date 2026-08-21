@@ -97,9 +97,10 @@ test('an unparsable tool input does not throw while grouping', () => {
   const [group] = items;
   assert.ok(isToolGroupItem(group));
   // Read's getValue reads .file_path off the parsed input; the unparsable input
-  // stays a string, so there is nothing to show. The group must still form, and
-  // the raw JSON must not leak into the summary line.
-  assert.equal(group.preview, '');
+  // stays a string, so there is nothing to show. The group must still form, the
+  // raw JSON must not leak into the summary line, and both calls must be
+  // accounted for as unnamed.
+  assert.equal(group.preview, '+2 more');
 });
 
 test('a tool with no getValue falls back to its config title', () => {
@@ -126,9 +127,9 @@ test('the group carries the run\u2019s first timestamp, which is what the search
   assert.equal(group.timestamp, '2024-01-01T10:00:00.000Z');
 });
 
-test('a run of two is fully shown even when one input has no preview', () => {
-  // extraCount used to be `messages.length - previews.filter(Boolean).length`,
-  // so this rendered "/a.ts, +1 more" while showing everything it had.
+test('a call the line cannot name is counted in the remainder', () => {
+  // One of the two is named, so the other is "more" — the badge says x2 and the
+  // line accounts for two calls.
   const items = groupConsecutiveTools([
     toolMessage('Read', { file_path: '/a.ts' }),
     toolMessage('Read', {}),
@@ -136,10 +137,13 @@ test('a run of two is fully shown even when one input has no preview', () => {
 
   const [group] = items;
   assert.ok(isToolGroupItem(group));
-  assert.equal(group.preview, '/a.ts');
+  assert.equal(group.preview, '/a.ts, +1 more');
 });
 
-test('the remainder counts messages the line omits, not previews that came back empty', () => {
+test('the named calls plus the remainder always add up to the group size', () => {
+  // The invariant that keeps the summary honest next to ToolGroupContainer's
+  // x{messages.length} badge. Subtracting the two preview slots instead of the
+  // previews that produced text renders "+1 more" for three hidden calls.
   const items = groupConsecutiveTools([
     toolMessage('Read', {}),
     toolMessage('Read', { file_path: '/b.ts' }),
@@ -148,7 +152,21 @@ test('the remainder counts messages the line omits, not previews that came back 
 
   const [group] = items;
   assert.ok(isToolGroupItem(group));
-  assert.equal(group.preview, '/b.ts, +1 more');
+  assert.equal(group.preview, '/b.ts, +2 more');
+});
+
+test('a group that can name nothing still accounts for every call', () => {
+  const items = groupConsecutiveTools([
+    toolMessage('Read', {}),
+    toolMessage('Read', {}),
+    toolMessage('Read', {}),
+    toolMessage('Read', {}),
+    toolMessage('Read', {}),
+  ]);
+
+  const [group] = items;
+  assert.ok(isToolGroupItem(group));
+  assert.equal(group.preview, '+5 more');
 });
 
 test('hidden reasoning between two tool calls does not split the run', () => {
