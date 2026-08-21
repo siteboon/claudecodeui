@@ -1149,12 +1149,10 @@ export type SidebarProjectListProps = {
   isLoading: boolean;
   loadingProgress: LoadingProgress | null;
   expandedProjects: Set<string>;
-  editingProject: string | null;
-  editingName: string;
+  activeRename: ActiveSidebarRename | null;
   initialSessionsLoaded: Set<string>;
   currentTime: Date;
-  editingSession: string | null;
-  editingSessionName: string;
+
   deletingProjects: Set<string>;
   tasksEnabled: boolean;
   mcpServerStatus: MCPServerStatus;
@@ -1165,18 +1163,17 @@ export type SidebarProjectListProps = {
   attentionSessionIds: ReadonlySet<string>;
   forceExpanded?: boolean;
   isProjectStarred: (projectName: string) => boolean;
-  onEditingNameChange: (value: string) => void;
+  onRenameDraftChange: (draft: string) => void;
   onToggleProject: (projectName: string) => void;
   onProjectSelect: (project: Project) => void;
   onToggleStarProject: (projectName: string) => void;
   onStartEditingProject: (project: Project) => void;
   onCancelEditingProject: () => void;
-  onSaveProjectName: (projectName: string) => void;
+  onSaveProjectName: (projectId: string, nextName: string) => void;
   onDeleteProject: (project: Project) => void;
   onSessionSelect: (session: SessionWithProvider, projectName: string) => void;
   onDeleteSession: (sessionId: string, sessionTitle: string) => void;
   onNewSession: (project: Project) => void;
-  onEditingSessionNameChange: (value: string) => void;
   onStartEditingSession: (sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
   onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => void;
@@ -1218,6 +1215,19 @@ export type RecentConversationListItem = Pick<
 >;
 
 /** The project queued for deletion together with its session count, used to populate the delete-confirmation dialog. */
+/**
+ * The rename the sidebar currently has open, if any.
+ *
+ * One value rather than two id/draft pairs, so a project and a session cannot
+ * both be mid-rename, and rows can be handed a resolved `isEditing` instead of
+ * the raw id — a keystroke then only invalidates the row being renamed.
+ */
+export type ActiveSidebarRename = {
+  target: 'project' | 'session';
+  id: string;
+  draft: string;
+};
+
 /**
  * The sidebar's pending delete confirmation. One value rather than a pair of
  * nullable states, so a project dialog and a session dialog cannot both be

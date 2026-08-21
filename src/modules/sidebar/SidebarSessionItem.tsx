@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { Check, Copy, Edit2, Loader2, MoreHorizontal, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
@@ -15,9 +15,10 @@ type SidebarSessionItemProps = {
   isProcessing: boolean;
   needsAttention: boolean;
   currentTime: Date;
-  editingSession: string | null;
-  editingSessionName: string;
-  onEditingSessionNameChange: (value: string) => void;
+  /** Resolved for this row, so a keystroke elsewhere does not invalidate it. */
+  isEditing: boolean;
+  renameDraft: string;
+  onRenameDraftChange: (draft: string) => void;
   onStartEditingSession: (sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
   onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => void;
@@ -36,16 +37,16 @@ const PROVIDER_LABELS: Record<LLMProvider, string> = {
 
 type CopyState = 'loading' | 'idle' | 'copying' | 'copied' | 'error';
 /** Rendered by SidebarProjectSessions for one session row, including its rename, copy and delete controls. */
-export default function SidebarSessionItem({
+function SidebarSessionItem({
   project,
   session,
   selectedSession,
   isProcessing,
   needsAttention,
   currentTime,
-  editingSession,
-  editingSessionName,
-  onEditingSessionNameChange,
+  isEditing,
+  renameDraft,
+  onRenameDraftChange,
   onStartEditingSession,
   onCancelEditingSession,
   onSaveEditingSession,
@@ -56,7 +57,6 @@ export default function SidebarSessionItem({
 }: SidebarSessionItemProps) {
   const sessionView = createSessionViewModel(session, currentTime, t);
   const isSelected = selectedSession?.id === session.id;
-  const isEditing = editingSession === session.id;
   const compactSessionAge = formatCompactAge(sessionView.sessionTime, currentTime);
   const editingContainerRef = useRef<HTMLDivElement>(null);
   const [isMobileOptionsOpen, setIsMobileOptionsOpen] = useState(false);
@@ -94,7 +94,7 @@ export default function SidebarSessionItem({
   };
 
   const saveEditedSession = () => {
-    onSaveEditingSession(project.projectId, session.id, editingSessionName, session.__provider);
+    onSaveEditingSession(project.projectId, session.id, renameDraft, session.__provider);
   };
 
   const requestDeleteSession = () => {
@@ -309,8 +309,8 @@ export default function SidebarSessionItem({
                 <input
                   id={`mobile-session-rename-${session.id}`}
                   type="text"
-                  value={editingSessionName}
-                  onChange={(event) => onEditingSessionNameChange(event.target.value)}
+                  value={renameDraft}
+                  onChange={(event) => onRenameDraftChange(event.target.value)}
                   onKeyDown={(event) => {
                     event.stopPropagation();
                     if (event.key === 'Enter') {
@@ -485,8 +485,8 @@ export default function SidebarSessionItem({
               <>
                 <input
                   type="text"
-                  value={editingSessionName}
-                  onChange={(event) => onEditingSessionNameChange(event.target.value)}
+                  value={renameDraft}
+                  onChange={(event) => onRenameDraftChange(event.target.value)}
                   onKeyDown={(event) => {
                     event.stopPropagation();
                     if (event.key === 'Enter') {
@@ -572,3 +572,10 @@ export default function SidebarSessionItem({
     </div>
   );
 }
+
+/**
+ * Memoized: a websocket session delta re-renders the sidebar roughly every
+ * 0.5-2s during a run, and a rename keystroke re-renders it per character. The
+ * rename state is resolved per row, so only the row being edited changes props.
+ */
+export default memo(SidebarSessionItem);

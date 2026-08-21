@@ -182,9 +182,7 @@ export default function SidebarContent({
   );
   const groupedArchivedSessions = groupArchivedSessionsByProject(archivedSessions);
   const visibleArchivedItemsCount = archivedProjects.length + archivedSessions.length;
-  const isRenamingOnMobile = isMobile && Boolean(
-    projectListProps.editingProject || projectListProps.editingSession,
-  );
+  const isRenamingOnMobile = isMobile && projectListProps.activeRename !== null;
 
   return (
     <div

@@ -15,12 +15,10 @@ export default function SidebarProjectList({
   isLoading,
   loadingProgress,
   expandedProjects,
-  editingProject,
-  editingName,
+  activeRename,
   initialSessionsLoaded,
   currentTime,
-  editingSession,
-  editingSessionName,
+
   deletingProjects,
   tasksEnabled,
   mcpServerStatus,
@@ -31,7 +29,7 @@ export default function SidebarProjectList({
   attentionSessionIds,
   forceExpanded = false,
   isProjectStarred,
-  onEditingNameChange,
+  onRenameDraftChange,
   onToggleProject,
   onProjectSelect,
   onToggleStarProject,
@@ -42,7 +40,6 @@ export default function SidebarProjectList({
   onSessionSelect,
   onDeleteSession,
   onNewSession,
-  onEditingSessionNameChange,
   onStartEditingSession,
   onCancelEditingSession,
   onSaveEditingSession,
@@ -80,17 +77,20 @@ export default function SidebarProjectList({
               isExpanded={forceExpanded || expandedProjects.has(project.projectId)}
               isDeleting={deletingProjects.has(project.projectId)}
               isStarred={isProjectStarred(project.projectId)}
-              editingProject={editingProject}
-              editingName={editingName}
+              isEditing={activeRename?.target === 'project' && activeRename.id === project.projectId}
+              renameDraft={
+                activeRename?.target === 'project' && activeRename.id === project.projectId
+                  ? activeRename.draft
+                  : ''
+              }
               sessions={getProjectSessions(project)}
               initialSessionsLoaded={initialSessionsLoaded.has(project.projectId)}
               isLoadingMoreSessions={loadingMoreProjects.has(project.projectId)}
               currentTime={currentTime}
-              editingSession={editingSession}
-              editingSessionName={editingSessionName}
+              activeRename={activeRename}
               tasksEnabled={tasksEnabled}
               mcpServerStatus={mcpServerStatus}
-              onEditingNameChange={onEditingNameChange}
+              onRenameDraftChange={onRenameDraftChange}
               onToggleProject={onToggleProject}
               onProjectSelect={onProjectSelect}
               onToggleStarProject={onToggleStarProject}
@@ -104,7 +104,6 @@ export default function SidebarProjectList({
               activeSessions={activeSessions}
               attentionSessionIds={attentionSessionIds}
               onNewSession={onNewSession}
-              onEditingSessionNameChange={onEditingSessionNameChange}
               onStartEditingSession={onStartEditingSession}
               onCancelEditingSession={onCancelEditingSession}
               onSaveEditingSession={onSaveEditingSession}

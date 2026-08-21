@@ -1,10 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { Check, ChevronDown, ChevronRight, Edit3, Star, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { Button } from '@/shared/ui';
 import { cn } from '@/shared/utils';
-import type { LLMProvider, MCPServerStatus, Project, ProjectSession, SessionWithProvider } from '@/shared/types';
+import type { ActiveSidebarRename, LLMProvider, MCPServerStatus, Project, ProjectSession, SessionWithProvider } from '@/shared/types';
 import { getTaskIndicatorStatus } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import TaskIndicator from '@/modules/sidebar/TaskIndicator';
 import SidebarProjectSessions from '@/modules/sidebar/SidebarProjectSessions';
@@ -16,23 +16,23 @@ type SidebarProjectItemProps = {
   isExpanded: boolean;
   isDeleting: boolean;
   isStarred: boolean;
-  editingProject: string | null;
-  editingName: string;
+  /** Resolved for this row: only the project being renamed re-renders on a keystroke. */
+  isEditing: boolean;
+  renameDraft: string;
   sessions: SessionWithProvider[];
   initialSessionsLoaded: boolean;
   isLoadingMoreSessions: boolean;
   currentTime: Date;
-  editingSession: string | null;
-  editingSessionName: string;
+  activeRename: ActiveSidebarRename | null;
   tasksEnabled: boolean;
   mcpServerStatus: MCPServerStatus;
-  onEditingNameChange: (name: string) => void;
+  onRenameDraftChange: (name: string) => void;
   onToggleProject: (projectName: string) => void;
   onProjectSelect: (project: Project) => void;
   onToggleStarProject: (projectName: string) => void;
   onStartEditingProject: (project: Project) => void;
   onCancelEditingProject: () => void;
-  onSaveProjectName: (projectName: string) => void;
+  onSaveProjectName: (projectId: string, nextName: string) => void;
   onDeleteProject: (project: Project) => void;
   onSessionSelect: (session: SessionWithProvider, projectName: string) => void;
   onDeleteSession: (sessionId: string, sessionTitle: string) => void;
@@ -40,7 +40,6 @@ type SidebarProjectItemProps = {
   activeSessions: ReadonlySet<string>;
   attentionSessionIds: ReadonlySet<string>;
   onNewSession: (project: Project) => void;
-  onEditingSessionNameChange: (value: string) => void;
   onStartEditingSession: (sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
   onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => void;
@@ -53,24 +52,23 @@ const getSessionCountDisplay = (project: Project, sessions: SessionWithProvider[
 };
 
 /** Rendered by SidebarProjectList for one project row, including its expand, rename, star and delete controls. */
-export default function SidebarProjectItem({
+function SidebarProjectItem({
   project,
   selectedProject,
   selectedSession,
   isExpanded,
   isDeleting,
   isStarred,
-  editingProject,
-  editingName,
+  isEditing,
+  renameDraft,
   sessions,
   initialSessionsLoaded,
   isLoadingMoreSessions,
   currentTime,
-  editingSession,
-  editingSessionName,
+  activeRename,
   tasksEnabled,
   mcpServerStatus,
-  onEditingNameChange,
+  onRenameDraftChange,
   onToggleProject,
   onProjectSelect,
   onToggleStarProject,
@@ -84,7 +82,6 @@ export default function SidebarProjectItem({
   activeSessions,
   attentionSessionIds,
   onNewSession,
-  onEditingSessionNameChange,
   onStartEditingSession,
   onCancelEditingSession,
   onSaveEditingSession,
@@ -93,7 +90,6 @@ export default function SidebarProjectItem({
   // Project identity is tracked by the DB-assigned `projectId` everywhere
   // after the projectName → projectId migration.
   const isSelected = selectedProject?.projectId === project.projectId;
-  const isEditing = editingProject === project.projectId;
   const totalSessionCount = Number(project.sessionMeta?.total ?? sessions.length);
   const sessionCountDisplay = getSessionCountDisplay(project, sessions);
   const sessionCountLabel = `${sessionCountDisplay} session${totalSessionCount === 1 ? '' : 's'}`;
@@ -126,7 +122,7 @@ export default function SidebarProjectItem({
   const toggleStarProject = () => onToggleStarProject(project.projectId);
 
   const saveProjectName = () => {
-    onSaveProjectName(project.projectId);
+    onSaveProjectName(project.projectId, renameDraft);
   };
 
   const selectAndToggleProject = () => {
@@ -181,8 +177,8 @@ export default function SidebarProjectItem({
                     <input
                       ref={mobileRenameInputRef}
                       type="text"
-                      value={editingName}
-                      onChange={(event) => onEditingNameChange(event.target.value)}
+                      value={renameDraft}
+                      onChange={(event) => onRenameDraftChange(event.target.value)}
                       className="w-full rounded-lg border-2 border-primary/40 bg-background px-3 py-2 text-sm text-foreground shadow-sm transition-all duration-200 focus:border-primary focus:shadow-md focus:outline-none"
                       placeholder={t('projects.projectNamePlaceholder')}
                       autoFocus
@@ -318,8 +314,8 @@ export default function SidebarProjectItem({
                 <div className="space-y-1">
                   <input
                     type="text"
-                    value={editingName}
-                    onChange={(event) => onEditingNameChange(event.target.value)}
+                    value={renameDraft}
+                    onChange={(event) => onRenameDraftChange(event.target.value)}
                     className="w-full rounded border border-border bg-background px-2 py-1 text-sm text-foreground focus:ring-2 focus:ring-primary/20"
                     placeholder={t('projects.projectNamePlaceholder')}
                     autoFocus
@@ -421,9 +417,8 @@ export default function SidebarProjectItem({
         activeSessions={activeSessions}
         attentionSessionIds={attentionSessionIds}
         currentTime={currentTime}
-        editingSession={editingSession}
-        editingSessionName={editingSessionName}
-        onEditingSessionNameChange={onEditingSessionNameChange}
+        activeRename={activeRename}
+        onRenameDraftChange={onRenameDraftChange}
         onStartEditingSession={onStartEditingSession}
         onCancelEditingSession={onCancelEditingSession}
         onSaveEditingSession={onSaveEditingSession}
@@ -437,3 +432,10 @@ export default function SidebarProjectItem({
     </div>
   );
 }
+
+/**
+ * Memoized: a websocket session delta re-renders the sidebar roughly every
+ * 0.5-2s during a run, and a rename keystroke re-renders it per character. The
+ * rename state is resolved per row, so only the row being edited changes props.
+ */
+export default memo(SidebarProjectItem);

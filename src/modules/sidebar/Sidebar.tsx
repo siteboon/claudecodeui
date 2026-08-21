@@ -1,4 +1,4 @@
-import { memo, useEffect } from 'react';
+import { memo, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useDeviceSettings } from '@/shared/hooks/useDeviceSettings';
@@ -81,14 +81,11 @@ function Sidebar({
   const {
     isSidebarCollapsed,
     expandedProjects,
-    editingProject,
+    activeRename,
     showNewProject,
-    editingName,
     initialSessionsLoaded,
     currentTime,
     isRefreshing,
-    editingSession,
-    editingSessionName,
     searchFilter,
     searchMode,
     setSearchMode,
@@ -120,8 +117,10 @@ function Sidebar({
     getProjectSessions,
     loadingMoreProjects,
     loadMoreSessionsForProject,
-    startEditing,
-    cancelEditing,
+    startEditingProject,
+    startEditingSession,
+    updateRenameDraft,
+    cancelRename,
     saveProjectName,
     showDeleteSessionConfirmation,
     confirmDeleteSession,
@@ -136,9 +135,6 @@ function Sidebar({
     collapseSidebar: handleCollapseSidebar,
     expandSidebar: handleExpandSidebar,
     setShowNewProject,
-    setEditingName,
-    setEditingSession,
-    setEditingSessionName,
     setSearchFilter,
     setPendingDeletion,
     setShowVersionModal,
@@ -174,6 +170,19 @@ function Sidebar({
     void paletteOps.refreshProjects();
   };
 
+  // Stable so memo() on the row components can bail out; an inline arrow here
+  // would give every row a new callback on each sidebar render.
+  const handleSaveProjectName = useCallback((projectId: string, nextName: string) => {
+    void saveProjectName(projectId, nextName);
+  }, [saveProjectName]);
+
+  const handleSaveSessionName = useCallback(
+    (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => {
+      void updateSessionSummary(projectName, sessionId, summary, provider);
+    },
+    [updateSessionSummary],
+  );
+
   const projectListProps: SidebarProjectListProps = {
     projects,
     filteredProjects,
@@ -182,12 +191,9 @@ function Sidebar({
     isLoading,
     loadingProgress,
     expandedProjects,
-    editingProject,
-    editingName,
+    activeRename,
     initialSessionsLoaded,
     currentTime,
-    editingSession,
-    editingSessionName,
     deletingProjects,
     tasksEnabled,
     mcpServerStatus,
@@ -197,32 +203,21 @@ function Sidebar({
     attentionSessionIds,
     forceExpanded: searchMode === 'running',
     isProjectStarred,
-    onEditingNameChange: setEditingName,
+    onRenameDraftChange: updateRenameDraft,
     onToggleProject: toggleProject,
     onProjectSelect: handleProjectSelect,
     onToggleStarProject: toggleStarProject,
-    onStartEditingProject: startEditing,
-    onCancelEditingProject: cancelEditing,
-    onSaveProjectName: (projectName) => {
-      void saveProjectName(projectName);
-    },
+    onStartEditingProject: startEditingProject,
+    onCancelEditingProject: cancelRename,
+    onSaveProjectName: handleSaveProjectName,
     onDeleteProject: requestProjectDelete,
     onSessionSelect: handleSessionClick,
     onDeleteSession: showDeleteSessionConfirmation,
     onLoadMoreSessions: loadMoreSessionsForProject,
     onNewSession,
-    onEditingSessionNameChange: setEditingSessionName,
-    onStartEditingSession: (sessionId, initialName) => {
-      setEditingSession(sessionId);
-      setEditingSessionName(initialName);
-    },
-    onCancelEditingSession: () => {
-      setEditingSession(null);
-      setEditingSessionName('');
-    },
-    onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => {
-      void updateSessionSummary(projectName, sessionId, summary, provider);
-    },
+    onStartEditingSession: startEditingSession,
+    onCancelEditingSession: cancelRename,
+    onSaveEditingSession: handleSaveSessionName,
     t,
   };
 

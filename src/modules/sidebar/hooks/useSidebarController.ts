@@ -3,7 +3,7 @@ import type { TFunction } from 'i18next';
 
 import { api } from '@/shared/api';
 import { usePaletteOps } from '@/modules/command-palette';
-import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationProjectResult, ConversationSearchResults, LLMProvider, Project, ProjectSession, ProjectSortOrder, RecentConversationListItem, SearchProgress, PendingSidebarDeletion, SessionTitleSearchResult, SessionWithProvider, SidebarSearchMode } from '@/shared/types';
+import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationProjectResult, ConversationSearchResults, LLMProvider, Project, ProjectSession, ProjectSortOrder, RecentConversationListItem, SearchProgress, ActiveSidebarRename, PendingSidebarDeletion, SessionTitleSearchResult, SessionWithProvider, SidebarSearchMode } from '@/shared/types';
 import {
   filterProjects,
   getAllSessions,
@@ -79,15 +79,12 @@ export function useSidebarController({
 }: UseSidebarControllerArgs) {
   const paletteOps = usePaletteOps();
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
-  const [editingProject, setEditingProject] = useState<string | null>(null);
+  const [activeRename, setActiveRename] = useState<ActiveSidebarRename | null>(null);
   const [showNewProject, setShowNewProject] = useState(false);
-  const [editingName, setEditingName] = useState('');
   const [initialSessionsLoaded, setInitialSessionsLoaded] = useState<Set<string>>(new Set());
   const [currentTime, setCurrentTime] = useState(new Date());
   const [projectSortOrder, setProjectSortOrder] = useState<ProjectSortOrder>('name');
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [editingSession, setEditingSession] = useState<string | null>(null);
-  const [editingSessionName, setEditingSessionName] = useState('');
   const [searchFilter, setSearchFilter] = useState('');
   const [deletingProjects, setDeletingProjects] = useState<Set<string>>(new Set());
   const [pendingDeletion, setPendingDeletion] = useState<PendingSidebarDeletion | null>(null);
@@ -740,24 +737,30 @@ export function useSidebarController({
     });
   }, [archivedProjects, debouncedSearchQuery]);
 
-  const startEditing = useCallback((project: Project) => {
-    // `editingProject` is keyed by projectId so it stays stable across
-    // display-name mutations that happen while the input is open.
-    setEditingProject(project.projectId);
-    setEditingName(project.displayName);
+  // Keyed by projectId so the rename survives display-name mutations that arrive
+  // while the input is open.
+  const startEditingProject = useCallback((project: Project) => {
+    setActiveRename({ target: 'project', id: project.projectId, draft: project.displayName });
   }, []);
 
-  const cancelEditing = useCallback(() => {
-    setEditingProject(null);
-    setEditingName('');
+  const startEditingSession = useCallback((sessionId: string, initialName: string) => {
+    setActiveRename({ target: 'session', id: sessionId, draft: initialName });
+  }, []);
+
+  const updateRenameDraft = useCallback((draft: string) => {
+    setActiveRename((previous) => (previous ? { ...previous, draft } : previous));
+  }, []);
+
+  const cancelRename = useCallback(() => {
+    setActiveRename(null);
   }, []);
 
   const saveProjectName = useCallback(
     // `projectId` is the DB primary key; the rename API resolves the path
     // through the `projects` table before writing the new display name.
-    async (projectId: string) => {
+    async (projectId: string, nextName: string) => {
       try {
-        const response = await api.renameProject(projectId, editingName);
+        const response = await api.renameProject(projectId, nextName);
         if (response.ok) {
           await paletteOps.refreshProjects();
         } else {
@@ -766,11 +769,10 @@ export function useSidebarController({
       } catch (error) {
         console.error('Error renaming project:', error);
       } finally {
-        setEditingProject(null);
-        setEditingName('');
+        setActiveRename(null);
       }
     },
-    [editingName, paletteOps],
+    [paletteOps],
   );
 
   const showDeleteSessionConfirmation = useCallback(
@@ -964,8 +966,7 @@ export function useSidebarController({
     async (_projectId: string, sessionId: string, summary: string, _provider: LLMProvider) => {
       const trimmed = summary.trim();
       if (!trimmed) {
-        setEditingSession(null);
-        setEditingSessionName('');
+        setActiveRename(null);
         return;
       }
       try {
@@ -980,8 +981,7 @@ export function useSidebarController({
         console.error('[Sidebar] Error renaming session:', error);
         alert(t('messages.renameSessionError'));
       } finally {
-        setEditingSession(null);
-        setEditingSessionName('');
+        setActiveRename(null);
       }
     },
     [onRefresh, t],
@@ -998,14 +998,11 @@ export function useSidebarController({
   return {
     isSidebarCollapsed,
     expandedProjects,
-    editingProject,
+    activeRename,
     showNewProject,
-    editingName,
     initialSessionsLoaded,
     currentTime,
     isRefreshing,
-    editingSession,
-    editingSessionName,
     searchFilter,
     deletingProjects,
     loadingMoreProjects,
@@ -1031,8 +1028,10 @@ export function useSidebarController({
     isProjectStarred,
     getProjectSessions,
     loadMoreSessionsForProject,
-    startEditing,
-    cancelEditing,
+    startEditingProject,
+    startEditingSession,
+    updateRenameDraft,
+    cancelRename,
     saveProjectName,
     showDeleteSessionConfirmation,
     confirmDeleteSession,
@@ -1047,9 +1046,6 @@ export function useSidebarController({
     collapseSidebar,
     expandSidebar,
     setShowNewProject,
-    setEditingName,
-    setEditingSession,
-    setEditingSessionName,
     searchMode,
     setSearchMode,
     conversationResults,
