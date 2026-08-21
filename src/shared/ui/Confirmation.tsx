@@ -78,18 +78,6 @@ export const ConfirmationRequest: React.FC<ConfirmationRequestProps> = ({ childr
 };
 ConfirmationRequest.displayName = 'ConfirmationRequest';
 
-/* ─── ConfirmationAccepted — visible only when approved ──────────── */
-
-export type ConfirmationAcceptedProps = {
-  children?: React.ReactNode;
-};
-
-/* ─── ConfirmationRejected — visible only when rejected ──────────── */
-
-export type ConfirmationRejectedProps = {
-  children?: React.ReactNode;
-};
-
 /* ─── ConfirmationActions — visible only when pending ────────────── */
 
 export type ConfirmationActionsProps = React.HTMLAttributes<HTMLDivElement>;

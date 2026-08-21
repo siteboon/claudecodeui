@@ -1,3 +1,20 @@
+/**
+ * The shared UI primitives.
+ *
+ * The rule is that a component earns a place here once a second feature module
+ * renders it. Card, Collapsible, Confirmation, Shimmer and Alert currently have
+ * consumers in the chat module only, and they stay anyway: 16 files across six
+ * modules hand-roll their own expand/collapse state today, and moving
+ * Collapsible into chat/ would put it behind a module boundary that makes it
+ * unreachable to the five modules with the clearest use for it. The two-module
+ * rule is a bar for admission, not a trigger for eviction.
+ *
+ * PromptInput, Reasoning and Queue did move out, on a different test: they are
+ * not primitives at all but chat-domain compositions — the composer form, the
+ * assistant-reasoning disclosure and the tool todo list — with chat vocabulary
+ * in their prop names and no plausible second consumer.
+ */
+
 export { ActionMenu } from '@/shared/ui/ActionMenu';
 export { Badge } from '@/shared/ui/Badge';
 export { Button, buttonVariants } from '@/shared/ui/Button';

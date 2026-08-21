@@ -53,8 +53,3 @@ export const CardFooter = React.forwardRef<HTMLDivElement, React.HTMLAttributes<
   )
 );
 CardFooter.displayName = 'CardFooter';
-
-/**
- * Use inside a CardHeader with `className="flex flex-row items-start justify-between"`.
- * Positions an action (button/icon) at the trailing edge of the header.
- */

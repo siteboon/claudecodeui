@@ -104,8 +104,14 @@ function ToolGroupContainer({
 }
 
 /**
- * Memoized because a group's rendered output depends only on props that are
- * stable between transcript re-renders — the previous useMemo could never hit,
- * since groupConsecutiveTools allocates a fresh messages array each pass.
+ * Memoized for the transcript re-renders that are not message changes — the
+ * pane re-renders when isProcessing or the activity indicator flips, and the
+ * group is unchanged then.
+ *
+ * It cannot bail during streaming: groupConsecutiveTools rebuilds every group
+ * object from a fresh visibleMessages array on each 100ms tick, so `group` is a
+ * new reference even when its contents are identical. Stabilizing it would mean
+ * keying a cache on the whole run — first and second message identity, run
+ * length and showThinking — because the preview depends on all four.
  */
 export default memo(ToolGroupContainer);

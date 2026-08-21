@@ -98,5 +98,3 @@ export const CommandItem = React.forwardRef<
 ));
 CommandItem.displayName = CommandPrimitive.Item.displayName;
 
-/** Divider between Command groups; kept beside them so the command family stays usable as a unit. */
-

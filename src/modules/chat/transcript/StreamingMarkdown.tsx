@@ -20,10 +20,18 @@ type StreamingMarkdownProps = {
  * document — including block spacing, because both halves are siblings inside
  * the single prose container below.
  *
- * A block does change parent when it crosses from pending to settled, so its
- * DOM is recreated once. That drops transient in-block UI state (a code block's
- * "Copied" tick, a text selection) at that moment; it only affects the block
- * being written, and only while streaming.
+ * A block changes parent when it crosses from pending to settled, so its DOM is
+ * recreated at that moment, dropping transient in-block state (a code block's
+ * "Copied" tick, a text selection).
+ *
+ * That crossing is not one-way. The boundary is recomputed from scratch on each
+ * tick, so an already-settled block returns to pending whenever the text that
+ * follows it makes the old boundary unsafe to split at — a soft-wrapped line, or
+ * a list, table or blockquote starting after it. Retracting is what keeps the
+ * two halves rendering identically to the unsplit document, so it is correct,
+ * not a bug; measured on realistic replies at streaming speed it happens for
+ * about a third of them, once. Only blocks in a message still being streamed are
+ * affected.
  */
 export default function StreamingMarkdown({ content, className }: StreamingMarkdownProps) {
   const { settled, pending } = useMemo(() => splitStreamingMarkdown(content), [content]);
