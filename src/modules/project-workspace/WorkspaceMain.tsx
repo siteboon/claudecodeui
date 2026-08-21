@@ -35,6 +35,8 @@ type WorkspaceMainProps = {
   onProjectSelect: (project: Project) => void;
   /** Silently re-syncs the sidebar project list after worktree projects change. */
   onProjectsRefresh: () => void;
+  /** Opens a new chat for a project — the host action behind `api.host.startNewSession`. */
+  onStartNewSession: (project: Project) => void;
 };
 
 /** Rendered by ProjectMainRegion to show the selected project's active tab: chat, files, shell, git, tasks, browser or a plugin. */
@@ -55,6 +57,7 @@ function WorkspaceMain({
   newSessionTrigger,
   onProjectSelect,
   onProjectsRefresh,
+  onStartNewSession,
 }: WorkspaceMainProps) {
   const preferences = useUiPreferences();
   const { showRawParameters, showThinking, sendByCtrlEnter } = preferences;
@@ -207,6 +210,8 @@ function WorkspaceMain({
                 pluginName={activeTab.replace('plugin:', '')}
                 selectedProject={selectedProject}
                 selectedSession={selectedSession}
+                onStartNewSession={onStartNewSession}
+                onOpenSession={(sessionId) => onNavigateToSession(sessionId)}
               />
             </div>
           )}
