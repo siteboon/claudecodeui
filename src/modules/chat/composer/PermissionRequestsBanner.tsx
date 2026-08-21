@@ -8,11 +8,11 @@ import { getPermissionPanel, registerPermissionPanel } from '@/modules/chat/tool
 import { AskUserQuestionPanel } from '@/modules/chat/tools/InteractiveRenderers/AskUserQuestionPanel';
 import {
   Confirmation,
-  ConfirmationTitle,
-  ConfirmationRequest,
-  ConfirmationActions,
   ConfirmationAction,
-} from '@/shared/ui';
+  ConfirmationActions,
+  ConfirmationRequest,
+  ConfirmationTitle,
+} from '@/modules/chat/composer/Confirmation';
 
 registerPermissionPanel('AskUserQuestion', AskUserQuestionPanel);
 

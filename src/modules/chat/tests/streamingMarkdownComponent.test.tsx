@@ -1,10 +1,25 @@
 import assert from 'node:assert/strict';
 
 import { render } from '@testing-library/react';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 
 import { Markdown } from '@/modules/chat/transcript/Markdown';
 import StreamingMarkdown from '@/modules/chat/transcript/StreamingMarkdown';
+// Type-only, so it is erased before vi.mock's hoisted factory runs.
+import type * as StreamingMarkdownUtils from '@/modules/chat/utils/streamingMarkdown';
+
+/** Records what the component asks the splitter for, without changing it. */
+const splitCalls: string[] = [];
+vi.mock('@/modules/chat/utils/streamingMarkdown', async (importOriginal) => {
+  const actual = await importOriginal<typeof StreamingMarkdownUtils>();
+  return {
+    ...actual,
+    splitStreamingMarkdown: (content: string) => {
+      splitCalls.push(content);
+      return actual.splitStreamingMarkdown(content);
+    },
+  };
+});
 
 /**
  * streamingMarkdownRenderEquivalence.test.tsx proves the split point is safe by
@@ -100,3 +115,17 @@ test('the finished reply renders exactly what <Markdown> would', () => {
   assert.equal(normalize(settled.container.innerHTML), normalize(whole.container.innerHTML));
 });
 
+test('a finished reply is rendered whole, not split into two parses', () => {
+  // The DOM is identical either way — the equivalence tests above are exactly
+  // that guarantee — so this asserts the work instead. Splitting a completed
+  // reply hands remark two documents where one would do, and a loaded
+  // transcript pays that for every assistant message it renders.
+  const content = 'First paragraph.\n\nSecond paragraph still being writ';
+
+  splitCalls.length = 0;
+  render(<StreamingMarkdown content={content} isStreaming={false} className={PROSE} />);
+  assert.deepEqual(splitCalls, [], 'a finished reply has nothing left to grow');
+
+  render(<StreamingMarkdown content={content} isStreaming className={PROSE} />);
+  assert.deepEqual(splitCalls, [content], 'a streaming reply is still split');
+});
