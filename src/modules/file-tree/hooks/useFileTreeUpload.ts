@@ -3,12 +3,8 @@ import type { DragEvent } from 'react';
 
 import { IS_PLATFORM } from '@/shared/utils';
 import type { FileTreeUploadProgressState, Project } from '@/shared/types';
-import {
-  api,
-  expireAuthSession,
-  getStoredAuthToken,
-  storeAuthToken,
-} from '@/shared/api';
+import { api } from '@/shared/api';
+import { expireAuthSession, getStoredAuthToken, storeAuthToken } from '@/shared/authToken';
 import { MAX_FILE_UPLOAD_SIZE_BYTES, MAX_FILE_UPLOAD_SIZE_LABEL } from '@/shared/constants';
 
 type UseFileTreeUploadOptions = {

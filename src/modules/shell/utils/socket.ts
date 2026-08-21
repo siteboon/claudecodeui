@@ -1,5 +1,5 @@
 import { IS_PLATFORM } from '@/shared/utils';
-import { getStoredAuthToken } from '@/shared/api';
+import { getStoredAuthToken } from '@/shared/authToken';
 
 type ShellInitMessage = {
   type: 'init';

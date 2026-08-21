@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { api } from '@/shared/api';
 import { useUiPreferences } from '@/shared/context/UiPreferencesContext';
-import { readVoiceConfig, VOICE_CONFIG_SYNC_EVENT } from '@/shared/hooks/useVoiceConfig';
+import { readVoiceConfig, VOICE_CONFIG_SYNC_EVENT } from '@/shared/voiceConfig';
 
 // Voice UI is gated on the `voiceEnabled` UI preference (toggled in Quick Settings /
 // the Settings modal) and a configured voice backend.
