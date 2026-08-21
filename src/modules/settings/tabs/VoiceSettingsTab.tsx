@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import SettingsSection from '@/modules/settings/SettingsSection';
 import SettingsToggle from '@/modules/settings/SettingsToggle';
-import { useUiPreferences } from '@/shared/hooks/useUiPreferences';
+import { useUiPreferences, useSetUiPreference } from '@/shared/context/UiPreferencesContext';
 import { useVoiceConfig } from '@/shared/hooks/useVoiceConfig';
 
 const inputClass =
@@ -21,7 +21,8 @@ function Field({ label, ...props }: { label: string } & InputHTMLAttributes<HTML
 /** Rendered by Settings for the "voice" tab, covering speech-to-text provider credentials. */
 export default function VoiceSettingsTab() {
   const { t } = useTranslation('settings');
-  const { preferences, setPreference } = useUiPreferences();
+  const preferences = useUiPreferences();
+  const setPreference = useSetUiPreference();
   const { config, update } = useVoiceConfig();
   const voiceEnabled = preferences.voiceEnabled;
 

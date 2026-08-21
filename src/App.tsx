@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import { I18nextProvider } from 'react-i18next';
 
 import { ThemeProvider } from '@/shared/context/ThemeContext';
+import { UiPreferencesProvider } from '@/shared/context/UiPreferencesContext';
 import { AuthProvider, ProtectedRoute } from '@/modules/auth';
 import { TaskMasterProvider,TasksSettingsProvider } from '@/modules/task-master';
 import { WebSocketProvider } from '@/shared/context/WebSocketContext';
@@ -111,6 +112,7 @@ export default function App() {
   return (
     <I18nextProvider i18n={i18n}>
       <ThemeProvider>
+        <UiPreferencesProvider>
         <AuthProvider>
           <WebSocketProvider>
             <PluginsProvider>
@@ -129,6 +131,7 @@ export default function App() {
             </PluginsProvider>
           </WebSocketProvider>
         </AuthProvider>
+        </UiPreferencesProvider>
       </ThemeProvider>
     </I18nextProvider>
   );

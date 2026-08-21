@@ -35,6 +35,28 @@ type SessionProtectionActions = {
 
 const SessionProtectionStateContext = createContext<SessionActivityMap | null>(null);
 const SessionProtectionActionsContext = createContext<SessionProtectionActions | null>(null);
+const BusySessionIdsContext = createContext<ReadonlySet<string> | null>(null);
+
+/**
+ * The set of session ids currently producing a response, with a stable identity
+ * while membership is unchanged.
+ *
+ * Every provider `status` frame rewrites an entry's `statusText`, which
+ * allocates a new activity map several times a second during a run. Consumers
+ * that only need membership — the sidebar renders a dot per row and a running
+ * count — would re-render on all of it.
+ */
+function useBusySessionIds(processingSessions: SessionActivityMap): ReadonlySet<string> {
+  // Deriving the set from a membership key, rather than from the map, keeps its
+  // identity stable across the `statusText` rewrites without reading a ref
+  // during render. Session ids never contain a NUL, so it is a safe separator.
+  const membershipKey = [...processingSessions.keys()].sort().join('\u0000');
+
+  return useMemo(
+    () => new Set(membershipKey ? membershipKey.split('\u0000') : []),
+    [membershipKey],
+  );
+}
 
 const parseStartedAt = (value: unknown): number | undefined => {
   if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
@@ -117,13 +139,29 @@ export function SessionProtectionProvider({ children }: { children: ReactNode })
     ],
   );
 
+  const busySessionIds = useBusySessionIds(processingSessions);
+
   return (
     <SessionProtectionActionsContext.Provider value={actions}>
-      <SessionProtectionStateContext.Provider value={processingSessions}>
-        {children}
-      </SessionProtectionStateContext.Provider>
+      <BusySessionIdsContext.Provider value={busySessionIds}>
+        <SessionProtectionStateContext.Provider value={processingSessions}>
+          {children}
+        </SessionProtectionStateContext.Provider>
+      </BusySessionIdsContext.Provider>
     </SessionProtectionActionsContext.Provider>
   );
+}
+
+/**
+ * Membership-only view of the running sessions. Prefer this over
+ * useProcessingSessions wherever the activity details are not rendered.
+ */
+export function useBusySessionIdSet(): ReadonlySet<string> {
+  const busySessionIds = useContext(BusySessionIdsContext);
+  if (!busySessionIds) {
+    throw new Error('useBusySessionIdSet must be used within SessionProtectionProvider');
+  }
+  return busySessionIds;
 }
 
 export function useProcessingSessions(): SessionActivityMap {

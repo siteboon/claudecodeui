@@ -3,7 +3,7 @@ import type { TFunction } from 'i18next';
 
 import { api } from '@/shared/api';
 import { usePaletteOps } from '@/modules/command-palette';
-import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationProjectResult, ConversationSearchResults, LLMProvider, Project, ProjectSession, ProjectSortOrder, RecentConversationListItem, SearchProgress, SessionActivityMap, PendingSidebarDeletion, SessionTitleSearchResult, SessionWithProvider, SidebarSearchMode } from '@/shared/types';
+import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationProjectResult, ConversationSearchResults, LLMProvider, Project, ProjectSession, ProjectSortOrder, RecentConversationListItem, SearchProgress, PendingSidebarDeletion, SessionTitleSearchResult, SessionWithProvider, SidebarSearchMode } from '@/shared/types';
 import {
   filterProjects,
   getAllSessions,
@@ -43,7 +43,7 @@ type UseSidebarControllerArgs = {
   projects: Project[];
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
-  activeSessions: SessionActivityMap;
+  activeSessions: ReadonlySet<string>;
   isLoading: boolean;
   isMobile: boolean;
   t: TFunction;
@@ -116,7 +116,7 @@ export function useSidebarController({
   const onRefreshRef = useRef(onRefresh);
 
   const isSidebarCollapsed = !isMobile && !sidebarVisible;
-  const activeSessionIds = useMemo(() => new Set(activeSessions.keys()), [activeSessions]);
+  const activeSessionIds = activeSessions;
   const runningSessionsCount = activeSessionIds.size;
 
   useEffect(() => {

@@ -1161,7 +1161,7 @@ export type SidebarProjectListProps = {
   getProjectSessions: (project: Project) => SessionWithProvider[];
   onLoadMoreSessions: (projectId: string) => void;
   loadingMoreProjects: Set<string>;
-  activeSessions: SessionActivityMap;
+  activeSessions: ReadonlySet<string>;
   attentionSessionIds: ReadonlySet<string>;
   forceExpanded?: boolean;
   isProjectStarred: (projectName: string) => boolean;

@@ -2,7 +2,7 @@ import { Plus } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { Button } from '@/shared/ui';
-import type { LLMProvider, Project, ProjectSession, SessionActivityMap, SessionWithProvider } from '@/shared/types';
+import type { LLMProvider, Project, ProjectSession, SessionWithProvider } from '@/shared/types';
 import SidebarSessionItem from '@/modules/sidebar/SidebarSessionItem';
 
 type SidebarProjectSessionsProps = {
@@ -13,7 +13,7 @@ type SidebarProjectSessionsProps = {
   initialSessionsLoaded: boolean;
   hasMoreSessions: boolean;
   isLoadingMoreSessions: boolean;
-  activeSessions: SessionActivityMap;
+  activeSessions: ReadonlySet<string>;
   attentionSessionIds: ReadonlySet<string>;
   currentTime: Date;
   editingSession: string | null;

@@ -82,7 +82,12 @@
       },
       {
         "type": "frontend-shared-file",
-        "pattern": ["src/shared/utils.ts", "src/shared/constants.ts", "src/shared/api.ts"],
+        "pattern": [
+          "src/shared/utils.ts",
+          "src/shared/constants.ts",
+          "src/shared/api.ts",
+          "src/shared/uiPreferences.ts"
+        ],
         "mode": "file"
       },
       {

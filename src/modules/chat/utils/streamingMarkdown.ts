@@ -80,7 +80,11 @@ export function splitStreamingMarkdown(content: string): StreamingMarkdownSplit 
     }
 
     if (!openFence && MATH_DELIMITER_PATTERN.test(line)) {
-      insideMath = !insideMath;
+      // A self-contained `$$x$$` line opens and closes in one go; toggling on it
+      // would leave the tracker stuck open and suppress every later boundary.
+      if (countMathDelimiters(line) % 2 === 1) {
+        insideMath = !insideMath;
+      }
       continue;
     }
 
@@ -114,6 +118,10 @@ export function splitStreamingMarkdown(content: string): StreamingMarkdownSplit 
     settled: content.slice(0, splitAt),
     pending: content.slice(splitAt),
   };
+}
+
+function countMathDelimiters(line: string): number {
+  return line.split('$$').length - 1;
 }
 
 function readFence(line: string): OpenFence | null {

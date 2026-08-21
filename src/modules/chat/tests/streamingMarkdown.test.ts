@@ -128,3 +128,30 @@ test('every prefix of a fenced reply stays lossless', () => {
     assertLossless(full.slice(0, end));
   }
 });
+
+test('a self-closing $$x$$ line does not leave math tracking stuck open', () => {
+  // Toggling on a line that opens and closes in one go would suppress every
+  // later boundary, silently disabling the optimisation for the rest of the reply.
+  const content = 'Intro.\n\n$$E = mc^2$$\n\nA settled paragraph.\n\nStill writing';
+  const { settled, pending } = splitStreamingMarkdown(content);
+
+  assert.equal(pending, 'Still writing');
+  assert.ok(settled.includes('A settled paragraph.'));
+});
+
+test('a blank line inside an unterminated $$ block is not a boundary', () => {
+  // This is the shape mid-stream: the closing $$ has not arrived yet.
+  const content = 'Intro.\n\n$$\na = b\n\nc = d';
+  const { settled, pending } = splitStreamingMarkdown(content);
+
+  assert.equal(settled, 'Intro.\n\n', 'the open math block must stay in one piece');
+  assert.equal(pending, '$$\na = b\n\nc = d');
+});
+
+test('a closed $$ block can be settled once its delimiter arrives', () => {
+  const content = 'Intro.\n\n$$\na = b\n\nc = d\n$$\n\nAfter';
+  const { settled, pending } = splitStreamingMarkdown(content);
+
+  assert.equal(settled, 'Intro.\n\n$$\na = b\n\nc = d\n$$\n\n');
+  assert.equal(pending, 'After');
+});
