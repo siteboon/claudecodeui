@@ -444,6 +444,5 @@ export const useFileTreeUpload = ({
     handleDragLeave,
     handleDrop,
     handleItemDragOver,
-    setDropTarget,
   };
 };

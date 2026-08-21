@@ -10,6 +10,7 @@ import type { PendingPermissionRequest, PermissionMode,
   ProviderModelOption,
   ProviderModelsDefinition } from '@/shared/types';
 import { DEFAULT_EFFORT_VALUE } from '@/shared/constants';
+import { readSelectedProvider, writeSelectedProvider } from '@/shared/selectedProvider';
 
 const FALLBACK_PROVIDER_EFFORT_VALUES: Partial<Record<LLMProvider, readonly string[]>> = {
   // Superset used only before the model catalog loads; `ultracode` belongs to the
@@ -38,13 +39,6 @@ const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode'];
 
 /** localStorage key holding the user's default model for one provider. */
 const providerModelStorageKey = (provider: LLMProvider): string => `${provider}-model`;
-
-const readStoredProvider = (): LLMProvider => {
-  const storedProvider = localStorage.getItem('selected-provider');
-  return PROVIDERS.includes(storedProvider as LLMProvider)
-    ? storedProvider as LLMProvider
-    : 'claude';
-};
 
 /**
  * Fallback permission-mode matrix used only until the backend capability
@@ -131,7 +125,7 @@ const getSessionSelectionKey = (provider: LLMProvider, sessionId: string): strin
 export function useChatProviderState({ selectedSession, selectedProject: _selectedProject }: UseChatProviderStateArgs) {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('default');
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<PendingPermissionRequest[]>([]);
-  const [provider, setProvider] = useState<LLMProvider>(readStoredProvider);
+  const [provider, setProvider] = useState<LLMProvider>(readSelectedProvider);
   const [providerModels, setProviderModels] = useState<Record<LLMProvider, string>>(() => {
     return PROVIDERS.reduce<Record<LLMProvider, string>>((acc, targetProvider) => {
       acc[targetProvider] = localStorage.getItem(providerModelStorageKey(targetProvider))
@@ -426,7 +420,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     }
 
     setProvider(selectedSession.__provider);
-    localStorage.setItem('selected-provider', selectedSession.__provider);
+    writeSelectedProvider(selectedSession.__provider);
   }, [provider, selectedSession]);
 
   // Permission prompts belong to a session, not to the transient provider
@@ -807,7 +801,6 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     currentProviderModel,
     currentProviderModelOptions,
     permissionMode,
-    setPermissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
     availablePermissionModes,

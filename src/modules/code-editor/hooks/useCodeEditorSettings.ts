@@ -58,12 +58,8 @@ export const useCodeEditorSettings = () => {
 
   return {
     wordWrap,
-    setWordWrap,
     minimapEnabled,
-    setMinimapEnabled,
     showLineNumbers,
-    setShowLineNumbers,
     fontSize,
-    setFontSize,
   };
 };

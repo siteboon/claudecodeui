@@ -27,6 +27,7 @@ import {
   LLMProviderLogo,
 } from "@/shared/ui";
 import ModelLibraryPanel from "@/modules/chat/ModelLibraryPanel";
+import { writeSelectedProvider } from '@/shared/selectedProvider';
 
 const PROVIDER_META: { id: LLMProvider; name: string }[] = [
   { id: "claude", name: "Anthropic" },
@@ -138,7 +139,7 @@ export default function ProviderSelectionEmptyState({
   const handleModelSelect = useCallback(
     (providerId: LLMProvider, modelValue: string) => {
       setProvider(providerId);
-      localStorage.setItem("selected-provider", providerId);
+      writeSelectedProvider(providerId);
       setProviderModel(providerId, modelValue);
       setDialogOpen(false);
       setTimeout(() => textareaRef.current?.focus(), 100);

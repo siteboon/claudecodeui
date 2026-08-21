@@ -58,7 +58,6 @@ export type UseFileTreeOperationsResult = {
   operationLoading: boolean;
 
   // Validation
-  validateFilename: (name: string) => string | null;
 };
 
 export function useFileTreeOperations({
@@ -374,6 +373,5 @@ export function useFileTreeOperations({
     operationLoading,
 
     // Validation
-    validateFilename,
   };
 }

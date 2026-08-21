@@ -86,7 +86,8 @@
           "src/shared/utils.ts",
           "src/shared/constants.ts",
           "src/shared/api.ts",
-          "src/shared/uiPreferences.ts"
+          "src/shared/uiPreferences.ts",
+          "src/shared/selectedProvider.ts"
         ],
         "mode": "file"
       },

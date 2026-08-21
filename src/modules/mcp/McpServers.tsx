@@ -113,13 +113,10 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
     loadError,
     deleteError,
     saveStatus,
-    isFormOpen,
-    isGlobalFormOpen,
-    editingServer,
+    serverForm,
     openForm,
     openGlobalForm,
     closeForm,
-    closeGlobalForm,
     submitForm,
     submitGlobalForm,
     deleteServer,
@@ -294,31 +291,34 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
 
       {selectedProvider === 'claude' && !IS_PLATFORM && <TeamMcpFeatureCard />}
 
-      <McpServerFormModal
-        provider={selectedProvider}
-        isOpen={isFormOpen}
-        editingServer={editingServer}
-        currentProjects={currentProjects}
-        title={editingServer ? undefined : providerButtonLabel}
-        submitLabel={providerButtonLabel}
-        onClose={closeForm}
-        onSubmit={submitForm}
-      />
+      {/* Mounted only while open: each instance runs a full useMcpServerForm. */}
+      {serverForm?.scope === 'provider' && (
+        <McpServerFormModal
+          provider={selectedProvider}
+          editingServer={serverForm.editingServer}
+          currentProjects={currentProjects}
+          title={serverForm.editingServer ? undefined : providerButtonLabel}
+          submitLabel={providerButtonLabel}
+          onClose={closeForm}
+          onSubmit={submitForm}
+        />
+      )}
 
-      <McpServerFormModal
-        provider={selectedProvider}
-        mode="global"
-        isOpen={isGlobalFormOpen}
-        editingServer={null}
-        currentProjects={currentProjects}
-        title={globalButtonLabel}
-        description={globalModalDescription}
-        submitLabel={globalButtonLabel}
-        supportedScopes={MCP_GLOBAL_SUPPORTED_SCOPES}
-        supportedTransports={MCP_GLOBAL_SUPPORTED_TRANSPORTS}
-        onClose={closeGlobalForm}
-        onSubmit={(formData) => submitGlobalForm(formData)}
-      />
+      {serverForm?.scope === 'global' && (
+        <McpServerFormModal
+          provider={selectedProvider}
+          mode="global"
+          editingServer={null}
+          currentProjects={currentProjects}
+          title={globalButtonLabel}
+          description={globalModalDescription}
+          submitLabel={globalButtonLabel}
+          supportedScopes={MCP_GLOBAL_SUPPORTED_SCOPES}
+          supportedTransports={MCP_GLOBAL_SUPPORTED_TRANSPORTS}
+          onClose={closeForm}
+          onSubmit={(formData) => submitGlobalForm(formData)}
+        />
+      )}
     </div>
   );
 }

@@ -12,7 +12,6 @@ type McpFormMode = 'provider' | 'global';
 type McpServerFormModalProps = {
   provider: McpProvider;
   mode?: McpFormMode;
-  isOpen: boolean;
   editingServer: ProviderMcpServer | null;
   currentProjects: McpProject[];
   title?: string;
@@ -56,7 +55,6 @@ const getScopeDescription = (scope: McpScope, mode: McpFormMode): string => {
 export default function McpServerFormModal({
   provider,
   mode = 'provider',
-  isOpen,
   editingServer,
   currentProjects,
   title,
@@ -87,7 +85,6 @@ export default function McpServerFormModal({
     handleSubmit,
   } = useMcpServerForm({
     provider,
-    isOpen,
     editingServer,
     currentProjects,
     supportedScopes: availableScopes,
@@ -97,10 +94,6 @@ export default function McpServerFormModal({
       : undefined,
     onSubmit,
   });
-
-  if (!isOpen) {
-    return null;
-  }
 
   const providerName = MCP_PROVIDER_NAMES[provider];
   const modalTitle = title ?? (isEditing ? t('mcpForm.title.edit') : t('mcpForm.title.add'));

@@ -9,6 +9,7 @@ import type { ServerEvent,
   Project,
   ProjectSession,IsSessionProcessing } from '@/shared/types';
 import { mergeProjectSelectionMetadata } from '@/modules/project-workspace/utils/projectSelectionMetadata';
+import { readSelectedProvider } from '@/shared/selectedProvider';
 
 type UseProjectsStateArgs = {
   sessionId?: string;
@@ -76,15 +77,6 @@ type ProjectSessionPage = Pick<Project, 'sessions' | 'sessionMeta'>;
 const DEFAULT_PROVIDER: LLMProvider = 'claude';
 
 const serialize = (value: unknown) => JSON.stringify(value ?? null);
-
-const readSelectedProvider = (): LLMProvider => {
-  try {
-    const storedProvider = localStorage.getItem('selected-provider');
-    return storedProvider ? storedProvider as LLMProvider : DEFAULT_PROVIDER;
-  } catch {
-    return DEFAULT_PROVIDER;
-  }
-};
 
 const getSessionProvider = (session: ProjectSession): LLMProvider => {
   const provider = session.__provider ?? session.provider;

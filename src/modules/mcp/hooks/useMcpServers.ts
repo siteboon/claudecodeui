@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '@/shared/api';
 import { MCP_GLOBAL_SUPPORTED_TRANSPORTS, MCP_PROVIDER_NAMES, MCP_SUPPORTED_SCOPES } from '@/shared/constants';
-import type { McpFormState, McpProject, McpProvider, McpScope, McpTransport, ProviderMcpServer, UpsertProviderMcpServerPayload } from '@/shared/types';
+import type { McpServerFormState, McpFormState, McpProject, McpProvider, McpScope, McpTransport, ProviderMcpServer, UpsertProviderMcpServerPayload } from '@/shared/types';
 import {
   createMcpPayloadFromForm,
   getErrorMessage,
@@ -296,9 +296,10 @@ export function useMcpServers({ selectedProvider, currentProjects }: UseMcpServe
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<'success' | 'error' | null>(null);
   const [isLoadingProjectScopes, setIsLoadingProjectScopes] = useState(false);
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [isGlobalFormOpen, setIsGlobalFormOpen] = useState(false);
-  const [editingServer, setEditingServer] = useState<ProviderMcpServer | null>(null);
+  // One value rather than three: `isFormOpen`, `isGlobalFormOpen` and
+  // `editingServer` made eight combinations representable, of which three were
+  // legal, and both modals stayed mounted running a full form hook while closed.
+  const [serverForm, setServerForm] = useState<McpServerFormState>(null);
   const activeLoadIdRef = useRef(0);
 
   const projectTargets = useMemo(() => createProjectTargets(currentProjects), [currentProjects]);
@@ -403,21 +404,15 @@ export function useMcpServers({ selectedProvider, currentProjects }: UseMcpServe
   }, [cacheKey, projectTargets, selectedProvider]);
 
   const openForm = useCallback((server?: ProviderMcpServer) => {
-    setEditingServer(server || null);
-    setIsFormOpen(true);
-  }, []);
-
-  const closeForm = useCallback(() => {
-    setIsFormOpen(false);
-    setEditingServer(null);
+    setServerForm({ scope: 'provider', editingServer: server || null });
   }, []);
 
   const openGlobalForm = useCallback(() => {
-    setIsGlobalFormOpen(true);
+    setServerForm({ scope: 'global', editingServer: null });
   }, []);
 
-  const closeGlobalForm = useCallback(() => {
-    setIsGlobalFormOpen(false);
+  const closeForm = useCallback(() => {
+    setServerForm(null);
   }, []);
 
   const submitForm = useCallback(
@@ -472,9 +467,9 @@ export function useMcpServers({ selectedProvider, currentProjects }: UseMcpServe
       }
 
       setSaveStatus('success');
-      closeGlobalForm();
+      closeForm();
     },
-    [closeGlobalForm, refreshServers, selectedProvider],
+    [closeForm, refreshServers, selectedProvider],
   );
 
   const deleteServer = useCallback(
@@ -502,9 +497,7 @@ export function useMcpServers({ selectedProvider, currentProjects }: UseMcpServe
   }, [refreshServers]);
 
   useEffect(() => {
-    setIsFormOpen(false);
-    setIsGlobalFormOpen(false);
-    setEditingServer(null);
+    setServerForm(null);
     setDeleteError(null);
     setSaveStatus(null);
   }, [selectedProvider]);
@@ -525,16 +518,12 @@ export function useMcpServers({ selectedProvider, currentProjects }: UseMcpServe
     loadError,
     deleteError,
     saveStatus,
-    isFormOpen,
-    isGlobalFormOpen,
-    editingServer,
+    serverForm,
     openForm,
     openGlobalForm,
     closeForm,
-    closeGlobalForm,
     submitForm,
     submitGlobalForm,
     deleteServer,
-    refreshServers,
   };
 }

@@ -1,19 +1,33 @@
 import { useEffect, useState } from 'react';
 
-export function useSelectedProvider() {
-  const [provider, setProvider] = useState(() => {
-    return localStorage.getItem('selected-provider') || 'claude';
-  });
+import {
+  isSelectedProviderStorageEvent,
+  readSelectedProvider,
+  SELECTED_PROVIDER_CHANGED_EVENT,
+} from '@/shared/selectedProvider';
+import type { LLMProvider } from '@/shared/types';
+
+/** Used by the git panel to attribute a generated commit message to a provider. */
+export function useSelectedProvider(): LLMProvider {
+  const [provider, setProvider] = useState(readSelectedProvider);
 
   useEffect(() => {
-    // Keep provider in sync when another tab changes the selected provider.
-    const handleStorageChange = () => {
-      const nextProvider = localStorage.getItem('selected-provider') || 'claude';
-      setProvider(nextProvider);
+    const syncProvider = () => setProvider(readSelectedProvider());
+
+    const handleStorageChange = (event: StorageEvent) => {
+      if (isSelectedProviderStorageEvent(event)) {
+        syncProvider();
+      }
     };
 
+    // The custom event covers this tab; `storage` covers the others.
+    window.addEventListener(SELECTED_PROVIDER_CHANGED_EVENT, syncProvider);
     window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+
+    return () => {
+      window.removeEventListener(SELECTED_PROVIDER_CHANGED_EVENT, syncProvider);
+      window.removeEventListener('storage', handleStorageChange);
+    };
   }, []);
 
   return provider;

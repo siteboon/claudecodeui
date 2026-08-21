@@ -1223,6 +1223,16 @@ export type RecentConversationListItem = Pick<
  * nullable states, so a project dialog and a session dialog cannot both be
  * open — they are portalled at the same z-index and would stack.
  */
+/**
+ * Which MCP server form is open, if any. One value so the provider-scoped and
+ * global forms cannot both be open and an edit target cannot exist without an
+ * open form.
+ */
+export type McpServerFormState =
+  | { scope: 'provider'; editingServer: ProviderMcpServer | null }
+  | { scope: 'global'; editingServer: null }
+  | null;
+
 export type PendingSidebarDeletion =
   | { kind: 'project'; project: Project; sessionCount: number }
   | { kind: 'session'; sessionId: string; sessionTitle: string; isArchived: boolean };

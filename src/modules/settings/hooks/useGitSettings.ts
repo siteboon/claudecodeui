@@ -18,14 +18,6 @@ export function useGitSettings() {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>(null);
   const clearStatusTimerRef = useRef<number | null>(null);
 
-  const clearSaveStatus = useCallback(() => {
-    if (clearStatusTimerRef.current !== null) {
-      window.clearTimeout(clearStatusTimerRef.current);
-      clearStatusTimerRef.current = null;
-    }
-    setSaveStatus(null);
-  }, []);
-
   const loadGitConfig = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -87,7 +79,6 @@ export function useGitSettings() {
     isLoading,
     isSaving,
     saveStatus,
-    clearSaveStatus,
     saveGitConfig,
   };
 }

@@ -234,7 +234,6 @@ export function useQuickSettingsDrag({ isMobile }: UseQuickSettingsDragProps) {
     isDragging,
     handleStyle,
     startDrag,
-    endDrag,
     consumeSuppressedClick,
   };
 }

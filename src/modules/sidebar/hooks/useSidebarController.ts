@@ -1003,7 +1003,6 @@ export function useSidebarController({
     editingName,
     initialSessionsLoaded,
     currentTime,
-    projectSortOrder,
     isRefreshing,
     editingSession,
     editingSessionName,

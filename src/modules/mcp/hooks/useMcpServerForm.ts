@@ -14,7 +14,6 @@ import {
 
 type UseMcpServerFormArgs = {
   provider: McpProvider;
-  isOpen: boolean;
   editingServer: ProviderMcpServer | null;
   currentProjects: McpProject[];
   supportedScopes?: McpScope[];
@@ -104,7 +103,6 @@ const normalizeTransport = (supportedTransports: McpTransport[], value: McpTrans
 
 export function useMcpServerForm({
   provider,
-  isOpen,
   editingServer,
   currentProjects,
   supportedScopes = MCP_SUPPORTED_SCOPES[provider],
@@ -124,11 +122,10 @@ export function useMcpServerForm({
 
   const isEditing = Boolean(editingServer);
 
+  // The modal is mounted only while open, so this runs on mount and whenever the
+  // edit target changes. The state initializers above already produce the blank
+  // form; this exists to load an existing server into it.
   useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
     setJsonValidationError('');
     if (editingServer) {
       const nextFormData = createFormStateFromServer(provider, editingServer, supportedScopes, supportedTransports);
@@ -140,7 +137,7 @@ export function useMcpServerForm({
     const nextFormData = cloneDefaultForm(provider, supportedScopes, supportedTransports);
     setFormData(nextFormData);
     setMultilineText(createMultilineTextFromForm(nextFormData));
-  }, [editingServer, isOpen, provider, supportedScopes, supportedTransports]);
+  }, [editingServer, provider, supportedScopes, supportedTransports]);
 
   const projectOptions = useMemo(() => (
     currentProjects
@@ -250,7 +247,6 @@ export function useMcpServerForm({
 
   return {
     formData,
-    setFormData,
     multilineText,
     projectOptions,
     isEditing,

@@ -113,7 +113,6 @@ export function useProviderAuthStatus(
 
   return {
     providerAuthStatus,
-    setProviderAuthStatus,
     checkProviderAuthStatus,
     refreshProviderAuthStatuses,
   };

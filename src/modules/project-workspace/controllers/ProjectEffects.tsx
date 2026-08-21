@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
 
 import { usePaletteOpsRegister } from '@/modules/command-palette';
+import { writeSelectedProvider } from '@/shared/selectedProvider';
 import { useProjectEffectsState } from '@/modules/project-workspace/context/ProjectsStateContext';
-import type { ProjectWorkspaceShellProps } from '@/shared/types';
+import type { LLMProvider, ProjectWorkspaceShellProps } from '@/shared/types';
 
 /** Headless controller rendered by ProjectWorkspaceShell to register palette operations and handle service-worker navigation messages. */
 export default function ProjectEffects({
@@ -32,7 +33,7 @@ export default function ProjectEffects({
       }
 
       if (typeof message.provider === 'string' && message.provider.trim()) {
-        localStorage.setItem('selected-provider', message.provider);
+        writeSelectedProvider(message.provider as LLMProvider);
       }
 
       setActiveTab('chat');
