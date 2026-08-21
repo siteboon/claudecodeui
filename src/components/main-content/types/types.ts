@@ -61,6 +61,8 @@ export type MainContentProps = {
   onProjectSelect: (project: Project) => void;
   /** Silently re-syncs the sidebar project list after worktree projects change. */
   onProjectsRefresh: () => void;
+  /** Opens a new chat for a project — the host action behind `api.host.startNewSession`. */
+  onStartNewSession: (project: Project) => void;
 };
 
 export type MainContentHeaderProps = {

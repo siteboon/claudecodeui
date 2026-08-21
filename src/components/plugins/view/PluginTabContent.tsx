@@ -3,11 +3,17 @@ import { useTheme } from '../../../contexts/ThemeContext';
 import { authenticatedFetch } from '../../../utils/api';
 import { usePlugins } from '../../../contexts/PluginsContext';
 import type { Project, ProjectSession } from '../../../types/app';
+import { usePluginHostApi } from '../hooks/usePluginHostApi';
+import { createPluginApi } from '../utils/pluginHostRequest';
 
 type PluginTabContentProps = {
   pluginName: string;
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
+  /** Opens a new chat for a project on the plugin's behalf. */
+  onStartNewSession: (project: Project) => void;
+  /** Navigates to an existing session on the plugin's behalf. */
+  onOpenSession: (sessionId: string) => void;
 };
 
 type PluginContext = {
@@ -45,10 +51,17 @@ export default function PluginTabContent({
   pluginName,
   selectedProject,
   selectedSession,
+  onStartNewSession,
+  onOpenSession,
 }: PluginTabContentProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const { isDarkMode } = useTheme();
   const { plugins } = usePlugins();
+  const hostApi = usePluginHostApi({ onStartNewSession, onOpenSession });
+  // Read through a ref for the same reason as the context: the plugin module
+  // captures the api object once, on mount.
+  const hostApiRef = useRef(hostApi);
+  hostApiRef.current = hostApi;
 
   // Stable refs so effects don't need context values in their dep arrays
   const contextRef = useRef<PluginContext>(buildContext(isDarkMode, selectedProject, selectedSession));
@@ -92,8 +105,8 @@ export default function PluginTabContent({
 
         moduleRef.current = mod;
 
-        const api = {
-          get context(): PluginContext { return contextRef.current; },
+        const api = createPluginApi({
+          getContext: () => contextRef.current,
 
           onContextChange(cb: (ctx: PluginContext) => void): () => void {
             contextCallbacks.add(cb);
@@ -112,7 +125,10 @@ export default function PluginTabContent({
             if (!res.ok) throw new Error(`RPC error ${res.status}`);
             return res.json();
           },
-        };
+
+          getHost: () => hostApiRef.current,
+          surface: 'tab',
+        });
 
         await mod.mount?.(container, api);
         if (!active) {

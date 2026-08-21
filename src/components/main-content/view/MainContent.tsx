@@ -54,6 +54,7 @@ function MainContent({
   newSessionTrigger,
   onProjectSelect,
   onProjectsRefresh,
+  onStartNewSession,
 }: MainContentProps) {
   const { preferences } = useUiPreferences();
   const { showRawParameters, showThinking, sendByCtrlEnter } = preferences;
@@ -226,6 +227,8 @@ function MainContent({
                 pluginName={activeTab.replace('plugin:', '')}
                 selectedProject={selectedProject}
                 selectedSession={selectedSession}
+                onStartNewSession={onStartNewSession}
+                onOpenSession={(sessionId) => onNavigateToSession(sessionId)}
               />
             </div>
           )}
