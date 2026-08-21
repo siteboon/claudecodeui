@@ -77,13 +77,33 @@ export const createSessionViewModel = (
   };
 };
 
+/**
+ * Cached against the project object, not its id.
+ *
+ * Every sidebar render asks for each project's sessions, and this builds a new
+ * array of new session objects. Without the cache the array is a different
+ * reference each time, which is enough on its own to defeat the memo boundary
+ * on every project and session row. `useProjectsState` always replaces a
+ * project rather than mutating it, so a stale entry is unreachable: a changed
+ * project is a different key.
+ */
+const sortedSessionsByProject = new WeakMap<Project, SessionWithProvider[]>();
+
 export const getAllSessions = (project: Project): SessionWithProvider[] => {
-  return (project.sessions || []).map((session) => ({
+  const cached = sortedSessionsByProject.get(project);
+  if (cached) {
+    return cached;
+  }
+
+  const sessions = (project.sessions || []).map((session) => ({
     ...session,
     __provider: getSessionProvider(session),
   })).sort(
     (a, b) => getSessionDate(b).getTime() - getSessionDate(a).getTime(),
   );
+
+  sortedSessionsByProject.set(project, sessions);
+  return sessions;
 };
 
 const getProjectLastActivity = (project: Project): Date => {

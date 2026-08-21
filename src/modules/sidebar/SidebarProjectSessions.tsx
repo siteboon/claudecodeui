@@ -2,7 +2,7 @@ import { Plus } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { Button } from '@/shared/ui';
-import type { ActiveSidebarRename, LLMProvider, Project, ProjectSession, SessionWithProvider } from '@/shared/types';
+import type { LLMProvider, Project, ProjectSession, SessionWithProvider } from '@/shared/types';
 import SidebarSessionItem from '@/modules/sidebar/SidebarSessionItem';
 
 type SidebarProjectSessionsProps = {
@@ -16,9 +16,11 @@ type SidebarProjectSessionsProps = {
   activeSessions: ReadonlySet<string>;
   attentionSessionIds: ReadonlySet<string>;
   currentTime: Date;
-  activeRename: ActiveSidebarRename | null;
+  /** The session being renamed, when it belongs to this project. */
+  sessionRenameId: string | null;
+  sessionRenameDraft: string;
   onRenameDraftChange: (draft: string) => void;
-  onStartEditingSession: (sessionId: string, initialName: string) => void;
+  onStartEditingSession: (projectId: string, sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
   onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => void;
   onProjectSelect: (project: Project) => void;
@@ -59,7 +61,8 @@ export default function SidebarProjectSessions({
   activeSessions,
   attentionSessionIds,
   currentTime,
-  activeRename,
+  sessionRenameId,
+  sessionRenameDraft,
   onRenameDraftChange,
   onStartEditingSession,
   onCancelEditingSession,
@@ -120,12 +123,8 @@ export default function SidebarProjectSessions({
               needsAttention={attentionSessionIds.has(session.id)}
               currentTime={currentTime}
               onRenameDraftChange={onRenameDraftChange}
-              isEditing={activeRename?.target === 'session' && activeRename.id === session.id}
-              renameDraft={
-                activeRename?.target === 'session' && activeRename.id === session.id
-                  ? activeRename.draft
-                  : ''
-              }
+              isEditing={session.id === sessionRenameId}
+              renameDraft={session.id === sessionRenameId ? sessionRenameDraft : ''}
               onStartEditingSession={onStartEditingSession}
               onCancelEditingSession={onCancelEditingSession}
               onSaveEditingSession={onSaveEditingSession}

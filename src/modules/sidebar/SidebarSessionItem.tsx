@@ -19,7 +19,7 @@ type SidebarSessionItemProps = {
   isEditing: boolean;
   renameDraft: string;
   onRenameDraftChange: (draft: string) => void;
-  onStartEditingSession: (sessionId: string, initialName: string) => void;
+  onStartEditingSession: (projectId: string, sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
   onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => void;
   onProjectSelect: (project: Project) => void;
@@ -146,7 +146,7 @@ function SidebarSessionItem({
   };
 
   const startMobileRename = () => {
-    onStartEditingSession(session.id, sessionView.sessionName);
+    onStartEditingSession(project.projectId, session.id, sessionView.sessionName);
   };
 
   const saveMobileRename = () => {
@@ -545,7 +545,7 @@ function SidebarSessionItem({
                     key: 'rename',
                     label: 'Rename session',
                     icon: Edit2,
-                    onSelect: () => onStartEditingSession(session.id, sessionView.sessionName),
+                    onSelect: () => onStartEditingSession(project.projectId, session.id, sessionView.sessionName),
                   },
                   {
                     key: 'copy',
@@ -575,7 +575,10 @@ function SidebarSessionItem({
 
 /**
  * Memoized: a websocket session delta re-renders the sidebar roughly every
- * 0.5-2s during a run, and a rename keystroke re-renders it per character. The
- * rename state is resolved per row, so only the row being edited changes props.
+ * 0.5-2s during a run, and a rename keystroke re-renders it per character.
+ *
+ * SidebarProjectSessions hands every row but the one being renamed a constant
+ * draft, and the session objects come from a per-project cache, so the compare
+ * succeeds for the rest. See sidebarRowProps.test.tsx.
  */
 export default memo(SidebarSessionItem);

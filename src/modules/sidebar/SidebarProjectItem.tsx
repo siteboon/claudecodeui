@@ -4,7 +4,7 @@ import type { TFunction } from 'i18next';
 
 import { Button } from '@/shared/ui';
 import { cn } from '@/shared/utils';
-import type { ActiveSidebarRename, LLMProvider, MCPServerStatus, Project, ProjectSession, SessionWithProvider } from '@/shared/types';
+import type { LLMProvider, MCPServerStatus, Project, ProjectSession, SessionWithProvider } from '@/shared/types';
 import { getTaskIndicatorStatus } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import TaskIndicator from '@/modules/sidebar/TaskIndicator';
 import SidebarProjectSessions from '@/modules/sidebar/SidebarProjectSessions';
@@ -23,7 +23,9 @@ type SidebarProjectItemProps = {
   initialSessionsLoaded: boolean;
   isLoadingMoreSessions: boolean;
   currentTime: Date;
-  activeRename: ActiveSidebarRename | null;
+  /** The session being renamed, when it belongs to this project. */
+  sessionRenameId: string | null;
+  sessionRenameDraft: string;
   tasksEnabled: boolean;
   mcpServerStatus: MCPServerStatus;
   onRenameDraftChange: (name: string) => void;
@@ -40,7 +42,7 @@ type SidebarProjectItemProps = {
   activeSessions: ReadonlySet<string>;
   attentionSessionIds: ReadonlySet<string>;
   onNewSession: (project: Project) => void;
-  onStartEditingSession: (sessionId: string, initialName: string) => void;
+  onStartEditingSession: (projectId: string, sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
   onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => void;
   t: TFunction;
@@ -65,7 +67,8 @@ function SidebarProjectItem({
   initialSessionsLoaded,
   isLoadingMoreSessions,
   currentTime,
-  activeRename,
+  sessionRenameId,
+  sessionRenameDraft,
   tasksEnabled,
   mcpServerStatus,
   onRenameDraftChange,
@@ -417,7 +420,8 @@ function SidebarProjectItem({
         activeSessions={activeSessions}
         attentionSessionIds={attentionSessionIds}
         currentTime={currentTime}
-        activeRename={activeRename}
+        sessionRenameId={sessionRenameId}
+        sessionRenameDraft={sessionRenameDraft}
         onRenameDraftChange={onRenameDraftChange}
         onStartEditingSession={onStartEditingSession}
         onCancelEditingSession={onCancelEditingSession}
@@ -435,7 +439,10 @@ function SidebarProjectItem({
 
 /**
  * Memoized: a websocket session delta re-renders the sidebar roughly every
- * 0.5-2s during a run, and a rename keystroke re-renders it per character. The
- * rename state is resolved per row, so only the row being edited changes props.
+ * 0.5-2s during a run, and a rename keystroke re-renders it per character.
+ *
+ * Both renames are resolved to scalars by SidebarProjectList and the sorted
+ * session array is cached per project, so a keystroke changes props on exactly
+ * one row and every other row's compare succeeds. See sidebarRowProps.test.tsx.
  */
 export default memo(SidebarProjectItem);

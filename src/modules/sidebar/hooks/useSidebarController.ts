@@ -743,9 +743,12 @@ export function useSidebarController({
     setActiveRename({ target: 'project', id: project.projectId, draft: project.displayName });
   }, []);
 
-  const startEditingSession = useCallback((sessionId: string, initialName: string) => {
-    setActiveRename({ target: 'session', id: sessionId, draft: initialName });
-  }, []);
+  const startEditingSession = useCallback(
+    (projectId: string, sessionId: string, initialName: string) => {
+      setActiveRename({ target: 'session', id: sessionId, projectId, draft: initialName });
+    },
+    [],
+  );
 
   const updateRenameDraft = useCallback((draft: string) => {
     setActiveRename((previous) => (previous ? { ...previous, draft } : previous));

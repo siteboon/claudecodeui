@@ -1173,7 +1173,7 @@ export type SidebarProjectListProps = {
   onSessionSelect: (session: SessionWithProvider, projectName: string) => void;
   onDeleteSession: (sessionId: string, sessionTitle: string) => void;
   onNewSession: (project: Project) => void;
-  onStartEditingSession: (sessionId: string, initialName: string) => void;
+  onStartEditingSession: (projectId: string, sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
   onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => void;
   t: TFunction;
@@ -1219,12 +1219,14 @@ export type RecentConversationListItem = Pick<
  * One value rather than two id/draft pairs, so a project and a session cannot
  * both be mid-rename, and rows can be handed a resolved `isEditing` instead of
  * the raw id — a keystroke then only invalidates the row being renamed.
+ *
+ * A session rename carries the project that owns it so SidebarProjectList can
+ * decide in O(1) which project row the draft belongs to. Without it every row
+ * has to be handed the whole value and a keystroke invalidates all of them.
  */
-export type ActiveSidebarRename = {
-  target: 'project' | 'session';
-  id: string;
-  draft: string;
-};
+export type ActiveSidebarRename =
+  | { target: 'project'; id: string; draft: string }
+  | { target: 'session'; id: string; projectId: string; draft: string };
 
 /**
  * The sidebar's pending delete confirmation. One value rather than a pair of
