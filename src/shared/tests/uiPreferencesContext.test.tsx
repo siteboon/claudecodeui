@@ -63,7 +63,7 @@ test('a change in another tab is picked up', () => {
   assert.equal(result.current.showThinking, false);
 });
 
-test('the setter is stable, so a writer never re-renders on a toggle', () => {
+test('the setter identity survives a toggle, so a write-only consumer can memo on it', () => {
   const setters: Array<(key: 'showThinking', value: boolean) => void> = [];
   const { result } = renderHook(
     () => {

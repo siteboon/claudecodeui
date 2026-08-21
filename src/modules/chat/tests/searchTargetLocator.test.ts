@@ -10,10 +10,17 @@ import type { ChatMessage } from '@/shared/types';
 
 /**
  * The sidebar search jump used to render the whole transcript and then scan the
- * DOM for the snippet, falling back to the nearest rendered timestamp. When the
- * hit was not on screen that fallback scrolled somewhere plausible and flashed
+ * DOM for the snippet. With nothing to identify the hit ahead of time, a miss
+ * was indistinguishable from a hit: it scrolled somewhere plausible and flashed
  * the highlight, telling the user they had been taken to their result when they
- * had not. Resolving the index from the data makes a miss detectable.
+ * had not.
+ *
+ * Resolving the index from the message data first is what makes a miss
+ * detectable — findSearchTargetIndex returns -1 and the jump declines rather
+ * than pretending. The DOM step still ends in a nearest-timestamp match on its
+ * final retry (useChatSessionState's findRenderedMessageElement with
+ * allowNearest), but only for a target it has already resolved: a hit collapsed
+ * inside a tool group is rendered under the group's own first timestamp.
  */
 
 const message = (content: string, timestamp: string): ChatMessage => ({

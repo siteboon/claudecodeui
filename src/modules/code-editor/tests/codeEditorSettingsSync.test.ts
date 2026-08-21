@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 
 import { act, renderHook } from '@testing-library/react';
-import { beforeEach, test } from 'vitest';
+import { beforeEach, test, vi } from 'vitest';
 
 import { useCodeEditorSettings } from '@/modules/code-editor/hooks/useCodeEditorSettings';
 import { writeCodeEditorSettings } from '@/shared/codeEditorSettings';
@@ -74,14 +74,25 @@ test('an unset minimap keeps the shared default rather than reading as off', () 
   assert.equal(result.current.wordWrap, false);
 });
 
-test('the editor stops listening once it unmounts', () => {
-  const { result, unmount } = renderHook(() => useCodeEditorSettings());
+test('the editor unsubscribes both listeners when it unmounts', () => {
+  // Asserted on the (type, handler) pairs rather than by dispatching after
+  // unmount: React drops a setState on an unmounted component silently, so a
+  // leaked listener is invisible from the outside and the test would pass
+  // whether or not the cleanup ran.
+  const OUR_EVENTS = new Set<string>(['storage', CODE_EDITOR_SETTINGS_CHANGED_EVENT]);
+  const added = vi.spyOn(window, 'addEventListener');
+  const removed = vi.spyOn(window, 'removeEventListener');
+
+  const { unmount } = renderHook(() => useCodeEditorSettings());
+  const subscribed = added.mock.calls.filter(([type]) => OUR_EVENTS.has(String(type)));
+  assert.equal(subscribed.length, 2, 'expected the same-tab and cross-tab listeners');
+
   unmount();
 
-  act(() => {
-    localStorage.setItem(CODE_EDITOR_STORAGE_KEYS.fontSize, '30');
-    window.dispatchEvent(new Event(CODE_EDITOR_SETTINGS_CHANGED_EVENT));
-  });
-
-  assert.notEqual(result.current.fontSize, 30);
+  for (const [type, handler] of subscribed) {
+    assert.ok(
+      removed.mock.calls.some(([t, h]) => t === type && h === handler),
+      `${String(type)} listener was never removed`,
+    );
+  }
 });

@@ -24,10 +24,21 @@ const FENCE_PATTERN = /^ {0,3}(`{3,}|~{3,})/;
 const MATH_DELIMITER_PATTERN = /^ {0,3}\$\$/;
 
 /**
- * Block starters whose meaning depends on the surrounding lines. Splitting next
- * to one would restart an ordered list, break a blockquote in two, separate a
- * table from its header, split an indented code block, or strand a reference
- * definition away from the text that uses it.
+ * Block starters whose meaning depends on the surrounding lines, checked on both
+ * sides of a candidate blank line.
+ *
+ * Three of these are demonstrably load-bearing, each with a fixture in
+ * streamingMarkdownComponent.test.tsx that renders differently if its arm is
+ * removed: a blank line between list items makes the list loose (every item
+ * gains a <p>), a blank line inside an indented code block does not end it, and
+ * a reference definition split away from the text that uses it leaves the link
+ * unresolved.
+ *
+ * The blockquote and table arms are conservative. CommonMark and GFM end both
+ * blocks at a blank line, and no input has been found where splitting there
+ * renders differently — they are kept because the cost of being wrong is a
+ * visible layout break and the cost of being cautious is one more block staying
+ * in the pending half for one tick.
  */
 const CONTEXT_SENSITIVE_LINE = new RegExp([
   '^\\s*([-*+]|\\d+[.)])\\s',      // list item
