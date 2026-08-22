@@ -8,6 +8,7 @@ import type { LLMProvider, MCPServerStatus, Project, ProjectSession, SessionWith
 import { getTaskIndicatorStatus } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import TaskIndicator from '@/modules/sidebar/TaskIndicator';
 import SidebarProjectSessions from '@/modules/sidebar/SidebarProjectSessions';
+import { useCompactSidebar } from '@/modules/sidebar/hooks/useCompactSidebar';
 
 type SidebarProjectItemProps = {
   project: Project;
@@ -121,6 +122,8 @@ function SidebarProjectItem({
     };
   }, [isEditing]);
 
+  const isCompact = useCompactSidebar();
+
   const toggleProject = () => onToggleProject(project.projectId);
   const toggleStarProject = () => onToggleStarProject(project.projectId);
 
@@ -139,7 +142,8 @@ function SidebarProjectItem({
   return (
     <div className={cn('md:space-y-1', isDeleting && 'opacity-50 pointer-events-none')}>
       <div className="md:group group">
-        <div className="md:hidden">
+        {isCompact && (
+        <div>
           <div
             className={cn(
               'p-3 mx-3 my-1 rounded-lg bg-card border border-border/50 active:scale-[0.98] transition-all duration-150',
@@ -277,11 +281,13 @@ function SidebarProjectItem({
             </div>
           </div>
         </div>
+        )}
 
+        {!isCompact && (
         <Button
           variant="ghost"
           className={cn(
-            'hidden md:flex w-full justify-between p-2 h-auto font-normal hover:bg-accent/50',
+            'flex w-full justify-between p-2 h-auto font-normal hover:bg-accent/50',
             isSelected && 'bg-accent text-accent-foreground',
             isStarred &&
               !isSelected &&
@@ -407,6 +413,7 @@ function SidebarProjectItem({
             )}
           </div>
         </Button>
+        )}
       </div>
 
       <SidebarProjectSessions

@@ -291,22 +291,98 @@ function readChecklistSignature(message: NormalizedMessage): string {
   }));
 }
 
-//----------------- UNIFICATION PASS ------------
+//----------------- TOOL OUTPUT SIZE ------------
 
 /**
- * Rewrites the provider-specific interaction rows of one loaded history onto
- * the canonical shapes, then drops checklist snapshots that a later snapshot
- * immediately supersedes.
+ * Longest tool output one transcript row carries.
  *
- * Consecutive snapshots are the normal case once incremental task calls are
- * replayed — three `TaskCreate` calls in a row describe one list, not three —
- * and keeping only the last of a run turns a wall of near-identical cards into
- * the single checklist the model was actually building. Snapshots separated by
- * real work are all kept, so the list still reappears wherever it changed.
+ * A provider records whatever the tool returned, which for a `Read` of a
+ * screenshot is a base64 image and for a long test run is the whole log. The
+ * transcript shows that output inside a collapsed section, so past roughly a
+ * screenful of scrolling nobody reads further — but every byte is parsed,
+ * stored and held in memory for the life of the session. Real Claude sessions
+ * ship megabytes per page this way.
+ */
+const MAX_TOOL_RESULT_CONTENT = 40_000;
+
+function truncateOutput(value: string): string {
+  if (value.length <= MAX_TOOL_RESULT_CONTENT) {
+    return value;
+  }
+
+  const omitted = value.length - MAX_TOOL_RESULT_CONTENT;
+  return `${value.slice(0, MAX_TOOL_RESULT_CONTENT)}\n… ${omitted} more characters`;
+}
+
+/**
+ * Applies the same cap to every string inside a provider's structured result.
+ *
+ * The structure is preserved rather than dropped wholesale because the
+ * transcript reads small fields out of it (a search's file list, for one), and
+ * only a single oversized string — a file body or an encoded image — is ever
+ * the thing making it large.
+ */
+function truncateNestedOutput(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return truncateOutput(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(truncateNestedOutput);
+  }
+
+  const record = readObjectRecord(value);
+  if (!record) {
+    return value;
+  }
+
+  const truncated: AnyRecord = {};
+  for (const [key, entry] of Object.entries(record)) {
+    truncated[key] = truncateNestedOutput(entry);
+  }
+  return truncated;
+}
+
+function capToolResult(message: NormalizedMessage): void {
+  const result = message.toolResult;
+  if (!result) {
+    return;
+  }
+
+  if (typeof result.content === 'string') {
+    result.content = truncateOutput(result.content);
+  }
+  if (result.toolUseResult !== undefined) {
+    result.toolUseResult = truncateNestedOutput(result.toolUseResult);
+  }
+}
+
+//----------------- TRANSCRIPT PASS ------------
+
+/**
+ * Turns one loaded history into exactly the rows the transcript draws.
+ *
+ * Three things happen here:
+ *
+ * 1. Provider-specific interaction rows are rewritten onto the canonical
+ *    shapes described above.
+ * 2. Checklist snapshots that a later snapshot supersedes are dropped.
+ *    Consecutive snapshots are the normal case once incremental task calls are
+ *    replayed — three `TaskCreate` calls in a row describe one list, not three
+ *    — and keeping only the last of a run turns a wall of near-identical cards
+ *    into the single checklist the model was actually building. Snapshots
+ *    separated by real work are all kept, so the list still reappears wherever
+ *    it changed.
+ * 3. Standalone tool-result rows are dropped, because the provider has already
+ *    attached each result to the call it belongs to and the chat draws it
+ *    there. Shipping the row twice is half of everything a tool-heavy Claude
+ *    session sends.
+ * 4. Tool output is capped, so one `Read` of an image cannot cost the session
+ *    a megabyte of memory for content nothing renders.
  *
  * Mutates and returns the given array; callers own it.
  */
-export function unifyInteractionMessages(messages: NormalizedMessage[]): NormalizedMessage[] {
+export function prepareTranscriptMessages(messages: NormalizedMessage[]): NormalizedMessage[] {
   const checklist = new ChecklistState();
 
   for (const message of messages) {
@@ -326,18 +402,14 @@ export function unifyInteractionMessages(messages: NormalizedMessage[]): Normali
     }
   }
 
+  // After the rewrites, so a folded-in answer is read from the full result.
+  for (const message of messages) {
+    capToolResult(message);
+  }
+
   const superseded = new Set<number>();
-  const supersededToolIds = new Set<string>();
   let openSnapshotIndex = -1;
   let keptSignature: string | null = null;
-
-  const drop = (index: number) => {
-    superseded.add(index);
-    const toolId = messages[index].toolId;
-    if (toolId) {
-      supersededToolIds.add(toolId);
-    }
-  };
 
   messages.forEach((message, index) => {
     // A result row renders as part of its call, so it must not break a run of
@@ -356,25 +428,22 @@ export function unifyInteractionMessages(messages: NormalizedMessage[]): Normali
     // nothing, however far apart the two calls are.
     const signature = readChecklistSignature(message);
     if (signature === keptSignature) {
-      drop(index);
+      superseded.add(index);
       return;
     }
 
     if (openSnapshotIndex !== -1) {
-      drop(openSnapshotIndex);
+      superseded.add(openSnapshotIndex);
     }
     openSnapshotIndex = index;
     keptSignature = signature;
   });
 
-  if (superseded.size === 0) {
-    return messages;
-  }
-
-  return messages.filter((message, index) => {
-    if (superseded.has(index)) {
-      return false;
-    }
-    return !(message.kind === 'tool_result' && message.toolId && supersededToolIds.has(message.toolId));
-  });
+  // A result that names its call is only ever drawn through that call. The one
+  // shape worth keeping is a result with no call to attach to, which the chat
+  // renders on its own.
+  return messages.filter((message, index) => (
+    !superseded.has(index)
+    && !(message.kind === 'tool_result' && message.toolId)
+  ));
 }

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -81,7 +81,7 @@ type ComposerPermissionMenuProps = {
  * Rendered by chat's ChatComposer as the popover for choosing the permission
  * mode the active provider runs the next turn under.
  */
-export default function ComposerPermissionMenu({
+function ComposerPermissionMenu({
   permissionMode,
   permissionModes,
   onSelectPermissionMode,
@@ -148,3 +148,6 @@ export default function ComposerPermissionMenu({
     </>
   );
 }
+
+/** Memoized: the composer re-renders on every keystroke and none of this menu's props change while typing. */
+export default memo(ComposerPermissionMenu);

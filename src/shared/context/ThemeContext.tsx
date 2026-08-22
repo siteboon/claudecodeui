@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
 type ThemeContextValue = {
@@ -84,14 +84,16 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, []);
 
-  const toggleDarkMode = () => {
+  const toggleDarkMode = useCallback(() => {
     setIsDarkMode(prev => !prev);
-  };
+  }, []);
 
-  const value: ThemeContextValue = {
-    isDarkMode,
-    toggleDarkMode,
-  };
+  // A fresh object here would re-render every consumer in the app on any
+  // render of this provider, theme change or not.
+  const value = useMemo<ThemeContextValue>(
+    () => ({ isDarkMode, toggleDarkMode }),
+    [isDarkMode, toggleDarkMode],
+  );
 
   return (
     <ThemeContext.Provider value={value}>

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
 
 import { api } from '@/shared/api';
@@ -93,11 +93,13 @@ export const TasksSettingsProvider = ({ children }: { children: ReactNode }) => 
     setTimeout(checkInstallation, 0);
   }, []);
 
-  const toggleTasksEnabled = () => {
+  const toggleTasksEnabled = useCallback(() => {
     setTasksEnabled(prev => !prev);
-  };
+  }, []);
 
-  const contextValue: TasksSettingsContextValue = {
+  // A fresh object here would re-render every consumer on any render of this
+  // provider, whether or not the settings moved.
+  const contextValue = useMemo<TasksSettingsContextValue>(() => ({
     tasksEnabled,
     setTasksEnabled,
     toggleTasksEnabled,
@@ -105,7 +107,15 @@ export const TasksSettingsProvider = ({ children }: { children: ReactNode }) => 
     isTaskMasterReady,
     installationStatus,
     isCheckingInstallation
-  };
+  }), [
+    installationStatus,
+    isCheckingInstallation,
+    isTaskMasterInstalled,
+    isTaskMasterReady,
+    setTasksEnabled,
+    tasksEnabled,
+    toggleTasksEnabled,
+  ]);
 
   return (
     <TasksSettingsContext.Provider value={contextValue}>

@@ -7,6 +7,7 @@ import { cn,copyTextToClipboard } from '@/shared/utils';
 import type { LLMProvider, Project, ProjectSession, SessionWithProvider } from '@/shared/types';
 import { api } from '@/shared/api';
 import { createSessionViewModel, formatCompactAge } from '@/modules/sidebar/utils/sidebarProjectFormatting';
+import { useCompactSidebar } from '@/modules/sidebar/hooks/useCompactSidebar';
 
 type SidebarSessionItemProps = {
   project: Project;
@@ -55,6 +56,7 @@ function SidebarSessionItem({
   onDeleteSession,
   t,
 }: SidebarSessionItemProps) {
+  const isCompact = useCompactSidebar();
   const sessionView = createSessionViewModel(session, currentTime, t);
   const isSelected = selectedSession?.id === session.id;
   const compactSessionAge = formatCompactAge(sessionView.sessionTime, currentTime);
@@ -209,7 +211,8 @@ function SidebarSessionItem({
         </div>
       )}
 
-      <div className="md:hidden">
+      {isCompact && (
+      <div>
         <div
           className={cn(
             'p-2 mx-3 my-0.5 rounded-md bg-card border active:scale-[0.98] transition-all duration-150 relative',
@@ -280,7 +283,6 @@ function SidebarSessionItem({
         <Dialog open={isMobileOptionsOpen} onOpenChange={setMobileOptionsOpen}>
           <DialogContent
             aria-describedby="mobile-session-options-description"
-            wrapperClassName="md:hidden"
             animationClassName="animate-bottom-sheet-content-show motion-reduce:animate-none"
             className="bottom-0 left-0 top-auto max-w-none translate-x-0 translate-y-0 rounded-b-none rounded-t-2xl border-x-0 border-b-0 px-4 pb-safe-area-inset-bottom pt-3"
           >
@@ -407,8 +409,10 @@ function SidebarSessionItem({
           </DialogContent>
         </Dialog>
       </div>
+      )}
 
-      <div className="hidden md:block">
+      {!isCompact && (
+      <div>
         <a
           href={`/session/${session.id}`}
           className={cn(
@@ -569,6 +573,7 @@ function SidebarSessionItem({
             )}
           </div>
       </div>
+      )}
     </div>
   );
 }

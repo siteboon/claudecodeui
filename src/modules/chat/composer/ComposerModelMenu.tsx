@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, ChevronRight } from 'lucide-react';
@@ -31,7 +31,7 @@ type ComposerModelMenuProps = {
  * Rendered by chat's ChatComposer as the popover for choosing the active
  * provider's model and reasoning effort for the next turn.
  */
-export default function ComposerModelMenu({
+function ComposerModelMenu({
   effort,
   effortOptions,
   onSelectEffort,
@@ -169,3 +169,6 @@ export default function ComposerModelMenu({
     </>
   );
 }
+
+/** Memoized: the composer re-renders on every keystroke and none of this menu's props change while typing. */
+export default memo(ComposerModelMenu);

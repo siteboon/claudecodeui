@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { api } from '@/shared/api';
@@ -125,8 +125,15 @@ export function PluginsProvider({ children }: { children: ReactNode }) {
     }
   }, [refreshPlugins]);
 
+  // Built once per change: an inline object would re-render every consumer on
+  // any render of this provider.
+  const value = useMemo(
+    () => ({ plugins, loading, pluginsError, refreshPlugins, installPlugin, uninstallPlugin, updatePlugin, togglePlugin }),
+    [installPlugin, loading, plugins, pluginsError, refreshPlugins, togglePlugin, uninstallPlugin, updatePlugin],
+  );
+
   return (
-    <PluginsContext.Provider value={{ plugins, loading, pluginsError, refreshPlugins, installPlugin, uninstallPlugin, updatePlugin, togglePlugin }}>
+    <PluginsContext.Provider value={value}>
       {children}
     </PluginsContext.Provider>
   );

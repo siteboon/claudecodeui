@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { unifyInteractionMessages } from '@/shared/message-unification.js';
+import { prepareTranscriptMessages } from '@/shared/message-unification.js';
 import type { NormalizedMessage } from '@/shared/types.js';
 
 let nextId = 0;
@@ -29,7 +29,7 @@ const todosOf = (entry: NormalizedMessage) =>
     .map((todo) => `${todo.status}:${todo.content}`);
 
 test('Claude task-tracker calls become one evolving checklist', () => {
-  const unified = unifyInteractionMessages([
+  const unified = prepareTranscriptMessages([
     taskCall('TaskCreate', 't1', { subject: 'Read notes', activeForm: 'Reading notes' }, { task: { id: '1' } }),
     taskCall('TaskCreate', 't2', { subject: 'Run tests', activeForm: 'Running tests' }, { task: { id: '2' } }),
     prose(),
@@ -47,7 +47,7 @@ test('Claude task-tracker calls become one evolving checklist', () => {
 });
 
 test('a task listing keeps the wording each task was created with', () => {
-  const unified = unifyInteractionMessages([
+  const unified = prepareTranscriptMessages([
     taskCall('TaskCreate', 't1', { subject: 'Read notes', activeForm: 'Reading notes' }, { task: { id: '1' } }),
     prose(),
     taskCall('TaskList', 't2', {}, { tasks: [{ id: '1', subject: 'Read notes', status: 'in_progress' }] }),
@@ -62,7 +62,7 @@ test('a task listing keeps the wording each task was created with', () => {
 });
 
 test('a checklist that has not changed since it was last drawn is dropped', () => {
-  const unified = unifyInteractionMessages([
+  const unified = prepareTranscriptMessages([
     message({ kind: 'tool_use', toolName: 'TodoWrite', toolId: 'w1', toolInput: { todos: [{ content: 'Ship it', status: 'pending' }] } }),
     prose(),
     message({ kind: 'tool_use', toolName: 'TodoWrite', toolId: 'w2', toolInput: { todos: [{ content: 'Ship it', status: 'pending' }] } }),
@@ -71,19 +71,38 @@ test('a checklist that has not changed since it was last drawn is dropped', () =
   assert.deepEqual(unified.map((entry) => entry.toolId), ['w1', undefined]);
 });
 
-test('a superseded checklist takes its own result row with it', () => {
-  const unified = unifyInteractionMessages([
+test('a superseded checklist and its result row both go', () => {
+  const unified = prepareTranscriptMessages([
     message({ kind: 'tool_use', toolName: 'TodoWrite', toolId: 'w1', toolInput: { todos: [{ content: 'One', status: 'pending' }] } }),
     message({ kind: 'tool_result', toolId: 'w1', content: 'stale' }),
     message({ kind: 'tool_use', toolName: 'TodoWrite', toolId: 'w2', toolInput: { todos: [{ content: 'One', status: 'completed' }] } }),
     message({ kind: 'tool_result', toolId: 'w2', content: 'fresh' }),
   ]);
 
-  assert.deepEqual(unified.map((entry) => entry.toolId), ['w2', 'w2']);
+  assert.deepEqual(unified.map((entry) => entry.toolId), ['w2']);
+});
+
+test('a result that names its call is not shipped alongside it', () => {
+  const unified = prepareTranscriptMessages([
+    message({ kind: 'tool_use', toolName: 'Bash', toolId: 'b1', toolInput: { command: 'ls' }, toolResult: { content: 'a\nb' } }),
+    message({ kind: 'tool_result', toolId: 'b1', content: 'a\nb' }),
+  ]);
+
+  assert.equal(unified.length, 1, 'the result already rides on the call it belongs to');
+  assert.equal(unified[0].kind, 'tool_use');
+  assert.equal(unified[0].toolResult?.content, 'a\nb');
+});
+
+test('a result with no call to attach to is kept', () => {
+  const unified = prepareTranscriptMessages([
+    message({ kind: 'tool_result', content: 'orphaned output' }),
+  ]);
+
+  assert.deepEqual(unified.map((entry) => entry.kind), ['tool_result']);
 });
 
 test("Codex's request_user_input becomes an answered AskUserQuestion", () => {
-  const [unified] = unifyInteractionMessages([
+  const [unified] = prepareTranscriptMessages([
     message({
       provider: 'codex',
       kind: 'tool_use',
@@ -101,7 +120,7 @@ test("Codex's request_user_input becomes an answered AskUserQuestion", () => {
 });
 
 test('a multi-select Codex answer keeps every label it picked', () => {
-  const [unified] = unifyInteractionMessages([
+  const [unified] = prepareTranscriptMessages([
     message({
       provider: 'codex',
       kind: 'tool_use',
@@ -116,7 +135,7 @@ test('a multi-select Codex answer keeps every label it picked', () => {
 });
 
 test("Claude's AskUserQuestion answer is folded into the question it answers", () => {
-  const [unified] = unifyInteractionMessages([
+  const [unified] = prepareTranscriptMessages([
     message({
       kind: 'tool_use',
       toolName: 'AskUserQuestion',
@@ -133,7 +152,7 @@ test("Claude's AskUserQuestion answer is folded into the question it answers", (
 });
 
 test('a live Claude answer is recovered from the acknowledgement sentence', () => {
-  const [unified] = unifyInteractionMessages([
+  const [unified] = prepareTranscriptMessages([
     message({
       kind: 'tool_use',
       toolName: 'AskUserQuestion',
@@ -149,7 +168,7 @@ test('a live Claude answer is recovered from the acknowledgement sentence', () =
 });
 
 test('a question that was never answered carries no answers', () => {
-  const [unified] = unifyInteractionMessages([
+  const [unified] = prepareTranscriptMessages([
     message({
       kind: 'tool_use',
       toolName: 'AskUserQuestion',
@@ -160,4 +179,40 @@ test('a question that was never answered carries no answers', () => {
   ]);
 
   assert.equal((unified.toolInput as { answers?: unknown }).answers, undefined);
+});
+
+test('a huge tool output is capped, and says how much it dropped', () => {
+  const body = 'x'.repeat(120_000);
+  const [unified] = prepareTranscriptMessages([
+    message({
+      kind: 'tool_use',
+      toolName: 'Read',
+      toolId: 'r1',
+      toolInput: { file_path: '/tmp/shot.png' },
+      toolResult: { content: body, toolUseResult: { file: { base64: body } } },
+    }),
+  ]);
+
+  const content = String(unified.toolResult?.content);
+  assert.ok(content.length < body.length / 2, 'the output must not survive at full size');
+  assert.match(content, /… 80000 more characters$/);
+  const nested = (unified.toolResult?.toolUseResult as { file: { base64: string } }).file.base64;
+  assert.equal(nested, content, 'the structured copy is capped the same way');
+});
+
+test('a search result keeps every file it found', () => {
+  const filenames = Array.from({ length: 900 }, (_, index) => `/repo/src/file-${index}.ts`);
+  const [unified] = prepareTranscriptMessages([
+    message({
+      kind: 'tool_use',
+      toolName: 'Glob',
+      toolId: 'g1',
+      toolInput: { pattern: '**/*.ts' },
+      toolResult: { content: 'ok', toolUseResult: { numFiles: filenames.length, filenames } },
+    }),
+  ]);
+
+  const result = unified.toolResult?.toolUseResult as { filenames: string[]; numFiles: number };
+  assert.equal(result.numFiles, 900);
+  assert.deepEqual(result.filenames, filenames);
 });
