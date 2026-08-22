@@ -2,6 +2,7 @@ import { DownloadIcon, FileArchiveIcon, FileCodeIcon, FileIcon, FileTextIcon } f
 import { useState } from 'react';
 
 import { authenticatedFetch } from '../../../../utils/api';
+import { triggerBlobDownload } from '../../../../utils/download';
 import type { ChatAttachment } from '../../types/types';
 
 type ChatMessageFilesProps = {
@@ -39,12 +40,7 @@ function ChatMessageFile({ file }: { file: ChatAttachment }) {
     try {
       const response = await authenticatedFetch(`/api/assets/files/${encodeURIComponent(storedName)}`);
       if (!response.ok) return;
-      const blobUrl = URL.createObjectURL(await response.blob());
-      const anchor = document.createElement('a');
-      anchor.href = blobUrl;
-      anchor.download = name;
-      anchor.click();
-      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 0);
+      triggerBlobDownload(await response.blob(), name);
     } catch (error) {
       console.error(`Failed to download attachment "${name}":`, error);
     } finally {

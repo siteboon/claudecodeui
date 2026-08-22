@@ -1,3 +1,4 @@
+import { triggerBlobDownload } from '../../../utils/download';
 import type { ChatMessage } from '../types/types';
 
 export interface ExportOptions {
@@ -85,7 +86,7 @@ export function downloadMarkdown(
 ): void {
   const content = exportToMarkdown(messages, sessionTitle);
   const blob = new Blob([content], { type: 'text/markdown' });
-  downloadBlob(blob, filename);
+  triggerBlobDownload(blob, filename);
 }
 
 /**
@@ -158,7 +159,7 @@ export function downloadHTML(
 ): void {
   const content = exportToHTML(messages, sessionTitle);
   const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
-  downloadBlob(blob, filename);
+  triggerBlobDownload(blob, filename);
 }
 
 /**
@@ -197,20 +198,6 @@ export function downloadPDF(
     // Optionally close after printing
     // win.close();
   }, 250);
-}
-
-/**
- * Helper to download a blob as a file.
- */
-function downloadBlob(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
 }
 
 /**
