@@ -39,6 +39,43 @@ import type {
  */
 export const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
 
+/**
+ * Names the environment variable that disabled automatic update checking for
+ * this deployment, or `null` when update checks are enabled.
+ *
+ * Consumers: `server/index.ts` (publishes the decision on `GET /health` so the
+ * web UI skips its GitHub release poll, and reports the winning variable in the
+ * startup banner) and `server/modules/cli/cli.service.ts` (skips the
+ * npm-registry check on `cloudcli start`). An explicit `cloudcli update`
+ * intentionally ignores this opt-out.
+ *
+ * The two variables have deliberately different truth tables:
+ * `CLOUDCLI_DISABLE_UPDATE_CHECK` accepts `true` or `1` (case-insensitive and
+ * whitespace-tolerant) and warns on any other non-empty value so a typo is
+ * never a silent no-op. `NO_UPDATE_NOTIFIER` follows the npm/update-notifier
+ * convention instead: any non-empty value disables, whatever the value. It is
+ * checked first, so it wins when both are set.
+ */
+export function getUpdateCheckOptOutVariable(environment: NodeJS.ProcessEnv): string | null {
+  if ((environment.NO_UPDATE_NOTIFIER ?? '').trim() !== '') return 'NO_UPDATE_NOTIFIER';
+  const raw = environment.CLOUDCLI_DISABLE_UPDATE_CHECK?.trim() ?? '';
+  if (raw === '') return null;
+  const value = raw.toLowerCase();
+  if (value === 'true' || value === '1') return 'CLOUDCLI_DISABLE_UPDATE_CHECK';
+  console.warn(
+    `[WARN] Ignoring CLOUDCLI_DISABLE_UPDATE_CHECK="${raw}": expected "true" or "1". Update checks stay enabled.`,
+  );
+  return null;
+}
+
+/**
+ * Reports whether automatic update checking is disabled, for the call sites that
+ * only need the decision and not which variable produced it.
+ */
+export function isUpdateCheckDisabled(environment: NodeJS.ProcessEnv): boolean {
+  return getUpdateCheckOptOutVariable(environment) !== null;
+}
+
 // ---------------------------
 //----------------- NORMALIZED MESSAGE HELPER INPUT TYPES ------------
 /**

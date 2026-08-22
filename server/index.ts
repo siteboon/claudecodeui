@@ -9,7 +9,7 @@ import http from 'http';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import cors from 'cors';
 
-import { AppError, findApplicationRoot, getModuleDirectory, IS_PLATFORM, terminalTextStyles } from '@/shared/utils.js';
+import { AppError, findApplicationRoot, getModuleDirectory, getUpdateCheckOptOutVariable, IS_PLATFORM, terminalTextStyles } from '@/shared/utils.js';
 import {
     closeSessionsWatcher,
     initializeSessionsWatcher,
@@ -69,6 +69,13 @@ const RUNNING_VERSION = (() => {
         return null;
     }
 })();
+// Operator opt-out for automatic update checks. Read once at startup like the
+// values above and published on `/health` so the prebuilt frontend bundle can
+// honor it at runtime (a build-time VITE_ variable cannot reach an npm install).
+// The winning variable is kept so the startup banner can name it: a correct
+// opt-out and a mistyped one otherwise look identical (both silent).
+const updateCheckOptOutVariable = getUpdateCheckOptOutVariable(process.env);
+const updateCheckDisabled = updateCheckOptOutVariable !== null;
 const systemRoutes = createSystemModule({
     appRoot: APP_ROOT,
     installMode,
@@ -138,7 +145,8 @@ app.get('/health', (req, res) => {
         status: 'ok',
         timestamp: new Date().toISOString(),
         installMode,
-        version: RUNNING_VERSION
+        version: RUNNING_VERSION,
+        updateCheckDisabled
     });
 });
 
@@ -357,6 +365,9 @@ async function startServer() {
             console.log('');
             console.log(`${terminalTextStyles.info('[INFO]')} Server URL:  ${terminalTextStyles.bright('http://' + DISPLAY_HOST + ':' + SERVER_PORT)}`);
             console.log(`${terminalTextStyles.info('[INFO]')} Installed at: ${terminalTextStyles.dim(appInstallPath)}`);
+            if (updateCheckOptOutVariable) {
+                console.log(`${terminalTextStyles.info('[INFO]')} Automatic update checks disabled (${terminalTextStyles.dim(updateCheckOptOutVariable)})`);
+            }
             console.log(`${terminalTextStyles.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
             console.log('');
 
