@@ -207,3 +207,79 @@ test('a websocket reconnect re-syncs the project list', async () => {
   });
   assert.equal(result.current.projects[1].displayName, 'Created while offline');
 });
+
+test('a superseded first load never renders the sidebar as empty', async () => {
+  // The mount fetch is held open so a refresh can supersede it, which is what
+  // the websocket's reconnect re-sync does on a real page load.
+  let releaseFirstLoad: (() => void) | null = null;
+  const firstLoadInFlight = new Promise<void>((resolve) => {
+    releaseFirstLoad = resolve;
+  });
+  projectsResponse.mockImplementationOnce(async () => {
+    await firstLoadInFlight;
+    return { ok: true, json: async () => [buildProject()] };
+  });
+
+  const { useProjectsState } = await import(
+    '@/modules/project-workspace/hooks/useProjectsState'
+  );
+
+  // Every render the sidebar would have seen. The bug is not a final state but a
+  // frame: `isLoadingProjects` went false while `projects` was still empty, so
+  // SidebarProjectsState rendered "No projects found" for as long as the newest
+  // response took to land.
+  const renderedStates: Array<{ isLoading: boolean; projectCount: number }> = [];
+  const { result } = renderHook(() => {
+    const state = useProjectsState({
+      sessionId: undefined,
+      navigate: vi.fn(),
+      subscribe: (listener: ServerEventListener) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      isMobile: false,
+      isSessionProcessing: () => false,
+    });
+    renderedStates.push({
+      isLoading: state.isLoadingProjects,
+      projectCount: state.projects.length,
+    });
+    return state;
+  });
+
+  let releaseRefresh: (() => void) | null = null;
+  const refreshInFlight = new Promise<void>((resolve) => {
+    releaseRefresh = resolve;
+  });
+  projectsResponse.mockImplementationOnce(async () => {
+    await refreshInFlight;
+    return { ok: true, json: async () => [buildProject()] };
+  });
+
+  let refresh: Promise<void> | null = null;
+  act(() => {
+    refresh = result.current.refreshProjectsSilently();
+  });
+
+  // The superseded mount response resolves first and returns without writing
+  // `projects`, then the newest one lands.
+  await act(async () => {
+    releaseFirstLoad?.();
+    await firstLoadInFlight;
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  await act(async () => {
+    releaseRefresh?.();
+    await refresh;
+  });
+
+  await waitFor(() => {
+    assert.equal(result.current.projects.length, 1);
+  });
+  assert.equal(result.current.isLoadingProjects, false);
+  assert.ok(
+    !renderedStates.some((state) => !state.isLoading && state.projectCount === 0),
+    `the sidebar must never see a settled empty list while the load is still in flight: ${JSON.stringify(renderedStates)}`,
+  );
+});

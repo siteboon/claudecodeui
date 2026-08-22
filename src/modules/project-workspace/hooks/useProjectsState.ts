@@ -480,11 +480,15 @@ export function useProjectsState({
   }, []);
 
   const fetchProjects = useCallback(async ({ showLoadingState = true }: FetchProjectsOptions = {}) => {
+    // Claimed before the request starts and read again in `finally`, so the
+    // loading flag is only ever cleared by the response that actually wrote
+    // `projects`.
+    const requestId = (projectsRequestIdRef.current += 1);
+
     try {
       if (showLoadingState) {
         setIsLoadingProjects(true);
       }
-      const requestId = (projectsRequestIdRef.current += 1);
       const response = await api.projects();
       const projectData = (await response.json()) as Project[];
 
@@ -527,7 +531,17 @@ export function useProjectsState({
     } catch (error) {
       console.error('Error fetching projects:', error);
     } finally {
-      if (showLoadingState) {
+      // Only the newest request clears the flag, and it clears it whether or not
+      // it asked for the spinner, because by now it has written the list.
+      //
+      // A superseded response must leave the spinner up: it returned above
+      // without touching `projects`, so clearing here would render the sidebar's
+      // "No projects found" empty state over the still-empty initial list until
+      // the newest response lands. Anything that refreshes during the first load
+      // — the websocket's reconnect re-sync, a command-palette refresh, React's
+      // StrictMode double-mount — supersedes the initial fetch and used to
+      // trigger exactly that flash.
+      if (projectsRequestIdRef.current === requestId) {
         setIsLoadingProjects(false);
       }
     }
