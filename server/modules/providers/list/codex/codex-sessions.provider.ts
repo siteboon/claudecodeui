@@ -6,10 +6,12 @@ import readline from 'node:readline';
 import { sessionsDb } from '@/modules/database/index.js';
 import { parseFilesInputTag, toImageAttachments } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
+import { unifyInteractionMessages } from '@/shared/message-unification.js';
 import type {
   AnyRecord,
   FetchHistoryOptions,
   FetchHistoryResult,
+  MemoryCitation,
   NormalizedMessage,
   SubagentActivity,
   SubagentInfo,
@@ -151,6 +153,53 @@ export function readCodexProposedPlan(text: string): string | null {
   return body || null;
 }
 
+/**
+ * The block Codex appends to a reply that leaned on its memory files. It is
+ * always the last thing in the message and is meant for programmatic parsing,
+ * so it reads as raw XML when left in the prose.
+ */
+const CODEX_MEMORY_CITATION_BLOCK = /<oai-mem-citation>([\s\S]*?)<\/oai-mem-citation>\s*$/i;
+
+/**
+ * Lifts Codex's memory citations out of an assistant reply.
+ *
+ * The block names the memory files and line ranges the answer drew on, which is
+ * worth showing — but as a footnote under the reply, not as markup inside it.
+ * The trailing `<rollout_ids>` list is dropped: those are handles to earlier
+ * rollouts that the transcript view has no way to open.
+ *
+ * Exported for tests.
+ */
+export function readCodexMemoryCitations(text: string): { text: string; memoryCitations?: MemoryCitation[] } {
+  const block = CODEX_MEMORY_CITATION_BLOCK.exec(text);
+  if (!block) {
+    return { text };
+  }
+
+  const entries = /<citation_entries>([\s\S]*?)<\/citation_entries>/i.exec(block[1])?.[1] ?? '';
+  const memoryCitations: MemoryCitation[] = [];
+  for (const line of entries.split('\n')) {
+    const entry = line.trim();
+    if (!entry) {
+      continue;
+    }
+
+    const noteMarker = entry.indexOf('|note=');
+    const source = (noteMarker === -1 ? entry : entry.slice(0, noteMarker)).trim();
+    if (!source) {
+      continue;
+    }
+
+    const note = noteMarker === -1
+      ? ''
+      : entry.slice(noteMarker + '|note='.length).trim().replace(/^\[/, '').replace(/\]$/, '').trim();
+    memoryCitations.push(note ? { source, note } : { source });
+  }
+
+  const prose = text.slice(0, block.index).trimEnd();
+  return memoryCitations.length > 0 ? { text: prose, memoryCitations } : { text: prose };
+}
+
 function extractCodexToolOutput(output: unknown): string {
   if (typeof output === 'string') {
     return output;
@@ -181,7 +230,10 @@ type CodexExecOperation =
   | { kind: 'stdin'; chars: string }
   | { kind: 'patch'; patch: string }
   | { kind: 'search'; queries: string[] }
-  | { kind: 'plan'; plan: unknown };
+  | { kind: 'plan'; todos: CodexPlanTodo[] };
+
+/** One step of a checklist, in the shape the shared todo renderer consumes. */
+type CodexPlanTodo = { content: string; status: string };
 
 /**
  * Decodes one JavaScript string literal (single, double or backtick quoted).
@@ -289,6 +341,24 @@ function readPatchLiteral(source: string): string | undefined {
 }
 
 /**
+ * Reads the steps of an `update_plan` call made from an exec script.
+ *
+ * The script writes its argument as a JavaScript object literal with unquoted
+ * keys, so it is not JSON — each `{step, status}` entry is matched directly.
+ */
+function readPlanSteps(objectSource: string): CodexPlanTodo[] {
+  const todos: CodexPlanTodo[] = [];
+  for (const entry of objectSource.matchAll(/\{([^{}]*)\}/g)) {
+    const content = readStringProperty(entry[1], 'step') ?? readStringProperty(entry[1], 'content');
+    if (content) {
+      todos.push({ content, status: readStringProperty(entry[1], 'status') ?? 'pending' });
+    }
+  }
+
+  return todos;
+}
+
+/**
  * Recovers commands a script keeps in a local array and maps over, which is how
  * Codex batches several shell calls:
  *   `const cmds = ["a", "b"]; await Promise.all(cmds.map(command => tools.shell_command({ command })))`
@@ -377,7 +447,10 @@ export function parseCodexExecScript(input: unknown): CodexExecOperation[] {
         break;
       }
       case 'update_plan': {
-        operations.push({ kind: 'plan', plan: argumentSource });
+        const todos = readPlanSteps(argumentSource);
+        if (todos.length > 0) {
+          operations.push({ kind: 'plan', todos });
+        }
         break;
       }
       default:
@@ -965,7 +1038,6 @@ function readCodexPlanInput(rawArguments: unknown): AnyRecord {
         content: typeof step?.step === 'string' ? step.step : String(step?.content ?? ''),
         status: typeof step?.status === 'string' ? step.status : 'pending',
       })),
-      ...(typeof parsed.explanation === 'string' ? { explanation: parsed.explanation } : {}),
     };
   } catch {
     return { todos: [] };
@@ -1158,7 +1230,8 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
 
     // ── response_item ──────────────────────────────────────────────────────
     if (payload.type === 'message' && payload.role === 'assistant') {
-      const textContent = extractCodexTextContent(payload.content);
+      const cited = readCodexMemoryCitations(extractCodexTextContent(payload.content));
+      const textContent = cited.text;
       if (!textContent.trim()) {
         continue;
       }
@@ -1172,6 +1245,7 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
           toolName: 'ExitPlanMode',
           toolInput: JSON.stringify({ plan: proposedPlan }),
           toolCallId: planCallId,
+          memoryCitations: cited.memoryCitations,
         });
         messages.push({ type: 'tool_result', timestamp, toolCallId: planCallId, output: '' });
         continue;
@@ -1181,6 +1255,7 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
         type: 'assistant',
         timestamp,
         message: { role: 'assistant', content: textContent },
+        memoryCitations: cited.memoryCitations,
       });
       continue;
     }
@@ -1392,13 +1467,17 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
         }
 
         for (const plan of plans) {
+          // The script's own result covers whatever else it did, so the plan
+          // row is closed here — without one it would read as still running.
+          const planCallId = nextRowId();
           messages.push({
             type: 'tool_use',
             timestamp,
             toolName: 'TodoWrite',
-            toolInput: JSON.stringify(readCodexPlanInput(plan.plan)),
-            toolCallId: nextRowId(),
+            toolInput: JSON.stringify({ todos: plan.todos }),
+            toolCallId: planCallId,
           });
+          messages.push({ type: 'tool_result', timestamp, toolCallId: planCallId, output: '' });
         }
 
         if (patches.length > 0) {
@@ -1678,6 +1757,7 @@ export class CodexSessionsProvider implements IProviderSessions {
         kind: 'text',
         role: 'assistant',
         content,
+        memoryCitations: raw.memoryCitations,
       })];
     }
 
@@ -1693,6 +1773,7 @@ export class CodexSessionsProvider implements IProviderSessions {
         toolId: raw.toolCallId || baseId,
         subagentTools: raw.subagentTools,
         subagent: raw.subagent,
+        memoryCitations: raw.memoryCitations,
       })];
     }
 
@@ -1735,7 +1816,8 @@ export class CodexSessionsProvider implements IProviderSessions {
 
       switch (raw.itemType) {
         case 'agent_message': {
-          const text = String(raw.message?.content || '');
+          const cited = readCodexMemoryCitations(String(raw.message?.content || ''));
+          const text = cited.text;
           const proposedPlan = readCodexProposedPlan(text);
           if (proposedPlan) {
             // Same unification as history: a proposed plan is a plan card, not
@@ -1749,6 +1831,7 @@ export class CodexSessionsProvider implements IProviderSessions {
               toolName: 'ExitPlanMode',
               toolInput: { plan: proposedPlan },
               toolId: itemId,
+              memoryCitations: cited.memoryCitations,
             })];
           }
           return [createNormalizedMessage({
@@ -1759,6 +1842,7 @@ export class CodexSessionsProvider implements IProviderSessions {
             kind: 'text',
             role: 'assistant',
             content: text,
+            memoryCitations: cited.memoryCitations,
           })];
         }
         case 'reasoning':
@@ -1959,15 +2043,17 @@ export class CodexSessionsProvider implements IProviderSessions {
       }
     }
 
+    const unified = unifyInteractionMessages(normalized);
+
     let total = 0;
-    for (const msg of normalized) {
+    for (const msg of unified) {
       if (msg.kind !== 'tool_result') {
         total += 1;
       }
     }
     const normalizedOffset = Math.max(0, offset);
     const normalizedLimit = limit === null ? null : Math.max(0, limit);
-    const { page, hasMore } = sliceTailPage(normalized, normalizedLimit, normalizedOffset);
+    const { page, hasMore } = sliceTailPage(unified, normalizedLimit, normalizedOffset);
 
     return {
       messages: page,

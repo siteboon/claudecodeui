@@ -282,10 +282,27 @@ export type NormalizedMessage = {
   subagentTools?: SubagentActivity[];
   /** Identity and lifecycle of the subagent this `tool_use` spawned. */
   subagent?: SubagentInfo;
+  /** Stored memory the reply drew on, when the provider reports it. */
+  memoryCitations?: MemoryCitation[];
   toolUseResult?: unknown;
   sequence?: number;
   rowid?: number;
   [key: string]: unknown;
+};
+
+/**
+ * One stored memory an assistant reply drew on.
+ *
+ * Codex appends these to a reply that used its memory files, naming the file
+ * and line range it read plus a short note on what it took from there. The
+ * transcript shows them as a footnote so a memory-derived claim is traceable
+ * rather than arriving as an unattributed assertion.
+ */
+export type MemoryCitation = {
+  /** File and line range that was read, e.g. `MEMORY.md:137-142`. */
+  source: string;
+  /** What the reply took from that range, when the provider states it. */
+  note?: string;
 };
 
 /**

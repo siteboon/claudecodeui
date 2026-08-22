@@ -13,6 +13,7 @@ import type {
   SubagentInfo,
 } from '@/shared/types.js';
 import { parseFilesInputTag } from '@/shared/image-attachments.js';
+import { unifyInteractionMessages } from '@/shared/message-unification.js';
 import {
   createNormalizedMessage,
   generateMessageId,
@@ -929,15 +930,17 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       }
     }
 
+    const unified = unifyInteractionMessages(normalized);
+
     let total = 0;
-    for (const msg of normalized) {
+    for (const msg of unified) {
       if (msg.kind !== 'tool_result') {
         total += 1;
       }
     }
     const normalizedOffset = Math.max(0, offset);
     const normalizedLimit = limit === null ? null : Math.max(0, limit);
-    const { page, hasMore } = sliceTailPage(normalized, normalizedLimit, normalizedOffset);
+    const { page, hasMore } = sliceTailPage(unified, normalizedLimit, normalizedOffset);
 
     return {
       messages: page,

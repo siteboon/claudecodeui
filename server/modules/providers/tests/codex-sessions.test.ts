@@ -6,7 +6,7 @@ import test from 'node:test';
 
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import { CodexSessionSynchronizer } from '@/modules/providers/list/codex/codex-session-synchronizer.provider.js';
-import { CodexSessionsProvider } from '@/modules/providers/list/codex/codex-sessions.provider.js';
+import { CodexSessionsProvider, parseCodexExecScript, readCodexMemoryCitations } from '@/modules/providers/list/codex/codex-sessions.provider.js';
 
 const patchHomeDir = (nextHomeDir: string) => {
   const original = os.homedir;
@@ -458,4 +458,96 @@ test('Codex history attaches a spawned agent\'s own transcript to the Task row',
     restoreHomeDir();
     await rm(tempRoot, { recursive: true, force: true });
   }
+});
+
+test('Codex memory citations are lifted out of the reply they trail', () => {
+  const reply = [
+    'Here is the answer.',
+    '',
+    '<oai-mem-citation>',
+    '<citation_entries>',
+    'MEMORY.md:137-142|note=[used verified container provisioning details]',
+    'notes/deploy.md:4-9',
+    '</citation_entries>',
+    '<rollout_ids>',
+    '019eda6d-c2f7-70c1-8b42-bf03c44a1f35',
+    '</rollout_ids>',
+    '</oai-mem-citation>',
+  ].join('\n');
+
+  const { text, memoryCitations } = readCodexMemoryCitations(reply);
+
+  assert.equal(text, 'Here is the answer.');
+  assert.deepEqual(memoryCitations, [
+    { source: 'MEMORY.md:137-142', note: 'used verified container provisioning details' },
+    { source: 'notes/deploy.md:4-9' },
+  ]);
+});
+
+test('a plan followed by a memory citation is still recognized as a plan', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-plan-citation-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tempRoot);
+
+  try {
+    const providerSessionId = 'codex-plan-citation-1';
+    const sessionsDir = path.join(tempRoot, '.codex', 'sessions', '2026', '07', '07');
+    await mkdir(sessionsDir, { recursive: true });
+    await writeFile(path.join(sessionsDir, `rollout-${providerSessionId}.jsonl`), `${[
+      JSON.stringify({ type: 'session_meta', payload: { id: providerSessionId, cwd: workspacePath } }),
+      JSON.stringify({
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'assistant',
+          id: 'plan-1',
+          content: [{
+            type: 'output_text',
+            text: '<proposed_plan>\n# Ship it\n</proposed_plan>\n\n<oai-mem-citation>\n<citation_entries>\nMEMORY.md:1-2|note=[prior deploy steps]\n</citation_entries>\n</oai-mem-citation>',
+          }],
+        },
+      }),
+    ].join('\n')}\n`, 'utf8');
+
+    await withIsolatedDatabase(async () => {
+      sessionsDb.createAppSession('app-plan-citation-1', 'codex', workspacePath);
+      sessionsDb.assignProviderSessionId('app-plan-citation-1', providerSessionId);
+      await new CodexSessionSynchronizer().synchronize();
+
+      const history = await new CodexSessionsProvider().fetchHistory('app-plan-citation-1');
+      const plan = history.messages.find((message) => message.toolName === 'ExitPlanMode');
+
+      assert.ok(plan, 'the trailing citation block must not hide the plan envelope');
+      assert.equal(JSON.parse(String(plan.toolInput)).plan, '# Ship it');
+      assert.deepEqual(plan.memoryCitations, [{ source: 'MEMORY.md:1-2', note: 'prior deploy steps' }]);
+      assert.ok(
+        !history.messages.some((message) => JSON.stringify(message).includes('oai-mem-citation')),
+        'no transcript row may still carry the raw citation markup',
+      );
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('an exec script that updates the plan yields the steps it set', () => {
+  const operations = parseCodexExecScript([
+    'const p = await tools.update_plan({plan:[',
+    '  {step:"Confirm the current workspace",status:"completed"},',
+    '  {step:"Check the Git working-tree status",status:"in_progress"},',
+    '  {step:"Identify the project",status:"pending"}',
+    ']});',
+    'text(p);',
+  ].join('\n'));
+
+  assert.deepEqual(operations, [{
+    kind: 'plan',
+    todos: [
+      { content: 'Confirm the current workspace', status: 'completed' },
+      { content: 'Check the Git working-tree status', status: 'in_progress' },
+      { content: 'Identify the project', status: 'pending' },
+    ],
+  }]);
 });
