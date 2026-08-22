@@ -30,6 +30,9 @@ export default defineConfig(({ mode }) => {
       port: parseInt(env.VITE_PORT) || 5173,
       proxy: {
         '/api': `http://${proxyHost}:${serverPort}`,
+        // The version checker reads installMode / version / updateCheckDisabled
+        // from /health, so it has to reach the backend in dev too.
+        '/health': `http://${proxyHost}:${serverPort}`,
         '/ws': {
           target: `ws://${proxyHost}:${serverPort}`,
           ws: true
