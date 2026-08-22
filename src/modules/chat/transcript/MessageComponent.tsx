@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LLMProvider,DiffLine,Project } from '@/shared/types';
 import { formatUsageLimitText, stripProposedPlanEnvelope } from '@/modules/chat/utils/chatFormatting';
-import { ToolRenderer, ToolErrorDisplay, shouldHideToolResult } from '@/modules/chat/tools';
+import { ToolRenderer, ToolErrorDisplay, SubagentPanel, shouldHideToolResult } from '@/modules/chat/tools';
 import { LLMProviderLogo } from '@/shared/ui';
 import { Reasoning, ReasoningContent, ReasoningTrigger } from '@/modules/chat/transcript/Reasoning';
 import ChatMessageImages from '@/modules/chat/transcript/ChatMessageImages';
@@ -169,7 +169,19 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
 
           <div className="w-full">
 
-            {message.isToolUse ? (
+            {message.isSubagentContainer ? (
+              /* A spawned agent owns its whole card — header, timeline and
+                 result — so it never goes through the tool input/result pair. */
+              <SubagentPanel
+                toolInput={message.toolInput}
+                toolResult={message.toolResult}
+                subagent={message.subagent}
+                activity={message.subagentActivity}
+                onFileOpen={onFileOpen}
+                createDiff={createDiff}
+                selectedProject={selectedProject}
+              />
+            ) : message.isToolUse ? (
               <>
                 <div className="flex flex-col">
                   <div className="flex flex-col">
@@ -191,8 +203,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                     selectedProject={selectedProject}
                     showRawParameters={showRawParameters}
                     rawToolInput={typeof message.toolInput === 'string' ? message.toolInput : undefined}
-                    isSubagentContainer={message.isSubagentContainer}
-                    subagentState={message.subagentState}
+                    toolStatus={message.toolStatus}
                   />
                 )}
 

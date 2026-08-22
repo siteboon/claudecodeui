@@ -41,6 +41,53 @@ export type ToolDisplayConfig = {
   };
 };
 
+/**
+ * Input keys that identify what a call operated on, most specific first. Used
+ * to summarize a tool this registry has no entry for.
+ */
+const DESCRIPTIVE_INPUT_KEYS = [
+  'command', 'cmd', 'file_path', 'path', 'filePath', 'pattern', 'query', 'url',
+  'prompt', 'description', 'name', 'selector', 'text', 'skill', 'id',
+] as const;
+
+/** Builds a one-line summary of an unmapped tool's input. */
+function summarizeToolInput(input: unknown): string {
+  if (typeof input === 'string') {
+    return input.length > 80 ? `${input.slice(0, 80)}…` : input || 'Parameters';
+  }
+  if (!input || typeof input !== 'object') {
+    return 'Parameters';
+  }
+
+  const record = input as Record<string, unknown>;
+  for (const key of DESCRIPTIVE_INPUT_KEYS) {
+    const value = record[key];
+    if (typeof value === 'string' && value.trim()) {
+      const single = value.replace(/\s+/g, ' ').trim();
+      return single.length > 80 ? `${single.slice(0, 80)}…` : single;
+    }
+  }
+
+  const keys = Object.keys(record);
+  return keys.length > 0 ? keys.slice(0, 3).join(', ') : 'Parameters';
+}
+
+/**
+ * Turns a namespaced MCP tool id into something readable.
+ *
+ * Providers name MCP tools `mcp__<server>__<tool>`, which is accurate and
+ * unreadable. The tool part is the action; the server is context.
+ *
+ * Used by chat's ToolRenderer to label every tool row.
+ */
+export function formatToolDisplayName(toolName: string): string {
+  const mcpMatch = /^mcp__([^_]+(?:_[^_]+)*)__(.+)$/.exec(toolName);
+  if (!mcpMatch) {
+    return toolName;
+  }
+  return `${mcpMatch[2]} (${mcpMatch[1]})`;
+}
+
 export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
   // ============================================================================
   // COMMAND TOOLS
@@ -66,6 +113,78 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     result: {
       hideOnSuccess: true,
       type: 'special'
+    }
+  },
+
+  // Claude exposes a separate PowerShell tool on Windows. It is the same
+  // interaction as Bash, so it gets the same command row rather than falling
+  // through to the generic parameter dump.
+  PowerShell: {
+    input: {
+      type: 'one-line',
+      icon: 'terminal',
+      getValue: (input) => input.command,
+      getSecondary: (input) => input.description,
+      action: 'copy',
+      style: 'terminal',
+      wrapText: true,
+      colorScheme: {
+        primary: 'text-green-400 font-mono',
+        secondary: 'text-gray-400',
+        background: '',
+        border: 'border-green-500 dark:border-green-400',
+        icon: 'text-green-500 dark:text-green-400'
+      }
+    },
+    result: {
+      hideOnSuccess: true,
+      type: 'special'
+    }
+  },
+
+  // ============================================================================
+  // WEB TOOLS
+  // ============================================================================
+
+  WebSearch: {
+    input: {
+      type: 'one-line',
+      label: 'Search',
+      getValue: (input) => input.query || '',
+      action: 'none',
+      colorScheme: {
+        primary: 'text-gray-700 dark:text-gray-300',
+        border: 'border-sky-400 dark:border-sky-500',
+        icon: 'text-sky-500 dark:text-sky-400'
+      }
+    },
+    result: {
+      type: 'collapsible',
+      title: 'Search results',
+      defaultOpen: false,
+      contentType: 'text',
+      getContentProps: (result) => ({ content: String(result?.content || ''), format: 'plain' })
+    }
+  },
+
+  WebFetch: {
+    input: {
+      type: 'one-line',
+      label: 'Fetch',
+      getValue: (input) => input.url || '',
+      action: 'none',
+      colorScheme: {
+        primary: 'text-gray-700 dark:text-gray-300',
+        border: 'border-sky-400 dark:border-sky-500',
+        icon: 'text-sky-500 dark:text-sky-400'
+      }
+    },
+    result: {
+      type: 'collapsible',
+      title: 'Fetched page',
+      defaultOpen: false,
+      contentType: 'text',
+      getContentProps: (result) => ({ content: String(result?.content || ''), format: 'plain' })
     }
   },
 
@@ -234,11 +353,17 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
   // TODO TOOLS
   // ============================================================================
 
+  // Both providers normalize their running checklist onto this tool — Claude's
+  // TodoWrite and Codex's update_plan / todo_list — so one renderer covers both.
   TodoWrite: {
     input: {
       type: 'collapsible',
-      title: 'Updating todo list',
-      defaultOpen: false,
+      title: (input) => {
+        const todos = Array.isArray(input?.todos) ? input.todos : [];
+        const done = todos.filter((todo: any) => todo?.status === 'completed').length;
+        return todos.length > 0 ? `Plan — ${done}/${todos.length} done` : 'Updating todo list';
+      },
+      defaultOpen: true,
       contentType: 'todo-list',
       getContentProps: (input) => ({
         todos: input.todos
@@ -375,6 +500,22 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
   // ============================================================================
   // SUBAGENT TASK TOOL
   // ============================================================================
+
+  // Claude's async subagent tool. A row that actually spawned an agent is
+  // rendered by SubagentPanel; this config only supplies the name and preview
+  // used by tool grouping.
+  Agent: {
+    input: {
+      type: 'collapsible',
+      title: (input) => input.description || input.subagent_type || 'Subagent',
+      defaultOpen: false,
+      contentType: 'markdown',
+      getContentProps: (input) => ({ content: input.prompt || '' })
+    },
+    result: {
+      hideOnSuccess: true
+    }
+  },
 
   Task: {
     input: {
@@ -523,14 +664,13 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     }
   },
 
-  // ============================================================================
-  // DEFAULT FALLBACK
-  // ============================================================================
-
-  Default: {
+  // An `exec` row only survives translation when nothing in the script was
+  // recognized, so show the script as code instead of pretending it is a
+  // command that ran.
+  exec: {
     input: {
       type: 'collapsible',
-      title: 'Parameters',
+      title: 'Sandbox script',
       defaultOpen: false,
       contentType: 'text',
       getContentProps: (input) => ({
@@ -540,6 +680,33 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     },
     result: {
       type: 'collapsible',
+      title: 'Output',
+      contentType: 'text',
+      getContentProps: (result) => ({ content: String(result?.content || ''), format: 'plain' })
+    }
+  },
+
+  // ============================================================================
+  // DEFAULT FALLBACK
+  // ============================================================================
+
+  Default: {
+    input: {
+      type: 'collapsible',
+      // A tool with no config still deserves a line that says what it did.
+      // Every row reading "Parameters" is what made unmapped provider tools
+      // unreadable in the transcript.
+      title: (input) => summarizeToolInput(input),
+      defaultOpen: false,
+      contentType: 'text',
+      getContentProps: (input) => ({
+        content: typeof input === 'string' ? input : JSON.stringify(input, null, 2),
+        format: 'code'
+      })
+    },
+    result: {
+      type: 'collapsible',
+      title: 'Output',
       contentType: 'text',
       getContentProps: (result) => {
         let content = result?.content || '';

@@ -230,13 +230,27 @@ export type ChatImage = {
   data?: string;
 } & ChatAttachment;
 
-/** One tool call made during a subagent (Task) run, collected so the transcript can list a subagent's nested tool activity inside a single collapsible container. */
-export type SubagentChildTool = {
-  toolId: string;
-  toolName: string;
-  toolInput: unknown;
+/** One entry in a subagent's recorded timeline, normalized by the backend from either provider's transcript; `kind` decides whether the tool fields or `content` carry the entry, so read only the set that matches. */
+export type SubagentActivity = {
+  kind: 'tool' | 'text' | 'thinking';
+  timestamp?: string;
+  toolId?: string;
+  toolName?: string;
+  toolInput?: unknown;
   toolResult?: ToolResult | null;
-  timestamp: Date;
+  content?: string;
+};
+
+/** Identity and lifecycle of one spawned subagent as the backend reports it; present on the tool call that spawned the agent and used to draw its container header. */
+export type SubagentInfo = {
+  id: string;
+  name?: string;
+  type?: string;
+  description?: string;
+  status: 'running' | 'completed' | 'failed';
+  model?: string;
+  /** Total entries the agent recorded, which exceeds the received timeline when a long run was truncated for transport. */
+  activityCount?: number;
 };
 
 /** One rendered entry in a chat transcript — user turn, assistant turn, tool call and result, local command output, or subagent container — and the shape the chat message list and message components consume. */
@@ -264,11 +278,12 @@ export type ChatMessage = {
   isLocalCommandStdout?: boolean;
   isCompactSummary?: boolean;
   isSubagentContainer?: boolean;
-  subagentState?: {
-    childTools: SubagentChildTool[];
-    currentToolIndex: number;
-    isComplete: boolean;
-  };
+  /** The agent this row spawned, when it spawned one. Its presence is what makes a row a subagent container. */
+  subagent?: SubagentInfo;
+  /** What that agent did, in order. Empty while the agent is still starting up. */
+  subagentActivity?: SubagentActivity[];
+  /** Lifecycle the provider reported for this tool call, when it reports one; otherwise the status is inferred from whether a result has arrived. */
+  toolStatus?: string;
   [key: string]: unknown;
 };
 
@@ -327,7 +342,7 @@ export type SessionEstablishedContext = {
 };
 
 /** The result returned for a tool call, carrying its content, error flag, timestamp and any provider-specific extras that the tool renderers read. */
-type ToolResult = {
+export type ToolResult = {
   content?: unknown;
   isError?: boolean;
   timestamp?: string | number | Date;
@@ -396,7 +411,10 @@ export type NormalizedMessage = {
   exitCode?: number;
   actualSessionId?: string;
   parentToolUseId?: string;
-  subagentTools?: unknown[];
+  /** Timeline of a spawned subagent's work, attached by the backend to the tool call that spawned it. */
+  subagentTools?: SubagentActivity[];
+  /** Identity and lifecycle of that subagent. */
+  subagent?: SubagentInfo;
   isFinal?: boolean;
   // Cursor-specific ordering
   sequence?: number;

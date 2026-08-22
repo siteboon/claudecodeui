@@ -103,17 +103,19 @@ test('an unparsable tool input does not throw while grouping', () => {
   assert.equal(group.preview, '+2 more');
 });
 
-test('a tool with no getValue falls back to its config title', () => {
+test('a tool with no config is previewed by what it operated on', () => {
   // Exercises the other half of getToolInputPreview: unknown tools resolve to
-  // the Default config, which has a title and no getValue.
+  // the Default config, whose title summarizes the input. Previewing the
+  // config's own label instead made every unmapped provider tool collapse into
+  // an identical, meaningless "Parameters, Parameters" line.
   const items = groupConsecutiveTools([
-    toolMessage('SomeUnknownTool', { a: 1 }),
-    toolMessage('SomeUnknownTool', { b: 2 }),
+    toolMessage('SomeUnknownTool', { command: 'npm test' }),
+    toolMessage('SomeUnknownTool', { file_path: '/repo/a.ts' }),
   ]);
 
   const [group] = items;
   assert.ok(isToolGroupItem(group));
-  assert.equal(group.preview, 'Parameters, Parameters');
+  assert.equal(group.preview, 'npm test, /repo/a.ts');
 });
 
 test('the group carries the run\u2019s first timestamp, which is what the search jump matches on', () => {

@@ -8,5 +8,6 @@
 // only, and the ContentRenderers/ and InteractiveRenderers/ barrels that made
 // the cycle possible are gone.
 export { ToolRenderer } from '@/modules/chat/tools/ToolRenderer';
+export { SubagentPanel } from '@/modules/chat/tools/SubagentPanel';
 export { ToolErrorDisplay } from '@/modules/chat/tools/ToolErrorDisplay';
 export { getToolConfig, shouldHideToolResult } from '@/modules/chat/tools/configs/toolConfigs';
