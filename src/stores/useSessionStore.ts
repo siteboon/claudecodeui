@@ -10,6 +10,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { authenticatedFetch } from '../utils/api';
+import { serverNowIso } from '../utils/serverClock';
 import type { LLMProvider } from '../types/app';
 
 import { removeOptimisticUserEchoes } from './sessionMessageReconciliation';
@@ -844,7 +845,7 @@ export function useSessionStore() {
     const msg: NormalizedMessage = {
       id: streamId,
       sessionId,
-      timestamp: new Date().toISOString(),
+      timestamp: serverNowIso(),
       provider: msgProvider,
       kind: 'stream_delta',
       content: accumulatedText,
