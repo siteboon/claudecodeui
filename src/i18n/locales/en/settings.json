@@ -157,6 +157,10 @@
       "alphabetical": "Alphabetical",
       "recentActivity": "Recent Activity"
     },
+    "projectGrouping": {
+      "label": "Group Projects by Name",
+      "description": "Combine projects from different paths that share the same folder name into one sidebar group"
+    },
     "codeEditor": {
       "title": "Code Editor",
       "theme": {

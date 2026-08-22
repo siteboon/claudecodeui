@@ -41,6 +41,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     saveStatus,
     projectSortOrder,
     setProjectSortOrder,
+    groupProjectsByName,
+    setGroupProjectsByName,
     codeEditorSettings,
     updateCodeEditorSetting,
     claudePermissions,
@@ -165,6 +167,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
                 <AppearanceSettingsTab
                   projectSortOrder={projectSortOrder}
                   onProjectSortOrderChange={setProjectSortOrder}
+                  groupProjectsByName={groupProjectsByName}
+                  onGroupProjectsByNameChange={setGroupProjectsByName}
                   codeEditorSettings={codeEditorSettings}
                   onCodeEditorWordWrapChange={(value) => updateCodeEditorSetting('wordWrap', value)}
                   onCodeEditorShowMinimapChange={(value) => updateCodeEditorSetting('showMinimap', value)}

@@ -132,6 +132,10 @@
       "alphabetical": "Alfabetik",
       "recentActivity": "Son Etkinlik"
     },
+    "projectGrouping": {
+      "label": "Projeleri ada göre grupla",
+      "description": "Aynı klasör adını paylaşan farklı yollardaki projeleri tek grupta birleştirir"
+    },
     "codeEditor": {
       "title": "Kod Editörü",
       "theme": {

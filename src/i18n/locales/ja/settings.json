@@ -131,6 +131,10 @@
       "alphabetical": "アルファベット順",
       "recentActivity": "最近のアクティビティ順"
     },
+    "projectGrouping": {
+      "label": "プロジェクトを名前でグループ化",
+      "description": "同じフォルダー名を持つ異なるパスのプロジェクトを1つのグループにまとめます"
+    },
     "codeEditor": {
       "title": "コードエディタ",
       "theme": {

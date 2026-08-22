@@ -131,6 +131,10 @@
       "alphabetical": "Alphabétique",
       "recentActivity": "Activité récente"
     },
+    "projectGrouping": {
+      "label": "Regrouper les projets par nom",
+      "description": "Regroupe les projets de chemins différents portant le même nom de dossier dans un seul groupe"
+    },
     "codeEditor": {
       "title": "Éditeur de code",
       "theme": {

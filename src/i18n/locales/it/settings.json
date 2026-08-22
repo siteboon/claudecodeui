@@ -131,6 +131,10 @@
       "alphabetical": "Alfabetico",
       "recentActivity": "Attività recente"
     },
+    "projectGrouping": {
+      "label": "Raggruppa progetti per nome",
+      "description": "Raggruppa i progetti di percorsi diversi che condividono lo stesso nome di cartella"
+    },
     "codeEditor": {
       "title": "Editor codice",
       "theme": {

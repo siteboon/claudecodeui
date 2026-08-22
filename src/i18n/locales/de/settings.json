@@ -131,6 +131,10 @@
       "alphabetical": "Alphabetisch",
       "recentActivity": "Letzte Aktivität"
     },
+    "projectGrouping": {
+      "label": "Projekte nach Namen gruppieren",
+      "description": "Fasst Projekte aus verschiedenen Pfaden mit demselben Ordnernamen in einer Seitenleisten-Gruppe zusammen"
+    },
     "codeEditor": {
       "title": "Code-Editor",
       "theme": {
