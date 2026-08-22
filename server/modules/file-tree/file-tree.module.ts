@@ -5,7 +5,9 @@ import os from 'node:os';
 import mime from 'mime-types';
 import multer from 'multer';
 
+import { generateDownloadToken } from '@/modules/auth/index.js';
 import { projectsDb } from '@/modules/database/index.js';
+import { createFileDownloadRouter } from '@/modules/file-tree/file-tree.download.routes.js';
 import { createFileTreeRouter } from '@/modules/file-tree/file-tree.routes.js';
 import { createFileTreeService } from '@/modules/file-tree/file-tree.service.js';
 import type {
@@ -113,4 +115,12 @@ export const fileTreeRoutes = createFileTreeRouter(
     maximumFileCount: MAXIMUM_UPLOAD_FILE_COUNT,
   },
   fileTreeLogger,
+  (user, target) => generateDownloadToken(user, target),
 );
+
+/**
+ * Native download router mounted at `/api/download`. It lives behind the
+ * capability-token middleware instead of the session middleware, so it cannot
+ * share the `/api/file-tree` mount.
+ */
+export const fileDownloadRoutes = createFileDownloadRouter(fileTreeServices, fileTreeLogger);

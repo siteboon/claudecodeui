@@ -21,6 +21,7 @@ import { getConnectableHost } from '../shared/networkHosts.js';
 
 import { createGitModule } from './modules/git/index.js';
 import {
+    authenticateDownloadToken,
     authenticateToken,
     authenticateWebSocket,
     authRoutes,
@@ -44,7 +45,7 @@ import providerRoutes from './modules/providers/provider.routes.js';
 import { voiceRoutes } from './modules/voice/index.js';
 import browserUseRoutes from './modules/browser-use/browser-use.routes.js';
 import { assetsRoutes } from './modules/assets/index.js';
-import { fileTreeRoutes } from './modules/file-tree/index.js';
+import { fileDownloadRoutes, fileTreeRoutes } from './modules/file-tree/index.js';
 import { worktreesRoutes } from './modules/worktrees/index.js';
 import browserUseMcpRoutes from './modules/browser-use/browser-use-mcp.routes.js';
 import { browserUseService } from './modules/browser-use/browser-use.service.js';
@@ -150,6 +151,9 @@ app.use('/api/auth', authRoutes);
 
 // File Tree API Routes (protected)
 app.use('/api/file-tree', authenticateToken, fileTreeRoutes);
+
+// Native file download (scoped 60s capability token in the URL, not a session)
+app.use('/api/download', authenticateDownloadToken, fileDownloadRoutes);
 
 // Projects API Routes (protected)
 app.use('/api/projects', authenticateToken, projectModuleRoutes);

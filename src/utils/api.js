@@ -250,6 +250,14 @@ export const api = {
     authenticatedFetch(`/api/file-tree/projects/${projectId}/file?filePath=${encodeURIComponent(filePath)}`),
   readFileBlob: (projectId, filePath) =>
     authenticatedFetch(`/api/file-tree/projects/${projectId}/files/content?path=${encodeURIComponent(filePath)}`),
+  requestDownloadTicket: (projectId, filePath) =>
+    authenticatedFetch(`/api/file-tree/projects/${projectId}/files/download-ticket`, {
+      method: 'POST',
+      body: JSON.stringify({ path: filePath }),
+    }),
+  // The 60s capability token is the whole credential: a native download cannot
+  // carry an Authorization header.
+  fileDownloadUrl: (token) => `/api/download/file?t=${encodeURIComponent(token)}`,
   saveFile: (projectId, filePath, content) =>
     authenticatedFetch(`/api/file-tree/projects/${projectId}/file`, {
       method: 'PUT',

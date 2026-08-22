@@ -369,3 +369,65 @@ test('createEntry performs filesystem mutation only through the injected adapter
   assert.equal(result.path, targetPath);
   assert.deepEqual(writtenFiles, [{ filePath: targetPath, content: '' }]);
 });
+
+test('resolveDownloadTarget reports the resolved path, name, and size without opening a stream', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const filePath = path.join(projectRoot, 'docs', 'отчёт 2026.pdf');
+  const fileSystem = createFakeFileSystem({
+    stat: async (candidatePath) => {
+      assert.equal(candidatePath, filePath);
+      return createStats(false, 0o644);
+    },
+    createReadStream: () => {
+      throw new Error('resolveDownloadTarget must not open a read stream');
+    },
+  });
+  const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
+
+  const target = await service.resolveDownloadTarget('project-1', 'docs/отчёт 2026.pdf');
+
+  assert.deepEqual(target, { path: filePath, name: 'отчёт 2026.pdf', size: 24 });
+});
+
+test('resolveDownloadTarget reports a missing file as 404', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const fileSystem = createFakeFileSystem({
+    stat: async () => {
+      throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+    },
+  });
+  const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
+
+  await assert.rejects(
+    () => service.resolveDownloadTarget('project-1', 'gone.txt'),
+    (error: unknown) => error instanceof AppError && error.statusCode === 404,
+  );
+});
+
+test('resolveDownloadTarget rejects a directory because folders use the ZIP path', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const fileSystem = createFakeFileSystem({
+    stat: async () => createStats(true, 0o755),
+  });
+  const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
+
+  await assert.rejects(
+    () => service.resolveDownloadTarget('project-1', 'src'),
+    (error: unknown) => error instanceof AppError && error.statusCode === 400,
+  );
+});
+
+test('resolveDownloadTarget rejects a path outside the project root before touching the filesystem', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const fileSystem = createFakeFileSystem({
+    stat: async () => {
+      throw new Error('stat must not run for a path outside the project root');
+    },
+  });
+  const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
+
+  await assert.rejects(
+    () => service.resolveDownloadTarget('project-1', '../../etc/passwd'),
+    (error: unknown) => error instanceof AppError && error.statusCode === 403,
+  );
+});
