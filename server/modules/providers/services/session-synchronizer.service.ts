@@ -1,10 +1,64 @@
-import { scanStateDb } from '@/modules/database/index.js';
+import path from 'node:path';
+import { access } from 'node:fs/promises';
+
+import { scanStateDb, sessionsDb } from '@/modules/database/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import type { LLMProvider } from '@/shared/types.js';
 
 type SessionSynchronizeResult = {
   processedByProvider: Record<LLMProvider, number>;
+  /** Indexed sessions dropped because their transcript file no longer exists. */
+  prunedOrphans: number;
   failures: string[];
+};
+
+const pathExists = async (target: string): Promise<boolean> => {
+  try {
+    await access(target);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Removes indexed sessions whose transcript file has disappeared from disk.
+ *
+ * Nothing else deletes these rows: the synchronizers only ever upsert, and the
+ * watcher reacts to `add`/`change` but not `unlink`. A transcript removed by
+ * hand — or written by a test run that pointed at the real `~/.claude` — left a
+ * permanent sidebar entry that opened an empty "Untitled" session.
+ *
+ * A row is only dropped when its *containing directory* still exists. That
+ * keeps an unmounted or not-yet-created home from being read as "every
+ * transcript was deleted" and wiping the whole index.
+ */
+const pruneOrphanedSessions = async (): Promise<number> => {
+  const knownDirectoryExists = new Map<string, boolean>();
+  let pruned = 0;
+
+  for (const { session_id: sessionId, jsonl_path: jsonlPath } of sessionsDb.getSessionsWithTranscriptPath()) {
+    if (await pathExists(jsonlPath)) {
+      continue;
+    }
+
+    const directory = path.dirname(jsonlPath);
+    let directoryExists = knownDirectoryExists.get(directory);
+    if (directoryExists === undefined) {
+      directoryExists = await pathExists(directory);
+      knownDirectoryExists.set(directory, directoryExists);
+    }
+
+    if (!directoryExists) {
+      continue;
+    }
+
+    if (sessionsDb.deleteSessionById(sessionId)) {
+      pruned += 1;
+    }
+  }
+
+  return pruned;
 };
 
 /**
@@ -42,6 +96,10 @@ export const sessionSynchronizerService = {
       failures.push(reason);
     }
 
+    // Pruning is skipped after a partial sync: a provider that just failed may
+    // not have re-indexed transcripts it would otherwise have re-created.
+    const prunedOrphans = failures.length === 0 ? await pruneOrphanedSessions() : 0;
+
     if (failures.length === 0) {
       scanStateDb.updateLastScannedAt(scanBoundary);
     } else {
@@ -52,6 +110,7 @@ export const sessionSynchronizerService = {
 
     return {
       processedByProvider,
+      prunedOrphans,
       failures,
     };
   },

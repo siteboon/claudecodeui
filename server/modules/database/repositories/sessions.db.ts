@@ -521,4 +521,24 @@ export const sessionsDb = {
     const db = getConnection();
     return db.prepare('DELETE FROM sessions WHERE session_id = ?').run(sessionId).changes > 0;
   },
+
+  /**
+   * Lists every indexed session that claims a transcript file on disk.
+   *
+   * Only rows with a `jsonl_path` are returned, which deliberately excludes
+   * app-created sessions still waiting for their first provider write and
+   * OpenCode rows (whose transcripts all live inside one shared sqlite file).
+   * Used by the session synchronizer to find rows whose transcript has been
+   * deleted underneath the index.
+   */
+  getSessionsWithTranscriptPath(): Array<{ session_id: string; jsonl_path: string }> {
+    const db = getConnection();
+    return db
+      .prepare(
+        `SELECT session_id, jsonl_path
+         FROM sessions
+         WHERE jsonl_path IS NOT NULL AND jsonl_path <> ''`
+      )
+      .all() as Array<{ session_id: string; jsonl_path: string }>;
+  },
 };

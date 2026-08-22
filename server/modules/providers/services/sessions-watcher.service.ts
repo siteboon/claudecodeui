@@ -262,6 +262,7 @@ export async function initializeSessionsWatcher(): Promise<void> {
   const initialSync = await sessionSynchronizerService.synchronizeSessions();
   console.log('Initial session synchronization complete', {
     processedByProvider: initialSync.processedByProvider,
+    prunedOrphans: initialSync.prunedOrphans,
     failures: initialSync.failures,
   });
 
