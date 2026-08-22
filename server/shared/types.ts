@@ -274,11 +274,88 @@ export type NormalizedMessage = {
   status?: string;
   summary?: string;
   tokenBudget?: unknown;
-  subagentTools?: unknown;
+  /**
+   * Timeline of everything a subagent did, attached to the `tool_use` that
+   * spawned it. Present for Claude `Agent`/`Task` calls and Codex
+   * `spawn_agent` calls; absent for every other tool.
+   */
+  subagentTools?: SubagentActivity[];
+  /** Identity and lifecycle of the subagent this `tool_use` spawned. */
+  subagent?: SubagentInfo;
+  /** Stored memory the reply drew on, when the provider reports it. */
+  memoryCitations?: MemoryCitation[];
   toolUseResult?: unknown;
   sequence?: number;
   rowid?: number;
   [key: string]: unknown;
+};
+
+/**
+ * One stored memory an assistant reply drew on.
+ *
+ * Codex appends these to a reply that used its memory files, naming the file
+ * and line range it read plus a short note on what it took from there. The
+ * transcript shows them as a footnote so a memory-derived claim is traceable
+ * rather than arriving as an unattributed assertion.
+ */
+export type MemoryCitation = {
+  /** File and line range that was read, e.g. `MEMORY.md:137-142`. */
+  source: string;
+  /** What the reply took from that range, when the provider states it. */
+  note?: string;
+};
+
+/**
+ * One entry in a subagent's recorded timeline.
+ *
+ * Providers store a subagent's work in a separate transcript (Claude:
+ * `<session>/subagents/agent-<id>.jsonl`; Codex: a sibling rollout keyed by
+ * `agent_thread_id`). Both are flattened into this shape so the transcript can
+ * replay a subagent's run with the same renderers the main thread uses.
+ *
+ * `kind` decides which fields matter: `tool` uses the tool fields, `text` and
+ * `thinking` use `content`. Consumers must not assume tool fields exist on the
+ * text kinds.
+ */
+export type SubagentActivity = {
+  kind: 'tool' | 'text' | 'thinking';
+  timestamp?: string;
+  /** Tool-call identity; only set when `kind` is `tool`. */
+  toolId?: string;
+  toolName?: string;
+  toolInput?: unknown;
+  toolResult?: { content?: string; isError?: boolean } | null;
+  /** Message body; only set when `kind` is `text` or `thinking`. */
+  content?: string;
+};
+
+/**
+ * Identity and lifecycle of one spawned subagent, normalized across providers.
+ *
+ * `status` is `running` until the call that spawned the agent resolves. After
+ * that it is whatever the provider reported — Claude's task notification
+ * carries one — and `completed` when the provider reported nothing. A failed
+ * tool call *inside* the agent is not a failed agent, so it is never inferred
+ * from the transcript.
+ */
+export type SubagentInfo = {
+  /** Provider-native agent id — Claude `agentId`, Codex `agent_thread_id`. */
+  id: string;
+  /** Human-facing label: Claude's agent type, or Codex's assigned nickname. */
+  name?: string;
+  /** Agent type/preset when the provider records one (Claude `agentType`). */
+  type?: string;
+  /** One-line task summary shown in the collapsed header. */
+  description?: string;
+  status: 'running' | 'completed' | 'failed';
+  /** Model the subagent ran on, when the provider records it. */
+  model?: string;
+  /**
+   * How many activities the agent actually recorded. It exceeds
+   * `subagentTools.length` when a long run was truncated for transport, which
+   * lets the UI say so instead of silently showing a partial timeline.
+   */
+  activityCount?: number;
 };
 
 /**

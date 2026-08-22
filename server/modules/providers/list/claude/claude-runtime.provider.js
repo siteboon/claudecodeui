@@ -24,7 +24,10 @@ import {
   buildClaudeUserContent,
   normalizeImageDescriptors
 } from '@/shared/image-attachments.js';
-import { CLAUDE_PREDEFINED_MODELS } from '@/modules/providers/list/claude/claude-models.provider.js';
+import {
+  CLAUDE_PREDEFINED_MODELS,
+  CLAUDE_ULTRACODE_EFFORT
+} from '@/modules/providers/list/claude/claude-models.provider.js';
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
 import {
   createNotificationEvent,
@@ -69,6 +72,12 @@ const BG_WAIT_CEILING_MS = 30 * 60 * 1000;
 
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
+// Ultracode is a session-scoped setting rather than an SDK effort level: it pairs xhigh
+// effort with standing dynamic-workflow orchestration, and the CLI only honours it when
+// Workflows are enabled. The catalog offers it as an effort choice for the picker, so the
+// selection is translated back into the two options the SDK actually understands here.
+const ULTRACODE_SDK_EFFORT = 'xhigh';
+
 function resolveClaudeEffort(model, effort, modelsDefinition = CLAUDE_PREDEFINED_MODELS) {
   const selectedModel = modelsDefinition?.OPTIONS?.find((option) => option.value === model) || null;
   const allowedEfforts = selectedModel?.effort?.values
@@ -76,6 +85,30 @@ function resolveClaudeEffort(model, effort, modelsDefinition = CLAUDE_PREDEFINED
   return typeof effort === 'string' && effort !== 'default' && allowedEfforts.includes(effort)
     ? effort
     : undefined;
+}
+
+/**
+ * Writes the resolved effort choice onto the SDK options, expanding `ultracode` into the
+ * xhigh effort level plus the session-scoped settings it requires.
+ * @param {Object} sdkOptions - SDK options being built
+ * @param {string|undefined} resolvedEffort - Catalog-validated effort selection
+ */
+function applyClaudeEffort(sdkOptions, resolvedEffort) {
+  if (!resolvedEffort) {
+    return;
+  }
+
+  if (resolvedEffort !== CLAUDE_ULTRACODE_EFFORT) {
+    sdkOptions.effort = resolvedEffort;
+    return;
+  }
+
+  sdkOptions.effort = ULTRACODE_SDK_EFFORT;
+  sdkOptions.settings = {
+    ...(sdkOptions.settings || {}),
+    ultracode: true,
+    enableWorkflows: true
+  };
 }
 
 function createRequestId() {
@@ -235,14 +268,11 @@ function mapCliOptionsToSDK(options = {}) {
 
   sdkOptions.model = options.model || CLAUDE_PREDEFINED_MODELS.DEFAULT;
 
-  const resolvedEffort = resolveClaudeEffort(
+  applyClaudeEffort(sdkOptions, resolveClaudeEffort(
     sdkOptions.model,
     effort,
     options.effortModels || CLAUDE_PREDEFINED_MODELS,
-  );
-  if (resolvedEffort) {
-    sdkOptions.effort = resolvedEffort;
-  }
+  ));
 
   sdkOptions.systemPrompt = {
     type: 'preset',
