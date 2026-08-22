@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { ActivityIcon } from 'lucide-react';
 
 type TokenUsageSummaryProps = {
@@ -34,7 +35,7 @@ const readUsageNumber = (value: unknown) => {
  * Rendered by chat's ChatComposer to show the session's context-window usage
  * and open the detailed token breakdown on click.
  */
-export default function TokenUsageSummary({ usage, onClick }: TokenUsageSummaryProps) {
+function TokenUsageSummary({ usage, onClick }: TokenUsageSummaryProps) {
   const breakdown =
     usage?.breakdown && typeof usage.breakdown === 'object'
       ? usage.breakdown as Record<string, unknown>
@@ -59,3 +60,6 @@ export default function TokenUsageSummary({ usage, onClick }: TokenUsageSummaryP
     </button>
   );
 }
+
+/** Memoized: the composer re-renders on every keystroke and this row's numbers only move when a turn ends. */
+export default memo(TokenUsageSummary);

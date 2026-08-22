@@ -91,7 +91,8 @@
           "src/shared/selectedProvider.ts",
           "src/shared/authToken.ts",
           "src/shared/voiceConfig.ts",
-          "src/shared/codeEditorSettings.ts"
+          "src/shared/codeEditorSettings.ts",
+          "src/shared/syntaxHighlighter.ts"
         ],
         "mode": "file"
       },

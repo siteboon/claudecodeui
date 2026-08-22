@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import {
   Activity,
   BadgeCheck,
@@ -527,7 +527,7 @@ function StatusContent({ data }: { data: StatusCommandData }) {
  * Rendered by chat's ChatInterface to present the result of a slash command
  * (help, model picker, cost or status) in a modal over the transcript.
  */
-export default function CommandResultModal({
+function CommandResultModal({
   payload,
   onClose,
   providerModelCatalog,
@@ -644,3 +644,6 @@ export default function CommandResultModal({
     </Dialog>
   );
 }
+
+/** Memoized: chat re-renders on every keystroke and this modal is closed for almost all of them. */
+export default memo(CommandResultModal);

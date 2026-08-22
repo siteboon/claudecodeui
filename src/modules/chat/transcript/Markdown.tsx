@@ -4,13 +4,13 @@ import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useTranslation } from 'react-i18next';
 
 import { MermaidDiagram } from '@/modules/code-editor';
 import { normalizeInlineCodeFences } from '@/modules/chat/utils/chatFormatting';
 import { copyTextToClipboard } from '@/shared/utils';
+import { SyntaxHighlighter } from '@/shared/syntaxHighlighter';
 import { usePaletteOps } from '@/modules/command-palette';
 import { buildSyntaxTheme } from '@/modules/chat/utils/syntaxHighlightTheme';
 import type { PrismStyleSheet } from '@/modules/chat/utils/syntaxHighlightTheme';
@@ -56,6 +56,11 @@ const childrenToText = (children: React.ReactNode): string => {
   }
   return '';
 };
+
+// The delimiters `remark-math` recognizes with `singleDollarTextMath` off.
+const MATH_DELIMITER = /\$\$|\\\(|\\\[/;
+
+const EMPTY_PLUGINS: never[] = [];
 
 type CodeBlockProps = {
   node?: any;
@@ -243,13 +248,24 @@ function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 
     () => normalizeInlineCodeFences(String(children ?? '')),
     [children],
   );
+  // Math support costs a remark tree pass plus a full KaTeX walk on every
+  // render, and almost no assistant message contains math. Only wire the two
+  // plugins up when the text has a delimiter they could act on.
+  const hasMath = useMemo(() => MATH_DELIMITER.test(content), [content]);
   const remarkPlugins = useMemo(
-    () => (breaks
-      ? [remarkGfm, [remarkMath, { singleDollarTextMath: false }], remarkBreaks]
-      : [remarkGfm, [remarkMath, { singleDollarTextMath: false }]]) as any,
-    [breaks],
+    () => {
+      const plugins: unknown[] = [remarkGfm];
+      if (hasMath) {
+        plugins.push([remarkMath, { singleDollarTextMath: false }]);
+      }
+      if (breaks) {
+        plugins.push(remarkBreaks);
+      }
+      return plugins as any;
+    },
+    [breaks, hasMath],
   );
-  const rehypePlugins = useMemo(() => [rehypeKatex], []);
+  const rehypePlugins = useMemo(() => (hasMath ? [rehypeKatex] : EMPTY_PLUGINS), [hasMath]);
   const { openFileInEditor } = usePaletteOps();
 
   const components = useMemo(

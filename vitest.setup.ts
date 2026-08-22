@@ -5,3 +5,19 @@ import { afterEach } from 'vitest';
 // not. Without this, a hook rendered in one test stays mounted — with its timers
 // and effects live — for the rest of the file.
 afterEach(cleanup);
+
+// jsdom ships no `matchMedia`, and components that pick a layout from the
+// viewport call it during render. Report the desktop breakpoint, which is the
+// layout the sidebar row tests assert on.
+if (typeof window.matchMedia !== 'function') {
+  window.matchMedia = ((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  })) as typeof window.matchMedia;
+}

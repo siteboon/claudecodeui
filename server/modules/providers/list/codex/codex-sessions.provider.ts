@@ -6,7 +6,7 @@ import readline from 'node:readline';
 import { sessionsDb } from '@/modules/database/index.js';
 import { parseFilesInputTag, toImageAttachments } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
-import { unifyInteractionMessages } from '@/shared/message-unification.js';
+import { prepareTranscriptMessages } from '@/shared/message-unification.js';
 import type {
   AnyRecord,
   FetchHistoryOptions,
@@ -2043,17 +2043,13 @@ export class CodexSessionsProvider implements IProviderSessions {
       }
     }
 
-    const unified = unifyInteractionMessages(normalized);
-
-    let total = 0;
-    for (const msg of unified) {
-      if (msg.kind !== 'tool_result') {
-        total += 1;
-      }
-    }
+    // Everything the transcript draws, and nothing else — so a page of N rows
+    // is N rows the user sees, and `total` counts the same thing.
+    const transcript = prepareTranscriptMessages(normalized);
+    const total = transcript.length;
     const normalizedOffset = Math.max(0, offset);
     const normalizedLimit = limit === null ? null : Math.max(0, limit);
-    const { page, hasMore } = sliceTailPage(unified, normalizedLimit, normalizedOffset);
+    const { page, hasMore } = sliceTailPage(transcript, normalizedLimit, normalizedOffset);
 
     return {
       messages: page,
