@@ -4,17 +4,39 @@ import path from 'node:path';
 import readline from 'node:readline';
 
 import type { IProviderSessions } from '@/shared/interfaces.js';
-import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
+import type {
+  AnyRecord,
+  FetchHistoryOptions,
+  FetchHistoryResult,
+  NormalizedMessage,
+  SubagentActivity,
+  SubagentInfo,
+} from '@/shared/types.js';
 import { parseFilesInputTag } from '@/shared/image-attachments.js';
-import { createNormalizedMessage, generateMessageId, readObjectRecord, sliceTailPage } from '@/shared/utils.js';
+import {
+  createNormalizedMessage,
+  generateMessageId,
+  readObjectRecord,
+  sliceTailPage,
+  truncateSubagentActivity,
+} from '@/shared/utils.js';
 import { sessionsDb } from '@/modules/database/index.js';
 
 const PROVIDER = 'claude';
 
+/**
+ * Upper bound on how much of a subagent's timeline is sent to the client. A
+ * long-running agent can record hundreds of tool calls, and the transcript only
+ * ever shows them behind a collapsed header, so shipping the whole history on
+ * every load costs far more than it shows.
+ */
+const MAX_TRANSMITTED_SUBAGENT_ACTIVITIES = 200;
+
 type ClaudeToolResult = {
   content: unknown;
   isError: boolean;
-  subagentTools?: unknown;
+  subagentTools?: SubagentActivity[];
+  subagent?: SubagentInfo;
   toolUseResult?: unknown;
 };
 
@@ -36,8 +58,27 @@ type ClaudeHistoryMessagesResult =
     limit?: number | null;
   };
 
-async function parseAgentTools(filePath: string): Promise<AnyRecord[]> {
-  const tools: AnyRecord[] = [];
+type ClaudeSubagentTranscript = {
+  activity: SubagentActivity[];
+  model?: string;
+  /**
+   * True when the transcript's last tool call never received a result, which
+   * is the only evidence in the file that the agent stopped mid-flight.
+   */
+  endedMidToolCall: boolean;
+};
+
+/**
+ * Flattens one subagent transcript into the shared activity timeline.
+ *
+ * Assistant prose and reasoning are kept alongside the tool calls so the
+ * transcript can replay what the agent actually did rather than listing tool
+ * names with no narrative.
+ */
+async function readClaudeSubagentTranscript(filePath: string): Promise<ClaudeSubagentTranscript> {
+  const activity: SubagentActivity[] = [];
+  const transcript: ClaudeSubagentTranscript = { activity, endedMidToolCall: false };
+  const toolsById = new Map<string, SubagentActivity>();
 
   try {
     const fileStream = fs.createReadStream(filePath);
@@ -53,16 +94,34 @@ async function parseAgentTools(filePath: string): Promise<AnyRecord[]> {
 
       try {
         const entry = JSON.parse(line) as AnyRecord;
+        const timestamp = typeof entry.timestamp === 'string' ? entry.timestamp : undefined;
 
         if (entry.message?.role === 'assistant' && Array.isArray(entry.message?.content)) {
+          if (typeof entry.message.model === 'string') {
+            transcript.model = entry.message.model;
+          }
+
           for (const part of entry.message.content as AnyRecord[]) {
             if (part.type === 'tool_use') {
-              tools.push({
-                toolId: part.id,
-                toolName: part.name,
+              const tool: SubagentActivity = {
+                kind: 'tool',
+                toolId: String(part.id ?? ''),
+                toolName: String(part.name ?? 'Tool'),
                 toolInput: part.input,
-                timestamp: entry.timestamp,
-              });
+                timestamp,
+              };
+              activity.push(tool);
+              if (tool.toolId) {
+                toolsById.set(tool.toolId, tool);
+              }
+              continue;
+            }
+            if (part.type === 'text' && typeof part.text === 'string' && part.text.trim()) {
+              activity.push({ kind: 'text', content: part.text, timestamp });
+              continue;
+            }
+            if (part.type === 'thinking' && typeof part.thinking === 'string' && part.thinking.trim()) {
+              activity.push({ kind: 'thinking', content: part.thinking, timestamp });
             }
           }
         }
@@ -73,7 +132,7 @@ async function parseAgentTools(filePath: string): Promise<AnyRecord[]> {
               continue;
             }
 
-            const tool = tools.find((candidate) => candidate.toolId === part.tool_use_id);
+            const tool = toolsById.get(String(part.tool_use_id ?? ''));
             if (!tool) {
               continue;
             }
@@ -99,7 +158,149 @@ async function parseAgentTools(filePath: string): Promise<AnyRecord[]> {
     console.warn(`Error parsing agent file ${filePath}:`, message);
   }
 
-  return tools;
+  const lastActivity = activity[activity.length - 1];
+  transcript.endedMidToolCall = lastActivity?.kind === 'tool' && !lastActivity.toolResult;
+
+  return transcript;
+}
+
+type ClaudeSubagentMeta = {
+  agentType?: string;
+  description?: string;
+};
+
+/** Reads the sidecar `.meta.json` Claude writes next to a subagent transcript. */
+async function readClaudeSubagentMeta(metaPath: string): Promise<ClaudeSubagentMeta> {
+  try {
+    const parsed = JSON.parse(await fsp.readFile(metaPath, 'utf8')) as AnyRecord;
+    return {
+      agentType: typeof parsed.agentType === 'string' ? parsed.agentType : undefined,
+      description: typeof parsed.description === 'string' ? parsed.description : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Resolves where a subagent's transcript lives.
+ *
+ * Current Claude versions write it to
+ * `<projectDir>/<providerSessionId>/subagents/agent-<agentId>.jsonl`; older
+ * ones dropped it next to the parent transcript. Both are checked, newest
+ * layout first, because a project directory usually holds sessions from
+ * several CLI versions.
+ */
+async function findClaudeSubagentTranscript(
+  projectDirectory: string,
+  providerSessionId: string,
+  agentId: string,
+): Promise<{ transcriptPath: string; metaPath: string } | null> {
+  const candidates = [
+    path.join(projectDirectory, providerSessionId, 'subagents', `agent-${agentId}.jsonl`),
+    path.join(projectDirectory, `agent-${agentId}.jsonl`),
+  ];
+
+  for (const transcriptPath of candidates) {
+    try {
+      await fsp.access(transcriptPath);
+      return { transcriptPath, metaPath: transcriptPath.replace(/\.jsonl$/, '.meta.json') };
+    } catch {
+      // Try the next layout.
+    }
+  }
+
+  return null;
+}
+
+type ClaudeTaskNotification = {
+  /** `uuid` of the transcript row the notification came from, so it can be dropped. */
+  sourceUuid: string;
+  toolUseId: string;
+  status: string;
+  summary: string;
+  result: string;
+};
+
+function readTaggedValue(content: string, tagName: string): string {
+  const match = new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`).exec(content);
+  return match ? match[1].trim() : '';
+}
+
+/**
+ * Collects every `<task-notification>` turn keyed by the tool call that
+ * spawned the agent it reports on.
+ *
+ * Only notifications that name a tool-use id are collected: without one there
+ * is no card to fold them into, and they must keep rendering on their own.
+ */
+function collectTaskNotifications(messages: AnyRecord[]): Map<string, ClaudeTaskNotification> {
+  const notifications = new Map<string, ClaudeTaskNotification>();
+
+  for (const message of messages) {
+    if (message.message?.role !== 'user') {
+      continue;
+    }
+
+    const content = message.message.content;
+    const texts: string[] = typeof content === 'string'
+      ? [content]
+      : Array.isArray(content)
+        ? content.filter((part: AnyRecord) => part?.type === 'text').map((part: AnyRecord) => String(part.text ?? ''))
+        : [];
+
+    for (const text of texts) {
+      if (!text.trimStart().startsWith('<task-notification>')) {
+        continue;
+      }
+
+      const toolUseId = readTaggedValue(text, 'tool-use-id');
+      if (!toolUseId) {
+        continue;
+      }
+
+      // A resumed agent notifies more than once; the last word wins.
+      notifications.set(toolUseId, {
+        sourceUuid: String(message.uuid ?? ''),
+        toolUseId,
+        status: readTaggedValue(text, 'status') || 'completed',
+        summary: readTaggedValue(text, 'summary'),
+        result: readTaggedValue(text, 'result'),
+      });
+    }
+  }
+
+  return notifications;
+}
+
+/** Reads the `tool_use_id` off the tool-result row that launched an agent. */
+function readAgentToolUseId(message: AnyRecord): string | null {
+  const content = message.message?.content;
+  if (!Array.isArray(content)) {
+    return null;
+  }
+
+  for (const part of content) {
+    if (part?.type === 'tool_result' && typeof part.tool_use_id === 'string') {
+      return part.tool_use_id;
+    }
+  }
+
+  return null;
+}
+
+/** Swaps an agent launch acknowledgement for the agent's actual answer. */
+function replaceAgentToolResultContent(message: AnyRecord, replacement: string): void {
+  const content = message.message?.content;
+  if (!Array.isArray(content)) {
+    return;
+  }
+
+  for (const part of content) {
+    if (part?.type === 'tool_result') {
+      part.content = replacement;
+    }
+  }
 }
 
 async function getSessionMessages(
@@ -118,11 +319,8 @@ async function getSessionMessages(
     }
 
     const projectDir = path.dirname(jsonLPath);
-    const files = await fsp.readdir(projectDir);
-    const agentFiles = files.filter((file) => file.endsWith('.jsonl') && file.startsWith('agent-'));
 
     const messages: AnyRecord[] = [];
-    const agentToolsCache = new Map<string, AnyRecord[]>();
 
     const fileStream = fs.createReadStream(jsonLPath);
     const rl = readline.createInterface({
@@ -153,16 +351,48 @@ async function getSessionMessages(
       }
     }
 
+    // Read each spawned agent's own transcript once, then hang it off every
+    // row that references it.
+    const subagentsById = new Map<string, {
+      activity: SubagentActivity[];
+      info: SubagentInfo;
+      endedMidToolCall: boolean;
+    }>();
     for (const agentId of agentIds) {
-      const agentFileName = `agent-${agentId}.jsonl`;
-      if (!agentFiles.includes(agentFileName)) {
+      const located = await findClaudeSubagentTranscript(projectDir, providerSessionId, agentId);
+      if (!located) {
         continue;
       }
 
-      const agentFilePath = path.join(projectDir, agentFileName);
-      const tools = await parseAgentTools(agentFilePath);
-      agentToolsCache.set(agentId, tools);
+      const [transcript, meta] = await Promise.all([
+        readClaudeSubagentTranscript(located.transcriptPath),
+        readClaudeSubagentMeta(located.metaPath),
+      ]);
+
+      subagentsById.set(agentId, {
+        endedMidToolCall: transcript.endedMidToolCall,
+        activity: transcript.activity
+          .slice(0, MAX_TRANSMITTED_SUBAGENT_ACTIVITIES)
+          .map(truncateSubagentActivity),
+        info: {
+          id: agentId,
+          name: meta.agentType,
+          type: meta.agentType,
+          description: meta.description,
+          model: transcript.model,
+          status: 'completed',
+          activityCount: transcript.activity.length,
+        },
+      });
     }
+
+    // An async agent's launch result is internal bookkeeping ("Async agent
+    // launched successfully…"); its real answer arrives later as a separate
+    // `<task-notification>` turn. Folding the notification back onto the tool
+    // call that started the agent keeps one card per agent instead of a card,
+    // an unrelated status line, and a stray markdown reply.
+    const notificationsByToolUseId = collectTaskNotifications(messages);
+    const foldedNotificationUuids = new Set<string>();
 
     for (const message of messages) {
       const agentId = message.toolUseResult?.agentId;
@@ -170,13 +400,48 @@ async function getSessionMessages(
         continue;
       }
 
-      const agentTools = agentToolsCache.get(String(agentId));
-      if (agentTools && agentTools.length > 0) {
-        message.subagentTools = agentTools;
+      const subagent = subagentsById.get(String(agentId));
+      const toolUseId = readAgentToolUseId(message);
+      const notification = toolUseId ? notificationsByToolUseId.get(toolUseId) : undefined;
+      // An async agent's launch row never tells you it finished — only the
+      // later notification does. When that notification is missing (a live run,
+      // or one compacted out of the transcript), the agent's own transcript is
+      // the evidence: a timeline that does not stop mid-tool-call is done.
+      const isAwaitingAsyncAgent = message.toolUseResult?.isAsync === true
+        && !notification
+        && (!subagent || subagent.endedMidToolCall);
+
+      if (subagent) {
+        if (subagent.activity.length > 0) {
+          message.subagentTools = subagent.activity;
+        }
+        message.subagent = {
+          ...subagent.info,
+          description: subagent.info.description
+            ?? (typeof message.toolUseResult?.description === 'string' ? message.toolUseResult.description : undefined),
+          model: subagent.info.model
+            ?? (typeof message.toolUseResult?.resolvedModel === 'string' ? message.toolUseResult.resolvedModel : undefined),
+          status: isAwaitingAsyncAgent
+            ? 'running'
+            : notification && notification.status !== 'completed'
+              ? 'failed'
+              : 'completed',
+        };
+      }
+
+      if (notification) {
+        replaceAgentToolResultContent(message, notification.result || notification.summary);
+        foldedNotificationUuids.add(notification.sourceUuid);
+      } else if (message.toolUseResult?.isAsync === true) {
+        // Without a notification there is no answer to show, and the launch
+        // acknowledgement is internal bookkeeping the user must never read.
+        replaceAgentToolResultContent(message, '');
       }
     }
 
-    const sortedMessages = messages.sort(
+    const sortedMessages = messages
+      .filter((message) => !foldedNotificationUuids.has(String(message.uuid ?? '')))
+      .sort(
       (a, b) => new Date(a.timestamp || 0).getTime() - new Date(b.timestamp || 0).getTime(),
     );
     const total = sortedMessages.length;
@@ -347,7 +612,6 @@ export class ClaudeSessionsProvider implements IProviderSessions {
               toolId: part.tool_use_id,
               content: typeof part.content === 'string' ? part.content : JSON.stringify(part.content),
               isError: Boolean(part.is_error),
-              subagentTools: raw.subagentTools,
               toolUseResult: raw.toolUseResult,
             }));
           } else if (part.type === 'text') {
@@ -633,6 +897,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
               content: part.content,
               isError: Boolean(part.is_error),
               subagentTools: raw.subagentTools,
+              subagent: raw.subagent,
               toolUseResult: raw.toolUseResult,
             });
           }
@@ -660,6 +925,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
           toolUseResult: toolResult.toolUseResult,
         };
         msg.subagentTools = toolResult.subagentTools;
+        msg.subagent = toolResult.subagent;
       }
     }
 
