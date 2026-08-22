@@ -1,7 +1,10 @@
 import { GitBranch, GitCommit, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+
 import type { ConfirmationRequest, FileStatusCode, GitDiffMap, GitStatusResponse } from '../../types/types';
 import { getAllChangedFiles, hasChangedFiles } from '../../utils/gitPanelUtils';
+
 import CommitComposer from './CommitComposer';
 import FileChangeList from './FileChangeList';
 import FileStatusLegend from './FileStatusLegend';
@@ -45,6 +48,7 @@ export default function ChangesView({
   onRequestConfirmation,
   onExpandedFilesChange,
 }: ChangesViewProps) {
+  const { t } = useTranslation();
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   // Stage/unstage calls in flight or queued. While > 0, status refreshes must
@@ -129,7 +133,7 @@ export default function ChangesView({
       if (status === 'U') {
         onRequestConfirmation({
           type: 'delete',
-          message: `Delete untracked file "${filePath}"? This action cannot be undone.`,
+          message: t('git:changes.confirmDeleteFile', { path: filePath }),
           onConfirm: async () => {
             await onDeleteFile(filePath);
           },
@@ -139,13 +143,13 @@ export default function ChangesView({
 
       onRequestConfirmation({
         type: 'discard',
-        message: `Discard all changes to "${filePath}"? This action cannot be undone.`,
+        message: t('git:changes.confirmDiscard', { path: filePath }),
         onConfirm: async () => {
           await onDiscardFile(filePath);
         },
       });
     },
-    [onDeleteFile, onDiscardFile, onRequestConfirmation],
+    [onDeleteFile, onDiscardFile, onRequestConfirmation, t],
   );
 
   const commitSelectedFiles = useCallback(
@@ -183,9 +187,9 @@ export default function ChangesView({
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/50">
               <GitBranch className="h-7 w-7 text-muted-foreground/50" />
             </div>
-            <h3 className="mb-2 text-lg font-medium text-foreground">No commits yet</h3>
+            <h3 className="mb-2 text-lg font-medium text-foreground">{t('git:changes.noCommitsTitle')}</h3>
             <p className="mb-6 max-w-md text-sm text-muted-foreground">
-              This repository doesn&apos;t have any commits yet. Create your first commit to start tracking changes.
+              {t('git:changes.noCommitsDescription')}
             </p>
             <button
               onClick={() => void onCreateInitialCommit()}
@@ -195,12 +199,12 @@ export default function ChangesView({
               {isCreatingInitialCommit ? (
                 <>
                   <RefreshCw className="h-4 w-4 animate-spin" />
-                  <span>Creating Initial Commit...</span>
+                  <span>{t('git:changes.creatingInitial')}</span>
                 </>
               ) : (
                 <>
                   <GitCommit className="h-4 w-4" />
-                  <span>Create Initial Commit</span>
+                  <span>{t('git:changes.createInitial')}</span>
                 </>
               )}
             </button>
@@ -208,14 +212,14 @@ export default function ChangesView({
         ) : !gitStatus || !hasChangedFiles(gitStatus) ? (
           <div className="flex h-32 flex-col items-center justify-center text-muted-foreground">
             <GitCommit className="mb-2 h-10 w-10 opacity-40" />
-            <p className="text-sm">No changes detected</p>
+            <p className="text-sm">{t('git:changes.noChanges')}</p>
           </div>
         ) : (
           <div className={isMobile ? 'pb-4' : ''}>
             {/* STAGED section */}
             <div className="flex items-center justify-between border-b border-border/60 bg-muted/30 px-3 py-1.5">
               <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Staged ({selectedFiles.size})
+                {t('git:changes.stagedCount', { n: selectedFiles.size })}
               </span>
               {selectedFiles.size > 0 && (
                 <button
@@ -226,12 +230,12 @@ export default function ChangesView({
                   }}
                   className="text-xs text-primary transition-colors hover:text-primary/80"
                 >
-                  Unstage All
+                  {t('git:changes.unstageAll')}
                 </button>
               )}
             </div>
             {selectedFiles.size === 0 ? (
-              <div className="px-3 py-2 text-xs text-muted-foreground italic">No staged files</div>
+              <div className="px-3 py-2 text-xs italic text-muted-foreground">{t('git:changes.noStagedFiles')}</div>
             ) : (
               <FileChangeList
                 gitStatus={gitStatus}
@@ -252,7 +256,7 @@ export default function ChangesView({
             {/* CHANGES section */}
             <div className="flex items-center justify-between border-b border-border/60 bg-muted/30 px-3 py-1.5">
               <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Changes ({unstagedFiles.size})
+                {t('git:changes.changesCount', { n: unstagedFiles.size })}
               </span>
               {unstagedFiles.size > 0 && (
                 <button
@@ -263,12 +267,12 @@ export default function ChangesView({
                   }}
                   className="text-xs text-primary transition-colors hover:text-primary/80"
                 >
-                  Stage All
+                  {t('git:changes.stageAll')}
                 </button>
               )}
             </div>
             {unstagedFiles.size === 0 ? (
-              <div className="px-3 py-2 text-xs text-muted-foreground italic">All changes staged</div>
+              <div className="px-3 py-2 text-xs italic text-muted-foreground">{t('git:changes.allStaged')}</div>
             ) : (
               <FileChangeList
                 gitStatus={gitStatus}

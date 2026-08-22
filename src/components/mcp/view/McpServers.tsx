@@ -71,6 +71,7 @@ function ConfigLine({ label, children }: { label: string; children: string }) {
 }
 
 function TeamMcpFeatureCard() {
+  const { t } = useTranslation('settings');
   return (
     <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 p-5">
       <div className="flex items-start gap-3">
@@ -79,11 +80,11 @@ function TeamMcpFeatureCard() {
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h4 className="text-sm font-medium text-foreground">Team MCP Configs</h4>
+            <h4 className="text-sm font-medium text-foreground">{t('mcpTeamCard.title')}</h4>
             <Lock className="h-3 w-3 text-muted-foreground/60" />
           </div>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            Share MCP server configurations across your team. Everyone stays in sync automatically.
+            {t('mcpTeamCard.description')}
           </p>
           <a
             href="https://cloudcli.ai"
@@ -91,7 +92,7 @@ function TeamMcpFeatureCard() {
             rel="noopener noreferrer"
             className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary transition-colors hover:underline"
           >
-            Available with CloudCLI Pro
+            {t('mcpTeamCard.proLink')}
             <ExternalLink className="h-3 w-3" />
           </a>
         </div>
@@ -125,12 +126,11 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
   const description = t(`mcpServers.description.${selectedProvider}`, {
     defaultValue: `Model Context Protocol servers provide additional tools and data sources to ${providerName}`,
   });
-  const globalButtonLabel = 'Add Global MCP Server';
-  const providerButtonLabel = `Add ${providerName} MCP Server`;
-  const globalAddDescription = 'Add Global MCP Server writes one common stdio or HTTP server to Claude, Cursor, Codex, and OpenCode.';
-  const providerAddDescription = `${providerButtonLabel} only changes ${providerName}.`;
-  const globalModalDescription = 'Adds this MCP server to every provider: Claude, Cursor, Codex, and OpenCode. '
-    + 'Only stdio and HTTP transports are supported because the same config must work across all providers.';
+  const globalButtonLabel = t('mcpServersAdd.globalButtonLabel');
+  const providerButtonLabel = t('mcpServersAdd.providerButtonLabel', { provider: providerName });
+  const globalAddDescription = t('mcpServersAdd.globalAddDescription');
+  const providerAddDescription = t('mcpServersAdd.providerAddDescription', { button: providerButtonLabel, provider: providerName });
+  const globalModalDescription = t('mcpServersAdd.globalModalDescription');
 
   return (
     <div className="space-y-4">
@@ -143,7 +143,7 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
           </div>
         </div>
         <ActionMenu
-          label="Add MCP Server"
+          label={t('mcpServersAdd.menuLabel')}
           icon={Plus}
           className="w-full sm:w-auto"
           triggerClassName={`w-full sm:w-auto ${MCP_PROVIDER_BUTTON_CLASSES[selectedProvider]}`}
@@ -173,7 +173,7 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
             <span className="animate-in fade-in text-xs text-muted-foreground">{t('saveStatus.success')}</span>
           )}
           {isLoadingProjectScopes && (
-            <span className="animate-in fade-in text-xs text-muted-foreground">Refreshing project scopes...</span>
+            <span className="animate-in fade-in text-xs text-muted-foreground">{t('mcpServersAdd.refreshingScopes')}</span>
           )}
         </div>
       </div>
@@ -186,7 +186,7 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
 
       <div className="space-y-2">
         {isLoading && servers.length === 0 && (
-          <div className="py-8 text-center text-muted-foreground">Loading MCP servers...</div>
+          <div className="py-8 text-center text-muted-foreground">{t('mcpServersAdd.loadingServers')}</div>
         )}
 
         {servers.map((server) => {
@@ -228,14 +228,14 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
                         <ConfigLine label={t('mcpServers.config.command')}>{server.command || ''}</ConfigLine>
                         <ConfigLine label={t('mcpServers.config.url')}>{server.url || ''}</ConfigLine>
                         <ConfigLine label={t('mcpServers.config.args')}>{(server.args || []).join(' ')}</ConfigLine>
-                        <ConfigLine label="Cwd">{server.cwd || ''}</ConfigLine>
+                        <ConfigLine label={t('mcpServersAdd.configCwd')}>{server.cwd || ''}</ConfigLine>
                         {server.env && Object.keys(server.env).length > 0 && (
                           <ConfigLine label={t('mcpServers.config.environment')}>
                             {Object.entries(server.env).map(([key, value]) => `${key}=${maskSecret(value)}`).join(', ')}
                           </ConfigLine>
                         )}
                         {server.envVars && server.envVars.length > 0 && (
-                          <ConfigLine label="Env Vars">{server.envVars.join(', ')}</ConfigLine>
+                          <ConfigLine label={t('mcpServersAdd.configEnvVars')}>{server.envVars.join(', ')}</ConfigLine>
                         )}
                       </>
                     )}

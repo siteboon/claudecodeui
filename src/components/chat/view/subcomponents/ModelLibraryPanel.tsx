@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ArrowLeft,
   Check,
@@ -39,6 +40,7 @@ export default function ModelLibraryPanel({
   actions,
   onDone,
 }: ModelLibraryPanelProps) {
+  const { t } = useTranslation();
   const [selectedProvider, setSelectedProvider] = useState(initialProvider);
   const [editing, setEditing] = useState<ProviderModelOption | null>(null);
   const [model, setModel] = useState('');
@@ -94,7 +96,7 @@ export default function ModelLibraryPanel({
     const normalizedModel = model.trim();
     const normalizedId = modelId.trim();
     if (!normalizedModel || !normalizedId) {
-      setError('Enter both a model name and model ID.');
+      setError(t('chat:misc.enterModelInfo'));
       return;
     }
     if (/\s/.test(normalizedId)) {
@@ -121,7 +123,7 @@ export default function ModelLibraryPanel({
       }
       resetForm();
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : 'Unable to save this model.');
+      setError(caughtError instanceof Error ? caughtError.message : t('chat:misc.modelSaveFailed'));
     } finally {
       setSaving(false);
     }
@@ -143,7 +145,7 @@ export default function ModelLibraryPanel({
       setConfirmDeleteRecordId(null);
       setNotice(`${option.label} was deleted.`);
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : 'Unable to delete this model.');
+      setError(caughtError instanceof Error ? caughtError.message : t('chat:misc.modelDeleteFailed'));
     } finally {
       setDeletingRecordId(null);
     }
@@ -216,7 +218,7 @@ export default function ModelLibraryPanel({
                 size="icon"
                 onClick={resetForm}
                 className="h-8 w-8 rounded-lg"
-                aria-label="Cancel editing"
+                aria-label={t('chat:misc.cancelEditing')}
               >
                 <X className="h-4 w-4" />
               </Button>

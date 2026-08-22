@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { copyTextToClipboard } from '../../../../utils/clipboard';
 import { ToolStatusBadge } from './ToolStatusBadge';
 import type { ToolStatus } from './ToolStatusBadge';
@@ -53,6 +54,7 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
   toolId,
   status,
 }) => {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const isTerminal = style === 'terminal';
 
@@ -71,8 +73,8 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
     <button
       onClick={handleAction}
       className="ml-1 flex-shrink-0 text-muted-foreground/40 opacity-0 transition-all hover:text-muted-foreground group-hover:opacity-100"
-      title="Copy to clipboard"
-      aria-label="Copy to clipboard"
+      title={t('chat:misc.copyToClipboard')}
+      aria-label={t('chat:misc.copyToClipboard')}
     >
       {copied ? (
         <svg className="h-3 w-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">

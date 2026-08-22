@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ComponentType } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Eye, EyeOff } from 'lucide-react';
 
 type AuthInputFieldProps = {
@@ -33,6 +34,7 @@ export default function AuthInputField({
   autoComplete,
   icon: Icon,
 }: AuthInputFieldProps) {
+  const { t } = useTranslation('auth');
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
   const isPasswordField = type === 'password';
@@ -66,7 +68,7 @@ export default function AuthInputField({
             type="button"
             onClick={() => setIsPasswordVisible((previous) => !previous)}
             disabled={isDisabled}
-            aria-label={isPasswordVisible ? 'Hide password' : 'Show password'}
+            aria-label={isPasswordVisible ? t('misc.hide') : t('misc.show')}
             className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-60"
           >
             {isPasswordVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}

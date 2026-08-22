@@ -17,7 +17,7 @@ export function hasChangedFiles(gitStatus: GitStatusResponse | null): boolean {
   return getChangedFileCount(gitStatus) > 0;
 }
 
-export function getStatusLabel(status: FileStatusCode): string {
+export function getStatusLabelKey(status: FileStatusCode): string {
   return FILE_STATUS_LABELS[status] || status;
 }
 

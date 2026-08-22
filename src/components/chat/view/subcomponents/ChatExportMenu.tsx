@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Download, FileJson, FileText } from 'lucide-react';
 
 import type { ChatMessage } from '../../types/types';
@@ -10,6 +11,7 @@ type ChatExportMenuProps = {
 };
 
 export default function ChatExportMenu({ messages, sessionTitle }: ChatExportMenuProps) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
 
   if (messages.length === 0) {
@@ -39,8 +41,8 @@ export default function ChatExportMenu({ messages, sessionTitle }: ChatExportMen
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        aria-label="Export chat"
-        title="Export chat"
+        aria-label={t('chat:misc.exportChat')}
+        title={t('chat:misc.exportChat')}
         className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/50 text-muted-foreground transition-all hover:bg-accent hover:text-foreground"
       >
         <Download className="h-4 w-4" />

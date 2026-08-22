@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import type { CSSProperties, ReactElement } from 'react';
 import {
@@ -132,6 +133,7 @@ export default function CommandMenu({
   isOpen = false,
   frequentCommands = [],
 }: CommandMenuProps) {
+  const { t } = useTranslation();
   const menuRef = useRef<HTMLDivElement | null>(null);
   const selectedItemRef = useRef<HTMLDivElement | null>(null);
   const menuPosition = getMenuPosition(position);
@@ -246,7 +248,7 @@ export default function CommandMenu({
     <div
       ref={menuRef}
       role="listbox"
-      aria-label="Available commands"
+      aria-label={t('chat:misc.availableCommands')}
       className="command-menu border border-border bg-popover/95 text-popover-foreground"
       style={{ ...menuBaseStyle, ...menuPosition, opacity: 1, transform: 'translateY(0)' }}
     >

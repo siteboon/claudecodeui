@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ChevronRight, Copy, Check } from 'lucide-react';
 
 import { cn } from '../../../../lib/utils';
@@ -31,6 +32,7 @@ export const BashCommandDisplay: React.FC<BashCommandDisplayProps> = ({
   status,
   defaultOpen = false,
 }) => {
+  const { t } = useTranslation();
   const trimmedOutput = (output || '').replace(/\s+$/, '');
   const hasOutput = trimmedOutput.length > 0;
   const outputLineCount = hasOutput ? trimmedOutput.split('\n').length : 0;
@@ -127,8 +129,8 @@ export const BashCommandDisplay: React.FC<BashCommandDisplayProps> = ({
           onClick={handleCopy}
           onKeyDown={(event) => event.stopPropagation()}
           className="flex-shrink-0 rounded p-0.5 text-muted-foreground/60 opacity-0 transition-all hover:bg-foreground/10 hover:text-foreground focus:opacity-100 group-hover/cmd:opacity-100"
-          title="Copy command"
-          aria-label="Copy command"
+          title={t('chat:misc.copyCommand')}
+          aria-label={t('chat:misc.copyCommand')}
         >
           {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
         </button>

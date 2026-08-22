@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import type { SubagentChildTool } from '../../types/types';
 import { CollapsibleSection } from './CollapsibleSection';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../../../../shared/view/ui';
@@ -45,12 +46,13 @@ export const SubagentContainer: React.FC<SubagentContainerProps> = ({
   toolResult,
   subagentState,
 }) => {
+  const { t } = useTranslation();
   const parsedInput = typeof toolInput === 'string' ? (() => {
     try { return JSON.parse(toolInput); } catch { return {}; }
   })() : (toolInput || {});
 
   const subagentType = parsedInput?.subagent_type || 'Agent';
-  const description = parsedInput?.description || 'Running task';
+  const description = parsedInput?.description || t('chat:misc.runningTask');
   const prompt = parsedInput?.prompt || '';
   const { childTools, currentToolIndex, isComplete } = subagentState;
   const currentTool = currentToolIndex >= 0 ? childTools[currentToolIndex] : null;

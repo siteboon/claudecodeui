@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 import type { LLMProvider } from '../../../../types/app';
 import type { ProviderAuthStatusMap } from '../../../provider-auth/types';
 
@@ -43,12 +45,13 @@ export default function AgentConnectionsStep({
   providerStatuses,
   onOpenProviderLogin,
 }: AgentConnectionsStepProps) {
+  const { t } = useTranslation('auth');
   return (
     <div className="space-y-4">
       <div className="text-center">
-        <h2 className="font-serif text-xl font-bold tracking-tight text-foreground">Connect Your AI Agents</h2>
+        <h2 className="font-serif text-xl font-bold tracking-tight text-foreground">{t('onboarding.agentsStepTitle')}</h2>
         <p className="mx-auto mt-1 max-w-sm text-sm leading-relaxed text-muted-foreground">
-          Login to one or more AI coding assistants. All are optional.
+          {t('onboarding.agentsStepDescription')}
         </p>
       </div>
 
@@ -67,7 +70,7 @@ export default function AgentConnectionsStep({
         ))}
       </div>
 
-      <p className="text-center text-xs text-muted-foreground">You can configure these later in Settings.</p>
+      <p className="text-center text-xs text-muted-foreground">{t('onboarding.agentsLaterHint')}</p>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Bot,
   Clock3,
@@ -57,32 +58,62 @@ type BrowserUsePanelProps = {
   onShowSettings?: (tab?: SettingsMainTab) => void;
 };
 
-async function readJson<T>(response: Response): Promise<T> {
-  const data = await response.json();
+type TranslateFn = (key: string, options?: Record<string, unknown>) => string;
+
+async function readJson<T>(response: Response, t: TranslateFn): Promise<T> {
+  // Empty or malformed bodies reject before the status check below; surface
+  // the localized request failure instead of a raw parser error.
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error(t('browserUse.requestFailed', { status: response.status }));
+  }
+  // A non-object body (JSON null, arrays, primitives) must also fall back
+  // instead of raising a TypeError on the field access below.
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error(t('browserUse.requestFailed', { status: response.status }));
+  }
   if (!response.ok || data.success === false) {
-    throw new Error(data.error || data.details || `Request failed (${response.status})`);
+    throw new Error(data.error || data.details || t('browserUse.requestFailed', { status: response.status }));
   }
   return data as T;
 }
 
-function formatRelativeTime(value: string | null): string {
-  if (!value) return 'Never';
-
-  const timestamp = Date.parse(value);
-  if (!Number.isFinite(timestamp)) return 'Unknown';
-
-  const elapsedSeconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
-  if (elapsedSeconds < 10) return 'Just now';
-  if (elapsedSeconds < 60) return `${elapsedSeconds}s ago`;
-  const elapsedMinutes = Math.round(elapsedSeconds / 60);
-  if (elapsedMinutes < 60) return `${elapsedMinutes}m ago`;
-  const elapsedHours = Math.round(elapsedMinutes / 60);
-  if (elapsedHours < 24) return `${elapsedHours}h ago`;
-  return `${Math.round(elapsedHours / 24)}d ago`;
+async function readJsonWithFallback<T>(response: Response, fallbackError: string): Promise<T> {
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error(fallbackError);
+  }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error(fallbackError);
+  }
+  if (!response.ok || data.success === false) {
+    throw new Error(data.error || data.details || fallbackError);
+  }
+  return data as T;
 }
 
-function getDomain(url: string | null): string {
-  if (!url) return 'No page loaded';
+function formatRelativeTime(value: string | null, t: TranslateFn): string {
+  if (!value) return t('browserUse.never');
+
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return t('browserUse.unknown');
+
+  const elapsedSeconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
+  if (elapsedSeconds < 10) return t('browserUse.justNow');
+  if (elapsedSeconds < 60) return t('browserUse.secondsAgo', { n: elapsedSeconds });
+  const elapsedMinutes = Math.round(elapsedSeconds / 60);
+  if (elapsedMinutes < 60) return t('browserUse.minutesAgo', { n: elapsedMinutes });
+  const elapsedHours = Math.round(elapsedMinutes / 60);
+  if (elapsedHours < 24) return t('browserUse.hoursAgo', { n: elapsedHours });
+  return t('browserUse.daysAgo', { n: Math.round(elapsedHours / 24) });
+}
+
+function getDomain(url: string | null, t: TranslateFn): string {
+  if (!url) return t('browserUse.noPageLoaded');
 
   try {
     return new URL(url).hostname;
@@ -91,8 +122,8 @@ function getDomain(url: string | null): string {
   }
 }
 
-function formatAction(action: string | null): string {
-  if (!action) return 'Waiting';
+function formatAction(action: string | null, t: TranslateFn): string {
+  if (!action) return t('browserUse.waitingAction');
   return action.replace(/_/g, ' ').replace(/:/g, ': ');
 }
 
@@ -113,18 +144,24 @@ function getRuntimeTone(status: BrowserUseStatus | null, installing: boolean): s
   return 'border-border bg-background text-muted-foreground';
 }
 
+function getStatusLabel(status: BrowserUseSession['status'] | undefined, t: TranslateFn): string {
+  if (!status) return t('browserUse.statusEmpty');
+  if (status === 'ready') return t('browserUse.statusReadySession');
+  if (status === 'stopped') return t('browserUse.statusStoppedSession');
+  if (status === 'unavailable') return t('browserUse.statusUnavailableSession');
+  return status;
+}
+
 function getStatusDot(status: BrowserUseSession['status']): string {
   if (status === 'ready') return 'bg-primary';
   if (status === 'stopped') return 'bg-muted-foreground/50';
   return 'bg-border';
 }
 
-const PROMPTS = [
-  'Use Browser to inspect the checkout flow and report any broken UI states.',
-  'Open <url> with Browser, interact with the page, and summarize what changed after each step.',
-];
+const PROMPT_KEYS = ['browserUse.prompt1', 'browserUse.prompt2'];
 
 export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUsePanelProps) {
+  const { t } = useTranslation('settings');
   const [status, setStatus] = useState<BrowserUseStatus | null>(null);
   const [sessions, setSessions] = useState<BrowserUseSession[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
@@ -142,12 +179,12 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
   const activeSessions = sessions.filter((session) => session.status === 'ready');
   const needsBrowserBinaries = Boolean(status?.enabled && (!status.playwrightInstalled || !status.chromiumInstalled));
   const runtimeLabel = !status?.enabled
-    ? 'Disabled'
+    ? t('browserUse.runtimeDisabled')
     : status.available
-      ? 'Ready'
+      ? t('browserUse.runtimeReady')
       : status.installInProgress || isInstalling
-        ? 'Installing'
-        : 'Setup required';
+        ? t('browserUse.runtimeInstalling')
+        : t('browserUse.runtimeSetupRequired');
 
   const cursorStyle = selectedSession?.cursor && selectedSession.viewport
     ? {
@@ -163,8 +200,8 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
         authenticatedFetch('/api/browser-use/status'),
         authenticatedFetch('/api/browser-use/sessions'),
       ]);
-      const statusData = await readJson<{ data: BrowserUseStatus }>(statusResponse);
-      const sessionsData = await readJson<{ data: { sessions: BrowserUseSession[] } }>(sessionsResponse);
+      const statusData = await readJson<{ data: BrowserUseStatus }>(statusResponse, t);
+      const sessionsData = await readJson<{ data: { sessions: BrowserUseSession[] } }>(sessionsResponse, t);
       const nextSessions = sessionsData.data.sessions;
       setStatus(statusData.data);
       setSessions(nextSessions);
@@ -175,11 +212,11 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
       ));
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load Browser');
+      setError(err instanceof Error ? err.message : t('browserUse.loadFailed'));
     } finally {
       setIsRefreshing(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!isVisible) return;
@@ -193,22 +230,22 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
       await action();
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Browser action failed');
+      setError(err instanceof Error ? err.message : t('browserUse.actionFailed'));
     } finally {
       setIsBusy(false);
     }
-  }, [refresh]);
+  }, [refresh, t]);
 
   const stopSession = () => runAction(async () => {
     if (!selectedSession) return;
     const response = await authenticatedFetch(`/api/browser-use/sessions/${selectedSession.id}/stop`, { method: 'POST' });
-    await readJson(response);
+    await readJsonWithFallback(response, t('browserUse.actionFailed'));
   });
 
   const deleteSession = () => runAction(async () => {
     if (!selectedSession) return;
     const response = await authenticatedFetch(`/api/browser-use/sessions/${selectedSession.id}`, { method: 'DELETE' });
-    await readJson(response);
+    await readJsonWithFallback(response, t('browserUse.actionFailed'));
     setIsFullscreen(false);
   });
 
@@ -216,7 +253,7 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
     setIsInstalling(true);
     try {
       const response = await authenticatedFetch('/api/browser-use/runtime/install', { method: 'POST' });
-      await readJson(response);
+      await readJsonWithFallback(response, t('browserUse.actionFailed'));
     } finally {
       setIsInstalling(false);
     }
@@ -240,18 +277,18 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-2">
               <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', getStatusDot(session.status))} />
-              <div className="truncate text-sm font-medium">{session.title || getDomain(session.url)}</div>
+              <div className="truncate text-sm font-medium">{session.title || getDomain(session.url, t)}</div>
             </div>
-            <div className="mt-1 truncate pl-3.5 text-xs text-muted-foreground">{getDomain(session.url)}</div>
+            <div className="mt-1 truncate pl-3.5 text-xs text-muted-foreground">{getDomain(session.url, t)}</div>
           </div>
           <Badge variant="outline" className="shrink-0 border-border bg-background text-[10px] text-muted-foreground">
-            {session.status}
+            {getStatusLabel(session.status, t)}
           </Badge>
         </div>
         <div className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <Clock3 className="h-3 w-3" />
-          <span>{formatRelativeTime(session.updatedAt)}</span>
-          <span className="truncate">- {formatAction(session.lastAction)}</span>
+          <span>{formatRelativeTime(session.updatedAt, t)}</span>
+          <span className="truncate">- {formatAction(session.lastAction, t)}</span>
         </div>
       </button>
     );
@@ -266,19 +303,19 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
           </div>
           <div className="min-w-0">
             <div className="text-sm font-semibold text-foreground">
-              {status?.enabled ? 'No browser sessions yet' : 'Browser is disabled'}
+              {status?.enabled ? t('browserUse.emptyTitleEnabled') : t('browserUse.emptyTitleDisabled')}
             </div>
             <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
               {status?.enabled
-                ? 'Agent browser sessions appear here while an AI task is using Browser.'
-                : 'Enable Browser in settings to let agents open monitored browser sessions.'}
+                ? t('browserUse.emptyDescEnabled')
+                : t('browserUse.emptyDescDisabled')}
             </p>
           </div>
         </div>
 
         {needsBrowserBinaries && (
           <div className="mt-4 rounded-md border border-border bg-muted/30 p-3">
-            <div className="text-sm font-medium text-foreground">Runtime setup required</div>
+            <div className="text-sm font-medium text-foreground">{t('browserUse.runtimeSetupTitle')}</div>
             <p className="mt-1 text-sm text-muted-foreground">{status?.message}</p>
             <Button
               type="button"
@@ -292,19 +329,19 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
               ) : (
                 <Download className="h-4 w-4" />
               )}
-              {isInstalling || status?.installInProgress ? 'Installing...' : 'Install Runtime'}
+              {isInstalling || status?.installInProgress ? t('browserUse.installing') : t('browserUse.installRuntime')}
             </Button>
           </div>
         )}
 
         <div className="mt-5 grid gap-2 sm:grid-cols-2">
-          {PROMPTS.map((prompt) => (
-            <div key={prompt} className="rounded-md border border-border/70 bg-background/70 p-3">
+          {PROMPT_KEYS.map((promptKey) => (
+            <div key={promptKey} className="rounded-md border border-border/70 bg-background/70 p-3">
               <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 <Bot className="h-3.5 w-3.5" />
-                Prompt
+                {t('browserUse.promptLabel')}
               </div>
-              <p className="text-sm leading-6 text-foreground">{prompt}</p>
+              <p className="text-sm leading-6 text-foreground">{t(promptKey)}</p>
             </div>
           ))}
         </div>
@@ -318,7 +355,7 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
         <div className="relative inline-block max-h-full">
           <img
             src={selectedSession.screenshotDataUrl}
-            alt="Browser session screenshot"
+            alt={t('browserUse.screenshotAlt')}
             className={fullscreen ? 'block max-h-[80vh] w-auto max-w-full object-contain' : 'block max-h-[72vh] w-auto max-w-full object-contain'}
           />
           {cursorStyle && (
@@ -333,8 +370,8 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
       ) : (
         <div className="px-6 text-center">
           <MonitorPlay className="mx-auto h-9 w-9 text-neutral-500" />
-          <div className="mt-3 text-sm font-medium text-neutral-100">{selectedSession?.message || 'Waiting for screenshot'}</div>
-          <p className="mt-1 text-xs text-neutral-400">The next agent browser snapshot will render here.</p>
+          <div className="mt-3 text-sm font-medium text-neutral-100">{selectedSession?.message || t('browserUse.waitingScreenshot')}</div>
+          <p className="mt-1 text-xs text-neutral-400">{t('browserUse.waitingScreenshotHint')}</p>
         </div>
       )}
     </div>
@@ -346,12 +383,12 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <MonitorPlay className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-semibold text-foreground">Browser</h3>
+            <h3 className="text-sm font-semibold text-foreground">{t('browserUse.title')}</h3>
             <Badge variant="outline" className={cn('text-[10px]', getRuntimeTone(status, isInstalling))}>
               {runtimeLabel}
             </Badge>
           </div>
-          <p className="mt-0.5 text-xs text-muted-foreground">Monitor browser sessions opened by AI agents.</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{t('browserUse.subtitle')}</p>
         </div>
         <div className="flex items-center gap-1.5">
           {onShowSettings && (
@@ -360,8 +397,8 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
               size="sm"
               className="h-7 w-7 p-0"
               onClick={() => onShowSettings('browser')}
-              title="Open Browser settings"
-              aria-label="Open Browser settings"
+              title={t('browserUse.openSettings')}
+              aria-label={t('browserUse.openSettings')}
             >
               <Settings className="h-3.5 w-3.5" />
             </Button>
@@ -372,8 +409,8 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
             className="h-7 w-7 p-0"
             onClick={() => void refresh()}
             disabled={isRefreshing || isBusy}
-            title="Refresh browser sessions"
-            aria-label="Refresh browser sessions"
+            title={t('browserUse.refreshSessions')}
+            aria-label={t('browserUse.refreshSessions')}
           >
             <RefreshCw className={cn('h-3.5 w-3.5', isRefreshing && 'animate-spin')} />
           </Button>
@@ -403,7 +440,7 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
               >
                 <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', getStatusDot(session.status))} />
                 <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
-                  {session.title || getDomain(session.url)}
+                  {session.title || getDomain(session.url, t)}
                 </span>
               </button>
             ))}
@@ -415,12 +452,12 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
         <main className="flex min-h-0 flex-col overflow-hidden">
           <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-muted/20 px-4 py-2.5 text-xs text-muted-foreground">
             <div className="min-w-0 truncate">
-              {activeSessions.length} active
+              {t('browserUse.activeCount', { n: activeSessions.length })}
               <span className="px-1.5">/</span>
-              {sessions.length} total
+              {t('browserUse.totalCount', { n: sessions.length })}
             </div>
             <div className="min-w-0 truncate">
-              Updated {formatRelativeTime(selectedSession?.updatedAt || null)}
+              {t('browserUse.updated', { time: formatRelativeTime(selectedSession?.updatedAt || null, t) })}
             </div>
           </div>
 
@@ -431,27 +468,27 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
               <div className="mx-auto flex min-h-[500px] max-w-7xl flex-col overflow-hidden rounded-md border border-border bg-background shadow-sm">
                 <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-3 py-2">
                   <Badge variant="outline" className={selectedSession ? cn('text-[10px]', getStatusTone(selectedSession.status)) : 'text-[10px]'}>
-                    {selectedSession?.status || 'empty'}
+                    {getStatusLabel(selectedSession?.status, t)}
                   </Badge>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium text-foreground">
-                      {selectedSession?.title || getDomain(selectedSession?.url || null)}
+                      {selectedSession?.title || getDomain(selectedSession?.url || null, t)}
                     </div>
                     <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
                       <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">{selectedSession?.url || 'No page loaded'}</span>
+                      <span className="truncate">{selectedSession?.url || t('browserUse.noPageLoaded')}</span>
                     </div>
                   </div>
                   <div className="hidden text-xs text-muted-foreground md:block">
-                    {formatAction(selectedSession?.lastAction || null)}
+                    {formatAction(selectedSession?.lastAction || null, t)}
                   </div>
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setIsFullscreen(true)} disabled={!selectedSession?.screenshotDataUrl} title="Full screen" aria-label="Full screen">
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setIsFullscreen(true)} disabled={!selectedSession?.screenshotDataUrl} title={t('browserUse.fullScreen')} aria-label={t('browserUse.fullScreen')}>
                     <Expand className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 lg:hidden" onClick={stopSession} disabled={isBusy || !selectedSession || selectedSession.status !== 'ready'} title="Stop session" aria-label="Stop session">
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 lg:hidden" onClick={stopSession} disabled={isBusy || !selectedSession || selectedSession.status !== 'ready'} title={t('browserUse.stopSession')} aria-label={t('browserUse.stopSession')}>
                     <Square className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 lg:hidden" onClick={deleteSession} disabled={isBusy || !selectedSession} title="Delete session" aria-label="Delete session">
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 lg:hidden" onClick={deleteSession} disabled={isBusy || !selectedSession} title={t('browserUse.deleteSession')} aria-label={t('browserUse.deleteSession')}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -465,10 +502,10 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
           <div className="border-b border-border/60 px-4 py-3">
             <div className="flex items-center justify-between gap-2">
               <div>
-                <div className="text-sm font-semibold text-foreground">Sessions</div>
-                <div className="mt-0.5 text-xs text-muted-foreground">{sessions.length} total</div>
+                <div className="text-sm font-semibold text-foreground">{t('browserUse.sessions')}</div>
+                <div className="mt-0.5 text-xs text-muted-foreground">{t('browserUse.totalCount', { n: sessions.length })}</div>
               </div>
-              <Badge variant="outline" className="text-[10px]">{activeSessions.length} active</Badge>
+              <Badge variant="outline" className="text-[10px]">{t('browserUse.activeCount', { n: activeSessions.length })}</Badge>
             </div>
           </div>
 
@@ -477,7 +514,7 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
               <div className="space-y-2">{sessions.map(renderSessionItem)}</div>
             ) : (
               <div className="rounded-md border border-dashed border-border/70 px-3 py-8 text-center text-xs text-muted-foreground">
-                No agent browser sessions.
+                {t('browserUse.noSessions')}
               </div>
             )}
           </div>
@@ -486,30 +523,30 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
             <div className="rounded-md border border-border/70 bg-muted/30 p-3">
               <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 <Bot className="h-3.5 w-3.5" />
-                Selected
+                {t('browserUse.selected')}
               </div>
               <div className="mt-3 space-y-2 text-xs text-muted-foreground">
                 <div className="flex items-center justify-between gap-3">
-                  <span>Status</span>
-                  <span className="font-medium text-foreground">{selectedSession?.status || 'None'}</span>
+                  <span>{t('browserUse.statusLabel')}</span>
+                  <span className="font-medium text-foreground">{getStatusLabel(selectedSession?.status, t)}</span>
                 </div>
                 <div className="flex items-center justify-between gap-3">
-                  <span>Last action</span>
-                  <span className="truncate font-medium text-foreground">{formatAction(selectedSession?.lastAction || null)}</span>
+                  <span>{t('browserUse.lastAction')}</span>
+                  <span className="truncate font-medium text-foreground">{formatAction(selectedSession?.lastAction || null, t)}</span>
                 </div>
                 <div className="flex items-center justify-between gap-3">
-                  <span>Profile</span>
-                  <span className="truncate font-medium text-foreground">{selectedSession?.profileName || 'Temporary'}</span>
+                  <span>{t('browserUse.profileLabel')}</span>
+                  <span className="truncate font-medium text-foreground">{selectedSession?.profileName || t('browserUse.temporaryProfile')}</span>
                 </div>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <Button variant="outline" size="sm" onClick={stopSession} disabled={isBusy || !selectedSession || selectedSession.status !== 'ready'}>
                   <Square className="h-4 w-4" />
-                  Stop
+                  {t('browserUse.stop')}
                 </Button>
                 <Button variant="outline" size="sm" onClick={deleteSession} disabled={isBusy || !selectedSession}>
                   <Trash2 className="h-4 w-4" />
-                  Delete
+                  {t('browserUse.delete')}
                 </Button>
               </div>
             </div>
@@ -521,10 +558,10 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
         <div className="fixed inset-0 z-50 bg-black/90 p-6">
           <div className="flex h-full flex-col rounded-md border border-white/10 bg-black">
             <div className="flex items-center justify-between border-b border-white/10 px-4 py-3 text-sm text-white/80">
-              <div className="min-w-0 truncate">{selectedSession.title || selectedSession.url || 'Browser session'}</div>
+              <div className="min-w-0 truncate">{selectedSession.title || selectedSession.url || t('browserUse.sessionFallback')}</div>
               <Button variant="outline" size="sm" onClick={() => setIsFullscreen(false)}>
                 <X className="h-4 w-4" />
-                Close
+                {t('browserUse.close')}
               </Button>
             </div>
             {renderBrowserSurface(true)}

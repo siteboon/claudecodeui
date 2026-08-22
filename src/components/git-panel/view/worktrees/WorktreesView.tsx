@@ -10,6 +10,7 @@ import {
   X,
 } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { Project } from '../../../../types/app';
 import { useWorktreesController } from '../../hooks/useWorktreesController';
@@ -46,8 +47,9 @@ type WorktreeRowProps = {
 };
 
 function WorktreeRow({ worktree, isMobile, isBusy, onOpen, onMerge, onRemove }: WorktreeRowProps) {
+  const { t } = useTranslation();
   const branchLabel = worktree.branch
-    ?? (worktree.headSha ? `detached @ ${worktree.headSha.slice(0, 7)}` : 'detached');
+    ?? (worktree.headSha ? t('git:worktrees.detachedAt', { sha: worktree.headSha.slice(0, 7) }) : t('git:worktrees.detached'));
 
   return (
     <div
@@ -72,17 +74,17 @@ function WorktreeRow({ worktree, isMobile, isBusy, onOpen, onMerge, onRemove }: 
           </span>
           {worktree.isCurrent && (
             <span className="shrink-0 rounded-full bg-primary/15 px-1.5 py-0.5 text-xs font-semibold text-primary">
-              current
+              {t('git:worktrees.current')}
             </span>
           )}
           {worktree.isMain && (
             <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-              main worktree
+              {t('git:worktrees.mainWorktree')}
             </span>
           )}
           {worktree.isLocked && (
             <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-              locked
+              {t('git:worktrees.locked')}
             </span>
           )}
         </div>
@@ -97,7 +99,7 @@ function WorktreeRow({ worktree, isMobile, isBusy, onOpen, onMerge, onRemove }: 
           )}
           {worktree.changedFileCount > 0 && (
             <span className="shrink-0 text-amber-600 dark:text-amber-400">
-              ● {worktree.changedFileCount} change{worktree.changedFileCount === 1 ? '' : 's'}
+              {t('git:worktrees.changeCount', { count: worktree.changedFileCount })}
             </span>
           )}
           {worktree.lastCommitSubject && (
@@ -121,10 +123,10 @@ function WorktreeRow({ worktree, isMobile, isBusy, onOpen, onMerge, onRemove }: 
             <button
               onClick={onOpen}
               className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              title={`Switch to ${branchLabel}`}
+              title={t('git:worktrees.switchTo', { name: branchLabel })}
             >
               <ArrowRightLeft className="h-3 w-3" />
-              Open
+              {t('git:worktrees.open')}
             </button>
             {!worktree.isMain && (
               <>
@@ -134,8 +136,8 @@ function WorktreeRow({ worktree, isMobile, isBusy, onOpen, onMerge, onRemove }: 
                   className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
                   title={
                     worktree.ahead === 0
-                      ? 'Nothing to merge — no commits ahead of the base branch'
-                      : `Merge ${branchLabel} into the base branch`
+                      ? t('git:worktrees.nothingToMerge')
+                      : t('git:worktrees.mergeInto', { branch: branchLabel })
                   }
                 >
                   <GitMerge className="h-3.5 w-3.5" />
@@ -143,7 +145,7 @@ function WorktreeRow({ worktree, isMobile, isBusy, onOpen, onMerge, onRemove }: 
                 <button
                   onClick={onRemove}
                   className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                  title={`Remove worktree for ${branchLabel}`}
+                  title={t('git:worktrees.removeTitle', { branch: branchLabel })}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -167,6 +169,7 @@ export default function WorktreesView({
   onProjectSelect,
   onProjectsRefresh,
 }: WorktreesViewProps) {
+  const { t } = useTranslation();
   const {
     worktreeData,
     isLoading,
@@ -202,14 +205,14 @@ export default function WorktreesView({
       <div className="flex items-center justify-between border-b border-border/40 px-4 py-2.5">
         <span className="text-sm text-muted-foreground">
           {linkedWorktreeCount === 0
-            ? 'No worktrees'
-            : `${linkedWorktreeCount} worktree${linkedWorktreeCount === 1 ? '' : 's'}`}
+            ? t('git:worktrees.noWorktrees')
+            : t('git:worktrees.count', { count: linkedWorktreeCount })}
         </span>
         <div className="flex items-center gap-1.5">
           <button
             onClick={() => void refreshWorktrees()}
             className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            title="Refresh worktrees"
+            title={t('git:worktrees.refreshTitle')}
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
@@ -219,7 +222,7 @@ export default function WorktreesView({
             className="flex items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Plus className="h-3.5 w-3.5" />
-            New worktree
+            {t('git:worktrees.newWorktree')}
           </button>
         </div>
       </div>
@@ -231,7 +234,7 @@ export default function WorktreesView({
           <button
             onClick={clearActionError}
             className="shrink-0 text-destructive/70 transition-colors hover:text-destructive"
-            title="Dismiss"
+            title={t('git:worktrees.dismiss')}
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -257,10 +260,9 @@ export default function WorktreesView({
           <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
             <GitFork className="h-10 w-10 text-muted-foreground opacity-30" />
             <div>
-              <p className="text-sm font-medium text-foreground/80">Work on branches in parallel</p>
+              <p className="text-sm font-medium text-foreground/80">{t('git:worktrees.explainerTitle')}</p>
               <p className="mx-auto mt-1 max-w-xs text-xs text-muted-foreground">
-                A worktree checks out a branch in its own folder, so you can run separate chat
-                sessions side by side and merge the results back when they're ready.
+                {t('git:worktrees.explainerDescription')}
               </p>
             </div>
             <button
@@ -269,7 +271,7 @@ export default function WorktreesView({
               className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Plus className="h-3.5 w-3.5" />
-              Create your first worktree
+              {t('git:worktrees.createFirst')}
             </button>
           </div>
         )}

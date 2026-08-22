@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 
 import StandaloneShell from '../../standalone-shell/view/StandaloneShell';
@@ -77,6 +78,7 @@ export default function ProviderLoginModal({
   customCommand,
   isAuthenticated = false,
 }: ProviderLoginModalProps) {
+  const { t } = useTranslation();
   if (!isOpen) {
     return null;
   }
@@ -97,7 +99,7 @@ export default function ProviderLoginModal({
           <button
             onClick={onClose}
             className="text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-gray-300"
-            aria-label="Close login modal"
+            aria-label={t('common:misc.closeLoginModal')}
           >
             <X className="h-6 w-6" />
           </button>

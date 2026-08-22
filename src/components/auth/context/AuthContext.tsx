@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { IS_PLATFORM } from '../../../shared/utils';
 import {
@@ -43,6 +44,7 @@ export function useAuth(): AuthContextValue {
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
+  const { t } = useTranslation();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [token, setToken] = useState<string | null>(() => readStoredToken());
   const [isLoading, setIsLoading] = useState(true);
@@ -114,7 +116,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     };
     const handleSessionExpired = () => {
       clearSession();
-      setError(AUTH_ERROR_MESSAGES.sessionExpired);
+      setError(t(AUTH_ERROR_MESSAGES.sessionExpired));
     };
 
     window.addEventListener(AUTH_TOKEN_REFRESHED_EVENT, handleTokenRefreshed);
@@ -123,7 +125,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       window.removeEventListener(AUTH_TOKEN_REFRESHED_EVENT, handleTokenRefreshed);
       window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, handleSessionExpired);
     };
-  }, [clearSession]);
+  }, [clearSession, t]);
 
   const checkAuthStatus = useCallback(async () => {
     try {
@@ -160,11 +162,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       await checkOnboardingStatus();
     } catch (caughtError) {
       console.error('[Auth] Auth status check failed:', caughtError);
-      setError(AUTH_ERROR_MESSAGES.authStatusCheckFailed);
+      setError(t(AUTH_ERROR_MESSAGES.authStatusCheckFailed));
     } finally {
       setIsLoading(false);
     }
-  }, [checkOnboardingStatus, clearSession, token]);
+  }, [checkOnboardingStatus, clearSession, t, token]);
 
   useEffect(() => {
     if (IS_PLATFORM) {
@@ -221,7 +223,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const payload = await parseJsonSafely<AuthSessionPayload>(response);
 
         if (!response.ok || !payload?.token || !payload.user) {
-          const message = resolveApiErrorMessage(payload, AUTH_ERROR_MESSAGES.loginFailed);
+          const message = resolveApiErrorMessage(payload, t(AUTH_ERROR_MESSAGES.loginFailed));
           setError(message);
           return { success: false, error: message };
         }
@@ -232,11 +234,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return { success: true };
       } catch (caughtError) {
         console.error('Login error:', caughtError);
-        setError(AUTH_ERROR_MESSAGES.networkError);
-        return { success: false, error: AUTH_ERROR_MESSAGES.networkError };
+        setError(t(AUTH_ERROR_MESSAGES.networkError));
+        return { success: false, error: t(AUTH_ERROR_MESSAGES.networkError) };
       }
     },
-    [checkOnboardingStatus, setSession],
+    [checkOnboardingStatus, setSession, t],
   );
 
   const register = useCallback<AuthContextValue['register']>(
@@ -247,7 +249,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const payload = await parseJsonSafely<AuthSessionPayload>(response);
 
         if (!response.ok || !payload?.token || !payload.user) {
-          const message = resolveApiErrorMessage(payload, AUTH_ERROR_MESSAGES.registrationFailed);
+          const message = resolveApiErrorMessage(payload, t(AUTH_ERROR_MESSAGES.registrationFailed));
           setError(message);
           return { success: false, error: message };
         }
@@ -258,11 +260,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return { success: true };
       } catch (caughtError) {
         console.error('Registration error:', caughtError);
-        setError(AUTH_ERROR_MESSAGES.networkError);
-        return { success: false, error: AUTH_ERROR_MESSAGES.networkError };
+        setError(t(AUTH_ERROR_MESSAGES.networkError));
+        return { success: false, error: t(AUTH_ERROR_MESSAGES.networkError) };
       }
     },
-    [checkOnboardingStatus, setSession],
+    [checkOnboardingStatus, setSession, t],
   );
 
   const logout = useCallback(() => {

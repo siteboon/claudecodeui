@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { ExternalLink, Lock } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -14,8 +15,10 @@ export default function PremiumFeatureCard({
   icon,
   title,
   description,
-  ctaText = 'Available with CloudCLI Pro',
+  ctaText,
 }: PremiumFeatureCardProps) {
+  const { t } = useTranslation('settings');
+  const resolvedCta = ctaText ?? t('about.proCta');
   return (
     <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 p-5">
       <div className="flex items-start gap-3">
@@ -36,7 +39,7 @@ export default function PremiumFeatureCard({
             rel="noopener noreferrer"
             className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary transition-colors hover:underline"
           >
-            {ctaText}
+            {resolvedCta}
             <ExternalLink className="h-3 w-3" />
           </a>
         </div>

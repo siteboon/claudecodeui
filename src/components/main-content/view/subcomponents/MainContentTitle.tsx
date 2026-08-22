@@ -33,7 +33,7 @@ function getTabTitle(activeTab: AppTab, shouldShowTasksTab: boolean, t: (key: st
     return t('tabs.browser');
   }
 
-  return 'Project';
+  return t('misc.projectFallback');
 }
 
 export default function MainContentTitle({
