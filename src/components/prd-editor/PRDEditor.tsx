@@ -1,5 +1,8 @@
 import { useCallback, useMemo, useState } from 'react';
+
+import { triggerBlobDownload } from '../../utils/download';
 import type { Project } from '../../types/app';
+
 import { usePrdDocument } from './hooks/usePrdDocument';
 import { usePrdKeyboardShortcuts } from './hooks/usePrdKeyboardShortcuts';
 import { usePrdRegistry } from './hooks/usePrdRegistry';
@@ -58,17 +61,10 @@ export default function PRDEditor({
   });
 
   const handleDownload = useCallback(() => {
-    const blob = new Blob([content], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    const downloadedFileName = ensurePrdExtension(fileName || 'prd');
-
-    anchor.href = url;
-    anchor.download = downloadedFileName;
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    URL.revokeObjectURL(url);
+    triggerBlobDownload(
+      new Blob([content], { type: 'text/markdown' }),
+      ensurePrdExtension(fileName || 'prd'),
+    );
   }, [content, fileName]);
 
   const handleSave = useCallback(

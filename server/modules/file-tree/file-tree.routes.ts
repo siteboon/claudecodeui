@@ -17,6 +17,19 @@ type UploadedRequest = Request & {
   files?: Express.Multer.File[];
 };
 
+type AuthenticatedRequest = Request & {
+  user?: { id: number; username: string };
+};
+
+/**
+ * Mints the short-lived, single-file capability token that authorizes one native
+ * browser download. Injected so routes stay free of JWT and database imports.
+ */
+type DownloadTokenIssuer = (
+  user: AuthenticatedRequest['user'],
+  target: { projectId: string; path: string },
+) => string;
+
 function readBody(request: Request): Record<string, unknown> {
   return typeof request.body === 'object' && request.body !== null
     ? request.body as Record<string, unknown>
@@ -82,7 +95,7 @@ function normalizeUploadedFiles(request: UploadedRequest): FileTreeUploadedFile[
     : [];
 }
 
-function createRouteHandler(
+export function createRouteHandler(
   operation: (request: Request, response: Response) => void | Promise<void>,
   logger: FileTreeLogger,
 ): RequestHandler {
@@ -112,6 +125,7 @@ export function createFileTreeRouter(
   uploadFilesMiddleware: RequestHandler,
   uploadLimits: FileTreeUploadLimits,
   logger: FileTreeLogger,
+  issueDownloadToken: DownloadTokenIssuer,
 ): express.Router {
   const router = express.Router();
 
@@ -140,6 +154,25 @@ export function createFileTreeRouter(
       if (!response.headersSent) {
         response.status(500).json({ error: 'Error reading file' });
       }
+    });
+  }, logger));
+
+  // Issues the credential for a native browser download. Resolving the target
+  // here means a missing or deleted file surfaces as an error the UI can show,
+  // before the browser starts a download that would only save the error body.
+  router.post('/projects/:projectId/files/download-ticket', createRouteHandler(async (request, response) => {
+    const body = readBody(request);
+    const filePath = readRequiredString(body.path, 'path', 'Invalid file path');
+    const projectId = readProjectId(request);
+    const target = await services.resolveDownloadTarget(projectId, filePath);
+
+    response.json({
+      token: issueDownloadToken((request as AuthenticatedRequest).user, {
+        projectId,
+        path: filePath,
+      }),
+      name: target.name,
+      size: target.size,
     });
   }, logger));
 

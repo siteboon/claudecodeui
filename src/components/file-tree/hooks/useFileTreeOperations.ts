@@ -1,7 +1,9 @@
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import JSZip from 'jszip';
+
 import { api } from '../../../utils/api';
+import { triggerBlobDownload, triggerDownload } from '../../../utils/download';
 import type { FileTreeNode } from '../types/types';
 import type { Project } from '../../../types/app';
 
@@ -248,54 +250,23 @@ export function useFileTreeOperations({
     showToast(t('fileTree.toast.pathCopied', 'Path copied to clipboard'), 'success');
   }, [showToast, t]);
 
-  const triggerBrowserDownload = useCallback((blob: Blob, fileName: string) => {
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-
-    anchor.href = url;
-    anchor.download = fileName;
-
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-
-    URL.revokeObjectURL(url);
-  }, []);
-
-  // Download file or folder
-  const handleDownload = useCallback(async (item: FileTreeNode) => {
-    if (!selectedProject) return;
-
-    setOperationLoading(true);
-    try {
-      if (item.type === 'directory') {
-        // Download folder as ZIP
-        await downloadFolderAsZip(item);
-      } else {
-        // Download single file
-        await downloadSingleFile(item);
-      }
-    } catch (err) {
-      showToast((err as Error).message, 'error');
-    } finally {
-      setOperationLoading(false);
-    }
-  }, [selectedProject, showToast]);
-
-  // Download a single file
+  // Download a single file natively: ask for a short-lived download ticket, then
+  // let the browser stream the file itself, with its own progress and cancel.
+  // Nothing is buffered in page memory, and the ticket request is fast enough
+  // that the click still counts as user activation.
   const downloadSingleFile = useCallback(async (item: FileTreeNode) => {
     if (!selectedProject) return;
 
-    // Use the binary streaming endpoint so downloads preserve raw bytes.
-    const response = await api.readFileBlob(selectedProject.projectId, item.path);
+    const response = await api.requestDownloadTicket(selectedProject.projectId, item.path);
 
     if (!response.ok) {
-      throw new Error('Failed to download file');
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || t('fileTree.toast.downloadFailed', 'Failed to download file'));
     }
 
-    const blob = await response.blob();
-    triggerBrowserDownload(blob, item.name);
-  }, [selectedProject, triggerBrowserDownload]);
+    const { token, name } = await response.json();
+    triggerDownload(api.fileDownloadUrl(token), name || item.name);
+  }, [selectedProject, t]);
 
   // Download folder as ZIP
   const downloadFolderAsZip = useCallback(async (folder: FileTreeNode) => {
@@ -333,10 +304,29 @@ export function useFileTreeOperations({
 
     // Generate ZIP file
     const zipBlob = await zip.generateAsync({ type: 'blob' });
-    triggerBrowserDownload(zipBlob, `${folder.name}.zip`);
+    triggerBlobDownload(zipBlob, `${folder.name}.zip`);
 
     showToast(t('fileTree.toast.folderDownloaded', 'Folder downloaded as ZIP'), 'success');
-  }, [selectedProject, showToast, t, triggerBrowserDownload]);
+  }, [selectedProject, showToast, t]);
+
+  // Download file or folder. Declared after both helpers so it can depend on
+  // them without hitting a temporal dead zone during render.
+  const handleDownload = useCallback(async (item: FileTreeNode) => {
+    if (!selectedProject) return;
+
+    setOperationLoading(true);
+    try {
+      if (item.type === 'directory') {
+        await downloadFolderAsZip(item);
+      } else {
+        await downloadSingleFile(item);
+      }
+    } catch (err) {
+      showToast((err as Error).message, 'error');
+    } finally {
+      setOperationLoading(false);
+    }
+  }, [selectedProject, showToast, downloadFolderAsZip, downloadSingleFile]);
 
   return {
     // Rename operations

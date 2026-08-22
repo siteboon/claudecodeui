@@ -436,6 +436,31 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       };
     },
 
+    // Resolve-only counterpart to `openFile`: native browser downloads need the
+    // path, name, and size, and opening a read stream here would leak a file
+    // descriptor because `res.download` opens its own.
+    async resolveDownloadTarget(projectId, filePath) {
+      const projectRoot = await resolveProjectRoot(projectId);
+      const resolvedPath = resolvePathInsideProject(projectRoot, filePath);
+
+      let stats;
+      try {
+        stats = await fileSystem.stat(resolvedPath);
+      } catch {
+        throw createFileTreeError('File not found', 404, 'FILE_NOT_FOUND');
+      }
+
+      if (stats.isDirectory()) {
+        throw createFileTreeError('Path is a directory', 400, 'NOT_A_FILE');
+      }
+
+      return {
+        path: resolvedPath,
+        name: path.basename(resolvedPath),
+        size: stats.size,
+      };
+    },
+
     async saveTextFile(projectId, filePath, content) {
       const projectRoot = await resolveProjectRoot(projectId);
       const resolvedPath = resolvePathInsideProject(projectRoot, filePath);
