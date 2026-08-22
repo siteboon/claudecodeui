@@ -3,7 +3,7 @@
  * Converts NormalizedMessage[] from the session store into ChatMessage[] for the UI.
  */
 
-import type { NormalizedMessage,ChatMessage,SubagentChildTool } from '@/shared/types';
+import type { ChatMessage,NormalizedMessage } from '@/shared/types';
 import { formatUsageLimitText } from '@/modules/chat/utils/chatFormatting';
 
 function formatToolResultContent(content: unknown): string {
@@ -169,21 +169,13 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
 
       case 'tool_use': {
         const tr = toolResultSource;
-        const isSubagentContainer = msg.toolName === 'Task';
-
-        // Build child tools from subagentTools
-        const childTools: SubagentChildTool[] = [];
-        if (isSubagentContainer && msg.subagentTools && Array.isArray(msg.subagentTools)) {
-          for (const tool of msg.subagentTools as any[]) {
-            childTools.push({
-              toolId: tool.toolId,
-              toolName: tool.toolName,
-              toolInput: tool.toolInput,
-              toolResult: tool.toolResult || null,
-              timestamp: new Date(tool.timestamp || Date.now()),
-            });
-          }
-        }
+        // A row is a subagent container when the backend attached agent
+        // metadata to it. Both providers normalize to that, so no provider or
+        // tool-name special-casing is needed here; the name check only covers
+        // a live spawn whose metadata has not been indexed yet.
+        const isSubagentContainer = Boolean(msg.subagent)
+          || msg.toolName === 'Task'
+          || msg.toolName === 'Agent';
 
         const toolResult = tr
           ? {
@@ -202,14 +194,10 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           toolInput: typeof msg.toolInput === 'string' ? msg.toolInput : JSON.stringify(msg.toolInput ?? '', null, 2),
           toolId: msg.toolId,
           toolResult,
+          toolStatus: typeof msg.status === 'string' ? msg.status : undefined,
           isSubagentContainer,
-          subagentState: isSubagentContainer
-            ? {
-                childTools,
-                currentToolIndex: childTools.length > 0 ? childTools.length - 1 : -1,
-                isComplete: Boolean(toolResult),
-              }
-            : undefined,
+          subagent: msg.subagent,
+          subagentActivity: Array.isArray(msg.subagentTools) ? msg.subagentTools : undefined,
           ...sharedMetadata,
         });
         break;

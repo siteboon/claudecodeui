@@ -1,12 +1,11 @@
 import React, { memo, useMemo, useCallback } from 'react';
 
-import type { DiffLine, Project,SubagentChildTool,ToolStatus } from '@/shared/types';
-import { getToolConfig } from '@/modules/chat/tools/configs/toolConfigs';
+import type { DiffLine, Project,ToolStatus } from '@/shared/types';
+import { formatToolDisplayName, getToolConfig } from '@/modules/chat/tools/configs/toolConfigs';
 import { OneLineDisplay } from '@/modules/chat/tools/OneLineDisplay';
 import { BashCommandDisplay } from '@/modules/chat/tools/BashCommandDisplay';
 import { CollapsibleDisplay } from '@/modules/chat/tools/CollapsibleDisplay';
 import { ToolDiffViewer } from '@/modules/chat/tools/ToolDiffViewer';
-import { SubagentContainer } from '@/modules/chat/tools/SubagentContainer';
 import { MarkdownContent } from '@/modules/chat/tools/ContentRenderers/MarkdownContent';
 import { FileListContent } from '@/modules/chat/tools/ContentRenderers/FileListContent';
 import { TodoListContent } from '@/modules/chat/tools/ContentRenderers/TodoListContent';
@@ -27,12 +26,8 @@ type ToolRendererProps = {
   selectedProject?: Project | null;
   showRawParameters?: boolean;
   rawToolInput?: string;
-  isSubagentContainer?: boolean;
-  subagentState?: {
-    childTools: SubagentChildTool[];
-    currentToolIndex: number;
-    isComplete: boolean;
-  };
+  /** Lifecycle the provider reported, when it reports one. Overrides the result-based inference. */
+  toolStatus?: string;
 };
 
 function getToolCategory(toolName: string): string {
@@ -55,7 +50,11 @@ const CLAUDE_DENIAL_MESSAGES = [
   'permission request cancelled',
 ];
 
-function deriveToolStatus(toolResult: any): ToolStatus {
+function deriveToolStatus(toolResult: any, reportedStatus?: string): ToolStatus {
+  // Codex reports a command's lifecycle directly, so a row can show as running
+  // while its output is still streaming in rather than only once it finishes.
+  if (reportedStatus === 'in_progress') return 'running';
+  if (reportedStatus === 'failed') return 'error';
   if (!toolResult) return 'running';
   if (toolResult.isError) {
     const content = String(toolResult.content || '').toLowerCase().trim();
@@ -85,11 +84,13 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
   selectedProject,
   showRawParameters = false,
   rawToolInput,
-  isSubagentContainer,
-  subagentState
+  toolStatus: reportedStatus,
 }) => {
   const config = getToolConfig(toolName);
   const displayConfig: any = mode === 'input' ? config.input : config.result;
+  // Namespaced MCP ids are unreadable as-is; every renderer gets the friendly
+  // form while lookups keep using the provider's real tool name.
+  const displayName = formatToolDisplayName(toolName);
 
   const parsedData = useMemo(() => {
     try {
@@ -102,8 +103,8 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
 
   // Only derive and show status badge on input renders
   const toolStatus = useMemo(
-    () => mode === 'input' ? deriveToolStatus(toolResult) : undefined,
-    [mode, toolResult],
+    () => mode === 'input' ? deriveToolStatus(toolResult, reportedStatus) : undefined,
+    [mode, toolResult, reportedStatus],
   );
 
   const handleAction = useCallback(() => {
@@ -112,18 +113,6 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
       onFileOpen(value);
     }
   }, [displayConfig, parsedData, onFileOpen]);
-
-  // Route subagent containers to dedicated component (after hooks to satisfy Rules of Hooks)
-  if (isSubagentContainer && subagentState) {
-    if (mode === 'result') return null;
-    return (
-      <SubagentContainer
-        toolInput={toolInput}
-        toolResult={toolResult}
-        subagentState={subagentState}
-      />
-    );
-  }
 
   if (!displayConfig) return null;
 
@@ -166,7 +155,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
 
     return (
       <OneLineDisplay
-        toolName={toolName}
+        toolName={displayName}
         toolResult={toolResult}
         toolId={toolId}
         icon={displayConfig.icon}
@@ -313,7 +302,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
 
     return (
       <CollapsibleDisplay
-        toolName={toolName}
+        toolName={displayName}
         toolId={toolId}
         title={title}
         defaultOpen={defaultOpen}
