@@ -3,6 +3,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 
 import type { ServerEvent } from '../../../contexts/WebSocketContext';
 import { showCompletionTitleIndicator } from '../../../utils/pageTitleNotification';
+import { serverNowIso } from '../../../utils/serverClock';
 import { playChatCompletionSound, playNotificationSound } from '../../../utils/notificationSound';
 import type { MarkSessionIdle, MarkSessionProcessing } from '../../../hooks/useSessionProtection';
 import type { PendingPermissionRequest } from '../types/types';
@@ -156,7 +157,7 @@ export function useChatRealtimeHandlers({
             sessionStore.appendRealtime(sid, {
               id: `protocol_error_${Date.now()}`,
               sessionId: sid,
-              timestamp: new Date().toISOString(),
+              timestamp: serverNowIso(),
               provider,
               kind: 'error',
               content: String(msg.error || 'Request failed'),

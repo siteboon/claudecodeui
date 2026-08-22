@@ -118,7 +118,17 @@ const wss = createWebSocketServer(server, {
 // Make WebSocket server available to routes
 app.locals.wss = wss;
 
-app.use(cors({ exposedHeaders: ['X-Refreshed-Token', 'X-Auth-Error'] }));
+// Chat interleaves browser-stamped optimistic rows with transcript rows the
+// provider CLI stamped with THIS machine's clock, so the client measures the
+// offset between the two. `Date` alone is not enough: nginx hides the upstream
+// `Date` and substitutes its own, so an app-owned header carries the clock that
+// actually writes the transcripts. Neither is CORS-safelisted, so both are
+// exposed for the desktop app and remote clients.
+app.use((_req, res, next) => {
+    res.setHeader('X-Server-Time', new Date().toISOString());
+    next();
+});
+app.use(cors({ exposedHeaders: ['X-Refreshed-Token', 'X-Auth-Error', 'X-Server-Time', 'Date'] }));
 app.use(express.json({
     limit: '50mb',
     type: (req) => {

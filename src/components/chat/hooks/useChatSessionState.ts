@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { MutableRefObject } from 'react';
 
 import { authenticatedFetch } from '../../../utils/api';
+import { toServerIso } from '../../../utils/serverClock';
 import type { MarkSessionIdle, SessionActivityMap } from '../../../hooks/useSessionProtection';
 import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
 import type { SessionStore, NormalizedMessage } from '../../../stores/useSessionStore';
@@ -65,11 +66,12 @@ function chatMessageToNormalized(
   provider: LLMProvider,
 ): NormalizedMessage | null {
   const id = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  const ts = msg.timestamp instanceof Date
-    ? msg.timestamp.toISOString()
-    : typeof msg.timestamp === 'number'
-      ? new Date(msg.timestamp).toISOString()
-      : String(msg.timestamp);
+  // Stamped on the server's timeline: this row is sorted against — and
+  // reconciled with — persisted transcript rows the provider CLI wrote with
+  // its own clock.
+  const ts = msg.timestamp instanceof Date || typeof msg.timestamp === 'number'
+    ? toServerIso(msg.timestamp)
+    : String(msg.timestamp);
   const base = { id, sessionId, timestamp: ts, provider };
 
   if (msg.isToolUse) {

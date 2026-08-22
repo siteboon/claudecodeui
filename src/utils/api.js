@@ -1,5 +1,7 @@
 import { IS_PLATFORM } from "../shared/utils";
 
+import { recordServerClockSample } from "./serverClock";
+
 export const AUTH_TOKEN_REFRESHED_EVENT = 'auth-token-refreshed';
 export const AUTH_SESSION_EXPIRED_EVENT = 'auth-session-expired';
 
@@ -106,6 +108,8 @@ export const authenticatedFetch = (url, options = {}) => {
     defaultHeaders['Authorization'] = `Bearer ${token}`;
   }
 
+  const requestSentAt = Date.now();
+
   return fetch(url, {
     ...options,
     headers: {
@@ -113,6 +117,16 @@ export const authenticatedFetch = (url, options = {}) => {
       ...options.headers,
     },
   }).then((response) => {
+    // Chat sorts server-stamped transcript rows next to browser-stamped
+    // optimistic rows, so keep a running measurement of the offset between
+    // the two clocks. `X-Server-Time` comes from the app itself; `Date` can be
+    // rewritten by a reverse proxy running on another machine.
+    recordServerClockSample(
+      response.headers.get('X-Server-Time') || response.headers.get('Date'),
+      requestSentAt,
+      Date.now(),
+    );
+
     const refreshedToken = response.headers.get('X-Refreshed-Token');
     if (refreshedToken) {
       storeAuthToken(refreshedToken);
