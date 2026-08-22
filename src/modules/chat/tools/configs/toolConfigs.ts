@@ -80,7 +80,25 @@ function summarizeToolInput(input: unknown): string {
  *
  * Used by chat's ToolRenderer to label every tool row.
  */
+/**
+ * Headers for the surfaces every provider is normalized onto.
+ *
+ * The canonical tool names are Claude's, so a Codex plan update would otherwise
+ * announce itself as `TodoWrite`. Naming the surface instead of the tool keeps
+ * the two providers reading as one product.
+ */
+const UNIFIED_TOOL_LABELS: Record<string, string> = {
+  TodoWrite: 'Checklist',
+  TodoRead: 'Checklist',
+  AskUserQuestion: 'Question',
+};
+
 export function formatToolDisplayName(toolName: string): string {
+  const unifiedLabel = UNIFIED_TOOL_LABELS[toolName];
+  if (unifiedLabel) {
+    return unifiedLabel;
+  }
+
   const mcpMatch = /^mcp__([^_]+(?:_[^_]+)*)__(.+)$/.exec(toolName);
   if (!mcpMatch) {
     return toolName;
@@ -353,15 +371,28 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
   // TODO TOOLS
   // ============================================================================
 
-  // Both providers normalize their running checklist onto this tool — Claude's
-  // TodoWrite and Codex's update_plan / todo_list — so one renderer covers both.
+  // Every provider's running checklist normalizes onto this tool — Claude's
+  // TodoWrite and its incremental Task tracker, Codex's update_plan and
+  // todo_list — so one renderer covers all of them.
   TodoWrite: {
     input: {
       type: 'collapsible',
+      // Naming the step in flight makes a collapsed checklist say what the
+      // agent is doing right now, not just how far along it is.
       title: (input) => {
         const todos = Array.isArray(input?.todos) ? input.todos : [];
+        if (todos.length === 0) {
+          return 'Updating checklist';
+        }
+
         const done = todos.filter((todo: any) => todo?.status === 'completed').length;
-        return todos.length > 0 ? `Plan — ${done}/${todos.length} done` : 'Updating todo list';
+        const active = todos.find((todo: any) => todo?.status === 'in_progress');
+        if (active) {
+          return `${String(active.activeForm || active.content)} — ${done}/${todos.length}`;
+        }
+        return done === todos.length
+          ? `Done — ${done}/${todos.length}`
+          : `${done}/${todos.length} done`;
       },
       defaultOpen: true,
       contentType: 'todo-list',
@@ -369,10 +400,10 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
         todos: input.todos
       })
     },
+    // The checklist itself already shows the new state, so a separate
+    // acknowledgement row would only repeat it. Failures still surface.
     result: {
-      type: 'collapsible',
-      contentType: 'success-message',
-      getMessage: () => 'Todo list updated'
+      hideOnSuccess: true
     }
   },
 
@@ -605,17 +636,28 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
   // INTERACTIVE TOOLS
   // ============================================================================
 
+  // Both providers normalize the ask-the-user round trip onto this tool —
+  // Claude's AskUserQuestion and Codex's request_user_input — and the backend
+  // folds the chosen answers into the input, so the question and the answer
+  // render as one card instead of a question card and an opaque result blob.
   AskUserQuestion: {
     input: {
       type: 'collapsible',
+      // A single answered question puts the choice straight in the header;
+      // that is the part the user came back to read.
       title: (input: any) => {
-        const count = input.questions?.length || 0;
-        const hasAnswers = input.answers && Object.keys(input.answers).length > 0;
-        if (count === 1) {
-          const header = input.questions[0]?.header || 'Question';
-          return hasAnswers ? `${header} — answered` : header;
+        const questions = Array.isArray(input?.questions) ? input.questions : [];
+        const answers = input?.answers || {};
+        if (questions.length === 1) {
+          const header = questions[0]?.header || 'Question';
+          const answer = answers[questions[0]?.question];
+          return answer ? `${header} — ${answer}` : header;
         }
-        return hasAnswers ? `${count} questions — answered` : `${count} questions`;
+
+        const answered = questions.filter((question: any) => answers[question?.question]).length;
+        return answered > 0
+          ? `${questions.length} questions — ${answered} answered`
+          : `${questions.length} questions`;
       },
       defaultOpen: true,
       contentType: 'question-answer',
@@ -624,6 +666,7 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
         answers: input.answers || {}
       }),
     },
+    // The result only restates the selection the input now carries.
     result: {
       hideOnSuccess: true
     }

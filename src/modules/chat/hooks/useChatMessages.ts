@@ -161,6 +161,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
             type: 'assistant',
             content: text,
             timestamp: msg.timestamp,
+            memoryCitations: msg.memoryCitations,
             ...sharedMetadata,
           });
         }
@@ -198,6 +199,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           isSubagentContainer,
           subagent: msg.subagent,
           subagentActivity: Array.isArray(msg.subagentTools) ? msg.subagentTools : undefined,
+          memoryCitations: msg.memoryCitations,
           ...sharedMetadata,
         });
         break;

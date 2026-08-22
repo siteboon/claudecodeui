@@ -230,6 +230,14 @@ export type ChatImage = {
   data?: string;
 } & ChatAttachment;
 
+/** One stored memory an assistant reply drew on, naming the file and line range read plus what was taken from it, shown as a footnote under the reply so a memory-derived claim stays traceable. */
+export type MemoryCitation = {
+  /** File and line range that was read, e.g. `MEMORY.md:137-142`. */
+  source: string;
+  /** What the reply took from that range, when the provider states it. */
+  note?: string;
+};
+
 /** One entry in a subagent's recorded timeline, normalized by the backend from either provider's transcript; `kind` decides whether the tool fields or `content` carry the entry, so read only the set that matches. */
 export type SubagentActivity = {
   kind: 'tool' | 'text' | 'thinking';
@@ -282,6 +290,8 @@ export type ChatMessage = {
   subagent?: SubagentInfo;
   /** What that agent did, in order. Empty while the agent is still starting up. */
   subagentActivity?: SubagentActivity[];
+  /** Stored memory this reply drew on, shown as a footnote beneath it. */
+  memoryCitations?: MemoryCitation[];
   /** Lifecycle the provider reported for this tool call, when it reports one; otherwise the status is inferred from whether a result has arrived. */
   toolStatus?: string;
   [key: string]: unknown;
@@ -415,6 +425,8 @@ export type NormalizedMessage = {
   subagentTools?: SubagentActivity[];
   /** Identity and lifecycle of that subagent. */
   subagent?: SubagentInfo;
+  /** Stored memory this reply drew on, when the provider reports it. */
+  memoryCitations?: MemoryCitation[];
   isFinal?: boolean;
   // Cursor-specific ordering
   sequence?: number;

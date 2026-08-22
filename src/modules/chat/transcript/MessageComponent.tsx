@@ -12,6 +12,7 @@ import { Markdown } from '@/modules/chat/transcript/Markdown';
 import StreamingMarkdown from '@/modules/chat/transcript/StreamingMarkdown';
 import MessageCopyControl from '@/modules/chat/transcript/MessageCopyControl';
 import MessageSpeakControl from '@/modules/chat/transcript/MessageSpeakControl';
+import { MemoryCitations } from '@/modules/chat/transcript/MemoryCitations';
 
 type MessageComponentProps = {
   message: ChatMessage;
@@ -391,6 +392,12 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                   );
                 })()}
               </div>
+            )}
+
+            {/* Outside the branches on purpose: a provider can cite memory on a
+                plain reply or on the plan card it turned that reply into. */}
+            {Array.isArray(message.memoryCitations) && message.memoryCitations.length > 0 && (
+              <MemoryCitations citations={message.memoryCitations} />
             )}
 
             {(shouldShowAssistantCopyControl || !isGrouped) && (
