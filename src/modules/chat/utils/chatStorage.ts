@@ -1,6 +1,5 @@
-import type { ClaudeSettings, QueuedSendOptions } from '@/shared/types';
-
-export const CLAUDE_SETTINGS_KEY = 'claude-settings';
+import type { ClaudeSettings } from '@/shared/types';
+import { readUserPreference, writeUserPreference } from '@/shared/userSettings';
 
 export const safeLocalStorage = {
   setItem: (key: string, value: string) => {
@@ -10,11 +9,10 @@ export const safeLocalStorage = {
       if (error?.name === 'QuotaExceededError') {
         console.warn('localStorage quota exceeded, clearing old data');
 
-        const keys = Object.keys(localStorage);
-        const draftKeys = keys.filter((k) => k.startsWith('draft_input_') || k.startsWith('queued_message_'));
-        draftKeys.forEach((k) => {
-          localStorage.removeItem(k);
-        });
+        // The draft mirror is the largest disposable thing in storage, and
+        // dropping it costs nothing: the server copy is authoritative and is
+        // read back on the next hydrate.
+        localStorage.removeItem('chat-drafts');
 
         try {
           localStorage.setItem(key, value);
@@ -44,84 +42,29 @@ export const safeLocalStorage = {
 };
 
 
-export type StoredQueuedMessage = {
-  content: string;
-  options?: QueuedSendOptions;
-  /** Legacy image-only descriptors retained for queued draft compatibility. */
-  images?: unknown[];
-  /**
-   * JSON-safe descriptors returned by POST /api/assets/files. Unlike browser
-   * File objects, they can follow a queued message across session switches.
-   */
-  attachments?: unknown[];
-};
-
-export const queuedMessageKey = (sessionId: string) => `queued_message_${sessionId}`;
-
 /**
- * Reads a session's queued message. Understands both the JSON
- * `{ content, options }` format and the legacy raw-text format.
+ * Claude's tool-permission settings, stored in auth.db so the allow-list a user
+ * builds up on one machine applies on the next.
+ *
+ * `projectSortOrder` is a separate preference now, but stays on the returned
+ * object because ClaudeSettings still describes the whole legacy blob.
  */
-export function readQueuedMessage(sessionId: string): StoredQueuedMessage | null {
-  const raw = safeLocalStorage.getItem(queuedMessageKey(sessionId));
-  if (!raw) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (parsed && typeof parsed === 'object' && typeof (parsed as StoredQueuedMessage).content === 'string') {
-      const { content, options, images, attachments } = parsed as StoredQueuedMessage;
-      const normalizedAttachments = Array.isArray(attachments)
-        ? attachments
-        : Array.isArray(images)
-          ? images
-          : [];
-      return content.trim() || normalizedAttachments.length > 0
-        ? { content, options, attachments: normalizedAttachments }
-        : null;
-    }
-  } catch {
-    // Legacy format: the raw draft text itself.
-  }
-
-  return raw.trim() ? { content: raw } : null;
-}
-
-export function writeQueuedMessage(sessionId: string, message: StoredQueuedMessage): void {
-  safeLocalStorage.setItem(queuedMessageKey(sessionId), JSON.stringify(message));
-}
-
-export function clearQueuedMessage(sessionId: string): void {
-  safeLocalStorage.removeItem(queuedMessageKey(sessionId));
-}
-
 export function getClaudeSettings(): ClaudeSettings {
-  const raw = safeLocalStorage.getItem(CLAUDE_SETTINGS_KEY);
-  if (!raw) {
-    return {
-      allowedTools: [],
-      disallowedTools: [],
-      skipPermissions: false,
-      projectSortOrder: 'name',
-    };
-  }
+  const stored = readUserPreference<Partial<ClaudeSettings>>('claudePermissions', {});
 
-  try {
-    const parsed = JSON.parse(raw);
-    return {
-      ...parsed,
-      allowedTools: Array.isArray(parsed.allowedTools) ? parsed.allowedTools : [],
-      disallowedTools: Array.isArray(parsed.disallowedTools) ? parsed.disallowedTools : [],
-      skipPermissions: Boolean(parsed.skipPermissions),
-      projectSortOrder: parsed.projectSortOrder || 'name',
-    };
-  } catch {
-    return {
-      allowedTools: [],
-      disallowedTools: [],
-      skipPermissions: false,
-      projectSortOrder: 'name',
-    };
-  }
+  return {
+    allowedTools: Array.isArray(stored.allowedTools) ? stored.allowedTools : [],
+    disallowedTools: Array.isArray(stored.disallowedTools) ? stored.disallowedTools : [],
+    skipPermissions: Boolean(stored.skipPermissions),
+    projectSortOrder: readUserPreference<ClaudeSettings['projectSortOrder']>('projectSortOrder', 'name'),
+  };
+}
+
+/** Persists Claude's tool permissions after the user grants one from the chat. */
+export function saveClaudePermissions(permissions: {
+  allowedTools: string[];
+  disallowedTools: string[];
+  skipPermissions: boolean;
+}): void {
+  writeUserPreference('claudePermissions', permissions);
 }

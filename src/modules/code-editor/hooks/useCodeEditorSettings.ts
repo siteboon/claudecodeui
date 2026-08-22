@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { readCodeEditorSettings } from '@/shared/codeEditorSettings';
-import { CODE_EDITOR_SETTINGS_CHANGED_EVENT, CODE_EDITOR_STORAGE_KEYS } from '@/shared/constants';
+import { subscribeToUserPreferences } from '@/shared/userSettings';
 
 /** CodeEditorSurface's fontSize prop is a number; the settings dialog edits a string. */
 const readEditorSettings = () => {
@@ -11,27 +11,15 @@ const readEditorSettings = () => {
 
 export const useCodeEditorSettings = () => {
   // Mirrors the four persisted display settings so the editor re-renders when
-  // the settings dialog rewrites them, in this tab or another one.
+  // the settings dialog rewrites them, in this tab or on another device.
   const [settings, setSettings] = useState(readEditorSettings);
 
-  // Keep legacy behavior where the editor writes wrap settings directly.
-  useEffect(() => {
-    localStorage.setItem(CODE_EDITOR_STORAGE_KEYS.wordWrap, String(settings.wordWrap));
-  }, [settings.wordWrap]);
-
-  useEffect(() => {
-    const refreshFromStorage = () => {
-      setSettings(readEditorSettings());
-    };
-
-    window.addEventListener('storage', refreshFromStorage);
-    window.addEventListener(CODE_EDITOR_SETTINGS_CHANGED_EVENT, refreshFromStorage);
-
-    return () => {
-      window.removeEventListener('storage', refreshFromStorage);
-      window.removeEventListener(CODE_EDITOR_SETTINGS_CHANGED_EVENT, refreshFromStorage);
-    };
-  }, []);
+  // One subscription covers both a write from the settings dialog in this tab
+  // and one arriving with the hydrated preferences, because the store notifies
+  // synchronously in the writing tab too.
+  useEffect(() => subscribeToUserPreferences(() => {
+    setSettings(readEditorSettings());
+  }), []);
 
   return {
     wordWrap: settings.wordWrap,

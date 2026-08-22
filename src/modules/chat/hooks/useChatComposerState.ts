@@ -12,10 +12,18 @@ import type {
 import { useDropzone } from 'react-dropzone';
 
 import { api } from '@/shared/api';
-import { PROVIDER_TOOLS_SETTINGS_STORAGE_KEYS } from '@/shared/constants';
+import { PROVIDER_PERMISSION_PREFERENCE_KEYS } from '@/shared/constants';
+import { readUserPreference } from '@/shared/userSettings';
 import type { CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
 import { grantClaudeToolPermission } from '@/modules/chat/utils/chatPermissions';
-import { clearQueuedMessage, readQueuedMessage, safeLocalStorage, writeQueuedMessage } from '@/modules/chat/utils/chatStorage';
+import {
+  clearQueuedMessage,
+  readDraftText,
+  readQueuedMessage,
+  subscribeToChatDrafts,
+  writeDraftText,
+  writeQueuedMessage,
+} from '@/shared/chatDrafts';
 import { escapeRegExp } from '@/modules/chat/utils/chatFormatting';
 import { useFileMentions } from '@/modules/chat/hooks/useFileMentions';
 import { useSlashCommands } from '@/modules/chat/hooks/useSlashCommands';
@@ -168,14 +176,28 @@ export function useChatComposerState({
   setIsUserScrolledUp,
   setPendingPermissionRequests,
 }: UseChatComposerStateArgs) {
-  const [input, setInput] = useState(() => {
-    if (typeof window !== 'undefined' && selectedProject) {
-      // Draft inputs are keyed by the DB projectId so per-project drafts
-      // survive display-name changes.
-      return safeLocalStorage.getItem(`draft_input_${selectedProject.projectId}`) || '';
+  // The composer text together with the chat scope it belongs to. They are one
+  // state rather than a value plus a ref because they have to move in lockstep:
+  // on a session switch there is one commit where the scope has already changed
+  // while the text has not, and anything that persisted the text in that commit
+  // would write the previous session's message into the new session's draft.
+  // A ref cannot express this — React evaluates a state updater eagerly, so a
+  // ref set inside one is already ahead by the time the effects run.
+  //
+  // Restored synchronously from the draft mirror so a reload shows what was
+  // being typed on the first paint rather than after the drafts request lands.
+  const [inputState, setInputState] = useState<{ scope: string | null; value: string }>(() => {
+    if (typeof window === 'undefined') {
+      return { scope: null, value: '' };
     }
-    return '';
+    const initialScope = selectedSession?.id || currentSessionId
+      || (selectedProject ? `project:${selectedProject.projectId}` : null);
+    return {
+      scope: initialScope,
+      value: initialScope ? readDraftText(initialScope) : '',
+    };
   });
+  const input = inputState.value;
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [fileErrors, setFileErrors] = useState<Map<string, string>>(new Map());
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
@@ -197,6 +219,18 @@ export function useChatComposerState({
   // to currentSessionId for a just-established session that hasn't been
   // handed back to the parent's `selectedSession` prop yet.
   const sessionKey = selectedSession?.id || currentSessionId || null;
+  // The chat scope a draft belongs to: the open session, or the project for a
+  // chat that has not been sent yet and so has no session id. Drafts used to be
+  // keyed by project alone, so every session in a project shared one draft.
+  const draftScope = sessionKey ?? (selectedProjectId ? `project:${selectedProjectId}` : null);
+  const draftScopeRef = useRef(draftScope);
+  draftScopeRef.current = draftScope;
+  const setInput = useCallback<Dispatch<SetStateAction<string>>>((next) => {
+    setInputState((previous) => ({
+      scope: draftScopeRef.current,
+      value: typeof next === 'function' ? next(previous.value) : next,
+    }));
+  }, []);
   const sessionKeyRef = useRef(sessionKey);
   const processingSessionsRef = useRef<SessionActivityMap | undefined>(processingSessions);
   sessionKeyRef.current = sessionKey;
@@ -528,23 +562,14 @@ export function useChatComposerState({
   // queued message keeps the provider settings it was composed under even if
   // it is later dispatched outside this composer (app-level auto-send).
   const buildSendOptions = useCallback((currentInput: string): QueuedSendOptions => {
-    const getToolsSettings = () => {
-      try {
-        const settingsKey = PROVIDER_TOOLS_SETTINGS_STORAGE_KEYS[provider];
-        const savedSettings = safeLocalStorage.getItem(settingsKey);
-        if (savedSettings) {
-          return JSON.parse(savedSettings);
-        }
-      } catch (error) {
-        console.error('Error loading tools settings:', error);
-      }
-
-      return {
+    const getToolsSettings = () => readUserPreference(
+      PROVIDER_PERMISSION_PREFERENCE_KEYS[provider],
+      {
         allowedTools: [],
         disallowedTools: [],
         skipPermissions: false,
-      };
-    };
+      },
+    );
 
     const toolsSettings = getToolsSettings();
 
@@ -664,8 +689,9 @@ export function useChatComposerState({
         if (textareaRef.current) {
           textareaRef.current.style.height = 'auto';
         }
-        // selectedProject is guaranteed by the guard at the top of handleSubmit.
-        safeLocalStorage.removeItem(`draft_input_${selectedProject.projectId}`);
+        if (draftScopeRef.current) {
+          writeDraftText(draftScopeRef.current, '');
+        }
         return;
       }
 
@@ -822,7 +848,9 @@ export function useChatComposerState({
         textareaRef.current.style.height = 'auto';
       }
 
-      safeLocalStorage.removeItem(`draft_input_${selectedProject.projectId}`);
+      if (draftScopeRef.current) {
+        writeDraftText(draftScopeRef.current, '');
+      }
     },
     [
       selectedSession,
@@ -923,28 +951,36 @@ export function useChatComposerState({
     inputValueRef.current = input;
   }, [input]);
 
+  // Swap in the open scope's draft, and pick up one that arrives from another
+  // device with the hydrated drafts.
   useEffect(() => {
-    if (!selectedProjectId) {
+    if (!draftScope) {
       return;
     }
-    const savedInput = safeLocalStorage.getItem(`draft_input_${selectedProjectId}`) || '';
-    setInput((previous) => {
-      const next = previous === savedInput ? previous : savedInput;
-      inputValueRef.current = next;
-      return next;
-    });
-  }, [selectedProjectId]);
 
+    const restoreDraft = () => {
+      const savedInput = readDraftText(draftScope);
+      setInputState((previous) => {
+        if (previous.scope === draftScope && previous.value === savedInput) {
+          return previous;
+        }
+        inputValueRef.current = savedInput;
+        return { scope: draftScope, value: savedInput };
+      });
+    };
+
+    restoreDraft();
+    return subscribeToChatDrafts(restoreDraft);
+  }, [draftScope]);
+
+  // Only persist text that was typed for the scope it is about to be written
+  // to; see the inputState declaration for why the scope travels with the text.
   useEffect(() => {
-    if (!selectedProjectId) {
+    if (!draftScope || inputState.scope !== draftScope) {
       return;
     }
-    if (input !== '') {
-      safeLocalStorage.setItem(`draft_input_${selectedProjectId}`, input);
-    } else {
-      safeLocalStorage.removeItem(`draft_input_${selectedProjectId}`);
-    }
-  }, [input, selectedProjectId]);
+    writeDraftText(draftScope, inputState.value);
+  }, [inputState, draftScope]);
 
   // Persist the queued draft under its session's key. Must be defined BEFORE
   // the swap effect below: on a session switch there is one commit where

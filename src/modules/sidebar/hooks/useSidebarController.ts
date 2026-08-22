@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TFunction } from 'i18next';
 
 import { api } from '@/shared/api';
+import { subscribeToUserPreferences } from '@/shared/userSettings';
 import { usePaletteOps } from '@/modules/command-palette';
 import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationProjectResult, ConversationSearchResults, LLMProvider, Project, ProjectSession, ProjectSortOrder, RecentConversationListItem, SearchProgress, ActiveSidebarRename, PendingSidebarDeletion, SessionTitleSearchResult, SessionWithProvider, SidebarSearchMode } from '@/shared/types';
 import {
@@ -164,31 +165,16 @@ export function useSidebarController({
     }
   }, [projects, isLoading]);
 
+  // The sort order used to be polled once a second (plus a `storage` listener
+  // for other tabs) because nothing announced a change. The preference store
+  // notifies on every write and on every hydrate, so both are unnecessary.
   useEffect(() => {
     const loadSortOrder = () => {
       setProjectSortOrder(readProjectSortOrder());
     };
 
     loadSortOrder();
-
-    const handleStorageChange = (event: StorageEvent) => {
-      if (event.key === 'claude-settings') {
-        loadSortOrder();
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-
-    const interval = setInterval(() => {
-      if (document.hasFocus()) {
-        loadSortOrder();
-      }
-    }, 1000);
-
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      clearInterval(interval);
-    };
+    return subscribeToUserPreferences(loadSortOrder);
   }, []);
 
   useEffect(() => {

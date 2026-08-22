@@ -11,7 +11,6 @@
 
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
-import LanguageDetector from 'i18next-browser-languagedetector';
 
 // Import translation resources
 import enCommon from '@/modules/i18n/locales/en/common.json';
@@ -111,24 +110,26 @@ import zhTWTasks from '@/modules/i18n/locales/zh-TW/tasks.json';
 
 // Import supported languages configuration
 import { languages } from '@/modules/i18n/languages';
+import {
+  readUserPreference,
+  subscribeToUserPreferences,
+  writeUserPreference,
+} from '@/shared/userSettings';
 
-// Get saved language preference from localStorage
+// The chosen language lives in auth.db so it follows the user between devices.
+// It is read synchronously from the preference mirror because i18n has to be
+// configured at module load, long before any request could resolve.
 const getSavedLanguage = (): string => {
-  try {
-    const saved = localStorage.getItem('userLanguage');
-    // Validate that the saved language is supported
-    if (saved && languages.some(lang => lang.value === saved)) {
-      return saved;
-    }
-    return 'en';
-  } catch {
-    return 'en';
+  const saved = readUserPreference<string | null>('userLanguage', null);
+  // Validate that the saved language is supported
+  if (saved && languages.some(lang => lang.value === saved)) {
+    return saved;
   }
+  return 'en';
 };
 
 // Initialize i18next
 i18n
-  .use(LanguageDetector) // Detect user language
   .use(initReactI18next) // Pass i18n instance to react-i18next
   .init({
     // Resources containing all translations
@@ -267,26 +268,19 @@ i18n
       bindI18n: 'languageChanged', // Re-render on language change
       bindI18nStore: false, // Don't re-render on resource changes
     },
-
-    // Detection options
-    detection: {
-      // Order of language detection (local storage first)
-      order: ['localStorage'],
-
-      // Keys to look for in localStorage
-      lookupLocalStorage: 'userLanguage',
-
-      // Cache user language
-      caches: ['localStorage'],
-    },
   });
 
 // Save language preference when it changes
 i18n.on('languageChanged', (lng: string) => {
-  try {
-    localStorage.setItem('userLanguage', lng);
-  } catch (error) {
-    console.error('Failed to save language preference:', error);
+  writeUserPreference('userLanguage', lng);
+});
+
+// A language chosen on another device arrives with the hydrated preferences,
+// after i18n was already initialized with whatever the mirror held.
+subscribeToUserPreferences(() => {
+  const saved = readUserPreference<string | null>('userLanguage', null);
+  if (saved && saved !== i18n.language && languages.some(lang => lang.value === saved)) {
+    void i18n.changeLanguage(saved);
   }
 });
 

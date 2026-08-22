@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 
+import { resetUserPreferences, writeUserPreference } from '@/shared/userSettings';
+
 /**
  * The four per-provider default models used to be four useState slots with four
  * copy-pasted reconciliation effects and a four-branch setter. They are now one
@@ -18,6 +20,12 @@ const okJson = (data: unknown) => Promise.resolve({
 
 vi.mock('@/shared/api', () => ({
   api: {
+    // The preference store PATCHes through api.user; it is stubbed rather than
+    // exercised here, which keeps these tests about the model record.
+    user: {
+      preferences: () => okJson({ success: true, preferences: {} }),
+      savePreferences: () => okJson({ success: true, preferences: {} }),
+    },
     providers: {
       models: () => okJson({ success: true, data: null }),
       capabilities: () => okJson({ success: true, data: null }),
@@ -42,6 +50,9 @@ const renderProviderState = async () => {
 
 beforeEach(() => {
   localStorage.clear();
+  // The preference store is a module-level singleton, so its in-memory copy
+  // outlives localStorage.clear() and would leak one test's writes into the next.
+  resetUserPreferences();
 });
 
 afterEach(() => {
@@ -123,7 +134,9 @@ test('setting the same model twice keeps the record identity stable', async () =
 });
 
 test('the active provider’s model is what currentProviderModel reports', async () => {
-  localStorage.setItem('selected-provider', 'cursor');
+  // The provider selection is a stored preference; the per-provider model is
+  // still a plain localStorage key.
+  writeUserPreference('selectedProvider', 'cursor');
   localStorage.setItem('cursor-model', 'cursor-active');
 
   const { result } = await renderProviderState();

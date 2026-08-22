@@ -1,6 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
+import {
+  readUserPreference,
+  subscribeToUserPreferences,
+  writeUserPreference,
+} from '@/shared/userSettings';
+
 type ThemeContextValue = {
   isDarkMode: boolean;
   toggleDarkMode: () => void;
@@ -18,10 +24,11 @@ export const useTheme = () => {
 
 /** Mounted once by App so every module can read and switch the colour theme through useTheme. */
 export const ThemeProvider = ({ children }: { children: ReactNode }) => {
-  // Check for saved theme preference or default to system preference
+  // Check for saved theme preference or default to system preference. The
+  // stored theme is read synchronously from the preference mirror so the very
+  // first paint is already the right colour.
   const [isDarkMode, setIsDarkMode] = useState(() => {
-    // Check localStorage first
-    const savedTheme = localStorage.getItem('theme');
+    const savedTheme = readUserPreference<string | null>('theme', null);
     if (savedTheme) {
       return savedTheme === 'dark';
     }
@@ -34,11 +41,22 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
     return false;
   });
 
-  // Update document class and localStorage when theme changes
+  // The theme now lives in auth.db, so a change made on another device (or in
+  // another tab) arrives through the preference store rather than a re-render.
+  useEffect(() => subscribeToUserPreferences(() => {
+    const savedTheme = readUserPreference<string | null>('theme', null);
+    if (savedTheme) {
+      setIsDarkMode(savedTheme === 'dark');
+    }
+  }), []);
+
+  // Applying the theme to the document and persisting it are deliberately
+  // separate. Persisting from here would also fire on mount — before the stored
+  // theme had been fetched — writing this device's system default over the
+  // theme the user actually chose on another one.
   useEffect(() => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
 
       // Update iOS status bar style and theme color for dark mode
       const statusBarMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
@@ -52,7 +70,6 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
       }
     } else {
       document.documentElement.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
 
       // Update iOS status bar style and theme color for light mode
       const statusBarMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
@@ -74,7 +91,7 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = (e: MediaQueryListEvent) => {
       // Only update if user hasn't manually set a preference
-      const savedTheme = localStorage.getItem('theme');
+      const savedTheme = readUserPreference<string | null>('theme', null);
       if (!savedTheme) {
         setIsDarkMode(e.matches);
       }
@@ -84,8 +101,14 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, []);
 
+  // The only writer: a theme is stored because the user picked it, never
+  // because this device happened to start on one.
   const toggleDarkMode = useCallback(() => {
-    setIsDarkMode(prev => !prev);
+    setIsDarkMode((previous) => {
+      const next = !previous;
+      writeUserPreference('theme', next ? 'dark' : 'light');
+      return next;
+    });
   }, []);
 
   // A fresh object here would re-render every consumer in the app on any

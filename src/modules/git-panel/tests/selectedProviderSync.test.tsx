@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
 
 import { act, renderHook } from '@testing-library/react';
-import { beforeEach, test, vi } from 'vitest';
+import { beforeEach, test } from 'vitest';
 
 import { useSelectedProvider } from '@/modules/git-panel/hooks/useSelectedProvider';
 import { writeSelectedProvider } from '@/shared/selectedProvider';
+import {
+  resetUserPreferences,
+  subscribeToUserPreferences,
+  writeUserPreference,
+} from '@/shared/userSettings';
 
 /**
  * The receiving half of the provider-selection contract.
@@ -18,6 +23,9 @@ import { writeSelectedProvider } from '@/shared/selectedProvider';
 
 beforeEach(() => {
   localStorage.clear();
+  // The preference store is a module-level singleton, so its in-memory copy
+  // outlives localStorage.clear() and would leak one test's writes into the next.
+  resetUserPreferences();
 });
 
 test('an unset provider starts at the shared default', () => {
@@ -44,53 +52,49 @@ test('a switch made in this tab reaches the panel', () => {
   assert.equal(result.current, 'cursor');
 });
 
-test('a switch made in another tab reaches the panel', () => {
+test('a switch made elsewhere reaches the panel', () => {
+  // Previously a cross-tab `storage` event. The selection lives in auth.db now,
+  // so the same path also carries a switch made on another device.
   const { result } = renderHook(() => useSelectedProvider());
 
   act(() => {
-    localStorage.setItem('selected-provider', 'opencode');
-    window.dispatchEvent(new StorageEvent('storage', {
-      key: 'selected-provider',
-      newValue: 'opencode',
-    }));
+    writeUserPreference('selectedProvider', 'opencode');
   });
 
   assert.equal(result.current, 'opencode');
 });
 
-test('an unrelated storage event does not trigger a re-read', () => {
+test('an unrelated preference change does not change the reported provider', () => {
   writeSelectedProvider('codex');
   const { result } = renderHook(() => useSelectedProvider());
 
   act(() => {
-    // A different key changing must not make the panel re-read; the guard is
-    // what keeps every localStorage write in the app from waking it.
-    localStorage.setItem('selected-provider', 'cursor');
-    window.dispatchEvent(new StorageEvent('storage', { key: 'theme', newValue: 'dark' }));
+    writeUserPreference('theme', 'dark');
   });
 
   assert.equal(result.current, 'codex');
 });
 
-test('the panel unsubscribes both listeners when it unmounts', () => {
-  // Asserted on the (type, handler) pairs rather than by dispatching after
-  // unmount: React drops a setState on an unmounted component silently, so a
-  // leaked listener is invisible from the outside and the test would pass
+test('the panel releases its subscription when it unmounts', () => {
+  // Asserted by counting the store's live subscribers rather than by writing a
+  // preference after unmount: React drops a setState on an unmounted component
+  // silently, so a leak is invisible from the outside and the test would pass
   // whether or not the cleanup ran.
-  const OUR_EVENTS = new Set(['storage', 'selected-provider:changed']);
-  const added = vi.spyOn(window, 'addEventListener');
-  const removed = vi.spyOn(window, 'removeEventListener');
+  let liveSubscribers = 0;
+  const countLive = () => {
+    liveSubscribers += 1;
+  };
+  const stopCounting = subscribeToUserPreferences(countLive);
 
   const { unmount } = renderHook(() => useSelectedProvider());
-  const subscribed = added.mock.calls.filter(([type]) => OUR_EVENTS.has(String(type)));
-  assert.equal(subscribed.length, 2, 'expected the same-tab and cross-tab listeners');
+  writeUserPreference('selectedProvider', 'cursor');
+  const withPanelMounted = liveSubscribers;
 
   unmount();
+  liveSubscribers = 0;
+  writeUserPreference('selectedProvider', 'opencode');
 
-  for (const [type, handler] of subscribed) {
-    assert.ok(
-      removed.mock.calls.some(([t, h]) => t === type && h === handler),
-      `${String(type)} listener was never removed`,
-    );
-  }
+  stopCounting();
+  assert.equal(withPanelMounted, 1, 'the counter itself must be notified once per write');
+  assert.equal(liveSubscribers, 1, 'only the counter should remain; the panel leaked');
 });

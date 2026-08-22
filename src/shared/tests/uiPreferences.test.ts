@@ -3,27 +3,35 @@ import assert from 'node:assert/strict';
 import { beforeEach, test } from 'vitest';
 
 import {
-  readInitialUiPreferences,
+  readStoredUiPreferences,
   uiPreferencesReducer,
-  UI_PREFERENCES_STORAGE_KEY,
 } from '@/shared/uiPreferences';
 import type { UiPreferences } from '@/shared/uiPreferences';
+import { writeUserPreference, resetUserPreferences } from '@/shared/userSettings';
 
 /**
  * These preferences were previously held by four independent useReducer
- * instances that reconciled through a CustomEvent. Consolidating them onto one
- * owner has to preserve the stored shape, the legacy per-key migration and the
- * string/boolean coercion, or users lose settings on upgrade.
+ * instances that reconciled through a CustomEvent, then by one localStorage
+ * blob, and now by the server-backed preference store. Consolidating them has
+ * to preserve the stored shape and the string/boolean coercion, or users lose
+ * settings on upgrade.
  */
 
 beforeEach(() => {
   localStorage.clear();
+  // The preference store is a module-level singleton, so its in-memory copy
+  // outlives localStorage.clear() and would leak one test's writes into the next.
+  resetUserPreferences();
 });
 
-const baseline = (): UiPreferences => readInitialUiPreferences();
+const storeUiPreferences = (value: unknown) => {
+  writeUserPreference('uiPreferences', value);
+};
+
+const baseline = (): UiPreferences => readStoredUiPreferences();
 
 test('a fresh install gets the documented defaults', () => {
-  assert.deepEqual(readInitialUiPreferences(), {
+  assert.deepEqual(readStoredUiPreferences(), {
     showRawParameters: false,
     showThinking: true,
     sendByCtrlEnter: false,
@@ -32,49 +40,27 @@ test('a fresh install gets the documented defaults', () => {
   });
 });
 
-test('the unified blob is read back', () => {
-  localStorage.setItem(
-    UI_PREFERENCES_STORAGE_KEY,
-    JSON.stringify({ showThinking: false, voiceEnabled: true }),
-  );
+test('the stored blob is read back', () => {
+  storeUiPreferences({ showThinking: false, voiceEnabled: true });
 
-  const preferences = readInitialUiPreferences();
+  const preferences = readStoredUiPreferences();
   assert.equal(preferences.showThinking, false);
   assert.equal(preferences.voiceEnabled, true);
   assert.equal(preferences.sidebarVisible, true, 'unlisted keys keep their default');
 });
 
 test('values stored as strings are coerced, as older versions wrote them', () => {
-  localStorage.setItem(
-    UI_PREFERENCES_STORAGE_KEY,
-    JSON.stringify({ showThinking: 'false', voiceEnabled: 'true' }),
-  );
+  storeUiPreferences({ showThinking: 'false', voiceEnabled: 'true' });
 
-  const preferences = readInitialUiPreferences();
+  const preferences = readStoredUiPreferences();
   assert.equal(preferences.showThinking, false);
   assert.equal(preferences.voiceEnabled, true);
 });
 
-test('settings from before the unified blob still migrate', () => {
-  localStorage.setItem('showThinking', JSON.stringify(false));
-  localStorage.setItem('sidebarVisible', JSON.stringify(false));
+test('a stored value of the wrong type falls back instead of throwing', () => {
+  storeUiPreferences('not an object');
 
-  const preferences = readInitialUiPreferences();
-  assert.equal(preferences.showThinking, false);
-  assert.equal(preferences.sidebarVisible, false);
-});
-
-test('the unified blob wins over the legacy keys', () => {
-  localStorage.setItem('showThinking', JSON.stringify(false));
-  localStorage.setItem(UI_PREFERENCES_STORAGE_KEY, JSON.stringify({ showThinking: true }));
-
-  assert.equal(readInitialUiPreferences().showThinking, true);
-});
-
-test('a corrupt blob falls back instead of throwing', () => {
-  localStorage.setItem(UI_PREFERENCES_STORAGE_KEY, '{not json');
-
-  assert.equal(readInitialUiPreferences().showThinking, true);
+  assert.equal(readStoredUiPreferences().showThinking, true);
 });
 
 test('setting a preference changes only that key', () => {

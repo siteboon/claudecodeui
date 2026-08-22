@@ -7,6 +7,10 @@ import {
   readCodeEditorSettings,
   writeCodeEditorSettings,
 } from '@/shared/codeEditorSettings';
+import {
+  readUserPreference,
+  writeUserPreferences,
+} from '@/shared/userSettings';
 import { useProviderAuthStatus } from '@/modules/provider-auth';
 import type { AgentProvider, ClaudePermissionsState, CodeEditorSettingsState, CodexPermissionMode, CursorPermissionsState, NotificationPreferencesState, ProjectSortOrder, SettingsMainTab } from '@/shared/types';
 
@@ -59,18 +63,6 @@ const normalizeMainTab = (tab: string): SettingsMainTab => {
   }
 
   return KNOWN_MAIN_TABS.includes(tab as SettingsMainTab) ? (tab as SettingsMainTab) : 'agents';
-};
-
-const parseJson = <T>(value: string | null, fallback: T): T => {
-  if (!value) {
-    return fallback;
-  }
-
-  try {
-    return JSON.parse(value) as T;
-  } catch {
-    return fallback;
-  }
 };
 
 const toCodexPermissionMode = (value: unknown): CodexPermissionMode => {
@@ -159,31 +151,22 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
 
   const loadSettings = useCallback(async () => {
     try {
-      const savedClaudeSettings = parseJson<ClaudeSettingsStorage>(
-        localStorage.getItem('claude-settings'),
-        {},
-      );
+      const savedClaudeSettings = readUserPreference<ClaudeSettingsStorage>('claudePermissions', {});
       setClaudePermissions({
         allowedTools: savedClaudeSettings.allowedTools || [],
         disallowedTools: savedClaudeSettings.disallowedTools || [],
         skipPermissions: Boolean(savedClaudeSettings.skipPermissions),
       });
-      setProjectSortOrder(savedClaudeSettings.projectSortOrder === 'date' ? 'date' : 'name');
+      setProjectSortOrder(readUserPreference<ProjectSortOrder>('projectSortOrder', 'name') === 'date' ? 'date' : 'name');
 
-      const savedCursorSettings = parseJson<CursorSettingsStorage>(
-        localStorage.getItem('cursor-tools-settings'),
-        {},
-      );
+      const savedCursorSettings = readUserPreference<CursorSettingsStorage>('cursorPermissions', {});
       setCursorPermissions({
         allowedCommands: savedCursorSettings.allowedCommands || [],
         disallowedCommands: savedCursorSettings.disallowedCommands || [],
         skipPermissions: Boolean(savedCursorSettings.skipPermissions),
       });
 
-      const savedCodexSettings = parseJson<CodexSettingsStorage>(
-        localStorage.getItem('codex-settings'),
-        {},
-      );
+      const savedCodexSettings = readUserPreference<CodexSettingsStorage>('codexPermissions', {});
       setCodexPermissionMode(toCodexPermissionMode(savedCodexSettings.permissionMode));
 
       try {
@@ -237,26 +220,24 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     setSaveStatus(null);
 
     try {
-      const now = new Date().toISOString();
-      localStorage.setItem('claude-settings', JSON.stringify({
-        allowedTools: claudePermissions.allowedTools,
-        disallowedTools: claudePermissions.disallowedTools,
-        skipPermissions: claudePermissions.skipPermissions,
+      // One call so the whole dialog's state reaches the server as a single
+      // merge-patch rather than four racing requests.
+      writeUserPreferences({
+        claudePermissions: {
+          allowedTools: claudePermissions.allowedTools,
+          disallowedTools: claudePermissions.disallowedTools,
+          skipPermissions: claudePermissions.skipPermissions,
+        },
         projectSortOrder,
-        lastUpdated: now,
-      }));
-
-      localStorage.setItem('cursor-tools-settings', JSON.stringify({
-        allowedCommands: cursorPermissions.allowedCommands,
-        disallowedCommands: cursorPermissions.disallowedCommands,
-        skipPermissions: cursorPermissions.skipPermissions,
-        lastUpdated: now,
-      }));
-
-      localStorage.setItem('codex-settings', JSON.stringify({
-        permissionMode: codexPermissionMode,
-        lastUpdated: now,
-      }));
+        cursorPermissions: {
+          allowedCommands: cursorPermissions.allowedCommands,
+          disallowedCommands: cursorPermissions.disallowedCommands,
+          skipPermissions: cursorPermissions.skipPermissions,
+        },
+        codexPermissions: {
+          permissionMode: codexPermissionMode,
+        },
+      });
 
       const notificationResponse = await api.settings.saveNotificationPreferences(
         notificationPreferences,
@@ -320,7 +301,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
   const isInitialLoadRef = useRef(true);
 
   useEffect(() => {
-    // Skip auto-save on initial load (settings are being loaded from localStorage)
+    // Skip auto-save on initial load (settings are being loaded from the store)
     if (isInitialLoadRef.current) {
       isInitialLoadRef.current = false;
       return;

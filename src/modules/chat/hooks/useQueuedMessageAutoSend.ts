@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-import { clearQueuedMessage, readQueuedMessage } from '@/modules/chat/utils/chatStorage';
+import { clearQueuedMessage, readQueuedMessage } from '@/shared/chatDrafts';
 import type { MarkSessionProcessing, SessionActivityMap } from '@/shared/types';
 
 type UseQueuedMessageAutoSendArgs = {

@@ -1,7 +1,11 @@
+import { readUserPreference } from '@/shared/userSettings';
+
 /**
  * The boolean UI preferences and their reducer, kept separate from the provider
- * so the state transitions and the legacy-key migration are unit-testable
- * without rendering anything.
+ * so the state transitions are unit-testable without rendering anything.
+ *
+ * The values are stored in `auth.db` through the preference store, so a toggle
+ * made on one device is in effect on the next.
  */
 
 /** Toggles the user controls from Quick Settings and the Settings dialog. */
@@ -18,9 +22,6 @@ export type UiPreferenceKey = keyof UiPreferences;
 export type UiPreferencesAction =
   | { type: 'set'; key: UiPreferenceKey; value: unknown }
   | { type: 'set_many'; value?: Partial<Record<UiPreferenceKey, unknown>> };
-
-/** The single blob every preference is stored under. */
-export const UI_PREFERENCES_STORAGE_KEY = 'uiPreferences';
 
 const DEFAULTS: UiPreferences = {
   showRawParameters: false,
@@ -48,38 +49,16 @@ const parseBoolean = (value: unknown, fallback: boolean): boolean => {
   return fallback;
 };
 
-/** Each preference used to live under its own key, before the unified blob. */
-const readLegacyPreference = (key: UiPreferenceKey, fallback: boolean): boolean => {
-  try {
-    const raw = localStorage.getItem(key);
-    if (raw === null) return fallback;
-    return parseBoolean(JSON.parse(raw), fallback);
-  } catch {
-    return fallback;
-  }
-};
-
-export const readInitialUiPreferences = (): UiPreferences => {
-  try {
-    const raw = localStorage.getItem(UI_PREFERENCES_STORAGE_KEY);
-
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        const parsedRecord = parsed as Record<string, unknown>;
-
-        return PREFERENCE_KEYS.reduce((acc, key) => {
-          acc[key] = parseBoolean(parsedRecord[key], DEFAULTS[key]);
-          return acc;
-        }, { ...DEFAULTS });
-      }
-    }
-  } catch {
-    // Fall through to the legacy keys when the blob is missing or invalid.
-  }
+/**
+ * Reads the stored preferences, filling in a default for anything the user has
+ * never toggled. Synchronous, because the sidebar's visibility and the composer's
+ * send-key are needed on the very first render.
+ */
+export const readStoredUiPreferences = (): UiPreferences => {
+  const stored = readUserPreference<Record<string, unknown>>('uiPreferences', {});
 
   return PREFERENCE_KEYS.reduce((acc, key) => {
-    acc[key] = readLegacyPreference(key, DEFAULTS[key]);
+    acc[key] = parseBoolean(stored[key], DEFAULTS[key]);
     return acc;
   }, { ...DEFAULTS });
 };

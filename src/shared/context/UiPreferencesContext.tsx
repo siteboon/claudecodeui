@@ -1,12 +1,12 @@
-import { createContext, useContext, useEffect, useMemo, useReducer } from 'react';
+import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
 import type { ReactNode } from 'react';
 
 import {
-  readInitialUiPreferences,
+  readStoredUiPreferences,
   uiPreferencesReducer,
-  UI_PREFERENCES_STORAGE_KEY,
 } from '@/shared/uiPreferences';
 import type { UiPreferenceKey, UiPreferences } from '@/shared/uiPreferences';
+import { subscribeToUserPreferences, writeUserPreference } from '@/shared/userSettings';
 
 type UiPreferenceActions = {
   setPreference: (key: UiPreferenceKey, value: boolean) => void;
@@ -22,9 +22,9 @@ const UiPreferencesActionsContext = createContext<UiPreferenceActions | null>(nu
  * This used to be a plain hook, which meant every call site held its own reducer
  * and they reconciled after the fact through a `ui-preferences:sync` CustomEvent
  * tagged with a per-instance id — so one toggle produced four localStorage
- * writes and four DOM events. With a single owner the same-tab event channel is
- * unnecessary; the `storage` listener remains, because it is the only thing that
- * carries a change to another tab.
+ * writes and four DOM events. With a single owner that channel is unnecessary,
+ * and the preferences themselves now live in `auth.db`, which is what carries a
+ * change to another tab or another device.
  */
 export function UiPreferencesProvider({ children }: { children: ReactNode }) {
   // The single copy of the preferences. Every consumer used to hold its own
@@ -33,29 +33,31 @@ export function UiPreferencesProvider({ children }: { children: ReactNode }) {
   const [preferences, dispatch] = useReducer(
     uiPreferencesReducer,
     undefined,
-    readInitialUiPreferences,
+    readStoredUiPreferences,
   );
 
+  // Persisting from an effect keyed on the state would also fire on mount —
+  // pushing the defaults to the server before the user's real preferences had
+  // even been fetched — and again for every value that *arrived* from the
+  // store, echoing each hydrate straight back. Comparing by content, not by
+  // reference, keeps the write one-directional: the reducer returns a fresh
+  // object for an incoming change, so an identity check would not catch it.
+  const lastPersistedRef = useRef<string>(JSON.stringify(preferences));
+
   useEffect(() => {
-    localStorage.setItem(UI_PREFERENCES_STORAGE_KEY, JSON.stringify(preferences));
+    const serialized = JSON.stringify(preferences);
+    if (lastPersistedRef.current === serialized) {
+      return;
+    }
+    lastPersistedRef.current = serialized;
+    writeUserPreference('uiPreferences', preferences);
   }, [preferences]);
 
-  useEffect(() => {
-    const handleStorageChange = (event: StorageEvent) => {
-      if (event.key !== UI_PREFERENCES_STORAGE_KEY || event.newValue === null) {
-        return;
-      }
-
-      try {
-        dispatch({ type: 'set_many', value: JSON.parse(event.newValue) });
-      } catch {
-        // Ignore malformed storage updates from another tab.
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
+  useEffect(() => subscribeToUserPreferences(() => {
+    const stored = readStoredUiPreferences();
+    lastPersistedRef.current = JSON.stringify(stored);
+    dispatch({ type: 'set_many', value: stored });
+  }), []);
 
   const actions = useMemo<UiPreferenceActions>(() => ({
     setPreference: (key, value) => dispatch({ type: 'set', key, value }),

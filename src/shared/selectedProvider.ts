@@ -1,4 +1,5 @@
 import type { LLMProvider } from '@/shared/types';
+import { readUserPreference, writeUserPreference } from '@/shared/userSettings';
 
 /**
  * The provider the user last chose, shared by chat, the shell, the git panel and
@@ -9,28 +10,21 @@ import type { LLMProvider } from '@/shared/types';
  * three modules. Nothing published a same-tab change, so the git panel's reader
  * (which listens only for the cross-tab `storage` event) never saw a switch made
  * in its own tab.
+ *
+ * The value now lives in `auth.db` through the preference store, which notifies
+ * its subscribers synchronously — including in the tab that wrote — so the
+ * choice both reaches every reader at once and follows the user between devices.
  */
-
-const SELECTED_PROVIDER_STORAGE_KEY = 'selected-provider';
-
-/** Emitted on write, because `storage` does not fire in the writing tab. */
-export const SELECTED_PROVIDER_CHANGED_EVENT = 'selected-provider:changed';
 
 const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode'];
 
 const DEFAULT_PROVIDER: LLMProvider = 'claude';
 
 export function readSelectedProvider(): LLMProvider {
-  const stored = localStorage.getItem(SELECTED_PROVIDER_STORAGE_KEY);
+  const stored = readUserPreference<string | null>('selectedProvider', null);
   return PROVIDERS.includes(stored as LLMProvider) ? (stored as LLMProvider) : DEFAULT_PROVIDER;
 }
 
 export function writeSelectedProvider(provider: LLMProvider): void {
-  localStorage.setItem(SELECTED_PROVIDER_STORAGE_KEY, provider);
-  window.dispatchEvent(new Event(SELECTED_PROVIDER_CHANGED_EVENT));
-}
-
-/** True when a `storage` event describes a change to this key. */
-export function isSelectedProviderStorageEvent(event: StorageEvent): boolean {
-  return event.key === SELECTED_PROVIDER_STORAGE_KEY;
+  writeUserPreference('selectedProvider', provider);
 }

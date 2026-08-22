@@ -1,5 +1,5 @@
 import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult } from '@/shared/types';
-import { CLAUDE_SETTINGS_KEY, getClaudeSettings, safeLocalStorage } from '@/modules/chat/utils/chatStorage';
+import { getClaudeSettings, saveClaudePermissions } from '@/modules/chat/utils/chatStorage';
 
 export function buildClaudeToolPermissionEntry(toolName?: string, toolInput?: unknown) {
   if (!toolName) return null;
@@ -65,9 +65,12 @@ export function grantClaudeToolPermission(entry: string | null): PermissionGrant
     ...settings,
     allowedTools: nextAllowed,
     disallowedTools: nextDisallowed,
-    lastUpdated: new Date().toISOString(),
   };
 
-  safeLocalStorage.setItem(CLAUDE_SETTINGS_KEY, JSON.stringify(updatedSettings));
+  saveClaudePermissions({
+    allowedTools: nextAllowed,
+    disallowedTools: nextDisallowed,
+    skipPermissions: settings.skipPermissions,
+  });
   return { success: true, alreadyAllowed, updatedSettings };
 }

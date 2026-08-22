@@ -1117,7 +1117,7 @@ export type CursorPermissionsState = {
   skipPermissions: boolean;
 };
 
-/** The code editor display preferences shown in the appearance tab (word wrap, minimap, line numbers and font size), each mirrored into localStorage. */
+/** The code editor display preferences shown in the appearance tab (word wrap, minimap, line numbers and font size), stored together as one server-backed `codeEditorSettings` preference. */
 export type CodeEditorSettingsState = {
   wordWrap: boolean;
   showMinimap: boolean;

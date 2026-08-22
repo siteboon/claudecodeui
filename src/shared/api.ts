@@ -415,6 +415,17 @@ export const api = {
       post('/api/user/git-config', { gitName, gitEmail }),
     onboardingStatus: () => get('/api/user/onboarding-status'),
     completeOnboarding: () => post('/api/user/complete-onboarding'),
+
+    // Preferences and chat drafts live server-side so they follow the user
+    // from one device to another. `savePreferences` is a merge-patch: only the
+    // keys it is given are written.
+    preferences: () => get('/api/user/preferences'),
+    savePreferences: (updates: Record<string, unknown>) =>
+      patch('/api/user/preferences', updates),
+    drafts: () => get('/api/user/drafts'),
+    saveDraft: (scope: string, draft: { text: string; queuedMessage?: unknown }) =>
+      put('/api/user/drafts', { scope, ...draft }),
+    deleteDraft: (scope: string) => del('/api/user/drafts', { scope }),
   },
 
   // Server-side settings: API keys, stored credentials, notifications, web push

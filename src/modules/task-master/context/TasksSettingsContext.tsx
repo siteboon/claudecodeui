@@ -2,6 +2,11 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
 
 import { api } from '@/shared/api';
+import {
+  readUserPreference,
+  subscribeToUserPreferences,
+  writeUserPreference,
+} from '@/shared/userSettings';
 
 type TaskMasterInstallationStatus = {
   isReady?: boolean;
@@ -22,8 +27,15 @@ type TasksSettingsContextValue = {
   isCheckingInstallation: boolean;
 };
 
+/**
+ * Tasks are off unless the user turns them on. The feature depends on an
+ * external TaskMaster install, so defaulting it on put a Tasks tab and a chat
+ * banner in front of everyone who had never heard of it.
+ */
+const TASKS_ENABLED_DEFAULT = false;
+
 const TasksSettingsContext = createContext<TasksSettingsContextValue>({
-  tasksEnabled: true,
+  tasksEnabled: TASKS_ENABLED_DEFAULT,
   setTasksEnabled: () => {},
   toggleTasksEnabled: () => {},
   isTaskMasterInstalled: null,
@@ -42,21 +54,31 @@ export const useTasksSettings = () => {
 
 /** Mounted by App.tsx; supplies the tasks-enabled preference and TaskMaster installation status that the chat, sidebar, settings and project-workspace modules read through useTasksSettings. */
 export const TasksSettingsProvider = ({ children }: { children: ReactNode }) => {
-  const [tasksEnabled, setTasksEnabled] = useState<boolean>(() => {
-    // Load from localStorage on initialization
-    const saved = localStorage.getItem('tasks-enabled');
-    return saved !== null ? JSON.parse(saved) : true; // Default to true
-  });
+  const [tasksEnabled, setTasksEnabled] = useState<boolean>(
+    () => readUserPreference('tasksEnabled', TASKS_ENABLED_DEFAULT),
+  );
 
   const [isTaskMasterInstalled, setIsTaskMasterInstalled] = useState<boolean | null>(null);
   const [isTaskMasterReady, setIsTaskMasterReady] = useState<boolean | null>(null);
   const [installationStatus, setInstallationStatus] = useState<TaskMasterInstallationStatus | null>(null);
   const [isCheckingInstallation, setIsCheckingInstallation] = useState(true);
 
-  // Save to localStorage whenever tasksEnabled changes
-  useEffect(() => {
-    localStorage.setItem('tasks-enabled', JSON.stringify(tasksEnabled));
-  }, [tasksEnabled]);
+  // Only a deliberate toggle is persisted. Persisting from an effect keyed on
+  // the state would also fire on mount, writing the default before the user
+  // had touched anything — which is exactly what made the previous
+  // "has the user chosen?" check below unreachable.
+  const chooseTasksEnabled = useCallback<Dispatch<SetStateAction<boolean>>>((update) => {
+    setTasksEnabled((previous) => {
+      const next = typeof update === 'function' ? update(previous) : update;
+      writeUserPreference('tasksEnabled', next);
+      return next;
+    });
+  }, []);
+
+  // A choice made on another device arrives with the hydrated preferences.
+  useEffect(() => subscribeToUserPreferences(() => {
+    setTasksEnabled(readUserPreference('tasksEnabled', TASKS_ENABLED_DEFAULT));
+  }), []);
 
   // Check TaskMaster installation status asynchronously on component mount
   useEffect(() => {
@@ -69,10 +91,11 @@ export const TasksSettingsProvider = ({ children }: { children: ReactNode }) => 
           setIsTaskMasterInstalled(data.installation?.isInstalled || false);
           setIsTaskMasterReady(data.isReady || false);
 
-          // If TaskMaster is not installed and user hasn't explicitly enabled tasks,
-          // disable tasks automatically
-          const userEnabledTasks = localStorage.getItem('tasks-enabled');
-          if (!data.installation?.isInstalled && !userEnabledTasks) {
+          // If TaskMaster is not installed and the user has never made a
+          // choice, disable tasks automatically — but never override a user
+          // who deliberately turned them on.
+          const userChoice = readUserPreference<boolean | null>('tasksEnabled', null);
+          if (!data.installation?.isInstalled && userChoice === null) {
             setTasksEnabled(false);
           }
         } else {
@@ -94,25 +117,25 @@ export const TasksSettingsProvider = ({ children }: { children: ReactNode }) => 
   }, []);
 
   const toggleTasksEnabled = useCallback(() => {
-    setTasksEnabled(prev => !prev);
-  }, []);
+    chooseTasksEnabled(prev => !prev);
+  }, [chooseTasksEnabled]);
 
   // A fresh object here would re-render every consumer on any render of this
   // provider, whether or not the settings moved.
   const contextValue = useMemo<TasksSettingsContextValue>(() => ({
     tasksEnabled,
-    setTasksEnabled,
+    setTasksEnabled: chooseTasksEnabled,
     toggleTasksEnabled,
     isTaskMasterInstalled,
     isTaskMasterReady,
     installationStatus,
     isCheckingInstallation
   }), [
+    chooseTasksEnabled,
     installationStatus,
     isCheckingInstallation,
     isTaskMasterInstalled,
     isTaskMasterReady,
-    setTasksEnabled,
     tasksEnabled,
     toggleTasksEnabled,
   ]);

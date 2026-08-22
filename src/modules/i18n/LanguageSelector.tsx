@@ -13,7 +13,7 @@ type LanguageSelectorProps = {
  * Language Selector Component
  *
  * A dropdown component for selecting the application language.
- * Automatically updates the i18n language and persists to localStorage.
+ * Automatically updates the i18n language and persists it as a user preference.
  *
  * Used by the settings module (appearance tab) and the quick-settings-panel module
  * so the user can switch language from either surface.

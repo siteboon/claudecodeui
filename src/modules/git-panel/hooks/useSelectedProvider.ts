@@ -1,10 +1,7 @@
 import { useEffect, useState } from 'react';
 
-import {
-  isSelectedProviderStorageEvent,
-  readSelectedProvider,
-  SELECTED_PROVIDER_CHANGED_EVENT,
-} from '@/shared/selectedProvider';
+import { readSelectedProvider } from '@/shared/selectedProvider';
+import { subscribeToUserPreferences } from '@/shared/userSettings';
 import type { LLMProvider } from '@/shared/types';
 
 /** Used by the git panel to attribute a generated commit message to a provider. */
@@ -14,24 +11,12 @@ export function useSelectedProvider(): LLMProvider {
   // provider a generated commit message is attributed to.
   const [provider, setProvider] = useState(readSelectedProvider);
 
-  useEffect(() => {
-    const syncProvider = () => setProvider(readSelectedProvider());
-
-    const handleStorageChange = (event: StorageEvent) => {
-      if (isSelectedProviderStorageEvent(event)) {
-        syncProvider();
-      }
-    };
-
-    // The custom event covers this tab; `storage` covers the others.
-    window.addEventListener(SELECTED_PROVIDER_CHANGED_EVENT, syncProvider);
-    window.addEventListener('storage', handleStorageChange);
-
-    return () => {
-      window.removeEventListener(SELECTED_PROVIDER_CHANGED_EVENT, syncProvider);
-      window.removeEventListener('storage', handleStorageChange);
-    };
-  }, []);
+  // One subscription covers a switch made in this tab and one hydrated from the
+  // server, including a switch made on another device: the store notifies
+  // synchronously in the writing tab too.
+  useEffect(() => subscribeToUserPreferences(() => {
+    setProvider(readSelectedProvider());
+  }), []);
 
   return provider;
 }
