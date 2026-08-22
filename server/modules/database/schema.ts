@@ -160,6 +160,44 @@ CREATE TABLE IF NOT EXISTS provider_models (
 );
 `;
 
+/**
+ * Per-user application preferences that used to live in browser localStorage.
+ *
+ * One row per (user, key); `preference_value` is always a JSON document so a
+ * key can hold a scalar (`"dark"`), a flag (`false`) or a whole settings blob
+ * without the schema having to know which. Keeping them server-side is what
+ * makes a preference follow the user from one device to another.
+ */
+export const USER_PREFERENCES_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS user_preferences (
+    user_id INTEGER NOT NULL,
+    preference_key TEXT NOT NULL,
+    preference_value TEXT NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, preference_key),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+`;
+
+/**
+ * Unsent composer text and queued messages, per user and per chat scope.
+ *
+ * `draft_scope` is a session id, or `project:<projectId>` for a chat that has
+ * not been sent yet and therefore has no session. Storing this server-side is
+ * what lets a message typed on a laptop be finished on a phone.
+ */
+export const SESSION_DRAFTS_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS session_drafts (
+    user_id INTEGER NOT NULL,
+    draft_scope TEXT NOT NULL,
+    draft_text TEXT NOT NULL DEFAULT '',
+    queued_message TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, draft_scope),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+`;
+
 export const INIT_SCHEMA_SQL = `
 -- Initialize authentication database
 PRAGMA foreign_keys = ON;
@@ -207,4 +245,8 @@ ${APP_CONFIG_TABLE_SCHEMA_SQL}
 ${PROVIDER_MODELS_TABLE_SCHEMA_SQL}
 CREATE INDEX IF NOT EXISTS idx_provider_models_provider_order
 ON provider_models(provider, sort_order, id);
+
+${USER_PREFERENCES_TABLE_SCHEMA_SQL}
+
+${SESSION_DRAFTS_TABLE_SCHEMA_SQL}
 `;
