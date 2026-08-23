@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 
 import { WebSocket } from 'ws';
@@ -116,4 +118,37 @@ test('shell output detects and normalizes a wrapped authentication URL', () => {
   });
 
   pty.emitExit();
+});
+
+test('a missing project directory is reported as an error frame and starts no pty', () => {
+  const socket = createFakeSocket();
+  let spawnCount = 0;
+  const dependencies = {
+    resolveProviderSessionId: () => null,
+    spawnPty: () => {
+      spawnCount += 1;
+      return createFakePty() as never;
+    },
+  };
+
+  handleShellConnection(socket as never, dependencies);
+  socket.emit(
+    'message',
+    JSON.stringify({
+      type: 'init',
+      // A project row survives its directory being deleted or unmounted, so
+      // this is what the Shell tab sends for a stale sidebar entry.
+      projectPath: path.join(os.tmpdir(), `shell-missing-${Date.now()}`),
+      sessionId: `missing-path-${Date.now()}`,
+      hasSession: false,
+      provider: 'plain-shell',
+      isPlainShell: true,
+    })
+  );
+
+  assert.equal(spawnCount, 0);
+  assert.deepEqual(
+    socket.frames.map((frame) => JSON.parse(frame) as Record<string, unknown>),
+    [{ type: 'error', message: 'Invalid project path' }]
+  );
 });

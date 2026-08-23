@@ -99,6 +99,18 @@ export function useShellConnection({
         return;
       }
 
+      if (message.type === 'error') {
+        // The server sends this instead of spawning a PTY, then keeps the
+        // socket open — so without writing it out the terminal just stays
+        // blank forever under a green "connected" dot. Deliberately not
+        // closing the socket: `onclose` clears the screen and would erase
+        // the very message being surfaced here.
+        const detail = typeof message.message === 'string' && message.message
+          ? message.message
+          : 'Shell error';
+        terminalRef.current?.write(`\r\n\x1b[31m${detail}\x1b[0m\r\n`);
+        return;
+      }
     },
     [handleProcessCompletion, onOutputRef, terminalRef],
   );
