@@ -94,7 +94,7 @@ const agentRoutes = createAgentModule({
 });
 
 // Single WebSocket server that handles chat, shell, and plugin proxy paths.
-const wss = createWebSocketServer(server, {
+createWebSocketServer(server, {
     verifyClient: {
         isPlatform: IS_PLATFORM,
         authenticateWebSocket,
@@ -114,9 +114,6 @@ const wss = createWebSocketServer(server, {
     },
     getPluginPort,
 });
-
-// Make WebSocket server available to routes
-app.locals.wss = wss;
 
 app.use(cors({ exposedHeaders: ['X-Refreshed-Token', 'X-Auth-Error'] }));
 app.use(express.json({
