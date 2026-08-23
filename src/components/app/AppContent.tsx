@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -12,6 +12,12 @@ import { useDeviceSettings } from '../../hooks/useDeviceSettings';
 import { useSessionProtection } from '../../hooks/useSessionProtection';
 import { useProjectsState } from '../../hooks/useProjectsState';
 import { useQueuedMessageAutoSend } from '../../hooks/useQueuedMessageAutoSend';
+import {
+  SIDEBAR_WIDTH_KEYBOARD_STEP,
+  SIDEBAR_WIDTH_MAX,
+  SIDEBAR_WIDTH_MIN,
+  useSidebarWidth,
+} from '../../hooks/useSidebarWidth';
 import { api } from '../../utils/api';
 
 type RunningSessionApiItem = {
@@ -54,6 +60,11 @@ function AppContentInner() {
   const { t } = useTranslation('common');
   const { isMobile } = useDeviceSettings({ trackPWA: false });
   const { ws, sendMessage, subscribe } = useWebSocket();
+  const { width: sidebarWidth, setWidth: setSidebarWidth, resetWidth: resetSidebarWidth } = useSidebarWidth();
+  // Drag origin; null while no resize is in progress.
+  const resizeOriginRef = useRef<{ pointerX: number; width: number } | null>(null);
+  const resizeFrameRef = useRef<number | null>(null);
+  const pendingWidthRef = useRef<number>(sidebarWidth);
 
   const {
     processingSessions,
@@ -204,11 +215,97 @@ function AppContentInner() {
     return () => vv.removeEventListener('resize', update);
   }, []);
 
+  // Sidebar resizing (desktop only). Pointer capture keeps the drag alive when
+  // the cursor leaves the 4px handle, and the width is only written to storage
+  // once the pointer is released.
+  const handleResizeStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    resizeOriginRef.current = { pointerX: event.clientX, width: sidebarWidth };
+    pendingWidthRef.current = sidebarWidth;
+    document.body.style.userSelect = 'none';
+  }, [sidebarWidth]);
+
+  const handleResizeMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const origin = resizeOriginRef.current;
+    if (!origin) return;
+
+    pendingWidthRef.current = origin.width + (event.clientX - origin.pointerX);
+    if (resizeFrameRef.current !== null) return;
+    resizeFrameRef.current = window.requestAnimationFrame(() => {
+      resizeFrameRef.current = null;
+      setSidebarWidth(pendingWidthRef.current, false);
+    });
+  }, [setSidebarWidth]);
+
+  const handleResizeEnd = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!resizeOriginRef.current) return;
+    resizeOriginRef.current = null;
+
+    if (resizeFrameRef.current !== null) {
+      window.cancelAnimationFrame(resizeFrameRef.current);
+      resizeFrameRef.current = null;
+    }
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    document.body.style.userSelect = '';
+    setSidebarWidth(pendingWidthRef.current);
+  }, [setSidebarWidth]);
+
+  const handleResizeKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      setSidebarWidth(sidebarWidth - SIDEBAR_WIDTH_KEYBOARD_STEP);
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      setSidebarWidth(sidebarWidth + SIDEBAR_WIDTH_KEYBOARD_STEP);
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      resetSidebarWidth();
+    }
+  }, [resetSidebarWidth, setSidebarWidth, sidebarWidth]);
+
+  // Going mobile mid-drag unmounts the separator, so the pointerup that would have
+  // ended the drag never arrives: the body stays unselectable, and the live origin
+  // would make a plain hover resize the sidebar once the desktop layout returns.
+  useEffect(() => {
+    if (!isMobile) return;
+    resizeOriginRef.current = null;
+    if (resizeFrameRef.current !== null) {
+      window.cancelAnimationFrame(resizeFrameRef.current);
+      resizeFrameRef.current = null;
+    }
+    document.body.style.userSelect = '';
+  }, [isMobile]);
+
+  // A drag interrupted by an unmount must not leave the page unselectable.
+  useEffect(() => () => {
+    if (resizeFrameRef.current !== null) window.cancelAnimationFrame(resizeFrameRef.current);
+    document.body.style.userSelect = '';
+  }, []);
+
   return (
     <div className="fixed inset-0 flex bg-background" style={{ bottom: 'var(--keyboard-height, 0px)' }}>
       {!isMobile ? (
-        <div className="h-full flex-shrink-0 border-r border-border/50">
+        <div className="relative h-full flex-shrink-0 border-r border-border/50" style={{ width: sidebarWidth }}>
           <Sidebar {...sidebarSharedProps} />
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={t('versionUpdate.ariaLabels.resizeSidebar')}
+            aria-valuenow={sidebarWidth}
+            aria-valuemin={SIDEBAR_WIDTH_MIN}
+            aria-valuemax={SIDEBAR_WIDTH_MAX}
+            tabIndex={0}
+            className="absolute inset-y-0 -right-0.5 z-10 w-1 cursor-col-resize hover:bg-primary/40 focus-visible:bg-primary/60 focus-visible:outline-none"
+            onPointerDown={handleResizeStart}
+            onPointerMove={handleResizeMove}
+            onPointerUp={handleResizeEnd}
+            onPointerCancel={handleResizeEnd}
+            onDoubleClick={resetSidebarWidth}
+            onKeyDown={handleResizeKeyDown}
+          />
         </div>
       ) : (
         <div
