@@ -52,13 +52,6 @@
     "viewFullOutput": "Ver salida completa ({{count}} caracteres)",
     "contentDisplayed": "El contenido del archivo se muestra en la vista de diff de arriba"
   },
-  "interactive": {
-    "title": "Prompt interactivo",
-    "waiting": "Esperando tu respuesta en la CLI",
-    "instruction": "Selecciona una opción en la terminal donde está corriendo Claude.",
-    "selectedOption": "✓ Claude seleccionó la opción {{number}}",
-    "instructionDetail": "En la CLI seleccionarías esta opción de forma interactiva con las flechas o escribiendo el número."
-  },
   "thinking": {
     "title": "Pensando...",
     "emoji": "💭 Pensando..."

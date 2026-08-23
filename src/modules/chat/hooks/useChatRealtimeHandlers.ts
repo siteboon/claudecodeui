@@ -323,7 +323,7 @@ export function useChatRealtimeHandlers({
           break;
         }
 
-        // text, tool_use, tool_result, thinking, interactive_prompt, task_notification
+        // text, tool_use, tool_result, thinking, task_notification
         // → already routed to store above, no UI side effects needed
         default:
           break;

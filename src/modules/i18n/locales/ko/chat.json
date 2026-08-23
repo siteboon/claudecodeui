@@ -52,13 +52,6 @@
     "viewFullOutput": "전체 출력 보기 ({{count}}자)",
     "contentDisplayed": "파일 내용이 위의 Diff 보기에 표시됩니다"
   },
-  "interactive": {
-    "title": "대화형 프롬프트",
-    "waiting": "CLI에서 응답을 기다리는 중",
-    "instruction": "Claude가 실행 중인 터미널에서 옵션을 선택해주세요.",
-    "selectedOption": "✓ Claude가 옵션 {{number}}을(를) 선택했습니다",
-    "instructionDetail": "CLI에서 화살표 키 또는 숫자를 입력하여 이 옵션을 대화형으로 선택합니다."
-  },
   "thinking": {
     "title": "생각 중...",
     "emoji": "💭 생각 중..."

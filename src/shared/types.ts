@@ -272,7 +272,6 @@ export type ChatMessage = {
   reasoning?: string;
   isThinking?: boolean;
   isStreaming?: boolean;
-  isInteractivePrompt?: boolean;
   isToolUse?: boolean;
   toolName?: string;
   toolInput?: unknown;
@@ -447,7 +446,6 @@ type MessageKind =
   | 'permission_request'
   | 'permission_cancelled'
   | 'session_created'
-  | 'interactive_prompt'
   | 'task_notification';
 
 // ---------------------------

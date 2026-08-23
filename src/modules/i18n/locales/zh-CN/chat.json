@@ -52,13 +52,6 @@
     "viewFullOutput": "查看完整输出（{{count}} 个字符）",
     "contentDisplayed": "文件内容显示在上面的差异视图中"
   },
-  "interactive": {
-    "title": "交互式提示",
-    "waiting": "等待您在 CLI 中响应",
-    "instruction": "请在 Claude 运行的终端中选择一个选项。",
-    "selectedOption": "✓ Claude 选择了选项 {{number}}",
-    "instructionDetail": "在 CLI 中，您可以使用方向键或输入数字来交互式地选择此选项。"
-  },
   "thinking": {
     "title": "思考中...",
     "emoji": "💭 思考中..."

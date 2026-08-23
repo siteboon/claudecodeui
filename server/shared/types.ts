@@ -188,7 +188,6 @@ export type MessageKind =
   | 'permission_request'
   | 'permission_cancelled'
   | 'session_created'
-  | 'interactive_prompt'
   | 'task_notification';
 
 /**

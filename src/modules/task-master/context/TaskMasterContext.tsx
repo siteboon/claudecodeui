@@ -331,14 +331,10 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
         void refreshTasks();
         return;
       }
-
-      if (message.type === 'taskmaster-mcp-status-changed') {
-        void refreshMCPStatus();
-      }
     };
 
     return subscribe(handleEvent);
-  }, [refreshCurrentProjectTaskMaster, refreshMCPStatus, refreshTasks, subscribe]);
+  }, [refreshCurrentProjectTaskMaster, refreshTasks, subscribe]);
 
   const contextValue = useMemo<TaskMasterContextValue>(
     () => ({

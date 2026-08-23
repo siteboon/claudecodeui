@@ -148,9 +148,6 @@ function chatMessageToNormalized(
   if (msg.isThinking) {
     return { ...base, kind: 'thinking', content: msg.content || '' } as NormalizedMessage;
   }
-  if (msg.isInteractivePrompt) {
-    return { ...base, kind: 'interactive_prompt', content: msg.content || '' } as NormalizedMessage;
-  }
   if ((msg as any).isTaskNotification) {
     return {
       ...base,

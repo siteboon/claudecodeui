@@ -51,13 +51,6 @@
     "viewFullOutput": "全出力を表示（{{count}}文字）",
     "contentDisplayed": "ファイルの内容は上の差分ビューに表示されています"
   },
-  "interactive": {
-    "title": "インタラクティブプロンプト",
-    "waiting": "CLIでの応答を待っています",
-    "instruction": "Claudeが実行されているターミナルでオプションを選択してください。",
-    "selectedOption": "✓ Claudeがオプション{{number}}を選択しました",
-    "instructionDetail": "CLIでは、矢印キーまたは番号を入力してオプションを選択します。"
-  },
   "thinking": {
     "title": "思考中...",
     "emoji": "💭 思考中..."

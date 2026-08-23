@@ -226,16 +226,6 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
         });
         break;
 
-      case 'interactive_prompt':
-        converted.push({
-          type: 'assistant',
-          content: msg.content || '',
-          timestamp: msg.timestamp,
-          isInteractivePrompt: true,
-          ...sharedMetadata,
-        });
-        break;
-
       case 'task_notification':
         converted.push({
           type: 'assistant',

@@ -51,13 +51,6 @@
     "viewFullOutput": "Vollständige Ausgabe anzeigen ({{count}} Zeichen)",
     "contentDisplayed": "Der Dateiinhalt wird in der Diff-Ansicht oben angezeigt"
   },
-  "interactive": {
-    "title": "Interaktive Eingabeaufforderung",
-    "waiting": "Warte auf deine Antwort in der CLI",
-    "instruction": "Bitte wähl eine Option in deinem Terminal, in dem Claude läuft.",
-    "selectedOption": "✓ Claude hat Option {{number}} ausgewählt",
-    "instructionDetail": "In der CLI würdest du diese Option interaktiv mit den Pfeiltasten oder durch Eingabe der Nummer auswählen."
-  },
   "thinking": {
     "title": "Denkt nach...",
     "emoji": "💭 Denkt nach..."

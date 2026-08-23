@@ -51,13 +51,6 @@
     "viewFullOutput": "Vedi output completo ({{count}} caratteri)",
     "contentDisplayed": "Il contenuto del file è visualizzato nella vista differenze sopra"
   },
-  "interactive": {
-    "title": "Prompt interattivo",
-    "waiting": "In attesa della tua risposta nella CLI",
-    "instruction": "Seleziona un'opzione nel terminale dove Claude è in esecuzione.",
-    "selectedOption": "✓ Claude ha selezionato l'opzione {{number}}",
-    "instructionDetail": "Nella CLI, selezioneresti questa opzione interattivamente usando i tasti freccia o digitando il numero."
-  },
   "thinking": {
     "title": "Sto pensando...",
     "emoji": "💭 Sto pensando..."

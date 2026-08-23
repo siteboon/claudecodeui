@@ -51,13 +51,6 @@
     "viewFullOutput": "Tam çıktıyı göster ({{count}} karakter)",
     "contentDisplayed": "Dosya içeriği yukarıdaki diff görünümünde gösteriliyor"
   },
-  "interactive": {
-    "title": "Etkileşimli Prompt",
-    "waiting": "CLI'da yanıtın bekleniyor",
-    "instruction": "Lütfen Claude'un çalıştığı terminalde bir seçenek seç.",
-    "selectedOption": "✓ Claude {{number}} numaralı seçeneği seçti",
-    "instructionDetail": "CLI'da bu seçeneği ok tuşları veya numara girerek interaktif olarak seçebilirsin."
-  },
   "thinking": {
     "title": "Düşünüyor...",
     "emoji": "💭 Düşünüyor..."

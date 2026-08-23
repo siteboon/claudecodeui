@@ -52,13 +52,6 @@
     "viewFullOutput": "Voir la sortie complète ({{count}} caractères)",
     "contentDisplayed": "Le contenu du fichier est affiché dans la vue diff ci-dessus"
   },
-  "interactive": {
-    "title": "Invite interactive",
-    "waiting": "En attente de votre réponse dans le CLI",
-    "instruction": "Veuillez sélectionner une option dans votre terminal où Claude s'exécute.",
-    "selectedOption": "✓ Claude a sélectionné l'option {{number}}",
-    "instructionDetail": "Dans le CLI, vous sélectionneriez cette option de manière interactive avec les touches fléchées ou en tapant le numéro."
-  },
   "thinking": {
     "title": "Réflexion...",
     "emoji": "💭 Réflexion..."
