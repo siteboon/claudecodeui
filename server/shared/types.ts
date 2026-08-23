@@ -215,6 +215,42 @@ export type GatewayEventKind =
  */
 export type ServerEventKind = MessageKind | GatewayEventKind;
 
+/** The owning project as it appears inside a `session_upserted` delta. */
+export type SessionUpsertedProject = {
+  projectId: string;
+  path: string;
+  fullPath: string;
+  displayName: string;
+  isStarred: boolean;
+};
+
+/**
+ * The `session_upserted` sidebar delta, built only by
+ * `modules/websocket/services/session-upsert-broadcast.service.ts`.
+ *
+ * Typed rather than assembled as an untyped object literal because the payload
+ * used to be built in two places and silently drifted apart: one copy set
+ * `providerSessionId` and the other did not, and nothing could detect it.
+ *
+ * `providerSessionId` is how a client recognises that a row it is currently
+ * showing has been merged into its canonical app-session row, so it is always
+ * present — `null` only while the provider has not reported an id yet.
+ */
+export type SessionUpsertedEvent = {
+  kind: 'session_upserted';
+  sessionId: string;
+  providerSessionId: string | null;
+  provider: LLMProvider;
+  session: {
+    id: string;
+    summary: string;
+    messageCount: number;
+    lastActivity: string;
+  };
+  project: SessionUpsertedProject | null;
+  timestamp: string;
+};
+
 /**
  * Provider-neutral message envelope used in REST responses and realtime channels.
  *

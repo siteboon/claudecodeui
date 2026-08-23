@@ -21,9 +21,13 @@ type UseProjectsStateArgs = {
 };
 
 /**
- * Shape of the per-session sidebar delta broadcast by the backend file
- * watcher (`kind: session_upserted`). It carries everything needed to upsert
- * one session row in place — no full project-list snapshot is ever pushed.
+ * Shape of the per-session sidebar delta (`kind: session_upserted`). It carries
+ * everything needed to upsert one session row in place — no full project-list
+ * snapshot is ever pushed.
+ *
+ * Produced on the wire by exactly one builder,
+ * `server/modules/websocket/services/session-upsert-broadcast.service.ts`,
+ * which both the on-disk sessions watcher and the chat run registry go through.
  */
 type SessionUpsertedEvent = ServerEvent & {
   sessionId: string;
@@ -574,6 +578,11 @@ export function useProjectsState({
       __provider: provider,
       __projectId: project.projectId,
     };
+    // A purely local record that reuses the wire shape to feed
+    // `upsertSessionIntoProject`; it is never dispatched onto the socket. It
+    // deliberately carries no `providerSessionId` — the row was created moments
+    // ago by `POST /api/providers/sessions` and the provider has not reported
+    // an id yet, so there is nothing truthful to put there.
     const upsert: SessionUpsertedEvent = {
       kind: 'session_upserted',
       sessionId: newSessionId,
