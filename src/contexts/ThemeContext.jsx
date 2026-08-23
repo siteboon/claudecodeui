@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 const ThemeContext = createContext();
 
@@ -18,12 +18,20 @@ export const ThemeProvider = ({ children }) => {
     if (savedTheme) {
       return savedTheme === 'dark';
     }
-    
+
     // Check system preference
     if (window.matchMedia) {
       return window.matchMedia('(prefers-color-scheme: dark)').matches;
     }
-    
+
+    return false;
+  });
+
+  // Check for reduced motion preference
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(() => {
+    if (window.matchMedia) {
+      return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }
     return false;
   });
 
@@ -32,13 +40,13 @@ export const ThemeProvider = ({ children }) => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
       localStorage.setItem('theme', 'dark');
-      
+
       // Update iOS status bar style and theme color for dark mode
       const statusBarMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
       if (statusBarMeta) {
         statusBarMeta.setAttribute('content', 'black-translucent');
       }
-      
+
       const themeColorMeta = document.querySelector('meta[name="theme-color"]');
       if (themeColorMeta) {
         themeColorMeta.setAttribute('content', '#141414'); // Dark background color (hsl(0 0% 8%))
@@ -46,13 +54,13 @@ export const ThemeProvider = ({ children }) => {
     } else {
       document.documentElement.classList.remove('dark');
       localStorage.setItem('theme', 'light');
-      
+
       // Update iOS status bar style and theme color for light mode
       const statusBarMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
       if (statusBarMeta) {
         statusBarMeta.setAttribute('content', 'default');
       }
-      
+
       const themeColorMeta = document.querySelector('meta[name="theme-color"]');
       if (themeColorMeta) {
         themeColorMeta.setAttribute('content', '#f6f4ef'); // Light background color (warm cream)
@@ -77,13 +85,34 @@ export const ThemeProvider = ({ children }) => {
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, []);
 
-  const toggleDarkMode = () => {
+  // Listen for reduced motion preference changes
+  useEffect(() => {
+    if (!window.matchMedia) return;
+
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const handleChange = (e) => {
+      setPrefersReducedMotion(e.matches);
+    };
+
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+
+  const toggleDarkMode = useCallback(() => {
     setIsDarkMode(prev => !prev);
-  };
+  }, []);
+
+  const setTheme = useCallback((theme) => {
+    if (theme === 'dark' || theme === 'light') {
+      setIsDarkMode(theme === 'dark');
+    }
+  }, []);
 
   const value = {
     isDarkMode,
     toggleDarkMode,
+    setTheme,
+    prefersReducedMotion,
   };
 
   return (

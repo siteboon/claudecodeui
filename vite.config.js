@@ -46,11 +46,25 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       outDir: 'dist',
-      chunkSizeWarningLimit: 1000,
+      minify: 'terser',
+      chunkSizeWarningLimit: 600,
+      terserOptions: {
+        compress: {
+          // Only drop console.log and console.debug in production
+          // Preserve console.error and console.warn for error handling and logging
+          drop_console: false,
+          pure_funcs: mode === 'production'
+            ? ['console.log', 'console.debug']
+            : [],
+        },
+      },
       rollupOptions: {
         output: {
+          // Optimized manual chunks for better code splitting
           manualChunks: {
+            // Core React ecosystem
             'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+            // Code editor suite
             'vendor-codemirror': [
               '@uiw/react-codemirror',
               '@codemirror/lang-css',
@@ -59,10 +73,20 @@ export default defineConfig(({ mode }) => {
               '@codemirror/lang-json',
               '@codemirror/lang-markdown',
               '@codemirror/lang-python',
-              '@codemirror/theme-one-dark'
+              '@codemirror/theme-one-dark',
+              '@codemirror/merge'
             ],
-            'vendor-xterm': ['@xterm/xterm', '@xterm/addon-fit', '@xterm/addon-clipboard', '@xterm/addon-webgl']
-          }
+            // Terminal emulator
+            'vendor-xterm': ['@xterm/xterm', '@xterm/addon-fit', '@xterm/addon-clipboard', '@xterm/addon-webgl'],
+            // Markdown rendering
+            'vendor-markdown': ['react-markdown', 'remark-gfm', 'remark-math', 'rehype-katex', 'katex'],
+            // Utility libraries
+            'vendor-utils': ['clsx', 'fuse.js', 'jszip', 'dompurify', 'gray-matter']
+          },
+          // Cache-busting asset naming
+          assetFileNames: 'assets/[name]-[hash][extname]',
+          chunkFileNames: 'assets/chunk-[hash].js',
+          entryFileNames: 'assets/[name]-[hash].js'
         }
       }
     }

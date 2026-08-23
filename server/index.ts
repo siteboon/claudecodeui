@@ -8,6 +8,7 @@ import http from 'http';
 
 import express, { type NextFunction, type Request, type Response } from 'express';
 import cors from 'cors';
+import compression from 'compression';
 
 import { AppError, findApplicationRoot, getModuleDirectory, IS_PLATFORM, terminalTextStyles } from '@/shared/utils.js';
 import {
@@ -119,6 +120,34 @@ const wss = createWebSocketServer(server, {
 app.locals.wss = wss;
 
 app.use(cors({ exposedHeaders: ['X-Refreshed-Token', 'X-Auth-Error'] }));
+
+// Compression middleware for response compression (gzip/brotli)
+// Compress responses larger than 1KB for better performance
+// Exclude Server-Sent Events (SSE) and streaming responses to prevent buffering
+app.use(compression({
+    // Only compress responses that are larger than 1KB
+    threshold: 1024,
+    // List of MIME types to compress
+    type: ['text/*', 'application/*', 'image/svg+xml'],
+    // Compression level (0-11, default 6)
+    level: 6,
+    // Filter function to exclude certain responses from compression
+    filter: (req, res) => {
+        // Don't compress Server-Sent Events (SSE) or streaming responses
+        // SSE requires real-time delivery without buffering
+        const contentType = res.getHeader('content-type') || '';
+        if (typeof contentType === 'string' && (
+            contentType.includes('text/event-stream') ||
+            contentType.includes('application/octet-stream') ||
+            contentType.includes('application/x-ndjson')
+        )) {
+            return false;
+        }
+        // Use default filter for other responses
+        return compression.filter(req, res);
+    }
+}));
+
 app.use(express.json({
     limit: '50mb',
     type: (req) => {

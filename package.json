@@ -165,6 +165,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "compression": "^1.8.1",
     "cors": "^2.8.5",
     "cross-spawn": "^7.0.3",
     "dompurify": "^3.4.7",
@@ -243,7 +244,14 @@
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.1",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vitest": "^1.6.0",
+    "@vitest/ui": "^1.6.0",
+    "@vitest/coverage-v8": "^1.6.0",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^7.0.1",
+    "jsdom": "^30.0.1"
   },
   "lint-staged": {
     "src/**/*.{ts,tsx,js,jsx}": "eslint",
