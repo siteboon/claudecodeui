@@ -273,11 +273,17 @@ export const chatRunRegistry = {
   },
 
   /**
-   * Re-attaches a run's outbound stream to a (new) websocket connection.
+   * Adds a websocket connection to a run's live audience.
    *
    * This is the generic replacement for the Claude-only writer reconnect:
    * after a page refresh the new socket subscribes and immediately starts
    * receiving the still-running stream, for every provider.
+   *
+   * Subscribing does not take the stream away from sockets that were already
+   * watching — a session open in two places stays live in both, and the
+   * refreshed tab's abandoned socket is dropped when the next event finds it
+   * closed. Replay stays per-connection because each client sends its own
+   * `lastSeq` with `chat.subscribe`.
    */
   attachConnection(appSessionId: string, connection: RealtimeClientConnection): boolean {
     const run = runs.get(appSessionId);
