@@ -11,7 +11,8 @@ export const clampSidebarWidth = (value: number): number =>
 
 /** A stored width that is missing, unparseable or out of range falls back to the default. */
 export const parseSidebarWidth = (raw: unknown): number => {
-  const value = typeof raw === 'string' ? Number.parseInt(raw, 10) : Number.NaN;
+  // Number(), not parseInt(): the latter takes a numeric prefix, so '320px' would pass.
+  const value = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : Number.NaN;
   return Number.isFinite(value) ? clampSidebarWidth(value) : SIDEBAR_WIDTH_DEFAULT;
 };
 

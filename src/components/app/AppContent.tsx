@@ -266,6 +266,19 @@ function AppContentInner() {
     }
   }, [resetSidebarWidth, setSidebarWidth, sidebarWidth]);
 
+  // Going mobile mid-drag unmounts the separator, so the pointerup that would have
+  // ended the drag never arrives: the body stays unselectable, and the live origin
+  // would make a plain hover resize the sidebar once the desktop layout returns.
+  useEffect(() => {
+    if (!isMobile) return;
+    resizeOriginRef.current = null;
+    if (resizeFrameRef.current !== null) {
+      window.cancelAnimationFrame(resizeFrameRef.current);
+      resizeFrameRef.current = null;
+    }
+    document.body.style.userSelect = '';
+  }, [isMobile]);
+
   // A drag interrupted by an unmount must not leave the page unselectable.
   useEffect(() => () => {
     if (resizeFrameRef.current !== null) window.cancelAnimationFrame(resizeFrameRef.current);
