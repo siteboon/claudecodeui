@@ -121,6 +121,11 @@ export const OPENCODE_PREDEFINED_MODELS: ProviderModelsDefinition = {
     { value: 'openrouter/z-ai/glm-5.2', label: 'GLM 5.2', description: 'OpenRouter' },
     { value: 'openrouter/minimax/minimax-m3', label: 'MiniMax M3', description: 'OpenRouter' },
     { value: 'openrouter/x-ai/grok-4.5', label: 'Grok 4.5', description: 'OpenRouter' },
+    { value: 'openrouter/meta-llama/llama-4.5-maverick', label: 'Llama 4.5 Maverick', description: 'OpenRouter' },
+    { value: 'openrouter/meta-llama/llama-4.5-scout', label: 'Llama 4.5 Scout', description: 'OpenRouter' },
+    { value: 'openrouter/mistralai/mistral-large-3', label: 'Mistral Large 3', description: 'OpenRouter' },
+    { value: 'openrouter/perplexity/sonar-pro-2', label: 'Sonar Pro 2', description: 'OpenRouter' },
+    { value: 'openrouter/nvidia/nemotron-3-ultra', label: 'Nemotron 3 Ultra', description: 'OpenRouter' },
   ],
   DEFAULT: 'opencode/gpt-5.6-terra',
 };
