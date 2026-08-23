@@ -19,7 +19,7 @@ test('OpenCode exposes only the curated predefined catalog', async () => {
   const providerIds = new Set(
     OPENCODE_PREDEFINED_MODELS.OPTIONS.map((option) => option.value.split('/')[0]),
   );
-  assert.deepEqual([...providerIds].sort(), ['anthropic', 'opencode', 'openai'].sort());
+  assert.deepEqual([...providerIds].sort(), ['anthropic', 'opencode', 'openai', 'openrouter'].sort());
   assert.equal(
     OPENCODE_PREDEFINED_MODELS.OPTIONS.every((option) => /^[a-z0-9-]+\/.+/.test(option.value)),
     true,
