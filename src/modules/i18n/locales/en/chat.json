@@ -246,5 +246,22 @@
   "message": {
     "editAndResend": "Edit and resend",
     "forkFromHere": "Fork from here"
+  },
+  "export": {
+    "trigger": "Export conversation",
+    "heading": "Export as",
+    "untitled": "Conversation",
+    "html": {
+      "label": "Web page (.html)",
+      "description": "Self-contained, looks like the app, prints to PDF."
+    },
+    "markdown": {
+      "label": "Markdown (.md)",
+      "description": "Plain text with tool calls and diffs."
+    },
+    "json": {
+      "label": "JSON (.json)",
+      "description": "Every message, unformatted, for tooling."
+    }
   }
 }

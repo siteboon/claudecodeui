@@ -4,6 +4,7 @@ import { ChevronRight } from 'lucide-react';
 import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LLMProvider,DiffLine,DiffStats,Project,ToolGroupItem } from '@/shared/types';
 import { getToolConfig } from '@/modules/chat/tools';
 import MessageComponent from '@/modules/chat/transcript/MessageComponent';
+import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
 import { DiffStatsBadge } from '@/modules/chat/tools/DiffStatsBadge';
 import { parseToolPayload, summarizeDiff } from '@/modules/chat/utils/messageTransforms';
 
@@ -85,7 +86,12 @@ function ToolGroupContainer({
   selectedProject,
   provider,
 }: ToolGroupContainerProps) {
+  const isExporting = useIsExportingTranscript();
+  // Collapsed on screen, always open in an export: the whole point of the
+  // group row is to hide detail the reader can ask for, and an exported file
+  // has no way to ask.
   const [isExpanded, setIsExpanded] = useState(false);
+  const showChildren = isExpanded || isExporting;
   const config = getToolConfig(group.toolName).input;
   const label = config.label || group.toolName;
   const borderClass = config.colorScheme?.border || 'border-border';
@@ -123,7 +129,7 @@ function ToolGroupContainer({
         {groupDiffStats && <DiffStatsBadge stats={groupDiffStats} className="ml-auto pl-2" />}
       </button>
 
-      {isExpanded && (
+      {showChildren && (
         <div className="mt-2 space-y-3 sm:space-y-4">
           {group.messages.map((message, index) => (
             <MessageComponent

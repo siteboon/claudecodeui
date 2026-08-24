@@ -63,6 +63,8 @@ type ChatMessagesPaneProps = {
   onEditMessage?: (message: ChatMessage) => void;
   /** Branches the conversation into a new session ending at a message. */
   onForkFromMessage?: (message: ChatMessage) => void;
+  /** Fetches the whole transcript for an export, which otherwise only sees the loaded page. */
+  onLoadFullTranscript?: () => Promise<ChatMessage[]>;
 };
 
 /**
@@ -107,6 +109,7 @@ function ChatMessagesPane({
   createDiff,
   onEditMessage,
   onForkFromMessage,
+  onLoadFullTranscript,
   onFileOpen,
   onShowSettings,
   onGrantToolPermission,
@@ -164,7 +167,14 @@ function ChatMessagesPane({
       {chatMessages.length > 0 && (
         <div className="pointer-events-none sticky right-4 top-3 z-10 mb-2 flex justify-end sm:px-4">
           <div className="pointer-events-auto">
-            <ChatExportMenu messages={chatMessages} sessionTitle={selectedSession?.title} />
+            <ChatExportMenu
+              messages={chatMessages}
+              sessionTitle={selectedSession?.summary || selectedSession?.title}
+              provider={provider}
+              selectedProject={selectedProject}
+              createDiff={createDiff}
+              onLoadFullTranscript={onLoadFullTranscript}
+            />
           </div>
         </div>
       )}

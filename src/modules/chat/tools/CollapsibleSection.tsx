@@ -2,6 +2,7 @@ import React from 'react';
 
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/shared/ui';
 import { cn } from '@/shared/utils';
+import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
 
 type CollapsibleSectionProps = {
   title: string;
@@ -30,8 +31,12 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   children,
   className = '',
 }) => {
+  // A document has no chevron to click, so a section that stays collapsed in
+  // an export is simply content the reader can never reach.
+  const isExporting = useIsExportingTranscript();
+
   return (
-    <Collapsible defaultOpen={open} className={cn('group/section', className)}>
+    <Collapsible defaultOpen={open || isExporting} className={cn('group/section', className)}>
       {/* When there's a clickable title (Edit/Write), only the chevron toggles collapse */}
       {onTitleClick ? (
         <div className="flex cursor-default select-none items-center gap-1.5 py-0.5 text-xs group-data-[state=open]/section:sticky group-data-[state=open]/section:top-0 group-data-[state=open]/section:z-10 group-data-[state=open]/section:-mx-1 group-data-[state=open]/section:bg-background group-data-[state=open]/section:px-1">

@@ -219,5 +219,22 @@
       "filesNotReverted": "i file già modificati non vengono ripristinati",
       "cancel": "Annulla"
     }
+  },
+  "export": {
+    "trigger": "Esporta conversazione",
+    "heading": "Esporta come",
+    "untitled": "Conversazione",
+    "html": {
+      "label": "Pagina web (.html)",
+      "description": "Autonoma, uguale all’app, stampabile in PDF."
+    },
+    "markdown": {
+      "label": "Markdown (.md)",
+      "description": "Testo semplice con chiamate agli strumenti e diff."
+    },
+    "json": {
+      "label": "JSON (.json)",
+      "description": "Tutti i messaggi, non formattati, per gli strumenti."
+    }
   }
 }

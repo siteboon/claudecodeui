@@ -219,5 +219,22 @@
       "filesNotReverted": "bereits geänderte Dateien werden nicht zurückgesetzt",
       "cancel": "Abbrechen"
     }
+  },
+  "export": {
+    "trigger": "Unterhaltung exportieren",
+    "heading": "Exportieren als",
+    "untitled": "Unterhaltung",
+    "html": {
+      "label": "Webseite (.html)",
+      "description": "Eigenständig, sieht aus wie die App, druckbar als PDF."
+    },
+    "markdown": {
+      "label": "Markdown (.md)",
+      "description": "Klartext mit Tool-Aufrufen und Diffs."
+    },
+    "json": {
+      "label": "JSON (.json)",
+      "description": "Alle Nachrichten, unformatiert, für Tools."
+    }
   }
 }

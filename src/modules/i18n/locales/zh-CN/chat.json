@@ -240,5 +240,22 @@
       "filesNotReverted": "已修改的文件不会被还原",
       "cancel": "取消"
     }
+  },
+  "export": {
+    "trigger": "导出对话",
+    "heading": "导出为",
+    "untitled": "对话",
+    "html": {
+      "label": "网页 (.html)",
+      "description": "单文件，与应用外观一致，可打印为 PDF。"
+    },
+    "markdown": {
+      "label": "Markdown (.md)",
+      "description": "含工具调用与差异的纯文本。"
+    },
+    "json": {
+      "label": "JSON (.json)",
+      "description": "全部消息原样输出，供工具使用。"
+    }
   }
 }

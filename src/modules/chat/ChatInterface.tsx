@@ -143,6 +143,7 @@ function ChatInterface({
     visibleMessages,
     loadEarlierMessages,
     loadAllMessages,
+    loadFullTranscript,
     allMessagesLoaded,
     isLoadingAllMessages,
     loadAllJustFinished,
@@ -446,6 +447,7 @@ function ChatInterface({
           // a live stream writing into it is not recoverable.
           onEditMessage={supportsMessageEditing && !isProcessing ? beginEditMessage : undefined}
           onForkFromMessage={supportsSessionForking ? handleForkFromMessage : undefined}
+          onLoadFullTranscript={loadFullTranscript}
         />
 
         <div className="relative flex-shrink-0">

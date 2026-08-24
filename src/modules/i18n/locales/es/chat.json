@@ -246,5 +246,22 @@
   "message": {
     "editAndResend": "Editar y reenviar",
     "forkFromHere": "Bifurcar desde aquí"
+  },
+  "export": {
+    "trigger": "Exportar conversación",
+    "heading": "Exportar como",
+    "untitled": "Conversación",
+    "html": {
+      "label": "Página web (.html)",
+      "description": "Autónoma, con el aspecto de la app, imprimible a PDF."
+    },
+    "markdown": {
+      "label": "Markdown (.md)",
+      "description": "Texto plano con llamadas a herramientas y diffs."
+    },
+    "json": {
+      "label": "JSON (.json)",
+      "description": "Todos los mensajes, sin formato, para herramientas."
+    }
   }
 }

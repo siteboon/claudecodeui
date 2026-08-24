@@ -1068,6 +1068,29 @@ export function useChatSessionState({
     }
   }, [isActive, selectedSession, selectedProject, isLoadingAllMessages, currentSessionId, sessionStore]);
 
+  /**
+   * Fetches the whole transcript into the store and returns it, without
+   * touching the render window.
+   *
+   * Export needs every message; the screen does not. Keeping those separate is
+   * why exporting a long conversation no longer silently produces a file
+   * containing only its last page.
+   */
+  const loadFullTranscript = useCallback(async (): Promise<ChatMessage[]> => {
+    const sessionId = activeSessionIdRef.current;
+    if (!sessionId) {
+      return [];
+    }
+
+    await sessionStore.fetchFromServer(sessionId, {
+      limit: null,
+      offset: 0,
+      canRequest: () => activeSessionIdRef.current === sessionId,
+    });
+
+    return normalizedToChatMessages(sessionStore.getMessages(sessionId));
+  }, [sessionStore]);
+
   const loadEarlierMessages = useCallback(() => {
     setVisibleMessageCount((prev) => prev + 100);
   }, []);
@@ -1092,6 +1115,7 @@ export function useChatSessionState({
     visibleMessages,
     loadEarlierMessages,
     loadAllMessages,
+    loadFullTranscript,
     allMessagesLoaded,
     isLoadingAllMessages,
     loadAllJustFinished,

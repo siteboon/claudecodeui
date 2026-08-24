@@ -3,6 +3,7 @@ import { ChevronRight, Copy, Check } from 'lucide-react';
 
 import { cn,copyTextToClipboard } from '@/shared/utils';
 import { ToolStatusBadge } from '@/modules/chat/tools/ToolStatusBadge';
+import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
 import type { ToolStatus } from '@/shared/types';
 
 type BashCommandDisplayProps = {
@@ -36,7 +37,11 @@ export const BashCommandDisplay: React.FC<BashCommandDisplayProps> = ({
   const hasOutput = trimmedOutput.length > 0;
   const outputLineCount = hasOutput ? trimmedOutput.split('\n').length : 0;
   const isRunning = status === 'running';
-  const [open, setOpen] = useState(false);
+  // `open` is raised by an effect once output arrives (below). A document is
+  // rendered without effects, so it would show every command and no output.
+  const isExporting = useIsExportingTranscript();
+  const [openState, setOpen] = useState(false);
+  const open = openState || isExporting;
   const [copied, setCopied] = useState(false);
 
   // Output often arrives after this component first mounts, so apply the

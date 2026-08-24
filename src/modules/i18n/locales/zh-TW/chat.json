@@ -255,5 +255,22 @@
       "filesNotReverted": "已修改的檔案不會還原",
       "cancel": "取消"
     }
+  },
+  "export": {
+    "trigger": "匯出對話",
+    "heading": "匯出為",
+    "untitled": "對話",
+    "html": {
+      "label": "網頁 (.html)",
+      "description": "單一檔案，與應用程式外觀一致，可列印為 PDF。"
+    },
+    "markdown": {
+      "label": "Markdown (.md)",
+      "description": "含工具呼叫與差異的純文字。"
+    },
+    "json": {
+      "label": "JSON (.json)",
+      "description": "全部訊息原樣輸出，供工具使用。"
+    }
   }
 }

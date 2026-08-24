@@ -240,5 +240,22 @@
       "filesNotReverted": "이미 변경된 파일은 되돌리지 않습니다",
       "cancel": "취소"
     }
+  },
+  "export": {
+    "trigger": "대화 내보내기",
+    "heading": "내보내기 형식",
+    "untitled": "대화",
+    "html": {
+      "label": "웹 페이지 (.html)",
+      "description": "단일 파일. 앱과 같은 모습이며 PDF로 인쇄 가능."
+    },
+    "markdown": {
+      "label": "마크다운 (.md)",
+      "description": "도구 호출과 diff가 포함된 일반 텍스트."
+    },
+    "json": {
+      "label": "JSON (.json)",
+      "description": "모든 메시지를 원본 그대로. 도구 연동용."
+    }
   }
 }

@@ -219,5 +219,22 @@
       "filesNotReverted": "zaten değiştirilen dosyalar geri alınmaz",
       "cancel": "İptal"
     }
+  },
+  "export": {
+    "trigger": "Sohbeti dışa aktar",
+    "heading": "Şu biçimde dışa aktar",
+    "untitled": "Sohbet",
+    "html": {
+      "label": "Web sayfası (.html)",
+      "description": "Tek dosya, uygulamayla aynı görünür, PDF’e yazdırılır."
+    },
+    "markdown": {
+      "label": "Markdown (.md)",
+      "description": "Araç çağrıları ve diff’lerle düz metin."
+    },
+    "json": {
+      "label": "JSON (.json)",
+      "description": "Tüm mesajlar, biçimlendirilmemiş, araçlar için."
+    }
   }
 }

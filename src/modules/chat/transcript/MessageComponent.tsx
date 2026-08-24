@@ -13,6 +13,7 @@ import { Markdown } from '@/modules/chat/transcript/Markdown';
 import StreamingMarkdown from '@/modules/chat/transcript/StreamingMarkdown';
 import MessageCopyControl from '@/modules/chat/transcript/MessageCopyControl';
 import MessageSpeakControl from '@/modules/chat/transcript/MessageSpeakControl';
+import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
 import { MemoryCitations } from '@/modules/chat/transcript/MemoryCitations';
 
 type MessageComponentProps = {
@@ -69,8 +70,14 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
   const isCommandOrFileEditToolResponse = Boolean(
     message.isToolUse && COPY_HIDDEN_TOOL_NAMES.has(String(message.toolName || ''))
   );
-  const shouldShowUserCopyControl = message.type === 'user' && userCopyContent.trim().length > 0;
-  const shouldShowAssistantCopyControl = message.type === 'assistant' &&
+  // Copy and speak are affordances for a live conversation. In an exported
+  // document there is nothing to click, and rendering them statically would
+  // also pull in browser-only voice state that a document render has no
+  // provider for.
+  const isExporting = useIsExportingTranscript();
+  const shouldShowUserCopyControl = !isExporting && message.type === 'user' && userCopyContent.trim().length > 0;
+  const shouldShowAssistantCopyControl = !isExporting &&
+    message.type === 'assistant' &&
     assistantCopyContent.trim().length > 0 &&
     !isCommandOrFileEditToolResponse &&
     !message.isThinking;
@@ -265,15 +272,17 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
               </>
             ) : message.isThinking ? (
               /* Thinking messages — Reasoning component (ai-elements pattern) */
-              <Reasoning defaultOpen={false}>
+              <Reasoning defaultOpen={isExporting}>
                 <ReasoningTrigger />
                 <ReasoningContent>
                   <Markdown className="prose prose-sm prose-gray max-w-none font-serif dark:prose-invert">
                     {message.content}
                   </Markdown>
-                  <div className="mt-3 flex items-center text-[11px]">
-                    <MessageCopyControl content={String(message.content || '')} messageType="assistant" />
-                  </div>
+                  {!isExporting && (
+                    <div className="mt-3 flex items-center text-[11px]">
+                      <MessageCopyControl content={String(message.content || '')} messageType="assistant" />
+                    </div>
+                  )}
                 </ReasoningContent>
               </Reasoning>
             ) : (

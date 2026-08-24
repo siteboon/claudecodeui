@@ -221,5 +221,22 @@
       "filesNotReverted": "les fichiers déjà modifiés ne sont pas restaurés",
       "cancel": "Annuler"
     }
+  },
+  "export": {
+    "trigger": "Exporter la conversation",
+    "heading": "Exporter en",
+    "untitled": "Conversation",
+    "html": {
+      "label": "Page web (.html)",
+      "description": "Autonome, identique à l’app, imprimable en PDF."
+    },
+    "markdown": {
+      "label": "Markdown (.md)",
+      "description": "Texte brut avec appels d’outils et diffs."
+    },
+    "json": {
+      "label": "JSON (.json)",
+      "description": "Tous les messages, bruts, pour l’outillage."
+    }
   }
 }

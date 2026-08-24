@@ -206,5 +206,22 @@
       "filesNotReverted": "変更済みのファイルは元に戻りません",
       "cancel": "キャンセル"
     }
+  },
+  "export": {
+    "trigger": "会話をエクスポート",
+    "heading": "エクスポート形式",
+    "untitled": "会話",
+    "html": {
+      "label": "Web ページ (.html)",
+      "description": "単一ファイル。アプリと同じ見た目で PDF 印刷も可能。"
+    },
+    "markdown": {
+      "label": "Markdown (.md)",
+      "description": "ツール呼び出しと差分を含むプレーンテキスト。"
+    },
+    "json": {
+      "label": "JSON (.json)",
+      "description": "全メッセージを未整形で。ツール連携向け。"
+    }
   }
 }

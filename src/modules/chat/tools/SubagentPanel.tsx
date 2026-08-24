@@ -4,6 +4,7 @@ import { Bot, Brain, ChevronRight, CircleAlert, CircleCheck, MessageSquareText }
 import type { DiffLine, Project, SubagentActivity, SubagentInfo, ToolResult } from '@/shared/types';
 import { cn } from '@/shared/utils';
 import { ToolRenderer } from '@/modules/chat/tools/ToolRenderer';
+import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
 import { MarkdownContent } from '@/modules/chat/tools/ContentRenderers/MarkdownContent';
 
 type SubagentPanelProps = {
@@ -107,10 +108,13 @@ export const SubagentPanel = memo(({
 }: SubagentPanelProps) => {
   // Collapsed by default: an agent is a summary of work, and its detail is
   // only wanted on demand.
+  const isExporting = useIsExportingTranscript();
   const [isOpen, setIsOpen] = useState(false);
+  const showTimeline = isOpen || isExporting;
   // Raised by the "show more" step so a long run can be inspected in full
   // without paying for it up front.
   const [renderLimit, setRenderLimit] = useState(INITIALLY_RENDERED_ACTIVITIES);
+  const effectiveRenderLimit = isExporting ? Number.POSITIVE_INFINITY : renderLimit;
 
   const parsedInput = useMemo(() => parseToolInput(toolInput), [toolInput]);
   const resultText = useMemo(() => readResultText(toolResult?.content), [toolResult?.content]);
@@ -127,7 +131,7 @@ export const SubagentPanel = memo(({
   // The backend truncates very long timelines for transport; say so rather
   // than implying the agent stopped where the list does.
   const untransmittedCount = Math.max(0, (subagent?.activityCount ?? entries.length) - entries.length);
-  const visibleEntries = entries.slice(0, renderLimit);
+  const visibleEntries = entries.slice(0, effectiveRenderLimit);
   const hiddenCount = entries.length - visibleEntries.length;
 
   return (
@@ -170,7 +174,7 @@ export const SubagentPanel = memo(({
         </span>
       </button>
 
-      {isOpen && (
+      {showTimeline && (
         <div className="mt-1.5 space-y-2 pl-[18px]">
           {subagent?.model && (
             <div className="text-[10px] uppercase tracking-wide text-muted-foreground/50">{subagent.model}</div>
