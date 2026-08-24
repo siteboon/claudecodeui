@@ -370,14 +370,32 @@ export const sessionsService = {
   },
 
   /**
-   * Rewinds a session on disk so `keepThroughId` is the last row it holds,
-   * for providers whose runtime cannot be asked to resume partway.
+   * Whether editing a message on this session's provider means rewinding it on
+   * disk first, rather than handing the anchor to the runtime as a resume
+   * option.
    *
-   * Returns false when the provider needs no such step — its runtime takes the
-   * anchor as a resume option instead — which is what the chat gateway
-   * branches on.
+   * Answering this without doing anything is the point: the rewind moves the
+   * session onto a different provider transcript and cannot be undone, so the
+   * gateway has to know which shape the run takes before it commits to one.
    */
-  async rewindSessionForEdit(sessionId: string, keepThroughId: string | null): Promise<boolean> {
+  providerRewindsForEdit(sessionId: string): boolean {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session) {
+      throw new AppError(`Session "${sessionId}" was not found.`, {
+        code: 'SESSION_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    return Boolean(providerRegistry.resolveProvider(session.provider as LLMProvider).sessions.rewindSession);
+  },
+
+  /**
+   * Rewinds a session on disk so `keepThroughId` is the last row it holds.
+   *
+   * Only call this once the run is admitted — see `providerRewindsForEdit`.
+   */
+  async rewindSessionForEdit(sessionId: string, keepThroughId: string | null): Promise<void> {
     const session = sessionsDb.getSessionById(sessionId);
     if (!session) {
       throw new AppError(`Session "${sessionId}" was not found.`, {
@@ -387,12 +405,7 @@ export const sessionsService = {
     }
 
     const sessions = providerRegistry.resolveProvider(session.provider as LLMProvider).sessions;
-    if (!sessions.rewindSession) {
-      return false;
-    }
-
-    await sessions.rewindSession(sessionId, keepThroughId);
-    return true;
+    await sessions.rewindSession?.(sessionId, keepThroughId);
   },
 
   async fetchHistory(
@@ -545,10 +558,22 @@ export const sessionsService = {
     }
 
     let removedFromDisk = false;
-    if (options.deletedFromDisk && session.jsonl_path) {
-      removedFromDisk = await removeFileIfExists(session.jsonl_path);
+    if (options.deletedFromDisk) {
+      // Every file the conversation has lived in, not just the one the row
+      // points at now: editing a message on a provider that rewinds by
+      // branching moves the session onto a copy and leaves the earlier
+      // transcript behind. Deleting only the current one would leave the
+      // replaced turns on disk, and unreachable through the app.
+      const transcripts = [
+        ...(session.jsonl_path ? [session.jsonl_path] : []),
+        ...sessionsDb.getSupersededTranscriptPaths(sessionId),
+      ];
+      for (const transcript of transcripts) {
+        removedFromDisk = (await removeFileIfExists(transcript)) || removedFromDisk;
+      }
     }
 
+    sessionsDb.clearSupersededProviderSessions(sessionId);
     const deleted = sessionsDb.deleteSessionById(sessionId);
     if (!deleted) {
       throw new AppError(`Session "${sessionId}" was not found.`, {

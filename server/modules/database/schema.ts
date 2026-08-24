@@ -241,6 +241,10 @@ CREATE TABLE IF NOT EXISTS superseded_provider_sessions (
     provider_session_id TEXT NOT NULL,
     provider TEXT NOT NULL,
     session_id TEXT NOT NULL,
+    -- The transcript the session left behind. Recorded because the session row
+    -- stops pointing at it, and "delete this conversation from disk" has to
+    -- reach every file the conversation ever lived in.
+    jsonl_path TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (provider_session_id, provider)
 );

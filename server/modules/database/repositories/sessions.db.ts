@@ -348,15 +348,17 @@ export const sessionsDb = {
     providerSessionId: string;
     provider: string;
     sessionId: string;
+    jsonlPath: string | null;
   }): void {
     const db = getConnection();
     db.prepare(
-      `INSERT INTO superseded_provider_sessions (provider_session_id, provider, session_id)
-       VALUES (?, ?, ?)
+      `INSERT INTO superseded_provider_sessions (provider_session_id, provider, session_id, jsonl_path)
+       VALUES (?, ?, ?, ?)
        ON CONFLICT(provider_session_id, provider) DO UPDATE SET
          session_id = excluded.session_id,
+         jsonl_path = excluded.jsonl_path,
          created_at = CURRENT_TIMESTAMP`
-    ).run(input.providerSessionId, input.provider, input.sessionId);
+    ).run(input.providerSessionId, input.provider, input.sessionId, input.jsonlPath);
   },
 
   isProviderSessionSuperseded(providerSessionId: string, provider: string): boolean {
@@ -370,6 +372,37 @@ export const sessionsDb = {
       .get(providerSessionId, provider) as { found: number } | undefined;
 
     return Boolean(row);
+  },
+
+  /**
+   * Transcripts one session has left behind, for the caller that deletes a
+   * conversation from disk.
+   *
+   * A conversation edited more than once has lived in more than one file, and
+   * the session row only ever points at the newest.
+   */
+  getSupersededTranscriptPaths(sessionId: string): string[] {
+    const db = getConnection();
+    const rows = db
+      .prepare(
+        `SELECT jsonl_path FROM superseded_provider_sessions
+         WHERE session_id = ? AND jsonl_path IS NOT NULL`
+      )
+      .all(sessionId) as Array<{ jsonl_path: string }>;
+
+    return rows.map((row) => row.jsonl_path);
+  },
+
+  /**
+   * Forgets what a session left behind, once the session itself is gone.
+   *
+   * Without this the record outlives the row it was written for and keeps the
+   * indexer refusing a transcript that no longer belongs to anything — a
+   * conversation invisible to the app and impossible to delete through it.
+   */
+  clearSupersededProviderSessions(sessionId: string): void {
+    const db = getConnection();
+    db.prepare('DELETE FROM superseded_provider_sessions WHERE session_id = ?').run(sessionId);
   },
 
   /**

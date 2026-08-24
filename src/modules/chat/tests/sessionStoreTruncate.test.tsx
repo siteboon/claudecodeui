@@ -177,6 +177,32 @@ describe('truncateAt', () => {
     );
   });
 
+  it('keeps only the newest replacement when an earlier attempt was refused', async () => {
+    const { result } = await loadedStore();
+
+    // A refused send leaves its echo in place — nothing rolls it back — so by
+    // the time an edit succeeds the store can be holding two attempts at the
+    // same message.
+    act(() => {
+      result.current.appendRealtime('session-1', {
+        ...row('5', 'first attempt'),
+        role: 'user',
+        replacesAnchorId: 'u2',
+      } as NormalizedMessage);
+      result.current.appendRealtime('session-1', {
+        ...row('6', 'second attempt'),
+        role: 'user',
+        replacesAnchorId: 'u2',
+      } as NormalizedMessage);
+      result.current.truncateAt('session-1', 'u2');
+    });
+
+    assert.deepEqual(
+      result.current.getMessages('session-1').map((message) => message.content),
+      ['first prompt', 'first answer', 'second attempt'],
+    );
+  });
+
   it('clears a replacement tagged for a different cut', async () => {
     const { result } = await loadedStore();
 

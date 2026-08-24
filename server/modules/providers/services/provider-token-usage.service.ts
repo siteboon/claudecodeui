@@ -19,6 +19,7 @@ type ProviderTokenUsageServiceDependencies = {
   readDirectory: (directoryPath: string) => Promise<Dirent[]>;
   readTextFile: (filePath: string) => Promise<string>;
   getClaudeContextWindow: () => string | undefined;
+  isProviderSessionSuperseded: (providerSessionId: string, provider: string) => boolean;
 };
 
 type TokenUsageResult = {
@@ -53,6 +54,8 @@ const defaultDependencies: ProviderTokenUsageServiceDependencies = {
   readDirectory: (directoryPath) => fsp.readdir(directoryPath, { withFileTypes: true }),
   readTextFile: (filePath) => fsp.readFile(filePath, 'utf8'),
   getClaudeContextWindow: () => process.env.CONTEXT_WINDOW,
+  isProviderSessionSuperseded: (providerSessionId, provider) =>
+    sessionsDb.isProviderSessionSuperseded(providerSessionId, provider),
 };
 
 function readUsageNumber(value: unknown): number {
@@ -286,6 +289,24 @@ export function createProviderTokenUsageService(
           code: 'SESSION_NOT_FOUND',
           statusCode: 404,
         });
+      }
+
+      // The fallback covers rows whose provider id was never recorded, and for
+      // a session discovered from disk the app id *is* its provider id. That
+      // stops being true the moment an edit rewinds the conversation off a
+      // thread: until the replacement run announces its own id, the fallback
+      // would resolve the retired transcript and report the discarded
+      // conversation's usage against an empty one.
+      if (
+        !session.provider_session_id
+        && dependencies.isProviderSessionSuperseded(sessionId, session.provider)
+      ) {
+        return {
+          used: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          breakdown: { input: 0, output: 0 },
+        };
       }
 
       const providerSessionId = session.provider_session_id || sessionId;

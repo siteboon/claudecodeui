@@ -48,13 +48,22 @@ function findServerEchoForLocalUser(
     return null;
   }
 
+  // The echo of an edited message may only be retired by a row that was not
+  // in the transcript when the cut was made. Text and a time window are not
+  // enough for it: a rewind that branches re-stamps every surviving turn to
+  // the moment of the copy, so an earlier turn with the same words — "yes",
+  // "continue", the typo being corrected — lands inside the window and would
+  // retire the message the user just sent.
+  const firstEligibleIndex = localMessage.replacesAfterRowCount ?? 0;
+
   const dedupeWindow = localFingerprint.text
     ? LOCAL_USER_DEDUPE_WINDOW_MS
     : LOCAL_ATTACHMENT_ONLY_DEDUPE_WINDOW_MS;
   let closestMatch: NormalizedMessage | null = null;
   let closestTimeDifference = Number.POSITIVE_INFINITY;
 
-  for (const serverMessage of serverMessages) {
+  for (let index = firstEligibleIndex; index < serverMessages.length; index++) {
+    const serverMessage = serverMessages[index];
     if (claimedServerIds.has(serverMessage.id)) {
       continue;
     }

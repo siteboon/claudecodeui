@@ -728,10 +728,18 @@ export function useSessionStore() {
     // optimistic echo before the server acknowledges, so clearing live rows
     // outright took the message the user had just sent with it, and it only
     // came back when the run finished and the transcript was re-read.
-    const replacement = slot.realtimeMessages.filter(
+    // Only the last one: a send that was refused leaves its echo behind, so a
+    // second attempt at the same message would otherwise survive the cut
+    // alongside the abandoned first and show the user both.
+    const replacements = slot.realtimeMessages.filter(
       (message) => message.replacesAnchorId === anchorId,
     );
-    slot.realtimeMessages = replacement.length > 0 ? replacement : EMPTY;
+    slot.realtimeMessages = replacements.length > 0
+      // Stamped here because this is the only place that knows how much of the
+      // conversation survived, which is what tells the echo apart from the
+      // turns it now sits after.
+      ? [{ ...replacements[replacements.length - 1], replacesAfterRowCount: cutIndex }]
+      : EMPTY;
     // `total` counts what the server would serve; it is about to be re-fetched
     // anyway, but leaving it high makes the pager offer pages that do not exist.
     slot.total = slot.serverMessages.length;

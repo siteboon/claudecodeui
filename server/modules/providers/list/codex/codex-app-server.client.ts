@@ -123,6 +123,13 @@ async function withAppServer<T>(
   child.on('exit', (code, signal) => {
     failPending(`codex app-server exited (code ${code ?? 'null'}, signal ${signal ?? 'null'})`);
   });
+  // A child that dies mid-request leaves its pipes broken, and the next write
+  // raises EPIPE on the stream rather than at the call site. Without a
+  // listener that is an unhandled 'error' event, which takes the whole server
+  // down over one failed fork.
+  child.stdin?.on('error', (error) => failPending(error.message));
+  child.stdout?.on('error', (error) => failPending(error.message));
+  child.stderr?.on('error', () => {});
 
   const call = (method: string, params: unknown): Promise<unknown> =>
     new Promise((resolve, reject) => {

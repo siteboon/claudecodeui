@@ -60,6 +60,18 @@ const CODEX_TRANSCRIPT_ROWS = [
 
 type RunCall = { provider: string; command: string; options: Record<string, unknown> };
 
+/**
+ * Set by a test that needs a run to still be in flight when the next frame
+ * arrives; the stub runtime returns immediately otherwise. Released when the
+ * test ends, so no stub run is left pending for the rest of the file.
+ */
+let holdRun: Promise<void> | null = null;
+let releaseHeldRun: (() => void) | null = null;
+
+function holdTheNextRun(): void {
+  holdRun = new Promise<void>((resolve) => { releaseHeldRun = resolve; });
+}
+
 async function withGateway(
   provider: string,
   runTest: (context: {
@@ -92,6 +104,9 @@ async function withGateway(
           hasRuntime: () => true,
           run: async (runProvider: string, command: string, options: Record<string, unknown>) => {
             runs.push({ provider: runProvider, command, options });
+            if (holdRun) {
+              await holdRun;
+            }
           },
         } as never,
       },
@@ -99,6 +114,9 @@ async function withGateway(
 
     await runTest({ socket, runs });
   } finally {
+    releaseHeldRun?.();
+    releaseHeldRun = null;
+    holdRun = null;
     connectedClients.clear();
     chatRunRegistry.clearAll();
     closeConnection();
@@ -211,6 +229,43 @@ test('a provider that cannot re-run from a point is refused rather than sending 
   });
 });
 
+test('a refused send never rewinds the conversation', async () => {
+  await withGateway('codex', async ({ socket, runs }) => {
+    // The rewind moves the session onto a different provider transcript and
+    // cannot be undone, so a send the gateway is about to refuse must not
+    // reach it. A run already in flight is the realistic way that happens: a
+    // scheduled message, or another device.
+    const realRewind = sessionsService.rewindSessionForEdit;
+    let rewound = false;
+    sessionsService.rewindSessionForEdit = async () => { rewound = true; };
+    holdTheNextRun();
+
+    try {
+      socket.emit('message', JSON.stringify({
+        type: 'chat.send',
+        sessionId: SESSION_ID,
+        content: 'a turn that is already running',
+      }));
+      await settle();
+      assert.equal(runs.length, 1);
+
+      socket.emit('message', JSON.stringify({
+        type: 'chat.edit-send',
+        sessionId: SESSION_ID,
+        anchorId: 'turn-b',
+        content: 'an edit that arrives too late',
+      }));
+      await settle();
+    } finally {
+      sessionsService.rewindSessionForEdit = realRewind;
+    }
+
+    assert.equal(rewound, false);
+    assert.equal(runs.length, 1);
+    assert.equal(socket.frames.at(-1)?.code, 'RUN_IN_PROGRESS');
+  }, CODEX_TRANSCRIPT_ROWS);
+});
+
 test('a provider that has to branch to rewind is rewound before the run, not during it', async () => {
   await withGateway('codex', async ({ socket, runs }) => {
     // The rewind itself belongs to the provider and is covered there; what
@@ -221,7 +276,6 @@ test('a provider that has to branch to rewind is rewound before the run, not dur
     const rewindCalls: unknown[] = [];
     sessionsService.rewindSessionForEdit = async (sessionId: string, keepThroughId: string | null) => {
       rewindCalls.push({ sessionId, keepThroughId });
-      return true;
     };
 
     try {

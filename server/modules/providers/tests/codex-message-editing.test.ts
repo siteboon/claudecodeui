@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import os from 'node:os';
@@ -277,6 +278,66 @@ test('the indexer does not hand back a thread a session was edited off', { concu
     const session = sessionsDb.getSessionById(sessionId);
     assert.equal(session?.provider_session_id, 'thread-2');
     assert.equal(session?.jsonl_path, forkPath);
+  });
+});
+
+test('deleting an edited session removes every transcript it lived in', { concurrency: false }, async () => {
+  await withIndexedSession(THREE_TURNS, async ({ sessionId, homeDir, workspacePath }) => {
+    const { sessionsService } = await import('@/modules/providers/services/sessions.service.js');
+    const preEditPath = sessionsDb.getSessionById(sessionId)?.jsonl_path as string;
+    const forkPath = path.join(homeDir, '.codex', 'sessions', '2026', '07', '08', 'rollout-thread-2.jsonl');
+    await mkdir(path.dirname(forkPath), { recursive: true });
+    await writeFile(forkPath, `${JSON.stringify({ type: 'session_meta', payload: { id: 'thread-2', cwd: workspacePath } })}\n`, 'utf8');
+
+    const realForkThread = codexAppServer.forkThread;
+    codexAppServer.forkThread = async () => ({ threadId: 'thread-2', path: forkPath });
+    try {
+      await new CodexSessionsProvider().rewindSession(sessionId, 'turn-b');
+    } finally {
+      codexAppServer.forkThread = realForkThread;
+    }
+
+    await sessionsService.deleteOrArchiveSessionById(sessionId, { force: true, deletedFromDisk: true });
+
+    // The row only ever points at the newest transcript, so deleting from that
+    // alone would leave the replaced turns on disk — and unreachable, because
+    // the indexer refuses a superseded thread.
+    assert.equal(existsSync(forkPath), false);
+    assert.equal(existsSync(preEditPath), false);
+    assert.equal(sessionsDb.isProviderSessionSuperseded('thread-1', 'codex'), false);
+  });
+});
+
+test('a session detached by an edit reports no token usage of its own', { concurrency: false }, async () => {
+  const spentTurns = [
+    ...THREE_TURNS,
+    {
+      type: 'event_msg',
+      payload: {
+        type: 'token_count',
+        info: {
+          total_token_usage: { input_tokens: 100_000, output_tokens: 25_000, total_tokens: 125_000 },
+          model_context_window: 200_000,
+        },
+      },
+    },
+  ];
+
+  await withIndexedSession(spentTurns, async ({ sessionId }) => {
+    const { createProviderTokenUsageService } = await import('@/modules/providers/services/provider-token-usage.service.js');
+    const service = createProviderTokenUsageService();
+
+    assert.equal((await service.getSessionTokenUsage(sessionId)).used, 125_000);
+
+    await new CodexSessionsProvider().rewindSession(sessionId, null);
+
+    // A session discovered from disk is keyed by its own thread id, so the
+    // "no provider id was ever recorded" fallback resolves the very thread the
+    // edit discarded — by filename, which still matches — and an empty
+    // conversation reports the spent context of the one it replaced.
+    const usage = await service.getSessionTokenUsage(sessionId);
+    assert.equal(usage.used, 0);
+    assert.equal(usage.inputTokens, 0);
   });
 });
 

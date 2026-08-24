@@ -413,6 +413,18 @@ const addProviderSessionIdMapping = (db: Database): void => {
  *
  * Nothing is backfilled: a session that predates forking was not forked.
  */
+/**
+ * Adds the transcript path to the superseded-session record.
+ *
+ * Only rows written before this column existed lack it, and there is nothing
+ * to backfill from — the session stopped pointing at that file when the row
+ * was created — so they keep a NULL and the delete path skips them.
+ */
+const addSupersededTranscriptPathColumn = (db: Database): void => {
+  const columnNames = getTableInfo(db, 'superseded_provider_sessions').map((column) => column.name);
+  addColumnToTableIfNotExists(db, 'superseded_provider_sessions', columnNames, 'jsonl_path', 'TEXT');
+};
+
 const addForkedFromSessionIdColumn = (db: Database): void => {
   const columnNames = getTableInfo(db, 'sessions').map((column) => column.name);
   addColumnToTableIfNotExists(db, 'sessions', columnNames, 'forked_from_session_id', 'TEXT');
@@ -495,6 +507,7 @@ export const runMigrations = (db: Database) => {
     db.exec(USER_PREFERENCES_TABLE_SCHEMA_SQL);
     db.exec(SESSION_DRAFTS_TABLE_SCHEMA_SQL);
     db.exec(SUPERSEDED_PROVIDER_SESSIONS_TABLE_SCHEMA_SQL);
+    addSupersededTranscriptPathColumn(db);
 
     db.exec(PROJECTS_TABLE_SCHEMA_SQL);
     rebuildProjectsTableWithPrimaryKeySchema(db);

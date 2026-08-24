@@ -69,3 +69,33 @@ test('keeps the existing optimistic text reconciliation behavior', () => {
 
   assert.deepEqual(removeOptimisticUserEchoes([persisted], [local]), []);
 });
+
+test('a replacement echo survives a kept turn that repeats its text', () => {
+  // The exact shape a rewind that branches produces: the turn that survived
+  // the cut is re-stamped to the moment of the copy, one second before the
+  // replacement was typed, and happens to say the same thing the user just
+  // corrected their message to.
+  const userRow = (id: string, content: string, timestamp: string) => ({
+    id,
+    kind: 'text',
+    role: 'user',
+    provider: 'codex',
+    sessionId: 's1',
+    content,
+    timestamp,
+  }) as NormalizedMessage;
+
+  const kept = [userRow('kept', 'continue', '2026-01-01T00:00:21.000Z')];
+  const echo = {
+    ...userRow('local_1', 'continue', '2026-01-01T00:00:20.000Z'),
+    replacesAnchorId: 'turn-b',
+    replacesAfterRowCount: kept.length,
+  } as NormalizedMessage;
+
+  assert.deepEqual(removeOptimisticUserEchoes(kept, [echo]), [echo]);
+
+  // Once the provider has written the replacement, it is a row the cut did not
+  // keep, so it retires the echo.
+  const persisted = [...kept, userRow('persisted', 'continue', '2026-01-01T00:00:25.000Z')];
+  assert.deepEqual(removeOptimisticUserEchoes(persisted, [echo]), []);
+});

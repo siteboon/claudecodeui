@@ -1847,6 +1847,7 @@ export class CodexSessionsProvider implements IProviderSessions {
         providerSessionId: supersededThreadId,
         provider: PROVIDER,
         sessionId,
+        jsonlPath: session.jsonl_path ?? null,
       });
       sessionsDb.detachProviderSession(sessionId);
       return;
@@ -1862,6 +1863,7 @@ export class CodexSessionsProvider implements IProviderSessions {
       providerSessionId: supersededThreadId,
       provider: PROVIDER,
       sessionId,
+      jsonlPath: session.jsonl_path ?? null,
     });
     sessionsDb.repointSessionToProviderSession(sessionId, {
       providerSessionId: fork.threadId,
