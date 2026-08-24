@@ -10,7 +10,7 @@ import type {
   RefObject,
   TouchEvent,
 } from 'react';
-import { PaperclipIcon, MessageSquareIcon, XIcon, Loader2, ArrowUpIcon } from 'lucide-react';
+import { PaperclipIcon, MessageSquareIcon, XIcon, Loader2, ArrowUpIcon, PencilIcon } from 'lucide-react';
 
 import { useVoiceInput } from '@/modules/chat/hooks/useVoiceInput';
 import { useVoiceAvailable } from '@/modules/chat/hooks/useVoiceAvailable';
@@ -70,6 +70,9 @@ type ChatComposerProps = {
   onSubmit: (event: FormEvent<HTMLFormElement> | MouseEvent<HTMLButtonElement> | TouchEvent<HTMLButtonElement>) => void;
   isDragActive: boolean;
   queuedDraft: QueuedDraft | null;
+  /** Set while the composer is replacing an already-sent message. */
+  isEditingSentMessage: boolean;
+  onCancelEditMessage: () => void;
   onEditQueuedDraft: () => void;
   onDeleteQueuedDraft: () => void;
   attachedFiles: File[];
@@ -138,6 +141,8 @@ export default function ChatComposer({
   onSubmit,
   isDragActive,
   queuedDraft,
+  isEditingSentMessage,
+  onCancelEditMessage,
   onEditQueuedDraft,
   onDeleteQueuedDraft,
   attachedFiles,
@@ -269,6 +274,24 @@ export default function ChatComposer({
             handlePermissionDecision={handlePermissionDecision}
             handleGrantToolPermission={handleGrantToolPermission}
           />
+        </div>
+      )}
+
+      {isEditingSentMessage && (
+        <div className="mx-auto mb-2 flex max-w-[54.25rem] items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-foreground">
+          <PencilIcon className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <span className="min-w-0 flex-1">
+            {t('composer.editing.title')}
+            {' — '}
+            <span className="text-muted-foreground">{t('composer.editing.filesNotReverted')}</span>
+          </span>
+          <button
+            type="button"
+            onClick={onCancelEditMessage}
+            className="shrink-0 rounded-md px-2 py-1 font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            {t('composer.editing.cancel')}
+          </button>
         </div>
       )}
 

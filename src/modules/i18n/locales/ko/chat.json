@@ -229,5 +229,15 @@
   },
   "tasks": {
     "nextTaskPrompt": "다음 작업 시작"
+  },
+  "message": {
+    "editAndResend": "수정 후 다시 보내기"
+  },
+  "composer": {
+    "editing": {
+      "title": "이전 메시지를 교체하는 중",
+      "filesNotReverted": "이미 변경된 파일은 되돌리지 않습니다",
+      "cancel": "취소"
+    }
   }
 }

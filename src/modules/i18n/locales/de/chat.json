@@ -208,5 +208,15 @@
   },
   "tasks": {
     "nextTaskPrompt": "Nächste Aufgabe starten"
+  },
+  "message": {
+    "editAndResend": "Bearbeiten und erneut senden"
+  },
+  "composer": {
+    "editing": {
+      "title": "Ersetzt eine frühere Nachricht",
+      "filesNotReverted": "bereits geänderte Dateien werden nicht zurückgesetzt",
+      "cancel": "Abbrechen"
+    }
   }
 }

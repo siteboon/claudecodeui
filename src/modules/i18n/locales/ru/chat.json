@@ -208,5 +208,15 @@
   },
   "tasks": {
     "nextTaskPrompt": "Начать следующую задачу"
+  },
+  "message": {
+    "editAndResend": "Изменить и отправить снова"
+  },
+  "composer": {
+    "editing": {
+      "title": "Замена предыдущего сообщения",
+      "filesNotReverted": "уже изменённые файлы не возвращаются",
+      "cancel": "Отмена"
+    }
   }
 }

@@ -137,7 +137,12 @@
     "effortDefault": "Default",
     "loadingModels": "Loading models…",
     "modelMenu": "Select model and reasoning effort",
-    "permissionHeading": "How should {{provider}} actions be approved?"
+    "permissionHeading": "How should {{provider}} actions be approved?",
+    "editing": {
+      "title": "Replacing an earlier message",
+      "filesNotReverted": "files the agent already changed are not reverted",
+      "cancel": "Cancel"
+    }
   },
   "providerSelection": {
     "title": "Choose Your AI Assistant",
@@ -237,5 +242,8 @@
   },
   "tasks": {
     "nextTaskPrompt": "Start the next task"
+  },
+  "message": {
+    "editAndResend": "Edit and resend"
   }
 }

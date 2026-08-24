@@ -63,6 +63,8 @@ type ProviderCapabilities = {
   supportsPermissionRequests: boolean;
   supportsTokenUsage: boolean;
   supportsEffort?: boolean;
+  supportsMessageEditing?: boolean;
+  supportsSessionForking?: boolean;
 };
 
 type ProviderCapabilitiesApiResponse = {
@@ -462,6 +464,14 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     [getPermissionModesForProvider, provider],
   );
 
+  /**
+   * Both default to false until the matrix loads, so an affordance is never
+   * offered and then withdrawn — and never offered at all for a provider whose
+   * runtime would reject it.
+   */
+  const supportsMessageEditing = Boolean(providerCapabilities?.[provider]?.supportsMessageEditing);
+  const supportsSessionForking = Boolean(providerCapabilities?.[provider]?.supportsSessionForking);
+
   const resolvePermissionModeForProvider = useCallback((
     targetProvider: LLMProvider,
     requestedMode: PermissionMode | string,
@@ -818,5 +828,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     selectProviderModel,
     selectProviderEffort,
     resolvePermissionModeForProvider,
+    supportsMessageEditing,
+    supportsSessionForking,
   };
 }

@@ -25,6 +25,15 @@ type ProviderCapabilities = {
   supportsTokenUsage: boolean;
   /** Whether the provider runtime can accept model-level reasoning effort. */
   supportsEffort: boolean;
+  /**
+   * Whether an already-sent message can be replaced, which requires the
+   * provider to re-run a conversation truncated at a chosen point.
+   */
+  supportsMessageEditing: boolean;
+  /**
+   * Whether a session's transcript can be branched into an independent one.
+   */
+  supportsSessionForking: boolean;
 };
 
 /**
@@ -44,6 +53,11 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsPermissionRequests: true,
     supportsTokenUsage: true,
     supportsEffort: true,
+    // Only the Claude SDK exposes the two primitives these need:
+    // `resumeSessionAt` to re-run a conversation truncated at a message, and
+    // `forkSession` to copy a transcript prefix into a new session file.
+    supportsMessageEditing: true,
+    supportsSessionForking: true,
   },
   cursor: {
     provider: 'cursor',
@@ -55,6 +69,8 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsPermissionRequests: false,
     supportsTokenUsage: false,
     supportsEffort: false,
+    supportsMessageEditing: false,
+    supportsSessionForking: false,
   },
   codex: {
     provider: 'codex',
@@ -66,6 +82,8 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsPermissionRequests: false,
     supportsTokenUsage: true,
     supportsEffort: true,
+    supportsMessageEditing: false,
+    supportsSessionForking: false,
   },
   opencode: {
     provider: 'opencode',
@@ -80,6 +98,8 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsPermissionRequests: false,
     supportsTokenUsage: true,
     supportsEffort: true,
+    supportsMessageEditing: false,
+    supportsSessionForking: false,
   },
 };
 

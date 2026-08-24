@@ -229,5 +229,15 @@
   },
   "tasks": {
     "nextTaskPrompt": "开始下一个任务"
+  },
+  "message": {
+    "editAndResend": "编辑并重新发送"
+  },
+  "composer": {
+    "editing": {
+      "title": "正在替换先前的消息",
+      "filesNotReverted": "已修改的文件不会被还原",
+      "cancel": "取消"
+    }
   }
 }

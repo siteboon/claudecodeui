@@ -188,6 +188,7 @@ export type MessageKind =
   | 'permission_request'
   | 'permission_cancelled'
   | 'session_created'
+  | 'history_truncated'
   | 'task_notification';
 
 /**
@@ -258,6 +259,13 @@ export type SessionUpsertedEvent = {
  */
 export type NormalizedMessage = {
   id: string;
+  /**
+   * The provider's own identifier for the transcript row this message came
+   * from, when the provider has stable per-row identity (today: Claude's
+   * `uuid`). It is what "edit this message" and "fork from here" address, so it
+   * has to survive a reload — never a value this app synthesized.
+   */
+  transcriptAnchorId?: string;
   sessionId: string;
   timestamp: string;
   provider: LLMProvider;

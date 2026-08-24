@@ -268,6 +268,34 @@ export const sessionsService = {
    * and every returned message is remapped back to the app session id so
    * provider ids never reach the frontend.
    */
+  /**
+   * Resolves where a conversation must resume from so that one already-sent
+   * message, and everything after it, is replaced.
+   *
+   * Returns `null` when the provider cannot do this at all, which is how the
+   * chat gateway knows to refuse the request rather than silently sending the
+   * edit as a new message at the end of the conversation.
+   */
+  async resolveEditAnchor(
+    sessionId: string,
+    anchorId: string,
+  ): Promise<{ found: boolean; resumeThroughId: string | null } | null> {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session) {
+      throw new AppError(`Session "${sessionId}" was not found.`, {
+        code: 'SESSION_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    const sessions = providerRegistry.resolveProvider(session.provider as LLMProvider).sessions;
+    if (!sessions.resolveEditAnchor) {
+      return null;
+    }
+
+    return sessions.resolveEditAnchor(sessionId, anchorId);
+  },
+
   async fetchHistory(
     sessionId: string,
     options: Pick<FetchHistoryOptions, 'limit' | 'offset'> = {},

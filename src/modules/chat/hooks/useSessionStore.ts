@@ -678,6 +678,34 @@ export function useSessionStore() {
    * Append a realtime (WebSocket) message to the correct session slot.
    * This works regardless of which session is actively viewed.
    */
+  /**
+   * Drops the message carrying `anchorId` and everything after it.
+   *
+   * Sent when an already-sent message is edited: the replacement streams in
+   * from the provider, so the rows it supersedes have to go first or the
+   * transcript shows the question twice. Runs on every subscribed client, not
+   * just the one that made the edit.
+   */
+  const truncateAt = useCallback((sessionId: string, anchorId: string) => {
+    const slot = storeRef.current.get(sessionId);
+    if (!slot) return;
+
+    const cutIndex = slot.serverMessages.findIndex(
+      (message) => message.transcriptAnchorId === anchorId,
+    );
+    if (cutIndex < 0) return;
+
+    slot.serverMessages = slot.serverMessages.slice(0, cutIndex);
+    // Anything already streamed belonged to the turn being replaced.
+    slot.realtimeMessages = EMPTY;
+    // `total` counts what the server would serve; it is about to be re-fetched
+    // anyway, but leaving it high makes the pager offer pages that do not exist.
+    slot.total = slot.serverMessages.length;
+    slot.offset = slot.serverMessages.length;
+    recomputeMergedIfNeeded(slot);
+    notify(sessionId);
+  }, [notify]);
+
   const appendRealtime = useCallback((sessionId: string, msg: NormalizedMessage) => {
     const slot = getSlot(sessionId);
     const normalizedMessage =
@@ -800,6 +828,7 @@ export function useSessionStore() {
     fetchFromServer,
     fetchMore,
     appendRealtime,
+    truncateAt,
     refreshLatestFromServer,
     setActiveSession,
     isStale,
@@ -808,7 +837,7 @@ export function useSessionStore() {
     getMessages,
     getSessionSlot,
   }), [
-    fetchFromServer, fetchMore, appendRealtime, refreshLatestFromServer,
+    fetchFromServer, fetchMore, appendRealtime, truncateAt, refreshLatestFromServer,
     setActiveSession, isStale, updateStreaming, finalizeStreaming,
     getMessages, getSessionSlot,
   ]);

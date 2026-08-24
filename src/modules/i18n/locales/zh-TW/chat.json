@@ -244,5 +244,15 @@
   },
   "tasks": {
     "nextTaskPrompt": "開始下一個任務"
+  },
+  "message": {
+    "editAndResend": "編輯並重新傳送"
+  },
+  "composer": {
+    "editing": {
+      "title": "正在取代先前的訊息",
+      "filesNotReverted": "已修改的檔案不會還原",
+      "cancel": "取消"
+    }
   }
 }

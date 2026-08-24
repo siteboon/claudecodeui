@@ -195,5 +195,15 @@
     "providers": {
       "assistant": "Assistant"
     }
+  },
+  "message": {
+    "editAndResend": "編集して再送信"
+  },
+  "composer": {
+    "editing": {
+      "title": "以前のメッセージを置き換えています",
+      "filesNotReverted": "変更済みのファイルは元に戻りません",
+      "cancel": "キャンセル"
+    }
   }
 }

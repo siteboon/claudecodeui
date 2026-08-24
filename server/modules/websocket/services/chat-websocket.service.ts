@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { WebSocket } from 'ws';
 
 import { sessionsDb } from '@/modules/database/index.js';
-import { providerModelsService } from '@/modules/providers/index.js';
+import { providerModelsService, sessionsService } from '@/modules/providers/index.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
 import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
 import {
@@ -149,10 +149,34 @@ async function handleChatSend(
   data: AnyRecord,
   dependencies: ChatWebSocketDependencies
 ): Promise<void> {
+  const resolved = resolveSendTarget(ws, data, dependencies, 'chat.send');
+  if (!resolved) {
+    return;
+  }
+
+  await dispatchRun(ws, userId, resolved.sessionId, resolved.session, data, dependencies);
+}
+
+type ResolvedSendTarget = {
+  sessionId: string;
+  session: NonNullable<ReturnType<typeof sessionsDb.getSessionById>>;
+  provider: LLMProvider;
+};
+
+/**
+ * Shared front half of `chat.send` and `chat.edit-send`: the session row and
+ * provider come from the database, never from the client.
+ */
+function resolveSendTarget(
+  ws: WebSocket,
+  data: AnyRecord,
+  dependencies: ChatWebSocketDependencies,
+  frameName: string,
+): ResolvedSendTarget | null {
   const sessionId = readRequiredSessionId(data);
   if (!sessionId) {
-    sendProtocolError(ws, 'SESSION_ID_REQUIRED', 'chat.send requires a sessionId.');
-    return;
+    sendProtocolError(ws, 'SESSION_ID_REQUIRED', `${frameName} requires a sessionId.`);
+    return null;
   }
 
   const session = sessionsDb.getSessionById(sessionId);
@@ -163,14 +187,35 @@ async function handleChatSend(
       `Session "${sessionId}" was not found. Create it via POST /api/providers/sessions first.`,
       sessionId
     );
-    return;
+    return null;
   }
 
   const provider = session.provider as LLMProvider;
   if (!dependencies.runtime.hasRuntime(provider)) {
     sendProtocolError(ws, 'UNSUPPORTED_PROVIDER', `Provider "${provider}" is not available.`, sessionId);
-    return;
+    return null;
   }
+
+  return { sessionId, session, provider };
+}
+
+/**
+ * Registers the run and hands the turn to the provider runtime.
+ *
+ * `extraRuntimeOptions` is how an edited message asks the provider to resume
+ * partway instead of continuing from the tip; a normal send passes nothing.
+ */
+async function dispatchRun(
+  ws: WebSocket,
+  userId: string | number | null,
+  sessionId: string,
+  session: NonNullable<ReturnType<typeof sessionsDb.getSessionById>>,
+  data: AnyRecord,
+  dependencies: ChatWebSocketDependencies,
+  extraRuntimeOptions: AnyRecord = {},
+  beforeRun?: (run: NonNullable<ReturnType<typeof chatRunRegistry.startRun>>) => void,
+): Promise<void> {
+  const provider = session.provider as LLMProvider;
 
   const run = chatRunRegistry.startRun({
     appSessionId: sessionId,
@@ -221,6 +266,7 @@ async function handleChatSend(
   // app session id.
   const runtimeOptions: AnyRecord = {
     ...clientOptions,
+    ...extraRuntimeOptions,
     // Attachments are re-validated server-side: only direct children of the
     // global upload store may reach provider runtimes or their file tools.
     attachments: uniqueAttachments,
@@ -230,6 +276,10 @@ async function handleChatSend(
     cwd: clientOptions.cwd ?? session.project_path ?? undefined,
     projectPath: session.project_path ?? clientOptions.projectPath,
   };
+
+  // Emitted through the run's writer so it is sequenced and replayed like any
+  // other event — a second tab watching this session has to truncate too.
+  beforeRun?.(run);
 
   try {
     await dependencies.runtime.run(provider, command, runtimeOptions, run.writer);
@@ -244,6 +294,77 @@ async function handleChatSend(
     // settles, and the session-keyed completeRun would kill that new run.
     chatRunRegistry.completeRunIfCurrent(run, { exitCode: 1 });
   }
+}
+
+/**
+ * Handles `chat.edit-send`: replaces an already-sent message and everything
+ * after it with a new turn.
+ *
+ * Nothing is deleted. The provider resumes the conversation partway and
+ * appends the replacement, so the abandoned attempt stays in the transcript
+ * file and is simply no longer part of the live conversation — the same shape
+ * Claude Code's rewind and Codex's fork-with-cut-point produce.
+ */
+async function handleChatEditSend(
+  ws: WebSocket,
+  userId: string | number | null,
+  data: AnyRecord,
+  dependencies: ChatWebSocketDependencies
+): Promise<void> {
+  const resolved = resolveSendTarget(ws, data, dependencies, 'chat.edit-send');
+  if (!resolved) {
+    return;
+  }
+
+  const { sessionId, session, provider } = resolved;
+  const anchorId = typeof data.anchorId === 'string' ? data.anchorId.trim() : '';
+  if (!anchorId) {
+    sendProtocolError(ws, 'ANCHOR_REQUIRED', 'chat.edit-send requires the anchorId of the message being replaced.', sessionId);
+    return;
+  }
+
+  let resumeThroughId: string | null;
+  try {
+    const anchor = await sessionsService.resolveEditAnchor(sessionId, anchorId);
+    if (!anchor) {
+      sendProtocolError(
+        ws,
+        'EDIT_NOT_SUPPORTED',
+        `Provider "${provider}" cannot replace an already-sent message.`,
+        sessionId
+      );
+      return;
+    }
+    if (!anchor.found) {
+      sendProtocolError(ws, 'ANCHOR_NOT_FOUND', 'That message is no longer in the transcript.', sessionId);
+      return;
+    }
+    resumeThroughId = anchor.resumeThroughId;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    sendProtocolError(ws, 'ANCHOR_LOOKUP_FAILED', `Could not read the transcript: ${message}`, sessionId);
+    return;
+  }
+
+  await dispatchRun(
+    ws,
+    userId,
+    sessionId,
+    session,
+    data,
+    dependencies,
+    // `null` is meaningful: the edited turn was the first prompt, so the
+    // conversation starts over instead of resuming.
+    { resumeAnchorId: resumeThroughId ?? undefined, resumeFromScratch: resumeThroughId === null },
+    (run) => {
+      run.writer.send({
+        kind: 'history_truncated',
+        provider,
+        sessionId,
+        anchorId,
+      });
+    },
+  );
 }
 
 /**
@@ -395,6 +516,9 @@ export function handleChatConnection(
       const messageType = typeof data.type === 'string' ? data.type : '';
 
       switch (messageType) {
+        case 'chat.edit-send':
+          await handleChatEditSend(ws, userId, data, dependencies);
+          return;
         case 'chat.send':
           await handleChatSend(ws, userId, data, dependencies);
           return;

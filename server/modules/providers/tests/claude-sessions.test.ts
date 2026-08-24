@@ -328,3 +328,246 @@ test('Claude history trims a subagent timeline down to a preview', { concurrency
     await rm(tempRoot, { recursive: true, force: true });
   }
 });
+
+const EDIT_SESSION_ID = 'claude-edit-session';
+
+/**
+ * Writes a transcript where one prompt was edited: the replacement shares a
+ * parent with the original, which is the shape Claude's resume-partway leaves
+ * behind. Nothing is deleted from the file.
+ */
+async function writeEditedTranscript(projectDirectory: string): Promise<string> {
+  const transcriptPath = path.join(projectDirectory, `${EDIT_SESSION_ID}.jsonl`);
+  const rows = [
+    {
+      type: 'user', uuid: 'u1', parentUuid: null, sessionId: EDIT_SESSION_ID,
+      timestamp: '2026-08-23T10:00:00.000Z',
+      message: { role: 'user', content: [{ type: 'text', text: 'first prompt' }] },
+    },
+    {
+      type: 'assistant', uuid: 'a1', parentUuid: 'u1', sessionId: EDIT_SESSION_ID,
+      timestamp: '2026-08-23T10:00:01.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'first answer' }] },
+    },
+    {
+      type: 'user', uuid: 'u2', parentUuid: 'a1', sessionId: EDIT_SESSION_ID,
+      timestamp: '2026-08-23T10:00:02.000Z',
+      message: { role: 'user', content: [{ type: 'text', text: 'original second prompt' }] },
+    },
+    {
+      type: 'assistant', uuid: 'a2', parentUuid: 'u2', sessionId: EDIT_SESSION_ID,
+      timestamp: '2026-08-23T10:00:03.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'answer to be replaced' }] },
+    },
+    // The edit: same parent as u2, written later.
+    {
+      type: 'user', uuid: 'u2b', parentUuid: 'a1', sessionId: EDIT_SESSION_ID,
+      timestamp: '2026-08-23T10:00:04.000Z',
+      message: { role: 'user', content: [{ type: 'text', text: 'edited second prompt' }] },
+    },
+    {
+      type: 'assistant', uuid: 'a2b', parentUuid: 'u2b', sessionId: EDIT_SESSION_ID,
+      timestamp: '2026-08-23T10:00:05.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'answer to the edit' }] },
+    },
+  ];
+
+  await writeFile(transcriptPath, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+  return transcriptPath;
+}
+
+test('an edited prompt replaces the one it superseded instead of stacking on it', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-edit-history-'));
+
+  try {
+    const transcriptPath = await writeEditedTranscript(tempRoot);
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(EDIT_SESSION_ID, 'claude', tempRoot, 'Edited session', now, now, transcriptPath);
+
+      const history = await new ClaudeSessionsProvider().fetchHistory(EDIT_SESSION_ID, {
+        providerSessionId: EDIT_SESSION_ID,
+      });
+      const texts = history.messages.map((message) => message.content);
+
+      assert.deepEqual(texts, [
+        'first prompt',
+        'first answer',
+        'edited second prompt',
+        'answer to the edit',
+      ]);
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('parallel tool calls are not mistaken for an edit', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-parallel-tools-'));
+  const sessionId = 'claude-parallel-session';
+
+  try {
+    const transcriptPath = path.join(tempRoot, `${sessionId}.jsonl`);
+    // One assistant turn issuing two tools: each tool_result parents onto the
+    // same row, so this row has two children — a branch point that must not be
+    // pruned, or tool output disappears from every transcript in the app.
+    const rows = [
+      {
+        type: 'user', uuid: 'p1', parentUuid: null, sessionId,
+        timestamp: '2026-08-23T10:00:00.000Z',
+        message: { role: 'user', content: [{ type: 'text', text: 'do two things' }] },
+      },
+      {
+        type: 'assistant', uuid: 'pa1', parentUuid: 'p1', sessionId,
+        timestamp: '2026-08-23T10:00:01.000Z',
+        message: {
+          role: 'assistant', model: 'claude-opus-5',
+          content: [{ type: 'tool_use', id: 'tool-1', name: 'Read', input: { file_path: '/a' } }],
+        },
+      },
+      {
+        type: 'user', uuid: 'pr1', parentUuid: 'pa1', sessionId,
+        timestamp: '2026-08-23T10:00:02.000Z',
+        message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tool-1', content: 'contents of a' }] },
+      },
+      {
+        type: 'user', uuid: 'pr2', parentUuid: 'pa1', sessionId,
+        timestamp: '2026-08-23T10:00:03.000Z',
+        message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tool-2', content: 'contents of b' }] },
+      },
+    ];
+    await writeFile(transcriptPath, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(sessionId, 'claude', tempRoot, 'Parallel tools', now, now, transcriptPath);
+
+      const history = await new ClaudeSessionsProvider().fetchHistory(sessionId, {
+        providerSessionId: sessionId,
+      });
+
+      assert.equal(
+        history.messages.some((message) => message.content === 'do two things'),
+        true,
+      );
+      const toolRow = history.messages.find((message) => message.kind === 'tool_use');
+      assert.ok(toolRow, 'the tool call survives');
+      assert.equal(toolRow?.toolResult?.content, 'contents of a');
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('resolving an edit anchor returns the assistant turn before it', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-edit-anchor-'));
+
+  try {
+    const transcriptPath = await writeEditedTranscript(tempRoot);
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(EDIT_SESSION_ID, 'claude', tempRoot, 'Edited session', now, now, transcriptPath);
+      const provider = new ClaudeSessionsProvider();
+
+      // Resuming is inclusive of the row it names, so replacing `u2b` must
+      // resume through `a1` — naming `u2b` itself would leave the prompt being
+      // replaced in context.
+      assert.deepEqual(
+        await provider.resolveEditAnchor(EDIT_SESSION_ID, 'u2b'),
+        { found: true, resumeThroughId: 'a1' },
+      );
+
+      // Nothing precedes the first prompt, so the conversation starts over.
+      assert.deepEqual(
+        await provider.resolveEditAnchor(EDIT_SESSION_ID, 'u1'),
+        { found: true, resumeThroughId: null },
+      );
+
+      assert.deepEqual(
+        await provider.resolveEditAnchor(EDIT_SESSION_ID, 'not-in-transcript'),
+        { found: false, resumeThroughId: null },
+      );
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('user turns carry the transcript uuid so they can be edited', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-anchor-ids-'));
+
+  try {
+    const transcriptPath = await writeEditedTranscript(tempRoot);
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(EDIT_SESSION_ID, 'claude', tempRoot, 'Edited session', now, now, transcriptPath);
+
+      const history = await new ClaudeSessionsProvider().fetchHistory(EDIT_SESSION_ID, {
+        providerSessionId: EDIT_SESSION_ID,
+      });
+
+      const userRows = history.messages.filter((message) => message.role === 'user');
+      assert.deepEqual(
+        userRows.map((message) => message.transcriptAnchorId),
+        ['u1', 'u2b'],
+      );
+      // Assistant rows are never an anchor: the UI only offers editing on a
+      // turn the user typed.
+      assert.equal(
+        history.messages.some((message) => message.role !== 'user' && message.transcriptAnchorId),
+        false,
+      );
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('resolving an edit anchor skips rows that are not conversation turns', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-anchor-skip-'));
+  const sessionId = 'claude-anchor-skip-session';
+
+  try {
+    const transcriptPath = path.join(tempRoot, `${sessionId}.jsonl`);
+    // An attachment row sits between the assistant turn and the next prompt.
+    // Resuming names an assistant message, so the walk has to pass over it —
+    // naming the attachment would resume at something the SDK cannot address.
+    const rows = [
+      {
+        type: 'user', uuid: 'su1', parentUuid: null, sessionId,
+        timestamp: '2026-08-23T10:00:00.000Z',
+        message: { role: 'user', content: [{ type: 'text', text: 'hello' }] },
+      },
+      {
+        type: 'assistant', uuid: 'sa1', parentUuid: 'su1', sessionId,
+        timestamp: '2026-08-23T10:00:01.000Z',
+        message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'hi' }] },
+      },
+      {
+        type: 'attachment', uuid: 'sat1', parentUuid: 'sa1', sessionId,
+        timestamp: '2026-08-23T10:00:02.000Z',
+      },
+      {
+        type: 'user', uuid: 'su2', parentUuid: 'sat1', sessionId,
+        timestamp: '2026-08-23T10:00:03.000Z',
+        message: { role: 'user', content: [{ type: 'text', text: 'second prompt' }] },
+      },
+    ];
+    await writeFile(transcriptPath, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(sessionId, 'claude', tempRoot, 'Anchor skip', now, now, transcriptPath);
+
+      assert.deepEqual(
+        await new ClaudeSessionsProvider().resolveEditAnchor(sessionId, 'su2'),
+        { found: true, resumeThroughId: 'sa1' },
+      );
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});

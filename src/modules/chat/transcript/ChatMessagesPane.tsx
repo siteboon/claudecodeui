@@ -59,6 +59,8 @@ type ChatMessagesPaneProps = {
   showRawParameters?: boolean;
   showThinking?: boolean;
   selectedProject: Project;
+  /** Loads an already-sent message back into the composer; absent when the provider cannot re-run from a point. */
+  onEditMessage?: (message: ChatMessage) => void;
 };
 
 /**
@@ -101,6 +103,7 @@ function ChatMessagesPane({
   loadAllJustFinished,
   showLoadAllOverlay,
   createDiff,
+  onEditMessage,
   onFileOpen,
   onShowSettings,
   onGrantToolPermission,
@@ -278,6 +281,7 @@ function ChatMessagesPane({
                   showThinking={showThinking}
                   selectedProject={selectedProject}
                   provider={provider}
+                  onEditMessage={onEditMessage}
                 />
               );
             });

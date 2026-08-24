@@ -210,5 +210,15 @@
   },
   "tasks": {
     "nextTaskPrompt": "Commencer la prochaine tâche"
+  },
+  "message": {
+    "editAndResend": "Modifier et renvoyer"
+  },
+  "composer": {
+    "editing": {
+      "title": "Remplacement d’un message précédent",
+      "filesNotReverted": "les fichiers déjà modifiés ne sont pas restaurés",
+      "cancel": "Annuler"
+    }
   }
 }

@@ -305,6 +305,106 @@ function replaceAgentToolResultContent(message: AnyRecord, replacement: string):
   }
 }
 
+/**
+ * Reads a Claude transcript's rows as a graph keyed by `uuid`.
+ *
+ * The file is append-only and every row names its predecessor in `parentUuid`,
+ * so a conversation is a path through it rather than the whole file. Editing a
+ * sent message makes a second path appear alongside the first.
+ */
+async function readTranscriptRows(jsonlPath: string, providerSessionId: string): Promise<AnyRecord[]> {
+  const rows: AnyRecord[] = [];
+  const fileStream = fs.createReadStream(jsonlPath);
+  const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
+
+  for await (const line of rl) {
+    if (!line.trim()) {
+      continue;
+    }
+    try {
+      const entry = JSON.parse(line) as AnyRecord;
+      if (entry.sessionId === providerSessionId) {
+        rows.push(entry);
+      }
+    } catch {
+      // A row can be half-written while the CLI is streaming into the file.
+    }
+  }
+
+  return rows;
+}
+
+/** True for a row the user typed, as opposed to a tool result or an injected note. */
+function isUserPromptRow(row: AnyRecord): boolean {
+  if (row.type !== 'user' || row.isMeta === true || row.isCompactSummary === true) {
+    return false;
+  }
+
+  const content = row.message?.content;
+  if (Array.isArray(content)) {
+    return content.some((part: AnyRecord) => part?.type === 'text' || part?.type === 'image');
+  }
+
+  return typeof content === 'string' && content.length > 0;
+}
+
+/**
+ * Drops the rows belonging to prompts that were replaced by an edit.
+ *
+ * When a message is edited, Claude resumes the conversation partway and appends
+ * the replacement, so two prompts end up sharing one parent and the file holds
+ * both the abandoned attempt and the live one. A flat read would show them
+ * stacked, which reads as the app having sent the message twice.
+ *
+ * Only sibling *prompts* are treated as a fork. Branch points made by parallel
+ * tool calls are extremely common — one assistant turn writes several chained
+ * rows and each tool result parents onto its own — and pruning those would
+ * delete tool output from every transcript in the app.
+ */
+function dropSupersededPromptBranches(rows: AnyRecord[]): AnyRecord[] {
+  const promptSiblings = new Map<string, AnyRecord[]>();
+  for (const row of rows) {
+    if (typeof row.parentUuid !== 'string' || !isUserPromptRow(row)) {
+      continue;
+    }
+    const siblings = promptSiblings.get(row.parentUuid);
+    if (siblings) {
+      siblings.push(row);
+    } else {
+      promptSiblings.set(row.parentUuid, [row]);
+    }
+  }
+
+  const supersededRoots = new Set<string>();
+  for (const siblings of promptSiblings.values()) {
+    if (siblings.length < 2) {
+      continue;
+    }
+    // The transcript is append-only, so the last prompt written under a parent
+    // is the one that replaced the others.
+    for (const row of siblings.slice(0, -1)) {
+      if (typeof row.uuid === 'string') {
+        supersededRoots.add(row.uuid);
+      }
+    }
+  }
+
+  if (supersededRoots.size === 0) {
+    return rows;
+  }
+
+  const abandoned = new Set(supersededRoots);
+  // Rows are appended in order, so one forward pass propagates each superseded
+  // root to its whole subtree.
+  for (const row of rows) {
+    if (typeof row.parentUuid === 'string' && abandoned.has(row.parentUuid) && typeof row.uuid === 'string') {
+      abandoned.add(row.uuid);
+    }
+  }
+
+  return rows.filter((row) => typeof row.uuid !== 'string' || !abandoned.has(row.uuid));
+}
+
 async function getSessionMessages(
   sessionId: string,
   providerSessionId: string,
@@ -322,28 +422,9 @@ async function getSessionMessages(
 
     const projectDir = path.dirname(jsonLPath);
 
-    const messages: AnyRecord[] = [];
-
-    const fileStream = fs.createReadStream(jsonLPath);
-    const rl = readline.createInterface({
-      input: fileStream,
-      crlfDelay: Infinity,
-    });
-
-    for await (const line of rl) {
-      if (!line.trim()) {
-        continue;
-      }
-
-      try {
-        const entry = JSON.parse(line) as AnyRecord;
-        if (entry.sessionId === providerSessionId) {
-          messages.push(entry);
-        }
-      } catch {
-        // Skip malformed JSONL lines that can happen during concurrent writes.
-      }
-    }
+    const messages = dropSupersededPromptBranches(
+      await readTranscriptRows(jsonLPath, providerSessionId),
+    );
 
     const agentIds = new Set<string>();
     for (const message of messages) {
@@ -569,8 +650,31 @@ export class ClaudeSessionsProvider implements IProviderSessions {
   /**
    * Normalizes one Claude JSONL entry or live SDK stream event into the shared
    * message shape consumed by REST and WebSocket clients.
+   *
+   * Every user turn it produces is stamped with the transcript row's `uuid`,
+   * which is the anchor "edit this message" and "fork from here" address. It is
+   * applied here rather than at each `createNormalizedMessage` call because the
+   * row-shape branches below have several exits, and an anchor missing from one
+   * of them would show up as a message the user silently cannot edit.
    */
   normalizeMessage(rawMessage: unknown, sessionId: string | null): NormalizedMessage[] {
+    const messages = this.normalizeMessageRows(rawMessage, sessionId);
+    // A synthesized id is useless as an anchor — it changes on every read — so
+    // a row without its own uuid produces messages with no anchor at all.
+    const raw = readObjectRecord(rawMessage);
+    const anchorId = typeof raw?.uuid === 'string' && raw.uuid ? raw.uuid : null;
+    if (anchorId) {
+      for (const message of messages) {
+        if (message.role === 'user') {
+          message.transcriptAnchorId = anchorId;
+        }
+      }
+    }
+
+    return messages;
+  }
+
+  private normalizeMessageRows(rawMessage: unknown, sessionId: string | null): NormalizedMessage[] {
     const raw = readObjectRecord(rawMessage);
     if (!raw) {
       return [];
@@ -864,6 +968,56 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     }
 
     return messages;
+  }
+
+  /**
+   * Finds the row to resume *through* so that `anchorId`'s turn is replaced.
+   *
+   * Walks up the `parentUuid` chain to the nearest assistant row, because the
+   * SDK's `resumeSessionAt` is documented against assistant message ids — the
+   * user row's immediate parent can be an attachment or an injected note.
+   * Returns `null` when nothing precedes the edited prompt, which means the
+   * conversation should start over rather than resume.
+   */
+  async resolveEditAnchor(
+    sessionId: string,
+    anchorId: string,
+  ): Promise<{ found: boolean; resumeThroughId: string | null }> {
+    const session = sessionsDb.getSessionById(sessionId);
+    const jsonlPath = session?.jsonl_path;
+    const providerSessionId = session?.provider_session_id;
+    if (!jsonlPath || !providerSessionId) {
+      return { found: false, resumeThroughId: null };
+    }
+
+    const rows = await readTranscriptRows(jsonlPath, providerSessionId);
+    const byUuid = new Map<string, AnyRecord>();
+    for (const row of rows) {
+      if (typeof row.uuid === 'string') {
+        byUuid.set(row.uuid, row);
+      }
+    }
+
+    const target = byUuid.get(anchorId);
+    if (!target) {
+      return { found: false, resumeThroughId: null };
+    }
+
+    const visited = new Set<string>([anchorId]);
+    let parentUuid: unknown = target.parentUuid;
+    while (typeof parentUuid === 'string' && !visited.has(parentUuid)) {
+      visited.add(parentUuid);
+      const parent = byUuid.get(parentUuid);
+      if (!parent) {
+        break;
+      }
+      if (parent.type === 'assistant') {
+        return { found: true, resumeThroughId: parentUuid };
+      }
+      parentUuid = parent.parentUuid;
+    }
+
+    return { found: true, resumeThroughId: null };
   }
 
   /**

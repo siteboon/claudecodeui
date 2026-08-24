@@ -114,6 +114,7 @@ function ChatInterface({
     selectProviderModel,
     selectProviderEffort,
     resolvePermissionModeForProvider,
+    supportsMessageEditing,
   } = useChatProviderState({
     selectedSession,
     selectedProject,
@@ -221,6 +222,9 @@ function ChatInterface({
     commandModalPayload,
     closeCommandModal,
     showCostModal,
+    editingAnchorId,
+    beginEditMessage,
+    cancelEditMessage,
   } = useChatComposerState({
     selectedProject,
     selectedSession,
@@ -411,6 +415,10 @@ function ChatInterface({
           showRawParameters={showRawParameters}
           showThinking={showThinking}
           selectedProject={selectedProject}
+          // Editing replaces the turn and everything after it, so it is only
+          // offered when the session is idle — a half-truncated transcript with
+          // a live stream writing into it is not recoverable.
+          onEditMessage={supportsMessageEditing && !isProcessing ? beginEditMessage : undefined}
         />
 
         <div className="relative flex-shrink-0">
@@ -448,6 +456,8 @@ function ChatInterface({
           modelsLoading={providerModelsLoading}
           tokenBudget={tokenBudget}
           onShowTokenUsage={showCostModal}
+          isEditingSentMessage={Boolean(editingAnchorId)}
+          onCancelEditMessage={cancelEditMessage}
           slashCommandsCount={slashCommandsCount}
           onToggleCommandMenu={handleToggleCommandMenu}
           hasInput={Boolean(input.trim())}

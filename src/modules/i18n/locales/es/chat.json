@@ -137,7 +137,12 @@
     "effortDefault": "Por defecto",
     "loadingModels": "Cargando modelos…",
     "modelMenu": "Seleccionar modelo y esfuerzo de razonamiento",
-    "permissionHeading": "¿Cómo se deben aprobar las acciones de {{provider}}?"
+    "permissionHeading": "¿Cómo se deben aprobar las acciones de {{provider}}?",
+    "editing": {
+      "title": "Reemplazando un mensaje anterior",
+      "filesNotReverted": "los archivos ya modificados no se revierten",
+      "cancel": "Cancelar"
+    }
   },
   "providerSelection": {
     "title": "Elige tu asistente de IA",
@@ -237,5 +242,8 @@
   },
   "tasks": {
     "nextTaskPrompt": "Empezar la siguiente tarea"
+  },
+  "message": {
+    "editAndResend": "Editar y reenviar"
   }
 }

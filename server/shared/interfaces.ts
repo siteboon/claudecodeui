@@ -154,6 +154,23 @@ export interface IProviderMcp {
 export interface IProviderSessions {
   normalizeMessage(raw: unknown, sessionId: string | null): NormalizedMessage[];
   fetchHistory(sessionId: string, options?: FetchHistoryOptions): Promise<FetchHistoryResult>;
+
+  /**
+   * Resolves where a conversation must resume from so that the turn identified
+   * by `anchorId`, and everything after it, is replaced.
+   *
+   * `resumeThroughId` is the last transcript row to KEEP — resuming is
+   * inclusive of it — or `null` when the edited turn is the first prompt and
+   * the conversation should start over. `found` is false when `anchorId` is not
+   * in the transcript, which the caller must report rather than guess at.
+   *
+   * Implemented only by providers whose transcripts have stable per-row
+   * identity; its absence is what makes "edit this message" unavailable.
+   */
+  resolveEditAnchor?(
+    sessionId: string,
+    anchorId: string,
+  ): Promise<{ found: boolean; resumeThroughId: string | null }>;
 }
 
 // ---------------------------

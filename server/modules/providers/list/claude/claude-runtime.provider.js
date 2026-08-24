@@ -216,7 +216,7 @@ function matchesToolPermission(entry, toolName, input) {
 }
 
 function mapCliOptionsToSDK(options = {}) {
-  const { providerSessionId, cwd, toolsSettings, permissionMode, effort } = options;
+  const { providerSessionId, cwd, toolsSettings, permissionMode, effort, resumeAnchorId, resumeFromScratch } = options;
 
   const sdkOptions = {};
 
@@ -282,8 +282,19 @@ function mapCliOptionsToSDK(options = {}) {
   sdkOptions.settingSources = ['project', 'user', 'local'];
 
   // The SDK resumes with the provider-native session id, never the app id.
-  if (providerSessionId) {
+  // `resumeFromScratch` is set when the very first prompt of a conversation was
+  // edited: there is nothing before it to resume through, so the turn has to
+  // start the conversation over instead.
+  if (providerSessionId && !resumeFromScratch) {
     sdkOptions.resume = providerSessionId;
+
+    // Editing an already-sent message re-runs the conversation truncated just
+    // before it. `resumeSessionAt` is inclusive of the uuid it names, so the
+    // caller resolves the last row to KEEP and passes that — never the edited
+    // turn itself, which would leave the original prompt in context.
+    if (resumeAnchorId) {
+      sdkOptions.resumeSessionAt = resumeAnchorId;
+    }
   }
 
   return sdkOptions;

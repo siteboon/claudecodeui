@@ -186,6 +186,15 @@ export function useChatComposerState({
   //
   // Restored synchronously from the draft mirror so a reload shows what was
   // being typed on the first paint rather than after the drafts request lands.
+  /**
+   * The already-sent message the composer is currently replacing, or null.
+   *
+   * Holds the anchor rather than the message, because that is all the send
+   * needs and it keeps a stale message object from being captured while the
+   * transcript refreshes underneath the composer.
+   */
+  const [editingAnchorId, setEditingAnchorId] = useState<string | null>(null);
+
   const [inputState, setInputState] = useState<{ scope: string | null; value: string }>(() => {
     if (typeof window === 'undefined') {
       return { scope: null, value: '' };
@@ -828,14 +837,19 @@ export function useChatComposerState({
       // provider, project path, and provider-native resume id from the
       // session row; `options` only carries composer-level preferences.
       sendMessage({
-        type: 'chat.send',
+        // Replacing an already-sent message is its own frame: it changes the
+        // shape of the conversation, so it gets validated separately and can
+        // report why it was refused.
+        type: editingAnchorId ? 'chat.edit-send' : 'chat.send',
         sessionId: targetSessionId,
+        ...(editingAnchorId ? { anchorId: editingAnchorId } : {}),
         content: messageContent,
         options: {
           ...(queuedSubmission?.options ?? buildSendOptions(messageContent)),
           attachments: uploadedAttachments,
         },
       });
+      setEditingAnchorId(null);
 
       setInput('');
       inputValueRef.current = '';
@@ -857,6 +871,7 @@ export function useChatComposerState({
       attachedFiles,
       buildSendOptions,
       currentSessionId,
+      editingAnchorId,
       executeCommand,
       isLoading,
       onSessionProcessing,
@@ -1194,9 +1209,27 @@ export function useChatComposerState({
     [],
   );
 
+  /** Loads an already-sent message back into the composer to be replaced. */
+  const beginEditMessage = useCallback((message: ChatMessage) => {
+    if (!message.transcriptAnchorId) return;
+    setEditingAnchorId(message.transcriptAnchorId);
+    setInput(message.content || '');
+    inputValueRef.current = message.content || '';
+    textareaRef.current?.focus();
+  }, [setInput]);
+
+  const cancelEditMessage = useCallback(() => {
+    setEditingAnchorId(null);
+    setInput('');
+    inputValueRef.current = '';
+  }, [setInput]);
+
   return {
     input,
     setInput,
+    editingAnchorId,
+    beginEditMessage,
+    cancelEditMessage,
     textareaRef,
     inputHighlightRef,
     isTextareaExpanded,

@@ -208,5 +208,15 @@
   },
   "tasks": {
     "nextTaskPrompt": "Sonraki görevi başlat"
+  },
+  "message": {
+    "editAndResend": "Düzenle ve yeniden gönder"
+  },
+  "composer": {
+    "editing": {
+      "title": "Önceki bir mesaj değiştiriliyor",
+      "filesNotReverted": "zaten değiştirilen dosyalar geri alınmaz",
+      "cancel": "İptal"
+    }
   }
 }

@@ -270,6 +270,12 @@ export type ChatMessage = {
   images?: ChatImage[];
   files?: ChatAttachment[];
   reasoning?: string;
+  /**
+   * The provider's identifier for the transcript row behind this message, when
+   * the provider has stable per-row identity. Present on user turns from
+   * Claude; it is the anchor "edit this message" and "fork from here" send back.
+   */
+  transcriptAnchorId?: string;
   isThinking?: boolean;
   isStreaming?: boolean;
   isToolUse?: boolean;
@@ -372,6 +378,12 @@ type QuestionOption = {
 /** A provider-agnostic transcript event as normalized by the backend adapters, with all kind-specific fields kept flat; it is the shape the session store holds and that chat converts into ChatMessage for rendering, so treat it as the wire contract rather than a view model. */
 export type NormalizedMessage = {
   id: string;
+  /**
+   * The provider's own id for the transcript row behind this message, when the
+   * provider has stable per-row identity (today: Claude). Sent back as the
+   * anchor for "edit this message" and "fork from here".
+   */
+  transcriptAnchorId?: string;
   sessionId: string;
   timestamp: string;
   provider: LLMProvider;
@@ -446,6 +458,7 @@ type MessageKind =
   | 'permission_request'
   | 'permission_cancelled'
   | 'session_created'
+  | 'history_truncated'
   | 'task_notification';
 
 // ---------------------------
