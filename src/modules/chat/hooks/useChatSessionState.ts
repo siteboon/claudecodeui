@@ -168,6 +168,9 @@ function chatMessageToNormalized(
     // its files immediately, before the server-backed copy replaces it.
     images: Array.isArray(msg.images) && msg.images.length > 0 ? msg.images : undefined,
     files: Array.isArray(msg.files) && msg.files.length > 0 ? msg.files : undefined,
+    // Survives the truncation that follows an edit, which clears every other
+    // live row.
+    replacesAnchorId: msg.replacesAnchorId,
   } as NormalizedMessage;
 }
 

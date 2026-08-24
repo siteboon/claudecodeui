@@ -111,4 +111,50 @@ describe('truncateAt', () => {
       ['first prompt', 'first answer'],
     );
   });
+
+  it('keeps the replacement the cut was made for', async () => {
+    const { result } = await loadedStore();
+
+    // The composer appends its echo of the edited message before the server
+    // acknowledges the edit, so the cut arrives with the replacement already
+    // on screen. Clearing it left the chat pane without the message the user
+    // had just sent until the run finished.
+    act(() => {
+      result.current.appendRealtime('session-1', {
+        ...row('5', 'second prompt, corrected'),
+        role: 'user',
+        replacesAnchorId: 'u2',
+      } as NormalizedMessage);
+    });
+
+    act(() => {
+      result.current.truncateAt('session-1', 'u2');
+    });
+
+    assert.deepEqual(
+      result.current.getMessages('session-1').map((message) => message.content),
+      ['first prompt', 'first answer', 'second prompt, corrected'],
+    );
+  });
+
+  it('clears a replacement tagged for a different cut', async () => {
+    const { result } = await loadedStore();
+
+    act(() => {
+      result.current.appendRealtime('session-1', {
+        ...row('5', 'first prompt, corrected'),
+        role: 'user',
+        replacesAnchorId: 'u1',
+      } as NormalizedMessage);
+    });
+
+    act(() => {
+      result.current.truncateAt('session-1', 'u2');
+    });
+
+    assert.deepEqual(
+      result.current.getMessages('session-1').map((message) => message.content),
+      ['first prompt', 'first answer'],
+    );
+  });
 });

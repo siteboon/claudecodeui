@@ -696,8 +696,15 @@ export function useSessionStore() {
     if (cutIndex < 0) return;
 
     slot.serverMessages = slot.serverMessages.slice(0, cutIndex);
-    // Anything already streamed belonged to the turn being replaced.
-    slot.realtimeMessages = EMPTY;
+    // Anything already streamed belonged to the turn being replaced — except
+    // the replacement itself. The client that made the edit appends its
+    // optimistic echo before the server acknowledges, so clearing live rows
+    // outright took the message the user had just sent with it, and it only
+    // came back when the run finished and the transcript was re-read.
+    const replacement = slot.realtimeMessages.filter(
+      (message) => message.replacesAnchorId === anchorId,
+    );
+    slot.realtimeMessages = replacement.length > 0 ? replacement : EMPTY;
     // `total` counts what the server would serve; it is about to be re-fetched
     // anyway, but leaving it high makes the pager offer pages that do not exist.
     slot.total = slot.serverMessages.length;

@@ -819,6 +819,10 @@ export function useChatComposerState({
         images: attachmentRecords.filter(isImageAttachment),
         files: attachmentRecords.filter((attachment) => !isImageAttachment(attachment)),
         timestamp: new Date(),
+        // Tags this echo as the replacement, so the truncation the server
+        // broadcasts a moment later cuts the turns being replaced without
+        // taking the message the user just sent with them.
+        ...(editingAnchorId ? { replacesAnchorId: editingAnchorId } : {}),
       };
 
       addMessage(userMessage);

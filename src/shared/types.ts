@@ -290,6 +290,11 @@ export type ChatMessage = {
    * Claude; it is the anchor "edit this message" and "fork from here" send back.
    */
   transcriptAnchorId?: string;
+  /**
+   * Set on the optimistic echo of a message being sent as a replacement for an
+   * already-sent one, naming the anchor it replaces. Local to this client.
+   */
+  replacesAnchorId?: string;
   isThinking?: boolean;
   isStreaming?: boolean;
   isToolUse?: boolean;
@@ -398,6 +403,15 @@ export type NormalizedMessage = {
    * anchor for "edit this message" and "fork from here".
    */
   transcriptAnchorId?: string;
+  /**
+   * Set only on the client-side optimistic echo of an edited message, naming
+   * the anchor that echo replaces. Never sent by the backend.
+   *
+   * The truncation that follows an edit clears every live row, because they
+   * belonged to the turn being replaced. This tag is what tells the store the
+   * replacement itself is not one of them.
+   */
+  replacesAnchorId?: string;
   sessionId: string;
   timestamp: string;
   provider: LLMProvider;
