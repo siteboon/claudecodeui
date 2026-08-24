@@ -77,7 +77,17 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   const [latestMessage, setLatestMessage] = useState<ServerEvent | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectCleanupRef = useRef<(() => void) | null>(null);
+  const pendingMessagesRef = useRef<unknown[]>([]);
   const { isLoading: isAuthLoading, token, user } = useAuth();
+  const prevUserRef = useRef(user?.username);
+
+  useEffect(() => {
+    if (prevUserRef.current !== undefined && prevUserRef.current !== user?.username) {
+      pendingMessagesRef.current = [];
+    }
+    prevUserRef.current = user?.username;
+  }, [user?.username]);
 
   const dispatch = useCallback((event: ServerEvent) => {
     for (const listener of listenersRef.current) {
@@ -105,6 +115,10 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
+      if (reconnectCleanupRef.current) {
+        reconnectCleanupRef.current();
+        reconnectCleanupRef.current = null;
+      }
       const activeSocket = wsRef.current;
       if (activeSocket) {
         // Prevent the intentionally closed, old-token socket from scheduling
@@ -118,6 +132,25 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       }
     };
   }, [isAuthLoading, token, user]); // reconnect after authentication or token refresh
+
+  const flushPendingMessages = useCallback(() => {
+    const socket = wsRef.current;
+    const pending = pendingMessagesRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN || pending.length === 0) {
+      return;
+    }
+    const toSend = [...pending];
+    pendingMessagesRef.current = [];
+    for (let i = 0; i < toSend.length; i++) {
+      const message = toSend[i];
+      try {
+        socket.send(JSON.stringify(message));
+      } catch {
+        pendingMessagesRef.current = [...toSend.slice(i), ...pendingMessagesRef.current];
+        break;
+      }
+    }
+  }, []);
 
   const connect = useCallback(() => {
     if (unmountedRef.current) return; // Prevent connection if unmounted
@@ -136,8 +169,12 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       websocket.onopen = () => {
         setIsConnected(true);
         if (hasConnectedRef.current) {
-          // This is a reconnect — signal so components can catch up on missed messages
           dispatch({ kind: 'websocket_reconnected', timestamp: Date.now() });
+        }
+        flushPendingMessages();
+        if (reconnectCleanupRef.current) {
+          reconnectCleanupRef.current();
+          reconnectCleanupRef.current = null;
         }
         hasConnectedRef.current = true;
       };
@@ -155,14 +192,34 @@ const useWebSocketProviderState = (): WebSocketContextType => {
         if (wsRef.current !== websocket) {
           return;
         }
+        reconnectCleanupRef.current?.();
+        reconnectCleanupRef.current = null;
         setIsConnected(false);
         wsRef.current = null;
 
-        // Attempt to reconnect after 3 seconds
         reconnectTimeoutRef.current = setTimeout(() => {
           if (unmountedRef.current) return; // Prevent reconnection if unmounted
           connect();
-        }, 3000);
+        }, 600);
+
+        const wake = () => {
+          if (wsRef.current) return;
+          if (unmountedRef.current) return;
+          if (reconnectTimeoutRef.current) {
+            clearTimeout(reconnectTimeoutRef.current);
+            reconnectTimeoutRef.current = null;
+          }
+          connect();
+        };
+        document.addEventListener('visibilitychange', wake);
+        window.addEventListener('online', wake);
+        window.addEventListener('focus', wake);
+
+        reconnectCleanupRef.current = () => {
+          document.removeEventListener('visibilitychange', wake);
+          window.removeEventListener('online', wake);
+          window.removeEventListener('focus', wake);
+        };
       };
 
       websocket.onerror = (error) => {
@@ -179,7 +236,8 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(message));
     } else {
-      console.warn('WebSocket not connected');
+      pendingMessagesRef.current.push(message);
+      console.warn('WebSocket not connected; queued', pendingMessagesRef.current.length);
     }
   }, []);
 
@@ -204,10 +262,40 @@ const useWebSocketProviderState = (): WebSocketContextType => {
 
 export const WebSocketProvider = ({ children }: { children: React.ReactNode }) => {
   const webSocketData = useWebSocketProviderState();
+  const [toast, setToast] = useState<{ message: string; bg: string } | null>(null);
+  const prevConnectedRef = useRef(webSocketData.isConnected);
+  const toastTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const wasConnected = prevConnectedRef.current;
+    const isConnected = webSocketData.isConnected;
+    prevConnectedRef.current = isConnected;
+
+    if (wasConnected && !isConnected) {
+      setToast({ message: 'Connection lost, reconnecting...', bg: 'rgb(82,82,91)' });
+    } else if (!wasConnected && isConnected) {
+      setToast({ message: 'Reconnected', bg: 'rgb(21,128,61)' });
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = window.setTimeout(() => setToast(null), 3000);
+    }
+
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    };
+  }, [webSocketData.isConnected]);
 
   return (
     <WebSocketContext.Provider value={webSocketData}>
       {children}
+      {toast && (
+        <div
+          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] px-4 py-2 rounded-full text-white text-sm shadow-lg transition-all duration-300"
+          style={{ background: toast.bg }}
+        >
+          {toast.message}
+        </div>
+      )}
     </WebSocketContext.Provider>
   );
 };

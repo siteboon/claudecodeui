@@ -51,12 +51,6 @@ export function useQueuedMessageAutoSend({
         continue;
       }
 
-      // A closed socket would drop the send silently; keep the draft so the
-      // composer (or a later completion) can retry once we're connected.
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        continue;
-      }
-
       clearQueuedMessage(sessionId);
       sendMessage({
         type: 'chat.send',
