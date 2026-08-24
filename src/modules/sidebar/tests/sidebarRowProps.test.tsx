@@ -155,6 +155,16 @@ test('a session rename does not put a same-id project row into edit mode', () =>
   assert.equal(recordedProjectRowProps[0].isEditing, false);
 });
 
+test('the fork callback reaches the rows that render the fork action', () => {
+  // `onForkSession` is optional on every component between Sidebar and the
+  // session row, so dropping it type-checks perfectly and shows up only as a
+  // missing item in a menu. That is exactly how it went missing.
+  const onForkSession = () => {};
+  render(React.createElement(SidebarProjectList, { ...listProps(null), onForkSession }));
+
+  assert.equal(recordedProjectRowProps[0].onForkSession, onForkSession);
+});
+
 const sessionsProps = (sessionRenameId: string | null, sessionRenameDraft: string) => ({
   project: PROJECT_A,
   isExpanded: true,

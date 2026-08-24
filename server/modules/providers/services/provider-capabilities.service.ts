@@ -81,12 +81,12 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsPermissionRequests: false,
     supportsTokenUsage: true,
     supportsEffort: true,
-    // Not from the Codex SDK, which only starts and resumes threads: this
-    // rides the same CLI's `app-server` protocol, whose `thread/fork` copies a
+    // Not from the Codex SDK, which only starts and resumes threads: both ride
+    // the same CLI's `app-server` protocol, whose `thread/fork` copies a
     // thread up to a chosen turn. Editing is that fork plus a new prompt,
     // which is how Codex's own IDE clients do it.
     supportsMessageEditing: true,
-    supportsSessionForking: false,
+    supportsSessionForking: true,
   },
   opencode: {
     provider: 'opencode',
