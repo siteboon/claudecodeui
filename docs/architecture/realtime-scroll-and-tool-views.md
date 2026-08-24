@@ -586,8 +586,25 @@ for row 1 only.
 
 ## 4. Suggested improvements
 
-Ordered by (value ÷ risk). Nothing here is implemented; each item names the
-evidence it rests on.
+Ordered by (value ÷ risk). Each item names the evidence it rests on.
+
+**Status** — everything below has now been acted on or explicitly declined:
+
+| | Outcome |
+|---|---|
+| 4.1 protocol dead ends | **Done.** `/shell` error frames are surfaced; `interactive_prompt`, `url_open` and `taskmaster-mcp-status-changed` deleted. `auth_url` deliberately left — see below. |
+| 4.2 one scroll arbitrator | **Declined as written; the two bugs it would have masked are fixed.** See 4.2. |
+| 4.3 cap the "Load all" path | **Declined on measurement.** See 4.3. |
+| 4.4 two-tab live-stream drop | **Done.** The writer holds a set of connections. |
+| 4.5 duplicated `session_upserted` builders | **Done.** One builder, and the field it was missing is now always on the wire. |
+| 4.6 split `useChatSessionState` | **Declined.** See 4.6. |
+| 4.7 TaskMaster fan-out | **Done.** Broadcasts go to `connectedClients`. |
+
+One claim in the sections below was wrong and is corrected in place: `"Load all"`
+is **not** the only unbounded render path. The search-jump effect widens the
+window to `length - targetIndex + 20`, which on a hit in the first message is
+the entire transcript — and unlike `"Load all"` it cannot be capped, because
+the target has to be inside the window for the jump to find it.
 
 ### 4.1 Close the protocol dead ends — *low risk; one of them is a live bug*
 
@@ -627,7 +644,42 @@ Two more phantoms outside the shell:
 Grep each before deleting. The point is that all five are currently *invisible*
 dead ends: nothing fails, so nothing tells you they are unreachable.
 
-### 4.2 Give the transcript one scroll arbitrator — *medium risk, high value*
+### 4.2 Give the transcript one scroll arbitrator — *declined as written*
+
+The counts here were understated: the scroll paths read or write **10** refs,
+not 5, and a fourth timer chain (the search-jump retry, up to ~3 s) also moves
+the viewport. More importantly, one rAF applier is **not** behaviour-preserving:
+the anchor restore has to run in `useLayoutEffect`, synchronously before paint,
+or every "load older messages" gains a visibly wrong frame — the exact bug
+commits `00503313` and `fadbcc82` fixed.
+
+Against that: no user-visible benefit, zero test coverage of any of the five
+writers, and the last scroll refactor on this branch shipped a regression that
+312 tests missed.
+
+What was done instead is the part with actual symptoms — two live bugs the
+ad-hoc coordination was causing:
+
+- **A deferred scroll-to-bottom overrode the user.** The 50 ms and 200 ms
+  timers fired unconditionally, so scrolling up inside that window was undone,
+  and the resulting programmatic scroll reset `isUserScrolledUp` too. Both now
+  re-read the flag when they fire.
+- **A search jump followed the user into the next session.** It was never
+  cancelled on a session change, so the new session opened part-way up (the
+  initial scroll declines while a jump is pending) and then scrolled to an
+  unrelated message and flashed the search highlight on it.
+
+Both are covered by the first tests that render this hook.
+
+Also settled: the `onWheel`/`onTouchMove` bindings stay. The mechanism given
+below for why is **wrong** — at `scrollTop === 0` with `topLoadLockRef` set the
+extra re-entry is a no-op. The real reason is that a transcript too short to
+scroll never emits `scroll` at all, and the "load earlier" link is hidden while
+more pages exist, so wheel and touch are the only route to the top pager.
+
+The original proposal follows.
+
+#### Original proposal
 
 Section 2.5 is the single biggest source of confusion in the codebase. The
 improvement is not "rewrite the scrolling" but "make the writers explicit":
@@ -662,7 +714,34 @@ with `topLoadLockRef` set (`:533`), a further wheel-up currently re-enters
 change and test it at the top of a long transcript, on both a mouse and a touch
 device.
 
-### 4.3 Cap the "Load all" path — *low risk, directly fixes the only unbounded render*
+### 4.3 Cap the "Load all" path — *declined on measurement*
+
+**Measured before deciding.** On the largest real transcript available here
+(942 renderable messages, 13 MB of JSONL), clicking "Load all" blocked the main
+thread for **≈1.3 s above idle baseline** — one elevated poll at ~2.0 s against
+a ~0.7 s baseline, with everything after it back to normal, no visible freeze
+and no tab crash. Post-load latency was *lower* than before the load.
+
+A cap of 2000 would therefore never engage on any transcript in this repo or in
+the fixture set: the largest is 942 rows, and the 7.5 MB file commit `7356033f`
+measured is ~885. An unexercised guard is exactly what this codebase's own
+convention rejects, and capping low enough to fire would truncate real
+conversations to buy back a second.
+
+The premise was also overstated. Capping `:999` would not have removed the
+unbounded render, because the search-jump path widens the same window without
+any cap and cannot be given one. And the row offering "Load earlier" is hidden
+precisely while the window is `Infinity` (`chatMessages.length > visibleMessageCount`
+is false against `Infinity`), so capping it turns a dead control live and needs
+UI work to go with it.
+
+If this is revisited, the honest lever is not the row count but the per-message
+cost — deferring Prism and Mermaid until a row is on screen — which helps the
+default path too.
+
+The original proposal follows.
+
+#### Original proposal
 
 `loadAllMessages` sets `visibleMessageCount = Infinity` (`:999`). On the 7.5 MB
 transcript that commit `7356033f` measured, that mounts every message, every code
@@ -711,7 +790,19 @@ is showing has been aliased, and rewrites the selected session's id in place.
 Reading any one producer alone gives you the wrong model of the event. Extract
 one builder — and remember the third one when you do.
 
-### 4.6 Split `useChatSessionState` — *high risk, do last*
+### 4.6 Split `useChatSessionState` — *declined*
+
+The numbers are real (1058 lines, 29 returned values, a 40-prop pane, and
+nearer 12 concerns than 9), but the stated safety net does not exist:
+`sessionMessagePagination`, `sessionMessageReconciliation` and
+`messageHistoryRefreshCoordinator` all test *utility modules the hook calls* and
+would pass unchanged through a completely broken split. Four features have since
+landed in this file; the seams are worth redrawing once, afterwards, against
+tests that can fail.
+
+The original proposal follows.
+
+#### Original proposal
 
 1058 lines, ~9 concerns, returning **29** values (`:1027-1057`) that are
 re-scattered into a 40-prop `ChatMessagesPane` (`ChatMessagesPaneProps`,

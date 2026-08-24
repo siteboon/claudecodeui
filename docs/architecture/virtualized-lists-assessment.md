@@ -143,7 +143,30 @@ Export is *not* affected: `ChatMessagesPane.tsx:161` passes the full
 Accessibility is not a blocker either — the transcript carries no `role="log"`,
 `role="feed"` or `aria-live`, so nothing assumes a complete list.
 
-## 4. The one real problem, and its actual fix
+## 4. The one real problem, and its actual fix — *measured, and declined*
+
+**Update after measuring.** On the largest real transcript available (942
+renderable messages, 13 MB of JSONL), "Load all" blocked the main thread for
+**≈1.3 s above idle baseline**, with no visible freeze, no crash, and *lower*
+interaction latency afterwards than before the load. A 2000-row cap would
+never engage — nothing here is close to it — so it would ship as an
+unexercised guard, and a cap low enough to fire would truncate real
+conversations.
+
+The claim below that this is "the only genuinely unbounded render path" is also
+false: the sidebar-search jump widens the same window to
+`length - targetIndex + 20`, which on a hit in the first message is the whole
+transcript, and it cannot be capped because the target must be inside the window
+for the jump to resolve.
+
+So the conclusion of section 6 stands and gets stronger — the case for
+virtualizing rested on this path, and this path is not expensive enough to
+justify it. If it is revisited, the lever is per-message cost (deferring Prism
+and Mermaid until a row is on screen), which helps the default path too.
+
+The original analysis follows.
+
+### Original analysis
 
 `loadAllMessages` sets `setVisibleMessageCount(Infinity)`
 (`useChatSessionState.ts:999`). That is the only genuinely unbounded render path
