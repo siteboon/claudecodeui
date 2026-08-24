@@ -367,6 +367,11 @@ function ChatInterface({
       <div className="flex h-full min-h-0 flex-col">
         <ChatMessagesPane
           scrollContainerRef={scrollContainerRef}
+          // Not redundant with the `scroll` listener. A first page is 20 rows,
+          // tool results fold into their calls, and the "load earlier" link is
+          // hidden while more pages exist — so a short transcript is often not
+          // scrollable at all and never emits `scroll`. Wheel and touch are
+          // then the only way to reach the top pager or the "load all" overlay.
           onWheel={handleScroll}
           onTouchMove={handleScroll}
           isLoadingSessionMessages={isLoadingSessionMessages}

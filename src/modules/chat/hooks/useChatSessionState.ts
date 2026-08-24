@@ -210,6 +210,18 @@ export function useChatSessionState({
   // and it is cleared once the row is on screen or the retries run out.
   const [searchTarget, setSearchTarget] = useState<SearchTarget | null>(null);
   const searchScrollActiveRef = useRef(false);
+  /**
+   * The pending step of the search-jump retry chain, so a session change can
+   * cancel a jump that belongs to the transcript the user just left.
+   */
+  const searchScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * `isUserScrolledUp` readable from a timer callback. Both deferred
+   * scroll-to-bottom calls are armed while the user is at the bottom and fire
+   * tens to hundreds of milliseconds later; without re-reading this at fire
+   * time, a scroll-up inside that window is silently undone.
+   */
+  const isUserScrolledUpRef = useRef(false);
   const isLoadingMoreRef = useRef(false);
   const allMessagesLoadedRef = useRef(false);
   const topLoadLockRef = useRef(false);
@@ -413,6 +425,14 @@ export function useChatSessionState({
     }
   }, [activeSessionId, sessionStore]);
 
+  // Mirrors the state into a ref so the two deferred scroll-to-bottom timers
+  // can re-read it at fire time. An effect rather than assignments next to each
+  // `setIsUserScrolledUp` call, because the setter is also returned from this
+  // hook and driven from the composer.
+  useEffect(() => {
+    isUserScrolledUpRef.current = isUserScrolledUp;
+  }, [isUserScrolledUp]);
+
   const scrollToBottom = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
@@ -567,10 +587,25 @@ export function useChatSessionState({
 
   // Reset scroll/pagination state on session change
   useEffect(() => {
-    if (!searchScrollActiveRef.current) {
-      pendingInitialScrollRef.current = true;
-      setVisibleMessageCount(INITIAL_VISIBLE_MESSAGES);
+    // A search jump belongs to the transcript it was requested against. Left
+    // armed across a session change it did two visible things to the session
+    // the user actually opened: the initial scroll bailed (it declines while a
+    // jump is pending) so the transcript opened part-way up, and then, once the
+    // retries ran out and started accepting the nearest row by timestamp, it
+    // scrolled to an unrelated message and flashed the search highlight on it.
+    //
+    // Clearing it here is safe for the jump itself: the effect that reads
+    // `__searchTargetSnippet` off the newly selected session runs after this
+    // one, so a session opened *from* a search result re-arms immediately.
+    if (searchScrollTimerRef.current) {
+      clearTimeout(searchScrollTimerRef.current);
+      searchScrollTimerRef.current = null;
     }
+    searchScrollActiveRef.current = false;
+    setSearchTarget(null);
+
+    pendingInitialScrollRef.current = true;
+    setVisibleMessageCount(INITIAL_VISIBLE_MESSAGES);
     topLoadLockRef.current = false;
     pendingScrollRestoreRef.current = null;
     wasNearTopRef.current = false;
@@ -771,7 +806,11 @@ export function useChatSessionState({
           await requestLatestMessages(selectedSession.id);
 
           if (shouldStickToBottom) {
-            setTimeout(() => scrollToBottom(), 200);
+            setTimeout(() => {
+              if (!isUserScrolledUpRef.current) {
+                scrollToBottom();
+              }
+            }, 200);
           }
         }
       } catch (error) {
@@ -881,19 +920,27 @@ export function useChatSessionState({
           targetElement.scrollIntoView({ block: 'center', behavior: 'smooth' });
           targetElement.classList.add('search-highlight-flash');
           setTimeout(() => targetElement.classList.remove('search-highlight-flash'), 4000);
+          searchScrollTimerRef.current = null;
           searchScrollActiveRef.current = false;
           return;
         }
 
         if (retriesLeft > 0) {
-          setTimeout(() => scrollToRenderedTarget(retriesLeft - 1), SEARCH_SCROLL_RETRY_DELAY_MS);
+          searchScrollTimerRef.current = setTimeout(
+            () => scrollToRenderedTarget(retriesLeft - 1),
+            SEARCH_SCROLL_RETRY_DELAY_MS,
+          );
           return;
         }
 
+        searchScrollTimerRef.current = null;
         searchScrollActiveRef.current = false;
       };
 
-      setTimeout(() => scrollToRenderedTarget(SEARCH_SCROLL_RETRIES), 150);
+      searchScrollTimerRef.current = setTimeout(
+        () => scrollToRenderedTarget(SEARCH_SCROLL_RETRIES),
+        150,
+      );
     };
 
     scrollToTarget();
@@ -942,7 +989,11 @@ export function useChatSessionState({
     if (searchScrollActiveRef.current) return;
 
     if (!isUserScrolledUp) {
-      setTimeout(() => scrollToBottom(), 50);
+      setTimeout(() => {
+        if (!isUserScrolledUpRef.current) {
+          scrollToBottom();
+        }
+      }, 50);
     }
   }, [chatMessages.length, isActive, isLoadingMoreMessages, isUserScrolledUp, scrollToBottom]);
 
