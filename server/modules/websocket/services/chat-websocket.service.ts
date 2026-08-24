@@ -373,6 +373,25 @@ async function handleChatEditSend(
       ? {}
       : { resumeAnchorId: resumeThroughId ?? undefined, resumeFromScratch: resumeThroughId === null },
     async (run) => {
+      // Emitted through the run's writer so it is sequenced and replayed like
+      // any other event — a second tab watching this session has to truncate
+      // too.
+      //
+      // Before the rewind, not after it. A rewind that has to branch spawns a
+      // process and waits on a JSON-RPC round trip, and holding the frame
+      // until that came back left the message the user had just edited away
+      // sitting on screen for about a second — the very flicker this feature
+      // exists to avoid. Announcing first is safe because a rewind that fails
+      // still ends the run, and the terminal `complete` makes every client
+      // re-read the transcript, which puts back anything that turned out not
+      // to have been replaced after all.
+      run.writer.send({
+        kind: 'history_truncated',
+        provider,
+        sessionId,
+        anchorId,
+      });
+
       if (rewinds) {
         try {
           await sessionsService.rewindSessionForEdit(sessionId, resumeThroughId);
@@ -384,17 +403,6 @@ async function handleChatEditSend(
           throw error;
         }
       }
-
-      // Emitted through the run's writer so it is sequenced and replayed like
-      // any other event — a second tab watching this session has to truncate
-      // too. After the rewind, so no client is told to drop turns that are
-      // still the conversation.
-      run.writer.send({
-        kind: 'history_truncated',
-        provider,
-        sessionId,
-        anchorId,
-      });
     },
   );
 }

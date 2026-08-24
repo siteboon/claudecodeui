@@ -274,7 +274,9 @@ test('a provider that has to branch to rewind is rewound before the run, not dur
     // runtime would not know what to do with.
     const realRewind = sessionsService.rewindSessionForEdit;
     const rewindCalls: unknown[] = [];
+    let truncatedBeforeRewind = false;
     sessionsService.rewindSessionForEdit = async (sessionId: string, keepThroughId: string | null) => {
+      truncatedBeforeRewind = socket.frames.some((frame) => frame.kind === 'history_truncated');
       rewindCalls.push({ sessionId, keepThroughId });
     };
 
@@ -297,7 +299,11 @@ test('a provider that has to branch to rewind is rewound before the run, not dur
     assert.equal(runs[0].options.resumeAnchorId, undefined);
     assert.equal(runs[0].options.resumeFromScratch, undefined);
 
-    // Clients still hear about the cut; how it was made is the server's business.
+    // Clients still hear about the cut; how it was made is the server's
+    // business. And they hear about it first: a rewind that branches waits on
+    // a spawned process, and holding the frame until it returned left the
+    // replaced message on screen for about a second.
     assert.ok(socket.frames.some((frame) => frame.kind === 'history_truncated'));
+    assert.equal(truncatedBeforeRewind, true);
   }, CODEX_TRANSCRIPT_ROWS);
 });
