@@ -415,6 +415,16 @@ export function useProjectsState({
 
   const loadingProgressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /**
+   * Guards the one-time mount fetch below. `fetchProjects` is stable, so the
+   * effect only ever re-runs because StrictMode remounts the tree in
+   * development — and each extra run costs a full `/api/projects`, which
+   * re-scans every provider transcript on the server and re-broadcasts the
+   * sidebar's loading progress. Two overlapping scans finish far enough apart
+   * that the progress bar replayed from zero, showing the loading screen twice
+   * on every refresh.
+   */
+  const mountFetchStartedRef = useRef(false);
+  /**
    * Ref mirrors for state the websocket subscription handler needs.
    *
    * The subscription is registered once (per `subscribe` identity) and events
@@ -669,6 +679,11 @@ export function useProjectsState({
   }, []);
 
   useEffect(() => {
+    if (mountFetchStartedRef.current) {
+      return;
+    }
+
+    mountFetchStartedRef.current = true;
     void fetchProjects();
   }, [fetchProjects]);
 
