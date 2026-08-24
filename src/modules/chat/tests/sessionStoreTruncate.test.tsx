@@ -137,6 +137,46 @@ describe('truncateAt', () => {
     );
   });
 
+  it('keeps the replacement last when the kept history comes back re-stamped', async () => {
+    const { result } = await loadedStore();
+
+    act(() => {
+      result.current.appendRealtime('session-1', {
+        ...row('5', 'second prompt, corrected'),
+        role: 'user',
+        replacesAnchorId: 'u2',
+      } as NormalizedMessage);
+      result.current.truncateAt('session-1', 'u2');
+    });
+
+    // A provider that rewinds by branching writes the surviving turns into a
+    // fresh transcript, so the next refresh returns them stamped later than
+    // the replacement was typed. Without a floor on where a replacement can
+    // sort, the message the user just sent moves to the top.
+    sessionMessages.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: {
+          messages: [
+            { ...row('1', 'first prompt', 'u1'), timestamp: '2026-01-01T00:00:09.000Z' },
+            { ...row('2', 'first answer'), timestamp: '2026-01-01T00:00:09.001Z' },
+          ],
+          total: 2,
+          hasMore: false,
+        },
+      }),
+    });
+
+    await act(async () => {
+      await result.current.refreshLatestFromServer('session-1');
+    });
+
+    assert.deepEqual(
+      result.current.getMessages('session-1').map((message) => message.content),
+      ['first prompt', 'first answer', 'second prompt, corrected'],
+    );
+  });
+
   it('clears a replacement tagged for a different cut', async () => {
     const { result } = await loadedStore();
 

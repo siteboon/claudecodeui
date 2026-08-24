@@ -53,9 +53,8 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsPermissionRequests: true,
     supportsTokenUsage: true,
     supportsEffort: true,
-    // Only the Claude SDK exposes the two primitives these need:
-    // `resumeSessionAt` to re-run a conversation truncated at a message, and
-    // `forkSession` to copy a transcript prefix into a new session file.
+    // `resumeSessionAt` re-runs a conversation truncated at a message, and
+    // `forkSession` copies a transcript prefix into a new session file.
     supportsMessageEditing: true,
     supportsSessionForking: true,
   },
@@ -82,7 +81,11 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsPermissionRequests: false,
     supportsTokenUsage: true,
     supportsEffort: true,
-    supportsMessageEditing: false,
+    // Not from the Codex SDK, which only starts and resumes threads: this
+    // rides the same CLI's `app-server` protocol, whose `thread/fork` copies a
+    // thread up to a chosen turn. Editing is that fork plus a new prompt,
+    // which is how Codex's own IDE clients do it.
+    supportsMessageEditing: true,
     supportsSessionForking: false,
   },
   opencode: {

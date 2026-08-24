@@ -351,16 +351,34 @@ async function handleChatEditSend(
     return;
   }
 
+  // Providers split here on what their runtime can do. Claude resumes its
+  // transcript partway, so the anchor rides along as a run option. Codex
+  // cannot — a thread only grows — so the rewind happens on disk first and the
+  // run that follows is an ordinary resume of whatever the session now points
+  // at.
+  let rewound: boolean;
+  try {
+    rewound = await sessionsService.rewindSessionForEdit(sessionId, resumeThroughId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    sendProtocolError(ws, 'EDIT_REWIND_FAILED', `Could not rewind the conversation: ${message}`, sessionId);
+    return;
+  }
+
   await dispatchRun(
     ws,
     userId,
     sessionId,
-    session,
+    // The rewind repoints the session at a different provider transcript, so
+    // the row read before it is stale by now.
+    (rewound ? sessionsDb.getSessionById(sessionId) : null) ?? session,
     data,
     dependencies,
     // `null` is meaningful: the edited turn was the first prompt, so the
     // conversation starts over instead of resuming.
-    { resumeAnchorId: resumeThroughId ?? undefined, resumeFromScratch: resumeThroughId === null },
+    rewound
+      ? {}
+      : { resumeAnchorId: resumeThroughId ?? undefined, resumeFromScratch: resumeThroughId === null },
     (run) => {
       run.writer.send({
         kind: 'history_truncated',

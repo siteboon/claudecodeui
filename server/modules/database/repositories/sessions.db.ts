@@ -287,6 +287,92 @@ export const sessionsDb = {
   },
 
   /**
+   * Moves one session onto a different provider session and transcript.
+   *
+   * Only editing a message on a provider that has to branch to rewind (Codex)
+   * does this — an ordinary run keeps the same provider session for its whole
+   * life. `assignProviderSessionId` cannot be used for it: that one keeps the
+   * existing `jsonl_path` on purpose, so a session repointed with it would
+   * claim the new thread while still reading the old transcript.
+   *
+   * The watcher may already have indexed the new transcript under its own id.
+   * That row is the same conversation this one is about to become, so it is
+   * replaced rather than left behind as a second sidebar entry.
+   */
+  repointSessionToProviderSession(
+    sessionId: string,
+    input: { providerSessionId: string; jsonlPath: string },
+  ): void {
+    const db = getConnection();
+
+    db.transaction(() => {
+      db.prepare('DELETE FROM sessions WHERE session_id = ? AND session_id <> ?')
+        .run(input.providerSessionId, sessionId);
+      db.prepare(
+        `UPDATE sessions SET
+           provider_session_id = ?,
+           jsonl_path = ?,
+           updated_at = CURRENT_TIMESTAMP
+         WHERE session_id = ?`
+      ).run(input.providerSessionId, input.jsonlPath, sessionId);
+    })();
+  },
+
+  /**
+   * Detaches a session from its provider session so the next run starts a new
+   * one.
+   *
+   * Used when an edit replaces the very first prompt: there is no conversation
+   * left to branch from, so the session starts over instead.
+   */
+  detachProviderSession(sessionId: string): void {
+    const db = getConnection();
+    db.prepare(
+      `UPDATE sessions SET
+         provider_session_id = NULL,
+         jsonl_path = NULL,
+         updated_at = CURRENT_TIMESTAMP
+       WHERE session_id = ?`
+    ).run(sessionId);
+  },
+
+  /**
+   * Records that a session has left a provider session behind for good.
+   *
+   * The transcript stays on disk, which is deliberate — the abandoned attempt
+   * is recoverable — but the indexer must not offer it back, and on a session
+   * discovered from disk (whose app id *is* the provider id) rediscovering it
+   * would repoint the row at the conversation the user edited away from.
+   */
+  markProviderSessionSuperseded(input: {
+    providerSessionId: string;
+    provider: string;
+    sessionId: string;
+  }): void {
+    const db = getConnection();
+    db.prepare(
+      `INSERT INTO superseded_provider_sessions (provider_session_id, provider, session_id)
+       VALUES (?, ?, ?)
+       ON CONFLICT(provider_session_id, provider) DO UPDATE SET
+         session_id = excluded.session_id,
+         created_at = CURRENT_TIMESTAMP`
+    ).run(input.providerSessionId, input.provider, input.sessionId);
+  },
+
+  isProviderSessionSuperseded(providerSessionId: string, provider: string): boolean {
+    const db = getConnection();
+    const row = db
+      .prepare(
+        `SELECT 1 AS found FROM superseded_provider_sessions
+         WHERE provider_session_id = ? AND provider = ?
+         LIMIT 1`
+      )
+      .get(providerSessionId, provider) as { found: number } | undefined;
+
+    return Boolean(row);
+  },
+
+  /**
    * Records the model one session runs with.
    *
    * Called both when the user picks a model for the session and on every send,

@@ -369,6 +369,32 @@ export const sessionsService = {
     return sessions.resolveEditAnchor(sessionId, anchorId);
   },
 
+  /**
+   * Rewinds a session on disk so `keepThroughId` is the last row it holds,
+   * for providers whose runtime cannot be asked to resume partway.
+   *
+   * Returns false when the provider needs no such step — its runtime takes the
+   * anchor as a resume option instead — which is what the chat gateway
+   * branches on.
+   */
+  async rewindSessionForEdit(sessionId: string, keepThroughId: string | null): Promise<boolean> {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session) {
+      throw new AppError(`Session "${sessionId}" was not found.`, {
+        code: 'SESSION_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    const sessions = providerRegistry.resolveProvider(session.provider as LLMProvider).sessions;
+    if (!sessions.rewindSession) {
+      return false;
+    }
+
+    await sessions.rewindSession(sessionId, keepThroughId);
+    return true;
+  },
+
   async fetchHistory(
     sessionId: string,
     options: Pick<FetchHistoryOptions, 'limit' | 'offset'> = {},

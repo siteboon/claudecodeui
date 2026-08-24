@@ -4,6 +4,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import { codexAppServer } from '@/modules/providers/list/codex/codex-app-server.client.js';
 import { parseFilesInputTag, toImageAttachments } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import { prepareTranscriptMessages } from '@/shared/message-unification.js';
@@ -17,6 +18,7 @@ import type {
   SubagentInfo,
 } from '@/shared/types.js';
 import {
+  AppError,
   createNormalizedMessage,
   generateMessageId,
   readObjectRecord,
@@ -65,6 +67,96 @@ function isVisibleCodexUserMessage(payload: AnyRecord | null | undefined): boole
   }
 
   return typeof payload.message === 'string' && payload.message.trim().length > 0;
+}
+
+/**
+ * Follows which turn a Codex rollout is inside as its rows stream past.
+ *
+ * Codex writes no per-row id — every line is `{timestamp, type, payload}` and
+ * the `user_message` event that carries a prompt has no identity of its own —
+ * so a turn id is the only durable address a user message has. Turns are
+ * bracketed by rows that do carry `turn_id`: `task_started` opens one,
+ * `turn_context` restates it, `task_complete` closes it, and the prompt is
+ * written between them. That id is also exactly what `thread/fork` cuts at,
+ * which is what makes "edit this message" and "fork from here" addressable
+ * for Codex at all.
+ *
+ * `thread_rolled_back` retires the last N turns in place: the rows stay in the
+ * file, but the turns are no longer part of the thread and the fork endpoint
+ * refuses to cut at one. They are tracked here so a retired turn is never
+ * offered as an anchor, rather than discovered when the fork fails.
+ */
+function createCodexTurnTracker() {
+  /** Turn ids still part of the conversation, oldest first. */
+  const liveTurnIds: string[] = [];
+  const seenTurnIds = new Set<string>();
+  const rolledBackTurnIds = new Set<string>();
+  let currentTurnId: string | undefined;
+
+  return {
+    /** Feeds one rollout row in. */
+    observe(entryType: unknown, payload: AnyRecord): void {
+      if (entryType === 'event_msg' && payload.type === 'thread_rolled_back') {
+        const retiredTurns = Number(payload.num_turns);
+        for (let retired = 0; retired < retiredTurns && liveTurnIds.length > 0; retired++) {
+          rolledBackTurnIds.add(liveTurnIds.pop() as string);
+        }
+        currentTurnId = undefined;
+        return;
+      }
+
+      const turnId = readNonEmptyString(payload.turn_id);
+      if (!turnId) {
+        return;
+      }
+      currentTurnId = turnId;
+      if (!seenTurnIds.has(turnId)) {
+        seenTurnIds.add(turnId);
+        liveTurnIds.push(turnId);
+      }
+    },
+    /** The turn the rows being read belong to, or undefined outside one. */
+    getCurrentTurnId(): string | undefined {
+      return currentTurnId;
+    },
+    getLiveTurnIds(): string[] {
+      return liveTurnIds;
+    },
+    isRolledBack(turnId: string): boolean {
+      return rolledBackTurnIds.has(turnId);
+    },
+  };
+}
+
+/**
+ * Reads the turns a Codex rollout still contains, oldest first.
+ *
+ * A separate pass rather than a by-product of the transcript reader: this runs
+ * once when a message is edited, while the reader runs on every history fetch,
+ * and both share the one rule for what a live turn is.
+ */
+async function readCodexLiveTurnIds(filePath: string): Promise<string[]> {
+  const turns = createCodexTurnTracker();
+  const stream = fsSync.createReadStream(filePath);
+  const lines = readline.createInterface({ input: stream, crlfDelay: Infinity });
+
+  for await (const line of lines) {
+    if (!line.trim()) {
+      continue;
+    }
+    let entry: AnyRecord;
+    try {
+      entry = JSON.parse(line) as AnyRecord;
+    } catch {
+      continue;
+    }
+    const payload = readObjectRecord(entry.payload);
+    if (payload) {
+      turns.observe(entry.type, payload);
+    }
+  }
+
+  return turns.getLiveTurnIds();
 }
 
 /**
@@ -1103,6 +1195,9 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
 
   const subagentsByCallId = new Map<string, CodexSubagentRecord>();
   const subagentsByPath = new Map<string, CodexSubagentRecord>();
+  const turns = createCodexTurnTracker();
+  /** Turns whose prompt already carries the anchor, so only the first does. */
+  const anchoredTurnIds = new Set<string>();
 
   const fileStream = fsSync.createReadStream(sessionFilePath);
   const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
@@ -1133,6 +1228,10 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
       continue;
     }
     const timestamp = typeof entry.timestamp === 'string' ? entry.timestamp : new Date().toISOString();
+    // Before the type-specific branches: a turn is opened and closed by rows
+    // that produce no transcript entry of their own, and each of those
+    // branches ends in a `continue`.
+    turns.observe(entry.type, payload);
 
     // ── event_msg ──────────────────────────────────────────────────────────
     if (entry.type === 'event_msg') {
@@ -1214,11 +1313,21 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
       }
 
       if (isVisibleCodexUserMessage(payload)) {
+        // Only the first prompt of a turn is anchored. A turn can hold more
+        // than one — a follow-up queued while the turn was running is written
+        // into it — and the cut is per turn, so anchoring the second would
+        // quietly take the first with it when the user edited only the second.
+        const turnId = turns.getCurrentTurnId();
+        const isFirstPromptOfTurn = Boolean(turnId) && !anchoredTurnIds.has(turnId as string);
+        if (isFirstPromptOfTurn) {
+          anchoredTurnIds.add(turnId as string);
+        }
         messages.push({
           type: 'user',
           timestamp,
           message: { role: 'user', content: payload.message },
           images: extractCodexUserImages(payload),
+          ...(isFirstPromptOfTurn ? { turnId } : {}),
         });
       }
       continue;
@@ -1620,6 +1729,16 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
 
   await attachCodexSubagentTranscripts(sessionFilePath, subagentsByCallId);
 
+  // A rollback is recorded after the turns it retires, so a prompt can be
+  // anchored and then retired later in the same file. Its rows still render —
+  // they are what the conversation looked like — but the turn is gone from the
+  // thread, so the anchor goes with it and the message loses its pencil.
+  for (const message of messages) {
+    if (typeof message.turnId === 'string' && turns.isRolledBack(message.turnId)) {
+      delete message.turnId;
+    }
+  }
+
   messages.sort((a, b) => new Date(a.timestamp || 0).getTime() - new Date(b.timestamp || 0).getTime());
   return { messages, tokenUsage: tokenUsage ?? undefined };
 }
@@ -1671,6 +1790,85 @@ async function attachCodexSubagentTranscripts(
 }
 
 export class CodexSessionsProvider implements IProviderSessions {
+  /**
+   * Resolves the last turn to keep when the turn `anchorId` names is replaced.
+   *
+   * `thread/fork`'s `lastTurnId` is inclusive of the turn it names, which is
+   * the same thing this contract's `resumeThroughId` means, so the answer is
+   * simply the turn before the edited one. Editing the first prompt leaves
+   * nothing to keep, and `null` is how that is reported.
+   */
+  async resolveEditAnchor(
+    sessionId: string,
+    anchorId: string,
+  ): Promise<{ found: boolean; resumeThroughId: string | null }> {
+    const session = sessionsDb.getSessionById(sessionId);
+    const jsonlPath = session?.jsonl_path;
+    if (!jsonlPath || !session?.provider_session_id) {
+      return { found: false, resumeThroughId: null };
+    }
+
+    const liveTurnIds = await readCodexLiveTurnIds(jsonlPath);
+    const anchorIndex = liveTurnIds.indexOf(anchorId);
+    if (anchorIndex < 0) {
+      return { found: false, resumeThroughId: null };
+    }
+
+    return {
+      found: true,
+      resumeThroughId: anchorIndex === 0 ? null : liveTurnIds[anchorIndex - 1],
+    };
+  }
+
+  /**
+   * Branches the conversation at `keepThroughId` and moves the session onto
+   * the branch.
+   *
+   * Codex threads are append-only — the SDK resumes one at its tip and nothing
+   * shortens it — so rewinding means copying the part being kept into a new
+   * thread. The pre-edit thread stays on disk in full and is recorded as
+   * superseded so the session indexer does not hand it back later.
+   */
+  async rewindSession(sessionId: string, keepThroughId: string | null): Promise<void> {
+    const session = sessionsDb.getSessionById(sessionId);
+    const supersededThreadId = session?.provider_session_id;
+    if (!session || !supersededThreadId) {
+      throw new AppError('This session has not produced a transcript yet.', {
+        code: 'EDIT_SOURCE_NOT_READY',
+        statusCode: 409,
+      });
+    }
+
+    // Nothing of the conversation survives an edit to its first prompt, and
+    // there is no such thing as a fork of no turns, so the session is simply
+    // detached and the next run opens a new thread.
+    if (keepThroughId === null) {
+      sessionsDb.markProviderSessionSuperseded({
+        providerSessionId: supersededThreadId,
+        provider: PROVIDER,
+        sessionId,
+      });
+      sessionsDb.detachProviderSession(sessionId);
+      return;
+    }
+
+    const fork = await codexAppServer.forkThread({
+      threadId: supersededThreadId,
+      lastTurnId: keepThroughId,
+      cwd: session.project_path ?? '',
+    });
+
+    sessionsDb.markProviderSessionSuperseded({
+      providerSessionId: supersededThreadId,
+      provider: PROVIDER,
+      sessionId,
+    });
+    sessionsDb.repointSessionToProviderSession(sessionId, {
+      providerSessionId: fork.threadId,
+      jsonlPath: fork.path,
+    });
+  }
+
   /**
    * Normalizes a persisted Codex JSONL entry.
    *
@@ -1734,6 +1932,10 @@ export class CodexSessionsProvider implements IProviderSessions {
         content: parsedFiles.text,
         images: rawImages,
         files,
+        // The enclosing turn, when the reader could name one. `baseId` is not
+        // usable for this: Codex rows carry no id, so it is synthesized per
+        // read and would address a different message every time.
+        transcriptAnchorId: readNonEmptyString(raw.turnId),
       })];
     }
 

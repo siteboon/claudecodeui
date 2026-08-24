@@ -6,6 +6,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
+import { sessionsService } from '@/modules/providers/index.js';
 import { handleChatConnection } from '@/modules/websocket/services/chat-websocket.service.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
 import { connectedClients } from '@/modules/websocket/services/websocket-state.service.js';
@@ -43,6 +44,20 @@ const TRANSCRIPT_ROWS = [
   },
 ];
 
+/**
+ * The same two turns as a Codex rollout. Codex rows carry no id of their own,
+ * so the edit anchor is the enclosing turn — which is also the unit its fork
+ * endpoint cuts at.
+ */
+const CODEX_TRANSCRIPT_ROWS = [
+  { type: 'event_msg', payload: { type: 'task_started', turn_id: 'turn-a' } },
+  { type: 'event_msg', payload: { type: 'user_message', message: 'first' } },
+  { type: 'event_msg', payload: { type: 'task_complete', turn_id: 'turn-a' } },
+  { type: 'event_msg', payload: { type: 'task_started', turn_id: 'turn-b' } },
+  { type: 'event_msg', payload: { type: 'user_message', message: 'second' } },
+  { type: 'event_msg', payload: { type: 'task_complete', turn_id: 'turn-b' } },
+];
+
 type RunCall = { provider: string; command: string; options: Record<string, unknown> };
 
 async function withGateway(
@@ -51,11 +66,12 @@ async function withGateway(
     socket: ReturnType<typeof createFakeSocket>;
     runs: RunCall[];
   }) => Promise<void>,
+  rows: unknown[] = TRANSCRIPT_ROWS,
 ): Promise<void> {
   const previousDatabasePath = process.env.DATABASE_PATH;
   const tempDirectory = await mkdtemp(path.join(os.tmpdir(), 'chat-edit-send-'));
   const transcriptPath = path.join(tempDirectory, `${SESSION_ID}.jsonl`);
-  await writeFile(transcriptPath, `${TRANSCRIPT_ROWS.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+  await writeFile(transcriptPath, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
 
   closeConnection();
   process.env.DATABASE_PATH = path.join(tempDirectory, 'auth.db');
@@ -181,7 +197,7 @@ test('an anchor the transcript does not hold is refused', async () => {
 });
 
 test('a provider that cannot re-run from a point is refused rather than sending a new message', async () => {
-  await withGateway('codex', async ({ socket, runs }) => {
+  await withGateway('cursor', async ({ socket, runs }) => {
     socket.emit('message', JSON.stringify({
       type: 'chat.edit-send',
       sessionId: SESSION_ID,
@@ -193,4 +209,41 @@ test('a provider that cannot re-run from a point is refused rather than sending 
     assert.equal(runs.length, 0);
     assert.equal(socket.frames.at(-1)?.code, 'EDIT_NOT_SUPPORTED');
   });
+});
+
+test('a provider that has to branch to rewind is rewound before the run, not during it', async () => {
+  await withGateway('codex', async ({ socket, runs }) => {
+    // The rewind itself belongs to the provider and is covered there; what
+    // this asserts is the gateway's half — that a provider which reports it
+    // rewound gets an ordinary run instead of one carrying a resume anchor its
+    // runtime would not know what to do with.
+    const realRewind = sessionsService.rewindSessionForEdit;
+    const rewindCalls: unknown[] = [];
+    sessionsService.rewindSessionForEdit = async (sessionId: string, keepThroughId: string | null) => {
+      rewindCalls.push({ sessionId, keepThroughId });
+      return true;
+    };
+
+    try {
+      socket.emit('message', JSON.stringify({
+        type: 'chat.edit-send',
+        sessionId: SESSION_ID,
+        anchorId: 'turn-b',
+        content: 'a better second prompt',
+      }));
+      await settle();
+    } finally {
+      sessionsService.rewindSessionForEdit = realRewind;
+    }
+
+    // Resolved from the real Codex rollout: the turn before the edited one.
+    assert.deepEqual(rewindCalls, [{ sessionId: SESSION_ID, keepThroughId: 'turn-a' }]);
+    assert.equal(runs.length, 1);
+    assert.equal(runs[0].command, 'a better second prompt');
+    assert.equal(runs[0].options.resumeAnchorId, undefined);
+    assert.equal(runs[0].options.resumeFromScratch, undefined);
+
+    // Clients still hear about the cut; how it was made is the server's business.
+    assert.ok(socket.frames.some((frame) => frame.kind === 'history_truncated'));
+  }, CODEX_TRANSCRIPT_ROWS);
 });

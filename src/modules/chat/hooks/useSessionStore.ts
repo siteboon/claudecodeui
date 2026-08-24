@@ -139,6 +139,25 @@ function compareMessagesChronologically(a: NormalizedMessage, b: NormalizedMessa
 }
 
 /**
+ * The time a row sorts by, which is its own except for one case.
+ *
+ * The optimistic echo of an edited message is the row whose clock cannot be
+ * trusted against the rows around it. Providers that rewind by branching —
+ * Codex has no way to resume a transcript partway, so an edit copies the kept
+ * history into a new one — write the copy with the timestamps of the copy. So
+ * every turn that survived the cut comes back from the next refresh stamped a
+ * moment *after* the replacement was typed, and the message the user just sent
+ * jumps to the top of the conversation.
+ *
+ * A replacement is by definition the newest thing in the conversation, so it
+ * is sorted as such instead of by what the clock said when it was typed.
+ */
+function readSortTime(message: NormalizedMessage, replacementFloor: number): number {
+  const time = readMessageTime(message) ?? 0;
+  return message.replacesAnchorId ? Math.max(time, replacementFloor) : time;
+}
+
+/**
  * Count how many user turns precede `message` in a chronologically merged view
  * of server + realtime rows. Used to match a realtime row to the correct turn
  * on disk when several turns share identical assistant text.
@@ -340,9 +359,17 @@ function computeMerged(server: NormalizedMessage[], realtime: NormalizedMessage[
   }
 
   // Interleave by timestamp so live rows stay with their turn instead of
-  // piling up at the bottom after every refresh.
+  // piling up at the bottom after every refresh. Sorting is stable and the
+  // live rows come second, so a replacement that ties with the newest server
+  // row still lands after it.
+  const newestServerTime = server.reduce(
+    (newest, message) => Math.max(newest, readMessageTime(message) ?? 0),
+    0,
+  );
   return dedupeAdjacentAssistantEchoes(
-    [...server, ...extra].sort(compareMessagesChronologically),
+    [...server, ...extra].sort(
+      (a, b) => readSortTime(a, newestServerTime) - readSortTime(b, newestServerTime),
+    ),
   );
 }
 

@@ -226,6 +226,26 @@ CREATE TABLE IF NOT EXISTS session_drafts (
 );
 `;
 
+/**
+ * Provider sessions an app session has moved off, and must never move back to.
+ *
+ * Editing a message on a provider that cannot resume a transcript partway
+ * (Codex) is done by branching: the conversation is copied up to the edited
+ * turn and the app session follows the copy. The original transcript is left
+ * on disk untouched — nothing is deleted — but it is no longer the session's,
+ * and the indexer would otherwise rediscover it on its next full scan and hand
+ * the session back to the version the user edited away from.
+ */
+export const SUPERSEDED_PROVIDER_SESSIONS_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS superseded_provider_sessions (
+    provider_session_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (provider_session_id, provider)
+);
+`;
+
 export const INIT_SCHEMA_SQL = `
 -- Initialize authentication database
 PRAGMA foreign_keys = ON;
@@ -277,4 +297,6 @@ ON provider_models(provider, sort_order, id);
 ${USER_PREFERENCES_TABLE_SCHEMA_SQL}
 
 ${SESSION_DRAFTS_TABLE_SCHEMA_SQL}
+
+${SUPERSEDED_PROVIDER_SESSIONS_TABLE_SCHEMA_SQL}
 `;
