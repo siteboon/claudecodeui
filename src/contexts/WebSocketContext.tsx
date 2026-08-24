@@ -80,6 +80,14 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   const reconnectCleanupRef = useRef<(() => void) | null>(null);
   const pendingMessagesRef = useRef<unknown[]>([]);
   const { isLoading: isAuthLoading, token, user } = useAuth();
+  const prevUserRef = useRef(user?.username);
+
+  useEffect(() => {
+    if (prevUserRef.current !== undefined && prevUserRef.current !== user?.username) {
+      pendingMessagesRef.current = [];
+    }
+    prevUserRef.current = user?.username;
+  }, [user?.username]);
 
   const dispatch = useCallback((event: ServerEvent) => {
     for (const listener of listenersRef.current) {
@@ -133,11 +141,13 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     }
     const toSend = [...pending];
     pendingMessagesRef.current = [];
-    for (const message of toSend) {
+    for (let i = 0; i < toSend.length; i++) {
+      const message = toSend[i];
       try {
         socket.send(JSON.stringify(message));
       } catch {
-        pendingMessagesRef.current.push(message);
+        pendingMessagesRef.current = [...toSend.slice(i), ...pendingMessagesRef.current];
+        break;
       }
     }
   }, []);
@@ -227,9 +237,6 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       socket.send(JSON.stringify(message));
     } else {
       pendingMessagesRef.current.push(message);
-      if (pendingMessagesRef.current.length > 20) {
-        pendingMessagesRef.current.shift();
-      }
       console.warn('WebSocket not connected; queued', pendingMessagesRef.current.length);
     }
   }, []);

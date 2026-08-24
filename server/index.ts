@@ -142,6 +142,12 @@ app.get('/health', (req, res) => {
     });
 });
 
+// Hotfix for CloudCLI auth stale-token cache issue (#1174)
+app.use('/api', (_req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store');
+    next();
+});
+
 // Optional API key validation (if configured)
 app.use('/api', validateApiKey);
 
