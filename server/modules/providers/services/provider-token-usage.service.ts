@@ -131,36 +131,47 @@ function readCodexTokenUsage(fileContent: string): TokenUsageResult {
   };
 }
 
-function readClaudeTokenUsage(fileContent: string, configuredContextWindow: string | undefined): TokenUsageResult {
+/**
+ * Latest context-window usage from a Claude transcript's already-parsed rows.
+ *
+ * Exported because the session-messages reader hands the same usage back on
+ * every history page, the way the Codex and OpenCode readers do. Without that,
+ * a Claude session's counter only moved when the session was reselected, and
+ * the store's "this provider reports no usage" path overwrote it with zero.
+ *
+ * Reads the newest assistant turn only: `input_tokens + cache_read +
+ * cache_creation` is that one request's whole prompt, i.e. what the context
+ * window currently holds. Summing turns would count the same cached prefix
+ * once per turn.
+ */
+export function summarizeClaudeTokenUsage(
+  entries: AnyRecord[],
+  configuredContextWindow: string | undefined = process.env.CONTEXT_WINDOW,
+): TokenUsageResult {
   let inputTokens = 0;
   let outputTokens = 0;
   let cacheReadTokens = 0;
   let cacheCreationTokens = 0;
-  const lines = fileContent.trim().split('\n');
 
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    try {
-      const entry = JSON.parse(lines[index]) as AnyRecord;
-      const usage = entry.type === 'assistant' ? entry.message?.usage : null;
-      if (!usage) {
-        continue;
-      }
-
-      const directInputTokens = readUsageNumber(usage.input_tokens ?? usage.inputTokens);
-      cacheReadTokens = readUsageNumber(
-        usage.cache_read_input_tokens ?? usage.cacheReadInputTokens ?? usage.cacheReadTokens,
-      );
-      cacheCreationTokens = readUsageNumber(
-        usage.cache_creation_input_tokens
-          ?? usage.cacheCreationInputTokens
-          ?? usage.cacheCreationTokens,
-      );
-      inputTokens = directInputTokens + cacheReadTokens + cacheCreationTokens;
-      outputTokens = readUsageNumber(usage.output_tokens ?? usage.outputTokens);
-      break;
-    } catch {
-      // Skip malformed lines without discarding usage from earlier messages.
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    const usage = entry?.type === 'assistant' ? entry.message?.usage : null;
+    if (!usage) {
+      continue;
     }
+
+    const directInputTokens = readUsageNumber(usage.input_tokens ?? usage.inputTokens);
+    cacheReadTokens = readUsageNumber(
+      usage.cache_read_input_tokens ?? usage.cacheReadInputTokens ?? usage.cacheReadTokens,
+    );
+    cacheCreationTokens = readUsageNumber(
+      usage.cache_creation_input_tokens
+        ?? usage.cacheCreationInputTokens
+        ?? usage.cacheCreationTokens,
+    );
+    inputTokens = directInputTokens + cacheReadTokens + cacheCreationTokens;
+    outputTokens = readUsageNumber(usage.output_tokens ?? usage.outputTokens);
+    break;
   }
 
   const parsedContextWindow = Number.parseInt(configuredContextWindow ?? '', 10);
@@ -177,6 +188,19 @@ function readClaudeTokenUsage(fileContent: string, configuredContextWindow: stri
     cacheTokens,
     breakdown: { input: inputTokens, output: outputTokens },
   };
+}
+
+function readClaudeTokenUsage(fileContent: string, configuredContextWindow: string | undefined): TokenUsageResult {
+  const entries: AnyRecord[] = [];
+  for (const line of fileContent.trim().split('\n')) {
+    try {
+      entries.push(JSON.parse(line) as AnyRecord);
+    } catch {
+      // Skip malformed lines without discarding usage from earlier messages.
+    }
+  }
+
+  return summarizeClaudeTokenUsage(entries, configuredContextWindow);
 }
 
 function readOpenCodeTokenUsage(databasePath: string, providerSessionId: string): TokenUsageResult {

@@ -6,7 +6,10 @@ import test from 'node:test';
 
 import Database from 'better-sqlite3';
 
-import { createProviderTokenUsageService } from '@/modules/providers/services/provider-token-usage.service.js';
+import {
+  createProviderTokenUsageService,
+  summarizeClaudeTokenUsage,
+} from '@/modules/providers/services/provider-token-usage.service.js';
 import { AppError } from '@/shared/utils.js';
 
 function createSessionRow(overrides: Record<string, unknown> = {}) {
@@ -183,4 +186,32 @@ test('token usage reports SESSION_NOT_FOUND for an unknown app session id', asyn
       && error.statusCode === 404
     ),
   );
+});
+
+test('the Claude summarizer reads the newest assistant turn, not the whole conversation', () => {
+  const entries = [
+    { type: 'assistant', message: { usage: { input_tokens: 5, cache_read_input_tokens: 1000, output_tokens: 50 } } },
+    { type: 'user', message: { role: 'user', content: 'next' } },
+    // The newest turn's prompt is the whole context, so its cache_read already
+    // includes everything before it. Summing turns would double-count.
+    { type: 'assistant', message: { usage: { input_tokens: 3, cache_read_input_tokens: 4000, cache_creation_input_tokens: 100, output_tokens: 80 } } },
+  ];
+
+  assert.deepEqual(summarizeClaudeTokenUsage(entries, '200000'), {
+    used: 4183,
+    total: 200_000,
+    inputTokens: 4103,
+    outputTokens: 80,
+    cacheReadTokens: 4000,
+    cacheCreationTokens: 100,
+    cacheTokens: 4100,
+    breakdown: { input: 4103, output: 80 },
+  });
+});
+
+test('the Claude summarizer reports zero for a transcript with no assistant turn yet', () => {
+  const usage = summarizeClaudeTokenUsage([{ type: 'user', message: { role: 'user', content: 'hi' } }], '200000');
+
+  assert.equal(usage.used, 0);
+  assert.equal(usage.total, 200_000);
 });

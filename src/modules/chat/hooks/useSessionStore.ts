@@ -64,7 +64,13 @@ function createEmptySlot(): SessionSlot {
     total: 0,
     hasMore: false,
     offset: 0,
-    tokenUsage: null,
+    // `undefined` means "no page has reported usage for this session yet", and
+    // every consumer distinguishes that from a reported `null`. Initialising it
+    // to `null` made the two indistinguishable, so a provider whose history
+    // payload carries no usage looked like one reporting zero — and every
+    // history refresh overwrote the value fetched from the token-usage
+    // endpoint with it.
+    tokenUsage: undefined,
     _historyMutationQueue: Promise.resolve(),
   };
 }
