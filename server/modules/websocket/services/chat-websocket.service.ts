@@ -64,7 +64,7 @@ export function filterImagesToUploadStore(
 }
 
 /** Application boundary for dispatching provider runs and approvals. */
-type ProviderRuntimeGateway = {
+export type ProviderRuntimeGateway = {
   hasRuntime(provider: string): boolean;
   run(
     provider: LLMProvider,
@@ -206,7 +206,7 @@ function resolveSendTarget(
  * partway instead of continuing from the tip; a normal send passes nothing.
  */
 async function dispatchRun(
-  ws: WebSocket,
+  ws: WebSocket | null,
   userId: string | number | null,
   sessionId: string,
   session: NonNullable<ReturnType<typeof sessionsDb.getSessionById>>,
@@ -214,7 +214,7 @@ async function dispatchRun(
   dependencies: ChatWebSocketDependencies,
   extraRuntimeOptions: AnyRecord = {},
   beforeRun?: (run: NonNullable<ReturnType<typeof chatRunRegistry.startRun>>) => void,
-): Promise<void> {
+): Promise<{ started: boolean; error: string | null }> {
   const provider = session.provider as LLMProvider;
 
   const run = chatRunRegistry.startRun({
@@ -226,13 +226,15 @@ async function dispatchRun(
   });
 
   if (!run) {
-    sendProtocolError(
-      ws,
-      'RUN_IN_PROGRESS',
-      `Session "${sessionId}" already has a run in progress.`,
-      sessionId
-    );
-    return;
+    if (ws) {
+      sendProtocolError(
+        ws,
+        'RUN_IN_PROGRESS',
+        `Session "${sessionId}" already has a run in progress.`,
+        sessionId
+      );
+    }
+    return { started: false, error: 'A run is already in progress for this session.' };
   }
 
   const clientOptions = (data.options ?? {}) as AnyRecord;
@@ -281,11 +283,12 @@ async function dispatchRun(
   // other event — a second tab watching this session has to truncate too.
   beforeRun?.(run);
 
+  let failure: string | null = null;
   try {
     await dependencies.runtime.run(provider, command, runtimeOptions, run.writer);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`[Chat] Provider runtime "${provider}" failed`, { sessionId, error: message });
+    failure = error instanceof Error ? error.message : String(error);
+    console.error(`[Chat] Provider runtime "${provider}" failed`, { sessionId, error: failure });
   } finally {
     // Safety net: a runtime that crashed (or resolved) without emitting its
     // terminal `complete` would otherwise leave the session stuck in
@@ -294,6 +297,8 @@ async function dispatchRun(
     // settles, and the session-keyed completeRun would kill that new run.
     chatRunRegistry.completeRunIfCurrent(run, { exitCode: 1 });
   }
+
+  return { started: true, error: failure };
 }
 
 /**
@@ -495,6 +500,51 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  * (`chat_subscribed`, `session_upserted`, `loading_progress`,
  * `protocol_error`).
  */
+/**
+ * Runs a turn for a session with no client attached.
+ *
+ * Used by scheduled messages, which fire from a timer: there is no socket to
+ * report errors to and no audience to stream to. The run is registered exactly
+ * like an interactive one, so anyone who opens the session while it is going
+ * subscribes and replays it from the start, and the session shows as busy
+ * everywhere in the meantime.
+ *
+ * Resolves when the provider run settles. Returns false when the session has
+ * gone away or is already busy, which the caller reports on the schedule.
+ */
+export async function runDetachedChatTurn(
+  input: {
+    sessionId: string;
+    userId: string | number | null;
+    content: string;
+    options?: AnyRecord;
+  },
+  dependencies: ChatWebSocketDependencies,
+): Promise<{ started: boolean; error: string | null }> {
+  const session = sessionsDb.getSessionById(input.sessionId);
+  if (!session) {
+    return { started: false, error: 'The session no longer exists.' };
+  }
+
+  const provider = session.provider as LLMProvider;
+  if (!dependencies.runtime.hasRuntime(provider)) {
+    return { started: false, error: `Provider "${provider}" is not available.` };
+  }
+
+  if (chatRunRegistry.isProcessing(input.sessionId)) {
+    return { started: false, error: 'A run was already in progress for this session.' };
+  }
+
+  return dispatchRun(
+    null,
+    input.userId,
+    input.sessionId,
+    session,
+    { sessionId: input.sessionId, content: input.content, options: input.options ?? {} },
+    dependencies,
+  );
+}
+
 export function handleChatConnection(
   ws: WebSocket,
   request: AuthenticatedWebSocketRequest,

@@ -238,5 +238,20 @@
       "label": "JSON (.json)",
       "description": "Tous les messages, bruts, pour l’outillage."
     }
+  },
+  "schedule": {
+    "trigger": "Programmer ce message",
+    "heading": "Envoyer plus tard",
+    "customLabel": "Ou choisir une heure",
+    "confirm": "Programmer",
+    "in": {
+      "15": "Dans 15 minutes",
+      "60": "Dans une heure",
+      "480": "Dans 8 heures",
+      "1440": "Demain"
+    },
+    "pending": "Programmé pour {{when}}",
+    "failed": "Non envoyé — {{reason}}",
+    "cancel": "Annuler le message programmé"
   }
 }

@@ -263,5 +263,20 @@
       "label": "JSON (.json)",
       "description": "Every message, unformatted, for tooling."
     }
+  },
+  "schedule": {
+    "trigger": "Schedule this message",
+    "heading": "Send later",
+    "customLabel": "Or pick a time",
+    "confirm": "Schedule",
+    "in": {
+      "15": "In 15 minutes",
+      "60": "In an hour",
+      "480": "In 8 hours",
+      "1440": "Tomorrow"
+    },
+    "pending": "Scheduled for {{when}}",
+    "failed": "Not sent — {{reason}}",
+    "cancel": "Cancel scheduled message"
   }
 }

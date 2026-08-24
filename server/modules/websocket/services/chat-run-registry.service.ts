@@ -168,7 +168,13 @@ export const chatRunRegistry = {
     appSessionId: string;
     provider: LLMProvider;
     providerSessionId: string | null;
-    connection: RealtimeClientConnection;
+    /**
+     * The socket that asked for this run, or `null` for one nobody is watching
+     * — a scheduled message fires with no browser attached. The writer's event
+     * buffer still records everything, so a client that subscribes later
+     * replays the run from its start.
+     */
+    connection: RealtimeClientConnection | null;
     userId: string | number | null;
   }): ChatRun | null {
     const existing = runs.get(input.appSessionId);

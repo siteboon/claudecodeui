@@ -14,6 +14,7 @@ import type {
   SessionNavigationOptions,
 } from '@/shared/types';
 import { useChatProviderState } from '@/modules/chat/hooks/useChatProviderState';
+import { useScheduledMessages } from '@/modules/chat/composer/useScheduledMessages';
 import { useChatSessionState } from '@/modules/chat/hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '@/modules/chat/hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
@@ -340,6 +341,27 @@ function ChatInterface({
     }
   }, [onNavigateToSession, selectedSession?.id]);
 
+  const { scheduledMessages, schedule: scheduleMessage, cancel: cancelScheduledMessage } =
+    useScheduledMessages(selectedSession?.id ?? null);
+
+  /**
+   * Hands the composer's current text to the server to send later, and clears
+   * the box as a send would — the message has left the composer either way.
+   */
+  const handleScheduleMessage = useCallback(async (scheduledFor: Date) => {
+    const content = input.trim();
+    if (!content) return;
+
+    const scheduled = await scheduleMessage({
+      content,
+      scheduledFor,
+      options: { model: currentProviderModel, effort: currentProviderEffort, permissionMode },
+    });
+    if (scheduled) {
+      setInput('');
+    }
+  }, [currentProviderEffort, currentProviderModel, input, permissionMode, scheduleMessage, setInput]);
+
   const permissionContextValue = useMemo(() => ({
     pendingPermissionRequests,
     handlePermissionDecision,
@@ -487,6 +509,9 @@ function ChatInterface({
           onShowTokenUsage={showCostModal}
           isEditingSentMessage={Boolean(editingAnchorId)}
           onCancelEditMessage={cancelEditMessage}
+          scheduledMessages={scheduledMessages}
+          onScheduleMessage={handleScheduleMessage}
+          onCancelScheduledMessage={cancelScheduledMessage}
           slashCommandsCount={slashCommandsCount}
           onToggleCommandMenu={handleToggleCommandMenu}
           hasInput={Boolean(input.trim())}

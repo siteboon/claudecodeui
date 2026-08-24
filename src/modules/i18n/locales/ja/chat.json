@@ -223,5 +223,20 @@
       "label": "JSON (.json)",
       "description": "全メッセージを未整形で。ツール連携向け。"
     }
+  },
+  "schedule": {
+    "trigger": "このメッセージを予約",
+    "heading": "後で送信",
+    "customLabel": "または時刻を指定",
+    "confirm": "予約",
+    "in": {
+      "15": "15 分後",
+      "60": "1 時間後",
+      "480": "8 時間後",
+      "1440": "明日"
+    },
+    "pending": "{{when}} に送信予定",
+    "failed": "未送信 — {{reason}}",
+    "cancel": "予約を取り消す"
   }
 }

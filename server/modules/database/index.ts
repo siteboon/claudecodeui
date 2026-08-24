@@ -20,3 +20,5 @@ export { userDb } from '@/modules/database/repositories/users.js';
 // userPreferencesDb: used by the User module to persist the settings that used to live in browser localStorage.
 export { userPreferencesDb } from '@/modules/database/repositories/user-preferences.db.js';
 export { vapidKeysDb } from '@/modules/database/repositories/vapid-keys.js';
+export { scheduledMessagesDb } from './repositories/scheduled-messages.db.js';
+export type { ScheduledMessageRow, ScheduledMessageStatus } from './repositories/scheduled-messages.db.js';

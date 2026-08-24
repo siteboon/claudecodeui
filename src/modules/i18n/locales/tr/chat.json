@@ -236,5 +236,20 @@
       "label": "JSON (.json)",
       "description": "Tüm mesajlar, biçimlendirilmemiş, araçlar için."
     }
+  },
+  "schedule": {
+    "trigger": "Bu mesajı zamanla",
+    "heading": "Daha sonra gönder",
+    "customLabel": "Veya bir saat seç",
+    "confirm": "Zamanla",
+    "in": {
+      "15": "15 dakika sonra",
+      "60": "Bir saat sonra",
+      "480": "8 saat sonra",
+      "1440": "Yarın"
+    },
+    "pending": "{{when}} için zamanlandı",
+    "failed": "Gönderilmedi — {{reason}}",
+    "cancel": "Zamanlanmış mesajı iptal et"
   }
 }

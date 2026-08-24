@@ -257,5 +257,20 @@
       "label": "JSON (.json)",
       "description": "모든 메시지를 원본 그대로. 도구 연동용."
     }
+  },
+  "schedule": {
+    "trigger": "이 메시지 예약",
+    "heading": "나중에 보내기",
+    "customLabel": "또는 시간 선택",
+    "confirm": "예약",
+    "in": {
+      "15": "15분 후",
+      "60": "1시간 후",
+      "480": "8시간 후",
+      "1440": "내일"
+    },
+    "pending": "{{when}}에 전송 예정",
+    "failed": "전송되지 않음 — {{reason}}",
+    "cancel": "예약 취소"
   }
 }

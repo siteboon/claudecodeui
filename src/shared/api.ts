@@ -213,6 +213,15 @@ export const api = {
   renameSession: (sessionId: string, summary: string) =>
     put(`/api/providers/sessions/${sessionId}`, { summary }),
 
+  // Scheduled messages: send a message to a session at a future time.
+  scheduledMessages: {
+    list: (sessionId?: string) =>
+      get(`/api/scheduled-messages${sessionId ? query({ sessionId }) : ''}`),
+    create: (body: { sessionId: string; content: string; scheduledFor: string; options?: unknown }) =>
+      post('/api/scheduled-messages', body),
+    cancel: (id: string) => del(`/api/scheduled-messages/${encodeURIComponent(id)}`),
+  },
+
   // Workspace file tree
   readFile: (projectId: string, filePath: string) =>
     get(`/api/file-tree/projects/${projectId}/file${query({ filePath })}`),

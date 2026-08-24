@@ -236,5 +236,20 @@
       "label": "JSON (.json)",
       "description": "Tutti i messaggi, non formattati, per gli strumenti."
     }
+  },
+  "schedule": {
+    "trigger": "Programma questo messaggio",
+    "heading": "Invia più tardi",
+    "customLabel": "Oppure scegli un orario",
+    "confirm": "Programma",
+    "in": {
+      "15": "Tra 15 minuti",
+      "60": "Tra un’ora",
+      "480": "Tra 8 ore",
+      "1440": "Domani"
+    },
+    "pending": "Programmato per {{when}}",
+    "failed": "Non inviato — {{reason}}",
+    "cancel": "Annulla messaggio programmato"
   }
 }

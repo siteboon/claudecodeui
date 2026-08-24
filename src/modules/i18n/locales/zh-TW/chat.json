@@ -272,5 +272,20 @@
       "label": "JSON (.json)",
       "description": "全部訊息原樣輸出，供工具使用。"
     }
+  },
+  "schedule": {
+    "trigger": "排程這則訊息",
+    "heading": "稍後傳送",
+    "customLabel": "或選擇時間",
+    "confirm": "排程",
+    "in": {
+      "15": "15 分鐘後",
+      "60": "1 小時後",
+      "480": "8 小時後",
+      "1440": "明天"
+    },
+    "pending": "將於 {{when}} 傳送",
+    "failed": "未傳送 — {{reason}}",
+    "cancel": "取消排程訊息"
   }
 }

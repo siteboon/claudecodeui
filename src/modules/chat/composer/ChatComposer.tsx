@@ -14,7 +14,7 @@ import { PaperclipIcon, MessageSquareIcon, XIcon, Loader2, ArrowUpIcon, PencilIc
 
 import { useVoiceInput } from '@/modules/chat/hooks/useVoiceInput';
 import { useVoiceAvailable } from '@/modules/chat/hooks/useVoiceAvailable';
-import type { QueuedDraft, SlashCommand,SessionActivity,PendingPermissionRequest,PermissionMode,ProviderModelOption } from '@/shared/types';
+import type { QueuedDraft, ScheduledMessage, SlashCommand,SessionActivity,PendingPermissionRequest,PermissionMode,ProviderModelOption } from '@/shared/types';
 import {
   PromptInput,
   PromptInputHeader,
@@ -32,6 +32,8 @@ import VoiceInputButton from '@/modules/chat/composer/VoiceInputButton';
 import PermissionRequestsBanner from '@/modules/chat/composer/PermissionRequestsBanner';
 import TokenUsageSummary from '@/modules/chat/composer/TokenUsageSummary';
 import QueuedMessageCard from '@/modules/chat/composer/QueuedMessageCard';
+import { ScheduleMessagePopover } from '@/modules/chat/composer/ScheduleMessagePopover';
+import { ScheduledMessageList } from '@/modules/chat/composer/ScheduledMessageList';
 import ComposerModelMenu from '@/modules/chat/composer/ComposerModelMenu';
 import ComposerPermissionMenu from '@/modules/chat/composer/ComposerPermissionMenu';
 
@@ -73,6 +75,10 @@ type ChatComposerProps = {
   /** Set while the composer is replacing an already-sent message. */
   isEditingSentMessage: boolean;
   onCancelEditMessage: () => void;
+  /** Messages waiting to be sent to this session later. */
+  scheduledMessages: ScheduledMessage[];
+  onScheduleMessage: (scheduledFor: Date) => void;
+  onCancelScheduledMessage: (id: string) => void;
   onEditQueuedDraft: () => void;
   onDeleteQueuedDraft: () => void;
   attachedFiles: File[];
@@ -143,6 +149,9 @@ export default function ChatComposer({
   queuedDraft,
   isEditingSentMessage,
   onCancelEditMessage,
+  scheduledMessages,
+  onScheduleMessage,
+  onCancelScheduledMessage,
   onEditQueuedDraft,
   onDeleteQueuedDraft,
   attachedFiles,
@@ -276,6 +285,11 @@ export default function ChatComposer({
           />
         </div>
       )}
+
+      <ScheduledMessageList
+        scheduledMessages={scheduledMessages}
+        onCancel={onCancelScheduledMessage}
+      />
 
       {isEditingSentMessage && (
         <div className="mx-auto mb-2 flex max-w-[54.25rem] items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-foreground">
@@ -466,6 +480,11 @@ export default function ChatComposer({
             >
               {submitHint}
             </div>
+
+            <ScheduleMessagePopover
+              disabled={!input.trim() || isLoading}
+              onSchedule={onScheduleMessage}
+            />
 
             <ComposerModelMenu
               effort={effort}

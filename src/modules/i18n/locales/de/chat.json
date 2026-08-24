@@ -236,5 +236,20 @@
       "label": "JSON (.json)",
       "description": "Alle Nachrichten, unformatiert, für Tools."
     }
+  },
+  "schedule": {
+    "trigger": "Nachricht planen",
+    "heading": "Später senden",
+    "customLabel": "Oder Zeit wählen",
+    "confirm": "Planen",
+    "in": {
+      "15": "In 15 Minuten",
+      "60": "In einer Stunde",
+      "480": "In 8 Stunden",
+      "1440": "Morgen"
+    },
+    "pending": "Geplant für {{when}}",
+    "failed": "Nicht gesendet – {{reason}}",
+    "cancel": "Geplante Nachricht abbrechen"
   }
 }

@@ -257,5 +257,20 @@
       "label": "JSON (.json)",
       "description": "全部消息原样输出，供工具使用。"
     }
+  },
+  "schedule": {
+    "trigger": "定时发送这条消息",
+    "heading": "稍后发送",
+    "customLabel": "或选择时间",
+    "confirm": "定时发送",
+    "in": {
+      "15": "15 分钟后",
+      "60": "1 小时后",
+      "480": "8 小时后",
+      "1440": "明天"
+    },
+    "pending": "将于 {{when}} 发送",
+    "failed": "未发送 — {{reason}}",
+    "cancel": "取消定时消息"
   }
 }

@@ -7,7 +7,7 @@ import type {
 import { createCompleteMessage, readObjectRecord } from '@/shared/utils.js';
 
 type ChatSessionWriterOptions = {
-  connection: RealtimeClientConnection;
+  connection: RealtimeClientConnection | null;
   userId: string | number | null;
   provider: LLMProvider;
   /** Provider-native id when resuming an existing session, otherwise null. */
@@ -73,7 +73,12 @@ export class ChatSessionWriter {
 
   constructor(options: ChatSessionWriterOptions) {
     this.options = options;
-    this.connections.add(options.connection);
+    // A run started by a timer has no audience yet. Everything still goes
+    // through `decorateOutboundEvent` into the run's replay buffer, so a
+    // client that subscribes mid-run catches up from the beginning.
+    if (options.connection) {
+      this.connections.add(options.connection);
+    }
     this.userId = options.userId;
     this.providerSessionId = options.providerSessionId;
   }

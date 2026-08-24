@@ -53,6 +53,20 @@ export type ProviderModelActions = {
 /** Identifies the workspace pane the user is looking at; plugin panes are namespaced by plugin id. */
 export type AppTab = 'chat' | 'files' | 'shell' | 'git' | 'tasks' | 'browser' | `plugin:${string}`;
 
+/** A message queued to be sent to a session at a future time. */
+export type ScheduledMessage = {
+  id: string;
+  sessionId: string;
+  content: string;
+  options: Record<string, unknown>;
+  /** ISO instant, so the schedule does not move when the user changes time zone. */
+  scheduledFor: string;
+  status: 'pending' | 'sent' | 'failed' | 'cancelled';
+  /** Why it did not go, when `status` is `failed`. */
+  failureReason: string | null;
+  createdAt: string;
+};
+
 /** A single conversation inside a project, as returned by the sessions API and rendered in the sidebar and chat. */
 export type ProjectSession = {
   id: string;
