@@ -5,13 +5,14 @@ import path from 'node:path';
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
+import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import type {
   FetchHistoryOptions,
   FetchHistoryResult,
   LLMProvider,
   NormalizedMessage,
 } from '@/shared/types.js';
-import { AppError } from '@/shared/utils.js';
+import { AppError, sliceTailPage } from '@/shared/utils.js';
 
 type CreateAppSessionResult = {
   sessionId: string;
@@ -433,12 +434,51 @@ export const sessionsService = {
     }
 
     const provider = session.provider as LLMProvider;
-    const result = await providerRegistry.resolveProvider(provider).sessions.fetchHistory(sessionId, {
-      limit: options.limit ?? null,
-      offset: options.offset ?? 0,
-      projectPath: session.project_path ?? '',
-      providerSessionId: session.provider_session_id,
+    const providerSessions = providerRegistry.resolveProvider(provider).sessions;
+    const providerSessionId = session.provider_session_id;
+    const projectPath = session.project_path ?? '';
+    const requestedLimit = options.limit ?? null;
+    const requestedOffset = options.offset ?? 0;
+
+    // Claude and Codex history readers parse `jsonl_path` itself, so a page
+    // can be sliced from the stat-validated full-transcript cache instead of
+    // re-parsing the whole file per request. Cursor and OpenCode read their
+    // messages from elsewhere (store.db / shared SQLite), so that file's stat
+    // says nothing about their history — they stay on the direct path.
+    const transcriptPath = provider === 'claude' || provider === 'codex'
+      ? session.jsonl_path
+      : null;
+    const fullHistory = await sessionHistoryCache.getFullHistory({
+      sessionId,
+      transcriptPath,
+      loadFull: () => providerSessions.fetchHistory(sessionId, {
+        limit: null,
+        offset: 0,
+        projectPath,
+        providerSessionId,
+      }),
     });
+
+    let result: FetchHistoryResult;
+    if (fullHistory) {
+      // Providers slice with this same helper, so a cached page is identical
+      // to what a direct `(limit, offset)` read would have returned.
+      const { page, hasMore } = sliceTailPage(fullHistory.messages, requestedLimit, Math.max(0, requestedOffset));
+      result = {
+        ...fullHistory,
+        messages: page,
+        hasMore,
+        offset: requestedOffset,
+        limit: requestedLimit,
+      };
+    } else {
+      result = await providerSessions.fetchHistory(sessionId, {
+        limit: requestedLimit,
+        offset: requestedOffset,
+        projectPath,
+        providerSessionId,
+      });
+    }
 
     return {
       ...result,

@@ -11,6 +11,12 @@ import { AppError, getOpenCodeDatabasePath } from '@/shared/utils.js';
 
 type SessionRow = NonNullable<ReturnType<typeof sessionsDb.getSessionById>>;
 
+type FileTail = {
+  content: string;
+  /** True when `content` is the whole file, not just its trailing bytes. */
+  isComplete: boolean;
+};
+
 type ProviderTokenUsageServiceDependencies = {
   getSessionById: (sessionId: string) => SessionRow | null | undefined;
   getHomeDirectory: () => string;
@@ -18,6 +24,7 @@ type ProviderTokenUsageServiceDependencies = {
   fileExists: (filePath: string) => boolean;
   readDirectory: (directoryPath: string) => Promise<Dirent[]>;
   readTextFile: (filePath: string) => Promise<string>;
+  readTextFileTail: (filePath: string, maxBytes: number) => Promise<FileTail>;
   getClaudeContextWindow: () => string | undefined;
   isProviderSessionSuperseded: (providerSessionId: string, provider: string) => boolean;
 };
@@ -46,6 +53,14 @@ type OpenCodeTokenRow = {
   cacheWriteTokens: number | null;
 };
 
+/**
+ * Both JSONL usage readers below only need the newest usage row, which sits at
+ * or near the end of the transcript. Reading just this much of the tail keeps
+ * a session-open usage lookup O(1) in the transcript's size; the rare tail
+ * with no usage row at all falls back to the full read.
+ */
+const TOKEN_USAGE_TAIL_BYTES = 4 * 1024 * 1024;
+
 const defaultDependencies: ProviderTokenUsageServiceDependencies = {
   getSessionById: (sessionId) => sessionsDb.getSessionById(sessionId),
   getHomeDirectory: () => os.homedir(),
@@ -53,6 +68,29 @@ const defaultDependencies: ProviderTokenUsageServiceDependencies = {
   fileExists: (filePath) => fsSync.existsSync(filePath),
   readDirectory: (directoryPath) => fsp.readdir(directoryPath, { withFileTypes: true }),
   readTextFile: (filePath) => fsp.readFile(filePath, 'utf8'),
+  readTextFileTail: async (filePath, maxBytes) => {
+    const handle = await fsp.open(filePath, 'r');
+    try {
+      const { size } = await handle.stat();
+      if (size <= maxBytes) {
+        return { content: await handle.readFile({ encoding: 'utf8' }), isComplete: true };
+      }
+
+      const buffer = Buffer.alloc(maxBytes);
+      await handle.read(buffer, 0, maxBytes, size - maxBytes);
+      const content = buffer.toString('utf8');
+      // The window almost never starts on a row boundary; dropping everything
+      // up to the first newline discards the partial row (and any split
+      // multi-byte character with it).
+      const firstNewline = content.indexOf('\n');
+      return {
+        content: firstNewline === -1 ? '' : content.slice(firstNewline + 1),
+        isComplete: false,
+      };
+    } finally {
+      await handle.close();
+    }
+  },
   getClaudeContextWindow: () => process.env.CONTEXT_WINDOW,
   isProviderSessionSuperseded: (providerSessionId, provider) =>
     sessionsDb.isProviderSessionSuperseded(providerSessionId, provider),
@@ -95,11 +133,8 @@ async function findCodexSessionFile(
   return null;
 }
 
-function readCodexTokenUsage(fileContent: string): TokenUsageResult {
-  let inputTokens = 0;
-  let outputTokens = 0;
-  let totalTokens = 0;
-  let contextWindow = 200_000;
+/** Newest `token_count` snapshot in the given JSONL text, or null when it has none. */
+function findCodexTokenUsage(fileContent: string): TokenUsageResult | null {
   const lines = fileContent.trim().split('\n');
 
   for (let index = lines.length - 1; index >= 0; index -= 1) {
@@ -112,25 +147,37 @@ function readCodexTokenUsage(fileContent: string): TokenUsageResult {
         continue;
       }
 
+      let inputTokens = 0;
+      let outputTokens = 0;
+      let totalTokens = 0;
       if (tokenInfo.total_token_usage) {
         inputTokens = readUsageNumber(tokenInfo.total_token_usage.input_tokens);
         outputTokens = readUsageNumber(tokenInfo.total_token_usage.output_tokens);
         totalTokens = readUsageNumber(tokenInfo.total_token_usage.total_tokens)
           || inputTokens + outputTokens;
       }
-      contextWindow = readUsageNumber(tokenInfo.model_context_window) || contextWindow;
-      break;
+      return {
+        used: totalTokens,
+        total: readUsageNumber(tokenInfo.model_context_window) || 200_000,
+        inputTokens,
+        outputTokens,
+        breakdown: { input: inputTokens, output: outputTokens },
+      };
     } catch {
       // A provider may be writing the last JSONL line while this read happens.
     }
   }
 
+  return null;
+}
+
+function emptyCodexTokenUsage(): TokenUsageResult {
   return {
-    used: totalTokens,
-    total: contextWindow,
-    inputTokens,
-    outputTokens,
-    breakdown: { input: inputTokens, output: outputTokens },
+    used: 0,
+    total: 200_000,
+    inputTokens: 0,
+    outputTokens: 0,
+    breakdown: { input: 0, output: 0 },
   };
 }
 
@@ -193,7 +240,7 @@ export function summarizeClaudeTokenUsage(
   };
 }
 
-function readClaudeTokenUsage(fileContent: string, configuredContextWindow: string | undefined): TokenUsageResult {
+function parseClaudeUsageEntries(fileContent: string): AnyRecord[] {
   const entries: AnyRecord[] = [];
   for (const line of fileContent.trim().split('\n')) {
     try {
@@ -202,8 +249,11 @@ function readClaudeTokenUsage(fileContent: string, configuredContextWindow: stri
       // Skip malformed lines without discarding usage from earlier messages.
     }
   }
+  return entries;
+}
 
-  return summarizeClaudeTokenUsage(entries, configuredContextWindow);
+function claudeEntriesHaveUsage(entries: AnyRecord[]): boolean {
+  return entries.some((entry) => entry?.type === 'assistant' && entry.message?.usage);
 }
 
 function readOpenCodeTokenUsage(databasePath: string, providerSessionId: string): TokenUsageResult {
@@ -352,8 +402,16 @@ export function createProviderTokenUsageService(
           });
         }
 
-        const fileContent = await dependencies.readTextFile(sessionFilePath);
-        return readCodexTokenUsage(fileContent);
+        const tail = await dependencies.readTextFileTail(sessionFilePath, TOKEN_USAGE_TAIL_BYTES);
+        const tailUsage = findCodexTokenUsage(tail.content);
+        if (tailUsage || tail.isComplete) {
+          return tailUsage ?? emptyCodexTokenUsage();
+        }
+
+        // A tail this large with no token_count row is pathological, but the
+        // whole file is still authoritative when it happens.
+        return findCodexTokenUsage(await dependencies.readTextFile(sessionFilePath))
+          ?? emptyCodexTokenUsage();
       }
 
       let sessionFilePath = session.jsonl_path;
@@ -390,8 +448,12 @@ export function createProviderTokenUsageService(
         });
       }
 
-      const fileContent = await dependencies.readTextFile(sessionFilePath);
-      return readClaudeTokenUsage(fileContent, dependencies.getClaudeContextWindow());
+      const tail = await dependencies.readTextFileTail(sessionFilePath, TOKEN_USAGE_TAIL_BYTES);
+      let entries = parseClaudeUsageEntries(tail.content);
+      if (!claudeEntriesHaveUsage(entries) && !tail.isComplete) {
+        entries = parseClaudeUsageEntries(await dependencies.readTextFile(sessionFilePath));
+      }
+      return summarizeClaudeTokenUsage(entries, dependencies.getClaudeContextWindow());
     },
   };
 }

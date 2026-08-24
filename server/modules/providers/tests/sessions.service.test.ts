@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { appendFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -124,4 +124,70 @@ test('recent sessions map project metadata and preserve database pagination', { 
       hasMore: true,
     });
   });
+});
+
+/** One Claude transcript row of user or assistant text, linked by uuid chain. */
+function claudeTextRow(
+  sessionId: string,
+  role: 'user' | 'assistant',
+  text: string,
+  ordinal: number,
+): Record<string, unknown> {
+  return {
+    type: role,
+    uuid: `row-${ordinal}`,
+    parentUuid: ordinal === 0 ? null : `row-${ordinal - 1}`,
+    timestamp: new Date(Date.UTC(2026, 0, 1, 0, 0, ordinal)).toISOString(),
+    sessionId,
+    message: { role, content: [{ type: 'text', text }] },
+  };
+}
+
+test('history pages are sliced from the cached full transcript and see appended rows', { concurrency: false }, async () => {
+  const transcriptDirectory = await mkdtemp(path.join(os.tmpdir(), 'sessions-service-history-'));
+  const sessionId = 'claude-history-cache-session';
+  const transcriptPath = path.join(transcriptDirectory, `${sessionId}.jsonl`);
+
+  try {
+    await withIsolatedDatabase(async () => {
+      const rows = [
+        claudeTextRow(sessionId, 'user', 'one', 0),
+        claudeTextRow(sessionId, 'assistant', 'reply one', 1),
+        claudeTextRow(sessionId, 'user', 'two', 2),
+        claudeTextRow(sessionId, 'assistant', 'reply two', 3),
+      ];
+      await writeFile(transcriptPath, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+      sessionsDb.createSession(
+        sessionId,
+        'claude',
+        '/tmp/history-cache-project',
+        'History cache conversation',
+        '2026-01-01T00:00:00.000Z',
+        '2026-01-01T00:00:10.000Z',
+        transcriptPath,
+      );
+
+      const page = await sessionsService.fetchHistory(sessionId, { limit: 2, offset: 0 });
+      assert.equal(page.total, 4);
+      assert.equal(page.hasMore, true);
+      assert.deepEqual(page.messages.map((message) => message.content), ['two', 'reply two']);
+
+      // A row appended after the page was cached must appear on the next read.
+      await appendFile(
+        transcriptPath,
+        `${JSON.stringify(claudeTextRow(sessionId, 'user', 'three', 4))}\n`,
+        'utf8',
+      );
+      const refreshed = await sessionsService.fetchHistory(sessionId, { limit: 2, offset: 0 });
+      assert.equal(refreshed.total, 5);
+      assert.deepEqual(refreshed.messages.map((message) => message.content), ['reply two', 'three']);
+
+      // An older page keeps the tail-offset contract while served from cache.
+      const older = await sessionsService.fetchHistory(sessionId, { limit: 2, offset: 2 });
+      assert.deepEqual(older.messages.map((message) => message.content), ['reply one', 'two']);
+      assert.equal(older.hasMore, true);
+    });
+  } finally {
+    await rm(transcriptDirectory, { recursive: true, force: true });
+  }
 });
