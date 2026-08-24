@@ -212,7 +212,8 @@
     "nextTaskPrompt": "Commencer la prochaine tâche"
   },
   "message": {
-    "editAndResend": "Modifier et renvoyer"
+    "editAndResend": "Modifier et renvoyer",
+    "forkFromHere": "Dupliquer à partir d’ici"
   },
   "composer": {
     "editing": {

@@ -113,7 +113,8 @@
     "restoreProjectFailed": "Impossibile ripristinare il progetto. Riprova.",
     "restoreProjectError": "Errore durante il ripristino del progetto. Riprova.",
     "restoreSessionFailed": "Impossibile ripristinare la sessione. Riprova.",
-    "restoreSessionError": "Errore durante il ripristino della sessione. Riprova."
+    "restoreSessionError": "Errore durante il ripristino della sessione. Riprova.",
+    "forkSessionError": "Impossibile creare un ramo da questa sessione. Riprova."
   },
   "version": {
     "updateAvailable": "Aggiornamento disponibile",

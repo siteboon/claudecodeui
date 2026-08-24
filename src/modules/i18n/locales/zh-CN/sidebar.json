@@ -113,7 +113,8 @@
     "restoreProjectFailed": "恢复项目失败，请重试。",
     "restoreProjectError": "恢复项目时出错，请重试。",
     "restoreSessionFailed": "恢复会话失败，请重试。",
-    "restoreSessionError": "恢复会话时出错，请重试。"
+    "restoreSessionError": "恢复会话时出错，请重试。",
+    "forkSessionError": "无法派生该会话，请重试。"
   },
   "version": {
     "updateAvailable": "有可用更新",

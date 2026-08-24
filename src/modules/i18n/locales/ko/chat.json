@@ -231,7 +231,8 @@
     "nextTaskPrompt": "다음 작업 시작"
   },
   "message": {
-    "editAndResend": "수정 후 다시 보내기"
+    "editAndResend": "수정 후 다시 보내기",
+    "forkFromHere": "여기서 분기"
   },
   "composer": {
     "editing": {

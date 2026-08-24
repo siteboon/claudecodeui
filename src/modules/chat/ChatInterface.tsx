@@ -5,7 +5,9 @@ import { ArrowDownIcon } from 'lucide-react';
 import { useTasksSettings } from '@/modules/task-master';
 import { useWebSocket } from '@/shared/context/WebSocketContext';
 import PermissionContext from '@/modules/chat/context/PermissionContext';
+import { api } from '@/shared/api';
 import type {
+  ChatMessage,
   Project,
   ProjectSession,
   SessionEstablishedContext,
@@ -115,6 +117,7 @@ function ChatInterface({
     selectProviderEffort,
     resolvePermissionModeForProvider,
     supportsMessageEditing,
+    supportsSessionForking,
   } = useChatProviderState({
     selectedSession,
     selectedProject,
@@ -314,6 +317,28 @@ function ChatInterface({
     };
   }, [resetStreamingState]);
 
+  /**
+   * Branches the conversation into a new session that ends at this message,
+   * then opens it. The session being viewed is left exactly as it was.
+   */
+  const handleForkFromMessage = useCallback(async (message: ChatMessage) => {
+    const anchorId = message.transcriptAnchorId;
+    const sourceSessionId = selectedSession?.id;
+    if (!anchorId || !sourceSessionId) return;
+
+    try {
+      const response = await api.forkSession(sourceSessionId, { upToAnchorId: anchorId });
+      const payload = await response.json();
+      const forkedSessionId = payload?.data?.sessionId;
+      if (!response.ok || typeof forkedSessionId !== 'string') {
+        throw new Error(payload?.message || `HTTP ${response.status}`);
+      }
+      onNavigateToSession?.(forkedSessionId);
+    } catch (error) {
+      console.error('Error forking session:', error);
+    }
+  }, [onNavigateToSession, selectedSession?.id]);
+
   const permissionContextValue = useMemo(() => ({
     pendingPermissionRequests,
     handlePermissionDecision,
@@ -365,6 +390,7 @@ function ChatInterface({
       </div>
     );
   }
+
 
   return (
     <PermissionContext.Provider value={permissionContextValue}>
@@ -419,6 +445,7 @@ function ChatInterface({
           // offered when the session is idle — a half-truncated transcript with
           // a live stream writing into it is not recoverable.
           onEditMessage={supportsMessageEditing && !isProcessing ? beginEditMessage : undefined}
+          onForkFromMessage={supportsSessionForking ? handleForkFromMessage : undefined}
         />
 
         <div className="relative flex-shrink-0">

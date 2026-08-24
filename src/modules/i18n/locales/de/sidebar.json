@@ -113,7 +113,8 @@
     "restoreProjectFailed": "Projekt konnte nicht wiederhergestellt werden. Bitte erneut versuchen.",
     "restoreProjectError": "Fehler beim Wiederherstellen des Projekts. Bitte erneut versuchen.",
     "restoreSessionFailed": "Sitzung konnte nicht wiederhergestellt werden. Bitte erneut versuchen.",
-    "restoreSessionError": "Fehler beim Wiederherstellen der Sitzung. Bitte erneut versuchen."
+    "restoreSessionError": "Fehler beim Wiederherstellen der Sitzung. Bitte erneut versuchen.",
+    "forkSessionError": "Diese Sitzung konnte nicht verzweigt werden. Bitte erneut versuchen."
   },
   "version": {
     "updateAvailable": "Update verfügbar",

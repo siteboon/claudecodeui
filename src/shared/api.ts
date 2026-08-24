@@ -206,6 +206,10 @@ export const api = {
   providerSessionId: (sessionId: string) =>
     get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/provider-id`),
   restoreSession: (sessionId: string) => post(`/api/providers/sessions/${sessionId}/restore`),
+  // Creates an independent session holding this one's conversation up to
+  // `upToAnchorId` (all of it when omitted). The source is left untouched.
+  forkSession: (sessionId: string, body: { upToAnchorId?: string; title?: string } = {}) =>
+    post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/fork`, body),
   renameSession: (sessionId: string, summary: string) =>
     put(`/api/providers/sessions/${sessionId}`, { summary }),
 

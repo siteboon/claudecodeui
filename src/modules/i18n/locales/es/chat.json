@@ -244,6 +244,7 @@
     "nextTaskPrompt": "Empezar la siguiente tarea"
   },
   "message": {
-    "editAndResend": "Editar y reenviar"
+    "editAndResend": "Editar y reenviar",
+    "forkFromHere": "Bifurcar desde aquí"
   }
 }

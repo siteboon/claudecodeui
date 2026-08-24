@@ -113,7 +113,8 @@
     "restoreProjectFailed": "No se pudo restaurar el proyecto. Inténtalo de nuevo.",
     "restoreProjectError": "Error al restaurar el proyecto. Inténtalo de nuevo.",
     "restoreSessionFailed": "No se pudo restaurar la sesión. Inténtalo de nuevo.",
-    "restoreSessionError": "Error al restaurar la sesión. Inténtalo de nuevo."
+    "restoreSessionError": "Error al restaurar la sesión. Inténtalo de nuevo.",
+    "forkSessionError": "No se pudo bifurcar esta sesión. Inténtalo de nuevo."
   },
   "version": {
     "updateAvailable": "Actualización disponible",

@@ -244,6 +244,7 @@
     "nextTaskPrompt": "Start the next task"
   },
   "message": {
-    "editAndResend": "Edit and resend"
+    "editAndResend": "Edit and resend",
+    "forkFromHere": "Fork from here"
   }
 }

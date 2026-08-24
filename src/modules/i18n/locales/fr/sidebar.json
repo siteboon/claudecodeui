@@ -113,7 +113,8 @@
     "restoreProjectFailed": "Échec de la restauration du projet. Veuillez réessayer.",
     "restoreProjectError": "Erreur lors de la restauration du projet. Veuillez réessayer.",
     "restoreSessionFailed": "Échec de la restauration de la session. Veuillez réessayer.",
-    "restoreSessionError": "Erreur lors de la restauration de la session. Veuillez réessayer."
+    "restoreSessionError": "Erreur lors de la restauration de la session. Veuillez réessayer.",
+    "forkSessionError": "Impossible de dupliquer cette session. Veuillez réessayer."
   },
   "version": {
     "updateAvailable": "Mise à jour disponible",

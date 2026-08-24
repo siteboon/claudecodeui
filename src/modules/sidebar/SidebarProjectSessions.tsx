@@ -27,6 +27,7 @@ type SidebarProjectSessionsProps = {
   onProjectSelect: (project: Project) => void;
   onSessionSelect: (session: SessionWithProvider, projectName: string) => void;
   onDeleteSession: (sessionId: string, sessionTitle: string) => void;
+  onForkSession?: (session: SessionWithProvider) => void;
   onLoadMoreSessions: (projectId: string) => void;
   onNewSession: (project: Project) => void;
   t: TFunction;
@@ -71,6 +72,7 @@ export default function SidebarProjectSessions({
   onProjectSelect,
   onSessionSelect,
   onDeleteSession,
+  onForkSession,
   onLoadMoreSessions,
   onNewSession,
   t,
@@ -136,6 +138,7 @@ export default function SidebarProjectSessions({
               onProjectSelect={onProjectSelect}
               onSessionSelect={onSessionSelect}
               onDeleteSession={onDeleteSession}
+              onForkSession={onForkSession}
               t={t}
             />
           ))}

@@ -61,6 +61,8 @@ type ChatMessagesPaneProps = {
   selectedProject: Project;
   /** Loads an already-sent message back into the composer; absent when the provider cannot re-run from a point. */
   onEditMessage?: (message: ChatMessage) => void;
+  /** Branches the conversation into a new session ending at a message. */
+  onForkFromMessage?: (message: ChatMessage) => void;
 };
 
 /**
@@ -104,6 +106,7 @@ function ChatMessagesPane({
   showLoadAllOverlay,
   createDiff,
   onEditMessage,
+  onForkFromMessage,
   onFileOpen,
   onShowSettings,
   onGrantToolPermission,
@@ -282,6 +285,7 @@ function ChatMessagesPane({
                   selectedProject={selectedProject}
                   provider={provider}
                   onEditMessage={onEditMessage}
+                  onForkFromMessage={onForkFromMessage}
                 />
               );
             });

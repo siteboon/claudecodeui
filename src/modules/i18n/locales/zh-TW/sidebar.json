@@ -112,7 +112,8 @@
     "restoreProjectFailed": "還原專案失敗，請重試。",
     "restoreProjectError": "還原專案時出錯，請重試。",
     "restoreSessionFailed": "還原工作階段失敗，請重試。",
-    "restoreSessionError": "還原工作階段時出錯，請重試。"
+    "restoreSessionError": "還原工作階段時出錯，請重試。",
+    "forkSessionError": "無法分支此工作階段，請再試一次。"
   },
   "version": {
     "updateAvailable": "有可用更新",

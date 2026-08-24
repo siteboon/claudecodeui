@@ -1,11 +1,12 @@
 import { memo, useEffect, useRef, useState } from 'react';
-import { Check, Copy, Edit2, Loader2, MoreHorizontal, Trash2, X } from 'lucide-react';
+import { Check, Copy, Edit2, GitBranch, Loader2, MoreHorizontal, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { ActionMenu, Badge, Dialog, DialogContent, DialogTitle, LLMProviderLogo, Tooltip, buttonVariants } from '@/shared/ui';
 import { cn,copyTextToClipboard } from '@/shared/utils';
 import type { LLMProvider, Project, ProjectSession, SessionWithProvider } from '@/shared/types';
 import { api } from '@/shared/api';
+import { useSessionForkingProviders } from '@/shared/hooks/useProviderCapabilities';
 import { createSessionViewModel, formatCompactAge } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import { useCompactSidebar } from '@/modules/sidebar/hooks/useCompactSidebar';
 
@@ -26,6 +27,8 @@ type SidebarSessionItemProps = {
   onProjectSelect: (project: Project) => void;
   onSessionSelect: (session: SessionWithProvider, projectName: string) => void;
   onDeleteSession: (sessionId: string, sessionTitle: string) => void;
+  /** Branches this session into an independent one; absent when its provider cannot. */
+  onForkSession?: (session: SessionWithProvider) => void;
   t: TFunction;
 };
 
@@ -54,6 +57,7 @@ function SidebarSessionItem({
   onProjectSelect,
   onSessionSelect,
   onDeleteSession,
+  onForkSession,
   t,
 }: SidebarSessionItemProps) {
   const isCompact = useCompactSidebar();
@@ -98,6 +102,12 @@ function SidebarSessionItem({
   const saveEditedSession = () => {
     onSaveEditingSession(project.projectId, session.id, renameDraft, session.__provider);
   };
+
+  // Read from the backend capability matrix rather than branching on the
+  // provider id here; the underlying request is cached module-side, so every
+  // row in the sidebar shares one fetch.
+  const forkableProviders = useSessionForkingProviders();
+  const canForkThisSession = forkableProviders.has(session.__provider);
 
   const requestDeleteSession = () => {
     onDeleteSession(session.id, sessionView.sessionName);
@@ -560,6 +570,13 @@ function SidebarSessionItem({
                     closeOnSelect: false,
                     onSelect: handleCopyAction,
                   },
+                  ...(onForkSession && canForkThisSession && !isProcessing ? [{
+                    key: 'fork',
+                    label: 'Fork session',
+                    description: 'Continue from a copy, leaving this one untouched.',
+                    icon: GitBranch,
+                    onSelect: () => onForkSession(session),
+                  }] : []),
                   ...(!isProcessing ? [{
                     key: 'delete',
                     label: 'Archive or delete session',

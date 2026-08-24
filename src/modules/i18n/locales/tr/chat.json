@@ -210,7 +210,8 @@
     "nextTaskPrompt": "Sonraki görevi başlat"
   },
   "message": {
-    "editAndResend": "Düzenle ve yeniden gönder"
+    "editAndResend": "Düzenle ve yeniden gönder",
+    "forkFromHere": "Buradan çatalla"
   },
   "composer": {
     "editing": {

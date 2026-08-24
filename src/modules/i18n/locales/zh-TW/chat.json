@@ -246,7 +246,8 @@
     "nextTaskPrompt": "開始下一個任務"
   },
   "message": {
-    "editAndResend": "編輯並重新傳送"
+    "editAndResend": "編輯並重新傳送",
+    "forkFromHere": "從此處分支"
   },
   "composer": {
     "editing": {

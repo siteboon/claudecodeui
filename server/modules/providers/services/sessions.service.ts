@@ -3,7 +3,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
-import { chatRunRegistry } from '@/modules/websocket/index.js';
+import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import type {
   FetchHistoryOptions,
@@ -232,6 +232,79 @@ export const sessionsService = {
       sessionId,
       provider,
       projectPath: normalizedProjectPath,
+      sessionName,
+    };
+  },
+
+  /**
+   * Branches a session into an independent one containing its conversation up
+   * to `upToAnchorId` (the whole thing when omitted).
+   *
+   * The source is left completely untouched — this is the "try two approaches"
+   * action, not a destructive one.
+   */
+  async forkSessionById(
+    sessionId: string,
+    options: { upToAnchorId?: string; title?: string } = {},
+  ): Promise<CreateAppSessionResult> {
+    const source = sessionsDb.getSessionById(sessionId);
+    if (!source) {
+      throw new AppError(`Session "${sessionId}" was not found.`, {
+        code: 'SESSION_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    const provider = source.provider as LLMProvider;
+    const fork = providerRegistry.resolveProvider(provider).fork;
+    if (!fork) {
+      throw new AppError(`Sessions cannot be forked for provider "${provider}".`, {
+        code: 'FORK_NOT_SUPPORTED',
+        statusCode: 409,
+      });
+    }
+
+    // A session that has never run has no transcript to copy, so there is
+    // nothing a fork of it could resume from.
+    if (!source.provider_session_id || !source.jsonl_path) {
+      throw new AppError('This session has not produced a transcript yet.', {
+        code: 'FORK_SOURCE_NOT_READY',
+        statusCode: 409,
+      });
+    }
+
+    const sessionName = options.title?.trim()
+      || `${source.custom_name?.trim() || 'Session'} (fork)`;
+
+    const forked = await fork.forkSession({
+      providerSessionId: source.provider_session_id,
+      jsonlPath: source.jsonl_path,
+      projectPath: source.project_path ?? '',
+      upToAnchorId: options.upToAnchorId,
+      title: sessionName,
+    });
+
+    const forkSessionId = randomUUID();
+    sessionsDb.createForkedSession({
+      sessionId: forkSessionId,
+      provider,
+      projectPath: source.project_path ?? '',
+      customName: sessionName,
+      providerSessionId: forked.providerSessionId,
+      jsonlPath: forked.jsonlPath,
+      forkedFromSessionId: sessionId,
+      // A fork that silently dropped to the catalog default would answer
+      // differently from the conversation it was branched from.
+      model: source.model,
+      effort: source.effort,
+    });
+
+    await broadcastSessionUpserted(forkSessionId);
+
+    return {
+      sessionId: forkSessionId,
+      provider,
+      projectPath: source.project_path ?? '',
       sessionName,
     };
   },

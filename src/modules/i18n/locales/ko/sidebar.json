@@ -113,7 +113,8 @@
     "restoreProjectFailed": "프로젝트 복원 실패. 다시 시도해주세요.",
     "restoreProjectError": "프로젝트 복원 오류. 다시 시도해주세요.",
     "restoreSessionFailed": "세션 복원 실패. 다시 시도해주세요.",
-    "restoreSessionError": "세션 복원 오류. 다시 시도해주세요."
+    "restoreSessionError": "세션 복원 오류. 다시 시도해주세요.",
+    "forkSessionError": "이 세션을 분기하지 못했습니다. 다시 시도해 주세요."
   },
   "version": {
     "updateAvailable": "업데이트 가능",

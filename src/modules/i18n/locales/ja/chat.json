@@ -197,7 +197,8 @@
     }
   },
   "message": {
-    "editAndResend": "編集して再送信"
+    "editAndResend": "編集して再送信",
+    "forkFromHere": "ここから分岐"
   },
   "composer": {
     "editing": {

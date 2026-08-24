@@ -1219,6 +1219,8 @@ export type SidebarProjectListProps = {
   onDeleteProject: (project: Project) => void;
   onSessionSelect: (session: SessionWithProvider, projectName: string) => void;
   onDeleteSession: (sessionId: string, sessionTitle: string) => void;
+  /** Branches a session into an independent one. Rows hide it for providers that cannot. */
+  onForkSession?: (session: SessionWithProvider) => void;
   onNewSession: (project: Project) => void;
   onStartEditingSession: (projectId: string, sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;

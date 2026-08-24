@@ -210,7 +210,8 @@
     "nextTaskPrompt": "Inizia l'attività successiva"
   },
   "message": {
-    "editAndResend": "Modifica e reinvia"
+    "editAndResend": "Modifica e reinvia",
+    "forkFromHere": "Dirama da qui"
   },
   "composer": {
     "editing": {

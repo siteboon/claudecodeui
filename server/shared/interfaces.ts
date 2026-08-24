@@ -53,6 +53,36 @@ export interface IProvider {
   readonly skills: IProviderSkills;
   readonly sessions: IProviderSessions;
   readonly sessionSynchronizer: IProviderSessionSynchronizer;
+  /**
+   * Transcript branching. Present only for providers that can materialise a
+   * prefix of one conversation as an independent, resumable provider session;
+   * its absence is what makes "fork session" unavailable.
+   */
+  readonly fork?: IProviderFork;
+}
+
+// ---------------------------
+//----------------- PROVIDER FORK INTERFACE ------------
+/**
+ * Transcript-branching contract for one provider.
+ */
+export interface IProviderFork {
+  /**
+   * Copies a session's transcript, up to and including `upToAnchorId` (the
+   * whole conversation when omitted), into a brand-new provider session.
+   *
+   * Returns the new provider-native id and the path of the artifact it wrote,
+   * so the caller can insert the database row before the filesystem watcher
+   * notices the file and indexes it as an unrelated session.
+   */
+  forkSession(input: {
+    providerSessionId: string;
+    jsonlPath: string;
+    /** The session's working directory — how providers scope a session lookup. */
+    projectPath: string;
+    upToAnchorId?: string;
+    title?: string;
+  }): Promise<{ providerSessionId: string; jsonlPath: string }>;
 }
 
 // ---------------------------

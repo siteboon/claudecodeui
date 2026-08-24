@@ -981,6 +981,36 @@ export function useSidebarController({
     [onRefresh, t],
   );
 
+  /**
+   * Branches a session and opens the copy.
+   *
+   * The new row arrives over the websocket as a `session_upserted`, so nothing
+   * is refetched here — the sidebar already has it by the time this navigates.
+   */
+  const forkSession = useCallback(
+    async (session: SessionWithProvider) => {
+      try {
+        const response = await api.forkSession(session.id);
+        const payload = await response.json();
+        const forkedSessionId = payload?.data?.sessionId;
+        if (!response.ok || typeof forkedSessionId !== 'string') {
+          throw new Error(payload?.message || `HTTP ${response.status}`);
+        }
+
+        onSessionSelect({
+          id: forkedSessionId,
+          summary: payload.data.sessionName,
+          __provider: session.__provider,
+          __projectId: session.__projectId,
+        } as ProjectSession);
+      } catch (error) {
+        console.error('[Sidebar] Error forking session:', error);
+        alert(t('messages.forkSessionError'));
+      }
+    },
+    [onSessionSelect, t],
+  );
+
   const collapseSidebar = useCallback(() => {
     setSidebarVisible(false);
   }, [setSidebarVisible]);
@@ -1018,6 +1048,7 @@ export function useSidebarController({
     loadMoreRecentConversations,
     toggleProject,
     handleSessionClick,
+    forkSession,
     toggleStarProject,
     isProjectStarred,
     getProjectSessions,

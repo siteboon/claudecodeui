@@ -231,7 +231,8 @@
     "nextTaskPrompt": "开始下一个任务"
   },
   "message": {
-    "editAndResend": "编辑并重新发送"
+    "editAndResend": "编辑并重新发送",
+    "forkFromHere": "从此处派生"
   },
   "composer": {
     "editing": {

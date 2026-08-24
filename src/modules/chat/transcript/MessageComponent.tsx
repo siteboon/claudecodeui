@@ -1,6 +1,6 @@
 import { memo, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { PencilIcon } from 'lucide-react';
+import { GitBranchIcon, PencilIcon } from 'lucide-react';
 
 import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LLMProvider,DiffLine,Project } from '@/shared/types';
 import { formatUsageLimitText, stripProposedPlanEnvelope } from '@/modules/chat/utils/chatFormatting';
@@ -32,6 +32,11 @@ type MessageComponentProps = {
    * hides the affordance rather than showing one that would fail.
    */
   onEditMessage?: (message: ChatMessage) => void;
+  /**
+   * Branches the conversation into a new session ending at this message.
+   * Absent when the provider cannot copy a transcript prefix.
+   */
+  onForkFromMessage?: (message: ChatMessage) => void;
 };
 
 const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'Edit', 'Write', 'ApplyPatch']);
@@ -40,7 +45,7 @@ const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'Edit', 'Write', 'ApplyPatch']);
  * Rendered by chat's ChatMessagesPane and ToolGroupContainer to draw one
  * transcript entry — user turn, assistant turn, or a tool call and its result.
  */
-const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, showRawParameters, showThinking, selectedProject, provider, onEditMessage }: MessageComponentProps) => {
+const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, showRawParameters, showThinking, selectedProject, provider, onEditMessage, onForkFromMessage }: MessageComponentProps) => {
   const { t } = useTranslation('chat');
   const isGrouped = prevMessage && prevMessage.type === message.type &&
     ((prevMessage.type === 'assistant') ||
@@ -117,6 +122,17 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                       className="rounded p-1 opacity-0 transition-opacity hover:bg-muted focus-visible:opacity-100 group-hover:opacity-100"
                     >
                       <PencilIcon className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  {onForkFromMessage && message.transcriptAnchorId && (
+                    <button
+                      type="button"
+                      onClick={() => onForkFromMessage(message)}
+                      title={t('message.forkFromHere')}
+                      aria-label={t('message.forkFromHere')}
+                      className="rounded p-1 opacity-0 transition-opacity hover:bg-muted focus-visible:opacity-100 group-hover:opacity-100"
+                    >
+                      <GitBranchIcon className="h-3.5 w-3.5" />
                     </button>
                   )}
                   {shouldShowUserCopyControl && (

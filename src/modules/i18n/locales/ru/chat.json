@@ -210,7 +210,8 @@
     "nextTaskPrompt": "Начать следующую задачу"
   },
   "message": {
-    "editAndResend": "Изменить и отправить снова"
+    "editAndResend": "Изменить и отправить снова",
+    "forkFromHere": "Ответвить отсюда"
   },
   "composer": {
     "editing": {
