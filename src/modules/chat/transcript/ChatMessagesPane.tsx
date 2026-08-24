@@ -10,11 +10,20 @@ import type { ChatMessage,
   ProviderModelsDefinition } from '@/shared/types';
 import { getIntrinsicMessageKey } from '@/modules/chat/utils/messageKeys';
 import { groupConsecutiveTools, isToolGroupItem } from '@/modules/chat/utils/toolGrouping';
+import { useLazyRowObserver } from '@/modules/chat/hooks/useLazyRowObserver';
+import LazyMessageRow from '@/modules/chat/transcript/LazyMessageRow';
 import MessageComponent from '@/modules/chat/transcript/MessageComponent';
 import ProviderSelectionEmptyState from '@/modules/chat/transcript/ProviderSelectionEmptyState';
 import ToolGroupContainer from '@/modules/chat/transcript/ToolGroupContainer';
 import LoadAllMessagesOverlay from '@/modules/chat/transcript/LoadAllMessagesOverlay';
 import ChatExportMenu from '@/modules/chat/transcript/ChatExportMenu';
+
+/**
+ * How many of the newest rows mount with real content on the first commit,
+ * before the lazy-row observer has had a chance to report what is actually
+ * near the viewport. Covers a bit more than one screen of typical rows.
+ */
+const INITIAL_MOUNTED_TAIL_ROWS = 30;
 
 type ChatMessagesPaneProps = {
   scrollContainerRef: RefObject<HTMLDivElement>;
@@ -118,6 +127,7 @@ function ChatMessagesPane({
   selectedProject,
 }: ChatMessagesPaneProps) {
   const { t } = useTranslation('chat');
+  const lazyRows = useLazyRowObserver(scrollContainerRef);
   const groupedVisibleMessages = useMemo(
     () => groupConsecutiveTools(visibleMessages, Boolean(showThinking)),
     [visibleMessages, showThinking],
@@ -254,27 +264,39 @@ function ChatMessagesPane({
 
           {(() => {
             let prevMessage: ChatMessage | null = null;
+            const rowCount = groupedVisibleMessages.length;
 
-            return groupedVisibleMessages.map((item) => {
+            return groupedVisibleMessages.map((item, index) => {
+              // Rows near the tail mount their content on first commit so the
+              // initial scroll-to-bottom measures real heights; older rows
+              // start as placeholders and mount when scrolled toward.
+              const initiallyNearViewport = index >= rowCount - INITIAL_MOUNTED_TAIL_ROWS;
+
               if (isToolGroupItem(item)) {
                 const groupPrevMessage = prevMessage;
                 prevMessage = item.messages[item.messages.length - 1] || prevMessage;
 
                 return (
-                  <ToolGroupContainer
+                  <LazyMessageRow
                     key={`tool-group-${getMessageKey(item.messages[0])}`}
-                    group={item}
-                    prevMessage={groupPrevMessage}
-                    createDiff={createDiff}
-                    getMessageKey={getMessageKey}
-                    onFileOpen={onFileOpen}
-                    onShowSettings={onShowSettings}
-                    onGrantToolPermission={onGrantToolPermission}
-                    showRawParameters={showRawParameters}
-                    showThinking={showThinking}
-                    selectedProject={selectedProject}
-                    provider={provider}
-                  />
+                    lazyRows={lazyRows}
+                    timestamp={item.timestamp}
+                    initiallyNearViewport={initiallyNearViewport}
+                  >
+                    <ToolGroupContainer
+                      group={item}
+                      prevMessage={groupPrevMessage}
+                      createDiff={createDiff}
+                      getMessageKey={getMessageKey}
+                      onFileOpen={onFileOpen}
+                      onShowSettings={onShowSettings}
+                      onGrantToolPermission={onGrantToolPermission}
+                      showRawParameters={showRawParameters}
+                      showThinking={showThinking}
+                      selectedProject={selectedProject}
+                      provider={provider}
+                    />
+                  </LazyMessageRow>
                 );
               }
 
@@ -282,21 +304,27 @@ function ChatMessagesPane({
               prevMessage = item;
 
               return (
-                <MessageComponent
+                <LazyMessageRow
                   key={getMessageKey(item)}
-                  message={item}
-                  prevMessage={messagePrevMessage}
-                  createDiff={createDiff}
-                  onFileOpen={onFileOpen}
-                  onShowSettings={onShowSettings}
-                  onGrantToolPermission={onGrantToolPermission}
-                  showRawParameters={showRawParameters}
-                  showThinking={showThinking}
-                  selectedProject={selectedProject}
-                  provider={provider}
-                  onEditMessage={onEditMessage}
-                  onForkFromMessage={onForkFromMessage}
-                />
+                  lazyRows={lazyRows}
+                  timestamp={item.timestamp}
+                  initiallyNearViewport={initiallyNearViewport}
+                >
+                  <MessageComponent
+                    message={item}
+                    prevMessage={messagePrevMessage}
+                    createDiff={createDiff}
+                    onFileOpen={onFileOpen}
+                    onShowSettings={onShowSettings}
+                    onGrantToolPermission={onGrantToolPermission}
+                    showRawParameters={showRawParameters}
+                    showThinking={showThinking}
+                    selectedProject={selectedProject}
+                    provider={provider}
+                    onEditMessage={onEditMessage}
+                    onForkFromMessage={onForkFromMessage}
+                  />
+                </LazyMessageRow>
               );
             });
           })()}
