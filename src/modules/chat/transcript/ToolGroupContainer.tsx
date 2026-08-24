@@ -1,9 +1,11 @@
-import { memo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 
-import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LLMProvider,DiffLine,Project,ToolGroupItem } from '@/shared/types';
+import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LLMProvider,DiffLine,DiffStats,Project,ToolGroupItem } from '@/shared/types';
 import { getToolConfig } from '@/modules/chat/tools';
 import MessageComponent from '@/modules/chat/transcript/MessageComponent';
+import { DiffStatsBadge } from '@/modules/chat/tools/DiffStatsBadge';
+import { parseToolPayload, summarizeDiff } from '@/modules/chat/utils/messageTransforms';
 
 type ToolGroupContainerProps = {
   group: ToolGroupItem;
@@ -18,6 +20,45 @@ type ToolGroupContainerProps = {
   selectedProject?: Project | null;
   provider: LLMProvider | string;
 };
+
+/**
+ * Totals the lines a run of file edits added and removed.
+ *
+ * A collapsed group hides every individual diff behind `x4`, so without this
+ * the one thing the row could usefully say about a batch of edits — how big it
+ * is — is the one thing it did not. Returns null for groups of tools that do
+ * not render a diff at all.
+ */
+function useGroupDiffStats(
+  toolName: string,
+  messages: ChatMessage[],
+  createDiff: (oldStr: string, newStr: string) => DiffLine[],
+): DiffStats | null {
+  return useMemo(() => {
+    const config = getToolConfig(toolName).input;
+    if (config.contentType !== 'diff' || !config.getContentProps) {
+      return null;
+    }
+
+    let added = 0;
+    let removed = 0;
+    let counted = 0;
+
+    for (const message of messages) {
+      const contentProps = config.getContentProps(parseToolPayload(message.toolInput) ?? {});
+      if (typeof contentProps?.oldContent !== 'string' || typeof contentProps?.newContent !== 'string') {
+        continue;
+      }
+
+      const stats = summarizeDiff(createDiff(contentProps.oldContent, contentProps.newContent));
+      added += stats.added;
+      removed += stats.removed;
+      counted += 1;
+    }
+
+    return counted > 0 ? { added, removed } : null;
+  }, [createDiff, messages, toolName]);
+}
 
 function getToolGroupIcon(icon: string | undefined, toolName: string): string {
   if (icon === 'terminal') {
@@ -52,6 +93,7 @@ function ToolGroupContainer({
   const icon = getToolGroupIcon(config.icon, group.toolName);
 
   const preview = group.preview;
+  const groupDiffStats = useGroupDiffStats(group.toolName, group.messages, createDiff);
 
   return (
     <div className="chat-message tool px-3 sm:px-0" data-message-timestamp={group.timestamp || undefined}>
@@ -78,6 +120,7 @@ function ToolGroupContainer({
             <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{preview}</span>
           </>
         )}
+        {groupDiffStats && <DiffStatsBadge stats={groupDiffStats} className="ml-auto pl-2" />}
       </button>
 
       {isExpanded && (

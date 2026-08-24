@@ -14,6 +14,8 @@ import { TextContent } from '@/modules/chat/tools/ContentRenderers/TextContent';
 import { QuestionAnswerContent } from '@/modules/chat/tools/ContentRenderers/QuestionAnswerContent';
 import { PlanDisplay } from '@/modules/chat/tools/PlanDisplay';
 import { ToolStatusBadge } from '@/modules/chat/tools/ToolStatusBadge';
+import { DiffStatsBadge } from '@/modules/chat/tools/DiffStatsBadge';
+import { parseToolPayload, summarizeDiff } from '@/modules/chat/utils/messageTransforms';
 
 type ToolRendererProps = {
   toolName: string;
@@ -92,14 +94,10 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
   // form while lookups keep using the provider's real tool name.
   const displayName = formatToolDisplayName(toolName);
 
-  const parsedData = useMemo(() => {
-    try {
-      const rawData = mode === 'input' ? toolInput : toolResult;
-      return typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
-    } catch {
-      return mode === 'input' ? toolInput : toolResult;
-    }
-  }, [mode, toolInput, toolResult]);
+  const parsedData = useMemo(
+    () => parseToolPayload(mode === 'input' ? toolInput : toolResult),
+    [mode, toolInput, toolResult],
+  );
 
   // Only derive and show status badge on input renders
   const toolStatus = useMemo(
@@ -298,7 +296,29 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
         })
       : undefined;
 
-    const badgeElement = toolStatus && toolStatus !== 'completed' ? <ToolStatusBadge status={toolStatus} /> : undefined;
+    // Not memoized on purpose: `createDiff` is the session's cached calculator,
+    // so this is a Map hit on the same key ToolDiffViewer is about to use.
+    const diffStats = displayConfig.contentType === 'diff'
+      && createDiff
+      && typeof contentProps.oldContent === 'string'
+      && typeof contentProps.newContent === 'string'
+      ? summarizeDiff(createDiff(contentProps.oldContent, contentProps.newContent))
+      : null;
+
+    const statusBadge = toolStatus && toolStatus !== 'completed'
+      ? <ToolStatusBadge status={toolStatus} />
+      : null;
+    const statsBadge = diffStats ? <DiffStatsBadge stats={diffStats} /> : null;
+    // The header is sticky while the section is open, so the counts stay
+    // visible over a long diff rather than scrolling away with it.
+    const badgeElement = statusBadge || statsBadge
+      ? (
+        <span className="inline-flex items-center gap-1.5">
+          {statsBadge}
+          {statusBadge}
+        </span>
+      )
+      : undefined;
 
     return (
       <CollapsibleDisplay

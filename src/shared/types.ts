@@ -602,6 +602,12 @@ export type DiffLine = {
   lineNum: number;
 };
 
+/** How many lines one file edit added and removed, for the `+12 -3` badge on a diff's header. */
+export type DiffStats = {
+  added: number;
+  removed: number;
+};
+
 // ---------------------------
 
 //----------------- CHAT TOOL RENDERING ------------
