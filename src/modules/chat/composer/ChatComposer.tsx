@@ -429,7 +429,7 @@ export default function ChatComposer({
             />
         </PromptInputBody>
 
-        <PromptInputFooter>
+        <PromptInputFooter className="flex-wrap gap-y-1">
           <PromptInputTools className="min-w-0">
             <PromptInputButton
               tooltip={{ content: t('input.attachFiles') }}
@@ -472,15 +472,7 @@ export default function ChatComposer({
 
           </PromptInputTools>
 
-          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-            <div
-              className={`hidden text-xs text-muted-foreground/50 transition-opacity duration-200 lg:block ${
-                input.trim() && !canQueueDraft ? 'opacity-0' : 'opacity-100'
-              }`}
-            >
-              {submitHint}
-            </div>
-
+          <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
             <ScheduleMessagePopover
               disabled={!input.trim() || isLoading}
               onSchedule={onScheduleMessage}
@@ -538,6 +530,14 @@ export default function ChatComposer({
                 <ArrowUpIcon className="h-4 w-4" />
               ) : undefined}
             </PromptInputSubmit>
+          </div>
+
+          <div
+            className={`order-last hidden basis-full px-2 text-center text-xs leading-4 text-muted-foreground/50 transition-opacity duration-200 lg:block ${
+              input.trim() && !canQueueDraft ? 'opacity-0' : 'opacity-100'
+            }`}
+          >
+            {submitHint}
           </div>
         </PromptInputFooter>
       </PromptInput>
