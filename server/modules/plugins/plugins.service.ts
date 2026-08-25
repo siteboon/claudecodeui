@@ -18,8 +18,8 @@ type PluginDependencies = {
   resolveAsset(pluginName: string, assetPath: string): string | null;
   assetIsFile(assetPath: string): boolean;
   contentType(assetPath: string): string;
-  install(url: string): Promise<unknown>;
-  update(pluginName: string): Promise<unknown>;
+  install(url: string, options?: { allowBuild?: boolean }): Promise<unknown>;
+  update(pluginName: string, options?: { allowBuild?: boolean }): Promise<unknown>;
   uninstall(pluginName: string): Promise<unknown>;
   startServer(pluginName: string, pluginDirectory: string, serverConfig: unknown): Promise<number>;
   stopServer(pluginName: string): Promise<void>;
@@ -104,22 +104,38 @@ export function createPluginsService(dependencies: PluginDependencies) {
       }
       return { success: true, name: pluginName, enabled };
     },
-    async install(urlInput: unknown) {
+    async install(urlInput: unknown, options?: { allowBuild?: boolean }) {
       const url = typeof urlInput === 'string' ? urlInput.trim() : '';
       if (!url || (!url.startsWith('https://') && !url.startsWith('git@'))) {
         throw new AppError('URL must start with https:// or git@', { code: 'INVALID_PLUGIN_URL', statusCode: 400 });
       }
-      const plugin = normalizePluginManifest(await dependencies.install(url));
+      const plugin = normalizePluginManifest(await dependencies.install(url, options));
       await startServerIfAvailable(plugin);
       return { success: true, plugin };
     },
-    async update(pluginName: string) {
+    async update(pluginName: string, options?: { allowBuild?: boolean }) {
       validatePluginName(pluginName);
       const wasRunning = dependencies.isServerRunning(pluginName);
       if (wasRunning) await dependencies.stopServer(pluginName);
-      const plugin = normalizePluginManifest(await dependencies.update(pluginName));
-      if (wasRunning) await startServerIfAvailable(plugin);
-      return { success: true, plugin };
+      try {
+        const plugin = normalizePluginManifest(await dependencies.update(pluginName, options));
+        if (wasRunning) await startServerIfAvailable(plugin);
+        return { success: true, plugin };
+      } catch (error) {
+        // The registry stages updates into a temp directory and only swaps
+        // them into the live plugin directory once every step (manifest
+        // validation, npm install, optional build policy) has succeeded. If
+        // any step rejects, the live directory is untouched, so we can
+        // safely bring the previously running server back up.
+        if (wasRunning) {
+          try {
+            await startServerIfAvailable(this.getManifest(pluginName));
+          } catch (restoreError) {
+            dependencies.logError(`Failed to restart plugin server for ${pluginName} after a failed update`, restoreError);
+          }
+        }
+        throw error;
+      }
     },
     async prepareRpc(pluginName: string) {
       validatePluginName(pluginName);
