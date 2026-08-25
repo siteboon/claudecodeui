@@ -170,12 +170,12 @@
       "nonePublic": "无（公共）",
       "selectToken": "选择令牌",
       "selectTokenPlaceholder": "-- 选择令牌 --",
-      "tokenPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "tokenPlaceholder": "ghp_your_token_here",
       "tokenHelp": "此令牌仅用于此操作",
       "publicRepoInfo": "公共仓库不需要身份验证。如果克隆公共仓库，可以跳过提供令牌。",
       "noTokensHelp": "没有可用的已保存令牌。您可以在 设置 → API 密钥 中添加令牌以便重复使用。",
       "optionalTokenPublic": "GitHub 令牌（公共仓库可选）",
-      "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx（公共仓库可留空）"
+      "tokenPublicPlaceholder": "ghp_your_token_here（公共仓库可留空）"
     },
     "step3": {
       "reviewConfig": "查看您的配置",

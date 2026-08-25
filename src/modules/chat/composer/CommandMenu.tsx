@@ -206,16 +206,17 @@ export default function CommandMenu({
     return groups;
   }, {});
   if (hasFrequentCommands) {
-    groupedCommands.frequent = frequentCommands
-      .map((command, index) => {
-        const commandIndex = getFrequentCommandIndex(command);
-        return {
+    groupedCommands.frequent = [];
+    frequentCommands.forEach((command, index) => {
+      const commandIndex = getFrequentCommandIndex(command);
+      if (commandIndex >= 0) {
+        groupedCommands.frequent.push({
           command,
           commandIndex,
           renderKey: `frequent-${index}-${commandIndex}-${getCommandKey(command)}`,
-        };
-      })
-      .filter((row) => row.commandIndex >= 0);
+        });
+      }
+    });
   }
 
   const preferredOrder = hasFrequentCommands

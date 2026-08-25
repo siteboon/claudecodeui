@@ -22,7 +22,7 @@ const startingPlugins = new Map();
  * resolve system DLLs, executable extensions and a temp directory. None of
  * these carry secrets, so the ones that are set get passed straight through.
  */
-function buildPluginEnv(name) {
+function buildExtensionEnv(name) {
   const env = {
     PATH: process.env.PATH,
     HOME: process.env.HOME,
@@ -46,12 +46,27 @@ function buildPluginEnv(name) {
   return env;
 }
 
+function resolveServerEntryPath(baseDirectory, entryPoint) {
+  if (typeof entryPoint !== 'string' || !entryPoint || path.isAbsolute(entryPoint)) {
+    throw new Error('Server entry must be a non-empty relative path');
+  }
+
+  const resolvedBase = path.resolve(baseDirectory);
+  const resolvedEntry = path.resolve(resolvedBase, entryPoint);
+  const relativeEntry = path.relative(resolvedBase, resolvedEntry);
+  if (relativeEntry.startsWith('..') || path.isAbsolute(relativeEntry)) {
+    throw new Error('Server entry must stay inside its installation directory');
+  }
+
+  return resolvedEntry;
+}
+
 /**
  * Start a plugin's server subprocess.
  * The plugin's server entry must print a JSON line with { ready: true, port: <number> }
  * to stdout within 10 seconds.
  */
-export function startPluginServer(name, pluginDir, serverEntry) {
+export function startPluginServer(name, extensionDirectory, serverEntry) {
   if (runningPlugins.has(name)) {
     return Promise.resolve(runningPlugins.get(name).port);
   }
@@ -63,11 +78,11 @@ export function startPluginServer(name, pluginDir, serverEntry) {
 
   const startPromise = new Promise((resolve, reject) => {
 
-    const serverPath = path.join(pluginDir, serverEntry);
+    const serverPath = resolveServerEntryPath(extensionDirectory, serverEntry);
 
-    const pluginProcess = spawn('node', [serverPath], {
-      cwd: pluginDir,
-      env: buildPluginEnv(name),
+    const childProcess = spawn('node', [serverPath], {
+      cwd: extensionDirectory,
+      env: buildExtensionEnv(name),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -77,12 +92,12 @@ export function startPluginServer(name, pluginDir, serverEntry) {
     const timeout = setTimeout(() => {
       if (!resolved) {
         resolved = true;
-        pluginProcess.kill();
+        childProcess.kill();
         reject(new Error('Plugin server did not report ready within 10 seconds'));
       }
     }, 10000);
 
-    pluginProcess.stdout.on('data', (data) => {
+    childProcess.stdout.on('data', (data) => {
       if (resolved) return;
       stdout += data.toString();
 
@@ -94,9 +109,9 @@ export function startPluginServer(name, pluginDir, serverEntry) {
           if (msg.ready && typeof msg.port === 'number') {
             clearTimeout(timeout);
             resolved = true;
-            runningPlugins.set(name, { process: pluginProcess, port: msg.port });
+            runningPlugins.set(name, { process: childProcess, port: msg.port });
 
-            pluginProcess.on('exit', () => {
+            childProcess.on('exit', () => {
               runningPlugins.delete(name);
             });
 
@@ -109,11 +124,11 @@ export function startPluginServer(name, pluginDir, serverEntry) {
       }
     });
 
-    pluginProcess.stderr.on('data', (data) => {
+    childProcess.stderr.on('data', (data) => {
       console.warn(`[Plugin:${name}] ${data.toString().trim()}`);
     });
 
-    pluginProcess.on('error', (err) => {
+    childProcess.on('error', (err) => {
       clearTimeout(timeout);
       if (!resolved) {
         resolved = true;
@@ -121,7 +136,7 @@ export function startPluginServer(name, pluginDir, serverEntry) {
       }
     });
 
-    pluginProcess.on('exit', (code) => {
+    childProcess.on('exit', (code) => {
       clearTimeout(timeout);
       runningPlugins.delete(name);
       if (!resolved) {

@@ -25,6 +25,11 @@ type CursorJsonBlob = CursorDbBlob & {
   parsed: AnyRecord;
 };
 
+function createCursorProjectStorageKey(projectPath: string): string {
+  // Cursor uses this exact digest as its on-disk project directory name.
+  return crypto.createHash('md5').update(projectPath).digest('hex');
+}
+
 export type CursorMessageBlob = {
   id: string;
   sequence: number;
@@ -123,21 +128,20 @@ function extractCursorToolResultContent(item: AnyRecord): string {
   }
 
   if (Array.isArray(item.experimental_content)) {
-    const experimentalText = item.experimental_content
-      .map((part: unknown) => {
-        if (typeof part === 'string') {
-          return part;
+    const experimentalTextParts: string[] = [];
+    for (const part of item.experimental_content as unknown[]) {
+      if (typeof part === 'string') {
+        if (part) experimentalTextParts.push(part);
+        continue;
+      }
+      if (part && typeof part === 'object') {
+        const record = part as AnyRecord;
+        if (typeof record.text === 'string' && record.text) {
+          experimentalTextParts.push(record.text);
         }
-        if (part && typeof part === 'object') {
-          const record = part as AnyRecord;
-          if (typeof record.text === 'string') {
-            return record.text;
-          }
-        }
-        return '';
-      })
-      .filter(Boolean)
-      .join('\n');
+      }
+    }
+    const experimentalText = experimentalTextParts.join('\n');
 
     if (experimentalText.trim()) {
       return experimentalText;
@@ -233,7 +237,7 @@ export class CursorSessionsProvider implements IProviderSessions {
     // Lazy-import better-sqlite3 so the module doesn't fail if it's unavailable
     const { default: Database } = await import('better-sqlite3');
 
-    const cwdId = crypto.createHash('md5').update(projectPath || process.cwd()).digest('hex');
+    const cwdId = createCursorProjectStorageKey(projectPath || process.cwd());
     const safeSessionId = sanitizeLeafDirectoryName(sessionId, 'cursor session id');
     const baseChatsPath = path.join(os.homedir(), '.cursor', 'chats', cwdId);
     const storeDbPath = path.join(baseChatsPath, safeSessionId, 'store.db');
@@ -455,26 +459,25 @@ export class CursorSessionsProvider implements IProviderSessions {
               continue;
             }
             const role = content.message.role === 'user' ? 'user' : 'assistant';
+            const messageContent = content.message.content;
             let text = '';
-            if (Array.isArray(content.message.content)) {
-              text = content.message.content
-                .map((part: string | AnyRecord) => {
-                  if (typeof part === 'string') {
-                    if (isInternalCursorText(part)) {
-                      return '';
-                    }
-                    return unwrapUserQueryText(part, role);
-                  }
-                  if (isInternalCursorPart(part)) {
-                    return '';
-                  }
-                  return unwrapUserQueryText(part?.text || '', role);
-                })
-                .filter(Boolean)
-                .join('\n');
-            } else if (typeof content.message.content === 'string') {
-              if (!isInternalCursorText(content.message.content)) {
-                text = unwrapUserQueryText(content.message.content, role);
+            if (Array.isArray(messageContent)) {
+              const textParts: string[] = [];
+              for (const part of messageContent as Array<string | AnyRecord>) {
+                if (typeof part === 'string') {
+                  if (isInternalCursorText(part)) continue;
+                  const unwrappedText = unwrapUserQueryText(part, role);
+                  if (unwrappedText) textParts.push(unwrappedText);
+                  continue;
+                }
+                if (isInternalCursorPart(part)) continue;
+                const unwrappedText = unwrapUserQueryText(part?.text || '', role);
+                if (unwrappedText) textParts.push(unwrappedText);
+              }
+              text = textParts.join('\n');
+            } else if (typeof messageContent === 'string') {
+              if (!isInternalCursorText(messageContent)) {
+                text = unwrapUserQueryText(messageContent, role);
               }
             }
             const { text: cleanText, images, files } = role === 'user'

@@ -118,7 +118,7 @@ export default function GithubAuthenticationCard({
                 type="password"
                 value={newGithubToken}
                 onChange={(event) => onNewGithubTokenChange(event.target.value)}
-                placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                placeholder="ghp_your_token_here"
                 className="w-full"
               />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">

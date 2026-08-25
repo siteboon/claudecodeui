@@ -245,11 +245,14 @@ function collectTaskNotifications(messages: AnyRecord[]): Map<string, ClaudeTask
     }
 
     const content = message.message.content;
-    const texts: string[] = typeof content === 'string'
-      ? [content]
-      : Array.isArray(content)
-        ? content.filter((part: AnyRecord) => part?.type === 'text').map((part: AnyRecord) => String(part.text ?? ''))
-        : [];
+    const texts: string[] = [];
+    if (typeof content === 'string') {
+      texts.push(content);
+    } else if (Array.isArray(content)) {
+      for (const part of content as AnyRecord[]) {
+        if (part?.type === 'text') texts.push(String(part.text ?? ''));
+      }
+    }
 
     for (const text of texts) {
       if (!text.trimStart().startsWith('<task-notification>')) {
@@ -747,11 +750,11 @@ export class ClaudeSessionsProvider implements IProviderSessions {
         }
 
         if (messages.length === 0) {
-          const textParts = raw.message.content
-            .filter((part: AnyRecord) => part.type === 'text')
-            .map((part: AnyRecord) => part.text)
-            .filter(Boolean)
-            .join('\n');
+          const textValues: string[] = [];
+          for (const part of raw.message.content as AnyRecord[]) {
+            if (part.type === 'text' && part.text) textValues.push(part.text);
+          }
+          const textParts = textValues.join('\n');
           if (textParts && !isInternalContent(textParts)) {
             messages.push(createNormalizedMessage({
               id: `${baseId}_text`,

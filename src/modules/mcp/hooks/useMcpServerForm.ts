@@ -139,15 +139,20 @@ export function useMcpServerForm({
     setMultilineText(createMultilineTextFromForm(nextFormData));
   }, [editingServer, provider, supportedScopes, supportedTransports]);
 
-  const projectOptions = useMemo(() => (
-    currentProjects
-      .map((project) => ({
-        value: getProjectPath(project),
+  const projectOptions = useMemo(() => {
+    const options = [];
+    for (const project of currentProjects) {
+      const value = getProjectPath(project);
+      if (value) {
+        options.push({
+          value,
         // Fall back to projectId (DB primary key) when no display name is set.
-        label: project.displayName || project.projectId,
-      }))
-      .filter((project) => project.value)
-  ), [currentProjects]);
+          label: project.displayName || project.projectId,
+        });
+      }
+    }
+    return options;
+  }, [currentProjects]);
 
   const updateForm = <K extends keyof McpFormState>(key: K, value: McpFormState[K]) => {
     setFormData((prev) => ({ ...prev, [key]: value }));

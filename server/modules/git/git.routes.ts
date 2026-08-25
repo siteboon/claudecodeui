@@ -261,16 +261,16 @@ function normalizeRepositoryRelativeFilePath(filePath) {
 }
 
 function parseStatusFilePaths(statusOutput) {
-  return statusOutput
-    .split('\n')
-    .map((line) => line.trimEnd())
-    .filter((line) => line.trim())
-    .map((line) => {
-      const statusPath = line.substring(3);
-      const renamedFilePath = statusPath.split(' -> ')[1];
-      return normalizeRepositoryRelativeFilePath(renamedFilePath || statusPath);
-    })
-    .filter(Boolean);
+  const filePaths: string[] = [];
+  for (const rawLine of statusOutput.split('\n')) {
+    const line = rawLine.trimEnd();
+    if (!line.trim()) continue;
+    const statusPath = line.substring(3);
+    const renamedFilePath = statusPath.split(' -> ')[1];
+    const filePath = normalizeRepositoryRelativeFilePath(renamedFilePath || statusPath);
+    if (filePath) filePaths.push(filePath);
+  }
+  return filePaths;
 }
 
 function buildFilePathCandidates(projectPath, repositoryRootPath, filePath) {
@@ -773,15 +773,20 @@ router.get('/branches', async (req, res) => {
       .filter(b => b && !b.includes('->'));
 
     // Local branches (may start with '* ' for current)
-    const localBranches = rawLines
-      .filter(b => !b.startsWith('remotes/'))
-      .map(b => (b.startsWith('* ') ? b.substring(2) : b));
+    const localBranches: string[] = [];
+    for (const branch of rawLines) {
+      if (!branch.startsWith('remotes/')) {
+        localBranches.push(branch.startsWith('* ') ? branch.substring(2) : branch);
+      }
+    }
 
     // Remote branches — strip 'remotes/<remote>/' prefix
-    const remoteBranches = rawLines
-      .filter(b => b.startsWith('remotes/'))
-      .map(b => b.replace(/^remotes\/[^/]+\//, ''))
-      .filter(name => !localBranches.includes(name)); // skip if already a local branch
+    const remoteBranches: string[] = [];
+    for (const branch of rawLines) {
+      if (!branch.startsWith('remotes/')) continue;
+      const name = branch.replace(/^remotes\/[^/]+\//, '');
+      if (!localBranches.includes(name)) remoteBranches.push(name);
+    }
 
     // Backward-compat flat list (local + unique remotes, deduplicated)
     const branches = [...localBranches, ...remoteBranches]

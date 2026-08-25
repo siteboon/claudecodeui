@@ -170,12 +170,12 @@
       "nonePublic": "Нет (публичный)",
       "selectToken": "Выбрать токен",
       "selectTokenPlaceholder": "-- Выберите токен --",
-      "tokenPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "tokenPlaceholder": "ghp_your_token_here",
       "tokenHelp": "Этот токен будет использован только для этой операции",
       "publicRepoInfo": "Публичные репозитории не требуют аутентификации. Вы можете пропустить токен при клонировании публичного репозитория.",
       "noTokensHelp": "Нет доступных сохраненных токенов. Вы можете добавить токены в Настройки → API ключи для удобного повторного использования.",
       "optionalTokenPublic": "Токен GitHub (необязательно для публичных репозиториев)",
-      "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (оставьте пустым для публичных репозиториев)"
+      "tokenPublicPlaceholder": "ghp_your_token_here (оставьте пустым для публичных репозиториев)"
     },
     "step3": {
       "reviewConfig": "Проверьте вашу конфигурацию",

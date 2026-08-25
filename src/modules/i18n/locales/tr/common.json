@@ -170,12 +170,12 @@
       "nonePublic": "Yok (Genel)",
       "selectToken": "Token Seç",
       "selectTokenPlaceholder": "-- Bir token seç --",
-      "tokenPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "tokenPlaceholder": "ghp_your_token_here",
       "tokenHelp": "Bu token sadece bu işlem için kullanılacak",
       "publicRepoInfo": "Genel depolar kimlik doğrulama gerektirmez. Genel bir depo klonluyorsan token girmeyi atlayabilirsin.",
       "noTokensHelp": "Kayıtlı token yok. Kolay tekrar kullanım için Ayarlar → API Anahtarları bölümünden token ekleyebilirsin.",
       "optionalTokenPublic": "GitHub Token (Genel Depolar için İsteğe Bağlı)",
-      "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (genel depolar için boş bırak)"
+      "tokenPublicPlaceholder": "ghp_your_token_here (genel depolar için boş bırak)"
     },
     "step3": {
       "reviewConfig": "Yapılandırmanı Gözden Geçir",

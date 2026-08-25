@@ -37,11 +37,19 @@ export function useTaskBoardState({ tasks, defaultView = 'kanban' }: UseTaskBoar
   const [showFilters, setShowFilters] = useState(false);
 
   const statuses = useMemo(() => {
-    return [...new Set(tasks.map((task) => task.status).filter(Boolean))] as string[];
+    const values = new Set<string>();
+    for (const task of tasks) {
+      if (task.status) values.add(task.status);
+    }
+    return [...values];
   }, [tasks]);
 
   const priorities = useMemo(() => {
-    return [...new Set(tasks.map((task) => task.priority).filter(Boolean))] as string[];
+    const values = new Set<string>();
+    for (const task of tasks) {
+      if (task.priority) values.add(task.priority);
+    }
+    return [...values];
   }, [tasks]);
 
   const filteredTasks = useMemo(() => {

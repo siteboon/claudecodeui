@@ -68,15 +68,17 @@ export default function WorkspaceTabs({
     ...(shouldShowTasksTab ? [TASKS_TAB] : []),
   ];
 
-  const pluginTabs: PluginTab[] = plugins
-    .filter((p) => p.enabled)
-    .map((p) => ({
+  const pluginTabs: PluginTab[] = [];
+  for (const plugin of plugins) {
+    if (!plugin.enabled) continue;
+    pluginTabs.push({
       kind: 'plugin',
-      id: `plugin:${p.name}` as AppTab,
-      label: p.displayName,
-      pluginName: p.name,
-      iconFile: p.icon,
-    }));
+      id: `plugin:${plugin.name}` as AppTab,
+      label: plugin.displayName,
+      pluginName: plugin.name,
+      iconFile: plugin.icon,
+    });
+  }
 
   const tabs: TabDefinition[] = [...builtInTabs, ...pluginTabs];
 

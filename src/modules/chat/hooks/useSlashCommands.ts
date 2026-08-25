@@ -236,12 +236,12 @@ export function useSlashCommands({
 
     const parsedHistory = readCommandHistory(selectedProject.projectId);
 
-    return slashCommands
-      .map((command) => ({
-        ...command,
-        usageCount: parsedHistory[command.name] || 0,
-      }))
-      .filter((command) => command.usageCount > 0)
+    const usedCommands = [];
+    for (const command of slashCommands) {
+      const usageCount = parsedHistory[command.name] || 0;
+      if (usageCount > 0) usedCommands.push({ ...command, usageCount });
+    }
+    return usedCommands
       .sort((commandA, commandB) => commandB.usageCount - commandA.usageCount)
       .slice(0, 5);
   }, [selectedProject, slashCommands]);

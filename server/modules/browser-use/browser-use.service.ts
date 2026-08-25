@@ -493,9 +493,11 @@ export const browserUseService = {
 
   async listSessions() {
     await expireStaleSessions();
-    return [...sessions.values()]
-      .filter((session) => session.ownerId === AGENT_OWNER_ID)
-      .map(publicSession);
+    const agentSessions = [];
+    for (const session of sessions.values()) {
+      if (session.ownerId === AGENT_OWNER_ID) agentSessions.push(publicSession(session));
+    }
+    return agentSessions;
   },
 
   async createAgentSession(options?: { profileName?: string | null }) {
@@ -576,9 +578,11 @@ export const browserUseService = {
       return [];
     }
     await expireStaleSessions();
-    return [...sessions.values()]
-      .filter((session) => session.ownerId === AGENT_OWNER_ID)
-      .map(publicSession);
+    const agentSessions = [];
+    for (const session of sessions.values()) {
+      if (session.ownerId === AGENT_OWNER_ID) agentSessions.push(publicSession(session));
+    }
+    return agentSessions;
   },
 
   async getAgentSession(sessionId: string) {

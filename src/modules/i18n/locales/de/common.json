@@ -170,12 +170,12 @@
       "nonePublic": "Keiner (Öffentlich)",
       "selectToken": "Token auswählen",
       "selectTokenPlaceholder": "-- Token auswählen --",
-      "tokenPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "tokenPlaceholder": "ghp_your_token_here",
       "tokenHelp": "Dieser Token wird nur für diesen Vorgang verwendet",
       "publicRepoInfo": "Öffentliche Repositories benötigen keine Authentifizierung. Du kannst das Token beim Klonen eines öffentlichen Repos weglassen.",
       "noTokensHelp": "Keine gespeicherten Token verfügbar. Du kannst Token unter Einstellungen → API-Schlüssel für einfachere Wiederverwendung hinzufügen.",
       "optionalTokenPublic": "GitHub-Token (Optional für öffentliche Repos)",
-      "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (leer lassen für öffentliche Repos)"
+      "tokenPublicPlaceholder": "ghp_your_token_here (leer lassen für öffentliche Repos)"
     },
     "step3": {
       "reviewConfig": "Konfiguration überprüfen",

@@ -170,12 +170,12 @@
       "nonePublic": "없음 (공개)",
       "selectToken": "토큰 선택",
       "selectTokenPlaceholder": "-- 토큰 선택 --",
-      "tokenPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "tokenPlaceholder": "ghp_your_token_here",
       "tokenHelp": "이 토큰은 이 작업에만 사용됩니다",
       "publicRepoInfo": "공개 저장소는 인증이 필요하지 않습니다. 공개 저장소를 clone하는 경우 토큰을 생략할 수 있습니다.",
       "noTokensHelp": "저장된 토큰이 없습니다. 설정 → API Keys에서 토큰을 추가하면 재사용이 편리합니다.",
       "optionalTokenPublic": "GitHub 토큰 (공개 저장소는 선택사항)",
-      "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (공개 저장소는 비워두세요)"
+      "tokenPublicPlaceholder": "ghp_your_token_here (공개 저장소는 비워두세요)"
     },
     "step3": {
       "reviewConfig": "설정 검토",

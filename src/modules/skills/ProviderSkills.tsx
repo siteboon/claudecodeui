@@ -150,10 +150,13 @@ const buildQueuedSkillFolders = (selectedFiles: File[]): QueuedSkillFile[] => {
     file,
     relativePath: getBrowserRelativePath(file),
   }));
-  const skillRoots = files
-    .filter(({ relativePath }) => getBaseName(relativePath).toLowerCase() === 'skill.md')
-    .map(({ relativePath }) => getParentPath(relativePath))
-    .sort((left, right) => right.length - left.length);
+  const skillRoots: string[] = [];
+  for (const { relativePath } of files) {
+    if (getBaseName(relativePath).toLowerCase() === 'skill.md') {
+      skillRoots.push(getParentPath(relativePath));
+    }
+  }
+  skillRoots.sort((left, right) => right.length - left.length);
 
   if (skillRoots.length === 0) {
     throw new Error('The selected folder does not contain a SKILL.md file.');
@@ -339,22 +342,25 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
     setSubmitError(null);
 
     try {
-      const entries = await Promise.all<ProviderSkillCreateEntryPayload>(queuedFiles.map(async (queuedFile) => ({
-        fileName: queuedFile.kind === 'folder' ? `${queuedFile.name}.md` : queuedFile.name,
-        directoryName: queuedFile.kind === 'folder' ? queuedFile.name : undefined,
-        content: await queuedFile.skillFile.text(),
-        files: queuedFile.kind === 'folder'
-          ? await Promise.all(
-            queuedFile.files
-              .filter(({ relativePath }) => relativePath.toLowerCase() !== 'skill.md')
-              .map(async ({ file, relativePath }) => ({
-                relativePath,
-                content: await readFileAsBase64(file),
-                encoding: 'base64' as const,
-              })),
-          )
-          : undefined,
-      })));
+      const entries = await Promise.all<ProviderSkillCreateEntryPayload>(queuedFiles.map(async (queuedFile) => {
+        const skillFileReads = [];
+        if (queuedFile.kind === 'folder') {
+          for (const { file, relativePath } of queuedFile.files) {
+            if (relativePath.toLowerCase() === 'skill.md') continue;
+            skillFileReads.push((async () => ({
+              relativePath,
+              content: await readFileAsBase64(file),
+              encoding: 'base64' as const,
+            }))());
+          }
+        }
+        return {
+          fileName: queuedFile.kind === 'folder' ? `${queuedFile.name}.md` : queuedFile.name,
+          directoryName: queuedFile.kind === 'folder' ? queuedFile.name : undefined,
+          content: await queuedFile.skillFile.text(),
+          files: queuedFile.kind === 'folder' ? await Promise.all(skillFileReads) : undefined,
+        };
+      }));
       await addSkills({ entries });
       setQueuedFiles([]);
       setJustInstalled(true);

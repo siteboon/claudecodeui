@@ -127,11 +127,10 @@ const mergeTaskMasterCache = (nextProjects: Project[], previousProjects: Project
 
   // Keyed by `projectId` (the DB primary key) so caches stay correct across
   // renames and other mutations that might have changed the display name.
-  const previousTaskMasterByProject = new Map(
-    previousProjects
-      .filter((project) => Boolean(project.taskmaster))
-      .map((project) => [project.projectId, project.taskmaster]),
-  );
+  const previousTaskMasterByProject = new Map<string, Project['taskmaster']>();
+  for (const project of previousProjects) {
+    if (project.taskmaster) previousTaskMasterByProject.set(project.projectId, project.taskmaster);
+  }
 
   return nextProjects.map((project) => {
     const cachedTaskMasterInfo = previousTaskMasterByProject.get(project.projectId);
