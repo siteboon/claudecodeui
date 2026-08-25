@@ -546,6 +546,28 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       return messages;
     }
 
+    // When a background sub-agent finishes while the parent turn is still
+    // active, the Claude Code harness removes the notification from its queue
+    // rather than dequeuing it into a user message. The removal record carries
+    // the full `<task-notification>` payload in `content`. Normalize it as a
+    // user-role text message — identical to a deferred dequeue — so the daemon
+    // and every downstream consumer see it instead of silently losing it.
+    if (raw.type === 'queue-operation' && raw.operation === 'remove') {
+      const content = typeof raw.content === 'string' ? raw.content : '';
+      if (content.startsWith('<task-notification>')) {
+        messages.push(createNormalizedMessage({
+          id: baseId,
+          sessionId,
+          timestamp: ts,
+          provider: PROVIDER,
+          kind: 'text',
+          role: 'user',
+          content,
+        }));
+      }
+      return messages;
+    }
+
     if (raw.message?.role === 'assistant' && raw.message?.content) {
       if (Array.isArray(raw.message.content)) {
         let partIndex = 0;
