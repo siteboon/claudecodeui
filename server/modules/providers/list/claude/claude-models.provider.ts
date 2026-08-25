@@ -173,14 +173,15 @@ const ANSI_PATTERN = new RegExp(
  */
 const isPlaceholderModel = (model: string): boolean => model.startsWith('<') && model.endsWith('>');
 
-const extractClaudeEventModel = (event: ClaudeInitEvent, sessionId: string): string | null => {
+/** Exported for tests. */
+export const extractClaudeEventModel = (event: ClaudeInitEvent, sessionId: string): string | null => {
   const eventSessionId = event.sessionId ?? event.session_id;
   if (eventSessionId && eventSessionId !== sessionId) {
     return null;
   }
 
   const contentModel = extractClaudeModelFromMessageContent(event.message?.content);
-  if (contentModel && !isPlaceholderModel(contentModel)) {
+  if (contentModel) {
     return contentModel;
   }
 
@@ -217,7 +218,8 @@ const extractClaudeModelFromTextContent = (content: string): string | null => {
 
 const extractClaudeModelFromMessageContent = (content: unknown): string | null => {
   if (typeof content === 'string') {
-    return extractClaudeModelFromTextContent(content);
+    const model = extractClaudeModelFromTextContent(content);
+    return model && !isPlaceholderModel(model) ? model : null;
   }
 
   if (!Array.isArray(content)) {
@@ -229,8 +231,9 @@ const extractClaudeModelFromMessageContent = (content: unknown): string | null =
       continue;
     }
 
+    // Skip placeholder hits so a later part can still supply the real model.
     const model = extractClaudeModelFromTextContent(part.text);
-    if (model) {
+    if (model && !isPlaceholderModel(model)) {
       return model;
     }
   }
