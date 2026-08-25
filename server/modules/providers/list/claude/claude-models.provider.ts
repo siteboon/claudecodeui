@@ -166,6 +166,13 @@ const ANSI_PATTERN = new RegExp(
   'g',
 );
 
+/**
+ * Claude Code stamps locally-synthesized rows (API-error placeholders and the
+ * like) with `model: "<synthetic>"`. Angle-bracketed values are placeholders,
+ * never real model ids, and must not be surfaced as the session's model.
+ */
+const isPlaceholderModel = (model: string): boolean => model.startsWith('<') && model.endsWith('>');
+
 const extractClaudeEventModel = (event: ClaudeInitEvent, sessionId: string): string | null => {
   const eventSessionId = event.sessionId ?? event.session_id;
   if (eventSessionId && eventSessionId !== sessionId) {
@@ -173,17 +180,17 @@ const extractClaudeEventModel = (event: ClaudeInitEvent, sessionId: string): str
   }
 
   const contentModel = extractClaudeModelFromMessageContent(event.message?.content);
-  if (contentModel) {
+  if (contentModel && !isPlaceholderModel(contentModel)) {
     return contentModel;
   }
 
   const directModel = event.model?.trim();
-  if (directModel) {
+  if (directModel && !isPlaceholderModel(directModel)) {
     return directModel;
   }
 
   const messageModel = event.message?.model?.trim();
-  return messageModel || null;
+  return messageModel && !isPlaceholderModel(messageModel) ? messageModel : null;
 };
 
 const stripAnsi = (value: string): string => value.replace(ANSI_PATTERN, '');
