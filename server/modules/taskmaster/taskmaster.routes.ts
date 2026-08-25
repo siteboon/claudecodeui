@@ -383,22 +383,21 @@ export function createTaskmasterRouter(dependencies: TaskmasterRouterDependencie
             // Read directory and filter for PRD files
             try {
                 const files = await fsPromises.readdir(docsPath);
-                const prdFiles = [];
-
-                for (const file of files) {
+                const prdFiles = (await Promise.all(files.map(async (file) => {
                     const filePath = path.join(docsPath, file);
                     const stats = await fsPromises.stat(filePath);
 
                     if (stats.isFile() && (file.endsWith('.txt') || file.endsWith('.md'))) {
-                        prdFiles.push({
+                        return {
                             name: file,
                             path: path.relative(projectPath, filePath),
                             size: stats.size,
                             modified: stats.mtime.toISOString(),
                             created: stats.birthtime.toISOString()
-                        });
+                        };
                     }
-                }
+                    return null;
+                }))).filter((file) => file !== null);
 
                 res.json({
                     projectId,

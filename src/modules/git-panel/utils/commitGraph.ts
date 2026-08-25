@@ -64,6 +64,7 @@ export function computeCommitGraph(commits: GraphCommit[]): CommitGraphRow[] {
 
     const hasTopContinuation = waiting.length > 0;
     const nodeLane = hasTopContinuation ? waiting[0] : takeFirstFreeLane();
+    const waitingLanes = new Set(waiting);
 
     // Additional lanes converging on this commit merge into the node and free up.
     const inbound = waiting.slice(1);
@@ -89,7 +90,7 @@ export function computeCommitGraph(commits: GraphCommit[]): CommitGraphRow[] {
     }
 
     const passThrough = [...activeBefore]
-      .filter((lane) => lane !== nodeLane && !waiting.includes(lane))
+      .filter((lane) => lane !== nodeLane && !waitingLanes.has(lane))
       .sort((a, b) => a - b);
 
     const bottomLanes: number[] = [];

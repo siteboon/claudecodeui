@@ -95,20 +95,18 @@ export abstract class SkillsProvider implements IProviderSkills {
   async listSkills(options?: ProviderSkillListOptions): Promise<ProviderSkill[]> {
     const workspacePath = resolveWorkspacePath(options?.workspacePath);
     const sources = await this.getSkillSources(workspacePath);
-    const skills: ProviderSkill[] = [];
-
-    for (const source of sources) {
+    const skillsBySource = await Promise.all(sources.map(async (source) => {
       const skillFiles = await findProviderSkillMarkdownFiles(source.rootDir, {
         recursive: source.recursive,
       });
-      for (const skillPath of skillFiles) {
+      const skills = await Promise.all(skillFiles.map(async (skillPath) => {
         try {
           const definition = await readProviderSkillMarkdownDefinition(skillPath);
           const command = source.commandForSkill
             ? source.commandForSkill(definition.name)
             : `${source.commandPrefix ?? '/'}${definition.name}`;
 
-          skills.push({
+          return {
             provider: this.provider,
             name: definition.name,
             description: definition.description,
@@ -117,14 +115,16 @@ export abstract class SkillsProvider implements IProviderSkills {
             sourcePath: skillPath,
             pluginName: source.pluginName,
             pluginId: source.pluginId,
-          });
+          };
         } catch {
           // A malformed or unreadable skill markdown file should not hide other valid skills.
+          return null;
         }
-      }
-    }
+      }));
+      return skills.filter((skill) => skill !== null);
+    }));
 
-    return skills;
+    return skillsBySource.flat();
   }
 
   async addSkills(input: ProviderSkillCreateInput): Promise<ProviderSkill[]> {

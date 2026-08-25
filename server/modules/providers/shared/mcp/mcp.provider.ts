@@ -44,9 +44,10 @@ export abstract class McpProvider implements IProviderMcp {
       project: [],
     };
 
-    for (const scope of this.supportedScopes) {
-      grouped[scope] = await this.listServersForScope(scope, options);
-    }
+    const serversByScope = await Promise.all(
+      this.supportedScopes.map(async (scope) => [scope, await this.listServersForScope(scope, options)] as const),
+    );
+    for (const [scope, servers] of serversByScope) grouped[scope] = servers;
 
     return grouped;
   }

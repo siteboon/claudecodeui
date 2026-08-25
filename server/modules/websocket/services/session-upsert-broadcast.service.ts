@@ -93,13 +93,8 @@ export async function broadcastSessionUpserted(sessionIdOrProviderSessionId: str
 export async function broadcastSessionUpsertedBatch(
   sessionIds: Iterable<string>,
 ): Promise<void> {
-  const payloads: string[] = [];
-  for (const sessionId of sessionIds) {
-    const event = await buildSessionUpsertedEvent(sessionId);
-    if (event) {
-      payloads.push(JSON.stringify(event));
-    }
-  }
+  const events = await Promise.all(Array.from(sessionIds, buildSessionUpsertedEvent));
+  const payloads = events.filter((event) => event !== null).map((event) => JSON.stringify(event));
 
   sendToConnectedClients(payloads);
 }

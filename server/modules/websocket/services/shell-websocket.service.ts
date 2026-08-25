@@ -255,12 +255,13 @@ function prioritizeUserNpmGlobalBin(env: NodeJS.ProcessEnv): { key: string; valu
   ].filter(Boolean);
 
   const normalizedPathEntries = pathEntries.map((entry) => os.platform() === 'win32' ? entry.toLowerCase() : entry);
-  const preferredEntries = candidates.filter((candidate, index) => {
+  const normalizedPathEntrySet = new Set(normalizedPathEntries);
+  const seenCandidates = new Set<string>();
+  const preferredEntries = candidates.filter((candidate) => {
     const normalizedCandidate = os.platform() === 'win32' ? candidate.toLowerCase() : candidate;
-    return (
-      candidates.indexOf(candidate) === index &&
-      normalizedPathEntries.includes(normalizedCandidate)
-    );
+    if (seenCandidates.has(candidate)) return false;
+    seenCandidates.add(candidate);
+    return normalizedPathEntrySet.has(normalizedCandidate);
   });
 
   if (preferredEntries.length === 0) {
@@ -270,12 +271,13 @@ function prioritizeUserNpmGlobalBin(env: NodeJS.ProcessEnv): { key: string; valu
   const normalizedPreferredEntries = preferredEntries.map((entry) =>
     os.platform() === 'win32' ? entry.toLowerCase() : entry
   );
+  const normalizedPreferredEntrySet = new Set(normalizedPreferredEntries);
 
   const value = [
     ...preferredEntries,
     ...pathEntries.filter((entry) => {
       const normalizedEntry = os.platform() === 'win32' ? entry.toLowerCase() : entry;
-      return !normalizedPreferredEntries.includes(normalizedEntry);
+      return !normalizedPreferredEntrySet.has(normalizedEntry);
     }),
   ].join(delimiter);
 

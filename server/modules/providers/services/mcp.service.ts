@@ -63,22 +63,19 @@ export const providerMcpService = {
     }
 
     const scope = input.scope ?? 'project';
-    const results: Array<{ provider: LLMProvider; created: boolean; error?: string }> = [];
     const providers = providerRegistry.listProviders();
-    for (const provider of providers) {
+    return Promise.all(providers.map(async (provider) => {
       try {
         await provider.mcp.upsertServer({ ...input, scope });
-        results.push({ provider: provider.id, created: true });
+        return { provider: provider.id, created: true };
       } catch (error) {
-        results.push({
+        return {
           provider: provider.id,
           created: false,
           error: error instanceof Error ? error.message : 'Unknown error',
-        });
+        };
       }
-    }
-
-    return results;
+    }));
   },
 
   /**
@@ -89,21 +86,18 @@ export const providerMcpService = {
   async removeMcpServerFromAllProviders(
     input: { name: string; scope?: McpScope; workspacePath?: string },
   ): Promise<Array<{ provider: LLMProvider; removed: boolean; error?: string }>> {
-    const results: Array<{ provider: LLMProvider; removed: boolean; error?: string }> = [];
     const providers = providerRegistry.listProviders();
-    for (const provider of providers) {
+    return Promise.all(providers.map(async (provider) => {
       try {
         const result = await provider.mcp.removeServer(input);
-        results.push({ provider: provider.id, removed: result.removed });
+        return { provider: provider.id, removed: result.removed };
       } catch (error) {
-        results.push({
+        return {
           provider: provider.id,
           removed: false,
           error: error instanceof Error ? error.message : 'Unknown error',
-        });
+        };
       }
-    }
-
-    return results;
+    }));
   },
 };

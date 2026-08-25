@@ -109,7 +109,7 @@ async function detectTaskMasterFolder(projectPath: string): Promise<TaskMasterDe
     const fileStatus: Record<string, boolean> = {};
     let hasEssentialFiles = true;
 
-    for (const fileName of keyFiles) {
+    await Promise.all(keyFiles.map(async (fileName) => {
       const absoluteFilePath = path.join(taskMasterPath, fileName);
       try {
         await access(absoluteFilePath);
@@ -120,7 +120,7 @@ async function detectTaskMasterFolder(projectPath: string): Promise<TaskMasterDe
           hasEssentialFiles = false;
         }
       }
-    }
+    }));
 
     let taskMetadata: TaskMasterMetadata = null;
     if (fileStatus['tasks/tasks.json']) {

@@ -110,17 +110,16 @@ async function scanCommandsDirectory(dir, baseDir, namespace) {
 
     const entries = await fs.readdir(dir, { withFileTypes: true });
 
-    for (const entry of entries) {
+    const commandsByEntry = await Promise.all(entries.map(async (entry) => {
       const fullPath = path.join(dir, entry.name);
 
       if (entry.isDirectory()) {
         // Recursively scan subdirectories
-        const subCommands = await scanCommandsDirectory(
+        return scanCommandsDirectory(
           fullPath,
           baseDir,
           namespace,
         );
-        commands.push(...subCommands);
       } else if (entry.isFile() && entry.name.endsWith(".md")) {
         // Parse markdown file for metadata
         try {
@@ -141,19 +140,21 @@ async function scanCommandsDirectory(dir, baseDir, namespace) {
             description = firstLine.replace(/^#+\s*/, "").trim();
           }
 
-          commands.push({
+          return [{
             name: commandName,
             path: fullPath,
             relativePath,
             description,
             namespace,
             metadata: frontmatter,
-          });
+          }];
         } catch (err) {
           console.error(`Error parsing command file ${fullPath}:`, err.message);
         }
       }
-    }
+      return [];
+    }));
+    commands.push(...commandsByEntry.flat());
   } catch (err) {
     // Directory doesn't exist or can't be accessed - this is okay
     if (err.code !== "ENOENT" && err.code !== "EACCES") {
