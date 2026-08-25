@@ -207,19 +207,20 @@ const extractClaudeModelFromTextContent = (content: string): string | null => {
   if (localCommandStdout !== null) {
     const cleanedStdout = stripAnsi(localCommandStdout).replace(/\s+/g, ' ').trim();
     const changedModel = /(?:set|changed|switched)\s+model\s+to\s+(.+?)\.?$/i.exec(cleanedStdout);
-    if (changedModel?.[1]?.trim()) {
-      return changedModel[1].trim();
+    const stdoutModel = changedModel?.[1]?.trim();
+    // A placeholder stdout hit must not shadow a real <model> tag further down.
+    if (stdoutModel && !isPlaceholderModel(stdoutModel)) {
+      return stdoutModel;
     }
   }
 
   const modelTag = extractTaggedContent(content, 'model')?.trim();
-  return modelTag || null;
+  return modelTag && !isPlaceholderModel(modelTag) ? modelTag : null;
 };
 
 const extractClaudeModelFromMessageContent = (content: unknown): string | null => {
   if (typeof content === 'string') {
-    const model = extractClaudeModelFromTextContent(content);
-    return model && !isPlaceholderModel(model) ? model : null;
+    return extractClaudeModelFromTextContent(content);
   }
 
   if (!Array.isArray(content)) {
@@ -231,9 +232,10 @@ const extractClaudeModelFromMessageContent = (content: unknown): string | null =
       continue;
     }
 
-    // Skip placeholder hits so a later part can still supply the real model.
+    // extractClaudeModelFromTextContent rejects placeholders, so a placeholder
+    // part yields null here and a later part can still supply the real model.
     const model = extractClaudeModelFromTextContent(part.text);
-    if (model && !isPlaceholderModel(model)) {
+    if (model) {
       return model;
     }
   }

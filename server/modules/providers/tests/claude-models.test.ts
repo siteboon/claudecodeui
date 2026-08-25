@@ -51,6 +51,25 @@ test('skips a placeholder content part so a later real model tag still wins', ()
   );
 });
 
+test('a placeholder stdout hit does not shadow a real <model> tag in the same text', () => {
+  const text = '<local-command-stdout>Set model to <synthetic></local-command-stdout>'
+    + '<model>claude-sonnet-5</model>';
+  assert.equal(
+    extractClaudeEventModel(
+      { sessionId: SESSION_ID, message: { content: text } },
+      SESSION_ID,
+    ),
+    'claude-sonnet-5',
+  );
+  assert.equal(
+    extractClaudeEventModel(
+      { sessionId: SESSION_ID, message: { content: [{ text }] } },
+      SESSION_ID,
+    ),
+    'claude-sonnet-5',
+  );
+});
+
 test('falls back to the message model when every content hit is a placeholder', () => {
   assert.equal(
     extractClaudeEventModel(
