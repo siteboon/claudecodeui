@@ -79,6 +79,9 @@ export class ClaudeProviderAuth implements IProviderAuth {
 
   /**
    * Checks Claude credentials in the same priority order used by Claude Code.
+   *
+   * An expired access token still counts as logged in while a refresh token is present:
+   * it lives ~12 hours and the CLI refreshes it the next time it runs.
    */
   private async checkCredentials(): Promise<ClaudeCredentialsStatus> {
     const missingCredentialsError = 'Claude CLI is not authenticated. Run claude /login or configure ANTHROPIC_API_KEY.';
@@ -118,7 +121,8 @@ export class ClaudeProviderAuth implements IProviderAuth {
       if (accessToken) {
         const expiresAt = typeof oauth?.expiresAt === 'number' ? oauth.expiresAt : undefined;
         const email = readOptionalString(creds.email) ?? readOptionalString(creds.user) ?? null;
-        if (!expiresAt || Date.now() < expiresAt) {
+        const refreshable = Boolean(readOptionalString(oauth?.refreshToken));
+        if (!expiresAt || Date.now() < expiresAt || refreshable) {
           return {
             authenticated: true,
             email,
