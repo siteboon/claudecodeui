@@ -21,6 +21,14 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return outputArray;
 }
 
+/** Creates the browser-owned push subscription, which intentionally persists beyond the settings screen. */
+function createPushSubscription(registration: ServiceWorkerRegistration, publicKey: string) {
+  return registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(publicKey).buffer as ArrayBuffer,
+  });
+}
+
 export function useWebPush(): WebPushState {
   const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>(() => {
     if (
@@ -62,10 +70,7 @@ export function useWebPush(): WebPushState {
       const { publicKey } = await keyRes.json();
 
       const registration = await navigator.serviceWorker.ready;
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey).buffer as ArrayBuffer,
-      });
+      const subscription = await createPushSubscription(registration, publicKey);
 
       const subJson = subscription.toJSON();
       await api.settings.push.subscribe({

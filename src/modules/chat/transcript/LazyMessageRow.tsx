@@ -62,7 +62,8 @@ export default function LazyMessageRow({
   useEffect(() => {
     const element = elementRef.current;
     if (!lazyRows || !element) return undefined;
-    return lazyRows.observe(element, handleNearViewportChange);
+    const stopObserving = lazyRows.observe(element, handleNearViewportChange);
+    return () => stopObserving();
   }, [lazyRows, handleNearViewportChange]);
 
   const isMounted = lazyRows === null || isNearViewport;

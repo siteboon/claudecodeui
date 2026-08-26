@@ -82,8 +82,9 @@ describe('shell socket error frames', () => {
     vi.stubGlobal('WebSocket', FakeSocket);
   });
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
   });
 
   it('writes the server error into the terminal instead of dropping it', () => {
@@ -131,5 +132,16 @@ describe('shell socket error frames', () => {
     });
 
     expect(write).toHaveBeenCalledWith('hello');
+  });
+
+  it('cancels initialization and closes the socket owner when unmounted', () => {
+    vi.useFakeTimers();
+    const { view, closeSocket, socket } = renderConnection();
+
+    view.unmount();
+    act(() => vi.runAllTimers());
+
+    expect(closeSocket).toHaveBeenCalledOnce();
+    expect(socket.sent).toEqual([]);
   });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { api } from '@/shared/api';
 import type { LLMProvider } from '@/shared/types';
@@ -24,78 +24,81 @@ type ProjectResult = {
 const MIN_QUERY = 2;
 const DEBOUNCE_MS = 250;
 
+function subscribeToSessionMessageSearch(
+  url: string,
+  onProjectResult: (result: ProjectResult) => void,
+) {
+  const source = new EventSource(url);
+
+  const handleResult = (event: Event) => {
+    try {
+      const data = JSON.parse((event as MessageEvent<string>).data) as {
+        projectResult: ProjectResult;
+      };
+      onProjectResult(data.projectResult);
+    } catch {
+      // Ignore malformed stream events.
+    }
+  };
+  const close = () => source.close();
+
+  source.addEventListener('result', handleResult);
+  source.addEventListener('done', close);
+  source.addEventListener('error', close);
+
+  return () => {
+    source.removeEventListener('result', handleResult);
+    source.removeEventListener('done', close);
+    source.removeEventListener('error', close);
+    source.close();
+  };
+}
+
 export function useSessionMessageSearch(
   projectId: string | undefined,
   query: string,
   enabled: boolean,
 ) {
   const [items, setItems] = useState<SessionMessageMatch[]>([]);
-  const seqRef = useRef(0);
-  const esRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
     const trimmed = query.trim();
     if (!enabled || !projectId || trimmed.length < MIN_QUERY) {
       setItems([]);
-      esRef.current?.close();
-      esRef.current = null;
       return;
     }
 
-    esRef.current?.close();
-    esRef.current = null;
-    seqRef.current++;
+    let cancelled = false;
+    let stopSearch: (() => void) | null = null;
 
     const handle = setTimeout(() => {
-      const seq = ++seqRef.current;
       const url = api.searchConversationsUrl(trimmed);
-      const es = new EventSource(url);
-      esRef.current = es;
       const accumulated: SessionMessageMatch[] = [];
 
-      es.addEventListener('result', (evt) => {
-        if (seq !== seqRef.current) {
-          es.close();
+      stopSearch = subscribeToSessionMessageSearch(url, (projectResult) => {
+        if (cancelled || projectResult.projectId !== projectId) {
           return;
         }
-        try {
-          const data = JSON.parse((evt as MessageEvent).data) as { projectResult: ProjectResult };
-          const pr = data.projectResult;
-          if (pr.projectId !== projectId) return;
-          for (const s of pr.sessions) {
-            accumulated.push({
-              sessionId: s.sessionId,
-              label: s.sessionSummary || s.sessionId,
-              snippet: s.matches[0]?.snippet ?? '',
-              provider: s.provider,
-            });
-          }
-          setItems([...accumulated]);
-        } catch {
-          // ignore malformed
+        for (const session of projectResult.sessions) {
+          accumulated.push({
+            sessionId: session.sessionId,
+            label: session.sessionSummary || session.sessionId,
+            snippet: session.matches[0]?.snippet ?? '',
+            provider: session.provider,
+          });
         }
+        setItems([...accumulated]);
       });
-
-      const finish = () => {
-        if (seq !== seqRef.current) return;
-        es.close();
-        esRef.current = null;
-      };
-      es.addEventListener('done', finish);
-      es.addEventListener('error', finish);
     }, DEBOUNCE_MS);
 
     return () => {
+      cancelled = true;
       clearTimeout(handle);
+      if (stopSearch) {
+        stopSearch();
+      }
     };
   }, [projectId, query, enabled]);
-
-  useEffect(() => {
-    return () => {
-      esRef.current?.close();
-      esRef.current = null;
-    };
-  }, []);
 
   return items;
 }

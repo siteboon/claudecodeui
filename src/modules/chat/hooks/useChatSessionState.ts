@@ -805,6 +805,8 @@ export function useChatSessionState({
   // External message update (e.g. WebSocket reconnect, background refresh)
   useEffect(() => {
     if (!externalMessageUpdate || !selectedSession || !selectedProject) return;
+    let cancelled = false;
+    let scrollTimer: ReturnType<typeof setTimeout> | null = null;
 
     const reloadExternalMessages = async () => {
       try {
@@ -813,8 +815,8 @@ export function useChatSessionState({
           const shouldStickToBottom = isActiveRef.current && isNearBottom();
           await requestLatestMessages(selectedSession.id);
 
-          if (shouldStickToBottom) {
-            setTimeout(() => {
+          if (!cancelled && shouldStickToBottom) {
+            scrollTimer = setTimeout(() => {
               if (!isUserScrolledUpRef.current) {
                 scrollToBottom();
               }
@@ -826,7 +828,11 @@ export function useChatSessionState({
       }
     };
 
-    reloadExternalMessages();
+    void reloadExternalMessages();
+    return () => {
+      cancelled = true;
+      if (scrollTimer !== null) clearTimeout(scrollTimer);
+    };
   }, [
     externalMessageUpdate,
     requestLatestMessages,
@@ -855,6 +861,9 @@ export function useChatSessionState({
     if (!isActive || !searchTarget || chatMessages.length === 0 || isLoadingSessionMessages) return;
 
     const target = searchTarget;
+    let cancelled = false;
+    let highlightTimer: ReturnType<typeof setTimeout> | null = null;
+    let highlightedElement: Element | null = null;
     setSearchTarget(null);
 
     const scrollToTarget = async () => {
@@ -869,6 +878,7 @@ export function useChatSessionState({
                 && activeSessionIdRef.current === selectedSession.id
               ),
             });
+            if (cancelled) return;
             if (slot) {
               // Fetch the whole transcript so an old hit can be found, but do
               // not render all of it — the window below is widened to exactly
@@ -912,6 +922,7 @@ export function useChatSessionState({
       const targetTimestamp = messagesForSearch[targetIndex].timestamp;
 
       const scrollToRenderedTarget = (retriesLeft: number) => {
+        if (cancelled) return;
         const container = scrollContainerRef.current;
         if (!container) return;
 
@@ -927,7 +938,8 @@ export function useChatSessionState({
         if (targetElement) {
           targetElement.scrollIntoView({ block: 'center', behavior: 'smooth' });
           targetElement.classList.add('search-highlight-flash');
-          setTimeout(() => targetElement.classList.remove('search-highlight-flash'), 4000);
+          highlightedElement = targetElement;
+          highlightTimer = setTimeout(() => targetElement.classList.remove('search-highlight-flash'), 4000);
           searchScrollTimerRef.current = null;
           searchScrollActiveRef.current = false;
           return;
@@ -951,7 +963,17 @@ export function useChatSessionState({
       );
     };
 
-    scrollToTarget();
+    void scrollToTarget();
+    return () => {
+      cancelled = true;
+      if (searchScrollTimerRef.current !== null) {
+        clearTimeout(searchScrollTimerRef.current);
+        searchScrollTimerRef.current = null;
+      }
+      if (highlightTimer !== null) clearTimeout(highlightTimer);
+      highlightedElement?.classList.remove('search-highlight-flash');
+      searchScrollActiveRef.current = false;
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatMessages.length, isActive, isLoadingSessionMessages, searchTarget]);
 
@@ -997,12 +1019,14 @@ export function useChatSessionState({
     if (searchScrollActiveRef.current) return;
 
     if (!isUserScrolledUp) {
-      setTimeout(() => {
+      const scrollTimer = setTimeout(() => {
         if (!isUserScrolledUpRef.current) {
           scrollToBottom();
         }
       }, 50);
+      return () => clearTimeout(scrollTimer);
     }
+    return undefined;
   }, [chatMessages.length, isActive, isLoadingMoreMessages, isUserScrolledUp, scrollToBottom]);
 
   useEffect(() => {

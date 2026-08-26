@@ -82,11 +82,13 @@ export const TasksSettingsProvider = ({ children }: { children: ReactNode }) => 
 
   // Check TaskMaster installation status asynchronously on component mount
   useEffect(() => {
+    let cancelled = false;
     const checkInstallation = async () => {
       try {
         const response = await api.taskmaster.installationStatus();
         if (response.ok) {
           const data = (await response.json()) as TaskMasterInstallationStatus;
+          if (cancelled) return;
           setInstallationStatus(data);
           setIsTaskMasterInstalled(data.installation?.isInstalled || false);
           setIsTaskMasterReady(data.isReady || false);
@@ -99,21 +101,27 @@ export const TasksSettingsProvider = ({ children }: { children: ReactNode }) => 
             setTasksEnabled(false);
           }
         } else {
+          if (cancelled) return;
           console.error('Failed to check TaskMaster installation status');
           setIsTaskMasterInstalled(false);
           setIsTaskMasterReady(false);
         }
       } catch (error) {
+        if (cancelled) return;
         console.error('Error checking TaskMaster installation:', error);
         setIsTaskMasterInstalled(false);
         setIsTaskMasterReady(false);
       } finally {
-        setIsCheckingInstallation(false);
+        if (!cancelled) setIsCheckingInstallation(false);
       }
     };
 
     // Run check asynchronously without blocking initial render
-    setTimeout(checkInstallation, 0);
+    const timer = setTimeout(checkInstallation, 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, []);
 
   const toggleTasksEnabled = useCallback(() => {

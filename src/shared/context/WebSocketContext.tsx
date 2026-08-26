@@ -44,6 +44,9 @@ const buildWebSocketUrl = (token: string | null) => {
   return `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}`; // OSS mode: Use same host:port that served the page
 };
 
+/** Opens the provider-owned socket; the authentication effect closes it on every rerun and unmount. */
+const openWebSocket = (url: string): WebSocket => new WebSocket(url);
+
 const useWebSocketProviderState = (): WebSocketContextType => {
   const wsRef = useRef<WebSocket | null>(null);
   const unmountedRef = useRef(false); // Track if component is unmounted
@@ -79,7 +82,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
 
       if (!wsUrl) return console.warn('No authentication token found for WebSocket connection');
 
-      const websocket = new WebSocket(wsUrl);
+      const websocket = openWebSocket(wsUrl);
       // Store connecting sockets too, so a token refresh can close them before
       // their handshake completes with stale credentials.
       wsRef.current = websocket;

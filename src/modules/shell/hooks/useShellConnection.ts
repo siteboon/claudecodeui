@@ -12,6 +12,11 @@ const ANSI_ESCAPE_REGEX =
   /(?:\u001B\[[0-?]*[ -/]*[@-~]|\u009B[0-?]*[ -/]*[@-~]|\u001B\][^\u0007\u001B]*(?:\u0007|\u001B\\)|\u009D[^\u0007\u009C]*(?:\u0007|\u009C)|\u001B[PX^_][^\u001B]*\u001B\\|[\u0090\u0098\u009E\u009F][^\u009C]*\u009C|\u001B[@-Z\\-_])/g;
 const PROCESS_EXIT_REGEX = /Process exited with code (\d+)/;
 
+/** Opens a shell socket whose lifecycle is owned by useShellConnection. */
+function openShellSocket(url: string): WebSocket {
+  return new WebSocket(url);
+}
+
 type UseShellConnectionOptions = {
   wsRef: MutableRefObject<WebSocket | null>;
   terminalRef: MutableRefObject<Terminal | null>;
@@ -56,6 +61,7 @@ export function useShellConnection({
   const connectingRef = useRef(false);
   const forceRestartOnInitRef = useRef(false);
   const suppressAutoConnectRef = useRef(false);
+  const initializationTimerRef = useRef<number | null>(null);
 
   const handleProcessCompletion = useCallback(
     (output: string) => {
@@ -131,7 +137,7 @@ export function useShellConnection({
 
         connectingRef.current = true;
 
-        const socket = new WebSocket(wsUrl);
+        const socket = openShellSocket(wsUrl);
         wsRef.current = socket;
 
         socket.onopen = () => {
@@ -139,7 +145,8 @@ export function useShellConnection({
           setIsConnecting(false);
           connectingRef.current = false;
 
-          window.setTimeout(() => {
+          initializationTimerRef.current = window.setTimeout(() => {
+            initializationTimerRef.current = null;
             const currentTerminal = terminalRef.current;
             const currentFitAddon = fitAddonRef.current;
             const currentProject = selectedProjectRef.current;
@@ -172,6 +179,10 @@ export function useShellConnection({
         };
 
         socket.onclose = () => {
+          if (initializationTimerRef.current !== null) {
+            clearTimeout(initializationTimerRef.current);
+            initializationTimerRef.current = null;
+          }
           setIsConnected(false);
           setIsConnecting(false);
           connectingRef.current = false;
@@ -243,6 +254,14 @@ export function useShellConnection({
 
     connectToShell();
   }, [autoConnect, connectToShell, isConnected, isConnecting, isInitialized]);
+
+  useEffect(() => () => {
+    if (initializationTimerRef.current !== null) {
+      clearTimeout(initializationTimerRef.current);
+      initializationTimerRef.current = null;
+    }
+    closeSocket();
+  }, [closeSocket]);
 
   return {
     isConnected,

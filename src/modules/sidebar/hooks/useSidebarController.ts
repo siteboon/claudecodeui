@@ -40,6 +40,17 @@ type RecentConversationsApiPayload = {
   };
 };
 
+/** Registers one named SSE listener and returns the exact matching teardown. */
+function listenToServerEvent(
+  source: EventSource,
+  eventName: string,
+  listener: (event: MessageEvent<string>) => void,
+): () => void {
+  const eventListener = listener as EventListener;
+  source.addEventListener(eventName, eventListener);
+  return () => source.removeEventListener(eventName, eventListener);
+}
+
 type UseSidebarControllerArgs = {
   projects: Project[];
   selectedProject: Project | null;
@@ -403,7 +414,7 @@ export function useSidebarController({
     let titleResults: SessionTitleSearchResult[] = [];
     let totalMatches = 0;
 
-    es.addEventListener('title-results', (evt) => {
+    const removeTitleResultsListener = listenToServerEvent(es, 'title-results', (evt) => {
       if (seq !== searchSeqRef.current) { es.close(); return; }
       try {
         const data = JSON.parse(evt.data) as { titleResults: SessionTitleSearchResult[] };
@@ -419,7 +430,7 @@ export function useSidebarController({
       }
     });
 
-    es.addEventListener('result', (evt) => {
+    const removeResultListener = listenToServerEvent(es, 'result', (evt) => {
       if (seq !== searchSeqRef.current) { es.close(); return; }
       try {
         const data = JSON.parse(evt.data) as {
@@ -442,7 +453,7 @@ export function useSidebarController({
       }
     });
 
-    es.addEventListener('progress', (evt) => {
+    const removeProgressListener = listenToServerEvent(es, 'progress', (evt) => {
       if (seq !== searchSeqRef.current) { es.close(); return; }
       try {
         const data = JSON.parse(evt.data) as { totalMatches: number; scannedProjects: number; totalProjects: number };
@@ -453,7 +464,7 @@ export function useSidebarController({
       }
     });
 
-    es.addEventListener('done', () => {
+    const removeDoneListener = listenToServerEvent(es, 'done', () => {
       if (seq !== searchSeqRef.current) { es.close(); return; }
       es.close();
       eventSourceRef.current = null;
@@ -467,7 +478,7 @@ export function useSidebarController({
       });
     });
 
-    es.addEventListener('error', () => {
+    const removeErrorListener = listenToServerEvent(es, 'error', () => {
       if (seq !== searchSeqRef.current) { es.close(); return; }
       es.close();
       eventSourceRef.current = null;
@@ -482,10 +493,13 @@ export function useSidebarController({
     });
 
     return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
+      removeTitleResultsListener();
+      removeResultListener();
+      removeProgressListener();
+      removeDoneListener();
+      removeErrorListener();
+      es.close();
+      eventSourceRef.current = null;
     };
   }, [debouncedSearchQuery, searchMode]);
 
