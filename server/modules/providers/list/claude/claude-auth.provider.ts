@@ -78,6 +78,46 @@ export class ClaudeProviderAuth implements IProviderAuth {
   }
 
   /**
+   * Asks the Claude Code CLI whether it is logged in.
+   *
+   * This is the only authoritative source. The credentials file below is a
+   * cache the CLI is free to bypass: on macOS the OAuth token lives in the
+   * Keychain and `~/.claude/.credentials.json` is left behind as a stale
+   * copy, and even when the file is used its access token expires long
+   * before the session does, because `refreshToken` renews it silently.
+   *
+   * Returns null when the CLI cannot answer (missing, too old, timing out),
+   * so the caller falls back to the previous file-based detection.
+   */
+  private checkCliStatus(): ClaudeCredentialsStatus | null {
+    const cliPath = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH);
+
+    try {
+      const result = spawn.sync(cliPath, ['auth', 'status', '--json'], {
+        encoding: 'utf8',
+        timeout: 10000,
+      });
+
+      if (result.status !== 0 || typeof result.stdout !== 'string') {
+        return null;
+      }
+
+      const status = readObjectRecord(JSON.parse(result.stdout));
+      if (!status || status.loggedIn !== true) {
+        return null;
+      }
+
+      return {
+        authenticated: true,
+        email: readOptionalString(status.email) ?? 'Authenticated',
+        method: 'cli_status',
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Checks Claude credentials in the same priority order used by Claude Code.
    */
   private async checkCredentials(): Promise<ClaudeCredentialsStatus> {
@@ -106,6 +146,11 @@ export class ClaudeProviderAuth implements IProviderAuth {
 
     if (readOptionalString(settingsEnv.CLAUDE_CODE_OAUTH_TOKEN)) {
       return { authenticated: true, email: 'OAuth Token (long-lived)', method: 'environment' };
+    }
+
+    const cliStatus = this.checkCliStatus();
+    if (cliStatus) {
+      return cliStatus;
     }
 
     try {
