@@ -432,13 +432,15 @@ export function useProjectsState({
    * re-subscribing on every state change would risk missing events.
    */
   const selectedSessionRef = useRef(selectedSession);
-  selectedSessionRef.current = selectedSession;
   const selectedProjectRef = useRef(selectedProject);
-  selectedProjectRef.current = selectedProject;
   const projectsRef = useRef(projects);
-  projectsRef.current = projects;
   const sessionIdRef = useRef(sessionId);
-  sessionIdRef.current = sessionId;
+  useEffect(() => {
+    selectedSessionRef.current = selectedSession;
+    selectedProjectRef.current = selectedProject;
+    projectsRef.current = projects;
+    sessionIdRef.current = sessionId;
+  }, [projects, selectedProject, selectedSession, sessionId]);
   /** URL session id whose backend lookup already ran (or is in flight) — one attempt per id. */
   const sessionLookupRef = useRef<string | null>(null);
   /**

@@ -78,9 +78,11 @@ export function useChatRealtimeHandlers({
   // so a fast `chat_subscribed` ack is matched against the current view, not
   // the previous render's closed-over selection.
   const activeViewSessionIdRef = useRef<string | null>(selectedSession?.id || currentSessionId || null);
-  activeViewSessionIdRef.current = selectedSession?.id || currentSessionId || null;
   const isActiveRef = useRef(isActive);
-  isActiveRef.current = isActive;
+  useEffect(() => {
+    activeViewSessionIdRef.current = selectedSession?.id || currentSessionId || null;
+    isActiveRef.current = isActive;
+  }, [currentSessionId, isActive, selectedSession?.id]);
 
   // Keep the latest pending-permission snapshot available to the websocket
   // listener so back-to-back permission events can dedupe and re-arm the

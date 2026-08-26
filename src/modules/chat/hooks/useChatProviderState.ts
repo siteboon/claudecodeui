@@ -490,7 +490,9 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     ? getSessionSelectionKey(selectedSessionProvider, selectedSessionId)
     : null;
   const selectedSessionKeyRef = useRef<string | null>(selectedSessionKey);
-  selectedSessionKeyRef.current = selectedSessionKey;
+  useEffect(() => {
+    selectedSessionKeyRef.current = selectedSessionKey;
+  }, [selectedSessionKey]);
 
   const activeSessionSelection = sessionSelection
     && selectedSessionId

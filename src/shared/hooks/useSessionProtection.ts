@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { IsSessionProcessing, MarkSessionIdle, MarkSessionProcessing, SessionActivity, SessionActivityMap, SessionActivitySnapshot, SyncProcessingSessions } from '@/shared/types';
 
@@ -43,7 +43,9 @@ export function useSessionProtection() {
     new Map(),
   );
   const processingSessionsRef = useRef<SessionActivityMap>(processingSessions);
-  processingSessionsRef.current = processingSessions;
+  useEffect(() => {
+    processingSessionsRef.current = processingSessions;
+  }, [processingSessions]);
 
   const markSessionProcessing = useCallback<MarkSessionProcessing>((sessionId, activity) => {
     if (!sessionId) {

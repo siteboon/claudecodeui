@@ -233,7 +233,9 @@ export function useChatComposerState({
   // keyed by project alone, so every session in a project shared one draft.
   const draftScope = sessionKey ?? (selectedProjectId ? `project:${selectedProjectId}` : null);
   const draftScopeRef = useRef(draftScope);
-  draftScopeRef.current = draftScope;
+  useEffect(() => {
+    draftScopeRef.current = draftScope;
+  }, [draftScope]);
   const setInput = useCallback<Dispatch<SetStateAction<string>>>((next) => {
     setInputState((previous) => ({
       scope: draftScopeRef.current,
@@ -241,7 +243,9 @@ export function useChatComposerState({
     }));
   }, []);
   const sessionKeyRef = useRef(sessionKey);
-  sessionKeyRef.current = sessionKey;
+  useEffect(() => {
+    sessionKeyRef.current = sessionKey;
+  }, [sessionKey]);
 
   const [queuedDraft, setQueuedDraft] = useState<QueuedDraft | null>(() => {
     if (typeof window === 'undefined' || !sessionKey) {

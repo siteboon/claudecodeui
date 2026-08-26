@@ -221,7 +221,7 @@ function useChatComposerController({
 }: ChatComposerProps) {
   const { t } = useTranslation("chat");
   const fileDropdownRef = useRef<HTMLDivElement | null>(null);
-  const selectedFileRef = useRef<HTMLDivElement | null>(null);
+  const selectedFileRef = useRef<HTMLButtonElement | null>(null);
   const commandMenuPosition = useMemo(() => {
     if (!isCommandMenuOpen) {
       return { top: 0, left: 16, bottom: 90 };

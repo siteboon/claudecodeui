@@ -319,35 +319,38 @@ export function useChatSessionState({
   // Ref mirror so effects can read the latest map without re-running on
   // every activity transition.
   const processingSessionsRef = useRef(processingSessions);
-  processingSessionsRef.current = processingSessions;
-
   const isActiveRef = useRef(isActive);
   const activeSessionIdRef = useRef(activeSessionId);
-  isActiveRef.current = isActive;
-  activeSessionIdRef.current = activeSessionId;
+  useEffect(() => {
+    processingSessionsRef.current = processingSessions;
+    isActiveRef.current = isActive;
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId, isActive, processingSessions]);
 
   const latestRefreshExecutorRef = useRef<(sessionId: string) => Promise<boolean | void>>(
     async () => true,
   );
-  latestRefreshExecutorRef.current = async (sessionId: string) => {
-    const result = await sessionStore.refreshLatestFromServer(sessionId, {
-      limit: SESSION_MESSAGES_PAGE_SIZE,
-      canRequest: () => (
-        isActiveRef.current
-        && activeSessionIdRef.current === sessionId
-      ),
-    });
-    const slot = result.slot;
-    if (slot && activeSessionIdRef.current === sessionId) {
-      setHasMoreMessages(slot.hasMore);
-      setTotalMessages(slot.total);
-      messagesOffsetRef.current = slot.offset;
-      if (slot.tokenUsage !== undefined) {
-        setTokenBudget((slot.tokenUsage as Record<string, unknown> | null) ?? null);
+  useEffect(() => {
+    latestRefreshExecutorRef.current = async (sessionId: string) => {
+      const result = await sessionStore.refreshLatestFromServer(sessionId, {
+        limit: SESSION_MESSAGES_PAGE_SIZE,
+        canRequest: () => (
+          isActiveRef.current
+          && activeSessionIdRef.current === sessionId
+        ),
+      });
+      const slot = result.slot;
+      if (slot && activeSessionIdRef.current === sessionId) {
+        setHasMoreMessages(slot.hasMore);
+        setTotalMessages(slot.total);
+        messagesOffsetRef.current = slot.offset;
+        if (slot.tokenUsage !== undefined) {
+          setTokenBudget((slot.tokenUsage as Record<string, unknown> | null) ?? null);
+        }
       }
-    }
-    return !result.deferred;
-  };
+      return !result.deferred;
+    };
+  }, [sessionStore, setTokenBudget]);
 
   const refreshCoordinatorRef = useRef<ReturnType<typeof createMessageHistoryRefreshCoordinator> | null>(null);
   if (!refreshCoordinatorRef.current) {
@@ -371,10 +374,12 @@ export function useChatSessionState({
   // CSS-hidden tree. Activation itself renders once and reads the latest cache.
   const activeSessionForStore = isActive ? activeSessionId : null;
   const prevActiveForStoreRef = useRef<string | null>(null);
-  if (activeSessionForStore !== prevActiveForStoreRef.current) {
-    prevActiveForStoreRef.current = activeSessionForStore;
-    sessionStore.setActiveSession(activeSessionForStore);
-  }
+  useEffect(() => {
+    if (activeSessionForStore !== prevActiveForStoreRef.current) {
+      prevActiveForStoreRef.current = activeSessionForStore;
+      sessionStore.setActiveSession(activeSessionForStore);
+    }
+  }, [activeSessionForStore, sessionStore]);
 
   useEffect(() => {
     if (!pendingUserMessage) {
