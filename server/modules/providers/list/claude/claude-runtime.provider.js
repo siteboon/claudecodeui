@@ -405,11 +405,57 @@ function readNumber(value) {
 }
 
 /**
- * Extracts token usage from SDK messages.
- * Prefers per-step `message.usage` (Claude message payload), then falls back
- * to result-level usage/modelUsage for compatibility across SDK versions.
+ * @typedef {Object} TokenBudget
+ * @property {number} used
+ * @property {number} total
+ * @property {number} inputTokens
+ * @property {number} outputTokens
+ * @property {number} [cacheReadTokens]
+ * @property {number} [cacheCreationTokens]
+ * @property {number} [cacheTokens]
+ * @property {{ input: number, output: number }} breakdown
+ */
+
+/**
+ * Builds a context-window budget from an Anthropic-shaped usage payload.
+ *
+ * `input_tokens + cache_read + cache_creation` is one request's whole prompt,
+ * which is exactly what the context window holds at that moment.
+ * @param {Object} messageUsage - Anthropic usage payload
+ * @returns {TokenBudget} Token budget object
+ */
+function buildTokenBudget(messageUsage) {
+  const directInputTokens = readNumber(messageUsage.input_tokens ?? messageUsage.inputTokens);
+  const cacheCreationTokens = readNumber(messageUsage.cache_creation_input_tokens ?? messageUsage.cacheCreationInputTokens ?? messageUsage.cacheCreationTokens);
+  const cacheReadTokens = readNumber(messageUsage.cache_read_input_tokens ?? messageUsage.cacheReadInputTokens ?? messageUsage.cacheReadTokens);
+  const cacheTokens = cacheCreationTokens + cacheReadTokens;
+  const inputTokens = directInputTokens + cacheTokens;
+  const outputTokens = readNumber(messageUsage.output_tokens ?? messageUsage.outputTokens);
+  const contextWindow = parseInt(process.env.CONTEXT_WINDOW, 10) || 160000;
+
+  return {
+    used: inputTokens + outputTokens,
+    total: contextWindow,
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheCreationTokens,
+    cacheTokens,
+    breakdown: {
+      input: inputTokens,
+      output: outputTokens,
+    },
+  };
+}
+
+/**
+ * Extracts the session's context-window usage from an SDK stream message.
+ *
+ * Only assistant messages describe the context window: each one reports the
+ * prompt its own request carried. The turn-ending `result` is deliberately not
+ * a source here — see `extractCumulativeTokenBudget`.
  * @param {Object} sdkMessage - SDK stream message
- * @returns {Object|null} Token budget object or null
+ * @returns {TokenBudget|null} Token budget object or null
  */
 function extractTokenBudget(sdkMessage) {
   if (!sdkMessage || typeof sdkMessage !== 'object') {
@@ -423,38 +469,45 @@ function extractTokenBudget(sdkMessage) {
     return null;
   }
 
-  // Only assistant and result messages carry Anthropic-shaped usage. System
+  // Only assistant messages carry Anthropic-shaped usage. System
   // task_progress/task_notification events have a top-level `usage` too, but
   // shaped {total_tokens, tool_uses, duration_ms} — reading Anthropic keys
   // off it yields an all-zero budget that flashes "0" in the composer.
-  if (sdkMessage.type !== 'assistant' && sdkMessage.type !== 'result') {
+  if (sdkMessage.type !== 'assistant') {
     return null;
   }
 
-  const messageUsage = sdkMessage.message?.usage || sdkMessage.usage;
-  if (messageUsage && typeof messageUsage === 'object') {
-    const directInputTokens = readNumber(messageUsage.input_tokens ?? messageUsage.inputTokens);
-    const cacheCreationTokens = readNumber(messageUsage.cache_creation_input_tokens ?? messageUsage.cacheCreationInputTokens ?? messageUsage.cacheCreationTokens);
-    const cacheReadTokens = readNumber(messageUsage.cache_read_input_tokens ?? messageUsage.cacheReadInputTokens ?? messageUsage.cacheReadTokens);
-    const cacheTokens = cacheCreationTokens + cacheReadTokens;
-    const inputTokens = directInputTokens + cacheTokens;
-    const outputTokens = readNumber(messageUsage.output_tokens ?? messageUsage.outputTokens);
-    const totalUsed = inputTokens + outputTokens;
-    const contextWindow = parseInt(process.env.CONTEXT_WINDOW, 10) || 160000;
+  const messageUsage = sdkMessage.message?.usage;
+  if (!messageUsage || typeof messageUsage !== 'object') {
+    return null;
+  }
 
-    return {
-      used: totalUsed,
-      total: contextWindow,
-      inputTokens,
-      outputTokens,
-      cacheReadTokens,
-      cacheCreationTokens,
-      cacheTokens,
-      breakdown: {
-        input: inputTokens,
-        output: outputTokens,
-      },
-    };
+  return buildTokenBudget(messageUsage);
+}
+
+/**
+ * Last-resort budget read from a turn's `result` message.
+ *
+ * `result.usage` and `result.modelUsage` are the turn's *bill*: every request
+ * the turn made, summed, including each subagent's. A turn that made four
+ * requests therefore reports roughly four times the context the conversation
+ * actually holds, so publishing it made the counter leap at the end of a turn
+ * and fall back on the next assistant message — worst with subagents running,
+ * whose requests inflate the sum without ever entering this session's context.
+ *
+ * It is still the only usage an SDK build that reports none per assistant
+ * message ever emits, so it stays available for the caller to use when a turn
+ * produced no assistant budget at all.
+ * @param {Object} sdkMessage - SDK stream message
+ * @returns {TokenBudget|null} Token budget object or null
+ */
+function extractCumulativeTokenBudget(sdkMessage) {
+  if (!sdkMessage || typeof sdkMessage !== 'object' || sdkMessage.type !== 'result') {
+    return null;
+  }
+
+  if (sdkMessage.usage && typeof sdkMessage.usage === 'object') {
+    return buildTokenBudget(sdkMessage.usage);
   }
 
   if (!sdkMessage.modelUsage || typeof sdkMessage.modelUsage !== 'object') {
@@ -674,6 +727,9 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   // True while the process is being held open for background work, so a later
   // `result` can be recognised as that work reporting back.
   let heldForBackgroundWork = false;
+  // Set once a turn publishes a budget read from an assistant message, so the
+  // turn-ending `result` is only mined for usage when nothing better arrived.
+  let assistantBudgetSent = false;
 
   // A new turn supersedes any earlier one still holding this session's process
   // open, so held runs cannot stack up across a conversation.
@@ -893,9 +949,15 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         ws.send(msg);
       }
 
-      // Extract and send token budget updates from assistant/result usage payloads
-      const tokenBudgetData = extractTokenBudget(message);
+      // Extract and send token budget updates from assistant usage payloads,
+      // falling back to the turn's cumulative bill only for SDK builds that
+      // report no per-assistant usage at all.
+      const tokenBudgetData = extractTokenBudget(message)
+        || (assistantBudgetSent ? null : extractCumulativeTokenBudget(message));
       if (tokenBudgetData) {
+        if (message.type === 'assistant') {
+          assistantBudgetSent = true;
+        }
         ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
       }
 
@@ -1143,5 +1205,6 @@ export {
   resolveToolApproval,
   getPendingApprovalsForSession,
   reconnectSessionWriter,
-  extractTokenBudget
+  extractTokenBudget,
+  extractCumulativeTokenBudget
 };

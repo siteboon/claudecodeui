@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { extractTokenBudget } from '@/modules/providers/list/claude/claude-runtime.provider.js';
+import {
+  extractCumulativeTokenBudget,
+  extractTokenBudget,
+} from '@/modules/providers/list/claude/claude-runtime.provider.js';
 
 test('assistant usage produces a cumulative budget', () => {
   const budget = extractTokenBudget({
@@ -48,14 +51,54 @@ test('subagent messages emit no budget for the parent session', () => {
   assert.equal(budget, null);
 });
 
-test('result messages keep the modelUsage fallback', () => {
+test('a turn-ending result emits no budget', () => {
+  // `result.usage` is the turn's bill: every request it made, summed, each
+  // subagent's included. A four-request turn therefore reports roughly four
+  // times the context the conversation holds, so publishing it made the
+  // counter leap when the turn ended and fall back on the next turn's first
+  // assistant message.
   const budget = extractTokenBudget({
+    type: 'result',
+    usage: {
+      input_tokens: 18,
+      cache_creation_input_tokens: 8_138,
+      cache_read_input_tokens: 40_460,
+      output_tokens: 166,
+    },
+    modelUsage: {
+      'claude-sonnet-5': { inputTokens: 929, outputTokens: 177 },
+    },
+  });
+
+  assert.equal(budget, null);
+});
+
+test('the cumulative reader stays available for SDK builds with no assistant usage', () => {
+  const fromUsage = extractCumulativeTokenBudget({
+    type: 'result',
+    usage: { input_tokens: 18, cache_read_input_tokens: 40_460, output_tokens: 166 },
+  });
+
+  assert.ok(fromUsage);
+  assert.equal(fromUsage.used, 40_644);
+
+  const fromModelUsage = extractCumulativeTokenBudget({
     type: 'result',
     modelUsage: {
       'claude-sonnet-5': { cumulativeInputTokens: 1_000, cumulativeOutputTokens: 200 },
     },
   });
 
-  assert.ok(budget);
-  assert.equal(budget.used, 1_200);
+  assert.ok(fromModelUsage);
+  assert.equal(fromModelUsage.used, 1_200);
+});
+
+test('the cumulative reader ignores anything that is not a result', () => {
+  assert.equal(
+    extractCumulativeTokenBudget({
+      type: 'assistant',
+      message: { usage: { input_tokens: 10, output_tokens: 2 } },
+    }),
+    null,
+  );
 });

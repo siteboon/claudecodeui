@@ -205,22 +205,42 @@ export function summarizeClaudeTokenUsage(
 
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     const entry = entries[index];
+    // A subagent's turns report the subagent's context window, not this
+    // conversation's; reading one makes the counter drop to the subagent's
+    // number and bounce back on the next main-thread turn.
+    if (entry?.isSidechain === true) {
+      continue;
+    }
+
     const usage = entry?.type === 'assistant' ? entry.message?.usage : null;
     if (!usage) {
       continue;
     }
 
     const directInputTokens = readUsageNumber(usage.input_tokens ?? usage.inputTokens);
-    cacheReadTokens = readUsageNumber(
+    const rowCacheReadTokens = readUsageNumber(
       usage.cache_read_input_tokens ?? usage.cacheReadInputTokens ?? usage.cacheReadTokens,
     );
-    cacheCreationTokens = readUsageNumber(
+    const rowCacheCreationTokens = readUsageNumber(
       usage.cache_creation_input_tokens
         ?? usage.cacheCreationInputTokens
         ?? usage.cacheCreationTokens,
     );
-    inputTokens = directInputTokens + cacheReadTokens + cacheCreationTokens;
-    outputTokens = readUsageNumber(usage.output_tokens ?? usage.outputTokens);
+    const rowInputTokens = directInputTokens + rowCacheReadTokens + rowCacheCreationTokens;
+    const rowOutputTokens = readUsageNumber(usage.output_tokens ?? usage.outputTokens);
+
+    // `<synthetic>` rows — interrupts, API errors, "No response requested" —
+    // are written with an all-zero usage block rather than none at all. They
+    // never carried a prompt, so treating one as the newest turn zeroed a
+    // counter that a live event had just set correctly.
+    if (rowInputTokens === 0 && rowOutputTokens === 0) {
+      continue;
+    }
+
+    cacheReadTokens = rowCacheReadTokens;
+    cacheCreationTokens = rowCacheCreationTokens;
+    inputTokens = rowInputTokens;
+    outputTokens = rowOutputTokens;
     break;
   }
 

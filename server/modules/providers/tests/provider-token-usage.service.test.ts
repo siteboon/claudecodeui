@@ -210,6 +210,44 @@ test('the Claude summarizer reads the newest assistant turn, not the whole conve
   });
 });
 
+test('the Claude summarizer skips synthetic rows that carry an all-zero usage block', () => {
+  // Interrupts, API errors and "No response requested." are written as
+  // assistant rows with a fully zeroed usage block. Reading one as the newest
+  // turn dropped the composer counter to 0 until the next turn pushed it back.
+  const entries = [
+    { type: 'assistant', message: { usage: { input_tokens: 3, cache_read_input_tokens: 4000, output_tokens: 80 } } },
+    {
+      type: 'assistant',
+      message: {
+        model: '<synthetic>',
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      },
+    },
+  ];
+
+  assert.equal(summarizeClaudeTokenUsage(entries, '200000').used, 4083);
+});
+
+test('the Claude summarizer skips a subagent sidechain turn', () => {
+  // A sidechain turn reports the subagent's own context window. Reading it
+  // made the counter drop to the subagent's number mid-run.
+  const entries = [
+    { type: 'assistant', message: { usage: { input_tokens: 3, cache_read_input_tokens: 4000, output_tokens: 80 } } },
+    {
+      type: 'assistant',
+      isSidechain: true,
+      message: { usage: { input_tokens: 10, cache_read_input_tokens: 900, output_tokens: 5 } },
+    },
+  ];
+
+  assert.equal(summarizeClaudeTokenUsage(entries, '200000').used, 4083);
+});
+
 test('the Claude summarizer reports zero for a transcript with no assistant turn yet', () => {
   const usage = summarizeClaudeTokenUsage([{ type: 'user', message: { role: 'user', content: 'hi' } }], '200000');
 
