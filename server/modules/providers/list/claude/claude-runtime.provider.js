@@ -380,6 +380,20 @@ function transformMessage(sdkMessage) {
   return sdkMessage;
 }
 
+/**
+ * True for the user bubble the SDK echoes for a subagent's own prompt.
+ *
+ * Subagent traffic carries `parent_tool_use_id`, so this echo lands in the main
+ * thread and stacks a second copy of the prompt right below the Agent tool card
+ * that already displays it. It also disappears on reload, because the transcript
+ * keeps that turn in the subagent's sidechain rather than the session file.
+ * @param {Object} message - Normalized message about to be sent to the client
+ * @returns {boolean}
+ */
+export function isSubagentPromptEcho(message) {
+  return Boolean(message?.parentToolUseId) && message.role === 'user' && message.kind === 'text';
+}
+
 function readNumber(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -867,6 +881,9 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         // Preserve parentToolUseId from SDK wrapper for subagent tool grouping
         if (transformedMessage.parentToolUseId && !msg.parentToolUseId) {
           msg.parentToolUseId = transformedMessage.parentToolUseId;
+        }
+        if (isSubagentPromptEcho(msg)) {
+          continue;
         }
         ws.send(msg);
       }
