@@ -3,7 +3,7 @@
  * Converts NormalizedMessage[] from the session store into ChatMessage[] for the UI.
  */
 
-import type { ChatMessage,NormalizedMessage } from '@/shared/types';
+import type { ChatMessage,NormalizedMessage,SubagentActivity } from '@/shared/types';
 import { formatUsageLimitText } from '@/modules/chat/utils/chatFormatting';
 
 function formatToolResultContent(content: unknown): string {
@@ -23,6 +23,8 @@ type ToolResultSource = NormalizedMessage['toolResult'] | NormalizedMessage | nu
 type CachedMessageProjection = {
   /** A tool-use row also depends on a separately received tool-result row. */
   toolResultSource: ToolResultSource;
+  /** A live subagent container also depends on the newest row folded into its timeline. */
+  subagentActivitySource: NormalizedMessage | null;
   messages: ChatMessage[];
 };
 
@@ -79,10 +81,74 @@ function parseTaskNotification(content: string): ParsedTaskNotification | null {
 export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMessage[] {
   const converted: ChatMessage[] = [];
 
-  // First pass: collect tool results for attachment
+  // First pass: collect tool results for attachment, and fold live subagent
+  // rows into their spawning tool call's timeline. A running subagent's rows
+  // stream in stamped with `parentToolUseId`; rendered top-level they read as
+  // the session's own tool calls, only to jump inside the container on the
+  // next history load, which ships the same timeline as `subagentTools`.
   const toolResultMap = new Map<string, NormalizedMessage>();
   const toolUseIds = new Set<string>();
+  const liveSubagentActivity = new Map<string, SubagentActivity[]>();
+  const liveSubagentToolsById = new Map<string, SubagentActivity>();
+  /** Newest folded row per container, so its cached projection knows to rebuild. */
+  const lastSubagentSourceByParent = new Map<string, NormalizedMessage>();
   for (const msg of messages) {
+    if (msg.parentToolUseId) {
+      const parentId = msg.parentToolUseId;
+      let activity = liveSubagentActivity.get(parentId);
+      if (!activity) {
+        activity = [];
+        liveSubagentActivity.set(parentId, activity);
+      }
+
+      switch (msg.kind) {
+        case 'tool_use': {
+          const tool: SubagentActivity = {
+            kind: 'tool',
+            toolId: msg.toolId,
+            toolName: msg.toolName || 'Tool',
+            toolInput: msg.toolInput,
+            timestamp: msg.timestamp,
+          };
+          activity.push(tool);
+          if (msg.toolId) {
+            liveSubagentToolsById.set(msg.toolId, tool);
+          }
+          lastSubagentSourceByParent.set(parentId, msg);
+          break;
+        }
+        case 'tool_result': {
+          const tool = msg.toolId ? liveSubagentToolsById.get(msg.toolId) : undefined;
+          if (tool) {
+            tool.toolResult = {
+              content: formatToolResultContent(msg.content ?? ''),
+              isError: Boolean(msg.isError),
+            };
+            lastSubagentSourceByParent.set(parentId, msg);
+          }
+          break;
+        }
+        case 'text':
+        case 'thinking': {
+          // Assistant prose and reasoning only, matching the timeline the
+          // server builds from the subagent's transcript — user-role rows
+          // there are tool results and the echoed task prompt.
+          if ((msg.kind === 'thinking' || msg.role === 'assistant') && msg.content?.trim()) {
+            activity.push({
+              kind: msg.kind === 'thinking' ? 'thinking' : 'text',
+              content: msg.content,
+              timestamp: msg.timestamp,
+            });
+            lastSubagentSourceByParent.set(parentId, msg);
+          }
+          break;
+        }
+        default:
+          break;
+      }
+      continue;
+    }
+
     if (msg.kind === 'tool_use' && msg.toolId) {
       toolUseIds.add(msg.toolId);
     }
@@ -93,14 +159,26 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
   }
 
   for (const msg of messages) {
+    // Subagent rows were folded into their container's timeline above.
+    if (msg.parentToolUseId) {
+      continue;
+    }
+
     const toolResultSource: ToolResultSource = msg.kind === 'tool_use'
       ? msg.toolResult || (msg.toolId ? toolResultMap.get(msg.toolId) : null) || null
+      : null;
+    const subagentActivitySource = msg.kind === 'tool_use' && msg.toolId
+      ? lastSubagentSourceByParent.get(msg.toolId) ?? null
       : null;
     const cachedProjection = projectionCache.get(msg);
 
     // A tool-use projection must be rebuilt when a matching result arrives,
-    // even though the original tool-use record itself is unchanged.
-    if (cachedProjection?.toolResultSource === toolResultSource) {
+    // even though the original tool-use record itself is unchanged. The same
+    // holds for a subagent container when its live timeline grows.
+    if (
+      cachedProjection?.toolResultSource === toolResultSource
+      && cachedProjection.subagentActivitySource === subagentActivitySource
+    ) {
       converted.push(...cachedProjection.messages);
       continue;
     }
@@ -189,6 +267,16 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
             }
           : null;
 
+        // The server-indexed timeline arrives on a history load; the live fold
+        // covers the run in progress. A mid-run refresh can attach a partial
+        // server timeline while newer live rows keep streaming, so the longer
+        // list is the fresher one.
+        const serverActivity = Array.isArray(msg.subagentTools) ? msg.subagentTools : undefined;
+        const liveActivity = msg.toolId ? liveSubagentActivity.get(msg.toolId) : undefined;
+        const subagentActivity = liveActivity && liveActivity.length > (serverActivity?.length ?? 0)
+          ? liveActivity
+          : serverActivity;
+
         converted.push({
           type: 'assistant',
           content: '',
@@ -201,7 +289,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           toolStatus: typeof msg.status === 'string' ? msg.status : undefined,
           isSubagentContainer,
           subagent: msg.subagent,
-          subagentActivity: Array.isArray(msg.subagentTools) ? msg.subagentTools : undefined,
+          subagentActivity,
           memoryCitations: msg.memoryCitations,
           ...sharedMetadata,
         });
@@ -299,6 +387,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
 
     projectionCache.set(msg, {
       toolResultSource,
+      subagentActivitySource,
       // One source record can produce zero, one, or two UI messages (task
       // notifications with a result produce two), so cache the whole slice.
       messages: converted.slice(convertedStart),
