@@ -397,6 +397,21 @@ function extractTokenBudget(sdkMessage) {
     return null;
   }
 
+  // Subagent traffic (parent_tool_use_id set) reports the subagent's own
+  // context window, not this session's — surfacing it makes the counter drop
+  // to the subagent's number and bounce back on the next main-thread event.
+  if (sdkMessage.parent_tool_use_id) {
+    return null;
+  }
+
+  // Only assistant and result messages carry Anthropic-shaped usage. System
+  // task_progress/task_notification events have a top-level `usage` too, but
+  // shaped {total_tokens, tool_uses, duration_ms} — reading Anthropic keys
+  // off it yields an all-zero budget that flashes "0" in the composer.
+  if (sdkMessage.type !== 'assistant' && sdkMessage.type !== 'result') {
+    return null;
+  }
+
   const messageUsage = sdkMessage.message?.usage || sdkMessage.usage;
   if (messageUsage && typeof messageUsage === 'object') {
     const directInputTokens = readNumber(messageUsage.input_tokens ?? messageUsage.inputTokens);
@@ -1105,5 +1120,6 @@ export {
   getActiveClaudeSDKSessions,
   resolveToolApproval,
   getPendingApprovalsForSession,
-  reconnectSessionWriter
+  reconnectSessionWriter,
+  extractTokenBudget
 };

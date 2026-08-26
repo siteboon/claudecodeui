@@ -323,7 +323,11 @@ export function useChatRealtimeHandlers({
 
         case 'status': {
           if (msg.text === 'token_budget' && msg.tokenBudget) {
-            setTokenBudget(msg.tokenBudget as Record<string, unknown>);
+            // The counter shows the viewed session's context; budgets from
+            // other concurrently running sessions must not overwrite it.
+            if (sid === activeViewSessionId) {
+              setTokenBudget(msg.tokenBudget as Record<string, unknown>);
+            }
           } else if (msg.text && sid) {
             onSessionProcessing?.(sid, {
               statusText: msg.text as string,
