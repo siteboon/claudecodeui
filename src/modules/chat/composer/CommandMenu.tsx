@@ -79,6 +79,10 @@ const namespaceAccentClasses: Record<string, string> = {
 const MENU_EDGE_GAP = 16;
 const MENU_MAX_HEIGHT = 360;
 const MENU_MIN_HEIGHT = 160;
+const PREFERRED_NAMESPACES = ['builtin', 'skill', 'project', 'user', 'other'];
+const PREFERRED_NAMESPACES_WITH_FREQUENT = ['frequent', ...PREFERRED_NAMESPACES];
+const PREFERRED_NAMESPACE_KEYS = new Set(PREFERRED_NAMESPACES);
+const PREFERRED_NAMESPACE_KEYS_WITH_FREQUENT = new Set(PREFERRED_NAMESPACES_WITH_FREQUENT);
 
 const getCommandKey = (command: CommandMenuCommand) =>
   `${command.name}::${command.namespace || command.type || 'other'}::${command.path || ''}`;
@@ -220,9 +224,14 @@ export default function CommandMenu({
   }
 
   const preferredOrder = hasFrequentCommands
-    ? ['frequent', 'builtin', 'skill', 'project', 'user', 'other']
-    : ['builtin', 'skill', 'project', 'user', 'other'];
-  const extraNamespaces = Object.keys(groupedCommands).filter((namespace) => !preferredOrder.includes(namespace));
+    ? PREFERRED_NAMESPACES_WITH_FREQUENT
+    : PREFERRED_NAMESPACES;
+  const preferredNamespaceKeys = hasFrequentCommands
+    ? PREFERRED_NAMESPACE_KEYS_WITH_FREQUENT
+    : PREFERRED_NAMESPACE_KEYS;
+  const extraNamespaces = Object.keys(groupedCommands).filter(
+    (namespace) => !preferredNamespaceKeys.has(namespace),
+  );
   const orderedNamespaces = [...preferredOrder, ...extraNamespaces].filter((namespace) => groupedCommands[namespace]);
   const renderInPortal = (node: ReactElement) =>
     typeof document === 'undefined' ? node : createPortal(node, document.body);
