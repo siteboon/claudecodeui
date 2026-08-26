@@ -26,10 +26,10 @@ docker build -t cloudcli:latest .
 # 3. Create a directory for database persistence
 mkdir -p /var/lib/cloudcli
 
-# 4. Run the container
+# 4. Run the container (bind to localhost only, use Nginx reverse proxy for external access)
 docker run -d \
   --name cloudcli-server \
-  -p 3001:3001 \
+  -p 127.0.0.1:3001:3001 \
   -e NODE_ENV=production \
   -e CORS_ORIGIN=https://your-domain.com \
   -v /var/lib/cloudcli:/var/lib/cloudcli \
@@ -74,7 +74,10 @@ services:
     container_name: cloudcli-server
     restart: unless-stopped
     ports:
-      - "3001:3001"
+      # Bind to localhost only when using Nginx reverse proxy for TLS termination
+      - "127.0.0.1:3001:3001"
+      # For remote proxy setup (not recommended for production), use:
+      # - "3001:3001"
     environment:
       NODE_ENV: production
       SERVER_PORT: 3001
@@ -89,7 +92,7 @@ services:
       # Optional: mount logs directory
       - cloudcli-logs:/app/logs
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:3001/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -276,23 +279,54 @@ docker logs -f --timestamps cloudcli-server
 
 ## Backup & Restore
 
-### Backup Database
+### Backup Database (Bind Mount Deployment)
+For deployments using bind mount (`-v /var/lib/cloudcli:/var/lib/cloudcli`):
+
 ```bash
 # Stop container
 docker stop cloudcli-server
 
-# Backup volume
-docker run --rm -v cloudcli-data:/data -v $(pwd):/backup \
-  alpine tar czf /backup/cloudcli-backup.tar.gz -C /data .
+# Backup bind-mounted database directory
+sudo tar czf cloudcli-backup-$(date +%Y%m%d).tar.gz -C /var/lib/cloudcli .
 
 # Restart
 docker start cloudcli-server
 ```
 
-### Restore Database
+### Restore Database (Bind Mount Deployment)
 ```bash
 # Stop container
 docker stop cloudcli-server
+
+# Clear existing data
+sudo rm -rf /var/lib/cloudcli/*
+
+# Restore backup
+sudo tar xzf cloudcli-backup-20260826.tar.gz -C /var/lib/cloudcli
+
+# Restart
+docker start cloudcli-server
+```
+
+### Backup Database (Docker Compose with Named Volume)
+For deployments using named volume (`cloudcli-data:/var/lib/cloudcli`):
+
+```bash
+# Stop container
+docker-compose down
+
+# Backup named volume
+docker run --rm -v cloudcli-data:/data -v $(pwd):/backup \
+  alpine tar czf /backup/cloudcli-backup.tar.gz -C /data .
+
+# Restart
+docker-compose up -d
+```
+
+### Restore Database (Docker Compose with Named Volume)
+```bash
+# Stop container
+docker-compose down
 
 # Clear existing data
 docker run --rm -v cloudcli-data:/data alpine rm -rf /data/*
@@ -302,7 +336,7 @@ docker run --rm -v cloudcli-data:/data -v $(pwd):/backup \
   alpine tar xzf /backup/cloudcli-backup.tar.gz -C /data
 
 # Restart
-docker start cloudcli-server
+docker-compose up -d
 ```
 
 ---
