@@ -66,13 +66,10 @@ function getDesktopNotificationsSettingsPath() {
 }
 
 function getRunningEnvironmentUrls() {
-  const urls = [];
-  for (const environment of cloud.getEnvironments()) {
-    if (environment.status !== 'running') continue;
-    const url = cloud.getEnvironmentUrl(environment);
-    if (url) urls.push(url);
-  }
-  return urls;
+  return cloud.getEnvironments()
+    .filter((environment) => environment.status === 'running')
+    .map((environment) => cloud.getEnvironmentUrl(environment))
+    .filter(Boolean);
 }
 
 function getDisplayTargetName() {

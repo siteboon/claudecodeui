@@ -362,11 +362,10 @@ function extractClaudeText(content: unknown): string {
     return '';
   }
 
-  const textParts: string[] = [];
-  for (const part of content as AnyRecord[]) {
-    if (part?.type === 'text' && typeof part.text === 'string') textParts.push(part.text);
-  }
-  return textParts.join(' ');
+  return content
+    .filter((part: AnyRecord) => part?.type === 'text' && typeof part?.text === 'string')
+    .map((part: AnyRecord) => String(part.text))
+    .join(' ');
 }
 
 function extractTaggedContent(content: string, tagName: string): string | null {
@@ -507,19 +506,24 @@ function extractCodexText(content: unknown): string {
     return '';
   }
 
-  const textParts: string[] = [];
-  for (const item of content) {
-    if (!item || typeof item !== 'object') continue;
-    const record = item as AnyRecord;
-    if (
-      (record.type === 'input_text' || record.type === 'output_text' || record.type === 'text')
-      && typeof record.text === 'string'
-      && record.text
-    ) {
-      textParts.push(record.text);
-    }
-  }
-  return textParts.join(' ');
+  return content
+    .map((item) => {
+      if (!item || typeof item !== 'object') {
+        return '';
+      }
+
+      const record = item as AnyRecord;
+      if (
+        (record.type === 'input_text' || record.type === 'output_text' || record.type === 'text')
+        && typeof record.text === 'string'
+      ) {
+        return record.text;
+      }
+
+      return '';
+    })
+    .filter(Boolean)
+    .join(' ');
 }
 
 function normalizeSearchableSessions(rows: SessionRepositoryRow[]): SearchableSessionRow[] {
@@ -1067,13 +1071,12 @@ async function parseCodexSessionMatches(
           role = 'assistant';
         }
       } else if (entry.type === 'response_item' && entry.payload?.type === 'reasoning') {
-        const summaryParts: string[] = [];
-        if (Array.isArray(entry.payload.summary)) {
-          for (const item of entry.payload.summary as AnyRecord[]) {
-            if (typeof item?.text === 'string' && item.text) summaryParts.push(item.text);
-          }
-        }
-        const summaryText = summaryParts.join('\n');
+        const summaryText = Array.isArray(entry.payload.summary)
+          ? entry.payload.summary
+            .map((item: AnyRecord) => (typeof item?.text === 'string' ? item.text : ''))
+            .filter(Boolean)
+            .join('\n')
+          : '';
 
         if (summaryText.trim()) {
           text = summaryText;

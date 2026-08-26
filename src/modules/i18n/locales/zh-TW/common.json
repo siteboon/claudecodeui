@@ -170,12 +170,12 @@
       "nonePublic": "無（公開）",
       "selectToken": "選取權杖",
       "selectTokenPlaceholder": "-- 選取權杖 --",
-      "tokenPlaceholder": "ghp_your_token_here",
+      "tokenPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
       "tokenHelp": "此權杖僅用於此操作",
       "publicRepoInfo": "公開儲存庫不需要身分驗證。如果複製公開儲存庫，可以略過提供權杖。",
       "noTokensHelp": "沒有可用的已儲存權杖。您可以在 設定 → API 金鑰 中新增權杖以便重複使用。",
       "optionalTokenPublic": "GitHub 權杖（公開儲存庫可選）",
-      "tokenPublicPlaceholder": "ghp_your_token_here（公開儲存庫可留空）"
+      "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx（公開儲存庫可留空）"
     },
     "step3": {
       "reviewConfig": "檢閱您的設定",

@@ -176,15 +176,15 @@ export class CloudController {
       clearTimeout(timeout);
     }
 
+    const body = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const errorBody = await response.json().catch(() => ({}));
       if (response.status === 401 || response.status === 403) {
         await this.invalidateCloudAccount();
       }
-      throw new Error(errorBody.error || `CloudCLI API request failed: ${response.status}`);
+      throw new Error(body.error || `CloudCLI API request failed: ${response.status}`);
     }
 
-    return response.json().catch(() => ({}));
+    return body;
   }
 
   async refreshCloudEnvironments() {

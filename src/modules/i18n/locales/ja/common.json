@@ -170,12 +170,12 @@
       "nonePublic": "なし（パブリック）",
       "selectToken": "トークンを選択",
       "selectTokenPlaceholder": "-- トークンを選択 --",
-      "tokenPlaceholder": "ghp_your_token_here",
+      "tokenPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
       "tokenHelp": "このトークンはこの操作にのみ使用されます",
       "publicRepoInfo": "パブリックリポジトリには認証は不要です。パブリックリポジトリをクローンする場合、トークンは省略できます。",
       "noTokensHelp": "保存済みトークンがありません。設定 → APIキーでトークンを追加すると再利用が簡単になります。",
       "optionalTokenPublic": "GitHubトークン（パブリックリポジトリの場合は任意）",
-      "tokenPublicPlaceholder": "ghp_your_token_here（パブリックリポジトリの場合は空欄可）"
+      "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx（パブリックリポジトリの場合は空欄可）"
     },
     "step3": {
       "reviewConfig": "設定の確認",

@@ -849,13 +849,9 @@ data: {"type":"done"}</code></pre>
             const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
             const results = await Promise.allSettled(
-                PROVIDER_ORDER.map(async ({ id }) => {
-                    const response = await fetch(`/api/providers/${id}/models`, { headers });
-                    if (!response.ok) {
-                        throw new Error(`Provider models request failed with status ${response.status}`);
-                    }
-                    return response.json();
-                })
+                PROVIDER_ORDER.map(({ id }) =>
+                    fetch(`/api/providers/${id}/models`, { headers }).then(r => r.json())
+                )
             );
 
             const providerModels = results.map((result, i) => {

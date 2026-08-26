@@ -22,12 +22,9 @@ export const readLegacyStarredProjectIds = (): string[] => {
       return [];
     }
 
-    const preferences: string[] = [];
-    for (const value of parsed) {
-      const preference = String(value).trim();
-      if (preference) preferences.push(preference);
-    }
-    return preferences;
+    return parsed
+      .map((value) => String(value).trim())
+      .filter((value) => value.length > 0);
   } catch {
     return [];
   }

@@ -60,13 +60,13 @@ self.addEventListener('fetch', event => {
 // Activate event — purge old caches
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then(cacheNames => {
-      const deletions = [];
-      for (const name of cacheNames) {
-        if (name !== CACHE_NAME) deletions.push(caches.delete(name));
-      }
-      return Promise.all(deletions);
-    })
+    caches.keys().then(cacheNames =>
+      Promise.all(
+        cacheNames
+          .filter(name => name !== CACHE_NAME)
+          .map(name => caches.delete(name))
+      )
+    )
   );
   self.clients.claim();
 });

@@ -35,9 +35,6 @@ export const useVersionCheck = (owner: string, repo: string) => {
     const fetchHealth = async () => {
       try {
         const response = await fetch('/health');
-        if (!response.ok) {
-          throw new Error(`Health request failed with status ${response.status}`);
-        }
         const data = await response.json();
         if (data.installMode === 'npm' || data.installMode === 'git') {
           setInstallMode(data.installMode);
@@ -62,9 +59,6 @@ export const useVersionCheck = (owner: string, repo: string) => {
     const checkVersion = async () => {
       try {
         const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases/latest`);
-        if (!response.ok) {
-          throw new Error(`Release request failed with status ${response.status}`);
-        }
         const data = await response.json();
 
         // Handle the case where there might not be any releases

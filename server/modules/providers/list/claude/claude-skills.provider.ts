@@ -44,11 +44,10 @@ const pathExistsAsDirectory = async (directoryPath: string): Promise<boolean> =>
 const listChildDirectories = async (directoryPath: string): Promise<string[]> => {
   try {
     const entries = await readdir(directoryPath, { withFileTypes: true });
-    const childDirectories: string[] = [];
-    for (const entry of entries) {
-      if (entry.isDirectory()) childDirectories.push(path.join(directoryPath, entry.name));
-    }
-    return childDirectories.sort((left, right) => left.localeCompare(right));
+    return entries
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => path.join(directoryPath, entry.name))
+      .sort((left, right) => left.localeCompare(right));
   } catch {
     return [];
   }

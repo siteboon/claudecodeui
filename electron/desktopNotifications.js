@@ -41,11 +41,11 @@ async function requestJson(url, { method = 'POST', body = null, headers = {} } =
       },
       ...(body == null ? {} : { body: JSON.stringify(body) }),
     });
+    const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const errorPayload = await response.json().catch(() => ({}));
-      throw new Error(errorPayload.error || `Request failed with status ${response.status}`);
+      throw new Error(payload.error || `Request failed with status ${response.status}`);
     }
-    return response.json().catch(() => ({}));
+    return payload;
   } finally {
     clearTimeout(timeout);
   }
@@ -150,13 +150,12 @@ export class DesktopNotificationsController {
       return;
     }
 
-    const targets = [];
-    for (const httpUrl of this.getRunningEnvironmentUrls?.() || []) {
-      const wsUrl = toNotificationsWsUrl(httpUrl);
-      if (wsUrl) {
-        targets.push({ httpUrl, wsUrl });
-      }
-    }
+    const targets = (this.getRunningEnvironmentUrls?.() || [])
+      .map((httpUrl) => ({
+        httpUrl,
+        wsUrl: toNotificationsWsUrl(httpUrl),
+      }))
+      .filter((target) => target.wsUrl);
 
     const nextWsUrls = new Set(targets.map((target) => target.wsUrl));
     for (const [wsUrl, connection] of this.connections.entries()) {
@@ -256,12 +255,10 @@ export class DesktopNotificationsController {
     const deviceId = this.getDeviceId?.();
     if (!deviceId) return;
 
-    const targets = new Set(this.getRunningEnvironmentUrls?.() || []);
-    for (const connection of this.connections.values()) {
-      if (connection.httpUrl) {
-        targets.add(connection.httpUrl);
-      }
-    }
+    const targets = new Set([
+      ...[...this.connections.values()].map((connection) => connection.httpUrl).filter(Boolean),
+      ...(this.getRunningEnvironmentUrls?.() || []),
+    ]);
 
     const results = await Promise.allSettled([...targets].map(async (httpUrl) => {
       const url = new URL(`/api/notifications/endpoints/desktop/${encodeURIComponent(deviceId)}`, httpUrl).toString();

@@ -346,19 +346,16 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       }
 
       const fileTree = await buildFileTree(resolvedPath, 1);
-      const directories: Array<{ path: string; name: string; type: 'directory' }> = [];
-      for (const item of fileTree) {
-        if (item.type === 'directory') {
-          directories.push({ path: item.path, name: item.name, type: 'directory' });
-        }
-      }
-      directories.sort((left, right) => {
+      const directories = fileTree
+        .filter((item) => item.type === 'directory')
+        .map((item) => ({ path: item.path, name: item.name, type: 'directory' as const }))
+        .sort((left, right) => {
           const leftHidden = left.name.startsWith('.');
           const rightHidden = right.name.startsWith('.');
           if (leftHidden && !rightHidden) return 1;
           if (!leftHidden && rightHidden) return -1;
           return left.name.localeCompare(right.name);
-      });
+        });
 
       let resolvedWorkspaceRoot = dependencies.workspace.rootPath;
       try {

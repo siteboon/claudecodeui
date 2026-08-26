@@ -223,22 +223,14 @@ export const chatRunRegistry = {
     startedAt: number;
     lastSeq: number;
   }> {
-    const runningRuns: Array<{
-      sessionId: string;
-      provider: LLMProvider;
-      startedAt: number;
-      lastSeq: number;
-    }> = [];
-    for (const run of runs.values()) {
-      if (run.status !== 'running') continue;
-      runningRuns.push({
+    return Array.from(runs.values())
+      .filter((run) => run.status === 'running')
+      .map((run) => ({
         sessionId: run.appSessionId,
         provider: run.provider,
         startedAt: run.startedAt,
         lastSeq: run.lastSeq,
-      });
-    }
-    return runningRuns;
+      }));
   },
 
   /**

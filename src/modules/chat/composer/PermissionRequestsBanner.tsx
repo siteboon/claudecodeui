@@ -62,15 +62,14 @@ export default function PermissionRequestsBanner({
         const settings = getClaudeSettings();
         const alreadyAllowed = permissionEntry ? settings.allowedTools.includes(permissionEntry) : false;
         const rememberLabel = alreadyAllowed ? 'Allow (saved)' : 'Allow & remember';
-        const matchingRequestIds = [request.requestId];
-        if (permissionEntry) {
-          matchingRequestIds.length = 0;
-          for (const item of pendingPermissionRequests) {
-            if (buildClaudeToolPermissionEntry(item.toolName, formatToolInputForDisplay(item.input)) === permissionEntry) {
-              matchingRequestIds.push(item.requestId);
-            }
-          }
-        }
+        const matchingRequestIds = permissionEntry
+          ? pendingPermissionRequests
+              .filter(
+                (item) =>
+                  buildClaudeToolPermissionEntry(item.toolName, formatToolInputForDisplay(item.input)) === permissionEntry,
+              )
+              .map((item) => item.requestId)
+          : [request.requestId];
 
         return (
           <Confirmation key={request.requestId} approval="pending">

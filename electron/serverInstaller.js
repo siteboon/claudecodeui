@@ -112,8 +112,8 @@ export class ServerInstaller {
       this.log('Extracting local server…');
       await fs.rm(versionDir, { recursive: true, force: true });
       await fs.mkdir(versionDir, { recursive: true });
-      const validatedBundlePath = await this.#validateBundleEntries(archivePath);
-      await this.#extract(validatedBundlePath, versionDir);
+      await this.#validateArchive(archivePath);
+      await this.#extract(archivePath, versionDir);
 
       const entry = this.getServerEntry();
       await fs.access(entry);
@@ -227,9 +227,9 @@ export class ServerInstaller {
     });
   }
 
-  #extract(bundlePath, destDir) {
+  #extract(archivePath, destDir) {
     return new Promise((resolve, reject) => {
-      const child = spawn('tar', ['-xzf', bundlePath, '-C', destDir], {
+      const child = spawn('tar', ['-xzf', archivePath, '-C', destDir], {
         stdio: ['ignore', 'ignore', 'pipe'],
         windowsHide: true,
       });
@@ -243,9 +243,9 @@ export class ServerInstaller {
     });
   }
 
-  #validateBundleEntries(bundlePath) {
+  #validateArchive(archivePath) {
     return new Promise((resolve, reject) => {
-      const child = spawn('tar', ['-tzf', bundlePath], {
+      const child = spawn('tar', ['-tzf', archivePath], {
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
       });
@@ -270,7 +270,7 @@ export class ServerInstaller {
             return;
           }
         }
-        resolve(bundlePath);
+        resolve();
       });
     });
   }

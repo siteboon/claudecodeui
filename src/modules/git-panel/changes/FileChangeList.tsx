@@ -35,8 +35,9 @@ export default function FileChangeList({
   return (
     <>
       {FILE_STATUS_GROUPS.map(({ key, status }) =>
-        (gitStatus[key] || []).map((filePath) =>
-          (!filePaths || filePaths.has(filePath)) ? (
+        (gitStatus[key] || [])
+          .filter((filePath) => !filePaths || filePaths.has(filePath))
+          .map((filePath) => (
             <FileChangeItem
               key={filePath}
               filePath={filePath}
@@ -52,8 +53,7 @@ export default function FileChangeList({
               onToggleWrapText={onToggleWrapText}
               onRequestFileAction={onRequestFileAction}
             />
-          ) : null,
-        ),
+          )),
       )}
     </>
   );

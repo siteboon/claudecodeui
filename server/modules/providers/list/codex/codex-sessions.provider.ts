@@ -200,19 +200,24 @@ function extractCodexTextContent(content: unknown): string {
     return typeof content === 'string' ? content : '';
   }
 
-  const textParts: string[] = [];
-  for (const item of content) {
-    if (!item || typeof item !== 'object') continue;
-    const record = item as AnyRecord;
-    if (
-      (record.type === 'input_text' || record.type === 'output_text' || record.type === 'text')
-      && typeof record.text === 'string'
-      && record.text
-    ) {
-      textParts.push(record.text);
-    }
-  }
-  return textParts.join('\n');
+  return content
+    .map((item) => {
+      if (!item || typeof item !== 'object') {
+        return '';
+      }
+
+      const record = item as AnyRecord;
+      if (
+        (record.type === 'input_text' || record.type === 'output_text' || record.type === 'text')
+        && typeof record.text === 'string'
+      ) {
+        return record.text;
+      }
+
+      return '';
+    })
+    .filter(Boolean)
+    .join('\n');
 }
 
 /**
@@ -296,12 +301,13 @@ function extractCodexToolOutput(output: unknown): string {
     return output == null ? '' : JSON.stringify(output);
   }
 
-  const textParts: string[] = [];
-  for (const item of output) {
-    const record = readObjectRecord(item);
-    if (typeof record?.text === 'string' && record.text) textParts.push(record.text);
-  }
-  return textParts.join('');
+  return output
+    .map((item) => {
+      const record = readObjectRecord(item);
+      return typeof record?.text === 'string' ? record.text : '';
+    })
+    .filter(Boolean)
+    .join('');
 }
 
 // ─── Codex "code mode" exec scripts ─────────────────────────────────────────
@@ -994,13 +1000,9 @@ async function readCodexSubagentTranscript(filePath: string): Promise<CodexSubag
     }
 
     if (payload.type === 'reasoning') {
-      const summaryParts: unknown[] = [];
-      if (Array.isArray(payload.summary)) {
-        for (const item of payload.summary as AnyRecord[]) {
-          if (item?.text) summaryParts.push(item.text);
-        }
-      }
-      const summary = summaryParts.join('\n');
+      const summary = Array.isArray(payload.summary)
+        ? payload.summary.map((item: AnyRecord) => item?.text).filter(Boolean).join('\n')
+        : '';
       if (summary.trim()) {
         activity.push({ kind: 'thinking', content: summary, timestamp });
       }
@@ -1368,13 +1370,9 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
     }
 
     if (payload.type === 'reasoning') {
-      const summaryParts: unknown[] = [];
-      if (Array.isArray(payload.summary)) {
-        for (const item of payload.summary as AnyRecord[]) {
-          if (item?.text) summaryParts.push(item.text);
-        }
-      }
-      const summaryText = summaryParts.join('\n');
+      const summaryText = Array.isArray(payload.summary)
+        ? payload.summary.map((item: AnyRecord) => item?.text).filter(Boolean).join('\n')
+        : '';
       if (summaryText.trim()) {
         messages.push({
           type: 'thinking',
@@ -1912,19 +1910,14 @@ export class CodexSessionsProvider implements IProviderSessions {
     }
 
     if (raw.message?.role === 'user') {
-      let content: string;
-      if (typeof raw.message.content === 'string') {
-        content = raw.message.content;
-      } else if (Array.isArray(raw.message.content)) {
-        const textParts: unknown[] = [];
-        for (const part of raw.message.content as Array<string | AnyRecord>) {
-          const text = typeof part === 'string' ? part : part?.text || '';
-          if (text) textParts.push(text);
-        }
-        content = textParts.join('\n');
-      } else {
-        content = String(raw.message.content || '');
-      }
+      const content = typeof raw.message.content === 'string'
+        ? raw.message.content
+        : Array.isArray(raw.message.content)
+          ? raw.message.content
+            .map((part: string | AnyRecord) => typeof part === 'string' ? part : part?.text || '')
+            .filter(Boolean)
+            .join('\n')
+          : String(raw.message.content || '');
       const parsedFiles = parseFilesInputTag(content);
       const rawImages = Array.isArray(raw.images) && raw.images.length > 0 ? raw.images : undefined;
       const files = parsedFiles.attachments.length > 0 ? parsedFiles.attachments : undefined;
@@ -1949,17 +1942,14 @@ export class CodexSessionsProvider implements IProviderSessions {
     }
 
     if (raw.message?.role === 'assistant') {
-      let content = '';
-      if (typeof raw.message.content === 'string') {
-        content = raw.message.content;
-      } else if (Array.isArray(raw.message.content)) {
-        const textParts: unknown[] = [];
-        for (const part of raw.message.content as Array<string | AnyRecord>) {
-          const text = typeof part === 'string' ? part : part?.text || '';
-          if (text) textParts.push(text);
-        }
-        content = textParts.join('\n');
-      }
+      const content = typeof raw.message.content === 'string'
+        ? raw.message.content
+        : Array.isArray(raw.message.content)
+          ? raw.message.content
+            .map((part: string | AnyRecord) => typeof part === 'string' ? part : part?.text || '')
+            .filter(Boolean)
+            .join('\n')
+          : '';
       if (!content.trim()) {
         return [];
       }
