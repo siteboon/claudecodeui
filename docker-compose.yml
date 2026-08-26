@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  cloudcli:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cloudcli
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      CORS_ORIGIN: http://localhost:3001
+    volumes:
+      - cloudcli_data:/root/.cloudcli
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    networks:
+      - cloudcli_network
+
+volumes:
+  cloudcli_data:
+    driver: local
+
+networks:
+  cloudcli_network:
+    driver: bridge
