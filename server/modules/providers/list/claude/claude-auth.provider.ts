@@ -25,7 +25,9 @@ export class ClaudeProviderAuth implements IProviderAuth {
    * Checks whether the Claude Code CLI is available on this host.
    */
   private checkInstalled(): boolean {
-    const cliPath = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH);
+    // cross-spawn resolves shims and PATHEXT itself, so the bare command is a
+    // usable fallback here even where the SDK's raw spawn could not use it.
+    const cliPath = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH) ?? 'claude';
     try {
       spawn.sync(cliPath, ['--version'], { stdio: 'ignore', timeout: 5000 });
       return true;

@@ -226,7 +226,12 @@ function mapCliOptionsToSDK(options = {}) {
 
   // Resolve the executable eagerly on Windows because the SDK uses raw child_process.spawn,
   // which does not reliably follow npm's shell wrappers like cross-spawn does.
-  sdkOptions.pathToClaudeCodeExecutable = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH);
+  // When nothing resolves the option stays unset on purpose: the SDK then falls back to the
+  // binary it ships, which beats handing it a bare `claude` that raw spawn can never launch.
+  const claudeExecutablePath = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH);
+  if (claudeExecutablePath) {
+    sdkOptions.pathToClaudeCodeExecutable = claudeExecutablePath;
+  }
 
   if (cwd) {
     sdkOptions.cwd = cwd;
