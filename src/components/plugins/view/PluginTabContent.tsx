@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+
 import { useTheme } from '../../../contexts/ThemeContext';
 import { authenticatedFetch } from '../../../utils/api';
 import { usePlugins } from '../../../contexts/PluginsContext';

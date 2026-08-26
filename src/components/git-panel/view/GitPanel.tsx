@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+
 import { useGitPanelController } from '../hooks/useGitPanelController';
 import { useRevertLocalCommit } from '../hooks/useRevertLocalCommit';
 import type { ConfirmationRequest, GitPanelProps, GitPanelView } from '../types/types';

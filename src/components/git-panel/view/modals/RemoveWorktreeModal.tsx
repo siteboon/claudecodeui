@@ -1,5 +1,6 @@
 import { RefreshCw, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+
 import type { RemoveWorktreeOptions, WorktreeInfo } from '../../types/types';
 
 type RemoveWorktreeModalProps = {

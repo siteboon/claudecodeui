@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AlertTriangle, Plus, Shield, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
 import { Button, Input } from '../../../../../../../shared/view/ui';
 import type { CodexPermissionMode } from '../../../../../types/types';
 

@@ -1,6 +1,8 @@
 import { AlertCircle, Check, ChevronDown, Download, GitBranch, Plus, RefreshCw, RotateCcw, Search, Upload, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+
 import type { ConfirmationRequest, GitRemoteStatus } from '../types/types';
+
 import NewBranchModal from './modals/NewBranchModal';
 
 type GitPanelHeaderProps = {

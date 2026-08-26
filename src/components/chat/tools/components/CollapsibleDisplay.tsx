@@ -1,5 +1,7 @@
 import React from 'react';
+
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../../../../shared/view/ui';
+
 import { CollapsibleSection } from './CollapsibleSection';
 
 interface CollapsibleDisplayProps {

@@ -3,6 +3,7 @@ import { markdown } from '@codemirror/lang-markdown';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { EditorView } from '@codemirror/view';
 import CodeMirror from '@uiw/react-codemirror';
+
 import MarkdownPreview from '../../code-editor/view/subcomponents/markdown/MarkdownPreview';
 
 type PrdEditorBodyProps = {

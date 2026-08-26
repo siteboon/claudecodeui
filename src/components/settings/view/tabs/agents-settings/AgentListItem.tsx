@@ -96,7 +96,7 @@ export default function AgentListItem({
       {authStatus.authenticated ? (
         <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${colors.dot}`} />
       ) : authStatus.loading ? (
-        <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-muted-foreground/30 animate-pulse" />
+        <span className="h-1.5 w-1.5 flex-shrink-0 animate-pulse rounded-full bg-muted-foreground/30" />
       ) : null}
     </button>
   );

@@ -1,5 +1,6 @@
 import { FILE_STATUS_GROUPS } from '../../constants/constants';
 import type { FileStatusCode, GitDiffMap, GitStatusResponse } from '../../types/types';
+
 import FileChangeItem from './FileChangeItem';
 
 type FileChangeListProps = {

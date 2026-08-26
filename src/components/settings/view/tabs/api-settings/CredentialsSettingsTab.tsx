@@ -1,5 +1,7 @@
 import { useTranslation } from 'react-i18next';
+
 import { useCredentialsSettings } from '../../../hooks/useCredentialsSettings';
+
 import ApiKeysSection from './sections/ApiKeysSection';
 import GithubCredentialsSection from './sections/GithubCredentialsSection';
 import NewApiKeyAlert from './sections/NewApiKeyAlert';

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Plus, Terminal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
 import { cn } from '../../../../lib/utils';
 import Shell from '../../../shell/view/Shell';
 import type { TaskMasterProject } from '../../types';

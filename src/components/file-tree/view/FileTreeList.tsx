@@ -1,5 +1,7 @@
 import type { DragEvent, ReactNode, RefObject } from 'react';
+
 import type { FileTreeNode as FileTreeNodeType, FileTreeViewMode } from '../types/types';
+
 import FileTreeNode from './FileTreeNode';
 
 type FileTreeListProps = {

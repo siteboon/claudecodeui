@@ -1,5 +1,6 @@
 import { Check, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
 import { Button } from '../../../shared/view/ui';
 import type { WizardStep } from '../types';
 

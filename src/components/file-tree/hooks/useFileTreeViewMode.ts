@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+
 import {
   FILE_TREE_DEFAULT_VIEW_MODE,
   FILE_TREE_VIEW_MODES,

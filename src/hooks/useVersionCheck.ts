@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+
 import { version } from '../../package.json';
 import { ReleaseInfo } from '../shared/types';
 

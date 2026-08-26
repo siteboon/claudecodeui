@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+
 import type { TaskBoardSortField, TaskBoardSortOrder } from '../../types';
 
 type TaskFiltersPanelProps = {
