@@ -276,6 +276,12 @@ export async function queryCodex(command, options = {}, ws, context) {
   let capturedSessionId = providerSessionId;
   let sessionCreatedSent = false;
   let terminalFailure = null;
+  // Codex surfaces API failures as streamed error items/turn.failed events, and
+  // then the SDK also throws "Codex Exec exited with code N: <stderr>" once the
+  // process dies. Showing both means the rendered error is followed by a raw
+  // stderr dump of unrelated CLI log lines, so the thrown wrapper is dropped
+  // when the stream already reported the failure.
+  let errorSurfaced = false;
   const abortController = new AbortController();
   // Session-map key: the app session id when the caller supplied one, else
   // the provider-native thread id once captured (legacy/direct API callers).
@@ -370,6 +376,9 @@ export async function queryCodex(command, options = {}, ws, context) {
       }
 
       const transformed = transformCodexEvent(event);
+      if (transformed.type === 'error' || transformed.itemType === 'error') {
+        errorSurfaced = true;
+      }
 
       // Normalize the transformed event into NormalizedMessage(s) via adapter
       const normalizedMsgs = context.normalizeMessage(transformed, capturedSessionId || sessionId || null);
@@ -379,6 +388,7 @@ export async function queryCodex(command, options = {}, ws, context) {
 
       if (event.type === 'turn.failed' && !terminalFailure) {
         terminalFailure = event.error || new Error('Turn failed');
+        errorSurfaced = true;
         // Notifications are app-facing, so they carry the app session id.
         notifyRunFailed({
           userId: ws?.userId || null,
@@ -430,13 +440,15 @@ export async function queryCodex(command, options = {}, ws, context) {
     if (!wasAborted) {
       console.error('[Codex] Error:', error);
 
-      // Check if Codex SDK is available for a clearer error message
-      const installed = await context.isProviderInstalled();
-      const errorContent = !installed
-        ? 'Codex CLI is not configured. Please set up authentication first.'
-        : error.message;
+      if (!errorSurfaced) {
+        // Check if Codex SDK is available for a clearer error message
+        const installed = await context.isProviderInstalled();
+        const errorContent = !installed
+          ? 'Codex CLI is not configured. Please set up authentication first.'
+          : error.message;
 
-      sendMessage(ws, createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider: 'codex' }));
+        sendMessage(ws, createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider: 'codex' }));
+      }
       sendMessage(ws, createCompleteMessage({
         provider: 'codex',
         sessionId: capturedSessionId || sessionId || null,
