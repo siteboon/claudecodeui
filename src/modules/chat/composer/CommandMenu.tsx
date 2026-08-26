@@ -94,6 +94,9 @@ const getNamespaceIcon = (namespace: string) => namespaceIcons[namespace] || nam
 const getNamespaceAccentClass = (namespace: string) =>
   namespaceAccentClasses[namespace] || namespaceAccentClasses.other;
 
+const renderInPortal = (node: ReactElement) =>
+  typeof document === 'undefined' ? node : createPortal(node, document.body);
+
 const getMenuPosition = (position: { top: number; left: number; bottom?: number }): CSSProperties => {
   if (typeof window === 'undefined') {
     return { position: 'fixed', top: '16px', left: '16px' };
@@ -233,8 +236,6 @@ export default function CommandMenu({
     (namespace) => !preferredNamespaceKeys.has(namespace),
   );
   const orderedNamespaces = [...preferredOrder, ...extraNamespaces].filter((namespace) => groupedCommands[namespace]);
-  const renderInPortal = (node: ReactElement) =>
-    typeof document === 'undefined' ? node : createPortal(node, document.body);
 
   if (commands.length === 0) {
     return renderInPortal(
