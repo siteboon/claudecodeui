@@ -191,9 +191,10 @@ export async function getProjectsWithSessions(
     isStarred?: number;
   }>;
   const totalProjects = projectRows.length;
+  const projects: ProjectListItem[] = [];
   let processedProjects = 0;
 
-  const projects = await Promise.all(projectRows.map(async (row): Promise<ProjectListItem> => {
+  for (const row of projectRows) {
     processedProjects += 1;
 
     const projectId = row.project_id;
@@ -216,7 +217,7 @@ export async function getProjectsWithSessions(
       offset: options.sessionsOffset,
     });
 
-    return {
+    projects.push({
       projectId,
       path: projectPath,
       displayName,
@@ -227,8 +228,8 @@ export async function getProjectsWithSessions(
         hasMore: sessionsPage.hasMore,
         total: sessionsPage.total,
       },
-    };
-  }));
+    });
+  }
 
   broadcastProgress({
     phase: 'complete',
@@ -258,7 +259,9 @@ export async function getArchivedProjectsWithSessions(
     isStarred?: number;
   }>;
 
-  return Promise.all(projectRows.map(async (row): Promise<ArchivedProjectListItem> => {
+  const archivedProjects: ArchivedProjectListItem[] = [];
+
+  for (const row of projectRows) {
     const displayName =
       row.custom_project_name && row.custom_project_name.trim().length > 0
         ? row.custom_project_name
@@ -266,7 +269,7 @@ export async function getArchivedProjectsWithSessions(
 
     const sessionsPage = readProjectSessionsIncludingArchived(row.project_path);
 
-    return {
+    archivedProjects.push({
       projectId: row.project_id,
       path: row.project_path,
       displayName,
@@ -278,8 +281,10 @@ export async function getArchivedProjectsWithSessions(
         hasMore: sessionsPage.hasMore,
         total: sessionsPage.total,
       },
-    };
-  }));
+    });
+  }
+
+  return archivedProjects;
 }
 
 /**

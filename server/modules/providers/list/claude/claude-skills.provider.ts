@@ -195,11 +195,11 @@ export class ClaudeSkillsProvider extends SkillsProvider {
         .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.md'))
         .sort((left, right) => left.name.localeCompare(right.name));
 
-      const commandSkills = await Promise.all(commandFiles.map(async (commandFile): Promise<ProviderSkill | null> => {
+      for (const commandFile of commandFiles) {
         const sourcePath = path.join(commandsPath, commandFile.name);
         try {
           const definition = await this.readPluginCommandDefinition(sourcePath);
-          return {
+          skills.push({
             provider: this.provider,
             name: definition.name,
             description: definition.description,
@@ -208,13 +208,11 @@ export class ClaudeSkillsProvider extends SkillsProvider {
             sourcePath,
             pluginName,
             pluginId,
-          };
+          });
         } catch {
           // Malformed command markdown should not block sibling plugin commands.
-          return null;
         }
-      }));
-      skills.push(...commandSkills.filter((skill) => skill !== null));
+      }
     } catch {
       // Missing or unreadable command folders are treated as empty plugin command sets.
     }
@@ -245,10 +243,10 @@ export class ClaudeSkillsProvider extends SkillsProvider {
     });
     const skills: ProviderSkill[] = [];
 
-    const pluginSkills = await Promise.all(skillFiles.map(async (skillPath): Promise<ProviderSkill | null> => {
+    for (const skillPath of skillFiles) {
       try {
         const definition = await readProviderSkillMarkdownDefinition(skillPath);
-        return {
+        skills.push({
           provider: this.provider,
           name: definition.name,
           description: definition.description,
@@ -257,13 +255,11 @@ export class ClaudeSkillsProvider extends SkillsProvider {
           sourcePath: skillPath,
           pluginName,
           pluginId,
-        };
+        });
       } catch {
         // A bad plugin skill file should not block other installed plugin skills.
-        return null;
       }
-    }));
-    skills.push(...pluginSkills.filter((skill) => skill !== null));
+    }
 
     return skills;
   }

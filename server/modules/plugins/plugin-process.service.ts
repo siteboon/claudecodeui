@@ -216,17 +216,17 @@ export async function startEnabledPluginServers() {
   const plugins = scanPlugins();
   const config = getPluginsConfig();
 
-  await Promise.all(plugins.map(async (plugin) => {
-    if (!plugin.server) return;
-    if (config[plugin.name]?.enabled === false) return;
+  for (const plugin of plugins) {
+    if (!plugin.server) continue;
+    if (config[plugin.name]?.enabled === false) continue;
 
     const pluginDir = getPluginDir(plugin.name);
-    if (!pluginDir) return;
+    if (!pluginDir) continue;
 
     try {
       await startPluginServer(plugin.name, pluginDir, plugin.server);
     } catch (err) {
       console.error(`[Plugins] Failed to start server for "${plugin.name}":`, err.message);
     }
-  }));
+  }
 }

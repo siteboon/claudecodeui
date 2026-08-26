@@ -169,10 +169,8 @@ const readConnectedOpenCodeProviderIds = async (): Promise<Set<string> | null> =
     }
   }
 
-  const configs = await Promise.all(
-    OPENCODE_CONFIG_FILES.map((configFile) => readOpenCodeJsonFile(path.join(configDir, configFile))),
-  );
-  for (const config of configs) {
+  for (const configFile of OPENCODE_CONFIG_FILES) {
+    const config = await readOpenCodeJsonFile(path.join(configDir, configFile));
     for (const providerId of Object.keys(readObjectRecord(config?.provider) ?? {})) {
       providerIds.add(providerId);
     }

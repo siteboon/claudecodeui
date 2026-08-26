@@ -34,25 +34,22 @@ const pathExists = async (target: string): Promise<boolean> => {
  * transcript was deleted" and wiping the whole index.
  */
 const pruneOrphanedSessions = async (): Promise<number> => {
-  const sessions = sessionsDb.getSessionsWithTranscriptPath();
-  const transcriptExists = await Promise.all(sessions.map(({ jsonl_path: jsonlPath }) => pathExists(jsonlPath)));
-  const missingDirectories = [...new Set(
-    sessions.flatMap(({ jsonl_path: jsonlPath }, index) => (
-      transcriptExists[index] ? [] : [path.dirname(jsonlPath)]
-    )),
-  )];
-  const directoryExists = new Map(
-    await Promise.all(missingDirectories.map(async (directory) => [directory, await pathExists(directory)] as const)),
-  );
+  const knownDirectoryExists = new Map<string, boolean>();
   let pruned = 0;
 
-  for (const [index, { session_id: sessionId, jsonl_path: jsonlPath }] of sessions.entries()) {
-    if (transcriptExists[index]) {
+  for (const { session_id: sessionId, jsonl_path: jsonlPath } of sessionsDb.getSessionsWithTranscriptPath()) {
+    if (await pathExists(jsonlPath)) {
       continue;
     }
 
     const directory = path.dirname(jsonlPath);
-    if (!directoryExists.get(directory)) {
+    let directoryExists = knownDirectoryExists.get(directory);
+    if (directoryExists === undefined) {
+      directoryExists = await pathExists(directory);
+      knownDirectoryExists.set(directory, directoryExists);
+    }
+
+    if (!directoryExists) {
       continue;
     }
 

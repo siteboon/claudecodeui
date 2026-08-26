@@ -629,11 +629,11 @@ router.post('/commit', async (req, res) => {
     await validateGitRepository(projectPath);
     const repositoryRootPath = await getRepositoryRootPath(projectPath);
     
-    // Resolve every requested path first, then update the index in one git operation.
-    const repositoryRelativeFilePaths = await Promise.all(
-      files.map(async (file) => (await resolveRepositoryFilePath(projectPath, file)).repositoryRelativeFilePath),
-    );
-    await spawnAsync('git', ['add', '--', ...repositoryRelativeFilePaths], { cwd: repositoryRootPath });
+    // Stage selected files
+    for (const file of files) {
+      const { repositoryRelativeFilePath } = await resolveRepositoryFilePath(projectPath, file);
+      await spawnAsync('git', ['add', '--', repositoryRelativeFilePath], { cwd: repositoryRootPath });
+    }
 
     // Commit with message
     const { stdout } = await spawnAsync('git', ['commit', '-m', message], { cwd: repositoryRootPath });
@@ -659,10 +659,10 @@ router.post('/stage', async (req, res) => {
     await validateGitRepository(projectPath);
     const repositoryRootPath = await getRepositoryRootPath(projectPath);
 
-    const repositoryRelativeFilePaths = await Promise.all(
-      files.map(async (file) => (await resolveRepositoryFilePath(projectPath, file)).repositoryRelativeFilePath),
-    );
-    await spawnAsync('git', ['add', '--', ...repositoryRelativeFilePaths], { cwd: repositoryRootPath });
+    for (const file of files) {
+      const { repositoryRelativeFilePath } = await resolveRepositoryFilePath(projectPath, file);
+      await spawnAsync('git', ['add', '--', repositoryRelativeFilePath], { cwd: repositoryRootPath });
+    }
 
     res.json({ success: true });
   } catch (error) {
@@ -685,15 +685,15 @@ router.post('/unstage', async (req, res) => {
     const repositoryRootPath = await getRepositoryRootPath(projectPath);
     const hasCommits = await repositoryHasCommits(projectPath);
 
-    const repositoryRelativeFilePaths = await Promise.all(
-      files.map(async (file) => (await resolveRepositoryFilePath(projectPath, file)).repositoryRelativeFilePath),
-    );
-    if (hasCommits) {
-      await spawnAsync('git', ['reset', 'HEAD', '--', ...repositoryRelativeFilePaths], { cwd: repositoryRootPath });
-    } else {
-      // No HEAD to reset against before the first commit; dropping the
-      // index entries is the only way to unstage while keeping the files.
-      await spawnAsync('git', ['rm', '--cached', '-r', '--force', '--', ...repositoryRelativeFilePaths], { cwd: repositoryRootPath });
+    for (const file of files) {
+      const { repositoryRelativeFilePath } = await resolveRepositoryFilePath(projectPath, file);
+      if (hasCommits) {
+        await spawnAsync('git', ['reset', 'HEAD', '--', repositoryRelativeFilePath], { cwd: repositoryRootPath });
+      } else {
+        // No HEAD to reset against before the first commit; dropping the
+        // index entry is the only way to unstage while keeping the file.
+        await spawnAsync('git', ['rm', '--cached', '-r', '--force', '--', repositoryRelativeFilePath], { cwd: repositoryRootPath });
+      }
     }
 
     res.json({ success: true });
@@ -779,18 +779,18 @@ router.get('/branches', async (req, res) => {
         localBranches.push(branch.startsWith('* ') ? branch.substring(2) : branch);
       }
     }
-    const localBranchNames = new Set(localBranches);
 
     // Remote branches — strip 'remotes/<remote>/' prefix
     const remoteBranches: string[] = [];
     for (const branch of rawLines) {
       if (!branch.startsWith('remotes/')) continue;
       const name = branch.replace(/^remotes\/[^/]+\//, '');
-      if (!localBranchNames.has(name)) remoteBranches.push(name);
+      if (!localBranches.includes(name)) remoteBranches.push(name);
     }
 
     // Backward-compat flat list (local + unique remotes, deduplicated)
-    const branches = [...new Set([...localBranches, ...remoteBranches])];
+    const branches = [...localBranches, ...remoteBranches]
+      .filter((b, i, arr) => arr.indexOf(b) === i);
 
     res.json({ branches, localBranches, remoteBranches });
   } catch (error) {
@@ -973,7 +973,8 @@ router.post('/generate-commit-message', async (req, res) => {
     const repositoryRootPath = await getRepositoryRootPath(projectPath);
 
     // Get diff for selected files
-    const diffChunks = await Promise.all(files.map(async (file) => {
+    let diffContext = '';
+    for (const file of files) {
       try {
         const { repositoryRelativeFilePath } = await resolveRepositoryFilePath(projectPath, file);
         const { stdout } = await spawnAsync(
@@ -981,19 +982,17 @@ router.post('/generate-commit-message', async (req, res) => {
           { cwd: repositoryRootPath }
         );
         if (stdout) {
-          return `\n--- ${repositoryRelativeFilePath} ---\n${stdout}`;
+          diffContext += `\n--- ${repositoryRelativeFilePath} ---\n${stdout}`;
         }
       } catch (error) {
         console.error(`Error getting diff for ${file}:`, error);
       }
-      return '';
-    }));
-    let diffContext = diffChunks.join('');
+    }
 
     // If no diff found, might be untracked files
     if (!diffContext.trim()) {
       // Try to get content of untracked files
-      const untrackedChunks = await Promise.all(files.map(async (file) => {
+      for (const file of files) {
         try {
           const { repositoryRelativeFilePath } = await resolveRepositoryFilePath(projectPath, file);
           const filePath = path.join(repositoryRootPath, repositoryRelativeFilePath);
@@ -1001,16 +1000,14 @@ router.post('/generate-commit-message', async (req, res) => {
 
           if (!stats.isDirectory()) {
             const content = await fs.readFile(filePath, 'utf-8');
-            return `\n--- ${repositoryRelativeFilePath} (new file) ---\n${content.substring(0, 1000)}\n`;
+            diffContext += `\n--- ${repositoryRelativeFilePath} (new file) ---\n${content.substring(0, 1000)}\n`;
           } else {
-            return `\n--- ${repositoryRelativeFilePath} (new directory) ---\n`;
+            diffContext += `\n--- ${repositoryRelativeFilePath} (new directory) ---\n`;
           }
         } catch (error) {
           console.error(`Error reading file ${file}:`, error);
         }
-        return '';
-      }));
-      diffContext = untrackedChunks.join('');
+      }
     }
 
     // Generate commit message using AI

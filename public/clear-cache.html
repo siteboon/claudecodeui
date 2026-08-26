@@ -50,19 +50,19 @@
                 // Unregister all service workers
                 if ('serviceWorker' in navigator) {
                     const registrations = await navigator.serviceWorker.getRegistrations();
-                    await Promise.all(registrations.map(async (registration) => {
+                    for (let registration of registrations) {
                         await registration.unregister();
                         status.innerHTML += '<p class="success">✓ Unregistered service worker</p>';
-                    }));
+                    }
                 }
 
                 // Clear all caches
                 if ('caches' in window) {
                     const cacheNames = await caches.keys();
-                    await Promise.all(cacheNames.map(async (cacheName) => {
+                    for (let cacheName of cacheNames) {
                         await caches.delete(cacheName);
                         status.innerHTML += `<p class="success">✓ Deleted cache: ${cacheName}</p>`;
-                    }));
+                    }
                 }
 
                 // Clear localStorage
