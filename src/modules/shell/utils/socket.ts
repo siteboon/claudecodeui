@@ -12,6 +12,7 @@ type ShellInitMessage = {
   initialCommand: string | null | undefined;
   isPlainShell: boolean;
   forceRestart?: boolean;
+  bypassPermissions?: boolean;
 };
 
 type ShellResizeMessage = {

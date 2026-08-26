@@ -166,7 +166,10 @@
       "restart": "Riavvia",
       "restartTitle": "Riavvia shell (disconnetti prima)",
       "connect": "Continua nella shell",
-      "connectTitle": "Connetti alla shell"
+      "connectTitle": "Connetti alla shell",
+      "bypass": "Bypass",
+      "bypassOnTitle": "Bypass dei permessi attivo — clicca per disattivarlo (riavvia la CLI)",
+      "bypassOffTitle": "Bypass dei permessi disattivato — clicca per attivarlo (riavvia la CLI)"
     },
     "loading": "Caricamento terminale...",
     "connecting": "Connessione alla shell...",

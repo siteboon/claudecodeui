@@ -166,7 +166,10 @@
       "restart": "Yeniden Başlat",
       "restartTitle": "Shell'i yeniden başlat (önce bağlantıyı kes)",
       "connect": "Shell'de Devam Et",
-      "connectTitle": "Shell'e bağlan"
+      "connectTitle": "Shell'e bağlan",
+      "bypass": "Atlama",
+      "bypassOnTitle": "İzin atlama açık — kapatmak için tıklayın (CLI yeniden başlar)",
+      "bypassOffTitle": "İzin atlama kapalı — açmak için tıklayın (CLI yeniden başlar)"
     },
     "loading": "Terminal yükleniyor...",
     "connecting": "Shell'e bağlanılıyor...",

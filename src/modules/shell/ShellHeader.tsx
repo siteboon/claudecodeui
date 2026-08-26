@@ -1,4 +1,4 @@
-import { RotateCcw, X } from 'lucide-react';
+import { RotateCcw, Shield, ShieldOff, X } from 'lucide-react';
 
 type ShellHeaderProps = {
   isConnected: boolean;
@@ -16,6 +16,11 @@ type ShellHeaderProps = {
   restartLabel: string;
   restartTitle: string;
   disableRestart: boolean;
+  showBypassToggle: boolean;
+  bypassEnabled: boolean;
+  onToggleBypass: () => void;
+  bypassLabel: string;
+  bypassTitle: string;
 };
 
 /** Rendered by Shell above the terminal to show connection status and the restart/disconnect actions. */
@@ -35,6 +40,11 @@ export default function ShellHeader({
   restartLabel,
   restartTitle,
   disableRestart,
+  showBypassToggle,
+  bypassEnabled,
+  onToggleBypass,
+  bypassLabel,
+  bypassTitle,
 }: ShellHeaderProps) {
   return (
     <div className="flex-shrink-0 border-b border-gray-700 bg-gray-800 px-4 py-2">
@@ -54,6 +64,27 @@ export default function ShellHeader({
         </div>
 
         <div className="flex items-center gap-2">
+          {showBypassToggle && (
+            <button
+              type="button"
+              onClick={onToggleBypass}
+              aria-pressed={bypassEnabled}
+              className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 ${
+                bypassEnabled
+                  ? 'border-orange-500/70 bg-orange-600/80 text-white hover:bg-orange-700 focus:ring-orange-400/70'
+                  : 'border-gray-600/80 bg-gray-700/70 text-gray-100 hover:border-orange-400/70 hover:bg-orange-600/60 hover:text-white focus:ring-orange-400/70'
+              }`}
+              title={bypassTitle}
+            >
+              {bypassEnabled ? (
+                <ShieldOff className="h-3.5 w-3.5" aria-hidden="true" />
+              ) : (
+                <Shield className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              <span>{bypassLabel}</span>
+            </button>
+          )}
+
           {isConnected && (
             <button
               type="button"

@@ -168,7 +168,10 @@
       "restart": "Redémarrer",
       "restartTitle": "Redémarrer le shell",
       "connect": "Continuer dans le shell",
-      "connectTitle": "Se connecter au shell"
+      "connectTitle": "Se connecter au shell",
+      "bypass": "Bypass",
+      "bypassOnTitle": "Contournement des permissions activé — cliquez pour désactiver (redémarre la CLI)",
+      "bypassOffTitle": "Contournement des permissions désactivé — cliquez pour activer (redémarre la CLI)"
     },
     "loading": "Chargement du terminal...",
     "connecting": "Connexion au shell...",

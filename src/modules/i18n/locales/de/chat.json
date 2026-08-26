@@ -166,7 +166,10 @@
       "restart": "Neu starten",
       "restartTitle": "Terminal neu starten (zuerst trennen)",
       "connect": "Im Terminal fortfahren",
-      "connectTitle": "Mit Terminal verbinden"
+      "connectTitle": "Mit Terminal verbinden",
+      "bypass": "Bypass",
+      "bypassOnTitle": "Berechtigungs-Bypass aktiv — klicken zum Deaktivieren (startet die CLI neu)",
+      "bypassOffTitle": "Berechtigungs-Bypass inaktiv — klicken zum Aktivieren (startet die CLI neu)"
     },
     "loading": "Terminal wird geladen...",
     "connecting": "Verbindung zum Terminal wird hergestellt...",

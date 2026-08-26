@@ -12,6 +12,7 @@ type UseShellRuntimeOptions = {
   selectedSession: ProjectSession | null | undefined;
   initialCommand: string | null | undefined;
   isPlainShell: boolean;
+  bypassPermissions: boolean;
   minimal: boolean;
   autoConnect: boolean;
   isRestarting: boolean;
@@ -35,6 +36,7 @@ export function useShellRuntime({
   selectedSession,
   initialCommand,
   isPlainShell,
+  bypassPermissions,
   minimal,
   autoConnect,
   isRestarting,
@@ -50,6 +52,7 @@ export function useShellRuntime({
   const selectedSessionRef = useRef(selectedSession);
   const initialCommandRef = useRef(initialCommand);
   const isPlainShellRef = useRef(isPlainShell);
+  const bypassPermissionsRef = useRef(bypassPermissions);
   const onProcessCompleteRef = useRef(onProcessComplete);
   const lastSessionIdRef = useRef<string | null>(selectedSession?.id ?? null);
 
@@ -59,8 +62,9 @@ export function useShellRuntime({
     selectedSessionRef.current = selectedSession;
     initialCommandRef.current = initialCommand;
     isPlainShellRef.current = isPlainShell;
+    bypassPermissionsRef.current = bypassPermissions;
     onProcessCompleteRef.current = onProcessComplete;
-  }, [selectedProject, selectedSession, initialCommand, isPlainShell, onProcessComplete]);
+  }, [selectedProject, selectedSession, initialCommand, isPlainShell, bypassPermissions, onProcessComplete]);
 
   const closeSocket = useCallback(() => {
     const activeSocket = wsRef.current;
@@ -97,6 +101,7 @@ export function useShellRuntime({
     selectedSessionRef,
     initialCommandRef,
     isPlainShellRef,
+    bypassPermissionsRef,
     onProcessCompleteRef,
     isInitialized,
     autoConnect,

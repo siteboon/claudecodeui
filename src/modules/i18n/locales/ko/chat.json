@@ -186,7 +186,10 @@
       "restart": "재시작",
       "restartTitle": "Shell 재시작 (먼저 연결 끊기)",
       "connect": "Shell에서 계속",
-      "connectTitle": "Shell에 연결"
+      "connectTitle": "Shell에 연결",
+      "bypass": "우회",
+      "bypassOnTitle": "권한 우회 켜짐 — 클릭하면 꺼짐 (CLI 재시작)",
+      "bypassOffTitle": "권한 우회 꺼짐 — 클릭하면 켜짐 (CLI 재시작)"
     },
     "loading": "터미널 로딩 중...",
     "connecting": "Shell에 연결 중...",

@@ -186,7 +186,10 @@
       "restart": "重启",
       "restartTitle": "重启 Shell（请先断开连接）",
       "connect": "在 Shell 中继续",
-      "connectTitle": "连接到 Shell"
+      "connectTitle": "连接到 Shell",
+      "bypass": "绕过",
+      "bypassOnTitle": "权限绕过已开启 — 点击关闭（将重启 CLI）",
+      "bypassOffTitle": "权限绕过已关闭 — 点击开启（将重启 CLI）"
     },
     "loading": "正在加载终端...",
     "connecting": "正在连接到 Shell...",

@@ -159,7 +159,10 @@
       "restart": "再起動",
       "restartTitle": "シェルを再起動（先に切断してください）",
       "connect": "シェルで続行",
-      "connectTitle": "シェルに接続"
+      "connectTitle": "シェルに接続",
+      "bypass": "バイパス",
+      "bypassOnTitle": "権限バイパスが有効 — クリックで無効化（CLIを再起動）",
+      "bypassOffTitle": "権限バイパスが無効 — クリックで有効化（CLIを再起動）"
     },
     "loading": "ターミナルを読み込んでいます...",
     "connecting": "シェルに接続しています...",

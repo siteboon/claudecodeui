@@ -58,6 +58,7 @@ function renderConnection() {
       selectedSessionRef: ref<ProjectSession | null | undefined>(null),
       initialCommandRef: ref<string | null | undefined>(null),
       isPlainShellRef: ref(false),
+      bypassPermissionsRef: ref(false),
       onProcessCompleteRef: ref<((exitCode: number) => void) | null | undefined>(null),
       isInitialized: true,
       autoConnect: false,

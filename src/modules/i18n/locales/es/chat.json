@@ -199,7 +199,10 @@
       "restart": "Reiniciar",
       "restartTitle": "Reiniciar shell",
       "connect": "Continuar en la shell",
-      "connectTitle": "Conectar a la shell"
+      "connectTitle": "Conectar a la shell",
+      "bypass": "Omitir",
+      "bypassOnTitle": "Omisión de permisos activada — haz clic para desactivarla (reinicia la CLI)",
+      "bypassOffTitle": "Omisión de permisos desactivada — haz clic para activarla (reinicia la CLI)"
     },
     "loading": "Cargando terminal...",
     "connecting": "Conectando a la shell...",

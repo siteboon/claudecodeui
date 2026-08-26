@@ -20,6 +20,7 @@ type UseShellConnectionOptions = {
   selectedSessionRef: MutableRefObject<ProjectSession | null | undefined>;
   initialCommandRef: MutableRefObject<string | null | undefined>;
   isPlainShellRef: MutableRefObject<boolean>;
+  bypassPermissionsRef: MutableRefObject<boolean>;
   onProcessCompleteRef: MutableRefObject<((exitCode: number) => void) | null | undefined>;
   isInitialized: boolean;
   autoConnect: boolean;
@@ -44,6 +45,7 @@ export function useShellConnection({
   selectedSessionRef,
   initialCommandRef,
   isPlainShellRef,
+  bypassPermissionsRef,
   onProcessCompleteRef,
   isInitialized,
   autoConnect,
@@ -162,6 +164,9 @@ export function useShellConnection({
               initialCommand: initialCommandRef.current,
               isPlainShell: isPlainShellRef.current,
               forceRestart,
+              // Launch-time flag: bypass mode can only join the CLI's
+              // shift+tab cycle when claude starts with it.
+              bypassPermissions: bypassPermissionsRef.current,
             });
           }, TERMINAL_INIT_DELAY_MS);
         };
@@ -191,6 +196,7 @@ export function useShellConnection({
       }
     },
     [
+      bypassPermissionsRef,
       clearTerminalScreen,
       fitAddonRef,
       handleSocketMessage,

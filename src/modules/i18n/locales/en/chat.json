@@ -199,7 +199,10 @@
       "restart": "Restart",
       "restartTitle": "Restart Shell",
       "connect": "Continue in Shell",
-      "connectTitle": "Connect to shell"
+      "connectTitle": "Connect to shell",
+      "bypass": "Bypass",
+      "bypassOnTitle": "Bypass permissions on — click to disable (restarts the CLI)",
+      "bypassOffTitle": "Bypass permissions off — click to enable (restarts the CLI)"
     },
     "loading": "Loading terminal...",
     "connecting": "Connecting to shell...",
