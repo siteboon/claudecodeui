@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { closeConnection, initializeDatabase, scheduledMessagesDb, sessionsDb, userDb } from '@/modules/database/index.js';
-import { dispatchDueScheduledMessages } from '@/modules/scheduled-messages/services/scheduled-message-dispatcher.service.js';
+import { closeConnection, initializeDatabase, scheduledMessagesDb, sessionDraftsDb, sessionsDb, userDb } from '@/modules/database/index.js';
+import { dispatchDueScheduledMessages, dispatchQueuedMessages } from '@/modules/scheduled-messages/services/scheduled-message-dispatcher.service.js';
 import { scheduledMessagesService } from '@/modules/scheduled-messages/services/scheduled-messages.service.js';
 import { chatRunRegistry } from '@/modules/websocket/index.js';
 
@@ -66,6 +66,50 @@ test('a message due in the past is sent on the next pass, not skipped', async ()
     assert.equal(runs.length, 1);
     assert.equal(runs[0].command, 'run the nightly checks');
     assert.equal(scheduledMessagesDb.listForSession(userId, SESSION_ID)[0].status, 'sent');
+  });
+});
+
+test('a queued message is sent by the server without a browser connection', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    sessionDraftsDb.saveDraft(userId, SESSION_ID, {
+      text: '',
+      queuedMessage: {
+        content: 'continue on the VPS',
+        options: { model: 'claude-opus-5' },
+        attachments: [{ path: '/tmp/upload.png' }],
+      },
+    });
+
+    const runs: RunCall[] = [];
+    assert.equal(await dispatchQueuedMessages(createRuntime(runs)), 1);
+    assert.equal(runs.length, 1);
+    assert.equal(runs[0].command, 'continue on the VPS');
+    assert.equal(runs[0].options.model, 'claude-opus-5');
+    assert.deepEqual(runs[0].options.attachments, []);
+    assert.equal(sessionDraftsDb.getDrafts(userId).length, 0);
+  });
+});
+
+test('a queued message stays pending while its session is busy', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    sessionDraftsDb.saveDraft(userId, SESSION_ID, {
+      text: '',
+      queuedMessage: { content: 'send after this run' },
+    });
+    chatRunRegistry.startRun({
+      appSessionId: SESSION_ID,
+      provider: 'claude',
+      providerSessionId: null,
+      connection: null,
+      userId,
+    });
+
+    const runs: RunCall[] = [];
+    assert.equal(await dispatchQueuedMessages(createRuntime(runs)), 0);
+    assert.equal(runs.length, 0);
+    assert.deepEqual(sessionDraftsDb.getDrafts(userId)[0]?.queuedMessage, {
+      content: 'send after this run',
+    });
   });
 });
 

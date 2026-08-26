@@ -1,6 +1,6 @@
-import { scheduledMessagesDb } from '@/modules/database/index.js';
-import type { ScheduledMessageRow } from '@/modules/database/index.js';
-import { runDetachedChatTurn } from '@/modules/websocket/index.js';
+import { scheduledMessagesDb, sessionDraftsDb } from '@/modules/database/index.js';
+import type { QueuedSessionMessageRecord, ScheduledMessageRow } from '@/modules/database/index.js';
+import { chatRunRegistry, runDetachedChatTurn } from '@/modules/websocket/index.js';
 import type { ProviderRuntimeGateway } from '@/modules/websocket/index.js';
 
 /**
@@ -15,6 +15,12 @@ const POLL_INTERVAL_MS = 30_000;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let dispatchInFlight = false;
 
+type StoredQueuedMessage = {
+  content: string;
+  options: Record<string, unknown>;
+  attachments: unknown[];
+};
+
 function readOptions(raw: string): Record<string, unknown> {
   try {
     const parsed: unknown = JSON.parse(raw);
@@ -24,6 +30,74 @@ function readOptions(raw: string): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+function readQueuedMessage(value: unknown): StoredQueuedMessage | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  const content = typeof record.content === 'string' ? record.content : '';
+  const attachments = Array.isArray(record.attachments)
+    ? record.attachments
+    : Array.isArray(record.images)
+      ? record.images
+      : [];
+  if (!content.trim() && attachments.length === 0) {
+    return null;
+  }
+  const options = record.options && typeof record.options === 'object' && !Array.isArray(record.options)
+    ? record.options as Record<string, unknown>
+    : {};
+  return { content, options, attachments };
+}
+
+async function sendClaimedQueuedMessage(
+  candidate: QueuedSessionMessageRecord,
+  runtime: ProviderRuntimeGateway,
+): Promise<void> {
+  const message = readQueuedMessage(candidate.queuedMessage);
+  if (!message) {
+    sessionDraftsDb.deleteEmptyDraft(candidate.userId, candidate.sessionId);
+    return;
+  }
+
+  const result = await runDetachedChatTurn(
+    {
+      sessionId: candidate.sessionId,
+      userId: candidate.userId,
+      content: message.content,
+      options: { ...message.options, attachments: message.attachments },
+    },
+    { runtime },
+  );
+
+  // The registry check and run reservation are separate operations. If a run
+  // wins that tiny race, put the turn back so the next poll tries again.
+  if (!result.started && result.error === 'A run was already in progress for this session.') {
+    sessionDraftsDb.restoreQueuedMessage(candidate);
+    return;
+  }
+  sessionDraftsDb.deleteEmptyDraft(candidate.userId, candidate.sessionId);
+}
+
+/** Sends every persisted queued turn whose session is currently idle. */
+export async function dispatchQueuedMessages(runtime: ProviderRuntimeGateway): Promise<number> {
+  const candidates = sessionDraftsDb.listQueuedMessages();
+  let claimed = 0;
+
+  await Promise.all(candidates.map(async (candidate) => {
+    if (chatRunRegistry.isProcessing(candidate.sessionId)) {
+      return;
+    }
+    if (!sessionDraftsDb.claimQueuedMessage(candidate)) {
+      return;
+    }
+    claimed += 1;
+    await sendClaimedQueuedMessage(candidate, runtime);
+  }));
+
+  return claimed;
 }
 
 async function sendClaimedMessage(
@@ -99,6 +173,7 @@ export function initializeScheduledMessageDispatcher(runtime: ProviderRuntimeGat
     }
     dispatchInFlight = true;
     void dispatchDueScheduledMessages(runtime)
+      .then(() => dispatchQueuedMessages(runtime))
       .catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);
         console.error('[ScheduledMessages] Dispatch pass failed', { error: message });

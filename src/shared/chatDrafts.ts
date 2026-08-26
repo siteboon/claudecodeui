@@ -150,6 +150,14 @@ function queueServerWrite(scope: string): void {
   serverWriteTimer = setTimeout(flushServerWrites, SERVER_WRITE_DEBOUNCE_MS);
 }
 
+function flushServerWritesNow(): void {
+  if (serverWriteTimer !== null) {
+    clearTimeout(serverWriteTimer);
+    serverWriteTimer = null;
+  }
+  flushServerWrites();
+}
+
 function updateDraft(scope: string, update: Partial<DraftRecord>): void {
   const current = drafts.get(scope) ?? EMPTY_DRAFT;
   const next: DraftRecord = { ...current, ...update };
@@ -200,10 +208,14 @@ export function readQueuedMessage(scope: string): StoredQueuedMessage | null {
 
 export function writeQueuedMessage(scope: string, message: StoredQueuedMessage): void {
   updateDraft(scope, { queuedMessage: message });
+  // Queueing is a send-like action, so persist it before the tab can close.
+  flushServerWritesNow();
 }
 
 export function clearQueuedMessage(scope: string): void {
   updateDraft(scope, { queuedMessage: null });
+  // Editing or cancelling must beat the server's next dispatcher poll.
+  flushServerWritesNow();
 }
 
 /** Subscribes to any draft change; returns the unsubscribe function. */
@@ -241,7 +253,7 @@ export async function hydrateChatDrafts(): Promise<void> {
     return;
   }
 
-  const merged = new Map(drafts);
+  const merged = new Map<string, DraftRecord>();
   for (const draft of serverDrafts) {
     const scope = typeof draft.scope === 'string' ? draft.scope : '';
     if (!scope || pendingScopes.has(scope)) {
@@ -254,6 +266,16 @@ export async function hydrateChatDrafts(): Promise<void> {
         ? (draft.queuedMessage as StoredQueuedMessage)
         : null,
     });
+  }
+
+  // Local edits whose debounced write has not left the browser yet win over
+  // the server snapshot. Every other missing scope was deleted remotely and
+  // must also disappear from the mirror.
+  for (const scope of pendingScopes) {
+    const pending = drafts.get(scope);
+    if (pending) {
+      merged.set(scope, pending);
+    }
   }
 
   drafts = merged;

@@ -19,6 +19,20 @@ type DraftRow = {
   updated_at: string;
 };
 
+/** A server-owned queued turn together with the exact stored value used to claim it once. */
+export type QueuedSessionMessageRecord = {
+  userId: number;
+  sessionId: string;
+  queuedMessage: unknown;
+  claimToken: string;
+};
+
+type QueuedMessageRow = {
+  user_id: number;
+  draft_scope: string;
+  queued_message: string;
+};
+
 /** A queued message that no longer parses is treated as absent, not fatal. */
 function parseQueuedMessage(raw: string | null): unknown | null {
   if (!raw) {
@@ -61,6 +75,58 @@ export const sessionDraftsDb = {
       .all(userId) as DraftRow[];
 
     return rows.map(toRecord);
+  },
+
+  /** Lists persisted queued turns whose scopes are real chat sessions. */
+  listQueuedMessages(): QueuedSessionMessageRecord[] {
+    const rows = getConnection()
+      .prepare(
+        `SELECT drafts.user_id, drafts.draft_scope, drafts.queued_message
+         FROM session_drafts AS drafts
+         INNER JOIN sessions ON sessions.session_id = drafts.draft_scope
+         WHERE drafts.queued_message IS NOT NULL`
+      )
+      .all() as QueuedMessageRow[];
+
+    return rows.map((row) => ({
+      userId: row.user_id,
+      sessionId: row.draft_scope,
+      queuedMessage: parseQueuedMessage(row.queued_message),
+      claimToken: row.queued_message,
+    }));
+  },
+
+  /** Atomically removes a queued turn only if it has not been edited since listing. */
+  claimQueuedMessage(candidate: QueuedSessionMessageRecord): boolean {
+    const result = getConnection()
+      .prepare(
+        `UPDATE session_drafts
+         SET queued_message = NULL, updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = ? AND draft_scope = ? AND queued_message = ?`
+      )
+      .run(candidate.userId, candidate.sessionId, candidate.claimToken);
+    return result.changes > 0;
+  },
+
+  /** Restores a claim lost to the narrow race where another run starts first. */
+  restoreQueuedMessage(candidate: QueuedSessionMessageRecord): void {
+    getConnection()
+      .prepare(
+        `UPDATE session_drafts
+         SET queued_message = ?, updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = ? AND draft_scope = ? AND queued_message IS NULL`
+      )
+      .run(candidate.claimToken, candidate.userId, candidate.sessionId);
+  },
+
+  /** Removes the placeholder row left after its last queued turn is claimed. */
+  deleteEmptyDraft(userId: number, scope: string): void {
+    getConnection()
+      .prepare(
+        `DELETE FROM session_drafts
+         WHERE user_id = ? AND draft_scope = ? AND draft_text = '' AND queued_message IS NULL`
+      )
+      .run(userId, scope);
   },
 
   /**

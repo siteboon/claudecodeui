@@ -125,6 +125,17 @@ test('hydrate brings in a draft typed on another device', async () => {
   assert.equal(store.readDraftText('session-a'), 'typed on the laptop');
 });
 
+test('hydrate removes a mirrored queue after the server claims it', async () => {
+  const store = await loadStore();
+  store.writeQueuedMessage('session-a', { content: 'server-owned queue' });
+  assert.equal(store.readQueuedMessage('session-a')?.content, 'server-owned queue');
+
+  serverDrafts = [];
+  await store.hydrateChatDrafts();
+
+  assert.equal(store.readQueuedMessage('session-a'), null);
+});
+
 test('hydrate does not overwrite a scope the user is typing into right now', async () => {
   serverDrafts = [{ scope: 'session-a', text: 'stale server copy', queuedMessage: null }];
 
@@ -157,8 +168,7 @@ test('a queued message round-trips alongside the draft text', async () => {
     content: 'send this next',
     attachments: [],
   });
-
-  await vi.advanceTimersByTimeAsync(1_500);
+  assert.equal(savedDrafts.length, 1, 'queue actions persist without waiting for the draft debounce');
   assert.deepEqual(savedDrafts, [{
     scope: 'session-a',
     text: 'still editing',

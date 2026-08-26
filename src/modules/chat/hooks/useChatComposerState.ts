@@ -18,6 +18,7 @@ import type { CommandModalPayload, CostCommandData, HelpCommandData, MarkSession
 import { grantClaudeToolPermission } from '@/modules/chat/utils/chatPermissions';
 import {
   clearQueuedMessage,
+  hydrateChatDrafts,
   readDraftText,
   readQueuedMessage,
   subscribeToChatDrafts,
@@ -162,7 +163,6 @@ export function useChatComposerState({
   currentProviderModel,
   currentProviderEffort,
   isLoading,
-  processingSessions,
   canAbortSession,
   tokenBudget,
   sendMessage,
@@ -241,9 +241,7 @@ export function useChatComposerState({
     }));
   }, []);
   const sessionKeyRef = useRef(sessionKey);
-  const processingSessionsRef = useRef<SessionActivityMap | undefined>(processingSessions);
   sessionKeyRef.current = sessionKey;
-  processingSessionsRef.current = processingSessions;
 
   const [queuedDraft, setQueuedDraft] = useState<QueuedDraft | null>(() => {
     if (typeof window === 'undefined' || !sessionKey) {
@@ -664,26 +662,10 @@ export function useChatComposerState({
           });
         }
 
-        // The upload is asynchronous. If the user changed sessions while it
-        // was running, persist/send against the session where Queue was
-        // pressed rather than putting the draft into the newly opened chat.
+        // The server owns dispatch after persistence. If the user changed
+        // sessions during upload, the durable record is already enough; do
+        // not attach its UI card to the newly opened composer.
         if (queuedSessionKey && sessionKeyRef.current !== queuedSessionKey) {
-          if (
-            processingSessionsRef.current
-            && !processingSessionsRef.current.has(queuedSessionKey)
-          ) {
-            clearQueuedMessage(queuedSessionKey);
-            sendMessage({
-              type: 'chat.send',
-              sessionId: queuedSessionKey,
-              content: durableDraft.content,
-              options: {
-                ...(durableDraft.options ?? {}),
-                attachments: durableDraft.uploadedAttachments ?? [],
-              },
-            });
-            onSessionProcessing?.(queuedSessionKey, { statusText: null, canInterrupt: true });
-          }
           return;
         }
 
@@ -896,49 +878,26 @@ export function useChatComposerState({
     handleSubmitRef.current = handleSubmit;
   }, [handleSubmit]);
 
-  // Once the in-flight turn ends, replay the queued draft through the normal
-  // submit path. The draft itself is passed directly so submission never
-  // depends on React committing restored attachment state first.
-  const wasLoadingRef = useRef(isLoading);
-  const flushSessionKeyRef = useRef(sessionKey);
+  // The VPS dispatcher owns sending. While the card is visible, periodically
+  // reconcile only its removal so the UI notices when the server claims it.
   useEffect(() => {
-    const wasLoading = wasLoadingRef.current;
-    wasLoadingRef.current = isLoading;
-
-    // A session switch changes which session `isLoading` describes, so this
-    // transition says nothing about the queued draft's own session. Never
-    // flush across it — the swap effect below replaces `queuedDraft` with the
-    // new session's saved draft right after this.
-    if (flushSessionKeyRef.current !== sessionKey) {
-      flushSessionKeyRef.current = sessionKey;
+    if (!sessionKey || !queuedDraft) {
       return;
     }
-
-    if (isLoading || !queuedDraft) {
-      return;
-    }
-
-    // Turn just ended in this session: flush immediately. Otherwise this is a
-    // saved draft restored into an apparently idle session — hold it briefly
-    // so the `chat_subscribed` ack can flip `isLoading` if a run is actually
-    // still live (the cleanup below cancels the send in that case).
-    const delay = wasLoading ? 0 : 750;
-    const timer = setTimeout(() => {
-      // The saved key is the claim ticket shared with the app-level auto-send
-      // (which handles sessions that finish while not viewed). If it's gone,
-      // the message was already dispatched — don't send it twice.
-      if (sessionKey && !readQueuedMessage(sessionKey)) {
+    let cancelled = false;
+    const reconcile = async () => {
+      await hydrateChatDrafts();
+      if (!cancelled && !readQueuedMessage(sessionKey)) {
+        queuedDraftSessionRef.current = sessionKey;
         setQueuedDraft(null);
-        return;
       }
-      setQueuedDraft(null);
-      setInput(queuedDraft.content);
-      inputValueRef.current = queuedDraft.content;
-      setAttachedFiles(queuedDraft.attachments);
-      handleSubmitRef.current?.(createFakeSubmitEvent(), queuedDraft);
-    }, delay);
-    return () => clearTimeout(timer);
-  }, [isLoading, queuedDraft, sessionKey, setInput]);
+    };
+    const timer = setInterval(() => void reconcile(), 5_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [queuedDraft, sessionKey]);
 
   const editQueuedDraft = useCallback(() => {
     if (!queuedDraft) {
