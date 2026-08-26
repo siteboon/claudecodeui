@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { FolderOpen } from 'lucide-react';
+
 import { Button, Input } from '../../../shared/view/ui';
 import { browseFilesystemFolders } from '../data/workspaceApi';
 import { getSuggestionRootPath } from '../utils/pathUtils';
 import type { FolderSuggestion } from '../types';
+
 import FolderBrowserModal from './FolderBrowserModal';
 
 type WorkspacePathFieldProps = {

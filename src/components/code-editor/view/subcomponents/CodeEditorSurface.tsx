@@ -1,6 +1,7 @@
 import CodeMirror from '@uiw/react-codemirror';
 import { oneDark } from '@codemirror/theme-one-dark';
 import type { Extension } from '@codemirror/state';
+
 import MarkdownPreview from './markdown/MarkdownPreview';
 
 type CodeEditorSurfaceProps = {

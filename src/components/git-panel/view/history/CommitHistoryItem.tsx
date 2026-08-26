@@ -1,10 +1,12 @@
 import { ChevronDown, ChevronRight, GitBranch, Tag } from 'lucide-react';
 import { useMemo } from 'react';
+
 import type { GitCommitSummary } from '../../types/types';
 import type { CommitGraphRow } from '../../utils/commitGraph';
 import { laneColor } from '../../utils/commitGraph';
 import { getStatusBadgeClass, parseCommitFiles } from '../../utils/gitPanelUtils';
 import GitDiffViewer from '../shared/GitDiffViewer';
+
 import CommitGraphStrip from './CommitGraphStrip';
 
 function formatDate(dateString: string): string {

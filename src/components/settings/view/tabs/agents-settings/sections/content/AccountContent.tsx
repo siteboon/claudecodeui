@@ -1,5 +1,6 @@
 import { LogIn } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
 import { Badge, Button } from '../../../../../../../shared/view/ui';
 import LLMProviderLogo from '../../../../../../llm-provider-logo/LLMProviderLogo';
 import type { AgentProvider, AuthStatus } from '../../../../../types/types';

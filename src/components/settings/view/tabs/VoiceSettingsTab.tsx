@@ -1,5 +1,6 @@
 import type { InputHTMLAttributes } from 'react';
 import { useTranslation } from 'react-i18next';
+
 import SettingsSection from '../SettingsSection';
 import SettingsToggle from '../SettingsToggle';
 import { useUiPreferences } from '../../../../hooks/useUiPreferences';

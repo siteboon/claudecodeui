@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+
 import { DarkModeToggle } from '../../../../shared/view/ui';
 import type { CodeEditorSettingsState, ProjectSortOrder } from '../../types/types';
 import LanguageSelector from '../../../../shared/view/ui/LanguageSelector';
@@ -56,7 +57,7 @@ export default function AppearanceSettingsTab({
             <select
               value={projectSortOrder}
               onChange={(event) => onProjectSortOrderChange(event.target.value as ProjectSortOrder)}
-              className="w-full rounded-lg border border-input bg-card p-2.5 text-sm text-foreground touch-manipulation focus:border-primary focus:ring-1 focus:ring-primary sm:w-36"
+              className="w-full touch-manipulation rounded-lg border border-input bg-card p-2.5 text-sm text-foreground focus:border-primary focus:ring-1 focus:ring-primary sm:w-36"
             >
               <option value="name">{t('appearanceSettings.projectSorting.alphabetical')}</option>
               <option value="date">{t('appearanceSettings.projectSorting.recentActivity')}</option>
@@ -107,7 +108,7 @@ export default function AppearanceSettingsTab({
             <select
               value={codeEditorSettings.fontSize}
               onChange={(event) => onCodeEditorFontSizeChange(event.target.value)}
-              className="w-full rounded-lg border border-input bg-card p-2.5 text-sm text-foreground touch-manipulation focus:border-primary focus:ring-1 focus:ring-primary sm:w-28"
+              className="w-full touch-manipulation rounded-lg border border-input bg-card p-2.5 text-sm text-foreground focus:border-primary focus:ring-1 focus:ring-primary sm:w-28"
             >
               <option value="10">10px</option>
               <option value="11">11px</option>

@@ -1,7 +1,9 @@
 import { History, RefreshCw } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
+
 import type { GitDiffMap, GitCommitSummary } from '../../types/types';
 import { computeCommitGraph } from '../../utils/commitGraph';
+
 import CommitHistoryItem from './CommitHistoryItem';
 
 type HistoryViewProps = {

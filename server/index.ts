@@ -132,7 +132,7 @@ app.use(compression({
     // Compression level (0-11, default 6)
     level: 6,
     // Filter function to exclude certain responses from compression
-    filter: (req, res) => {
+    filter: (req: Request, res: Response) => {
         // Don't compress Server-Sent Events (SSE) or streaming responses
         // SSE requires real-time delivery without buffering
         const contentType = res.getHeader('content-type') || '';

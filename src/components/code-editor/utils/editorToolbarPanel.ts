@@ -1,5 +1,6 @@
 import { getChunks } from '@codemirror/merge';
 import { EditorView, showPanel } from '@codemirror/view';
+
 import type { CodeEditorFile } from '../types/types';
 
 type EditorToolbarLabels = {

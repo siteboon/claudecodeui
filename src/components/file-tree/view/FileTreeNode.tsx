@@ -1,9 +1,11 @@
 import type { DragEvent, ReactNode, RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronRight, Folder, FolderOpen, Upload } from 'lucide-react';
+
 import { cn } from '../../../lib/utils';
 import type { FileTreeNode as FileTreeNodeType, FileTreeViewMode } from '../types/types';
 import { Input } from '../../../shared/view/ui';
+
 import FileContextMenu from './FileContextMenu';
 
 type FileTreeNodeProps = {

@@ -11,8 +11,10 @@ import {
   Terminal,
   Zap,
 } from 'lucide-react';
+
 import { cn } from '../../../lib/utils';
 import { useTaskMaster } from '../context/TaskMasterContext';
+
 import TaskDetailModal from './TaskDetailModal';
 import TaskMasterSetupModal from './modals/TaskMasterSetupModal';
 
